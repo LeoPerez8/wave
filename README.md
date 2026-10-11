@@ -1,7 +1,7 @@
 # Wave
 
-A local music player for Android with BlackPlayer-grade features and Apple Music's
-structure, gestures and glass. Personal project, sideloaded — see the
+A local music player for Android with BlackPlayer-grade features and an interface of its
+own, inspired by Apple Music. Personal project, sideloaded — see the
 [v1 spec](docs/spec.md) and the [Wave v1 tracking issue](https://github.com/LeoPerez8/wave/issues/2).
 
 ## Layout
