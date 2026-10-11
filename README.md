@@ -6,18 +6,18 @@ structure, gestures and glass. Personal project, sideloaded — see the
 
 ## Layout
 
-| Path            | What                                                                  |
-| --------------- | --------------------------------------------------------------------- |
-| `apps/mobile`   | The Expo / React Native app (Expo Router, uniwind, Inter)              |
-| `packages/core` | Domain logic in pure TypeScript with **zero runtime dependencies**     |
-| `scripts/ci`    | Helpers used by GitHub Actions                                         |
-| `docs`          | Spec and design decisions                                              |
+| Path            | What                                                               |
+| --------------- | ------------------------------------------------------------------ |
+| `apps/mobile`   | The Expo / React Native app (Expo Router, uniwind, Inter)          |
+| `packages/core` | Domain logic in pure TypeScript with **zero runtime dependencies** |
+| `scripts/ci`    | Helpers used by GitHub Actions                                     |
+| `docs`          | Spec and design decisions                                          |
 
 ## Getting the app on a phone
 
 Every PR and every push to `main` builds a release APK (arm64, signed with the debug key):
 
-- **PR builds** — the PR gets a comment with a *Download APK* link.
+- **PR builds** — the PR gets a comment with a _Download APK_ link.
 - **Latest `main`** — <https://github.com/LeoPerez8/wave/releases/download/latest/wave-latest.apk>
 
 Open the link on the phone and install (allow installs from the browser once). Builds

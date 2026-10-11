@@ -13,7 +13,9 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: background }}>
       <SafeAreaProvider>
         <StatusBar style="auto" />
-        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: background } }}>
+        <Stack
+          screenOptions={{ headerShown: false, contentStyle: { backgroundColor: background } }}
+        >
           <Stack.Screen name="(tabs)" />
         </Stack>
       </SafeAreaProvider>

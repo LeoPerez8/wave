@@ -19,9 +19,7 @@ export const formatDuration = (ms: number): string => {
   const hours = Math.floor(total / 3600);
   const minutes = Math.floor((total % 3600) / 60);
   const seconds = total % 60;
-  return hours > 0
-    ? `${hours}:${pad2(minutes)}:${pad2(seconds)}`
-    : `${minutes}:${pad2(seconds)}`;
+  return hours > 0 ? `${hours}:${pad2(minutes)}:${pad2(seconds)}` : `${minutes}:${pad2(seconds)}`;
 };
 
 /**

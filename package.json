@@ -3,10 +3,6 @@
   "private": true,
   "description": "Local music player for Android with Apple Music's look and feel.",
   "type": "module",
-  "packageManager": "pnpm@10.28.0",
-  "engines": {
-    "node": ">=22.18"
-  },
   "scripts": {
     "dev": "pnpm --filter @wave/mobile start",
     "android": "pnpm --filter @wave/mobile android",
@@ -20,5 +16,9 @@
   "devDependencies": {
     "oxfmt": "latest",
     "oxlint": "^1.0.0"
-  }
+  },
+  "engines": {
+    "node": ">=22.18"
+  },
+  "packageManager": "pnpm@10.28.0"
 }
