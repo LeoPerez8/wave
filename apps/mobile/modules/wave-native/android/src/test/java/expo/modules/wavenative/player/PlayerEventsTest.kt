@@ -3,7 +3,9 @@ package expo.modules.wavenative.player
 import androidx.media3.common.C
 import androidx.media3.common.Player
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PlayerEventsTest {
@@ -24,6 +26,37 @@ class PlayerEventsTest {
       "playlist",
       PlayerEvents.transitionReason(Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED),
     )
+  }
+
+  @Test
+  fun transitionsCausedBySyncingTheQueueAreNamedSync() {
+    assertEquals(
+      "sync",
+      PlayerEvents.transitionReason(Player.MEDIA_ITEM_TRANSITION_REASON_SEEK, duringSync = true),
+    )
+    assertEquals(
+      "seek",
+      PlayerEvents.transitionReason(Player.MEDIA_ITEM_TRANSITION_REASON_SEEK, duringSync = false),
+    )
+  }
+
+  @Test
+  fun seeksWithinTheCurrentItemAreReportedAsSeeks() {
+    // "Previous" after three seconds, from the notification or a headset, seeks to 0 in place.
+    assertTrue(PlayerEvents.isSeekWithinItem(Player.DISCONTINUITY_REASON_SEEK, "k1", "k1"))
+    // Going to another item is a transition, not a seek.
+    assertFalse(PlayerEvents.isSeekWithinItem(Player.DISCONTINUITY_REASON_SEEK, "k1", "k2"))
+    assertFalse(PlayerEvents.isSeekWithinItem(Player.DISCONTINUITY_REASON_SEEK, null, null))
+    // Auto-advance and repeat-one jumps aren't seeks.
+    assertFalse(PlayerEvents.isSeekWithinItem(Player.DISCONTINUITY_REASON_AUTO_TRANSITION, "k1", "k1"))
+  }
+
+  @Test
+  fun mapsRepeatModes() {
+    assertEquals(Player.REPEAT_MODE_OFF, PlayerEvents.repeatMode("off"))
+    assertEquals(Player.REPEAT_MODE_ALL, PlayerEvents.repeatMode("all"))
+    assertEquals(Player.REPEAT_MODE_ONE, PlayerEvents.repeatMode("one"))
+    assertEquals(Player.REPEAT_MODE_OFF, PlayerEvents.repeatMode("sometimes"))
   }
 
   @Test

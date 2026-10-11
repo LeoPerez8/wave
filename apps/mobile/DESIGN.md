@@ -140,7 +140,7 @@ The world rejects the category default it was chosen against: bold large titles,
 - Light large titles; one size per list, rank by weight and tint.
 - Small tracked-caps catalog lines for section heads and cover captions.
 - Teal for active, ember for favorite and now playing; nothing else is coloured.
-- Flat: no shadows, no glass, no gradients.
+- Flat: no shadows, no gradients (the Now Playing ground is the one exception). Glass only on the floating chrome (tab bar, Search pill, mini player).
 - Every press sinks and dims for a duration the owner sets in Settings.
 
 ## Colors
@@ -164,7 +164,7 @@ A cool, low-chroma tonal ramp carrying two small, saturated voices: teal and emb
 - **Rule** (`separator`): one-pixel hairlines between entries and around setting rows.
 - **Field** (`fill`): the square behind artwork that has no image, and empty cover slots.
 
-The full ramp lives in `global.css` as `tone-0` (lightest, `#eff4f6`) to `tone-10` (darkest, `#121b1d`); each semantic token is a step on it, in both themes. `surface`, `grouped` and `on-accent` are also declared there but are not yet used by this world's components; they wait for the tab bar and mini player.
+The full ramp lives in `global.css` as `tone-0` (lightest, `#eff4f6`) to `tone-10` (darkest, `#121b1d`); each semantic token is a step on it, in both themes. `surface` is the tint laid over the glass of the floating chrome (at about 72%); `grouped` and `on-accent` are also declared there but are not yet used by this world's components.
 
 ### Named Rules
 
@@ -208,7 +208,7 @@ Sizes are in dp and scale with the system font size; at font scale 1.3 album fur
 
 ## Layout
 
-Everything is a whole (or half/quarter) multiple of the 8dp cell (`CELL` in `src/catalog/grid.ts`): side margin 24dp, tile gutter 16dp, row height 56dp, a 32dp state cell, 40dp track thumbnails, and a 24dp-wide spine. Vertical rhythm uses the same steps: 12dp between artwork and its caption, 40dp above "Recently added", 24dp between album rows, 48dp of bottom padding.
+Everything is a whole (or half/quarter) multiple of the 8dp cell (`CELL` in `src/catalog/grid.ts`): side margin 24dp, tile gutter 16dp, row height 56dp, a 32dp state cell, 40dp track thumbnails, and a 24dp-wide spine. Vertical rhythm uses the same steps: 12dp between artwork and its caption, 40dp above "Recently added", 24dp between album rows. Scrolling screens pad their bottom so the last row clears the floating chrome plus 24dp (`useChromeInset()` in `src/chrome/chrome.tsx`).
 
 Album grids are two columns. Tile width is computed from the window: screen width minus the left margin, the spine and its inset, and one gutter, halved. Each tile reserves a fixed 96dp caption block (catalog line, two lines of title, furniture line), so every furniture line lands in the same place.
 
@@ -226,15 +226,17 @@ The A–Z spine sits 24dp in from the right edge, not on it, to stay clear of An
 
 ## Elevation & Depth
 
-The world is flat. There are no shadows, no elevation, no blur and no gradients; depth comes from the tone ramp (field squares and hairlines a step off the ground) and from artwork itself. The only overlay is the spine's letter field: the ground at 90% opacity laid over the list, with the huge letter centred in it.
+The world is flat. There are no shadows, no elevation and no gradients (save the Now Playing ground, below); depth comes from the tone ramp (field squares and hairlines a step off the ground) and from artwork itself. Two things float: the spine's letter field (the ground at 90% opacity laid over the list, with the huge letter centred in it) and the floating chrome at the bottom, which is glass.
+
+**Glass** (the chrome only): a live blur of the content scrolling underneath, a slight lens-like refraction at the rounded edge with a specular rim lit from the top left, and the `surface` tone laid over it so text stays legible. It is native (`modules/wave-glass`, RenderEffect + AGSL on the RenderThread) and sized for 120 Hz; the blur + tint + rim fallback is one line away (`GLASS` in `src/glass/Glass.tsx`). See `docs/glass-spike.md`.
 
 ### Named Rules
 
-**The Flat Field Rule.** Surfaces never cast shadows. Separate things with a ramp step or a hairline. Glass is not part of this world unless the tab-bar/mini-player build decides otherwise against the 120 Hz budget.
+**The Flat Field Rule.** Surfaces never cast shadows. Separate things with a ramp step or a hairline. Glass belongs to the floating chrome alone (tab bar, Search pill, mini player); content surfaces stay flat.
 
 ## Shapes
 
-Square everywhere. Artwork, empty cover slots, track thumbnails and placeholder fields have no corner radius and no frame. Structure is drawn with one-pixel hairlines in the separator tone, running the full content width between entries; there are no boxed cards, no chips and no pills. The one recurring silhouette is the thin vertical column of spine letters on the right.
+Square everywhere. Artwork, empty cover slots, track thumbnails and placeholder fields have no corner radius and no frame. Structure is drawn with one-pixel hairlines in the separator tone, running the full content width between entries; there are no boxed cards and no chips. The floating chrome is the one exception: its glass surfaces are pills (fully rounded ends), set apart from the square content beneath. The recurring silhouettes are the thin vertical column of spine letters on the right and the pills at the bottom.
 
 ### Named Rules
 
@@ -278,7 +280,19 @@ Small tracked caps (Label) in graphite by default, with teal and ember tones ava
 - **Tab screens** open on a light large title at top-left, with at most one trailing icon button on the title line.
 - **Pushed screens** show a Back icon button aligned so its glyph sits on the 24dp margin, then the title in Title type. System and predictive Back both work.
 - **In-screen switches** (Albums / Songs) are text tabs in Body: selected is 600 ink with a 2dp teal underline, unselected is 400 graphite; each tab is at least 48dp tall.
-- **Tab bar and mini player** are not yet built in this world; ticket #8 brings them in. The current tab bar is a scaffold placeholder and not part of this system.
+- **Tab bar** floats a cell above the system inset with 24dp side margins: Home and Library share one 64dp glass pill (24dp line icon over a Caption 600 label, teal when current, graphite otherwise), and Search sits beside it, a cell apart, in its own 64dp round glass pill with the icon only. Tabs press with `selection` haptics.
+- **Mini player** floats a cell above the tab bar (or above the system inset on pushed Library screens) in a 56dp glass pill with the same side margins: a 40dp square thumbnail, title (Body 500) over artist (Body 400 graphite), then play/pause and next as icon buttons. Tap it, or swipe it up, to open Now Playing. Swipe left for the next track, right for the previous one: the content follows the finger and fades, and a skip leaves the way it was pushed with a light `impact` haptic; a short slow drag springs back. Screen readers get "Next track" / "Previous track" actions instead of the swipe.
+
+### Now Playing
+
+- **Presentation:** a full-screen sheet over the tabs (`src/app/now-playing.tsx`, a transparent modal route; motion in `src/nowPlaying/sheet.ts`). It follows the finger up out of the mini player and down to dismiss, and springs (no wobble) to wherever it settles: a quarter of the screen or a flick commits, a flick back cancels (Core's `settleSheet`). The chevron and system Back slide it away too. Lists inside it (Up Next) keep their own scrolling; everything else drags the sheet.
+- **Ground:** the one gradient in Wave. Top to bottom from two artwork palette swatches (dark swatches in dark mode, light ones in light), toned toward the ground until ink, graphite and teal all keep 4.5:1 on it (Core's `paletteGradient`); artwork without a palette leaves the plain ground. On a track change it crossfades over 700 ms. Everything set on it uses the app palette, never the artwork's.
+- **Player view:** the artwork as the largest square the space allows (still a photograph: square, unframed), stepping back to 84% on a soft spring while paused. Under it the title (Title3 500, ink) with the favorite star in its own 48dp cell, then the artist and the album (Body graphite), each opening its screen.
+- **Scrubber:** a 2dp pewter rule with the elapsed part and an 8dp square thumb in teal; touching anywhere scrubs (the rule thickens and the thumb grows to 16dp), and the track seeks when the finger lifts, with a light `impact`. Elapsed and remaining (`-m:ss`) in tabular Footnote graphite below.
+- **Transport:** previous, play/pause and next as filled glyphs in ink (32 / 48 / 32dp), each in a target a cell and a half larger on every side, with `impact` haptics. Previous restarts the track after its first three seconds.
+- **Sleep timer:** the Zzz glyph beside Lyrics at the bottom left (graphite when off, teal while a timer runs, with the time left beside it in tabular Footnote teal, or "End of track"). It opens a menu laid out like the long-press menu: a "Sleep timer" catalog line over what the running timer will do, then 15 / 30 / 45 / 60 Minutes, Custom… (a stepper: minute steps under 10 min, 5 under an hour, 15 above, up to 12 h), End of Track and, while one runs, Turn Off Timer. The playback service enforces it, so it pauses with Wave in the background.
+- **Queue view:** the Queue icon (teal while open) swaps the player view for the playing track in a small row, Shuffle and Repeat as labelled toggles (teal and 600 when on, graphite when off; Repeat cycles off → all → one), then the Up Next catalog line with its count and the list. Each Up Next row is a Songs-list row with a remove X and a drag handle (both graphite, 48dp). Dragging the handle lifts the row onto the `surface` tone under the finger while the others step aside; near the list's edges the list scrolls. Screen readers get Remove / Move up / Move down actions.
+- **Lyrics view:** the Lyrics icon (bottom left, teal while open) swaps the player view for the same small track row, then the lyrics in Title2 500. Synced lyrics (embedded LRC or a sidecar `.lrc`; Core's `pickLyrics` prefers synced, then the sidecar) tint the sung line ink and the rest graphite, easing over 240 ms, and keep the sung line a third of the way down as the song plays. A pause between lines shows as three 4dp squares. Scrolling by hand stops the follow until three seconds after the finger lifts; tapping a line seeks there with a `selection` haptic. Unsynced lyrics are plain ink text to scroll; a song without lyrics shows the empty state. Lyrics are read from the file each time the view opens, so a newly added `.lrc` shows up without a rescan.
 
 ### Stepper (Settings)
 
@@ -312,5 +326,5 @@ A 40dp line icon in pewter, an Entry-type title in ink, a Subheadline message in
 - **Don't** use bold large titles; titles are weight 300.
 - **Don't** add icons or chevrons to Library entry rows.
 - **Don't** set text in `tertiary`.
-- **Don't** add shadows, gradients or blur; separate with a ramp step or a hairline.
+- **Don't** add shadows, gradients or blur; separate with a ramp step or a hairline. Glass is for the floating chrome only, and the artwork gradient for the Now Playing ground only.
 - **Don't** introduce a third accent colour.

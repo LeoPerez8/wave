@@ -1,75 +1,206 @@
-import { IconPlayerPauseFilled, IconPlayerPlayFilled } from "@tabler/icons-react-native";
+import {
+  IconPlayerPauseFilled,
+  IconPlayerPlayFilled,
+  IconPlayerTrackNextFilled,
+} from "@tabler/icons-react-native";
+import { resolveSkipSwipe, type SkipDirection } from "@wave/core";
+import * as Haptics from "expo-haptics";
+import { useRef, useSyncExternalStore } from "react";
 import { Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withSequence,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated";
+import { scheduleOnRN } from "react-native-worklets";
 
 import { Artwork } from "@/catalog/Artwork";
 import { CELL, grid } from "@/catalog/grid";
-import { Hairline } from "@/catalog/Hairline";
+import { chrome, useTabBarTop } from "@/chrome/chrome";
 import { IconButton } from "@/components/IconButton";
+import { Glass } from "@/glass/Glass";
+import { Press } from "@/motion/Press";
+import {
+  beginNowPlayingDrag,
+  endNowPlayingDrag,
+  sheetHeight,
+  sheetOffset,
+} from "@/nowPlaying/sheet";
 
-import { togglePlayPause } from "./actions";
-import { usePlayback } from "./hooks";
+import { skipToNext, skipToPrevious, togglePlayPause } from "./actions";
+import { playbackState } from "./Player";
+
+const RADIUS = chrome.miniPlayer / 2;
+
+/** Horizontal travel before the drag takes over from a tap, in dp. */
+const DRAG_SLOP = CELL * 1.5;
+
+const EASE_OUT = Easing.out(Easing.exp);
+
+const skip = (direction: SkipDirection): void =>
+  direction === "next" ? skipToNext() : skipToPrevious();
+
+// Separate selectors, so position ticks don't re-render the mini player.
+const usePlaybackField = <K extends "item" | "playWhenReady" | "error">(key: K) =>
+  useSyncExternalStore(playbackState.subscribe, () => playbackState.get()[key]);
 
 type Props = {
-  /** Pad for the bottom system inset when nothing below the mini player does (pushed screens). */
-  inset?: boolean;
+  /** `nativeID` of the view behind the mini player, for the glass. */
+  backdropId: string;
+  /** Opens Now Playing. */
+  onOpen: () => void;
 };
 
 /**
- * The current track with play/pause and a position line. Flat for now; the
- * floating mini player (#8) and Now Playing (#9) build on it.
+ * The floating glass mini player: artwork, title and artist, play/pause and
+ * next. Swipe it left for the next track and right for the previous one; tap
+ * it for Now Playing. It floats above the tab bar, or above the system inset
+ * on screens without one.
  */
-export function MiniPlayer({ inset = false }: Props) {
-  const playback = usePlayback();
-  const insets = useSafeAreaInsets();
-  const { item } = playback;
-  if (item === null) return null;
+export function MiniPlayer({ backdropId, onOpen }: Props) {
+  const item = usePlaybackField("item");
+  const playing = usePlaybackField("playWhenReady");
+  const error = usePlaybackField("error");
+  const bottom = useTabBarTop();
+  const reduceMotion = useReducedMotion();
 
-  const fraction =
-    playback.durationMs !== null && playback.durationMs > 0
-      ? Math.min(1, playback.positionMs / playback.durationMs)
-      : 0;
+  const width = useSharedValue(1);
+  const widthRef = useRef(1);
+  const offset = useSharedValue(0);
+
+  const finish = (translationX: number, velocityX: number, canceled: boolean) => {
+    const direction = canceled
+      ? null
+      : resolveSkipSwipe({ translationX, velocityX, width: widthRef.current });
+    if (direction === null) {
+      offset.set(withSpring(0, { damping: 20, stiffness: 240 }));
+      return;
+    }
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    skip(direction);
+    if (reduceMotion) {
+      offset.set(0);
+      return;
+    }
+    // The old track leaves the way it was pushed and the new one slides in behind it.
+    const out = direction === "next" ? -widthRef.current : widthRef.current;
+    offset.set(
+      withSequence(
+        withTiming(out, { duration: 120, easing: EASE_OUT }),
+        withTiming(-out / 3, { duration: 0 }),
+        withTiming(0, { duration: 240, easing: EASE_OUT }),
+      ),
+    );
+  };
+
+  const pan = usePanGesture({
+    activeOffsetX: [-DRAG_SLOP, DRAG_SLOP],
+    failOffsetY: [-DRAG_SLOP, DRAG_SLOP],
+    onUpdate: (event) => {
+      "worklet";
+      offset.set(event.translationX);
+    },
+    onDeactivate: (event) => {
+      "worklet";
+      scheduleOnRN(finish, event.translationX, event.velocityX, event.canceled);
+    },
+  });
+
+  // Swiping up pulls Now Playing out of the mini player, following the finger.
+  const openPan = usePanGesture({
+    activeOffsetY: [-DRAG_SLOP, 1_000_000],
+    failOffsetX: [-DRAG_SLOP, DRAG_SLOP],
+    onActivate: () => {
+      "worklet";
+      scheduleOnRN(beginNowPlayingDrag);
+    },
+    onUpdate: (event) => {
+      "worklet";
+      const height = sheetHeight.get();
+      sheetOffset.set(Math.min(height, Math.max(0, height + event.translationY)));
+    },
+    onDeactivate: (event) => {
+      "worklet";
+      scheduleOnRN(endNowPlayingDrag, event.translationY, event.velocityY);
+    },
+  });
+
+  const contentStyle = useAnimatedStyle(() => ({
+    opacity: 1 - Math.min(1, Math.abs(offset.get()) / width.get()) * 0.8,
+    transform: [{ translateX: offset.get() }],
+  }));
+
+  if (item === null) return null;
   const title = item.title ?? "Unknown title";
-  const playing = playback.playWhenReady;
+  const subtitle = error === null ? (item.artist ?? "Unknown Artist") : "Couldn't play this file";
 
   return (
-    <View className="bg-background" style={{ paddingBottom: inset ? insets.bottom : 0 }}>
-      <Hairline />
+    <GestureDetector gesture={openPan}>
       <View
-        className="flex-row items-center"
-        style={{
-          height: grid.row + CELL,
-          gap: CELL * 1.5,
-          paddingLeft: grid.margin,
-          paddingRight: grid.margin - 12,
+        pointerEvents="box-none"
+        className="absolute"
+        style={{ left: grid.margin, right: grid.margin, bottom, height: chrome.miniPlayer }}
+        onLayout={(event) => {
+          const measured = Math.max(1, event.nativeEvent.layout.width);
+          widthRef.current = measured;
+          width.set(measured);
         }}
       >
-        <Artwork uri={item.artworkUri ?? undefined} size={CELL * 5} />
-        <View className="flex-1">
-          <Text numberOfLines={1} className="font-sans text-body font-medium text-foreground">
-            {title}
-          </Text>
-          <Text numberOfLines={1} className="font-sans text-body text-secondary">
-            {playback.error === null
-              ? (item.artist ?? "Unknown Artist")
-              : "Couldn't play this file"}
-          </Text>
+        <Glass backdropId={backdropId} cornerRadius={RADIUS} />
+        <View className="flex-1 overflow-hidden" style={{ borderRadius: RADIUS }}>
+          <GestureDetector gesture={pan}>
+            <Animated.View className="flex-1 flex-row items-center" style={contentStyle}>
+              <Press
+                accessibilityRole="button"
+                accessibilityLabel={`Now playing: ${title}, ${subtitle}`}
+                accessibilityHint="Opens Now Playing"
+                accessibilityActions={[
+                  { name: "next", label: "Next track" },
+                  { name: "previous", label: "Previous track" },
+                ]}
+                onAccessibilityAction={(event) =>
+                  skip(event.nativeEvent.actionName === "next" ? "next" : "previous")
+                }
+                onPress={onOpen}
+                haptic="selection"
+                depth={0.015}
+                className="flex-1 flex-row items-center self-stretch"
+                style={{ gap: CELL * 1.5, paddingLeft: CELL * 1.5 }}
+              >
+                <Artwork uri={item.artworkUri ?? undefined} size={CELL * 5} />
+                <View className="flex-1">
+                  <Text
+                    numberOfLines={1}
+                    className="font-sans text-body font-medium text-foreground"
+                  >
+                    {title}
+                  </Text>
+                  <Text numberOfLines={1} className="font-sans text-body text-secondary">
+                    {subtitle}
+                  </Text>
+                </View>
+              </Press>
+              <View className="flex-row" style={{ paddingRight: CELL / 2 }}>
+                <IconButton
+                  icon={playing ? IconPlayerPauseFilled : IconPlayerPlayFilled}
+                  label={playing ? `Pause ${title}` : `Play ${title}`}
+                  onPress={togglePlayPause}
+                />
+                <IconButton
+                  icon={IconPlayerTrackNextFilled}
+                  label="Next track"
+                  onPress={skipToNext}
+                />
+              </View>
+            </Animated.View>
+          </GestureDetector>
         </View>
-        <IconButton
-          icon={playing ? IconPlayerPauseFilled : IconPlayerPlayFilled}
-          label={playing ? `Pause ${title}` : `Play ${title}`}
-          onPress={togglePlayPause}
-        />
       </View>
-      <View
-        accessibilityRole="progressbar"
-        accessibilityValue={{ min: 0, max: 100, now: Math.round(fraction * 100) }}
-        className="bg-separator"
-        style={{ height: CELL / 4, marginHorizontal: grid.margin }}
-      >
-        <View className="bg-accent" style={{ height: CELL / 4, width: `${fraction * 100}%` }} />
-      </View>
-      <View style={{ height: CELL }} />
-    </View>
+    </GestureDetector>
   );
 }

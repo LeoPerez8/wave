@@ -1,5 +1,20 @@
-import { filesLeavingWithRoot, type LibraryTrack } from "@wave/core";
-import { asc, eq, inArray, sql, type SQL } from "drizzle-orm";
+import {
+  artistAlbums,
+  checkPlaylistName,
+  compareAlbumTracks,
+  compareFileNames,
+  compareStrings,
+  filesLeavingWithRoot,
+  rememberSearch,
+  moveItem,
+  planPlaylistAdd,
+  playlistMosaic,
+  sortKey,
+  type IndexedFile,
+  type LibraryTrack,
+  type PlayEvent,
+} from "@wave/core";
+import { and, asc, desc, eq, inArray, ne, or, sql, type SQL } from "drizzle-orm";
 import { drizzle, type ExpoSQLiteDatabase } from "drizzle-orm/expo-sqlite";
 import { migrate } from "drizzle-orm/expo-sqlite/migrator";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
@@ -10,7 +25,16 @@ import * as Layer from "effect/Layer";
 import { openDatabaseSync } from "expo-sqlite";
 
 import migrations from "./db/migrations";
+import {
+  homeSections,
+  latestPlay,
+  recordPlay,
+  updatePlay,
+  type HomeSections,
+  type RecordedPlay,
+} from "./db/playHistory";
 import * as schema from "./db/schema";
+import type { KnownFile } from "./NativeScanner";
 
 const DATABASE_NAME = "wave.db";
 
@@ -60,6 +84,148 @@ export interface SongRow {
   readonly durationMs: number;
   readonly thumbPath: string | null;
   readonly artworkPath: string | null;
+  /** Core sort key of the title (files the row on the A–Z spine). */
+  readonly titleSort: string;
+  readonly albumId: number;
+  /** The track artist. */
+  readonly artistId: number;
+}
+
+/** A track on an album screen, with what orders it there. */
+export interface AlbumTrackRow extends SongRow {
+  readonly discNumber: number | null;
+  readonly trackNumber: number | null;
+}
+
+/** One album of the Albums grid (and of an artist's albums). */
+export interface AlbumRow {
+  readonly id: number;
+  readonly title: string;
+  readonly titleSort: string;
+  readonly albumArtist: string;
+  readonly albumArtistId: number;
+  readonly year: number | null;
+  readonly compilation: boolean;
+  readonly trackCount: number;
+  readonly durationMs: number;
+  readonly thumbPath: string | null;
+  readonly artworkPath: string | null;
+}
+
+/** One row of the Artists list: track artists and album artists alike. */
+export interface ArtistRow {
+  readonly id: number;
+  readonly name: string;
+  readonly sort: string;
+  /** Albums filed under the artist. */
+  readonly albumCount: number;
+  /** Songs by the artist or on their albums. */
+  readonly trackCount: number;
+}
+
+export interface GenreRow {
+  readonly id: number;
+  readonly name: string;
+  readonly sort: string;
+  readonly trackCount: number;
+}
+
+/** A folder that holds tracks, for Library › Folders. */
+export interface FolderRow {
+  readonly id: number;
+  readonly name: string;
+  readonly path: string;
+  /** Core sort key of the name. */
+  readonly sort: string;
+  readonly trackCount: number;
+}
+
+export interface AlbumDetail {
+  readonly album: AlbumRow;
+  /** The genre most of the album's tracks carry. */
+  readonly genre: string | null;
+  /** By disc, then track number (Core's `compareAlbumTracks`). */
+  readonly tracks: readonly AlbumTrackRow[];
+}
+
+export interface ArtistDetail {
+  readonly artist: ArtistRow;
+  /** Filed under the artist, newest first. */
+  readonly albums: readonly AlbumRow[];
+  /** Other albums with songs by the artist (compilations…), newest first. */
+  readonly appearsOn: readonly AlbumRow[];
+  /** By title. */
+  readonly songs: readonly SongRow[];
+}
+
+export interface GenreDetail {
+  readonly genre: GenreRow;
+  /** By title. */
+  readonly songs: readonly SongRow[];
+}
+
+export interface FolderDetail {
+  readonly folder: FolderRow;
+  /** By file name, the way a file manager lists them. */
+  readonly songs: readonly SongRow[];
+}
+
+/** An indexed file found under a new path (see Core's `reconcileScan`). */
+export interface PathMove {
+  readonly from: string;
+  readonly to: string;
+}
+
+/** The queue and position saved for the next launch. */
+export interface SavedPlayback {
+  /** Core's `QueueState` as JSON. */
+  readonly queue: string;
+  readonly positionMs: number;
+}
+
+/** What Now Playing shows about a track beyond the player's item. */
+export interface TrackDetails {
+  readonly id: number;
+  readonly artistId: number;
+  readonly artist: string;
+  readonly albumId: number;
+  readonly album: string;
+  readonly palette: schema.ArtworkPalette | null;
+  /** The audio file, for reading its lyrics. */
+  readonly path: string;
+}
+
+/** One playlist of Library › Playlists. */
+export interface PlaylistRow {
+  readonly id: number;
+  readonly name: string;
+  /** Core sort key of the name. */
+  readonly sort: string;
+  readonly trackCount: number;
+  readonly durationMs: number;
+  /** Thumbnails of its mosaic (Core's `playlistMosaic`): none, one or four. */
+  readonly thumbPaths: readonly string[];
+}
+
+/** A song in a playlist; the same track may only appear once. */
+export interface PlaylistItemRow extends SongRow {
+  readonly itemId: number;
+}
+
+export interface PlaylistDetail {
+  readonly playlist: PlaylistRow;
+  /** Full-size covers of its mosaic, for the playlist screen. */
+  readonly artworkPaths: readonly string[];
+  /** In playlist order. */
+  readonly items: readonly PlaylistItemRow[];
+}
+
+/** What adding songs to a playlist did. */
+export interface PlaylistAddResult {
+  readonly playlistId: number;
+  readonly name: string;
+  readonly added: number;
+  readonly alreadyIn: number;
 }
 
 export class LibraryStore extends Context.Service<
@@ -85,10 +251,15 @@ export class LibraryStore extends Context.Service<
      */
     readonly removeRoot: (path: string) => Effect.Effect<void, LibraryStoreError>;
     readonly excludedFolders: Effect.Effect<readonly string[], LibraryStoreError>;
-    /** Upserts one scanner batch (and the artwork it references) in a single transaction. */
+    /**
+     * Upserts one scanner batch (and the artwork it references) in a single
+     * transaction. [moves] first re-point indexed tracks to the paths they were
+     * found under, so they keep their id (and with it history and favorites).
+     */
     readonly saveBatch: (
       tracks: readonly IndexedTrack[],
       artwork: readonly IndexedArtwork[],
+      moves?: readonly PathMove[],
     ) => Effect.Effect<void, LibraryStoreError>;
     readonly markScanned: (
       roots: readonly string[],
@@ -97,6 +268,98 @@ export class LibraryStore extends Context.Service<
     readonly countTracks: Effect.Effect<number, LibraryStoreError>;
     /** Every track ordered by title, for Library › Songs. */
     readonly listSongs: Effect.Effect<readonly SongRow[], LibraryStoreError>;
+    /** Every album by title, then album artist, for Library › Albums. */
+    readonly listAlbums: Effect.Effect<readonly AlbumRow[], LibraryStoreError>;
+    /** Every artist with songs, by name, for Library › Artists. */
+    readonly listArtists: Effect.Effect<readonly ArtistRow[], LibraryStoreError>;
+    /** Every genre with songs, by name, for Library › Genres. */
+    readonly listGenres: Effect.Effect<readonly GenreRow[], LibraryStoreError>;
+    /** Every folder holding songs, by name, for Library › Folders. */
+    readonly listFolders: Effect.Effect<readonly FolderRow[], LibraryStoreError>;
+    /** An album and its tracks, or null when it's no longer in the library. */
+    readonly getAlbum: (id: number) => Effect.Effect<AlbumDetail | null, LibraryStoreError>;
+    readonly getArtist: (id: number) => Effect.Effect<ArtistDetail | null, LibraryStoreError>;
+    readonly getGenre: (id: number) => Effect.Effect<GenreDetail | null, LibraryStoreError>;
+    readonly getFolder: (id: number) => Effect.Effect<FolderDetail | null, LibraryStoreError>;
+
+    /** The indexed files under [roots], for an incremental scan to skip the unchanged ones. */
+    readonly knownFiles: (
+      roots: readonly string[],
+    ) => Effect.Effect<readonly KnownFile[], LibraryStoreError>;
+    /** What identifies the indexed files at [paths] when they turn up elsewhere. */
+    readonly indexedFiles: (
+      paths: readonly string[],
+    ) => Effect.Effect<readonly IndexedFile[], LibraryStoreError>;
+    /**
+     * Removes the tracks at [paths], then the albums, artists, genres and
+     * folders left without tracks (also after tag changes, so call it once per scan).
+     */
+    readonly removeTracks: (paths: readonly string[]) => Effect.Effect<void, LibraryStoreError>;
+    /** Excludes [path] and drops the exclusions in [drop] (see Core's `planExclusion`). */
+    readonly addExcludedFolder: (
+      path: string,
+      drop: readonly string[],
+    ) => Effect.Effect<void, LibraryStoreError>;
+    readonly removeExcludedFolder: (path: string) => Effect.Effect<void, LibraryStoreError>;
+    /** The tracks with these ids, in no particular order; ids no longer indexed are left out. */
+    readonly songsByIds: (
+      ids: readonly number[],
+    ) => Effect.Effect<readonly SongRow[], LibraryStoreError>;
+    readonly loadPlayback: Effect.Effect<SavedPlayback | null, LibraryStoreError>;
+    /** Saves the queue with where its current entry is. */
+    readonly saveQueue: (
+      queue: string,
+      positionMs: number,
+    ) => Effect.Effect<void, LibraryStoreError>;
+    readonly savePosition: (positionMs: number) => Effect.Effect<void, LibraryStoreError>;
+    /** The playing track's links and artwork palette, for Now Playing; null once it's gone. */
+    readonly trackDetails: (id: number) => Effect.Effect<TrackDetails | null, LibraryStoreError>;
+    /** The recent searches, newest first. */
+    readonly listRecentSearches: Effect.Effect<readonly string[], LibraryStoreError>;
+    /** Adds a search to the recent ones (see Core's `rememberSearch`); returns them, newest first. */
+    readonly rememberSearch: (query: string) => Effect.Effect<readonly string[], LibraryStoreError>;
+    readonly clearRecentSearches: Effect.Effect<void, LibraryStoreError>;
+    /** Every playlist by name, with its mosaic. */
+    readonly listPlaylists: Effect.Effect<readonly PlaylistRow[], LibraryStoreError>;
+    readonly getPlaylist: (id: number) => Effect.Effect<PlaylistDetail | null, LibraryStoreError>;
+    /**
+     * Creates a playlist holding [trackIds] (Core's `checkPlaylistName` must
+     * accept the name, or it fails).
+     */
+    readonly createPlaylist: (
+      name: string,
+      trackIds: readonly number[],
+    ) => Effect.Effect<PlaylistAddResult, LibraryStoreError>;
+    readonly renamePlaylist: (id: number, name: string) => Effect.Effect<void, LibraryStoreError>;
+    readonly deletePlaylist: (id: number) => Effect.Effect<void, LibraryStoreError>;
+    /** Appends the tracks the playlist doesn't have yet (Core's `planPlaylistAdd`). */
+    readonly addToPlaylist: (
+      id: number,
+      trackIds: readonly number[],
+    ) => Effect.Effect<PlaylistAddResult, LibraryStoreError>;
+    /** Moves an item to [toIndex] (0-based) in its playlist. */
+    readonly movePlaylistItem: (
+      playlistId: number,
+      itemId: number,
+      toIndex: number,
+    ) => Effect.Effect<void, LibraryStoreError>;
+    readonly removePlaylistItem: (
+      playlistId: number,
+      itemId: number,
+    ) => Effect.Effect<void, LibraryStoreError>;
+    /** The ids of every starred track. */
+    readonly favoriteTrackIds: Effect.Effect<readonly number[], LibraryStoreError>;
+    readonly setFavorite: (trackId: number, on: boolean) => Effect.Effect<void, LibraryStoreError>;
+    /** Starred tracks, most recently starred first, for Library › Favorites. */
+    readonly listFavorites: Effect.Effect<readonly SongRow[], LibraryStoreError>;
+    /** Records a play as it starts (Core's `PlayEvent`); returns its id, to update it as it goes on. */
+    readonly recordPlay: (play: PlayEvent) => Effect.Effect<number, LibraryStoreError>;
+    /** Brings a recorded play up to date: listened time, how it ended (so far), counted. */
+    readonly updatePlay: (id: number, play: PlayEvent) => Effect.Effect<void, LibraryStoreError>;
+    /** The Home tab: Recently Added, Recently Played, Most Played and Favorites. */
+    readonly home: Effect.Effect<HomeSections, LibraryStoreError>;
+    /** The play recorded last, to pick back up when JS restarts while the player kept going. */
+    readonly latestPlay: Effect.Effect<RecordedPlay | null, LibraryStoreError>;
   }
 >()("@wave/mobile/library/LibraryStore") {}
 
@@ -126,10 +389,18 @@ const saveBatchSync = (
   db: Database,
   tracks: readonly IndexedTrack[],
   artworkRows: readonly IndexedArtwork[],
+  moves: readonly PathMove[],
   now: number,
 ): void => {
   const { artists, genres, folders, albums, artwork } = schema;
   db.transaction((tx) => {
+    // The upsert below then updates the moved rows by their new path.
+    for (const move of moves) {
+      tx.update(schema.tracks)
+        .set({ path: move.to })
+        .where(eq(schema.tracks.path, move.from))
+        .run();
+    }
     if (artworkRows.length > 0) {
       tx.insert(artwork)
         .values(artworkRows.map((row) => ({ ...row })))
@@ -291,8 +562,38 @@ const saveBatchSync = (
 /** SQLite's default limit on bound parameters is far above this; it keeps statements small. */
 const DELETE_CHUNK = 500;
 
+const chunks = <A>(items: readonly A[]): A[][] => {
+  const result: A[][] = [];
+  for (let i = 0; i < items.length; i += DELETE_CHUNK) {
+    result.push(items.slice(i, i + DELETE_CHUNK));
+  }
+  return result;
+};
+
+type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
+
+/** Deletes the albums, artists, genres and folders no track uses any more. */
+const pruneOrphans = (tx: Transaction): void => {
+  // Albums first: they hold the album artist.
+  tx.run(sql`DELETE FROM albums WHERE id NOT IN (SELECT album_id FROM tracks)`);
+  tx.run(sql`DELETE FROM artists WHERE id NOT IN (SELECT artist_id FROM tracks)
+    AND id NOT IN (SELECT album_artist_id FROM albums)`);
+  tx.run(sql`DELETE FROM genres
+    WHERE id NOT IN (SELECT genre_id FROM tracks WHERE genre_id IS NOT NULL)`);
+  tx.run(sql`DELETE FROM folders WHERE id NOT IN (SELECT folder_id FROM tracks)`);
+};
+
+const removeTracksSync = (db: Database, paths: readonly string[]): void => {
+  db.transaction((tx) => {
+    for (const chunk of chunks(paths)) {
+      tx.delete(schema.tracks).where(inArray(schema.tracks.path, chunk)).run();
+    }
+    pruneOrphans(tx);
+  });
+};
+
 const removeRootSync = (db: Database, path: string): void => {
-  const { scanRoots, tracks } = schema;
+  const { scanRoots, tracks, excludedFolders } = schema;
   db.transaction((tx) => {
     const remaining = tx
       .select({ path: scanRoots.path })
@@ -310,22 +611,467 @@ const removeRootSync = (db: Database, path: string): void => {
       .all()
       .map((row) => row.path);
     const leaving = filesLeavingWithRoot(under, path, remaining);
-    for (let i = 0; i < leaving.length; i += DELETE_CHUNK) {
-      tx.delete(tracks)
-        .where(inArray(tracks.path, leaving.slice(i, i + DELETE_CHUNK)))
-        .run();
+    for (const chunk of chunks(leaving)) {
+      tx.delete(tracks).where(inArray(tracks.path, chunk)).run();
     }
     tx.delete(scanRoots).where(eq(scanRoots.path, path)).run();
 
-    // Albums first: they hold the album artist.
-    tx.run(sql`DELETE FROM albums WHERE id NOT IN (SELECT album_id FROM tracks)`);
-    tx.run(sql`DELETE FROM artists WHERE id NOT IN (SELECT artist_id FROM tracks)
-      AND id NOT IN (SELECT album_artist_id FROM albums)`);
-    tx.run(sql`DELETE FROM genres
-      WHERE id NOT IN (SELECT genre_id FROM tracks WHERE genre_id IS NOT NULL)`);
-    tx.run(sql`DELETE FROM folders WHERE id NOT IN (SELECT folder_id FROM tracks)`);
+    // Exclusions only mean something inside a root.
+    const exclusions = tx
+      .select({ path: excludedFolders.path })
+      .from(excludedFolders)
+      .all()
+      .map((row) => row.path);
+    const stale = filesLeavingWithRoot(exclusions, path, remaining);
+    if (stale.length > 0) {
+      tx.delete(excludedFolders)
+        .where(inArray(excludedFolders.path, [...stale]))
+        .run();
+    }
+
+    pruneOrphans(tx);
   });
 };
+
+/** Tracks with what every track list shows (a `SongRow`), plus what orders albums and folders. */
+const trackQuery = (db: Database) => {
+  const { tracks, artists, albums, artwork } = schema;
+  return db
+    .select({
+      id: tracks.id,
+      path: tracks.path,
+      title: tracks.title,
+      artist: artists.name,
+      album: albums.title,
+      durationMs: tracks.durationMs,
+      thumbPath: artwork.thumbPath,
+      artworkPath: artwork.path,
+      titleSort: tracks.titleSort,
+      albumId: tracks.albumId,
+      artistId: tracks.artistId,
+      discNumber: tracks.discNumber,
+      trackNumber: tracks.trackNumber,
+      fileName: tracks.fileName,
+    })
+    .from(tracks)
+    .innerJoin(artists, eq(tracks.artistId, artists.id))
+    .innerJoin(albums, eq(tracks.albumId, albums.id))
+    .leftJoin(artwork, eq(tracks.artworkHash, artwork.hash));
+};
+
+/** Albums with their track count and length; albums left without tracks don't appear. */
+const albumQuery = (db: Database, where: SQL | undefined): AlbumRow[] => {
+  const { tracks, artists, albums, artwork } = schema;
+  return db
+    .select({
+      id: albums.id,
+      title: albums.title,
+      titleSort: albums.titleSort,
+      albumArtist: artists.name,
+      albumArtistId: albums.albumArtistId,
+      year: albums.year,
+      compilation: albums.compilation,
+      trackCount: sql<number>`count(${tracks.id})`,
+      durationMs: sql<number>`coalesce(sum(${tracks.durationMs}), 0)`,
+      thumbPath: artwork.thumbPath,
+      artworkPath: artwork.path,
+    })
+    .from(albums)
+    .innerJoin(artists, eq(albums.albumArtistId, artists.id))
+    .innerJoin(tracks, eq(tracks.albumId, albums.id))
+    .leftJoin(artwork, eq(albums.artworkHash, artwork.hash))
+    .where(where)
+    .groupBy(albums.id)
+    .orderBy(asc(albums.titleSort), asc(artists.sort), asc(albums.id))
+    .all();
+};
+
+const BY_TITLE = [
+  asc(schema.tracks.titleSort),
+  asc(schema.artists.sort),
+  asc(schema.tracks.path),
+] as const;
+
+/**
+ * Artists with songs: a song belongs to its track artist and to the album
+ * artist of its album (so Watch the Throne counts for Kanye West as well).
+ */
+const listArtistsSync = (db: Database): ArtistRow[] =>
+  db.all<ArtistRow>(sql`
+    WITH links AS (
+      SELECT id AS track_id, artist_id FROM tracks
+      UNION
+      SELECT tracks.id, albums.album_artist_id FROM tracks JOIN albums ON albums.id = tracks.album_id
+    )
+    SELECT artists.id AS "id", artists.name AS "name", artists.sort AS "sort",
+      (SELECT count(*) FROM albums WHERE albums.album_artist_id = artists.id) AS "albumCount",
+      count(links.track_id) AS "trackCount"
+    FROM artists JOIN links ON links.artist_id = artists.id
+    GROUP BY artists.id
+    ORDER BY artists.sort, artists.id`);
+
+const getAlbumSync = (db: Database, id: number): AlbumDetail | null => {
+  const { tracks, genres } = schema;
+  const album = albumQuery(db, eq(schema.albums.id, id))[0];
+  if (album === undefined) return null;
+  const genre = db
+    .select({ name: genres.name })
+    .from(tracks)
+    .innerJoin(genres, eq(tracks.genreId, genres.id))
+    .where(eq(tracks.albumId, id))
+    .groupBy(genres.id)
+    .orderBy(desc(sql`count(*)`), asc(genres.sort))
+    .get();
+  const rows = trackQuery(db).where(eq(tracks.albumId, id)).all();
+  // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
+  return { album, genre: genre?.name ?? null, tracks: rows.sort(compareAlbumTracks) };
+};
+
+const getArtistSync = (db: Database, id: number): ArtistDetail | null => {
+  const { artists, albums, tracks } = schema;
+  const artist = db
+    .select({ id: artists.id, name: artists.name, sort: artists.sort })
+    .from(artists)
+    .where(eq(artists.id, id))
+    .get();
+  if (artist === undefined) return null;
+  const songs = trackQuery(db)
+    .where(
+      or(
+        eq(tracks.artistId, id),
+        inArray(
+          tracks.albumId,
+          db.select({ id: albums.id }).from(albums).where(eq(albums.albumArtistId, id)),
+        ),
+      ),
+    )
+    .orderBy(...BY_TITLE)
+    .all();
+  const split = artistAlbums(
+    id,
+    albumQuery(
+      db,
+      or(
+        eq(albums.albumArtistId, id),
+        inArray(
+          albums.id,
+          db.select({ id: tracks.albumId }).from(tracks).where(eq(tracks.artistId, id)),
+        ),
+      ),
+    ),
+  );
+  return {
+    artist: { ...artist, albumCount: split.albums.length, trackCount: songs.length },
+    albums: split.albums,
+    appearsOn: split.appearsOn,
+    songs,
+  };
+};
+
+const getGenreSync = (db: Database, id: number): GenreDetail | null => {
+  const { genres, tracks } = schema;
+  const genre = db
+    .select({ id: genres.id, name: genres.name, sort: genres.sort })
+    .from(genres)
+    .where(eq(genres.id, id))
+    .get();
+  if (genre === undefined) return null;
+  const songs = trackQuery(db)
+    .where(eq(tracks.genreId, id))
+    .orderBy(...BY_TITLE)
+    .all();
+  return { genre: { ...genre, trackCount: songs.length }, songs };
+};
+
+const getFolderSync = (db: Database, id: number): FolderDetail | null => {
+  const { folders, tracks } = schema;
+  const folder = db
+    .select({ id: folders.id, name: folders.name, path: folders.path })
+    .from(folders)
+    .where(eq(folders.id, id))
+    .get();
+  if (folder === undefined) return null;
+  const songs = trackQuery(db)
+    .where(eq(tracks.folderId, id))
+    .all()
+    // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
+    .sort((a, b) => compareFileNames(a.fileName, b.fileName));
+  return {
+    folder: { ...folder, sort: sortKey(folder.name), trackCount: songs.length },
+    songs,
+  };
+};
+
+const listFoldersSync = (db: Database): FolderRow[] => {
+  const { folders, tracks } = schema;
+  return (
+    db
+      .select({
+        id: folders.id,
+        name: folders.name,
+        path: folders.path,
+        trackCount: sql<number>`count(${tracks.id})`,
+      })
+      .from(folders)
+      .innerJoin(tracks, eq(tracks.folderId, folders.id))
+      .groupBy(folders.id)
+      .all()
+      .map((folder) => ({ ...folder, sort: sortKey(folder.name) }))
+      // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
+      .sort((a, b) => compareStrings(a.sort, b.sort) || compareStrings(a.path, b.path))
+  );
+};
+
+const SAVED_PLAYBACK_ID = 1;
+
+const listRecentSearchesSync = (db: Pick<Database, "select">): string[] =>
+  db
+    .select({ query: schema.recentSearches.query })
+    .from(schema.recentSearches)
+    .orderBy(desc(schema.recentSearches.searchedAt))
+    .all()
+    .map((row) => row.query);
+
+/** Rewrites the list Core's `rememberSearch` returns, newest with the latest time. */
+const rememberSearchSync = (db: Database, query: string, now: number): readonly string[] =>
+  db.transaction((tx) => {
+    const recent = listRecentSearchesSync(tx);
+    const next = rememberSearch(recent, query);
+    if (next === recent) return recent;
+    tx.delete(schema.recentSearches).run();
+    tx.insert(schema.recentSearches)
+      .values(next.map((search, i) => ({ query: search, searchedAt: now - i })))
+      .run();
+    return next;
+  });
+
+/** Rows per multi-row insert, well under SQLite's bound-parameter limit. */
+const INSERT_CHUNK = 200;
+
+/** Songs (`SongRow`s) by track id, fetched in chunks. */
+const songsById = (db: Database, ids: readonly number[]) => {
+  const songs = new Map<number, ReturnType<ReturnType<typeof trackQuery>["all"]>[number]>();
+  for (const chunk of chunks(ids)) {
+    for (const song of trackQuery(db).where(inArray(schema.tracks.id, chunk)).all())
+      songs.set(song.id, song);
+  }
+  return songs;
+};
+
+interface PlaylistCovers {
+  readonly thumbPaths: readonly string[];
+  readonly artworkPaths: readonly string[];
+}
+
+const NO_COVERS: PlaylistCovers = { thumbPaths: [], artworkPaths: [] };
+
+/** Each playlist's mosaic, from its songs' album covers in playlist order. */
+const playlistCovers = (db: Database, playlistId?: number): Map<number, PlaylistCovers> => {
+  const { playlistItems, tracks, albums, artwork } = schema;
+  const rows = db
+    .select({
+      playlistId: playlistItems.playlistId,
+      thumbPath: artwork.thumbPath,
+      path: artwork.path,
+    })
+    .from(playlistItems)
+    .innerJoin(tracks, eq(playlistItems.trackId, tracks.id))
+    .innerJoin(albums, eq(tracks.albumId, albums.id))
+    .leftJoin(artwork, eq(albums.artworkHash, artwork.hash))
+    .where(playlistId === undefined ? undefined : eq(playlistItems.playlistId, playlistId))
+    .orderBy(asc(playlistItems.playlistId), asc(playlistItems.position), asc(playlistItems.id))
+    .all();
+  const grouped = new Map<number, { thumbs: (string | null)[]; paths: (string | null)[] }>();
+  for (const row of rows) {
+    let group = grouped.get(row.playlistId);
+    if (group === undefined) {
+      group = { thumbs: [], paths: [] };
+      grouped.set(row.playlistId, group);
+    }
+    group.thumbs.push(row.thumbPath);
+    group.paths.push(row.path);
+  }
+  return new Map(
+    [...grouped].map(([id, group]) => [
+      id,
+      { thumbPaths: playlistMosaic(group.thumbs), artworkPaths: playlistMosaic(group.paths) },
+    ]),
+  );
+};
+
+const listPlaylistsSync = (db: Database): PlaylistRow[] => {
+  const { playlists, playlistItems, tracks } = schema;
+  const covers = playlistCovers(db);
+  return (
+    db
+      .select({
+        id: playlists.id,
+        name: playlists.name,
+        trackCount: sql<number>`count(${tracks.id})`,
+        durationMs: sql<number>`coalesce(sum(${tracks.durationMs}), 0)`,
+      })
+      .from(playlists)
+      .leftJoin(playlistItems, eq(playlistItems.playlistId, playlists.id))
+      .leftJoin(tracks, eq(playlistItems.trackId, tracks.id))
+      .groupBy(playlists.id)
+      .all()
+      .map((row) => ({
+        ...row,
+        sort: sortKey(row.name),
+        thumbPaths: (covers.get(row.id) ?? NO_COVERS).thumbPaths,
+      }))
+      // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
+      .sort((a, b) => compareStrings(a.sort, b.sort) || a.id - b.id)
+  );
+};
+
+const getPlaylistSync = (db: Database, id: number): PlaylistDetail | null => {
+  const { playlists, playlistItems } = schema;
+  const playlist = db
+    .select({ id: playlists.id, name: playlists.name })
+    .from(playlists)
+    .where(eq(playlists.id, id))
+    .get();
+  if (playlist === undefined) return null;
+  const order = db
+    .select({ itemId: playlistItems.id, trackId: playlistItems.trackId })
+    .from(playlistItems)
+    .where(eq(playlistItems.playlistId, id))
+    .orderBy(asc(playlistItems.position), asc(playlistItems.id))
+    .all();
+  const songs = songsById(
+    db,
+    order.map((item) => item.trackId),
+  );
+  const items = order.flatMap((item) => {
+    const song = songs.get(item.trackId);
+    return song === undefined ? [] : [{ ...song, itemId: item.itemId }];
+  });
+  const covers = playlistCovers(db, id).get(id) ?? NO_COVERS;
+  return {
+    playlist: {
+      ...playlist,
+      sort: sortKey(playlist.name),
+      trackCount: items.length,
+      durationMs: items.reduce((total, item) => total + item.durationMs, 0),
+      thumbPaths: covers.thumbPaths,
+    },
+    artworkPaths: covers.artworkPaths,
+    items,
+  };
+};
+
+/** Fails with the reason when Core rejects the name. */
+const requireName = (name: string, otherNames: readonly string[]): string => {
+  const check = checkPlaylistName(name, otherNames);
+  if (!check.ok) throw new Error(`Playlist name rejected (${check.problem})`);
+  return check.name;
+};
+
+/** Appends the tracks the playlist doesn't have yet; returns how many went in and were skipped. */
+const appendItems = (
+  tx: Transaction,
+  playlistId: number,
+  trackIds: readonly number[],
+  now: number,
+): { added: number; alreadyIn: number } => {
+  const { playlistItems } = schema;
+  const existing = tx
+    .select({ trackId: playlistItems.trackId })
+    .from(playlistItems)
+    .where(eq(playlistItems.playlistId, playlistId))
+    .all()
+    .map((row) => row.trackId);
+  const plan = planPlaylistAdd(existing, trackIds);
+  const last =
+    tx
+      .select({ position: sql<number | null>`max(${playlistItems.position})` })
+      .from(playlistItems)
+      .where(eq(playlistItems.playlistId, playlistId))
+      .get()?.position ?? -1;
+  const rows = plan.add.map((trackId, i) => ({
+    playlistId,
+    trackId,
+    position: last + 1 + i,
+    addedAt: now,
+  }));
+  for (let i = 0; i < rows.length; i += INSERT_CHUNK) {
+    tx.insert(playlistItems)
+      .values(rows.slice(i, i + INSERT_CHUNK))
+      .run();
+  }
+  return { added: plan.add.length, alreadyIn: plan.alreadyIn };
+};
+
+const createPlaylistSync = (
+  db: Database,
+  name: string,
+  trackIds: readonly number[],
+  now: number,
+): PlaylistAddResult =>
+  db.transaction((tx) => {
+    const { playlists } = schema;
+    const names = tx
+      .select({ name: playlists.name })
+      .from(playlists)
+      .all()
+      .map((row) => row.name);
+    const stored = requireName(name, names);
+    const created = tx
+      .insert(playlists)
+      .values({ name: stored, createdAt: now, updatedAt: now })
+      .returning({ id: playlists.id })
+      .get();
+    return {
+      playlistId: created.id,
+      name: stored,
+      ...appendItems(tx, created.id, trackIds, now),
+    };
+  });
+
+const addToPlaylistSync = (
+  db: Database,
+  id: number,
+  trackIds: readonly number[],
+  now: number,
+): PlaylistAddResult =>
+  db.transaction((tx) => {
+    const { playlists } = schema;
+    const playlist = tx
+      .select({ name: playlists.name })
+      .from(playlists)
+      .where(eq(playlists.id, id))
+      .get();
+    if (playlist === undefined) throw new Error("The playlist no longer exists");
+    const result = appendItems(tx, id, trackIds, now);
+    if (result.added > 0)
+      tx.update(playlists).set({ updatedAt: now }).where(eq(playlists.id, id)).run();
+    return { playlistId: id, name: playlist.name, ...result };
+  });
+
+const movePlaylistItemSync = (
+  db: Database,
+  playlistId: number,
+  itemId: number,
+  toIndex: number,
+  now: number,
+): void =>
+  db.transaction((tx) => {
+    const { playlists, playlistItems } = schema;
+    const rows = tx
+      .select({ id: playlistItems.id, position: playlistItems.position })
+      .from(playlistItems)
+      .where(eq(playlistItems.playlistId, playlistId))
+      .orderBy(asc(playlistItems.position), asc(playlistItems.id))
+      .all();
+    const from = rows.findIndex((row) => row.id === itemId);
+    if (from === -1) return;
+    moveItem(rows, from, toIndex).forEach((row, position) => {
+      if (row.position !== position)
+        tx.update(playlistItems).set({ position }).where(eq(playlistItems.id, row.id)).run();
+    });
+    tx.update(playlists).set({ updatedAt: now }).where(eq(playlists.id, playlistId)).run();
+  });
 
 const make = Effect.gen(function* () {
   const db: Database = yield* Effect.try({
@@ -391,8 +1137,10 @@ const make = Effect.gen(function* () {
         .map((row) => row.path),
     ),
 
-    saveBatch: (tracks, artworkRows) =>
-      attempt("save scanned tracks", () => saveBatchSync(db, tracks, artworkRows, Date.now())),
+    saveBatch: (tracks, artworkRows, moves = []) =>
+      attempt("save scanned tracks", () =>
+        saveBatchSync(db, tracks, artworkRows, moves, Date.now()),
+      ),
 
     markScanned: (roots, at) =>
       attempt("record the scan", () => {
@@ -413,29 +1161,250 @@ const make = Effect.gen(function* () {
     ),
 
     listSongs: attempt("list songs", () =>
-      db
-        .select({
-          id: schema.tracks.id,
-          path: schema.tracks.path,
-          title: schema.tracks.title,
-          artist: schema.artists.name,
-          album: schema.albums.title,
-          durationMs: schema.tracks.durationMs,
-          thumbPath: schema.artwork.thumbPath,
-          artworkPath: schema.artwork.path,
-        })
-        .from(schema.tracks)
-        .innerJoin(schema.artists, eq(schema.tracks.artistId, schema.artists.id))
-        .innerJoin(schema.albums, eq(schema.tracks.albumId, schema.albums.id))
-        .leftJoin(schema.artwork, eq(schema.tracks.artworkHash, schema.artwork.hash))
-        .orderBy(asc(schema.tracks.titleSort), asc(schema.artists.sort), asc(schema.tracks.path))
+      trackQuery(db)
+        .orderBy(...BY_TITLE)
         .all(),
     ),
+
+    trackDetails: (id) =>
+      attempt(
+        "read the playing track",
+        () =>
+          db
+            .select({
+              id: schema.tracks.id,
+              artistId: schema.tracks.artistId,
+              artist: schema.artists.name,
+              albumId: schema.tracks.albumId,
+              album: schema.albums.title,
+              palette: schema.artwork.palette,
+              path: schema.tracks.path,
+            })
+            .from(schema.tracks)
+            .innerJoin(schema.artists, eq(schema.tracks.artistId, schema.artists.id))
+            .innerJoin(schema.albums, eq(schema.tracks.albumId, schema.albums.id))
+            .leftJoin(schema.artwork, eq(schema.tracks.artworkHash, schema.artwork.hash))
+            .where(eq(schema.tracks.id, id))
+            .get() ?? null,
+      ),
+
+    listAlbums: attempt("list albums", () => albumQuery(db, undefined)),
+
+    listArtists: attempt("list artists", () => listArtistsSync(db)),
+
+    listGenres: attempt("list genres", () => {
+      const { genres, tracks } = schema;
+      return db
+        .select({
+          id: genres.id,
+          name: genres.name,
+          sort: genres.sort,
+          trackCount: sql<number>`count(${tracks.id})`,
+        })
+        .from(genres)
+        .innerJoin(tracks, eq(tracks.genreId, genres.id))
+        .groupBy(genres.id)
+        .orderBy(asc(genres.sort), asc(genres.id))
+        .all();
+    }),
+
+    listFolders: attempt("list folders", () => listFoldersSync(db)),
+
+    getAlbum: (id) => attempt("open the album", () => getAlbumSync(db, id)),
+
+    getArtist: (id) => attempt("open the artist", () => getArtistSync(db, id)),
+
+    getGenre: (id) => attempt("open the genre", () => getGenreSync(db, id)),
+
+    getFolder: (id) => attempt("open the folder", () => getFolderSync(db, id)),
+
+    knownFiles: (roots) =>
+      attempt("read the library index", () => {
+        if (roots.length === 0) return [];
+        const { tracks } = schema;
+        const under = roots.map(
+          (root) => sql`substr(${tracks.path}, 1, length(${root}) + 1) = ${`${root}/`}`,
+        );
+        return db
+          .select({
+            path: tracks.path,
+            sizeBytes: tracks.sizeBytes,
+            modifiedAt: tracks.modifiedAt,
+          })
+          .from(tracks)
+          .where(sql.join(under, sql` OR `))
+          .all();
+      }),
+
+    indexedFiles: (paths) =>
+      attempt("read missing files", () =>
+        chunks(paths).flatMap((chunk) =>
+          db
+            .select({
+              path: schema.tracks.path,
+              sizeBytes: schema.tracks.sizeBytes,
+              durationMs: schema.tracks.durationMs,
+              title: schema.tracks.title,
+              artist: schema.artists.name,
+            })
+            .from(schema.tracks)
+            .innerJoin(schema.artists, eq(schema.tracks.artistId, schema.artists.id))
+            .where(inArray(schema.tracks.path, chunk))
+            .all(),
+        ),
+      ),
+
+    removeTracks: (paths) => attempt("remove missing songs", () => removeTracksSync(db, paths)),
+
+    addExcludedFolder: (path, drop) =>
+      attempt("exclude a folder", () =>
+        db.transaction((tx) => {
+          const { excludedFolders } = schema;
+          if (drop.length > 0)
+            tx.delete(excludedFolders)
+              .where(inArray(excludedFolders.path, [...drop]))
+              .run();
+          tx.insert(excludedFolders)
+            .values({ path, addedAt: Date.now() })
+            .onConflictDoNothing()
+            .run();
+        }),
+      ),
+
+    removeExcludedFolder: (path) =>
+      attempt("include a folder again", () => {
+        db.delete(schema.excludedFolders).where(eq(schema.excludedFolders.path, path)).run();
+      }),
+
+    songsByIds: (ids) =>
+      attempt("read queued songs", () =>
+        chunks(ids).flatMap((chunk) =>
+          trackQuery(db).where(inArray(schema.tracks.id, chunk)).all(),
+        ),
+      ),
+
+    loadPlayback: attempt(
+      "read the saved queue",
+      () =>
+        db
+          .select({
+            queue: schema.savedPlayback.queue,
+            positionMs: schema.savedPlayback.positionMs,
+          })
+          .from(schema.savedPlayback)
+          .where(eq(schema.savedPlayback.id, SAVED_PLAYBACK_ID))
+          .get() ?? null,
+    ),
+
+    saveQueue: (queue, positionMs) =>
+      attempt("save the queue", () => {
+        const row = { queue, positionMs: Math.round(positionMs), updatedAt: Date.now() };
+        db.insert(schema.savedPlayback)
+          .values({ id: SAVED_PLAYBACK_ID, ...row })
+          .onConflictDoUpdate({ target: schema.savedPlayback.id, set: row })
+          .run();
+      }),
+
+    savePosition: (positionMs) =>
+      attempt("save the playback position", () => {
+        db.update(schema.savedPlayback)
+          .set({ positionMs: Math.round(positionMs), updatedAt: Date.now() })
+          .where(eq(schema.savedPlayback.id, SAVED_PLAYBACK_ID))
+          .run();
+      }),
+
+    listRecentSearches: attempt("read recent searches", () => listRecentSearchesSync(db)),
+
+    rememberSearch: (query) =>
+      attempt("save the search", () => rememberSearchSync(db, query, Date.now())),
+
+    clearRecentSearches: attempt("clear recent searches", () => {
+      db.delete(schema.recentSearches).run();
+    }),
+
+    listPlaylists: attempt("list playlists", () => listPlaylistsSync(db)),
+
+    getPlaylist: (id) => attempt("open the playlist", () => getPlaylistSync(db, id)),
+
+    createPlaylist: (name, trackIds) =>
+      attempt("create the playlist", () => createPlaylistSync(db, name, trackIds, Date.now())),
+
+    renamePlaylist: (id, name) =>
+      attempt("rename the playlist", () =>
+        db.transaction((tx) => {
+          const { playlists } = schema;
+          const others = tx
+            .select({ name: playlists.name })
+            .from(playlists)
+            .where(ne(playlists.id, id))
+            .all()
+            .map((row) => row.name);
+          tx.update(playlists)
+            .set({ name: requireName(name, others), updatedAt: Date.now() })
+            .where(eq(playlists.id, id))
+            .run();
+        }),
+      ),
+
+    deletePlaylist: (id) =>
+      attempt("delete the playlist", () => {
+        // Its items go with it (ON DELETE CASCADE).
+        db.delete(schema.playlists).where(eq(schema.playlists.id, id)).run();
+      }),
+
+    addToPlaylist: (id, trackIds) =>
+      attempt("add to the playlist", () => addToPlaylistSync(db, id, trackIds, Date.now())),
+
+    movePlaylistItem: (playlistId, itemId, toIndex) =>
+      attempt("reorder the playlist", () =>
+        movePlaylistItemSync(db, playlistId, itemId, toIndex, Date.now()),
+      ),
+
+    removePlaylistItem: (playlistId, itemId) =>
+      attempt("remove from the playlist", () =>
+        db.transaction((tx) => {
+          const { playlists, playlistItems } = schema;
+          tx.delete(playlistItems)
+            .where(and(eq(playlistItems.id, itemId), eq(playlistItems.playlistId, playlistId)))
+            .run();
+          tx.update(playlists)
+            .set({ updatedAt: Date.now() })
+            .where(eq(playlists.id, playlistId))
+            .run();
+        }),
+      ),
+
+    favoriteTrackIds: attempt("read favorites", () =>
+      db
+        .select({ trackId: schema.favorites.trackId })
+        .from(schema.favorites)
+        .all()
+        .map((row) => row.trackId),
+    ),
+
+    setFavorite: (trackId, on) =>
+      attempt(on ? "add a favorite" : "remove a favorite", () => {
+        const { favorites } = schema;
+        if (on)
+          db.insert(favorites).values({ trackId, addedAt: Date.now() }).onConflictDoNothing().run();
+        else db.delete(favorites).where(eq(favorites.trackId, trackId)).run();
+      }),
+
+    listFavorites: attempt("list favorites", () =>
+      trackQuery(db)
+        .innerJoin(schema.favorites, eq(schema.favorites.trackId, schema.tracks.id))
+        .orderBy(desc(schema.favorites.addedAt), ...BY_TITLE)
+        .all(),
+    ),
+
+    recordPlay: (play) => attempt("record the play", () => recordPlay(db, play)),
+
+    updatePlay: (id, play) => attempt("update the play", () => updatePlay(db, id, play)),
+
+    home: attempt("read Home", () => homeSections(db)),
+
+    latestPlay: attempt("read the latest play", () => latestPlay(db)),
   });
 });
 
 export const layer = Layer.effect(LibraryStore, make);
-
-/** Roots that have never finished a full scan. */
-export const unscannedRoots = (roots: readonly ScanRoot[]): readonly ScanRoot[] =>
-  roots.filter((root) => root.lastScannedAt === null);

@@ -25,6 +25,8 @@ data class RawTags(
   /** Embedded front cover (or the first picture), undecoded. */
   // Compared field by field in tests; ByteArray equality is by identity, which is fine here.
   val artwork: ByteArray? = null,
+  /** Embedded lyrics as tagged: plain text, or LRC for synced lyrics (Core tells them apart). */
+  val lyrics: String? = null,
 )
 
 /** Reads tags from an audio file. Implementations throw when the file can't be parsed. */

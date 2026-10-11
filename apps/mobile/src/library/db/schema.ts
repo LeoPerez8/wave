@@ -136,3 +136,90 @@ export const excludedFolders = sqliteTable("excluded_folders", {
   path: text("path").primaryKey(),
   addedAt: integer("added_at").notNull(),
 });
+
+/** The queue and position restored (paused) on launch. A single row, id 1. */
+export const savedPlayback = sqliteTable("playback_state", {
+  id: integer("id").primaryKey(),
+  /** Core's `QueueState` as JSON; entries hold track ids. */
+  queue: text("queue").notNull(),
+  /** Where the current entry was, last time it was saved. */
+  positionMs: integer("position_ms").notNull().default(0),
+  updatedAt: integer("updated_at").notNull(),
+});
+
+/** The owner's recent searches, as Core's `rememberSearch` keeps them; the newest has the latest time. */
+export const recentSearches = sqliteTable("recent_searches", {
+  query: text("query").primaryKey(),
+  searchedAt: integer("searched_at").notNull(),
+});
+
+/** Playlists the owner made. */
+export const playlists = sqliteTable("playlists", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  createdAt: integer("created_at").notNull(),
+  /** When the name or the items last changed. */
+  updatedAt: integer("updated_at").notNull(),
+});
+
+/**
+ * A playlist's songs, ordered by `position` (gaps allowed). Items go with their
+ * playlist, and with their track when its file leaves the library.
+ */
+export const playlistItems = sqliteTable(
+  "playlist_items",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    playlistId: integer("playlist_id")
+      .notNull()
+      .references(() => playlists.id, { onDelete: "cascade" }),
+    trackId: integer("track_id")
+      .notNull()
+      .references(() => tracks.id, { onDelete: "cascade" }),
+    position: integer("position").notNull(),
+    addedAt: integer("added_at").notNull(),
+  },
+  (t) => [
+    index("playlist_items_playlist_position_idx").on(t.playlistId, t.position),
+    index("playlist_items_track_idx").on(t.trackId),
+  ],
+);
+
+/** Starred tracks; a star goes with its track when the file leaves the library. */
+export const favorites = sqliteTable("favorites", {
+  trackId: integer("track_id")
+    .primaryKey()
+    .references(() => tracks.id, { onDelete: "cascade" }),
+  /** When the track was starred (the Favorites list is newest first). */
+  addedAt: integer("added_at").notNull(),
+});
+
+/**
+ * One row per time a track started playing (Core's `PlayEvent`). Append-only:
+ * a row is written when the play starts and updated until it ends, never
+ * aggregated away. `track_id` has no foreign key on purpose, so history
+ * outlives a deleted file (track ids are never reused: AUTOINCREMENT).
+ */
+export const playEvents = sqliteTable(
+  "play_events",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    trackId: integer("track_id").notNull(),
+    startedAt: integer("started_at").notNull(),
+    listenedMs: integer("listened_ms").notNull(),
+    /** Null when the player never learnt the track's length. */
+    durationMs: integer("duration_ms"),
+    endReason: text("end_reason", {
+      enum: ["completed", "skipped", "stopped", "interrupted"],
+    }).notNull(),
+    /** Core's counted-play rule (≥ 50% or ≥ 4 min listened). */
+    counted: integer("counted", { mode: "boolean" }).notNull(),
+    /** The play context (album, playlist, search…); null for Play Next / Add to Queue. */
+    contextType: text("context_type"),
+    contextId: text("context_id"),
+  },
+  (t) => [
+    index("play_events_track_idx").on(t.trackId),
+    index("play_events_started_at_idx").on(t.startedAt),
+  ],
+);

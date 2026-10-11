@@ -9,7 +9,8 @@ import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 
 /**
- * Spike (issue #4): the native glass view and a frame-time meter.
+ * The native glass view (the tab bar and mini player material) and a
+ * frame-time meter used by the glass spike screen (issue #4).
  *
  * The meter listens to FrameMetrics for the current window, so it measures what
  * the RenderThread and GPU actually took per frame (where blur and shaders cost

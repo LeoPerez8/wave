@@ -14,3 +14,98 @@ export type { LibraryTrack, RawTrack } from "./library.ts";
 export { formatDuration, formatRemaining } from "./time.ts";
 export { describeFolder, filesLeavingWithRoot, isWithin, planAddRoot } from "./scanRoots.ts";
 export type { AddRootPlan, FolderLabel, ScanRootState } from "./scanRoots.ts";
+export { resolveSkipSwipe } from "./swipe.ts";
+export type { SkipDirection, SkipSwipe } from "./swipe.ts";
+export {
+  EMPTY_QUEUE,
+  RESTART_THRESHOLD_MS,
+  currentEntry,
+  parseQueueState,
+  reduceQueue,
+  upNext,
+} from "./queue.ts";
+export type {
+  QueueCommand,
+  QueueContext,
+  QueueEntry,
+  QueuePlayback,
+  QueueResult,
+  QueueState,
+  RepeatMode,
+} from "./queue.ts";
+export { applyPlayerSync, planPlayerSync } from "./playerSync.ts";
+export type { PlayerList, QueueList, SyncStep } from "./playerSync.ts";
+export { alphabetIndex, artistAlbums, compareFileNames, indexLetter } from "./browse.ts";
+export type { ArtistAlbum, IndexEntry } from "./browse.ts";
+export { reconcileScan } from "./scanReconcile.ts";
+export type { IndexedFile, ScanChanges, ScanReconcileInput, TrackMove } from "./scanReconcile.ts";
+export { planExclusion } from "./scanRoots.ts";
+export type { ExclusionPlan } from "./scanRoots.ts";
+export { restorePlayback } from "./playbackRestore.ts";
+export type { RestoredPlayback } from "./playbackRestore.ts";
+export { extrapolatePosition, scrubPosition } from "./position.ts";
+export type { PositionReport, ScrubTouch } from "./position.ts";
+export { contrastRatio, paletteGradient } from "./palette.ts";
+export type { ArtworkPalette, Gradient, GradientTheme } from "./palette.ts";
+export { settleSheet } from "./sheet.ts";
+export type { SheetDrag, SheetState } from "./sheet.ts";
+export { reorderShift, reorderTarget } from "./reorder.ts";
+export type { ReorderDrag, ReorderRow } from "./reorder.ts";
+export {
+  RECENT_SEARCHES,
+  createSearchIndex,
+  normalizeSearchText,
+  rememberSearch,
+} from "./search.ts";
+export type {
+  SearchEntry,
+  SearchGroup,
+  SearchIndex,
+  SearchKind,
+  SearchOptions,
+  SearchResults,
+} from "./search.ts";
+export {
+  PLAYLIST_NAME_MAX,
+  checkPlaylistName,
+  describePlaylistAdd,
+  moveItem,
+  nextPlaylistName,
+  planPlaylistAdd,
+  playlistMosaic,
+} from "./playlists.ts";
+export type { PlaylistAdd, PlaylistNameCheck } from "./playlists.ts";
+export { resolveRemoveSwipe } from "./rowGestures.ts";
+export { currentLyricIndex, parseLyrics, pickLyrics } from "./lyrics.ts";
+export type { LyricLine, Lyrics, LyricsSources } from "./lyrics.ts";
+export {
+  CUSTOM_SLEEP_MINUTES,
+  SLEEP_TIMER_PRESETS,
+  formatSleepMinutes,
+  formatSleepRemaining,
+  sleepTimerRemaining,
+  startSleepTimer,
+  stepSleepMinutes,
+} from "./sleepTimer.ts";
+export type { SleepTimer, SleepTimerChoice, SleepTimerClock } from "./sleepTimer.ts";
+export {
+  COUNTED_PLAY_MS,
+  EMPTY_PLAY_TRACKER,
+  isCountedPlay,
+  playSoFar,
+  resumePlay,
+  trackPlays,
+} from "./playEvents.ts";
+export type {
+  PlayContext,
+  PlayEndReason,
+  PlayEvent,
+  PlayStep,
+  PlayTrack,
+  PlayTrackerResult,
+  PlayTrackerState,
+  PlaybackSignal,
+} from "./playEvents.ts";
+export { favoriteStar, starWriteSettled, starWriteStarted } from "./favorites.ts";
+export type { FavoriteStar } from "./favorites.ts";
+export { compareStrings } from "./library.ts";

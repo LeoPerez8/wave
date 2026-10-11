@@ -42,7 +42,16 @@ export interface ScanProgressEvent {
   readonly scanId: number;
   readonly phase: "discovering" | "reading";
   readonly filesFound: number;
+  /** Files whose tags were read so far. */
   readonly filesRead: number;
+  /** Found files an incremental scan skipped because the index has them as they are. */
+  readonly filesUnchanged: number;
+}
+
+/** Known files the scan didn't find; sent once, before the first batch. */
+export interface ScanMissingEvent {
+  readonly scanId: number;
+  readonly paths: readonly string[];
 }
 
 export interface ScanBatchEvent {
@@ -56,6 +65,7 @@ export interface ScanCompleteEvent {
   readonly scanId: number;
   readonly filesFound: number;
   readonly filesRead: number;
+  readonly filesUnchanged: number;
   readonly cancelled: boolean;
   readonly durationMs: number;
 }
@@ -63,6 +73,12 @@ export interface ScanCompleteEvent {
 export interface ScanErrorEvent {
   readonly scanId: number;
   readonly message: string;
+}
+
+/** A track's lyrics as found on disk; Core's `pickLyrics` decides what to show. */
+export interface NativeLyrics {
+  readonly embedded: string | null;
+  readonly sidecar: string | null;
 }
 
 /** The outcome of the system folder picker. */
@@ -74,6 +90,7 @@ export type FolderPick =
 
 type WaveNativeEvents = {
   onScanProgress: (event: ScanProgressEvent) => void;
+  onScanMissing: (event: ScanMissingEvent) => void;
   onScanBatch: (event: ScanBatchEvent) => void;
   onScanComplete: (event: ScanCompleteEvent) => void;
   onScanError: (event: ScanErrorEvent) => void;
@@ -88,9 +105,22 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
   getDefaultMusicFolder(): string;
   /** Opens the system folder picker and resolves the picked folder's absolute path. */
   pickFolder(): Promise<FolderPick>;
-  /** Starts a full scan, cancelling any running one, and returns its id. */
-  startScan(roots: readonly string[], excluded: readonly string[]): number;
+  /**
+   * Starts a scan, cancelling any running one, and returns its id. The known
+   * files (parallel lists) make it incremental: files with the same size and
+   * modification time aren't read again, and known files under the roots that
+   * are gone are reported in `onScanMissing`.
+   */
+  startScan(
+    roots: readonly string[],
+    excluded: readonly string[],
+    knownPaths: readonly string[],
+    knownSizes: readonly number[],
+    knownModifiedAt: readonly number[],
+  ): number;
   cancelScan(scanId: number): void;
+  /** A track's lyrics, unparsed: from its tags and from a sidecar `.lrc` beside it. */
+  readLyrics(path: string): Promise<NativeLyrics>;
 }
 
 export const WaveNative = requireNativeModule<WaveNativeModule>("WaveNative");

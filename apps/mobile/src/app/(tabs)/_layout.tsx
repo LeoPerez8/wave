@@ -1,60 +1,47 @@
-import { IconHome, IconSearch, IconStack2 } from "@tabler/icons-react-native";
-import { Tabs } from "expo-router";
-import { BottomTabBar, type BottomTabBarProps } from "expo-router/js-tabs";
+import { usePathname } from "expo-router";
+import { TabList, TabSlot, TabTrigger, Tabs } from "expo-router/ui";
 import { View } from "react-native";
+import Animated from "react-native-reanimated";
 
+import { BACKDROP, ChromeProvider } from "@/chrome/chrome";
+import { TabBar } from "@/chrome/TabBar";
+import { type TabName, useTabEntry } from "@/chrome/tabEntry";
+import { openNowPlaying } from "@/nowPlaying/sheet";
 import { MiniPlayer } from "@/playback/MiniPlayer";
-
 import { useThemeColor } from "@/theme/useThemeColor";
 
-/** The mini player sits on top of the tab bar. */
-const tabBar = (props: BottomTabBarProps) => (
-  <View>
-    <MiniPlayer />
-    <BottomTabBar {...props} />
-  </View>
-);
+const TAB_OF_PATH: Readonly<Record<string, TabName>> = {
+  "/": "index",
+  "/library": "library",
+  "/search": "search",
+};
 
-// Plain tab bar for now; the glass tab bar with Search as a separate pill
-// replaces it once the glass spike has picked a technique.
+/**
+ * Home, Library and Search under the floating glass chrome. The screens sit in
+ * the backdrop the glass shows through; the tab bar and mini player float over
+ * it as siblings, so the glass never has to draw itself. A tapped switch
+ * slides the new screen in from the tapped tab's side; the chrome stays put.
+ */
 export default function TabsLayout() {
-  const accent = useThemeColor("accent");
-  const secondary = useThemeColor("secondary");
-  const surface = useThemeColor("surface");
-  const separator = useThemeColor("separator");
-
+  const background = useThemeColor("background");
+  const entry = useTabEntry(TAB_OF_PATH[usePathname()] ?? null);
   return (
-    <Tabs
-      tabBar={tabBar}
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: accent,
-        tabBarInactiveTintColor: secondary,
-        tabBarStyle: { backgroundColor: surface, borderTopColor: separator },
-        tabBarLabelStyle: { fontFamily: "Inter", fontSize: 10, fontWeight: "600" },
-      }}
-    >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: "Home",
-          tabBarIcon: ({ color, size }) => <IconHome color={color} size={size} />,
-        }}
-      />
-      <Tabs.Screen
-        name="library"
-        options={{
-          title: "Library",
-          tabBarIcon: ({ color, size }) => <IconStack2 color={color} size={size} />,
-        }}
-      />
-      <Tabs.Screen
-        name="search"
-        options={{
-          title: "Search",
-          tabBarIcon: ({ color, size }) => <IconSearch color={color} size={size} />,
-        }}
-      />
-    </Tabs>
+    <ChromeProvider tabBar>
+      <Tabs style={{ flex: 1, backgroundColor: background }}>
+        <View nativeID={BACKDROP.tabs} collapsable={false} className="flex-1">
+          <Animated.View style={[{ flex: 1 }, entry.style]}>
+            <TabSlot />
+          </Animated.View>
+        </View>
+        {/* Declares the tabs; the visible triggers live in TabBar. */}
+        <TabList style={{ display: "none" }}>
+          <TabTrigger name="index" href="/" />
+          <TabTrigger name="library" href="/library" />
+          <TabTrigger name="search" href="/search" />
+        </TabList>
+        <MiniPlayer backdropId={BACKDROP.tabs} onOpen={openNowPlaying} />
+        <TabBar onTabTap={entry.noteTap} />
+      </Tabs>
+    </ChromeProvider>
   );
 }

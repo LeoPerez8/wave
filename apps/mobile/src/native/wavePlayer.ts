@@ -1,7 +1,9 @@
+import type { SleepTimer } from "@wave/core";
 import { NativeModule, requireNativeModule } from "expo";
 
 /** One track handed to the native player (`modules/wave-native`, `WavePlayerModule`). */
 export interface PlayerItem {
+  /** The queue entry key (unique per entry, not the track id). */
   readonly id: string;
   readonly path: string;
   readonly title: string;
@@ -34,8 +36,23 @@ export interface NativePlayerState extends PlayerPosition {
 
 export interface ItemTransitionEvent {
   readonly itemId: string | null;
-  /** Played through, repeated, skipped or seeked to, or the item list changed. */
-  readonly reason: "auto" | "repeat" | "seek" | "playlist";
+  /**
+   * Played through, repeated, skipped or seeked to (notification, Bluetooth),
+   * the item list changed, or Wave's own queue sync moved it.
+   */
+  readonly reason: "auto" | "repeat" | "seek" | "playlist" | "sync";
+}
+
+/**
+ * The player jumped within the current item (a seek from Wave, the scrubber,
+ * or "previous" after three seconds from the notification or a headset).
+ */
+export interface SeekEvent {
+  readonly itemId: string | null;
+  readonly fromMs: number;
+  readonly toMs: number;
+  /** Wall-clock time (ms) of the jump. */
+  readonly at: number;
 }
 
 export interface PlayerErrorEvent {
@@ -43,25 +60,54 @@ export interface PlayerErrorEvent {
   readonly message: string;
 }
 
+/** One step of Core's `planPlayerSync`, flattened for the native module. */
+export interface NativeSyncStep {
+  readonly type: "clear" | "replace" | "seek" | "edit";
+  readonly at?: number;
+  readonly removeCount?: number;
+  readonly keys?: readonly string[];
+  readonly index?: number;
+  readonly key?: string;
+}
+
+export interface NativeItemIds {
+  readonly keys: readonly string[];
+  readonly currentKey: string | null;
+}
+
+/** The running sleep timer (Core's `SleepTimer`), or null, whenever it changes. */
+export interface SleepTimerEvent {
+  readonly timer: SleepTimer | null;
+}
+
 type WavePlayerEvents = {
   onPlaybackState: (state: NativePlayerState) => void;
   onPosition: (position: PlayerPosition) => void;
   onItemTransition: (event: ItemTransitionEvent) => void;
+  onSeek: (event: SeekEvent) => void;
   onPlayerError: (event: PlayerErrorEvent) => void;
+  onSleepTimer: (event: SleepTimerEvent) => void;
 };
 
 declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
-  /** Replaces the item list and starts at an index and position. */
-  setItems(
-    items: readonly PlayerItem[],
-    startIndex: number,
-    startPositionMs: number,
-    play: boolean,
-  ): Promise<void>;
+  /** Edits the item list per the plan; `items` holds only the keys new to the player. */
+  applySync(steps: readonly NativeSyncStep[], items: readonly PlayerItem[]): Promise<void>;
+  setRepeatMode(mode: "off" | "all" | "one"): Promise<void>;
+  getItemIds(): Promise<NativeItemIds>;
+  /** Keeps the queue (JSON) in the native process, for when JS restarts. */
+  saveQueue(json: string): void;
+  savedQueue(): string | null;
   play(): Promise<void>;
   pause(): Promise<void>;
   seekTo(positionMs: number): Promise<void>;
   getState(): Promise<NativePlayerState>;
+  /**
+   * Starts the sleep timer in the playback service, which enforces it even with
+   * Wave in the background. `endsAt` (wall-clock ms) is for `deadline` only.
+   */
+  setSleepTimer(type: SleepTimer["type"], endsAt: number | null): Promise<void>;
+  cancelSleepTimer(): Promise<void>;
+  getSleepTimer(): Promise<SleepTimer | null>;
 }
 
 export const WavePlayer = requireNativeModule<WavePlayerModule>("WavePlayer");

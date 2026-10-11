@@ -123,12 +123,80 @@ ALTER TABLE \`scan_roots\` ADD \`is_default\` integer DEFAULT false NOT NULL;
 UPDATE \`scan_roots\` SET \`is_default\` = true;
 `;
 
+const m0002 = `
+CREATE TABLE \`playback_state\` (
+	\`id\` integer PRIMARY KEY NOT NULL,
+	\`queue\` text NOT NULL,
+	\`position_ms\` integer DEFAULT 0 NOT NULL,
+	\`updated_at\` integer NOT NULL
+);
+`;
+
+const m0003 = `
+CREATE TABLE \`recent_searches\` (
+	\`query\` text PRIMARY KEY NOT NULL,
+	\`searched_at\` integer NOT NULL
+);
+`;
+
+const m0004 = `
+CREATE TABLE \`playlists\` (
+	\`id\` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	\`name\` text NOT NULL,
+	\`created_at\` integer NOT NULL,
+	\`updated_at\` integer NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE \`playlist_items\` (
+	\`id\` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	\`playlist_id\` integer NOT NULL,
+	\`track_id\` integer NOT NULL,
+	\`position\` integer NOT NULL,
+	\`added_at\` integer NOT NULL,
+	FOREIGN KEY (\`playlist_id\`) REFERENCES \`playlists\`(\`id\`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (\`track_id\`) REFERENCES \`tracks\`(\`id\`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE INDEX \`playlist_items_playlist_position_idx\` ON \`playlist_items\` (\`playlist_id\`,\`position\`);
+--> statement-breakpoint
+CREATE INDEX \`playlist_items_track_idx\` ON \`playlist_items\` (\`track_id\`);
+--> statement-breakpoint
+CREATE TABLE \`favorites\` (
+	\`track_id\` integer PRIMARY KEY NOT NULL,
+	\`added_at\` integer NOT NULL,
+	FOREIGN KEY (\`track_id\`) REFERENCES \`tracks\`(\`id\`) ON UPDATE no action ON DELETE cascade
+);
+`;
+
+// No foreign key on track_id: history outlives deleted files (see schema.ts).
+const m0005 = `
+CREATE TABLE \`play_events\` (
+	\`id\` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	\`track_id\` integer NOT NULL,
+	\`started_at\` integer NOT NULL,
+	\`listened_ms\` integer NOT NULL,
+	\`duration_ms\` integer,
+	\`end_reason\` text NOT NULL,
+	\`counted\` integer NOT NULL,
+	\`context_type\` text,
+	\`context_id\` text
+);
+--> statement-breakpoint
+CREATE INDEX \`play_events_track_idx\` ON \`play_events\` (\`track_id\`);
+--> statement-breakpoint
+CREATE INDEX \`play_events_started_at_idx\` ON \`play_events\` (\`started_at\`);
+`;
+
 export default {
   journal: {
     entries: [
       { idx: 0, when: 1_791_806_400_000, tag: "0000_library", breakpoints: true },
       { idx: 1, when: 1_791_892_800_000, tag: "0001_default_scan_root", breakpoints: true },
+      { idx: 2, when: 1_791_979_200_000, tag: "0002_playback_state", breakpoints: true },
+      { idx: 3, when: 1_792_065_600_000, tag: "0003_recent_searches", breakpoints: true },
+      { idx: 4, when: 1_792_152_000_000, tag: "0004_playlists_favorites", breakpoints: true },
+      { idx: 5, when: 1_792_238_400_000, tag: "0005_play_events", breakpoints: true },
     ],
   },
-  migrations: { m0000, m0001 },
+  migrations: { m0000, m0001, m0002, m0003, m0004, m0005 },
 };

@@ -1,51 +1,24 @@
-import { LegendList } from "@legendapp/list/react-native";
-import { useCallback } from "react";
 import { IconMusic } from "@tabler/icons-react-native";
 import { View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { CatalogLine } from "@/catalog/CatalogLine";
-import { CELL, grid } from "@/catalog/grid";
-import { type TrackSummary, TrackRow } from "@/catalog/TrackRow";
+import { grid } from "@/catalog/grid";
 import { EmptyState } from "@/components/EmptyState";
 import { ScanProgressBanner } from "@/components/ScanProgressBanner";
-import { playSong } from "@/playback/actions";
-import { useCurrentItemId } from "@/playback/hooks";
 import { TextButton } from "@/components/TextButton";
 
 import { folderPhrase } from "./folderPhrase";
 import { useScanRoots, useScanState, useSongs } from "./hooks";
-import type { SongRow } from "./LibraryStore";
 import { promptForMusicFolder } from "./promptForMusicFolder";
+import { ListIntro, songCount, TrackList } from "./TrackList";
 
-const toSummary = (song: SongRow): TrackSummary => ({
-  id: String(song.id),
-  title: song.title,
-  artist: song.artist,
-  durationMs: song.durationMs,
-  artworkUri: song.thumbPath === null ? undefined : `file://${song.thumbPath}`,
-});
-
-const keyExtractor = (song: SongRow): string => String(song.id);
+/** Tapping a song plays the whole Songs list from it. */
+const SONGS_CONTEXT = { kind: "songs", id: null } as const;
 
 /** Library › Songs: every track by title, virtualised for libraries of tens of thousands. */
 export function SongsList() {
   const songs = useSongs();
   const scan = useScanState();
   const roots = useScanRoots();
-  const insets = useSafeAreaInsets();
-  const currentId = useCurrentItemId();
-  const renderItem = useCallback(
-    ({ item }: { item: SongRow }) => (
-      <TrackRow
-        track={toSummary(item)}
-        state={String(item.id) === currentId ? "playing" : undefined}
-        leading="artwork"
-        onPress={() => playSong(item)}
-      />
-    ),
-    [currentId],
-  );
 
   if (songs.length === 0) {
     return (
@@ -70,24 +43,14 @@ export function SongsList() {
   }
 
   return (
-    <LegendList
-      className="flex-1"
-      data={songs}
-      keyExtractor={keyExtractor}
-      renderItem={renderItem}
-      extraData={currentId}
-      estimatedItemSize={grid.row}
-      recycleItems
-      contentContainerStyle={{
-        paddingHorizontal: grid.margin,
-        paddingBottom: insets.bottom + CELL * 6,
-      }}
-      ListHeaderComponent={
-        <View style={{ paddingBottom: CELL }}>
+    <TrackList
+      songs={songs}
+      context={SONGS_CONTEXT}
+      indexed
+      header={
+        <View>
           <ScanProgressBanner />
-          <CatalogLine>
-            {`${songs.length.toLocaleString("en")} ${songs.length === 1 ? "song" : "songs"}`}
-          </CatalogLine>
+          <ListIntro line={songCount(songs.length)} songs={songs} context={SONGS_CONTEXT} />
         </View>
       }
     />
