@@ -15,6 +15,7 @@ import { PlayerView } from "@/nowPlaying/PlayerView";
 import { QueueHeader, UpNextList } from "@/nowPlaying/QueueView";
 import { Scrubber } from "@/nowPlaying/Scrubber";
 import { closeNowPlaying, nowPlayingMounted, sheetHeight, sheetOffset } from "@/nowPlaying/sheet";
+import { SleepTimerButton } from "@/nowPlaying/SleepTimer";
 import { Transport } from "@/nowPlaying/Transport";
 import { useCurrentTrackId } from "@/playback/hooks";
 import { playbackState } from "@/playback/Player";
@@ -138,6 +139,8 @@ export default function NowPlayingScreen() {
           <Scrubber />
           <Transport />
           <View className="flex-row items-center justify-end">
+            <SleepTimerButton />
+            <View className="flex-1" />
             <ViewToggle
               icon={IconListNumbers}
               label="Queue"

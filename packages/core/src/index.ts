@@ -51,3 +51,13 @@ export { settleSheet } from "./sheet.ts";
 export type { SheetDrag, SheetState } from "./sheet.ts";
 export { reorderShift, reorderTarget } from "./reorder.ts";
 export type { ReorderDrag, ReorderRow } from "./reorder.ts";
+export {
+  CUSTOM_SLEEP_MINUTES,
+  SLEEP_TIMER_PRESETS,
+  formatSleepMinutes,
+  formatSleepRemaining,
+  sleepTimerRemaining,
+  startSleepTimer,
+  stepSleepMinutes,
+} from "./sleepTimer.ts";
+export type { SleepTimer, SleepTimerChoice, SleepTimerClock } from "./sleepTimer.ts";

@@ -3,6 +3,7 @@ package expo.modules.wavenative.player
 import android.content.ComponentName
 import android.content.Context
 import android.net.Uri
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import androidx.media3.common.MediaItem
@@ -10,6 +11,9 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
+import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionError
+import androidx.media3.session.SessionResult
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
 import expo.modules.kotlin.Promise
@@ -131,7 +135,7 @@ class WavePlayerModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("WavePlayer")
 
-    Events("onPlaybackState", "onPosition", "onItemTransition", "onPlayerError")
+    Events("onPlaybackState", "onPosition", "onItemTransition", "onPlayerError", "onSleepTimer")
 
     OnCreate { main.post(::connect) }
 
@@ -209,6 +213,27 @@ class WavePlayerModule : Module() {
       }
     }.runOnQueue(Queues.MAIN)
 
+    /**
+     * Starts the sleep timer in the playback service (Core's `SleepTimer`:
+     * `deadline` with `endsAt`, or `endOfTrack`), replacing a running one.
+     */
+    AsyncFunction("setSleepTimer") { type: String, endsAt: Double?, promise: Promise ->
+      val mode = SleepTimerWire.fromJs(type, endsAt)
+        ?: return@AsyncFunction promise.reject("ERR_SLEEP_TIMER", "Unknown sleep timer: $type", null)
+      sendSleepTimerCommand(promise, SleepTimerSession.START, SleepTimerSession.toBundle(mode))
+    }.runOnQueue(Queues.MAIN)
+
+    AsyncFunction("cancelSleepTimer") { promise: Promise ->
+      sendSleepTimerCommand(promise, SleepTimerSession.CANCEL, Bundle.EMPTY)
+    }.runOnQueue(Queues.MAIN)
+
+    /** The running sleep timer, or null; `onSleepTimer` reports changes. */
+    AsyncFunction("getSleepTimer") { promise: Promise ->
+      withController(promise) { player ->
+        promise.resolve(SleepTimerWire.toJs(SleepTimerSession.fromBundle(player.sessionExtras)))
+      }
+    }.runOnQueue(Queues.MAIN)
+
     /** The current state, e.g. when JS starts while the service is already playing. */
     AsyncFunction("getState") { promise: Promise ->
       withController(promise) { player -> promise.resolve(state(player)) }
@@ -225,10 +250,38 @@ class WavePlayerModule : Module() {
     }
   }
 
+  /** The service publishes the running sleep timer in its session extras. */
+  private val controllerListener = object : MediaController.Listener {
+    override fun onExtrasChanged(controller: MediaController, extras: Bundle) {
+      sendSleepTimer(extras)
+    }
+  }
+
+  private fun sendSleepTimer(extras: Bundle) {
+    sendEvent("onSleepTimer", mapOf("timer" to SleepTimerWire.toJs(SleepTimerSession.fromBundle(extras))))
+  }
+
+  private fun sendSleepTimerCommand(promise: Promise, command: SessionCommand, args: Bundle) {
+    withController(promise) { player ->
+      val result = player.sendCustomCommand(command, args)
+      result.addListener(
+        {
+          val code = runCatching { result.get().resultCode }.getOrDefault(SessionError.ERROR_UNKNOWN)
+          if (code == SessionResult.RESULT_SUCCESS) {
+            promise.resolve(null)
+          } else {
+            promise.reject("ERR_SLEEP_TIMER", "The player refused the sleep timer ($code)", null)
+          }
+        },
+        context.mainExecutor,
+      )
+    }
+  }
+
   private fun connect() {
     if (controllerFuture != null) return
     val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
-    val future = MediaController.Builder(context, token).buildAsync()
+    val future = MediaController.Builder(context, token).setListener(controllerListener).buildAsync()
     controllerFuture = future
     future.addListener(
       {
@@ -236,6 +289,7 @@ class WavePlayerModule : Module() {
         connected.addListener(listener)
         controller = connected
         sendEvent("onPlaybackState", state(connected))
+        sendSleepTimer(connected.sessionExtras)
         if (connected.isPlaying) main.post(positionTicker)
       },
       context.mainExecutor,
