@@ -58,8 +58,6 @@ const useLibraryQuery = <A>(
   const version = useSyncExternalStore(libraryVersion.subscribe, libraryVersion.get);
   const lastRun = useRef(0);
   const mounted = useRef(true);
-  const queryRef = useRef(query);
-  queryRef.current = query;
 
   useEffect(() => {
     mounted.current = true;
@@ -72,7 +70,7 @@ const useLibraryQuery = <A>(
     const run = () => {
       lastRun.current = Date.now();
       appRuntime
-        .runPromise(queryRef.current)
+        .runPromise(query)
         .then((result) => {
           // A newer version may already be pending; this result is still the freshest one we have.
           if (mounted.current) setValue(result);
@@ -88,7 +86,7 @@ const useLibraryQuery = <A>(
     }
     const timer = setTimeout(run, wait);
     return () => clearTimeout(timer);
-  }, [version]);
+  }, [query, version]);
 
   return value;
 };
