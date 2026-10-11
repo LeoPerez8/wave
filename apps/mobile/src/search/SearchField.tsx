@@ -1,4 +1,5 @@
 import { IconSearch, IconX } from "@tabler/icons-react-native";
+import type { ComponentRef, Ref } from "react";
 import { TextInput, View } from "react-native";
 
 import { CELL } from "@/catalog/grid";
@@ -6,6 +7,7 @@ import { Press } from "@/motion/Press";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 type Props = {
+  ref?: Ref<ComponentRef<typeof TextInput>>;
   value: string;
   onChange: (text: string) => void;
   /** The keyboard's search key. */
@@ -16,7 +18,7 @@ type Props = {
  * The search field: a square field-tone well with the search glyph, the query
  * in Body ink, and a clear button once there is something to clear.
  */
-export function SearchField({ value, onChange, onSubmit }: Props) {
+export function SearchField({ ref, value, onChange, onSubmit }: Props) {
   const secondary = useThemeColor("secondary");
   const accent = useThemeColor("accent");
   return (
@@ -26,6 +28,7 @@ export function SearchField({ value, onChange, onSubmit }: Props) {
     >
       <IconSearch size={20} color={secondary} strokeWidth={1.5} />
       <TextInput
+        ref={ref}
         className="flex-1 font-sans text-body text-foreground"
         style={{ height: CELL * 6, paddingVertical: 0 }}
         value={value}

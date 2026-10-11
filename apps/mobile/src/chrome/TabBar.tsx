@@ -7,22 +7,28 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { grid } from "@/catalog/grid";
 import { Glass } from "@/glass/Glass";
 import { Press } from "@/motion/Press";
+import { requestSearchFocus } from "@/search/focusRequest";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { BACKDROP, chrome } from "./chrome";
+import type { TabName } from "./tabEntry";
 
 type IconProps = { size?: number; color?: string; strokeWidth?: number };
 
 type TabProps = {
-  name: string;
+  name: TabName;
   label: string;
   icon: ComponentType<IconProps>;
   /** Show the label under the icon (the Search pill is icon-only). */
   showLabel?: boolean;
+  /** Runs before switching to this tab. */
+  onSwitch: (to: TabName) => void;
+  /** Runs on every tap, the current tab included. */
+  onTap?: () => void;
 };
 
 /** One tab inside a pill: teal when it's the current tab, graphite otherwise. */
-function Tab({ name, label, icon: Icon, showLabel = true }: TabProps) {
+function Tab({ name, label, icon: Icon, showLabel = true, onSwitch, onTap }: TabProps) {
   const { triggerProps } = useTabTrigger({ name });
   const accent = useThemeColor("accent");
   const secondary = useThemeColor("secondary");
@@ -33,7 +39,11 @@ function Tab({ name, label, icon: Icon, showLabel = true }: TabProps) {
       accessibilityRole="tab"
       accessibilityLabel={label}
       accessibilityState={{ selected: focused }}
-      onPress={triggerProps.onPress}
+      onPress={(event) => {
+        if (!focused) onSwitch(name);
+        onTap?.();
+        triggerProps.onPress?.(event);
+      }}
       onLongPress={triggerProps.onLongPress}
       haptic="selection"
       depth={0.1}
@@ -54,9 +64,9 @@ const RADIUS = chrome.tabBar / 2;
 
 /**
  * The floating glass tab bar: Home and Library share one pill, and Search
- * sits beside it in a pill of its own.
+ * sits beside it in a pill of its own. Tapping Search brings the keyboard up.
  */
-export function TabBar() {
+export function TabBar({ onTabTap }: { onTabTap: (to: TabName) => void }) {
   const insets = useSafeAreaInsets();
   return (
     <View
@@ -72,12 +82,19 @@ export function TabBar() {
     >
       <View className="flex-1 flex-row">
         <Glass backdropId={BACKDROP.tabs} cornerRadius={RADIUS} />
-        <Tab name="index" label="Home" icon={IconHome} />
-        <Tab name="library" label="Library" icon={IconStack2} />
+        <Tab name="index" label="Home" icon={IconHome} onSwitch={onTabTap} />
+        <Tab name="library" label="Library" icon={IconStack2} onSwitch={onTabTap} />
       </View>
       <View className="flex-row" style={{ width: chrome.tabBar }}>
         <Glass backdropId={BACKDROP.tabs} cornerRadius={RADIUS} />
-        <Tab name="search" label="Search" icon={IconSearch} showLabel={false} />
+        <Tab
+          name="search"
+          label="Search"
+          icon={IconSearch}
+          showLabel={false}
+          onSwitch={onTabTap}
+          onTap={requestSearchFocus}
+        />
       </View>
     </View>
   );

@@ -1,24 +1,37 @@
+import { usePathname } from "expo-router";
 import { TabList, TabSlot, TabTrigger, Tabs } from "expo-router/ui";
 import { View } from "react-native";
+import Animated from "react-native-reanimated";
 
 import { BACKDROP, ChromeProvider } from "@/chrome/chrome";
 import { TabBar } from "@/chrome/TabBar";
+import { type TabName, useTabEntry } from "@/chrome/tabEntry";
 import { openNowPlaying } from "@/nowPlaying/sheet";
 import { MiniPlayer } from "@/playback/MiniPlayer";
 import { useThemeColor } from "@/theme/useThemeColor";
 
+const TAB_OF_PATH: Readonly<Record<string, TabName>> = {
+  "/": "index",
+  "/library": "library",
+  "/search": "search",
+};
+
 /**
  * Home, Library and Search under the floating glass chrome. The screens sit in
  * the backdrop the glass shows through; the tab bar and mini player float over
- * it as siblings, so the glass never has to draw itself.
+ * it as siblings, so the glass never has to draw itself. A tapped switch
+ * slides the new screen in from the tapped tab's side; the chrome stays put.
  */
 export default function TabsLayout() {
   const background = useThemeColor("background");
+  const entry = useTabEntry(TAB_OF_PATH[usePathname()] ?? null);
   return (
     <ChromeProvider tabBar>
       <Tabs style={{ flex: 1, backgroundColor: background }}>
         <View nativeID={BACKDROP.tabs} collapsable={false} className="flex-1">
-          <TabSlot />
+          <Animated.View style={[{ flex: 1 }, entry.style]}>
+            <TabSlot />
+          </Animated.View>
         </View>
         {/* Declares the tabs; the visible triggers live in TabBar. */}
         <TabList style={{ display: "none" }}>
@@ -27,7 +40,7 @@ export default function TabsLayout() {
           <TabTrigger name="search" href="/search" />
         </TabList>
         <MiniPlayer backdropId={BACKDROP.tabs} onOpen={openNowPlaying} />
-        <TabBar />
+        <TabBar onTabTap={entry.noteTap} />
       </Tabs>
     </ChromeProvider>
   );

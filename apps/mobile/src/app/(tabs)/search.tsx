@@ -1,8 +1,9 @@
 import { IconSearch } from "@tabler/icons-react-native";
 import type { SearchKind } from "@wave/core";
 import { useFocusEffect } from "expo-router";
-import { useCallback, useDeferredValue, useMemo, useState } from "react";
-import { ScrollView, Text, View } from "react-native";
+import { type ComponentRef, useCallback, useDeferredValue, useMemo, useRef, useState } from "react";
+import { ScrollView, Text, TextInput, View } from "react-native";
+import Animated, { LayoutAnimationConfig, useReducedMotion } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
@@ -12,8 +13,10 @@ import { Hairline } from "@/catalog/Hairline";
 import { useChromeInset } from "@/chrome/chrome";
 import { EmptyState } from "@/components/EmptyState";
 import { TextButton } from "@/components/TextButton";
+import { rise, riseReduced } from "@/motion/entry";
 import { clearRecentSearches, rememberSearch, useRecentSearches } from "@/search/recentSearches";
 import { RESULT_LIMIT, resultRows } from "@/search/rows";
+import { onSearchFocusRequest, takeSearchFocusRequest } from "@/search/focusRequest";
 import { SearchField } from "@/search/SearchField";
 import { useSearchIndex } from "@/search/searchIndex";
 import { SearchResultsList } from "@/search/SearchResultsList";
@@ -53,18 +56,36 @@ function RecentSearches({ onPick }: { onPick: (query: string) => void }) {
 
 /**
  * The Search tab: results update as you type, grouped by type under a top
- * result. With nothing typed it shows the recent searches.
+ * result. With nothing typed it shows the recent searches. Tapping the tab
+ * raises the keyboard; leaving it puts the keyboard away. Switching between
+ * recents and results rises the new content in.
  */
 export default function SearchScreen() {
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<ReadonlySet<SearchKind>>(NO_KINDS);
   const [focused, setFocused] = useState(false);
+  const field = useRef<ComponentRef<typeof TextInput>>(null);
+  const reduceMotion = useReducedMotion();
 
   useFocusEffect(
     useCallback(() => {
       setFocused(true);
-      return () => setFocused(false);
+      let frame = 0;
+      // A frame later, so the field is attached when the tap is what mounts it.
+      const focusField = () => {
+        if (!takeSearchFocusRequest()) return;
+        cancelAnimationFrame(frame);
+        frame = requestAnimationFrame(() => field.current?.focus());
+      };
+      focusField();
+      const stop = onSearchFocusRequest(focusField);
+      return () => {
+        setFocused(false);
+        stop();
+        cancelAnimationFrame(frame);
+        field.current?.blur();
+      };
     }, []),
   );
 
@@ -94,7 +115,10 @@ export default function SearchScreen() {
     [],
   );
 
-  const typed = query.trim() !== "";
+  // What's shown; a change of it rises in. Results and no results count as
+  // one, so refining a query never animates or remounts the list.
+  const content = query.trim() === "" ? "recents" : index === null ? "preparing" : "results";
+  const noResults = results !== null && results.groups.length === 0 && deferredQuery === query;
   return (
     <View className="flex-1 bg-background">
       <View style={{ paddingTop: insets.top + 16, paddingHorizontal: grid.margin, gap: 16 }}>
@@ -105,26 +129,35 @@ export default function SearchScreen() {
         >
           Search
         </Text>
-        <SearchField value={query} onChange={changeQuery} onSubmit={remember} />
+        <SearchField ref={field} value={query} onChange={changeQuery} onSubmit={remember} />
       </View>
-      {!typed ? (
-        <RecentSearches onPick={pickRecent} />
-      ) : index === null ? (
-        <Text
-          className="font-sans text-subheadline text-secondary"
-          style={{ paddingHorizontal: grid.margin, paddingTop: CELL * 3 }}
+      {/* Only a change of kind rises in; the screen's first content doesn't. */}
+      <LayoutAnimationConfig skipEntering>
+        <Animated.View
+          key={content}
+          entering={reduceMotion ? riseReduced : rise}
+          style={{ flex: 1 }}
         >
-          Getting your library ready to search…
-        </Text>
-      ) : results !== null && results.groups.length === 0 && deferredQuery === query ? (
-        <EmptyState
-          icon={IconSearch}
-          title="No results"
-          message={`Nothing in your library matches “${query.trim()}”.`}
-        />
-      ) : (
-        <SearchResultsList rows={rows} onOpen={remember} onShowAll={showAll} />
-      )}
+          {content === "recents" ? (
+            <RecentSearches onPick={pickRecent} />
+          ) : content === "preparing" ? (
+            <Text
+              className="font-sans text-subheadline text-secondary"
+              style={{ paddingHorizontal: grid.margin, paddingTop: CELL * 3 }}
+            >
+              Getting your library ready to search…
+            </Text>
+          ) : noResults ? (
+            <EmptyState
+              icon={IconSearch}
+              title="No results"
+              message={`Nothing in your library matches “${query.trim()}”.`}
+            />
+          ) : (
+            <SearchResultsList rows={rows} onOpen={remember} onShowAll={showAll} />
+          )}
+        </Animated.View>
+      </LayoutAnimationConfig>
     </View>
   );
 }
