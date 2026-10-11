@@ -1,5 +1,12 @@
-import { filesLeavingWithRoot, type LibraryTrack } from "@wave/core";
-import { asc, eq, inArray, sql, type SQL } from "drizzle-orm";
+import {
+  artistAlbums,
+  compareAlbumTracks,
+  compareFileNames,
+  filesLeavingWithRoot,
+  sortKey,
+  type LibraryTrack,
+} from "@wave/core";
+import { asc, desc, eq, inArray, or, sql, type SQL } from "drizzle-orm";
 import { drizzle, type ExpoSQLiteDatabase } from "drizzle-orm/expo-sqlite";
 import { migrate } from "drizzle-orm/expo-sqlite/migrator";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
@@ -60,6 +67,90 @@ export interface SongRow {
   readonly durationMs: number;
   readonly thumbPath: string | null;
   readonly artworkPath: string | null;
+  /** Core sort key of the title (files the row on the A–Z spine). */
+  readonly titleSort: string;
+  readonly albumId: number;
+  /** The track artist. */
+  readonly artistId: number;
+}
+
+/** A track on an album screen, with what orders it there. */
+export interface AlbumTrackRow extends SongRow {
+  readonly discNumber: number | null;
+  readonly trackNumber: number | null;
+}
+
+/** One album of the Albums grid (and of an artist's albums). */
+export interface AlbumRow {
+  readonly id: number;
+  readonly title: string;
+  readonly titleSort: string;
+  readonly albumArtist: string;
+  readonly albumArtistId: number;
+  readonly year: number | null;
+  readonly compilation: boolean;
+  readonly trackCount: number;
+  readonly durationMs: number;
+  readonly thumbPath: string | null;
+  readonly artworkPath: string | null;
+}
+
+/** One row of the Artists list: track artists and album artists alike. */
+export interface ArtistRow {
+  readonly id: number;
+  readonly name: string;
+  readonly sort: string;
+  /** Albums filed under the artist. */
+  readonly albumCount: number;
+  /** Songs by the artist or on their albums. */
+  readonly trackCount: number;
+}
+
+export interface GenreRow {
+  readonly id: number;
+  readonly name: string;
+  readonly sort: string;
+  readonly trackCount: number;
+}
+
+/** A folder that holds tracks, for Library › Folders. */
+export interface FolderRow {
+  readonly id: number;
+  readonly name: string;
+  readonly path: string;
+  /** Core sort key of the name. */
+  readonly sort: string;
+  readonly trackCount: number;
+}
+
+export interface AlbumDetail {
+  readonly album: AlbumRow;
+  /** The genre most of the album's tracks carry. */
+  readonly genre: string | null;
+  /** By disc, then track number (Core's `compareAlbumTracks`). */
+  readonly tracks: readonly AlbumTrackRow[];
+}
+
+export interface ArtistDetail {
+  readonly artist: ArtistRow;
+  /** Filed under the artist, newest first. */
+  readonly albums: readonly AlbumRow[];
+  /** Other albums with songs by the artist (compilations…), newest first. */
+  readonly appearsOn: readonly AlbumRow[];
+  /** By title. */
+  readonly songs: readonly SongRow[];
+}
+
+export interface GenreDetail {
+  readonly genre: GenreRow;
+  /** By title. */
+  readonly songs: readonly SongRow[];
+}
+
+export interface FolderDetail {
+  readonly folder: FolderRow;
+  /** By file name, the way a file manager lists them. */
+  readonly songs: readonly SongRow[];
 }
 
 export class LibraryStore extends Context.Service<
@@ -97,6 +188,19 @@ export class LibraryStore extends Context.Service<
     readonly countTracks: Effect.Effect<number, LibraryStoreError>;
     /** Every track ordered by title, for Library › Songs. */
     readonly listSongs: Effect.Effect<readonly SongRow[], LibraryStoreError>;
+    /** Every album by title, then album artist, for Library › Albums. */
+    readonly listAlbums: Effect.Effect<readonly AlbumRow[], LibraryStoreError>;
+    /** Every artist with songs, by name, for Library › Artists. */
+    readonly listArtists: Effect.Effect<readonly ArtistRow[], LibraryStoreError>;
+    /** Every genre with songs, by name, for Library › Genres. */
+    readonly listGenres: Effect.Effect<readonly GenreRow[], LibraryStoreError>;
+    /** Every folder holding songs, by name, for Library › Folders. */
+    readonly listFolders: Effect.Effect<readonly FolderRow[], LibraryStoreError>;
+    /** An album and its tracks, or null when it's no longer in the library. */
+    readonly getAlbum: (id: number) => Effect.Effect<AlbumDetail | null, LibraryStoreError>;
+    readonly getArtist: (id: number) => Effect.Effect<ArtistDetail | null, LibraryStoreError>;
+    readonly getGenre: (id: number) => Effect.Effect<GenreDetail | null, LibraryStoreError>;
+    readonly getFolder: (id: number) => Effect.Effect<FolderDetail | null, LibraryStoreError>;
   }
 >()("@wave/mobile/library/LibraryStore") {}
 
@@ -327,6 +431,197 @@ const removeRootSync = (db: Database, path: string): void => {
   });
 };
 
+/** Tracks with what every track list shows (a `SongRow`), plus what orders albums and folders. */
+const trackQuery = (db: Database) => {
+  const { tracks, artists, albums, artwork } = schema;
+  return db
+    .select({
+      id: tracks.id,
+      path: tracks.path,
+      title: tracks.title,
+      artist: artists.name,
+      album: albums.title,
+      durationMs: tracks.durationMs,
+      thumbPath: artwork.thumbPath,
+      artworkPath: artwork.path,
+      titleSort: tracks.titleSort,
+      albumId: tracks.albumId,
+      artistId: tracks.artistId,
+      discNumber: tracks.discNumber,
+      trackNumber: tracks.trackNumber,
+      fileName: tracks.fileName,
+    })
+    .from(tracks)
+    .innerJoin(artists, eq(tracks.artistId, artists.id))
+    .innerJoin(albums, eq(tracks.albumId, albums.id))
+    .leftJoin(artwork, eq(tracks.artworkHash, artwork.hash));
+};
+
+/** Albums with their track count and length; albums left without tracks don't appear. */
+const albumQuery = (db: Database, where: SQL | undefined): AlbumRow[] => {
+  const { tracks, artists, albums, artwork } = schema;
+  return db
+    .select({
+      id: albums.id,
+      title: albums.title,
+      titleSort: albums.titleSort,
+      albumArtist: artists.name,
+      albumArtistId: albums.albumArtistId,
+      year: albums.year,
+      compilation: albums.compilation,
+      trackCount: sql<number>`count(${tracks.id})`,
+      durationMs: sql<number>`coalesce(sum(${tracks.durationMs}), 0)`,
+      thumbPath: artwork.thumbPath,
+      artworkPath: artwork.path,
+    })
+    .from(albums)
+    .innerJoin(artists, eq(albums.albumArtistId, artists.id))
+    .innerJoin(tracks, eq(tracks.albumId, albums.id))
+    .leftJoin(artwork, eq(albums.artworkHash, artwork.hash))
+    .where(where)
+    .groupBy(albums.id)
+    .orderBy(asc(albums.titleSort), asc(artists.sort), asc(albums.id))
+    .all();
+};
+
+const BY_TITLE = [
+  asc(schema.tracks.titleSort),
+  asc(schema.artists.sort),
+  asc(schema.tracks.path),
+] as const;
+
+/**
+ * Artists with songs: a song belongs to its track artist and to the album
+ * artist of its album (so Watch the Throne counts for Kanye West as well).
+ */
+const listArtistsSync = (db: Database): ArtistRow[] =>
+  db.all<ArtistRow>(sql`
+    WITH links AS (
+      SELECT id AS track_id, artist_id FROM tracks
+      UNION
+      SELECT tracks.id, albums.album_artist_id FROM tracks JOIN albums ON albums.id = tracks.album_id
+    )
+    SELECT artists.id AS "id", artists.name AS "name", artists.sort AS "sort",
+      (SELECT count(*) FROM albums WHERE albums.album_artist_id = artists.id) AS "albumCount",
+      count(links.track_id) AS "trackCount"
+    FROM artists JOIN links ON links.artist_id = artists.id
+    GROUP BY artists.id
+    ORDER BY artists.sort, artists.id`);
+
+const getAlbumSync = (db: Database, id: number): AlbumDetail | null => {
+  const { tracks, genres } = schema;
+  const album = albumQuery(db, eq(schema.albums.id, id))[0];
+  if (album === undefined) return null;
+  const genre = db
+    .select({ name: genres.name })
+    .from(tracks)
+    .innerJoin(genres, eq(tracks.genreId, genres.id))
+    .where(eq(tracks.albumId, id))
+    .groupBy(genres.id)
+    .orderBy(desc(sql`count(*)`), asc(genres.sort))
+    .get();
+  const rows = trackQuery(db).where(eq(tracks.albumId, id)).all();
+  // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
+  return { album, genre: genre?.name ?? null, tracks: rows.sort(compareAlbumTracks) };
+};
+
+const getArtistSync = (db: Database, id: number): ArtistDetail | null => {
+  const { artists, albums, tracks } = schema;
+  const artist = db
+    .select({ id: artists.id, name: artists.name, sort: artists.sort })
+    .from(artists)
+    .where(eq(artists.id, id))
+    .get();
+  if (artist === undefined) return null;
+  const songs = trackQuery(db)
+    .where(
+      or(
+        eq(tracks.artistId, id),
+        inArray(
+          tracks.albumId,
+          db.select({ id: albums.id }).from(albums).where(eq(albums.albumArtistId, id)),
+        ),
+      ),
+    )
+    .orderBy(...BY_TITLE)
+    .all();
+  const split = artistAlbums(
+    id,
+    albumQuery(
+      db,
+      or(
+        eq(albums.albumArtistId, id),
+        inArray(
+          albums.id,
+          db.select({ id: tracks.albumId }).from(tracks).where(eq(tracks.artistId, id)),
+        ),
+      ),
+    ),
+  );
+  return {
+    artist: { ...artist, albumCount: split.albums.length, trackCount: songs.length },
+    albums: split.albums,
+    appearsOn: split.appearsOn,
+    songs,
+  };
+};
+
+const getGenreSync = (db: Database, id: number): GenreDetail | null => {
+  const { genres, tracks } = schema;
+  const genre = db
+    .select({ id: genres.id, name: genres.name, sort: genres.sort })
+    .from(genres)
+    .where(eq(genres.id, id))
+    .get();
+  if (genre === undefined) return null;
+  const songs = trackQuery(db)
+    .where(eq(tracks.genreId, id))
+    .orderBy(...BY_TITLE)
+    .all();
+  return { genre: { ...genre, trackCount: songs.length }, songs };
+};
+
+const getFolderSync = (db: Database, id: number): FolderDetail | null => {
+  const { folders, tracks } = schema;
+  const folder = db
+    .select({ id: folders.id, name: folders.name, path: folders.path })
+    .from(folders)
+    .where(eq(folders.id, id))
+    .get();
+  if (folder === undefined) return null;
+  const songs = trackQuery(db)
+    .where(eq(tracks.folderId, id))
+    .all()
+    // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
+    .sort((a, b) => compareFileNames(a.fileName, b.fileName));
+  return {
+    folder: { ...folder, sort: sortKey(folder.name), trackCount: songs.length },
+    songs,
+  };
+};
+
+const compareStrings = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
+const listFoldersSync = (db: Database): FolderRow[] => {
+  const { folders, tracks } = schema;
+  return (
+    db
+      .select({
+        id: folders.id,
+        name: folders.name,
+        path: folders.path,
+        trackCount: sql<number>`count(${tracks.id})`,
+      })
+      .from(folders)
+      .innerJoin(tracks, eq(tracks.folderId, folders.id))
+      .groupBy(folders.id)
+      .all()
+      .map((folder) => ({ ...folder, sort: sortKey(folder.name) }))
+      // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
+      .sort((a, b) => compareStrings(a.sort, b.sort) || compareStrings(a.path, b.path))
+  );
+};
+
 const make = Effect.gen(function* () {
   const db: Database = yield* Effect.try({
     try: () => {
@@ -413,24 +708,40 @@ const make = Effect.gen(function* () {
     ),
 
     listSongs: attempt("list songs", () =>
-      db
-        .select({
-          id: schema.tracks.id,
-          path: schema.tracks.path,
-          title: schema.tracks.title,
-          artist: schema.artists.name,
-          album: schema.albums.title,
-          durationMs: schema.tracks.durationMs,
-          thumbPath: schema.artwork.thumbPath,
-          artworkPath: schema.artwork.path,
-        })
-        .from(schema.tracks)
-        .innerJoin(schema.artists, eq(schema.tracks.artistId, schema.artists.id))
-        .innerJoin(schema.albums, eq(schema.tracks.albumId, schema.albums.id))
-        .leftJoin(schema.artwork, eq(schema.tracks.artworkHash, schema.artwork.hash))
-        .orderBy(asc(schema.tracks.titleSort), asc(schema.artists.sort), asc(schema.tracks.path))
+      trackQuery(db)
+        .orderBy(...BY_TITLE)
         .all(),
     ),
+
+    listAlbums: attempt("list albums", () => albumQuery(db, undefined)),
+
+    listArtists: attempt("list artists", () => listArtistsSync(db)),
+
+    listGenres: attempt("list genres", () => {
+      const { genres, tracks } = schema;
+      return db
+        .select({
+          id: genres.id,
+          name: genres.name,
+          sort: genres.sort,
+          trackCount: sql<number>`count(${tracks.id})`,
+        })
+        .from(genres)
+        .innerJoin(tracks, eq(tracks.genreId, genres.id))
+        .groupBy(genres.id)
+        .orderBy(asc(genres.sort), asc(genres.id))
+        .all();
+    }),
+
+    listFolders: attempt("list folders", () => listFoldersSync(db)),
+
+    getAlbum: (id) => attempt("open the album", () => getAlbumSync(db, id)),
+
+    getArtist: (id) => attempt("open the artist", () => getArtistSync(db, id)),
+
+    getGenre: (id) => attempt("open the genre", () => getGenreSync(db, id)),
+
+    getFolder: (id) => attempt("open the folder", () => getFolderSync(db, id)),
   });
 });
 
