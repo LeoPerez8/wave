@@ -33,7 +33,9 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-          cache: ${{ hashFiles('pnpm-lock.yaml') != '' && 'pnpm' || '' }}
+          # setup-node v5 caches automatically when package.json has packageManager,
+          # and fails without a lockfile, which only exists after the first autofix.
+          package-manager-cache: ${{ hashFiles('pnpm-lock.yaml') != '' }}
 
       - name: Autofix lockfile and formatting
         id: autofix
