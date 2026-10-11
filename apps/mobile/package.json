@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",
+    "@shopify/react-native-skia": "2.13.1",
     "@tabler/icons-react-native": "^3.44.0",
     "@wave/core": "workspace:*",
     "expo": "~58.0.2",
