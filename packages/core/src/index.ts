@@ -35,6 +35,8 @@ export type {
 } from "./queue.ts";
 export { applyPlayerSync, planPlayerSync } from "./playerSync.ts";
 export type { PlayerList, QueueList, SyncStep } from "./playerSync.ts";
+export { alphabetIndex, artistAlbums, compareFileNames, indexLetter } from "./browse.ts";
+export type { ArtistAlbum, IndexEntry } from "./browse.ts";
 export { reconcileScan } from "./scanReconcile.ts";
 export type { IndexedFile, ScanChanges, ScanReconcileInput, TrackMove } from "./scanReconcile.ts";
 export { planExclusion } from "./scanRoots.ts";
