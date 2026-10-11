@@ -80,7 +80,11 @@ export function AlphabetSpine({ letters, onLetter }: Props) {
           <Text className="font-sans text-index font-light text-foreground">{active}</Text>
         </Animated.View>
       )}
-      <View pointerEvents="box-none" className="absolute bottom-0 right-0 top-0 justify-center">
+      <View
+        pointerEvents="box-none"
+        className="absolute bottom-0 top-0 justify-center"
+        style={{ right: grid.spineInset }}
+      >
         <GestureDetector gesture={pan}>
           <View
             accessible

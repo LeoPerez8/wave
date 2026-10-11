@@ -19,7 +19,7 @@ import {
 type Shelf = "albums" | "songs";
 
 /** Fixed height of an album tile's caption block (catalog line, title, furniture). */
-const CAPTION = CELL * 9;
+const CAPTION = CELL * 12;
 const ROW_GAP = CELL * 3;
 
 /** The Library's components on synthetic data. Developer-only; see Settings. */
@@ -27,7 +27,8 @@ export default function DesignPreviewScreen() {
   const [view, setView] = useState<Shelf>("albums");
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const tile = Math.floor((width - grid.margin - grid.spine - grid.gutter) / 2);
+  const reserved = grid.spine + grid.spineInset;
+  const tile = Math.floor((width - grid.margin - reserved - grid.gutter) / 2);
   const tileRow = tile + CAPTION + ROW_GAP;
 
   const albums = useRef<FlatList<AlbumSummary>>(null);
@@ -51,7 +52,7 @@ export default function DesignPreviewScreen() {
     <View className="flex-1 bg-background">
       <ScreenHeader title="Design preview" />
       <View style={{ paddingHorizontal: grid.margin, gap: CELL * 2, paddingBottom: CELL * 2 }}>
-        <CatalogLine tone="highlight">Synthetic data · not your library</CatalogLine>
+        <CatalogLine>Synthetic data · not your library</CatalogLine>
         <View accessibilityRole="tablist" className="flex-row" style={{ gap: CELL * 3 }}>
           {(["albums", "songs"] as const).map((option) => (
             <Press
@@ -81,6 +82,7 @@ export default function DesignPreviewScreen() {
       <View className="flex-1">
         {view === "albums" ? (
           <FlatList
+            key="albums"
             ref={albums}
             data={SYNTHETIC_ALBUMS}
             keyExtractor={(album) => album.id}
@@ -88,7 +90,7 @@ export default function DesignPreviewScreen() {
             columnWrapperStyle={{ gap: grid.gutter }}
             contentContainerStyle={{
               paddingLeft: grid.margin,
-              paddingRight: grid.spine,
+              paddingRight: reserved,
               paddingBottom: insets.bottom + 48,
               gap: ROW_GAP,
             }}
@@ -100,13 +102,14 @@ export default function DesignPreviewScreen() {
           />
         ) : (
           <FlatList
+            key="songs"
             ref={songs}
             data={SYNTHETIC_TRACKS}
             keyExtractor={(item) => item.track.id}
             getItemLayout={(_, index) => ({ length: grid.row, offset: grid.row * index, index })}
             contentContainerStyle={{
               paddingLeft: grid.margin,
-              paddingRight: grid.spine + CELL,
+              paddingRight: reserved,
               paddingBottom: insets.bottom + 48,
             }}
             renderItem={({ item }) => (

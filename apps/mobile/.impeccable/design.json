@@ -1,0 +1,519 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-11T17:59:24+00:00",
+  "title": "Design System: Wave",
+  "extensions": {
+    "colorMeta": {
+      "accent": {
+        "role": "primary",
+        "displayName": "Darkroom Teal",
+        "canonical": "oklch(47.1% 0.084 183)",
+        "tonalRamp": [
+          "#000f0c",
+          "#002b26",
+          "#004b43",
+          "#076d62",
+          "#388e81",
+          "#5cb0a3",
+          "#83d6c9",
+          "#bafff2"
+        ],
+        "note": "Active state."
+      },
+      "accent-dark": {
+        "role": "primary",
+        "displayName": "Darkroom Teal (dark)",
+        "canonical": "oklch(74.1% 0.100 180)",
+        "tonalRamp": [
+          "#000f0c",
+          "#002b26",
+          "#004b43",
+          "#076d62",
+          "#388e81",
+          "#5cb0a3",
+          "#83d6c9",
+          "#bafff2"
+        ]
+      },
+      "highlight": {
+        "role": "secondary",
+        "displayName": "Ember",
+        "canonical": "oklch(52.0% 0.130 52)",
+        "tonalRamp": [
+          "#180600",
+          "#3c1901",
+          "#652e01",
+          "#914603",
+          "#b86428",
+          "#dd854c",
+          "#ffaf7e",
+          "#ffeade"
+        ],
+        "note": "Favorite and now playing."
+      },
+      "highlight-dark": {
+        "role": "secondary",
+        "displayName": "Ember (dark)",
+        "canonical": "oklch(76.1% 0.130 62)",
+        "tonalRamp": [
+          "#180600",
+          "#3c1901",
+          "#652e01",
+          "#914603",
+          "#b86428",
+          "#dd854c",
+          "#ffaf7e",
+          "#ffeade"
+        ]
+      },
+      "background": {
+        "role": "neutral",
+        "displayName": "Fog",
+        "canonical": "tone-1 of the tone ramp (OKLCH hue ~215)",
+        "tonalRamp": [
+          "#121b1d",
+          "#1c2628",
+          "#293235",
+          "#454f52",
+          "#606b6e",
+          "#778385",
+          "#a5b0b3",
+          "#c1cdd0",
+          "#d3dfe2",
+          "#e0ecef",
+          "#eff4f6"
+        ]
+      },
+      "foreground": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "tone-10 of the tone ramp (OKLCH hue ~215)",
+        "tonalRamp": [
+          "#121b1d",
+          "#1c2628",
+          "#293235",
+          "#454f52",
+          "#606b6e",
+          "#778385",
+          "#a5b0b3",
+          "#c1cdd0",
+          "#d3dfe2",
+          "#e0ecef",
+          "#eff4f6"
+        ]
+      },
+      "secondary": {
+        "role": "neutral",
+        "displayName": "Graphite",
+        "canonical": "tone-7 of the tone ramp (OKLCH hue ~215)",
+        "tonalRamp": [
+          "#121b1d",
+          "#1c2628",
+          "#293235",
+          "#454f52",
+          "#606b6e",
+          "#778385",
+          "#a5b0b3",
+          "#c1cdd0",
+          "#d3dfe2",
+          "#e0ecef",
+          "#eff4f6"
+        ]
+      },
+      "tertiary": {
+        "role": "neutral",
+        "displayName": "Pewter",
+        "canonical": "tone-5 of the tone ramp (OKLCH hue ~215)",
+        "tonalRamp": [
+          "#121b1d",
+          "#1c2628",
+          "#293235",
+          "#454f52",
+          "#606b6e",
+          "#778385",
+          "#a5b0b3",
+          "#c1cdd0",
+          "#d3dfe2",
+          "#e0ecef",
+          "#eff4f6"
+        ]
+      },
+      "separator": {
+        "role": "neutral",
+        "displayName": "Rule",
+        "canonical": "tone-3 of the tone ramp (OKLCH hue ~215)",
+        "tonalRamp": [
+          "#121b1d",
+          "#1c2628",
+          "#293235",
+          "#454f52",
+          "#606b6e",
+          "#778385",
+          "#a5b0b3",
+          "#c1cdd0",
+          "#d3dfe2",
+          "#e0ecef",
+          "#eff4f6"
+        ]
+      },
+      "fill": {
+        "role": "neutral",
+        "displayName": "Field",
+        "canonical": "tone-2 of the tone ramp (OKLCH hue ~215)",
+        "tonalRamp": [
+          "#121b1d",
+          "#1c2628",
+          "#293235",
+          "#454f52",
+          "#606b6e",
+          "#778385",
+          "#a5b0b3",
+          "#c1cdd0",
+          "#d3dfe2",
+          "#e0ecef",
+          "#eff4f6"
+        ]
+      },
+      "background-dark": {
+        "role": "neutral",
+        "displayName": "Night Slate",
+        "canonical": "tone-10 of the tone ramp (OKLCH hue ~215)",
+        "tonalRamp": [
+          "#121b1d",
+          "#1c2628",
+          "#293235",
+          "#454f52",
+          "#606b6e",
+          "#778385",
+          "#a5b0b3",
+          "#c1cdd0",
+          "#d3dfe2",
+          "#e0ecef",
+          "#eff4f6"
+        ]
+      },
+      "foreground-dark": {
+        "role": "neutral",
+        "displayName": "Ink (dark)",
+        "canonical": "tone-1 of the tone ramp (OKLCH hue ~215)",
+        "tonalRamp": [
+          "#121b1d",
+          "#1c2628",
+          "#293235",
+          "#454f52",
+          "#606b6e",
+          "#778385",
+          "#a5b0b3",
+          "#c1cdd0",
+          "#d3dfe2",
+          "#e0ecef",
+          "#eff4f6"
+        ]
+      },
+      "secondary-dark": {
+        "role": "neutral",
+        "displayName": "Graphite (dark)",
+        "canonical": "tone-4 of the tone ramp (OKLCH hue ~215)",
+        "tonalRamp": [
+          "#121b1d",
+          "#1c2628",
+          "#293235",
+          "#454f52",
+          "#606b6e",
+          "#778385",
+          "#a5b0b3",
+          "#c1cdd0",
+          "#d3dfe2",
+          "#e0ecef",
+          "#eff4f6"
+        ]
+      },
+      "tertiary-dark": {
+        "role": "neutral",
+        "displayName": "Pewter (dark)",
+        "canonical": "tone-6 of the tone ramp (OKLCH hue ~215)",
+        "tonalRamp": [
+          "#121b1d",
+          "#1c2628",
+          "#293235",
+          "#454f52",
+          "#606b6e",
+          "#778385",
+          "#a5b0b3",
+          "#c1cdd0",
+          "#d3dfe2",
+          "#e0ecef",
+          "#eff4f6"
+        ]
+      },
+      "separator-dark": {
+        "role": "neutral",
+        "displayName": "Rule (dark)",
+        "canonical": "tone-8 of the tone ramp (OKLCH hue ~215)",
+        "tonalRamp": [
+          "#121b1d",
+          "#1c2628",
+          "#293235",
+          "#454f52",
+          "#606b6e",
+          "#778385",
+          "#a5b0b3",
+          "#c1cdd0",
+          "#d3dfe2",
+          "#e0ecef",
+          "#eff4f6"
+        ]
+      },
+      "fill-dark": {
+        "role": "neutral",
+        "displayName": "Field (dark)",
+        "canonical": "tone-9 of the tone ramp (OKLCH hue ~215)",
+        "tonalRamp": [
+          "#121b1d",
+          "#1c2628",
+          "#293235",
+          "#454f52",
+          "#606b6e",
+          "#778385",
+          "#a5b0b3",
+          "#c1cdd0",
+          "#d3dfe2",
+          "#e0ecef",
+          "#eff4f6"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Spine scrub letter, set huge in the field."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Large title of a tab screen."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Title of a pushed screen."
+      },
+      "entry": {
+        "displayName": "Entry",
+        "purpose": "Library entries and settings row labels."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Track rows (artist), body copy."
+      },
+      "body-strong": {
+        "displayName": "Body Strong",
+        "purpose": "Track and album titles, stepper value."
+      },
+      "subheadline": {
+        "displayName": "Subheadline",
+        "purpose": "Entry counts, empty-state messages."
+      },
+      "footnote": {
+        "displayName": "Footnote",
+        "purpose": "Furniture lines, durations, helper text; tabular figures."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Catalog line: tracked caps section heads and cover captions."
+      },
+      "spine": {
+        "displayName": "Spine",
+        "purpose": "A–Z spine letters."
+      }
+    },
+    "shadows": [],
+    "motion": [
+      {
+        "name": "ease-press",
+        "value": "Easing.out(Easing.exp) ≈ cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Every press: fast to respond, quiet to settle."
+      },
+      {
+        "name": "duration-tap",
+        "value": "140ms (owner-set, 0–600ms in 20ms steps)",
+        "purpose": "Press dim-and-sink and the spine veil fade-in; 0 makes the press an instant dim."
+      },
+      {
+        "name": "duration-spine-out",
+        "value": "2 × duration-tap",
+        "purpose": "The spine's letter veil fading out."
+      },
+      {
+        "name": "press-dim",
+        "value": "opacity 0.65",
+        "purpose": "Pressed state; kept under reduce-motion."
+      },
+      {
+        "name": "press-depth",
+        "value": "scale 1 − depth: icon 0.1, default 0.04, album tile 0.02, track row 0.015",
+        "purpose": "How far a target sinks; removed under reduce-motion."
+      }
+    ],
+    "breakpoints": []
+  },
+  "components": [
+    {
+      "name": "Entry Row",
+      "kind": "nav",
+      "refersTo": "entry-row",
+      "description": "A Library entry: one quiet line, a reserved count column, a hairline. No icon, no chevron.",
+      "html": "<div class=\"ds-entries\"><button class=\"ds-entry\"><span class=\"ds-entry-label\">Albums</span><span class=\"ds-entry-count\">1,284</span></button><button class=\"ds-entry\"><span class=\"ds-entry-label\">Songs</span><span class=\"ds-entry-count\">14,902</span></button></div>",
+      "css": ".ds-entries{background:#e0ecef;padding:0 24px;border-top:1px solid #c1cdd0;} .ds-entry{font-family:Inter,system-ui,sans-serif;display:flex;align-items:center;width:100%;height:56px;padding:0;background:none;border:0;border-bottom:1px solid #c1cdd0;color:#121b1d;cursor:pointer;transition:opacity 140ms cubic-bezier(0.16,1,0.3,1),transform 140ms cubic-bezier(0.16,1,0.3,1);} .ds-entry-label{flex:1;text-align:left;font-size:20px;line-height:26px;font-weight:400;} .ds-entry-count{font-size:15px;line-height:20px;color:#454f52;font-variant-numeric:tabular-nums;} .ds-entry:active{opacity:.65;transform:scale(.96);} .ds-entry:focus-visible{outline:2px solid #006a5f;outline-offset:-2px;}"
+    },
+    {
+      "name": "Track Row",
+      "kind": "custom",
+      "refersTo": "track-row",
+      "description": "Fixed cells: thumbnail, title/artist at one size, state, favorite, duration.",
+      "html": "<div class=\"ds-tracks\"><button class=\"ds-track\"><span class=\"ds-thumb\" style=\"background:#7d8f6a\"></span><span class=\"ds-track-text\"><span class=\"ds-track-title\">Köln, January 24</span><span class=\"ds-track-artist\">Keith Jarrett</span></span><span class=\"ds-cell\"></span><span class=\"ds-cell\"></span><span class=\"ds-dur\">26:01</span></button><button class=\"ds-track ds-track-playing\"><span class=\"ds-thumb\" style=\"background:#5a6f86\"></span><span class=\"ds-track-text\"><span class=\"ds-track-title\">Part II c</span><span class=\"ds-track-artist\">Keith Jarrett</span></span><span class=\"ds-cell\"><svg width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M15 8a5 5 0 0 1 0 8\"/><path d=\"M6 15H4a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1h2l3.5-4.5A.8.8 0 0 1 11 5v14a.8.8 0 0 1-1.5.5L6 15\"/></svg></span><span class=\"ds-cell ds-star\">★</span><span class=\"ds-dur\">6:59</span></button></div>",
+      "css": ".ds-tracks{background:#e0ecef;padding:0 24px;} .ds-track{font-family:Inter,system-ui,sans-serif;display:flex;align-items:center;gap:12px;width:100%;height:56px;padding:0;background:none;border:0;cursor:pointer;color:#121b1d;transition:opacity 140ms cubic-bezier(0.16,1,0.3,1),transform 140ms cubic-bezier(0.16,1,0.3,1);} .ds-thumb{width:40px;height:40px;flex:none;} .ds-track-text{flex:1;display:flex;flex-direction:column;text-align:left;min-width:0;} .ds-track-title{font-size:16px;line-height:22px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;} .ds-track-artist{font-size:16px;line-height:22px;color:#454f52;} .ds-cell{width:24px;display:flex;justify-content:center;color:#a14f09;} .ds-cell svg{width:18px;height:18px;} .ds-star{font-size:14px;} .ds-dur{width:40px;text-align:right;font-size:13px;line-height:18px;color:#454f52;font-variant-numeric:tabular-nums;} .ds-track-playing .ds-track-title{color:#a14f09;} .ds-track:active{opacity:.65;transform:scale(.985);} .ds-track:focus-visible{outline:2px solid #006a5f;}"
+    },
+    {
+      "name": "Album Tile",
+      "kind": "card",
+      "refersTo": "album-artwork",
+      "description": "Square, unrounded cover; catalog line, two reserved title lines, fixed furniture line.",
+      "html": "<div class=\"ds-albums\"><button class=\"ds-album\"><span class=\"ds-cover\" style=\"background:#5a6f86\"></span><span class=\"ds-cat\">Keith Jarrett</span><span class=\"ds-album-title\">The Köln Concert</span><span class=\"ds-furn\">1975 · 4 · 66 min</span></button><button class=\"ds-album\"><span class=\"ds-cover ds-cover-empty\">♪</span><span class=\"ds-cat\">Jan Garbarek</span><span class=\"ds-album-title\">Officium</span><span class=\"ds-furn\">1994 · 15 · 78 min</span></button></div>",
+      "css": ".ds-albums{background:#e0ecef;padding:24px;display:grid;grid-template-columns:1fr 1fr;gap:16px;} .ds-album{font-family:Inter,system-ui,sans-serif;display:flex;flex-direction:column;padding:0;background:none;border:0;text-align:left;cursor:pointer;transition:opacity 140ms cubic-bezier(0.16,1,0.3,1),transform 140ms cubic-bezier(0.16,1,0.3,1);} .ds-cover{aspect-ratio:1;width:100%;border-radius:0;margin-bottom:12px;} .ds-cover-empty{background:#d3dfe2;color:#778385;display:flex;align-items:center;justify-content:center;font-size:32px;} .ds-cat{font-size:12px;line-height:16px;font-weight:600;letter-spacing:1.4px;text-transform:uppercase;color:#454f52;} .ds-album-title{margin-top:2px;min-height:44px;font-size:16px;line-height:22px;font-weight:500;color:#121b1d;} .ds-furn{margin-top:2px;font-size:13px;line-height:18px;color:#454f52;font-variant-numeric:tabular-nums;} .ds-album:active{opacity:.65;transform:scale(.98);} .ds-album:focus-visible{outline:2px solid #006a5f;outline-offset:2px;}"
+    },
+    {
+      "name": "Catalog Line",
+      "kind": "custom",
+      "refersTo": "catalog-line",
+      "description": "Small tracked caps for section heads and cover captions.",
+      "html": "<div class=\"ds-catwrap\"><span class=\"ds-catline\">Recently added</span></div>",
+      "css": ".ds-catwrap{background:#e0ecef;padding:16px 24px;} .ds-catline{font-family:Inter,system-ui,sans-serif;font-size:12px;line-height:16px;font-weight:600;letter-spacing:1.4px;text-transform:uppercase;color:#454f52;}"
+    },
+    {
+      "name": "Icon Button",
+      "kind": "button",
+      "refersTo": "icon-button",
+      "description": "48dp target, 24dp teal line icon, no container; pewter when disabled.",
+      "html": "<div class=\"ds-ibwrap\"><button class=\"ds-ib\" aria-label=\"Settings\"><svg width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M10.3 4.3c.4-1.8 3-1.8 3.4 0a1.7 1.7 0 0 0 2.6 1.1c1.5-.9 3.3.8 2.4 2.4a1.7 1.7 0 0 0 1 2.5c1.8.5 1.8 3 0 3.5a1.7 1.7 0 0 0-1 2.5c.9 1.5-.9 3.3-2.4 2.4a1.7 1.7 0 0 0-2.6 1c-.4 1.8-3 1.8-3.4 0a1.7 1.7 0 0 0-2.6-1c-1.5.9-3.3-.9-2.4-2.4a1.7 1.7 0 0 0-1-2.5c-1.8-.5-1.8-3 0-3.5a1.7 1.7 0 0 0 1-2.5c-.9-1.6.9-3.3 2.4-2.4a1.7 1.7 0 0 0 2.6-1.1z\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/></svg></button><button class=\"ds-ib\" disabled aria-label=\"Shorter\"><svg width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 12h14\"/></svg></button></div>",
+      "css": ".ds-ibwrap{background:#e0ecef;padding:12px;display:flex;gap:8px;} .ds-ib{width:48px;height:48px;display:flex;align-items:center;justify-content:center;background:none;border:0;border-radius:0;color:#006a5f;cursor:pointer;transition:opacity 140ms cubic-bezier(0.16,1,0.3,1),transform 140ms cubic-bezier(0.16,1,0.3,1);} .ds-ib:disabled{color:#778385;cursor:default;} .ds-ib:not(:disabled):active{opacity:.65;transform:scale(.9);} .ds-ib:focus-visible{outline:2px solid #006a5f;}"
+    },
+    {
+      "name": "Large Title Header",
+      "kind": "nav",
+      "refersTo": "headline",
+      "description": "Light large title top-left with one trailing icon button.",
+      "html": "<div class=\"ds-lt\"><h1>Library</h1><button class=\"ds-ib\" aria-label=\"Settings\"><svg width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"3\"/><circle cx=\"12\" cy=\"12\" r=\"8\"/></svg></button></div>",
+      "css": ".ds-lt{font-family:Inter,system-ui,sans-serif;background:#e0ecef;display:flex;align-items:flex-end;justify-content:space-between;padding:16px 24px;} .ds-lt h1{margin:0;font-size:36px;line-height:44px;font-weight:300;letter-spacing:-0.6px;color:#121b1d;} .ds-lt .ds-ib{width:48px;height:48px;display:flex;align-items:center;justify-content:center;background:none;border:0;color:#006a5f;transition:opacity 140ms cubic-bezier(0.16,1,0.3,1),transform 140ms cubic-bezier(0.16,1,0.3,1);} .ds-lt .ds-ib:active{opacity:.65;transform:scale(.9);}"
+    },
+    {
+      "name": "Text Tabs",
+      "kind": "nav",
+      "refersTo": "body",
+      "description": "In-screen switch: selected 600 ink with a 2dp teal underline.",
+      "html": "<div class=\"ds-tabs\" role=\"tablist\"><button role=\"tab\" aria-selected=\"true\" class=\"ds-tab ds-tab-on\">Albums</button><button role=\"tab\" class=\"ds-tab\">Songs</button></div>",
+      "css": ".ds-tabs{font-family:Inter,system-ui,sans-serif;background:#e0ecef;padding:0 24px;display:flex;gap:24px;} .ds-tab{min-height:48px;padding:0;background:none;border:0;border-bottom:2px solid transparent;font-size:16px;line-height:22px;font-weight:400;color:#454f52;cursor:pointer;transition:opacity 140ms cubic-bezier(0.16,1,0.3,1),transform 140ms cubic-bezier(0.16,1,0.3,1);} .ds-tab-on{font-weight:600;color:#121b1d;border-bottom-color:#006a5f;} .ds-tab:active{opacity:.65;} .ds-tab:focus-visible{outline:2px solid #006a5f;}"
+    },
+    {
+      "name": "Alphabet Spine",
+      "kind": "custom",
+      "refersTo": "alphabet-spine",
+      "description": "Signature: thin tracked A–Z column 24dp from the right edge; active letter teal, huge letter in the field.",
+      "html": "<div class=\"ds-spinewrap\"><div class=\"ds-veil\">K</div><div class=\"ds-spine\"><span class=\"\">#</span><span class=\"\">A</span><span class=\"\">B</span><span class=\"\">C</span><span class=\"\">D</span><span class=\"\">E</span><span class=\"\">F</span><span class=\"\">G</span><span class=\"\">H</span><span class=\"\">I</span><span class=\"\">J</span><span class=\"ds-on\">K</span><span class=\"\">L</span><span class=\"\">M</span><span class=\"\">N</span><span class=\"\">O</span><span class=\"\">P</span><span class=\"\">Q</span><span class=\"\">R</span><span class=\"\">S</span><span class=\"\">T</span><span class=\"\">U</span><span class=\"\">V</span><span class=\"\">W</span><span class=\"\">X</span><span class=\"\">Y</span><span class=\"\">Z</span></div></div>",
+      "css": ".ds-spinewrap{font-family:Inter,system-ui,sans-serif;position:relative;height:420px;background:#e0ecef;} .ds-veil{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(224,236,239,.9);font-size:168px;line-height:176px;font-weight:300;color:#121b1d;} .ds-spine{position:absolute;top:0;bottom:0;right:24px;width:24px;display:flex;flex-direction:column;justify-content:center;padding:8px 0;} .ds-spine span{text-align:center;font-size:10px;line-height:14px;font-weight:600;letter-spacing:.7px;color:#454f52;} .ds-spine span.ds-on{color:#006a5f;}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Quiet Catalog",
+    "overview": "Wave sets the owner's library the way a record label sets its catalog (the ECM cover program is the touchstone): artwork sits in wide, calm, tinted fields and the type around it is small and exact. Calm here comes from alignment, not from emptiness. Every margin, row, tile and the A–Z spine snaps to one 8dp cell, so a screen of tens of thousands of tracks still reads as ordered furniture rather than density.\n\nThe ground is tinted, never plain white or black: fog blue-grey in light, night slate in dark, and every neutral is a step on one tonal ramp drawn from that ground. Hierarchy is quiet. The large title is light, not bold; lists use one type size and rank by weight and tint; labels are small tracked capitals, like the catalog line printed under a sleeve. Two chromatic voices only: a deep teal for what is active, an ember for what is loved or playing.\n\nThe world rejects the category default it was chosen against: bold large titles, chevron-and-icon rows, rounded \"card\" chrome around artwork, and a single accent on pure black or white. Components are fully custom (chosen over Material 3), but Android's own conventions still hold: system and predictive Back work, touch targets are 48dp, and the theme follows the system light/dark setting.",
+    "keyCharacteristics": [
+      "Tinted fog / night-slate ground; neutrals from one ramp (OKLCH hue ~215).",
+      "One 8dp cell module for every dimension.",
+      "Artwork as photographs: square, unrounded, unframed.",
+      "Light large titles; one size per list, rank by weight and tint.",
+      "Small tracked-caps catalog lines for section heads and cover captions.",
+      "Teal for active, ember for favorite and now playing; nothing else is coloured.",
+      "Flat: no shadows, no glass, no gradients.",
+      "Every press sinks and dims for a duration the owner sets in Settings."
+    ],
+    "rules": [
+      {
+        "name": "The One Ramp Rule",
+        "body": "Every neutral is a step on the tone ramp. No ad-hoc greys, no opacity-on-black greys; if a new neutral is needed, pick a ramp step.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tinted Ground Rule",
+        "body": "The ground is fog or night slate. Never ship a screen on `#ffffff` or `#000000`.",
+        "section": "colors"
+      },
+      {
+        "name": "The Two Voices Rule",
+        "body": "Teal means active, ember means favorite or playing. If a colour on screen means neither, it should be a neutral.",
+        "section": "colors"
+      },
+      {
+        "name": "The Pewter Is Not Text Rule",
+        "body": "`tertiary` sits near 3:1 on the ground: enough for an icon, not for words. Text uses `foreground` or `secondary`.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Size Per List Rule",
+        "body": "Within a list, title and secondary line share one size; rank comes from weight (500 vs 400) and tint (`foreground` vs `secondary`), never from a second size.",
+        "section": "typography"
+      },
+      {
+        "name": "The Light Title Rule",
+        "body": "Large titles are weight 300. Bold large titles are the category default this world was chosen against.",
+        "section": "typography"
+      },
+      {
+        "name": "The Catalog Line Rule",
+        "body": "Tracked caps label a section or a cover's metadata. They never sit as a kicker above a headline.",
+        "section": "typography"
+      },
+      {
+        "name": "The One Module Rule",
+        "body": "If a dimension isn't a multiple of 8dp (or a half/quarter of it, for type-adjacent gaps), it's wrong.",
+        "section": "layout"
+      },
+      {
+        "name": "The Fixed Cell Rule",
+        "body": "Each piece of row state owns a fixed cell in every row. Reserve the cell even when empty.",
+        "section": "layout"
+      },
+      {
+        "name": "The Back Zone Rule",
+        "body": "Nothing draggable lives in the outer 24dp of a screen edge.",
+        "section": "layout"
+      },
+      {
+        "name": "The Flat Field Rule",
+        "body": "Surfaces never cast shadows. Separate things with a ramp step or a hairline. Glass is not part of this world unless the tab-bar/mini-player build decides otherwise against the 120 Hz budget.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Photograph Rule",
+        "body": "Artwork is a photograph: square, unrounded, unbordered, never inside card chrome.",
+        "section": "shapes"
+      }
+    ],
+    "dos": [
+      "Do size every margin, gap, row and tile from the 8dp cell (24dp margins, 16dp gutters, 56dp rows).",
+      "Do take every neutral from the tone ramp and name it by its semantic token (`background`, `foreground`, `secondary`, `tertiary`, `separator`, `fill`).",
+      "Do keep teal for active state and ember for favorite / now playing.",
+      "Do rank list text by weight and tint at one size, and use tabular figures for counts, durations and furniture lines.",
+      "Do reserve every row's state, favorite and duration cells even when empty.",
+      "Do build every tappable element on Press, so the owner's tap animation setting reaches it.",
+      "Do keep draggable controls at least 24dp in from the screen edge, clear of the Back gesture zone.",
+      "Do give every target at least 48dp, even when the drawn element is smaller."
+    ],
+    "donts": [
+      "Don't put a screen on plain `#ffffff` or `#000000`.",
+      "Don't round, frame or shadow artwork, or wrap it in a card.",
+      "Don't use bold large titles; titles are weight 300.",
+      "Don't add icons or chevrons to Library entry rows.",
+      "Don't set text in `tertiary`.",
+      "Don't add shadows, gradients or blur; separate with a ramp step or a hairline.",
+      "Don't introduce a third accent colour."
+    ]
+  }
+}

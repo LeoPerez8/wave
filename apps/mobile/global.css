@@ -18,7 +18,7 @@
       --color-background: #e0ecef;
       --color-grouped: #d3dfe2;
       --color-surface: #eff4f6;
-      --color-foreground: #0b1417;
+      --color-foreground: #121b1d;
       --color-secondary: #454f52;
       --color-tertiary: #778385;
       --color-separator: #c1cdd0;
@@ -29,16 +29,16 @@
     }
 
     @variant dark {
-      --color-background: #0b1417;
-      --color-grouped: #000000;
-      --color-surface: #172022;
+      --color-background: #121b1d;
+      --color-grouped: #121b1d;
+      --color-surface: #1c2628;
       --color-foreground: #e0ecef;
       --color-secondary: #a5b0b3;
       --color-tertiary: #606b6e;
       --color-separator: #293235;
-      --color-fill: #172022;
+      --color-fill: #1c2628;
       --color-accent: #59c0ad;
-      --color-on-accent: #0b1417;
+      --color-on-accent: #121b1d;
       --color-highlight: #ec9d53;
     }
   }
@@ -62,8 +62,8 @@
   --color-tone-6: #606b6e;
   --color-tone-7: #454f52;
   --color-tone-8: #293235;
-  --color-tone-9: #172022;
-  --color-tone-10: #0b1417;
+  --color-tone-9: #1c2628;
+  --color-tone-10: #121b1d;
 
   --text-catalog: 12px;
   --text-catalog--line-height: 16px;

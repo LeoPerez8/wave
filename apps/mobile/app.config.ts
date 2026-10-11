@@ -33,10 +33,10 @@ const config: ExpoConfig = {
       {
         image: "./assets/splash-icon.png",
         imageWidth: 160,
-        backgroundColor: "#FFFFFF",
+        backgroundColor: "#E0ECEF",
         dark: {
           image: "./assets/splash-icon.png",
-          backgroundColor: "#000000",
+          backgroundColor: "#121B1D",
         },
       },
     ],
@@ -64,7 +64,7 @@ const config: ExpoConfig = {
       "expo-build-properties",
       {
         android: {
-          // Android 12 is the floor: native blur (RenderEffect) is needed for the glass material.
+          // Android 12 is the floor (native RenderEffect is available should any blur be added).
           minSdkVersion: 31,
         },
       },

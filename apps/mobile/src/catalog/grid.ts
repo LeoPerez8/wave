@@ -14,8 +14,13 @@ export const grid = {
   row: CELL * 7,
   /** Width of a row's fixed state cell (track number, playing, missing). */
   stateCell: CELL * 4,
-  /** Width reserved on the right of a list for the A–Z spine. */
+  /** Width of the drawn A–Z spine. */
   spine: CELL * 3,
+  /**
+   * Gap between the spine and the screen edge, keeping it clear of the system
+   * Back gesture zone (Android only lets an app exclude 200dp per edge).
+   */
+  spineInset: CELL * 3,
 } as const;
 
 /** Letter spacing for catalog lines (small tracked caps), in dp. */

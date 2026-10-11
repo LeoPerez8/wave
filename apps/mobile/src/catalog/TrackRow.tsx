@@ -38,13 +38,20 @@ const THUMB = CELL * 5;
 
 /**
  * A track. Every row reserves the same fixed cells, so state never shifts the
- * layout: the state cell (number / playing / missing), the favorite cell and
- * the duration. Title and artist share one size; rank is weight and tint.
+ * layout: the state cell (playing / missing; leading in numbered lists, where
+ * it replaces the number, trailing in artwork lists), the
+ * favorite cell and the duration. Title and artist share one size; rank is weight and tint.
  */
 export function TrackRow({ track, state, favorite = false, leading, onPress, onLongPress }: Props) {
   const highlight = useThemeColor("highlight");
   const tertiary = useThemeColor("tertiary");
   const missing = state === "missing";
+  const stateIcon =
+    state === "playing" ? (
+      <IconVolume size={18} color={highlight} strokeWidth={1.75} />
+    ) : missing ? (
+      <IconFileOff size={18} color={tertiary} strokeWidth={1.5} />
+    ) : null;
 
   return (
     <Press
@@ -57,21 +64,22 @@ export function TrackRow({ track, state, favorite = false, leading, onPress, onL
       depth={0.015}
     >
       <View className="flex-row items-center" style={{ height: grid.row, gap: CELL * 1.5 }}>
-        {leading === "artwork" && <Artwork uri={track.artworkUri} tint={track.tint} size={THUMB} />}
-        <View className="items-center" style={{ width: grid.stateCell, marginLeft: -CELL }}>
-          {state === "playing" ? (
-            <IconVolume size={18} color={highlight} strokeWidth={1.75} />
-          ) : missing ? (
-            <IconFileOff size={18} color={tertiary} strokeWidth={1.5} />
-          ) : leading === "number" && track.trackNumber !== undefined ? (
-            <Text
-              className="font-sans text-body text-secondary"
-              style={{ fontVariant: ["tabular-nums"] }}
-            >
-              {track.trackNumber}
-            </Text>
-          ) : null}
-        </View>
+        {leading === "artwork" ? (
+          <Artwork uri={track.artworkUri} tint={track.tint} size={THUMB} />
+        ) : (
+          <View className="items-center" style={{ width: grid.stateCell }}>
+            {state === undefined && track.trackNumber !== undefined ? (
+              <Text
+                className="font-sans text-body text-secondary"
+                style={{ fontVariant: ["tabular-nums"] }}
+              >
+                {track.trackNumber}
+              </Text>
+            ) : (
+              stateIcon
+            )}
+          </View>
+        )}
         <View className="flex-1">
           <Text
             numberOfLines={1}
@@ -89,6 +97,11 @@ export function TrackRow({ track, state, favorite = false, leading, onPress, onL
             {missing ? "File not found" : track.artist}
           </Text>
         </View>
+        {leading === "artwork" && (
+          <View className="items-center" style={{ width: CELL * 3 }}>
+            {stateIcon}
+          </View>
+        )}
         <View className="items-center" style={{ width: CELL * 3 }}>
           {favorite && <IconStarFilled size={14} color={highlight} />}
         </View>

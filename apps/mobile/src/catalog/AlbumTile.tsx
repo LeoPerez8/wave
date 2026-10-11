@@ -17,15 +17,25 @@ export type AlbumSummary = {
   tint?: string | undefined;
 };
 
-/** "1975 · 9 tracks · 41 min": the same furniture line on every album, in the same place. */
+const minutes = (album: AlbumSummary): number => Math.max(1, Math.round(album.durationMs / 60_000));
+
+/**
+ * "1975 · 9 · 41 min": the same furniture line on every album, in the same
+ * place, short enough to never truncate in a two-column grid.
+ */
 export const furnitureLine = (album: AlbumSummary): string =>
+  [album.year, album.trackCount, `${minutes(album)} min`]
+    .filter((part) => part !== undefined)
+    .join(" · ");
+
+const furnitureLabel = (album: AlbumSummary): string =>
   [
     album.year,
     `${album.trackCount} ${album.trackCount === 1 ? "track" : "tracks"}`,
-    `${Math.max(1, Math.round(album.durationMs / 60_000))} min`,
+    `${minutes(album)} minutes`,
   ]
     .filter((part) => part !== undefined)
-    .join(" · ");
+    .join(", ");
 
 type Props = { album: AlbumSummary; size: number; onPress: () => void };
 
@@ -33,7 +43,7 @@ export function AlbumTile({ album, size, onPress }: Props) {
   return (
     <Press
       accessibilityRole="button"
-      accessibilityLabel={`${album.title} by ${album.albumArtist}`}
+      accessibilityLabel={`${album.title} by ${album.albumArtist}, ${furnitureLabel(album)}`}
       onPress={onPress}
       depth={0.02}
       style={{ width: size }}
@@ -41,7 +51,12 @@ export function AlbumTile({ album, size, onPress }: Props) {
       <Artwork uri={album.artworkUri} tint={album.tint} size={size} />
       <View style={{ paddingTop: CELL * 1.5, gap: CELL / 4 }}>
         <CatalogLine>{album.albumArtist}</CatalogLine>
-        <Text numberOfLines={1} className="font-sans text-body font-medium text-foreground">
+        {/* Two lines reserved, so the furniture line lands in the same place on every tile. */}
+        <Text
+          numberOfLines={2}
+          className="font-sans text-body font-medium text-foreground"
+          style={{ minHeight: CELL * 5.5 }}
+        >
           {album.title}
         </Text>
         <Text

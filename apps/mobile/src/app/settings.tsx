@@ -19,7 +19,9 @@ export default function SettingsScreen() {
         <CatalogLine className="mb-2">Motion</CatalogLine>
         <Hairline />
         <View className="flex-row items-center" style={{ minHeight: grid.row }}>
-          <Text className="flex-1 font-sans text-body text-foreground">Tap animation</Text>
+          <Text className="flex-1 font-sans text-title3 font-normal text-foreground">
+            Tap animation
+          </Text>
           <IconButton
             icon={IconMinus}
             label="Shorter tap animation"
@@ -29,7 +31,8 @@ export default function SettingsScreen() {
           <Text
             accessibilityLiveRegion="polite"
             className="text-center font-sans text-body font-medium text-foreground"
-            style={{ width: 72, fontVariant: ["tabular-nums"] }}
+            numberOfLines={1}
+            style={{ minWidth: 72, fontVariant: ["tabular-nums"] }}
           >
             {ms} ms
           </Text>

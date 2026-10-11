@@ -107,39 +107,48 @@ export const indexLetter = (text: string): string => {
   return first >= "A" && first <= "Z" ? first : "#";
 };
 
+/**
+ * Sorted copy by title. Hermes has no `Array#toSorted`, so this copies, then sorts.
+ */
+const byTitle = <T extends { title: string }>(items: T[]): T[] =>
+  // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
+  [...items].sort((a, b) => sortKey(a.title).localeCompare(sortKey(b.title)));
+
 const next = random(42);
 
-export const SYNTHETIC_ALBUMS: readonly AlbumSummary[] = Array.from({ length: 48 }, (_, i) => {
-  const trackCount = 6 + Math.floor(next() * 9);
-  return {
-    id: `album-${i}`,
-    title: title(next),
-    albumArtist: pick(ARTISTS, next),
-    year: 1968 + Math.floor(next() * 57),
-    trackCount,
-    durationMs: trackCount * (150_000 + Math.floor(next() * 180_000)),
-    tint: pick(TINTS, next),
-  };
-}).toSorted((a, b) => sortKey(a.title).localeCompare(sortKey(b.title)));
+export const SYNTHETIC_ALBUMS: readonly AlbumSummary[] = byTitle(
+  Array.from({ length: 48 }, (_, i) => {
+    const trackCount = 6 + Math.floor(next() * 9);
+    return {
+      id: `album-${i}`,
+      title: title(next),
+      albumArtist: pick(ARTISTS, next),
+      year: 1968 + Math.floor(next() * 57),
+      trackCount,
+      durationMs: trackCount * (150_000 + Math.floor(next() * 180_000)),
+      tint: pick(TINTS, next),
+    };
+  }),
+);
 
 export type SyntheticTrack = { track: TrackSummary; state: TrackState; favorite: boolean };
 
-export const SYNTHETIC_TRACKS: readonly SyntheticTrack[] = SYNTHETIC_ALBUMS.flatMap((album) =>
-  Array.from({ length: album.trackCount }, (_, n) => ({
-    id: `${album.id}-${n + 1}`,
-    title: title(next),
-    artist: album.albumArtist,
-    durationMs: 120_000 + Math.floor(next() * 300_000),
-    trackNumber: n + 1,
-    tint: album.tint,
-  })),
-)
-  .toSorted((a, b) => sortKey(a.title).localeCompare(sortKey(b.title)))
-  .map((track, i) => ({
-    track,
-    state: i === 2 ? "playing" : i === 7 ? "missing" : undefined,
-    favorite: i % 9 === 4,
-  }));
+export const SYNTHETIC_TRACKS: readonly SyntheticTrack[] = byTitle(
+  SYNTHETIC_ALBUMS.flatMap((album) =>
+    Array.from({ length: album.trackCount }, (_, n) => ({
+      id: `${album.id}-${n + 1}`,
+      title: title(next),
+      artist: album.albumArtist,
+      durationMs: 120_000 + Math.floor(next() * 300_000),
+      trackNumber: n + 1,
+      tint: album.tint,
+    })),
+  ),
+).map((track, i) => ({
+  track,
+  state: i === 2 ? "playing" : i === 7 ? "missing" : undefined,
+  favorite: i % 9 === 4,
+}));
 
 /** First index of each letter in an ordered list, for the A–Z spine. */
 export const letterIndex = (titles: readonly string[]): Map<string, number> => {
