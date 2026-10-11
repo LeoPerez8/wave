@@ -1,0 +1,35 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'dev.leoperez.wave.native'
+version = '0.0.0'
+
+android {
+  namespace 'expo.modules.wavenative'
+  defaultConfig {
+    versionCode 1
+    versionName '0.0.0'
+    consumerProguardFiles 'proguard-rules.pro'
+  }
+  testOptions {
+    unitTests.returnDefaultValues = true
+  }
+}
+
+dependencies {
+  // Tag reading (and, in v2, writing) for MP3, FLAC, M4A, Ogg Vorbis and WAV.
+  implementation 'net.jthink:jaudiotagger:3.0.1'
+  implementation 'androidx.palette:palette:1.0.0'
+
+  testImplementation 'junit:junit:4.13.2'
+}
+
+// Print assertion messages in CI logs, which are all the PR comment shows.
+tasks.withType(Test).configureEach {
+  testLogging {
+    events 'failed'
+    exceptionFormat 'full'
+  }
+}

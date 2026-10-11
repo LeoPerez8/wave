@@ -1,0 +1,85 @@
+import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Queue from "effect/Queue";
+import * as Stream from "effect/Stream";
+
+import {
+  WaveNative,
+  type ScanBatchEvent,
+  type ScanCompleteEvent,
+  type ScanProgressEvent,
+} from "@/native/waveNative";
+
+export class ScanFailed extends Data.TaggedError("ScanFailed")<{ readonly message: string }> {}
+
+export type ScanEvent =
+  | ({ readonly _tag: "Progress" } & ScanProgressEvent)
+  | ({ readonly _tag: "Batch" } & ScanBatchEvent)
+  | ({ readonly _tag: "Complete" } & ScanCompleteEvent);
+
+/** The native scanner as a typed service. */
+export class NativeScanner extends Context.Service<
+  NativeScanner,
+  {
+    readonly hasAllFilesAccess: Effect.Effect<boolean>;
+    readonly defaultMusicFolder: Effect.Effect<string>;
+    /**
+     * Scans [roots] minus [excluded]. The stream emits progress and batches and
+     * ends with one `Complete` event. Interrupting it cancels the native scan.
+     */
+    readonly scan: (
+      roots: readonly string[],
+      excluded: readonly string[],
+    ) => Stream.Stream<ScanEvent, ScanFailed>;
+  }
+>()("@wave/mobile/library/NativeScanner") {}
+
+const scan = (
+  roots: readonly string[],
+  excluded: readonly string[],
+): Stream.Stream<ScanEvent, ScanFailed> =>
+  Stream.callback<ScanEvent, ScanFailed>((queue) =>
+    Effect.acquireRelease(
+      Effect.sync(() => {
+        // Native events reach JS after this synchronous block, so the id is known before any arrive.
+        let scanId = -1;
+        let finished = false;
+        const subscriptions = [
+          WaveNative.addListener("onScanProgress", (event) => {
+            if (event.scanId === scanId) Queue.offerUnsafe(queue, { _tag: "Progress", ...event });
+          }),
+          WaveNative.addListener("onScanBatch", (event) => {
+            if (event.scanId === scanId) Queue.offerUnsafe(queue, { _tag: "Batch", ...event });
+          }),
+          WaveNative.addListener("onScanComplete", (event) => {
+            if (event.scanId !== scanId) return;
+            finished = true;
+            Queue.offerUnsafe(queue, { _tag: "Complete", ...event });
+            Queue.endUnsafe(queue);
+          }),
+          WaveNative.addListener("onScanError", (event) => {
+            if (event.scanId !== scanId) return;
+            finished = true;
+            Queue.failCauseUnsafe(queue, Cause.fail(new ScanFailed({ message: event.message })));
+          }),
+        ];
+        scanId = WaveNative.startScan(roots, excluded);
+        return {
+          release: () => {
+            for (const subscription of subscriptions) subscription.remove();
+            if (!finished) WaveNative.cancelScan(scanId);
+          },
+        };
+      }),
+      (handle) => Effect.sync(handle.release),
+    ),
+  );
+
+export const layer = Layer.succeed(NativeScanner, {
+  hasAllFilesAccess: Effect.sync(() => WaveNative.hasAllFilesAccess()),
+  defaultMusicFolder: Effect.sync(() => WaveNative.getDefaultMusicFolder()),
+  scan,
+});
