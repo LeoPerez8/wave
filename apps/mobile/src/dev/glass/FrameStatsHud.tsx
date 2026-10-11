@@ -23,14 +23,10 @@ const summarize = (windows: readonly FrameStats[]) => {
 /**
  * Frame-time readout from Android FrameMetrics (RenderThread + GPU time per
  * frame), with a 5-second rolling summary to copy into docs/glass-spike.md.
- * `resetKey` clears the history, e.g. when switching technique.
+ * Give it a `key` to clear the history, e.g. when switching technique.
  */
-export function FrameStatsHud({ resetKey }: { resetKey: string }) {
+export function FrameStatsHud() {
   const [windows, setWindows] = useState<FrameStats[]>([]);
-
-  useEffect(() => {
-    setWindows([]);
-  }, [resetKey]);
 
   useEffect(() => {
     WaveGlass.startFrameStats();

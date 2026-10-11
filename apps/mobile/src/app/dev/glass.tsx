@@ -95,19 +95,19 @@ export default function GlassSpikeScreen() {
   const maxScroll = useSharedValue(0);
 
   const onScroll = useAnimatedScrollHandler((event) => {
-    scrollY.value = event.contentOffset.y;
+    scrollY.set(event.contentOffset.y);
   });
 
   const autoScroller = useFrameCallback((frame) => {
     "worklet";
     const dt = (frame.timeSincePreviousFrame ?? 0) / 1000;
-    let next = scrollY.value + direction.value * AUTO_SCROLL_DP_PER_S * dt;
-    if (next >= maxScroll.value) {
-      next = maxScroll.value;
-      direction.value = -1;
+    let next = scrollY.get() + direction.get() * AUTO_SCROLL_DP_PER_S * dt;
+    if (next >= maxScroll.get()) {
+      next = maxScroll.get();
+      direction.set(-1);
     } else if (next <= 0) {
       next = 0;
-      direction.value = 1;
+      direction.set(1);
     }
     scrollTo(scrollRef, 0, next, false);
   }, false);
@@ -117,7 +117,7 @@ export default function GlassSpikeScreen() {
   }, [autoScroll, autoScroller]);
 
   useEffect(() => {
-    maxScroll.value = Math.max(0, contentTop + contentSize.height - window.height);
+    maxScroll.set(Math.max(0, contentTop + contentSize.height - window.height));
   }, [contentTop, contentSize.height, window.height, maxScroll]);
 
   const takeSnapshot = useCallback(async () => {
@@ -254,7 +254,8 @@ export default function GlassSpikeScreen() {
             <Text className="font-sans text-footnote font-semibold text-white">Close</Text>
           </Pressable>
         </View>
-        <FrameStatsHud resetKey={`${technique}-${autoScroll}`} />
+        {/* Remounting on a new key clears the history when the technique or scrolling changes. */}
+        <FrameStatsHud key={`${technique}-${autoScroll}`} />
         {technique === "skia" && snapshotMs !== null ? (
           <Text className="font-sans text-caption text-white">
             {`Snapshot ${snapshot?.width() ?? 0}×${snapshot?.height() ?? 0} px in ${snapshotMs.toFixed(0)} ms`}
