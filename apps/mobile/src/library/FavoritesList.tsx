@@ -1,0 +1,35 @@
+import { IconStar } from "@tabler/icons-react-native";
+import { View } from "react-native";
+
+import { grid } from "@/catalog/grid";
+import { EmptyState } from "@/components/EmptyState";
+
+import { useFavoriteSongs } from "./hooks";
+import { ListIntro, songCount, TrackList } from "./TrackList";
+
+/** Tapping a favorite plays the Favorites list from it. */
+const FAVORITES_CONTEXT = { kind: "favorites", id: null } as const;
+
+/** Library › Favorites: every starred song, most recently starred first. */
+export function FavoritesList({ empty }: { empty: string }) {
+  const songs = useFavoriteSongs();
+  if (songs === undefined) return null;
+
+  if (songs.length === 0) {
+    return (
+      <View style={{ paddingHorizontal: grid.margin }}>
+        <EmptyState icon={IconStar} title="No favorites yet" message={empty} />
+      </View>
+    );
+  }
+
+  return (
+    <TrackList
+      songs={songs}
+      context={FAVORITES_CONTEXT}
+      header={
+        <ListIntro line={songCount(songs.length)} songs={songs} context={FAVORITES_CONTEXT} />
+      }
+    />
+  );
+}

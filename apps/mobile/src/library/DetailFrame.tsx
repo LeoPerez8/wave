@@ -12,11 +12,13 @@ type Props<A> = {
   /** "album", "artist"… for the gone state. */
   noun: string;
   title?: (detail: A) => string;
+  /** The gone state's message, when "its files are gone" isn't why (a deleted playlist). */
+  goneMessage?: string;
   children: (detail: A) => ReactNode;
 };
 
 /** A pushed detail screen: Back (and the title), then the content once it has loaded. */
-export function DetailFrame<A>({ detail, noun, title, children }: Props<A>) {
+export function DetailFrame<A>({ detail, noun, title, goneMessage, children }: Props<A>) {
   return (
     <View className="flex-1 bg-background">
       <ScreenHeader title={detail != null && title !== undefined ? title(detail) : undefined} />
@@ -25,7 +27,7 @@ export function DetailFrame<A>({ detail, noun, title, children }: Props<A>) {
           <EmptyState
             icon={IconStack2}
             title={`This ${noun} is gone`}
-            message={`Its files are no longer in your music folders.`}
+            message={goneMessage ?? "Its files are no longer in your music folders."}
           />
         </View>
       ) : detail === undefined ? null : (

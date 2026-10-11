@@ -16,9 +16,13 @@ import {
   type GenreDetail,
   type GenreRow,
   type LibraryStoreError,
+  type PlaylistDetail,
+  type PlaylistRow,
   type ScanRootSummary,
   type SongRow,
 } from "./LibraryStore";
+import { useFavoritesSaved } from "./favorites";
+import { usePlaylistsVersion } from "./playlists";
 import { appRuntime } from "./runtime";
 
 export const useScanState = (): ScanState =>
@@ -66,10 +70,13 @@ const REQUERY_INTERVAL_MS = 1500;
 const useLibraryQuery = <A>(
   query: Effect.Effect<A, LibraryStoreError, LibraryStore>,
   initial: A,
+  /** Changes when the owner edits what the query reads (a playlist, a star): re-run at once. */
+  edits = 0,
 ): A => {
   const [value, setValue] = useState(initial);
   const version = useSyncExternalStore(libraryVersion.subscribe, libraryVersion.get);
   const lastRun = useRef(0);
+  const lastEdits = useRef(edits);
   const mounted = useRef(true);
 
   useEffect(() => {
@@ -92,14 +99,16 @@ const useLibraryQuery = <A>(
           // Keep showing the last good result; scan errors surface in the banner.
         });
     };
-    const wait = lastRun.current + REQUERY_INTERVAL_MS - Date.now();
+    const edited = edits !== lastEdits.current;
+    lastEdits.current = edits;
+    const wait = edited ? 0 : lastRun.current + REQUERY_INTERVAL_MS - Date.now();
     if (wait <= 0) {
       run();
       return undefined;
     }
     const timer = setTimeout(run, wait);
     return () => clearTimeout(timer);
-  }, [query, version]);
+  }, [query, version, edits]);
 
   return value;
 };
@@ -175,3 +184,26 @@ const NO_EXCLUDED_FOLDERS: readonly string[] = [];
 /** The folders inside the music folders that Wave ignores. */
 export const useExcludedFolders = (): readonly string[] =>
   useLibraryQuery(listExcludedFolders, NO_EXCLUDED_FOLDERS);
+
+const listPlaylists = LibraryStore.use((store) => store.listPlaylists);
+const listFavorites = LibraryStore.use((store) => store.listFavorites);
+
+const NO_PLAYLISTS: readonly PlaylistRow[] = [];
+
+/** Library › Playlists, refreshed as soon as a playlist is edited. */
+export const usePlaylists = (): readonly PlaylistRow[] =>
+  useLibraryQuery(listPlaylists, NO_PLAYLISTS, usePlaylistsVersion());
+
+/** A playlist screen's data (see `useDetail`), refreshed as soon as it is edited. */
+export const usePlaylist = (id: number): PlaylistDetail | null | undefined => {
+  const query = useMemo(() => LibraryStore.use((store) => store.getPlaylist(id)), [id]);
+  return useLibraryQuery<PlaylistDetail | null | undefined>(
+    query,
+    undefined,
+    usePlaylistsVersion(),
+  );
+};
+
+/** Library › Favorites: starred songs, most recently starred first. */
+export const useFavoriteSongs = (): readonly SongRow[] | undefined =>
+  useLibraryQuery<readonly SongRow[] | undefined>(listFavorites, undefined, useFavoritesSaved());

@@ -90,7 +90,8 @@ const SPECIAL_LETTERS: Readonly<Record<string, string>> = {
   ı: "i",
 };
 
-const foldAccentsAndCase = (value: string): string =>
+/** Lower-cases and strips accents (`Émilie` → `emilie`, `Straße` → `strasse`); collapses whitespace. */
+export const foldAccentsAndCase = (value: string): string =>
   value
     .normalize("NFKD")
     .replace(/\p{M}/gu, "")

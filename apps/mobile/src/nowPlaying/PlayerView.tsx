@@ -1,4 +1,4 @@
-import { IconMusic, IconStar } from "@tabler/icons-react-native";
+import { IconMusic, IconStar, IconStarFilled } from "@tabler/icons-react-native";
 import { Image } from "expo-image";
 import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
@@ -10,9 +10,11 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { CELL } from "@/catalog/grid";
+import { toggleFavorite, useIsFavorite } from "@/library/favorites";
 import type { TrackDetails } from "@/library/LibraryStore";
 import { openAlbum, openArtist } from "@/library/routes";
 import { Press } from "@/motion/Press";
+import { useCurrentTrackId } from "@/playback/hooks";
 import type { PlaybackState } from "@/playback/Player";
 import { useThemeColor } from "@/theme/useThemeColor";
 
@@ -96,6 +98,35 @@ function MetaLink({ label, open, hint, className }: LinkProps) {
   );
 }
 
+/** Stars the current track; in sync with every other star (rows, menus). */
+function FavoriteStar({ title }: { title: string }) {
+  const accent = useThemeColor("accent");
+  const highlight = useThemeColor("highlight");
+  const trackId = useCurrentTrackId();
+  const favorite = useIsFavorite(trackId);
+  return (
+    <Press
+      accessibilityRole="button"
+      accessibilityLabel={favorite ? `Remove ${title} from Favorites` : `Favorite ${title}`}
+      accessibilityState={{ selected: favorite, disabled: trackId === null }}
+      disabled={trackId === null}
+      onPress={() => {
+        if (trackId !== null) void toggleFavorite(trackId);
+      }}
+      haptic="impact"
+      depth={0.1}
+      className="items-center justify-center"
+      style={{ width: CELL * 6, height: CELL * 6 }}
+    >
+      {favorite ? (
+        <IconStarFilled size={24} color={highlight} />
+      ) : (
+        <IconStar size={24} color={accent} strokeWidth={1.5} />
+      )}
+    </Press>
+  );
+}
+
 type Props = {
   item: NonNullable<PlaybackState["item"]>;
   details: TrackDetails | null;
@@ -108,7 +139,6 @@ type Props = {
  * their screens.
  */
 export function PlayerView({ item, details, playing }: Props) {
-  const tertiary = useThemeColor("tertiary");
   const title = item.title ?? "Unknown title";
   const artist = details?.artist ?? item.artist ?? "Unknown Artist";
   const album = details?.album ?? item.album ?? "Unknown Album";
@@ -137,17 +167,7 @@ export function PlayerView({ item, details, playing }: Props) {
             className="font-sans text-body text-secondary"
           />
         </View>
-        {/* Favorites arrive with playlists (#11); the star holds its place until then. */}
-        <View
-          accessible
-          accessibilityRole="button"
-          accessibilityLabel="Favorite"
-          accessibilityState={{ disabled: true }}
-          className="items-center justify-center"
-          style={{ width: CELL * 6, height: CELL * 6 }}
-        >
-          <IconStar size={24} color={tertiary} strokeWidth={1.5} />
-        </View>
+        <FavoriteStar title={title} />
       </View>
     </View>
   );
