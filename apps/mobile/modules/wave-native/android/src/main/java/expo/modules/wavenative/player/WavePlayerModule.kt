@@ -31,9 +31,50 @@ class PlayerItem : Record {
   @Field val artworkPath: String? = null
 }
 
+/** One [SyncStep] as JS sends it. */
+class SyncStepRecord : Record {
+  @Field val type: String = ""
+  @Field val at: Int = 0
+  @Field val removeCount: Int = 0
+  @Field val keys: List<String> = emptyList()
+  @Field val index: Int = 0
+  @Field val key: String = ""
+}
+
 /**
- * Drives [PlaybackService] through a MediaController. JS owns the order and
- * pushes the item list; the player reports `onPlaybackState` (on any change),
+ * The last queue JS saved, kept for the life of the process: the activity and
+ * the JS runtime can go away while [PlaybackService] keeps playing, and JS
+ * picks its queue (shuffle, repeat, Up Next) back up from here when it returns.
+ */
+object QueueSnapshot {
+  @Volatile var json: String? = null
+}
+
+/** The controller's item list, edited in place so the playing item keeps playing. */
+private class ControllerPlaylist(private val player: Player) : PlaylistEditor<MediaItem> {
+  override val keys: List<String>
+    get() = (0 until player.mediaItemCount).map { player.getMediaItemAt(it).mediaId }
+  override val currentKey: String?
+    get() = player.currentMediaItem?.mediaId
+
+  override fun clear() = player.clearMediaItems()
+
+  override fun replace(items: List<MediaItem>, index: Int) {
+    player.setMediaItems(items, index, 0)
+    player.prepare()
+  }
+
+  override fun seek(index: Int) = player.seekTo(index, 0)
+
+  override fun remove(from: Int, toExclusive: Int) = player.removeMediaItems(from, toExclusive)
+
+  override fun insert(at: Int, items: List<MediaItem>) = player.addMediaItems(at, items)
+}
+
+/**
+ * Drives [PlaybackService] through a MediaController. JS owns the order (Core's
+ * queue engine) and keeps the item list in step with `applySync`; the player
+ * plays it gaplessly and reports `onPlaybackState` (on any change),
  * `onPosition` (every 500 ms while playing), `onItemTransition` and
  * `onPlayerError`. The controller is only touched on the main thread.
  */
@@ -41,6 +82,9 @@ class WavePlayerModule : Module() {
   private val main = Handler(Looper.getMainLooper())
   private var controllerFuture: ListenableFuture<MediaController>? = null
   private var controller: MediaController? = null
+
+  /** True while [QueueSync] edits the list; transitions it causes are reported as `sync`. */
+  private var syncing = false
 
   private val context: Context
     get() = appContext.reactContext ?: throw Exceptions.ReactContextLost()
@@ -66,7 +110,10 @@ class WavePlayerModule : Module() {
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
       sendEvent(
         "onItemTransition",
-        mapOf("itemId" to mediaItem?.mediaId, "reason" to PlayerEvents.transitionReason(reason)),
+        mapOf(
+          "itemId" to mediaItem?.mediaId,
+          "reason" to PlayerEvents.transitionReason(reason, duringSync = syncing),
+        ),
       )
     }
 
@@ -88,16 +135,55 @@ class WavePlayerModule : Module() {
 
     OnCreate { main.post(::connect) }
 
-    /** Replaces the item list and starts at [startIndex] / [startPositionMs]. */
-    AsyncFunction("setItems") {
-        items: List<PlayerItem>, startIndex: Int, startPositionMs: Double, play: Boolean, promise: Promise ->
+    /**
+     * Applies Core's sync plan. Items already loaded are reused by key, so JS
+     * only sends [items] for keys new to the player.
+     */
+    AsyncFunction("applySync") { steps: List<SyncStepRecord>, items: List<PlayerItem>, promise: Promise ->
       withController(promise) { player ->
-        player.setMediaItems(items.map(::toMediaItem), startIndex, startPositionMs.toLong())
-        player.prepare()
-        player.playWhenReady = play
+        val loaded = (0 until player.mediaItemCount)
+          .map { player.getMediaItemAt(it) }
+          .associateBy { it.mediaId }
+        val incoming = items.associate { it.id to toMediaItem(it) }
+        syncing = true
+        try {
+          val plan = steps.map { SyncStep.of(it.type, it.at, it.removeCount, it.keys, it.index, it.key) }
+          QueueSync.apply(plan, ControllerPlaylist(player)) { key -> incoming[key] ?: loaded[key] }
+          if (player.playbackState == Player.STATE_IDLE && player.mediaItemCount > 0) player.prepare()
+          promise.resolve(null)
+        } catch (error: IllegalArgumentException) {
+          promise.reject("ERR_PLAYER_SYNC", error.message, error)
+        } finally {
+          syncing = false
+        }
+      }
+    }.runOnQueue(Queues.MAIN)
+
+    /** `off`, `all` or `one`. Core owns shuffle, so the player's own stays off. */
+    AsyncFunction("setRepeatMode") { mode: String, promise: Promise ->
+      withController(promise) { player ->
+        player.repeatMode = PlayerEvents.repeatMode(mode)
+        player.shuffleModeEnabled = false
         promise.resolve(null)
       }
     }.runOnQueue(Queues.MAIN)
+
+    /** The loaded entry keys and the one playing, for JS to check a saved queue against. */
+    AsyncFunction("getItemIds") { promise: Promise ->
+      withController(promise) { player ->
+        promise.resolve(
+          mapOf(
+            "keys" to (0 until player.mediaItemCount).map { player.getMediaItemAt(it).mediaId },
+            "currentKey" to player.currentMediaItem?.mediaId,
+          ),
+        )
+      }
+    }.runOnQueue(Queues.MAIN)
+
+    /** Keeps the queue for when JS comes back (see [QueueSnapshot]). */
+    Function("saveQueue") { json: String -> QueueSnapshot.json = json }
+
+    Function("savedQueue") { QueueSnapshot.json }
 
     AsyncFunction("play") { promise: Promise ->
       withController(promise) { player ->

@@ -2,6 +2,7 @@ import { NativeModule, requireNativeModule } from "expo";
 
 /** One track handed to the native player (`modules/wave-native`, `WavePlayerModule`). */
 export interface PlayerItem {
+  /** The queue entry key (unique per entry, not the track id). */
   readonly id: string;
   readonly path: string;
   readonly title: string;
@@ -34,13 +35,31 @@ export interface NativePlayerState extends PlayerPosition {
 
 export interface ItemTransitionEvent {
   readonly itemId: string | null;
-  /** Played through, repeated, skipped or seeked to, or the item list changed. */
-  readonly reason: "auto" | "repeat" | "seek" | "playlist";
+  /**
+   * Played through, repeated, skipped or seeked to (notification, Bluetooth),
+   * the item list changed, or Wave's own queue sync moved it.
+   */
+  readonly reason: "auto" | "repeat" | "seek" | "playlist" | "sync";
 }
 
 export interface PlayerErrorEvent {
   readonly itemId: string | null;
   readonly message: string;
+}
+
+/** One step of Core's `planPlayerSync`, flattened for the native module. */
+export interface NativeSyncStep {
+  readonly type: "clear" | "replace" | "seek" | "edit";
+  readonly at?: number;
+  readonly removeCount?: number;
+  readonly keys?: readonly string[];
+  readonly index?: number;
+  readonly key?: string;
+}
+
+export interface NativeItemIds {
+  readonly keys: readonly string[];
+  readonly currentKey: string | null;
 }
 
 type WavePlayerEvents = {
@@ -51,13 +70,13 @@ type WavePlayerEvents = {
 };
 
 declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
-  /** Replaces the item list and starts at an index and position. */
-  setItems(
-    items: readonly PlayerItem[],
-    startIndex: number,
-    startPositionMs: number,
-    play: boolean,
-  ): Promise<void>;
+  /** Edits the item list per the plan; `items` holds only the keys new to the player. */
+  applySync(steps: readonly NativeSyncStep[], items: readonly PlayerItem[]): Promise<void>;
+  setRepeatMode(mode: "off" | "all" | "one"): Promise<void>;
+  getItemIds(): Promise<NativeItemIds>;
+  /** Keeps the queue (JSON) in the native process, for when JS restarts. */
+  saveQueue(json: string): void;
+  savedQueue(): string | null;
   play(): Promise<void>;
   pause(): Promise<void>;
   seekTo(positionMs: number): Promise<void>;

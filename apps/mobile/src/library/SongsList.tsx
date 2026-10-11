@@ -9,8 +9,9 @@ import { CELL, grid } from "@/catalog/grid";
 import { type TrackSummary, TrackRow } from "@/catalog/TrackRow";
 import { EmptyState } from "@/components/EmptyState";
 import { ScanProgressBanner } from "@/components/ScanProgressBanner";
-import { playSong } from "@/playback/actions";
-import { useCurrentItemId } from "@/playback/hooks";
+import { playSongs } from "@/playback/actions";
+import { useCurrentTrackId } from "@/playback/hooks";
+import { openTrackActions } from "@/playback/TrackActionsSheet";
 import { TextButton } from "@/components/TextButton";
 
 import { folderPhrase } from "./folderPhrase";
@@ -26,6 +27,9 @@ const toSummary = (song: SongRow): TrackSummary => ({
   artworkUri: song.thumbPath === null ? undefined : `file://${song.thumbPath}`,
 });
 
+/** Tapping a song plays the whole Songs list from it. */
+const SONGS_CONTEXT = { kind: "songs", id: null } as const;
+
 const keyExtractor = (song: SongRow): string => String(song.id);
 
 /** Library › Songs: every track by title, virtualised for libraries of tens of thousands. */
@@ -34,17 +38,18 @@ export function SongsList() {
   const scan = useScanState();
   const roots = useScanRoots();
   const insets = useSafeAreaInsets();
-  const currentId = useCurrentItemId();
+  const currentId = useCurrentTrackId();
   const renderItem = useCallback(
-    ({ item }: { item: SongRow }) => (
+    ({ item, index }: { item: SongRow; index: number }) => (
       <TrackRow
         track={toSummary(item)}
         state={String(item.id) === currentId ? "playing" : undefined}
         leading="artwork"
-        onPress={() => playSong(item)}
+        onPress={() => playSongs(songs, index, SONGS_CONTEXT)}
+        onLongPress={() => openTrackActions(item)}
       />
     ),
-    [currentId],
+    [currentId, songs],
   );
 
   if (songs.length === 0) {

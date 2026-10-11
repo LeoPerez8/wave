@@ -5,6 +5,7 @@ import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 
 import * as Player from "@/playback/Player";
+import * as Queue from "@/playback/Queue";
 
 import {
   chooseFolder,
@@ -19,11 +20,19 @@ import * as LibraryStore from "./LibraryStore";
 import * as NativeScanner from "./NativeScanner";
 
 /** Every app service, built once and shared by the whole app. */
-export const appLayer = Layer.mergeAll(LibraryStore.layer, NativeScanner.layer, Player.layer);
+export const appLayer = Layer.mergeAll(
+  LibraryStore.layer,
+  NativeScanner.layer,
+  Queue.layer.pipe(Layer.provideMerge(Player.layer)),
+);
 
 export const appRuntime = ManagedRuntime.make(appLayer);
 
-export type AppServices = LibraryStore.LibraryStore | NativeScanner.NativeScanner | Player.Player;
+export type AppServices =
+  | LibraryStore.LibraryStore
+  | NativeScanner.NativeScanner
+  | Player.Player
+  | Queue.Queue;
 
 const startScan = (scan: Effect.Effect<unknown, never, AppServices>): void => {
   if (scanState.get().status === "scanning") return;

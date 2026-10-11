@@ -2,9 +2,17 @@ import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import type * as Scope from "effect/Scope";
 
 import { makeExternalStore } from "@/lib/externalStore";
-import { WavePlayer, type NativePlayerState, type PlayerItem } from "@/native/wavePlayer";
+import {
+  WavePlayer,
+  type ItemTransitionEvent,
+  type NativeItemIds,
+  type NativePlayerState,
+  type NativeSyncStep,
+  type PlayerItem,
+} from "@/native/wavePlayer";
 
 export class PlayerError extends Data.TaggedError("PlayerError")<{
   readonly operation: string;
@@ -31,28 +39,40 @@ const IDLE: PlaybackState = {
   error: null,
 };
 
-/** What the player is doing, for the mini player and track rows. */
+/**
+ * What the player is doing, for the mini player and track rows. `item.id` is
+ * the queue entry key; the track id comes from the queue (`useCurrentTrackId`).
+ */
 export const playbackState = makeExternalStore<PlaybackState>(IDLE);
 
-/** The native player as a typed service. JS owns the order; the player plays the list it's given. */
+/**
+ * The native player as a typed service. JS owns the order (Core's queue
+ * engine); the player holds the list it's synced to and plays it gaplessly.
+ */
 export class Player extends Context.Service<
   Player,
   {
-    readonly setItems: (
+    /** Edits the native item list; `items` carries metadata for the keys new to the player. */
+    readonly applySync: (
+      steps: readonly NativeSyncStep[],
       items: readonly PlayerItem[],
-      startIndex: number,
-      options?: { readonly positionMs?: number; readonly play?: boolean },
     ) => Effect.Effect<void, PlayerError>;
+    readonly setRepeatMode: (mode: "off" | "all" | "one") => Effect.Effect<void, PlayerError>;
+    readonly getItemIds: Effect.Effect<NativeItemIds, PlayerError>;
+    readonly saveQueue: (json: string) => Effect.Effect<void>;
+    readonly savedQueue: Effect.Effect<string | null>;
+    /** Calls `listener` for every item transition while the scope lives. */
+    readonly onItemTransition: (
+      listener: (event: ItemTransitionEvent) => void,
+    ) => Effect.Effect<void, never, Scope.Scope>;
     readonly play: Effect.Effect<void, PlayerError>;
     readonly pause: Effect.Effect<void, PlayerError>;
     readonly seekTo: (positionMs: number) => Effect.Effect<void, PlayerError>;
   }
 >()("@wave/mobile/playback/Player") {}
 
-const call = (operation: string, run: () => Promise<unknown>): Effect.Effect<void, PlayerError> =>
-  Effect.tryPromise({ try: run, catch: (cause) => new PlayerError({ operation, cause }) }).pipe(
-    Effect.asVoid,
-  );
+const call = <A>(operation: string, run: () => Promise<A>): Effect.Effect<A, PlayerError> =>
+  Effect.tryPromise({ try: run, catch: (cause) => new PlayerError({ operation, cause }) });
 
 const fromNative = ({ index: _index, ...state }: NativePlayerState): Omit<PlaybackState, "error"> =>
   state;
@@ -91,9 +111,18 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     yield* syncState;
     return Player.of({
-      setItems: (items, startIndex, options) =>
-        call("start playback", () =>
-          WavePlayer.setItems(items, startIndex, options?.positionMs ?? 0, options?.play ?? true),
+      applySync: (steps, items) =>
+        call("update the queue", () => WavePlayer.applySync(steps, items)),
+      setRepeatMode: (mode) => call("set repeat", () => WavePlayer.setRepeatMode(mode)),
+      getItemIds: call("read the queue", () => WavePlayer.getItemIds()),
+      saveQueue: (json) => Effect.sync(() => WavePlayer.saveQueue(json)),
+      savedQueue: Effect.sync(() => WavePlayer.savedQueue()),
+      onItemTransition: (listener) =>
+        Effect.asVoid(
+          Effect.acquireRelease(
+            Effect.sync(() => WavePlayer.addListener("onItemTransition", listener)),
+            (subscription) => Effect.sync(() => subscription.remove()),
+          ),
         ),
       play: call("resume playback", () => WavePlayer.play()),
       pause: call("pause playback", () => WavePlayer.pause()),
