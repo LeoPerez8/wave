@@ -1,0 +1,28 @@
+{
+  "name": "@wave/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "expo start",
+    "android": "EXPO_NO_GIT_STATUS=1 expo prebuild --clean --platform android && expo run:android",
+    "prebuild": "EXPO_NO_GIT_STATUS=1 expo prebuild --clean --platform android",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@expo-google-fonts/inter": "^0.4.2",
+    "@tabler/icons-react-native": "^3.44.0",
+    "@wave/core": "workspace:*",
+    "expo": "~58.0.2",
+    "tailwindcss": "^4.3.3",
+    "uniwind": "1.12.1"
+  },
+  "devDependencies": {
+    "typescript": "catalog:"
+  },
+  "expo": {
+    "install": {
+      "exclude": ["typescript"]
+    }
+  }
+}

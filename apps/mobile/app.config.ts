@@ -1,0 +1,73 @@
+import type { ExpoConfig } from "expo/config";
+
+// Font files ship inside the @expo-google-fonts/inter package and are embedded
+// natively at prebuild time, so text renders in Inter from the first frame.
+const inter = (file: string): string => `./node_modules/@expo-google-fonts/inter/${file}`;
+
+const config: ExpoConfig = {
+  name: "Wave",
+  slug: "wave",
+  scheme: "wave",
+  version: "0.1.0",
+  platforms: ["android"],
+  orientation: "portrait",
+  userInterfaceStyle: "automatic",
+  icon: "./assets/icon.png",
+  android: {
+    package: "dev.leoperez.wave",
+    adaptiveIcon: {
+      foregroundImage: "./assets/adaptive-icon-foreground.png",
+      monochromeImage: "./assets/adaptive-icon-monochrome.png",
+      backgroundColor: "#0D6B62",
+    },
+    predictiveBackGestureEnabled: true,
+  },
+  experiments: {
+    typedRoutes: true,
+  },
+  plugins: [
+    "expo-router",
+    [
+      "expo-splash-screen",
+      {
+        image: "./assets/splash-icon.png",
+        imageWidth: 160,
+        backgroundColor: "#FFFFFF",
+        dark: {
+          image: "./assets/splash-icon.png",
+          backgroundColor: "#000000",
+        },
+      },
+    ],
+    [
+      "expo-font",
+      {
+        android: {
+          fonts: [
+            {
+              fontFamily: "Inter",
+              fontDefinitions: [
+                { path: inter("400Regular/Inter_400Regular.ttf"), weight: 400 },
+                { path: inter("500Medium/Inter_500Medium.ttf"), weight: 500 },
+                { path: inter("600SemiBold/Inter_600SemiBold.ttf"), weight: 600 },
+                { path: inter("700Bold/Inter_700Bold.ttf"), weight: 700 },
+                { path: inter("800ExtraBold/Inter_800ExtraBold.ttf"), weight: 800 },
+              ],
+            },
+          ],
+        },
+      },
+    ],
+    [
+      "expo-build-properties",
+      {
+        android: {
+          // Android 12 is the floor: native blur (RenderEffect) is needed for the glass material.
+          minSdkVersion: 31,
+        },
+      },
+    ],
+  ],
+};
+
+export default config;

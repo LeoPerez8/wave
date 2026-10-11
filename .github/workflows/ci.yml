@@ -1,0 +1,144 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  PR_NUMBER: ${{ github.event.pull_request.number }}
+  IS_SAME_REPO_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+
+jobs:
+  checks:
+    name: Checks
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.autofix.outputs.sha || github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.ref || github.ref }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: ${{ hashFiles('pnpm-lock.yaml') != '' && 'pnpm' || '' }}
+
+      - name: Autofix lockfile and formatting
+        id: autofix
+        if: env.IS_SAME_REPO_PR == 'true'
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: scripts/ci/step.sh "Autofix lockfile and formatting" scripts/ci/autofix.sh
+
+      - name: Install
+        run: scripts/ci/step.sh "Install" pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: scripts/ci/step.sh "Typecheck" pnpm typecheck
+
+      - name: Lint
+        run: scripts/ci/step.sh "Lint" pnpm lint
+
+      - name: Format check
+        run: scripts/ci/step.sh "Format check" pnpm fmt:check
+
+      - name: Test
+        run: scripts/ci/step.sh "Test" pnpm test
+
+      - name: Report
+        if: always() && env.IS_SAME_REPO_PR == 'true' && job.status != 'cancelled'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ steps.autofix.outputs.sha || github.event.pull_request.head.sha }}
+        run: scripts/ci/report.sh "${{ job.status }}" "Checks"
+
+  android:
+    name: Android APK
+    needs: checks
+    runs-on: ubuntu-latest
+    env:
+      HEAD_SHA: ${{ needs.checks.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.checks.outputs.sha }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Install
+        run: scripts/ci/step.sh "Install" pnpm install --frozen-lockfile
+
+      - name: Prebuild native project
+        working-directory: apps/mobile
+        env:
+          EXPO_NO_GIT_STATUS: "1"
+        run: ../../scripts/ci/step.sh "Prebuild" pnpm exec expo prebuild --platform android --no-install
+
+      - name: Build release APK
+        working-directory: apps/mobile/android
+        run: ../../../scripts/ci/step.sh "Gradle assembleRelease" ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon
+
+      - name: Collect APK
+        id: apk
+        run: |
+          name="wave-${HEAD_SHA:0:7}.apk"
+          cp apps/mobile/android/app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/$name"
+          echo "path=$RUNNER_TEMP/$name" >> "$GITHUB_OUTPUT"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.apk.outputs.name }}
+          path: ${{ steps.apk.outputs.path }}
+          retention-days: 14
+
+      # A prerelease per PR (and a rolling one for main) gives a stable link
+      # that installs straight from the phone's browser.
+      - name: Publish APK to a prerelease
+        id: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -n "$PR_NUMBER" ]; then tag="pr-$PR_NUMBER"; asset="wave-pr-$PR_NUMBER.apk"; title="PR #$PR_NUMBER build";
+          else tag="latest"; asset="wave-latest.apk"; title="Latest main build"; fi
+          cp "${{ steps.apk.outputs.path }}" "$RUNNER_TEMP/$asset"
+          gh release view "$tag" > /dev/null 2>&1 || \
+            gh release create "$tag" --prerelease --target "$HEAD_SHA" --title "$title" \
+              --notes "Sideloadable APK, rebuilt on every push. Not for distribution."
+          gh release upload "$tag" "$RUNNER_TEMP/$asset" --clobber
+          echo "url=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${tag}/${asset}" >> "$GITHUB_OUTPUT"
+
+      - name: Report
+        if: always() && env.IS_SAME_REPO_PR == 'true' && job.status != 'cancelled'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          extra=""
+          if [ -n "${{ steps.publish.outputs.url }}" ]; then
+            extra="📱 **[Download APK](${{ steps.publish.outputs.url }})** (built from \`${HEAD_SHA:0:7}\`)"
+          fi
+          scripts/ci/report.sh "${{ job.status }}" "Android APK" "$extra"

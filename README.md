@@ -1,75 +1,55 @@
-# wave
+# Wave
 
-Working environment for the `wave` project.
+A local music player for Android with BlackPlayer-grade features and Apple Music's
+structure, gestures and glass. Personal project, sideloaded — see the
+[v1 spec](docs/spec.md) and the [Wave v1 tracking issue](https://github.com/LeoPerez8/wave/issues/2).
+
+## Layout
+
+| Path            | What                                                                  |
+| --------------- | --------------------------------------------------------------------- |
+| `apps/mobile`   | The Expo / React Native app (Expo Router, uniwind, Inter)              |
+| `packages/core` | Domain logic in pure TypeScript with **zero runtime dependencies**     |
+| `scripts/ci`    | Helpers used by GitHub Actions                                         |
+| `docs`          | Spec and design decisions                                              |
+
+## Getting the app on a phone
+
+Every PR and every push to `main` builds a release APK (arm64, signed with the debug key):
+
+- **PR builds** — the PR gets a comment with a *Download APK* link.
+- **Latest `main`** — <https://github.com/LeoPerez8/wave/releases/download/latest/wave-latest.apk>
+
+Open the link on the phone and install (allow installs from the browser once). Builds
+share a signing key, so each one updates the previous install in place.
+
+## Local development
+
+Requirements: Node ≥ 22.18, pnpm 10, JDK 17 and the Android SDK.
+
+```bash
+pnpm install
+pnpm android        # prebuild + build + install on a connected device
+pnpm dev            # Metro, for an already-installed dev build
+```
+
+Checks (the same ones CI runs):
+
+```bash
+pnpm typecheck
+pnpm lint
+pnpm fmt:check      # `pnpm fmt` to fix
+pnpm test           # Core tests run with plain `node --test`
+```
 
 ## Agent skills
 
-This environment uses [Matt Pocock's skills](https://github.com/mattpocock/skills) (MIT),
-installed as a **Claude Code plugin**. They are a managed, read-only bundle that updates
-when upstream ships — the skill files are *not* vendored into this repo.
-
-### Setup on a new machine
+This repo is set up for [Matt Pocock's skills](https://github.com/mattpocock/skills) (MIT),
+installed as a Claude Code plugin rather than vendored:
 
 ```bash
 claude plugin marketplace add mattpocock/skills
 claude plugin install mattpocock-skills@mattpocock
 ```
 
-Then, once per repo, run `/setup-matt-pocock-skills` inside a session. It asks which issue
-tracker to use (GitHub, Linear, or local files), which labels you apply when triaging, and
-where generated docs should live.
-
-### What's available
-
-Alignment before you build — use these *first*:
-
-| Skill | Use it to |
-| --- | --- |
-| `/grill-me` | Get grilled on what you actually want, before any code |
-| `/grill-with-docs` | Same, plus research and a written spec |
-| `/wayfinder` | Find your way around an unfamiliar codebase |
-| `/research` | Investigate a question and write up the findings |
-
-Turning intent into work:
-
-| Skill | Use it to |
-| --- | --- |
-| `/to-spec` | Turn a conversation into a spec |
-| `/to-tickets` | Break a spec into tickets |
-| `/triage` | Label and sort incoming tickets |
-| `/to-questionnaire` | Turn a topic into questions worth answering |
-
-Building:
-
-| Skill | Use it to |
-| --- | --- |
-| `/implement` | Work a ticket through to done |
-| `/tdd` | Drive the change test-first |
-| `/prototype` | Spike something throwaway to learn from |
-| `/wizard` | Scaffold a guided multi-step flow |
-
-Design and review:
-
-| Skill | Use it to |
-| --- | --- |
-| `/domain-modeling` | Build a shared language for the domain |
-| `/codebase-design` | Shape module and file structure |
-| `/improve-codebase-architecture` | Find and fix architectural drift |
-| `/code-review` | Review a change |
-| `/diagnosing-bugs` | Track a bug to its root cause |
-| `/resolving-merge-conflicts` | Work through a conflicted merge |
-
-Communication:
-
-| Skill | Use it to |
-| --- | --- |
-| `/handoff` | Hand work off with enough context to continue |
-| `/teach` | Have a concept explained properly |
-| `/wait-what` | Flag something surprising and dig in |
-| `/writing-for-agents` | Write docs an agent can actually use |
-| `/ask-matt` | Ask what Matt would do here |
-
-## Environment
-
-- Node 20.11.1, npm 10.2.4, pnpm 9.0.6
-- git 2.42.0, GitHub CLI 2.100.0
+Issues live on GitHub; ready tickets carry the `ready-for-agent` label; docs live in `docs/`.
