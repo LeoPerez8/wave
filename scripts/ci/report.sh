@@ -34,10 +34,24 @@ body="$dir/ci-comment.md"
     echo
     echo "**Failing step:** $(cat "$dir/ci-step-name" 2>/dev/null || echo unknown)"
     echo
+    clean="$dir/ci-step.clean.log"
+    sed -e 's/\x1b\[[0-9;]*[A-Za-z]//g' "$dir/ci-step.log" > "$clean"
+    # The root cause is usually the first error, which can scroll far above the tail.
+    first="$(grep -n -m1 -E '(^|[^a-zA-Z])(Error|ERROR|error:|FAILURE|Cannot find)' "$clean" | cut -d: -f1 || true)"
+    if [ -n "$first" ]; then
+      echo "First error (line $first):"
+      echo
+      echo '```text'
+      sed -n "$((first > 15 ? first - 15 : 1)),$((first + 45))p" "$clean" | cut -c1-400
+      echo '```'
+      echo
+      echo "Last lines:"
+      echo
+    fi
     echo '```text'
     # Strip ANSI colours, keep the last lines, and cap line length to stay under
     # GitHub's comment size limit.
-    sed -e 's/\x1b\[[0-9;]*[A-Za-z]//g' "$dir/ci-step.log" | tail -n 200 | cut -c1-400
+    tail -n 120 "$clean" | cut -c1-400
     echo '```'
   fi
 } > "$body"
