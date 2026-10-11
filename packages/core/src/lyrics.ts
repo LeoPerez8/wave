@@ -20,7 +20,8 @@ const STAMP = /^\[(\d+):(\d{1,2})(?:[.:,](\d{1,3}))?\]/;
 const WORD_STAMP = /<\d+:\d{1,2}(?:[.:,]\d{1,3})?>/g;
 /** `[offset:+500]`: shifts every line, in ms; positive shows lines earlier. */
 const OFFSET = /^\[offset:\s*([+-]?\d+)\s*\]/i;
-const ID_TAG = /^\[[a-z]+:[^\]]*\]$/i;
+/** LRC header tags; only these keys, so section labels like `[Chorus: Jay-Z]` stay lyrics. */
+const ID_TAG = /^\[(?:ar|ti|al|au|by|offset|length|re|ve|la|id|#):[^\]]*\]$/i;
 
 const trimBlankEdges = (rows: readonly string[]): string[] => {
   let start = 0;
