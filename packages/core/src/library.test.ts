@@ -102,6 +102,50 @@ describe("album artist and album identity", () => {
     assert.equal(a.albumKey, b.albumKey);
   });
 
+  test("a compilation keeps its own track artists while filed under Various Artists", () => {
+    const track = normalizeTrack({
+      path: `${MUSIC}/x.mp3`,
+      artist: "Air",
+      album: "Late Night Tales",
+      compilation: true,
+    });
+    assert.equal(track.artist, "Air");
+    assert.equal(
+      track.albumArtistKey,
+      normalizeTrack({ path: "/y.mp3", artist: VARIOUS_ARTISTS }).artistKey,
+    );
+  });
+
+  test("a compilation tagged with an album artist (a DJ mix) is filed under that artist", () => {
+    const a = normalizeTrack({
+      path: `${MUSIC}/a.mp3`,
+      artist: "Burial",
+      album: "Fabric 01",
+      albumArtist: "Craig Richards",
+      compilation: true,
+    });
+    const b = normalizeTrack({
+      path: `${MUSIC}/b.mp3`,
+      artist: "Four Tet",
+      album: "Fabric 01",
+      albumArtist: "Craig Richards",
+      compilation: true,
+    });
+    assert.equal(a.albumArtist, "Craig Richards");
+    assert.equal(a.albumKey, b.albumKey);
+  });
+
+  test("a compilation and an artist album with the same title stay apart", () => {
+    const compilation = normalizeTrack({
+      path: `${MUSIC}/a.mp3`,
+      artist: "Moby",
+      album: "Greatest Hits",
+      compilation: true,
+    });
+    const own = normalizeTrack({ path: `${MUSIC}/b.mp3`, artist: "Moby", album: "Greatest Hits" });
+    assert.notEqual(compilation.albumKey, own.albumKey);
+  });
+
   test("same album title by different album artists are different albums", () => {
     const a = normalizeTrack({ path: `${MUSIC}/a.mp3`, artist: "Weezer", album: "Weezer" });
     const b = normalizeTrack({ path: `${MUSIC}/b.mp3`, artist: "Peter Gabriel", album: "Weezer" });

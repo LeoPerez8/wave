@@ -37,14 +37,20 @@ const furnitureLabel = (album: AlbumSummary): string =>
     .filter((part) => part !== undefined)
     .join(", ");
 
-type Props = { album: AlbumSummary; size: number; onPress: () => void };
+type Props = {
+  album: AlbumSummary;
+  size: number;
+  onPress: () => void;
+  onLongPress?: () => void;
+};
 
-export function AlbumTile({ album, size, onPress }: Props) {
+export function AlbumTile({ album, size, onPress, onLongPress }: Props) {
   return (
     <Press
       accessibilityRole="button"
       accessibilityLabel={`${album.title} by ${album.albumArtist}, ${furnitureLabel(album)}`}
       onPress={onPress}
+      onLongPress={onLongPress}
       depth={0.02}
       style={{ width: size }}
     >
