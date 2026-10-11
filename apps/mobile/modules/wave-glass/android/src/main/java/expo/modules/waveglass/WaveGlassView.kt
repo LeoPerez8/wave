@@ -13,8 +13,9 @@ import android.graphics.RuntimeShader
 import android.graphics.Shader
 import android.os.Build
 import android.view.View
+import android.view.ViewGroup
 import android.view.ViewTreeObserver
-import com.facebook.react.uimanager.util.ReactFindViewUtil
+import com.facebook.react.R as ReactR
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.views.ExpoView
 
@@ -101,8 +102,23 @@ class WaveGlassView(context: Context, appContext: AppContext) : ExpoView(context
   private fun findBackdrop(): View? {
     backdrop?.let { if (it.isAttachedToWindow) return it }
     val id = backdropNativeId ?: return null
-    backdrop = ReactFindViewUtil.findView(rootView, id)
+    backdrop = findByNativeId(rootView, id)
     return backdrop
+  }
+
+  /**
+   * React Native stores `nativeID` as a view tag; ReactFindViewUtil, which used to
+   * look it up, is gone in RN 0.88. Breadth-first, since the backdrop sits near the root.
+   */
+  private fun findByNativeId(root: View, nativeId: String): View? {
+    val queue = ArrayDeque<View>()
+    queue.add(root)
+    while (queue.isNotEmpty()) {
+      val view = queue.removeFirst()
+      if (view.getTag(ReactR.id.view_tag_native_id) == nativeId) return view
+      if (view is ViewGroup) for (i in 0 until view.childCount) queue.add(view.getChildAt(i))
+    }
+    return null
   }
 
   /** Re-records the backdrop under this view. Returns false when there's nothing to draw. */
