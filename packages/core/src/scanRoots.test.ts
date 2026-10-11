@@ -6,6 +6,7 @@ import {
   filesLeavingWithRoot,
   isWithin,
   planAddRoot,
+  planExclusion,
   type ScanRootState,
 } from "./index.ts";
 
@@ -71,6 +72,39 @@ describe("filesLeavingWithRoot", () => {
       `${MUSIC}/Live/b.mp3`,
     ]);
     assert.deepEqual(filesLeavingWithRoot(files, MUSIC, [`${MUSIC}/Live`]), [`${MUSIC}/a.mp3`]);
+  });
+});
+
+describe("planExclusion", () => {
+  test("a folder inside a root is excluded", () => {
+    assert.deepEqual(planExclusion([MUSIC], [], `${MUSIC}/Podcasts`), { kind: "add", drop: [] });
+  });
+
+  test("a folder outside every root can't be excluded", () => {
+    assert.deepEqual(planExclusion([MUSIC], [], `${STORAGE}/Download`), { kind: "outside" });
+  });
+
+  test("a root itself is removed from music folders instead", () => {
+    assert.deepEqual(planExclusion([MUSIC], [], MUSIC), { kind: "root" });
+  });
+
+  test("a folder inside an excluded one is already excluded", () => {
+    assert.deepEqual(planExclusion([MUSIC], [`${MUSIC}/Podcasts`], `${MUSIC}/Podcasts/Old`), {
+      kind: "covered",
+      by: `${MUSIC}/Podcasts`,
+    });
+  });
+
+  test("excluding a parent replaces the exclusions inside it", () => {
+    const plan = planExclusion(
+      [MUSIC],
+      [`${MUSIC}/Spoken/Podcasts`, `${MUSIC}/Spoken/Books`, `${MUSIC}/Voice memos`],
+      `${MUSIC}/Spoken`,
+    );
+    assert.deepEqual(plan, {
+      kind: "add",
+      drop: [`${MUSIC}/Spoken/Podcasts`, `${MUSIC}/Spoken/Books`],
+    });
   });
 });
 

@@ -35,3 +35,9 @@ export type {
 } from "./queue.ts";
 export { applyPlayerSync, planPlayerSync } from "./playerSync.ts";
 export type { PlayerList, QueueList, SyncStep } from "./playerSync.ts";
+export { reconcileScan } from "./scanReconcile.ts";
+export type { IndexedFile, ScanChanges, ScanReconcileInput, TrackMove } from "./scanReconcile.ts";
+export { planExclusion } from "./scanRoots.ts";
+export type { ExclusionPlan } from "./scanRoots.ts";
+export { restorePlayback } from "./playbackRestore.ts";
+export type { RestoredPlayback } from "./playbackRestore.ts";

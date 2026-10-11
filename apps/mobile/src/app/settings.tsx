@@ -8,12 +8,15 @@ import { grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { IconButton } from "@/components/IconButton";
 import { ScreenHeader } from "@/components/ScreenHeader";
-import { useScanRoots } from "@/library/hooks";
+import { TextButton } from "@/components/TextButton";
+import { useScanRoots, useScanState } from "@/library/hooks";
+import { startRescan } from "@/library/runtime";
 import { setTapAnimationMs, TAP_ANIMATION, useTapAnimationMs } from "@/settings/tapAnimation";
 
 export default function SettingsScreen() {
   const ms = useTapAnimationMs();
   const roots = useScanRoots();
+  const scanning = useScanState().status === "scanning";
   return (
     <View className="flex-1 bg-background">
       <ScreenHeader title="Settings" />
@@ -26,7 +29,19 @@ export default function SettingsScreen() {
           onPress={() => router.push("/music-folders")}
         />
         <Text className="mt-2 font-sans text-footnote text-secondary">
-          The folders on your phone that Wave shows songs from.
+          The folders on your phone that Wave shows songs from, and the folders inside them it
+          ignores.
+        </Text>
+        <View className="mt-4 items-start">
+          <TextButton
+            label={scanning ? "Scanning…" : "Rescan library"}
+            disabled={scanning}
+            onPress={() => void startRescan()}
+          />
+        </View>
+        <Text className="font-sans text-footnote text-secondary">
+          Wave picks up new, changed and removed files each time you open it, and when you pull down
+          in the Library.
         </Text>
 
         <CatalogLine className="mb-2 mt-12">Motion</CatalogLine>

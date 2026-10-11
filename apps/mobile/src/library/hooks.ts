@@ -122,3 +122,14 @@ const NO_ROOTS: readonly ScanRootSummary[] = [];
 
 /** The music folders Wave indexes, with their song counts. */
 export const useScanRoots = (): readonly ScanRootSummary[] => useLibraryQuery(listRoots, NO_ROOTS);
+
+const listExcludedFolders = Effect.gen(function* () {
+  const store = yield* LibraryStore;
+  return yield* store.excludedFolders;
+});
+
+const NO_FOLDERS: readonly string[] = [];
+
+/** The folders inside the music folders that Wave ignores. */
+export const useExcludedFolders = (): readonly string[] =>
+  useLibraryQuery(listExcludedFolders, NO_FOLDERS);
