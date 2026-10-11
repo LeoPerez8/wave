@@ -77,6 +77,8 @@ export {
 export type { PlaylistAdd, PlaylistNameCheck } from "./playlists.ts";
 export { dragTargetIndex, resolveRemoveSwipe } from "./rowGestures.ts";
 export type { RowDrag } from "./rowGestures.ts";
+export { currentLyricIndex, parseLyrics, pickLyrics } from "./lyrics.ts";
+export type { LyricLine, Lyrics, LyricsSources } from "./lyrics.ts";
 export {
   COUNTED_PLAY_MS,
   EMPTY_PLAY_TRACKER,

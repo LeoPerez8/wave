@@ -183,6 +183,8 @@ export interface TrackDetails {
   readonly albumId: number;
   readonly album: string;
   readonly palette: schema.ArtworkPalette | null;
+  /** The audio file, for reading its lyrics. */
+  readonly path: string;
 }
 
 /** One playlist of Library › Playlists. */
@@ -1168,6 +1170,7 @@ const make = Effect.gen(function* () {
               albumId: schema.tracks.albumId,
               album: schema.albums.title,
               palette: schema.artwork.palette,
+              path: schema.tracks.path,
             })
             .from(schema.tracks)
             .innerJoin(schema.artists, eq(schema.tracks.artistId, schema.artists.id))
