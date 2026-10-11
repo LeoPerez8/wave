@@ -19,14 +19,21 @@ import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.views.ExpoView
 
 /**
- * Spike (issue #4): a glass surface drawn from the views behind it.
+ * A glass surface drawn from the views behind it (the tab bar and mini player;
+ * chosen in the spike, issue #4, see docs/glass-spike.md).
  *
- * Every frame, the backdrop view (found by its React `nativeID`) is recorded
- * into a RenderNode — which only references the backdrop's existing display
- * lists, so it's cheap — offset so the part under this view lines up. The node
- * gets a RenderEffect: Gaussian blur, then (API 33+, `refraction > 0`) an AGSL
- * shader that bends the backdrop near the rounded edge and adds a specular rim.
- * A tint and a rim stroke are drawn on top. All of it runs on the RenderThread.
+ * Whenever the window draws a frame, the backdrop view (found by its React
+ * `nativeID`) is recorded into a RenderNode — which only references the
+ * backdrop's existing display lists, so it's cheap — offset so the part under
+ * this view lines up. The node gets a RenderEffect: Gaussian blur, then
+ * (API 33+, `refraction > 0`) an AGSL shader that bends the backdrop near the
+ * rounded edge and adds a specular rim. A tint and a rim stroke are drawn on
+ * top. All of it runs on the RenderThread.
+ *
+ * The view never schedules frames itself: this view's display list only
+ * references the node, and the RenderThread syncs the node's new recording with
+ * whatever frame the window is drawing anyway (a scroll, an image loading). So
+ * an idle screen renders no frames, and a scroll costs one re-record per frame.
  */
 class WaveGlassView(context: Context, appContext: AppContext) : ExpoView(context, appContext) {
   private val density = resources.displayMetrics.density
@@ -74,7 +81,9 @@ class WaveGlassView(context: Context, appContext: AppContext) : ExpoView(context
   private val backdropLocation = IntArray(2)
 
   private val preDrawListener = ViewTreeObserver.OnPreDrawListener {
-    if (recordBackdrop()) invalidate()
+    val hadContent = node.hasDisplayList()
+    // Only the first recording needs a redraw of this view, to put the node in its display list.
+    if (recordBackdrop() && !hadContent) invalidate()
     true
   }
 
@@ -96,6 +105,15 @@ class WaveGlassView(context: Context, appContext: AppContext) : ExpoView(context
   override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
     super.onSizeChanged(w, h, oldw, oldh)
     effectDirty = true
+    rimPaint.shader = LinearGradient(
+      0f,
+      0f,
+      0f,
+      h.toFloat(),
+      Color.argb(150, 255, 255, 255),
+      Color.argb(30, 255, 255, 255),
+      Shader.TileMode.CLAMP,
+    )
   }
 
   private fun findBackdrop(): View? {
@@ -192,15 +210,6 @@ class WaveGlassView(context: Context, appContext: AppContext) : ExpoView(context
     if (rimEnabled) {
       val stroke = density
       rimPaint.strokeWidth = stroke
-      rimPaint.shader = LinearGradient(
-        0f,
-        0f,
-        0f,
-        height.toFloat(),
-        Color.argb(150, 255, 255, 255),
-        Color.argb(30, 255, 255, 255),
-        Shader.TileMode.CLAMP,
-      )
       bounds.inset(stroke / 2, stroke / 2)
       canvas.drawRoundRect(bounds, radius, radius, rimPaint)
     }

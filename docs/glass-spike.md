@@ -1,7 +1,7 @@
 # Spike: glass material on Android (#4)
 
-Status: **prototypes built, waiting for measurements on the S24+.** The decision below is
-filled in once the table has numbers.
+Status: **technique A in use by the tab bar and mini player (#8), waiting for measurements
+on the S24+.** The decision below is confirmed once the table has numbers.
 
 The spec calls glass on Android "the main technical risk": the tab bar, mini player and
 Now Playing controls need a material with backdrop blur, edge refraction and a specular
@@ -76,7 +76,21 @@ Snapshot cost for B (from the readout): ___ × ___ px in ___ ms.
 
 ## Decision
 
-_To be recorded after the measurements:_ technique A, B, or the blur + tint + rim
-fallback — and why. Going in, A is the expected winner: it is live (B is a still), it runs
-entirely on the RenderThread, and its fallback is the same view with the shader off. B is
-worth keeping only if A turns out visibly worse or much slower on the device.
+**Technique A, chosen for #8 pending on-device numbers.** The tab bar, the Search pill and
+the mini player use `WaveGlassView` with a 24 dp blur and 12 dp edge refraction
+(`GLASS` in `apps/mobile/src/glass/Glass.tsx`). A was the expected winner going in: it is
+live (B is a still that goes stale), it runs entirely on the RenderThread, and its
+fallback is the same view with the shader off. B stays in the spike screen only.
+
+- **Fallback is one line:** set `refraction: 0` in `GLASS` to get blur + tint + rim. Below
+  API 33 the view already drops the shader by itself.
+- **Production change from the spike:** the view no longer invalidates itself on every
+  pre-draw. It re-records the backdrop whenever the window draws a frame anyway (a scroll,
+  an image loading) and lets the RenderThread pick the new recording up, so an idle
+  screen renders no frames. The spike screen's readout still works while scrolling.
+- **Backdrop rule:** the glass records a backdrop found by `nativeID`, so the backdrop
+  must be a sibling of the glass, never an ancestor (the glass would draw itself). The
+  tab screens and the pushed Library stack each sit in such a backdrop view.
+
+Still to do on the S24+: fill in the table above, then confirm or switch to the fallback
+(or B) here.

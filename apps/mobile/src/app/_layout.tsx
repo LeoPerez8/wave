@@ -31,6 +31,7 @@ export default function RootLayout() {
         >
           <Stack.Protected guard={granted}>
             <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="now-playing" options={{ animation: "slide_from_bottom" }} />
           </Stack.Protected>
           <Stack.Protected guard={!granted}>
             <Stack.Screen name="access" options={{ animation: "fade" }} />

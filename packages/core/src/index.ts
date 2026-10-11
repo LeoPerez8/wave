@@ -14,3 +14,5 @@ export type { LibraryTrack, RawTrack } from "./library.ts";
 export { formatDuration, formatRemaining } from "./time.ts";
 export { describeFolder, filesLeavingWithRoot, isWithin, planAddRoot } from "./scanRoots.ts";
 export type { AddRootPlan, FolderLabel, ScanRootState } from "./scanRoots.ts";
+export { resolveSkipSwipe } from "./swipe.ts";
+export type { SkipDirection, SkipSwipe } from "./swipe.ts";

@@ -2,7 +2,7 @@ import { NativeModule, requireNativeModule, requireNativeView } from "expo";
 import type { ComponentType } from "react";
 import type { ColorValue, ViewProps } from "react-native";
 
-/** Spike (#4): native bindings from `modules/wave-glass`. */
+/** Native bindings from `modules/wave-glass`: the glass view and the frame-time meter. */
 
 export interface FrameStats {
   /** Frames rendered per second over the last 500 ms window. */
