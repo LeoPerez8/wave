@@ -18,7 +18,7 @@ importers:
   .:
     devDependencies:
       oxfmt:
-        specifier: latest
+        specifier: 0.72.0
         version: 0.72.0
       oxlint:
         specifier: ^1.0.0
