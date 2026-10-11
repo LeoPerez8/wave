@@ -10,13 +10,10 @@ import {
   type GenreRow,
   type SongRow,
 } from "@/library/LibraryStore";
+import { usePlaylistsVersion } from "@/library/playlists";
 import { appRuntime } from "@/library/runtime";
 
-/**
- * A playlist as search shows it. Playlists arrive with #11: once the store
- * lists them, add them to `loadSources` below and they're searchable (Core
- * already ranks the "playlist" kind).
- */
+/** A playlist as search shows it (a `PlaylistRow` from the store). */
 export interface PlaylistHit {
   readonly id: number;
   readonly name: string;
@@ -51,13 +48,14 @@ interface Sources {
 
 const loadSources: Effect.Effect<Sources, unknown, LibraryStore> = Effect.gen(function* () {
   const store = yield* LibraryStore;
-  const [songs, albums, artists, genres] = yield* Effect.all([
+  const [songs, albums, artists, genres, playlists] = yield* Effect.all([
     store.listSongs,
     store.listAlbums,
     store.listArtists,
     store.listGenres,
+    store.listPlaylists,
   ]);
-  return { songs, albums, artists, genres, playlists: [] };
+  return { songs, albums, artists, genres, playlists };
 });
 
 const toEntries = (sources: Sources): SearchHit[] => {
@@ -83,7 +81,9 @@ const REFRESH_MS = 3000;
  * (prepared, narrowing) search itself.
  */
 export const useSearchIndex = (active: boolean): SearchIndex<SearchHit> | null => {
-  const version = useSyncExternalStore(libraryVersion.subscribe, libraryVersion.get);
+  // Both only ever go up, so their sum changes whenever either does.
+  const version =
+    useSyncExternalStore(libraryVersion.subscribe, libraryVersion.get) + usePlaylistsVersion();
   const [built, setBuilt] = useState<{
     readonly version: number;
     readonly index: SearchIndex<SearchHit>;

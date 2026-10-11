@@ -1,6 +1,5 @@
 import { LegendList } from "@legendapp/list/react-native";
 import type { QueueContext, SearchKind } from "@wave/core";
-import { router, type Href } from "expo-router";
 import { useCallback } from "react";
 import { Text, View } from "react-native";
 
@@ -11,7 +10,7 @@ import { TrackRow } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { TextButton } from "@/components/TextButton";
 import type { SongRow } from "@/library/LibraryStore";
-import { openAlbum, openArtist, openGenre } from "@/library/routes";
+import { openAlbum, openArtist, openGenre, openPlaylist } from "@/library/routes";
 import { toTrackSummary } from "@/library/TrackList";
 import { playSongs } from "@/playback/actions";
 import { useCurrentTrackId } from "@/playback/hooks";
@@ -27,9 +26,6 @@ import type { SearchHit } from "./searchIndex";
 
 /** Tapping a song plays the song results from it. */
 const SEARCH_CONTEXT: QueueContext = { kind: "search", id: null };
-
-/** Playlist screens arrive with #11 (`/library/playlist/[id]`). */
-const openPlaylist = (id: number): void => router.push(`/library/playlist/${id}` as Href);
 
 const counted = (count: number, word: string): string =>
   `${count.toLocaleString("en")} ${count === 1 ? word : `${word}s`}`;

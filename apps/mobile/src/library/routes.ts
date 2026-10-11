@@ -11,6 +11,9 @@ export const openArtist = (id: number): void => router.push(artistHref(id));
 export const openGenre = (id: number): void => router.push(genreHref(id));
 export const openFolder = (id: number): void => router.push(folderHref(id));
 
+export const playlistHref = (id: number) => `/library/playlist/${id}` as const;
+export const openPlaylist = (id: number): void => router.push(playlistHref(id));
+
 /** Parses a route's `[id]` param; NaN-safe (an unknown id shows the "gone" state). */
 export const parseId = (param: string | string[] | undefined): number => {
   const id = Number(Array.isArray(param) ? param[0] : param);

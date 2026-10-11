@@ -1,5 +1,5 @@
 import { IconFileOff, IconStarFilled, IconVolume } from "@tabler/icons-react-native";
-import { Text, View } from "react-native";
+import { Text, View, type PressableProps as PressProps } from "react-native";
 
 import { Press } from "@/motion/Press";
 import { useThemeColor } from "@/theme/useThemeColor";
@@ -27,6 +27,9 @@ type Props = {
   leading: "artwork" | "number";
   onPress: () => void;
   onLongPress?: () => void;
+  /** Screen-reader actions standing in for gestures (move, remove in a playlist). */
+  accessibilityActions?: PressProps["accessibilityActions"];
+  onAccessibilityAction?: PressProps["onAccessibilityAction"];
 };
 
 export const formatDuration = (ms: number): string => {
@@ -42,7 +45,16 @@ const THUMB = CELL * 5;
  * it replaces the number, trailing in artwork lists), the
  * favorite cell and the duration. Title and artist share one size; rank is weight and tint.
  */
-export function TrackRow({ track, state, favorite = false, leading, onPress, onLongPress }: Props) {
+export function TrackRow({
+  track,
+  state,
+  favorite = false,
+  leading,
+  onPress,
+  onLongPress,
+  accessibilityActions,
+  onAccessibilityAction,
+}: Props) {
   const highlight = useThemeColor("highlight");
   const tertiary = useThemeColor("tertiary");
   const missing = state === "missing";
@@ -61,6 +73,8 @@ export function TrackRow({ track, state, favorite = false, leading, onPress, onL
       disabled={missing}
       onPress={onPress}
       onLongPress={onLongPress}
+      accessibilityActions={accessibilityActions}
+      onAccessibilityAction={onAccessibilityAction}
       depth={0.015}
     >
       <View className="flex-row items-center" style={{ height: grid.row, gap: CELL * 1.5 }}>

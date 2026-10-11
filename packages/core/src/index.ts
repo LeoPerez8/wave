@@ -65,3 +65,15 @@ export type {
   SearchOptions,
   SearchResults,
 } from "./search.ts";
+export {
+  PLAYLIST_NAME_MAX,
+  checkPlaylistName,
+  describePlaylistAdd,
+  moveItem,
+  nextPlaylistName,
+  planPlaylistAdd,
+  playlistMosaic,
+} from "./playlists.ts";
+export type { PlaylistAdd, PlaylistNameCheck } from "./playlists.ts";
+export { dragTargetIndex, resolveRemoveSwipe } from "./rowGestures.ts";
+export type { RowDrag } from "./rowGestures.ts";
