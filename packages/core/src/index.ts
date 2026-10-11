@@ -16,3 +16,22 @@ export { describeFolder, filesLeavingWithRoot, isWithin, planAddRoot } from "./s
 export type { AddRootPlan, FolderLabel, ScanRootState } from "./scanRoots.ts";
 export { resolveSkipSwipe } from "./swipe.ts";
 export type { SkipDirection, SkipSwipe } from "./swipe.ts";
+export {
+  EMPTY_QUEUE,
+  RESTART_THRESHOLD_MS,
+  currentEntry,
+  parseQueueState,
+  reduceQueue,
+  upNext,
+} from "./queue.ts";
+export type {
+  QueueCommand,
+  QueueContext,
+  QueueEntry,
+  QueuePlayback,
+  QueueResult,
+  QueueState,
+  RepeatMode,
+} from "./queue.ts";
+export { applyPlayerSync, planPlayerSync } from "./playerSync.ts";
+export type { PlayerList, QueueList, SyncStep } from "./playerSync.ts";

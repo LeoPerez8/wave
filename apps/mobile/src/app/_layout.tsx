@@ -9,6 +9,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useAllFilesAccess } from "@/library/hooks";
 import { startInitialScan } from "@/library/runtime";
 import { connectPlayer } from "@/playback/actions";
+import { TrackActionsSheet } from "@/playback/TrackActionsSheet";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 export default function RootLayout() {
@@ -37,6 +38,7 @@ export default function RootLayout() {
             <Stack.Screen name="access" options={{ animation: "fade" }} />
           </Stack.Protected>
         </Stack>
+        <TrackActionsSheet />
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

@@ -27,6 +27,26 @@ class PlayerEventsTest {
   }
 
   @Test
+  fun transitionsCausedBySyncingTheQueueAreNamedSync() {
+    assertEquals(
+      "sync",
+      PlayerEvents.transitionReason(Player.MEDIA_ITEM_TRANSITION_REASON_SEEK, duringSync = true),
+    )
+    assertEquals(
+      "seek",
+      PlayerEvents.transitionReason(Player.MEDIA_ITEM_TRANSITION_REASON_SEEK, duringSync = false),
+    )
+  }
+
+  @Test
+  fun mapsRepeatModes() {
+    assertEquals(Player.REPEAT_MODE_OFF, PlayerEvents.repeatMode("off"))
+    assertEquals(Player.REPEAT_MODE_ALL, PlayerEvents.repeatMode("all"))
+    assertEquals(Player.REPEAT_MODE_ONE, PlayerEvents.repeatMode("one"))
+    assertEquals(Player.REPEAT_MODE_OFF, PlayerEvents.repeatMode("sometimes"))
+  }
+
+  @Test
   fun unknownDurationIsNull() {
     assertNull(PlayerEvents.duration(C.TIME_UNSET))
     assertEquals(183_000.0, PlayerEvents.duration(183_000)!!, 0.0)
