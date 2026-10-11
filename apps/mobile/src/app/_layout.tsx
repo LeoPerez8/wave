@@ -8,11 +8,14 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { useAllFilesAccess } from "@/library/hooks";
 import { startInitialScan } from "@/library/runtime";
+import { connectPlayer } from "@/playback/actions";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 export default function RootLayout() {
   const background = useThemeColor("background");
   const { granted } = useAllFilesAccess();
+
+  useEffect(connectPlayer, []);
 
   // The first scan starts as soon as Wave can read the scan roots.
   useEffect(() => {

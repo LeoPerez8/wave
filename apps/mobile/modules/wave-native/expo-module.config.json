@@ -1,4 +1,9 @@
 {
   "platforms": ["android"],
-  "android": { "modules": ["expo.modules.wavenative.WaveNativeModule"] }
+  "android": {
+    "modules": [
+      "expo.modules.wavenative.WaveNativeModule",
+      "expo.modules.wavenative.player.WavePlayerModule"
+    ]
+  }
 }

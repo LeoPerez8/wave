@@ -1,4 +1,5 @@
 import { LegendList } from "@legendapp/list/react-native";
+import { useCallback } from "react";
 import { IconMusic } from "@tabler/icons-react-native";
 import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -8,6 +9,8 @@ import { CELL, grid } from "@/catalog/grid";
 import { type TrackSummary, TrackRow } from "@/catalog/TrackRow";
 import { EmptyState } from "@/components/EmptyState";
 import { ScanProgressBanner } from "@/components/ScanProgressBanner";
+import { playSong } from "@/playback/actions";
+import { useCurrentItemId } from "@/playback/hooks";
 
 import { useScanState, useSongs } from "./hooks";
 import type { SongRow } from "./LibraryStore";
@@ -22,16 +25,23 @@ const toSummary = (song: SongRow): TrackSummary => ({
 
 const keyExtractor = (song: SongRow): string => String(song.id);
 
-// Playback arrives with #6; until then a tap does nothing.
-const renderItem = ({ item }: { item: SongRow }) => (
-  <TrackRow track={toSummary(item)} leading="artwork" onPress={() => undefined} />
-);
-
 /** Library › Songs: every track by title, virtualised for libraries of tens of thousands. */
 export function SongsList() {
   const songs = useSongs();
   const scan = useScanState();
   const insets = useSafeAreaInsets();
+  const currentId = useCurrentItemId();
+  const renderItem = useCallback(
+    ({ item }: { item: SongRow }) => (
+      <TrackRow
+        track={toSummary(item)}
+        state={String(item.id) === currentId ? "playing" : undefined}
+        leading="artwork"
+        onPress={() => playSong(item)}
+      />
+    ),
+    [currentId],
+  );
 
   if (songs.length === 0) {
     return (
@@ -56,6 +66,7 @@ export function SongsList() {
       data={songs}
       keyExtractor={keyExtractor}
       renderItem={renderItem}
+      extraData={currentId}
       estimatedItemSize={grid.row}
       recycleItems
       contentContainerStyle={{
