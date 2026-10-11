@@ -26,9 +26,27 @@ enum class ScanPhase(val id: String) {
   READING("reading"),
 }
 
-data class ScanProgress(val phase: ScanPhase, val filesFound: Int, val filesRead: Int)
+/** What the index holds for a file, for incremental scans. */
+data class KnownFile(val sizeBytes: Long, val modifiedAt: Long)
 
-data class ScanSummary(val filesFound: Int, val filesRead: Int, val cancelled: Boolean, val durationMs: Long)
+/**
+ * [filesRead] counts the files whose tags were read; [filesUnchanged] the found
+ * files an incremental scan skipped because the index already has them as they are.
+ */
+data class ScanProgress(
+  val phase: ScanPhase,
+  val filesFound: Int,
+  val filesRead: Int,
+  val filesUnchanged: Int = 0,
+)
+
+data class ScanSummary(
+  val filesFound: Int,
+  val filesRead: Int,
+  val cancelled: Boolean,
+  val durationMs: Long,
+  val filesUnchanged: Int = 0,
+)
 
 interface ScanListener {
   fun onProgress(progress: ScanProgress)
@@ -38,12 +56,24 @@ interface ScanListener {
    * the current scan (each unique image is reported once per scan).
    */
   fun onBatch(tracks: List<ScannedTrack>, artwork: List<ArtworkInfo>)
+
+  /**
+   * Known files the scan didn't find, reported once after discovery and before
+   * the first batch, so moved files can be matched as their batches arrive.
+   */
+  fun onMissing(paths: List<String>) {}
 }
 
 /**
- * Full library scan: walks the roots, then reads tags on a small thread pool and
+ * Library scan: walks the roots, then reads tags on a small thread pool and
  * reports results in batches of [batchSize], so JS can store and show tracks
  * while the scan is still running.
+ *
+ * Incremental mode: given the [KnownFile]s the index holds, files found with the
+ * same size and modification time are not read again, and known files under the
+ * roots that weren't found are reported missing. Known files outside the roots,
+ * or under a root that isn't there (an unmounted SD card) or can't be listed,
+ * are left alone.
  */
 class LibraryScanner(
   private val tagReader: TagReader,
@@ -58,41 +88,66 @@ class LibraryScanner(
     excluded: List<File>,
     listener: ScanListener,
     isCancelled: () -> Boolean = { false },
+    known: Map<String, KnownFile> = emptyMap(),
   ): ScanSummary {
     val startedAt = clock()
     var lastProgressAt = Long.MIN_VALUE
-    fun progress(phase: ScanPhase, found: Int, read: Int, force: Boolean = false) {
+    var found = 0
+    var unchanged = 0
+    fun progress(phase: ScanPhase, read: Int, force: Boolean = false) {
       val now = clock()
       if (force || lastProgressAt == Long.MIN_VALUE || now - lastProgressAt >= progressIntervalMs) {
         lastProgressAt = now
-        listener.onProgress(ScanProgress(phase, found, read))
+        listener.onProgress(ScanProgress(phase, found, read, unchanged))
       }
     }
+    fun summary(read: Int, cancelled: Boolean) =
+      ScanSummary(found, read, cancelled, clock() - startedAt, unchanged)
 
     val files = ArrayList<File>()
+    val seen = HashSet<String>()
     AudioFileWalker(roots, excluded).walk(isCancelled) { file ->
-      files.add(file)
-      progress(ScanPhase.DISCOVERING, files.size, 0)
+      found += 1
+      seen.add(file.path)
+      if (isUnchanged(file, known[file.path])) unchanged += 1 else files.add(file)
+      progress(ScanPhase.DISCOVERING, 0)
     }
-    if (isCancelled()) return ScanSummary(files.size, 0, true, clock() - startedAt)
-    progress(ScanPhase.READING, files.size, 0, force = true)
+    if (isCancelled()) return summary(0, true)
+    val missing = missingFiles(known, seen, roots)
+    if (missing.isNotEmpty()) listener.onMissing(missing)
+    progress(ScanPhase.READING, 0, force = true)
 
     val reportedArtwork = ConcurrentHashMap.newKeySet<String>()
     val pool = Executors.newFixedThreadPool(threads.coerceAtLeast(1))
     var read = 0
     try {
       for (chunk in files.chunked(batchSize.coerceAtLeast(1))) {
-        if (isCancelled()) return ScanSummary(files.size, read, true, clock() - startedAt)
+        if (isCancelled()) return summary(read, true)
         val results = pool.invokeAll(chunk.map { file -> Callable { index(file) } }).map { it.get() }
         val newArtwork = results.mapNotNull { it.second }.filter { reportedArtwork.add(it.hash) }
         read += results.size
         listener.onBatch(results.map { it.first }, newArtwork)
-        progress(ScanPhase.READING, files.size, read, force = true)
+        progress(ScanPhase.READING, read, force = true)
       }
     } finally {
       pool.shutdownNow()
     }
-    return ScanSummary(files.size, read, false, clock() - startedAt)
+    return summary(read, false)
+  }
+
+  private fun isUnchanged(file: File, indexed: KnownFile?): Boolean =
+    indexed != null && indexed.sizeBytes == file.length() && indexed.modifiedAt == file.lastModified()
+
+  /**
+   * Known files under the available [roots] that the walk didn't find. A root
+   * that is gone or can't be listed tells nothing about its files.
+   */
+  private fun missingFiles(known: Map<String, KnownFile>, seen: Set<String>, roots: List<File>): List<String> {
+    if (known.isEmpty()) return emptyList()
+    val available = roots.filter { it.listFiles() != null }.map { it.canonicalFile.path }
+    return known.keys
+      .filter { path -> path !in seen && available.any { root -> path == root || path.startsWith("$root/") } }
+      .sorted()
   }
 
   private fun index(file: File): Pair<ScannedTrack, ArtworkInfo?> {

@@ -4,6 +4,7 @@ import {
   compareFileNames,
   filesLeavingWithRoot,
   sortKey,
+  type IndexedFile,
   type LibraryTrack,
 } from "@wave/core";
 import { asc, desc, eq, inArray, or, sql, type SQL } from "drizzle-orm";
@@ -18,6 +19,7 @@ import { openDatabaseSync } from "expo-sqlite";
 
 import migrations from "./db/migrations";
 import * as schema from "./db/schema";
+import type { KnownFile } from "./NativeScanner";
 
 const DATABASE_NAME = "wave.db";
 
@@ -153,6 +155,19 @@ export interface FolderDetail {
   readonly songs: readonly SongRow[];
 }
 
+/** An indexed file found under a new path (see Core's `reconcileScan`). */
+export interface PathMove {
+  readonly from: string;
+  readonly to: string;
+}
+
+/** The queue and position saved for the next launch. */
+export interface SavedPlayback {
+  /** Core's `QueueState` as JSON. */
+  readonly queue: string;
+  readonly positionMs: number;
+}
+
 export class LibraryStore extends Context.Service<
   LibraryStore,
   {
@@ -176,10 +191,15 @@ export class LibraryStore extends Context.Service<
      */
     readonly removeRoot: (path: string) => Effect.Effect<void, LibraryStoreError>;
     readonly excludedFolders: Effect.Effect<readonly string[], LibraryStoreError>;
-    /** Upserts one scanner batch (and the artwork it references) in a single transaction. */
+    /**
+     * Upserts one scanner batch (and the artwork it references) in a single
+     * transaction. [moves] first re-point indexed tracks to the paths they were
+     * found under, so they keep their id (and with it history and favorites).
+     */
     readonly saveBatch: (
       tracks: readonly IndexedTrack[],
       artwork: readonly IndexedArtwork[],
+      moves?: readonly PathMove[],
     ) => Effect.Effect<void, LibraryStoreError>;
     readonly markScanned: (
       roots: readonly string[],
@@ -201,6 +221,37 @@ export class LibraryStore extends Context.Service<
     readonly getArtist: (id: number) => Effect.Effect<ArtistDetail | null, LibraryStoreError>;
     readonly getGenre: (id: number) => Effect.Effect<GenreDetail | null, LibraryStoreError>;
     readonly getFolder: (id: number) => Effect.Effect<FolderDetail | null, LibraryStoreError>;
+
+    /** The indexed files under [roots], for an incremental scan to skip the unchanged ones. */
+    readonly knownFiles: (
+      roots: readonly string[],
+    ) => Effect.Effect<readonly KnownFile[], LibraryStoreError>;
+    /** What identifies the indexed files at [paths] when they turn up elsewhere. */
+    readonly indexedFiles: (
+      paths: readonly string[],
+    ) => Effect.Effect<readonly IndexedFile[], LibraryStoreError>;
+    /**
+     * Removes the tracks at [paths], then the albums, artists, genres and
+     * folders left without tracks (also after tag changes, so call it once per scan).
+     */
+    readonly removeTracks: (paths: readonly string[]) => Effect.Effect<void, LibraryStoreError>;
+    /** Excludes [path] and drops the exclusions in [drop] (see Core's `planExclusion`). */
+    readonly addExcludedFolder: (
+      path: string,
+      drop: readonly string[],
+    ) => Effect.Effect<void, LibraryStoreError>;
+    readonly removeExcludedFolder: (path: string) => Effect.Effect<void, LibraryStoreError>;
+    /** The tracks with these ids, in no particular order; ids no longer indexed are left out. */
+    readonly songsByIds: (
+      ids: readonly number[],
+    ) => Effect.Effect<readonly SongRow[], LibraryStoreError>;
+    readonly loadPlayback: Effect.Effect<SavedPlayback | null, LibraryStoreError>;
+    /** Saves the queue with where its current entry is. */
+    readonly saveQueue: (
+      queue: string,
+      positionMs: number,
+    ) => Effect.Effect<void, LibraryStoreError>;
+    readonly savePosition: (positionMs: number) => Effect.Effect<void, LibraryStoreError>;
   }
 >()("@wave/mobile/library/LibraryStore") {}
 
@@ -230,10 +281,18 @@ const saveBatchSync = (
   db: Database,
   tracks: readonly IndexedTrack[],
   artworkRows: readonly IndexedArtwork[],
+  moves: readonly PathMove[],
   now: number,
 ): void => {
   const { artists, genres, folders, albums, artwork } = schema;
   db.transaction((tx) => {
+    // The upsert below then updates the moved rows by their new path.
+    for (const move of moves) {
+      tx.update(schema.tracks)
+        .set({ path: move.to })
+        .where(eq(schema.tracks.path, move.from))
+        .run();
+    }
     if (artworkRows.length > 0) {
       tx.insert(artwork)
         .values(artworkRows.map((row) => ({ ...row })))
@@ -395,8 +454,38 @@ const saveBatchSync = (
 /** SQLite's default limit on bound parameters is far above this; it keeps statements small. */
 const DELETE_CHUNK = 500;
 
+const chunks = <A>(items: readonly A[]): A[][] => {
+  const result: A[][] = [];
+  for (let i = 0; i < items.length; i += DELETE_CHUNK) {
+    result.push(items.slice(i, i + DELETE_CHUNK));
+  }
+  return result;
+};
+
+type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
+
+/** Deletes the albums, artists, genres and folders no track uses any more. */
+const pruneOrphans = (tx: Transaction): void => {
+  // Albums first: they hold the album artist.
+  tx.run(sql`DELETE FROM albums WHERE id NOT IN (SELECT album_id FROM tracks)`);
+  tx.run(sql`DELETE FROM artists WHERE id NOT IN (SELECT artist_id FROM tracks)
+    AND id NOT IN (SELECT album_artist_id FROM albums)`);
+  tx.run(sql`DELETE FROM genres
+    WHERE id NOT IN (SELECT genre_id FROM tracks WHERE genre_id IS NOT NULL)`);
+  tx.run(sql`DELETE FROM folders WHERE id NOT IN (SELECT folder_id FROM tracks)`);
+};
+
+const removeTracksSync = (db: Database, paths: readonly string[]): void => {
+  db.transaction((tx) => {
+    for (const chunk of chunks(paths)) {
+      tx.delete(schema.tracks).where(inArray(schema.tracks.path, chunk)).run();
+    }
+    pruneOrphans(tx);
+  });
+};
+
 const removeRootSync = (db: Database, path: string): void => {
-  const { scanRoots, tracks } = schema;
+  const { scanRoots, tracks, excludedFolders } = schema;
   db.transaction((tx) => {
     const remaining = tx
       .select({ path: scanRoots.path })
@@ -414,20 +503,25 @@ const removeRootSync = (db: Database, path: string): void => {
       .all()
       .map((row) => row.path);
     const leaving = filesLeavingWithRoot(under, path, remaining);
-    for (let i = 0; i < leaving.length; i += DELETE_CHUNK) {
-      tx.delete(tracks)
-        .where(inArray(tracks.path, leaving.slice(i, i + DELETE_CHUNK)))
-        .run();
+    for (const chunk of chunks(leaving)) {
+      tx.delete(tracks).where(inArray(tracks.path, chunk)).run();
     }
     tx.delete(scanRoots).where(eq(scanRoots.path, path)).run();
 
-    // Albums first: they hold the album artist.
-    tx.run(sql`DELETE FROM albums WHERE id NOT IN (SELECT album_id FROM tracks)`);
-    tx.run(sql`DELETE FROM artists WHERE id NOT IN (SELECT artist_id FROM tracks)
-      AND id NOT IN (SELECT album_artist_id FROM albums)`);
-    tx.run(sql`DELETE FROM genres
-      WHERE id NOT IN (SELECT genre_id FROM tracks WHERE genre_id IS NOT NULL)`);
-    tx.run(sql`DELETE FROM folders WHERE id NOT IN (SELECT folder_id FROM tracks)`);
+    // Exclusions only mean something inside a root.
+    const exclusions = tx
+      .select({ path: excludedFolders.path })
+      .from(excludedFolders)
+      .all()
+      .map((row) => row.path);
+    const stale = filesLeavingWithRoot(exclusions, path, remaining);
+    if (stale.length > 0) {
+      tx.delete(excludedFolders)
+        .where(inArray(excludedFolders.path, [...stale]))
+        .run();
+    }
+
+    pruneOrphans(tx);
   });
 };
 
@@ -622,6 +716,8 @@ const listFoldersSync = (db: Database): FolderRow[] => {
   );
 };
 
+const SAVED_PLAYBACK_ID = 1;
+
 const make = Effect.gen(function* () {
   const db: Database = yield* Effect.try({
     try: () => {
@@ -686,8 +782,10 @@ const make = Effect.gen(function* () {
         .map((row) => row.path),
     ),
 
-    saveBatch: (tracks, artworkRows) =>
-      attempt("save scanned tracks", () => saveBatchSync(db, tracks, artworkRows, Date.now())),
+    saveBatch: (tracks, artworkRows, moves = []) =>
+      attempt("save scanned tracks", () =>
+        saveBatchSync(db, tracks, artworkRows, moves, Date.now()),
+      ),
 
     markScanned: (roots, at) =>
       attempt("record the scan", () => {
@@ -742,11 +840,102 @@ const make = Effect.gen(function* () {
     getGenre: (id) => attempt("open the genre", () => getGenreSync(db, id)),
 
     getFolder: (id) => attempt("open the folder", () => getFolderSync(db, id)),
+
+    knownFiles: (roots) =>
+      attempt("read the library index", () => {
+        if (roots.length === 0) return [];
+        const { tracks } = schema;
+        const under = roots.map(
+          (root) => sql`substr(${tracks.path}, 1, length(${root}) + 1) = ${`${root}/`}`,
+        );
+        return db
+          .select({
+            path: tracks.path,
+            sizeBytes: tracks.sizeBytes,
+            modifiedAt: tracks.modifiedAt,
+          })
+          .from(tracks)
+          .where(sql.join(under, sql` OR `))
+          .all();
+      }),
+
+    indexedFiles: (paths) =>
+      attempt("read missing files", () =>
+        chunks(paths).flatMap((chunk) =>
+          db
+            .select({
+              path: schema.tracks.path,
+              sizeBytes: schema.tracks.sizeBytes,
+              durationMs: schema.tracks.durationMs,
+              title: schema.tracks.title,
+              artist: schema.artists.name,
+            })
+            .from(schema.tracks)
+            .innerJoin(schema.artists, eq(schema.tracks.artistId, schema.artists.id))
+            .where(inArray(schema.tracks.path, chunk))
+            .all(),
+        ),
+      ),
+
+    removeTracks: (paths) => attempt("remove missing songs", () => removeTracksSync(db, paths)),
+
+    addExcludedFolder: (path, drop) =>
+      attempt("exclude a folder", () =>
+        db.transaction((tx) => {
+          const { excludedFolders } = schema;
+          if (drop.length > 0)
+            tx.delete(excludedFolders)
+              .where(inArray(excludedFolders.path, [...drop]))
+              .run();
+          tx.insert(excludedFolders)
+            .values({ path, addedAt: Date.now() })
+            .onConflictDoNothing()
+            .run();
+        }),
+      ),
+
+    removeExcludedFolder: (path) =>
+      attempt("include a folder again", () => {
+        db.delete(schema.excludedFolders).where(eq(schema.excludedFolders.path, path)).run();
+      }),
+
+    songsByIds: (ids) =>
+      attempt("read queued songs", () =>
+        chunks(ids).flatMap((chunk) =>
+          trackQuery(db).where(inArray(schema.tracks.id, chunk)).all(),
+        ),
+      ),
+
+    loadPlayback: attempt(
+      "read the saved queue",
+      () =>
+        db
+          .select({
+            queue: schema.savedPlayback.queue,
+            positionMs: schema.savedPlayback.positionMs,
+          })
+          .from(schema.savedPlayback)
+          .where(eq(schema.savedPlayback.id, SAVED_PLAYBACK_ID))
+          .get() ?? null,
+    ),
+
+    saveQueue: (queue, positionMs) =>
+      attempt("save the queue", () => {
+        const row = { queue, positionMs: Math.round(positionMs), updatedAt: Date.now() };
+        db.insert(schema.savedPlayback)
+          .values({ id: SAVED_PLAYBACK_ID, ...row })
+          .onConflictDoUpdate({ target: schema.savedPlayback.id, set: row })
+          .run();
+      }),
+
+    savePosition: (positionMs) =>
+      attempt("save the playback position", () => {
+        db.update(schema.savedPlayback)
+          .set({ positionMs: Math.round(positionMs), updatedAt: Date.now() })
+          .where(eq(schema.savedPlayback.id, SAVED_PLAYBACK_ID))
+          .run();
+      }),
   });
 });
 
 export const layer = Layer.effect(LibraryStore, make);
-
-/** Roots that have never finished a full scan. */
-export const unscannedRoots = (roots: readonly ScanRoot[]): readonly ScanRoot[] =>
-  roots.filter((root) => root.lastScannedAt === null);

@@ -15,6 +15,7 @@ import { TextButton } from "@/components/TextButton";
 import { folderPhrase } from "@/library/folderPhrase";
 import { useScanRoots, useScanState, useTrackCount } from "@/library/hooks";
 import { promptForMusicFolder } from "@/library/promptForMusicFolder";
+import { RescanRefreshControl } from "@/library/RescanRefreshControl";
 
 /** Empty cover slots stand in for Recently Added until the first scan. */
 const SLOT = CELL * 9;
@@ -28,6 +29,7 @@ export default function LibraryScreen() {
   return (
     <LargeTitleScreen
       title="Library"
+      refreshControl={<RescanRefreshControl />}
       action={
         <IconButton icon={IconSettings} label="Settings" onPress={() => router.push("/settings")} />
       }

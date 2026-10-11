@@ -167,3 +167,11 @@ export const useAlbum = (id: number): AlbumDetail | null | undefined => useDetai
 export const useArtist = (id: number): ArtistDetail | null | undefined => useDetail(id, getArtist);
 export const useGenre = (id: number): GenreDetail | null | undefined => useDetail(id, getGenre);
 export const useFolder = (id: number): FolderDetail | null | undefined => useDetail(id, getFolder);
+
+const listExcludedFolders = LibraryStore.use((store) => store.excludedFolders);
+
+const NO_EXCLUDED_FOLDERS: readonly string[] = [];
+
+/** The folders inside the music folders that Wave ignores. */
+export const useExcludedFolders = (): readonly string[] =>
+  useLibraryQuery(listExcludedFolders, NO_EXCLUDED_FOLDERS);
