@@ -2,10 +2,10 @@ import { LegendList } from "@legendapp/list/react-native";
 import { useCallback } from "react";
 import { IconMusic } from "@tabler/icons-react-native";
 import { View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
+import { useChromeInset } from "@/chrome/chrome";
 import { type TrackSummary, TrackRow } from "@/catalog/TrackRow";
 import { EmptyState } from "@/components/EmptyState";
 import { ScanProgressBanner } from "@/components/ScanProgressBanner";
@@ -37,7 +37,7 @@ export function SongsList() {
   const songs = useSongs();
   const scan = useScanState();
   const roots = useScanRoots();
-  const insets = useSafeAreaInsets();
+  const bottomInset = useChromeInset();
   const currentId = useCurrentTrackId();
   const renderItem = useCallback(
     ({ item, index }: { item: SongRow; index: number }) => (
@@ -85,7 +85,8 @@ export function SongsList() {
       recycleItems
       contentContainerStyle={{
         paddingHorizontal: grid.margin,
-        paddingBottom: insets.bottom + CELL * 6,
+        // Lets the last row scroll out from under the floating mini player.
+        paddingBottom: bottomInset,
       }}
       ListHeaderComponent={
         <View style={{ paddingBottom: CELL }}>

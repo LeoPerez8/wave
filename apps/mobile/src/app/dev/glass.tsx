@@ -21,7 +21,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { FrameStatsHud } from "@/dev/glass/FrameStatsHud";
 import { SkiaGlass, type Frame } from "@/dev/glass/SkiaGlass";
-import { NativeGlassView } from "@/dev/glass/waveGlass";
+import { NativeGlassView } from "@/glass/waveGlass";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 /**
