@@ -51,3 +51,17 @@ export { settleSheet } from "./sheet.ts";
 export type { SheetDrag, SheetState } from "./sheet.ts";
 export { reorderShift, reorderTarget } from "./reorder.ts";
 export type { ReorderDrag, ReorderRow } from "./reorder.ts";
+export {
+  RECENT_SEARCHES,
+  createSearchIndex,
+  normalizeSearchText,
+  rememberSearch,
+} from "./search.ts";
+export type {
+  SearchEntry,
+  SearchGroup,
+  SearchIndex,
+  SearchKind,
+  SearchOptions,
+  SearchResults,
+} from "./search.ts";

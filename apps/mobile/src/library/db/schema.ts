@@ -146,3 +146,9 @@ export const savedPlayback = sqliteTable("playback_state", {
   positionMs: integer("position_ms").notNull().default(0),
   updatedAt: integer("updated_at").notNull(),
 });
+
+/** The owner's recent searches, as Core's `rememberSearch` keeps them; the newest has the latest time. */
+export const recentSearches = sqliteTable("recent_searches", {
+  query: text("query").primaryKey(),
+  searchedAt: integer("searched_at").notNull(),
+});
