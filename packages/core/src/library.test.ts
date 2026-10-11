@@ -109,8 +109,16 @@ describe("album artist and album identity", () => {
   });
 
   test("album identity ignores case and spacing differences", () => {
-    const a = normalizeTrack({ path: `${MUSIC}/a.mp3`, artist: "Muse", album: "Origin of Symmetry" });
-    const b = normalizeTrack({ path: `${MUSIC}/b.mp3`, artist: "MUSE", album: "origin of  symmetry" });
+    const a = normalizeTrack({
+      path: `${MUSIC}/a.mp3`,
+      artist: "Muse",
+      album: "Origin of Symmetry",
+    });
+    const b = normalizeTrack({
+      path: `${MUSIC}/b.mp3`,
+      artist: "MUSE",
+      album: "origin of  symmetry",
+    });
     assert.equal(a.albumKey, b.albumKey);
     assert.equal(a.artistKey, b.artistKey);
   });
@@ -124,7 +132,11 @@ describe("album artist and album identity", () => {
 
 describe("number and date tags", () => {
   test("track and disc numbers accept n, 0n and n/total", () => {
-    const track = normalizeTrack({ path: `${MUSIC}/x.mp3`, trackNumber: "03/12", discNumber: "2/2" });
+    const track = normalizeTrack({
+      path: `${MUSIC}/x.mp3`,
+      trackNumber: "03/12",
+      discNumber: "2/2",
+    });
     assert.equal(track.trackNumber, 3);
     assert.equal(track.trackTotal, 12);
     assert.equal(track.discNumber, 2);

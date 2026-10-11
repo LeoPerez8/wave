@@ -75,7 +75,10 @@ const clean = (value: string | null | undefined): string | null => {
   if (value == null) return null;
   // Tags sometimes carry NUL terminators or padding; collapse runs of whitespace.
   // oxlint-disable-next-line no-control-regex
-  const trimmed = value.replace(/\u0000/g, "").replace(/\s+/g, " ").trim();
+  const trimmed = value
+    .replace(/\u0000/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
   return trimmed.length > 0 ? trimmed : null;
 };
 

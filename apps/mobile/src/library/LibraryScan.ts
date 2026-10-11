@@ -7,7 +7,12 @@ import { makeExternalStore } from "@/lib/externalStore";
 import { argbToHex, type NativeArtwork, type NativeScannedTrack } from "@/native/waveNative";
 
 import type { ArtworkPalette } from "./db/schema";
-import { LibraryStore, unscannedRoots, type IndexedArtwork, type IndexedTrack } from "./LibraryStore";
+import {
+  LibraryStore,
+  unscannedRoots,
+  type IndexedArtwork,
+  type IndexedTrack,
+} from "./LibraryStore";
 import { NativeScanner, type ScanEvent } from "./NativeScanner";
 
 export type ScanState =
@@ -62,7 +67,10 @@ const handleEvent = (event: ScanEvent) =>
         return;
       case "Batch": {
         const store = yield* LibraryStore;
-        yield* store.saveBatch(event.tracks.map(toIndexedTrack), event.artwork.map(toIndexedArtwork));
+        yield* store.saveBatch(
+          event.tracks.map(toIndexedTrack),
+          event.artwork.map(toIndexedArtwork),
+        );
         libraryVersion.update((version) => version + 1);
         return;
       }

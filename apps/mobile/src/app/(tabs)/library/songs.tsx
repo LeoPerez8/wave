@@ -27,7 +27,11 @@ export default function SongsScreen() {
             Songs appear here as Wave finds them.
           </Text>
         ) : (
-          <EmptyState icon={IconMusic} title="No songs" message="Your Music folder has no songs yet." />
+          <EmptyState
+            icon={IconMusic}
+            title="No songs"
+            message="Your Music folder has no songs yet."
+          />
         )}
       </View>
     );

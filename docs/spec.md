@@ -135,13 +135,13 @@ v1 delivers the core player and library. v2 adds the advanced audio and library-
 ### Modules
 
 1. **Core** (workspace package, pure TypeScript, **zero runtime dependencies**). Holds all decision-heavy domain logic behind a small public API, so it can be tested anywhere with plain Node:
-   - *Queue engine* — a pure state + command reducer: start playback from a context at a given track; next/previous (with the 3-second restart rule); seek; shuffle on/off (current track stays first, original order restorable); repeat off/all/one; Play Next; Add to Queue; reorder; remove; track-ended transitions. It outputs the ordered list the native player should hold.
-   - *Play-event classifier* — given start, listened time, duration and end reason, decides whether a play is counted.
-   - *Library model* — grouping (album identity = album title + album artist, album-artist fallback, compilations), sort keys (articles and accents ignored), disc/track ordering, unknown-tag fallbacks.
-   - *Scan reconciliation* — given the known index and a scan result, produces adds/updates/removals, and matches moved/renamed files (same size + duration + title + artist) so history and favorites carry over.
-   - *Search* — normalisation (case, accents, punctuation), word-prefix matching and ranking across entity types.
-   - *Lyrics* — LRC parsing (timestamps, multiple stamps per line, offsets) and current-line lookup.
-   - *Sleep timer* — deadline/end-of-track logic.
+   - _Queue engine_ — a pure state + command reducer: start playback from a context at a given track; next/previous (with the 3-second restart rule); seek; shuffle on/off (current track stays first, original order restorable); repeat off/all/one; Play Next; Add to Queue; reorder; remove; track-ended transitions. It outputs the ordered list the native player should hold.
+   - _Play-event classifier_ — given start, listened time, duration and end reason, decides whether a play is counted.
+   - _Library model_ — grouping (album identity = album title + album artist, album-artist fallback, compilations), sort keys (articles and accents ignored), disc/track ordering, unknown-tag fallbacks.
+   - _Scan reconciliation_ — given the known index and a scan result, produces adds/updates/removals, and matches moved/renamed files (same size + duration + title + artist) so history and favorites carry over.
+   - _Search_ — normalisation (case, accents, punctuation), word-prefix matching and ranking across entity types.
+   - _Lyrics_ — LRC parsing (timestamps, multiple stamps per line, offsets) and current-line lookup.
+   - _Sleep timer_ — deadline/end-of-track logic.
 2. **Native player** (local Expo module, Kotlin, Media3). A `MediaSessionService` hosting ExoPlayer, so notification, lock screen, Bluetooth/headset buttons, audio focus and becoming-noisy handling come from Media3. The JS side owns ordering (from the queue engine) and pushes the ordered item list; the native side plays it gaplessly and reports state, throttled position, item transitions with a reason (auto-advance, skip, seek, error) and errors. Native shuffle is not used. The audio pipeline keeps a hook for custom audio processors so equalizer, crossfade and ReplayGain (v2) slot in without restructuring.
 3. **Native scanner** (same Kotlin module). Walks the scan roots minus exclusions, reads tags with a JVM tag library that also supports writing (needed by the v2 tag editor), extracts embedded artwork once per unique image (hashed, cached as files) together with a small colour palette (Android Palette) for the Now Playing tint, and finds sidecar `.lrc` files. It streams results to JS in batches of ~500 and supports an incremental mode driven by known path + modification time + size.
 4. **Library store** (app, Drizzle on expo-sqlite). The single owner of the schema and migrations. Tables for tracks, albums, artists, genres, folders, artwork (path + palette), playlists and playlist items, favorites, play events, scan roots/exclusions, recent searches, and persisted playback state. Home sections and play counts are queries over play events.

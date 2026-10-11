@@ -58,7 +58,9 @@ export class LibraryStore extends Context.Service<
   LibraryStore,
   {
     /** Adds [path] as a scan root when there are no roots yet; returns the roots. */
-    readonly ensureDefaultRoot: (path: string) => Effect.Effect<readonly ScanRoot[], LibraryStoreError>;
+    readonly ensureDefaultRoot: (
+      path: string,
+    ) => Effect.Effect<readonly ScanRoot[], LibraryStoreError>;
     readonly excludedFolders: Effect.Effect<readonly string[], LibraryStoreError>;
     /** Upserts one scanner batch (and the artwork it references) in a single transaction. */
     readonly saveBatch: (

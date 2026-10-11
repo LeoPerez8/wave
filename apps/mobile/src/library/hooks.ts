@@ -108,5 +108,4 @@ const NO_SONGS: readonly SongRow[] = [];
 export const useSongs = (): readonly SongRow[] => useLibraryQuery(listSongs, NO_SONGS);
 
 /** Number of tracks in the library, or null before the first count arrives. */
-export const useTrackCount = (): number | null =>
-  useLibraryQuery<number | null>(countTracks, null);
+export const useTrackCount = (): number | null => useLibraryQuery<number | null>(countTracks, null);
