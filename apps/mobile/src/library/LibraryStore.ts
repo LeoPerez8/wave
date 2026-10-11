@@ -168,6 +168,16 @@ export interface SavedPlayback {
   readonly positionMs: number;
 }
 
+/** What Now Playing shows about a track beyond the player's item. */
+export interface TrackDetails {
+  readonly id: number;
+  readonly artistId: number;
+  readonly artist: string;
+  readonly albumId: number;
+  readonly album: string;
+  readonly palette: schema.ArtworkPalette | null;
+}
+
 export class LibraryStore extends Context.Service<
   LibraryStore,
   {
@@ -252,6 +262,8 @@ export class LibraryStore extends Context.Service<
       positionMs: number,
     ) => Effect.Effect<void, LibraryStoreError>;
     readonly savePosition: (positionMs: number) => Effect.Effect<void, LibraryStoreError>;
+    /** The playing track's links and artwork palette, for Now Playing; null once it's gone. */
+    readonly trackDetails: (id: number) => Effect.Effect<TrackDetails | null, LibraryStoreError>;
   }
 >()("@wave/mobile/library/LibraryStore") {}
 
@@ -810,6 +822,27 @@ const make = Effect.gen(function* () {
         .orderBy(...BY_TITLE)
         .all(),
     ),
+
+    trackDetails: (id) =>
+      attempt(
+        "read the playing track",
+        () =>
+          db
+            .select({
+              id: schema.tracks.id,
+              artistId: schema.tracks.artistId,
+              artist: schema.artists.name,
+              albumId: schema.tracks.albumId,
+              album: schema.albums.title,
+              palette: schema.artwork.palette,
+            })
+            .from(schema.tracks)
+            .innerJoin(schema.artists, eq(schema.tracks.artistId, schema.artists.id))
+            .innerJoin(schema.albums, eq(schema.tracks.albumId, schema.albums.id))
+            .leftJoin(schema.artwork, eq(schema.tracks.artworkHash, schema.artwork.hash))
+            .where(eq(schema.tracks.id, id))
+            .get() ?? null,
+      ),
 
     listAlbums: attempt("list albums", () => albumQuery(db, undefined)),
 

@@ -32,7 +32,15 @@ export default function RootLayout() {
         >
           <Stack.Protected guard={granted}>
             <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="now-playing" options={{ animation: "slide_from_bottom" }} />
+            {/* Now Playing animates itself as a sheet over the tabs (src/nowPlaying/sheet.ts). */}
+            <Stack.Screen
+              name="now-playing"
+              options={{
+                presentation: "transparentModal",
+                animation: "none",
+                contentStyle: { backgroundColor: "transparent" },
+              }}
+            />
           </Stack.Protected>
           <Stack.Protected guard={!granted}>
             <Stack.Screen name="access" options={{ animation: "fade" }} />
