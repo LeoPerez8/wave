@@ -1,6 +1,5 @@
 import { IconMusic, IconStar } from "@tabler/icons-react-native";
 import { Image } from "expo-image";
-import type { Href } from "expo-router";
 import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 import Animated, {
@@ -12,11 +11,12 @@ import Animated, {
 
 import { CELL } from "@/catalog/grid";
 import type { TrackDetails } from "@/library/LibraryStore";
+import { openAlbum, openArtist } from "@/library/routes";
 import { Press } from "@/motion/Press";
 import type { PlaybackState } from "@/playback/Player";
 import { useThemeColor } from "@/theme/useThemeColor";
 
-import { closeNowPlayingTo } from "./sheet";
+import { closeNowPlaying } from "./sheet";
 
 /** How far the artwork steps back while paused. */
 const PAUSED_SCALE = 0.84;
@@ -65,26 +65,27 @@ function NowPlayingArtwork({ uri, playing }: { uri: string | null; playing: bool
 
 type LinkProps = {
   label: string;
-  /** Where it leads; plain text until the library has answered. */
-  href: Href | null;
+  /** Opens the screen; plain text until the library has answered. */
+  open: (() => void) | null;
   hint: string;
   className: string;
 };
 
 /** A line of metadata that opens its album or artist screen. */
-function MetaLink({ label, href, hint, className }: LinkProps) {
+function MetaLink({ label, open, hint, className }: LinkProps) {
   const text = (
     <Text numberOfLines={1} className={className}>
       {label}
     </Text>
   );
-  if (href === null) return <View style={{ paddingVertical: CELL / 2 }}>{text}</View>;
+  if (open === null) return <View style={{ paddingVertical: CELL / 2 }}>{text}</View>;
   return (
     <Press
       accessibilityRole="link"
       accessibilityLabel={label}
       accessibilityHint={hint}
-      onPress={() => closeNowPlayingTo(href)}
+      // Now Playing slides away first, then the screen opens over the tabs.
+      onPress={() => closeNowPlaying(open)}
       haptic="selection"
       depth={0.015}
       hitSlop={{ top: CELL, bottom: CELL }}
@@ -125,13 +126,13 @@ export function PlayerView({ item, details, playing }: Props) {
           </Text>
           <MetaLink
             label={artist}
-            href={details === null ? null : (`/library/artist/${details.artistId}` as Href)}
+            open={details === null ? null : () => openArtist(details.artistId)}
             hint="Opens the artist"
             className="font-sans text-body text-secondary"
           />
           <MetaLink
             label={album}
-            href={details === null ? null : (`/library/album/${details.albumId}` as Href)}
+            open={details === null ? null : () => openAlbum(details.albumId)}
             hint="Opens the album"
             className="font-sans text-body text-secondary"
           />

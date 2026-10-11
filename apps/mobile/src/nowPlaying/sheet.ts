@@ -1,5 +1,5 @@
 import { settleSheet, type SheetState } from "@wave/core";
-import { router, type Href } from "expo-router";
+import { router } from "expo-router";
 import { Dimensions } from "react-native";
 import { makeMutable, withSpring } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
@@ -86,9 +86,6 @@ export const closeNowPlaying = (then?: () => void): void => {
   afterClose = then ?? null;
   settleNowPlaying("closed");
 };
-
-/** Dismisses Now Playing and opens a screen (an album, an artist) in its place. */
-export const closeNowPlayingTo = (href: Href): void => closeNowPlaying(() => router.push(href));
 
 /**
  * Called by the screen as it mounts; returns its unmount cleanup. A sheet
