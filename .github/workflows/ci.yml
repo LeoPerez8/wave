@@ -100,6 +100,12 @@ jobs:
           EXPO_NO_GIT_STATUS: "1"
         run: ../../scripts/ci/step.sh "Prebuild" pnpm exec expo prebuild --platform android --no-install
 
+      # JVM tests for the local native module (tag reading, folder walking, artwork).
+      # AGP 9 only creates unit-test tasks for the tested build type (debug) in libraries.
+      - name: Native unit tests
+        working-directory: apps/mobile/android
+        run: ../../../scripts/ci/step.sh "Native unit tests" ./gradlew :wave-native:testDebugUnitTest --no-daemon --console=plain
+
       # Bundling on its own first surfaces Metro errors clearly instead of deep in Gradle output.
       - name: Bundle JavaScript
         working-directory: apps/mobile

@@ -1,5 +1,6 @@
 import { IconMusic } from "@tabler/icons-react-native";
-import { Image, View } from "react-native";
+import { Image } from "expo-image";
+import { View } from "react-native";
 
 import { useThemeColor } from "@/theme/useThemeColor";
 
@@ -14,11 +15,15 @@ type Props = {
 /** Album art, treated as a photograph: square, no rounding, no frame. */
 export function Artwork({ uri, tint, size }: Props) {
   const tertiary = useThemeColor("tertiary");
+  const fill = useThemeColor("fill");
   if (uri !== undefined) {
     return (
       <Image
         source={{ uri }}
-        style={{ width: size, height: size }}
+        // List rows are recycled; the key stops the previous track's artwork flashing.
+        recyclingKey={uri}
+        style={{ width: size, height: size, backgroundColor: fill }}
+        contentFit="cover"
         accessibilityIgnoresInvertColors
       />
     );

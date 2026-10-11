@@ -21,6 +21,9 @@ const config: ExpoConfig = {
       backgroundColor: "#0D6B62",
     },
     predictiveBackGestureEnabled: true,
+    // All-files access lets the scanner read every audio file in the scan roots.
+    // Acceptable because Wave is sideloaded, not distributed on the Play Store.
+    permissions: ["android.permission.MANAGE_EXTERNAL_STORAGE"],
   },
   experiments: {
     typedRoutes: true,
