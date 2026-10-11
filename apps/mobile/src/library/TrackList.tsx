@@ -13,6 +13,7 @@ import { playSongs } from "@/playback/actions";
 import { useCurrentTrackId } from "@/playback/hooks";
 import { openTrackActions } from "@/playback/TrackActionsSheet";
 
+import { useFavoriteIds } from "./favorites";
 import type { SongRow } from "./LibraryStore";
 import { useSpine } from "./useSpine";
 
@@ -68,6 +69,8 @@ export function TrackList({ songs, context, header, indexed = false }: Props) {
   const list = useRef<LegendListRef>(null);
   const bottomInset = useChromeInset();
   const currentId = useCurrentTrackId();
+  const favorites = useFavoriteIds();
+  const rowState = useMemo(() => ({ currentId, favorites }), [currentId, favorites]);
   const sortKeys = useMemo(
     () => (indexed ? songs.map((song) => song.titleSort) : []),
     [indexed, songs],
@@ -79,12 +82,13 @@ export function TrackList({ songs, context, header, indexed = false }: Props) {
       <TrackRow
         track={toTrackSummary(item)}
         state={String(item.id) === currentId ? "playing" : undefined}
+        favorite={favorites.has(item.id)}
         leading="artwork"
         onPress={() => playSongs(songs, index, context)}
         onLongPress={() => openTrackActions(item)}
       />
     ),
-    [context, currentId, songs],
+    [context, currentId, favorites, songs],
   );
 
   return (
@@ -95,7 +99,7 @@ export function TrackList({ songs, context, header, indexed = false }: Props) {
         data={songs}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
-        extraData={currentId}
+        extraData={rowState}
         estimatedItemSize={grid.row}
         getFixedItemSize={() => grid.row}
         recycleItems

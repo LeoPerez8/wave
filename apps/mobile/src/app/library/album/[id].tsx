@@ -14,6 +14,7 @@ import { playSongs } from "@/playback/actions";
 import { useCurrentTrackId } from "@/playback/hooks";
 import { openTrackActions } from "@/playback/TrackActionsSheet";
 import { DetailFrame } from "@/library/DetailFrame";
+import { useFavoriteIds } from "@/library/favorites";
 import { useAlbum } from "@/library/hooks";
 import type { AlbumDetail, AlbumTrackRow } from "@/library/LibraryStore";
 import { openArtist, parseId } from "@/library/routes";
@@ -97,6 +98,8 @@ function AlbumHead({ detail }: { detail: AlbumDetail }) {
 function AlbumTracks({ detail }: { detail: AlbumDetail }) {
   const bottomInset = useChromeInset();
   const currentId = useCurrentTrackId();
+  const favorites = useFavoriteIds();
+  const rowState = useMemo(() => ({ currentId, favorites }), [currentId, favorites]);
   const items = useMemo(() => albumItems(detail.tracks), [detail.tracks]);
   const context = useMemo(
     () => ({ kind: "album", id: String(detail.album.id) }) as const,
@@ -116,12 +119,13 @@ function AlbumTracks({ detail }: { detail: AlbumDetail }) {
             trackNumber: item.track.trackNumber ?? undefined,
           }}
           state={String(item.track.id) === currentId ? "playing" : undefined}
+          favorite={favorites.has(item.track.id)}
           leading="number"
           onPress={() => playSongs(detail.tracks, item.index, context)}
           onLongPress={() => openTrackActions(item.track)}
         />
       ),
-    [context, currentId, detail.tracks],
+    [context, currentId, detail.tracks, favorites],
   );
 
   return (
@@ -130,7 +134,7 @@ function AlbumTracks({ detail }: { detail: AlbumDetail }) {
       data={items}
       keyExtractor={itemKey}
       renderItem={renderItem}
-      extraData={currentId}
+      extraData={rowState}
       getItemType={(item) => item.type}
       getFixedItemSize={(item) => (item.type === "disc" ? DISC_HEAD : grid.row)}
       estimatedItemSize={grid.row}

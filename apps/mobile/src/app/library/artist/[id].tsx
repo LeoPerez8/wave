@@ -12,6 +12,7 @@ import { useCurrentTrackId } from "@/playback/hooks";
 import { openTrackActions } from "@/playback/TrackActionsSheet";
 import { albumPairs, albumRowHeight, AlbumPair, useAlbumTileSize } from "@/library/AlbumGrid";
 import { DetailFrame } from "@/library/DetailFrame";
+import { useFavoriteIds } from "@/library/favorites";
 import { useArtist } from "@/library/hooks";
 import type { AlbumRow, ArtistDetail, SongRow } from "@/library/LibraryStore";
 import { parseId } from "@/library/routes";
@@ -54,7 +55,9 @@ const albumsLine = (count: number): string => `${count} ${count === 1 ? "album" 
 function ArtistContent({ detail }: { detail: ArtistDetail }) {
   const bottomInset = useChromeInset();
   const currentId = useCurrentTrackId();
+  const favorites = useFavoriteIds();
   const tile = useAlbumTileSize(grid.margin);
+  const rowState = useMemo(() => ({ currentId, favorites, tile }), [currentId, favorites, tile]);
   const items = useMemo(() => artistItems(detail), [detail]);
   const context = useMemo(
     () => ({ kind: "artist", id: String(detail.artist.id) }) as const,
@@ -78,6 +81,7 @@ function ArtistContent({ detail }: { detail: ArtistDetail }) {
             <TrackRow
               track={toTrackSummary(item.song)}
               state={String(item.song.id) === currentId ? "playing" : undefined}
+              favorite={favorites.has(item.song.id)}
               leading="artwork"
               onPress={() => playSongs(songs, item.index, context)}
               onLongPress={() => openTrackActions(item.song)}
@@ -85,7 +89,7 @@ function ArtistContent({ detail }: { detail: ArtistDetail }) {
           );
       }
     },
-    [context, currentId, songs, tile],
+    [context, currentId, favorites, songs, tile],
   );
 
   const line = [
@@ -101,7 +105,7 @@ function ArtistContent({ detail }: { detail: ArtistDetail }) {
       data={items}
       keyExtractor={itemKey}
       renderItem={renderItem}
-      extraData={`${currentId}:${tile}`}
+      extraData={rowState}
       getItemType={(item) => item.type}
       getFixedItemSize={(item) =>
         item.type === "section"

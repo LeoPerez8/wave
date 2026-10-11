@@ -1,12 +1,16 @@
 import {
   artistAlbums,
+  checkPlaylistName,
   compareAlbumTracks,
   compareFileNames,
   filesLeavingWithRoot,
+  moveItem,
+  planPlaylistAdd,
+  playlistMosaic,
   sortKey,
   type LibraryTrack,
 } from "@wave/core";
-import { asc, desc, eq, inArray, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne, or, sql, type SQL } from "drizzle-orm";
 import { drizzle, type ExpoSQLiteDatabase } from "drizzle-orm/expo-sqlite";
 import { migrate } from "drizzle-orm/expo-sqlite/migrator";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
@@ -153,6 +157,39 @@ export interface FolderDetail {
   readonly songs: readonly SongRow[];
 }
 
+/** One playlist of Library › Playlists. */
+export interface PlaylistRow {
+  readonly id: number;
+  readonly name: string;
+  /** Core sort key of the name. */
+  readonly sort: string;
+  readonly trackCount: number;
+  readonly durationMs: number;
+  /** Thumbnails of its mosaic (Core's `playlistMosaic`): none, one or four. */
+  readonly thumbPaths: readonly string[];
+}
+
+/** A song in a playlist; the same track may only appear once. */
+export interface PlaylistItemRow extends SongRow {
+  readonly itemId: number;
+}
+
+export interface PlaylistDetail {
+  readonly playlist: PlaylistRow;
+  /** Full-size covers of its mosaic, for the playlist screen. */
+  readonly artworkPaths: readonly string[];
+  /** In playlist order. */
+  readonly items: readonly PlaylistItemRow[];
+}
+
+/** What adding songs to a playlist did. */
+export interface PlaylistAddResult {
+  readonly playlistId: number;
+  readonly name: string;
+  readonly added: number;
+  readonly alreadyIn: number;
+}
+
 export class LibraryStore extends Context.Service<
   LibraryStore,
   {
@@ -201,6 +238,39 @@ export class LibraryStore extends Context.Service<
     readonly getArtist: (id: number) => Effect.Effect<ArtistDetail | null, LibraryStoreError>;
     readonly getGenre: (id: number) => Effect.Effect<GenreDetail | null, LibraryStoreError>;
     readonly getFolder: (id: number) => Effect.Effect<FolderDetail | null, LibraryStoreError>;
+    /** Every playlist by name, with its mosaic. */
+    readonly listPlaylists: Effect.Effect<readonly PlaylistRow[], LibraryStoreError>;
+    readonly getPlaylist: (id: number) => Effect.Effect<PlaylistDetail | null, LibraryStoreError>;
+    /**
+     * Creates a playlist holding [trackIds] (Core's `checkPlaylistName` must
+     * accept the name, or it fails).
+     */
+    readonly createPlaylist: (
+      name: string,
+      trackIds: readonly number[],
+    ) => Effect.Effect<PlaylistAddResult, LibraryStoreError>;
+    readonly renamePlaylist: (id: number, name: string) => Effect.Effect<void, LibraryStoreError>;
+    readonly deletePlaylist: (id: number) => Effect.Effect<void, LibraryStoreError>;
+    /** Appends the tracks the playlist doesn't have yet (Core's `planPlaylistAdd`). */
+    readonly addToPlaylist: (
+      id: number,
+      trackIds: readonly number[],
+    ) => Effect.Effect<PlaylistAddResult, LibraryStoreError>;
+    /** Moves an item to [toIndex] (0-based) in its playlist. */
+    readonly movePlaylistItem: (
+      playlistId: number,
+      itemId: number,
+      toIndex: number,
+    ) => Effect.Effect<void, LibraryStoreError>;
+    readonly removePlaylistItem: (
+      playlistId: number,
+      itemId: number,
+    ) => Effect.Effect<void, LibraryStoreError>;
+    /** The ids of every starred track. */
+    readonly favoriteTrackIds: Effect.Effect<readonly number[], LibraryStoreError>;
+    readonly setFavorite: (trackId: number, on: boolean) => Effect.Effect<void, LibraryStoreError>;
+    /** Starred tracks, most recently starred first, for Library › Favorites. */
+    readonly listFavorites: Effect.Effect<readonly SongRow[], LibraryStoreError>;
   }
 >()("@wave/mobile/library/LibraryStore") {}
 
@@ -622,6 +692,238 @@ const listFoldersSync = (db: Database): FolderRow[] => {
   );
 };
 
+type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
+
+/** Rows per multi-row insert, well under SQLite's bound-parameter limit. */
+const INSERT_CHUNK = 200;
+
+/** Songs (`SongRow`s) by track id, fetched in chunks. */
+const songsById = (db: Database, ids: readonly number[]) => {
+  const songs = new Map<number, ReturnType<ReturnType<typeof trackQuery>["all"]>[number]>();
+  for (let i = 0; i < ids.length; i += DELETE_CHUNK) {
+    for (const song of trackQuery(db)
+      .where(inArray(schema.tracks.id, ids.slice(i, i + DELETE_CHUNK)))
+      .all())
+      songs.set(song.id, song);
+  }
+  return songs;
+};
+
+interface PlaylistCovers {
+  readonly thumbPaths: readonly string[];
+  readonly artworkPaths: readonly string[];
+}
+
+const NO_COVERS: PlaylistCovers = { thumbPaths: [], artworkPaths: [] };
+
+/** Each playlist's mosaic, from its songs' album covers in playlist order. */
+const playlistCovers = (db: Database, playlistId?: number): Map<number, PlaylistCovers> => {
+  const { playlistItems, tracks, albums, artwork } = schema;
+  const rows = db
+    .select({
+      playlistId: playlistItems.playlistId,
+      thumbPath: artwork.thumbPath,
+      path: artwork.path,
+    })
+    .from(playlistItems)
+    .innerJoin(tracks, eq(playlistItems.trackId, tracks.id))
+    .innerJoin(albums, eq(tracks.albumId, albums.id))
+    .leftJoin(artwork, eq(albums.artworkHash, artwork.hash))
+    .where(playlistId === undefined ? undefined : eq(playlistItems.playlistId, playlistId))
+    .orderBy(asc(playlistItems.playlistId), asc(playlistItems.position), asc(playlistItems.id))
+    .all();
+  const grouped = new Map<number, { thumbs: (string | null)[]; paths: (string | null)[] }>();
+  for (const row of rows) {
+    let group = grouped.get(row.playlistId);
+    if (group === undefined) {
+      group = { thumbs: [], paths: [] };
+      grouped.set(row.playlistId, group);
+    }
+    group.thumbs.push(row.thumbPath);
+    group.paths.push(row.path);
+  }
+  return new Map(
+    [...grouped].map(([id, group]) => [
+      id,
+      { thumbPaths: playlistMosaic(group.thumbs), artworkPaths: playlistMosaic(group.paths) },
+    ]),
+  );
+};
+
+const listPlaylistsSync = (db: Database): PlaylistRow[] => {
+  const { playlists, playlistItems, tracks } = schema;
+  const covers = playlistCovers(db);
+  return (
+    db
+      .select({
+        id: playlists.id,
+        name: playlists.name,
+        trackCount: sql<number>`count(${tracks.id})`,
+        durationMs: sql<number>`coalesce(sum(${tracks.durationMs}), 0)`,
+      })
+      .from(playlists)
+      .leftJoin(playlistItems, eq(playlistItems.playlistId, playlists.id))
+      .leftJoin(tracks, eq(playlistItems.trackId, tracks.id))
+      .groupBy(playlists.id)
+      .all()
+      .map((row) => ({
+        ...row,
+        sort: sortKey(row.name),
+        thumbPaths: (covers.get(row.id) ?? NO_COVERS).thumbPaths,
+      }))
+      // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
+      .sort((a, b) => compareStrings(a.sort, b.sort) || a.id - b.id)
+  );
+};
+
+const getPlaylistSync = (db: Database, id: number): PlaylistDetail | null => {
+  const { playlists, playlistItems } = schema;
+  const playlist = db
+    .select({ id: playlists.id, name: playlists.name })
+    .from(playlists)
+    .where(eq(playlists.id, id))
+    .get();
+  if (playlist === undefined) return null;
+  const order = db
+    .select({ itemId: playlistItems.id, trackId: playlistItems.trackId })
+    .from(playlistItems)
+    .where(eq(playlistItems.playlistId, id))
+    .orderBy(asc(playlistItems.position), asc(playlistItems.id))
+    .all();
+  const songs = songsById(
+    db,
+    order.map((item) => item.trackId),
+  );
+  const items = order.flatMap((item) => {
+    const song = songs.get(item.trackId);
+    return song === undefined ? [] : [{ ...song, itemId: item.itemId }];
+  });
+  const covers = playlistCovers(db, id).get(id) ?? NO_COVERS;
+  return {
+    playlist: {
+      ...playlist,
+      sort: sortKey(playlist.name),
+      trackCount: items.length,
+      durationMs: items.reduce((total, item) => total + item.durationMs, 0),
+      thumbPaths: covers.thumbPaths,
+    },
+    artworkPaths: covers.artworkPaths,
+    items,
+  };
+};
+
+/** Fails with the reason when Core rejects the name. */
+const requireName = (name: string, otherNames: readonly string[]): string => {
+  const check = checkPlaylistName(name, otherNames);
+  if (!check.ok) throw new Error(`Playlist name rejected (${check.problem})`);
+  return check.name;
+};
+
+/** Appends the tracks the playlist doesn't have yet; returns how many went in and were skipped. */
+const appendItems = (
+  tx: Transaction,
+  playlistId: number,
+  trackIds: readonly number[],
+  now: number,
+): { added: number; alreadyIn: number } => {
+  const { playlistItems } = schema;
+  const existing = tx
+    .select({ trackId: playlistItems.trackId })
+    .from(playlistItems)
+    .where(eq(playlistItems.playlistId, playlistId))
+    .all()
+    .map((row) => row.trackId);
+  const plan = planPlaylistAdd(existing, trackIds);
+  const last =
+    tx
+      .select({ position: sql<number | null>`max(${playlistItems.position})` })
+      .from(playlistItems)
+      .where(eq(playlistItems.playlistId, playlistId))
+      .get()?.position ?? -1;
+  const rows = plan.add.map((trackId, i) => ({
+    playlistId,
+    trackId,
+    position: last + 1 + i,
+    addedAt: now,
+  }));
+  for (let i = 0; i < rows.length; i += INSERT_CHUNK) {
+    tx.insert(playlistItems)
+      .values(rows.slice(i, i + INSERT_CHUNK))
+      .run();
+  }
+  return { added: plan.add.length, alreadyIn: plan.alreadyIn };
+};
+
+const createPlaylistSync = (
+  db: Database,
+  name: string,
+  trackIds: readonly number[],
+  now: number,
+): PlaylistAddResult =>
+  db.transaction((tx) => {
+    const { playlists } = schema;
+    const names = tx
+      .select({ name: playlists.name })
+      .from(playlists)
+      .all()
+      .map((row) => row.name);
+    const stored = requireName(name, names);
+    const created = tx
+      .insert(playlists)
+      .values({ name: stored, createdAt: now, updatedAt: now })
+      .returning({ id: playlists.id })
+      .get();
+    return {
+      playlistId: created.id,
+      name: stored,
+      ...appendItems(tx, created.id, trackIds, now),
+    };
+  });
+
+const addToPlaylistSync = (
+  db: Database,
+  id: number,
+  trackIds: readonly number[],
+  now: number,
+): PlaylistAddResult =>
+  db.transaction((tx) => {
+    const { playlists } = schema;
+    const playlist = tx
+      .select({ name: playlists.name })
+      .from(playlists)
+      .where(eq(playlists.id, id))
+      .get();
+    if (playlist === undefined) throw new Error("The playlist no longer exists");
+    const result = appendItems(tx, id, trackIds, now);
+    if (result.added > 0)
+      tx.update(playlists).set({ updatedAt: now }).where(eq(playlists.id, id)).run();
+    return { playlistId: id, name: playlist.name, ...result };
+  });
+
+const movePlaylistItemSync = (
+  db: Database,
+  playlistId: number,
+  itemId: number,
+  toIndex: number,
+  now: number,
+): void =>
+  db.transaction((tx) => {
+    const { playlists, playlistItems } = schema;
+    const rows = tx
+      .select({ id: playlistItems.id, position: playlistItems.position })
+      .from(playlistItems)
+      .where(eq(playlistItems.playlistId, playlistId))
+      .orderBy(asc(playlistItems.position), asc(playlistItems.id))
+      .all();
+    const from = rows.findIndex((row) => row.id === itemId);
+    if (from === -1) return;
+    moveItem(rows, from, toIndex).forEach((row, position) => {
+      if (row.position !== position)
+        tx.update(playlistItems).set({ position }).where(eq(playlistItems.id, row.id)).run();
+    });
+    tx.update(playlists).set({ updatedAt: now }).where(eq(playlists.id, playlistId)).run();
+  });
+
 const make = Effect.gen(function* () {
   const db: Database = yield* Effect.try({
     try: () => {
@@ -742,6 +1044,81 @@ const make = Effect.gen(function* () {
     getGenre: (id) => attempt("open the genre", () => getGenreSync(db, id)),
 
     getFolder: (id) => attempt("open the folder", () => getFolderSync(db, id)),
+
+    listPlaylists: attempt("list playlists", () => listPlaylistsSync(db)),
+
+    getPlaylist: (id) => attempt("open the playlist", () => getPlaylistSync(db, id)),
+
+    createPlaylist: (name, trackIds) =>
+      attempt("create the playlist", () => createPlaylistSync(db, name, trackIds, Date.now())),
+
+    renamePlaylist: (id, name) =>
+      attempt("rename the playlist", () =>
+        db.transaction((tx) => {
+          const { playlists } = schema;
+          const others = tx
+            .select({ name: playlists.name })
+            .from(playlists)
+            .where(ne(playlists.id, id))
+            .all()
+            .map((row) => row.name);
+          tx.update(playlists)
+            .set({ name: requireName(name, others), updatedAt: Date.now() })
+            .where(eq(playlists.id, id))
+            .run();
+        }),
+      ),
+
+    deletePlaylist: (id) =>
+      attempt("delete the playlist", () => {
+        // Its items go with it (ON DELETE CASCADE).
+        db.delete(schema.playlists).where(eq(schema.playlists.id, id)).run();
+      }),
+
+    addToPlaylist: (id, trackIds) =>
+      attempt("add to the playlist", () => addToPlaylistSync(db, id, trackIds, Date.now())),
+
+    movePlaylistItem: (playlistId, itemId, toIndex) =>
+      attempt("reorder the playlist", () =>
+        movePlaylistItemSync(db, playlistId, itemId, toIndex, Date.now()),
+      ),
+
+    removePlaylistItem: (playlistId, itemId) =>
+      attempt("remove from the playlist", () =>
+        db.transaction((tx) => {
+          const { playlists, playlistItems } = schema;
+          tx.delete(playlistItems)
+            .where(and(eq(playlistItems.id, itemId), eq(playlistItems.playlistId, playlistId)))
+            .run();
+          tx.update(playlists)
+            .set({ updatedAt: Date.now() })
+            .where(eq(playlists.id, playlistId))
+            .run();
+        }),
+      ),
+
+    favoriteTrackIds: attempt("read favorites", () =>
+      db
+        .select({ trackId: schema.favorites.trackId })
+        .from(schema.favorites)
+        .all()
+        .map((row) => row.trackId),
+    ),
+
+    setFavorite: (trackId, on) =>
+      attempt(on ? "add a favorite" : "remove a favorite", () => {
+        const { favorites } = schema;
+        if (on)
+          db.insert(favorites).values({ trackId, addedAt: Date.now() }).onConflictDoNothing().run();
+        else db.delete(favorites).where(eq(favorites.trackId, trackId)).run();
+      }),
+
+    listFavorites: attempt("list favorites", () =>
+      trackQuery(db)
+        .innerJoin(schema.favorites, eq(schema.favorites.trackId, schema.tracks.id))
+        .orderBy(desc(schema.favorites.addedAt), ...BY_TITLE)
+        .all(),
+    ),
   });
 });
 

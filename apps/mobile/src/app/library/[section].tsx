@@ -7,6 +7,8 @@ import { findSection, type LibrarySection } from "@/catalog/sections";
 import { EmptyState } from "@/components/EmptyState";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { AlbumsList, ArtistsList, FoldersList, GenresList } from "@/library/BrowseLists";
+import { FavoritesList } from "@/library/FavoritesList";
+import { PlaylistsList } from "@/library/PlaylistsList";
 import { SongsList } from "@/library/SongsList";
 
 function SectionList({ section }: { section: LibrarySection | undefined }) {
@@ -21,21 +23,24 @@ function SectionList({ section }: { section: LibrarySection | undefined }) {
       return <GenresList empty={section.empty} />;
     case "folders":
       return <FoldersList empty={section.empty} />;
+    case "playlists":
+      return <PlaylistsList empty={section.empty} />;
+    case "favorites":
+      return <FavoritesList empty={section.empty} />;
     default:
-      // Playlists and Favorites arrive with #11.
       return (
         <View style={{ paddingHorizontal: grid.margin }}>
           <EmptyState
             icon={IconStack2}
             title="Nothing here yet"
-            message={section?.empty ?? "This part of the library doesn't exist."}
+            message="This part of the library doesn't exist."
           />
         </View>
       );
   }
 }
 
-/** A Library list: Songs, Albums, Artists, Genres or Folders. */
+/** A Library list: Playlists, Artists, Albums, Songs, Genres, Folders or Favorites. */
 export default function LibrarySectionScreen() {
   const { section: slug } = useLocalSearchParams<{ section: string }>();
   const section = findSection(slug);

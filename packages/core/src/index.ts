@@ -37,3 +37,15 @@ export { applyPlayerSync, planPlayerSync } from "./playerSync.ts";
 export type { PlayerList, QueueList, SyncStep } from "./playerSync.ts";
 export { alphabetIndex, artistAlbums, compareFileNames, indexLetter } from "./browse.ts";
 export type { ArtistAlbum, IndexEntry } from "./browse.ts";
+export {
+  PLAYLIST_NAME_MAX,
+  checkPlaylistName,
+  describePlaylistAdd,
+  moveItem,
+  nextPlaylistName,
+  planPlaylistAdd,
+  playlistMosaic,
+} from "./playlists.ts";
+export type { PlaylistAdd, PlaylistNameCheck } from "./playlists.ts";
+export { dragTargetIndex, resolveRemoveSwipe } from "./rowGestures.ts";
+export type { RowDrag } from "./rowGestures.ts";

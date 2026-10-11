@@ -136,3 +136,44 @@ export const excludedFolders = sqliteTable("excluded_folders", {
   path: text("path").primaryKey(),
   addedAt: integer("added_at").notNull(),
 });
+
+/** Playlists the owner made. */
+export const playlists = sqliteTable("playlists", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  createdAt: integer("created_at").notNull(),
+  /** When the name or the items last changed. */
+  updatedAt: integer("updated_at").notNull(),
+});
+
+/**
+ * A playlist's songs, ordered by `position` (gaps allowed). Items go with their
+ * playlist, and with their track when its file leaves the library.
+ */
+export const playlistItems = sqliteTable(
+  "playlist_items",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    playlistId: integer("playlist_id")
+      .notNull()
+      .references(() => playlists.id, { onDelete: "cascade" }),
+    trackId: integer("track_id")
+      .notNull()
+      .references(() => tracks.id, { onDelete: "cascade" }),
+    position: integer("position").notNull(),
+    addedAt: integer("added_at").notNull(),
+  },
+  (t) => [
+    index("playlist_items_playlist_position_idx").on(t.playlistId, t.position),
+    index("playlist_items_track_idx").on(t.trackId),
+  ],
+);
+
+/** Starred tracks; a star goes with its track when the file leaves the library. */
+export const favorites = sqliteTable("favorites", {
+  trackId: integer("track_id")
+    .primaryKey()
+    .references(() => tracks.id, { onDelete: "cascade" }),
+  /** When the track was starred (the Favorites list is newest first). */
+  addedAt: integer("added_at").notNull(),
+});
