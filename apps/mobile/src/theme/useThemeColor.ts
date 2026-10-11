@@ -10,6 +10,7 @@ export type ThemeColor =
   | "separator"
   | "fill"
   | "accent"
+  | "on-accent"
   | "highlight";
 
 /**

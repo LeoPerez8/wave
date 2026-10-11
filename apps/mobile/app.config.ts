@@ -48,6 +48,7 @@ const config: ExpoConfig = {
             {
               fontFamily: "Inter",
               fontDefinitions: [
+                { path: inter("300Light/Inter_300Light.ttf"), weight: 300 },
                 { path: inter("400Regular/Inter_400Regular.ttf"), weight: 400 },
                 { path: inter("500Medium/Inter_500Medium.ttf"), weight: 500 },
                 { path: inter("600SemiBold/Inter_600SemiBold.ttf"), weight: 600 },

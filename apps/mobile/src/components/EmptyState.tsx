@@ -14,9 +14,9 @@ type Props = {
 export function EmptyState({ icon: Icon, title, message }: Props) {
   const tertiary = useThemeColor("tertiary");
   return (
-    <View className="items-center gap-2 pt-24">
-      <Icon size={56} color={tertiary} strokeWidth={1.5} />
-      <Text className="mt-2 text-center font-sans text-title3 font-semibold text-foreground">
+    <View className="items-center gap-2 pt-24" style={{ paddingHorizontal: 16 }}>
+      <Icon size={40} color={tertiary} strokeWidth={1.25} />
+      <Text className="mt-3 text-center font-sans text-title3 font-normal text-foreground">
         {title}
       </Text>
       <Text className="text-center font-sans text-subheadline text-secondary">{message}</Text>
