@@ -75,8 +75,7 @@ export {
   playlistMosaic,
 } from "./playlists.ts";
 export type { PlaylistAdd, PlaylistNameCheck } from "./playlists.ts";
-export { dragTargetIndex, resolveRemoveSwipe } from "./rowGestures.ts";
-export type { RowDrag } from "./rowGestures.ts";
+export { resolveRemoveSwipe } from "./rowGestures.ts";
 export { currentLyricIndex, parseLyrics, pickLyrics } from "./lyrics.ts";
 export type { LyricLine, Lyrics, LyricsSources } from "./lyrics.ts";
 export {
@@ -109,3 +108,4 @@ export type {
 } from "./playEvents.ts";
 export { favoriteStar, starWriteSettled, starWriteStarted } from "./favorites.ts";
 export type { FavoriteStar } from "./favorites.ts";
+export { compareStrings } from "./library.ts";

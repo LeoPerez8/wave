@@ -25,6 +25,12 @@ describe("checkPlaylistName", () => {
     assert.deepEqual(checkPlaylistName("WORKOUT ", others), { ok: false, problem: "taken" });
   });
 
+  test("letters that fold to plain ones, like ß and dotless ı, are matched too", () => {
+    const others = ["Straße", "Kır"];
+    assert.deepEqual(checkPlaylistName("strasse", others), { ok: false, problem: "taken" });
+    assert.deepEqual(checkPlaylistName("KIR", others), { ok: false, problem: "taken" });
+  });
+
   test("a name that only shares words with another playlist is free", () => {
     assert.deepEqual(checkPlaylistName("Workout 2", ["Workout"]), { ok: true, name: "Workout 2" });
     assert.deepEqual(checkPlaylistName("The Mix", ["Mix"]), { ok: true, name: "The Mix" });

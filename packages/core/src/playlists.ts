@@ -3,6 +3,8 @@
  * does, how its items move, and which covers make its mosaic.
  */
 
+import { foldAccentsAndCase } from "./library.ts";
+
 export type PlaylistNameCheck =
   | { readonly ok: true; readonly name: string }
   | { readonly ok: false; readonly problem: "empty" | "taken" | "tooLong" };
@@ -11,10 +13,6 @@ export type PlaylistNameCheck =
 export const PLAYLIST_NAME_MAX = 100;
 
 const tidy = (name: string): string => name.trim().replace(/\s+/g, " ");
-
-/** Two names that fold the same would be told apart only by case or accents. */
-const fold = (name: string): string =>
-  tidy(name).normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase();
 
 /**
  * Checks a playlist name the owner typed against the other playlists' names
@@ -27,8 +25,10 @@ export const checkPlaylistName = (
   const name = tidy(input);
   if (name === "") return { ok: false, problem: "empty" };
   if ([...name].length > PLAYLIST_NAME_MAX) return { ok: false, problem: "tooLong" };
-  const folded = fold(name);
-  if (otherNames.some((other) => fold(other) === folded)) return { ok: false, problem: "taken" };
+  // Names that fold the same would be told apart only by case, accents or spacing.
+  const folded = foldAccentsAndCase(name);
+  if (otherNames.some((other) => foldAccentsAndCase(other) === folded))
+    return { ok: false, problem: "taken" };
   return { ok: true, name };
 };
 
@@ -36,10 +36,10 @@ const NEW_PLAYLIST = "New Playlist";
 
 /** The name a new playlist starts with: New Playlist, then New Playlist 2, 3… */
 export const nextPlaylistName = (names: readonly string[]): string => {
-  const taken = new Set(names.map(fold));
-  if (!taken.has(fold(NEW_PLAYLIST))) return NEW_PLAYLIST;
+  const taken = new Set(names.map(foldAccentsAndCase));
+  if (!taken.has(foldAccentsAndCase(NEW_PLAYLIST))) return NEW_PLAYLIST;
   let n = 2;
-  while (taken.has(fold(`${NEW_PLAYLIST} ${n}`))) n++;
+  while (taken.has(foldAccentsAndCase(`${NEW_PLAYLIST} ${n}`))) n++;
   return `${NEW_PLAYLIST} ${n}`;
 };
 

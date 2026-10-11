@@ -3,6 +3,7 @@ import {
   checkPlaylistName,
   compareAlbumTracks,
   compareFileNames,
+  compareStrings,
   filesLeavingWithRoot,
   rememberSearch,
   moveItem,
@@ -800,8 +801,6 @@ const getFolderSync = (db: Database, id: number): FolderDetail | null => {
     songs,
   };
 };
-
-const compareStrings = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
 const listFoldersSync = (db: Database): FolderRow[] => {
   const { folders, tracks } = schema;
