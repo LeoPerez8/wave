@@ -1,0 +1,190 @@
+# Wave v1 — Spec
+
+Status: draft for review · Owner: @LeoPerez8
+
+## Problem Statement
+
+I keep my music as local files on my Android phone (Samsung Galaxy S24+). BlackPlayer has the features I want from a local player — folder-based library, gapless playback, lyrics, sleep timer, an equalizer and a tag editor — but its look and interaction model feel dated next to Apple Music, whose structure, gestures and "Liquid Glass" materials I much prefer. Apple Music, on the other hand, does not exist as a local-file player on Android. No app gives me both.
+
+## Solution
+
+**Wave** is a personal, Android-only local music player that recreates the structure, gestures and glass materials of Apple Music (iOS 26 era) on top of a BlackPlayer-grade local-file engine. It indexes the music folders I choose, plays them gaplessly through a native audio engine with full system integration (notification, lock screen, Bluetooth), and records every play so that rich listening statistics can be built later.
+
+v1 delivers the core player and library. v2 adds the advanced audio and library-management features (see Out of Scope).
+
+## Glossary
+
+- **Track** — one audio file in the library.
+- **Album** — tracks grouped by album title + album artist.
+- **Artist** — a track artist; **Album artist** — the artist an album is filed under (falls back to the track artist; "Various Artists" for compilations).
+- **Genre**, **Folder** — alternative groupings of tracks.
+- **Playlist** — a user-made, ordered list of tracks.
+- **Scan root** — a folder Wave indexes; **Excluded folder** — a folder under a root that Wave ignores.
+- **Library scan** — walking the scan roots and reconciling files with the index (full on first run, incremental afterwards).
+- **Play context** — what a playback was started from (album, artist, playlist, genre, folder, search, all songs, favorites, home section).
+- **Queue** — the ordered list of tracks to be played, including the current one and **Up Next**.
+- **Play event** — one record per time a track starts playing, with how long it was listened to and how it ended.
+- **Counted play** — a play event that counts towards play counts: listened ≥ 50% of the track or ≥ 4 minutes, whichever comes first.
+- **Favorite** — a starred track (Apple Music's star).
+- **Now Playing** — the full-screen player; **Mini player** — the floating glass pill above the tab bar.
+
+## User Stories
+
+### First run and library
+
+1. As a user, I want Wave to ask for all-files access on first launch, so that it can read every audio file in my music folders.
+2. As a user, I want Wave to index my `Music` folder by default, so that I get a working library with zero configuration.
+3. As a user, I want to add other scan roots and exclude sub-folders in Settings, so that only the music I care about appears.
+4. As a user, I want to see scan progress (files found / indexed) during the first scan, so that I know the app is working on a large library.
+5. As a user, I want to start browsing while the first scan is still running, so that I don't wait for tens of thousands of files.
+6. As a user, I want Wave to pick up new, changed and deleted files automatically each time I open it, so that my library stays current without a manual full rescan.
+7. As a user, I want to pull to refresh in the Library, so that I can force a rescan after copying new music.
+8. As a user, I want MP3, FLAC, M4A/AAC/ALAC, OGG/Opus and WAV files to be supported, so that my whole collection plays.
+9. As a user, I want Wave to read title, artist, album, album artist, genre, year, track and disc number, duration, embedded artwork and embedded lyrics from tags, so that my library is organised the way I tagged it.
+10. As a user, I want files without tags to still appear (using the file name as title and "Unknown Artist/Album"), so that nothing goes missing.
+11. As a user, I want a renamed or moved file to keep its play history and favorite status, so that my statistics survive reorganising folders.
+
+### Browsing (Library tab)
+
+12. As a user, I want the Library tab to list Playlists, Artists, Albums, Songs, Genres, Folders and Favorites as entry rows like Apple Music, so that I can browse the way I think.
+13. As a user, I want albums shown as an artwork grid with title and album artist, so that I can browse visually.
+14. As a user, I want artists sorted alphabetically ignoring leading "The"/"A"/"An" and accents, so that sorting matches my expectations.
+15. As a user, I want an album screen with large artwork, title, album artist, year, genre, track list ordered by disc and track number, and Play / Shuffle buttons, so that I can play an album properly.
+16. As a user, I want an artist screen listing their albums and songs, so that I can explore an artist.
+17. As a user, I want genre and folder screens listing their tracks, so that I can browse by genre or by my folder structure.
+18. As a user, I want long lists (tens of thousands of songs) to scroll smoothly at 120 Hz, so that the app feels native on my phone.
+19. As a user, I want a fast-scroll alphabet index on long lists, so that I can jump to a letter.
+20. As a user, I want long-press context menus on tracks, albums, artists and playlists (Play Next, Add to Queue, Add to Playlist, Favorite, Go to Album/Artist), so that I can act without opening screens.
+
+### Playback
+
+21. As a user, I want tapping a track to play it and queue the rest of its context after it, so that playback continues naturally.
+22. As a user, I want gapless playback between consecutive tracks, so that live albums and mixes play without silence.
+23. As a user, I want play/pause, next, previous and seek, so that I control playback.
+24. As a user, I want "previous" to restart the current track if more than 3 seconds have played, so that it behaves like Apple Music.
+25. As a user, I want shuffle that keeps the current track playing and shuffles the rest, so that toggling shuffle doesn't interrupt me.
+26. As a user, I want turning shuffle off to restore the original context order from the current track, so that I can go back to album order.
+27. As a user, I want repeat off / repeat all / repeat one, so that I can loop a context or a track.
+28. As a user, I want Play Next and Add to Queue, so that I can line up tracks without losing the current context.
+29. As a user, I want to see, reorder (drag) and remove items in Up Next, so that I can curate what plays.
+30. As a user, I want playback to continue in the background with a media notification, so that I can use other apps.
+31. As a user, I want lock-screen, notification, Bluetooth and headset-button controls, so that I can control playback without opening Wave.
+32. As a user, I want playback to pause when headphones are unplugged or Bluetooth disconnects, so that music doesn't blast from the speaker.
+33. As a user, I want Wave to pause or duck for calls and other apps' audio and resume afterwards where appropriate, so that it behaves well with the system.
+34. As a user, I want my queue, current track, position, shuffle and repeat restored (paused) when I reopen Wave, so that I can pick up where I left off.
+
+### Mini player and Now Playing
+
+35. As a user, I want a floating glass mini player above the tab bar showing artwork, title and play/pause + next, so that playback is always reachable.
+36. As a user, I want to swipe the mini player left/right to skip tracks, so that I can change tracks quickly.
+37. As a user, I want to tap or swipe up the mini player to open Now Playing, and swipe down to dismiss it, with an interactive spring animation, so that it feels like Apple Music.
+38. As a user, I want Now Playing to show large artwork that shrinks when paused, title, artist, a scrubber with elapsed/remaining time, and transport controls, so that I have full control.
+39. As a user, I want the Now Playing background tinted with colours from the current artwork and to crossfade on track change, so that each album has its own mood.
+40. As a user, I want to star the current track from Now Playing, so that favoriting is one tap away.
+41. As a user, I want to tap the album or artist name in Now Playing to navigate there, so that I can explore what's playing.
+42. As a user, I want a Lyrics view in Now Playing, so that I can read along.
+43. As a user, I want synced lyrics to highlight and auto-scroll with playback, and tapping a line to seek there, so that lyrics work like Apple Music.
+44. As a user, I want a Queue view in Now Playing with shuffle and repeat toggles, so that I can manage playback from one place.
+45. As a user, I want a sleep timer (15/30/45/60 minutes, custom, or end of current track), so that music stops when I fall asleep.
+46. As a user, I want to see the remaining sleep-timer time and cancel it, so that I stay in control.
+
+### Search tab
+
+47. As a user, I want a Search tab (separate glass pill, as in iOS 26) that searches songs, albums, artists, genres and playlists as I type, so that I find music fast.
+48. As a user, I want search to ignore case and accents and match word prefixes, so that "beyo" finds "Beyoncé".
+49. As a user, I want results grouped by type with the best match on top, so that I can scan results quickly.
+50. As a user, I want my recent searches kept, so that I can repeat them.
+
+### Playlists and favorites
+
+51. As a user, I want to create, rename and delete playlists, so that I can organise music.
+52. As a user, I want to add tracks, albums or a whole artist to a playlist, so that building playlists is quick.
+53. As a user, I want to reorder and remove playlist tracks, so that I control the order.
+54. As a user, I want playlist artwork to be a mosaic of its first albums, so that playlists are recognisable.
+55. As a user, I want a Favorites list of all starred tracks, so that I can play my favorites.
+
+### Home tab and play history
+
+56. As a user, I want every play recorded with start time, listened time, how it ended (completed, skipped, stopped, interrupted) and its play context, so that statistics can be computed later over my full history.
+57. As a user, I want play counts to follow the counted-play rule (≥ 50% or ≥ 4 minutes), so that counts are meaningful and compatible with future Last.fm scrobbling.
+58. As a user, I want a Home tab with Recently Added (albums), Recently Played, Most Played and Favorites sections, so that my most relevant music is one tap away.
+
+### Look and feel
+
+59. As a user, I want the app to follow the system light/dark theme, so that it matches my phone.
+60. As a user, I want teal as the accent colour and gold for highlights (favorites, now-playing indicator, badges), so that Wave has its own identity.
+61. As a user, I want glass materials (blur, edge refraction, specular highlight) on the tab bar, mini player and Now Playing controls, so that the app feels like iOS 26.
+62. As a user, I want Apple-style typography and line icons, so that the UI reads like Apple Music.
+63. As a user, I want haptic feedback on key interactions (play/pause, favorite, long-press, scrubbing ends), so that the app feels tactile.
+64. As a user, I want the entire interface in English, so that it is consistent.
+
+## Implementation Decisions
+
+### Platform and distribution
+
+- Android only. Minimum Android 12 (API 31, required for native blur), target the latest SDK. Tuned for the Galaxy S24+ (120 Hz).
+- App name **Wave**, application id `dev.leoperez.wave` (permanent).
+- Personal use, sideloaded APK. No Play Store, so `MANAGE_EXTERNAL_STORAGE` (all-files access) is acceptable.
+- No backend, no accounts, no network features in v1.
+
+### Stack (mirrors the T3 Code mobile app)
+
+- pnpm monorepo. Expo (SDK matching T3 Code), React Native, React, TypeScript strict with erasable-syntax-only, Expo Router, uniwind (Tailwind), Effect, Legend List, Reanimated, Gesture Handler, React Native Skia, expo-sqlite + Drizzle ORM, expo-haptics. Linting/formatting with oxlint/oxfmt.
+- Code, UI copy, docs, issues, PRs and commits are in English.
+
+### Modules
+
+1. **Core** (workspace package, pure TypeScript, **zero runtime dependencies**). Holds all decision-heavy domain logic behind a small public API, so it can be tested anywhere with plain Node:
+   - *Queue engine* — a pure state + command reducer: start playback from a context at a given track; next/previous (with the 3-second restart rule); seek; shuffle on/off (current track stays first, original order restorable); repeat off/all/one; Play Next; Add to Queue; reorder; remove; track-ended transitions. It outputs the ordered list the native player should hold.
+   - *Play-event classifier* — given start, listened time, duration and end reason, decides whether a play is counted.
+   - *Library model* — grouping (album identity = album title + album artist, album-artist fallback, compilations), sort keys (articles and accents ignored), disc/track ordering, unknown-tag fallbacks.
+   - *Scan reconciliation* — given the known index and a scan result, produces adds/updates/removals, and matches moved/renamed files (same size + duration + title + artist) so history and favorites carry over.
+   - *Search* — normalisation (case, accents, punctuation), word-prefix matching and ranking across entity types.
+   - *Lyrics* — LRC parsing (timestamps, multiple stamps per line, offsets) and current-line lookup.
+   - *Sleep timer* — deadline/end-of-track logic.
+2. **Native player** (local Expo module, Kotlin, Media3). A `MediaSessionService` hosting ExoPlayer, so notification, lock screen, Bluetooth/headset buttons, audio focus and becoming-noisy handling come from Media3. The JS side owns ordering (from the queue engine) and pushes the ordered item list; the native side plays it gaplessly and reports state, throttled position, item transitions with a reason (auto-advance, skip, seek, error) and errors. Native shuffle is not used. The audio pipeline keeps a hook for custom audio processors so equalizer, crossfade and ReplayGain (v2) slot in without restructuring.
+3. **Native scanner** (same Kotlin module). Walks the scan roots minus exclusions, reads tags with a JVM tag library that also supports writing (needed by the v2 tag editor), extracts embedded artwork once per unique image (hashed, cached as files) together with a small colour palette (Android Palette) for the Now Playing tint, and finds sidecar `.lrc` files. It streams results to JS in batches of ~500 and supports an incremental mode driven by known path + modification time + size.
+4. **Library store** (app, Drizzle on expo-sqlite). The single owner of the schema and migrations. Tables for tracks, albums, artists, genres, folders, artwork (path + palette), playlists and playlist items, favorites, play events, scan roots/exclusions, recent searches, and persisted playback state. Home sections and play counts are queries over play events.
+5. **App services** (app, Effect). Wrap the native modules as typed services and event streams; orchestrate scans (core reconciliation → store); drive the queue engine and sync it to the native player; record play events through the classifier; persist and restore playback state.
+6. **UI** (app, Expo Router). Three tabs — Home, Library, Search (Search rendered as a separate glass pill). A custom glass tab bar, a floating glass mini player and a full-screen Now Playing presented over the tabs with an interactive drag-to-dismiss gesture. Detail screens for album, artist, playlist, genre and folder. Settings for scan roots, exclusions and rescan.
+
+### Play event shape
+
+One row per playback start: track, started-at, listened milliseconds, track duration, end reason (`completed` | `skipped` | `stopped` | `interrupted`), counted flag, and play context (type + id). Append-only; nothing is aggregated away.
+
+### Visual design
+
+- Theme follows the system. Accent teal `#14B8A6` (dark) / `#0D9488` (light); highlight gold `#F5B83D` (dark) / `#B7791F` (light). Exposed as design tokens.
+- Inter as the typeface (SF Pro cannot be licensed for Android); a free line-icon set close to SF Symbols in weight and rounding.
+- Glass: Skia-based material with backdrop blur, edge refraction and specular highlight for the tab bar, mini player and Now Playing controls; plain blur + tint elsewhere. The exact technique is decided by a spike (see Further Notes), with a defined fallback.
+- Now Playing background: gradient from the artwork palette, animated on track change; controls use the app palette.
+
+### Build and CI
+
+- GitHub Actions on every PR and on `main`: install, typecheck, lint, core tests, Kotlin unit tests, and assemble an APK uploaded as a build artifact that I install on the phone.
+
+## Testing Decisions
+
+- A good test exercises a module only through its public interface and asserts observable behaviour (resulting queue, counted/not counted, search results order, reconciled changes) — never internals. Tests should survive refactors of the implementation.
+- **Primary seam — Core.** Every decision-heavy rule lives in Core and is tested there with `node:test`, run directly by Node's TypeScript type-stripping. Because Core has zero dependencies, these tests run anywhere, including environments without package-registry access. This is where most tests live.
+- **Library store.** Migrations and the Home/play-count queries are tested in CI against a real SQLite database through Drizzle, seeded with fixture data.
+- **Native module.** Kotlin JVM unit tests in CI for tag reading (small fixture audio files per format) and for scan diffing; Media3's test utilities for the player command/event mapping where practical.
+- **UI.** No automated UI tests in v1. Each ticket has acceptance criteria verified manually on the S24+ using the CI-built APK.
+- Prior art: none yet (new repository). The first ticket establishes the test setup for each seam.
+
+## Out of Scope
+
+- v2 features: equalizer and presets, crossfade, ReplayGain, tag editor, smart playlists, M3U import/export, Last.fm scrobbling, home-screen widgets, artwork download, statistics/metrics screens (v1 only records the data).
+- iOS, desktop, web.
+- Streaming services, cloud libraries, network shares.
+- Accounts, sync, backup.
+- Play Store distribution.
+- Chromecast / casting; Android Auto beyond what Media3 provides for free.
+- Localisation (English only).
+
+## Further Notes
+
+- **Glass on Android is the main technical risk.** Sampling the native views behind a surface is not straightforward in React Native Skia. The first UI work is a spike comparing approaches (for example, Android `RenderEffect` blur with an AGSL refraction shader versus a Skia snapshot of the backdrop) for visual quality and 120 Hz performance on the S24+. Acceptable fallback if refraction is too costly: blur + tint + specular rim highlight.
+- **Track identity** is the file path in v1, with moved/renamed files matched by Core's reconciliation so history survives.
+- **Development environment constraint:** the agent session working on this repository cannot reach the npm registry or the Android/Gradle repositories. GitHub Actions is the build and test environment of record; Core's zero-dependency design keeps its tests runnable inside the agent session as well.
+- Library sizes in the tens of thousands of tracks are the design target for scan batching, list virtualisation and query indexes.
