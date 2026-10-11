@@ -15,7 +15,6 @@ import android.os.Build
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewTreeObserver
-import com.facebook.react.R as ReactR
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.views.ExpoView
 
@@ -107,15 +106,25 @@ class WaveGlassView(context: Context, appContext: AppContext) : ExpoView(context
   }
 
   /**
-   * React Native stores `nativeID` as a view tag; ReactFindViewUtil, which used to
-   * look it up, is gone in RN 0.88. Breadth-first, since the backdrop sits near the root.
+   * React Native stores `nativeID` as a view tag keyed by `R.id.view_tag_native_id`.
+   * ReactFindViewUtil, which used to look it up, is gone in RN 0.88, and React
+   * Native's R class isn't on this module's compile classpath, so the id is
+   * resolved by name from the app's merged resources.
    */
+  @Suppress("DiscouragedApi")
+  private val nativeIdTagKey: Int by lazy {
+    resources.getIdentifier("view_tag_native_id", "id", context.packageName)
+  }
+
+  /** Breadth-first, since the backdrop sits near the root. */
   private fun findByNativeId(root: View, nativeId: String): View? {
+    val key = nativeIdTagKey
+    if (key == 0) return null
     val queue = ArrayDeque<View>()
     queue.add(root)
     while (queue.isNotEmpty()) {
       val view = queue.removeFirst()
-      if (view.getTag(ReactR.id.view_tag_native_id) == nativeId) return view
+      if (view.getTag(key) == nativeId) return view
       if (view is ViewGroup) for (i in 0 until view.childCount) queue.add(view.getChildAt(i))
     }
     return null
