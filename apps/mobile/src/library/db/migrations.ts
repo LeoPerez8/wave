@@ -124,6 +124,15 @@ UPDATE \`scan_roots\` SET \`is_default\` = true;
 `;
 
 const m0002 = `
+CREATE TABLE \`playback_state\` (
+	\`id\` integer PRIMARY KEY NOT NULL,
+	\`queue\` text NOT NULL,
+	\`position_ms\` integer DEFAULT 0 NOT NULL,
+	\`updated_at\` integer NOT NULL
+);
+`;
+
+const m0003 = `
 CREATE TABLE \`recent_searches\` (
 	\`query\` text PRIMARY KEY NOT NULL,
 	\`searched_at\` integer NOT NULL
@@ -135,8 +144,9 @@ export default {
     entries: [
       { idx: 0, when: 1_791_806_400_000, tag: "0000_library", breakpoints: true },
       { idx: 1, when: 1_791_892_800_000, tag: "0001_default_scan_root", breakpoints: true },
-      { idx: 2, when: 1_791_979_200_000, tag: "0002_recent_searches", breakpoints: true },
+      { idx: 2, when: 1_791_979_200_000, tag: "0002_playback_state", breakpoints: true },
+      { idx: 3, when: 1_792_065_600_000, tag: "0003_recent_searches", breakpoints: true },
     ],
   },
-  migrations: { m0000, m0001, m0002 },
+  migrations: { m0000, m0001, m0002, m0003 },
 };

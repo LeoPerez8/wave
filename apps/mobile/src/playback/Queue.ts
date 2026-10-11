@@ -45,6 +45,17 @@ export class Queue extends Context.Service<
       command: QueueCommand,
       tracks?: readonly QueueTrack[],
     ) => Effect.Effect<void, PlayerError>;
+    /**
+     * Loads a queue saved before Wave's process ended, paused at [positionMs]
+     * in its current entry. Does nothing (and returns false) when a queue is
+     * already loaded, e.g. the player kept playing while JS restarted.
+     * `tracks` must describe every track id in [state].
+     */
+    readonly restore: (
+      state: QueueState,
+      tracks: readonly QueueTrack[],
+      positionMs: number,
+    ) => Effect.Effect<boolean, PlayerError>;
   }
 >()("@wave/mobile/playback/Queue") {}
 
@@ -192,6 +203,24 @@ export const layer = Layer.effect(
       );
     });
 
-    return Queue.of({ dispatch });
+    const restoreSaved = (state: QueueState, added: readonly QueueTrack[], positionMs: number) =>
+      lane.withPermit(
+        Effect.gen(function* () {
+          if (queueState.get().entries.length > 0) return false;
+          native = yield* player.getItemIds;
+          if (native.keys.length > 0) return false;
+          for (const track of added) tracks.set(track.id, track);
+          queueState.set(state);
+          // A fresh player stays paused: nothing here asks it to play.
+          yield* sync(state);
+          yield* player.setRepeatMode(state.repeat);
+          appliedRepeat = state.repeat;
+          if (positionMs > 0) yield* player.seekTo(positionMs);
+          yield* player.saveQueue(JSON.stringify(state));
+          return true;
+        }).pipe(Effect.tapError(() => Effect.sync(() => queueState.set(EMPTY_QUEUE)))),
+      );
+
+    return Queue.of({ dispatch, restore: restoreSaved });
   }),
 );

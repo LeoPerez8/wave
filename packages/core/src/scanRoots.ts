@@ -49,6 +49,29 @@ export const filesLeavingWithRoot = (
     (file) => isWithin(file, removed) && !remaining.some((root) => isWithin(file, root)),
   );
 
+export type ExclusionPlan =
+  /** Only folders inside a scan root can be excluded. */
+  | { readonly kind: "outside" }
+  /** The folder is a scan root: remove it from the music folders instead. */
+  | { readonly kind: "root" }
+  /** The folder is already excluded through `by` (itself or a parent folder). */
+  | { readonly kind: "covered"; readonly by: string }
+  /** Exclude the folder and drop the exclusions in `drop`, which it makes redundant. */
+  | { readonly kind: "add"; readonly drop: readonly string[] };
+
+/** Plans excluding [folder] from the scan [roots], given the folders already [excluded]. */
+export const planExclusion = (
+  roots: readonly string[],
+  excluded: readonly string[],
+  folder: string,
+): ExclusionPlan => {
+  if (roots.includes(folder)) return { kind: "root" };
+  if (!roots.some((root) => isWithin(folder, root))) return { kind: "outside" };
+  const parent = excluded.find((path) => isWithin(folder, path));
+  if (parent !== undefined) return { kind: "covered", by: parent };
+  return { kind: "add", drop: excluded.filter((path) => isWithin(path, folder)) };
+};
+
 export interface FolderLabel {
   /** The folder's own name, or the storage name for a storage root. */
   readonly name: string;

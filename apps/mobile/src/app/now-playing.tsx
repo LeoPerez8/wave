@@ -1,25 +1,152 @@
-import { Text, View } from "react-native";
+import { IconChevronDown, IconListNumbers } from "@tabler/icons-react-native";
+import type { ComponentType } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { BackHandler, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import Animated, { useAnimatedStyle } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { grid } from "@/catalog/grid";
-import { ScreenHeader } from "@/components/ScreenHeader";
-import { usePlayback } from "@/playback/hooks";
+import { CELL, grid } from "@/catalog/grid";
+import { IconButton } from "@/components/IconButton";
+import { Press } from "@/motion/Press";
+import { Background } from "@/nowPlaying/Background";
+import { DismissArea } from "@/nowPlaying/DismissArea";
+import { useNowPlayingGradient, useTrackDetails } from "@/nowPlaying/hooks";
+import { PlayerView } from "@/nowPlaying/PlayerView";
+import { QueueHeader, UpNextList } from "@/nowPlaying/QueueView";
+import { Scrubber } from "@/nowPlaying/Scrubber";
+import { closeNowPlaying, nowPlayingMounted, sheetHeight, sheetOffset } from "@/nowPlaying/sheet";
+import { Transport } from "@/nowPlaying/Transport";
+import { useCurrentTrackId } from "@/playback/hooks";
+import { playbackState } from "@/playback/Player";
+import { useThemeColor } from "@/theme/useThemeColor";
 
-/** Placeholder the mini player opens; the full Now Playing screen replaces it (#9). */
-export default function NowPlayingScreen() {
-  const { item } = usePlayback();
+/** What fills the space above the controls. Lyrics (#14) adds a view here. */
+export type NowPlayingView = "player" | "queue";
+
+type IconProps = { size?: number; color?: string; strokeWidth?: number };
+
+/** An icon that switches Now Playing's view: teal while its view shows, graphite otherwise. */
+function ViewToggle({
+  icon: Icon,
+  label,
+  on,
+  onPress,
+}: {
+  icon: ComponentType<IconProps>;
+  label: string;
+  on: boolean;
+  onPress: () => void;
+}) {
+  const accent = useThemeColor("accent");
+  const secondary = useThemeColor("secondary");
   return (
-    <View className="flex-1 bg-background">
-      <ScreenHeader title="Now Playing" />
-      <View style={{ paddingHorizontal: grid.margin }}>
-        <Text className="font-sans text-body font-medium text-foreground">
-          {item?.title ?? "Nothing playing"}
-        </Text>
-        {item !== null && (
-          <Text className="font-sans text-body text-secondary">
-            {item.artist ?? "Unknown Artist"}
-          </Text>
+    <Press
+      accessibilityRole="switch"
+      accessibilityLabel={label}
+      accessibilityState={{ checked: on }}
+      onPress={onPress}
+      haptic="selection"
+      depth={0.1}
+      className="items-center justify-center"
+      style={{ width: CELL * 6, height: CELL * 6 }}
+    >
+      <Icon size={24} color={on ? accent : secondary} strokeWidth={1.5} />
+    </Press>
+  );
+}
+
+const close = (): void => closeNowPlaying();
+
+/**
+ * Now Playing: a sheet over the tabs, tinted by the artwork. The player view
+ * (artwork, title, artist and album) or the Queue view sits above the
+ * scrubber and transport. Drag it down, tap the chevron or press Back to
+ * dismiss it.
+ */
+export default function NowPlayingScreen() {
+  const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
+  const item = useSyncExternalStore(playbackState.subscribe, () => playbackState.get().item);
+  const playing = useSyncExternalStore(
+    playbackState.subscribe,
+    () => playbackState.get().playWhenReady,
+  );
+  const details = useTrackDetails(useCurrentTrackId());
+  const gradient = useNowPlayingGradient(details);
+  const [view, setView] = useState<NowPlayingView>("player");
+
+  useEffect(() => {
+    sheetHeight.set(height);
+  }, [height]);
+
+  useEffect(nowPlayingMounted, []);
+
+  // Back slides the sheet away instead of cutting to the tabs.
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      closeNowPlaying();
+      return true;
+    });
+    return () => subscription.remove();
+  }, []);
+
+  const sheetStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: sheetOffset.get() }],
+  }));
+
+  const toggleQueue = () => setView((current) => (current === "queue" ? "player" : "queue"));
+
+  return (
+    <Animated.View style={[StyleSheet.absoluteFill, sheetStyle]}>
+      <Background gradient={gradient} />
+      <View
+        className="flex-1"
+        style={{
+          paddingTop: insets.top,
+          paddingBottom: insets.bottom + CELL * 2,
+          paddingHorizontal: grid.margin,
+        }}
+      >
+        <DismissArea
+          style={{ marginHorizontal: -grid.margin, paddingHorizontal: grid.margin - 12 }}
+        >
+          <View className="flex-row items-center" style={{ height: CELL * 7 }}>
+            <IconButton icon={IconChevronDown} label="Close Now Playing" onPress={close} />
+          </View>
+        </DismissArea>
+
+        {item === null ? (
+          <DismissArea style={{ flex: 1 }}>
+            <View className="flex-1 items-center justify-center">
+              <Text className="font-sans text-subheadline text-secondary">Nothing is playing.</Text>
+            </View>
+          </DismissArea>
+        ) : view === "queue" ? (
+          <View className="flex-1">
+            <DismissArea>
+              <QueueHeader item={item} />
+            </DismissArea>
+            <UpNextList bottomInset={CELL * 2} />
+          </View>
+        ) : (
+          <DismissArea style={{ flex: 1, paddingTop: CELL }}>
+            <PlayerView item={item} details={details} playing={playing} />
+          </DismissArea>
         )}
+
+        <DismissArea style={{ paddingTop: CELL * 3, gap: CELL * 2 }}>
+          <Scrubber />
+          <Transport />
+          <View className="flex-row items-center justify-end">
+            <ViewToggle
+              icon={IconListNumbers}
+              label="Queue"
+              on={view === "queue"}
+              onPress={toggleQueue}
+            />
+          </View>
+        </DismissArea>
       </View>
-    </View>
+    </Animated.View>
   );
 }

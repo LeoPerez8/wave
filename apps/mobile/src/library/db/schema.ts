@@ -137,6 +137,16 @@ export const excludedFolders = sqliteTable("excluded_folders", {
   addedAt: integer("added_at").notNull(),
 });
 
+/** The queue and position restored (paused) on launch. A single row, id 1. */
+export const savedPlayback = sqliteTable("playback_state", {
+  id: integer("id").primaryKey(),
+  /** Core's `QueueState` as JSON; entries hold track ids. */
+  queue: text("queue").notNull(),
+  /** Where the current entry was, last time it was saved. */
+  positionMs: integer("position_ms").notNull().default(0),
+  updatedAt: integer("updated_at").notNull(),
+});
+
 /** The owner's recent searches, as Core's `rememberSearch` keeps them; the newest has the latest time. */
 export const recentSearches = sqliteTable("recent_searches", {
   query: text("query").primaryKey(),
