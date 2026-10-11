@@ -15,6 +15,13 @@ blockers are closed.
 - The app uses Effect for services, uniwind classes for styling (colour tokens in
   `apps/mobile/global.css`), and `useThemeColor` for native props that can't take a class.
 
+## Skills
+
+The `mattpocock-skills` and `impeccable` plugins are enabled in `.claude/settings.json`.
+Use the Matt Pocock flow for planning and engineering (grill → spec → tickets → TDD) and
+Impeccable to critique and polish UI work against the spec's Apple Music direction. If a
+session can't load plugins, read the skill files straight from their GitHub repos.
+
 ## Environment constraints
 
 Agent sessions on this repo may not be able to reach the npm registry, Maven or the Android
