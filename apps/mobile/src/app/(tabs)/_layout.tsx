@@ -1,13 +1,11 @@
-import { router } from "expo-router";
 import { TabList, TabSlot, TabTrigger, Tabs } from "expo-router/ui";
 import { View } from "react-native";
 
 import { BACKDROP, ChromeProvider } from "@/chrome/chrome";
 import { TabBar } from "@/chrome/TabBar";
+import { openNowPlaying } from "@/nowPlaying/sheet";
 import { MiniPlayer } from "@/playback/MiniPlayer";
 import { useThemeColor } from "@/theme/useThemeColor";
-
-const openNowPlaying = () => router.push("/now-playing");
 
 /**
  * Home, Library and Search under the floating glass chrome. The screens sit in

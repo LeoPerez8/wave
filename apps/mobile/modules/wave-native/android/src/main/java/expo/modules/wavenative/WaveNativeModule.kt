@@ -18,6 +18,7 @@ import expo.modules.wavenative.artwork.AndroidArtworkProcessor
 import expo.modules.wavenative.artwork.ArtworkInfo
 import expo.modules.wavenative.artwork.ArtworkStore
 import expo.modules.wavenative.folders.TreeUris
+import expo.modules.wavenative.scan.KnownFile
 import expo.modules.wavenative.scan.LibraryScanner
 import expo.modules.wavenative.scan.ScanListener
 import expo.modules.wavenative.scan.ScanProgress
@@ -34,8 +35,8 @@ import java.util.concurrent.atomic.AtomicInteger
 /**
  * Wave's native side: all-files access, the folder picker and the library scanner. Scans run one at
  * a time on a background thread and stream results to JS as events:
- * `onScanProgress`, `onScanBatch`, `onScanComplete` and `onScanError`, each
- * carrying the `scanId` returned by `startScan`.
+ * `onScanProgress`, `onScanMissing`, `onScanBatch`, `onScanComplete` and
+ * `onScanError`, each carrying the `scanId` returned by `startScan`.
  */
 class WaveNativeModule : Module() {
   private val scanExecutor: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
@@ -52,7 +53,7 @@ class WaveNativeModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("WaveNative")
 
-    Events("onScanProgress", "onScanBatch", "onScanComplete", "onScanError")
+    Events("onScanProgress", "onScanMissing", "onScanBatch", "onScanComplete", "onScanError")
 
     Function("hasAllFilesAccess") { Environment.isExternalStorageManager() }
 
@@ -106,14 +107,33 @@ class WaveNativeModule : Module() {
       )
     }
 
-    /** Starts a full scan of [roots] minus [excluded], cancelling any scan in progress. */
-    Function("startScan") { roots: List<String>, excluded: List<String> ->
+    /**
+     * Scans [roots] minus [excluded], cancelling any scan in progress. The known
+     * files (parallel lists of path, size and modification time) make it
+     * incremental: unchanged files aren't read again and missing ones are reported.
+     */
+    Function("startScan") {
+        roots: List<String>,
+        excluded: List<String>,
+        knownPaths: List<String>,
+        knownSizes: List<Double>,
+        knownModifiedAt: List<Double>,
+      ->
+      require(knownPaths.size == knownSizes.size && knownPaths.size == knownModifiedAt.size) {
+        "Known file lists differ in length"
+      }
+      val known = HashMap<String, KnownFile>(knownPaths.size * 2)
+      for (i in knownPaths.indices) {
+        known[knownPaths[i]] = KnownFile(knownSizes[i].toLong(), knownModifiedAt[i].toLong())
+      }
       val id = nextScanId.getAndIncrement()
       val cancelled = AtomicBoolean(false)
       currentScan?.second?.set(true)
       currentScan = id to cancelled
       val artworkDir = File(context.filesDir, "artwork")
-      scanExecutor.execute { runScan(id, cancelled, roots.map(::File), excluded.map(::File), artworkDir) }
+      scanExecutor.execute {
+        runScan(id, cancelled, roots.map(::File), excluded.map(::File), known, artworkDir)
+      }
       id
     }
 
@@ -142,6 +162,7 @@ class WaveNativeModule : Module() {
     cancelled: AtomicBoolean,
     roots: List<File>,
     excluded: List<File>,
+    known: Map<String, KnownFile>,
     artworkDir: File,
   ) {
     try {
@@ -162,8 +183,13 @@ class WaveNativeModule : Module() {
                 "phase" to progress.phase.id,
                 "filesFound" to progress.filesFound,
                 "filesRead" to progress.filesRead,
+                "filesUnchanged" to progress.filesUnchanged,
               ),
             )
+          }
+
+          override fun onMissing(paths: List<String>) {
+            sendEvent("onScanMissing", mapOf("scanId" to id, "paths" to paths))
           }
 
           override fun onBatch(tracks: List<ScannedTrack>, artwork: List<ArtworkInfo>) {
@@ -178,6 +204,7 @@ class WaveNativeModule : Module() {
           }
         },
         isCancelled = cancelled::get,
+        known = known,
       )
       sendEvent(
         "onScanComplete",
@@ -185,6 +212,7 @@ class WaveNativeModule : Module() {
           "scanId" to id,
           "filesFound" to summary.filesFound,
           "filesRead" to summary.filesRead,
+          "filesUnchanged" to summary.filesUnchanged,
           "cancelled" to summary.cancelled,
           "durationMs" to summary.durationMs.toDouble(),
         ),

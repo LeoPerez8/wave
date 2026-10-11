@@ -95,3 +95,17 @@ export const moveQueueEntry = (key: string, toUpNextIndex: number): void =>
   dispatch({ type: "move", key, toUpNextIndex });
 
 export const removeQueueEntry = (key: string): void => dispatch({ type: "remove", key });
+
+/**
+ * Seeks the current track. The position shows at once, before the player
+ * confirms it, so the scrubber doesn't jump back and "previous" sees it.
+ */
+export const seekTo = (positionMs: number): void => {
+  playbackState.update((state) => ({ ...state, positionMs, at: Date.now() }));
+  run(
+    Effect.gen(function* () {
+      const player = yield* Player;
+      yield* player.seekTo(positionMs);
+    }),
+  );
+};

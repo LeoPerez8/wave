@@ -1,11 +1,10 @@
-import { router, Stack } from "expo-router";
+import { Stack } from "expo-router";
 import { View } from "react-native";
 
 import { BACKDROP } from "@/chrome/chrome";
+import { openNowPlaying } from "@/nowPlaying/sheet";
 import { MiniPlayer } from "@/playback/MiniPlayer";
 import { useThemeColor } from "@/theme/useThemeColor";
-
-const openNowPlaying = () => router.push("/now-playing");
 
 /** Library screens pushed over the tabs keep the floating mini player, above the system inset. */
 export default function LibraryLayout() {
