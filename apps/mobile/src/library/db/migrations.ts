@@ -123,12 +123,20 @@ ALTER TABLE \`scan_roots\` ADD \`is_default\` integer DEFAULT false NOT NULL;
 UPDATE \`scan_roots\` SET \`is_default\` = true;
 `;
 
+const m0002 = `
+CREATE TABLE \`recent_searches\` (
+	\`query\` text PRIMARY KEY NOT NULL,
+	\`searched_at\` integer NOT NULL
+);
+`;
+
 export default {
   journal: {
     entries: [
       { idx: 0, when: 1_791_806_400_000, tag: "0000_library", breakpoints: true },
       { idx: 1, when: 1_791_892_800_000, tag: "0001_default_scan_root", breakpoints: true },
+      { idx: 2, when: 1_791_979_200_000, tag: "0002_recent_searches", breakpoints: true },
     ],
   },
-  migrations: { m0000, m0001 },
+  migrations: { m0000, m0001, m0002 },
 };

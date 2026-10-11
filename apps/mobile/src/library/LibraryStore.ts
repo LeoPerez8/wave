@@ -3,6 +3,7 @@ import {
   compareAlbumTracks,
   compareFileNames,
   filesLeavingWithRoot,
+  rememberSearch,
   sortKey,
   type LibraryTrack,
 } from "@wave/core";
@@ -201,6 +202,11 @@ export class LibraryStore extends Context.Service<
     readonly getArtist: (id: number) => Effect.Effect<ArtistDetail | null, LibraryStoreError>;
     readonly getGenre: (id: number) => Effect.Effect<GenreDetail | null, LibraryStoreError>;
     readonly getFolder: (id: number) => Effect.Effect<FolderDetail | null, LibraryStoreError>;
+    /** The recent searches, newest first. */
+    readonly listRecentSearches: Effect.Effect<readonly string[], LibraryStoreError>;
+    /** Adds a search to the recent ones (see Core's `rememberSearch`); returns them, newest first. */
+    readonly rememberSearch: (query: string) => Effect.Effect<readonly string[], LibraryStoreError>;
+    readonly clearRecentSearches: Effect.Effect<void, LibraryStoreError>;
   }
 >()("@wave/mobile/library/LibraryStore") {}
 
@@ -622,6 +628,27 @@ const listFoldersSync = (db: Database): FolderRow[] => {
   );
 };
 
+const listRecentSearchesSync = (db: Pick<Database, "select">): string[] =>
+  db
+    .select({ query: schema.recentSearches.query })
+    .from(schema.recentSearches)
+    .orderBy(desc(schema.recentSearches.searchedAt))
+    .all()
+    .map((row) => row.query);
+
+/** Rewrites the list Core's `rememberSearch` returns, newest with the latest time. */
+const rememberSearchSync = (db: Database, query: string, now: number): readonly string[] =>
+  db.transaction((tx) => {
+    const recent = listRecentSearchesSync(tx);
+    const next = rememberSearch(recent, query);
+    if (next === recent) return recent;
+    tx.delete(schema.recentSearches).run();
+    tx.insert(schema.recentSearches)
+      .values(next.map((search, i) => ({ query: search, searchedAt: now - i })))
+      .run();
+    return next;
+  });
+
 const make = Effect.gen(function* () {
   const db: Database = yield* Effect.try({
     try: () => {
@@ -742,6 +769,15 @@ const make = Effect.gen(function* () {
     getGenre: (id) => attempt("open the genre", () => getGenreSync(db, id)),
 
     getFolder: (id) => attempt("open the folder", () => getFolderSync(db, id)),
+
+    listRecentSearches: attempt("read recent searches", () => listRecentSearchesSync(db)),
+
+    rememberSearch: (query) =>
+      attempt("save the search", () => rememberSearchSync(db, query, Date.now())),
+
+    clearRecentSearches: attempt("clear recent searches", () => {
+      db.delete(schema.recentSearches).run();
+    }),
   });
 });
 

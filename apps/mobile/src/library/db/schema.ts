@@ -136,3 +136,9 @@ export const excludedFolders = sqliteTable("excluded_folders", {
   path: text("path").primaryKey(),
   addedAt: integer("added_at").notNull(),
 });
+
+/** The owner's recent searches, as Core's `rememberSearch` keeps them; the newest has the latest time. */
+export const recentSearches = sqliteTable("recent_searches", {
+  query: text("query").primaryKey(),
+  searchedAt: integer("searched_at").notNull(),
+});
