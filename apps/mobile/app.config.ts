@@ -27,6 +27,7 @@ const config: ExpoConfig = {
   },
   plugins: [
     "expo-router",
+    "expo-status-bar",
     [
       "expo-splash-screen",
       {
