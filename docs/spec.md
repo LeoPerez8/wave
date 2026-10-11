@@ -33,8 +33,8 @@ v1 delivers the core player and library. v2 adds the advanced audio and library-
 ### First run and library
 
 1. As a user, I want Wave to ask for all-files access on first launch, so that it can read every audio file in my music folders.
-2. As a user, I want Wave to index my `Music` folder by default, so that I get a working library with zero configuration.
-3. As a user, I want to add other scan roots and exclude sub-folders in Settings, so that only the music I care about appears.
+2. As a user, I want Wave to index my `Music` folder by default and let me choose the folders my music is actually in with the system folder picker, so that I get a working library whatever my folders are called.
+3. As a user, I want to add and remove scan roots and exclude sub-folders in Settings, so that only the music I care about appears.
 4. As a user, I want to see scan progress (files found / indexed) during the first scan, so that I know the app is working on a large library.
 5. As a user, I want to start browsing while the first scan is still running, so that I don't wait for tens of thousands of files.
 6. As a user, I want Wave to pick up new, changed and deleted files automatically each time I open it, so that my library stays current without a manual full rescan.

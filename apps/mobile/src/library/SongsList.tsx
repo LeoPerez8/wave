@@ -11,9 +11,12 @@ import { EmptyState } from "@/components/EmptyState";
 import { ScanProgressBanner } from "@/components/ScanProgressBanner";
 import { playSong } from "@/playback/actions";
 import { useCurrentItemId } from "@/playback/hooks";
+import { TextButton } from "@/components/TextButton";
 
-import { useScanState, useSongs } from "./hooks";
+import { folderPhrase } from "./folderPhrase";
+import { useScanRoots, useScanState, useSongs } from "./hooks";
 import type { SongRow } from "./LibraryStore";
+import { promptForMusicFolder } from "./promptForMusicFolder";
 
 const toSummary = (song: SongRow): TrackSummary => ({
   id: String(song.id),
@@ -29,6 +32,7 @@ const keyExtractor = (song: SongRow): string => String(song.id);
 export function SongsList() {
   const songs = useSongs();
   const scan = useScanState();
+  const roots = useScanRoots();
   const insets = useSafeAreaInsets();
   const currentId = useCurrentItemId();
   const renderItem = useCallback(
@@ -53,7 +57,12 @@ export function SongsList() {
           message={
             scan.status === "scanning"
               ? "Songs appear here as Wave finds them."
-              : "Wave didn't find any songs in your Music folder."
+              : `Wave didn't find any songs in ${folderPhrase(roots)}.`
+          }
+          action={
+            scan.status === "scanning" ? undefined : (
+              <TextButton label="Choose music folder" onPress={() => void promptForMusicFolder()} />
+            )
           }
         />
       </View>

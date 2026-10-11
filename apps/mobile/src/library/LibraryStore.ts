@@ -1,4 +1,4 @@
-import type { LibraryTrack } from "@wave/core";
+import { filesLeavingWithRoot, type LibraryTrack } from "@wave/core";
 import { asc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { drizzle, type ExpoSQLiteDatabase } from "drizzle-orm/expo-sqlite";
 import { migrate } from "drizzle-orm/expo-sqlite/migrator";
@@ -41,7 +41,13 @@ export interface IndexedArtwork {
 
 export interface ScanRoot {
   readonly path: string;
+  readonly isDefault: boolean;
   readonly lastScannedAt: number | null;
+}
+
+/** A scan root with the number of indexed tracks under it, for Music folders. */
+export interface ScanRootSummary extends ScanRoot {
+  readonly trackCount: number;
 }
 
 /** One row of the Songs list. */
@@ -63,6 +69,21 @@ export class LibraryStore extends Context.Service<
     readonly ensureDefaultRoot: (
       path: string,
     ) => Effect.Effect<readonly ScanRoot[], LibraryStoreError>;
+    /** Every scan root in the order it was added, with its track count. */
+    readonly listRoots: Effect.Effect<readonly ScanRootSummary[], LibraryStoreError>;
+    /**
+     * Adds [path] as a root the owner picked and removes the roots in [drop]
+     * (see Core's `planAddRoot`). No root is a default one afterwards.
+     */
+    readonly addRoot: (
+      path: string,
+      drop: readonly string[],
+    ) => Effect.Effect<void, LibraryStoreError>;
+    /**
+     * Removes a root and the tracks no other root covers, then the albums,
+     * artists, genres and folders left without tracks. The last root can't be removed.
+     */
+    readonly removeRoot: (path: string) => Effect.Effect<void, LibraryStoreError>;
     readonly excludedFolders: Effect.Effect<readonly string[], LibraryStoreError>;
     /** Upserts one scanner batch (and the artwork it references) in a single transaction. */
     readonly saveBatch: (
@@ -267,6 +288,45 @@ const saveBatchSync = (
   });
 };
 
+/** SQLite's default limit on bound parameters is far above this; it keeps statements small. */
+const DELETE_CHUNK = 500;
+
+const removeRootSync = (db: Database, path: string): void => {
+  const { scanRoots, tracks } = schema;
+  db.transaction((tx) => {
+    const remaining = tx
+      .select({ path: scanRoots.path })
+      .from(scanRoots)
+      .all()
+      .map((root) => root.path)
+      .filter((root) => root !== path);
+    if (remaining.length === 0) throw new Error("Wave needs at least one music folder");
+
+    const under = tx
+      .select({ path: tracks.path })
+      .from(tracks)
+      // SQLite counts characters where JS counts UTF-16 units, so the length is taken in SQL.
+      .where(sql`substr(${tracks.path}, 1, length(${path}) + 1) = ${`${path}/`}`)
+      .all()
+      .map((row) => row.path);
+    const leaving = filesLeavingWithRoot(under, path, remaining);
+    for (let i = 0; i < leaving.length; i += DELETE_CHUNK) {
+      tx.delete(tracks)
+        .where(inArray(tracks.path, leaving.slice(i, i + DELETE_CHUNK)))
+        .run();
+    }
+    tx.delete(scanRoots).where(eq(scanRoots.path, path)).run();
+
+    // Albums first: they hold the album artist.
+    tx.run(sql`DELETE FROM albums WHERE id NOT IN (SELECT album_id FROM tracks)`);
+    tx.run(sql`DELETE FROM artists WHERE id NOT IN (SELECT artist_id FROM tracks)
+      AND id NOT IN (SELECT album_artist_id FROM albums)`);
+    tx.run(sql`DELETE FROM genres
+      WHERE id NOT IN (SELECT genre_id FROM tracks WHERE genre_id IS NOT NULL)`);
+    tx.run(sql`DELETE FROM folders WHERE id NOT IN (SELECT folder_id FROM tracks)`);
+  });
+};
+
 const make = Effect.gen(function* () {
   const db: Database = yield* Effect.try({
     try: () => {
@@ -289,9 +349,39 @@ const make = Effect.gen(function* () {
       attempt("set up scan roots", () => {
         const existing = db.select().from(schema.scanRoots).all();
         if (existing.length > 0) return existing;
-        db.insert(schema.scanRoots).values({ path, addedAt: Date.now() }).run();
+        db.insert(schema.scanRoots).values({ path, addedAt: Date.now(), isDefault: true }).run();
         return db.select().from(schema.scanRoots).all();
       }),
+
+    listRoots: attempt("list music folders", () => {
+      const { scanRoots, tracks } = schema;
+      return db
+        .select({
+          path: scanRoots.path,
+          isDefault: scanRoots.isDefault,
+          lastScannedAt: scanRoots.lastScannedAt,
+          trackCount: sql<number>`(SELECT count(*) FROM ${tracks}
+            WHERE substr(${tracks.path}, 1, length(${scanRoots.path}) + 1) = ${scanRoots.path} || '/')`,
+        })
+        .from(scanRoots)
+        .orderBy(asc(scanRoots.addedAt), asc(scanRoots.path))
+        .all();
+    }),
+
+    addRoot: (path, drop) =>
+      attempt("add a music folder", () =>
+        db.transaction((tx) => {
+          const { scanRoots } = schema;
+          if (drop.length > 0)
+            tx.delete(scanRoots)
+              .where(inArray(scanRoots.path, [...drop]))
+              .run();
+          tx.insert(scanRoots).values({ path, addedAt: Date.now() }).onConflictDoNothing().run();
+          tx.update(scanRoots).set({ isDefault: false }).run();
+        }),
+      ),
+
+    removeRoot: (path) => attempt("remove a music folder", () => removeRootSync(db, path)),
 
     excludedFolders: attempt("read excluded folders", () =>
       db

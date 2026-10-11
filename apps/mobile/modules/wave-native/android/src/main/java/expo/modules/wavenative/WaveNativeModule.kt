@@ -1,17 +1,23 @@
 package expo.modules.wavenative
 
+import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Environment
+import android.os.storage.StorageManager
+import android.provider.DocumentsContract
 import android.provider.Settings
+import expo.modules.kotlin.Promise
 import expo.modules.kotlin.exception.Exceptions
+import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.wavenative.artwork.AndroidArtworkProcessor
 import expo.modules.wavenative.artwork.ArtworkInfo
 import expo.modules.wavenative.artwork.ArtworkStore
+import expo.modules.wavenative.folders.TreeUris
 import expo.modules.wavenative.scan.LibraryScanner
 import expo.modules.wavenative.scan.ScanListener
 import expo.modules.wavenative.scan.ScanProgress
@@ -26,7 +32,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * Wave's native side: all-files access and the library scanner. Scans run one at
+ * Wave's native side: all-files access, the folder picker and the library scanner. Scans run one at
  * a time on a background thread and stream results to JS as events:
  * `onScanProgress`, `onScanBatch`, `onScanComplete` and `onScanError`, each
  * carrying the `scanId` returned by `startScan`.
@@ -37,6 +43,8 @@ class WaveNativeModule : Module() {
   }
   private val nextScanId = AtomicInteger(1)
   @Volatile private var currentScan: Pair<Int, AtomicBoolean>? = null
+  /** Only touched on the main thread, where the picker starts and its result arrives. */
+  private var pendingFolderPick: Promise? = null
 
   private val context: Context
     get() = appContext.reactContext ?: throw Exceptions.ReactContextLost()
@@ -70,6 +78,34 @@ class WaveNativeModule : Module() {
       Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC).absolutePath
     }
 
+    /**
+     * Opens the system folder picker. Resolves `{ status: "picked", path }`,
+     * `{ status: "cancelled" }`, or `{ status: "unsupported" }` for folders
+     * without a file path (Downloads, cloud providers).
+     */
+    AsyncFunction("pickFolder") { promise: Promise ->
+      val activity = appContext.currentActivity ?: throw Exceptions.MissingActivity()
+      pendingFolderPick?.resolve(mapOf("status" to "cancelled"))
+      pendingFolderPick = promise
+      activity.startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE), PICK_FOLDER_REQUEST)
+    }.runOnQueue(Queues.MAIN)
+
+    OnActivityResult { _, payload ->
+      if (payload.requestCode != PICK_FOLDER_REQUEST) return@OnActivityResult
+      val promise = pendingFolderPick ?: return@OnActivityResult
+      pendingFolderPick = null
+      val uri = payload.data?.data
+      if (payload.resultCode != Activity.RESULT_OK || uri == null) {
+        promise.resolve(mapOf("status" to "cancelled"))
+        return@OnActivityResult
+      }
+      val documentId = runCatching { DocumentsContract.getTreeDocumentId(uri) }.getOrNull()
+      val path = TreeUris.toPath(uri.authority, documentId, ::volumeDirectory)
+      promise.resolve(
+        if (path == null) mapOf("status" to "unsupported") else mapOf("status" to "picked", "path" to path),
+      )
+    }
+
     /** Starts a full scan of [roots] minus [excluded], cancelling any scan in progress. */
     Function("startScan") { roots: List<String>, excluded: List<String> ->
       val id = nextScanId.getAndIncrement()
@@ -89,6 +125,16 @@ class WaveNativeModule : Module() {
       currentScan?.second?.set(true)
       scanExecutor.shutdownNow()
     }
+  }
+
+  /** The root of a storage volume: `primary` or the UUID of an SD card or USB drive. */
+  private fun volumeDirectory(volumeId: String): File? {
+    if (volumeId == "primary") {
+      @Suppress("DEPRECATION")
+      return Environment.getExternalStorageDirectory()
+    }
+    val storage = context.getSystemService(StorageManager::class.java) ?: return null
+    return storage.storageVolumes.firstOrNull { it.uuid.equals(volumeId, ignoreCase = true) }?.directory
   }
 
   private fun runScan(
@@ -177,4 +223,8 @@ class WaveNativeModule : Module() {
       "thumbPath" to artwork.thumbPath,
       "palette" to artwork.palette.toMap(),
     )
+
+  private companion object {
+    const val PICK_FOLDER_REQUEST = 0x5741
+  }
 }
