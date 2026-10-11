@@ -116,9 +116,19 @@ CREATE TABLE \`excluded_folders\` (
 );
 `;
 
+// Installs from before this migration only ever had the default Music root.
+const m0001 = `
+ALTER TABLE \`scan_roots\` ADD \`is_default\` integer DEFAULT false NOT NULL;
+--> statement-breakpoint
+UPDATE \`scan_roots\` SET \`is_default\` = true;
+`;
+
 export default {
   journal: {
-    entries: [{ idx: 0, when: 1_791_806_400_000, tag: "0000_library", breakpoints: true }],
+    entries: [
+      { idx: 0, when: 1_791_806_400_000, tag: "0000_library", breakpoints: true },
+      { idx: 1, when: 1_791_892_800_000, tag: "0001_default_scan_root", breakpoints: true },
+    ],
   },
-  migrations: { m0000 },
+  migrations: { m0000, m0001 },
 };

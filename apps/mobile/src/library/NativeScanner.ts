@@ -8,12 +8,21 @@ import * as Stream from "effect/Stream";
 
 import {
   WaveNative,
+  type FolderPick,
   type ScanBatchEvent,
   type ScanCompleteEvent,
   type ScanProgressEvent,
 } from "@/native/waveNative";
 
 export class ScanFailed extends Data.TaggedError("ScanFailed")<{ readonly message: string }> {}
+
+export class FolderPickFailed extends Data.TaggedError("FolderPickFailed")<{
+  readonly cause: unknown;
+}> {
+  override get message(): string {
+    return `Couldn't open the folder picker: ${String(this.cause)}`;
+  }
+}
 
 export type ScanEvent =
   | ({ readonly _tag: "Progress" } & ScanProgressEvent)
@@ -26,6 +35,8 @@ export class NativeScanner extends Context.Service<
   {
     readonly hasAllFilesAccess: Effect.Effect<boolean>;
     readonly defaultMusicFolder: Effect.Effect<string>;
+    /** Lets the owner pick a folder with the system picker. */
+    readonly pickFolder: Effect.Effect<FolderPick, FolderPickFailed>;
     /**
      * Scans [roots] minus [excluded]. The stream emits progress and batches and
      * ends with one `Complete` event. Interrupting it cancels the native scan.
@@ -81,5 +92,9 @@ const scan = (
 export const layer = Layer.succeed(NativeScanner, {
   hasAllFilesAccess: Effect.sync(() => WaveNative.hasAllFilesAccess()),
   defaultMusicFolder: Effect.sync(() => WaveNative.getDefaultMusicFolder()),
+  pickFolder: Effect.tryPromise({
+    try: () => WaveNative.pickFolder(),
+    catch: (cause) => new FolderPickFailed({ cause }),
+  }),
   scan,
 });

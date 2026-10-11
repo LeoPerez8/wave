@@ -65,6 +65,13 @@ export interface ScanErrorEvent {
   readonly message: string;
 }
 
+/** The outcome of the system folder picker. */
+export type FolderPick =
+  | { readonly status: "picked"; readonly path: string }
+  | { readonly status: "cancelled" }
+  /** A folder without a file path, such as the Downloads shortcut or a cloud drive. */
+  | { readonly status: "unsupported" };
+
 type WaveNativeEvents = {
   onScanProgress: (event: ScanProgressEvent) => void;
   onScanBatch: (event: ScanBatchEvent) => void;
@@ -79,6 +86,8 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
   requestAllFilesAccess(): Promise<void>;
   /** Absolute path of the shared `Music` folder. */
   getDefaultMusicFolder(): string;
+  /** Opens the system folder picker and resolves the picked folder's absolute path. */
+  pickFolder(): Promise<FolderPick>;
   /** Starts a full scan, cancelling any running one, and returns its id. */
   startScan(roots: readonly string[], excluded: readonly string[]): number;
   cancelScan(scanId: number): void;

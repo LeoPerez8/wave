@@ -1,4 +1,4 @@
-import { normalizeTrack } from "@wave/core";
+import { normalizeTrack, planAddRoot } from "@wave/core";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
@@ -97,38 +97,38 @@ const reportFailures = <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A 
     ),
   );
 
-/** Runs a full scan of the scan roots and stores the results batch by batch. */
-export const runFullScan = Effect.gen(function* () {
-  const store = yield* LibraryStore;
-  const scanner = yield* NativeScanner;
-  const roots = yield* store.ensureDefaultRoot(yield* scanner.defaultMusicFolder);
-  const excluded = yield* store.excludedFolders;
-  const startedAt = Date.now();
-  scanState.set({ status: "scanning", phase: "discovering", filesFound: 0, filesRead: 0 });
+/** Fully scans [roots] and stores the results batch by batch. */
+const scanFolders = (roots: readonly string[]) =>
+  Effect.gen(function* () {
+    const store = yield* LibraryStore;
+    const scanner = yield* NativeScanner;
+    const excluded = yield* store.excludedFolders;
+    const startedAt = Date.now();
+    scanState.set({ status: "scanning", phase: "discovering", filesFound: 0, filesRead: 0 });
 
-  // Assigned from the stream callback; the cast keeps TypeScript from narrowing it to undefined.
-  let completed = undefined as Extract<ScanEvent, { _tag: "Complete" }> | undefined;
-  yield* scanner
-    .scan(
-      roots.map((root) => root.path),
-      excluded,
-    )
-    .pipe(
+    // Assigned from the stream callback; the cast keeps TypeScript from narrowing it to undefined.
+    let completed = undefined as Extract<ScanEvent, { _tag: "Complete" }> | undefined;
+    yield* scanner.scan(roots, excluded).pipe(
       Stream.runForEach((event) => {
         if (event._tag === "Complete") completed = event;
         return handleEvent(event);
       }),
     );
 
-  if (completed === undefined || completed.cancelled) {
-    scanState.set({ status: "idle" });
-    return;
-  }
-  yield* store.markScanned(
-    roots.map((root) => root.path),
-    startedAt,
-  );
-  scanState.set({ status: "done", filesFound: completed.filesFound });
+    if (completed === undefined || completed.cancelled) {
+      scanState.set({ status: "idle" });
+      return;
+    }
+    yield* store.markScanned(roots, startedAt);
+    scanState.set({ status: "done", filesFound: completed.filesFound });
+  });
+
+/** Runs a full scan of the scan roots. */
+export const runFullScan = Effect.gen(function* () {
+  const store = yield* LibraryStore;
+  const scanner = yield* NativeScanner;
+  const roots = yield* store.ensureDefaultRoot(yield* scanner.defaultMusicFolder);
+  yield* scanFolders(roots.map((root) => root.path));
 }).pipe(reportFailures);
 
 /**
@@ -146,3 +146,34 @@ export const runInitialScanIfNeeded = Effect.gen(function* () {
   }
   yield* runFullScan;
 }).pipe(reportFailures);
+
+/** Scans a newly added root. */
+export const runFolderScan = (path: string) => scanFolders([path]).pipe(reportFailures);
+
+export type FolderChoice =
+  | { readonly kind: "added"; readonly path: string }
+  /** The folder is already indexed through [by] (itself or a parent folder). */
+  | { readonly kind: "covered"; readonly by: string }
+  | { readonly kind: "cancelled" }
+  | { readonly kind: "unsupported" };
+
+/** Lets the owner pick a folder and adds it as a root. The caller starts its scan. */
+export const chooseFolder = Effect.gen(function* () {
+  const scanner = yield* NativeScanner;
+  const store = yield* LibraryStore;
+  const pick = yield* scanner.pickFolder;
+  if (pick.status !== "picked") return { kind: pick.status } satisfies FolderChoice;
+  const plan = planAddRoot(yield* store.listRoots, pick.path);
+  if (plan.kind === "covered") return plan satisfies FolderChoice;
+  yield* store.addRoot(pick.path, plan.drop);
+  libraryVersion.update((version) => version + 1);
+  return { kind: "added", path: pick.path } satisfies FolderChoice;
+});
+
+/** Removes a root and the songs only it covered. */
+export const removeFolder = (path: string) =>
+  Effect.gen(function* () {
+    const store = yield* LibraryStore;
+    yield* store.removeRoot(path);
+    libraryVersion.update((version) => version + 1);
+  });

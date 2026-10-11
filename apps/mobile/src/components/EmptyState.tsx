@@ -1,4 +1,4 @@
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
 import { Text, View } from "react-native";
 
 import { useThemeColor } from "@/theme/useThemeColor";
@@ -9,9 +9,11 @@ type Props = {
   icon: ComponentType<IconProps>;
   title: string;
   message: string;
+  /** An action under the message, such as a TextButton. */
+  action?: ReactNode;
 };
 
-export function EmptyState({ icon: Icon, title, message }: Props) {
+export function EmptyState({ icon: Icon, title, message, action }: Props) {
   const tertiary = useThemeColor("tertiary");
   return (
     <View className="items-center gap-2 pt-24" style={{ paddingHorizontal: 16 }}>
@@ -20,6 +22,7 @@ export function EmptyState({ icon: Icon, title, message }: Props) {
         {title}
       </Text>
       <Text className="text-center font-sans text-subheadline text-secondary">{message}</Text>
+      {action}
     </View>
   );
 }

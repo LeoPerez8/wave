@@ -125,6 +125,8 @@ export const tracks = sqliteTable(
 export const scanRoots = sqliteTable("scan_roots", {
   path: text("path").primaryKey(),
   addedAt: integer("added_at").notNull(),
+  /** Added by Wave on first launch (the shared Music folder) rather than picked by the owner. */
+  isDefault: integer("is_default", { mode: "boolean" }).notNull().default(false),
   /** When a full scan of this root last finished; null until the first one does. */
   lastScannedAt: integer("last_scanned_at"),
 });
