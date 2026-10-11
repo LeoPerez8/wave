@@ -77,3 +77,20 @@ export {
 export type { PlaylistAdd, PlaylistNameCheck } from "./playlists.ts";
 export { dragTargetIndex, resolveRemoveSwipe } from "./rowGestures.ts";
 export type { RowDrag } from "./rowGestures.ts";
+export {
+  COUNTED_PLAY_MS,
+  EMPTY_PLAY_TRACKER,
+  isCountedPlay,
+  playSoFar,
+  trackPlays,
+} from "./playEvents.ts";
+export type {
+  PlayContext,
+  PlayEndReason,
+  PlayEvent,
+  PlayStep,
+  PlayTrack,
+  PlayTrackerResult,
+  PlayTrackerState,
+  PlaybackSignal,
+} from "./playEvents.ts";
