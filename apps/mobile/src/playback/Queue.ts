@@ -34,6 +34,13 @@ export interface QueueTrack {
 /** The queue as the app shows it (Up Next, shuffle and repeat toggles, the playing row). */
 export const queueState = makeExternalStore<QueueState>(EMPTY_QUEUE);
 
+/**
+ * Counts the times the queue sent the current entry back to its start
+ * (previous after three seconds, or next past the end of the queue), which
+ * ends the play going on (see `PlayHistory`).
+ */
+export const queueRestarts = makeExternalStore(0);
+
 export class Queue extends Context.Service<
   Queue,
   {
@@ -158,9 +165,11 @@ export const layer = Layer.effect(
             yield* player.play;
             break;
           case "restart":
+            queueRestarts.update((count) => count + 1);
             yield* player.seekTo(0);
             break;
           case "stop":
+            queueRestarts.update((count) => count + 1);
             yield* player.pause;
             yield* player.seekTo(0);
             break;

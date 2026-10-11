@@ -11,6 +11,7 @@ import {
   sortKey,
   type IndexedFile,
   type LibraryTrack,
+  type PlayEvent,
 } from "@wave/core";
 import { and, asc, desc, eq, inArray, ne, or, sql, type SQL } from "drizzle-orm";
 import { drizzle, type ExpoSQLiteDatabase } from "drizzle-orm/expo-sqlite";
@@ -23,6 +24,7 @@ import * as Layer from "effect/Layer";
 import { openDatabaseSync } from "expo-sqlite";
 
 import migrations from "./db/migrations";
+import { homeSections, recordPlay, updatePlay, type HomeSections } from "./db/playHistory";
 import * as schema from "./db/schema";
 import type { KnownFile } from "./NativeScanner";
 
@@ -342,6 +344,12 @@ export class LibraryStore extends Context.Service<
     readonly setFavorite: (trackId: number, on: boolean) => Effect.Effect<void, LibraryStoreError>;
     /** Starred tracks, most recently starred first, for Library › Favorites. */
     readonly listFavorites: Effect.Effect<readonly SongRow[], LibraryStoreError>;
+    /** Records a play as it starts (Core's `PlayEvent`); returns its id, to update it as it goes on. */
+    readonly recordPlay: (play: PlayEvent) => Effect.Effect<number, LibraryStoreError>;
+    /** Brings a recorded play up to date: listened time, how it ended (so far), counted. */
+    readonly updatePlay: (id: number, play: PlayEvent) => Effect.Effect<void, LibraryStoreError>;
+    /** The Home tab: Recently Added, Recently Played, Most Played and Favorites. */
+    readonly home: Effect.Effect<HomeSections, LibraryStoreError>;
   }
 >()("@wave/mobile/library/LibraryStore") {}
 
@@ -1380,6 +1388,12 @@ const make = Effect.gen(function* () {
         .orderBy(desc(schema.favorites.addedAt), ...BY_TITLE)
         .all(),
     ),
+
+    recordPlay: (play) => attempt("record the play", () => recordPlay(db, play)),
+
+    updatePlay: (id, play) => attempt("update the play", () => updatePlay(db, id, play)),
+
+    home: attempt("read Home", () => homeSections(db)),
   });
 });
 

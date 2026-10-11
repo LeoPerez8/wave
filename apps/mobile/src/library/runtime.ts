@@ -6,6 +6,7 @@ import * as ManagedRuntime from "effect/ManagedRuntime";
 import { AppState } from "react-native";
 
 import * as PlaybackPersistence from "@/playback/PlaybackPersistence";
+import * as PlayHistory from "@/playback/PlayHistory";
 import * as Player from "@/playback/Player";
 import * as Queue from "@/playback/Queue";
 
@@ -30,7 +31,9 @@ const services = Layer.mergeAll(
   Queue.layer.pipe(Layer.provideMerge(Player.layer)),
 );
 
-export const appLayer = PlaybackPersistence.layer.pipe(Layer.provideMerge(services));
+export const appLayer = Layer.mergeAll(PlaybackPersistence.layer, PlayHistory.layer).pipe(
+  Layer.provideMerge(services),
+);
 
 export const appRuntime = ManagedRuntime.make(appLayer);
 

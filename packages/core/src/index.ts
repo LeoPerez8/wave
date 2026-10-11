@@ -89,3 +89,20 @@ export {
   stepSleepMinutes,
 } from "./sleepTimer.ts";
 export type { SleepTimer, SleepTimerChoice, SleepTimerClock } from "./sleepTimer.ts";
+export {
+  COUNTED_PLAY_MS,
+  EMPTY_PLAY_TRACKER,
+  isCountedPlay,
+  playSoFar,
+  trackPlays,
+} from "./playEvents.ts";
+export type {
+  PlayContext,
+  PlayEndReason,
+  PlayEvent,
+  PlayStep,
+  PlayTrack,
+  PlayTrackerResult,
+  PlayTrackerState,
+  PlaybackSignal,
+} from "./playEvents.ts";

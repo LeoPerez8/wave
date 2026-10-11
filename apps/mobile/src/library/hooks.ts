@@ -3,7 +3,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { AppState } from "react-native";
 
 import { WaveNative } from "@/native/waveNative";
+import { playHistoryVersion } from "@/playback/PlayHistory";
 
+import type { HomeSections } from "./db/playHistory";
 import { libraryVersion, scanState, type ScanState } from "./LibraryScan";
 import {
   LibraryStore,
@@ -207,3 +209,18 @@ export const usePlaylist = (id: number): PlaylistDetail | null | undefined => {
 /** Library › Favorites: starred songs, most recently starred first. */
 export const useFavoriteSongs = (): readonly SongRow[] | undefined =>
   useLibraryQuery<readonly SongRow[] | undefined>(listFavorites, undefined, useFavoritesSaved());
+
+const readHome = LibraryStore.use((store) => store.home);
+
+/**
+ * The Home tab's sections, or undefined while loading. Re-read as soon as a
+ * play starts or ends, or a star is saved.
+ */
+export const useHome = (): HomeSections | undefined => {
+  const plays = useSyncExternalStore(playHistoryVersion.subscribe, playHistoryVersion.get);
+  return useLibraryQuery<HomeSections | undefined>(
+    readHome,
+    undefined,
+    plays + useFavoritesSaved(),
+  );
+};

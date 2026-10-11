@@ -168,6 +168,25 @@ CREATE TABLE \`favorites\` (
 );
 `;
 
+// No foreign key on track_id: history outlives deleted files (see schema.ts).
+const m0005 = `
+CREATE TABLE \`play_events\` (
+	\`id\` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	\`track_id\` integer NOT NULL,
+	\`started_at\` integer NOT NULL,
+	\`listened_ms\` integer NOT NULL,
+	\`duration_ms\` integer,
+	\`end_reason\` text NOT NULL,
+	\`counted\` integer NOT NULL,
+	\`context_type\` text,
+	\`context_id\` text
+);
+--> statement-breakpoint
+CREATE INDEX \`play_events_track_idx\` ON \`play_events\` (\`track_id\`);
+--> statement-breakpoint
+CREATE INDEX \`play_events_started_at_idx\` ON \`play_events\` (\`started_at\`);
+`;
+
 export default {
   journal: {
     entries: [
@@ -176,7 +195,8 @@ export default {
       { idx: 2, when: 1_791_979_200_000, tag: "0002_playback_state", breakpoints: true },
       { idx: 3, when: 1_792_065_600_000, tag: "0003_recent_searches", breakpoints: true },
       { idx: 4, when: 1_792_152_000_000, tag: "0004_playlists_favorites", breakpoints: true },
+      { idx: 5, when: 1_792_238_400_000, tag: "0005_play_events", breakpoints: true },
     ],
   },
-  migrations: { m0000, m0001, m0002, m0003, m0004 },
+  migrations: { m0000, m0001, m0002, m0003, m0004, m0005 },
 };
