@@ -140,7 +140,7 @@ The world rejects the category default it was chosen against: bold large titles,
 - Light large titles; one size per list, rank by weight and tint.
 - Small tracked-caps catalog lines for section heads and cover captions.
 - Teal for active, ember for favorite and now playing; nothing else is coloured.
-- Flat: no shadows, no glass, no gradients.
+- Flat: no shadows, no gradients. Glass only on the floating chrome (tab bar, Search pill, mini player).
 - Every press sinks and dims for a duration the owner sets in Settings.
 
 ## Colors
@@ -164,7 +164,7 @@ A cool, low-chroma tonal ramp carrying two small, saturated voices: teal and emb
 - **Rule** (`separator`): one-pixel hairlines between entries and around setting rows.
 - **Field** (`fill`): the square behind artwork that has no image, and empty cover slots.
 
-The full ramp lives in `global.css` as `tone-0` (lightest, `#eff4f6`) to `tone-10` (darkest, `#121b1d`); each semantic token is a step on it, in both themes. `surface`, `grouped` and `on-accent` are also declared there but are not yet used by this world's components; they wait for the tab bar and mini player.
+The full ramp lives in `global.css` as `tone-0` (lightest, `#eff4f6`) to `tone-10` (darkest, `#121b1d`); each semantic token is a step on it, in both themes. `surface` is the tint laid over the glass of the floating chrome (at about 72%); `grouped` and `on-accent` are also declared there but are not yet used by this world's components.
 
 ### Named Rules
 
@@ -208,7 +208,7 @@ Sizes are in dp and scale with the system font size; at font scale 1.3 album fur
 
 ## Layout
 
-Everything is a whole (or half/quarter) multiple of the 8dp cell (`CELL` in `src/catalog/grid.ts`): side margin 24dp, tile gutter 16dp, row height 56dp, a 32dp state cell, 40dp track thumbnails, and a 24dp-wide spine. Vertical rhythm uses the same steps: 12dp between artwork and its caption, 40dp above "Recently added", 24dp between album rows, 48dp of bottom padding.
+Everything is a whole (or half/quarter) multiple of the 8dp cell (`CELL` in `src/catalog/grid.ts`): side margin 24dp, tile gutter 16dp, row height 56dp, a 32dp state cell, 40dp track thumbnails, and a 24dp-wide spine. Vertical rhythm uses the same steps: 12dp between artwork and its caption, 40dp above "Recently added", 24dp between album rows. Scrolling screens pad their bottom so the last row clears the floating chrome plus 24dp (`useChromeInset()` in `src/chrome/chrome.tsx`).
 
 Album grids are two columns. Tile width is computed from the window: screen width minus the left margin, the spine and its inset, and one gutter, halved. Each tile reserves a fixed 96dp caption block (catalog line, two lines of title, furniture line), so every furniture line lands in the same place.
 
@@ -226,15 +226,17 @@ The A–Z spine sits 24dp in from the right edge, not on it, to stay clear of An
 
 ## Elevation & Depth
 
-The world is flat. There are no shadows, no elevation, no blur and no gradients; depth comes from the tone ramp (field squares and hairlines a step off the ground) and from artwork itself. The only overlay is the spine's letter field: the ground at 90% opacity laid over the list, with the huge letter centred in it.
+The world is flat. There are no shadows, no elevation and no gradients; depth comes from the tone ramp (field squares and hairlines a step off the ground) and from artwork itself. Two things float: the spine's letter field (the ground at 90% opacity laid over the list, with the huge letter centred in it) and the floating chrome at the bottom, which is glass.
+
+**Glass** (the chrome only): a live blur of the content scrolling underneath, a slight lens-like refraction at the rounded edge with a specular rim lit from the top left, and the `surface` tone laid over it so text stays legible. It is native (`modules/wave-glass`, RenderEffect + AGSL on the RenderThread) and sized for 120 Hz; the blur + tint + rim fallback is one line away (`GLASS` in `src/glass/Glass.tsx`). See `docs/glass-spike.md`.
 
 ### Named Rules
 
-**The Flat Field Rule.** Surfaces never cast shadows. Separate things with a ramp step or a hairline. Glass is not part of this world unless the tab-bar/mini-player build decides otherwise against the 120 Hz budget.
+**The Flat Field Rule.** Surfaces never cast shadows. Separate things with a ramp step or a hairline. Glass belongs to the floating chrome alone (tab bar, Search pill, mini player); content surfaces stay flat.
 
 ## Shapes
 
-Square everywhere. Artwork, empty cover slots, track thumbnails and placeholder fields have no corner radius and no frame. Structure is drawn with one-pixel hairlines in the separator tone, running the full content width between entries; there are no boxed cards, no chips and no pills. The one recurring silhouette is the thin vertical column of spine letters on the right.
+Square everywhere. Artwork, empty cover slots, track thumbnails and placeholder fields have no corner radius and no frame. Structure is drawn with one-pixel hairlines in the separator tone, running the full content width between entries; there are no boxed cards and no chips. The floating chrome is the one exception: its glass surfaces are pills (fully rounded ends), set apart from the square content beneath. The recurring silhouettes are the thin vertical column of spine letters on the right and the pills at the bottom.
 
 ### Named Rules
 
@@ -278,7 +280,8 @@ Small tracked caps (Label) in graphite by default, with teal and ember tones ava
 - **Tab screens** open on a light large title at top-left, with at most one trailing icon button on the title line.
 - **Pushed screens** show a Back icon button aligned so its glyph sits on the 24dp margin, then the title in Title type. System and predictive Back both work.
 - **In-screen switches** (Albums / Songs) are text tabs in Body: selected is 600 ink with a 2dp teal underline, unselected is 400 graphite; each tab is at least 48dp tall.
-- **Tab bar and mini player** are not yet built in this world; ticket #8 brings them in. The current tab bar is a scaffold placeholder and not part of this system.
+- **Tab bar** floats a cell above the system inset with 24dp side margins: Home and Library share one 64dp glass pill (24dp line icon over a Caption 600 label, teal when current, graphite otherwise), and Search sits beside it, a cell apart, in its own 64dp round glass pill with the icon only. Tabs press with `selection` haptics.
+- **Mini player** floats a cell above the tab bar (or above the system inset on pushed Library screens) in a 56dp glass pill with the same side margins: a 40dp square thumbnail, title (Body 500) over artist (Body 400 graphite), then play/pause and next as icon buttons. Tap opens Now Playing. Swipe left for the next track, right for the previous one: the content follows the finger and fades, and a skip leaves the way it was pushed with a light `impact` haptic; a short slow drag springs back. Screen readers get "Next track" / "Previous track" actions instead of the swipe.
 
 ### Stepper (Settings)
 
@@ -312,5 +315,5 @@ A 40dp line icon in pewter, an Entry-type title in ink, a Subheadline message in
 - **Don't** use bold large titles; titles are weight 300.
 - **Don't** add icons or chevrons to Library entry rows.
 - **Don't** set text in `tertiary`.
-- **Don't** add shadows, gradients or blur; separate with a ramp step or a hairline.
+- **Don't** add shadows, gradients or blur; separate with a ramp step or a hairline. Glass is for the floating chrome only.
 - **Don't** introduce a third accent colour.

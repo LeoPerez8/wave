@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 
-import { WaveGlass, type FrameStats } from "./waveGlass";
+import { WaveGlass, type FrameStats } from "@/glass/waveGlass";
 
 /** Windows of 500 ms kept for the rolling average (5 s). */
 const WINDOWS = 10;

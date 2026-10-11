@@ -13,7 +13,7 @@ export default function HomeScreen() {
         title="Nothing played yet"
         message="Your recently added, recently played and most played music will show up here."
       />
-      {/* Temporary entry to the glass spike (#4); removed once a technique is chosen. */}
+      {/* Temporary entry to the glass spike (#4), kept until its numbers confirm the technique. */}
       <Link href="/dev/glass" asChild>
         <Pressable className="mt-12 self-center py-2">
           <Text className="font-sans text-footnote text-tertiary">Developer: glass spike</Text>
