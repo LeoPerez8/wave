@@ -11,16 +11,7 @@ import type { SongRow } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 
 import { Player, playbackState } from "./Player";
-import { Queue, currentPositionMs, queueState, type QueueTrack } from "./Queue";
-
-const toTrack = (song: SongRow): QueueTrack => ({
-  id: String(song.id),
-  path: song.path,
-  title: song.title,
-  artist: song.artist,
-  album: song.album,
-  artworkPath: song.artworkPath,
-});
+import { Queue, currentPositionMs, queueState, toQueueTrack } from "./Queue";
 
 const run = (effect: Effect.Effect<void, unknown, Player | Queue>): void => {
   void appRuntime.runPromise(effect).catch((error: unknown) =>
@@ -35,7 +26,7 @@ const dispatch = (command: QueueCommand, songs: readonly SongRow[] = []): void =
   run(
     Effect.gen(function* () {
       const queue = yield* Queue;
-      yield* queue.dispatch(command, songs.map(toTrack));
+      yield* queue.dispatch(command, songs.map(toQueueTrack));
     }),
   );
 
