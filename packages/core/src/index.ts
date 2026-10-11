@@ -79,3 +79,13 @@ export { dragTargetIndex, resolveRemoveSwipe } from "./rowGestures.ts";
 export type { RowDrag } from "./rowGestures.ts";
 export { currentLyricIndex, parseLyrics, pickLyrics } from "./lyrics.ts";
 export type { LyricLine, Lyrics, LyricsSources } from "./lyrics.ts";
+export {
+  CUSTOM_SLEEP_MINUTES,
+  SLEEP_TIMER_PRESETS,
+  formatSleepMinutes,
+  formatSleepRemaining,
+  sleepTimerRemaining,
+  startSleepTimer,
+  stepSleepMinutes,
+} from "./sleepTimer.ts";
+export type { SleepTimer, SleepTimerChoice, SleepTimerClock } from "./sleepTimer.ts";

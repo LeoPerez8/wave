@@ -16,6 +16,7 @@ import { PlayerView } from "@/nowPlaying/PlayerView";
 import { QueueHeader, UpNextList } from "@/nowPlaying/QueueView";
 import { Scrubber } from "@/nowPlaying/Scrubber";
 import { closeNowPlaying, nowPlayingMounted, sheetHeight, sheetOffset } from "@/nowPlaying/sheet";
+import { SleepTimerButton } from "@/nowPlaying/SleepTimer";
 import { TrackHeader } from "@/nowPlaying/TrackHeader";
 import { Transport } from "@/nowPlaying/Transport";
 import { useCurrentTrackId } from "@/playback/hooks";
@@ -154,6 +155,7 @@ export default function NowPlayingScreen() {
               on={view === "lyrics"}
               onPress={toggleLyrics}
             />
+            <SleepTimerButton />
             <View className="flex-1" />
             <ViewToggle
               icon={IconListNumbers}

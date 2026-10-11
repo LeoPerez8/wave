@@ -1,3 +1,4 @@
+import type { SleepTimer } from "@wave/core";
 import { NativeModule, requireNativeModule } from "expo";
 
 /** One track handed to the native player (`modules/wave-native`, `WavePlayerModule`). */
@@ -62,11 +63,17 @@ export interface NativeItemIds {
   readonly currentKey: string | null;
 }
 
+/** The running sleep timer (Core's `SleepTimer`), or null, whenever it changes. */
+export interface SleepTimerEvent {
+  readonly timer: SleepTimer | null;
+}
+
 type WavePlayerEvents = {
   onPlaybackState: (state: NativePlayerState) => void;
   onPosition: (position: PlayerPosition) => void;
   onItemTransition: (event: ItemTransitionEvent) => void;
   onPlayerError: (event: PlayerErrorEvent) => void;
+  onSleepTimer: (event: SleepTimerEvent) => void;
 };
 
 declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
@@ -81,6 +88,13 @@ declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
   pause(): Promise<void>;
   seekTo(positionMs: number): Promise<void>;
   getState(): Promise<NativePlayerState>;
+  /**
+   * Starts the sleep timer in the playback service, which enforces it even with
+   * Wave in the background. `endsAt` (wall-clock ms) is for `deadline` only.
+   */
+  setSleepTimer(type: SleepTimer["type"], endsAt: number | null): Promise<void>;
+  cancelSleepTimer(): Promise<void>;
+  getSleepTimer(): Promise<SleepTimer | null>;
 }
 
 export const WavePlayer = requireNativeModule<WavePlayerModule>("WavePlayer");

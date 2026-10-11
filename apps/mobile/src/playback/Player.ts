@@ -1,3 +1,4 @@
+import type { SleepTimer } from "@wave/core";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -45,6 +46,9 @@ const IDLE: PlaybackState = {
  */
 export const playbackState = makeExternalStore<PlaybackState>(IDLE);
 
+/** The sleep timer the playback service is running, if any (it enforces it natively). */
+export const sleepTimerState = makeExternalStore<SleepTimer | null>(null);
+
 /**
  * The native player as a typed service. JS owns the order (Core's queue
  * engine); the player holds the list it's synced to and plays it gaplessly.
@@ -68,6 +72,8 @@ export class Player extends Context.Service<
     readonly play: Effect.Effect<void, PlayerError>;
     readonly pause: Effect.Effect<void, PlayerError>;
     readonly seekTo: (positionMs: number) => Effect.Effect<void, PlayerError>;
+    /** Starts (or, with null, cancels) the sleep timer in the playback service. */
+    readonly setSleepTimer: (timer: SleepTimer | null) => Effect.Effect<void, PlayerError>;
   }
 >()("@wave/mobile/playback/Player") {}
 
@@ -93,10 +99,14 @@ const syncState = Effect.acquireRelease(
       WavePlayer.addListener("onPlayerError", (event) =>
         playbackState.update((previous) => ({ ...previous, error: event.message })),
       ),
+      WavePlayer.addListener("onSleepTimer", (event) => sleepTimerState.set(event.timer)),
     ];
     // The service may already be playing (Wave was reopened from the notification).
     WavePlayer.getState()
       .then((state) => playbackState.update((previous) => ({ ...previous, ...fromNative(state) })))
+      .catch(() => undefined);
+    WavePlayer.getSleepTimer()
+      .then((timer) => sleepTimerState.set(timer))
       .catch(() => undefined);
     return subscriptions;
   }),
@@ -127,6 +137,12 @@ export const layer = Layer.effect(
       play: call("resume playback", () => WavePlayer.play()),
       pause: call("pause playback", () => WavePlayer.pause()),
       seekTo: (positionMs) => call("seek", () => WavePlayer.seekTo(positionMs)),
+      setSleepTimer: (timer) =>
+        timer === null
+          ? call("cancel the sleep timer", () => WavePlayer.cancelSleepTimer())
+          : call("set the sleep timer", () =>
+              WavePlayer.setSleepTimer(timer.type, timer.type === "deadline" ? timer.endsAt : null),
+            ),
     });
   }),
 );

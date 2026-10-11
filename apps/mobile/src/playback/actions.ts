@@ -1,4 +1,10 @@
-import type { QueueCommand, QueueContext, RepeatMode } from "@wave/core";
+import {
+  startSleepTimer,
+  type QueueCommand,
+  type QueueContext,
+  type RepeatMode,
+  type SleepTimerChoice,
+} from "@wave/core";
 import * as Effect from "effect/Effect";
 
 import type { SongRow } from "@/library/LibraryStore";
@@ -109,3 +115,26 @@ export const seekTo = (positionMs: number): void => {
     }),
   );
 };
+
+/**
+ * Starts the sleep timer, replacing a running one. The playback service
+ * enforces it, and `sleepTimerState` follows it from there.
+ */
+export const setSleepTimer = (choice: SleepTimerChoice): void => {
+  const timer = startSleepTimer(choice, Date.now());
+  if (timer === null) return;
+  run(
+    Effect.gen(function* () {
+      const player = yield* Player;
+      yield* player.setSleepTimer(timer);
+    }),
+  );
+};
+
+export const cancelSleepTimer = (): void =>
+  run(
+    Effect.gen(function* () {
+      const player = yield* Player;
+      yield* player.setSleepTimer(null);
+    }),
+  );
