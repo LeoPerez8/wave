@@ -1,0 +1,18 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "react", "unicorn", "oxc", "import"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn"
+  },
+  "rules": {
+    "react/react-in-jsx-scope": "off"
+  },
+  "ignorePatterns": [
+    "**/node_modules/**",
+    "**/android/**",
+    "**/ios/**",
+    "**/.expo/**",
+    "apps/mobile/uniwind-types.d.ts"
+  ]
+}

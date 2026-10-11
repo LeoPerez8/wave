@@ -1,0 +1,9 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Versions shared across workspace packages. SDK-bound mobile dependencies are
+# pinned in the app's package.json by `expo install` instead.
+catalog:
+  "@types/node": 24.12.4
+  typescript: 7.0.2
