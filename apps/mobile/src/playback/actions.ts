@@ -43,3 +43,15 @@ export const togglePlayPause = (): void =>
       yield* playbackState.get().playWhenReady ? player.pause : player.play;
     }),
   );
+
+// Minimal skips for the mini player (#8) until the queue engine (#7) brings real ones.
+// With one item loaded there is no next track, and previous restarts the current one.
+export const skipToNext = (): void => undefined;
+
+export const skipToPrevious = (): void =>
+  run(
+    Effect.gen(function* () {
+      const player = yield* Player;
+      yield* player.seekTo(0);
+    }),
+  );
