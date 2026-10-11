@@ -1,4 +1,4 @@
-import { IconChevronDown, IconListNumbers } from "@tabler/icons-react-native";
+import { IconChevronDown, IconListNumbers, IconQuote } from "@tabler/icons-react-native";
 import type { ComponentType } from "react";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { BackHandler, StyleSheet, Text, View, useWindowDimensions } from "react-native";
@@ -11,17 +11,19 @@ import { Press } from "@/motion/Press";
 import { Background } from "@/nowPlaying/Background";
 import { DismissArea } from "@/nowPlaying/DismissArea";
 import { useNowPlayingGradient, useTrackDetails } from "@/nowPlaying/hooks";
+import { LyricsView } from "@/nowPlaying/LyricsView";
 import { PlayerView } from "@/nowPlaying/PlayerView";
 import { QueueHeader, UpNextList } from "@/nowPlaying/QueueView";
 import { Scrubber } from "@/nowPlaying/Scrubber";
 import { closeNowPlaying, nowPlayingMounted, sheetHeight, sheetOffset } from "@/nowPlaying/sheet";
+import { TrackHeader } from "@/nowPlaying/TrackHeader";
 import { Transport } from "@/nowPlaying/Transport";
 import { useCurrentTrackId } from "@/playback/hooks";
 import { playbackState } from "@/playback/Player";
 import { useThemeColor } from "@/theme/useThemeColor";
 
-/** What fills the space above the controls. Lyrics (#14) adds a view here. */
-export type NowPlayingView = "player" | "queue";
+/** What fills the space above the controls. */
+export type NowPlayingView = "player" | "queue" | "lyrics";
 
 type IconProps = { size?: number; color?: string; strokeWidth?: number };
 
@@ -59,8 +61,8 @@ const close = (): void => closeNowPlaying();
 
 /**
  * Now Playing: a sheet over the tabs, tinted by the artwork. The player view
- * (artwork, title, artist and album) or the Queue view sits above the
- * scrubber and transport. Drag it down, tap the chevron or press Back to
+ * (artwork, title, artist and album), the Queue view or the Lyrics view sits
+ * above the scrubber and transport. Drag it down, tap the chevron or press Back to
  * dismiss it.
  */
 export default function NowPlayingScreen() {
@@ -95,6 +97,7 @@ export default function NowPlayingScreen() {
   }));
 
   const toggleQueue = () => setView((current) => (current === "queue" ? "player" : "queue"));
+  const toggleLyrics = () => setView((current) => (current === "lyrics" ? "player" : "lyrics"));
 
   return (
     <Animated.View style={[StyleSheet.absoluteFill, sheetStyle]}>
@@ -128,6 +131,13 @@ export default function NowPlayingScreen() {
             </DismissArea>
             <UpNextList bottomInset={CELL * 2} />
           </View>
+        ) : view === "lyrics" ? (
+          <View className="flex-1">
+            <DismissArea>
+              <TrackHeader item={item} />
+            </DismissArea>
+            <LyricsView path={details?.path ?? null} />
+          </View>
         ) : (
           <DismissArea style={{ flex: 1, paddingTop: CELL }}>
             <PlayerView item={item} details={details} playing={playing} />
@@ -137,7 +147,14 @@ export default function NowPlayingScreen() {
         <DismissArea style={{ paddingTop: CELL * 3, gap: CELL * 2 }}>
           <Scrubber />
           <Transport />
-          <View className="flex-row items-center justify-end">
+          <View className="flex-row items-center">
+            <ViewToggle
+              icon={IconQuote}
+              label="Lyrics"
+              on={view === "lyrics"}
+              onPress={toggleLyrics}
+            />
+            <View className="flex-1" />
             <ViewToggle
               icon={IconListNumbers}
               label="Queue"

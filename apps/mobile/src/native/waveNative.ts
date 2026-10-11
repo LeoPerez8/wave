@@ -75,6 +75,12 @@ export interface ScanErrorEvent {
   readonly message: string;
 }
 
+/** A track's lyrics as found on disk; Core's `pickLyrics` decides what to show. */
+export interface NativeLyrics {
+  readonly embedded: string | null;
+  readonly sidecar: string | null;
+}
+
 /** The outcome of the system folder picker. */
 export type FolderPick =
   | { readonly status: "picked"; readonly path: string }
@@ -113,6 +119,8 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
     knownModifiedAt: readonly number[],
   ): number;
   cancelScan(scanId: number): void;
+  /** A track's lyrics, unparsed: from its tags and from a sidecar `.lrc` beside it. */
+  readLyrics(path: string): Promise<NativeLyrics>;
 }
 
 export const WaveNative = requireNativeModule<WaveNativeModule>("WaveNative");

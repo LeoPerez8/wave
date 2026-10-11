@@ -45,6 +45,7 @@ import type { PlaybackState } from "@/playback/Player";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { useQueueSongs } from "./hooks";
+import { TrackHeader } from "./TrackHeader";
 
 type IconProps = { size?: number; color?: string; strokeWidth?: number };
 
@@ -108,17 +109,7 @@ export function QueueHeader({ item }: { item: NonNullable<PlaybackState["item"]>
   const count = queue.entries.length - queue.index - 1;
   return (
     <View>
-      <View className="flex-row items-center" style={{ height: ROW + CELL * 2, gap: CELL * 1.5 }}>
-        <Artwork uri={item.artworkUri ?? undefined} size={ROW} />
-        <View className="flex-1">
-          <Text numberOfLines={1} className="font-sans text-body font-medium text-foreground">
-            {item.title ?? "Unknown title"}
-          </Text>
-          <Text numberOfLines={1} className="font-sans text-body text-secondary">
-            {item.artist ?? "Unknown Artist"}
-          </Text>
-        </View>
-      </View>
+      <TrackHeader item={item} />
       <Hairline />
       <View className="flex-row" style={{ gap: CELL }}>
         <Toggle

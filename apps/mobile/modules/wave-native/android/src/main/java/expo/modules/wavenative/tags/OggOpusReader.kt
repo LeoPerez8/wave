@@ -126,6 +126,7 @@ class OggOpusReader : TagReader {
         durationMs = durationMs,
         sampleRate = sampleRate,
         artwork = this["METADATA_BLOCK_PICTURE"]?.let(::pickPicture),
+        lyrics = first("LYRICS", "UNSYNCEDLYRICS", "UNSYNCED LYRICS"),
       )
     }
 
