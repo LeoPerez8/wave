@@ -1,7 +1,7 @@
 import { makeImageFromView, type SkImage } from "@shopify/react-native-skia";
 import { IconHome, IconSearch, IconStack2 } from "@tabler/icons-react-native";
 import { router } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ComponentRef } from "react";
 import {
   Pressable,
   StyleSheet,
@@ -89,7 +89,7 @@ export default function GlassSpikeScreen() {
   // Room for the controls floating at the top.
   const contentTop = insets.top + 150;
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
-  const contentRef = useRef<View>(null);
+  const contentRef = useRef<ComponentRef<typeof View>>(null);
   const scrollY = useSharedValue(0);
   const direction = useSharedValue(1);
   const maxScroll = useSharedValue(0);
@@ -122,7 +122,10 @@ export default function GlassSpikeScreen() {
 
   const takeSnapshot = useCallback(async () => {
     const started = performance.now();
-    const image = await makeImageFromView(contentRef);
+    // Skia's types predate RN's element refs; at runtime it only needs a ref findNodeHandle accepts.
+    const image = await makeImageFromView(
+      contentRef as unknown as Parameters<typeof makeImageFromView>[0],
+    );
     setSnapshotMs(performance.now() - started);
     setSnapshot(image);
   }, []);
