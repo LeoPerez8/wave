@@ -1,6 +1,10 @@
 /** The Library's entries, in the order they are listed. */
 export const LIBRARY_SECTIONS = [
-  { slug: "playlists", label: "Playlists", empty: "Playlists you make will be listed here." },
+  {
+    slug: "playlists",
+    label: "Playlists",
+    empty: "Make a playlist, then add songs, albums or artists to it from their menus.",
+  },
   { slug: "artists", label: "Artists", empty: "Artists appear once Wave has scanned your music." },
   { slug: "albums", label: "Albums", empty: "Albums appear once Wave has scanned your music." },
   { slug: "songs", label: "Songs", empty: "Songs appear once Wave has scanned your music." },
@@ -10,7 +14,11 @@ export const LIBRARY_SECTIONS = [
     label: "Folders",
     empty: "Your music folders appear once Wave has scanned them.",
   },
-  { slug: "favorites", label: "Favorites", empty: "Star a song to keep it here." },
+  {
+    slug: "favorites",
+    label: "Favorites",
+    empty: "Star a song from its menu or from Now Playing to keep it here.",
+  },
 ] as const;
 
 export type LibrarySection = (typeof LIBRARY_SECTIONS)[number];

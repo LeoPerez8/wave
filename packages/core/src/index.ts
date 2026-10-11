@@ -51,5 +51,31 @@ export { settleSheet } from "./sheet.ts";
 export type { SheetDrag, SheetState } from "./sheet.ts";
 export { reorderShift, reorderTarget } from "./reorder.ts";
 export type { ReorderDrag, ReorderRow } from "./reorder.ts";
+export {
+  RECENT_SEARCHES,
+  createSearchIndex,
+  normalizeSearchText,
+  rememberSearch,
+} from "./search.ts";
+export type {
+  SearchEntry,
+  SearchGroup,
+  SearchIndex,
+  SearchKind,
+  SearchOptions,
+  SearchResults,
+} from "./search.ts";
+export {
+  PLAYLIST_NAME_MAX,
+  checkPlaylistName,
+  describePlaylistAdd,
+  moveItem,
+  nextPlaylistName,
+  planPlaylistAdd,
+  playlistMosaic,
+} from "./playlists.ts";
+export type { PlaylistAdd, PlaylistNameCheck } from "./playlists.ts";
+export { dragTargetIndex, resolveRemoveSwipe } from "./rowGestures.ts";
+export type { RowDrag } from "./rowGestures.ts";
 export { currentLyricIndex, parseLyrics, pickLyrics } from "./lyrics.ts";
 export type { LyricLine, Lyrics, LyricsSources } from "./lyrics.ts";
