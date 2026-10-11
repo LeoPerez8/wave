@@ -25,6 +25,12 @@ import { chrome, useTabBarTop } from "@/chrome/chrome";
 import { IconButton } from "@/components/IconButton";
 import { Glass } from "@/glass/Glass";
 import { Press } from "@/motion/Press";
+import {
+  beginNowPlayingDrag,
+  endNowPlayingDrag,
+  sheetHeight,
+  sheetOffset,
+} from "@/nowPlaying/sheet";
 
 import { skipToNext, skipToPrevious, togglePlayPause } from "./actions";
 import { playbackState } from "./Player";
@@ -105,6 +111,25 @@ export function MiniPlayer({ backdropId, onOpen }: Props) {
     },
   });
 
+  // Swiping up pulls Now Playing out of the mini player, following the finger.
+  const openPan = usePanGesture({
+    activeOffsetY: [-DRAG_SLOP, 1_000_000],
+    failOffsetX: [-DRAG_SLOP, DRAG_SLOP],
+    onActivate: () => {
+      "worklet";
+      scheduleOnRN(beginNowPlayingDrag);
+    },
+    onUpdate: (event) => {
+      "worklet";
+      const height = sheetHeight.get();
+      sheetOffset.set(Math.min(height, Math.max(0, height + event.translationY)));
+    },
+    onDeactivate: (event) => {
+      "worklet";
+      scheduleOnRN(endNowPlayingDrag, event.translationY, event.velocityY);
+    },
+  });
+
   const contentStyle = useAnimatedStyle(() => ({
     opacity: 1 - Math.min(1, Math.abs(offset.get()) / width.get()) * 0.8,
     transform: [{ translateX: offset.get() }],
@@ -115,62 +140,67 @@ export function MiniPlayer({ backdropId, onOpen }: Props) {
   const subtitle = error === null ? (item.artist ?? "Unknown Artist") : "Couldn't play this file";
 
   return (
-    <View
-      pointerEvents="box-none"
-      className="absolute"
-      style={{ left: grid.margin, right: grid.margin, bottom, height: chrome.miniPlayer }}
-      onLayout={(event) => {
-        const measured = Math.max(1, event.nativeEvent.layout.width);
-        widthRef.current = measured;
-        width.set(measured);
-      }}
-    >
-      <Glass backdropId={backdropId} cornerRadius={RADIUS} />
-      <View className="flex-1 overflow-hidden" style={{ borderRadius: RADIUS }}>
-        <GestureDetector gesture={pan}>
-          <Animated.View className="flex-1 flex-row items-center" style={contentStyle}>
-            <Press
-              accessibilityRole="button"
-              accessibilityLabel={`Now playing: ${title}, ${subtitle}`}
-              accessibilityHint="Opens Now Playing"
-              accessibilityActions={[
-                { name: "next", label: "Next track" },
-                { name: "previous", label: "Previous track" },
-              ]}
-              onAccessibilityAction={(event) =>
-                skip(event.nativeEvent.actionName === "next" ? "next" : "previous")
-              }
-              onPress={onOpen}
-              haptic="selection"
-              depth={0.015}
-              className="flex-1 flex-row items-center self-stretch"
-              style={{ gap: CELL * 1.5, paddingLeft: CELL * 1.5 }}
-            >
-              <Artwork uri={item.artworkUri ?? undefined} size={CELL * 5} />
-              <View className="flex-1">
-                <Text numberOfLines={1} className="font-sans text-body font-medium text-foreground">
-                  {title}
-                </Text>
-                <Text numberOfLines={1} className="font-sans text-body text-secondary">
-                  {subtitle}
-                </Text>
+    <GestureDetector gesture={openPan}>
+      <View
+        pointerEvents="box-none"
+        className="absolute"
+        style={{ left: grid.margin, right: grid.margin, bottom, height: chrome.miniPlayer }}
+        onLayout={(event) => {
+          const measured = Math.max(1, event.nativeEvent.layout.width);
+          widthRef.current = measured;
+          width.set(measured);
+        }}
+      >
+        <Glass backdropId={backdropId} cornerRadius={RADIUS} />
+        <View className="flex-1 overflow-hidden" style={{ borderRadius: RADIUS }}>
+          <GestureDetector gesture={pan}>
+            <Animated.View className="flex-1 flex-row items-center" style={contentStyle}>
+              <Press
+                accessibilityRole="button"
+                accessibilityLabel={`Now playing: ${title}, ${subtitle}`}
+                accessibilityHint="Opens Now Playing"
+                accessibilityActions={[
+                  { name: "next", label: "Next track" },
+                  { name: "previous", label: "Previous track" },
+                ]}
+                onAccessibilityAction={(event) =>
+                  skip(event.nativeEvent.actionName === "next" ? "next" : "previous")
+                }
+                onPress={onOpen}
+                haptic="selection"
+                depth={0.015}
+                className="flex-1 flex-row items-center self-stretch"
+                style={{ gap: CELL * 1.5, paddingLeft: CELL * 1.5 }}
+              >
+                <Artwork uri={item.artworkUri ?? undefined} size={CELL * 5} />
+                <View className="flex-1">
+                  <Text
+                    numberOfLines={1}
+                    className="font-sans text-body font-medium text-foreground"
+                  >
+                    {title}
+                  </Text>
+                  <Text numberOfLines={1} className="font-sans text-body text-secondary">
+                    {subtitle}
+                  </Text>
+                </View>
+              </Press>
+              <View className="flex-row" style={{ paddingRight: CELL / 2 }}>
+                <IconButton
+                  icon={playing ? IconPlayerPauseFilled : IconPlayerPlayFilled}
+                  label={playing ? `Pause ${title}` : `Play ${title}`}
+                  onPress={togglePlayPause}
+                />
+                <IconButton
+                  icon={IconPlayerTrackNextFilled}
+                  label="Next track"
+                  onPress={skipToNext}
+                />
               </View>
-            </Press>
-            <View className="flex-row" style={{ paddingRight: CELL / 2 }}>
-              <IconButton
-                icon={playing ? IconPlayerPauseFilled : IconPlayerPlayFilled}
-                label={playing ? `Pause ${title}` : `Play ${title}`}
-                onPress={togglePlayPause}
-              />
-              <IconButton
-                icon={IconPlayerTrackNextFilled}
-                label="Next track"
-                onPress={skipToNext}
-              />
-            </View>
-          </Animated.View>
-        </GestureDetector>
+            </Animated.View>
+          </GestureDetector>
+        </View>
       </View>
-    </View>
+    </GestureDetector>
   );
 }

@@ -62,6 +62,16 @@ export interface SongRow {
   readonly artworkPath: string | null;
 }
 
+/** What Now Playing shows about a track beyond the player's item. */
+export interface TrackDetails {
+  readonly id: number;
+  readonly artistId: number;
+  readonly artist: string;
+  readonly albumId: number;
+  readonly album: string;
+  readonly palette: schema.ArtworkPalette | null;
+}
+
 export class LibraryStore extends Context.Service<
   LibraryStore,
   {
@@ -97,6 +107,12 @@ export class LibraryStore extends Context.Service<
     readonly countTracks: Effect.Effect<number, LibraryStoreError>;
     /** Every track ordered by title, for Library › Songs. */
     readonly listSongs: Effect.Effect<readonly SongRow[], LibraryStoreError>;
+    /** The playing track's links and artwork palette, for Now Playing; null once it's gone. */
+    readonly trackDetails: (id: number) => Effect.Effect<TrackDetails | null, LibraryStoreError>;
+    /** The tracks with these ids, in no particular order (missing ids are skipped). */
+    readonly songsByIds: (
+      ids: readonly number[],
+    ) => Effect.Effect<readonly SongRow[], LibraryStoreError>;
   }
 >()("@wave/mobile/library/LibraryStore") {}
 
@@ -431,8 +447,60 @@ const make = Effect.gen(function* () {
         .orderBy(asc(schema.tracks.titleSort), asc(schema.artists.sort), asc(schema.tracks.path))
         .all(),
     ),
+
+    trackDetails: (id) =>
+      attempt(
+        "read the playing track",
+        () =>
+          db
+            .select({
+              id: schema.tracks.id,
+              artistId: schema.tracks.artistId,
+              artist: schema.artists.name,
+              albumId: schema.tracks.albumId,
+              album: schema.albums.title,
+              palette: schema.artwork.palette,
+            })
+            .from(schema.tracks)
+            .innerJoin(schema.artists, eq(schema.tracks.artistId, schema.artists.id))
+            .innerJoin(schema.albums, eq(schema.tracks.albumId, schema.albums.id))
+            .leftJoin(schema.artwork, eq(schema.tracks.artworkHash, schema.artwork.hash))
+            .where(eq(schema.tracks.id, id))
+            .get() ?? null,
+      ),
+
+    songsByIds: (ids) =>
+      attempt("read queued songs", () => {
+        const rows: SongRow[] = [];
+        // Stays well under SQLite's bound-parameter limit for queues of any length.
+        for (let start = 0; start < ids.length; start += SONGS_BY_IDS_CHUNK) {
+          const chunk = ids.slice(start, start + SONGS_BY_IDS_CHUNK);
+          rows.push(
+            ...db
+              .select({
+                id: schema.tracks.id,
+                path: schema.tracks.path,
+                title: schema.tracks.title,
+                artist: schema.artists.name,
+                album: schema.albums.title,
+                durationMs: schema.tracks.durationMs,
+                thumbPath: schema.artwork.thumbPath,
+                artworkPath: schema.artwork.path,
+              })
+              .from(schema.tracks)
+              .innerJoin(schema.artists, eq(schema.tracks.artistId, schema.artists.id))
+              .innerJoin(schema.albums, eq(schema.tracks.albumId, schema.albums.id))
+              .leftJoin(schema.artwork, eq(schema.tracks.artworkHash, schema.artwork.hash))
+              .where(inArray(schema.tracks.id, chunk))
+              .all(),
+          );
+        }
+        return rows;
+      }),
   });
 });
+
+const SONGS_BY_IDS_CHUNK = 500;
 
 export const layer = Layer.effect(LibraryStore, make);
 
