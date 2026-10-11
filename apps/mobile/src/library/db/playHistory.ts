@@ -61,6 +61,39 @@ export const updatePlay = (db: LibraryDatabase, id: number, play: PlayEvent): vo
   db.update(schema.playEvents).set(progress(play)).where(eq(schema.playEvents.id, id)).run();
 };
 
+/** A recorded play with its row id. */
+export interface RecordedPlay {
+  readonly id: number;
+  readonly play: PlayEvent;
+}
+
+/**
+ * The play recorded last, as it was last brought up to date; `PlayHistory`
+ * picks it back up when JS restarts while the player kept going.
+ */
+export const latestPlay = (db: LibraryDatabase): RecordedPlay | null => {
+  const row = db
+    .select()
+    .from(schema.playEvents)
+    .orderBy(desc(schema.playEvents.id))
+    .limit(1)
+    .get();
+  if (row === undefined) return null;
+  return {
+    id: row.id,
+    play: {
+      trackId: String(row.trackId),
+      context:
+        row.contextType === null ? null : { kind: row.contextType, id: row.contextId ?? null },
+      startedAt: row.startedAt,
+      listenedMs: row.listenedMs,
+      durationMs: row.durationMs,
+      endReason: row.endReason,
+      counted: row.counted,
+    },
+  };
+};
+
 /** Albums by id, with their track count and length, in the order of `ids`. */
 const albumsInOrder = (db: LibraryDatabase, ids: readonly number[]): AlbumRow[] => {
   if (ids.length === 0) return [];

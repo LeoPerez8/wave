@@ -4,6 +4,8 @@
  * and the order of a folder's files.
  */
 
+import { compareStrings, foldAccentsAndCase } from "./library.ts";
+
 /**
  * The spine letter for a Core sort key: `A`–`Z`, or `#` for names that start
  * with a digit, a symbol or a non-Latin letter.
@@ -39,8 +41,6 @@ export interface ArtistAlbum {
   readonly titleSort: string;
 }
 
-const compareStrings = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
-
 /** Newest first; undated albums after the dated ones; then by title. */
 const compareByRelease = (a: ArtistAlbum, b: ArtistAlbum): number =>
   (b.year ?? Number.MIN_SAFE_INTEGER) - (a.year ?? Number.MIN_SAFE_INTEGER) ||
@@ -63,9 +63,7 @@ export const artistAlbums = <A extends ArtistAlbum>(
   };
 };
 
-const fold = (name: string): string => name.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase();
-
-const chunks = (name: string): string[] => fold(name).match(/\d+|\D+/g) ?? [];
+const chunks = (name: string): string[] => foldAccentsAndCase(name).match(/\d+|\D+/g) ?? [];
 
 const isDigits = (chunk: string): boolean => chunk.charCodeAt(0) >= 48 && chunk.charCodeAt(0) <= 57;
 

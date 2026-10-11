@@ -1,5 +1,5 @@
 import { IconGripVertical, IconTrash } from "@tabler/icons-react-native";
-import { dragTargetIndex, moveItem, resolveRemoveSwipe } from "@wave/core";
+import { moveItem, reorderTarget, resolveRemoveSwipe } from "@wave/core";
 import * as Haptics from "expo-haptics";
 import { useLayoutEffect, useRef, useState, type ReactElement } from "react";
 import { Text, View } from "react-native";
@@ -336,9 +336,9 @@ export function PlaylistItems({ detail, header, empty }: Props) {
 
   const onDragMove = (offsetY: number) => {
     if (from.current < 0) return;
-    const next = dragTargetIndex({
+    const next = reorderTarget({
       from: from.current,
-      offsetY,
+      distance: offsetY,
       rowHeight: ROW,
       count: orderRef.current.length,
     });

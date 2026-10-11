@@ -229,7 +229,8 @@ export const normalizeTrack = (raw: RawTrack): LibraryTrack => {
   };
 };
 
-const compareStrings = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+/** Orders strings by code unit, the way SQLite's default collation does. */
+export const compareStrings = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
 /** Orders tracks by title, the way the Songs list shows them. */
 export const compareByTitle = (

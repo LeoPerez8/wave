@@ -1,6 +1,7 @@
 import {
   EMPTY_QUEUE,
   applyPlayerSync,
+  extrapolatePosition,
   parseQueueState,
   planPlayerSync,
   reduceQueue,
@@ -17,6 +18,7 @@ import * as Layer from "effect/Layer";
 import * as Semaphore from "effect/Semaphore";
 
 import { makeExternalStore } from "@/lib/externalStore";
+import type { SongRow } from "@/library/LibraryStore";
 import type { NativeSyncStep, PlayerItem } from "@/native/wavePlayer";
 
 import { Player, PlayerError, playbackState } from "./Player";
@@ -31,15 +33,34 @@ export interface QueueTrack {
   readonly artworkPath: string | null;
 }
 
+/** A library song as the player needs it. */
+export const toQueueTrack = (song: SongRow): QueueTrack => ({
+  id: String(song.id),
+  path: song.path,
+  title: song.title,
+  artist: song.artist,
+  album: song.album,
+  artworkPath: song.artworkPath,
+});
+
 /** The queue as the app shows it (Up Next, shuffle and repeat toggles, the playing row). */
 export const queueState = makeExternalStore<QueueState>(EMPTY_QUEUE);
 
 /**
- * Counts the times the queue sent the current entry back to its start
- * (previous after three seconds, or next past the end of the queue), which
- * ends the play going on (see `PlayHistory`).
+ * The entry the player was on when JS restarted while it kept going, and the
+ * queue was picked back up from it; null otherwise. `PlayHistory` goes on with
+ * the play on record for it instead of starting a new one.
  */
-export const queueRestarts = makeExternalStore(0);
+export const keptPlayingKey = makeExternalStore<string | null>(null);
+
+/** Queue changes come in bursts (skips, reorders); the queue is serialised once they settle. */
+const QUEUE_SETTLE_MS = 500;
+
+/**
+ * The queue as JSON, serialised once per settled change and shared: the player
+ * keeps it for when JS restarts, and `PlaybackPersistence` writes it to the library.
+ */
+export const settledQueue = makeExternalStore<string | null>(null);
 
 export class Queue extends Context.Service<
   Queue,
@@ -63,6 +84,8 @@ export class Queue extends Context.Service<
       tracks: readonly QueueTrack[],
       positionMs: number,
     ) => Effect.Effect<boolean, PlayerError>;
+    /** Serialises a queue change still settling right away (Wave is leaving the foreground). */
+    readonly flush: Effect.Effect<void>;
   }
 >()("@wave/mobile/playback/Queue") {}
 
@@ -89,10 +112,7 @@ const reportError = (error: unknown): void =>
   }));
 
 /** Where the current track is now, extrapolated from the last position report. */
-export const currentPositionMs = (): number => {
-  const state = playbackState.get();
-  return state.isPlaying ? state.positionMs + (Date.now() - state.at) : state.positionMs;
-};
+export const currentPositionMs = (): number => extrapolatePosition(playbackState.get(), Date.now());
 
 export const layer = Layer.effect(
   Queue,
@@ -105,6 +125,24 @@ export const layer = Layer.effect(
     // list; the player moves `currentKey` on its own (auto-advance, notification).
     let native: PlayerList = { keys: [], currentKey: null };
     let appliedRepeat: RepeatMode | null = null;
+    let settleTimer: ReturnType<typeof setTimeout> | null = null;
+
+    /** Serialises the queue once, for the player and the library (`settledQueue`). */
+    const settle = (): void => {
+      if (settleTimer !== null) clearTimeout(settleTimer);
+      settleTimer = null;
+      const json = JSON.stringify(queueState.get());
+      Effect.runSync(player.saveQueue(json));
+      settledQueue.set(json);
+    };
+
+    const queueChanged = (): void => {
+      settleTimer ??= setTimeout(settle, QUEUE_SETTLE_MS);
+    };
+
+    const flush = Effect.sync(() => {
+      if (settleTimer !== null) settle();
+    });
 
     const itemFor = (entry: QueueEntry): Effect.Effect<PlayerItem, PlayerError> => {
       const track = tracks.get(entry.trackId);
@@ -155,6 +193,7 @@ export const layer = Layer.effect(
         const { state, playback } = reduceQueue(before, command);
         if (state === before && playback === "keep") return;
         queueState.set(state);
+        if (state !== before) queueChanged();
         yield* sync(state);
         if (state.repeat !== appliedRepeat) {
           yield* player.setRepeatMode(state.repeat);
@@ -164,19 +203,17 @@ export const layer = Layer.effect(
           case "play":
             yield* player.play;
             break;
+          // The player reports the seek back to the start, which ends the play (`PlayHistory`).
           case "restart":
-            queueRestarts.update((count) => count + 1);
             yield* player.seekTo(0);
             break;
           case "stop":
-            queueRestarts.update((count) => count + 1);
             yield* player.pause;
             yield* player.seekTo(0);
             break;
           case "keep":
             break;
         }
-        yield* player.saveQueue(JSON.stringify(state));
       });
 
     const dispatch = (command: QueueCommand, added: readonly QueueTrack[] = []) =>
@@ -191,6 +228,7 @@ export const layer = Layer.effect(
       const json = yield* player.savedQueue;
       const saved = json === null ? null : parseQueueState(JSON.parse(json));
       if (saved === null || !sameKeys(saved.entries, native.keys)) return;
+      keptPlayingKey.set(native.currentKey);
       queueState.set(saved);
       appliedRepeat = saved.repeat;
       if (native.currentKey !== null) {
@@ -225,11 +263,13 @@ export const layer = Layer.effect(
           yield* player.setRepeatMode(state.repeat);
           appliedRepeat = state.repeat;
           if (positionMs > 0) yield* player.seekTo(positionMs);
-          yield* player.saveQueue(JSON.stringify(state));
+          settle();
           return true;
         }).pipe(Effect.tapError(() => Effect.sync(() => queueState.set(EMPTY_QUEUE)))),
       );
 
-    return Queue.of({ dispatch, restore: restoreSaved });
+    yield* Effect.addFinalizer(() => flush);
+
+    return Queue.of({ dispatch, restore: restoreSaved, flush });
   }),
 );

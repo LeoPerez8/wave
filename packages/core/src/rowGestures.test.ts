@@ -1,26 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { dragTargetIndex, resolveRemoveSwipe } from "./index.ts";
-
-// Track rows are 56 dp tall.
-const rowHeight = 56;
-
-describe("dragTargetIndex", () => {
-  test("a row dragged down past half of the next row takes its place", () => {
-    assert.equal(dragTargetIndex({ from: 2, offsetY: 29, rowHeight, count: 10 }), 3);
-    assert.equal(dragTargetIndex({ from: 2, offsetY: 27, rowHeight, count: 10 }), 2);
-  });
-
-  test("dragging up works the same way", () => {
-    assert.equal(dragTargetIndex({ from: 5, offsetY: -3 * rowHeight, rowHeight, count: 10 }), 2);
-  });
-
-  test("dragging past either end of the list lands at that end", () => {
-    assert.equal(dragTargetIndex({ from: 1, offsetY: -400, rowHeight, count: 10 }), 0);
-    assert.equal(dragTargetIndex({ from: 8, offsetY: 400, rowHeight, count: 10 }), 9);
-  });
-});
+import { resolveRemoveSwipe } from "./index.ts";
 
 // A track row on the S24+ (412 dp window minus the 24 dp margins).
 const width = 364;

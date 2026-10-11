@@ -13,6 +13,7 @@ import {
   type NativePlayerState,
   type NativeSyncStep,
   type PlayerItem,
+  type SeekEvent,
 } from "@/native/wavePlayer";
 
 export class PlayerError extends Data.TaggedError("PlayerError")<{
@@ -68,6 +69,10 @@ export class Player extends Context.Service<
     /** Calls `listener` for every item transition while the scope lives. */
     readonly onItemTransition: (
       listener: (event: ItemTransitionEvent) => void,
+    ) => Effect.Effect<void, never, Scope.Scope>;
+    /** Calls `listener` for every seek within the current item while the scope lives. */
+    readonly onSeek: (
+      listener: (event: SeekEvent) => void,
     ) => Effect.Effect<void, never, Scope.Scope>;
     readonly play: Effect.Effect<void, PlayerError>;
     readonly pause: Effect.Effect<void, PlayerError>;
@@ -131,6 +136,13 @@ export const layer = Layer.effect(
         Effect.asVoid(
           Effect.acquireRelease(
             Effect.sync(() => WavePlayer.addListener("onItemTransition", listener)),
+            (subscription) => Effect.sync(() => subscription.remove()),
+          ),
+        ),
+      onSeek: (listener) =>
+        Effect.asVoid(
+          Effect.acquireRelease(
+            Effect.sync(() => WavePlayer.addListener("onSeek", listener)),
             (subscription) => Effect.sync(() => subscription.remove()),
           ),
         ),

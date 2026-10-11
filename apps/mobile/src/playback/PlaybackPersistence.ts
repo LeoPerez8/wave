@@ -1,26 +1,15 @@
-import { parseQueueState, restorePlayback, type QueueState } from "@wave/core";
+import { parseQueueState, restorePlayback } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { AppState } from "react-native";
 
-import { LibraryStore, type SongRow } from "@/library/LibraryStore";
+import { LibraryStore } from "@/library/LibraryStore";
 
 import { playbackState } from "./Player";
-import { Queue, currentPositionMs, queueState, type QueueTrack } from "./Queue";
+import { Queue, currentPositionMs, settledQueue, toQueueTrack } from "./Queue";
 
-/** Queue changes come in bursts (skips, reorders); they're written once things settle. */
-const QUEUE_SAVE_DELAY_MS = 500;
 /** How often the position is written while playing; it's also written on pause and on leaving the app. */
 const POSITION_SAVE_INTERVAL_MS = 5_000;
-
-const toTrack = (song: SongRow): QueueTrack => ({
-  id: String(song.id),
-  path: song.path,
-  title: song.title,
-  artist: song.artist,
-  album: song.album,
-  artworkPath: song.artworkPath,
-});
 
 /** Saving is best effort: a failed write must never disturb playback. */
 const run = (effect: Effect.Effect<void, unknown>): void => {
@@ -47,23 +36,11 @@ export const layer = Layer.effectDiscard(
       const available = new Set(songs.map((song) => String(song.id)));
       const restored = restorePlayback(state, saved.positionMs, (id) => available.has(id));
       if (restored === null) return;
-      yield* queue.restore(restored.state, songs.map(toTrack), restored.positionMs);
+      yield* queue.restore(restored.state, songs.map(toQueueTrack), restored.positionMs);
     });
 
     let saving = false;
-    let pendingQueue: QueueState | null = null;
-    let queueTimer: ReturnType<typeof setTimeout> | null = null;
     let lastPositionSave = 0;
-
-    const flushQueue = (): void => {
-      if (queueTimer !== null) clearTimeout(queueTimer);
-      queueTimer = null;
-      if (pendingQueue === null) return;
-      const state = pendingQueue;
-      pendingQueue = null;
-      lastPositionSave = Date.now();
-      run(store.saveQueue(JSON.stringify(state), currentPositionMs()));
-    };
 
     const savePosition = (): void => {
       lastPositionSave = Date.now();
@@ -74,10 +51,12 @@ export const layer = Layer.effectDiscard(
 
     yield* Effect.acquireRelease(
       Effect.sync(() => [
-        queueState.subscribe(() => {
-          if (!saving) return;
-          pendingQueue = queueState.get();
-          if (queueTimer === null) queueTimer = setTimeout(flushQueue, QUEUE_SAVE_DELAY_MS);
+        // `Queue` serialises the queue once changes settle (skips, reorders come in bursts).
+        settledQueue.subscribe(() => {
+          const json = settledQueue.get();
+          if (!saving || json === null) return;
+          lastPositionSave = Date.now();
+          run(store.saveQueue(json, currentPositionMs()));
         }),
         playbackState.subscribe(() => {
           if (!saving) return;
@@ -92,17 +71,20 @@ export const layer = Layer.effectDiscard(
         (() => {
           const subscription = AppState.addEventListener("change", (next) => {
             if (!saving || next === "active") return;
-            flushQueue();
+            Effect.runSync(queue.flush);
             savePosition();
           });
           return () => subscription.remove();
         })(),
       ]),
       (unsubscribes) =>
-        Effect.sync(() => {
-          flushQueue();
-          for (const unsubscribe of unsubscribes) unsubscribe();
-        }),
+        queue.flush.pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              for (const unsubscribe of unsubscribes) unsubscribe();
+            }),
+          ),
+        ),
     );
 
     // Saving starts after the restore so an empty queue at startup can't overwrite the saved one.

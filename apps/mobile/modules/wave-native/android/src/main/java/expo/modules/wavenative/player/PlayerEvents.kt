@@ -27,6 +27,14 @@ object PlayerEvents {
       else -> "playlist"
     }
 
+  /**
+   * Whether a position discontinuity is a seek within the current item, reported
+   * as `onSeek`. "Previous" after three seconds (Wave, the notification, a
+   * headset) is one: it seeks to 0 without an item transition.
+   */
+  fun isSeekWithinItem(reason: Int, fromItemId: String?, toItemId: String?): Boolean =
+    reason == Player.DISCONTINUITY_REASON_SEEK && fromItemId != null && fromItemId == toItemId
+
   /** Core's repeat mode as the player's; anything unknown is off. */
   fun repeatMode(mode: String): Int =
     when (mode) {

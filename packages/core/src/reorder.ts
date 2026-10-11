@@ -1,6 +1,6 @@
 /**
- * Drag-to-reorder in a list of fixed-height rows (Up Next): where a dragged
- * row would land if it were dropped now.
+ * Drag-to-reorder in a list of fixed-height rows (Up Next, playlist items):
+ * where a dragged row would land if it were dropped now.
  */
 
 export interface ReorderDrag {
@@ -13,7 +13,10 @@ export interface ReorderDrag {
   readonly count: number;
 }
 
-/** The index the dragged row would take. */
+/**
+ * The index the dragged row would take: another row's place once its centre
+ * passes that row's middle.
+ */
 export const reorderTarget = ({ from, distance, rowHeight, count }: ReorderDrag): number =>
   Math.max(0, Math.min(count - 1, from + Math.round(distance / rowHeight)));
 

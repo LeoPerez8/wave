@@ -3,9 +3,19 @@ import { describe, test } from "node:test";
 
 import { reorderShift, reorderTarget } from "./index.ts";
 
+// Track rows are 56 dp tall.
 const rowHeight = 56;
 
 describe("reorderTarget", () => {
+  test("a row dragged down past half of the next row takes its place", () => {
+    assert.equal(reorderTarget({ from: 2, distance: 29, rowHeight, count: 10 }), 3);
+    assert.equal(reorderTarget({ from: 2, distance: 27, rowHeight, count: 10 }), 2);
+  });
+
+  test("dragging up works the same way", () => {
+    assert.equal(reorderTarget({ from: 5, distance: -3 * rowHeight, rowHeight, count: 10 }), 2);
+  });
+
   test("dragging a row down past two rows drops it two places later", () => {
     assert.equal(reorderTarget({ from: 1, distance: 2.4 * rowHeight, rowHeight, count: 10 }), 3);
   });

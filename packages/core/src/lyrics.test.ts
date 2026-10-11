@@ -139,6 +139,13 @@ describe("parseLyrics", () => {
       lines: ["Plain words"],
     });
   });
+
+  test("section labels such as [Chorus: Jay-Z] are lyrics, not LRC tags", () => {
+    assert.deepEqual(parseLyrics("[Verse 1: Kanye]\nFirst line\n\n[Chorus: Jay-Z]\nHook"), {
+      kind: "unsynced",
+      lines: ["[Verse 1: Kanye]", "First line", "", "[Chorus: Jay-Z]", "Hook"],
+    });
+  });
 });
 
 /** One line of LRC, sung a second in. */

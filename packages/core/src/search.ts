@@ -11,7 +11,7 @@
  *   genres in that order, then the shorter name, then A–Z.
  */
 
-import { foldAccentsAndCase } from "./library.ts";
+import { compareStrings, foldAccentsAndCase } from "./library.ts";
 
 export type SearchKind = "artist" | "album" | "song" | "playlist" | "genre";
 
@@ -129,8 +129,6 @@ interface Hit<E> {
   readonly item: Indexed<E>;
   readonly tier: Tier;
 }
-
-const compareStrings = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
 /** Which type wins between equally good matches. */
 const KIND_ORDER: Readonly<Record<SearchKind, number>> = {

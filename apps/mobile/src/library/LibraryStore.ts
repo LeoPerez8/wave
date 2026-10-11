@@ -3,6 +3,7 @@ import {
   checkPlaylistName,
   compareAlbumTracks,
   compareFileNames,
+  compareStrings,
   filesLeavingWithRoot,
   rememberSearch,
   moveItem,
@@ -24,7 +25,14 @@ import * as Layer from "effect/Layer";
 import { openDatabaseSync } from "expo-sqlite";
 
 import migrations from "./db/migrations";
-import { homeSections, recordPlay, updatePlay, type HomeSections } from "./db/playHistory";
+import {
+  homeSections,
+  latestPlay,
+  recordPlay,
+  updatePlay,
+  type HomeSections,
+  type RecordedPlay,
+} from "./db/playHistory";
 import * as schema from "./db/schema";
 import type { KnownFile } from "./NativeScanner";
 
@@ -350,6 +358,8 @@ export class LibraryStore extends Context.Service<
     readonly updatePlay: (id: number, play: PlayEvent) => Effect.Effect<void, LibraryStoreError>;
     /** The Home tab: Recently Added, Recently Played, Most Played and Favorites. */
     readonly home: Effect.Effect<HomeSections, LibraryStoreError>;
+    /** The play recorded last, to pick back up when JS restarts while the player kept going. */
+    readonly latestPlay: Effect.Effect<RecordedPlay | null, LibraryStoreError>;
   }
 >()("@wave/mobile/library/LibraryStore") {}
 
@@ -791,8 +801,6 @@ const getFolderSync = (db: Database, id: number): FolderDetail | null => {
     songs,
   };
 };
-
-const compareStrings = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
 const listFoldersSync = (db: Database): FolderRow[] => {
   const { folders, tracks } = schema;
@@ -1394,6 +1402,8 @@ const make = Effect.gen(function* () {
     updatePlay: (id, play) => attempt("update the play", () => updatePlay(db, id, play)),
 
     home: attempt("read Home", () => homeSections(db)),
+
+    latestPlay: attempt("read the latest play", () => latestPlay(db)),
   });
 });
 
