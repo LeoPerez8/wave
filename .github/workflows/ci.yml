@@ -100,9 +100,14 @@ jobs:
           EXPO_NO_GIT_STATUS: "1"
         run: ../../scripts/ci/step.sh "Prebuild" pnpm exec expo prebuild --platform android --no-install
 
+      # Bundling on its own first surfaces Metro errors clearly instead of deep in Gradle output.
+      - name: Bundle JavaScript
+        working-directory: apps/mobile
+        run: ../../scripts/ci/step.sh "Bundle JavaScript" pnpm exec expo export --platform android --output-dir "$RUNNER_TEMP/js-export"
+
       - name: Build release APK
         working-directory: apps/mobile/android
-        run: ../../../scripts/ci/step.sh "Gradle assembleRelease" ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon
+        run: ../../../scripts/ci/step.sh "Gradle assembleRelease" ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon --console=plain
 
       - name: Collect APK
         id: apk

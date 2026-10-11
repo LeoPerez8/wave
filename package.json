@@ -14,7 +14,7 @@
     "fmt:check": "oxfmt --check"
   },
   "devDependencies": {
-    "oxfmt": "latest",
+    "oxfmt": "0.72.0",
     "oxlint": "^1.0.0"
   },
   "engines": {
