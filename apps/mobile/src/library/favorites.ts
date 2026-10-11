@@ -1,3 +1,4 @@
+import { favoriteStar, starWriteSettled, starWriteStarted, type FavoriteStar } from "@wave/core";
 import { useEffect, useSyncExternalStore } from "react";
 
 import { makeExternalStore } from "@/lib/externalStore";
@@ -8,12 +9,13 @@ import { appRuntime } from "./runtime";
 /**
  * Favorites (starred tracks), held in memory so every star (track rows, the
  * long-press menu, Now Playing) flips at once and stays in sync. Writes go to
- * the store behind the scenes and are undone if they fail.
+ * the store behind the scenes; should they fail, the star goes back to what the
+ * store holds (Core's `FavoriteStar`).
  */
 interface FavoritesState {
   readonly ids: ReadonlySet<number>;
   readonly loaded: boolean;
-  /** Bumped when a star is toggled. */
+  /** Bumped when a star is toggled, and when its write settles. */
   readonly edits: number;
   /** Bumped once a toggle is saved; the Favorites list re-reads on it. */
   readonly saved: number;
@@ -52,24 +54,34 @@ const withStar = (ids: ReadonlySet<number>, trackId: number, on: boolean): Reado
   return next;
 };
 
+/** Stars with writes in flight; a star with none shows what `favorites` holds. */
+const writing = new Map<number, FavoriteStar>();
+
+/** Records a star's new state and shows it. */
+const showStar = (trackId: number, star: FavoriteStar, saved: boolean): void => {
+  if (star.pending === 0) writing.delete(trackId);
+  else writing.set(trackId, star);
+  favorites.update((state) => ({
+    ...state,
+    ids:
+      state.ids.has(trackId) === star.shown ? state.ids : withStar(state.ids, trackId, star.shown),
+    edits: state.edits + 1,
+    saved: saved ? state.saved + 1 : state.saved,
+  }));
+};
+
 /** Stars or unstars a track. Accepts a queue track id (a string) as well. */
 export const setFavorite = (trackId: number | string, on: boolean): Promise<void> => {
   const id = Number(trackId);
-  favorites.update((state) => ({
-    ...state,
-    ids: withStar(state.ids, id, on),
-    edits: state.edits + 1,
-  }));
+  const star = writing.get(id) ?? favoriteStar(favorites.get().ids.has(id));
+  showStar(id, starWriteStarted(star, on), false);
+  const settle = (saved: boolean | null) => () => {
+    const current = writing.get(id);
+    if (current !== undefined) showStar(id, starWriteSettled(current, saved), saved !== null);
+  };
   return appRuntime
     .runPromise(LibraryStore.use((store) => store.setFavorite(id, on)))
-    .then(() => favorites.update((state) => ({ ...state, saved: state.saved + 1 })))
-    .catch(() =>
-      favorites.update((state) => ({
-        ...state,
-        ids: withStar(state.ids, id, !on),
-        edits: state.edits + 1,
-      })),
-    );
+    .then(settle(on), settle(null));
 };
 
 export const isFavorite = (trackId: number | string): boolean =>
