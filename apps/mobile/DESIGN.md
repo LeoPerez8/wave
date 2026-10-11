@@ -1,0 +1,316 @@
+---
+name: Wave
+description: A local-file music player whose library is set like a record label's catalog.
+colors:
+  background: "#e0ecef"
+  foreground: "#121b1d"
+  secondary: "#454f52"
+  tertiary: "#778385"
+  separator: "#c1cdd0"
+  fill: "#d3dfe2"
+  accent: "#006a5f"
+  highlight: "#a14f09"
+  background-dark: "#121b1d"
+  foreground-dark: "#e0ecef"
+  secondary-dark: "#a5b0b3"
+  tertiary-dark: "#606b6e"
+  separator-dark: "#293235"
+  fill-dark: "#1c2628"
+  accent-dark: "#59c0ad"
+  highlight-dark: "#ec9d53"
+typography:
+  display:
+    fontFamily: "Inter"
+    fontSize: "168px"
+    fontWeight: 300
+    lineHeight: "176px"
+  headline:
+    fontFamily: "Inter"
+    fontSize: "36px"
+    fontWeight: 300
+    lineHeight: "44px"
+    letterSpacing: "-0.6px"
+  title:
+    fontFamily: "Inter"
+    fontSize: "28px"
+    fontWeight: 300
+    lineHeight: "34px"
+    letterSpacing: "-0.4px"
+  entry:
+    fontFamily: "Inter"
+    fontSize: "20px"
+    fontWeight: 400
+    lineHeight: "26px"
+  body:
+    fontFamily: "Inter"
+    fontSize: "16px"
+    fontWeight: 400
+    lineHeight: "22px"
+  body-strong:
+    fontFamily: "Inter"
+    fontSize: "16px"
+    fontWeight: 500
+    lineHeight: "22px"
+  subheadline:
+    fontFamily: "Inter"
+    fontSize: "15px"
+    fontWeight: 400
+    lineHeight: "20px"
+  footnote:
+    fontFamily: "Inter"
+    fontSize: "13px"
+    fontWeight: 400
+    lineHeight: "18px"
+    fontFeature: "tnum"
+  label:
+    fontFamily: "Inter"
+    fontSize: "12px"
+    fontWeight: 600
+    lineHeight: "16px"
+    letterSpacing: "1.4px"
+  spine:
+    fontFamily: "Inter"
+    fontSize: "10px"
+    fontWeight: 600
+    lineHeight: "14px"
+    letterSpacing: "0.7px"
+rounded:
+  none: "0px"
+spacing:
+  cell: "8px"
+  gutter: "16px"
+  margin: "24px"
+  state-cell: "32px"
+  thumb: "40px"
+  row: "56px"
+  spine: "24px"
+  spine-inset: "24px"
+components:
+  entry-row:
+    textColor: "{colors.foreground}"
+    typography: "{typography.entry}"
+    height: "{spacing.row}"
+    rounded: "{rounded.none}"
+  track-row:
+    textColor: "{colors.foreground}"
+    typography: "{typography.body-strong}"
+    height: "{spacing.row}"
+    rounded: "{rounded.none}"
+  track-row-playing:
+    textColor: "{colors.highlight}"
+  track-row-missing:
+    textColor: "{colors.secondary}"
+  album-artwork:
+    backgroundColor: "{colors.fill}"
+    rounded: "{rounded.none}"
+  catalog-line:
+    textColor: "{colors.secondary}"
+    typography: "{typography.label}"
+  icon-button:
+    textColor: "{colors.accent}"
+    size: "48px"
+    rounded: "{rounded.none}"
+  icon-button-disabled:
+    textColor: "{colors.tertiary}"
+  alphabet-spine:
+    textColor: "{colors.secondary}"
+    typography: "{typography.spine}"
+    width: "{spacing.spine}"
+  alphabet-spine-active:
+    textColor: "{colors.accent}"
+---
+
+# Design System: Wave
+
+## Overview
+
+**Creative North Star: "The Quiet Catalog"**
+
+Wave sets the owner's library the way a record label sets its catalog (the ECM cover program is the touchstone): artwork sits in wide, calm, tinted fields and the type around it is small and exact. Calm here comes from alignment, not from emptiness. Every margin, row, tile and the A–Z spine snaps to one 8dp cell, so a screen of tens of thousands of tracks still reads as ordered furniture rather than density.
+
+The ground is tinted, never plain white or black: fog blue-grey in light, night slate in dark, and every neutral is a step on one tonal ramp drawn from that ground. Hierarchy is quiet. The large title is light, not bold; lists use one type size and rank by weight and tint; labels are small tracked capitals, like the catalog line printed under a sleeve. Two chromatic voices only: a deep teal for what is active, an ember for what is loved or playing.
+
+The world rejects the category default it was chosen against: bold large titles, chevron-and-icon rows, rounded "card" chrome around artwork, and a single accent on pure black or white. Components are fully custom (chosen over Material 3), but Android's own conventions still hold: system and predictive Back work, touch targets are 48dp, and the theme follows the system light/dark setting.
+
+**Key Characteristics:**
+
+- Tinted fog / night-slate ground; neutrals from one ramp (OKLCH hue ~215).
+- One 8dp cell module for every dimension.
+- Artwork as photographs: square, unrounded, unframed.
+- Light large titles; one size per list, rank by weight and tint.
+- Small tracked-caps catalog lines for section heads and cover captions.
+- Teal for active, ember for favorite and now playing; nothing else is coloured.
+- Flat: no shadows, no glass, no gradients.
+- Every press sinks and dims for a duration the owner sets in Settings.
+
+## Colors
+
+A cool, low-chroma tonal ramp carrying two small, saturated voices: teal and ember.
+
+### Primary
+
+- **Darkroom Teal** (`accent`; deep in light, a lifted mint-teal in dark): the active state. Icon buttons, the selected tab underline in segmented views, the active letter on the A–Z spine, toggles and progress. It marks what you can act on or what is currently selected, never decoration.
+
+### Secondary
+
+- **Ember** (`highlight`; burnt orange in light, a warm apricot in dark): favorite and now playing. The playing track's title and speaker glyph, the favorite star. Ember means "this one is yours, or this one is sounding".
+
+### Neutral
+
+- **Fog / Night Slate** (`background`): the ground of every screen. Fog blue-grey in light (tone-1), night slate in dark (tone-10).
+- **Ink** (`foreground`): titles, track titles, entry labels, the large title.
+- **Graphite** (`secondary`): artists, counts, durations, furniture lines, catalog lines, inactive spine letters, helper copy.
+- **Pewter** (`tertiary`): non-text only. Disabled icon buttons, the missing-file glyph, the placeholder note on artless covers.
+- **Rule** (`separator`): one-pixel hairlines between entries and around setting rows.
+- **Field** (`fill`): the square behind artwork that has no image, and empty cover slots.
+
+The full ramp lives in `global.css` as `tone-0` (lightest, `#eff4f6`) to `tone-10` (darkest, `#121b1d`); each semantic token is a step on it, in both themes. `surface`, `grouped` and `on-accent` are also declared there but are not yet used by this world's components; they wait for the tab bar and mini player.
+
+### Named Rules
+
+**The One Ramp Rule.** Every neutral is a step on the tone ramp. No ad-hoc greys, no opacity-on-black greys; if a new neutral is needed, pick a ramp step.
+
+**The Tinted Ground Rule.** The ground is fog or night slate. Never ship a screen on `#ffffff` or `#000000`.
+
+**The Two Voices Rule.** Teal means active, ember means favorite or playing. If a colour on screen means neither, it should be a neutral.
+
+**The Pewter Is Not Text Rule.** `tertiary` sits near 3:1 on the ground: enough for an icon, not for words. Text uses `foreground` or `secondary`.
+
+## Typography
+
+**Display Font:** Inter (bundled by the expo-font plugin, weights 300–800)
+**Body Font:** Inter
+**Label/Mono Font:** Inter, tracked caps for labels; tabular figures for every number that lines up
+
+**Character:** One workhorse grotesk speaking at low volume. Light weights carry the big type, so size reads as calm rather than loud; small sizes do the exact work.
+
+### Hierarchy
+
+- **Display** (300, 168/176): the single huge letter set in the field while the A–Z spine is dragged. Nowhere else.
+- **Headline** (300, 36/44, -0.6 tracking): the large title of a tab screen ("Library"), top-left, scrolling with the content.
+- **Title** (300, 28/34, -0.4 tracking): the title of a pushed screen, under the Back button.
+- **Entry** (400, 20/26): Library entries and settings row labels; one quiet line each.
+- **Body** (400 / 500, 16/22): track rows (title at 500, artist at 400, same size), album titles under covers (500), the settings stepper value (500).
+- **Subheadline** (400, 15/20): entry counts and empty-state messages.
+- **Footnote** (400, 13/18): album furniture lines, track durations, helper text under settings. Numbers use tabular figures.
+- **Label** (600, 12/16, 1.4 tracking, uppercase): the catalog line. Section heads ("Recently added", "Motion") and the artist line on a cover.
+- **Spine** (600, 10/14, 0.7 tracking): the letters of the A–Z spine.
+
+Sizes are in dp and scale with the system font size; at font scale 1.3 album furniture lines and song artists truncate to one line by design.
+
+### Named Rules
+
+**The One Size Per List Rule.** Within a list, title and secondary line share one size; rank comes from weight (500 vs 400) and tint (`foreground` vs `secondary`), never from a second size.
+
+**The Light Title Rule.** Large titles are weight 300. Bold large titles are the category default this world was chosen against.
+
+**The Catalog Line Rule.** Tracked caps label a section or a cover's metadata. They never sit as a kicker above a headline.
+
+## Layout
+
+Everything is a whole (or half/quarter) multiple of the 8dp cell (`CELL` in `src/catalog/grid.ts`): side margin 24dp, tile gutter 16dp, row height 56dp, a 32dp state cell, 40dp track thumbnails, and a 24dp-wide spine. Vertical rhythm uses the same steps: 12dp between artwork and its caption, 40dp above "Recently added", 24dp between album rows, 48dp of bottom padding.
+
+Album grids are two columns. Tile width is computed from the window: screen width minus the left margin, the spine and its inset, and one gutter, halved. Each tile reserves a fixed 96dp caption block (catalog line, two lines of title, furniture line), so every furniture line lands in the same place.
+
+Rows are fixed-height (56dp), so long lists can be laid out by index and scroll at 120 Hz. Every track row reserves the same cells whether or not they are filled: leading thumbnail or track-number cell, title and artist, a state cell (playing / missing), a favorite cell, and a right-aligned 40dp duration. State never shifts the layout.
+
+The A–Z spine sits 24dp in from the right edge, not on it, to stay clear of Android's system Back gesture zone (Android only lets an app exclude 200dp per edge). Lists that carry a spine pad their right side by spine plus inset (48dp). The spine's touch target is 48dp wide even though only 24dp is drawn.
+
+### Named Rules
+
+**The One Module Rule.** If a dimension isn't a multiple of 8dp (or a half/quarter of it, for type-adjacent gaps), it's wrong.
+
+**The Fixed Cell Rule.** Each piece of row state owns a fixed cell in every row. Reserve the cell even when empty.
+
+**The Back Zone Rule.** Nothing draggable lives in the outer 24dp of a screen edge.
+
+## Elevation & Depth
+
+The world is flat. There are no shadows, no elevation, no blur and no gradients; depth comes from the tone ramp (field squares and hairlines a step off the ground) and from artwork itself. The only overlay is the spine's letter field: the ground at 90% opacity laid over the list, with the huge letter centred in it.
+
+### Named Rules
+
+**The Flat Field Rule.** Surfaces never cast shadows. Separate things with a ramp step or a hairline. Glass is not part of this world unless the tab-bar/mini-player build decides otherwise against the 120 Hz budget.
+
+## Shapes
+
+Square everywhere. Artwork, empty cover slots, track thumbnails and placeholder fields have no corner radius and no frame. Structure is drawn with one-pixel hairlines in the separator tone, running the full content width between entries; there are no boxed cards, no chips and no pills. The one recurring silhouette is the thin vertical column of spine letters on the right.
+
+### Named Rules
+
+**The Photograph Rule.** Artwork is a photograph: square, unrounded, unbordered, never inside card chrome.
+
+## Components
+
+Every tappable element is built on one press primitive, so the whole world feels the same under the thumb.
+
+### Press (the motion primitive)
+
+- **Behaviour:** on press-in the target dims to 65% opacity and sinks (scales down) by its depth; on release it returns. Ease-out exponential: fast to respond, quiet to settle.
+- **Duration:** the owner's tap animation setting (0–600 ms in 20 ms steps, default 140 ms). 0 ms makes it an instant dim; the system reduce-motion setting removes the scale and keeps the dim.
+- **Depth by size:** small icon buttons sink most (0.1), the default is 0.04, album tiles 0.02, track rows 0.015. Big targets move less.
+- **Haptics:** `selection` for light taps (entries, tabs, icon buttons), `impact` (light) for actions such as play or favorite; a selection tick per letter on the spine.
+
+### Buttons
+
+- **Shape:** a 48dp square target, no visible container (0px radius, no fill).
+- **Icon button:** a 24dp line icon (1.5 stroke) in teal; disabled drops to pewter. Used for Settings, Back and the stepper's minus/plus.
+- **Hover / Focus:** touch only; the Press dim-and-sink is the whole feedback.
+
+### Entry Row
+
+The Library's entries (Playlists, Artists, Albums, Songs, Genres, Folders, Favorites) and settings links. One quiet line of Entry type, 56dp tall, with a right-aligned tabular count in Subheadline graphite whose column stays reserved when the count is unknown. A hairline below each; the list opens with a hairline above. No icon, no chevron.
+
+### Track Row
+
+56dp, fixed cells, one type size. Songs lists lead with a 40dp square thumbnail and put the state cell after the text; album track lists lead with the track number in a 32dp cell, which the state glyph replaces. Playing: title and speaker glyph in ember. Missing file: title in graphite, artist line reads "File not found", a file-off glyph in pewter, and the row is disabled. Favorite: a small filled star in ember in its own 24dp cell. Duration in tabular Footnote, right-aligned.
+
+### Album Tile
+
+A square cover at the computed tile width, then 12dp, then the caption: artist as a catalog line, the title in Body 500 with two lines always reserved, then the furniture line in Footnote graphite ("1975 · 9 · 41 min", tabular). Covers without art show a field square with a thin music note in pewter.
+
+### Catalog Line
+
+Small tracked caps (Label) in graphite by default, with teal and ember tones available. One line, truncating. Used as section heads and cover captions.
+
+### Navigation
+
+- **Tab screens** open on a light large title at top-left, with at most one trailing icon button on the title line.
+- **Pushed screens** show a Back icon button aligned so its glyph sits on the 24dp margin, then the title in Title type. System and predictive Back both work.
+- **In-screen switches** (Albums / Songs) are text tabs in Body: selected is 600 ink with a 2dp teal underline, unselected is 400 graphite; each tab is at least 48dp tall.
+- **Tab bar and mini player** are not yet built in this world; ticket #8 brings them in. The current tab bar is a scaffold placeholder and not part of this system.
+
+### Stepper (Settings)
+
+An Entry-type label, then minus / value / plus. The value is Body 500 tabular, centred in a minimum 72dp column on one line so it never wraps at large font scales; the buttons disable at the range ends. Helper text in Footnote sits below the row's closing hairline.
+
+### Alphabet Spine (signature)
+
+Wave's signature move: a thin column of tracked letters (Spine type, graphite) on the right, 24dp from the edge. Dragging it jumps the list, ticks a haptic per letter, turns the active letter teal, and sets that letter huge (Display, ink) in the field over a 90% ground veil. The veil fades in over the tap duration and out over twice that. For accessibility it is a single adjustable control with increment / decrement actions.
+
+### Empty State
+
+A 40dp line icon in pewter, an Entry-type title in ink, a Subheadline message in graphite, centred with generous top space. On the Library, empty cover slots in the field tone stand in for Recently Added until the first scan.
+
+## Do's and Don'ts
+
+### Do:
+
+- **Do** size every margin, gap, row and tile from the 8dp cell (24dp margins, 16dp gutters, 56dp rows).
+- **Do** take every neutral from the tone ramp and name it by its semantic token (`background`, `foreground`, `secondary`, `tertiary`, `separator`, `fill`).
+- **Do** keep teal for active state and ember for favorite / now playing.
+- **Do** rank list text by weight and tint at one size, and use tabular figures for counts, durations and furniture lines.
+- **Do** reserve every row's state, favorite and duration cells even when empty.
+- **Do** build every tappable element on Press, so the owner's tap animation setting reaches it.
+- **Do** keep draggable controls at least 24dp in from the screen edge, clear of the Back gesture zone.
+- **Do** give every target at least 48dp, even when the drawn element is smaller.
+
+### Don't:
+
+- **Don't** put a screen on plain `#ffffff` or `#000000`.
+- **Don't** round, frame or shadow artwork, or wrap it in a card.
+- **Don't** use bold large titles; titles are weight 300.
+- **Don't** add icons or chevrons to Library entry rows.
+- **Don't** set text in `tertiary`.
+- **Don't** add shadows, gradients or blur; separate with a ramp step or a hairline.
+- **Don't** introduce a third accent colour.

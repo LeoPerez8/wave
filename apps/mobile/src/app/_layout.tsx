@@ -14,7 +14,7 @@ export default function RootLayout() {
   const background = useThemeColor("background");
   const { granted } = useAllFilesAccess();
 
-  // The first scan starts as soon as Wave can read the Music folder.
+  // The first scan starts as soon as Wave can read the scan roots.
   useEffect(() => {
     if (granted) startInitialScan();
   }, [granted]);

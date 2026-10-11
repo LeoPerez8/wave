@@ -1,63 +1,88 @@
 @import "tailwindcss";
 @import "uniwind";
 
-/* ─── Colour tokens ─────────────────────────────────────────────────────
- * Light and dark follow the system theme. Teal is the accent (buttons,
- * active tab, progress, toggles); gold is for highlights (favorites,
- * now-playing indicator, badges). Neutrals follow Apple's system colours.
- * Native props that can't take a className read these with useThemeColor().
+/* ─── Colour tokens: The Quiet Catalog ──────────────────────────────────
+ * Wave's world is a record label's catalog: artwork in calm, tinted fields
+ * and small, exact type. The ground is never plain white or black: fog in
+ * light, night slate in dark. Every neutral comes from one tonal ramp
+ * (tone-0 lightest … tone-10 darkest, OKLCH hue 215); semantic tokens pick
+ * steps from it, so there are no ad-hoc greys.
+ *
+ * Teal is the accent (active, progress, toggles); ember is the highlight
+ * (favorites, now playing). Native props that can't take a className read
+ * these with useThemeColor().
  */
 @layer theme {
   :root {
     @variant light {
-      --color-background: #ffffff;
-      --color-grouped: #f2f2f7;
-      --color-surface: #ffffff;
-      --color-foreground: #000000;
-      --color-secondary: rgba(60, 60, 67, 0.6);
-      --color-tertiary: rgba(60, 60, 67, 0.3);
-      --color-separator: rgba(60, 60, 67, 0.29);
-      --color-fill: rgba(120, 120, 128, 0.12);
-      --color-accent: #0d9488;
-      --color-highlight: #b7791f;
+      --color-background: #e0ecef;
+      --color-grouped: #d3dfe2;
+      --color-surface: #eff4f6;
+      --color-foreground: #121b1d;
+      --color-secondary: #454f52;
+      --color-tertiary: #778385;
+      --color-separator: #c1cdd0;
+      --color-fill: #d3dfe2;
+      --color-accent: #006a5f;
+      --color-on-accent: #eff4f6;
+      --color-highlight: #a14f09;
     }
 
     @variant dark {
-      --color-background: #000000;
-      --color-grouped: #000000;
-      --color-surface: #1c1c1e;
-      --color-foreground: #ffffff;
-      --color-secondary: rgba(235, 235, 245, 0.6);
-      --color-tertiary: rgba(235, 235, 245, 0.3);
-      --color-separator: rgba(84, 84, 88, 0.6);
-      --color-fill: rgba(118, 118, 128, 0.24);
-      --color-accent: #14b8a6;
-      --color-highlight: #f5b83d;
+      --color-background: #121b1d;
+      --color-grouped: #121b1d;
+      --color-surface: #1c2628;
+      --color-foreground: #e0ecef;
+      --color-secondary: #a5b0b3;
+      --color-tertiary: #606b6e;
+      --color-separator: #293235;
+      --color-fill: #1c2628;
+      --color-accent: #59c0ad;
+      --color-on-accent: #121b1d;
+      --color-highlight: #ec9d53;
     }
   }
 }
 
 /* ─── Typography ────────────────────────────────────────────────────────
- * One native family ("Inter", registered by the expo-font config plugin
- * with weights 400–800). Sizes follow Apple's text styles.
+ * One family ("Inter", registered by the expo-font config plugin with
+ * weights 300–800). Quiet hierarchy: the large title is light, not bold;
+ * lists use one size and rank by weight and tint. `catalog` is the small
+ * tracked-caps line under covers and above sections.
  */
 @theme {
   --font-sans: "Inter";
 
+  --color-tone-0: #eff4f6;
+  --color-tone-1: #e0ecef;
+  --color-tone-2: #d3dfe2;
+  --color-tone-3: #c1cdd0;
+  --color-tone-4: #a5b0b3;
+  --color-tone-5: #778385;
+  --color-tone-6: #606b6e;
+  --color-tone-7: #454f52;
+  --color-tone-8: #293235;
+  --color-tone-9: #1c2628;
+  --color-tone-10: #121b1d;
+
+  --text-catalog: 12px;
+  --text-catalog--line-height: 16px;
   --text-caption: 12px;
   --text-caption--line-height: 16px;
   --text-footnote: 13px;
   --text-footnote--line-height: 18px;
   --text-subheadline: 15px;
   --text-subheadline--line-height: 20px;
-  --text-body: 17px;
+  --text-body: 16px;
   --text-body--line-height: 22px;
   --text-title3: 20px;
-  --text-title3--line-height: 25px;
+  --text-title3--line-height: 26px;
   --text-title2: 22px;
   --text-title2--line-height: 28px;
   --text-title1: 28px;
   --text-title1--line-height: 34px;
-  --text-large-title: 34px;
-  --text-large-title--line-height: 41px;
+  --text-large-title: 36px;
+  --text-large-title--line-height: 44px;
+  --text-index: 168px;
+  --text-index--line-height: 176px;
 }

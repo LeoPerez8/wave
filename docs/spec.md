@@ -8,7 +8,7 @@ I keep my music as local files on my Android phone (Samsung Galaxy S24+). BlackP
 
 ## Solution
 
-**Wave** is a personal, Android-only local music player that recreates the structure, gestures and glass materials of Apple Music (iOS 26 era) on top of a BlackPlayer-grade local-file engine. It indexes the music folders I choose, plays them gaplessly through a native audio engine with full system integration (notification, lock screen, Bluetooth), and records every play so that rich listening statistics can be built later.
+**Wave** is a personal, Android-only local music player with a BlackPlayer-grade local-file engine and an interface of its own. Apple Music (iOS 26 era) is the reference for how it should feel, not a template to copy. It indexes the music folders I choose, plays them gaplessly through a native audio engine with full system integration (notification, lock screen, Bluetooth), and records every play so that rich listening statistics can be built later.
 
 v1 delivers the core player and library. v2 adds the advanced audio and library-management features (see Out of Scope).
 
@@ -112,11 +112,12 @@ v1 delivers the core player and library. v2 adds the advanced audio and library-
 ### Look and feel
 
 59. As a user, I want the app to follow the system light/dark theme, so that it matches my phone.
-60. As a user, I want teal as the accent colour and gold for highlights (favorites, now-playing indicator, badges), so that Wave has its own identity.
-61. As a user, I want glass materials (blur, edge refraction, specular highlight) on the tab bar, mini player and Now Playing controls, so that the app feels like iOS 26.
-62. As a user, I want Apple-style typography and line icons, so that the UI reads like Apple Music.
+60. As a user, I want Wave to have its own visual identity (The Quiet Catalog: tinted grounds, a teal accent and an ember highlight for favorites and now playing), so that it feels like mine rather than a copy of another app.
+61. As a user, I want calm, uncluttered screens with no heavy effects, so that the app stays smooth at 120 Hz.
+62. As a user, I want small, exact typography and line icons, so that my library reads like a record label's catalog.
 63. As a user, I want haptic feedback on key interactions (play/pause, favorite, long-press, scrubbing ends), so that the app feels tactile.
 64. As a user, I want the entire interface in English, so that it is consistent.
+65. As a user, I want every tap to animate, with the animation duration adjustable in milliseconds in Settings, so that the app responds the way I like.
 
 ## Implementation Decisions
 
@@ -154,9 +155,13 @@ One row per playback start: track, started-at, listened milliseconds, track dura
 
 ### Visual design
 
-- Theme follows the system. Accent teal `#14B8A6` (dark) / `#0D9488` (light); highlight gold `#F5B83D` (dark) / `#B7791F` (light). Exposed as design tokens.
-- Inter as the typeface (SF Pro cannot be licensed for Android); a free line-icon set close to SF Symbols in weight and rounding.
-- Glass: Skia-based material with backdrop blur, edge refraction and specular highlight for the tab bar, mini player and Now Playing controls; plain blur + tint elsewhere. The exact technique is decided by a spike (see Further Notes), with a defined fallback.
+- The visual world is **The Quiet Catalog** (ECM Records' cover program as the reference): artwork in calm, tinted fields, small and exact type. The decision, its direction contract and the product record live in `apps/mobile/PRODUCT.md` and `apps/mobile/.impeccable/`; `apps/mobile/DESIGN.md` documents the built system.
+- Components are fully custom (Apple Music is inspiration only); system and predictive Back always work.
+- Theme follows the system. Fog ground in light, night slate in dark, every neutral from one tonal ramp; teal accent, ember highlight. Tokens live in `apps/mobile/global.css`.
+- Inter as the typeface, with a light large title and tracked-caps catalog lines; Tabler line icons.
+- Signature move: a thin A–Z spine on long lists that sets one huge letter in the field while scrubbing, with a haptic tick per letter.
+- Every tap animates through one press primitive whose duration comes from Settings (0–600 ms, default 140 ms) and respects the system's reduce-motion setting.
+- Glass is no longer a default material. Whether the tab bar and mini player get any blur is decided against the 120 Hz budget.
 - Now Playing background: gradient from the artwork palette, animated on track change; controls use the app palette.
 
 ### Build and CI
@@ -179,12 +184,12 @@ One row per playback start: track, started-at, listened milliseconds, track dura
 - Streaming services, cloud libraries, network shares.
 - Accounts, sync, backup.
 - Play Store distribution.
-- Chromecast / casting; Android Auto beyond what Media3 provides for free.
+- Chromecast / casting; Android Auto beyond what Media3 provides for free. Android Auto is one of the two primary listening scenes, so a browsable Auto library is the first v2 candidate.
 - Localisation (English only).
 
 ## Further Notes
 
-- **Glass on Android is the main technical risk.** Sampling the native views behind a surface is not straightforward in React Native Skia. The first UI work is a spike comparing approaches (for example, Android `RenderEffect` blur with an AGSL refraction shader versus a Skia snapshot of the backdrop) for visual quality and 120 Hz performance on the S24+. Acceptable fallback if refraction is too costly: blur + tint + specular rim highlight.
+- **Glass on Android** (no longer a default material; see Visual design) **was the main technical risk.** Sampling the native views behind a surface is not straightforward in React Native Skia. The first UI work is a spike comparing approaches (for example, Android `RenderEffect` blur with an AGSL refraction shader versus a Skia snapshot of the backdrop) for visual quality and 120 Hz performance on the S24+. Acceptable fallback if refraction is too costly: blur + tint + specular rim highlight.
 - **Track identity** is the file path in v1, with moved/renamed files matched by Core's reconciliation so history survives.
 - **Development environment constraint:** the agent session working on this repository cannot reach the npm registry or the Android/Gradle repositories. GitHub Actions is the build and test environment of record; Core's zero-dependency design keeps its tests runnable inside the agent session as well.
 - Library sizes in the tens of thousands of tracks are the design target for scan batching, list virtualisation and query indexes.

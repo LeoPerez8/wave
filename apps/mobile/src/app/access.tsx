@@ -1,8 +1,9 @@
-import { IconFolderOpen, IconLockAccess } from "@tabler/icons-react-native";
+import { IconFolderOpen } from "@tabler/icons-react-native";
 import { Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Button } from "@/components/Button";
+import { CELL, grid } from "@/catalog/grid";
+import { TextButton } from "@/components/TextButton";
 import { useAllFilesAccess } from "@/library/hooks";
 import { useThemeColor } from "@/theme/useThemeColor";
 
@@ -12,27 +13,35 @@ import { useThemeColor } from "@/theme/useThemeColor";
  */
 export default function AccessScreen() {
   const insets = useSafeAreaInsets();
-  const accent = useThemeColor("accent");
+  const tertiary = useThemeColor("tertiary");
   const { denied, request } = useAllFilesAccess();
-  const Icon = denied ? IconLockAccess : IconFolderOpen;
 
   return (
     <View
-      className="flex-1 justify-between bg-background px-8"
-      style={{ paddingTop: insets.top + 96, paddingBottom: insets.bottom + 32 }}
+      className="flex-1 bg-background"
+      style={{
+        paddingHorizontal: grid.margin,
+        paddingTop: insets.top + CELL * 12,
+        paddingBottom: insets.bottom + CELL * 4,
+        gap: CELL * 2,
+      }}
     >
-      <View className="items-center gap-3">
-        <Icon size={64} color={accent} strokeWidth={1.5} />
-        <Text className="mt-4 text-center font-sans text-title1 font-bold text-foreground">
-          {denied ? "Wave can't see your music yet" : "Allow access to your music"}
-        </Text>
-        <Text className="text-center font-sans text-body text-secondary">
-          {denied
-            ? "All files access is still off. Turn on “Allow access to manage all files” for Wave, then come back."
-            : "Wave plays the audio files on this phone. To find them in your Music folder, it needs “All files access”, which you turn on in Android settings."}
-        </Text>
+      <IconFolderOpen size={40} color={tertiary} strokeWidth={1.25} />
+      <Text
+        accessibilityRole="header"
+        className="font-sans text-large-title font-light text-foreground"
+        style={{ letterSpacing: -0.6 }}
+      >
+        {denied ? "Wave can't see your music yet" : "Allow access to your music"}
+      </Text>
+      <Text className="font-sans text-body text-secondary">
+        {denied
+          ? "All files access is still off. Turn on “Allow access to manage all files” for Wave, then come back."
+          : "Wave plays the audio files on this phone. To find them, it needs “All files access”, which you turn on in Android settings."}
+      </Text>
+      <View className="items-start">
+        <TextButton label={denied ? "Try again" : "Open settings"} onPress={request} />
       </View>
-      <Button label={denied ? "Try Again" : "Open Settings"} onPress={request} />
     </View>
   );
 }

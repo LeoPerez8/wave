@@ -48,3 +48,6 @@ apps/mobile/ios/
 *.aab
 *.keystore
 !debug.keystore
+
+# Impeccable review captures (local evidence, not source)
+apps/mobile/.impeccable/review/
