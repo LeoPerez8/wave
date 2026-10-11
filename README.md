@@ -48,10 +48,10 @@ Two skill packs are installed as Claude Code plugins (managed, not vendored — 
 when upstream ships). `.claude/settings.json` registers both marketplaces and enables the
 plugins, so Claude Code offers to install them when you trust this folder.
 
-| Plugin | Source | Use it for |
-| ------ | ------ | ---------- |
-| `mattpocock-skills` | [mattpocock/skills](https://github.com/mattpocock/skills) (MIT) | Engineering flow: `/grill-me`, `/to-spec`, `/to-tickets`, `/tdd`, `/code-review`, `/diagnosing-bugs` … |
-| `impeccable` | [pbakaus/impeccable](https://github.com/pbakaus/impeccable) | Design quality: `/impeccable critique`, `/impeccable audit`, `/impeccable polish` and anti-pattern checks |
+| Plugin              | Source                                                          | Use it for                                                                                                |
+| ------------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `mattpocock-skills` | [mattpocock/skills](https://github.com/mattpocock/skills) (MIT) | Engineering flow: `/grill-me`, `/to-spec`, `/to-tickets`, `/tdd`, `/code-review`, `/diagnosing-bugs` …    |
+| `impeccable`        | [pbakaus/impeccable](https://github.com/pbakaus/impeccable)     | Design quality: `/impeccable critique`, `/impeccable audit`, `/impeccable polish` and anti-pattern checks |
 
 Manual install, if needed:
 
