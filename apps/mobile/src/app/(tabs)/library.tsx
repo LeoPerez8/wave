@@ -11,7 +11,10 @@ import { EmptyState } from "@/components/EmptyState";
 import { IconButton } from "@/components/IconButton";
 import { LargeTitleScreen } from "@/components/LargeTitleScreen";
 import { ScanProgressBanner } from "@/components/ScanProgressBanner";
-import { useScanState, useTrackCount } from "@/library/hooks";
+import { TextButton } from "@/components/TextButton";
+import { folderPhrase } from "@/library/folderPhrase";
+import { useScanRoots, useScanState, useTrackCount } from "@/library/hooks";
+import { promptForMusicFolder } from "@/library/promptForMusicFolder";
 
 /** Empty cover slots stand in for Recently Added until the first scan. */
 const SLOT = CELL * 9;
@@ -19,6 +22,7 @@ const SLOT = CELL * 9;
 export default function LibraryScreen() {
   const scan = useScanState();
   const trackCount = useTrackCount();
+  const roots = useScanRoots();
   const empty = scan.status === "done" && trackCount === 0;
 
   return (
@@ -33,7 +37,10 @@ export default function LibraryScreen() {
         <EmptyState
           icon={IconStack2}
           title="No music found"
-          message="Wave didn't find any audio files in your Music folder. Copy some music there and it will show up here."
+          message={`Wave didn't find any audio files in ${folderPhrase(roots)}. Choose the folder your music is in.`}
+          action={
+            <TextButton label="Choose music folder" onPress={() => void promptForMusicFolder()} />
+          }
         />
       )}
       <Hairline />
@@ -53,7 +60,7 @@ export default function LibraryScreen() {
           ))}
         </View>
         <Text className="font-sans text-subheadline text-secondary">
-          No albums yet. They appear here as Wave scans your Music folder.
+          No albums yet. They appear here as Wave scans {folderPhrase(roots)}.
         </Text>
       </View>
     </LargeTitleScreen>

@@ -5,7 +5,12 @@ import { AppState } from "react-native";
 import { WaveNative } from "@/native/waveNative";
 
 import { libraryVersion, scanState, type ScanState } from "./LibraryScan";
-import { LibraryStore, type LibraryStoreError, type SongRow } from "./LibraryStore";
+import {
+  LibraryStore,
+  type LibraryStoreError,
+  type ScanRootSummary,
+  type SongRow,
+} from "./LibraryStore";
 import { appRuntime } from "./runtime";
 
 export const useScanState = (): ScanState =>
@@ -107,3 +112,13 @@ export const useSongs = (): readonly SongRow[] => useLibraryQuery(listSongs, NO_
 
 /** Number of tracks in the library, or null before the first count arrives. */
 export const useTrackCount = (): number | null => useLibraryQuery<number | null>(countTracks, null);
+
+const listRoots = Effect.gen(function* () {
+  const store = yield* LibraryStore;
+  return yield* store.listRoots;
+});
+
+const NO_ROOTS: readonly ScanRootSummary[] = [];
+
+/** The music folders Wave indexes, with their song counts. */
+export const useScanRoots = (): readonly ScanRootSummary[] => useLibraryQuery(listRoots, NO_ROOTS);

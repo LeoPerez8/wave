@@ -8,15 +8,28 @@ import { grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { IconButton } from "@/components/IconButton";
 import { ScreenHeader } from "@/components/ScreenHeader";
+import { useScanRoots } from "@/library/hooks";
 import { setTapAnimationMs, TAP_ANIMATION, useTapAnimationMs } from "@/settings/tapAnimation";
 
 export default function SettingsScreen() {
   const ms = useTapAnimationMs();
+  const roots = useScanRoots();
   return (
     <View className="flex-1 bg-background">
       <ScreenHeader title="Settings" />
       <ScrollView contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: 48 }}>
-        <CatalogLine className="mb-2">Motion</CatalogLine>
+        <CatalogLine className="mb-2">Library</CatalogLine>
+        <Hairline />
+        <EntryRow
+          label="Music folders"
+          count={roots.length === 0 ? undefined : roots.length}
+          onPress={() => router.push("/music-folders")}
+        />
+        <Text className="mt-2 font-sans text-footnote text-secondary">
+          The folders on your phone that Wave shows songs from.
+        </Text>
+
+        <CatalogLine className="mb-2 mt-12">Motion</CatalogLine>
         <Hairline />
         <View className="flex-row items-center" style={{ minHeight: grid.row }}>
           <Text className="flex-1 font-sans text-title3 font-normal text-foreground">

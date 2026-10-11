@@ -4,7 +4,15 @@ import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 
-import { runFullScan, runInitialScanIfNeeded, scanState } from "./LibraryScan";
+import {
+  chooseFolder,
+  removeFolder,
+  runFolderScan,
+  runFullScan,
+  runInitialScanIfNeeded,
+  scanState,
+  type FolderChoice,
+} from "./LibraryScan";
 import * as LibraryStore from "./LibraryStore";
 import * as NativeScanner from "./NativeScanner";
 
@@ -34,3 +42,13 @@ export const startInitialScan = (): void => startScan(runInitialScanIfNeeded);
 
 /** Scans the library again from scratch (used to retry after a failed scan). */
 export const startFullScan = (): void => startScan(runFullScan);
+
+/** Opens the folder picker and, when a new folder is added, starts scanning it. */
+export const chooseMusicFolder = async (): Promise<FolderChoice> => {
+  const choice = await appRuntime.runPromise(chooseFolder);
+  if (choice.kind === "added") startScan(runFolderScan(choice.path));
+  return choice;
+};
+
+export const removeMusicFolder = (path: string): Promise<void> =>
+  appRuntime.runPromise(removeFolder(path));
