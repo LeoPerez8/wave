@@ -35,11 +35,11 @@ export interface QueueTrack {
 export const queueState = makeExternalStore<QueueState>(EMPTY_QUEUE);
 
 /**
- * Counts the times the queue sent the current entry back to its start
- * (previous after three seconds, or next past the end of the queue), which
- * ends the play going on (see `PlayHistory`).
+ * The entry the player was on when JS restarted while it kept going, and the
+ * queue was picked back up from it; null otherwise. `PlayHistory` goes on with
+ * the play on record for it instead of starting a new one.
  */
-export const queueRestarts = makeExternalStore(0);
+export const keptPlayingKey = makeExternalStore<string | null>(null);
 
 export class Queue extends Context.Service<
   Queue,
@@ -164,12 +164,11 @@ export const layer = Layer.effect(
           case "play":
             yield* player.play;
             break;
+          // The player reports the seek back to the start, which ends the play (`PlayHistory`).
           case "restart":
-            queueRestarts.update((count) => count + 1);
             yield* player.seekTo(0);
             break;
           case "stop":
-            queueRestarts.update((count) => count + 1);
             yield* player.pause;
             yield* player.seekTo(0);
             break;
@@ -191,6 +190,7 @@ export const layer = Layer.effect(
       const json = yield* player.savedQueue;
       const saved = json === null ? null : parseQueueState(JSON.parse(json));
       if (saved === null || !sameKeys(saved.entries, native.keys)) return;
+      keptPlayingKey.set(native.currentKey);
       queueState.set(saved);
       appliedRepeat = saved.repeat;
       if (native.currentKey !== null) {

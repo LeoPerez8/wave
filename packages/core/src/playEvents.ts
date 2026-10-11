@@ -5,6 +5,8 @@
  * whichever comes first.
  */
 
+import { RESTART_THRESHOLD_MS } from "./queue.ts";
+
 /** Listening this long counts a play whatever the track's length. */
 export const COUNTED_PLAY_MS = 240_000;
 
@@ -47,8 +49,9 @@ export interface PlayTrack {
  * What the player reports, with the wall-clock time it happened at:
  * - `state`: what the player is doing (the entry key, whether it's playing).
  * - `transition`: the player moved to another entry, or repeated the current one.
- * - `restart`: Wave sent the current entry back to its start (previous after
- *   three seconds, or next past the end of the queue).
+ * - `seek`: the player jumped within entry `key`, from `fromMs` to `toMs`. Back
+ *   to the start it ends the play: "previous" after three seconds (from Wave, the
+ *   notification or a headset), or next past the end of the queue.
  */
 export type PlaybackSignal =
   | {
@@ -67,7 +70,23 @@ export type PlaybackSignal =
       readonly key: string | null;
       readonly reason: "auto" | "repeat" | "seek" | "playlist" | "sync";
     }
-  | { readonly type: "restart"; readonly at: number };
+  | {
+      readonly type: "seek";
+      readonly at: number;
+      readonly key: string | null;
+      readonly fromMs: number;
+      readonly toMs: number;
+    };
+
+/** A seek landing this close to the start of the track replays it. */
+const REPLAY_START_MS = 1000;
+
+/**
+ * Whether a seek sends the track back to its start, which ends the play: it
+ * lands in the first second, from past the point where "previous" restarts.
+ */
+const isReplay = (fromMs: number, toMs: number): boolean =>
+  toMs < REPLAY_START_MS && fromMs > RESTART_THRESHOLD_MS;
 
 /** The play going on now. */
 interface OpenPlay extends PlayTrack {
@@ -137,6 +156,40 @@ const cutShort = (play: OpenPlay): PlayEndReason =>
 export const playSoFar = (state: PlayTrackerState, at: number): PlayEvent | null =>
   state.play === null ? null : toEvent(state.play, at, cutShort(state.play));
 
+const sameContext = (a: PlayContext | null, b: PlayContext | null): boolean =>
+  a === null || b === null ? a === b : a.kind === b.kind && a.id === b.id;
+
+/**
+ * Picks a recorded play back up when Wave's JS restarted while the player kept
+ * going, so one listen isn't split in two: it goes on from what was listened
+ * when the player is still on its track, from the same context, and it hadn't
+ * ended (it's on record as interrupted or stopped). Null otherwise. Time spent
+ * playing while JS was away isn't known, so it isn't counted.
+ */
+export const resumePlay = (
+  recorded: PlayEvent,
+  signal: Extract<PlaybackSignal, { type: "state" }>,
+): PlayTrackerState | null => {
+  const { key, track } = signal;
+  if (key === null || track === null) return null;
+  if (signal.status === "idle" || signal.status === "ended") return null;
+  if (recorded.endReason !== "interrupted" && recorded.endReason !== "stopped") return null;
+  if (recorded.trackId !== track.trackId || !sameContext(recorded.context, track.context)) {
+    return null;
+  }
+  return {
+    play: {
+      key,
+      trackId: track.trackId,
+      context: track.context,
+      startedAt: recorded.startedAt,
+      durationMs: signal.durationMs ?? recorded.durationMs,
+      listenedMs: recorded.listenedMs,
+      playingSince: signal.playing ? signal.at : null,
+    },
+  };
+};
+
 /** Starts or stops the listening clock. */
 const setPlaying = (play: OpenPlay, playing: boolean, at: number): OpenPlay => {
   if (playing === (play.playingSince !== null)) return play;
@@ -163,8 +216,9 @@ export const trackPlays = (state: PlayTrackerState, signal: PlaybackSignal): Pla
       const playedThrough = signal.reason === "auto" || signal.reason === "repeat";
       return end(play, playedThrough ? "completed" : "skipped");
     }
-    case "restart":
-      return play === null ? unchanged : end(play, "skipped");
+    case "seek":
+      if (play === null || signal.key !== play.key) return unchanged;
+      return isReplay(signal.fromMs, signal.toMs) ? end(play, "skipped") : unchanged;
     case "state": {
       if (play !== null) {
         // Playback went away (an error, the queue cleared, the player stopped).

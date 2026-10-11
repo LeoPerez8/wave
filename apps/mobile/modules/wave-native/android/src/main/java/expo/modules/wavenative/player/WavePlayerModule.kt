@@ -79,7 +79,7 @@ private class ControllerPlaylist(private val player: Player) : PlaylistEditor<Me
  * Drives [PlaybackService] through a MediaController. JS owns the order (Core's
  * queue engine) and keeps the item list in step with `applySync`; the player
  * plays it gaplessly and reports `onPlaybackState` (on any change),
- * `onPosition` (every 500 ms while playing), `onItemTransition` and
+ * `onPosition` (every 500 ms while playing), `onItemTransition`, `onSeek` and
  * `onPlayerError`. The controller is only touched on the main thread.
  */
 class WavePlayerModule : Module() {
@@ -121,6 +121,24 @@ class WavePlayerModule : Module() {
       )
     }
 
+    override fun onPositionDiscontinuity(
+      oldPosition: Player.PositionInfo,
+      newPosition: Player.PositionInfo,
+      reason: Int,
+    ) {
+      val itemId = newPosition.mediaItem?.mediaId
+      if (!PlayerEvents.isSeekWithinItem(reason, oldPosition.mediaItem?.mediaId, itemId)) return
+      sendEvent(
+        "onSeek",
+        mapOf(
+          "itemId" to itemId,
+          "fromMs" to oldPosition.positionMs.toDouble(),
+          "toMs" to newPosition.positionMs.toDouble(),
+          "at" to System.currentTimeMillis().toDouble(),
+        ),
+      )
+    }
+
     override fun onPlayerError(error: PlaybackException) {
       sendEvent(
         "onPlayerError",
@@ -135,7 +153,7 @@ class WavePlayerModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("WavePlayer")
 
-    Events("onPlaybackState", "onPosition", "onItemTransition", "onPlayerError", "onSleepTimer")
+    Events("onPlaybackState", "onPosition", "onItemTransition", "onSeek", "onPlayerError", "onSleepTimer")
 
     OnCreate { main.post(::connect) }
 

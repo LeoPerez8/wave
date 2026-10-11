@@ -5,6 +5,7 @@ import {
   EMPTY_PLAY_TRACKER,
   isCountedPlay,
   playSoFar,
+  resumePlay,
   trackPlays,
   type PlayEvent,
   type PlaybackSignal,
@@ -42,6 +43,15 @@ const moved = (
   key: string | null,
   reason: Extract<PlaybackSignal, { type: "transition" }>["reason"],
 ): PlaybackSignal => ({ type: "transition", at, key, reason });
+
+/** The player jumped from `fromMs` to `toMs` within entry `key`. */
+const seeked = (at: number, key: string, fromMs: number, toMs: number): PlaybackSignal => ({
+  type: "seek",
+  at,
+  key,
+  fromMs,
+  toMs,
+});
 
 /** Feeds the signals in order; returns the plays that started and ended, and the final state. */
 const run = (
@@ -177,9 +187,10 @@ describe("trackPlays", () => {
   });
 
   test("going back to the start of the track ends the play as skipped; the replay is a new play", () => {
+    // "Previous" after three seconds, from Wave, the notification or a headset.
     const { ended, started } = run([
       playing(0, "1", "a"),
-      { type: "restart", at: 60_000 },
+      seeked(60_000, "1", 60_000, 0),
       playing(60_100, "1", "a"),
       moved(80_100, "2", "sync"),
     ]);
@@ -191,6 +202,35 @@ describe("trackPlays", () => {
       ],
     );
     assert.equal(started.length, 2);
+  });
+
+  test("seeking elsewhere in the track, even near its start, goes on with the same play", () => {
+    const { ended, started } = run([
+      playing(0, "1", "a"),
+      seeked(30_000, "1", 30_000, 120_000),
+      seeked(40_000, "1", 130_000, 5_000),
+      // Another entry's seek is for the transition to tell.
+      seeked(55_000, "2", 20_000, 0),
+      moved(60_000, "2", "sync"),
+    ]);
+    assert.equal(started.length, 1);
+    assert.deepEqual(
+      ended.map((play) => [play.trackId, play.endReason, play.listenedMs]),
+      [["a", "skipped", 60_000]],
+    );
+  });
+
+  test("going back to the start right after it started isn't a replay", () => {
+    const { ended, started } = run([
+      playing(0, "1", "a"),
+      seeked(800, "1", 800, 0),
+      moved(30_000, "2", "sync"),
+    ]);
+    assert.equal(started.length, 1);
+    assert.deepEqual(
+      ended.map((play) => play.listenedMs),
+      [30_000],
+    );
   });
 
   test("takes the track's length once the player knows it", () => {
@@ -244,6 +284,70 @@ describe("playSoFar", () => {
   test("there is nothing on record before anything plays", () => {
     assert.equal(playSoFar(EMPTY_PLAY_TRACKER, 1_000), null);
     assert.equal(playSoFar(run([paused(0, "1", "a")]).state, 1_000), null);
+  });
+});
+
+describe("resumePlay", () => {
+  /** What was on record for a play of `a` when Wave's JS went away. */
+  const recorded = (overrides: Partial<PlayEvent> = {}): PlayEvent => ({
+    trackId: "a",
+    context: album,
+    startedAt: 0,
+    listenedMs: 60_000,
+    durationMs: 3 * MIN,
+    endReason: "interrupted",
+    counted: false,
+    ...overrides,
+  });
+
+  /** Resumes `play`, failing the test when it isn't picked back up. */
+  const resume = (play: PlayEvent, signal: StateSignal): PlayTrackerState => {
+    const resumed = resumePlay(play, signal);
+    assert.ok(resumed, "the play is picked back up");
+    return resumed;
+  };
+
+  test("a play the player kept going while JS restarted goes on, so the whole listen counts", () => {
+    const resumed = resume(recorded(), playing(70_000, "1", "a"));
+    const { started, ended } = run(
+      [playing(70_500, "1", "a"), moved(100_000, "2", "auto")],
+      resumed,
+    );
+    assert.equal(started.length, 0);
+    assert.deepEqual(ended, [
+      {
+        trackId: "a",
+        context: album,
+        startedAt: 0,
+        listenedMs: 90_000,
+        durationMs: 3 * MIN,
+        endReason: "completed",
+        counted: true,
+      },
+    ]);
+  });
+
+  test("a paused play stays paused until the player resumes it", () => {
+    const resumed = resume(
+      recorded({ endReason: "stopped", listenedMs: 50_000 }),
+      paused(400_000, "1", "a"),
+    );
+    assert.equal(playSoFar(resumed, 500_000)?.listenedMs, 50_000);
+    const { ended } = run([playing(500_000, "1", "a"), moved(510_000, "2", "sync")], resumed);
+    assert.deepEqual(
+      ended.map((play) => [play.startedAt, play.listenedMs]),
+      [[0, 60_000]],
+    );
+  });
+
+  test("a play that had ended, or of another track or context, isn't picked back up", () => {
+    assert.equal(resumePlay(recorded({ endReason: "completed" }), playing(1, "1", "a")), null);
+    assert.equal(resumePlay(recorded({ endReason: "skipped" }), playing(1, "1", "a")), null);
+    assert.equal(resumePlay(recorded(), playing(1, "1", "b")), null);
+    assert.equal(resumePlay(recorded(), playing(1, "1", "a", { context: null })), null);
+    assert.equal(resumePlay(recorded({ context: null }), playing(1, "1", "a")), null);
+    assert.equal(resumePlay(recorded(), { ...playing(1, "1", "a"), status: "idle" }), null);
+    assert.equal(resumePlay(recorded(), { ...playing(1, "1", "a"), track: null }), null);
   });
 });
 

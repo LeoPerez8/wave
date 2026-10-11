@@ -43,6 +43,18 @@ export interface ItemTransitionEvent {
   readonly reason: "auto" | "repeat" | "seek" | "playlist" | "sync";
 }
 
+/**
+ * The player jumped within the current item (a seek from Wave, the scrubber,
+ * or "previous" after three seconds from the notification or a headset).
+ */
+export interface SeekEvent {
+  readonly itemId: string | null;
+  readonly fromMs: number;
+  readonly toMs: number;
+  /** Wall-clock time (ms) of the jump. */
+  readonly at: number;
+}
+
 export interface PlayerErrorEvent {
   readonly itemId: string | null;
   readonly message: string;
@@ -72,6 +84,7 @@ type WavePlayerEvents = {
   onPlaybackState: (state: NativePlayerState) => void;
   onPosition: (position: PlayerPosition) => void;
   onItemTransition: (event: ItemTransitionEvent) => void;
+  onSeek: (event: SeekEvent) => void;
   onPlayerError: (event: PlayerErrorEvent) => void;
   onSleepTimer: (event: SleepTimerEvent) => void;
 };

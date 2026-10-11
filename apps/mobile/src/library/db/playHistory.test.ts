@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { beforeEach, describe, test } from "node:test";
 
-import { homeSections, recordPlay, updatePlay } from "./playHistory.ts";
+import { homeSections, latestPlay, recordPlay, updatePlay } from "./playHistory.ts";
 import * as schema from "./schema.ts";
 import { addTrack, openTestDatabase, star, type TestDatabase } from "./testDatabase.ts";
 
@@ -152,5 +152,31 @@ describe("Most Played", () => {
       homeSections(db).mostPlayed.map((row) => row.title),
       ["Second", "First"],
     );
+  });
+});
+
+describe("The latest play", () => {
+  test("is the play recorded last, as last brought up to date, to pick it back up", () => {
+    const first = addTrack(db, { title: "First" });
+    const second = addTrack(db, { title: "Second" });
+    recordPlay(db, play(first, 1_000));
+    const going = { listenedMs: 0, endReason: "interrupted", counted: false } as const;
+    const id = recordPlay(db, play(second, 200_000, going));
+    updatePlay(db, id, play(second, 200_000, { ...going, listenedMs: 45_000 }));
+
+    assert.deepEqual(latestPlay(db), {
+      id,
+      play: play(second, 200_000, { ...going, listenedMs: 45_000 }),
+    });
+  });
+
+  test("a play outside any context comes back without one", () => {
+    const track = addTrack(db, { title: "Queued" });
+    const id = recordPlay(db, play(track, 1_000, { context: null }));
+    assert.deepEqual(latestPlay(db), { id, play: play(track, 1_000, { context: null }) });
+  });
+
+  test("there is none before anything was played", () => {
+    assert.equal(latestPlay(db), null);
   });
 });

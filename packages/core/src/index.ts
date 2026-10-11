@@ -94,6 +94,7 @@ export {
   EMPTY_PLAY_TRACKER,
   isCountedPlay,
   playSoFar,
+  resumePlay,
   trackPlays,
 } from "./playEvents.ts";
 export type {
