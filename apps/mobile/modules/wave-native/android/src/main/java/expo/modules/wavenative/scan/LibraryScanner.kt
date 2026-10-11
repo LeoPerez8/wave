@@ -14,7 +14,10 @@ data class ScannedTrack(
   val path: String,
   val sizeBytes: Long,
   val modifiedAt: Long,
-  /** Tags without the artwork bytes; the artwork is referenced by [artworkHash]. */
+  /**
+   * Tags without the artwork bytes (referenced by [artworkHash]) or the lyrics,
+   * which `LyricsReader` reads when they are shown.
+   */
   val tags: RawTags,
   val artworkHash: String?,
 )
@@ -157,7 +160,7 @@ class LibraryScanner(
       path = file.path,
       sizeBytes = file.length(),
       modifiedAt = file.lastModified(),
-      tags = tags.copy(artwork = null),
+      tags = tags.copy(artwork = null, lyrics = null),
       artworkHash = artwork?.hash,
     )
     return track to artwork

@@ -96,4 +96,31 @@ class TagReadingTest {
     )
     assertEquals("From fallback", withFallback.read(garbage).title)
   }
+
+  private fun assertLyrics(name: String) =
+    assertEquals("$name lyrics", FIXTURE_LYRICS, reader.read(Fixtures.file(name)).lyrics)
+
+  @Test fun lyricsFromAnId3UsltFrame() = assertLyrics("lyrics.mp3")
+
+  @Test fun lyricsFromAnMp3ConvertedByFfmpeg() = assertLyrics("lyrics-ffmpeg.mp3")
+
+  @Test fun lyricsFromFlac() = assertLyrics("lyrics.flac")
+
+  @Test fun lyricsFromM4a() = assertLyrics("lyrics.m4a")
+
+  @Test fun lyricsFromOggVorbisUnsyncedLyricsField() = assertLyrics("lyrics.ogg")
+
+  @Test fun lyricsFromOpus() = assertLyrics("lyrics.opus")
+
+  @Test
+  fun noLyricsWhenNoneAreTagged() {
+    assertNull(reader.read(Fixtures.file("tagged.mp3")).lyrics)
+    assertNull(reader.read(Fixtures.file("tagged.flac")).lyrics)
+    assertNull(reader.read(Fixtures.file("untagged.mp3")).lyrics)
+  }
+
+  private companion object {
+    /** What every `lyrics.*` fixture carries (see `generate.sh`). */
+    const val FIXTURE_LYRICS = "[00:00.50]Olá, onda\n[00:01.00]Second line"
+  }
 }

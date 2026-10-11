@@ -51,3 +51,5 @@ export { settleSheet } from "./sheet.ts";
 export type { SheetDrag, SheetState } from "./sheet.ts";
 export { reorderShift, reorderTarget } from "./reorder.ts";
 export type { ReorderDrag, ReorderRow } from "./reorder.ts";
+export { currentLyricIndex, parseLyrics, pickLyrics } from "./lyrics.ts";
+export type { LyricLine, Lyrics, LyricsSources } from "./lyrics.ts";

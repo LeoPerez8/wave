@@ -18,6 +18,7 @@ import expo.modules.wavenative.artwork.AndroidArtworkProcessor
 import expo.modules.wavenative.artwork.ArtworkInfo
 import expo.modules.wavenative.artwork.ArtworkStore
 import expo.modules.wavenative.folders.TreeUris
+import expo.modules.wavenative.lyrics.LyricsReader
 import expo.modules.wavenative.scan.KnownFile
 import expo.modules.wavenative.scan.LibraryScanner
 import expo.modules.wavenative.scan.ScanListener
@@ -33,7 +34,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * Wave's native side: all-files access, the folder picker and the library scanner. Scans run one at
+ * Wave's native side: all-files access, the folder picker, the library scanner and
+ * lyrics. Scans run one at
  * a time on a background thread and stream results to JS as events:
  * `onScanProgress`, `onScanMissing`, `onScanBatch`, `onScanComplete` and
  * `onScanError`, each carrying the `scanId` returned by `startScan`.
@@ -44,6 +46,9 @@ class WaveNativeModule : Module() {
   }
   private val nextScanId = AtomicInteger(1)
   @Volatile private var currentScan: Pair<Int, AtomicBoolean>? = null
+  private val lyricsReader by lazy {
+    LyricsReader(AudioTagReader(primary = JAudioTaggerReader(), fallback = MediaRetrieverTagReader()))
+  }
   /** Only touched on the main thread, where the picker starts and its result arrives. */
   private var pendingFolderPick: Promise? = null
 
@@ -139,6 +144,15 @@ class WaveNativeModule : Module() {
 
     Function("cancelScan") { scanId: Int ->
       currentScan?.takeIf { it.first == scanId }?.second?.set(true)
+    }
+
+    /**
+     * A track's lyrics, unparsed: `{ embedded, sidecar }`, each the text or
+     * null. Read on a background thread when the Lyrics view asks for them.
+     */
+    AsyncFunction("readLyrics") { path: String ->
+      val sources = lyricsReader.read(File(path))
+      mapOf("embedded" to sources.embedded, "sidecar" to sources.sidecar)
     }
 
     OnDestroy {

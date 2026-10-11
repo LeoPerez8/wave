@@ -35,6 +35,36 @@ TAGS=(
   -metadata "disc=1/2"
 )
 
+# Embedded lyrics, one fixture per way taggers store them. Every one carries LYRICS.
+LYRICS=$'[00:00.50]Olá, onda\n[00:01.00]Second line'
+lyrics_fixtures() { # <tmp> <out>
+  local tmp="$1" out="$2"
+  # MP3 with a real USLT frame (ID3v2.3, UTF-16), as Mp3tag, Picard or foobar2000 write it.
+  # ffmpeg can't write USLT, so the tag is assembled here and put in front of bare audio.
+  ff -i "$tmp/tone44k.wav" -c:a libmp3lame -b:a 32k -map_metadata -1 -id3v2_version 0 "$tmp/bare.mp3"
+  python3 - "$tmp/bare.mp3" "$out/lyrics.mp3" "$LYRICS" <<'PY'
+import struct, sys
+audio, target, lyrics = open(sys.argv[1], "rb").read(), sys.argv[2], sys.argv[3]
+def frame(frame_id, body):
+    return frame_id.encode() + struct.pack(">IH", len(body), 0) + body
+utf16 = lambda text: text.encode("utf-16")  # with BOM
+title = frame("TIT2", b"\x00Lyrics Fixture")
+uslt = frame("USLT", b"\x01" + b"eng" + utf16("") + b"\x00\x00" + utf16(lyrics))
+frames = title + uslt
+size = len(frames)
+syncsafe = bytes([(size >> 21) & 0x7F, (size >> 14) & 0x7F, (size >> 7) & 0x7F, size & 0x7F])
+open(target, "wb").write(b"ID3\x03\x00\x00" + syncsafe + frames + audio)
+PY
+  # MP3 converted by ffmpeg, which stores lyrics as a TXXX:USLT text frame instead.
+  ff -i "$tmp/tone44k.wav" -c:a libmp3lame -b:a 32k -id3v2_version 4 -metadata "lyrics=$LYRICS" \
+    "$out/lyrics-ffmpeg.mp3"
+  ff -i "$tmp/tone.wav" -c:a flac -metadata "lyrics=$LYRICS" "$out/lyrics.flac"
+  ff -i "$tmp/tone.wav" -c:a aac -b:a 16k -metadata "lyrics=$LYRICS" "$out/lyrics.m4a"
+  # foobar2000 writes UNSYNCEDLYRICS in Vorbis comments.
+  ff -i "$tmp/tone.wav" -c:a libvorbis -q:a 0 -metadata "UNSYNCEDLYRICS=$LYRICS" "$out/lyrics.ogg"
+  ff -i "$tmp/tone48k.wav" -c:a libopus -b:a 8k -metadata "lyrics=$LYRICS" "$out/lyrics.opus"
+}
+
 with_cover() { # <cover> -> args that embed it as the attached picture
   echo -i "$1" -map 0:a -map 1:v -disposition:v attached_pic
 }
@@ -74,5 +104,7 @@ cp "$out/tagged.opus" "$out/opus-in-ogg.ogg"
 # WAV with a LIST/INFO chunk
 ff -i "$tmp/tone.wav" -c:a pcm_s16le -metadata "title=Wave Fixture" -metadata "artist=Fixture Artist" \
   -metadata "album=Fixture Album" -metadata "genre=Ambient" -metadata "date=2024" "$out/tagged.wav"
+
+lyrics_fixtures "$tmp" "$out"
 
 ls -l "$out"
