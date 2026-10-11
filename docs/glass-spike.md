@@ -65,12 +65,12 @@ the other rows can be read as overhead.
 Fill in from the 5 s line of the readout. "Look" is a quick note on visual quality:
 smoothness of the blur, whether the edge refraction reads as glass, artefacts.
 
-| Technique                      | Auto-scroll fps | Avg ms | p95 ms | Late frames | Fling feel | Look |
-| ------------------------------ | --------------- | ------ | ------ | ----------- | ---------- | ---- |
-| A · Native refraction          |                 |        |        |             |            |      |
-| Fallback · Blur + tint + rim   |                 |        |        |             |            |      |
-| B · Skia snapshot              |                 |        |        |             |            |      |
-| Baseline · No blur             |                 |        |        |             |            |      |
+| Technique                    | Auto-scroll fps | Avg ms | p95 ms | Late frames | Fling feel | Look |
+| ---------------------------- | --------------- | ------ | ------ | ----------- | ---------- | ---- |
+| A · Native refraction        |                 |        |        |             |            |      |
+| Fallback · Blur + tint + rim |                 |        |        |             |            |      |
+| B · Skia snapshot            |                 |        |        |             |            |      |
+| Baseline · No blur           |                 |        |        |             |            |      |
 
 Snapshot cost for B (from the readout): ___ × ___ px in ___ ms.
 

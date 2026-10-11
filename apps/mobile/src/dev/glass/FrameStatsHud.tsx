@@ -14,7 +14,8 @@ const summarize = (windows: readonly FrameStats[]) => {
     avgFrameMs: windows.reduce((sum, w) => sum + w.avgFrameMs * w.frames, 0) / Math.max(frames, 1),
     worstP95Ms: Math.max(...windows.map((w) => w.p95FrameMs)),
     missed: windows.reduce((sum, w) => sum + w.missedDeadlines, 0),
-    missedPercent: (100 * windows.reduce((sum, w) => sum + w.missedDeadlines, 0)) / Math.max(frames, 1),
+    missedPercent:
+      (100 * windows.reduce((sum, w) => sum + w.missedDeadlines, 0)) / Math.max(frames, 1),
     frames,
   };
 };

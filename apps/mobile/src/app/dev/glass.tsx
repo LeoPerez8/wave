@@ -2,7 +2,14 @@ import { makeImageFromView, type SkImage } from "@shopify/react-native-skia";
 import { IconHome, IconSearch, IconStack2 } from "@tabler/icons-react-native";
 import { router } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View, useColorScheme, useWindowDimensions } from "react-native";
+import {
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  useColorScheme,
+  useWindowDimensions,
+} from "react-native";
 import Animated, {
   scrollTo,
   useAnimatedRef,
@@ -199,7 +206,11 @@ export default function GlassSpikeScreen() {
       ) : null}
 
       {/* Tab items on top of whichever glass is shown. */}
-      <View pointerEvents="none" className="flex-row items-center justify-around" style={frameStyle}>
+      <View
+        pointerEvents="none"
+        className="flex-row items-center justify-around"
+        style={frameStyle}
+      >
         {[
           { label: "Home", Icon: IconHome, active: true },
           { label: "Library", Icon: IconStack2, active: false },
