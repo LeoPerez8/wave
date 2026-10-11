@@ -56,8 +56,10 @@ export interface SongRow {
   readonly path: string;
   readonly title: string;
   readonly artist: string;
+  readonly album: string;
   readonly durationMs: number;
   readonly thumbPath: string | null;
+  readonly artworkPath: string | null;
 }
 
 export class LibraryStore extends Context.Service<
@@ -417,11 +419,14 @@ const make = Effect.gen(function* () {
           path: schema.tracks.path,
           title: schema.tracks.title,
           artist: schema.artists.name,
+          album: schema.albums.title,
           durationMs: schema.tracks.durationMs,
           thumbPath: schema.artwork.thumbPath,
+          artworkPath: schema.artwork.path,
         })
         .from(schema.tracks)
         .innerJoin(schema.artists, eq(schema.tracks.artistId, schema.artists.id))
+        .innerJoin(schema.albums, eq(schema.tracks.albumId, schema.albums.id))
         .leftJoin(schema.artwork, eq(schema.tracks.artworkHash, schema.artwork.hash))
         .orderBy(asc(schema.tracks.titleSort), asc(schema.artists.sort), asc(schema.tracks.path))
         .all(),
