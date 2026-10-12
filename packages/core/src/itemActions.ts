@@ -142,19 +142,27 @@ export const itemActions = (subject: ActionSubject): ItemActionEntry[] => {
   return entries;
 };
 
-/** What a kind of item is mostly selected for: always a button of its own on the bar. */
-const PRIMARY_ACTIONS: ReadonlySet<ItemAction> = new Set<ItemAction>([
+/**
+ * What items are mostly selected for, and Delete (songs): always a button of
+ * their own on the bar, never behind More.
+ */
+const KEPT_ON_BAR: ReadonlySet<ItemAction> = new Set<ItemAction>([
   "playNext",
   "addToQueue",
   "addToPlaylist",
   "favorite",
   "unfavorite",
   "removeFromPlaylist",
+  "delete",
 ]);
 
-/** Shorter captions for labels too long for a bar button (whose accessibility label stays the full one). */
+/**
+ * Shorter captions for labels too long for a bar button (whose accessibility
+ * label stays the full one). "Unfavorite" is wider than a button of a
+ * seven-button bar: its soft hyphen lets it break into two lines there.
+ */
 const BAR_LABELS: { readonly [A in ItemAction]?: string } = {
-  unfavorite: "Unfavorite",
+  unfavorite: "Un­favorite",
   removeFromPlaylist: "Remove",
 };
 
@@ -164,22 +172,23 @@ export const actionBarLabel = (action: ItemAction): string =>
 
 /**
  * Fits entries into a bar of [slots] buttons: all of them when they fit,
- * otherwise a More button (the last slot) holding the rest. Primary actions
- * (queue, add to a playlist, favorite, remove from the playlist) always keep a
- * button, the bar growing a slot past [slots] if they need it; other entries
- * fill what's left before More, in order.
+ * otherwise a More button (the last slot) holding the rest. The primary
+ * actions (queue, add to a playlist, favorite, remove from the playlist) and
+ * Delete always keep a button, the bar growing past [slots] if they need it
+ * (a playlist's songs: six, and More); other entries fill what's left before
+ * More, in order.
  */
 export const splitActionBar = <T extends { readonly action: ItemAction }>(
   entries: readonly T[],
   slots: number,
 ): { readonly bar: T[]; readonly more: T[] } => {
   if (entries.length <= slots) return { bar: [...entries], more: [] };
-  const primary = entries.filter((entry) => PRIMARY_ACTIONS.has(entry.action)).length;
-  let spare = Math.max(0, slots - 1 - primary);
+  const kept = entries.filter((entry) => KEPT_ON_BAR.has(entry.action)).length;
+  let spare = Math.max(0, slots - 1 - kept);
   const bar: T[] = [];
   const more: T[] = [];
   for (const entry of entries) {
-    if (PRIMARY_ACTIONS.has(entry.action)) bar.push(entry);
+    if (KEPT_ON_BAR.has(entry.action)) bar.push(entry);
     else if (spare > 0) {
       bar.push(entry);
       spare -= 1;

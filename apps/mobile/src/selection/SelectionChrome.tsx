@@ -56,9 +56,10 @@ const ICONS: { readonly [A in ItemAction]: ComponentType<IconProps> } = {
 };
 
 /**
- * Buttons the bar has room for, More included. A kind's primary actions may
- * take one more (Core's `splitActionBar`): six still fit a ~412dp phone with
- * captions on up to two lines.
+ * Buttons the bar has room for, More included. Primary actions and Delete may
+ * take more (Core's `splitActionBar`): a playlist's songs need seven, about
+ * 52dp each on a ~412dp phone, where every caption fits on up to two lines at
+ * full size ("Unfavorite" breaks at its soft hyphen).
  */
 const BAR_SLOTS = 5;
 
@@ -97,6 +98,7 @@ function BarButton({
       <Icon size={24} color={tone} strokeWidth={1.5} />
       <Text
         numberOfLines={2}
+        android_hyphenationFrequency="normal"
         adjustsFontSizeToFit
         minimumFontScale={0.85}
         className="text-center font-sans text-caption font-semibold"

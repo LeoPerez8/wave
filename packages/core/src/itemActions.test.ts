@@ -322,7 +322,7 @@ describe("splitActionBar", () => {
     });
   });
 
-  test("past the slots, the rest goes behind More, in order", () => {
+  test("past the slots, the rest goes behind More, in order; a song selection keeps Delete on the bar", () => {
     assert.deepEqual(
       bar([
         "playNext",
@@ -334,13 +334,13 @@ describe("splitActionBar", () => {
         "delete",
       ]),
       {
-        bar: ["playNext", "addToQueue", "addToPlaylist", "favorite"],
-        more: ["goToAlbum", "goToArtist", "delete"],
+        bar: ["playNext", "addToQueue", "addToPlaylist", "favorite", "delete"],
+        more: ["goToAlbum", "goToArtist"],
       },
     );
   });
 
-  test("a playlist's tracks keep every primary action on the bar, with a sixth slot for More", () => {
+  test("a playlist's tracks keep every primary action and Delete on the bar, More taking a seventh slot", () => {
     assert.deepEqual(
       bar([
         "playNext",
@@ -353,15 +353,29 @@ describe("splitActionBar", () => {
         "delete",
       ]),
       {
-        bar: ["playNext", "addToQueue", "addToPlaylist", "unfavorite", "removeFromPlaylist"],
-        more: ["goToAlbum", "goToArtist", "delete"],
+        bar: [
+          "playNext",
+          "addToQueue",
+          "addToPlaylist",
+          "unfavorite",
+          "removeFromPlaylist",
+          "delete",
+        ],
+        more: ["goToAlbum", "goToArtist"],
       },
     );
     assert.deepEqual(
       bar(["playNext", "addToQueue", "addToPlaylist", "favorite", "removeFromPlaylist", "delete"]),
       {
-        bar: ["playNext", "addToQueue", "addToPlaylist", "favorite", "removeFromPlaylist"],
-        more: ["delete"],
+        bar: [
+          "playNext",
+          "addToQueue",
+          "addToPlaylist",
+          "favorite",
+          "removeFromPlaylist",
+          "delete",
+        ],
+        more: [],
       },
     );
   });
@@ -370,8 +384,8 @@ describe("splitActionBar", () => {
     assert.deepEqual(
       bar(["playNext", "addToQueue", "goToAlbum", "goToArtist", "renamePlaylist", "delete"]),
       {
-        bar: ["playNext", "addToQueue", "goToAlbum", "goToArtist"],
-        more: ["renamePlaylist", "delete"],
+        bar: ["playNext", "addToQueue", "goToAlbum", "delete"],
+        more: ["goToArtist", "renamePlaylist"],
       },
     );
   });
@@ -380,7 +394,8 @@ describe("splitActionBar", () => {
 describe("actionBarLabel", () => {
   test("long labels get a short caption for a bar button; the rest keep their label", () => {
     assert.equal(actionBarLabel("removeFromPlaylist"), "Remove");
-    assert.equal(actionBarLabel("unfavorite"), "Unfavorite");
+    // A soft hyphen: on a crowded bar it breaks as "Un-" / "favorite" rather than shrinking.
+    assert.equal(actionBarLabel("unfavorite"), "Un\u00ADfavorite");
     assert.equal(actionBarLabel("playNext"), "Play Next");
     assert.equal(actionBarLabel("addToPlaylist"), "Add to Playlist");
   });
