@@ -16,6 +16,7 @@ import { startRescan } from "@/library/runtime";
 import { Press } from "@/motion/Press";
 import { GlassSettingsSection } from "@/settings/GlassSettingsSection";
 import { setShortcutTab, useShortcutTab } from "@/settings/shortcutTab";
+import { ThemeSettingsSection } from "@/settings/ThemeSettingsSection";
 import { setTapAnimationMs, TAP_ANIMATION, useTapAnimationMs } from "@/settings/tapAnimation";
 import { useThemeColor } from "@/theme/useThemeColor";
 
@@ -111,6 +112,8 @@ export default function SettingsScreen() {
         <Text className="mt-2 font-sans text-footnote text-secondary">
           A Library section to keep one tap away, as a third tab beside Home and Library.
         </Text>
+
+        <ThemeSettingsSection />
 
         <CatalogLine className="mb-2 mt-12">Developer</CatalogLine>
         <Hairline />

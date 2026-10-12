@@ -50,6 +50,8 @@ export interface ThemeColors {
   readonly "on-accent": string;
   readonly highlight: string;
   readonly destructive: string;
+  /** The veil laid (at a quarter strength) over the screen behind a dialog. */
+  readonly scrim: string;
 }
 
 export interface Theme {
@@ -78,6 +80,7 @@ export const DEFAULT_THEME: Theme = {
     "on-accent": TONES[0],
     highlight: "#a14f09",
     destructive: "#b3261e",
+    scrim: TONES[10],
   },
   dark: {
     background: TONES[11],
@@ -92,6 +95,7 @@ export const DEFAULT_THEME: Theme = {
     "on-accent": TONES[11],
     highlight: "#ec9d53",
     destructive: "#f2867a",
+    scrim: TONES[11],
   },
 };
 
@@ -110,7 +114,11 @@ const TEXT = 4.5;
 const NON_TEXT = 3;
 
 /** Every pair the app draws, with the contrast it needs. */
-const REQUIREMENTS: readonly { ink: Token; on: readonly Token[]; minimum: number }[] = [
+export const CONTRAST_REQUIREMENTS: readonly {
+  ink: Token;
+  on: readonly Token[];
+  minimum: number;
+}[] = [
   { ink: "foreground", on: ["background", "surface", "grouped"], minimum: TEXT },
   { ink: "secondary", on: ["background", "surface", "grouped"], minimum: TEXT },
   { ink: "tertiary", on: ["background", "surface"], minimum: NON_TEXT },
@@ -122,7 +130,7 @@ const REQUIREMENTS: readonly { ink: Token; on: readonly Token[]; minimum: number
 
 /** The pairs of a scheme that miss WCAG AA, in a fixed order; empty when it all reads. */
 export const themeContrastIssues = (colors: ThemeColors): readonly ContrastIssue[] =>
-  REQUIREMENTS.flatMap(({ ink, on, minimum }) =>
+  CONTRAST_REQUIREMENTS.flatMap(({ ink, on, minimum }) =>
     on.flatMap((ground) => {
       const ratio = contrastRatio(colors[ink], colors[ground]);
       return ratio < minimum ? [{ ink, on: ground, ratio, minimum }] : [];

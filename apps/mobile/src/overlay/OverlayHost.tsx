@@ -22,6 +22,7 @@ import { CELL, grid } from "@/catalog/grid";
 import { BACKDROP, useFloatingChromeHeight } from "@/chrome/chrome";
 import { Glass } from "@/glass/Glass";
 import { useTapAnimationMs } from "@/settings/tapAnimation";
+import { useThemeColor } from "@/theme/useThemeColor";
 
 import {
   closeOverlay,
@@ -51,6 +52,9 @@ const MIN_ANCHORED_HEIGHT = CELL * 20;
 const ENTER_SCALE = 0.94;
 
 const EASE = Easing.out(Easing.exp);
+
+/** The veil behind a card: the theme's scrim colour at a quarter strength (hex alpha). */
+const SCRIM_ALPHA = "40";
 
 /**
  * Hosts Wave's glass dialogs. Wrap the app's navigator with it: the navigator
@@ -98,6 +102,7 @@ function OverlayCard({ entry, frontmost }: { entry: OverlayEntry; frontmost: boo
   const insets = useSafeAreaInsets();
   const keyboard = useKeyboardHeight();
   const ms = useTapAnimationMs();
+  const scrim = useThemeColor("scrim");
   const reduceMotion = useReducedMotion();
   const card = useRef<ComponentRef<typeof View>>(null);
   const [cardHeight, setCardHeight] = useState<number | null>(null);
@@ -162,7 +167,7 @@ function OverlayCard({ entry, frontmost }: { entry: OverlayEntry; frontmost: boo
     >
       <Animated.View style={[StyleSheet.absoluteFill, veilStyle]}>
         <Pressable
-          className="flex-1 bg-tone-10/25 dark:bg-tone-11/25"
+          style={{ flex: 1, backgroundColor: `${scrim}${SCRIM_ALPHA}` }}
           accessibilityRole="button"
           accessibilityLabel="Close"
           onPress={() => dismissOverlay(entry)}

@@ -171,6 +171,21 @@ export { planAlert } from "./alert.ts";
 export type { AlertButton, AlertChoice, AlertPlan, AlertSpec } from "./alert.ts";
 export { DEFAULT_THEME, TONES, themeContrastIssues } from "./theme.ts";
 export type { ContrastIssue, Theme, ThemeColors } from "./theme.ts";
+export {
+  DEFAULT_THEME_CHOICE,
+  THEME_SWATCHES,
+  readThemeChoice,
+  themeFor,
+  themeSwatchRows,
+} from "./themeChoice.ts";
+export type {
+  BackgroundSwatch,
+  InkSwatch,
+  Scheme,
+  ThemeChoice,
+  ThemeSwatchOption,
+  ThemeSwatchRow,
+} from "./themeChoice.ts";
 export { sliderFraction, sliderValueAt, snapSliderValue, stepSlider } from "./slider.ts";
 export type { SliderRange } from "./slider.ts";
 export {
