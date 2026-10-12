@@ -18,7 +18,7 @@ import {
   type SongListening,
   type StatsWindow,
 } from "@wave/core";
-import { and, asc, desc, eq, inArray, ne, or, sql, type SQL } from "drizzle-orm";
+import { asc, desc, eq, inArray, ne, or, sql, type SQL } from "drizzle-orm";
 import { drizzle, type ExpoSQLiteDatabase } from "drizzle-orm/expo-sqlite";
 import { migrate } from "drizzle-orm/expo-sqlite/migrator";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
@@ -50,7 +50,7 @@ import {
   type HomeSections,
   type RecordedPlay,
 } from "./db/playHistory";
-import { selectPlaylistSongs } from "./db/playlists";
+import { removePlaylistItems, selectPlaylistSongs } from "./db/playlists";
 import * as schema from "./db/schema";
 import { BY_TITLE, trackQuery } from "./db/tracks";
 import { creditedPlayTotals, songListening, trackPlayTotals } from "./db/stats";
@@ -402,9 +402,10 @@ export class LibraryStore extends Context.Service<
       itemId: number,
       toIndex: number,
     ) => Effect.Effect<void, LibraryStoreError>;
-    readonly removePlaylistItem: (
+    /** Removes these entries from the playlist (other copies of the same songs stay). */
+    readonly removePlaylistItems: (
       playlistId: number,
-      itemId: number,
+      itemIds: readonly number[],
     ) => Effect.Effect<void, LibraryStoreError>;
     /** The ids of every starred track. */
     readonly favoriteTrackIds: Effect.Effect<readonly number[], LibraryStoreError>;
@@ -1363,18 +1364,9 @@ const make = Effect.gen(function* () {
         movePlaylistItemSync(db, playlistId, itemId, toIndex, Date.now()),
       ),
 
-    removePlaylistItem: (playlistId, itemId) =>
+    removePlaylistItems: (playlistId, itemIds) =>
       attempt("remove from the playlist", () =>
-        db.transaction((tx) => {
-          const { playlists, playlistItems } = schema;
-          tx.delete(playlistItems)
-            .where(and(eq(playlistItems.id, itemId), eq(playlistItems.playlistId, playlistId)))
-            .run();
-          tx.update(playlists)
-            .set({ updatedAt: Date.now() })
-            .where(eq(playlists.id, playlistId))
-            .run();
-        }),
+        removePlaylistItems(db, playlistId, itemIds, Date.now()),
       ),
 
     favoriteTrackIds: attempt("read favorites", () =>
