@@ -10,6 +10,7 @@ import {
   autoPageItems,
   autoPlayList,
   autoPlaylistItem,
+  autoQueueAdd,
   autoQueueStart,
   autoTrackItems,
   decodeAutoMediaId,
@@ -237,6 +238,29 @@ describe("Auto queue start", () => {
       assert.equal(autoPlayList(node), null);
       assert.equal(autoQueueStart(node, albumTracks), null);
     }
+  });
+});
+
+describe("Auto queue add", () => {
+  test("adding a track adds that track", () => {
+    const node = { type: "track", list: album, index: 2, trackId: "13" } as const;
+    assert.deepEqual(autoQueueAdd(node, albumTracks), ["13"]);
+  });
+
+  test("a track that moved within the list is still found", () => {
+    const node = { type: "track", list: album, index: 0, trackId: "12" } as const;
+    assert.deepEqual(autoQueueAdd(node, albumTracks), ["12"]);
+  });
+
+  test("adding Shuffle adds the whole list, in list order", () => {
+    assert.deepEqual(autoQueueAdd({ type: "shuffle", list: album }, albumTracks), inAlbumOrder);
+  });
+
+  test("nothing is added for a track gone from the list, an empty list or a browsable node", () => {
+    const gone = { type: "track", list: album, index: 0, trackId: "99" } as const;
+    assert.equal(autoQueueAdd(gone, albumTracks), null);
+    assert.equal(autoQueueAdd({ type: "shuffle", list: album }, []), null);
+    assert.equal(autoQueueAdd({ type: "list", list: album }, albumTracks), null);
   });
 });
 

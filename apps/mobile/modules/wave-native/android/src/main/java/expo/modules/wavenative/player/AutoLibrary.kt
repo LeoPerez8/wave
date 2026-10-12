@@ -100,6 +100,24 @@ object AutoLibrary {
     )
 
   /**
+   * Asks JS to add [mediaIds] to the queue through its queue engine, which
+   * syncs them onto the player itself: the session gets no items to add.
+   * Fails with an [AutoPlayException] carrying Auto's message.
+   */
+  fun add(mediaIds: List<String>): ListenableFuture<MutableList<MediaItem>> =
+    Futures.transform(
+      request("add", JSONObject().put("mediaIds", JSONArray(mediaIds))),
+      { answer ->
+        when (answer) {
+          is AutoReply.Ok -> mutableListOf()
+          is AutoReply.Failed -> throw AutoPlayException(answer.message)
+          null -> throw AutoPlayException(AutoBridge.STILL_LOADING)
+        }
+      },
+      MoreExecutors.directExecutor(),
+    )
+
+  /**
    * Forwards a tap on a shuffle or repeat button ([AutoModes.request]) to JS's
    * queue engine. JS then reports the new modes, which update the buttons.
    */

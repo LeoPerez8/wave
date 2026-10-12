@@ -7,6 +7,7 @@ import {
   autoPageItems,
   autoPlayList,
   autoPlaylistItem,
+  autoQueueAdd,
   autoQueueStart,
   autoTrackItems,
   decodeAutoMediaId,
@@ -26,7 +27,7 @@ import * as Layer from "effect/Layer";
 import { LibraryStore, type LibraryStoreError, type SongRow } from "@/library/LibraryStore";
 import type { AutoPlayback, AutoRequest } from "@/native/wavePlayer";
 import type { PlayerError } from "@/playback/Player";
-import { Queue, queueState, toQueueTrack } from "@/playback/Queue";
+import { Queue, queueState, toQueueTrack, type QueueTrack } from "@/playback/Queue";
 
 /** Why Wave can't answer an Auto request; `message` is what Auto shows. */
 export class AutoError extends Data.TaggedError("AutoError")<{ readonly message: string }> {}
@@ -230,6 +231,25 @@ export const layer = Layer.effect(
         return playback;
       });
 
+    /** Adds the tracks of [mediaIds] (each a track or a Shuffle) to the end of the queue. */
+    const add = (mediaIds: readonly string[]) =>
+      Effect.gen(function* () {
+        const trackIds: string[] = [];
+        const tracks: QueueTrack[] = [];
+        for (const mediaId of mediaIds) {
+          const node = yield* decode(mediaId);
+          const list = autoPlayList(node);
+          if (list === null) return yield* notFound;
+          const songs = yield* songsOf(list);
+          const added = autoQueueAdd(node, songs.map(toAutoTrack));
+          if (added === null) return yield* notFound;
+          trackIds.push(...added);
+          tracks.push(...songs.map(toQueueTrack));
+        }
+        if (trackIds.length > 0) yield* queue.dispatch({ type: "addToQueue", trackIds }, tracks);
+        return null;
+      });
+
     /**
      * Auto's shuffle and repeat buttons, through the queue engine like the
      * app's: shuffle keeps the current track, repeat goes off → all → one.
@@ -255,6 +275,8 @@ export const layer = Layer.effect(
           return item(request.mediaId);
         case "play":
           return play(request.mediaId);
+        case "add":
+          return add(request.mediaIds);
         case "command":
           return command(request.command);
       }

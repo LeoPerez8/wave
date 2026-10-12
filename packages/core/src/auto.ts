@@ -542,6 +542,25 @@ export const autoQueueStart = (
 };
 
 /**
+ * What adding `node` to the queue adds (a controller asked to add it rather
+ * than play it), given every track of its list (`autoPlayList`) in any order:
+ * a track adds itself; Shuffle adds its whole list, in list order. Null when
+ * there's nothing to add: a browsable node, an empty list, or a track that
+ * has left the list.
+ */
+export const autoQueueAdd = (
+  node: AutoNode,
+  tracks: readonly AutoTrack[],
+): readonly string[] | null => {
+  const start = autoQueueStart(node, tracks);
+  if (start === null) return null;
+  const { trackIds, startIndex } = start;
+  return node.type === "track" && startIndex !== undefined
+    ? trackIds.slice(startIndex, startIndex + 1)
+    : trackIds;
+};
+
+/**
  * `limit` of a track list's tracks from `offset`, in list order: `tracks` is
  * the whole list, in any order. Each plays the list from itself.
  */

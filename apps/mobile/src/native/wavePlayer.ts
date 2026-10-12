@@ -111,6 +111,11 @@ export type AutoRequest =
   /** Auto played a node: start its queue and answer the items the session sets on the player. */
   | { readonly type: "play"; readonly mediaId: string }
   /**
+   * Auto added nodes to the queue: add their tracks through the queue engine
+   * (which puts them on the player), then answer `null`.
+   */
+  | { readonly type: "add"; readonly mediaIds: readonly string[] }
+  /**
    * A tap on Auto's shuffle or repeat button: change the queue's mode as the
    * app's buttons do, then answer `null` (the new modes go out with `setModes`).
    */

@@ -126,6 +126,7 @@ export {
   autoChildren,
   autoItem,
   autoPlayList,
+  autoQueueAdd,
   autoQueueStart,
   autoTrackItems,
   decodeAutoMediaId,
