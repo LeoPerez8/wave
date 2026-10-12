@@ -28,7 +28,7 @@ import * as Layer from "effect/Layer";
 import { openDatabaseSync } from "expo-sqlite";
 
 import { selectAlbums } from "./db/albums";
-import { selectArtistCovers, selectArtists } from "./db/artists";
+import { selectArtistCovers, selectArtistSongs, selectArtists } from "./db/artists";
 import migrations from "./db/migrations";
 import {
   homeSections,
@@ -38,7 +38,9 @@ import {
   type HomeSections,
   type RecordedPlay,
 } from "./db/playHistory";
+import { selectPlaylistSongs } from "./db/playlists";
 import * as schema from "./db/schema";
+import { BY_TITLE, trackQuery } from "./db/tracks";
 import { creditedPlayTotals, trackPlayTotals } from "./db/stats";
 import type { KnownFile } from "./NativeScanner";
 
@@ -672,39 +674,6 @@ const removeRootSync = (db: Database, path: string): void => {
   });
 };
 
-/** Tracks with what every track list shows (a `SongRow`), plus what orders albums and folders. */
-const trackQuery = (db: Database) => {
-  const { tracks, artists, albums, artwork } = schema;
-  return db
-    .select({
-      id: tracks.id,
-      path: tracks.path,
-      title: tracks.title,
-      artist: artists.name,
-      album: albums.title,
-      durationMs: tracks.durationMs,
-      thumbPath: artwork.thumbPath,
-      artworkPath: artwork.path,
-      titleSort: tracks.titleSort,
-      albumId: tracks.albumId,
-      artistId: tracks.artistId,
-      discNumber: tracks.discNumber,
-      trackNumber: tracks.trackNumber,
-      fileName: tracks.fileName,
-    })
-    .from(tracks)
-    .innerJoin(artists, eq(tracks.artistId, artists.id))
-    .innerJoin(albums, eq(tracks.albumId, albums.id))
-    .leftJoin(artwork, eq(tracks.artworkHash, artwork.hash));
-};
-
-/** Albums with their track count and length; albums left without tracks don't appear. */
-const BY_TITLE = [
-  asc(schema.tracks.titleSort),
-  asc(schema.artists.sort),
-  asc(schema.tracks.path),
-] as const;
-
 /** Artists with songs (see `selectArtists`), only [ids] if given. */
 const listArtistsSync = (db: Database, ids?: readonly number[]): ArtistRow[] =>
   selectArtists(db, { ids });
@@ -734,18 +703,7 @@ const getArtistSync = (db: Database, id: number): ArtistDetail | null => {
     .where(eq(artists.id, id))
     .get();
   if (artist === undefined) return null;
-  const songs = trackQuery(db)
-    .where(
-      or(
-        eq(tracks.artistId, id),
-        inArray(
-          tracks.albumId,
-          db.select({ id: albums.id }).from(albums).where(eq(albums.albumArtistId, id)),
-        ),
-      ),
-    )
-    .orderBy(...BY_TITLE)
-    .all();
+  const songs = selectArtistSongs(db, id);
   const split = artistAlbums(
     id,
     selectAlbums(
@@ -847,16 +805,6 @@ const rememberSearchSync = (db: Database, query: string, now: number): readonly 
 /** Rows per multi-row insert, well under SQLite's bound-parameter limit. */
 const INSERT_CHUNK = 200;
 
-/** Songs (`SongRow`s) by track id, fetched in chunks. */
-const songsById = (db: Database, ids: readonly number[]) => {
-  const songs = new Map<number, ReturnType<ReturnType<typeof trackQuery>["all"]>[number]>();
-  for (const chunk of chunks(ids)) {
-    for (const song of trackQuery(db).where(inArray(schema.tracks.id, chunk)).all())
-      songs.set(song.id, song);
-  }
-  return songs;
-};
-
 interface PlaylistCovers {
   readonly thumbPaths: readonly string[];
   readonly artworkPaths: readonly string[];
@@ -925,27 +873,14 @@ const listPlaylistsSync = (db: Database): PlaylistRow[] => {
 };
 
 const getPlaylistSync = (db: Database, id: number): PlaylistDetail | null => {
-  const { playlists, playlistItems } = schema;
+  const { playlists } = schema;
   const playlist = db
     .select({ id: playlists.id, name: playlists.name })
     .from(playlists)
     .where(eq(playlists.id, id))
     .get();
   if (playlist === undefined) return null;
-  const order = db
-    .select({ itemId: playlistItems.id, trackId: playlistItems.trackId })
-    .from(playlistItems)
-    .where(eq(playlistItems.playlistId, id))
-    .orderBy(asc(playlistItems.position), asc(playlistItems.id))
-    .all();
-  const songs = songsById(
-    db,
-    order.map((item) => item.trackId),
-  );
-  const items = order.flatMap((item) => {
-    const song = songs.get(item.trackId);
-    return song === undefined ? [] : [{ ...song, itemId: item.itemId }];
-  });
+  const items = selectPlaylistSongs(db, id);
   const covers = playlistCovers(db, id).get(id) ?? NO_COVERS;
   return {
     playlist: {
