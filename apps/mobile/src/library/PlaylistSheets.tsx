@@ -7,7 +7,6 @@ import {
 } from "@wave/core";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import {
-  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -26,6 +25,7 @@ import { PlaylistEntry } from "@/catalog/PlaylistEntry";
 import { TextButton } from "@/components/TextButton";
 import { makeExternalStore } from "@/lib/externalStore";
 import { Press } from "@/motion/Press";
+import { confirmAction } from "@/overlay/alert";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { usePlaylists } from "./hooks";
@@ -276,18 +276,17 @@ export const confirmDeletePlaylist = (
   playlist: { readonly id: number; readonly name: string },
   onDeleted?: () => void,
 ): void =>
-  Alert.alert(`Delete ${playlist.name}?`, "Its songs stay in your library.", [
-    { text: "Cancel", style: "cancel" },
-    {
-      text: "Delete",
-      style: "destructive",
-      onPress: () => {
-        void deletePlaylist(playlist.id)
+  void confirmAction({
+    title: `Delete ${playlist.name}?`,
+    message: "Its songs stay in your library.",
+    action: { label: "Delete", destructive: true },
+  }).then((confirmed) =>
+    confirmed
+      ? deletePlaylist(playlist.id)
           .then(() => onDeleted?.())
-          .catch(failed("delete the playlist"));
-      },
-    },
-  ]);
+          .catch(failed("delete the playlist"))
+      : undefined,
+  );
 
 /** The playlist picker and the name prompt. Mounted once at the root. */
 export function PlaylistSheets() {

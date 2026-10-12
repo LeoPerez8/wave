@@ -1,5 +1,6 @@
 import { describeFolder } from "@wave/core";
-import { Alert } from "react-native";
+
+import { showError, showMessage } from "@/overlay/alert";
 
 import { scanState } from "./LibraryScan";
 import { chooseMusicFolder } from "./runtime";
@@ -10,23 +11,23 @@ import { chooseMusicFolder } from "./runtime";
  */
 export const promptForMusicFolder = async (): Promise<void> => {
   if (scanState.get().status === "scanning") {
-    Alert.alert("Wave is scanning", "You can add a folder once the scan finishes.");
+    await showMessage("Wave is scanning", "You can add a folder once the scan finishes.");
     return;
   }
   try {
     const choice = await chooseMusicFolder();
     if (choice.kind === "covered") {
-      Alert.alert(
+      await showMessage(
         "Already in your library",
         `Wave already shows the songs in ${describeFolder(choice.by).name}, which includes this folder.`,
       );
     } else if (choice.kind === "unsupported") {
-      Alert.alert(
+      await showMessage(
         "Wave can't read this folder",
         "Pick it from your phone's storage or SD card in the picker, rather than from a shortcut like Downloads or a cloud drive.",
       );
     }
   } catch (error) {
-    Alert.alert("Couldn't add the folder", error instanceof Error ? error.message : String(error));
+    await showError("Couldn't add the folder", error);
   }
 };

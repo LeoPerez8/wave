@@ -26,6 +26,7 @@
       --color-accent: #006a5f;
       --color-on-accent: #eff4f6;
       --color-highlight: #a14f09;
+      --color-destructive: #b3261e;
     }
 
     @variant dark {
@@ -40,6 +41,7 @@
       --color-accent: #59c0ad;
       --color-on-accent: #121b1d;
       --color-highlight: #ec9d53;
+      --color-destructive: #f2867a;
     }
   }
 }
