@@ -66,6 +66,7 @@ function FolderRow({ path, detail, removeLabel, removable, onRemove }: FolderRow
           icon={IconMinus}
           label={`${removeLabel} ${label.name}`}
           disabled={!removable}
+          opensMenu
           onPress={onRemove}
         />
       </View>

@@ -2,6 +2,7 @@ import { IconMinus, IconPlus, IconZzz } from "@tabler/icons-react-native";
 import {
   CUSTOM_SLEEP_MINUTES,
   SLEEP_TIMER_PRESETS,
+  entryDivider,
   formatSleepMinutes,
   formatSleepRemaining,
   sleepTimerRemaining,
@@ -19,6 +20,9 @@ import { Hairline } from "@/catalog/Hairline";
 import { IconButton } from "@/components/IconButton";
 import { TextButton } from "@/components/TextButton";
 import { Press } from "@/motion/Press";
+import { pressedRect } from "@/motion/pressedRect";
+import { CardEntries } from "@/overlay/CardEntries";
+import { useOverlayFlow } from "@/overlay/flow";
 import { openOverlay } from "@/overlay/overlay";
 import { cancelSleepTimer, setSleepTimer } from "@/playback/actions";
 import { sleepTimerState } from "@/playback/Player";
@@ -87,6 +91,7 @@ function SleepTimerMenu({ close }: { close: () => void }) {
   const timer = useSleepTimer();
   const [custom, setCustom] = useState(false);
   const [minutes, setMinutes] = useState<number>(CUSTOM_SLEEP_MINUTES.initial);
+  const flow = useOverlayFlow();
 
   const pick = (choice: SleepTimerChoice) => {
     setSleepTimer(choice);
@@ -155,22 +160,28 @@ function SleepTimerMenu({ close }: { close: () => void }) {
           </View>
         </>
       ) : (
-        entries.map((entry, index) => (
-          <EntryRow
-            key={entry.label}
-            label={entry.label}
-            onPress={entry.onPress}
-            divider={index < entries.length - 1}
-          />
-        ))
+        <CardEntries>
+          {entries.map((entry, index) => (
+            <EntryRow
+              key={entry.label}
+              label={entry.label}
+              onPress={entry.onPress}
+              divider={entryDivider(index, entries.length, flow)}
+            />
+          ))}
+        </CardEntries>
       )}
     </>
   );
 }
 
-/** Opens the timer menu over everything, Now Playing included. */
+/** Opens the timer menu over everything, Now Playing included, next to its button. */
 const openSleepTimer = (): void => {
-  openOverlay({ label: "Sleep timer", render: (close) => <SleepTimerMenu close={close} /> });
+  openOverlay({
+    label: "Sleep timer",
+    anchor: pressedRect(),
+    render: (close) => <SleepTimerMenu close={close} />,
+  });
 };
 
 /**
@@ -189,6 +200,7 @@ export function SleepTimerButton() {
         text: timer === null ? "Off" : timer.type === "endOfTrack" ? "End of track" : "On",
       }}
       onPress={openSleepTimer}
+      opensMenu
       haptic="selection"
       depth={0.1}
       className="flex-row items-center"

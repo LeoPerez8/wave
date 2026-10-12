@@ -121,7 +121,15 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
   cancelScan(scanId: number): void;
   /** A track's lyrics, unparsed: from its tags and from a sidecar `.lrc` beside it. */
   readLyrics(path: string): Promise<NativeLyrics>;
+  /**
+   * Deletes audio files and their sidecar `.lrc`; one outcome per path, in
+   * order. MediaStore is told about the deleted ones.
+   */
+  deleteFiles(paths: readonly string[]): Promise<readonly FileDeleteOutcome[]>;
 }
+
+/** What became of a file `deleteFiles` was asked to delete (Core's `SongDeleteFailureReason` otherwise). */
+export type FileDeleteOutcome = "deleted" | "missing" | "denied" | "readOnly" | "failed";
 
 export const WaveNative = requireNativeModule<WaveNativeModule>("WaveNative");
 

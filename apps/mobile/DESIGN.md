@@ -157,7 +157,7 @@ A cool, low-chroma tonal ramp carrying two small, saturated voices: teal and emb
 
 ### Secondary
 
-- **Ember** (`highlight`; burnt orange in light, a warm apricot in dark): favorite and now playing. The playing track's title and speaker glyph, the favorite star. Ember means "this one is yours, or this one is sounding".
+- **Ember** (`highlight`; burnt orange in light, a warm apricot in dark): favorite and now playing. The playing track's title and its wavy underline, the favorite star. Ember means "this one is yours, or this one is sounding".
 
 ### Destructive
 
@@ -170,6 +170,7 @@ A cool, low-chroma tonal ramp carrying two small, saturated voices: teal and emb
 - **Graphite** (`secondary`): artists, counts, durations, furniture lines, catalog lines, inactive spine letters, helper copy.
 - **Pewter** (`tertiary`): non-text only. Disabled icon buttons, the missing-file glyph, the placeholder note on artless covers.
 - **Rule** (`separator`): one-pixel hairlines between entries and around setting rows.
+- **Card divider**: on overlay cards (menus, dialogs) the separator tone vanishes on glass, so their rules are the ink laid at about a quarter strength, two pixels thick (Core's `overlayDivider`). `Hairline` draws it by itself inside any overlay card; one sits between each pair of entries, never after the last.
 - **Field** (`fill`): the square behind artwork that has no image, and empty cover slots.
 
 The full ramp lives in `global.css` as `tone-0` (lightest, `#eff4f6`) to `tone-11` (darkest, `#0a1113`); each semantic token is a step on it, in both themes. Light mode uses `tone-0` to `tone-10` (its ink is `tone-10`); `tone-11` is dark mode's ground only, and dark cards and fills (`tone-10`) and hairlines (`tone-9`) climb one step each from it, evenly spaced, so light mode never changes when dark mode gets darker. Core's `packages/core/src/theme.ts` holds the same values (`DEFAULT_THEME`, `TONES`) and checks WCAG AA for every pair the app draws (`themeContrastIssues`); an app test fails if `global.css` or the launch splash drift from it. `surface` is the tint laid over the glass of the floating chrome (at about 72%); `scrim` is the veil behind dialog and menu cards, laid at a quarter strength: the ink in light mode, the ground in dark. `grouped` and `on-accent` are also declared there but are not yet used by this world's components.
@@ -283,7 +284,7 @@ The Library's entries (Playlists, Artists, Albums, Songs, Genres, Folders, Favor
 
 ### Track Row
 
-56dp, fixed cells, one type size. Songs lists lead with a 40dp square thumbnail and put the state cell after the text; album track lists lead with the track number in a 32dp cell, which the state glyph replaces. Playing: title and speaker glyph in ember. Missing file: title in graphite, artist line reads "File not found", a file-off glyph in pewter, and the row is disabled. Favorite: a small filled star in ember in its own 24dp cell. Duration in tabular Footnote, right-aligned. Stats rankings use the numbered row with the rank as the number (the top one in ember, 500) and the counted plays after the artist ("Artist · 12 plays").
+56dp, fixed cells, one type size. Songs lists lead with a 40dp square thumbnail; album track lists lead with the track number in a 32dp cell. Playing: title in ember with a thin ember wavy underline spanning its visible text, rippling while music plays and still when paused (static under reduce motion or tap animation 0 ms). Missing file: title in graphite, artist line reads "File not found", a file-off glyph in pewter (after the text in Songs lists, in place of the number in album lists), and the row is disabled. Favorite: a small filled star in ember in its own 24dp cell. Duration in tabular Footnote, right-aligned. Stats rankings use the numbered row with the rank as the number (the top one in ember, 500) and the counted plays after the artist ("Artist · 12 plays").
 
 ### Album Tile
 

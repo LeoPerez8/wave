@@ -1,27 +1,42 @@
 import type { OverlayRect } from "@wave/core";
 
+/** The `Press` whose handler is running: which one, and where it sits in the window. */
+export interface PressedElement {
+  /** Tells this `Press` apart from every other, for as long as it is mounted. */
+  readonly key: number;
+  /** Undefined when it couldn't be measured. */
+  readonly rect: OverlayRect | undefined;
+}
+
 /**
- * Where on screen the `Press` that is running its handler sits, so a menu it
- * opens can float next to it without every row passing its position along.
- * Set only while a long-press handler (or the press handler of a `Press` with
- * `opensMenu`) runs.
+ * Where on screen the `Press` that is running its handler sits, so a card it
+ * opens can float next to it, and highlight it, without every row passing its
+ * position along. Set only while a long-press handler (or the press handler of
+ * a `Press` with `opensMenu`) runs.
  */
-let current: OverlayRect | undefined;
+let current: PressedElement | undefined;
 /** Whether the running handler asked for the rect, i.e. opened a menu. */
 let read = false;
 
-/** The window rect of the `Press` whose handler is running, if one is. */
-export const pressedRect = (): OverlayRect | undefined => {
+/** The `Press` whose handler is running, if one is (and notes that it opened a card). */
+export const pressedElement = (): PressedElement | undefined => {
   read = true;
   return current;
 };
 
+/** The window rect of the `Press` whose handler is running, if one is. */
+export const pressedRect = (): OverlayRect | undefined => pressedElement()?.rect;
+
 /**
- * Runs a press handler with `rect` as the pressed rect. Returns whether the
- * handler opened a menu next to it (asked for `pressedRect`).
+ * Runs a press handler with `rect` as the pressed rect (of the `Press` known as
+ * `key`). Returns whether the handler opened a menu next to it (asked for it).
  */
-export const runPressedAt = (rect: OverlayRect | undefined, handler: () => void): boolean => {
-  current = rect;
+export const runPressedAt = (
+  rect: OverlayRect | undefined,
+  handler: () => void,
+  key = 0,
+): boolean => {
+  current = { key, rect };
   read = false;
   try {
     handler();

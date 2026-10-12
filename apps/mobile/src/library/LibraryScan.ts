@@ -43,6 +43,15 @@ export const libraryVersion = makeExternalStore(0);
 
 const bumpLibraryVersion = (): void => libraryVersion.update((version) => version + 1);
 
+/** Bumped when the owner changes the library (deletes songs): lists re-query at once. */
+export const libraryEdits = makeExternalStore(0);
+
+/** The owner changed the library outside a scan: every list re-queries straight away. */
+export const libraryEdited = (): void => {
+  libraryEdits.update((edits) => edits + 1);
+  bumpLibraryVersion();
+};
+
 const toIndexedTrack = (native: NativeScannedTrack): IndexedTrack => ({
   ...normalizeTrack(native),
   sizeBytes: native.sizeBytes,

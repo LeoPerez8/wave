@@ -7,6 +7,10 @@ import { queueState } from "./Queue";
 export const usePlayback = (): PlaybackState =>
   useSyncExternalStore(playbackState.subscribe, playbackState.get);
 
+/** Whether the player is playing (or about to, once buffered); position ticks don't re-render. */
+export const usePlayWhenReady = (): boolean =>
+  useSyncExternalStore(playbackState.subscribe, () => playbackState.get().playWhenReady);
+
 export const useQueue = (): QueueState =>
   useSyncExternalStore(queueState.subscribe, queueState.get);
 
