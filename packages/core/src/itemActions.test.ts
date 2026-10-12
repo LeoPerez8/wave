@@ -25,6 +25,14 @@ const tracks = (
   rest: Partial<Omit<ActionSubject, "items" | "kind">> = {},
 ): ActionSubject => ({ kind: "track", items, surface: "menu", here: "/library/songs", ...rest });
 
+/** Albums checked in the Albums grid, by their album artists. */
+const albums = (artistIds: readonly number[]): ActionSubject => ({
+  kind: "album",
+  items: artistIds.map((artistId) => ({ artistId })),
+  surface: "selection",
+  here: "/library/albums",
+});
+
 describe("itemActions", () => {
   test("a song's menu: queue it, add it to a playlist, star it, go to its album and artist, delete it", () => {
     assert.deepEqual(names(itemActions(tracks([song()]))), [
@@ -139,6 +147,24 @@ describe("itemActions", () => {
       "addToPlaylist",
       "goToArtist",
     ]);
+  });
+
+  test("selected albums: the menu's entries, Go to Artist only when they share an album artist, no Favorite", () => {
+    assert.deepEqual(names(itemActions(albums([3, 3]))), [
+      "playNext",
+      "addToQueue",
+      "addToPlaylist",
+      "goToArtist",
+    ]);
+    assert.deepEqual(names(itemActions(albums([3, 4]))), [
+      "playNext",
+      "addToQueue",
+      "addToPlaylist",
+    ]);
+    assert.deepEqual(
+      names(itemActions({ kind: "album", items: [{ artistId: 3 }], selectable: true, here: "/" })),
+      ["playNext", "addToQueue", "addToPlaylist", "goToArtist", "select"],
+    );
   });
 
   test("a playlist can be renamed and deleted, one at a time", () => {

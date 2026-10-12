@@ -236,6 +236,7 @@ export {
   toggleSelected,
 } from "./selection.ts";
 export type { Selection } from "./selection.ts";
+export { groupSongs } from "./groupSongs.ts";
 export {
   isDestructiveAction,
   ITEM_ACTION_LABELS,

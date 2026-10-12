@@ -1,4 +1,5 @@
 import {
+  groupSongs,
   isDestructiveAction,
   isDetailPath,
   ITEM_ACTION_LABELS,
@@ -192,11 +193,17 @@ type Items = { readonly kind: ItemKind; readonly items: readonly unknown[] };
 const info = (target: ActionItems): KindInfo<unknown> =>
   kindOf(target.kind) as unknown as KindInfo<unknown>;
 
-/** The songs the queue actions act on: each item's, in the items' order. */
+const songId = (song: SongRow): number => song.id;
+
+/**
+ * The songs the queue actions act on: each item's, in the items' order. Groups
+ * (albums, artists…) expand by Core's `groupSongs`: a song two of them hold
+ * comes once; checked tracks are taken as they are.
+ */
 export const targetSongs = async (target: ActionItems): Promise<readonly SongRow[]> => {
   const kind = info(target);
   const lists = await Promise.all((target as Items).items.map((item) => kind.songs(item)));
-  return lists.flat();
+  return target.kind === "track" ? lists.flat() : groupSongs(lists, songId);
 };
 
 /** A menu's heading: what its one item is. */

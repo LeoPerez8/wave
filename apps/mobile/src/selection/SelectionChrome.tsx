@@ -27,7 +27,12 @@ import { pressedRect } from "@/motion/pressedRect";
 import { CardEntries } from "@/overlay/CardEntries";
 import { useOverlayFlow } from "@/overlay/flow";
 import { openOverlay } from "@/overlay/overlay";
-import { useItemActions, type ActionEntry, type ActionItems } from "@/playback/itemActions";
+import {
+  targetCount,
+  useItemActions,
+  type ActionEntry,
+  type ActionItems,
+} from "@/playback/itemActions";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { endSelection, selectAllInList, useSelectedTarget, useSelectionSummary } from "./selection";
@@ -173,12 +178,13 @@ export function SelectionBar({ backdropId }: { backdropId: string }) {
 }
 
 /**
- * The top of the screen while a list is selecting: "N selected", Select All
+ * The top of the screen while a list is selecting: the count ("3 albums"), Select All
  * and Done, over the screen's own header.
  */
 export function SelectionHeader() {
   const insets = useSafeAreaInsets();
   const summary = useSelectionSummary();
+  const target = useSelectedTarget();
   if (summary === null) return null;
   return (
     <View
@@ -195,7 +201,8 @@ export function SelectionHeader() {
           numberOfLines={1}
           className="flex-1 font-sans text-title3 font-medium text-foreground"
         >
-          {`${summary.count.toLocaleString("en")} selected`}
+          {/* Names the kind: "3 albums", "12 songs". */}
+          {target === null ? `${summary.count.toLocaleString("en")} selected` : targetCount(target)}
         </Text>
         <TextButton label="Select All" disabled={summary.all} onPress={selectAllInList} />
         <TextButton label="Done" onPress={endSelection} />
