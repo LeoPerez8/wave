@@ -5,6 +5,7 @@ import { Press } from "@/motion/Press";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { Artwork } from "./Artwork";
+import { CheckCell } from "./CheckCell";
 import { CELL, grid } from "./grid";
 import { RankNumber } from "./RankNumber";
 import { WavyUnderline } from "./WavyUnderline";
@@ -29,6 +30,11 @@ type Props = {
   leading: "artwork" | "number";
   /** Sets the number in ember: the top entry of a ranking, whose number is its rank. */
   topNumber?: boolean;
+  /**
+   * In selection mode, whether the row is checked: it shows a leading check
+   * cell and reads as a checkbox. Undefined outside selection mode.
+   */
+  checked?: boolean | undefined;
   onPress: () => void;
   onLongPress?: () => void;
   /** Screen-reader actions standing in for gestures (move, remove in a playlist). */
@@ -48,7 +54,8 @@ const THUMB = CELL * 5;
  * favorite cell and the duration. The playing track's title is in ember with a
  * wavy underline under its visible text. A missing file shows its icon (in
  * place of the number in numbered lists, trailing in artwork lists). Title and
- * artist share one size; rank is weight and tint.
+ * artist share one size; rank is weight and tint. In selection mode a check
+ * cell leads the row.
  */
 export function TrackRow({
   track,
@@ -56,6 +63,7 @@ export function TrackRow({
   favorite = false,
   leading,
   topNumber = false,
+  checked,
   onPress,
   onLongPress,
   accessibilityActions,
@@ -65,13 +73,16 @@ export function TrackRow({
   const tertiary = useThemeColor("tertiary");
   const missing = state === "missing";
   const playing = state === "playing";
+  const selecting = checked !== undefined;
   const missingIcon = <IconFileOff size={18} color={tertiary} strokeWidth={1.5} />;
 
   return (
     <Press
-      accessibilityRole="button"
+      accessibilityRole={selecting ? "checkbox" : "button"}
       accessibilityLabel={`${track.title}, ${track.artist}${playing ? ", now playing" : ""}`}
-      accessibilityState={{ disabled: missing, selected: playing }}
+      accessibilityState={
+        selecting ? { disabled: missing, checked } : { disabled: missing, selected: playing }
+      }
       disabled={missing}
       onPress={onPress}
       onLongPress={onLongPress}
@@ -80,6 +91,7 @@ export function TrackRow({
       depth={0.015}
     >
       <View className="flex-row items-center" style={{ height: grid.row, gap: CELL * 1.5 }}>
+        {selecting && <CheckCell checked={checked} />}
         {leading === "artwork" ? (
           <Artwork uri={track.artworkUri} tint={track.tint} size={THUMB} />
         ) : !missing && track.trackNumber !== undefined ? (

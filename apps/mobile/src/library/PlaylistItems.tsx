@@ -1,7 +1,7 @@
 import { IconGripVertical, IconTrash } from "@tabler/icons-react-native";
 import { moveItem, reorderTarget, resolveRemoveSwipe } from "@wave/core";
 import * as Haptics from "expo-haptics";
-import { useLayoutEffect, useRef, useState, type ReactElement } from "react";
+import { useCallback, useLayoutEffect, useRef, useState, type ReactElement } from "react";
 import { Text, View } from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 import Animated, {
@@ -26,11 +26,13 @@ import { useChromeInset } from "@/chrome/chrome";
 import { playSongs } from "@/playback/actions";
 import { useCurrentTrackId } from "@/playback/hooks";
 import { openTrackActions } from "@/playback/ActionsMenu";
+import type { ActionItems } from "@/playback/itemActions";
+import { useListSelection } from "@/selection/useListSelection";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { useFavoriteIds } from "./favorites";
 import type { PlaylistDetail, PlaylistItemRow } from "./LibraryStore";
-import { movePlaylistItem, removePlaylistItem } from "./playlists";
+import { movePlaylistItem, removePlaylistItems } from "./playlists";
 import { toTrackSummary } from "./TrackList";
 import { useListScrollable } from "@/motion/heldTouch";
 
@@ -64,6 +66,8 @@ type RowProps = {
   drag: DragState;
   playing: boolean;
   favorite: boolean;
+  /** In selection mode, whether the row is checked; undefined otherwise. Selecting turns off dragging and swiping. */
+  checked: boolean | undefined;
   onPress: () => void;
   onLongPress: () => void;
   onDragBegin: (index: number) => void;
@@ -84,6 +88,7 @@ function PlaylistItem({
   drag,
   playing,
   favorite,
+  checked,
   onPress,
   onLongPress,
   onDragBegin,
@@ -96,7 +101,8 @@ function PlaylistItem({
   const secondary = useThemeColor("secondary");
   const reduceMotion = useReducedMotion();
   // No swipe-to-remove while the long-pressed finger slides to choose in the menu.
-  const swipeable = useListScrollable();
+  const selecting = checked !== undefined;
+  const swipeable = useListScrollable() && !selecting;
   const { active, hover, dragY, translation, fingerY, startScroll, scroll } = drag;
 
   // Other rows make way for the dragged one.
@@ -174,6 +180,7 @@ function PlaylistItem({
   });
 
   const grip = usePanGesture({
+    enabled: !selecting,
     minDistance: 0,
     onActivate: (event) => {
       "worklet";
@@ -223,13 +230,18 @@ function PlaylistItem({
               state={playing ? "playing" : undefined}
               favorite={favorite}
               leading="artwork"
+              checked={checked}
               onPress={onPress}
               onLongPress={onLongPress}
-              accessibilityActions={[
-                ...(index > 0 ? [{ name: "moveUp", label: "Move up" }] : []),
-                ...(index < count - 1 ? [{ name: "moveDown", label: "Move down" }] : []),
-                { name: "remove", label: "Remove from playlist" },
-              ]}
+              accessibilityActions={
+                selecting
+                  ? []
+                  : [
+                      ...(index > 0 ? [{ name: "moveUp", label: "Move up" }] : []),
+                      ...(index < count - 1 ? [{ name: "moveDown", label: "Move down" }] : []),
+                      { name: "remove", label: "Remove from playlist" },
+                    ]
+              }
               onAccessibilityAction={(event) => {
                 const action = event.nativeEvent.actionName;
                 if (action === "moveUp") onMove(index, index - 1);
@@ -247,7 +259,8 @@ function PlaylistItem({
             // 48dp of target for a grip drawn in the 32dp state cell.
             style={{ width: grid.stateCell + CELL * 2, height: ROW, marginLeft: -CELL * 2 }}
           >
-            <IconGripVertical size={20} color={secondary} strokeWidth={1.5} />
+            {/* Hidden, not removed, while selecting: the rows keep their width. */}
+            {!selecting && <IconGripVertical size={20} color={secondary} strokeWidth={1.5} />}
           </View>
         </GestureDetector>
       </Animated.View>
@@ -263,10 +276,18 @@ type Props = {
   empty: ReactElement;
 };
 
+/** While selecting, a long-press does nothing (rather than toggling the row on release). */
+const ignoreLongPress = (): void => undefined;
+
+/** Each entry is its own selection item, so a song in the playlist twice is checked per copy. */
+const entryKey = (item: PlaylistItemRow): string => String(item.itemId);
+
 /**
  * A playlist's songs in order: tap plays the playlist from the song, the grip
  * drags it to a new place (scrolling the list near its edges), a left swipe
- * removes it, long-press opens its menu.
+ * removes it, long-press opens its menu. The menu's Select starts selection
+ * mode (check cells, taps toggle, no dragging or swiping), whose bar adds
+ * Remove from Playlist.
  */
 export function PlaylistItems({ detail, header, empty }: Props) {
   const scrollable = useListScrollable();
@@ -274,6 +295,10 @@ export function PlaylistItems({ detail, header, empty }: Props) {
   const bottomInset = useChromeInset();
   const currentId = useCurrentTrackId();
   const favorites = useFavoriteIds();
+  const placeOf = useCallback(
+    (item: PlaylistItemRow) => ({ playlistId, itemId: item.itemId }),
+    [playlistId],
+  );
 
   // The owner's last edit, shown until the store's next read replaces `detail.items`.
   const [edit, setEdit] = useState<{
@@ -288,6 +313,18 @@ export function PlaylistItems({ detail, header, empty }: Props) {
         previous !== null && previous.base === detail.items ? previous.order : detail.items,
       ),
     }));
+  const tracksOf = useCallback(
+    (selected: readonly PlaylistItemRow[]): ActionItems => ({
+      kind: "track",
+      items: selected.map((item) => ({ song: item, playlistItem: placeOf(item) })),
+    }),
+    [placeOf],
+  );
+  const { selecting, isChecked, start, toggle } = useListSelection({
+    items: order,
+    keyOf: entryKey,
+    target: tracksOf,
+  });
   const orderRef = useRef(order);
   useLayoutEffect(() => {
     orderRef.current = order;
@@ -363,7 +400,7 @@ export function PlaylistItems({ detail, header, empty }: Props) {
 
   const onRemove = (item: PlaylistItemRow) => {
     setOrder((current) => current.filter((row) => row.itemId !== item.itemId));
-    void removePlaylistItem(playlistId, item.itemId);
+    void removePlaylistItems(playlistId, [item.itemId]);
   };
 
   // Near the top or bottom edge, a dragged row scrolls the list, faster the closer it gets.
@@ -408,8 +445,17 @@ export function PlaylistItems({ detail, header, empty }: Props) {
               drag={drag}
               playing={String(item.id) === currentId}
               favorite={favorites.has(item.id)}
-              onPress={() => playSongs(order, index, context)}
-              onLongPress={() => openTrackActions(item, { playlistId, itemId: item.itemId })}
+              checked={selecting ? isChecked(item) : undefined}
+              onPress={selecting ? () => toggle(item) : () => playSongs(order, index, context)}
+              onLongPress={
+                selecting
+                  ? ignoreLongPress
+                  : () =>
+                      openTrackActions(item, {
+                        playlistItem: placeOf(item),
+                        onSelect: () => start(item),
+                      })
+              }
               onDragBegin={onDragBegin}
               onDragMove={onDragMove}
               onDrop={onDrop}

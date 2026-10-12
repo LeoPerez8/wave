@@ -18,7 +18,7 @@ import {
   type SongListening,
   type StatsWindow,
 } from "@wave/core";
-import { and, asc, desc, eq, inArray, ne, or, sql, type SQL } from "drizzle-orm";
+import { asc, desc, eq, inArray, ne, or, sql, type SQL } from "drizzle-orm";
 import { drizzle, type ExpoSQLiteDatabase } from "drizzle-orm/expo-sqlite";
 import { migrate } from "drizzle-orm/expo-sqlite/migrator";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
@@ -53,12 +53,13 @@ import {
   latestPlay,
   listFavorites,
   recordPlay,
+  setFavorites,
   updatePlay,
   type FavoriteRow,
   type HomeSections,
   type RecordedPlay,
 } from "./db/playHistory";
-import { selectPlaylistSongs } from "./db/playlists";
+import { removePlaylistItems, selectPlaylistSongs } from "./db/playlists";
 import * as schema from "./db/schema";
 import { BY_TITLE, trackQuery } from "./db/tracks";
 import { creditedPlayTotals, songListening, trackPlayTotals } from "./db/stats";
@@ -410,13 +411,18 @@ export class LibraryStore extends Context.Service<
       itemId: number,
       toIndex: number,
     ) => Effect.Effect<void, LibraryStoreError>;
-    readonly removePlaylistItem: (
+    /** Removes these entries from the playlist (other copies of the same songs stay). */
+    readonly removePlaylistItems: (
       playlistId: number,
-      itemId: number,
+      itemIds: readonly number[],
     ) => Effect.Effect<void, LibraryStoreError>;
     /** The ids of every starred track. */
     readonly favoriteTrackIds: Effect.Effect<readonly number[], LibraryStoreError>;
-    readonly setFavorite: (trackId: number, on: boolean) => Effect.Effect<void, LibraryStoreError>;
+    /** Stars (or unstars) the tracks; those starred already keep when they were starred. */
+    readonly setFavorites: (
+      trackIds: readonly number[],
+      on: boolean,
+    ) => Effect.Effect<void, LibraryStoreError>;
     /** Starred tracks, most recently starred first, for Library › Favorites. */
     readonly listFavorites: Effect.Effect<readonly FavoriteRow[], LibraryStoreError>;
     /** Records a play as it starts (Core's `PlayEvent`); returns its id, to update it as it goes on. */
@@ -1378,18 +1384,9 @@ const make = Effect.gen(function* () {
         movePlaylistItemSync(db, playlistId, itemId, toIndex, Date.now()),
       ),
 
-    removePlaylistItem: (playlistId, itemId) =>
+    removePlaylistItems: (playlistId, itemIds) =>
       attempt("remove from the playlist", () =>
-        db.transaction((tx) => {
-          const { playlists, playlistItems } = schema;
-          tx.delete(playlistItems)
-            .where(and(eq(playlistItems.id, itemId), eq(playlistItems.playlistId, playlistId)))
-            .run();
-          tx.update(playlists)
-            .set({ updatedAt: Date.now() })
-            .where(eq(playlists.id, playlistId))
-            .run();
-        }),
+        removePlaylistItems(db, playlistId, itemIds, Date.now()),
       ),
 
     favoriteTrackIds: attempt("read favorites", () =>
@@ -1400,13 +1397,10 @@ const make = Effect.gen(function* () {
         .map((row) => row.trackId),
     ),
 
-    setFavorite: (trackId, on) =>
-      attempt(on ? "add a favorite" : "remove a favorite", () => {
-        const { favorites } = schema;
-        if (on)
-          db.insert(favorites).values({ trackId, addedAt: Date.now() }).onConflictDoNothing().run();
-        else db.delete(favorites).where(eq(favorites.trackId, trackId)).run();
-      }),
+    setFavorites: (trackIds, on) =>
+      attempt(on ? "add favorites" : "remove favorites", () =>
+        setFavorites(db, trackIds, on, Date.now()),
+      ),
 
     listFavorites: attempt("list favorites", () => listFavorites(db)),
 

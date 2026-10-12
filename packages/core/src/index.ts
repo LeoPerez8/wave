@@ -224,6 +224,36 @@ export {
   writeSongSort,
 } from "./songSort.ts";
 export type { SongListKind, SongSort, SongSortKey, SortableSong } from "./songSort.ts";
+export {
+  allSelected,
+  clearSelection,
+  isSelected,
+  NO_SELECTION,
+  selectAll,
+  selectedCount,
+  selectedInOrder,
+  selectionOf,
+  toggleSelected,
+  withSelectedKept,
+} from "./selection.ts";
+export type { Selection } from "./selection.ts";
+export { groupSongs } from "./groupSongs.ts";
+export {
+  actionBarLabel,
+  confirmsFirst,
+  isDestructiveAction,
+  ITEM_ACTION_LABELS,
+  itemActions,
+  splitActionBar,
+} from "./itemActions.ts";
+export type {
+  ActionItem,
+  ActionSubject,
+  ActionSurface,
+  ItemAction,
+  ItemActionEntry,
+  ItemKind,
+} from "./itemActions.ts";
 export { concentricRadius } from "./corners.ts";
 export type { InsetSquare } from "./corners.ts";
 export { underlineMotion, wavePath } from "./wavyUnderline.ts";

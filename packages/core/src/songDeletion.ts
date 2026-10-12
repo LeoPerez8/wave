@@ -27,10 +27,13 @@ export const confirmSongDeletion = (
 ): AlertSpec & { readonly action: NonNullable<AlertSpec["action"]> } => {
   const only = songs.length === 1 ? songs[0] : undefined;
   return {
-    title: only === undefined ? `Delete ${songs.length} songs?` : `Delete “${only.title}”?`,
+    title:
+      only === undefined
+        ? `Delete ${songs.length.toLocaleString("en")} songs?`
+        : `Delete “${only.title}”?`,
     message:
       only === undefined
-        ? "Their files are removed from your phone."
+        ? "The files are removed from your phone."
         : "The file is removed from your phone.",
     action: { label: "Delete", destructive: true },
   };
@@ -71,11 +74,11 @@ export const songDeletionFailure = (
     .map((failure) => `“${failure.title}”: ${lowerFirst(REASONS[failure.reason])}`);
   const more = failures.length - NAMED_FAILURES;
   return {
-    title: `Couldn't delete ${failures.length} of ${attempted} songs`,
+    title: `Couldn't delete ${failures.length.toLocaleString("en")} of ${attempted.toLocaleString("en")} songs`,
     message: [
       failures.length === 1 ? "It stays in your library." : "They stay in your library.",
       ...named,
-      ...(more > 0 ? [`And ${more} more.`] : []),
+      ...(more > 0 ? [`And ${more.toLocaleString("en")} more.`] : []),
     ].join("\n"),
   };
 };
