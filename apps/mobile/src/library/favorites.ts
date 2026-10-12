@@ -77,7 +77,10 @@ const showStars = (stars: ReadonlyMap<number, FavoriteStar>, saved: boolean): vo
  * Stars or unstars tracks (a selection's, say) with one write. Accepts queue
  * track ids (strings) as well.
  */
-export const setFavorites = (trackIds: readonly (number | string)[], on: boolean): Promise<void> => {
+export const setFavorites = (
+  trackIds: readonly (number | string)[],
+  on: boolean,
+): Promise<void> => {
   const ids = [...new Set(trackIds.map(Number))];
   if (ids.length === 0) return Promise.resolve();
   const current = favorites.get().ids;

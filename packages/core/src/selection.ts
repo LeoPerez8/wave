@@ -26,17 +26,14 @@ export const toggleSelected = <K>(selection: Selection<K>, key: K): Selection<K>
 /** Unchecks everything. */
 export const clearSelection = <K = never>(): Selection<K> => NO_SELECTION;
 
-export const isSelected = <K>(selection: Selection<K>, key: K): boolean =>
-  selection.keys.has(key);
+export const isSelected = <K>(selection: Selection<K>, key: K): boolean => selection.keys.has(key);
 
 /** How many items are checked. */
 export const selectedCount = (selection: Selection<unknown>): number => selection.keys.size;
 
 /** Checks every item of [list]. */
-export const selectAll = <T, K>(
-  list: readonly T[],
-  keyOf: (item: T) => K,
-): Selection<K> => selectionOf(list.map(keyOf));
+export const selectAll = <T, K>(list: readonly T[], keyOf: (item: T) => K): Selection<K> =>
+  selectionOf(list.map(keyOf));
 
 /** Whether every item of a non-empty [list] is checked (and nothing else). */
 export const allSelected = <T, K>(

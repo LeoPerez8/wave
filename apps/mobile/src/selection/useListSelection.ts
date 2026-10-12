@@ -1,5 +1,5 @@
 import { isSelected, type Selection } from "@wave/core";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { addScreenBackHandler } from "@/overlay/back";
 import type { ActionItems } from "@/playback/itemActions";
@@ -8,6 +8,7 @@ import {
   endSelectionOf,
   startSelection,
   toggleInSelection,
+  updateSelectionSource,
   useSelectionOf,
   type SelectionSource,
 } from "./selection";
@@ -38,22 +39,20 @@ export function useListSelection<T>({
   keyOf: (item: T) => string;
   target: (selected: readonly T[]) => ActionItems;
 }): ListSelection<T> {
-  const owner = useRef({}).current;
-  const latest = useRef({ items, keyOf, target });
-  latest.current = { items, keyOf, target };
+  // A stable identity for this list, which no other list can share.
+  const [owner] = useState(() => ({}));
   const selection = useSelectionOf(owner);
   const selecting = selection !== null;
 
   const source = useMemo<SelectionSource<T>>(
-    () => ({
-      items: () => latest.current.items,
-      keyOf: (item) => latest.current.keyOf(item),
-      target: (selected) => latest.current.target(selected),
-    }),
-    [],
+    () => ({ items: () => items, keyOf, target }),
+    [items, keyOf, target],
   );
 
   useEffect(() => () => endSelectionOf(owner), [owner]);
+
+  // A new sort (or a rescan) keeps the same items checked; the bar acts in the new order.
+  useEffect(() => updateSelectionSource(owner, source), [owner, source]);
 
   useEffect(() => {
     if (!selecting) return;

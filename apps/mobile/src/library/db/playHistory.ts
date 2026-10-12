@@ -227,7 +227,7 @@ export const setFavorites = (
   });
 };
 
-export const homeSections =(db: LibraryDatabase): HomeSections => ({
+export const homeSections = (db: LibraryDatabase): HomeSections => ({
   recentlyAdded: recentlyAddedAlbums(db),
   recentlyPlayed: recentlyPlayedAlbums(db),
   mostPlayed: mostPlayedSongs(db),

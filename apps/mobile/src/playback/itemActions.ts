@@ -1,4 +1,5 @@
 import {
+  isDetailPath,
   ITEM_ACTION_LABELS,
   itemActions,
   type ActionItem,
@@ -29,7 +30,6 @@ import { removePlaylistItem } from "@/library/playlists";
 import { openAlbum, openArtist } from "@/library/routes";
 import { itemSongs, librarySectionSongs } from "@/library/sectionSongs";
 import { showError } from "@/overlay/alert";
-import { isDetailPath } from "@wave/core";
 
 import { addToQueue, playNext } from "./actions";
 

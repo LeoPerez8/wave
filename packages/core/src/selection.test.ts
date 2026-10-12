@@ -14,6 +14,8 @@ import {
   type Selection,
 } from "./index.ts";
 
+const same = (key: string) => key;
+
 describe("selection", () => {
   test("toggling a key checks it, toggling it again unchecks it", () => {
     const one = toggleSelected(NO_SELECTION, "b");
@@ -60,10 +62,16 @@ describe("selection", () => {
 
   test("re-sorting the list keeps the same items selected, now in the new order", () => {
     const byTitle = ["a", "b", "c", "d"];
-    const reversed = [...byTitle].reverse();
+    const reversed = byTitle.toReversed();
     const selection = selectionOf(["b", "d"]);
-    assert.deepEqual(selectedInOrder(selection, byTitle, (key) => key), ["b", "d"]);
-    assert.deepEqual(selectedInOrder(selection, reversed, (key) => key), ["d", "b"]);
+    assert.deepEqual(
+      selectedInOrder(selection, byTitle, (key) => key),
+      ["b", "d"],
+    );
+    assert.deepEqual(
+      selectedInOrder(selection, reversed, (key) => key),
+      ["d", "b"],
+    );
   });
 
   test("select all checks every item in the list", () => {
@@ -78,7 +86,6 @@ describe("selection", () => {
 
   test("everything is selected only once every item in the list is checked", () => {
     const list = ["a", "b", "c"];
-    const same = (key: string) => key;
     assert.equal(allSelected(selectionOf(["a", "b"]), list, same), false);
     assert.equal(allSelected(selectionOf(["c", "a", "b"]), list, same), true);
     assert.equal(allSelected(selectionOf(["a", "b", "gone"]), list, same), false);
@@ -89,7 +96,10 @@ describe("selection", () => {
     const list = Array.from({ length: 50_000 }, (_, index) => index);
     const started = performance.now();
     const all = selectAll(list, (key) => key);
-    assert.equal(allSelected(all, list, (key) => key), true);
+    assert.equal(
+      allSelected(all, list, (key) => key),
+      true,
+    );
     assert.equal(selectedInOrder(toggleSelected(all, 0), list, (key) => key).length, 49_999);
     assert.ok(performance.now() - started < 200);
   });

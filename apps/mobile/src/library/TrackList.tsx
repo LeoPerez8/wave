@@ -13,6 +13,8 @@ import { useChromeInset } from "@/chrome/chrome";
 import { playSongs } from "@/playback/actions";
 import { useCurrentTrackId } from "@/playback/hooks";
 import { openTrackActions } from "@/playback/ActionsMenu";
+import type { ActionItems } from "@/playback/itemActions";
+import { useListSelection } from "@/selection/useListSelection";
 
 import { useFavoriteIds } from "./favorites";
 import type { SongRow } from "./LibraryStore";
@@ -64,6 +66,15 @@ const NO_KEYS: readonly string[] = [];
 
 const keyExtractor = (song: SongRow): string => String(song.id);
 
+/** While selecting, a long-press does nothing (rather than toggling the row on release). */
+const ignoreLongPress = (): void => undefined;
+
+/** The actions in selection mode act on the checked songs. */
+const tracksOf = (songs: readonly SongRow[]): ActionItems => ({
+  kind: "track",
+  items: songs.map((song) => ({ song })),
+});
+
 type Props = {
   songs: readonly SongRow[];
   /** What tapping a row plays: this whole list, from the row. */
@@ -79,7 +90,8 @@ type Props = {
 /**
  * Tracks with thumbnails (Songs, a genre, a folder, an artist's songs),
  * virtualised for tens of thousands of rows. Tap plays the list from the row;
- * long-press opens the track's menu.
+ * long-press opens the track's menu, whose Select starts selection mode: then
+ * every row shows a check cell and taps check and uncheck.
  */
 export function TrackList({ songs, context, header, sort }: Props) {
   const scrollable = useListScrollable();
@@ -88,7 +100,15 @@ export function TrackList({ songs, context, header, sort }: Props) {
   const bottomInset = useChromeInset();
   const currentId = useCurrentTrackId();
   const favorites = useFavoriteIds();
-  const rowState = useMemo(() => ({ currentId, favorites }), [currentId, favorites]);
+  const { selection, isChecked, start, toggle } = useListSelection({
+    items: songs,
+    keyOf: keyExtractor,
+    target: tracksOf,
+  });
+  const rowState = useMemo(
+    () => ({ currentId, favorites, selection }),
+    [currentId, favorites, selection],
+  );
   const sortKeys = useMemo(
     () => (sort === undefined ? NO_KEYS : (songSpineKeys(songs, sort) ?? NO_KEYS)),
     [sort, songs],
@@ -102,11 +122,16 @@ export function TrackList({ songs, context, header, sort }: Props) {
         state={String(item.id) === currentId ? "playing" : undefined}
         favorite={favorites.has(item.id)}
         leading="artwork"
-        onPress={() => playSongs(songs, index, context)}
-        onLongPress={() => openTrackActions(item)}
+        checked={selection === null ? undefined : isChecked(item)}
+        onPress={selection === null ? () => playSongs(songs, index, context) : () => toggle(item)}
+        onLongPress={
+          selection === null
+            ? () => openTrackActions(item, { onSelect: () => start(item) })
+            : ignoreLongPress
+        }
       />
     ),
-    [context, currentId, favorites, songs],
+    [context, currentId, favorites, songs, selection, isChecked, start, toggle],
   );
 
   return (
@@ -125,7 +150,7 @@ export function TrackList({ songs, context, header, sort }: Props) {
         contentContainerStyle={{
           paddingLeft: grid.margin,
           paddingRight: spine.paddingRight,
-          // Lets the last row scroll out from under the floating mini player.
+          // Lets the last row scroll out from under the floating mini player (or selection bar).
           paddingBottom: bottomInset,
         }}
         ListHeaderComponent={header}

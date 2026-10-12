@@ -409,7 +409,9 @@ export function PlaylistItems({ detail, header, empty }: Props) {
               playing={String(item.id) === currentId}
               favorite={favorites.has(item.id)}
               onPress={() => playSongs(order, index, context)}
-              onLongPress={() => openTrackActions(item, { playlistId, itemId: item.itemId })}
+              onLongPress={() =>
+                openTrackActions(item, { playlistItem: { playlistId, itemId: item.itemId } })
+              }
               onDragBegin={onDragBegin}
               onDragMove={onDragMove}
               onDrop={onDrop}

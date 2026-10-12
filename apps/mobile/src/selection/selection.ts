@@ -8,7 +8,7 @@ import {
   toggleSelected,
   type Selection,
 } from "@wave/core";
-import { useSyncExternalStore } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 
 import { makeExternalStore } from "@/lib/externalStore";
 import type { ActionItems } from "@/playback/itemActions";
@@ -71,12 +71,20 @@ export const selectAllInList = (): void => {
   state.update((current) => ({ ...current, selection: selectAll(source.items(), source.keyOf) }));
 };
 
-/** What the actions act on: the checked items in the list's order; null outside selection mode. */
-export const selectedTarget = (): ActionItems | null => {
-  const { selection, source } = state.get();
-  if (source === null) return null;
-  return source.target(selectedInOrder(selection, source.items(), source.keyOf));
+/**
+ * [owner]'s list changed (re-sorted, say): the same items stay checked, and
+ * what reads the list reads the new one.
+ */
+export const updateSelectionSource = <T>(owner: object, source: SelectionSource<T>): void => {
+  if (state.get().owner === owner)
+    state.update((current) => ({
+      ...current,
+      source: source as unknown as SelectionSource<unknown>,
+    }));
 };
+
+const targetOf = ({ selection, source }: SelectionState): ActionItems | null =>
+  source === null ? null : source.target(selectedInOrder(selection, source.items(), source.keyOf));
 
 const useSelectionState = (): SelectionState => useSyncExternalStore(state.subscribe, state.get);
 
@@ -103,5 +111,8 @@ export const useSelectionSummary = (): {
   };
 };
 
-/** Re-renders whenever the selection changes; for the bar, which reads `selectedTarget`. */
-export const useSelectionVersion = (): Selection<string> => useSelectionState().selection;
+/** What the actions act on: the checked items in the list's order; null outside selection mode. */
+export const useSelectedTarget = (): ActionItems | null => {
+  const current = useSelectionState();
+  return useMemo(() => targetOf(current), [current]);
+};
