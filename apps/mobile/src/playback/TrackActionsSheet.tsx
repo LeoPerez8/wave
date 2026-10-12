@@ -13,6 +13,7 @@ import {
   LibraryStore,
   type AlbumRow,
   type ArtistRow,
+  type GenreRow,
   type PlaylistRow,
   type SongRow,
 } from "@/library/LibraryStore";
@@ -44,7 +45,8 @@ export type ActionTarget =
     }
   | { readonly kind: "album"; readonly album: AlbumRow }
   | { readonly kind: "artist"; readonly artist: ArtistRow }
-  | { readonly kind: "playlist"; readonly playlist: PlaylistRow };
+  | { readonly kind: "playlist"; readonly playlist: PlaylistRow }
+  | { readonly kind: "genre"; readonly genre: GenreRow };
 
 const openTarget = makeExternalStore<ActionTarget | null>(null);
 
@@ -62,6 +64,9 @@ export const openAlbumActions = (album: AlbumRow): void => openTarget.set({ kind
 /** Opens the long-press menu for an artist (their songs, in the artist screen's order). */
 export const openArtistActions = (artist: ArtistRow): void =>
   openTarget.set({ kind: "artist", artist });
+
+/** Opens the long-press menu for a genre (its songs, in the genre screen's order). */
+export const openGenreActions = (genre: GenreRow): void => openTarget.set({ kind: "genre", genre });
 
 const close = (): void => openTarget.set(null);
 
@@ -82,6 +87,10 @@ export const targetSongs = (target: ActionTarget): Promise<readonly SongRow[]> =
       return appRuntime
         .runPromise(LibraryStore.use((store) => store.getPlaylist(target.playlist.id)))
         .then((detail) => detail?.items ?? []);
+    case "genre":
+      return appRuntime
+        .runPromise(LibraryStore.use((store) => store.getGenre(target.genre.id)))
+        .then((detail) => detail?.songs ?? []);
   }
 };
 
@@ -120,6 +129,13 @@ const heading = (
         subtitle: plural(target.playlist.trackCount, "song"),
         covers: target.playlist.thumbPaths,
       };
+    case "genre":
+      return {
+        title: target.genre.name,
+        subtitle: plural(target.genre.trackCount, "song"),
+        // Genres have no picture; the heading is text only.
+        covers: undefined,
+      };
   }
 };
 
@@ -132,6 +148,7 @@ const destinations = (target: ActionTarget): { albumId?: number; artistId?: numb
       return { artistId: target.album.albumArtistId };
     case "artist":
     case "playlist":
+    case "genre":
       return {};
   }
 };
@@ -152,7 +169,7 @@ function FavoriteEntry({ song, onDone }: { song: SongRow; onDone: () => void }) 
 }
 
 /**
- * The long-press menu for a track, an album, an artist or a playlist: what it
+ * The long-press menu for a track, an album, an artist, a playlist or a genre: what it
  * is, then one quiet line per action. Flat, square and set on the ground over
  * a 90% ground veil, like the spine's letter field. Mounted once at the root.
  */

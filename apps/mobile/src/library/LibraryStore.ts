@@ -29,6 +29,7 @@ import { openDatabaseSync } from "expo-sqlite";
 
 import { selectAlbums } from "./db/albums";
 import { selectArtistCovers, selectArtistSongs, selectArtists } from "./db/artists";
+import { selectGenreSongs } from "./db/genres";
 import type { RowPage } from "./db/database";
 import migrations from "./db/migrations";
 import {
@@ -735,17 +736,14 @@ const getArtistSync = (db: Database, id: number): ArtistDetail | null => {
 };
 
 const getGenreSync = (db: Database, id: number): GenreDetail | null => {
-  const { genres, tracks } = schema;
+  const { genres } = schema;
   const genre = db
     .select({ id: genres.id, name: genres.name, sort: genres.sort })
     .from(genres)
     .where(eq(genres.id, id))
     .get();
   if (genre === undefined) return null;
-  const songs = trackQuery(db)
-    .where(eq(tracks.genreId, id))
-    .orderBy(...BY_TITLE)
-    .all();
+  const songs = selectGenreSongs(db, id);
   return { genre: { ...genre, trackCount: songs.length }, songs };
 };
 

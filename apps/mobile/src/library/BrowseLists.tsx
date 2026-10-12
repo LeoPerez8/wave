@@ -11,7 +11,7 @@ import { NameRow } from "@/catalog/NameRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { EmptyState } from "@/components/EmptyState";
 import { ScanProgressBanner } from "@/components/ScanProgressBanner";
-import { openArtistActions } from "@/playback/TrackActionsSheet";
+import { openArtistActions, openGenreActions } from "@/playback/TrackActionsSheet";
 
 import { albumPairs, albumRowHeight, AlbumPair, useAlbumTileSize } from "./AlbumGrid";
 import { useAlbums, useArtists, useFolders, useGenres, useScanState } from "./hooks";
@@ -123,6 +123,7 @@ const renderGenre = (genre: GenreRow) => (
     name={genre.name}
     detail={counted(genre.trackCount, "song")}
     onPress={() => openGenre(genre.id)}
+    onLongPress={() => openGenreActions(genre)}
   />
 );
 
