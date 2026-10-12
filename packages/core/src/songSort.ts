@@ -201,7 +201,9 @@ export const readSongSort = (saved: string | null, kind: SongListKind = "songs")
     const parsed: unknown = JSON.parse(saved);
     if (typeof parsed !== "object" || parsed === null) return fallback;
     const { key, descending } = parsed as Record<string, unknown>;
-    const known = songSortsFor(kind).find((sort) => sort.key === key && sort.descending === descending);
+    const known = songSortsFor(kind).find(
+      (sort) => sort.key === key && sort.descending === descending,
+    );
     return known ?? fallback;
   } catch {
     return fallback;

@@ -1,4 +1,5 @@
 import { LegendList } from "@legendapp/list/react-native";
+import { sortSongs } from "@wave/core";
 import { useLocalSearchParams } from "expo-router";
 import { useCallback, useMemo } from "react";
 import { View } from "react-native";
@@ -16,6 +17,8 @@ import { useFavoriteIds } from "@/library/favorites";
 import { useArtist } from "@/library/hooks";
 import type { AlbumRow, ArtistDetail, SongRow } from "@/library/LibraryStore";
 import { parseId } from "@/library/routes";
+import { SongSortButton } from "@/library/SongSortButton";
+import { useSongSort } from "@/library/songSort";
 import { ListIntro, songCount, toTrackSummary } from "@/library/TrackList";
 import { useListScrollable } from "@/motion/heldTouch";
 
@@ -26,7 +29,7 @@ type Item =
 
 const SECTION_HEAD = CELL * 6;
 
-const artistItems = (detail: ArtistDetail): Item[] => {
+const artistItems = (detail: ArtistDetail, songs: readonly SongRow[]): Item[] => {
   const items: Item[] = [];
   const shelf = (label: string, albums: readonly AlbumRow[]) => {
     if (albums.length === 0) return;
@@ -35,8 +38,8 @@ const artistItems = (detail: ArtistDetail): Item[] => {
   };
   shelf("Albums", detail.albums);
   shelf("Appears on", detail.appearsOn);
-  if (detail.songs.length > 0) items.push({ type: "section", label: "Songs" });
-  detail.songs.forEach((song, index) => items.push({ type: "track", song, index }));
+  if (songs.length > 0) items.push({ type: "section", label: "Songs" });
+  songs.forEach((song, index) => items.push({ type: "track", song, index }));
   return items;
 };
 
@@ -60,12 +63,14 @@ function ArtistContent({ detail }: { detail: ArtistDetail }) {
   const favorites = useFavoriteIds();
   const tile = useAlbumTileSize(grid.margin);
   const rowState = useMemo(() => ({ currentId, favorites, tile }), [currentId, favorites, tile]);
-  const items = useMemo(() => artistItems(detail), [detail]);
+  const sort = useSongSort("artist");
+  // In the sort chosen for artists; Play, Shuffle and rows all play this displayed order.
+  const songs = useMemo(() => sortSongs(detail.songs, sort), [detail.songs, sort]);
+  const items = useMemo(() => artistItems(detail, songs), [detail, songs]);
   const context = useMemo(
     () => ({ kind: "artist", id: String(detail.artist.id) }) as const,
     [detail.artist.id],
   );
-  const { songs } = detail;
 
   const renderItem = useCallback(
     ({ item }: { item: Item }) => {
@@ -120,7 +125,14 @@ function ArtistContent({ detail }: { detail: ArtistDetail }) {
       estimatedItemSize={grid.row}
       recycleItems
       contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottomInset }}
-      ListHeaderComponent={<ListIntro line={line} songs={songs} context={context} />}
+      ListHeaderComponent={
+        <ListIntro
+          line={line}
+          songs={songs}
+          context={context}
+          sortControl={<SongSortButton kind="artist" />}
+        />
+      }
     />
   );
 }

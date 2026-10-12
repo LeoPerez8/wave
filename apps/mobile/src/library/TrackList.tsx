@@ -70,8 +70,8 @@ type Props = {
   context: QueueContext;
   header?: ReactElement;
   /**
-   * The sort the songs are in; the A–Z spine follows it (none for date added).
-   * Lists in an order of their own (a folder's files, Favorites) omit it and go without a spine.
+   * The sort the songs are in; the A–Z spine follows it (none for the date and
+   * file-name sorts). Without it the list goes without a spine.
    */
   sort?: SongSort | undefined;
 };

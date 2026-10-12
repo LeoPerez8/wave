@@ -1,5 +1,5 @@
 import { IconArrowsSort } from "@tabler/icons-react-native";
-import { SONG_SORTS, songSortLabel, type SongSort } from "@wave/core";
+import { songSortLabel, songSortsFor, type SongSort } from "@wave/core";
 import { ScrollView, Text, View } from "react-native";
 
 import { EntryRow } from "@/catalog/EntryRow";
@@ -17,6 +17,7 @@ const same = (a: SongSort, b: SongSort): boolean =>
 /** The sorts on offer, the current one checked; choosing one closes the card. */
 function SortMenu({ kind, close }: { kind: SongListKind; close: () => void }) {
   const current = useSongSort(kind);
+  const sorts = songSortsFor(kind);
   return (
     <>
       <Text
@@ -29,12 +30,12 @@ function SortMenu({ kind, close }: { kind: SongListKind; close: () => void }) {
       <Hairline />
       {/* Scrolls only where the card can't fit every sort (small windows, landscape). */}
       <ScrollView bounces={false} overScrollMode="never" style={{ flexShrink: 1 }}>
-        {SONG_SORTS.map((sort, index) => (
+        {sorts.map((sort, index) => (
           <EntryRow
             key={songSortLabel(sort)}
             label={songSortLabel(sort)}
             selected={same(sort, current)}
-            divider={index < SONG_SORTS.length - 1}
+            divider={index < sorts.length - 1}
             onPress={() => {
               setSongSort(kind, sort);
               close();
