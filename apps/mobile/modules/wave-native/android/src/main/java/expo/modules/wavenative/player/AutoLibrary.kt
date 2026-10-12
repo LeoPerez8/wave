@@ -13,6 +13,7 @@ import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService.LibraryParams
 import androidx.media3.session.MediaSession.MediaItemsWithStartPosition
 import androidx.media3.session.SessionError
+import androidx.media3.session.SessionResult
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
@@ -92,6 +93,23 @@ object AutoLibrary {
           }
           is AutoReply.Failed -> throw AutoPlayException(answer.message)
           null -> throw AutoPlayException(AutoBridge.STILL_LOADING)
+        }
+      },
+      MoreExecutors.directExecutor(),
+    )
+
+  /**
+   * Forwards a tap on a shuffle or repeat button ([AutoModes.request]) to JS's
+   * queue engine. JS then reports the new modes, which update the buttons.
+   */
+  fun command(command: AutoCommandRequest): ListenableFuture<SessionResult> =
+    Futures.transform(
+      request(command.type, JSONObject(command.payload)),
+      { answer ->
+        when (answer) {
+          is AutoReply.Ok -> SessionResult(SessionResult.RESULT_SUCCESS)
+          is AutoReply.Failed -> SessionResult(SessionError(SessionError.ERROR_UNKNOWN, answer.message))
+          null -> SessionResult(SessionError(SessionError.ERROR_UNKNOWN, AutoBridge.STILL_LOADING))
         }
       },
       MoreExecutors.directExecutor(),

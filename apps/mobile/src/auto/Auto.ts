@@ -7,6 +7,7 @@ import {
   autoQueueStart,
   autoTrackItems,
   decodeAutoMediaId,
+  nextRepeatMode,
   type AutoItem,
   type AutoNode,
   type AutoSource,
@@ -22,7 +23,7 @@ import * as Layer from "effect/Layer";
 import { LibraryStore, type LibraryStoreError, type SongRow } from "@/library/LibraryStore";
 import type { AutoPlayback, AutoRequest } from "@/native/wavePlayer";
 import type { PlayerError } from "@/playback/Player";
-import { Queue, toQueueTrack } from "@/playback/Queue";
+import { Queue, queueState, toQueueTrack } from "@/playback/Queue";
 
 /** Why Wave can't answer an Auto request; `message` is what Auto shows. */
 export class AutoError extends Data.TaggedError("AutoError")<{ readonly message: string }> {}
@@ -157,6 +158,21 @@ export const layer = Layer.effect(
         return playback;
       });
 
+    /**
+     * Auto's shuffle and repeat buttons, through the queue engine like the
+     * app's: shuffle keeps the current track, repeat goes off → all → one.
+     */
+    const command = (name: Extract<AutoRequest, { type: "command" }>["command"]) =>
+      Effect.gen(function* () {
+        const { shuffle, repeat } = queueState.get();
+        yield* queue.dispatch(
+          name === "toggleShuffle"
+            ? { type: "setShuffle", on: !shuffle }
+            : { type: "setRepeat", mode: nextRepeatMode(repeat) },
+        );
+        return null;
+      });
+
     const answer = (request: AutoRequest): Effect.Effect<unknown, Failure> => {
       switch (request.type) {
         case "root":
@@ -167,6 +183,8 @@ export const layer = Layer.effect(
           return item(request.mediaId);
         case "play":
           return play(request.mediaId);
+        case "command":
+          return command(request.command);
       }
     };
 

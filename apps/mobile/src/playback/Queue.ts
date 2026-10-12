@@ -274,6 +274,29 @@ export const layer = Layer.effect(
       }
     }).pipe(Effect.catch(() => Effect.void));
 
+    // Auto's shuffle and repeat toggles follow the queue, whether the app or the car changed it.
+    let shownModes: string | null = null;
+    const showModes = (): void => {
+      const { shuffle, repeat } = queueState.get();
+      const modes = `${shuffle}/${repeat}`;
+      if (modes === shownModes) return;
+      shownModes = modes;
+      Effect.runFork(
+        player.setModes(shuffle, repeat).pipe(
+          Effect.catch(() =>
+            Effect.sync(() => {
+              shownModes = null;
+            }),
+          ),
+        ),
+      );
+    };
+    showModes();
+    yield* Effect.acquireRelease(
+      Effect.sync(() => queueState.subscribe(showModes)),
+      (stop) => Effect.sync(stop),
+    );
+
     yield* lane.take(1);
     yield* Effect.forkScoped(restore.pipe(Effect.ensuring(lane.release(1))));
 

@@ -1,4 +1,5 @@
 import {
+  nextRepeatMode,
   startSleepTimer,
   type QueueCommand,
   type QueueContext,
@@ -80,10 +81,8 @@ export const toggleShuffle = (): void => setShuffle(!queueState.get().shuffle);
 
 export const setRepeat = (mode: RepeatMode): void => dispatch({ type: "setRepeat", mode });
 
-const NEXT_REPEAT: Record<RepeatMode, RepeatMode> = { off: "all", all: "one", one: "off" };
-
 /** Off → all → one → off, like Apple Music's repeat button. */
-export const cycleRepeat = (): void => setRepeat(NEXT_REPEAT[queueState.get().repeat]);
+export const cycleRepeat = (): void => setRepeat(nextRepeatMode(queueState.get().repeat));
 
 /** Plays an Up Next entry. */
 export const playQueueEntry = (key: string): void => dispatch({ type: "jumpTo", key });
