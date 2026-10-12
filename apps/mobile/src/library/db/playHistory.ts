@@ -51,6 +51,7 @@ export const recordPlay = (db: LibraryDatabase, play: PlayEvent): number =>
       startedAt: play.startedAt,
       contextType: play.context?.kind ?? null,
       contextId: play.context?.id ?? null,
+      source: play.source,
       ...progress(play),
     })
     .returning({ id: schema.playEvents.id })
@@ -90,6 +91,7 @@ export const latestPlay = (db: LibraryDatabase): RecordedPlay | null => {
       durationMs: row.durationMs,
       endReason: row.endReason,
       counted: row.counted,
+      source: row.source,
     },
   };
 };

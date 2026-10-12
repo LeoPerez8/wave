@@ -15,7 +15,7 @@ import { makeExternalStore } from "@/lib/externalStore";
 import { LibraryStore } from "@/library/LibraryStore";
 
 import { Player, playbackState } from "./Player";
-import { keptPlayingKey, queueState } from "./Queue";
+import { keptPlayingKey, queueSource, queueState } from "./Queue";
 
 /** Bumped whenever a play starts or ends; Home re-reads on it. */
 export const playHistoryVersion = makeExternalStore(0);
@@ -30,7 +30,11 @@ const trackFor = (key: string): PlayTrack | null => {
   const queue = queueState.get();
   const entry = queue.entries.find((candidate) => candidate.key === key);
   if (entry === undefined) return null;
-  return { trackId: entry.trackId, context: entry.contextIndex === null ? null : queue.context };
+  return {
+    trackId: entry.trackId,
+    context: entry.contextIndex === null ? null : queue.context,
+    source: queueSource.get(),
+  };
 };
 
 /**
