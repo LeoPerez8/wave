@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
 
 import { CELL, grid } from "@/catalog/grid";
+import { OnOverlayCard } from "@/catalog/Hairline";
 import { BACKDROP, useFloatingChromeHeight } from "@/chrome/chrome";
 import { Glass } from "@/glass/Glass";
 import { useTapAnimationMs } from "@/settings/tapAnimation";
@@ -202,7 +203,7 @@ function OverlayCard({ entry, frontmost }: { entry: OverlayEntry; frontmost: boo
         ]}
       >
         <Glass backdropId={BACKDROP.root} cornerRadius={OVERLAY_RADIUS} />
-        {entry.request.render(() => closeOverlay(entry.id))}
+        <OnOverlayCard value>{entry.request.render(() => closeOverlay(entry.id))}</OnOverlayCard>
       </Animated.View>
     </View>
   );
