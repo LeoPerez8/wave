@@ -10,10 +10,12 @@ type Props = {
   /** Solid field shown instead of an image (synthetic preview covers). */
   tint?: string | undefined;
   size: number;
+  /** Corner radius, for art set inside a rounded container; square by default. */
+  radius?: number | undefined;
 };
 
-/** Album art, treated as a photograph: square, no rounding, no frame. */
-export function Artwork({ uri, tint, size }: Props) {
+/** Album art, treated as a photograph: square, no frame, no rounding unless asked. */
+export function Artwork({ uri, tint, size, radius = 0 }: Props) {
   const tertiary = useThemeColor("tertiary");
   const fill = useThemeColor("fill");
   if (uri !== undefined) {
@@ -22,7 +24,7 @@ export function Artwork({ uri, tint, size }: Props) {
         source={{ uri }}
         // List rows are recycled; the key stops the previous track's artwork flashing.
         recyclingKey={uri}
-        style={{ width: size, height: size, backgroundColor: fill }}
+        style={{ width: size, height: size, borderRadius: radius, backgroundColor: fill }}
         contentFit="cover"
         accessibilityIgnoresInvertColors
       />
@@ -31,7 +33,10 @@ export function Artwork({ uri, tint, size }: Props) {
   return (
     <View
       className="items-center justify-center bg-fill"
-      style={[{ width: size, height: size }, tint !== undefined && { backgroundColor: tint }]}
+      style={[
+        { width: size, height: size, borderRadius: radius },
+        tint !== undefined && { backgroundColor: tint },
+      ]}
     >
       {tint === undefined && <IconMusic size={size / 4} color={tertiary} strokeWidth={1.25} />}
     </View>
