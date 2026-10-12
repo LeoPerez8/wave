@@ -6,6 +6,7 @@ import {
   planPlayerSync,
   reduceQueue,
   type PlayerList,
+  type PlaySource,
   type QueueCommand,
   type QueueEntry,
   type QueueState,
@@ -52,6 +53,13 @@ export const queueState = makeExternalStore<QueueState>(EMPTY_QUEUE);
  * the play on record for it instead of starting a new one.
  */
 export const keptPlayingKey = makeExternalStore<string | null>(null);
+
+/**
+ * Where the queue's playback was started from: `auto` once Android Auto
+ * started it (`Queue.handOver`), `phone` once the app did. Every play in the
+ * queue is recorded with it (`PlayHistory`), whoever skips or pauses later.
+ */
+export const queueSource = makeExternalStore<PlaySource>("phone");
 
 /** Queue changes come in bursts (skips, reorders); the queue is serialised once they settle. */
 const QUEUE_SETTLE_MS = 500;
@@ -233,7 +241,12 @@ export const layer = Layer.effect(
       });
 
     const dispatch = (command: QueueCommand, added: readonly QueueTrack[] = []) =>
-      lane.withPermit(run(command, added));
+      lane.withPermit(
+        Effect.gen(function* () {
+          if (command.type === "play") queueSource.set("phone");
+          yield* run(command, added);
+        }),
+      );
 
     const handOver = (command: QueueCommand, added: readonly QueueTrack[]) =>
       lane.withPermit(
@@ -242,6 +255,7 @@ export const layer = Layer.effect(
           for (const track of added) tracks.set(track.id, track);
           const { state } = reduceQueue(queueState.get(), command);
           const items = yield* Effect.forEach(state.entries, itemFor);
+          if (command.type === "play") queueSource.set("auto");
           queueState.set(state);
           queueChanged();
           // What the player holds once the session has set the items.

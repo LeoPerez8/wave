@@ -187,6 +187,11 @@ CREATE INDEX \`play_events_track_idx\` ON \`play_events\` (\`track_id\`);
 CREATE INDEX \`play_events_started_at_idx\` ON \`play_events\` (\`started_at\`);
 `;
 
+// Plays recorded before v2 came from the phone: Android Auto arrived with v2.
+const m0006 = `
+ALTER TABLE \`play_events\` ADD \`source\` text DEFAULT 'phone' NOT NULL;
+`;
+
 export default {
   journal: {
     entries: [
@@ -196,7 +201,8 @@ export default {
       { idx: 3, when: 1_792_065_600_000, tag: "0003_recent_searches", breakpoints: true },
       { idx: 4, when: 1_792_152_000_000, tag: "0004_playlists_favorites", breakpoints: true },
       { idx: 5, when: 1_792_238_400_000, tag: "0005_play_events", breakpoints: true },
+      { idx: 6, when: 1_792_324_800_000, tag: "0006_play_source", breakpoints: true },
     ],
   },
-  migrations: { m0000, m0001, m0002, m0003, m0004, m0005 },
+  migrations: { m0000, m0001, m0002, m0003, m0004, m0005, m0006 },
 };

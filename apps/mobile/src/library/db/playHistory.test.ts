@@ -1,12 +1,19 @@
 /// <reference types="node" />
 import type { PlayEvent } from "@wave/core";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { beforeEach, describe, test } from "node:test";
 
 import { homeSections, latestPlay, recordPlay, updatePlay } from "./playHistory.ts";
 import * as schema from "./schema.ts";
-import { addTrack, openTestDatabase, star, type TestDatabase } from "./testDatabase.ts";
+import { trackPlayTotals } from "./stats.ts";
+import {
+  addTrack,
+  migrateTestDatabase,
+  openTestDatabase,
+  star,
+  type TestDatabase,
+} from "./testDatabase.ts";
 
 const album = { kind: "album", id: "1" } as const;
 
@@ -23,6 +30,7 @@ const play = (
   durationMs: 180_000,
   endReason: "completed",
   counted: true,
+  source: "phone",
   ...overrides,
 });
 
@@ -178,5 +186,52 @@ describe("The latest play", () => {
 
   test("there is none before anything was played", () => {
     assert.equal(latestPlay(db), null);
+  });
+});
+
+describe("Play source", () => {
+  test("a play is recorded with where it was started from", () => {
+    const track = addTrack(db, { title: "In the car" });
+    const id = recordPlay(db, play(track, 1_000, { source: "auto" }));
+    updatePlay(db, id, play(track, 1_000, { source: "auto", listenedMs: 200_000 }));
+
+    assert.equal(latestPlay(db)?.play.source, "auto");
+  });
+
+  test("plays recorded before v2 become phone plays, and Home reads them as before", async () => {
+    const v1 = await openTestDatabase({ through: "0005_play_events" });
+    const often = addTrack(v1, { title: "Often", album: "First" });
+    const once = addTrack(v1, { title: "Once", album: "Second" });
+    // Rows as v1 wrote them, with no play source.
+    const v1Play = (trackId: number, startedAt: number) =>
+      v1.run(
+        sql`INSERT INTO play_events (track_id, started_at, listened_ms, duration_ms, end_reason, counted, context_type, context_id)
+              VALUES (${trackId}, ${startedAt}, 180000, 180000, 'completed', 1, 'album', '1')`,
+      );
+    v1Play(often, 1_000);
+    v1Play(often, 2_000);
+    v1Play(once, 3_000);
+    const before = homeSections(v1);
+    const allTime = { from: null, to: 10_000 };
+    const totalsBefore = trackPlayTotals(v1, allTime);
+
+    await migrateTestDatabase(v1);
+
+    assert.deepEqual(
+      v1.select({ source: schema.playEvents.source }).from(schema.playEvents).all(),
+      [{ source: "phone" }, { source: "phone" }, { source: "phone" }],
+    );
+    assert.deepEqual(homeSections(v1), before);
+    assert.deepEqual(trackPlayTotals(v1, allTime), totalsBefore);
+    assert.deepEqual(
+      before.mostPlayed.map((row) => [row.title, row.playCount]),
+      [
+        ["Often", 2],
+        ["Once", 1],
+      ],
+    );
+
+    const id = recordPlay(v1, play(once, 4_000, { source: "auto" }));
+    assert.deepEqual(latestPlay(v1), { id, play: play(once, 4_000, { source: "auto" }) });
   });
 });

@@ -13,7 +13,21 @@ import * as schema from "./schema.ts";
 
 export type TestDatabase = Awaited<ReturnType<typeof openTestDatabase>>;
 
-export const openTestDatabase = async () => {
+type Migrator = Parameters<typeof migrate>[0];
+
+/** The migrations up to and including the one tagged `through`. */
+const migrationsThrough = (through: string): typeof migrations => {
+  const last = migrations.journal.entries.findIndex((entry) => entry.tag === through);
+  if (last < 0) throw new Error(`no migration tagged ${through}`);
+  return { ...migrations, journal: { entries: migrations.journal.entries.slice(0, last + 1) } };
+};
+
+/**
+ * Opens the database with every migration applied or, given a migration tag
+ * (`through`), as the Wave that shipped it left it; `migrateTestDatabase`
+ * then upgrades it as an app update does.
+ */
+export const openTestDatabase = async (options: { readonly through?: string } = {}) => {
   const SQL = await initSqlJs();
   const client = new SQL.Database();
   // As on the phone: cascades only happen with foreign keys on.
@@ -21,8 +35,16 @@ export const openTestDatabase = async () => {
   const db = drizzle(client, { schema });
   // The Expo migrator is typed for Expo's database but only uses the dialect
   // and session every synchronous SQLite driver shares.
-  await migrate(db as unknown as Parameters<typeof migrate>[0], migrations);
+  await migrate(
+    db as unknown as Migrator,
+    options.through === undefined ? migrations : migrationsThrough(options.through),
+  );
   return db;
+};
+
+/** Applies the migrations a database opened `through` an older one is missing. */
+export const migrateTestDatabase = async (db: TestDatabase): Promise<void> => {
+  await migrate(db as unknown as Migrator, migrations);
 };
 
 export interface FixtureTrack {
