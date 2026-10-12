@@ -22,7 +22,7 @@ import { followUp, openOverlay, presentOverlay } from "@/overlay/overlay";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { usePlaylists } from "./hooks";
-import type { SongRow } from "./LibraryStore";
+import type { PlaylistRow, SongRow } from "./LibraryStore";
 import {
   addToPlaylist,
   createPlaylist,
@@ -234,15 +234,13 @@ const createNamedPlaylist = async (
   }
 };
 
-export const renamePlaylistFlow = (playlist: {
-  readonly id: number;
-  readonly name: string;
-}): Promise<void> => followUp(() => renameNamedPlaylist(playlist));
+/** What renaming or deleting a playlist needs to know about it (any `PlaylistRow` will do). */
+export type NamedPlaylist = Pick<PlaylistRow, "id" | "name">;
 
-const renameNamedPlaylist = async (playlist: {
-  readonly id: number;
-  readonly name: string;
-}): Promise<void> => {
+export const renamePlaylistFlow = (playlist: NamedPlaylist): Promise<void> =>
+  followUp(() => renameNamedPlaylist(playlist));
+
+const renameNamedPlaylist = async (playlist: NamedPlaylist): Promise<void> => {
   const names = await playlistNames();
   const name = await askName({
     title: "Rename playlist",
@@ -262,7 +260,7 @@ const renameNamedPlaylist = async (playlist: {
  * playlist's screen).
  */
 export const confirmDeletePlaylists = (
-  playlists: readonly { readonly id: number; readonly name: string }[],
+  playlists: readonly NamedPlaylist[],
   {
     onConfirm,
     onDeleted,
