@@ -410,6 +410,8 @@ export interface AutoPlaylist {
   readonly id: number;
   readonly name: string;
   readonly trackCount: number;
+  /** Its mosaic's files (Core's `playlistMosaic`): none, one or four. */
+  readonly thumbPaths?: readonly string[];
 }
 
 const songCount = (count: number): string => `${count} ${count === 1 ? "song" : "songs"}`;
@@ -420,6 +422,7 @@ export const autoPlaylistItem = (playlist: AutoPlaylist): AutoItem =>
     { type: "list", list: { kind: "playlist", id: String(playlist.id) } },
     playlist.name,
     songCount(playlist.trackCount),
+    playlist.thumbPaths ?? [],
   );
 
 /** Every track of `list` in its order (an album: by disc and track number). */
@@ -517,8 +520,10 @@ export const autoChildren = (
 export interface AutoArtist {
   readonly id: number;
   readonly name: string;
+  /** A cover of theirs (the store's `artistCovers`), if they have one. */
+  readonly artworkPath?: string | null;
 }
 
 /** An artist in a list (the Artists tab): opens Shuffle all and their albums. */
 export const autoArtistItem = (artist: AutoArtist): AutoItem =>
-  folder({ type: "artist", id: String(artist.id) }, artist.name);
+  folder({ type: "artist", id: String(artist.id) }, artist.name, null, [artist.artworkPath]);

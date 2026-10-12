@@ -343,6 +343,22 @@ describe("Auto artwork", () => {
     ];
     for (const item of items) assert.equal("artwork" in item, false);
   });
+
+  test("a playlist shows its mosaic, or its single cover", () => {
+    const tiles = ["/a_thumb.jpg", "/b_thumb.jpg", "/c_thumb.jpg", "/d_thumb.jpg"];
+    const mosaic = autoPlaylistItem({ id: 7, name: "Drive", trackCount: 9, thumbPaths: tiles });
+    assert.deepEqual(mosaic.artwork, tiles);
+    const single = autoPlaylistItem({ id: 7, name: "Drive", trackCount: 1, thumbPaths: [cover] });
+    assert.deepEqual(single.artwork, [cover]);
+    const empty = autoPlaylistItem({ id: 7, name: "Drive", trackCount: 0, thumbPaths: [] });
+    assert.equal("artwork" in empty, false);
+  });
+
+  test("an artist shows a cover of theirs when there is one", () => {
+    const shown = autoArtistItem({ id: 3, name: "Radiohead", artworkPath: cover });
+    assert.deepEqual(shown.artwork, [cover]);
+    assert.equal("artwork" in autoArtistItem({ id: 3, name: "Radiohead" }), false);
+  });
 });
 
 describe("Auto Playlists tab", () => {

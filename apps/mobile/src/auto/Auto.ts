@@ -91,6 +91,16 @@ export const layer = Layer.effect(
         Effect.flatMap((songs) => (songs === null ? notFound : Effect.succeed(songs))),
       );
 
+    /** [artists] with a cover of theirs, where they have one. */
+    const withCovers = <A extends { readonly id: number }>(artists: readonly A[]) =>
+      store
+        .artistCovers(artists.map((artist) => artist.id))
+        .pipe(
+          Effect.map((covers) =>
+            artists.map((artist) => ({ ...artist, artworkPath: covers.get(artist.id) ?? null })),
+          ),
+        );
+
     /** The rows of [source] one page lists, as items. */
     const fetch = (
       source: AutoSource,
@@ -110,9 +120,10 @@ export const layer = Layer.effect(
             ),
           );
         case "artists":
-          return store
-            .listArtistsPage(offset, limit)
-            .pipe(Effect.map((artists) => artists.map(autoArtistItem)));
+          return store.listArtistsPage(offset, limit).pipe(
+            Effect.flatMap(withCovers),
+            Effect.map((artists) => artists.map(autoArtistItem)),
+          );
         case "artistAlbums":
           return store
             .getArtist(Number(source.id))
@@ -168,7 +179,9 @@ export const layer = Layer.effect(
         }
         if (node.type === "artist") {
           const detail = yield* store.getArtist(Number(node.id));
-          return detail === null ? yield* notFound : autoArtistItem(detail.artist);
+          if (detail === null) return yield* notFound;
+          const [artist] = yield* withCovers([detail.artist]);
+          return autoArtistItem(artist ?? detail.artist);
         }
         if (node.type === "track") {
           const songs = yield* songsOf(node.list);

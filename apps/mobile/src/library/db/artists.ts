@@ -43,3 +43,28 @@ export const selectArtists = (db: LibraryDatabase, { ids, page }: ArtistsQuery):
     GROUP BY artists.id
     ORDER BY artists.sort, artists.id
     ${page === undefined ? sql`` : sql`LIMIT ${page.limit} OFFSET ${page.offset}`}`);
+
+/**
+ * A cover for each of [ids] that has one (Auto shows artists with it): the
+ * first of their albums with artwork, by title, else the artwork of one of
+ * their songs. Artists without any artwork are left out.
+ */
+export const selectArtistCovers = (
+  db: LibraryDatabase,
+  ids: readonly number[],
+): Map<number, string> => {
+  if (ids.length === 0) return new Map();
+  const rows = db.all<{ id: number; path: string | null }>(sql`
+    SELECT artists.id AS "id", coalesce(
+      (SELECT artwork.path FROM albums JOIN artwork ON artwork.hash = albums.artwork_hash
+        WHERE albums.album_artist_id = artists.id ORDER BY albums.title_sort, albums.id LIMIT 1),
+      (SELECT artwork.path FROM tracks JOIN artwork ON artwork.hash = tracks.artwork_hash
+        WHERE tracks.artist_id = artists.id ORDER BY tracks.title_sort, tracks.id LIMIT 1)
+    ) AS "path"
+    FROM artists
+    WHERE artists.id IN (${sql.join(
+      ids.map((id) => sql`${id}`),
+      sql`, `,
+    )})`);
+  return new Map(rows.flatMap((row) => (row.path === null ? [] : [[row.id, row.path] as const])));
+};
