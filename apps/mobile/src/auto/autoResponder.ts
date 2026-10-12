@@ -1,10 +1,24 @@
+import { AutoError } from "@/auto/Auto";
 import { WavePlayer, type AutoRequest, type AutoRequestEvent } from "@/native/wavePlayer";
 
-/** Answers one Auto request with a JSON-serialisable value (see `AutoRequest`). */
+/**
+ * Answers one Auto request with a JSON-serialisable value (see `AutoRequest`).
+ * It fails with an `AutoError` to tell Auto what to show.
+ */
 export type AutoAnswer = (request: AutoRequest) => Promise<unknown>;
 
-const errorMessage = (error: unknown): string =>
-  error instanceof Error && error.message !== "" ? error.message : "Wave couldn't load this.";
+const COULD_NOT_LOAD = "Wave couldn't load this. Try again in a moment.";
+
+/**
+ * What Auto shows for a failed request: an `AutoError`'s message, written for
+ * the car. Anything else (a store or player failure, a defect, a request that
+ * can't be read) is logged and shown as a generic message, never its own text.
+ */
+const failureMessage = (type: string, error: unknown): string => {
+  if (error instanceof AutoError) return error.message;
+  console.warn(`[wave] Auto ${type} failed`, error);
+  return COULD_NOT_LOAD;
+};
 
 /** The request an event carries, with its payload read. */
 const readRequest = (event: AutoRequestEvent): AutoRequest =>
@@ -26,7 +40,7 @@ export const startAutoResponder = (answer: AutoAnswer): void => {
       .then(() => answer(readRequest(event)))
       .then(
         (value) => WavePlayer.respondAuto(event.id, JSON.stringify(value)),
-        (error: unknown) => WavePlayer.failAuto(event.id, errorMessage(error)),
+        (error: unknown) => WavePlayer.failAuto(event.id, failureMessage(event.type, error)),
       );
   });
   WavePlayer.attachAuto();

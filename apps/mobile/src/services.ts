@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 
-import { Auto, AutoError } from "@/auto/Auto";
+import { Auto } from "@/auto/Auto";
 import { startAutoResponder } from "@/auto/autoResponder";
 import { appRuntime } from "@/library/runtime";
 import type { AutoRequest } from "@/native/wavePlayer";
@@ -17,26 +17,16 @@ export interface ServicesStart {
 
 let start: ServicesStart | null = null;
 
-const COULD_NOT_LOAD = "Wave couldn't load this. Try again in a moment.";
-
 /**
- * Answers one Auto request through the `Auto` service. Auto shows an
- * `AutoError`'s message; any other failure is logged and shown as a generic one.
+ * Answers one Auto request through the `Auto` service. What Auto shows when it
+ * fails is the responder's call (`startAutoResponder`).
  */
 const answerAuto = (request: AutoRequest): Promise<unknown> =>
   appRuntime.runPromise(
     Effect.gen(function* () {
       const auto = yield* Auto;
       return yield* auto.answer(request);
-    }).pipe(
-      Effect.catch((error) =>
-        error instanceof AutoError
-          ? Effect.fail(error)
-          : Effect.sync(() => console.warn(`[wave] Auto ${request.type} failed`, error)).pipe(
-              Effect.andThen(Effect.fail(new AutoError({ message: COULD_NOT_LOAD }))),
-            ),
-      ),
-    ),
+    }),
   );
 
 /**
