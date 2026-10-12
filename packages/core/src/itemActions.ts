@@ -8,8 +8,26 @@
 
 import { isDetailPath } from "./navigation.ts";
 
-/** What kind of library item the actions are about. */
-export type ItemKind = "track" | "album" | "artist" | "playlist" | "genre" | "folder" | "section";
+/**
+ * What kind of library item the actions are about. `mixed` is items of
+ * several kinds checked together (an artist page's albums and songs): they
+ * get only the entries every kind offers.
+ */
+export type ItemKind =
+  | "track"
+  | "album"
+  | "artist"
+  | "playlist"
+  | "genre"
+  | "folder"
+  | "section"
+  | "mixed";
+
+/** The kind of items checked together: theirs when they're all one kind, otherwise `mixed`. */
+export const commonKind = (kinds: readonly Exclude<ItemKind, "mixed">[]): ItemKind => {
+  const first = kinds[0];
+  return first !== undefined && kinds.every((kind) => kind === first) ? first : "mixed";
+};
 
 /** Where the actions show: an item's long-press menu, or the bar of a list in selection mode. */
 export type ActionSurface = "menu" | "selection";
