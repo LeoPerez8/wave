@@ -7,10 +7,12 @@ import {
   isDetailPath,
   ITEM_ACTION_LABELS,
   itemActions,
+  playlistRemovals,
   type ActionItem,
   type ActionSurface,
   type ItemAction,
   type ItemKind,
+  type PlaylistPlace,
 } from "@wave/core";
 import * as Haptics from "expo-haptics";
 import { router, usePathname } from "expo-router";
@@ -47,10 +49,7 @@ import { addToQueue, playNext } from "./actions";
  */
 
 /** A track's place in the playlist its menu was opened from. */
-export interface PlaylistPlace {
-  readonly playlistId: number;
-  readonly itemId: number;
-}
+export type { PlaylistPlace };
 
 /** A track as the actions see it: the song, and its place when shown in a playlist. */
 export interface TrackItem {
@@ -348,15 +347,8 @@ export function useItemActions(
       case "removeFromPlaylist":
         return make(
           run(() => {
-            // Each checked entry, not every copy of its song; one edit per playlist.
-            const byPlaylist = new Map<number, number[]>();
-            for (const { playlistItem } of tracks) {
-              if (playlistItem === undefined) continue;
-              const ids = byPlaylist.get(playlistItem.playlistId) ?? [];
-              ids.push(playlistItem.itemId);
-              byPlaylist.set(playlistItem.playlistId, ids);
-            }
-            for (const [playlistId, itemIds] of byPlaylist) {
+            const places = tracks.flatMap(({ playlistItem }) => playlistItem ?? []);
+            for (const { playlistId, itemIds } of playlistRemovals(places)) {
               removePlaylistItems(playlistId, itemIds).catch((error: unknown) =>
                 showError("Couldn't remove the songs", error),
               );

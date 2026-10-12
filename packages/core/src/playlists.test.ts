@@ -9,6 +9,7 @@ import {
   nextPlaylistName,
   planPlaylistAdd,
   playlistMosaic,
+  playlistRemovals,
 } from "./index.ts";
 
 describe("checkPlaylistName", () => {
@@ -159,5 +160,26 @@ describe("confirmPlaylistDeletion", () => {
       message: "Their songs stay in your library.",
       action: { label: "Delete", destructive: true },
     });
+  });
+});
+
+describe("playlistRemovals", () => {
+  test("one removal per playlist, in the order first checked, with exactly the checked entries", () => {
+    assert.deepEqual(
+      playlistRemovals([
+        { playlistId: 2, itemId: 20 },
+        { playlistId: 1, itemId: 10 },
+        { playlistId: 2, itemId: 21 },
+        { playlistId: 2, itemId: 25 },
+      ]),
+      [
+        { playlistId: 2, itemIds: [20, 21, 25] },
+        { playlistId: 1, itemIds: [10] },
+      ],
+    );
+  });
+
+  test("nothing checked removes nothing", () => {
+    assert.deepEqual(playlistRemovals([]), []);
   });
 });

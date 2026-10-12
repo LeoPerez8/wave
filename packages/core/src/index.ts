@@ -75,8 +75,14 @@ export {
   nextPlaylistName,
   planPlaylistAdd,
   playlistMosaic,
+  playlistRemovals,
 } from "./playlists.ts";
-export type { PlaylistAdd, PlaylistNameCheck } from "./playlists.ts";
+export type {
+  PlaylistAdd,
+  PlaylistNameCheck,
+  PlaylistPlace,
+  PlaylistRemoval,
+} from "./playlists.ts";
 export { resolveRemoveSwipe } from "./rowGestures.ts";
 export { currentLyricIndex, parseLyrics, pickLyrics } from "./lyrics.ts";
 export type { LyricLine, Lyrics, LyricsSources } from "./lyrics.ts";
