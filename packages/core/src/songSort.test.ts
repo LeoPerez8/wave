@@ -4,13 +4,17 @@ import { describe, test } from "node:test";
 import {
   alphabetIndex,
   DEFAULT_SONG_SORT,
+  defaultSongSort,
   readSongSort,
+  SONG_LIST_KINDS,
   SONG_SORTS,
+  songSortsFor,
   songSortLabel,
   songSpineKeys,
   sortKey,
   sortSongs,
   writeSongSort,
+  type SongListKind,
   type SongSort,
   type SortableSong,
 } from "./index.ts";
@@ -255,5 +259,126 @@ describe("sortSongs by date added", () => {
       "Same time B",
       "New",
     ]);
+  });
+});
+
+describe("sortSongs by file name", () => {
+  const file = (name: string): SortableSong & { readonly name: string } => ({
+    ...song(name, { title: "Same" }),
+    path: `/music/Album/${name}`,
+  });
+  const songs = [file("10 Ten.mp3"), file("b.mp3"), file("2 Two.mp3"), file("A.flac")];
+
+  test("orders like a file manager: 2 before 10, letters ignoring case", () => {
+    assert.deepEqual(names(sortSongs(songs, { key: "file", descending: false })), [
+      "2 Two.mp3",
+      "10 Ten.mp3",
+      "A.flac",
+      "b.mp3",
+    ]);
+  });
+
+  test("descending runs the other way", () => {
+    assert.deepEqual(names(sortSongs(songs, { key: "file", descending: true })), [
+      "b.mp3",
+      "A.flac",
+      "10 Ten.mp3",
+      "2 Two.mp3",
+    ]);
+  });
+
+  test("goes by the file's name, not the folders above it", () => {
+    const apart = [
+      { ...song("z in a"), path: "/a/z.mp3" },
+      { ...song("a in z"), path: "/z/a.mp3" },
+    ];
+    assert.deepEqual(names(sortSongs(apart, { key: "file", descending: false })), [
+      "a in z",
+      "z in a",
+    ]);
+  });
+
+  test("has no spine", () => {
+    assert.equal(songSpineKeys(songs, { key: "file", descending: false }), undefined);
+  });
+});
+
+describe("sortSongs by date starred", () => {
+  const starred = (name: string, starredAt: number) => ({ ...song(name), starredAt });
+  const songs = [
+    starred("Early", 1_000),
+    starred("Late", 3_000),
+    starred("Same time B", 2_000),
+    starred("Same time A", 2_000),
+  ];
+
+  test("most recently starred first when descending, ties by song name", () => {
+    assert.deepEqual(names(sortSongs(songs, { key: "starred", descending: true })), [
+      "Late",
+      "Same time A",
+      "Same time B",
+      "Early",
+    ]);
+  });
+
+  test("oldest first when ascending", () => {
+    assert.deepEqual(names(sortSongs(songs, { key: "starred", descending: false })), [
+      "Early",
+      "Same time A",
+      "Same time B",
+      "Late",
+    ]);
+  });
+
+  test("has no spine", () => {
+    assert.equal(songSpineKeys(songs, { key: "starred", descending: true }), undefined);
+  });
+});
+
+describe("sorts per kind of song list", () => {
+  const labels = (kind: SongListKind) => songSortsFor(kind).map(songSortLabel);
+  const shared = SONG_SORTS.map(songSortLabel);
+
+  test("Songs, artist and genre lists offer the shared sorts, song name A to Z first", () => {
+    for (const kind of ["songs", "artist", "genre"] as const) {
+      assert.deepEqual(labels(kind), shared);
+      assert.deepEqual(defaultSongSort(kind), { key: "title", descending: false });
+    }
+  });
+
+  test("a folder leads with its file-name order, and defaults to it", () => {
+    assert.deepEqual(labels("folder"), ["File name, A to Z", "File name, Z to A", ...shared]);
+    assert.deepEqual(defaultSongSort("folder"), { key: "file", descending: false });
+  });
+
+  test("Favorites leads with date starred, and defaults to most recently starred", () => {
+    assert.deepEqual(labels("favorites"), [
+      "Date starred, newest first",
+      "Date starred, oldest first",
+      ...shared,
+    ]);
+    assert.deepEqual(defaultSongSort("favorites"), { key: "starred", descending: true });
+  });
+
+  test("a saved sort reads back as itself for every kind", () => {
+    for (const kind of SONG_LIST_KINDS)
+      for (const sort of songSortsFor(kind))
+        assert.deepEqual(readSongSort(writeSongSort(sort), kind), sort);
+  });
+
+  test("nothing saved reads as the kind's default", () => {
+    for (const kind of SONG_LIST_KINDS)
+      assert.deepEqual(readSongSort(null, kind), defaultSongSort(kind));
+  });
+
+  test("a sort the kind doesn't offer reads as its default", () => {
+    assert.deepEqual(
+      readSongSort(writeSongSort({ key: "file", descending: false }), "artist"),
+      DEFAULT_SONG_SORT,
+    );
+    assert.deepEqual(
+      readSongSort(writeSongSort({ key: "starred", descending: false }), "folder"),
+      defaultSongSort("folder"),
+    );
   });
 });

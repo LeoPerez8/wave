@@ -1,13 +1,15 @@
 /**
- * The orders a song list can be sorted in (Library › Songs, and the other song
- * lists that offer the same control): by song name, artist, album or date
- * added, each ascending or descending.
+ * The orders a song list can be sorted in (Library › Songs, an artist's,
+ * genre's or folder's songs, Favorites): by song name, artist, album or date
+ * added, each ascending or descending, plus a list's own order where it has one
+ * (a folder's file names, when Favorites were starred).
  */
 
+import { compareFileNames } from "./browse.ts";
 import { compareAlbumTracks, compareByTitle, compareStrings } from "./library.ts";
 
 /** What a song list can be sorted by. */
-export type SongSortKey = "title" | "artist" | "album" | "added";
+export type SongSortKey = "title" | "artist" | "album" | "added" | "file" | "starred";
 
 /** A song list's sort: what it's sorted by, and which way. */
 export interface SongSort {
@@ -26,6 +28,8 @@ export interface SortableSong {
   /** When the file entered the library (epoch ms). */
   readonly addedAt: number;
   readonly path: string;
+  /** When the song was starred (epoch ms); only Favorites sort by it. */
+  readonly starredAt?: number | undefined;
 }
 
 type Compare = (a: SortableSong, b: SortableSong) => number;
@@ -54,6 +58,8 @@ interface Order {
 }
 
 const ALPHABETICAL = ["A to Z", "Z to A"] as const;
+
+const fileName = (path: string): string => path.slice(path.lastIndexOf("/") + 1);
 
 const ORDERS: Record<SongSortKey, Order> = {
   title: {
@@ -84,6 +90,18 @@ const ORDERS: Record<SongSortKey, Order> = {
     primary: (a, b) => a.addedAt - b.addedAt,
     ties: compareByTitle,
   },
+  file: {
+    name: "File name",
+    directions: ALPHABETICAL,
+    primary: (a, b) => compareFileNames(fileName(a.path), fileName(b.path)),
+    ties: (a, b) => compareStrings(a.path, b.path),
+  },
+  starred: {
+    name: "Date starred",
+    directions: ["oldest first", "newest first"],
+    primary: (a, b) => (a.starredAt ?? 0) - (b.starredAt ?? 0),
+    ties: compareByTitle,
+  },
 };
 
 /** Song name A to Z: how song lists are sorted until you choose otherwise. */
@@ -100,6 +118,44 @@ export const SONG_SORTS: readonly SongSort[] = [
   { key: "added", descending: true },
   { key: "added", descending: false },
 ];
+
+/**
+ * The kinds of song list with a sort control. Every list of a kind shares one
+ * sort: sorting one artist's songs by album sorts every artist's.
+ */
+export type SongListKind = "songs" | "artist" | "genre" | "folder" | "favorites";
+
+export const SONG_LIST_KINDS: readonly SongListKind[] = [
+  "songs",
+  "artist",
+  "genre",
+  "folder",
+  "favorites",
+];
+
+/** A list's own order, offered first (and its default) where it isn't song name A to Z. */
+const OWN_ORDER: Partial<Record<SongListKind, readonly [SongSort, SongSort]>> = {
+  // The file-manager order a folder has always had.
+  folder: [
+    { key: "file", descending: false },
+    { key: "file", descending: true },
+  ],
+  // Most recently starred first, as Favorites has always been.
+  favorites: [
+    { key: "starred", descending: true },
+    { key: "starred", descending: false },
+  ],
+};
+
+/** The sorts a [kind] list offers, in the control's order: its own order leads. */
+export const songSortsFor = (kind: SongListKind): readonly SongSort[] => {
+  const own = OWN_ORDER[kind];
+  return own === undefined ? SONG_SORTS : [...own, ...SONG_SORTS];
+};
+
+/** How a [kind] list is sorted until you choose otherwise: the order it always had. */
+export const defaultSongSort = (kind: SongListKind): SongSort =>
+  OWN_ORDER[kind]?.[0] ?? DEFAULT_SONG_SORT;
 
 /** How a sort reads in the control and to screen readers, e.g. "Artist, Z to A". */
 export const songSortLabel = (sort: SongSort): string => {
@@ -134,17 +190,18 @@ export const songSpineKeys = (
 export const writeSongSort = (sort: SongSort): string =>
   JSON.stringify({ key: sort.key, descending: sort.descending });
 
-/** A sort saved by `writeSongSort`; [fallback] when nothing (readable) was saved. */
-export const readSongSort = (
-  saved: string | null,
-  fallback: SongSort = DEFAULT_SONG_SORT,
-): SongSort => {
+/**
+ * A [kind] list's sort saved by `writeSongSort`; the kind's default when nothing
+ * (readable, and on offer for the kind) was saved.
+ */
+export const readSongSort = (saved: string | null, kind: SongListKind = "songs"): SongSort => {
+  const fallback = defaultSongSort(kind);
   if (saved === null) return fallback;
   try {
     const parsed: unknown = JSON.parse(saved);
     if (typeof parsed !== "object" || parsed === null) return fallback;
     const { key, descending } = parsed as Record<string, unknown>;
-    const known = SONG_SORTS.find((sort) => sort.key === key && sort.descending === descending);
+    const known = songSortsFor(kind).find((sort) => sort.key === key && sort.descending === descending);
     return known ?? fallback;
   } catch {
     return fallback;

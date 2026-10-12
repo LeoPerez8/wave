@@ -37,8 +37,10 @@ import migrations from "./db/migrations";
 import {
   homeSections,
   latestPlay,
+  listFavorites,
   recordPlay,
   updatePlay,
+  type FavoriteRow,
   type HomeSections,
   type RecordedPlay,
 } from "./db/playHistory";
@@ -113,6 +115,8 @@ export interface SongRow {
 
 /** A track on an album screen, with what orders it there. */
 export type AlbumTrackRow = SongRow;
+
+export type { FavoriteRow };
 
 /** One album of the Albums grid (and of an artist's albums). */
 export interface AlbumRow {
@@ -392,7 +396,7 @@ export class LibraryStore extends Context.Service<
     readonly favoriteTrackIds: Effect.Effect<readonly number[], LibraryStoreError>;
     readonly setFavorite: (trackId: number, on: boolean) => Effect.Effect<void, LibraryStoreError>;
     /** Starred tracks, most recently starred first, for Library › Favorites. */
-    readonly listFavorites: Effect.Effect<readonly SongRow[], LibraryStoreError>;
+    readonly listFavorites: Effect.Effect<readonly FavoriteRow[], LibraryStoreError>;
     /** Records a play as it starts (Core's `PlayEvent`); returns its id, to update it as it goes on. */
     readonly recordPlay: (play: PlayEvent) => Effect.Effect<number, LibraryStoreError>;
     /** Brings a recorded play up to date: listened time, how it ended (so far), counted. */
@@ -1359,12 +1363,7 @@ const make = Effect.gen(function* () {
         else db.delete(favorites).where(eq(favorites.trackId, trackId)).run();
       }),
 
-    listFavorites: attempt("list favorites", () =>
-      trackQuery(db)
-        .innerJoin(schema.favorites, eq(schema.favorites.trackId, schema.tracks.id))
-        .orderBy(desc(schema.favorites.addedAt), ...BY_TITLE)
-        .all(),
-    ),
+    listFavorites: attempt("list favorites", () => listFavorites(db)),
 
     recordPlay: (play) => attempt("record the play", () => recordPlay(db, play)),
 

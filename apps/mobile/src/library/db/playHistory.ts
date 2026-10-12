@@ -9,11 +9,16 @@ import { desc, eq, inArray, max, sql } from "drizzle-orm";
 import type { AlbumRow, SongRow } from "../LibraryStore.ts";
 import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
-import { songColumns } from "./tracks.ts";
+import { BY_TITLE, songColumns } from "./tracks.ts";
 
 /** A Most Played song with its number of counted plays. */
 export interface MostPlayedRow extends SongRow {
   readonly playCount: number;
+}
+
+/** A starred song, with when it was starred (Favorites can be sorted by it). */
+export interface FavoriteRow extends SongRow {
+  readonly starredAt: number;
 }
 
 export interface HomeSections {
@@ -178,6 +183,20 @@ const recentFavorites = (db: LibraryDatabase): SongRow[] => {
     .leftJoin(artwork, eq(tracks.artworkHash, artwork.hash))
     .orderBy(desc(favorites.addedAt), desc(favorites.trackId))
     .limit(LIST)
+    .all();
+};
+
+/** Library › Favorites: starred songs with when each was starred, the most recent first. */
+export const listFavorites = (db: LibraryDatabase): FavoriteRow[] => {
+  const { favorites, tracks, artists, albums, artwork } = schema;
+  return db
+    .select({ ...songColumns, starredAt: favorites.addedAt })
+    .from(favorites)
+    .innerJoin(tracks, eq(favorites.trackId, tracks.id))
+    .innerJoin(artists, eq(tracks.artistId, artists.id))
+    .innerJoin(albums, eq(tracks.albumId, albums.id))
+    .leftJoin(artwork, eq(tracks.artworkHash, artwork.hash))
+    .orderBy(desc(favorites.addedAt), ...BY_TITLE)
     .all();
 };
 

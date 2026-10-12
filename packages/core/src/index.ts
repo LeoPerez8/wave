@@ -190,11 +190,14 @@ export type {
 } from "./listening.ts";
 export {
   DEFAULT_SONG_SORT,
+  defaultSongSort,
   readSongSort,
+  SONG_LIST_KINDS,
   SONG_SORTS,
   songSortLabel,
+  songSortsFor,
   songSpineKeys,
   sortSongs,
   writeSongSort,
 } from "./songSort.ts";
-export type { SongSort, SongSortKey, SortableSong } from "./songSort.ts";
+export type { SongListKind, SongSort, SongSortKey, SortableSong } from "./songSort.ts";
