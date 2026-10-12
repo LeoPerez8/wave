@@ -37,3 +37,57 @@ describe("placeOverlayCard", () => {
     assert.deepEqual(frame, { left: 234, top: 118, width: 480, maxHeight: 340 });
   });
 });
+
+describe("placeOverlayCard next to an anchor", () => {
+  // A full-width row, 56 dp tall, and a menu kept 8 dp from it.
+  const row = (top: number) => ({ top, bottom: top + 56, left: 0, right: 412 });
+  const near = (top: number) => ({ rect: row(top), gap: 8 });
+
+  test("a menu opens just below the long-pressed row when it fits there", () => {
+    assert.deepEqual(placeOverlayCard({ ...phone, cardHeight: 400, anchor: near(200) }), {
+      left: 24,
+      top: 264,
+      width: 364,
+      maxHeight: 811,
+      side: "below",
+    });
+  });
+
+  test("a row near the bottom gets its menu above it instead", () => {
+    const frame = placeOverlayCard({ ...phone, cardHeight: 400, anchor: near(600) });
+    assert.equal(frame.side, "above");
+    assert.equal(frame.top, 192);
+  });
+
+  test("the floating tab bar and mini player count as the bottom of the screen", () => {
+    const anchor = near(450);
+    assert.equal(placeOverlayCard({ ...phone, cardHeight: 300, anchor }).side, "below");
+    const frame = placeOverlayCard({ ...phone, cardHeight: 300, anchor, chromeBottom: 136 });
+    assert.equal(frame.side, "above");
+    assert.equal(frame.top, 142);
+    assert.equal(frame.maxHeight, 675);
+  });
+
+  test("a menu too tall for either side stays on screen, over the row, on the roomier side", () => {
+    const lower = placeOverlayCard({ ...phone, cardHeight: 600, anchor: near(400) });
+    assert.deepEqual([lower.side, lower.top], ["below", 267]);
+    const higher = placeOverlayCard({ ...phone, cardHeight: 600, anchor: near(500) });
+    assert.deepEqual([higher.side, higher.top], ["above", 56]);
+  });
+
+  test("a row half under the tab bar still gets a menu clear of it, above the row", () => {
+    const frame = placeOverlayCard({ ...phone, cardHeight: 200, anchor: near(740), chromeBottom: 80 });
+    assert.deepEqual([frame.side, frame.top], ["above", 532]);
+  });
+
+  test("on a wide screen the menu centres under the album tile, kept a margin inside the edges", () => {
+    const tablet = { ...phone, window: { width: 1000, height: 1400 }, cardHeight: 300 };
+    const tile = (left: number, right: number) => ({
+      rect: { top: 100, bottom: 400, left, right },
+      gap: 8,
+    });
+    assert.equal(placeOverlayCard({ ...tablet, anchor: tile(360, 840) }).left, 360);
+    assert.equal(placeOverlayCard({ ...tablet, anchor: tile(520, 980) }).left, 496);
+    assert.equal(placeOverlayCard({ ...tablet, anchor: tile(20, 480) }).left, 24);
+  });
+});

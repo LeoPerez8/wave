@@ -55,6 +55,7 @@ function PlaylistHead({ detail }: { detail: PlaylistDetail }) {
           <IconButton
             icon={IconDots}
             label="Playlist actions"
+            opensMenu
             onPress={() => openPlaylistActions(playlist)}
           />
         </View>
