@@ -466,6 +466,9 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
     ),
     [songs, active, handlers, translation, entries.length],
   );
+  // Legend List re-renders a row only when its item or extraData changes, and the
+  // songs arrive after the first render.
+  const rowState = useMemo(() => ({ songs, active }), [songs, active]);
 
   if (entries.length === 0) {
     return (
@@ -492,7 +495,7 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
         data={entries}
         keyExtractor={(entry) => entry.key}
         renderItem={renderItem}
-        extraData={active}
+        extraData={rowState}
         estimatedItemSize={ROW}
         alwaysRender={active === null ? undefined : { keys: [active.key] }}
         scrollEnabled={active === null}
