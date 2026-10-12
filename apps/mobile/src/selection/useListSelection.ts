@@ -86,5 +86,9 @@ export function useListSelection<T>({
     [selection, keyOf],
   );
 
-  return { selecting, selection, isChecked, start, toggle };
+  // One object per change, so rows can depend on it (`selectableRow`).
+  return useMemo(
+    () => ({ selecting, selection, isChecked, start, toggle }),
+    [selecting, selection, isChecked, start, toggle],
+  );
 }

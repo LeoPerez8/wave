@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { TextButton } from "@/components/TextButton";
 import { openPlaylistActions } from "@/playback/ActionsMenu";
 import type { ActionItems } from "@/playback/actionTargets";
+import { selectableRow } from "@/selection/selectableRow";
 import { useListSelection, type ListSelection } from "@/selection/useListSelection";
 
 import { usePlaylists } from "./hooks";
@@ -36,9 +37,6 @@ const playlistsOf = (playlists: readonly PlaylistRow[]): ActionItems => ({
   items: playlists,
 });
 
-/** While selecting, a long-press does nothing (rather than toggling the row on release). */
-const ignoreLongPress = (): void => undefined;
-
 /**
  * A playlist row. Tap opens it; long-press opens its menu, which offers
  * Select. While selecting, rows show a check and taps check and uncheck.
@@ -50,21 +48,17 @@ function PlaylistItem({
   playlist: PlaylistRow;
   selection: ListSelection<PlaylistRow>;
 }) {
-  const { selecting } = selection;
   return (
     <PlaylistEntry
       name={playlist.name}
       detail={songCount(playlist.trackCount)}
       paths={playlist.thumbPaths}
-      checked={selecting ? selection.isChecked(playlist) : undefined}
-      onPress={
-        selecting ? () => selection.toggle(playlist) : () => openPlaylist(playlist.id, playlist)
-      }
-      onLongPress={
-        selecting
-          ? ignoreLongPress
-          : () => openPlaylistActions(playlist, { onSelect: () => selection.start(playlist) })
-      }
+      {...selectableRow(
+        playlist,
+        selection,
+        () => openPlaylist(playlist.id, playlist),
+        (options) => openPlaylistActions(playlist, options),
+      )}
     />
   );
 }

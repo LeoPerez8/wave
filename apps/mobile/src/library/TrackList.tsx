@@ -14,6 +14,7 @@ import { playSongs } from "@/playback/actions";
 import { useCurrentTrackId } from "@/playback/hooks";
 import { openTrackActions } from "@/playback/ActionsMenu";
 import type { ActionItems } from "@/playback/actionTargets";
+import { selectableRow } from "@/selection/selectableRow";
 import { useListSelection } from "@/selection/useListSelection";
 
 import { useFavoriteIds } from "./favorites";
@@ -65,9 +66,6 @@ const NO_KEYS: readonly string[] = [];
 
 const keyExtractor = (song: SongRow): string => String(song.id);
 
-/** While selecting, a long-press does nothing (rather than toggling the row on release). */
-const ignoreLongPress = (): void => undefined;
-
 /** The actions in selection mode act on the checked songs. */
 const tracksOf = (songs: readonly SongRow[]): ActionItems => ({
   kind: "track",
@@ -99,14 +97,14 @@ export function TrackList({ songs, context, header, sort }: Props) {
   const bottomInset = useChromeInset();
   const currentId = useCurrentTrackId();
   const favorites = useFavoriteIds();
-  const { selection, isChecked, start, toggle } = useListSelection({
+  const listSelection = useListSelection({
     items: songs,
     keyOf: keyExtractor,
     target: tracksOf,
   });
   const rowState = useMemo(
-    () => ({ currentId, favorites, selection }),
-    [currentId, favorites, selection],
+    () => ({ currentId, favorites, selection: listSelection.selection }),
+    [currentId, favorites, listSelection.selection],
   );
   const sortKeys = useMemo(
     () => (sort === undefined ? NO_KEYS : (songSpineKeys(songs, sort) ?? NO_KEYS)),
@@ -121,16 +119,15 @@ export function TrackList({ songs, context, header, sort }: Props) {
         state={String(item.id) === currentId ? "playing" : undefined}
         favorite={favorites.has(item.id)}
         leading="artwork"
-        checked={selection === null ? undefined : isChecked(item)}
-        onPress={selection === null ? () => playSongs(songs, index, context) : () => toggle(item)}
-        onLongPress={
-          selection === null
-            ? () => openTrackActions(item, { onSelect: () => start(item) })
-            : ignoreLongPress
-        }
+        {...selectableRow(
+          item,
+          listSelection,
+          () => playSongs(songs, index, context),
+          (options) => openTrackActions(item, options),
+        )}
       />
     ),
-    [context, currentId, favorites, songs, selection, isChecked, start, toggle],
+    [context, currentId, favorites, songs, listSelection],
   );
 
   return (

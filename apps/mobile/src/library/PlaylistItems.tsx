@@ -35,6 +35,7 @@ import { playSongs } from "@/playback/actions";
 import { useCurrentTrackId } from "@/playback/hooks";
 import { openTrackActions } from "@/playback/ActionsMenu";
 import type { ActionItems } from "@/playback/actionTargets";
+import { selectableRow } from "@/selection/selectableRow";
 import { useListSelection } from "@/selection/useListSelection";
 import { useThemeColor } from "@/theme/useThemeColor";
 
@@ -287,9 +288,6 @@ type Props = {
   empty: ReactElement;
 };
 
-/** While selecting, a long-press does nothing (rather than toggling the row on release). */
-const ignoreLongPress = (): void => undefined;
-
 const NO_ITEMS: readonly PlaylistItemRow[] = [];
 
 /** Each entry is its own selection item, so a song in the playlist twice is checked per copy. */
@@ -331,7 +329,7 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
     }),
     [placeOf],
   );
-  const { selecting, isChecked, start, toggle } = useListSelection({
+  const listSelection = useListSelection({
     items: order,
     keyOf: entryKey,
     target: tracksOf,
@@ -484,17 +482,12 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
         drag={drag}
         playing={String(item.id) === currentId}
         favorite={favorites.has(item.id)}
-        checked={selecting ? isChecked(item) : undefined}
-        onPress={selecting ? () => toggle(item) : () => playSongs(order, index, context)}
-        onLongPress={
-          selecting
-            ? ignoreLongPress
-            : () =>
-                openTrackActions(item, {
-                  playlistItem: placeOf(item),
-                  onSelect: () => start(item),
-                })
-        }
+        {...selectableRow(
+          item,
+          listSelection,
+          () => playSongs(order, index, context),
+          (options) => openTrackActions(item, { ...options, playlistItem: placeOf(item) }),
+        )}
         onDragBegin={onDragBegin}
         onDragMove={onDragMove}
         onDrop={onDrop}

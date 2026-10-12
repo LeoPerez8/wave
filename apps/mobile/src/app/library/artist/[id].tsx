@@ -22,6 +22,7 @@ import { SongSortButton } from "@/library/SongSortButton";
 import { useSortedSongs } from "@/library/songSort";
 import { ListIntro, songCount, toTrackSummary } from "@/library/TrackList";
 import { useListScrollable } from "@/motion/heldTouch";
+import { selectableRow } from "@/selection/selectableRow";
 import { useListSelection, type ListSelection } from "@/selection/useListSelection";
 import { ArtistStatsBlock } from "@/stats/ArtistStatsBlock";
 
@@ -82,9 +83,6 @@ const albumSelectionOf = (page: ListSelection<MixedItem>): ListSelection<AlbumRo
   toggle: (album) => page.toggle(albumItem(album)),
 });
 
-/** While selecting, a long-press does nothing (rather than toggling the row on release). */
-const ignoreLongPress = (): void => undefined;
-
 /** The artist page's head: their image as a large circle, then their name. */
 function ArtistHead({ artist }: { artist: ArtistRow }) {
   const { width } = useWindowDimensions();
@@ -120,7 +118,7 @@ function ArtistContent({ detail }: { detail: ArtistDetail }) {
   const selectable = useMemo(() => selectableItems(detail, songs), [detail, songs]);
   const page = useListSelection({ items: selectable, keyOf: selectableKey, target: mixedTarget });
   const albumSelection = useMemo(() => albumSelectionOf(page), [page]);
-  const { selection, isChecked, start, toggle } = page;
+  const { selection } = page;
   const rowState = useMemo(
     () => ({ currentId, favorites, tile, selection }),
     [currentId, favorites, tile, selection],
@@ -148,34 +146,17 @@ function ArtistContent({ detail }: { detail: ArtistDetail }) {
               state={String(item.song.id) === currentId ? "playing" : undefined}
               favorite={favorites.has(item.song.id)}
               leading="artwork"
-              checked={selection === null ? undefined : isChecked(trackItem(item.song))}
-              onPress={
-                selection === null
-                  ? () => playSongs(songs, item.index, context)
-                  : () => toggle(trackItem(item.song))
-              }
-              onLongPress={
-                selection === null
-                  ? () =>
-                      openTrackActions(item.song, { onSelect: () => start(trackItem(item.song)) })
-                  : ignoreLongPress
-              }
+              {...selectableRow(
+                trackItem(item.song),
+                page,
+                () => playSongs(songs, item.index, context),
+                (options) => openTrackActions(item.song, options),
+              )}
             />
           );
       }
     },
-    [
-      context,
-      currentId,
-      favorites,
-      songs,
-      tile,
-      albumSelection,
-      selection,
-      isChecked,
-      start,
-      toggle,
-    ],
+    [context, currentId, favorites, songs, tile, albumSelection, page],
   );
 
   const line = [

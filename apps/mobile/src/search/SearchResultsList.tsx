@@ -26,6 +26,7 @@ import { ArtworkRow } from "./ArtworkRow";
 import type { ResultRow } from "./rows";
 import type { SearchHit } from "./searchIndex";
 import { useListScrollable } from "@/motion/heldTouch";
+import { selectableRow } from "@/selection/selectableRow";
 import type { ListSelection } from "@/selection/useListSelection";
 
 /** Tapping a song plays the song results from it. */
@@ -51,7 +52,7 @@ type Props = {
   selection: ListSelection<SongRow>;
 };
 
-/** While selecting, non-song results and long-presses do nothing. */
+/** While selecting, non-song results do nothing. */
 const ignore = (): void => undefined;
 
 function Hit({
@@ -106,17 +107,12 @@ function Hit({
           track={top ? { ...track, artist: `Song · ${track.artist}` } : track}
           state={playing ? "playing" : undefined}
           leading="artwork"
-          checked={selecting ? selection.isChecked(hit.song) : undefined}
-          onPress={
-            selecting
-              ? () => selection.toggle(hit.song)
-              : open(() => playSongs(songs, Math.max(0, songs.indexOf(hit.song)), SEARCH_CONTEXT))
-          }
-          onLongPress={
-            selecting
-              ? ignore
-              : () => openTrackActions(hit.song, { onSelect: () => selection.start(hit.song) })
-          }
+          {...selectableRow(
+            hit.song,
+            selection,
+            open(() => playSongs(songs, Math.max(0, songs.indexOf(hit.song)), SEARCH_CONTEXT)),
+            (options) => openTrackActions(hit.song, options),
+          )}
         />
       );
     }
