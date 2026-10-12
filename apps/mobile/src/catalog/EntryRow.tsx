@@ -12,10 +12,12 @@ type Props = {
   onPress: () => void;
   /** Opens the entry's menu, where it has one. */
   onLongPress?: (() => void) | undefined;
+  /** The hairline under the entry; the last entry in a card goes without. */
+  divider?: boolean;
 };
 
 /** A Library entry (Playlists, Artists, …): one quiet line of type, no icon, no chevron. */
-export function EntryRow({ label, count, onPress, onLongPress }: Props) {
+export function EntryRow({ label, count, onPress, onLongPress, divider = true }: Props) {
   return (
     <Press
       accessibilityRole="button"
@@ -33,7 +35,7 @@ export function EntryRow({ label, count, onPress, onLongPress }: Props) {
           {count === undefined ? "" : count.toLocaleString("en")}
         </Text>
       </View>
-      <Hairline />
+      {divider && <Hairline />}
     </Press>
   );
 }

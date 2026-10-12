@@ -8,6 +8,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { useAllFilesAccess } from "@/library/hooks";
 import { PlaylistSheets } from "@/library/PlaylistSheets";
+import { OverlayHost } from "@/overlay/OverlayHost";
 import { startInitialScan } from "@/library/runtime";
 import { TrackActionsSheet } from "@/playback/TrackActionsSheet";
 import { startServices } from "@/services";
@@ -29,25 +30,27 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: background }}>
       <SafeAreaProvider>
         <StatusBar style="auto" />
-        <Stack
-          screenOptions={{ headerShown: false, contentStyle: { backgroundColor: background } }}
-        >
-          <Stack.Protected guard={granted}>
-            <Stack.Screen name="(tabs)" />
-            {/* Now Playing animates itself as a sheet over the tabs (src/nowPlaying/sheet.ts). */}
-            <Stack.Screen
-              name="now-playing"
-              options={{
-                presentation: "transparentModal",
-                animation: "none",
-                contentStyle: { backgroundColor: "transparent" },
-              }}
-            />
-          </Stack.Protected>
-          <Stack.Protected guard={!granted}>
-            <Stack.Screen name="access" options={{ animation: "fade" }} />
-          </Stack.Protected>
-        </Stack>
+        <OverlayHost>
+          <Stack
+            screenOptions={{ headerShown: false, contentStyle: { backgroundColor: background } }}
+          >
+            <Stack.Protected guard={granted}>
+              <Stack.Screen name="(tabs)" />
+              {/* Now Playing animates itself as a sheet over the tabs (src/nowPlaying/sheet.ts). */}
+              <Stack.Screen
+                name="now-playing"
+                options={{
+                  presentation: "transparentModal",
+                  animation: "none",
+                  contentStyle: { backgroundColor: "transparent" },
+                }}
+              />
+            </Stack.Protected>
+            <Stack.Protected guard={!granted}>
+              <Stack.Screen name="access" options={{ animation: "fade" }} />
+            </Stack.Protected>
+          </Stack>
+        </OverlayHost>
         <TrackActionsSheet />
         <PlaylistSheets />
       </SafeAreaProvider>

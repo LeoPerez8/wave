@@ -158,3 +158,5 @@ export type {
   LibrarySectionSource,
   SectionCollection,
 } from "./librarySections.ts";
+export { placeOverlayCard } from "./overlay.ts";
+export type { OverlayCardFrame, OverlayCardInput, OverlayInsets } from "./overlay.ts";

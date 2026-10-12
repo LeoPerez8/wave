@@ -1,4 +1,4 @@
-import { StyleSheet } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 
 import { useThemeColor } from "@/theme/useThemeColor";
 
@@ -22,9 +22,21 @@ type Props = {
   cornerRadius: number;
 };
 
+/** RenderEffect blur arrived in Android 12 (API 31); below it glass is an opaque surface. */
+const CAN_BLUR = Platform.OS !== "android" || Number(Platform.Version) >= 31;
+
 /** A glass layer filling its parent; put the parent's content after it. */
 export function Glass({ backdropId, cornerRadius }: Props) {
   const surface = useThemeColor("surface");
+  if (!CAN_BLUR) {
+    return (
+      <View
+        pointerEvents="none"
+        className="bg-surface"
+        style={[StyleSheet.absoluteFill, { borderRadius: cornerRadius }]}
+      />
+    );
+  }
   return (
     <NativeGlassView
       pointerEvents="none"
