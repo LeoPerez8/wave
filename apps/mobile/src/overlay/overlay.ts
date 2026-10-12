@@ -1,3 +1,4 @@
+import type { OverlayRect } from "@wave/core";
 import type { ReactNode } from "react";
 import { useSyncExternalStore } from "react";
 
@@ -15,6 +16,11 @@ export interface OverlayRequest {
   readonly render: (close: () => void) => ReactNode;
   /** Runs when Back or a tap outside the card dismisses it (not when content calls `close`). */
   readonly onDismiss?: () => void;
+  /**
+   * Float next to this rect in the window (a menu next to its row: below it,
+   * or above when there's no room) instead of centred. See `pressedRect`.
+   */
+  readonly anchor?: OverlayRect | undefined;
 }
 
 export interface OverlayHandle {

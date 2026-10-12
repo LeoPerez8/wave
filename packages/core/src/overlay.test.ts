@@ -38,11 +38,16 @@ describe("placeOverlayCard", () => {
   });
 });
 
-describe("placeOverlayCard next to an anchor", () => {
-  // A full-width row, 56 dp tall, and a menu kept 8 dp from it.
-  const row = (top: number) => ({ top, bottom: top + 56, left: 0, right: 412 });
-  const near = (top: number) => ({ rect: row(top), gap: 8 });
+// A full-width row, 56 dp tall, and a menu kept 8 dp from it.
+const near = (top: number) => ({ rect: { top, bottom: top + 56, left: 0, right: 412 }, gap: 8 });
 
+// An album tile on a tablet.
+const tile = (left: number, right: number) => ({
+  rect: { top: 100, bottom: 400, left, right },
+  gap: 8,
+});
+
+describe("placeOverlayCard next to an anchor", () => {
   test("a menu opens just below the long-pressed row when it fits there", () => {
     assert.deepEqual(placeOverlayCard({ ...phone, cardHeight: 400, anchor: near(200) }), {
       left: 24,
@@ -76,16 +81,17 @@ describe("placeOverlayCard next to an anchor", () => {
   });
 
   test("a row half under the tab bar still gets a menu clear of it, above the row", () => {
-    const frame = placeOverlayCard({ ...phone, cardHeight: 200, anchor: near(740), chromeBottom: 80 });
+    const frame = placeOverlayCard({
+      ...phone,
+      cardHeight: 200,
+      anchor: near(740),
+      chromeBottom: 80,
+    });
     assert.deepEqual([frame.side, frame.top], ["above", 532]);
   });
 
   test("on a wide screen the menu centres under the album tile, kept a margin inside the edges", () => {
     const tablet = { ...phone, window: { width: 1000, height: 1400 }, cardHeight: 300 };
-    const tile = (left: number, right: number) => ({
-      rect: { top: 100, bottom: 400, left, right },
-      gap: 8,
-    });
     assert.equal(placeOverlayCard({ ...tablet, anchor: tile(360, 840) }).left, 360);
     assert.equal(placeOverlayCard({ ...tablet, anchor: tile(520, 980) }).left, 496);
     assert.equal(placeOverlayCard({ ...tablet, anchor: tile(20, 480) }).left, 24);

@@ -19,7 +19,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
 
 import { CELL, grid } from "@/catalog/grid";
-import { BACKDROP } from "@/chrome/chrome";
+import { BACKDROP, useFloatingChromeHeight } from "@/chrome/chrome";
 import { Glass } from "@/glass/Glass";
 import { useTapAnimationMs } from "@/settings/tapAnimation";
 
@@ -94,6 +94,8 @@ function OverlayCard({ entry, top }: { entry: OverlayEntry; top: boolean }) {
   const [cardHeight, setCardHeight] = useState<number | null>(null);
   const progress = useSharedValue(0);
   const measured = cardHeight !== null;
+  const anchor = entry.request.anchor;
+  const chromeBottom = useFloatingChromeHeight();
 
   const frame = placeOverlayCard({
     window,
@@ -101,6 +103,7 @@ function OverlayCard({ entry, top }: { entry: OverlayEntry; top: boolean }) {
     margin: grid.margin,
     maxWidth: MAX_WIDTH,
     cardHeight: cardHeight ?? 0,
+    ...(anchor === undefined ? {} : { anchor: { rect: anchor, gap: CELL }, chromeBottom }),
   });
 
   // Fade in once the card knows its size (so it appears where it settles), out when closing.
@@ -167,6 +170,10 @@ function OverlayCard({ entry, top }: { entry: OverlayEntry; top: boolean }) {
             overflow: "hidden",
             paddingHorizontal: OVERLAY_PADDING.horizontal,
             paddingVertical: OVERLAY_PADDING.vertical,
+            // An anchored card grows out of its row's edge.
+            ...(frame.side === undefined
+              ? {}
+              : { transformOrigin: frame.side === "below" ? "top" : "bottom" }),
           },
           cardStyle,
         ]}

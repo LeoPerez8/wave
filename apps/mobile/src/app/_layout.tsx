@@ -10,7 +10,6 @@ import { useAllFilesAccess } from "@/library/hooks";
 import { PlaylistSheets } from "@/library/PlaylistSheets";
 import { OverlayHost } from "@/overlay/OverlayHost";
 import { startInitialScan } from "@/library/runtime";
-import { TrackActionsSheet } from "@/playback/TrackActionsSheet";
 import { startServices } from "@/services";
 import { useThemeColor } from "@/theme/useThemeColor";
 
@@ -51,7 +50,6 @@ export default function RootLayout() {
             </Stack.Protected>
           </Stack>
         </OverlayHost>
-        <TrackActionsSheet />
         <PlaylistSheets />
       </SafeAreaProvider>
     </GestureHandlerRootView>
