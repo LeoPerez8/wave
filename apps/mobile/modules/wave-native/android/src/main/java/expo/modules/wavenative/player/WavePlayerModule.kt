@@ -46,9 +46,20 @@ class SyncStepRecord : Record {
  * The last queue JS saved, kept for the life of the process: the activity and
  * the JS runtime can go away while [PlaybackService] keeps playing, and JS
  * picks its queue (shuffle, repeat, Up Next) back up from here when it returns.
+ * After a cold start, playback resumption seeds it from the resume snapshot.
  */
 object QueueSnapshot {
   @Volatile var json: String? = null
+
+  /** Where the queue was started from (`phone` or `auto`), for the plays JS records. */
+  @Volatile var source: String? = null
+
+  /**
+   * Whether the player's list came from playback resumption (Wave's process
+   * had died) and JS hasn't taken it over yet: its plays are new ones, not the
+   * ones on record going on.
+   */
+  @Volatile var resumed = false
 }
 
 /** The controller's item list, edited in place so the playing item keeps playing. */
@@ -160,7 +171,10 @@ class WavePlayerModule : Module() {
       "onAutoRequest",
     )
 
-    OnCreate { main.post(::connect) }
+    OnCreate {
+      ResumeStore.init(context)
+      main.post(::connect)
+    }
 
     /**
      * Applies Core's sync plan. Items already loaded are reused by key, so JS
@@ -173,6 +187,7 @@ class WavePlayerModule : Module() {
           .associateBy { it.mediaId }
         val incoming = items.associate { it.id to toMediaItem(it) }
         syncing = true
+        QueueSnapshot.resumed = false
         try {
           val plan = steps.map { SyncStep.of(it.type, it.at, it.removeCount, it.keys, it.index, it.key) }
           QueueSync.apply(plan, ControllerPlaylist(player)) { key -> incoming[key] ?: loaded[key] }
@@ -218,10 +233,26 @@ class WavePlayerModule : Module() {
       }
     }.runOnQueue(Queues.MAIN)
 
-    /** Keeps the queue for when JS comes back (see [QueueSnapshot]). */
-    Function("saveQueue") { json: String -> QueueSnapshot.json = json }
+    /**
+     * Keeps the queue for when JS comes back (see [QueueSnapshot]), and for a
+     * cold start ([ResumeStore]), with where it was started from.
+     */
+    Function("saveQueue") { json: String, source: String? ->
+      QueueSnapshot.json = json
+      if (source != null) QueueSnapshot.source = source
+      ResumeStore.saveQueue(json, source)
+    }
 
     Function("savedQueue") { QueueSnapshot.json }
+
+    Function("savedQueueSource") { QueueSnapshot.source }
+
+    /** Whether the player resumed the saved queue on its own (see [QueueSnapshot.resumed]); clears it. */
+    Function("takeResumed") {
+      val resumed = QueueSnapshot.resumed
+      QueueSnapshot.resumed = false
+      resumed
+    }
 
     AsyncFunction("play") { promise: Promise ->
       withController(promise) { player ->

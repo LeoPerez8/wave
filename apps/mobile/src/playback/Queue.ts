@@ -156,7 +156,7 @@ export const layer = Layer.effect(
       if (settleTimer !== null) clearTimeout(settleTimer);
       settleTimer = null;
       const json = JSON.stringify(queueState.get());
-      Effect.runSync(player.saveQueue(json));
+      Effect.runSync(player.saveQueue(json, queueSource.get()));
       settledQueue.set(json);
     };
 
@@ -280,7 +280,11 @@ export const layer = Layer.effect(
       const json = yield* player.savedQueue;
       const saved = json === null ? null : parseQueueState(JSON.parse(json));
       if (saved === null || !sameKeys(saved.entries, native.keys)) return;
-      keptPlayingKey.set(native.currentKey);
+      // After a cold start the player resumed the queue itself: its plays are new ones.
+      const resumed = yield* player.takeResumed;
+      keptPlayingKey.set(resumed ? null : native.currentKey);
+      const source = yield* player.savedQueueSource;
+      if (source !== null) queueSource.set(source);
       queueState.set(saved);
       appliedRepeat = saved.repeat;
       if (native.currentKey !== null) {
@@ -317,6 +321,16 @@ export const layer = Layer.effect(
     // Notification, lock screen and Bluetooth skips, and gapless auto-advance.
     yield* player.onItemTransition((event) => {
       if (event.itemId === null) return;
+      // The player was handed a list JS didn't sync: it resumed the saved queue
+      // (playback resumption) while JS was up with nothing loaded. Adopt it.
+      if (
+        event.reason === "playlist" &&
+        queueState.get().entries.length === 0 &&
+        !native.keys.includes(event.itemId)
+      ) {
+        Effect.runFork(lane.withPermit(restore));
+        return;
+      }
       if (event.reason !== "auto" && event.reason !== "seek") return;
       Effect.runFork(
         dispatch({ type: "playerMoved", key: event.itemId }).pipe(
