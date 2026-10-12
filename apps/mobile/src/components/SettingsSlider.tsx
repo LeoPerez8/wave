@@ -73,7 +73,7 @@ export function SettingsSlider({ label, value, range, format, onChange }: Props)
       onAccessibilityAction={(event) =>
         onChange(stepSlider(value, event.nativeEvent.actionName === "increment" ? 1 : -1, range))
       }
-      style={{ paddingTop: 12, paddingBottom: 4 }}
+      className="pb-1 pt-3"
     >
       <View className="flex-row items-baseline">
         <Text className="flex-1 font-sans text-title3 font-normal text-foreground">{label}</Text>

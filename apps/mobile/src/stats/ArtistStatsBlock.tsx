@@ -2,8 +2,8 @@ import { useMemo } from "react";
 import { Text, View } from "react-native";
 
 import { CELL } from "@/catalog/grid";
-import { HomeSection } from "@/home/HomeSections";
-import { TotalsLine } from "@/home/ListeningOverview";
+import { TitledSection } from "@/catalog/TitledSection";
+import { TotalsLine } from "@/catalog/TotalsLine";
 import type { SongRow } from "@/library/LibraryStore";
 
 import { useArtistStats } from "./hooks";
@@ -29,7 +29,7 @@ export function ArtistStatsBlock({
   if (stats === undefined) return null;
   return (
     <View>
-      <HomeSection title="Stats">
+      <TitledSection title="Stats">
         {stats.played ? (
           <View style={{ gap: CELL / 2 }}>
             <TotalsLine totals={[stats.plays, stats.minutesListened, stats.songsListened]} />
@@ -38,11 +38,11 @@ export function ArtistStatsBlock({
         ) : (
           <Text className="font-sans text-subheadline text-secondary">Not played yet</Text>
         )}
-      </HomeSection>
+      </TitledSection>
       {stats.played && stats.mostPlayed.length > 0 && (
-        <HomeSection title="Most played">
+        <TitledSection title="Most played">
           <RankedSongs ranking={stats.mostPlayed} context={context} />
-        </HomeSection>
+        </TitledSection>
       )}
     </View>
   );

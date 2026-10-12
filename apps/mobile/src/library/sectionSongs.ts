@@ -1,14 +1,9 @@
-import {
-  sectionSongs,
-  sortSongs,
-  type LibrarySectionSlug,
-  type SectionCollection,
-} from "@wave/core";
+import { sectionSongs, type LibrarySectionSlug, type SectionCollection } from "@wave/core";
 import * as Effect from "effect/Effect";
 
 import { LibraryStore, type LibraryStoreError, type SongRow } from "./LibraryStore";
 import { appRuntime } from "./runtime";
-import { currentSongSort } from "./songSort";
+import { sortedForKind } from "./songSort";
 
 type Store = LibraryStore["Service"];
 type Query<A> = (store: Store) => Effect.Effect<A, LibraryStoreError>;
@@ -41,17 +36,17 @@ const collections = {
   artists: collection(
     (store) => store.listArtists,
     (store, id) => store.getArtist(id),
-    (artist) => sortSongs(artist.songs, currentSongSort("artist")),
+    (artist) => sortedForKind("artist", artist.songs),
   ),
   genres: collection(
     (store) => store.listGenres,
     (store, id) => store.getGenre(id),
-    (genre) => sortSongs(genre.songs, currentSongSort("genre")),
+    (genre) => sortedForKind("genre", genre.songs),
   ),
   folders: collection(
     (store) => store.listFolders,
     (store, id) => store.getFolder(id),
-    (folder) => sortSongs(folder.songs, currentSongSort("folder")),
+    (folder) => sortedForKind("folder", folder.songs),
   ),
   playlists: collection(
     (store) => store.listPlaylists,
@@ -73,11 +68,8 @@ export const itemSongs = (
 export const librarySectionSongs = (section: LibrarySectionSlug): Promise<readonly SongRow[]> =>
   sectionSongs(section, {
     // As Library › Songs shows them, in the sort chosen there.
-    songs: () =>
-      run((store) => store.listSongs).then((songs) => sortSongs(songs, currentSongSort("songs"))),
+    songs: () => run((store) => store.listSongs).then((songs) => sortedForKind("songs", songs)),
     favorites: () =>
-      run((store) => store.listFavorites).then((songs) =>
-        sortSongs(songs, currentSongSort("favorites")),
-      ),
+      run((store) => store.listFavorites).then((songs) => sortedForKind("favorites", songs)),
     ...collections,
   });

@@ -1,4 +1,4 @@
-import { GLASS_SETTINGS } from "@wave/core";
+import { GLASS_SETTINGS, isDefaultGlassSettings } from "@wave/core";
 import { Switch, Text, View } from "react-native";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
@@ -19,11 +19,6 @@ export function GlassSettingsSection() {
   const accent = useThemeColor("accent");
   const fill = useThemeColor("fill");
   const surface = useThemeColor("surface");
-  const isDefault =
-    glass.blur === GLASS_SETTINGS.blur.default &&
-    glass.refraction === GLASS_SETTINGS.refraction.default &&
-    glass.tint === GLASS_SETTINGS.tint.default &&
-    glass.rim === GLASS_SETTINGS.rim.default;
 
   return (
     <>
@@ -70,7 +65,11 @@ export function GlassSettingsSection() {
         colour over it so text stays legible, and the rim is the bright edge.
       </Text>
       <View className="mt-4 items-start">
-        <TextButton label="Reset to defaults" disabled={isDefault} onPress={resetGlassSettings} />
+        <TextButton
+          label="Reset to defaults"
+          disabled={isDefaultGlassSettings(glass)}
+          onPress={resetGlassSettings}
+        />
       </View>
     </>
   );

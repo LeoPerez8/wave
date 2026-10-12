@@ -1,7 +1,6 @@
 import { IconCheck } from "@tabler/icons-react-native";
 import {
-  contrastRatio,
-  DEFAULT_THEME_CHOICE,
+  isDefaultThemeChoice,
   themeSwatchRows,
   type ThemeChoice,
   type ThemeSwatchOption,
@@ -25,10 +24,6 @@ const ROW_LABEL: Record<keyof ThemeChoice, string> = {
 const SWATCH = 36;
 const TARGET = 48;
 
-/** Black or white, whichever reads better on the swatch. */
-const markOn = (colour: string): string =>
-  contrastRatio("#000000", colour) >= contrastRatio("#ffffff", colour) ? "#000000" : "#ffffff";
-
 function Swatch({ swatch, group }: { swatch: ThemeSwatchOption; group: keyof ThemeChoice }) {
   return (
     <Press
@@ -46,9 +41,7 @@ function Swatch({ swatch, group }: { swatch: ThemeSwatchOption; group: keyof The
         }`}
         style={{ width: SWATCH, height: SWATCH, backgroundColor: swatch.colour }}
       >
-        {swatch.selected ? (
-          <IconCheck size={18} strokeWidth={2.5} color={markOn(swatch.colour)} />
-        ) : null}
+        {swatch.selected ? <IconCheck size={18} strokeWidth={2.5} color={swatch.mark} /> : null}
       </View>
     </Press>
   );
@@ -59,9 +52,6 @@ export function ThemeSettingsSection() {
   const choice = useThemeChoice();
   const scheme = useColorScheme() === "dark" ? "dark" : "light";
   const rows = themeSwatchRows(choice, scheme);
-  const isDefault = (Object.keys(choice) as (keyof ThemeChoice)[]).every(
-    (group) => choice[group] === DEFAULT_THEME_CHOICE[group],
-  );
 
   return (
     <>
@@ -99,7 +89,11 @@ export function ThemeSettingsSection() {
         it does.
       </Text>
       <View className="mt-4 items-start">
-        <TextButton label="Reset to defaults" disabled={isDefault} onPress={resetTheme} />
+        <TextButton
+          label="Reset to defaults"
+          disabled={isDefaultThemeChoice(choice)}
+          onPress={resetTheme}
+        />
       </View>
     </>
   );

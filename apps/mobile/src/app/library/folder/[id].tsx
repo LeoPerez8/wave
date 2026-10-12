@@ -1,4 +1,3 @@
-import { sortSongs } from "@wave/core";
 import { useLocalSearchParams } from "expo-router";
 import { useMemo } from "react";
 
@@ -8,7 +7,7 @@ import { useFolder } from "@/library/hooks";
 import type { FolderDetail } from "@/library/LibraryStore";
 import { parseId } from "@/library/routes";
 import { SongSortButton } from "@/library/SongSortButton";
-import { useSongSort } from "@/library/songSort";
+import { useSortedSongs } from "@/library/songSort";
 import { ListIntro, songCount, TrackList } from "@/library/TrackList";
 
 function FolderSongs({ detail }: { detail: FolderDetail }) {
@@ -16,9 +15,7 @@ function FolderSongs({ detail }: { detail: FolderDetail }) {
     () => ({ kind: "folder", id: String(detail.folder.id) }) as const,
     [detail.folder.id],
   );
-  const sort = useSongSort("folder");
-  // Play, Shuffle and rows all play this displayed order.
-  const songs = useMemo(() => sortSongs(detail.songs, sort), [detail.songs, sort]);
+  const { sort, songs } = useSortedSongs("folder", detail.songs);
   const parent = folderParent(detail.folder.path);
   const count = songCount(songs.length);
   return (

@@ -263,9 +263,9 @@ describe("sortSongs by date added", () => {
 });
 
 const file = (name: string): SortableSong & { readonly name: string } => ({
-    ...song(name, { title: "Same" }),
-    path: `/music/Album/${name}`,
-  });
+  ...song(name, { title: "Same" }),
+  path: `/music/Album/${name}`,
+});
 
 describe("sortSongs by file name", () => {
   const songs = [file("10 Ten.mp3"), file("b.mp3"), file("2 Two.mp3"), file("A.flac")];
@@ -372,8 +372,7 @@ describe("sorts per kind of song list", () => {
   });
 
   test("nothing saved reads as the kind's default", () => {
-    for (const kind of KINDS)
-      assert.deepEqual(readSongSort(null, kind), defaultSongSort(kind));
+    for (const kind of KINDS) assert.deepEqual(readSongSort(null, kind), defaultSongSort(kind));
   });
 
   test("a sort the kind doesn't offer reads as its default", () => {

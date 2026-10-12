@@ -1,46 +1,26 @@
 import { DEFAULT_GLASS_SETTINGS, readGlassSettings, type GlassSettings } from "@wave/core";
-import { Storage } from "expo-sqlite/kv-store";
-import { useSyncExternalStore } from "react";
 
-const KEY = "settings.glass";
+import { persistedSetting, sameFields } from "@/lib/persistedSetting";
 
-/** Writes wait until a drag settles, so a slider doesn't hit storage every frame. */
-const PERSIST_DELAY_MS = 300;
-
-let current = readGlassSettings(Storage.getItemSync(KEY));
-const listeners = new Set<() => void>();
-let pending: ReturnType<typeof setTimeout> | undefined;
-
-const persist = () => {
-  pending = undefined;
-  Storage.setItemSync(KEY, JSON.stringify(current));
-};
-
-const publish = (next: GlassSettings) => {
-  current = next;
-  if (pending !== undefined) clearTimeout(pending);
-  pending = setTimeout(persist, PERSIST_DELAY_MS);
-  for (const listener of listeners) listener();
-};
+const glass = persistedSetting<GlassSettings>({
+  key: "settings.glass",
+  read: readGlassSettings,
+  write: (settings) => JSON.stringify(settings),
+  equals: sameFields,
+  // Writes wait until a drag settles, so a slider doesn't hit storage every frame.
+  persistDelayMs: 300,
+});
 
 /** Changes one glass setting; every glass surface follows at once. */
 export const setGlassSetting = <K extends keyof GlassSettings>(
   key: K,
   value: GlassSettings[K],
-): void => {
+): void =>
   // Read back through Core so the value lands on the slider's range and step.
-  const next = readGlassSettings(JSON.stringify({ ...current, [key]: value }));
-  if (next[key] === current[key]) return;
-  publish(next);
-};
+  glass.set(readGlassSettings(JSON.stringify({ ...glass.get(), [key]: value })));
 
 /** Puts the glass back as it was before it could be tuned. */
-export const resetGlassSettings = (): void => publish(DEFAULT_GLASS_SETTINGS);
-
-const subscribe = (listener: () => void): (() => void) => {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-};
+export const resetGlassSettings = (): void => glass.set(DEFAULT_GLASS_SETTINGS);
 
 /** The persisted glass settings; re-renders when Settings changes them. */
-export const useGlassSettings = (): GlassSettings => useSyncExternalStore(subscribe, () => current);
+export const useGlassSettings = glass.useValue;

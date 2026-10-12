@@ -1,6 +1,4 @@
 import { IconStar } from "@tabler/icons-react-native";
-import { sortSongs } from "@wave/core";
-import { useMemo } from "react";
 import { View } from "react-native";
 
 import { grid } from "@/catalog/grid";
@@ -8,7 +6,7 @@ import { EmptyState } from "@/components/EmptyState";
 
 import { useFavoriteSongs } from "./hooks";
 import { SongSortButton } from "./SongSortButton";
-import { useSongSort } from "./songSort";
+import { useSortedSongs } from "./songSort";
 import { ListIntro, songCount, TrackList } from "./TrackList";
 
 /** Tapping a favorite plays the Favorites list from it. */
@@ -17,12 +15,7 @@ const FAVORITES_CONTEXT = { kind: "favorites", id: null } as const;
 /** Library › Favorites: every starred song in the sort you chose (most recently starred first until then). */
 export function FavoritesList({ empty }: { empty: string }) {
   const starred = useFavoriteSongs();
-  const sort = useSongSort("favorites");
-  // Play, Shuffle and rows all play this displayed order.
-  const songs = useMemo(
-    () => (starred === undefined ? undefined : sortSongs(starred, sort)),
-    [starred, sort],
-  );
+  const { sort, songs } = useSortedSongs("favorites", starred);
   if (songs === undefined) return null;
 
   if (songs.length === 0) {
