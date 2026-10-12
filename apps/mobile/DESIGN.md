@@ -140,7 +140,7 @@ The world rejects the category default it was chosen against: bold large titles,
 - Light large titles; one size per list, rank by weight and tint.
 - Small tracked-caps catalog lines for section heads and cover captions.
 - Teal for active, ember for favorite and now playing; nothing else is coloured.
-- Flat: no shadows, no gradients (the Now Playing ground is the one exception). Glass only on the floating chrome (tab bar, Search pill, mini player).
+- Flat: no shadows, no gradients (the Now Playing ground is the one exception). Glass only on what floats: the chrome (tab bar, Search pill, mini player) and dialog and menu cards.
 - Every press sinks and dims for a duration the owner sets in Settings.
 
 ## Colors
@@ -226,17 +226,19 @@ The A–Z spine sits 24dp in from the right edge, not on it, to stay clear of An
 
 ## Elevation & Depth
 
-The world is flat. There are no shadows, no elevation and no gradients (save the Now Playing ground, below); depth comes from the tone ramp (field squares and hairlines a step off the ground) and from artwork itself. Two things float: the spine's letter field (the ground at 90% opacity laid over the list, with the huge letter centred in it) and the floating chrome at the bottom, which is glass.
+The world is flat. There are no shadows, no elevation and no gradients (save the Now Playing ground, below); depth comes from the tone ramp (field squares and hairlines a step off the ground) and from artwork itself. Three things float: the spine's letter field (the ground at 90% opacity laid over the list, with the huge letter centred in it) the floating chrome at the bottom, and dialogs and menus; the last two are glass.
 
-**Glass** (the chrome only): a live blur of the content scrolling underneath, a slight lens-like refraction at the rounded edge with a specular rim lit from the top left, and the `surface` tone laid over it so text stays legible. It is native (`modules/wave-glass`, RenderEffect + AGSL on the RenderThread) and sized for 120 Hz; the blur + tint + rim fallback is one line away (`GLASS` in `src/glass/Glass.tsx`). See `docs/glass-spike.md`.
+**Glass** (the floating chrome, dialogs and menus): a live blur of the content underneath, a slight lens-like refraction at the rounded edge with a specular rim lit from the top left, and the `surface` tone laid over it so text stays legible. It is native (`modules/wave-glass`, RenderEffect + AGSL on the RenderThread) and sized for 120 Hz; the blur + tint + rim fallback is one line away (`GLASS` in `src/glass/Glass.tsx`). See `docs/glass-spike.md`. Below Android 12 (no RenderEffect) glass is an opaque `surface`.
+
+**Dialogs and menus** float as glass cards over the app: rounded (24dp), sized to their content, centred a margin clear of the system bars, over the app dimmed lightly (darkest tone at 25%). They fade and grow in over the tap duration (fade only with reduce motion, instant at 0). They are drawn at the app root by `src/overlay/OverlayHost.tsx` rather than in a `Modal` (a separate window the blur can't see through). Back or a tap outside closes them, and screen readers move into the card.
 
 ### Named Rules
 
-**The Flat Field Rule.** Surfaces never cast shadows. Separate things with a ramp step or a hairline. Glass belongs to the floating chrome alone (tab bar, Search pill, mini player); content surfaces stay flat.
+**The Flat Field Rule.** Surfaces never cast shadows. Separate things with a ramp step or a hairline. Glass belongs to what floats (tab bar, Search pill, mini player, dialog and menu cards); content surfaces stay flat.
 
 ## Shapes
 
-Square everywhere. Artwork, empty cover slots, track thumbnails and placeholder fields have no corner radius and no frame. Structure is drawn with one-pixel hairlines in the separator tone, running the full content width between entries; there are no boxed cards and no chips. The floating chrome is the one exception: its glass surfaces are pills (fully rounded ends), set apart from the square content beneath. The recurring silhouettes are the thin vertical column of spine letters on the right and the pills at the bottom.
+Square everywhere. Artwork, empty cover slots, track thumbnails and placeholder fields have no corner radius and no frame. Structure is drawn with one-pixel hairlines in the separator tone, running the full content width between entries; there are no boxed cards and no chips. What floats is the exception: the chrome's glass surfaces are pills (fully rounded ends) and dialog cards have 24dp corners, set apart from the square content beneath. The recurring silhouettes are the thin vertical column of spine letters on the right and the pills at the bottom.
 
 ### Named Rules
 
@@ -290,7 +292,7 @@ Small tracked caps (Label) in graphite by default, with teal and ember tones ava
 - **Player view:** the artwork as the largest square the space allows (still a photograph: square, unframed), stepping back to 84% on a soft spring while paused. Under it the title (Title3 500, ink) with the favorite star in its own 48dp cell, then the artist and the album (Body graphite), each opening its screen.
 - **Scrubber:** a 2dp pewter rule with the elapsed part and an 8dp square thumb in teal; touching anywhere scrubs (the rule thickens and the thumb grows to 16dp), and the track seeks when the finger lifts, with a light `impact`. Elapsed and remaining (`-m:ss`) in tabular Footnote graphite below.
 - **Transport:** previous, play/pause and next as filled glyphs in ink (32 / 48 / 32dp), each in a target a cell and a half larger on every side, with `impact` haptics. Previous restarts the track after its first three seconds.
-- **Sleep timer:** the Zzz glyph beside Lyrics at the bottom left (graphite when off, teal while a timer runs, with the time left beside it in tabular Footnote teal, or "End of track"). It opens a menu laid out like the long-press menu: a "Sleep timer" catalog line over what the running timer will do, then 15 / 30 / 45 / 60 Minutes, Custom… (a stepper: minute steps under 10 min, 5 under an hour, 15 above, up to 12 h), End of Track and, while one runs, Turn Off Timer. The playback service enforces it, so it pauses with Wave in the background.
+- **Sleep timer:** the Zzz glyph beside Lyrics at the bottom left (graphite when off, teal while a timer runs, with the time left beside it in tabular Footnote teal, or "End of track"). It opens a glass dialog card laid out like the long-press menu: a "Sleep timer" catalog line over what the running timer will do, then 15 / 30 / 45 / 60 Minutes, Custom… (a stepper: minute steps under 10 min, 5 under an hour, 15 above, up to 12 h), End of Track and, while one runs, Turn Off Timer. The playback service enforces it, so it pauses with Wave in the background.
 - **Queue view:** the Queue icon (teal while open) swaps the player view for the playing track in a small row, Shuffle and Repeat as labelled toggles (teal and 600 when on, graphite when off; Repeat cycles off → all → one), then the Up Next catalog line with its count and the list. Each Up Next row is a Songs-list row with a remove X and a drag handle (both graphite, 48dp). Dragging the handle lifts the row onto the `surface` tone under the finger while the others step aside; near the list's edges the list scrolls. Screen readers get Remove / Move up / Move down actions.
 - **Lyrics view:** the Lyrics icon (bottom left, teal while open) swaps the player view for the same small track row, then the lyrics in Title2 500. Synced lyrics (embedded LRC or a sidecar `.lrc`; Core's `pickLyrics` prefers synced, then the sidecar) tint the sung line ink and the rest graphite, easing over 240 ms, and keep the sung line a third of the way down as the song plays. A pause between lines shows as three 4dp squares. Scrolling by hand stops the follow until three seconds after the finger lifts; tapping a line seeks there with a `selection` haptic. Unsynced lyrics are plain ink text to scroll; a song without lyrics shows the empty state. Lyrics are read from the file each time the view opens, so a newly added `.lrc` shows up without a rescan.
 
@@ -326,5 +328,5 @@ A 40dp line icon in pewter, an Entry-type title in ink, a Subheadline message in
 - **Don't** use bold large titles; titles are weight 300.
 - **Don't** add icons or chevrons to Library entry rows.
 - **Don't** set text in `tertiary`.
-- **Don't** add shadows, gradients or blur; separate with a ramp step or a hairline. Glass is for the floating chrome only, and the artwork gradient for the Now Playing ground only.
+- **Don't** add shadows, gradients or blur; separate with a ramp step or a hairline. Glass is for the floating chrome and dialog cards only, and the artwork gradient for the Now Playing ground only.
 - **Don't** introduce a third accent colour.

@@ -152,3 +152,5 @@ export type {
   AutoTrackList,
   AutoTrackListKind,
 } from "./auto.ts";
+export { placeOverlayCard } from "./overlay.ts";
+export type { OverlayCardFrame, OverlayCardInput, OverlayInsets } from "./overlay.ts";

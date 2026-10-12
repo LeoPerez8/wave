@@ -161,7 +161,7 @@ One row per playback start: track, started-at, listened milliseconds, track dura
 - Inter as the typeface, with a light large title and tracked-caps catalog lines; Tabler line icons.
 - Signature move: a thin A–Z spine on long lists that sets one huge letter in the field while scrubbing, with a haptic tick per letter.
 - Every tap animates through one press primitive whose duration comes from Settings (0–600 ms, default 140 ms) and respects the system's reduce-motion setting.
-- Glass is no longer a default material. Whether the tab bar and mini player get any blur is decided against the 120 Hz budget.
+- Glass is reserved for what floats: the tab bar, the mini player, and dialogs and menus, which are floating glass cards (rounded, sized to their content, clear of the system bars) over a lightly dimmed app. They are drawn at the app root, not in a separate window, so the blur shows the app behind live. Below Android 12 (no blur) the cards are an opaque surface.
 - Now Playing background: gradient from the artwork palette, animated on track change; controls use the app palette.
 
 ### Build and CI

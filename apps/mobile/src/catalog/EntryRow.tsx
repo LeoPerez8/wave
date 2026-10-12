@@ -10,10 +10,12 @@ type Props = {
   /** Item count, when known; the column stays reserved either way. */
   count?: number | undefined;
   onPress: () => void;
+  /** The hairline under the entry; the last entry in a card goes without. */
+  divider?: boolean;
 };
 
 /** A Library entry (Playlists, Artists, …): one quiet line of type, no icon, no chevron. */
-export function EntryRow({ label, count, onPress }: Props) {
+export function EntryRow({ label, count, onPress, divider = true }: Props) {
   return (
     <Press
       accessibilityRole="button"
@@ -30,7 +32,7 @@ export function EntryRow({ label, count, onPress }: Props) {
           {count === undefined ? "" : count.toLocaleString("en")}
         </Text>
       </View>
-      <Hairline />
+      {divider && <Hairline />}
     </Press>
   );
 }

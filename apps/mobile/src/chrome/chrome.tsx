@@ -19,7 +19,12 @@ export const chrome = {
 } as const;
 
 /** `nativeID`s of the views the glass shows through (siblings of the chrome, never its parents). */
-export const BACKDROP = { tabs: "wave-backdrop-tabs", library: "wave-backdrop-library" } as const;
+export const BACKDROP = {
+  tabs: "wave-backdrop-tabs",
+  library: "wave-backdrop-library",
+  /** The whole app, under the dialog overlay (src/overlay/OverlayHost.tsx). */
+  root: "wave-backdrop-root",
+} as const;
 
 const ChromeContext = createContext<{ readonly tabBar: boolean }>({ tabBar: false });
 
