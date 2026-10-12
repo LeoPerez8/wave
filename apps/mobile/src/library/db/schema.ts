@@ -243,6 +243,14 @@ export const playEvents = sqliteTable(
     source: text("source", { enum: ["phone", "auto"] })
       .notNull()
       .default("phone"),
+    /**
+     * The track's album and track artist, written when the track leaves the
+     * library (`deleteTracks`) so its plays keep counting for them in Stats.
+     * Null while the track is in the library (read the track instead), and for
+     * tracks that left before Wave kept them.
+     */
+    albumId: integer("album_id"),
+    artistId: integer("artist_id"),
   },
   (t) => [
     index("play_events_track_idx").on(t.trackId),

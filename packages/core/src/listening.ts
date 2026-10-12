@@ -8,8 +8,13 @@
 /** What the library sums up for one song over all its plays. */
 export interface SongListening {
   readonly trackId: number;
-  /** The song's track artist; null once the song is no longer in the library. */
+  /**
+   * The song's track artist, kept once the song leaves the library; null for
+   * songs that left before Wave kept it.
+   */
   readonly artistId: number | null;
+  /** Whether the song is still in the library. */
+  readonly inLibrary: boolean;
   /** Its counted plays. */
   readonly countedPlays: number;
   /** Time listened over every play, skipped and uncounted ones included. */
@@ -41,8 +46,8 @@ const MINUTE_MS = 60_000;
  * Sums each song's listening into all-time totals. Unfiltered, the totals
  * cover the whole history: plays and minutes of songs since removed from the
  * library still count (they were listened to), but such songs aren't among
- * the songs listened. Filtered to an artist, only that artist's songs in the
- * library count.
+ * the songs listened. Filtered to an artist, only that artist's songs count,
+ * the same way.
  */
 export const listeningTotals = (
   songs: readonly SongListening[],
@@ -56,7 +61,7 @@ export const listeningTotals = (
     if (filter.artistId !== undefined && song.artistId !== filter.artistId) continue;
     listenedMs += song.listenedMs;
     plays += song.countedPlays;
-    if (song.artistId !== null && song.countedPlays > 0) songsListened += 1;
+    if (song.inLibrary && song.countedPlays > 0) songsListened += 1;
     lastPlayedAt = Math.max(lastPlayedAt ?? song.lastPlayedAt, song.lastPlayedAt);
   }
   return {

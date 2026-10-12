@@ -61,7 +61,7 @@ import {
 } from "./db/playHistory";
 import { removePlaylistItems, selectPlaylistSongs } from "./db/playlists";
 import * as schema from "./db/schema";
-import { BY_TITLE, trackQuery } from "./db/tracks";
+import { BY_TITLE, deleteTracks, trackQuery } from "./db/tracks";
 import { creditedPlayTotals, songListening, trackPlayTotals } from "./db/stats";
 import type { KnownFile } from "./NativeScanner";
 
@@ -438,8 +438,8 @@ export class LibraryStore extends Context.Service<
       window: StatsWindow,
     ) => Effect.Effect<readonly PlayTotals[], LibraryStoreError>;
     /**
-     * Counted plays within [window] per album and track artist (tracks still in
-     * the library), in no order; Core's `albumPlayTotals` / `artistPlayTotals` group them.
+     * Counted plays within [window] per album and track artist (deleted songs
+     * included), in no order; Core's `albumPlayTotals` / `artistPlayTotals` group them.
      */
     readonly creditedPlayTotals: (
       window: StatsWindow,
@@ -697,9 +697,7 @@ const pruneOrphans = (tx: Transaction): void => {
 
 const removeTracksSync = (db: Database, paths: readonly string[]): void => {
   db.transaction((tx) => {
-    for (const chunk of chunks(paths)) {
-      tx.delete(schema.tracks).where(inArray(schema.tracks.path, chunk)).run();
-    }
+    deleteTracks(tx, paths);
     pruneOrphans(tx);
   });
 };
@@ -723,9 +721,7 @@ const removeRootSync = (db: Database, path: string): void => {
       .all()
       .map((row) => row.path);
     const leaving = filesLeavingWithRoot(under, path, remaining);
-    for (const chunk of chunks(leaving)) {
-      tx.delete(tracks).where(inArray(tracks.path, chunk)).run();
-    }
+    deleteTracks(tx, leaving);
     tx.delete(scanRoots).where(eq(scanRoots.path, path)).run();
 
     // Exclusions only mean something inside a root.
