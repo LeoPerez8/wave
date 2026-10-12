@@ -16,6 +16,7 @@ import { folderPhrase } from "@/library/folderPhrase";
 import { useLibraryCounts, useScanRoots, useScanState, useTrackCount } from "@/library/hooks";
 import { promptForMusicFolder } from "@/library/promptForMusicFolder";
 import { RescanRefreshControl } from "@/library/RescanRefreshControl";
+import { openLibrarySectionActions } from "@/playback/TrackActionsSheet";
 
 /** Empty cover slots stand in for Recently Added until the first scan. */
 const SLOT = CELL * 9;
@@ -53,6 +54,7 @@ export default function LibraryScreen() {
           label={section.label}
           count={counts?.[section.slug]}
           onPress={() => router.push(`/library/${section.slug}`)}
+          onLongPress={() => openLibrarySectionActions(section)}
         />
       ))}
       <View style={{ marginTop: CELL * 5, gap: CELL * 1.5 }}>

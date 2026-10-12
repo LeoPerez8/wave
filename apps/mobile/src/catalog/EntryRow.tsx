@@ -10,15 +10,18 @@ type Props = {
   /** Item count, when known; the column stays reserved either way. */
   count?: number | undefined;
   onPress: () => void;
+  /** Opens the entry's menu, where it has one. */
+  onLongPress?: (() => void) | undefined;
 };
 
 /** A Library entry (Playlists, Artists, …): one quiet line of type, no icon, no chevron. */
-export function EntryRow({ label, count, onPress }: Props) {
+export function EntryRow({ label, count, onPress, onLongPress }: Props) {
   return (
     <Press
       accessibilityRole="button"
       accessibilityLabel={count === undefined ? label : `${label}, ${count.toLocaleString("en")}`}
       onPress={onPress}
+      onLongPress={onLongPress}
       haptic="selection"
     >
       <View className="flex-row items-center" style={{ height: grid.row }}>
