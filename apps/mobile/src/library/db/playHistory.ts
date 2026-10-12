@@ -9,6 +9,7 @@ import { desc, eq, inArray, max, sql } from "drizzle-orm";
 import type { AlbumRow, SongRow } from "../LibraryStore.ts";
 import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
+import { songColumns } from "./tracks.ts";
 
 /** A Most Played song with its number of counted plays. */
 export interface MostPlayedRow extends SongRow {
@@ -147,21 +148,6 @@ const recentlyPlayedAlbums = (db: LibraryDatabase): AlbumRow[] => {
     .all()
     .map((row) => row.id);
   return albumsInOrder(db, ids);
-};
-
-/** What every track list shows (a `SongRow`). */
-const songColumns = {
-  id: schema.tracks.id,
-  path: schema.tracks.path,
-  title: schema.tracks.title,
-  artist: schema.artists.name,
-  album: schema.albums.title,
-  durationMs: schema.tracks.durationMs,
-  thumbPath: schema.artwork.thumbPath,
-  artworkPath: schema.artwork.path,
-  titleSort: schema.tracks.titleSort,
-  albumId: schema.tracks.albumId,
-  artistId: schema.tracks.artistId,
 };
 
 const mostPlayedSongs = (db: LibraryDatabase): MostPlayedRow[] => {

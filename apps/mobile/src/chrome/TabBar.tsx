@@ -5,9 +5,11 @@ import { Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { grid } from "@/catalog/grid";
+import { findSection } from "@/catalog/sections";
 import { Glass } from "@/glass/Glass";
 import { Press } from "@/motion/Press";
 import { requestSearchFocus } from "@/search/focusRequest";
+import { useShortcutTab } from "@/settings/shortcutTab";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { BACKDROP, chrome } from "./chrome";
@@ -63,11 +65,14 @@ function Tab({ name, label, icon: Icon, showLabel = true, onSwitch, onTap }: Tab
 const RADIUS = chrome.tabBar / 2;
 
 /**
- * The floating glass tab bar: Home and Library share one pill, and Search
- * sits beside it in a pill of its own. Tapping Search brings the keyboard up.
+ * The floating glass tab bar: Home, Library and the shortcut tab chosen in
+ * Settings (if any) share one pill, and Search sits beside it in a pill of its
+ * own. Tapping Search brings the keyboard up.
  */
 export function TabBar({ onTabTap }: { onTabTap: (to: TabName) => void }) {
   const insets = useSafeAreaInsets();
+  const slug = useShortcutTab();
+  const shortcut = slug === null ? undefined : findSection(slug);
   return (
     <View
       accessibilityRole="tablist"
@@ -84,6 +89,9 @@ export function TabBar({ onTabTap }: { onTabTap: (to: TabName) => void }) {
         <Glass backdropId={BACKDROP.tabs} cornerRadius={RADIUS} />
         <Tab name="index" label="Home" icon={IconHome} onSwitch={onTabTap} />
         <Tab name="library" label="Library" icon={IconStack2} onSwitch={onTabTap} />
+        {shortcut !== undefined && (
+          <Tab name="shortcut" label={shortcut.label} icon={shortcut.icon} onSwitch={onTabTap} />
+        )}
       </View>
       <View className="flex-row" style={{ width: chrome.tabBar }}>
         <Glass backdropId={BACKDROP.tabs} cornerRadius={RADIUS} />

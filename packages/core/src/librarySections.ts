@@ -4,15 +4,18 @@
  * one of them, in the order the section lists its items.
  */
 
-/** The Library tab's entries. */
-export type LibrarySectionSlug =
-  | "playlists"
-  | "artists"
-  | "albums"
-  | "songs"
-  | "genres"
-  | "folders"
-  | "favorites";
+/** The Library tab's entries, in the order it lists them. */
+export const LIBRARY_SECTION_SLUGS = [
+  "playlists",
+  "artists",
+  "albums",
+  "songs",
+  "genres",
+  "folders",
+  "favorites",
+] as const;
+
+export type LibrarySectionSlug = (typeof LIBRARY_SECTION_SLUGS)[number];
 
 /** Items of a section (albums, artists…): their ids in the section's order, and each one's songs. */
 export interface SectionCollection<Song> {
@@ -23,7 +26,7 @@ export interface SectionCollection<Song> {
 
 /** Where the library's sections come from. */
 export interface LibrarySectionSource<Song> {
-  /** Every song, as Library › Songs lists them (by title). */
+  /** Every song, as Library › Songs lists them (in the sort chosen there). */
   readonly songs: () => Promise<readonly Song[]>;
   /** Favorites, most recently starred first. */
   readonly favorites: () => Promise<readonly Song[]>;

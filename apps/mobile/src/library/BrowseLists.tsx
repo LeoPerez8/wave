@@ -1,4 +1,5 @@
 import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
+import { useScrollToTop } from "expo-router";
 import { IconStack2 } from "@tabler/icons-react-native";
 import { describeFolder } from "@wave/core";
 import { useCallback, useMemo, useRef, type ReactElement } from "react";
@@ -11,11 +12,7 @@ import { NameRow } from "@/catalog/NameRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { EmptyState } from "@/components/EmptyState";
 import { ScanProgressBanner } from "@/components/ScanProgressBanner";
-import {
-  openArtistActions,
-  openFolderActions,
-  openGenreActions,
-} from "@/playback/TrackActionsSheet";
+import { openArtistActions, openFolderActions, openGenreActions } from "@/playback/ActionsMenu";
 
 import { albumPairs, albumRowHeight, AlbumPair, useAlbumTileSize } from "./AlbumGrid";
 import { useAlbums, useArtists, useFolders, useGenres, useScanState } from "./hooks";
@@ -64,6 +61,7 @@ type NameListProps<A> = {
 function NameList<A>({ items, noun, empty, sortKey, keyOf, renderRow }: NameListProps<A>) {
   const scrollable = useListScrollable();
   const list = useRef<LegendListRef>(null);
+  useScrollToTop(list);
   const bottomInset = useChromeInset();
   const sortKeys = useMemo(() => items.map(sortKey), [items, sortKey]);
   const spine = useSpine(sortKeys, list);
@@ -191,6 +189,7 @@ export function AlbumsList({ empty }: { empty: string }) {
   const scrollable = useListScrollable();
   const albums = useAlbums();
   const list = useRef<LegendListRef>(null);
+  useScrollToTop(list);
   const bottomInset = useChromeInset();
   const sortKeys = useMemo(() => albums.map((album) => album.titleSort), [albums]);
   const spine = useSpine(sortKeys, list, pairRow);

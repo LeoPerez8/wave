@@ -1,6 +1,7 @@
 import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
-import type { QueueContext } from "@wave/core";
-import { useCallback, useMemo, useRef, type ReactElement } from "react";
+import { useScrollToTop } from "expo-router";
+import { songSpineKeys, type QueueContext, type SongSort } from "@wave/core";
+import { useCallback, useMemo, useRef, type ReactElement, type ReactNode } from "react";
 import { View } from "react-native";
 
 import { AlphabetSpine } from "@/catalog/AlphabetSpine";
@@ -11,7 +12,7 @@ import { type TrackSummary, TrackRow } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { playSongs } from "@/playback/actions";
 import { useCurrentTrackId } from "@/playback/hooks";
-import { openTrackActions } from "@/playback/TrackActionsSheet";
+import { openTrackActions } from "@/playback/ActionsMenu";
 
 import { useFavoriteIds } from "./favorites";
 import type { SongRow } from "./LibraryStore";
@@ -29,26 +30,37 @@ export const toTrackSummary = (song: SongRow): TrackSummary => ({
 export const songCount = (count: number): string =>
   `${count.toLocaleString("en")} ${count === 1 ? "song" : "songs"}`;
 
-/** A list's opening: a catalog line (the count, a path…) over Play and Shuffle. */
+/**
+ * A list's opening: a catalog line (the count, a path…) over Play and Shuffle,
+ * with the list's sort control (if any) on the right.
+ */
 export function ListIntro({
   line,
   songs,
   context,
+  sortControl,
 }: {
   line: string;
+  /** In the order the list shows them: Play and Shuffle play them so. */
   songs: readonly SongRow[];
   context: QueueContext;
+  sortControl?: ReactNode;
 }) {
   return (
     <View style={{ gap: CELL, paddingBottom: CELL }}>
       <CatalogLine>{line}</CatalogLine>
-      <PlayShuffle
-        onPlay={() => playSongs(songs, undefined, context, { shuffle: false })}
-        onShuffle={() => playSongs(songs, undefined, context, { shuffle: true })}
-      />
+      <View className="flex-row items-center justify-between">
+        <PlayShuffle
+          onPlay={() => playSongs(songs, undefined, context, { shuffle: false })}
+          onShuffle={() => playSongs(songs, undefined, context, { shuffle: true })}
+        />
+        {sortControl}
+      </View>
     </View>
   );
 }
+
+const NO_KEYS: readonly string[] = [];
 
 const keyExtractor = (song: SongRow): string => String(song.id);
 
@@ -57,8 +69,11 @@ type Props = {
   /** What tapping a row plays: this whole list, from the row. */
   context: QueueContext;
   header?: ReactElement;
-  /** Shows the A–Z spine; the songs must be ordered by title. */
-  indexed?: boolean;
+  /**
+   * The sort the songs are in; the A–Z spine follows it (none for date added).
+   * Lists in an order of their own (a folder's files, Favorites) omit it and go without a spine.
+   */
+  sort?: SongSort | undefined;
 };
 
 /**
@@ -66,16 +81,17 @@ type Props = {
  * virtualised for tens of thousands of rows. Tap plays the list from the row;
  * long-press opens the track's menu.
  */
-export function TrackList({ songs, context, header, indexed = false }: Props) {
+export function TrackList({ songs, context, header, sort }: Props) {
   const scrollable = useListScrollable();
   const list = useRef<LegendListRef>(null);
+  useScrollToTop(list);
   const bottomInset = useChromeInset();
   const currentId = useCurrentTrackId();
   const favorites = useFavoriteIds();
   const rowState = useMemo(() => ({ currentId, favorites }), [currentId, favorites]);
   const sortKeys = useMemo(
-    () => (indexed ? songs.map((song) => song.titleSort) : []),
-    [indexed, songs],
+    () => (sort === undefined ? NO_KEYS : (songSpineKeys(songs, sort) ?? NO_KEYS)),
+    [sort, songs],
   );
   const spine = useSpine(sortKeys, list);
 
