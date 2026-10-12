@@ -29,8 +29,7 @@ const EPSILON = 1e-9;
  */
 export const stepSlider = (value: number, direction: 1 | -1, range: SliderRange): number => {
   const steps = (snapSliderValue(value, range) - range.min) / range.step;
-  const next =
-    direction === 1 ? Math.floor(steps + EPSILON) + 1 : Math.ceil(steps - EPSILON) - 1;
+  const next = direction === 1 ? Math.floor(steps + EPSILON) + 1 : Math.ceil(steps - EPSILON) - 1;
   const stepped = Math.min(range.max, Math.max(range.min, range.min + next * range.step));
   return Number(stepped.toFixed(6));
 };
