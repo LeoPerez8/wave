@@ -11,7 +11,8 @@ export type ThemeColor =
   | "fill"
   | "accent"
   | "on-accent"
-  | "highlight";
+  | "highlight"
+  | "destructive";
 
 /**
  * Reads a colour token from global.css for native props that can't take a

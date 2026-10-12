@@ -10,6 +10,7 @@ colors:
   fill: "#d3dfe2"
   accent: "#006a5f"
   highlight: "#a14f09"
+  destructive: "#b3261e"
   background-dark: "#121b1d"
   foreground-dark: "#e0ecef"
   secondary-dark: "#a5b0b3"
@@ -18,6 +19,7 @@ colors:
   fill-dark: "#1c2628"
   accent-dark: "#59c0ad"
   highlight-dark: "#ec9d53"
+  destructive-dark: "#f2867a"
 typography:
   display:
     fontFamily: "Inter"
@@ -139,7 +141,7 @@ The world rejects the category default it was chosen against: bold large titles,
 - Artwork as photographs: square, unrounded, unframed.
 - Light large titles; one size per list, rank by weight and tint.
 - Small tracked-caps catalog lines for section heads and cover captions.
-- Teal for active, ember for favorite and now playing; nothing else is coloured.
+- Teal for active, ember for favorite and now playing; nothing else is coloured, save the red on a Delete or Remove button.
 - Flat: no shadows, no gradients (the Now Playing ground is the one exception). Glass only on what floats: the chrome (tab bar, Search pill, mini player) and dialog and menu cards.
 - Every press sinks and dims for a duration the owner sets in Settings.
 
@@ -154,6 +156,10 @@ A cool, low-chroma tonal ramp carrying two small, saturated voices: teal and emb
 ### Secondary
 
 - **Ember** (`highlight`; burnt orange in light, a warm apricot in dark): favorite and now playing. The playing track's title and speaker glyph, the favorite star. Ember means "this one is yours, or this one is sounding".
+
+### Destructive
+
+- **Signal Red** (`destructive`; brick red in light, a soft coral in dark): only the label of a confirmation's action that deletes or removes something (Delete, Remove). Never a fill, never decoration.
 
 ### Neutral
 
@@ -172,7 +178,7 @@ The full ramp lives in `global.css` as `tone-0` (lightest, `#eff4f6`) to `tone-1
 
 **The Tinted Ground Rule.** The ground is fog or night slate. Never ship a screen on `#ffffff` or `#000000`.
 
-**The Two Voices Rule.** Teal means active, ember means favorite or playing. If a colour on screen means neither, it should be a neutral.
+**The Two Voices Rule.** Teal means active, ember means favorite or playing. If a colour on screen means neither, it should be a neutral. The one exception is the destructive red on a Delete or Remove button.
 
 **The Pewter Is Not Text Rule.** `tertiary` sits near 3:1 on the ground: enough for an icon, not for words. Text uses `foreground` or `secondary`.
 
@@ -259,6 +265,12 @@ Every tappable element is built on one press primitive, so the whole world feels
 
 - **Shape:** a 48dp square target, no visible container (0px radius, no fill).
 - **Icon button:** a 24dp line icon (1.5 stroke) in teal; disabled drops to pewter. Used for Settings, Back and the stepper's minus/plus.
+- **Text button:** a Body 500 label in teal (red for a destructive action, graphite when disabled), no container, a 48dp target.
+
+### Alert Dialog
+
+A glass dialog card (`src/overlay/alert.tsx`, opened from anywhere with `showMessage` / `confirmAction`): the title in Title3 ink, the message below in Subheadline graphite, then the buttons as text buttons right-aligned along the bottom. A message has a single OK; a confirmation has Cancel then the action, which is red when it deletes or removes. Back or a tap outside does what Cancel or OK does. Screen readers hear the title and message as it opens. There are no system alerts.
+
 - **Hover / Focus:** touch only; the Press dim-and-sink is the whole feedback.
 
 ### Entry Row
@@ -329,4 +341,4 @@ A 40dp line icon in pewter, an Entry-type title in ink, a Subheadline message in
 - **Don't** add icons or chevrons to Library entry rows.
 - **Don't** set text in `tertiary`.
 - **Don't** add shadows, gradients or blur; separate with a ramp step or a hairline. Glass is for the floating chrome and dialog cards only, and the artwork gradient for the Now Playing ground only.
-- **Don't** introduce a third accent colour.
+- **Don't** introduce a third accent colour. The destructive red is for Delete and Remove buttons only.
