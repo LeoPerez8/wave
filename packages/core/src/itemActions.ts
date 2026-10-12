@@ -135,14 +135,48 @@ export const itemActions = (subject: ActionSubject): ItemActionEntry[] => {
   return entries;
 };
 
+/** What a kind of item is mostly selected for: always a button of its own on the bar. */
+const PRIMARY_ACTIONS: ReadonlySet<ItemAction> = new Set<ItemAction>([
+  "playNext",
+  "addToQueue",
+  "addToPlaylist",
+  "favorite",
+  "unfavorite",
+  "removeFromPlaylist",
+]);
+
+/** Shorter captions for labels too long for a bar button (whose accessibility label stays the full one). */
+const BAR_LABELS: { readonly [A in ItemAction]?: string } = {
+  unfavorite: "Unfavorite",
+  removeFromPlaylist: "Remove",
+};
+
+/** A bar button's caption for [action]. */
+export const actionBarLabel = (action: ItemAction): string =>
+  BAR_LABELS[action] ?? ITEM_ACTION_LABELS[action];
+
 /**
  * Fits entries into a bar of [slots] buttons: all of them when they fit,
- * otherwise the first ones and a More button (the last slot) holding the rest.
+ * otherwise a More button (the last slot) holding the rest. Primary actions
+ * (queue, add to a playlist, favorite, remove from the playlist) always keep a
+ * button, the bar growing a slot past [slots] if they need it; other entries
+ * fill what's left before More, in order.
  */
-export const splitActionBar = <T>(
+export const splitActionBar = <T extends { readonly action: ItemAction }>(
   entries: readonly T[],
   slots: number,
-): { readonly bar: T[]; readonly more: T[] } =>
-  entries.length <= slots
-    ? { bar: [...entries], more: [] }
-    : { bar: entries.slice(0, slots - 1), more: entries.slice(slots - 1) };
+): { readonly bar: T[]; readonly more: T[] } => {
+  if (entries.length <= slots) return { bar: [...entries], more: [] };
+  const primary = entries.filter((entry) => PRIMARY_ACTIONS.has(entry.action)).length;
+  let spare = Math.max(0, slots - 1 - primary);
+  const bar: T[] = [];
+  const more: T[] = [];
+  for (const entry of entries) {
+    if (PRIMARY_ACTIONS.has(entry.action)) bar.push(entry);
+    else if (spare > 0) {
+      bar.push(entry);
+      spare -= 1;
+    } else more.push(entry);
+  }
+  return { bar, more };
+};

@@ -32,7 +32,7 @@ import {
   openAddToPlaylist,
   renamePlaylistFlow,
 } from "@/library/PlaylistSheets";
-import { removePlaylistItem } from "@/library/playlists";
+import { removePlaylistItems } from "@/library/playlists";
 import { openAlbum, openArtist } from "@/library/routes";
 import { itemSongs, librarySectionSongs } from "@/library/sectionSongs";
 import { showError } from "@/overlay/alert";
@@ -350,9 +350,18 @@ export function useItemActions(
       case "removeFromPlaylist":
         return make(
           run(() => {
+            // Each checked entry, not every copy of its song; one edit per playlist.
+            const byPlaylist = new Map<number, number[]>();
             for (const { playlistItem } of tracks) {
-              if (playlistItem !== undefined)
-                void removePlaylistItem(playlistItem.playlistId, playlistItem.itemId);
+              if (playlistItem === undefined) continue;
+              const ids = byPlaylist.get(playlistItem.playlistId) ?? [];
+              ids.push(playlistItem.itemId);
+              byPlaylist.set(playlistItem.playlistId, ids);
+            }
+            for (const [playlistId, itemIds] of byPlaylist) {
+              removePlaylistItems(playlistId, itemIds).catch((error: unknown) =>
+                showError("Couldn't remove the songs", error),
+              );
             }
           }),
         );

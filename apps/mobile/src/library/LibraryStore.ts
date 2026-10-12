@@ -18,7 +18,7 @@ import {
   type SongListening,
   type StatsWindow,
 } from "@wave/core";
-import { and, asc, desc, eq, inArray, ne, or, sql, type SQL } from "drizzle-orm";
+import { asc, desc, eq, inArray, ne, or, sql, type SQL } from "drizzle-orm";
 import { drizzle, type ExpoSQLiteDatabase } from "drizzle-orm/expo-sqlite";
 import { migrate } from "drizzle-orm/expo-sqlite/migrator";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
@@ -35,6 +35,15 @@ import {
   selectArtistSongs,
   selectArtists,
 } from "./db/artists";
+import {
+  clearArtistPhotos,
+  recordArtistPhoto,
+  selectArtistPhotoLookups,
+  selectArtistPhotos,
+  type ArtistPhotoLookup,
+  type ArtistPhotoRecord,
+  type ArtistPhotoRow,
+} from "./db/artistPhotos";
 import { libraryCounts, sectionSongCounts, type LibraryCounts } from "./db/counts";
 import { selectGenreSongs } from "./db/genres";
 import type { RowPage } from "./db/database";
@@ -50,7 +59,7 @@ import {
   type HomeSections,
   type RecordedPlay,
 } from "./db/playHistory";
-import { selectPlaylistSongs } from "./db/playlists";
+import { removePlaylistItems, selectPlaylistSongs } from "./db/playlists";
 import * as schema from "./db/schema";
 import { BY_TITLE, trackQuery } from "./db/tracks";
 import { creditedPlayTotals, songListening, trackPlayTotals } from "./db/stats";
@@ -402,9 +411,10 @@ export class LibraryStore extends Context.Service<
       itemId: number,
       toIndex: number,
     ) => Effect.Effect<void, LibraryStoreError>;
-    readonly removePlaylistItem: (
+    /** Removes these entries from the playlist (other copies of the same songs stay). */
+    readonly removePlaylistItems: (
       playlistId: number,
-      itemId: number,
+      itemIds: readonly number[],
     ) => Effect.Effect<void, LibraryStoreError>;
     /** The ids of every starred track. */
     readonly favoriteTrackIds: Effect.Effect<readonly number[], LibraryStoreError>;
@@ -447,6 +457,17 @@ export class LibraryStore extends Context.Service<
      * latest play, track artist), in no order; Core's `listeningTotals` sums it.
      */
     readonly songListening: Effect.Effect<readonly SongListening[], LibraryStoreError>;
+    /** The artists whose photo is due for a lookup now (Core's `artistPhotoLookups`). */
+    readonly artistPhotoLookups: Effect.Effect<readonly ArtistPhotoLookup[], LibraryStoreError>;
+    /** Records how an artist's photo lookup went, by artist key. */
+    readonly recordArtistPhoto: (
+      artistKey: string,
+      record: ArtistPhotoRecord,
+    ) => Effect.Effect<void, LibraryStoreError>;
+    /** Every downloaded artist photo. */
+    readonly listArtistPhotos: Effect.Effect<readonly ArtistPhotoRow[], LibraryStoreError>;
+    /** Forgets every artist photo and miss (the files are deleted by the caller). */
+    readonly clearArtistPhotos: Effect.Effect<void, LibraryStoreError>;
   }
 >()("@wave/mobile/library/LibraryStore") {}
 
@@ -1363,18 +1384,9 @@ const make = Effect.gen(function* () {
         movePlaylistItemSync(db, playlistId, itemId, toIndex, Date.now()),
       ),
 
-    removePlaylistItem: (playlistId, itemId) =>
+    removePlaylistItems: (playlistId, itemIds) =>
       attempt("remove from the playlist", () =>
-        db.transaction((tx) => {
-          const { playlists, playlistItems } = schema;
-          tx.delete(playlistItems)
-            .where(and(eq(playlistItems.id, itemId), eq(playlistItems.playlistId, playlistId)))
-            .run();
-          tx.update(playlists)
-            .set({ updatedAt: Date.now() })
-            .where(eq(playlists.id, playlistId))
-            .run();
-        }),
+        removePlaylistItems(db, playlistId, itemIds, Date.now()),
       ),
 
     favoriteTrackIds: attempt("read favorites", () =>
@@ -1414,6 +1426,17 @@ const make = Effect.gen(function* () {
       attempt("read ranked artists", () => (ids.length === 0 ? [] : listArtistsSync(db, ids))),
 
     songListening: attempt("sum up listening", () => songListening(db)),
+
+    artistPhotoLookups: attempt("list artist photo lookups", () =>
+      selectArtistPhotoLookups(db, Date.now()),
+    ),
+
+    recordArtistPhoto: (artistKey, record) =>
+      attempt("record an artist photo", () => recordArtistPhoto(db, artistKey, record)),
+
+    listArtistPhotos: attempt("list artist photos", () => selectArtistPhotos(db)),
+
+    clearArtistPhotos: attempt("clear artist photos", () => clearArtistPhotos(db)),
   });
 });
 

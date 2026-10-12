@@ -240,6 +240,7 @@ export type { Selection } from "./selection.ts";
 export { groupSongs } from "./groupSongs.ts";
 export {
   commonKind,
+  actionBarLabel,
   confirmsFirst,
   isDestructiveAction,
   ITEM_ACTION_LABELS,
@@ -264,3 +265,18 @@ export { confirmSongDeletion, songDeletionFailure } from "./songDeletion.ts";
 export type { SongDeleteFailure, SongDeleteFailureReason } from "./songDeletion.ts";
 export { artistArtwork, artistInitial } from "./artistImage.ts";
 export type { ArtistAlbumLink } from "./artistImage.ts";
+export {
+  ARTIST_PHOTO_RETRY_MS,
+  artistPhotoLookups,
+  artistPhotoName,
+  artistPhotoQuery,
+  deezerArtistCandidates,
+  deezerArtistSearchUrl,
+  pickArtistPhoto,
+} from "./artistPhoto.ts";
+export type {
+  ArtistPhotoCandidate,
+  ArtistPhotoCheck,
+  ArtistPhotoOutcome,
+  ArtistPhotoUrls,
+} from "./artistPhoto.ts";
