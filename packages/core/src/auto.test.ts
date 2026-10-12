@@ -7,7 +7,9 @@ import {
   autoArtistItem,
   autoChildren,
   autoItem,
+  autoPageItems,
   autoPlayList,
+  autoPlaylistItem,
   autoQueueStart,
   autoTrackItems,
   decodeAutoMediaId,
@@ -297,6 +299,105 @@ describe("Auto album", () => {
       autoChildren({ type: "track", list: album, index: 0, trackId: "11" }, 0, 10),
       null,
     );
+  });
+});
+
+describe("Auto Playlists tab", () => {
+  const playlists = { type: "tab", tab: "playlists" } as const;
+  const playlist = { kind: "playlist", id: "7" } as const;
+
+  test("lists every playlist, fetched a page at a time", () => {
+    assert.deepEqual(autoChildren(playlists, 0, 50), {
+      items: [],
+      fetch: { source: { type: "playlists" }, offset: 0, limit: 50 },
+    });
+    assert.deepEqual(autoChildren(playlists, 2, 50)?.fetch, {
+      source: { type: "playlists" },
+      offset: 100,
+      limit: 50,
+    });
+  });
+
+  test("a playlist opens with its name and song count", () => {
+    assert.deepEqual(autoPlaylistItem({ id: 7, name: "Road trip", trackCount: 12 }), {
+      mediaId: "playlist/7",
+      title: "Road trip",
+      subtitle: "12 songs",
+      browsable: true,
+      playable: false,
+    });
+    assert.equal(autoPlaylistItem({ id: 7, name: "Solo", trackCount: 1 }).subtitle, "1 song");
+    assert.deepEqual(decodeAutoMediaId("playlist/7"), { type: "list", list: playlist });
+  });
+
+  test("no playlists shows a short explicit item instead of nothing", () => {
+    assert.deepEqual(autoPageItems(playlists, 0, []), [
+      {
+        mediaId: "tab/playlists/empty",
+        title: "No playlists yet",
+        subtitle: "Create one in Wave on your phone",
+        browsable: false,
+        playable: false,
+      },
+    ]);
+    // Later pages of a list that ran out stay empty; a page with rows keeps them.
+    assert.deepEqual(autoPageItems(playlists, 1, []), []);
+    const row = autoPlaylistItem({ id: 7, name: "Road trip", trackCount: 12 });
+    assert.deepEqual(autoPageItems(playlists, 0, [row]), [row]);
+  });
+
+  test("the empty item's media ID names it", () => {
+    const node = decodeAutoMediaId("tab/playlists/empty");
+    assert.deepEqual(node, { type: "empty", parent: playlists });
+    assert.ok(node !== null);
+    assert.deepEqual(autoItem(node), autoPageItems(playlists, 0, [])[0]);
+    assert.equal(encodeAutoMediaId(node), "tab/playlists/empty");
+    assert.equal(autoChildren(node, 0, 10), null);
+    assert.equal(autoPlayList(node), null);
+    // Only lists that say what "empty" means have one.
+    assert.equal(decodeAutoMediaId("tab/albums/empty"), null);
+    assert.equal(decodeAutoMediaId("root/empty"), null);
+    assert.equal(decodeAutoMediaId("tab/playlists/empty/empty"), null);
+  });
+
+  // Playlist order is the order the app loads them in, unlike an album's.
+  const playlistTracks = [track("30", 2, 5), track("10", 1, 1), track("20", null, 3)];
+
+  test("a playlist starts with Shuffle, then its tracks in playlist order", () => {
+    const open = { type: "list", list: playlist } as const;
+    const children = autoChildren(open, 0, 10);
+    assert.deepEqual(
+      children?.items.map((item) => [item.title, decodeAutoMediaId(item.mediaId)]),
+      [["Shuffle", { type: "shuffle", list: playlist }]],
+    );
+    assert.deepEqual(children?.fetch, {
+      source: { type: "tracks", list: playlist },
+      offset: 0,
+      limit: 9,
+    });
+    assert.deepEqual(
+      autoTrackItems(playlist, playlistTracks, 0, 9).map((item) => decodeAutoMediaId(item.mediaId)),
+      [
+        { type: "track", list: playlist, index: 0, trackId: "30" },
+        { type: "track", list: playlist, index: 1, trackId: "10" },
+        { type: "track", list: playlist, index: 2, trackId: "20" },
+      ],
+    );
+  });
+
+  test("a track plays the playlist from that track; Shuffle plays it shuffled", () => {
+    const context = { kind: "playlist", id: "7" };
+    const trackIds = ["30", "10", "20"];
+    assert.deepEqual(
+      autoQueueStart({ type: "track", list: playlist, index: 1, trackId: "10" }, playlistTracks),
+      { context, trackIds, startIndex: 1, shuffle: undefined },
+    );
+    assert.deepEqual(autoQueueStart({ type: "shuffle", list: playlist }, playlistTracks), {
+      context,
+      trackIds,
+      startIndex: undefined,
+      shuffle: true,
+    });
   });
 });
 

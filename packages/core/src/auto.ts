@@ -11,7 +11,8 @@
  *   their context): add its kind to `AutoTrackListKind` and `TRACK_LISTS`;
  * - another browsable node (say, an artist): add an `AutoNode` variant, its
  *   segments in `encodeAutoMediaId`/`decodeAutoMediaId`, its children in
- *   `listing` and, if it plays, its list in `autoPlayList`.
+ *   `listing` and, if it plays, its list in `autoPlayList`;
+ * - an explicit item for a list with nothing in it: its titles in `emptyTitles`.
  *
  * The app side (`apps/mobile/src/auto/Auto.ts`) loads a source's rows in
  * `fetch` and a track list's songs in `listSongs`.
@@ -46,6 +47,7 @@ export interface AutoTrack {
 /** The kinds of track list Auto can open or play. */
 export type AutoTrackListKind =
   | "album"
+  | "playlist"
   /** Every song by an artist or on their albums (the artist's Shuffle all). */
   | "artistSongs";
 
@@ -78,6 +80,11 @@ const TRACK_LISTS: Record<AutoTrackListKind, TrackListKind> = {
     // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
     order: (tracks) => [...tracks].sort(compareAlbumTracks),
   },
+  playlist: {
+    context: (id) => ({ kind: "playlist", id }),
+    // The app loads a playlist's tracks in playlist order already.
+    order: (tracks) => [...tracks],
+  },
   // Not `artist`: that segment names the browsable artist.
   artistSongs: {
     context: (id) => ({ kind: "artist", id }),
@@ -109,6 +116,8 @@ export type AutoNode =
       readonly index: number;
       readonly trackId: string;
     }
+  /** What a list shows when it has nothing to list (`autoPageItems`); does nothing. */
+  | { readonly type: "empty"; readonly parent: AutoNode }
   /** An artist to open: Shuffle all, then their albums. `id` is the artist id. */
   | { readonly type: "artist"; readonly id: string };
 
@@ -119,6 +128,7 @@ const ROOT_ID = "root";
  * `tab/albums`, `album/12`, `album/12/shuffle`, `album/12/track/3/456`.
  */
 export const encodeAutoMediaId = (node: AutoNode): string => {
+  if (node.type === "empty") return `${encodeAutoMediaId(node.parent)}/${EMPTY}`;
   const segments = ((): readonly string[] => {
     switch (node.type) {
       case "root":
@@ -138,10 +148,25 @@ export const encodeAutoMediaId = (node: AutoNode): string => {
   return segments.map(encodeURIComponent).join("/");
 };
 
+/** The last segment of an empty item's media ID, after its list's: `tab/playlists/empty`. */
+const EMPTY = "empty";
+
 const isIndex = (text: string): boolean => /^(0|[1-9][0-9]*)$/.test(text);
 
 /** The node a media ID names, or null when it isn't one of Wave's. */
-export const decodeAutoMediaId = (mediaId: string): AutoNode | null => {
+export const decodeAutoMediaId = (mediaId: string): AutoNode | null =>
+  decodeListed(mediaId) ?? decodeEmpty(mediaId);
+
+/** `<list>/empty`, for a list that has an empty item. */
+const decodeEmpty = (mediaId: string): AutoNode | null => {
+  const suffix = `/${EMPTY}`;
+  if (!mediaId.endsWith(suffix)) return null;
+  const parent = decodeListed(mediaId.slice(0, -suffix.length));
+  return parent !== null && emptyTitles(parent) !== null ? { type: "empty", parent } : null;
+};
+
+/** Every node but an empty item. */
+const decodeListed = (mediaId: string): AutoNode | null => {
   let parts: string[];
   try {
     parts = mediaId.split("/").map(decodeURIComponent);
@@ -206,6 +231,8 @@ export const AUTO_ROOT: AutoItem = folder({ type: "root" }, "Wave");
 export type AutoSource =
   /** Every album, in Library order. */
   | { readonly type: "albums" }
+  /** Every playlist, by name (Library order); `autoPlaylistItem` builds each. */
+  | { readonly type: "playlists" }
   /** Every artist with songs, in Library order (leading articles and accents ignored). */
   | { readonly type: "artists" }
   /** The albums an artist's screen shows: theirs, then the ones they appear on. */
@@ -236,11 +263,12 @@ const tabChildren = (tab: AutoTab): Listing => {
   switch (tab) {
     case "albums":
       return { items: [], source: { type: "albums" } };
+    case "playlists":
+      return { items: [], source: { type: "playlists" } };
     case "artists":
       return { items: [], source: { type: "artists" } };
     // Filled by their own tickets.
     case "home":
-    case "playlists":
       return { items: [], source: null };
   }
 };
@@ -260,6 +288,7 @@ const listing = (node: AutoNode): Listing | null => {
       return { items: [shuffleItem(node.list)], source: { type: "tracks", list: node.list } };
     case "shuffle":
     case "track":
+    case "empty":
       return null;
     case "artist":
       return {
@@ -267,6 +296,38 @@ const listing = (node: AutoNode): Listing | null => {
         source: { type: "artistAlbums", id: node.id },
       };
   }
+};
+
+/** What a node shows when it lists nothing (title, subtitle), or null: nothing at all. */
+const emptyTitles = (node: AutoNode): readonly [string, string | null] | null =>
+  node.type === "tab" && node.tab === "playlists"
+    ? ["No playlists yet", "Create one in Wave on your phone"]
+    : null;
+
+const emptyItem = (parent: AutoNode): AutoItem | null => {
+  const titles = emptyTitles(parent);
+  if (titles === null) return null;
+  return {
+    mediaId: encodeAutoMediaId({ type: "empty", parent }),
+    title: titles[0],
+    subtitle: titles[1],
+    browsable: false,
+    playable: false,
+  };
+};
+
+/**
+ * What page `page` of `node` shows, given its items (fixed ones, then the
+ * fetched rows): those items, or the node's empty item when its first page
+ * has none.
+ */
+export const autoPageItems = (
+  node: AutoNode,
+  page: number,
+  items: readonly AutoItem[],
+): readonly AutoItem[] => {
+  const empty = page === 0 && items.length === 0 ? emptyItem(node) : null;
+  return empty === null ? items : [empty];
 };
 
 /**
@@ -282,6 +343,8 @@ export const autoItem = (node: AutoNode): AutoItem | null => {
       return tabItem(node.tab);
     case "shuffle":
       return shuffleItem(node.list);
+    case "empty":
+      return emptyItem(node.parent);
     case "list":
     case "track":
     case "artist":
@@ -302,6 +365,23 @@ export const autoAlbumItem = (album: AutoAlbum): AutoItem =>
     { type: "list", list: { kind: "album", id: String(album.id) } },
     album.title,
     album.albumArtist,
+  );
+
+/** What a playlist row needs to show in Auto. */
+export interface AutoPlaylist {
+  readonly id: number;
+  readonly name: string;
+  readonly trackCount: number;
+}
+
+const songCount = (count: number): string => `${count} ${count === 1 ? "song" : "songs"}`;
+
+/** A playlist in a list (the Playlists tab): opens its tracks. */
+export const autoPlaylistItem = (playlist: AutoPlaylist): AutoItem =>
+  folder(
+    { type: "list", list: { kind: "playlist", id: String(playlist.id) } },
+    playlist.name,
+    songCount(playlist.trackCount),
   );
 
 /** Every track of `list` in its order (an album: by disc and track number). */
