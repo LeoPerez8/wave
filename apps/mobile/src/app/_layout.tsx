@@ -9,15 +9,16 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useAllFilesAccess } from "@/library/hooks";
 import { PlaylistSheets } from "@/library/PlaylistSheets";
 import { startInitialScan } from "@/library/runtime";
-import { connectPlayer } from "@/playback/actions";
 import { TrackActionsSheet } from "@/playback/TrackActionsSheet";
+import { startServices } from "@/services";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 export default function RootLayout() {
   const background = useThemeColor("background");
   const { granted } = useAllFilesAccess();
 
-  useEffect(connectPlayer, []);
+  // A no-op when Android Auto already started them headless (src/services.ts).
+  useEffect(() => startServices("app"), []);
 
   // The first scan starts as soon as Wave can read the scan roots.
   useEffect(() => {

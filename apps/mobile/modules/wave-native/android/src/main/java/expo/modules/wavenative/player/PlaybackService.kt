@@ -5,7 +5,11 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
+import android.os.IBinder
 import android.os.Looper
+import android.os.Process
+import android.os.SystemClock
+import android.util.Log
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -13,11 +17,13 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.LibraryResult
+import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
-import androidx.media3.session.MediaSessionService
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionError
 import androidx.media3.session.SessionResult
+import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 
@@ -28,9 +34,16 @@ import com.google.common.util.concurrent.ListenableFuture
  *
  * The sleep timer runs here too, so it pauses playback with Wave in the
  * background (the JS side may be suspended by then).
+ *
+ * It is a media library service so Android Auto can browse Wave: browse
+ * requests go to JS over [AutoLibrary.bridge], starting the JS runtime
+ * headless first when Wave isn't running ([JsRuntime]).
  */
-class PlaybackService : MediaSessionService() {
-  private var session: MediaSession? = null
+class PlaybackService : MediaLibraryService() {
+  private var session: MediaLibrarySession? = null
+
+  /** Controllers browsing the library (Auto); JS is kept running while there are any. */
+  private val browsers = mutableSetOf<MediaSession.ControllerInfo>()
   private var exoPlayer: ExoPlayer? = null
   private val main = Handler(Looper.getMainLooper())
 
@@ -98,13 +111,28 @@ class PlaybackService : MediaSessionService() {
       .build()
     player.addListener(sleepTimerListener)
     exoPlayer = player
-    session = MediaSession.Builder(this, player)
-      .setCallback(SessionCallback())
+    session = MediaLibrarySession.Builder(this, player, SessionCallback())
       .apply { openAppIntent()?.let(::setSessionActivity) }
       .build()
   }
 
-  override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session
+  override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? = session
+
+  /** Logs bind times for the Auto spike's measurements (docs/auto-spike.md). */
+  override fun onBind(intent: Intent?): IBinder? {
+    Log.i(
+      JsRuntime.LOG_TAG,
+      "Bound (${intent?.action}) at ${SystemClock.elapsedRealtime()} ms; " +
+        "process started at ${Process.getStartElapsedRealtime()} ms",
+    )
+    return super.onBind(intent)
+  }
+
+  /** Starts JS (headless if needed) and keeps it running while [controller] browses. */
+  private fun keepJsFor(controller: MediaSession.ControllerInfo) {
+    browsers += controller
+    JsRuntime.ensureStarted(this)
+  }
 
   /** Keeps playing after Wave is swiped away; otherwise there's nothing to keep the service for. */
   override fun onTaskRemoved(rootIntent: Intent?) {
@@ -117,6 +145,8 @@ class PlaybackService : MediaSessionService() {
   }
 
   override fun onDestroy() {
+    browsers.clear()
+    JsRuntime.release()
     main.removeCallbacks(sleepCheck)
     exoPlayer = null
     session?.run {
@@ -138,8 +168,13 @@ class PlaybackService : MediaSessionService() {
     )
   }
 
-  private inner class SessionCallback : MediaSession.Callback {
-    /** Wave's own controller (the JS module) may also start and cancel the sleep timer. */
+  @OptIn(UnstableApi::class)
+  private inner class SessionCallback : MediaLibrarySession.Callback {
+    /**
+     * Wave's own controller (the JS module) may also start and cancel the sleep
+     * timer. Auto gets the default library commands, and its connection starts
+     * JS right away, ahead of its first browse request.
+     */
     override fun onConnect(
       session: MediaSession,
       controller: MediaSession.ControllerInfo,
@@ -152,8 +187,37 @@ class PlaybackService : MediaSessionService() {
             .add(SleepTimerSession.CANCEL)
             .build(),
         )
+      } else if (session.isAutoCompanionController(controller) || session.isAutomotiveController(controller)) {
+        Log.i(JsRuntime.LOG_TAG, "Auto connected at ${SystemClock.elapsedRealtime()} ms")
+        keepJsFor(controller)
       }
       return result.build()
+    }
+
+    override fun onDisconnected(session: MediaSession, controller: MediaSession.ControllerInfo) {
+      if (browsers.remove(controller) && browsers.isEmpty()) JsRuntime.release()
+    }
+
+    override fun onGetLibraryRoot(
+      session: MediaLibrarySession,
+      browser: MediaSession.ControllerInfo,
+      params: LibraryParams?,
+    ): ListenableFuture<LibraryResult<MediaItem>> {
+      Log.i(JsRuntime.LOG_TAG, "Root requested at ${SystemClock.elapsedRealtime()} ms by ${browser.packageName}")
+      keepJsFor(browser)
+      return AutoLibrary.root(params)
+    }
+
+    override fun onGetChildren(
+      session: MediaLibrarySession,
+      browser: MediaSession.ControllerInfo,
+      parentId: String,
+      page: Int,
+      pageSize: Int,
+      params: LibraryParams?,
+    ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
+      keepJsFor(browser)
+      return AutoLibrary.children(parentId, page, pageSize, params)
     }
 
     override fun onCustomCommand(

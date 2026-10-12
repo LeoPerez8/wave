@@ -80,6 +80,28 @@ export interface SleepTimerEvent {
   readonly timer: SleepTimer | null;
 }
 
+/**
+ * A question from Android Auto, forwarded by the media library service. Answer
+ * every one with `respondAuto` or `failAuto`: the service gives up after a few
+ * seconds and shows Auto a "still loading" message.
+ */
+export interface AutoRequestEvent {
+  readonly id: number;
+  /** `root`: the browse root; `children`: one page of a node's children. */
+  readonly type: "root" | "children";
+  /** JSON: `{}` for `root`; `{ parentId, page, pageSize }` for `children`. */
+  readonly payload: string;
+}
+
+/** A browse tree node as JS answers it (JSON in `respondAuto`). */
+export interface AutoNode {
+  readonly mediaId: string;
+  readonly title: string;
+  readonly subtitle?: string;
+  readonly browsable: boolean;
+  readonly playable: boolean;
+}
+
 type WavePlayerEvents = {
   onPlaybackState: (state: NativePlayerState) => void;
   onPosition: (position: PlayerPosition) => void;
@@ -87,6 +109,7 @@ type WavePlayerEvents = {
   onSeek: (event: SeekEvent) => void;
   onPlayerError: (event: PlayerErrorEvent) => void;
   onSleepTimer: (event: SleepTimerEvent) => void;
+  onAutoRequest: (event: AutoRequestEvent) => void;
 };
 
 declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
@@ -108,6 +131,15 @@ declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
   setSleepTimer(type: SleepTimer["type"], endsAt: number | null): Promise<void>;
   cancelSleepTimer(): Promise<void>;
   getSleepTimer(): Promise<SleepTimer | null>;
+  /**
+   * Starts sending `onAutoRequest`, including the requests that queued up while
+   * the runtime was starting. Call it once a listener is in place.
+   */
+  attachAuto(): void;
+  /** Answers request `id`: an `AutoNode` for `root`, an `AutoNode[]` for `children`. */
+  respondAuto(id: number, json: string): void;
+  /** Answers request `id` with an error Auto shows as `message`. */
+  failAuto(id: number, message: string): void;
 }
 
 export const WavePlayer = requireNativeModule<WavePlayerModule>("WavePlayer");

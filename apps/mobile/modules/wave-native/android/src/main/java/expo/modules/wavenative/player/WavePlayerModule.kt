@@ -153,7 +153,15 @@ class WavePlayerModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("WavePlayer")
 
-    Events("onPlaybackState", "onPosition", "onItemTransition", "onSeek", "onPlayerError", "onSleepTimer")
+    Events(
+      "onPlaybackState",
+      "onPosition",
+      "onItemTransition",
+      "onSeek",
+      "onPlayerError",
+      "onSleepTimer",
+      "onAutoRequest",
+    )
 
     OnCreate { main.post(::connect) }
 
@@ -257,7 +265,22 @@ class WavePlayerModule : Module() {
       withController(promise) { player -> promise.resolve(state(player)) }
     }.runOnQueue(Queues.MAIN)
 
+    /**
+     * JS answers Android Auto from now on ([AutoLibrary.bridge]): `onAutoRequest`
+     * carries each request, including those made while the runtime was starting.
+     */
+    Function("attachAuto") {
+      AutoLibrary.bridge.attach { id, type, payload ->
+        sendEvent("onAutoRequest", mapOf("id" to id, "type" to type, "payload" to payload))
+      }
+    }
+
+    Function("respondAuto") { id: Int, json: String -> AutoLibrary.bridge.respond(id, json) }
+
+    Function("failAuto") { id: Int, message: String -> AutoLibrary.bridge.fail(id, message) }
+
     OnDestroy {
+      AutoLibrary.bridge.detach()
       main.post {
         main.removeCallbacks(positionTicker)
         controller?.removeListener(listener)
