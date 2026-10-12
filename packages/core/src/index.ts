@@ -222,3 +222,24 @@ export {
   writeSongSort,
 } from "./songSort.ts";
 export type { SongListKind, SongSort, SongSortKey, SortableSong } from "./songSort.ts";
+export {
+  allSelected,
+  clearSelection,
+  isSelected,
+  NO_SELECTION,
+  selectAll,
+  selectedCount,
+  selectedInOrder,
+  selectionOf,
+  toggleSelected,
+} from "./selection.ts";
+export type { Selection } from "./selection.ts";
+export { ITEM_ACTION_LABELS, itemActions, splitActionBar } from "./itemActions.ts";
+export type {
+  ActionItem,
+  ActionSubject,
+  ActionSurface,
+  ItemAction,
+  ItemActionEntry,
+  ItemKind,
+} from "./itemActions.ts";
