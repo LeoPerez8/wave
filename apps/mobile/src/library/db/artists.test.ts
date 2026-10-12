@@ -4,9 +4,19 @@ import { beforeEach, describe, test } from "node:test";
 
 import { eq } from "drizzle-orm";
 
-import { selectArtistCovers, selectArtistSongs, selectArtists } from "./artists.ts";
+import {
+  refreshArtistImages,
+  selectArtistCovers,
+  selectArtistSongs,
+  selectArtists,
+} from "./artists.ts";
 import * as schema from "./schema.ts";
-import { addTrack, openTestDatabase, type TestDatabase } from "./testDatabase.ts";
+import {
+  addTrack,
+  migrateTestDatabase,
+  openTestDatabase,
+  type TestDatabase,
+} from "./testDatabase.ts";
 
 let db: TestDatabase;
 
@@ -64,7 +74,7 @@ const idOf = (name: string) =>
   selectArtists(db, {}).find((artist) => artist.name === name)?.id ?? -1;
 
 describe("selectArtistCovers", () => {
-  test("an artist's cover is the first of their albums with one, by title", () => {
+  test("an artist's cover is their image: their album with the most songs", () => {
     addTrack(db, {
       title: "15 Step",
       album: "In Rainbows",
@@ -72,8 +82,10 @@ describe("selectArtistCovers", () => {
       artworkHash: "rainbows",
     });
     addTrack(db, { title: "Everything", album: "Kid A", artist: "Radiohead", artworkHash: "kida" });
+    addTrack(db, { title: "Idioteque", album: "Kid A", artist: "Radiohead", artworkHash: "kida" });
+    refreshArtistImages(db);
     const covers = selectArtistCovers(db, [idOf("Radiohead")]);
-    assert.equal(covers.get(idOf("Radiohead")), "/covers/rainbows.jpg");
+    assert.equal(covers.get(idOf("Radiohead")), "/covers/kida.jpg");
   });
 
   test("an artist with no album of their own takes a cover from their songs", () => {
@@ -84,13 +96,99 @@ describe("selectArtistCovers", () => {
       albumArtist: "Various",
       artworkHash: "indie",
     });
+    refreshArtistImages(db);
     assert.equal(selectArtistCovers(db, [idOf("Pixies")]).get(idOf("Pixies")), "/covers/indie.jpg");
   });
 
   test("artists without any artwork have no cover", () => {
+    refreshArtistImages(db);
     const covers = selectArtistCovers(db, [idOf("Björk"), idOf("Daft Punk")]);
     assert.equal(covers.size, 0);
     assert.equal(selectArtistCovers(db, []).size, 0);
+  });
+});
+
+describe("artist images", () => {
+  const imageOf = (name: string) => {
+    const artist = selectArtists(db, {}).find((row) => row.name === name);
+    return { thumbPath: artist?.thumbPath, artworkPath: artist?.artworkPath };
+  };
+  const cover = (hash: string) => ({
+    thumbPath: `/covers/${hash}.thumb.jpg`,
+    artworkPath: `/covers/${hash}.jpg`,
+  });
+
+  test("an artist's image is the cover of their own album with the most songs", () => {
+    addTrack(db, {
+      title: "15 Step",
+      album: "In Rainbows",
+      artist: "Radiohead",
+      artworkHash: "ir",
+    });
+    addTrack(db, { title: "Nude", album: "In Rainbows", artist: "Radiohead", artworkHash: "ir" });
+    addTrack(db, { title: "Idioteque", album: "Kid A", artist: "Radiohead", artworkHash: "kida" });
+    refreshArtistImages(db);
+    assert.deepEqual(imageOf("Radiohead"), cover("ir"));
+  });
+
+  test("an artist with no album of their own takes the album they appear on most", () => {
+    addTrack(db, {
+      title: "Debaser",
+      album: "Hits",
+      artist: "Pixies",
+      albumArtist: "Various",
+      artworkHash: "hits",
+    });
+    refreshArtistImages(db);
+    assert.deepEqual(imageOf("Pixies"), cover("hits"));
+  });
+
+  test("artists with no artwork have no image", () => {
+    refreshArtistImages(db);
+    assert.deepEqual(imageOf("Björk"), { thumbPath: null, artworkPath: null });
+  });
+
+  test("after the update, artists show the placeholder until the next scan picks their image", async () => {
+    db = await openTestDatabase({ through: "0007_recount_plays" });
+    addTrack(db, { title: "Everything", album: "Kid A", artist: "Radiohead", artworkHash: "kida" });
+    await migrateTestDatabase(db);
+    assert.deepEqual(imageOf("Radiohead"), { thumbPath: null, artworkPath: null });
+    refreshArtistImages(db);
+    assert.deepEqual(imageOf("Radiohead"), cover("kida"));
+  });
+
+  test("a rescan that adds or removes albums updates the choice", () => {
+    addTrack(db, { title: "Everything", album: "Kid A", artist: "Radiohead", artworkHash: "kida" });
+    refreshArtistImages(db);
+    assert.deepEqual(imageOf("Radiohead"), cover("kida"));
+
+    addTrack(db, {
+      title: "15 Step",
+      album: "In Rainbows",
+      artist: "Radiohead",
+      artworkHash: "ir",
+    });
+    addTrack(db, { title: "Nude", album: "In Rainbows", artist: "Radiohead", artworkHash: "ir" });
+    refreshArtistImages(db);
+    assert.deepEqual(imageOf("Radiohead"), cover("ir"));
+
+    const inRainbows = db
+      .select()
+      .from(schema.albums)
+      .where(eq(schema.albums.title, "In Rainbows"))
+      .get();
+    db.delete(schema.tracks)
+      .where(eq(schema.tracks.albumId, inRainbows?.id ?? -1))
+      .run();
+    db.delete(schema.albums)
+      .where(eq(schema.albums.id, inRainbows?.id ?? -1))
+      .run();
+    refreshArtistImages(db);
+    assert.deepEqual(imageOf("Radiohead"), cover("kida"));
+
+    db.update(schema.albums).set({ artworkHash: null }).run();
+    refreshArtistImages(db);
+    assert.deepEqual(imageOf("Radiohead"), { thumbPath: null, artworkPath: null });
   });
 });
 

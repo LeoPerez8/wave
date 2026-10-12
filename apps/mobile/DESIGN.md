@@ -249,7 +249,7 @@ The world is flat. There are no shadows, no elevation and no gradients (save the
 
 ## Shapes
 
-Square everywhere. Artwork, empty cover slots, track thumbnails and placeholder fields have no corner radius and no frame. Structure is drawn with one-pixel hairlines in the separator tone, running the full content width between entries; there are no boxed cards and no chips. What floats is the exception: the chrome's glass surfaces are pills (fully rounded ends) and dialog cards have 24dp corners, set apart from the square content beneath. The recurring silhouettes are the thin vertical column of spine letters on the right and the pills at the bottom.
+Square everywhere. Artwork, empty cover slots, track thumbnails and placeholder fields have no corner radius and no frame. Structure is drawn with one-pixel hairlines in the separator tone, running the full content width between entries; there are no boxed cards and no chips. What floats is the exception: the chrome's glass surfaces are pills (fully rounded ends) and dialog cards have 24dp corners, set apart from the square content beneath. Artists are the one round image: a circle (their image, Core's `artistArtwork`: the cover of their own album with the most songs, else the album they appear on most), or their initial in graphite on a `fill` circle when they have no artwork, so artists read apart from albums. Rows lead with a 40dp circle, Home's artist shelf and the artist page head with a large one. The recurring silhouettes are the thin vertical column of spine letters on the right and the pills at the bottom.
 
 ### Named Rules
 

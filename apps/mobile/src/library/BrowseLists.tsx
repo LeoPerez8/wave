@@ -101,6 +101,7 @@ const artistDetail = (artist: ArtistRow): string =>
 const renderArtist = (artist: ArtistRow) => (
   <NameRow
     name={artist.name}
+    artist={artist}
     detail={artistDetail(artist)}
     onPress={() => openArtist(artist.id)}
     onLongPress={() => openArtistActions(artist)}

@@ -6,6 +6,7 @@ import { Text, View } from "react-native";
 import { EntryRow } from "@/catalog/EntryRow";
 import { CELL } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
+import { ArtistImage, type ArtistImageSource } from "@/catalog/ArtistImage";
 import { Mosaic } from "@/catalog/Mosaic";
 import type { LibrarySection } from "@/catalog/sections";
 import type { LibraryCounts } from "@/library/db/counts";
@@ -65,6 +66,8 @@ interface Heading {
   readonly subtitle: string;
   /** Artwork beside the title; undefined for a text-only heading. */
   readonly covers: readonly string[] | undefined;
+  /** An artist's heading shows their image (a circle) instead of covers. */
+  readonly artist?: ArtistImageSource;
 }
 
 /** What a menu needs to know about one kind of target. */
@@ -102,15 +105,16 @@ const KINDS: { readonly [K in ActionTarget["kind"]]: TargetKind<TargetOf<K>> } =
     }),
     goesTo: ({ album }) => ({ artistId: album.albumArtistId }),
   },
-  // Artists, genres and folders have no picture; their headings are text only.
   artist: {
     songs: ({ artist }) => itemSongs("artists", artist.id),
     heading: ({ artist }) => ({
       title: artist.name,
       subtitle: plural(artist.trackCount, "song"),
       covers: undefined,
+      artist,
     }),
   },
+  // Genres and folders have no picture; their headings are text only.
   playlist: {
     songs: ({ playlist }) => itemSongs("playlists", playlist.id),
     heading: ({ playlist }) => ({
@@ -307,6 +311,7 @@ function ActionsMenu({ target, close }: { target: ActionTarget; close: () => voi
         style={{ paddingBottom: CELL * 1.5, gap: CELL * 1.5 }}
       >
         {head.covers !== undefined && <Mosaic paths={head.covers} size={CELL * 5} />}
+        {head.artist !== undefined && <ArtistImage artist={head.artist} size={CELL * 5} />}
         <View className="flex-1">
           <Text numberOfLines={1} className="font-sans text-body font-medium text-foreground">
             {head.title}

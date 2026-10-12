@@ -1,8 +1,9 @@
 import { LegendList } from "@legendapp/list/react-native";
 import { useLocalSearchParams } from "expo-router";
 import { useCallback, useMemo } from "react";
-import { View } from "react-native";
+import { Text, useWindowDimensions, View } from "react-native";
 
+import { ArtistImage } from "@/catalog/ArtistImage";
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { TrackRow } from "@/catalog/TrackRow";
@@ -14,7 +15,7 @@ import { albumPairs, albumRowHeight, AlbumPair, useAlbumTileSize } from "@/libra
 import { DetailFrame } from "@/library/DetailFrame";
 import { useFavoriteIds } from "@/library/favorites";
 import { useArtist } from "@/library/hooks";
-import type { AlbumRow, ArtistDetail, SongRow } from "@/library/LibraryStore";
+import type { AlbumRow, ArtistDetail, ArtistRow, SongRow } from "@/library/LibraryStore";
 import { parseId } from "@/library/routes";
 import { SongSortButton } from "@/library/SongSortButton";
 import { useSortedSongs } from "@/library/songSort";
@@ -53,6 +54,26 @@ const itemKey = (item: Item): string => {
       return `track-${item.song.id}`;
   }
 };
+
+/** The artist page's head: their image as a large circle, then their name. */
+function ArtistHead({ artist }: { artist: ArtistRow }) {
+  const { width } = useWindowDimensions();
+  // Three fifths of the content width, on the cell grid.
+  const size = Math.floor(((width - grid.margin * 2) * 0.6) / CELL) * CELL;
+  return (
+    <View className="items-center" style={{ gap: CELL * 2, paddingBottom: CELL * 2 }}>
+      <ArtistImage artist={artist} size={size} large />
+      <Text
+        accessibilityRole="header"
+        numberOfLines={2}
+        className="text-center font-sans text-title1 font-light text-foreground"
+        style={{ letterSpacing: -0.4 }}
+      >
+        {artist.name}
+      </Text>
+    </View>
+  );
+}
 
 const albumsLine = (count: number): string => `${count} ${count === 1 ? "album" : "albums"}`;
 
@@ -126,6 +147,7 @@ function ArtistContent({ detail }: { detail: ArtistDetail }) {
       contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottomInset }}
       ListHeaderComponent={
         <>
+          <ArtistHead artist={detail.artist} />
           <ListIntro
             line={line}
             songs={songs}
@@ -144,7 +166,7 @@ export default function ArtistScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const detail = useArtist(parseId(id));
   return (
-    <DetailFrame detail={detail} noun="artist" title={(artist) => artist.artist.name}>
+    <DetailFrame detail={detail} noun="artist">
       {(artist) => <ArtistContent detail={artist} />}
     </DetailFrame>
   );
