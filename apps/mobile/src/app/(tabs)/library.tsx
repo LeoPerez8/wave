@@ -13,7 +13,7 @@ import { LargeTitleScreen } from "@/components/LargeTitleScreen";
 import { ScanProgressBanner } from "@/components/ScanProgressBanner";
 import { TextButton } from "@/components/TextButton";
 import { folderPhrase } from "@/library/folderPhrase";
-import { useScanRoots, useScanState, useTrackCount } from "@/library/hooks";
+import { useLibraryCounts, useScanRoots, useScanState, useTrackCount } from "@/library/hooks";
 import { promptForMusicFolder } from "@/library/promptForMusicFolder";
 import { RescanRefreshControl } from "@/library/RescanRefreshControl";
 
@@ -24,6 +24,7 @@ export default function LibraryScreen() {
   const scan = useScanState();
   const trackCount = useTrackCount();
   const roots = useScanRoots();
+  const counts = useLibraryCounts();
   const empty = scan.status === "done" && trackCount === 0;
 
   return (
@@ -50,7 +51,7 @@ export default function LibraryScreen() {
         <EntryRow
           key={section.slug}
           label={section.label}
-          count={section.slug === "songs" ? (trackCount ?? undefined) : undefined}
+          count={counts?.[section.slug]}
           onPress={() => router.push(`/library/${section.slug}`)}
         />
       ))}

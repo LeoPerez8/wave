@@ -5,6 +5,7 @@ import { AppState } from "react-native";
 import { WaveNative } from "@/native/waveNative";
 import { playHistoryVersion } from "@/playback/PlayHistory";
 
+import type { LibraryCounts } from "./db/counts";
 import type { HomeSections } from "./db/playHistory";
 import { libraryVersion, scanState, type ScanState } from "./LibraryScan";
 import {
@@ -131,6 +132,20 @@ export const useSongs = (): readonly SongRow[] => useLibraryQuery(listSongs, NO_
 
 /** Number of tracks in the library, or null before the first count arrives. */
 export const useTrackCount = (): number | null => useLibraryQuery<number | null>(countTracks, null);
+
+const countLibrary = LibraryStore.use((store) => store.countLibrary);
+
+/**
+ * How many items each Library entry holds, or undefined before the first count
+ * arrives. Re-counted as soon as a playlist is edited or a star is saved.
+ */
+export const useLibraryCounts = (): LibraryCounts | undefined =>
+  useLibraryQuery<LibraryCounts | undefined>(
+    countLibrary,
+    undefined,
+    // Both only ever go up, so their sum changes whenever either does.
+    usePlaylistsVersion() + useFavoritesSaved(),
+  );
 
 const listRoots = Effect.gen(function* () {
   const store = yield* LibraryStore;
