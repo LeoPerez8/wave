@@ -18,7 +18,7 @@
  */
 
 import type { QueueContext } from "./queue.ts";
-import { compareAlbumTracks } from "./library.ts";
+import { compareAlbumTracks, compareStrings } from "./library.ts";
 
 /** Auto's tabs: the root's children, in order. */
 export type AutoTab = "home" | "playlists" | "albums" | "artists";
@@ -44,7 +44,10 @@ export interface AutoTrack {
 }
 
 /** The kinds of track list Auto can open or play. */
-export type AutoTrackListKind = "album";
+export type AutoTrackListKind =
+  | "album"
+  /** Every song by an artist or on their albums (the artist's Shuffle all). */
+  | "artistSongs";
 
 /**
  * A list of tracks Auto plays as one context: its Shuffle item plays it
@@ -61,7 +64,12 @@ interface TrackListKind {
   readonly context: (id: string) => QueueContext;
   /** The list's tracks in list order (a new array). */
   readonly order: (tracks: readonly AutoTrack[]) => readonly AutoTrack[];
+  /** The title of its Shuffle item, when not "Shuffle". */
+  readonly shuffleTitle?: string;
 }
+
+const compareSongTitles = (a: AutoTrack, b: AutoTrack): number =>
+  compareStrings(a.titleSort, b.titleSort) || compareStrings(a.path, b.path);
 
 /** One entry per track list kind; the media ID segment is the kind itself. */
 const TRACK_LISTS: Record<AutoTrackListKind, TrackListKind> = {
@@ -69,6 +77,14 @@ const TRACK_LISTS: Record<AutoTrackListKind, TrackListKind> = {
     context: (id) => ({ kind: "album", id }),
     // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
     order: (tracks) => [...tracks].sort(compareAlbumTracks),
+  },
+  // Not `artist`: that segment names the browsable artist.
+  artistSongs: {
+    context: (id) => ({ kind: "artist", id }),
+    // By title, as the artist screen lists them.
+    // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
+    order: (tracks) => [...tracks].sort(compareSongTitles),
+    shuffleTitle: "Shuffle all",
   },
 };
 
@@ -92,7 +108,9 @@ export type AutoNode =
       readonly list: AutoTrackList;
       readonly index: number;
       readonly trackId: string;
-    };
+    }
+  /** An artist to open: Shuffle all, then their albums. `id` is the artist id. */
+  | { readonly type: "artist"; readonly id: string };
 
 const ROOT_ID = "root";
 
@@ -113,6 +131,8 @@ export const encodeAutoMediaId = (node: AutoNode): string => {
         return [node.list.kind, node.list.id, "shuffle"];
       case "track":
         return [node.list.kind, node.list.id, "track", String(node.index), node.trackId];
+      case "artist":
+        return ["artist", node.id];
     }
   })();
   return segments.map(encodeURIComponent).join("/");
@@ -133,6 +153,9 @@ export const decodeAutoMediaId = (mediaId: string): AutoNode | null => {
   if (head === "tab") {
     const tab = AUTO_TABS.find((candidate) => candidate === rest[0]);
     return tab !== undefined && rest.length === 1 ? { type: "tab", tab } : null;
+  }
+  if (head === "artist") {
+    return rest.length === 1 && rest[0] !== "" ? { type: "artist", id: rest[0] ?? "" } : null;
   }
   if (!isTrackListKind(head)) return null;
   const [id = "", what, index = "", trackId = "", ...more] = rest;
@@ -183,6 +206,10 @@ export const AUTO_ROOT: AutoItem = folder({ type: "root" }, "Wave");
 export type AutoSource =
   /** Every album, in Library order. */
   | { readonly type: "albums" }
+  /** Every artist with songs, in Library order (leading articles and accents ignored). */
+  | { readonly type: "artists" }
+  /** The albums an artist's screen shows: theirs, then the ones they appear on. */
+  | { readonly type: "artistAlbums"; readonly id: string }
   /** A track list's tracks: the app loads all of them, `autoTrackItems` orders and pages them. */
   | { readonly type: "tracks"; readonly list: AutoTrackList };
 
@@ -209,10 +236,11 @@ const tabChildren = (tab: AutoTab): Listing => {
   switch (tab) {
     case "albums":
       return { items: [], source: { type: "albums" } };
+    case "artists":
+      return { items: [], source: { type: "artists" } };
     // Filled by their own tickets.
     case "home":
     case "playlists":
-    case "artists":
       return { items: [], source: null };
   }
 };
@@ -220,7 +248,7 @@ const tabChildren = (tab: AutoTab): Listing => {
 const tabItem = (tab: AutoTab): AutoItem => folder({ type: "tab", tab }, TAB_TITLES[tab]);
 
 const shuffleItem = (list: AutoTrackList): AutoItem =>
-  playable({ type: "shuffle", list }, "Shuffle");
+  playable({ type: "shuffle", list }, TRACK_LISTS[list.kind].shuffleTitle ?? "Shuffle");
 
 const listing = (node: AutoNode): Listing | null => {
   switch (node.type) {
@@ -233,6 +261,11 @@ const listing = (node: AutoNode): Listing | null => {
     case "shuffle":
     case "track":
       return null;
+    case "artist":
+      return {
+        items: [shuffleItem({ kind: "artistSongs", id: node.id })],
+        source: { type: "artistAlbums", id: node.id },
+      };
   }
 };
 
@@ -251,6 +284,7 @@ export const autoItem = (node: AutoNode): AutoItem | null => {
       return shuffleItem(node.list);
     case "list":
     case "track":
+    case "artist":
       return null;
   }
 };
@@ -359,3 +393,13 @@ export const autoChildren = (
         : { source: children.source, offset: from - fixed, limit },
   };
 };
+
+/** What an artist row needs to show in Auto. */
+export interface AutoArtist {
+  readonly id: number;
+  readonly name: string;
+}
+
+/** An artist in a list (the Artists tab): opens Shuffle all and their albums. */
+export const autoArtistItem = (artist: AutoArtist): AutoItem =>
+  folder({ type: "artist", id: String(artist.id) }, artist.name);

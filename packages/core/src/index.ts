@@ -140,3 +140,5 @@ export type {
   AutoTrackList,
   AutoTrackListKind,
 } from "./auto.ts";
+export { autoArtistItem } from "./auto.ts";
+export type { AutoArtist } from "./auto.ts";

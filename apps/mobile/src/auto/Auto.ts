@@ -1,6 +1,7 @@
 import {
   AUTO_ROOT,
   autoAlbumItem,
+  autoArtistItem,
   autoChildren,
   autoItem,
   autoPlayList,
@@ -75,6 +76,8 @@ export const layer = Layer.effect(
     > = {
       album: (id) =>
         store.getAlbum(Number(id)).pipe(Effect.map((detail) => detail?.tracks ?? null)),
+      artistSongs: (id) =>
+        store.getArtist(Number(id)).pipe(Effect.map((detail) => detail?.songs ?? null)),
     };
 
     const songsOf = (list: AutoTrackList) =>
@@ -93,6 +96,24 @@ export const layer = Layer.effect(
           return store
             .listAlbumsPage(offset, limit)
             .pipe(Effect.map((albums) => albums.map(autoAlbumItem)));
+        case "artists":
+          return store
+            .listArtistsPage(offset, limit)
+            .pipe(Effect.map((artists) => artists.map(autoArtistItem)));
+        case "artistAlbums":
+          return store
+            .getArtist(Number(source.id))
+            .pipe(
+              Effect.flatMap((detail) =>
+                detail === null
+                  ? notFound
+                  : Effect.succeed(
+                      [...detail.albums, ...detail.appearsOn]
+                        .slice(offset, offset + limit)
+                        .map(autoAlbumItem),
+                    ),
+              ),
+            );
         case "tracks":
           return songsOf(source.list).pipe(
             Effect.map((songs) =>
@@ -124,6 +145,10 @@ export const layer = Layer.effect(
               return detail === null ? yield* notFound : autoAlbumItem(detail.album);
             }
           }
+        }
+        if (node.type === "artist") {
+          const detail = yield* store.getArtist(Number(node.id));
+          return detail === null ? yield* notFound : autoArtistItem(detail.artist);
         }
         if (node.type === "track") {
           const songs = yield* songsOf(node.list);
