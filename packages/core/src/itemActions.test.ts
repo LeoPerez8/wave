@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  confirmsFirst,
   isDestructiveAction,
   ITEM_ACTION_LABELS,
   itemActions,
@@ -46,6 +47,13 @@ describe("itemActions", () => {
       ["delete"],
     );
     assert.ok(!names(itemActions({ kind: "album", items: [{}], here: "/" })).includes("delete"));
+  });
+
+  test("Delete asks first, so the selection only ends once it's confirmed", () => {
+    assert.deepEqual(
+      Object.keys(ITEM_ACTION_LABELS).filter((action) => confirmsFirst(action as ItemAction)),
+      ["delete"],
+    );
   });
 
   test("a starred song offers Remove from Favorites instead", () => {
