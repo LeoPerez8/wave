@@ -191,6 +191,7 @@ export type {
 } from "./themeChoice.ts";
 export { sliderFraction, sliderValueAt, snapSliderValue, stepSlider } from "./slider.ts";
 export type { SliderRange } from "./slider.ts";
+export { LONG_PRESS_DELAY, readLongPressDelay, snapLongPressDelay } from "./longPress.ts";
 export {
   DEFAULT_GLASS_SETTINGS,
   GLASS_SETTINGS,
