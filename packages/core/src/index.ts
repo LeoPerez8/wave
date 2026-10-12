@@ -222,3 +222,5 @@ export {
   writeSongSort,
 } from "./songSort.ts";
 export type { SongListKind, SongSort, SongSortKey, SortableSong } from "./songSort.ts";
+export { underlineMotion, wavePath } from "./wavyUnderline.ts";
+export type { UnderlineMotion, UnderlineMotionInput, WaveShape } from "./wavyUnderline.ts";
