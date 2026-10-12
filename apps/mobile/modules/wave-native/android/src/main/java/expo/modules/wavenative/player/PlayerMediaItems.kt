@@ -41,8 +41,11 @@ object PlayerMediaItems {
       .build()
   }
 
-  /** The extras key holding the artwork file, for the app's own UI. */
-  private const val ARTWORK_PATH = "expo.modules.wavenative.ARTWORK_PATH"
+  /**
+   * The extras key holding the artwork file, for the app's own UI and the
+   * resume snapshot ([ResumeStore]), which rebuilds items through [build].
+   */
+  const val ARTWORK_PATH = "expo.modules.wavenative.ARTWORK_PATH"
 
   /**
    * The artwork URI the app shows for an item: its cached file, as the app's

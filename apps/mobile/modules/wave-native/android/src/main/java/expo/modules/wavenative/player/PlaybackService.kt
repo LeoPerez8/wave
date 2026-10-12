@@ -41,6 +41,10 @@ import com.google.common.util.concurrent.ListenableFuture
  * headless first when Wave isn't running ([JsRuntime]). Auto's play requests
  * go to JS too, whose queue engine answers with the items to play
  * ([SessionCallback.onSetMediaItems]).
+ *
+ * The player's state is kept on disk ([ResumeStore]), so after Wave's process
+ * died, Auto and the system media controls can resume the last queue before
+ * JS is up ([SessionCallback.onPlaybackResumption]).
  */
 class PlaybackService : MediaLibraryService() {
   private var session: MediaLibrarySession? = null
@@ -98,9 +102,35 @@ class PlaybackService : MediaLibraryService() {
     }
   }
 
+  /** Keeps the resume snapshot up to date with the player. */
+  private val resumeListener = object : Player.Listener {
+    override fun onEvents(player: Player, events: Player.Events) {
+      if (events.contains(Player.EVENT_TIMELINE_CHANGED)) {
+        ResumeStore.savePlayer(player, withItems = true)
+      } else if (events.containsAny(*RESUME_EVENTS)) {
+        ResumeStore.savePlayer(player, withItems = false)
+      }
+    }
+
+    override fun onIsPlayingChanged(isPlaying: Boolean) {
+      main.removeCallbacks(resumePositionSave)
+      if (isPlaying) main.postDelayed(resumePositionSave, RESUME_SAVE_INTERVAL_MS)
+    }
+  }
+
+  /** Brings the snapshot's position up to date while playing, should the process die. */
+  private val resumePositionSave: Runnable = object : Runnable {
+    override fun run() {
+      val player = exoPlayer ?: return
+      ResumeStore.savePlayer(player, withItems = false)
+      if (player.isPlaying) main.postDelayed(this, RESUME_SAVE_INTERVAL_MS)
+    }
+  }
+
   @OptIn(UnstableApi::class)
   override fun onCreate() {
     super.onCreate()
+    ResumeStore.init(this)
     val player = ExoPlayer.Builder(this, WaveRenderersFactory(this))
       .setAudioAttributes(
         AudioAttributes.Builder()
@@ -113,6 +143,7 @@ class PlaybackService : MediaLibraryService() {
       .setWakeMode(C.WAKE_MODE_LOCAL)
       .build()
     player.addListener(sleepTimerListener)
+    player.addListener(resumeListener)
     exoPlayer = player
     session = MediaLibrarySession.Builder(this, player, SessionCallback())
       .apply { openAppIntent()?.let(::setSessionActivity) }
@@ -172,6 +203,8 @@ class PlaybackService : MediaLibraryService() {
     browsers.clear()
     JsRuntime.release()
     main.removeCallbacks(sleepCheck)
+    main.removeCallbacks(resumePositionSave)
+    exoPlayer?.let { ResumeStore.savePlayer(it, withItems = false) }
     exoPlayer = null
     session?.run {
       player.release()
@@ -326,6 +359,44 @@ class PlaybackService : MediaLibraryService() {
     }
 
     /**
+     * Resumes the last queue from the snapshot ([ResumeStore]) when a
+     * controller asks to play with nothing loaded: Auto or the system media
+     * controls after Wave's process died, before JS is up. The queue JS saved
+     * with it is kept for JS to adopt when it comes up (see [QueueSnapshot]).
+     */
+    override fun onPlaybackResumption(
+      mediaSession: MediaSession,
+      controller: MediaSession.ControllerInfo,
+      isForPlayback: Boolean,
+    ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+      val byAuto = mediaSession.isAutoCompanionController(controller) ||
+        mediaSession.isAutomotiveController(controller)
+      if (byAuto) keepJsFor(controller)
+      return Futures.transform(
+        ResumeStore.load(),
+        { snapshot ->
+          val resumption = PlaybackResumption.plan(snapshot, byAuto) {
+            PlayerMediaItems.build(it.id, it.path, it.title, it.artist, it.album, it.artworkPath)
+          } ?: throw UnsupportedOperationException("Nothing to resume")
+          if (isForPlayback) {
+            mediaSession.player.repeatMode = resumption.repeatMode
+            mediaSession.player.shuffleModeEnabled = false
+            // Auto's buttons show the resumed modes before JS is up to publish them.
+            snapshot?.let { saved ->
+              AutoModes.fromJs(saved.shuffle, saved.repeat)?.let(AutoModes.state::publish)
+            }
+            QueueSnapshot.json = snapshot?.queueJson
+            QueueSnapshot.source = resumption.source
+            QueueSnapshot.resumed = true
+          }
+          Log.i(JsRuntime.LOG_TAG, "Resuming ${resumption.items.size} items at ${resumption.startIndex}")
+          MediaSession.MediaItemsWithStartPosition(resumption.items, resumption.startIndex, resumption.positionMs)
+        },
+        mainExecutor,
+      )
+    }
+
+    /**
      * Items from a controller may arrive without their local configuration; Wave
      * puts the file URI in the request metadata so the session can rebuild it.
      */
@@ -340,5 +411,17 @@ class PlaybackService : MediaLibraryService() {
           if (item.localConfiguration != null || uri == null) item else item.buildUpon().setUri(uri).build()
         },
       )
+  }
+
+  private companion object {
+    /** Player changes that move the snapshot's current item, position or repeat. */
+    val RESUME_EVENTS = intArrayOf(
+      Player.EVENT_MEDIA_ITEM_TRANSITION,
+      Player.EVENT_IS_PLAYING_CHANGED,
+      Player.EVENT_POSITION_DISCONTINUITY,
+      Player.EVENT_REPEAT_MODE_CHANGED,
+    )
+
+    const val RESUME_SAVE_INTERVAL_MS = 10_000L
   }
 }

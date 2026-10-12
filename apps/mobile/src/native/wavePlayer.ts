@@ -1,4 +1,4 @@
-import type { SleepTimer } from "@wave/core";
+import type { PlaySource, SleepTimer } from "@wave/core";
 import { NativeModule, requireNativeModule } from "expo";
 
 /** One track handed to the native player (`modules/wave-native`, `WavePlayerModule`). */
@@ -140,8 +140,19 @@ declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
   setModes(shuffle: boolean, repeat: "off" | "all" | "one"): Promise<void>;
   getItemIds(): Promise<NativeItemIds>;
   /** Keeps the queue (JSON) in the native process, for when JS restarts. */
-  saveQueue(json: string): void;
+  /**
+   * Keeps the queue (JSON) in the native process, for when JS restarts, and on
+   * disk with where it was started from, for a cold start (playback resumption).
+   */
+  saveQueue(json: string, source: PlaySource): void;
   savedQueue(): string | null;
+  /** Where the saved queue was started from; null before any was saved. */
+  savedQueueSource(): PlaySource | null;
+  /**
+   * Whether the player resumed the saved queue on its own after Wave's process
+   * died (its plays are new, not ones on record going on). Reading it clears it.
+   */
+  takeResumed(): boolean;
   play(): Promise<void>;
   pause(): Promise<void>;
   seekTo(positionMs: number): Promise<void>;

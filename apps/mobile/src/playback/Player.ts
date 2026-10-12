@@ -1,4 +1,4 @@
-import type { SleepTimer } from "@wave/core";
+import type { PlaySource, SleepTimer } from "@wave/core";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -69,8 +69,11 @@ export class Player extends Context.Service<
       repeat: "off" | "all" | "one",
     ) => Effect.Effect<void, PlayerError>;
     readonly getItemIds: Effect.Effect<NativeItemIds, PlayerError>;
-    readonly saveQueue: (json: string) => Effect.Effect<void>;
+    readonly saveQueue: (json: string, source: PlaySource) => Effect.Effect<void>;
     readonly savedQueue: Effect.Effect<string | null>;
+    readonly savedQueueSource: Effect.Effect<PlaySource | null>;
+    /** Whether the player resumed the saved queue on its own (a cold start); clears it. */
+    readonly takeResumed: Effect.Effect<boolean>;
     /** Calls `listener` for every item transition while the scope lives. */
     readonly onItemTransition: (
       listener: (event: ItemTransitionEvent) => void,
@@ -137,8 +140,10 @@ export const layer = Layer.effect(
       setModes: (shuffle, repeat) =>
         call("show shuffle and repeat", () => WavePlayer.setModes(shuffle, repeat)),
       getItemIds: call("read the queue", () => WavePlayer.getItemIds()),
-      saveQueue: (json) => Effect.sync(() => WavePlayer.saveQueue(json)),
+      saveQueue: (json, source) => Effect.sync(() => WavePlayer.saveQueue(json, source)),
       savedQueue: Effect.sync(() => WavePlayer.savedQueue()),
+      savedQueueSource: Effect.sync(() => WavePlayer.savedQueueSource()),
+      takeResumed: Effect.sync(() => WavePlayer.takeResumed()),
       onItemTransition: (listener) =>
         Effect.asVoid(
           Effect.acquireRelease(

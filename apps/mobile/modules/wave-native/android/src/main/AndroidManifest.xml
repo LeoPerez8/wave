@@ -22,6 +22,18 @@
       </intent-filter>
     </service>
 
+    <!--
+      Media buttons with nothing playing resume the last queue (playback resumption,
+      PlaybackService.onPlaybackResumption); Media3 requires it to be declared.
+    -->
+    <receiver
+      android:name="androidx.media3.session.MediaButtonReceiver"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.MEDIA_BUTTON" />
+      </intent-filter>
+    </receiver>
+
     <!-- Cached artwork as content URIs: Android Auto can't read Wave's files (ArtworkProvider). -->
     <provider
       android:name="expo.modules.wavenative.artwork.ArtworkProvider"
