@@ -153,7 +153,7 @@ export type {
   AutoTrackList,
   AutoTrackListKind,
 } from "./auto.ts";
-export { sectionSongs } from "./librarySections.ts";
+export { LIBRARY_SECTION_SLUGS, sectionSongs } from "./librarySections.ts";
 export type {
   LibrarySectionSlug,
   LibrarySectionSource,
@@ -165,6 +165,8 @@ export type { OverlayAnchor, OverlayRect } from "./overlay.ts";
 export type { OverlayAlign } from "./overlay.ts";
 export { moveSlide, slideEntry, slideTicks, startSlide } from "./slideToChoose.ts";
 export type { MenuSlide, SlidePoint } from "./slideToChoose.ts";
+export { SHORTCUT_TAB_CHOICES, parseShortcutTab, tabBarTabs } from "./shortcutTab.ts";
+export type { TabBarTab } from "./shortcutTab.ts";
 export { planAlert } from "./alert.ts";
 export type { AlertButton, AlertChoice, AlertPlan, AlertSpec } from "./alert.ts";
 export { DEFAULT_THEME, TONES, themeContrastIssues } from "./theme.ts";
@@ -201,3 +203,15 @@ export type {
   ListeningTotals,
   SongListening,
 } from "./listening.ts";
+export { ARTIST_MOST_PLAYED, artistStats } from "./artistStats.ts";
+export type { ArtistStats, ArtistStatsInput } from "./artistStats.ts";
+export {
+  DEFAULT_SONG_SORT,
+  readSongSort,
+  SONG_SORTS,
+  songSortLabel,
+  songSpineKeys,
+  sortSongs,
+  writeSongSort,
+} from "./songSort.ts";
+export type { SongSort, SongSortKey, SortableSong } from "./songSort.ts";

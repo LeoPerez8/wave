@@ -42,6 +42,12 @@ export const OVERLAY_PADDING = { horizontal: CELL * 3, vertical: CELL * 2 } as c
 /** Cards never grow wider than this (landscape, tablets). */
 const MAX_WIDTH = CELL * 56;
 
+/**
+ * The shortest an anchored card (a menu) shrinks to stay beside its row: its
+ * heading and a couple of entries. With less room it covers the row instead.
+ */
+const MIN_ANCHORED_HEIGHT = CELL * 20;
+
 /** How much smaller a card starts before it grows into place. */
 const ENTER_SCALE = 0.94;
 
@@ -61,7 +67,8 @@ export function OverlayHost({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!open) return undefined;
-    // Registered after the screens' own handlers, so it runs first.
+    // Runs before any screen's handler: screens register theirs through
+    // `addScreenBackHandler`, which steps aside while a card is open.
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
       const top = entries.findLast((entry) => !entry.closing);
       if (top !== undefined) dismissOverlay(top);
@@ -70,7 +77,7 @@ export function OverlayHost({ children }: { children: ReactNode }) {
     return () => subscription.remove();
   }, [open, entries]);
 
-  const top = entries.findLast((entry) => !entry.closing);
+  const frontmost = entries.findLast((entry) => !entry.closing);
 
   return (
     <>
@@ -83,14 +90,14 @@ export function OverlayHost({ children }: { children: ReactNode }) {
         {children}
       </View>
       {entries.map((entry) => (
-        <OverlayCard key={entry.id} entry={entry} top={entry === top} />
+        <OverlayCard key={entry.id} entry={entry} frontmost={entry === frontmost} />
       ))}
     </>
   );
 }
 
 /** One dimmed backdrop and its glass card, fading and growing in and out. */
-function OverlayCard({ entry, top }: { entry: OverlayEntry; top: boolean }) {
+function OverlayCard({ entry, frontmost }: { entry: OverlayEntry; frontmost: boolean }) {
   const window = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const keyboard = useKeyboardHeight();
@@ -110,7 +117,9 @@ function OverlayCard({ entry, top }: { entry: OverlayEntry; top: boolean }) {
     margin: grid.margin,
     maxWidth: MAX_WIDTH,
     cardHeight: cardHeight ?? 0,
-    ...(anchor === undefined ? {} : { anchor: { rect: anchor, gap: CELL }, chromeBottom }),
+    ...(anchor === undefined
+      ? {}
+      : { anchor: { rect: anchor, gap: CELL, minHeight: MIN_ANCHORED_HEIGHT }, chromeBottom }),
     align: entry.request.align,
     keyboard,
   });
@@ -139,10 +148,10 @@ function OverlayCard({ entry, top }: { entry: OverlayEntry; top: boolean }) {
 
   // Screen readers move into the card as it opens.
   useEffect(() => {
-    if (measured && top && !entry.closing && card.current !== null) {
+    if (measured && frontmost && !entry.closing && card.current !== null) {
       AccessibilityInfo.sendAccessibilityEvent(card.current, "focus");
     }
-  }, [measured, top, entry.closing]);
+  }, [measured, frontmost, entry.closing]);
 
   const veilStyle = useAnimatedStyle(() => ({ opacity: progress.get() }));
   const cardStyle = useAnimatedStyle(() => ({
@@ -154,7 +163,7 @@ function OverlayCard({ entry, top }: { entry: OverlayEntry; top: boolean }) {
     <View
       style={StyleSheet.absoluteFill}
       pointerEvents={entry.closing ? "none" : "box-none"}
-      importantForAccessibility={top ? "auto" : "no-hide-descendants"}
+      importantForAccessibility={frontmost ? "auto" : "no-hide-descendants"}
     >
       <Animated.View style={[StyleSheet.absoluteFill, veilStyle]}>
         <Pressable
@@ -167,14 +176,19 @@ function OverlayCard({ entry, top }: { entry: OverlayEntry; top: boolean }) {
       <Animated.View
         ref={card}
         accessibilityLabel={entry.request.label}
-        onLayout={(event) => setCardHeight(event.nativeEvent.layout.height)}
+        onLayout={(event) => {
+          // Placement needs the content's own height: a layout cut short by maxHeight isn't it.
+          const { height } = event.nativeEvent.layout;
+          if (!measured || height < frame.maxHeight - 1) setCardHeight(height);
+        }}
         style={[
           {
             position: "absolute",
             left: frame.left,
             top: frame.top,
             width: frame.width,
-            maxHeight: frame.maxHeight,
+            // The first, hidden layout is unbounded so the card shows its full height.
+            ...(measured ? { maxHeight: frame.maxHeight } : {}),
             borderRadius: OVERLAY_RADIUS,
             overflow: "hidden",
             paddingHorizontal: OVERLAY_PADDING.horizontal,

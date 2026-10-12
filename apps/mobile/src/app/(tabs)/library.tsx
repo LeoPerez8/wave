@@ -16,7 +16,7 @@ import { folderPhrase } from "@/library/folderPhrase";
 import { useLibraryCounts, useScanRoots, useScanState, useTrackCount } from "@/library/hooks";
 import { promptForMusicFolder } from "@/library/promptForMusicFolder";
 import { RescanRefreshControl } from "@/library/RescanRefreshControl";
-import { openLibrarySectionActions } from "@/playback/TrackActionsSheet";
+import { openLibrarySectionActions } from "@/playback/ActionsMenu";
 
 /** Empty cover slots stand in for Recently Added until the first scan. */
 const SLOT = CELL * 9;

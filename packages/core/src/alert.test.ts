@@ -4,16 +4,15 @@ import { describe, test } from "node:test";
 import { planAlert } from "./index.ts";
 
 describe("planAlert", () => {
-  test("a message has a single OK, which Back or a tap outside also chooses", () => {
+  test("a message has a single OK", () => {
     const plan = planAlert({
       title: "Wave is scanning",
       message: "You can add a folder once the scan finishes.",
     });
     assert.deepEqual(plan.buttons, [{ label: "OK", tone: "accent", choice: "dismiss" }]);
-    assert.equal(plan.dismissed, "dismiss");
   });
 
-  test("a confirmation shows Cancel then the destructive action, and Back or a tap outside cancels", () => {
+  test("a confirmation shows Cancel then the destructive action", () => {
     const plan = planAlert({
       title: "Delete Road Trip?",
       message: "Its songs stay in your library.",
@@ -23,7 +22,6 @@ describe("planAlert", () => {
       { label: "Cancel", tone: "accent", choice: "dismiss" },
       { label: "Delete", tone: "destructive", choice: "action" },
     ]);
-    assert.equal(plan.dismissed, "dismiss");
   });
 
   test("screen readers hear the title, then the message", () => {

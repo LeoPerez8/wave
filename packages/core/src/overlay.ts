@@ -3,12 +3,16 @@
  * card sits on screen, given its measured height.
  */
 
-export interface OverlayInsets {
+/** Four edges, in dp: how far in each one sits (insets), or where (a rect in the window). */
+interface Edges {
   readonly top: number;
   readonly bottom: number;
   readonly left: number;
   readonly right: number;
 }
+
+/** How far system bars (and cutouts) reach in from each edge of the window. */
+export type OverlayInsets = Edges;
 
 export interface OverlayCardInput {
   /** The app window, in dp. */
@@ -41,18 +45,19 @@ export interface OverlayCardInput {
 }
 
 /** A rectangle in the app window, in dp. */
-export interface OverlayRect {
-  readonly top: number;
-  readonly bottom: number;
-  readonly left: number;
-  readonly right: number;
-}
+export type OverlayRect = Edges;
 
 export interface OverlayAnchor {
   /** What the card opens next to, e.g. the long-pressed row. */
   readonly rect: OverlayRect;
   /** Space kept between the card and the anchor, in dp. */
   readonly gap: number;
+  /**
+   * The shortest the card gets to stay beside the anchor when it fits on
+   * neither side (its content scrolls), in dp. With less room than this on
+   * both sides it covers the anchor instead. 0 when absent.
+   */
+  readonly minHeight?: number;
 }
 
 export type OverlayAlign = "center" | "top";
@@ -91,26 +96,33 @@ export const placeOverlayCard = (input: OverlayCardInput): OverlayCardFrame => {
 
 /**
  * Below the anchor, or above it when the card wouldn't fit below; always a
- * margin clear of the system bars and the floating chrome.
+ * margin clear of the system bars and the floating chrome. Too tall for
+ * either side, it shrinks into the roomier one (down to the anchor's
+ * `minHeight`), so it never covers the anchor, nor the finger holding it.
  */
 const placeNextTo = (
   { window, insets, margin, maxWidth, cardHeight, chromeBottom = 0 }: OverlayCardInput,
-  { rect, gap }: OverlayAnchor,
+  { rect, gap, minHeight = 0 }: OverlayAnchor,
 ): OverlayCardFrame => {
   const areaWidth = window.width - insets.left - insets.right;
   const width = Math.min(areaWidth - margin * 2, maxWidth);
   const highest = insets.top + margin;
   const lowest = window.height - insets.bottom - chromeBottom - margin;
-  const maxHeight = lowest - highest;
-  const height = Math.min(cardHeight, maxHeight);
   const below = rect.bottom + gap;
-  const above = rect.top - gap - height;
-  // Where neither side has room, the roomier one wins and the card slides over the row.
+  const roomBelow = lowest - below;
+  const roomAbove = rect.top - gap - highest;
   const side =
-    below + height <= lowest || (above < highest && lowest - below >= rect.top - gap - highest)
+    cardHeight <= roomBelow || (cardHeight > roomAbove && roomBelow >= roomAbove)
       ? "below"
       : "above";
-  const top = Math.min(Math.max(side === "below" ? below : above, highest), lowest - height);
+  const room = side === "below" ? roomBelow : roomAbove;
+  // Where even the roomier side is cramped, the card may use the whole height and cover the anchor.
+  const maxHeight = cardHeight <= room || room >= minHeight ? room : lowest - highest;
+  const height = Math.min(cardHeight, maxHeight);
+  const top = Math.min(
+    Math.max(side === "below" ? below : rect.top - gap - height, highest),
+    lowest - height,
+  );
   // Centred on the anchor where the card is narrower than the screen (tablets, landscape).
   const leftmost = insets.left + margin;
   const rightmost = window.width - insets.right - margin - width;

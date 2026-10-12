@@ -74,7 +74,8 @@ describe("placeOverlayCard next to an anchor", () => {
       left: 24,
       top: 264,
       width: 364,
-      maxHeight: 811,
+      // The room below the row: content scrolls rather than run past it.
+      maxHeight: 603,
       side: "below",
     });
   });
@@ -91,14 +92,32 @@ describe("placeOverlayCard next to an anchor", () => {
     const frame = placeOverlayCard({ ...phone, cardHeight: 300, anchor, chromeBottom: 136 });
     assert.equal(frame.side, "above");
     assert.equal(frame.top, 142);
-    assert.equal(frame.maxHeight, 675);
+    assert.equal(frame.maxHeight, 386);
   });
 
-  test("a menu too tall for either side stays on screen, over the row, on the roomier side", () => {
+  test("a menu too tall for either side shrinks to fit the roomier side and scrolls", () => {
     const lower = placeOverlayCard({ ...phone, cardHeight: 600, anchor: near(400) });
-    assert.deepEqual([lower.side, lower.top], ["below", 267]);
+    assert.deepEqual([lower.side, lower.top, lower.maxHeight], ["below", 464, 403]);
     const higher = placeOverlayCard({ ...phone, cardHeight: 600, anchor: near(500) });
-    assert.deepEqual([higher.side, higher.top], ["above", 56]);
+    assert.deepEqual([higher.side, higher.top, higher.maxHeight], ["above", 56, 436]);
+  });
+
+  test("a menu shrinks beside its anchor only down to the anchor's least height", () => {
+    // A tall tile leaves 159 dp below it and 236 dp above.
+    const rect = { top: 300, bottom: 700, left: 0, right: 412 };
+    const roomy = placeOverlayCard({
+      ...phone,
+      cardHeight: 600,
+      anchor: { rect, gap: 8, minHeight: 200 },
+    });
+    assert.deepEqual([roomy.side, roomy.top, roomy.maxHeight], ["above", 56, 236]);
+    // Too little room on either side: the card covers the tile rather than shrink further.
+    const cramped = placeOverlayCard({
+      ...phone,
+      cardHeight: 600,
+      anchor: { rect, gap: 8, minHeight: 240 },
+    });
+    assert.deepEqual([cramped.side, cramped.top, cramped.maxHeight], ["above", 56, 811]);
   });
 
   test("a row half under the tab bar still gets a menu clear of it, above the row", () => {
