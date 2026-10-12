@@ -8,9 +8,13 @@
  * - a tab: add it to `AUTO_TABS` and `TAB_TITLES`, and describe its children in
  *   `tabChildren` (fixed items and/or an `AutoSource`);
  * - a track list (something with a Shuffle item and tracks that play it as
- *   their context): add a `TrackListKind` entry to `TRACK_LISTS`;
+ *   their context): add its kind to `AutoTrackListKind` and `TRACK_LISTS`;
  * - another browsable node (say, an artist): add an `AutoNode` variant, its
- *   segment in `encode`/`decode`, and its children in `autoChildren`.
+ *   segments in `encodeAutoMediaId`/`decodeAutoMediaId`, its children in
+ *   `listing` and, if it plays, its list in `autoPlayList`.
+ *
+ * The app side (`apps/mobile/src/auto/Auto.ts`) loads a source's rows in
+ * `fetch` and a track list's songs in `listSongs`.
  */
 
 import type { QueueContext } from "./queue.ts";
@@ -55,7 +59,7 @@ export interface AutoTrackList {
 interface TrackListKind {
   /** The play context the app uses for the same list. */
   readonly context: (id: string) => QueueContext;
-  /** Orders the list's tracks (in place-free fashion: returns a new array). */
+  /** The list's tracks in list order (a new array). */
   readonly order: (tracks: readonly AutoTrack[]) => readonly AutoTrack[];
 }
 

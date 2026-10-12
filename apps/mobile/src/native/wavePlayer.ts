@@ -87,19 +87,34 @@ export interface SleepTimerEvent {
  */
 export interface AutoRequestEvent {
   readonly id: number;
-  /** `root`: the browse root; `children`: one page of a node's children. */
-  readonly type: "root" | "children";
-  /** JSON: `{}` for `root`; `{ parentId, page, pageSize }` for `children`. */
+  readonly type: AutoRequest["type"];
+  /** JSON: the request's other fields (see `AutoRequest`). */
   readonly payload: string;
 }
 
-/** A browse tree node as JS answers it (JSON in `respondAuto`). */
-export interface AutoNode {
-  readonly mediaId: string;
-  readonly title: string;
-  readonly subtitle?: string;
-  readonly browsable: boolean;
-  readonly playable: boolean;
+/**
+ * An Auto request with its payload. Browse requests are answered with Core's
+ * `AutoItem` (or `AutoItem[]`) as JSON; `play` with an `AutoPlayback`.
+ */
+export type AutoRequest =
+  /** The browse root: an `AutoItem`. */
+  | { readonly type: "root" }
+  /** One page of a node's children: an `AutoItem[]`. */
+  | {
+      readonly type: "children";
+      readonly parentId: string;
+      readonly page: number;
+      readonly pageSize: number;
+    }
+  /** One node by media ID: an `AutoItem`. */
+  | { readonly type: "item"; readonly mediaId: string }
+  /** Auto played a node: start its queue and answer the items the session sets on the player. */
+  | { readonly type: "play"; readonly mediaId: string };
+
+/** The answer to a `play` request: the new player list and the item to start at. */
+export interface AutoPlayback {
+  readonly items: readonly PlayerItem[];
+  readonly startIndex: number;
 }
 
 type WavePlayerEvents = {
@@ -136,7 +151,7 @@ declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
    * the runtime was starting. Call it once a listener is in place.
    */
   attachAuto(): void;
-  /** Answers request `id`: an `AutoNode` for `root`, an `AutoNode[]` for `children`. */
+  /** Answers request `id` with JSON (see `AutoRequest`). */
   respondAuto(id: number, json: string): void;
   /** Answers request `id` with an error Auto shows as `message`. */
   failAuto(id: number, message: string): void;

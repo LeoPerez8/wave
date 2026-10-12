@@ -10,6 +10,7 @@ import * as PlayHistory from "@/playback/PlayHistory";
 import * as Player from "@/playback/Player";
 import * as Queue from "@/playback/Queue";
 import * as Stats from "@/stats/Stats";
+import * as Auto from "@/auto/Auto";
 
 import {
   chooseExcludedFolder,
@@ -36,6 +37,7 @@ export const appLayer = Layer.mergeAll(
   PlaybackPersistence.layer,
   PlayHistory.layer,
   Stats.layer,
+  Auto.layer,
 ).pipe(Layer.provideMerge(services));
 
 export const appRuntime = ManagedRuntime.make(appLayer);

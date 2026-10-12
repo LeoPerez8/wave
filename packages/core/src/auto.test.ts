@@ -237,6 +237,16 @@ describe("Auto queue start", () => {
   });
 });
 
+/** The titles on one page of [node], with its fetched tracks from `albumTracks`. */
+const albumPageTitles = (node: AutoNode, n: number, size: number): string[] => {
+  const children = autoChildren(node, n, size);
+  const fetched =
+    children?.fetch == null
+      ? []
+      : autoTrackItems(album, albumTracks, children.fetch.offset, children.fetch.limit);
+  return [...(children?.items ?? []), ...fetched].map((item) => item.title);
+};
+
 describe("Auto album", () => {
   const open = { type: "list", list: album } as const;
 
@@ -274,22 +284,17 @@ describe("Auto album", () => {
   });
 
   test("pages count the Shuffle item, so no track is skipped or repeated", () => {
-    const page = (n: number) => {
-      const children = autoChildren(open, n, 2);
-      const fetched =
-        children?.fetch == null
-          ? []
-          : autoTrackItems(album, albumTracks, children.fetch.offset, children.fetch.limit);
-      return [...(children?.items ?? []), ...fetched].map((item) => item.title);
-    };
-    assert.deepEqual(page(0), ["Shuffle", "Song 11"]);
-    assert.deepEqual(page(1), ["Song 12", "Song 13"]);
-    assert.deepEqual(page(2), ["Bonus", "Song 21"]);
-    assert.deepEqual(page(3), []);
+    assert.deepEqual(albumPageTitles(open, 0, 2), ["Shuffle", "Song 11"]);
+    assert.deepEqual(albumPageTitles(open, 1, 2), ["Song 12", "Song 13"]);
+    assert.deepEqual(albumPageTitles(open, 2, 2), ["Bonus", "Song 21"]);
+    assert.deepEqual(albumPageTitles(open, 3, 2), []);
   });
 
   test("Shuffle and tracks have no children", () => {
     assert.equal(autoChildren({ type: "shuffle", list: album }, 0, 10), null);
-    assert.equal(autoChildren({ type: "track", list: album, index: 0, trackId: "11" }, 0, 10), null);
+    assert.equal(
+      autoChildren({ type: "track", list: album, index: 0, trackId: "11" }, 0, 10),
+      null,
+    );
   });
 });
