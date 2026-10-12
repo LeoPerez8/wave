@@ -1,3 +1,4 @@
+import { DEFAULT_SONG_SORT } from "@wave/core";
 import { useLocalSearchParams } from "expo-router";
 import { useMemo } from "react";
 
@@ -16,7 +17,7 @@ function GenreSongs({ detail }: { detail: GenreDetail }) {
     <TrackList
       songs={detail.songs}
       context={context}
-      indexed
+      sort={DEFAULT_SONG_SORT}
       header={
         <ListIntro line={songCount(detail.songs.length)} songs={detail.songs} context={context} />
       }

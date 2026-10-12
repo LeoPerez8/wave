@@ -97,16 +97,21 @@ export interface SongRow {
   readonly artworkPath: string | null;
   /** Core sort key of the title (files the row on the A–Z spine). */
   readonly titleSort: string;
+  /** Core sort keys of the artist and album, for sorting song lists. */
+  readonly artistSort: string;
+  readonly albumSort: string;
+  /** When the file entered the library (epoch ms). */
+  readonly addedAt: number;
   readonly albumId: number;
   /** The track artist. */
   readonly artistId: number;
-}
-
-/** A track on an album screen, with what orders it there. */
-export interface AlbumTrackRow extends SongRow {
+  /** Orders the album's tracks, and so sorts by artist and by album. */
   readonly discNumber: number | null;
   readonly trackNumber: number | null;
 }
+
+/** A track on an album screen, with what orders it there. */
+export type AlbumTrackRow = SongRow;
 
 /** One album of the Albums grid (and of an artist's albums). */
 export interface AlbumRow {
