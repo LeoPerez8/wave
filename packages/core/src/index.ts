@@ -159,10 +159,10 @@ export type {
   LibrarySectionSource,
   SectionCollection,
 } from "./librarySections.ts";
-export { placeOverlayCard } from "./overlay.ts";
+export { cardKeyboard, placeOverlayCard } from "./overlay.ts";
 export type { OverlayCardFrame, OverlayCardInput, OverlayInsets } from "./overlay.ts";
 export type { OverlayAnchor, OverlayRect } from "./overlay.ts";
-export type { OverlayAlign } from "./overlay.ts";
+export type { CardKeyboard, OverlayAlign } from "./overlay.ts";
 export { moveSlide, slideEntry, slideTicks, startSlide } from "./slideToChoose.ts";
 export type { MenuSlide, SlidePoint } from "./slideToChoose.ts";
 export { SHORTCUT_TAB_CHOICES, parseShortcutTab, tabBarTabs } from "./shortcutTab.ts";
