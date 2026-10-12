@@ -205,10 +205,10 @@ describe("Per-album, per-track-artist play totals", () => {
   });
 });
 
-describe("Per-song listening over all time", () => {
-  const byTrack = (rows: ReturnType<typeof songListening>) =>
-    rows.toSorted((a, b) => a.trackId - b.trackId);
+const byTrack = (rows: ReturnType<typeof songListening>) =>
+  rows.toSorted((a, b) => a.trackId - b.trackId);
 
+describe("Per-song listening over all time", () => {
   test("sum every play's time, the counted plays and the latest play, with the track artist", () => {
     const so = addTrack(db, { title: "So What", artist: "Miles Davis" });
     const naima = addTrack(db, { title: "Naima", artist: "John Coltrane" });

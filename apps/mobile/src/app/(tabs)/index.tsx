@@ -8,6 +8,7 @@ import { Hairline } from "@/catalog/Hairline";
 import { EmptyState } from "@/components/EmptyState";
 import { LargeTitleScreen } from "@/components/LargeTitleScreen";
 import { AlbumShelf, ArtistRows, HomeSection, SongRows } from "@/home/HomeSections";
+import { ListeningOverview } from "@/home/ListeningOverview";
 import type { MostPlayedRow } from "@/library/db/playHistory";
 import { useHome } from "@/library/hooks";
 import { openStats, openStatsSeeAll } from "@/library/routes";
@@ -101,6 +102,8 @@ export default function HomeScreen() {
             <Hairline />
             <EntryRow label="Stats" onPress={openStats} />
           </View>
+          {/* Keep the overview last, below every other section. */}
+          <ListeningOverview />
         </>
       )}
       {/* Temporary entry to the glass spike (#4), kept until its numbers confirm the technique. */}
