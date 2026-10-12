@@ -1,5 +1,11 @@
 import { IconChartBar } from "@tabler/icons-react-native";
-import { STATS_RANKINGS, statsSeeAll, type StatsPeriod, type StatsSeeAll } from "@wave/core";
+import {
+  STATS_RANKINGS,
+  STATS_SEE_ALL,
+  statsSeeAll,
+  type StatsPeriod,
+  type StatsSeeAll,
+} from "@wave/core";
 import { useLocalSearchParams } from "expo-router";
 import { View } from "react-native";
 
@@ -7,7 +13,7 @@ import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { EmptyState } from "@/components/EmptyState";
 import { ScreenHeader } from "@/components/ScreenHeader";
-import { useAllTopAlbums, useAllTopArtists, useAllTopSongs } from "@/stats/hooks";
+import { useTopAlbums, useTopArtists, useTopSongs } from "@/stats/hooks";
 import {
   NothingPlayed,
   periodLabel,
@@ -34,7 +40,7 @@ function NothingPlayedHere({ period }: { period: StatsPeriod }) {
 }
 
 function AllTopSongs({ period }: { period: StatsPeriod }) {
-  const ranking = useAllTopSongs(period);
+  const ranking = useTopSongs(period, STATS_SEE_ALL);
   if (ranking === undefined) return null;
   if (ranking.length === 0) return <NothingPlayedHere period={period} />;
   return (
@@ -43,14 +49,14 @@ function AllTopSongs({ period }: { period: StatsPeriod }) {
 }
 
 function AllTopAlbums({ period }: { period: StatsPeriod }) {
-  const ranking = useAllTopAlbums(period);
+  const ranking = useTopAlbums(period, STATS_SEE_ALL);
   if (ranking === undefined) return null;
   if (ranking.length === 0) return <NothingPlayedHere period={period} />;
   return <RankedAlbumList ranking={ranking} header={<PeriodLine period={period} />} />;
 }
 
 function AllTopArtists({ period }: { period: StatsPeriod }) {
-  const ranking = useAllTopArtists(period);
+  const ranking = useTopArtists(period, STATS_SEE_ALL);
   if (ranking === undefined) return null;
   if (ranking.length === 0) return <NothingPlayedHere period={period} />;
   return <RankedArtistList ranking={ranking} header={<PeriodLine period={period} />} />;
