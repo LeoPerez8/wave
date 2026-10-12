@@ -1,6 +1,6 @@
 import * as Haptics from "expo-haptics";
 import { router, usePathname } from "expo-router";
-import { useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { Modal, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -8,6 +8,7 @@ import { EntryRow } from "@/catalog/EntryRow";
 import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { Mosaic } from "@/catalog/Mosaic";
+import type { LibrarySection } from "@/catalog/sections";
 import { setFavorite, useIsFavorite } from "@/library/favorites";
 import {
   LibraryStore,
@@ -24,6 +25,7 @@ import {
 import { removePlaylistItem } from "@/library/playlists";
 import { albumHref, artistHref, openAlbum, openArtist, playlistHref } from "@/library/routes";
 import { appRuntime } from "@/library/runtime";
+import { librarySectionSongs } from "@/library/sectionSongs";
 import { makeExternalStore } from "@/lib/externalStore";
 
 import { addToQueue, playNext } from "./actions";
@@ -44,7 +46,13 @@ export type ActionTarget =
     }
   | { readonly kind: "album"; readonly album: AlbumRow }
   | { readonly kind: "artist"; readonly artist: ArtistRow }
-  | { readonly kind: "playlist"; readonly playlist: PlaylistRow };
+  | { readonly kind: "playlist"; readonly playlist: PlaylistRow }
+  | {
+      readonly kind: "section";
+      readonly section: LibrarySection;
+      /** Every song the section holds, in its order; loading starts as the menu opens. */
+      readonly songs: Promise<readonly SongRow[]>;
+    };
 
 const openTarget = makeExternalStore<ActionTarget | null>(null);
 
@@ -62,6 +70,10 @@ export const openAlbumActions = (album: AlbumRow): void => openTarget.set({ kind
 /** Opens the long-press menu for an artist (their songs, in the artist screen's order). */
 export const openArtistActions = (artist: ArtistRow): void =>
   openTarget.set({ kind: "artist", artist });
+
+/** Opens the menu for a Library entry (Songs, Albums…): every song it holds, in its order. */
+export const openLibrarySectionActions = (section: LibrarySection): void =>
+  openTarget.set({ kind: "section", section, songs: librarySectionSongs(section.slug) });
 
 const close = (): void => openTarget.set(null);
 
@@ -82,6 +94,8 @@ export const targetSongs = (target: ActionTarget): Promise<readonly SongRow[]> =
       return appRuntime
         .runPromise(LibraryStore.use((store) => store.getPlaylist(target.playlist.id)))
         .then((detail) => detail?.items ?? []);
+    case "section":
+      return target.songs;
   }
 };
 
@@ -93,6 +107,8 @@ const cover = (thumbPath: string | null): readonly string[] =>
 
 const heading = (
   target: ActionTarget,
+  /** How many songs a Library entry holds, once known. */
+  songCount: number | undefined,
 ): { title: string; subtitle: string; covers: readonly string[] | undefined } => {
   switch (target.kind) {
     case "track":
@@ -120,6 +136,12 @@ const heading = (
         subtitle: plural(target.playlist.trackCount, "song"),
         covers: target.playlist.thumbPaths,
       };
+    case "section":
+      return {
+        title: target.section.label,
+        subtitle: songCount === undefined ? "" : plural(songCount, "song"),
+        covers: undefined,
+      };
   }
 };
 
@@ -132,9 +154,30 @@ const destinations = (target: ActionTarget): { albumId?: number; artistId?: numb
       return { artistId: target.album.albumArtistId };
     case "artist":
     case "playlist":
+    case "section":
       return {};
   }
 };
+
+/** How many songs a Library entry's menu acts on, once they have loaded. */
+function useSectionSongCount(target: ActionTarget | null): number | undefined {
+  const songs = target?.kind === "section" ? target.songs : undefined;
+  const [loaded, setLoaded] = useState<{ songs: Promise<unknown>; count: number }>();
+  useEffect(() => {
+    if (songs === undefined) return;
+    let live = true;
+    songs.then(
+      (list) => {
+        if (live) setLoaded({ songs, count: list.length });
+      },
+      () => {},
+    );
+    return () => {
+      live = false;
+    };
+  }, [songs]);
+  return loaded !== undefined && loaded.songs === songs ? loaded.count : undefined;
+}
 
 /** Favorite / Remove from Favorites for a track; stars stay in sync everywhere. */
 function FavoriteEntry({ song, onDone }: { song: SongRow; onDone: () => void }) {
@@ -152,7 +195,8 @@ function FavoriteEntry({ song, onDone }: { song: SongRow; onDone: () => void }) 
 }
 
 /**
- * The long-press menu for a track, an album, an artist or a playlist: what it
+ * The long-press menu for a track, an album, an artist, a playlist or a
+ * Library entry: what it
  * is, then one quiet line per action. Flat, square and set on the ground over
  * a 90% ground veil, like the spine's letter field. Mounted once at the root.
  */
@@ -160,6 +204,7 @@ export function TrackActionsSheet() {
   const target = useSyncExternalStore(openTarget.subscribe, openTarget.get);
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
+  const sectionSongCount = useSectionSongCount(target);
 
   const queue = (action: (songs: readonly SongRow[]) => void) => () => {
     if (target !== null) void targetSongs(target).then(action);
@@ -171,7 +216,7 @@ export function TrackActionsSheet() {
     open();
   };
 
-  const head = target === null ? null : heading(target);
+  const head = target === null ? null : heading(target, sectionSongCount);
   const { albumId, artistId } = target === null ? {} : destinations(target);
   const place = target?.kind === "track" ? target.playlistItem : undefined;
 
