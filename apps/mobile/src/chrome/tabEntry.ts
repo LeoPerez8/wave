@@ -1,3 +1,4 @@
+import { type TabBarTab, tabBarTabs } from "@wave/core";
 import { useCallback, useLayoutEffect, useRef } from "react";
 import {
   useAnimatedStyle,
@@ -7,10 +8,7 @@ import {
 } from "react-native-reanimated";
 
 import { ENTRY } from "@/motion/entry";
-
-/** The tabs in tab-bar order, which decides the side a switch slides in from. */
-export const TABS = ["index", "library", "search"] as const;
-export type TabName = (typeof TABS)[number];
+import { useShortcutTab } from "@/settings/shortcutTab";
 
 /**
  * The style for the view holding the tab screens: after a tapped switch the
@@ -18,12 +16,13 @@ export type TabName = (typeof TABS)[number];
  * calls `noteTap` before switching, so only a tap animates: launching, deep
  * links and Back switch without motion.
  */
-export function useTabEntry(tab: TabName | null) {
+export function useTabEntry(tab: TabBarTab | null) {
   const reduceMotion = useReducedMotion();
+  const shortcut = useShortcutTab();
   const progress = useSharedValue(1);
   const side = useSharedValue(0);
   const previous = useRef(tab);
-  const tapped = useRef<TabName | null>(null);
+  const tapped = useRef<TabBarTab | null>(null);
 
   useLayoutEffect(() => {
     const from = previous.current;
@@ -32,14 +31,15 @@ export function useTabEntry(tab: TabName | null) {
     const wasTapped = tab !== null && tapped.current === tab;
     tapped.current = null;
     if (!wasTapped || from === null) return;
-    side.set(reduceMotion ? 0 : Math.sign(TABS.indexOf(tab) - TABS.indexOf(from)));
+    const order = tabBarTabs(shortcut);
+    side.set(reduceMotion ? 0 : Math.sign(order.indexOf(tab) - order.indexOf(from)));
     progress.set(0);
     progress.set(
       withTiming(1, { duration: reduceMotion ? ENTRY.fadeMs : ENTRY.slideMs, easing: ENTRY.ease }),
     );
-  }, [tab, reduceMotion, progress, side]);
+  }, [tab, shortcut, reduceMotion, progress, side]);
 
-  const noteTap = useCallback((to: TabName) => {
+  const noteTap = useCallback((to: TabBarTab) => {
     tapped.current = to;
   }, []);
 

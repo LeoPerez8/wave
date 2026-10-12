@@ -9,10 +9,16 @@ import { desc, eq, inArray, max, sql } from "drizzle-orm";
 import type { AlbumRow, SongRow } from "../LibraryStore.ts";
 import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
+import { BY_TITLE, songColumns } from "./tracks.ts";
 
 /** A Most Played song with its number of counted plays. */
 export interface MostPlayedRow extends SongRow {
   readonly playCount: number;
+}
+
+/** A starred song, with when it was starred (Favorites can be sorted by it). */
+export interface FavoriteRow extends SongRow {
+  readonly starredAt: number;
 }
 
 export interface HomeSections {
@@ -149,21 +155,6 @@ const recentlyPlayedAlbums = (db: LibraryDatabase): AlbumRow[] => {
   return albumsInOrder(db, ids);
 };
 
-/** What every track list shows (a `SongRow`). */
-const songColumns = {
-  id: schema.tracks.id,
-  path: schema.tracks.path,
-  title: schema.tracks.title,
-  artist: schema.artists.name,
-  album: schema.albums.title,
-  durationMs: schema.tracks.durationMs,
-  thumbPath: schema.artwork.thumbPath,
-  artworkPath: schema.artwork.path,
-  titleSort: schema.tracks.titleSort,
-  albumId: schema.tracks.albumId,
-  artistId: schema.tracks.artistId,
-};
-
 const mostPlayedSongs = (db: LibraryDatabase): MostPlayedRow[] => {
   const { playEvents, tracks, artists, albums, artwork } = schema;
   const playCount = sql<number>`count(*)`;
@@ -192,6 +183,20 @@ const recentFavorites = (db: LibraryDatabase): SongRow[] => {
     .leftJoin(artwork, eq(tracks.artworkHash, artwork.hash))
     .orderBy(desc(favorites.addedAt), desc(favorites.trackId))
     .limit(LIST)
+    .all();
+};
+
+/** Library › Favorites: starred songs with when each was starred, the most recent first. */
+export const listFavorites = (db: LibraryDatabase): FavoriteRow[] => {
+  const { favorites, tracks, artists, albums, artwork } = schema;
+  return db
+    .select({ ...songColumns, starredAt: favorites.addedAt })
+    .from(favorites)
+    .innerJoin(tracks, eq(favorites.trackId, tracks.id))
+    .innerJoin(artists, eq(tracks.artistId, artists.id))
+    .innerJoin(albums, eq(tracks.albumId, albums.id))
+    .leftJoin(artwork, eq(tracks.artworkHash, artwork.hash))
+    .orderBy(desc(favorites.addedAt), ...BY_TITLE)
     .all();
 };
 

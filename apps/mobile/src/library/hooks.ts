@@ -1,3 +1,4 @@
+import { listeningOverview, listeningTotals, type ListeningOverview } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { AppState } from "react-native";
@@ -5,6 +6,7 @@ import { AppState } from "react-native";
 import { WaveNative } from "@/native/waveNative";
 import { playHistoryVersion } from "@/playback/PlayHistory";
 
+import type { LibraryCounts } from "./db/counts";
 import type { HomeSections } from "./db/playHistory";
 import { libraryVersion, scanState, type ScanState } from "./LibraryScan";
 import {
@@ -14,6 +16,7 @@ import {
   type ArtistDetail,
   type ArtistRow,
   type FolderDetail,
+  type FavoriteRow,
   type FolderRow,
   type GenreDetail,
   type GenreRow,
@@ -132,6 +135,33 @@ export const useSongs = (): readonly SongRow[] => useLibraryQuery(listSongs, NO_
 /** Number of tracks in the library, or null before the first count arrives. */
 export const useTrackCount = (): number | null => useLibraryQuery<number | null>(countTracks, null);
 
+const countLibrary = LibraryStore.use((store) => store.countLibrary);
+
+/**
+ * How many items each Library entry holds, or undefined before the first count
+ * arrives. Re-counted as soon as a playlist is edited or a star is saved.
+ */
+export const useLibraryCounts = (): LibraryCounts | undefined =>
+  useLibraryQuery<LibraryCounts | undefined>(
+    countLibrary,
+    undefined,
+    // Both only ever go up, so their sum changes whenever either does.
+    usePlaylistsVersion() + useFavoritesSaved(),
+  );
+
+const countSectionSongs = LibraryStore.use((store) => store.countSectionSongs);
+
+/**
+ * How many songs each Library entry's menu acts on, or undefined before the
+ * first count arrives. Re-counted as `useLibraryCounts` is.
+ */
+export const useSectionSongCounts = (): LibraryCounts | undefined =>
+  useLibraryQuery<LibraryCounts | undefined>(
+    countSectionSongs,
+    undefined,
+    usePlaylistsVersion() + useFavoritesSaved(),
+  );
+
 const listRoots = Effect.gen(function* () {
   const store = yield* LibraryStore;
   return yield* store.listRoots;
@@ -207,8 +237,12 @@ export const usePlaylist = (id: number): PlaylistDetail | null | undefined => {
 };
 
 /** Library › Favorites: starred songs, most recently starred first. */
-export const useFavoriteSongs = (): readonly SongRow[] | undefined =>
-  useLibraryQuery<readonly SongRow[] | undefined>(listFavorites, undefined, useFavoritesSaved());
+export const useFavoriteSongs = (): readonly FavoriteRow[] | undefined =>
+  useLibraryQuery<readonly FavoriteRow[] | undefined>(
+    listFavorites,
+    undefined,
+    useFavoritesSaved(),
+  );
 
 const readHome = LibraryStore.use((store) => store.home);
 
@@ -223,4 +257,20 @@ export const useHome = (): HomeSections | undefined => {
     undefined,
     plays + useFavoritesSaved(),
   );
+};
+
+const readListeningOverview = LibraryStore.use((store) =>
+  Effect.map(Effect.all([store.countLibrary, store.songListening]), ([counts, songs]) =>
+    listeningOverview(counts, listeningTotals(songs)),
+  ),
+);
+
+/**
+ * Home's listening overview (library and all-time listening totals), or
+ * undefined while loading. Re-read after scan batches and as soon as a play
+ * starts or ends.
+ */
+export const useListeningOverview = (): ListeningOverview | undefined => {
+  const plays = useSyncExternalStore(playHistoryVersion.subscribe, playHistoryVersion.get);
+  return useLibraryQuery<ListeningOverview | undefined>(readListeningOverview, undefined, plays);
 };

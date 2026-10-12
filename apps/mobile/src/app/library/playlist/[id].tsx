@@ -7,7 +7,7 @@ import { Mosaic } from "@/catalog/Mosaic";
 import { PlayShuffle } from "@/catalog/PlayShuffle";
 import { IconButton } from "@/components/IconButton";
 import { playSongs } from "@/playback/actions";
-import { openPlaylistActions } from "@/playback/TrackActionsSheet";
+import { openPlaylistActions } from "@/playback/ActionsMenu";
 import { DetailFrame } from "@/library/DetailFrame";
 import { usePlaylist } from "@/library/hooks";
 import type { PlaylistDetail } from "@/library/LibraryStore";
@@ -55,6 +55,7 @@ function PlaylistHead({ detail }: { detail: PlaylistDetail }) {
           <IconButton
             icon={IconDots}
             label="Playlist actions"
+            opensMenu
             onPress={() => openPlaylistActions(playlist)}
           />
         </View>

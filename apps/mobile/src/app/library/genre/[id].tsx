@@ -5,6 +5,8 @@ import { DetailFrame } from "@/library/DetailFrame";
 import { useGenre } from "@/library/hooks";
 import type { GenreDetail } from "@/library/LibraryStore";
 import { parseId } from "@/library/routes";
+import { SongSortButton } from "@/library/SongSortButton";
+import { useSortedSongs } from "@/library/songSort";
 import { ListIntro, songCount, TrackList } from "@/library/TrackList";
 
 function GenreSongs({ detail }: { detail: GenreDetail }) {
@@ -12,19 +14,25 @@ function GenreSongs({ detail }: { detail: GenreDetail }) {
     () => ({ kind: "genre", id: String(detail.genre.id) }) as const,
     [detail.genre.id],
   );
+  const { sort, songs } = useSortedSongs("genre", detail.songs);
   return (
     <TrackList
-      songs={detail.songs}
+      songs={songs}
       context={context}
-      indexed
+      sort={sort}
       header={
-        <ListIntro line={songCount(detail.songs.length)} songs={detail.songs} context={context} />
+        <ListIntro
+          line={songCount(songs.length)}
+          songs={songs}
+          context={context}
+          sortControl={<SongSortButton kind="genre" />}
+        />
       }
     />
   );
 }
 
-/** A genre: its songs by title, with Play / Shuffle and the A–Z spine. */
+/** A genre: its songs in the sort chosen for genres (by title until then), with Play / Shuffle and the A–Z spine. */
 export default function GenreScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const detail = useGenre(parseId(id));

@@ -4,13 +4,20 @@
 /* ─── Colour tokens: The Quiet Catalog ──────────────────────────────────
  * Wave's world is a record label's catalog: artwork in calm, tinted fields
  * and small, exact type. The ground is never plain white or black: fog in
- * light, night slate in dark. Every neutral comes from one tonal ramp
- * (tone-0 lightest … tone-10 darkest, OKLCH hue 215); semantic tokens pick
- * steps from it, so there are no ad-hoc greys.
+ * light, deep night slate in dark. Every neutral comes from one tonal ramp
+ * (tone-0 lightest … tone-11 darkest, OKLCH hue 215); semantic tokens pick
+ * steps from it, so there are no ad-hoc greys. tone-11 is used only by dark
+ * mode: its ground sits there and cards, fills and separators climb one ramp
+ * step each from it, so light mode (whose text is tone-10) stays as it was.
+ *
+ * packages/core/src/theme.ts holds the same values (and the contrast checks);
+ * src/theme/tokens.test.ts fails if the two drift apart.
  *
  * Teal is the accent (active, progress, toggles); ember is the highlight
  * (favorites, now playing). Native props that can't take a className read
- * these with useThemeColor().
+ * these with useThemeColor(). These are the defaults: Settings › Theme
+ * overrides every value at runtime (src/settings/theme.ts, derived in Core's
+ * themeChoice.ts).
  */
 @layer theme {
   :root {
@@ -26,20 +33,24 @@
       --color-accent: #006a5f;
       --color-on-accent: #eff4f6;
       --color-highlight: #a14f09;
+      --color-destructive: #b3261e;
+      --color-scrim: #121b1d;
     }
 
     @variant dark {
-      --color-background: #121b1d;
-      --color-grouped: #121b1d;
-      --color-surface: #1c2628;
+      --color-background: #0a1113;
+      --color-grouped: #0a1113;
+      --color-surface: #121b1d;
       --color-foreground: #e0ecef;
       --color-secondary: #a5b0b3;
       --color-tertiary: #606b6e;
-      --color-separator: #293235;
-      --color-fill: #1c2628;
+      --color-separator: #1c2628;
+      --color-fill: #121b1d;
       --color-accent: #59c0ad;
-      --color-on-accent: #121b1d;
+      --color-on-accent: #0a1113;
       --color-highlight: #ec9d53;
+      --color-destructive: #f2867a;
+      --color-scrim: #0a1113;
     }
   }
 }
@@ -64,6 +75,7 @@
   --color-tone-8: #293235;
   --color-tone-9: #1c2628;
   --color-tone-10: #121b1d;
+  --color-tone-11: #0a1113;
 
   --text-catalog: 12px;
   --text-catalog--line-height: 16px;

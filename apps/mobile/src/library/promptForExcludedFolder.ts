@@ -1,5 +1,6 @@
 import { describeFolder } from "@wave/core";
-import { Alert } from "react-native";
+
+import { showError, showMessage } from "@/overlay/alert";
 
 import { scanState } from "./LibraryScan";
 import { chooseExcludedMusicFolder } from "./runtime";
@@ -10,32 +11,32 @@ import { chooseExcludedMusicFolder } from "./runtime";
  */
 export const promptForExcludedFolder = async (): Promise<void> => {
   if (scanState.get().status === "scanning") {
-    Alert.alert("Wave is scanning", "You can exclude a folder once the scan finishes.");
+    await showMessage("Wave is scanning", "You can exclude a folder once the scan finishes.");
     return;
   }
   try {
     const choice = await chooseExcludedMusicFolder();
     switch (choice.kind) {
       case "outside":
-        Alert.alert(
+        await showMessage(
           "Not in your music folders",
           "Wave only shows songs from your music folders, so there's nothing to exclude here.",
         );
         return;
       case "root":
-        Alert.alert(
+        await showMessage(
           "This is a music folder",
           "To stop Wave showing its songs, remove it from your music folders instead.",
         );
         return;
       case "covered":
-        Alert.alert(
+        await showMessage(
           "Already excluded",
           `Wave already ignores ${describeFolder(choice.by).name}, which includes this folder.`,
         );
         return;
       case "unsupported":
-        Alert.alert(
+        await showMessage(
           "Wave can't read this folder",
           "Pick it from your phone's storage or SD card in the picker, rather than from a shortcut like Downloads or a cloud drive.",
         );
@@ -45,9 +46,6 @@ export const promptForExcludedFolder = async (): Promise<void> => {
         return;
     }
   } catch (error) {
-    Alert.alert(
-      "Couldn't exclude the folder",
-      error instanceof Error ? error.message : String(error),
-    );
+    await showError("Couldn't exclude the folder", error);
   }
 };

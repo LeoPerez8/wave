@@ -10,10 +10,18 @@ type Props = {
   label: string;
   onPress: () => void;
   disabled?: boolean;
+  /** It opens a menu, which floats next to the button. */
+  opensMenu?: boolean;
 };
 
 /** A 48dp icon-only control in the accent tone. */
-export function IconButton({ icon: Icon, label, onPress, disabled = false }: Props) {
+export function IconButton({
+  icon: Icon,
+  label,
+  onPress,
+  disabled = false,
+  opensMenu = false,
+}: Props) {
   const accent = useThemeColor("accent");
   const tertiary = useThemeColor("tertiary");
   return (
@@ -23,6 +31,7 @@ export function IconButton({ icon: Icon, label, onPress, disabled = false }: Pro
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
+      opensMenu={opensMenu}
       haptic="selection"
       depth={0.1}
       className="items-center justify-center"

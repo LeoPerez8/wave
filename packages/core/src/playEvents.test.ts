@@ -103,24 +103,40 @@ describe("trackPlays", () => {
   test("skipping in Wave or from the notification ends the play as skipped", () => {
     const { ended, started } = run([
       playing(0, "1", "a"),
-      moved(20_000, "2", "sync"),
-      playing(20_100, "2", "b"),
+      moved(10_000, "2", "sync"),
+      playing(10_100, "2", "b"),
       moved(150_100, "3", "seek"),
       playing(150_200, "3", "c"),
     ]);
     assert.deepEqual(
       ended.map((play) => [play.trackId, play.endReason, play.listenedMs, play.counted]),
       [
-        ["a", "skipped", 20_000, false],
-        ["b", "skipped", 130_000, true],
+        ["a", "skipped", 10_000, false],
+        ["b", "skipped", 140_000, true],
       ],
     );
     assert.deepEqual(
       started.map((play) => [play.trackId, play.startedAt]),
       [
         ["a", 0],
-        ["b", 20_100],
+        ["b", 10_100],
         ["c", 150_200],
+      ],
+    );
+  });
+
+  test("a short song counts when played through, not when skipped before the end", () => {
+    const { ended } = run([
+      playing(0, "1", "jingle", { durationMs: 10_000 }),
+      moved(10_000, "2", "auto"),
+      playing(10_000, "2", "jingle", { durationMs: 10_000 }),
+      moved(19_000, "3", "sync"),
+    ]);
+    assert.deepEqual(
+      ended.map((play) => [play.endReason, play.listenedMs, play.counted]),
+      [
+        ["completed", 10_000, true],
+        ["skipped", 9_000, false],
       ],
     );
   });
@@ -440,24 +456,42 @@ describe("resumePlay", () => {
   });
 });
 
+const counted = (
+  listenedMs: number,
+  durationMs: number | null,
+  endReason: PlayEvent["endReason"] = "skipped",
+): boolean => isCountedPlay({ listenedMs, durationMs, endReason });
+
 describe("isCountedPlay", () => {
-  test("counts a play listened to for half the track", () => {
-    assert.equal(isCountedPlay(90_000, 3 * MIN), true);
-    assert.equal(isCountedPlay(89_999, 3 * MIN), false);
+  test("counts a play listened to for more than 15 seconds", () => {
+    assert.equal(counted(15_001, 3 * MIN), true);
+    assert.equal(counted(15_000, 3 * MIN), false);
+    assert.equal(counted(14_000, 3 * MIN, "stopped"), false);
   });
 
-  test("counts four minutes of a long track before it reaches half", () => {
-    assert.equal(isCountedPlay(4 * MIN, 20 * MIN), true);
-    assert.equal(isCountedPlay(4 * MIN - 1, 20 * MIN), false);
+  test("counts more than 15 seconds whatever the track's length, known or not", () => {
+    assert.equal(counted(16_000, 20 * MIN, "interrupted"), true);
+    assert.equal(counted(16_000, null), true);
+    assert.equal(counted(15_000, null), false);
   });
 
-  test("falls back to the four-minute rule when the duration is unknown", () => {
-    assert.equal(isCountedPlay(3 * MIN, null), false);
-    assert.equal(isCountedPlay(4 * MIN, null), true);
-    assert.equal(isCountedPlay(10_000, 0), false);
+  test("counts a song of 15 seconds or less once it's played to the end", () => {
+    assert.equal(counted(15_000, 15_000, "completed"), true);
+    assert.equal(counted(8_000, 8_000, "completed"), true);
+  });
+
+  test("doesn't count a short song skipped, stopped or cut short before the end", () => {
+    assert.equal(counted(7_000, 8_000, "skipped"), false);
+    assert.equal(counted(7_000, 8_000, "stopped"), false);
+    assert.equal(counted(7_000, 8_000, "interrupted"), false);
+  });
+
+  test("a longer song played to the end still needs more than 15 seconds of listening", () => {
+    assert.equal(counted(10_000, 3 * MIN, "completed"), false);
+    assert.equal(counted(10_000, null, "completed"), false);
   });
 
   test("never counts a play that wasn't listened to", () => {
-    assert.equal(isCountedPlay(0, 1_000), false);
+    assert.equal(counted(0, 10_000, "completed"), false);
   });
 });

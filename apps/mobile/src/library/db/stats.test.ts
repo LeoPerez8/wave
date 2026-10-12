@@ -1,12 +1,12 @@
 /// <reference types="node" />
-import type { PlayEvent } from "@wave/core";
+import { artistPlayTotals, artistStats, type PlayEvent } from "@wave/core";
 import { eq } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { beforeEach, describe, test } from "node:test";
 
 import { recordPlay } from "./playHistory.ts";
 import * as schema from "./schema.ts";
-import { creditedPlayTotals, trackPlayTotals } from "./stats.ts";
+import { creditedPlayTotals, songListening, trackPlayTotals } from "./stats.ts";
 import { addTrack, openTestDatabase, type TestDatabase } from "./testDatabase.ts";
 
 /** A counted play of `trackId` that started at `startedAt`. */
@@ -201,6 +201,99 @@ describe("Per-album, per-track-artist play totals", () => {
     assert.deepEqual(
       creditedPlayTotals(db, { from: null, to: 10_000 }).map((row) => row.artistSort),
       ["keeper"],
+    );
+  });
+});
+
+const byTrack = (rows: ReturnType<typeof songListening>) =>
+  rows.toSorted((a, b) => a.trackId - b.trackId);
+
+describe("Per-song listening over all time", () => {
+  test("sum every play's time, the counted plays and the latest play, with the track artist", () => {
+    const so = addTrack(db, { title: "So What", artist: "Miles Davis" });
+    const naima = addTrack(db, { title: "Naima", artist: "John Coltrane" });
+    addTrack(db, { title: "Never played" });
+    recordPlay(db, play(so, 1_000, { listenedMs: 100_000 }));
+    recordPlay(db, play(so, 3_000, skip));
+    recordPlay(db, play(naima, 2_000, skip));
+
+    assert.deepEqual(byTrack(songListening(db)), [
+      {
+        trackId: so,
+        artistId: creditOf(so).artistId,
+        countedPlays: 1,
+        listenedMs: 110_000,
+        lastPlayedAt: 3_000,
+      },
+      {
+        trackId: naima,
+        artistId: creditOf(naima).artistId,
+        countedPlays: 0,
+        listenedMs: 10_000,
+        lastPlayedAt: 2_000,
+      },
+    ]);
+  });
+
+  test("a song that left the library keeps its history, without an artist", () => {
+    const gone = addTrack(db, { title: "Deleted" });
+    recordPlay(db, play(gone, 1_000));
+    recordPlay(db, play(gone, 2_000));
+    db.delete(schema.tracks).where(eq(schema.tracks.id, gone)).run();
+
+    assert.deepEqual(songListening(db), [
+      { trackId: gone, artistId: null, countedPlays: 2, listenedMs: 360_000, lastPlayedAt: 2_000 },
+    ]);
+  });
+});
+
+describe("Artist page stats", () => {
+  test("agree with the artist's plays in Stats (all time), crediting compilations by track artist", () => {
+    const so = addTrack(db, { title: "So What", artist: "Miles Davis", album: "Kind of Blue" });
+    const blue = addTrack(db, {
+      title: "Blue in Green",
+      artist: "Miles Davis",
+      album: "Kind of Blue",
+    });
+    const milesOnHits = addTrack(db, {
+      title: "Milestones",
+      artist: "Miles Davis",
+      album: "Jazz Hits",
+      albumArtist: "Various Artists",
+    });
+    const trane = addTrack(db, {
+      title: "Naima",
+      artist: "John Coltrane",
+      album: "Jazz Hits",
+      albumArtist: "Various Artists",
+    });
+    const gone = addTrack(db, { title: "Deleted", artist: "Miles Davis", album: "Kind of Blue" });
+    recordPlay(db, play(so, 1_000));
+    recordPlay(db, play(so, 2_000));
+    recordPlay(db, play(so, 3_000, skip));
+    recordPlay(db, play(milesOnHits, 4_000));
+    recordPlay(db, play(trane, 5_000));
+    recordPlay(db, play(gone, 6_000));
+    db.delete(schema.tracks).where(eq(schema.tracks.id, gone)).run();
+
+    const miles = creditOf(so).artistId;
+    const all = { from: null, to: 10_000 };
+    const stats = artistStats({
+      artistId: miles,
+      songIds: [so, blue, milesOnHits],
+      listening: songListening(db),
+      songPlays: trackPlayTotals(db, all),
+      now: 10_000,
+    });
+    const inStats = artistPlayTotals(creditedPlayTotals(db, all)).find((a) => a.id === miles);
+
+    assert.equal(inStats?.countedPlays, 3);
+    assert.ok(stats.played);
+    assert.equal(stats.plays, "3 plays");
+    assert.equal(stats.songsListened, "2 of 3 songs");
+    assert.deepEqual(
+      stats.mostPlayed.map((song) => song.id),
+      [so, milesOnHits],
     );
   });
 });

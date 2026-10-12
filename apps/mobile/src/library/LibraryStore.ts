@@ -15,6 +15,7 @@ import {
   type CreditedPlayTotals,
   type PlayEvent,
   type PlayTotals,
+  type SongListening,
   type StatsWindow,
 } from "@wave/core";
 import { and, asc, desc, eq, inArray, ne, or, sql, type SQL } from "drizzle-orm";
@@ -29,20 +30,24 @@ import { openDatabaseSync } from "expo-sqlite";
 
 import { selectAlbums } from "./db/albums";
 import { selectArtistCovers, selectArtistSongs, selectArtists } from "./db/artists";
+import { libraryCounts, sectionSongCounts, type LibraryCounts } from "./db/counts";
+import { selectGenreSongs } from "./db/genres";
 import type { RowPage } from "./db/database";
 import migrations from "./db/migrations";
 import {
   homeSections,
   latestPlay,
+  listFavorites,
   recordPlay,
   updatePlay,
+  type FavoriteRow,
   type HomeSections,
   type RecordedPlay,
 } from "./db/playHistory";
 import { selectPlaylistSongs } from "./db/playlists";
 import * as schema from "./db/schema";
 import { BY_TITLE, trackQuery } from "./db/tracks";
-import { creditedPlayTotals, trackPlayTotals } from "./db/stats";
+import { creditedPlayTotals, songListening, trackPlayTotals } from "./db/stats";
 import type { KnownFile } from "./NativeScanner";
 
 const DATABASE_NAME = "wave.db";
@@ -95,16 +100,23 @@ export interface SongRow {
   readonly artworkPath: string | null;
   /** Core sort key of the title (files the row on the A–Z spine). */
   readonly titleSort: string;
+  /** Core sort keys of the artist and album, for sorting song lists. */
+  readonly artistSort: string;
+  readonly albumSort: string;
+  /** When the file entered the library (epoch ms). */
+  readonly addedAt: number;
   readonly albumId: number;
   /** The track artist. */
   readonly artistId: number;
-}
-
-/** A track on an album screen, with what orders it there. */
-export interface AlbumTrackRow extends SongRow {
+  /** Orders the album's tracks, and so sorts by artist and by album. */
   readonly discNumber: number | null;
   readonly trackNumber: number | null;
 }
+
+/** A track on an album screen, with what orders it there. */
+export type AlbumTrackRow = SongRow;
+
+export type { FavoriteRow };
 
 /** One album of the Albums grid (and of an artist's albums). */
 export interface AlbumRow {
@@ -275,6 +287,10 @@ export class LibraryStore extends Context.Service<
       at: number,
     ) => Effect.Effect<void, LibraryStoreError>;
     readonly countTracks: Effect.Effect<number, LibraryStoreError>;
+    /** How many items each Library entry holds, for the Library tab. */
+    readonly countLibrary: Effect.Effect<LibraryCounts, LibraryStoreError>;
+    /** How many songs each Library entry's menu acts on, for its heading. */
+    readonly countSectionSongs: Effect.Effect<LibraryCounts, LibraryStoreError>;
     /** Every track ordered by title, for Library › Songs. */
     readonly listSongs: Effect.Effect<readonly SongRow[], LibraryStoreError>;
     /** Every album by title, then album artist, for Library › Albums. */
@@ -382,7 +398,7 @@ export class LibraryStore extends Context.Service<
     readonly favoriteTrackIds: Effect.Effect<readonly number[], LibraryStoreError>;
     readonly setFavorite: (trackId: number, on: boolean) => Effect.Effect<void, LibraryStoreError>;
     /** Starred tracks, most recently starred first, for Library › Favorites. */
-    readonly listFavorites: Effect.Effect<readonly SongRow[], LibraryStoreError>;
+    readonly listFavorites: Effect.Effect<readonly FavoriteRow[], LibraryStoreError>;
     /** Records a play as it starts (Core's `PlayEvent`); returns its id, to update it as it goes on. */
     readonly recordPlay: (play: PlayEvent) => Effect.Effect<number, LibraryStoreError>;
     /** Brings a recorded play up to date: listened time, how it ended (so far), counted. */
@@ -410,6 +426,11 @@ export class LibraryStore extends Context.Service<
     readonly artistsByIds: (
       ids: readonly number[],
     ) => Effect.Effect<readonly ArtistRow[], LibraryStoreError>;
+    /**
+     * Each played song's all-time listening (every play's time, counted plays,
+     * latest play, track artist), in no order; Core's `listeningTotals` sums it.
+     */
+    readonly songListening: Effect.Effect<readonly SongListening[], LibraryStoreError>;
   }
 >()("@wave/mobile/library/LibraryStore") {}
 
@@ -735,17 +756,14 @@ const getArtistSync = (db: Database, id: number): ArtistDetail | null => {
 };
 
 const getGenreSync = (db: Database, id: number): GenreDetail | null => {
-  const { genres, tracks } = schema;
+  const { genres } = schema;
   const genre = db
     .select({ id: genres.id, name: genres.name, sort: genres.sort })
     .from(genres)
     .where(eq(genres.id, id))
     .get();
   if (genre === undefined) return null;
-  const songs = trackQuery(db)
-    .where(eq(tracks.genreId, id))
-    .orderBy(...BY_TITLE)
-    .all();
+  const songs = selectGenreSongs(db, id);
   return { genre: { ...genre, trackCount: songs.length }, songs };
 };
 
@@ -1103,6 +1121,9 @@ const make = Effect.gen(function* () {
           .get()?.count ?? 0,
     ),
 
+    countLibrary: attempt("count the library", () => libraryCounts(db)),
+    countSectionSongs: attempt("count the library's songs", () => sectionSongCounts(db)),
+
     listSongs: attempt("list songs", () =>
       trackQuery(db)
         .orderBy(...BY_TITLE)
@@ -1345,12 +1366,7 @@ const make = Effect.gen(function* () {
         else db.delete(favorites).where(eq(favorites.trackId, trackId)).run();
       }),
 
-    listFavorites: attempt("list favorites", () =>
-      trackQuery(db)
-        .innerJoin(schema.favorites, eq(schema.favorites.trackId, schema.tracks.id))
-        .orderBy(desc(schema.favorites.addedAt), ...BY_TITLE)
-        .all(),
-    ),
+    listFavorites: attempt("list favorites", () => listFavorites(db)),
 
     recordPlay: (play) => attempt("record the play", () => recordPlay(db, play)),
 
@@ -1372,6 +1388,8 @@ const make = Effect.gen(function* () {
 
     artistsByIds: (ids) =>
       attempt("read ranked artists", () => (ids.length === 0 ? [] : listArtistsSync(db, ids))),
+
+    songListening: attempt("sum up listening", () => songListening(db)),
   });
 });
 

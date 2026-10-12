@@ -1,8 +1,10 @@
 import {
   albumPlayTotals,
+  artistStats,
   artistPlayTotals,
   rankPlays,
   statsWindow,
+  type ArtistStats as ArtistStatsLines,
   type PlayTotals,
   type StatsPeriod,
 } from "@wave/core";
@@ -24,6 +26,13 @@ export interface Ranked<A> {
   readonly countedPlays: number;
 }
 
+/** An artist page's stats block, its most played songs loaded. */
+export type ArtistStats =
+  | Extract<ArtistStatsLines, { played: false }>
+  | (Omit<Extract<ArtistStatsLines, { played: true }>, "mostPlayed"> & {
+      readonly mostPlayed: readonly Ranked<SongRow>[];
+    });
+
 export class Stats extends Context.Service<
   Stats,
   {
@@ -42,20 +51,25 @@ export class Stats extends Context.Service<
       period: StatsPeriod,
       limit: number,
     ) => Effect.Effect<readonly Ranked<ArtistRow>[], LibraryStoreError>;
+    /**
+     * The artist page's stats block over all time, credited by track artist:
+     * `songIds` are the artist's songs on the page.
+     */
+    readonly artist: (
+      artistId: number,
+      songIds: readonly number[],
+    ) => Effect.Effect<ArtistStats, LibraryStoreError>;
   }
 >()("@wave/mobile/stats/Stats") {}
 
 /**
- * Ranks the store's totals with Core's rule, then loads the rows of the
- * winners, in ranking order. An entity that left the library between the two
- * reads is skipped.
+ * Loads the rows of a ranking's entities, in ranking order. An entity that
+ * left the library since the totals were read is skipped.
  */
-const rank = <A extends { readonly id: number }>(
-  totals: readonly PlayTotals[],
-  limit: number,
+const withRows = <A extends { readonly id: number }>(
+  ranking: readonly PlayTotals[],
   rows: (ids: readonly number[]) => Effect.Effect<readonly A[], LibraryStoreError>,
 ): Effect.Effect<readonly Ranked<A>[], LibraryStoreError> => {
-  const ranking = rankPlays(totals, limit);
   if (ranking.length === 0) return Effect.succeed([]);
   return Effect.map(rows(ranking.map((entry) => entry.id)), (found) => {
     const byId = new Map(found.map((row) => [row.id, row]));
@@ -65,6 +79,14 @@ const rank = <A extends { readonly id: number }>(
     });
   });
 };
+
+/** Ranks the store's totals with Core's rule, then loads the rows of the winners. */
+const rank = <A extends { readonly id: number }>(
+  totals: readonly PlayTotals[],
+  limit: number,
+  rows: (ids: readonly number[]) => Effect.Effect<readonly A[], LibraryStoreError>,
+): Effect.Effect<readonly Ranked<A>[], LibraryStoreError> =>
+  withRows(rankPlays(totals, limit), rows);
 
 export const layer = Layer.effect(
   Stats,
@@ -83,6 +105,20 @@ export const layer = Layer.effect(
         Effect.flatMap(store.creditedPlayTotals(statsWindow(period, Date.now())), (credits) =>
           rank(artistPlayTotals(credits), limit, store.artistsByIds),
         ),
+      artist: (artistId, songIds) => {
+        const now = Date.now();
+        return Effect.flatMap(
+          Effect.all([store.songListening, store.trackPlayTotals(statsWindow("all", now))]),
+          ([listening, songPlays]): Effect.Effect<ArtistStats, LibraryStoreError> => {
+            const stats = artistStats({ artistId, songIds, listening, songPlays, now });
+            if (!stats.played) return Effect.succeed(stats);
+            return Effect.map(withRows(stats.mostPlayed, store.songsByIds), (mostPlayed) => ({
+              ...stats,
+              mostPlayed,
+            }));
+          },
+        );
+      },
     };
   }),
 );

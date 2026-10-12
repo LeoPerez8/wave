@@ -1,10 +1,10 @@
 /// <reference types="node" />
-import type { PlayEvent } from "@wave/core";
+import { isCountedPlay, type PlayEvent } from "@wave/core";
 import { eq, sql } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { beforeEach, describe, test } from "node:test";
 
-import { homeSections, latestPlay, recordPlay, updatePlay } from "./playHistory.ts";
+import { homeSections, latestPlay, listFavorites, recordPlay, updatePlay } from "./playHistory.ts";
 import * as schema from "./schema.ts";
 import { trackPlayTotals } from "./stats.ts";
 import {
@@ -90,6 +90,22 @@ describe("Favorites", () => {
     assert.deepEqual(
       homeSections(db).favorites.map((row) => row.title),
       ["Starred late", "Starred early"],
+    );
+  });
+
+  test("the Favorites list carries when each song was starred, for sorting by it", () => {
+    const early = addTrack(db, { title: "Starred early" });
+    const late = addTrack(db, { title: "Starred late" });
+    addTrack(db, { title: "Not starred" });
+    star(db, early, 1_000);
+    star(db, late, 2_000);
+
+    assert.deepEqual(
+      listFavorites(db).map((row) => [row.title, row.starredAt]),
+      [
+        ["Starred late", 2_000],
+        ["Starred early", 1_000],
+      ],
     );
   });
 });
@@ -233,5 +249,55 @@ describe("Play source", () => {
 
     const id = recordPlay(v1, play(once, 4_000, { source: "auto" }));
     assert.deepEqual(latestPlay(v1), { id, play: play(once, 4_000, { source: "auto" }) });
+  });
+});
+
+describe("Recounting past plays", () => {
+  test("plays on record are recounted: more than 15 s, or a short song played through", async () => {
+    const v2 = await openTestDatabase({ through: "0006_play_source" });
+    const song = addTrack(v2, { title: "Song", album: "First", durationMs: 180_000 });
+    const jingle = addTrack(v2, { title: "Jingle", album: "Second", durationMs: 10_000 });
+    // Rows as v2 wrote them: counted under "half the track or four minutes".
+    const v2Play = (
+      trackId: number,
+      startedAt: number,
+      listenedMs: number,
+      durationMs: number | null,
+      endReason: PlayEvent["endReason"],
+      counted: boolean,
+    ) => recordPlay(v2, play(trackId, startedAt, { listenedMs, durationMs, endReason, counted }));
+    v2Play(song, 1_000, 20_000, 180_000, "skipped", false); // now counted
+    v2Play(song, 2_000, 15_000, 180_000, "stopped", false); // 15 s exactly: not counted
+    v2Play(song, 3_000, 10_000, 180_000, "completed", false); // seeked to the end: not counted
+    v2Play(song, 4_000, 20_000, null, "interrupted", false); // length unknown: now counted
+    v2Play(jingle, 5_000, 10_000, 10_000, "completed", true); // played through: still counted
+    v2Play(jingle, 6_000, 7_000, 10_000, "skipped", true); // skipped before the end: no longer
+    v2Play(jingle, 7_000, 0, 10_000, "completed", false); // never listened: not counted
+
+    await migrateTestDatabase(v2);
+
+    const rows = v2.select().from(schema.playEvents).orderBy(schema.playEvents.startedAt).all();
+    assert.deepEqual(
+      rows.map((row) => row.counted),
+      [true, false, false, true, true, false, false],
+    );
+    // The migration agrees with Core's rule, the one the app records plays with.
+    assert.deepEqual(
+      rows.map((row) => row.counted),
+      rows.map((row) =>
+        isCountedPlay({
+          listenedMs: row.listenedMs,
+          durationMs: row.durationMs,
+          endReason: row.endReason as PlayEvent["endReason"],
+        }),
+      ),
+    );
+    assert.deepEqual(
+      homeSections(v2).mostPlayed.map((row) => [row.title, row.playCount]),
+      [
+        ["Song", 2],
+        ["Jingle", 1],
+      ],
+    );
   });
 });

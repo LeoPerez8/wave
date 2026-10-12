@@ -1,6 +1,6 @@
 import { describeFolder } from "@wave/core";
 import { IconMinus } from "@tabler/icons-react-native";
-import { Alert, ScrollView, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
@@ -13,23 +13,20 @@ import { useExcludedFolders, useScanRoots, useScanState } from "@/library/hooks"
 import { promptForExcludedFolder } from "@/library/promptForExcludedFolder";
 import { promptForMusicFolder } from "@/library/promptForMusicFolder";
 import { includeMusicFolder, removeMusicFolder } from "@/library/runtime";
+import { confirmAction, showError } from "@/overlay/alert";
 
 const songCount = (n: number): string => `${n.toLocaleString("en")} ${n === 1 ? "song" : "songs"}`;
 
-const showError = (title: string) => (error: unknown) =>
-  Alert.alert(title, error instanceof Error ? error.message : String(error));
+const failed = (title: string) => (error: unknown) => showError(title, error);
 
-const confirmRemove = (path: string, name: string) =>
-  Alert.alert(`Remove ${name}?`, "Its songs leave your library. The files stay on your phone.", [
-    { text: "Cancel", style: "cancel" },
-    {
-      text: "Remove",
-      style: "destructive",
-      onPress: () => {
-        removeMusicFolder(path).catch(showError("Couldn't remove the folder"));
-      },
-    },
-  ]);
+const confirmRemove = async (path: string, name: string): Promise<void> => {
+  const remove = await confirmAction({
+    title: `Remove ${name}?`,
+    message: "Its songs leave your library. The files stay on your phone.",
+    action: { label: "Remove", destructive: true },
+  });
+  if (remove) await removeMusicFolder(path).catch(failed("Couldn't remove the folder"));
+};
 
 type FolderRowProps = {
   path: string;
@@ -100,7 +97,7 @@ export default function MusicFoldersScreen() {
             detail={root.lastScannedAt === null ? "" : songCount(root.trackCount)}
             removeLabel="Remove"
             removable={roots.length > 1 && !scanning}
-            onRemove={() => confirmRemove(root.path, describeFolder(root.path).name)}
+            onRemove={() => void confirmRemove(root.path, describeFolder(root.path).name)}
           />
         ))}
         <View className="items-start">
@@ -124,7 +121,7 @@ export default function MusicFoldersScreen() {
             removeLabel="Stop excluding"
             removable={!scanning}
             onRemove={() => {
-              includeMusicFolder(path).catch(showError("Couldn't include the folder"));
+              includeMusicFolder(path).catch(failed("Couldn't include the folder"));
             }}
           />
         ))}

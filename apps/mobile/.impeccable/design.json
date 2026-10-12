@@ -71,6 +71,7 @@
         "displayName": "Fog",
         "canonical": "tone-1 of the tone ramp (OKLCH hue ~215)",
         "tonalRamp": [
+          "#0a1113",
           "#121b1d",
           "#1c2628",
           "#293235",
@@ -89,6 +90,7 @@
         "displayName": "Ink",
         "canonical": "tone-10 of the tone ramp (OKLCH hue ~215)",
         "tonalRamp": [
+          "#0a1113",
           "#121b1d",
           "#1c2628",
           "#293235",
@@ -107,6 +109,7 @@
         "displayName": "Graphite",
         "canonical": "tone-7 of the tone ramp (OKLCH hue ~215)",
         "tonalRamp": [
+          "#0a1113",
           "#121b1d",
           "#1c2628",
           "#293235",
@@ -125,6 +128,7 @@
         "displayName": "Pewter",
         "canonical": "tone-5 of the tone ramp (OKLCH hue ~215)",
         "tonalRamp": [
+          "#0a1113",
           "#121b1d",
           "#1c2628",
           "#293235",
@@ -143,6 +147,7 @@
         "displayName": "Rule",
         "canonical": "tone-3 of the tone ramp (OKLCH hue ~215)",
         "tonalRamp": [
+          "#0a1113",
           "#121b1d",
           "#1c2628",
           "#293235",
@@ -161,6 +166,7 @@
         "displayName": "Field",
         "canonical": "tone-2 of the tone ramp (OKLCH hue ~215)",
         "tonalRamp": [
+          "#0a1113",
           "#121b1d",
           "#1c2628",
           "#293235",
@@ -177,8 +183,9 @@
       "background-dark": {
         "role": "neutral",
         "displayName": "Night Slate",
-        "canonical": "tone-10 of the tone ramp (OKLCH hue ~215)",
+        "canonical": "tone-11 of the tone ramp (OKLCH hue ~215)",
         "tonalRamp": [
+          "#0a1113",
           "#121b1d",
           "#1c2628",
           "#293235",
@@ -197,6 +204,7 @@
         "displayName": "Ink (dark)",
         "canonical": "tone-1 of the tone ramp (OKLCH hue ~215)",
         "tonalRamp": [
+          "#0a1113",
           "#121b1d",
           "#1c2628",
           "#293235",
@@ -215,6 +223,7 @@
         "displayName": "Graphite (dark)",
         "canonical": "tone-4 of the tone ramp (OKLCH hue ~215)",
         "tonalRamp": [
+          "#0a1113",
           "#121b1d",
           "#1c2628",
           "#293235",
@@ -233,6 +242,7 @@
         "displayName": "Pewter (dark)",
         "canonical": "tone-6 of the tone ramp (OKLCH hue ~215)",
         "tonalRamp": [
+          "#0a1113",
           "#121b1d",
           "#1c2628",
           "#293235",
@@ -249,8 +259,9 @@
       "separator-dark": {
         "role": "neutral",
         "displayName": "Rule (dark)",
-        "canonical": "tone-8 of the tone ramp (OKLCH hue ~215)",
+        "canonical": "tone-9 of the tone ramp (OKLCH hue ~215)",
         "tonalRamp": [
+          "#0a1113",
           "#121b1d",
           "#1c2628",
           "#293235",
@@ -267,8 +278,9 @@
       "fill-dark": {
         "role": "neutral",
         "displayName": "Field (dark)",
-        "canonical": "tone-9 of the tone ramp (OKLCH hue ~215)",
+        "canonical": "tone-10 of the tone ramp (OKLCH hue ~215)",
         "tonalRamp": [
+          "#0a1113",
           "#121b1d",
           "#1c2628",
           "#293235",

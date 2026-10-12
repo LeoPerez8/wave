@@ -1,5 +1,7 @@
-import { LegendList } from "@legendapp/list/react-native";
+import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
 import { IconPlaylist } from "@tabler/icons-react-native";
+import { useScrollToTop } from "expo-router";
+import { useRef } from "react";
 import { View } from "react-native";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
@@ -8,13 +10,14 @@ import { PlaylistEntry } from "@/catalog/PlaylistEntry";
 import { useChromeInset } from "@/chrome/chrome";
 import { EmptyState } from "@/components/EmptyState";
 import { TextButton } from "@/components/TextButton";
-import { openPlaylistActions } from "@/playback/TrackActionsSheet";
+import { openPlaylistActions } from "@/playback/ActionsMenu";
 
 import { usePlaylists } from "./hooks";
 import type { PlaylistRow } from "./LibraryStore";
 import { newPlaylist } from "./PlaylistSheets";
 import { openPlaylist } from "./routes";
 import { songCount } from "./TrackList";
+import { useListScrollable } from "@/motion/heldTouch";
 
 /** Makes an empty playlist and opens it. */
 const createAndOpen = (): void => {
@@ -37,8 +40,11 @@ const renderPlaylist = ({ item }: { item: PlaylistRow }) => (
 
 /** Library › Playlists: every playlist by name, with New Playlist above them. */
 export function PlaylistsList({ empty }: { empty: string }) {
+  const scrollable = useListScrollable();
   const playlists = usePlaylists();
   const bottomInset = useChromeInset();
+  const list = useRef<LegendListRef>(null);
+  useScrollToTop(list);
 
   if (playlists.length === 0) {
     return (
@@ -55,6 +61,8 @@ export function PlaylistsList({ empty }: { empty: string }) {
 
   return (
     <LegendList
+      ref={list}
+      scrollEnabled={scrollable}
       className="flex-1"
       data={playlists}
       keyExtractor={keyOf}

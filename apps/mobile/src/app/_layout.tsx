@@ -1,4 +1,7 @@
 import "../../global.css";
+// Lays the chosen theme colours over global.css's before anything renders.
+// oxlint-disable-next-line import/no-unassigned-import
+import "@/settings/theme";
 
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -7,15 +10,17 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { useAllFilesAccess } from "@/library/hooks";
-import { PlaylistSheets } from "@/library/PlaylistSheets";
+import { OverlayHost } from "@/overlay/OverlayHost";
+import { useTrackCurrentPath } from "@/library/routes";
 import { startInitialScan } from "@/library/runtime";
-import { TrackActionsSheet } from "@/playback/TrackActionsSheet";
 import { startServices } from "@/services";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 export default function RootLayout() {
   const background = useThemeColor("background");
   const { granted } = useAllFilesAccess();
+  // Lets library screens open inside the tab they were opened from.
+  useTrackCurrentPath();
 
   // A no-op when Android Auto already started them headless (src/services.ts).
   useEffect(() => startServices("app"), []);
@@ -29,27 +34,27 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: background }}>
       <SafeAreaProvider>
         <StatusBar style="auto" />
-        <Stack
-          screenOptions={{ headerShown: false, contentStyle: { backgroundColor: background } }}
-        >
-          <Stack.Protected guard={granted}>
-            <Stack.Screen name="(tabs)" />
-            {/* Now Playing animates itself as a sheet over the tabs (src/nowPlaying/sheet.ts). */}
-            <Stack.Screen
-              name="now-playing"
-              options={{
-                presentation: "transparentModal",
-                animation: "none",
-                contentStyle: { backgroundColor: "transparent" },
-              }}
-            />
-          </Stack.Protected>
-          <Stack.Protected guard={!granted}>
-            <Stack.Screen name="access" options={{ animation: "fade" }} />
-          </Stack.Protected>
-        </Stack>
-        <TrackActionsSheet />
-        <PlaylistSheets />
+        <OverlayHost>
+          <Stack
+            screenOptions={{ headerShown: false, contentStyle: { backgroundColor: background } }}
+          >
+            <Stack.Protected guard={granted}>
+              <Stack.Screen name="(tabs)" />
+              {/* Now Playing animates itself as a sheet over the tabs (src/nowPlaying/sheet.ts). */}
+              <Stack.Screen
+                name="now-playing"
+                options={{
+                  presentation: "transparentModal",
+                  animation: "none",
+                  contentStyle: { backgroundColor: "transparent" },
+                }}
+              />
+            </Stack.Protected>
+            <Stack.Protected guard={!granted}>
+              <Stack.Screen name="access" options={{ animation: "fade" }} />
+            </Stack.Protected>
+          </Stack>
+        </OverlayHost>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

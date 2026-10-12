@@ -9,14 +9,18 @@ import { TrackRow } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { playSongs } from "@/playback/actions";
 import { useCurrentTrackId } from "@/playback/hooks";
-import { openTrackActions } from "@/playback/TrackActionsSheet";
+import { openTrackActions } from "@/playback/ActionsMenu";
 import { albumPairs, albumRowHeight, AlbumPair, useAlbumTileSize } from "@/library/AlbumGrid";
 import { DetailFrame } from "@/library/DetailFrame";
 import { useFavoriteIds } from "@/library/favorites";
 import { useArtist } from "@/library/hooks";
 import type { AlbumRow, ArtistDetail, SongRow } from "@/library/LibraryStore";
 import { parseId } from "@/library/routes";
+import { SongSortButton } from "@/library/SongSortButton";
+import { useSortedSongs } from "@/library/songSort";
 import { ListIntro, songCount, toTrackSummary } from "@/library/TrackList";
+import { useListScrollable } from "@/motion/heldTouch";
+import { ArtistStatsBlock } from "@/stats/ArtistStatsBlock";
 
 type Item =
   | { readonly type: "section"; readonly label: string }
@@ -25,7 +29,7 @@ type Item =
 
 const SECTION_HEAD = CELL * 6;
 
-const artistItems = (detail: ArtistDetail): Item[] => {
+const artistItems = (detail: ArtistDetail, songs: readonly SongRow[]): Item[] => {
   const items: Item[] = [];
   const shelf = (label: string, albums: readonly AlbumRow[]) => {
     if (albums.length === 0) return;
@@ -34,8 +38,8 @@ const artistItems = (detail: ArtistDetail): Item[] => {
   };
   shelf("Albums", detail.albums);
   shelf("Appears on", detail.appearsOn);
-  if (detail.songs.length > 0) items.push({ type: "section", label: "Songs" });
-  detail.songs.forEach((song, index) => items.push({ type: "track", song, index }));
+  if (songs.length > 0) items.push({ type: "section", label: "Songs" });
+  songs.forEach((song, index) => items.push({ type: "track", song, index }));
   return items;
 };
 
@@ -53,17 +57,19 @@ const itemKey = (item: Item): string => {
 const albumsLine = (count: number): string => `${count} ${count === 1 ? "album" : "albums"}`;
 
 function ArtistContent({ detail }: { detail: ArtistDetail }) {
+  const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
   const currentId = useCurrentTrackId();
   const favorites = useFavoriteIds();
   const tile = useAlbumTileSize(grid.margin);
   const rowState = useMemo(() => ({ currentId, favorites, tile }), [currentId, favorites, tile]);
-  const items = useMemo(() => artistItems(detail), [detail]);
+  // In the sort chosen for artists; Play, Shuffle and rows all play this displayed order.
+  const { songs } = useSortedSongs("artist", detail.songs);
+  const items = useMemo(() => artistItems(detail, songs), [detail, songs]);
   const context = useMemo(
     () => ({ kind: "artist", id: String(detail.artist.id) }) as const,
     [detail.artist.id],
   );
-  const { songs } = detail;
 
   const renderItem = useCallback(
     ({ item }: { item: Item }) => {
@@ -101,6 +107,7 @@ function ArtistContent({ detail }: { detail: ArtistDetail }) {
 
   return (
     <LegendList
+      scrollEnabled={scrollable}
       className="flex-1"
       data={items}
       keyExtractor={itemKey}
@@ -117,7 +124,17 @@ function ArtistContent({ detail }: { detail: ArtistDetail }) {
       estimatedItemSize={grid.row}
       recycleItems
       contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottomInset }}
-      ListHeaderComponent={<ListIntro line={line} songs={songs} context={context} />}
+      ListHeaderComponent={
+        <>
+          <ListIntro
+            line={line}
+            songs={songs}
+            context={context}
+            sortControl={<SongSortButton kind="artist" />}
+          />
+          <ArtistStatsBlock artistId={detail.artist.id} songs={detail.songs} />
+        </>
+      }
     />
   );
 }

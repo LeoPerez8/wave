@@ -10,14 +10,18 @@ colors:
   fill: "#d3dfe2"
   accent: "#006a5f"
   highlight: "#a14f09"
-  background-dark: "#121b1d"
+  destructive: "#b3261e"
+  scrim: "#121b1d"
+  background-dark: "#0a1113"
   foreground-dark: "#e0ecef"
   secondary-dark: "#a5b0b3"
   tertiary-dark: "#606b6e"
-  separator-dark: "#293235"
-  fill-dark: "#1c2628"
+  separator-dark: "#1c2628"
+  fill-dark: "#121b1d"
   accent-dark: "#59c0ad"
   highlight-dark: "#ec9d53"
+  destructive-dark: "#f2867a"
+  scrim-dark: "#0a1113"
 typography:
   display:
     fontFamily: "Inter"
@@ -139,8 +143,8 @@ The world rejects the category default it was chosen against: bold large titles,
 - Artwork as photographs: square, unrounded, unframed.
 - Light large titles; one size per list, rank by weight and tint.
 - Small tracked-caps catalog lines for section heads and cover captions.
-- Teal for active, ember for favorite and now playing; nothing else is coloured.
-- Flat: no shadows, no gradients (the Now Playing ground is the one exception). Glass only on the floating chrome (tab bar, Search pill, mini player).
+- Teal for active, ember for favorite and now playing; nothing else is coloured, save the red on a Delete or Remove button.
+- Flat: no shadows, no gradients (the Now Playing ground is the one exception). Glass only on what floats: the chrome (tab bar, Search pill, mini player) and dialog and menu cards.
 - Every press sinks and dims for a duration the owner sets in Settings.
 
 ## Colors
@@ -155,16 +159,22 @@ A cool, low-chroma tonal ramp carrying two small, saturated voices: teal and emb
 
 - **Ember** (`highlight`; burnt orange in light, a warm apricot in dark): favorite and now playing. The playing track's title and speaker glyph, the favorite star. Ember means "this one is yours, or this one is sounding".
 
+### Destructive
+
+- **Signal Red** (`destructive`; brick red in light, a soft coral in dark): only the label of a confirmation's action that deletes or removes something (Delete, Remove). Never a fill, never decoration.
+
 ### Neutral
 
-- **Fog / Night Slate** (`background`): the ground of every screen. Fog blue-grey in light (tone-1), night slate in dark (tone-10).
+- **Fog / Night Slate** (`background`): the ground of every screen. Fog blue-grey in light (tone-1), a deep night slate in dark (tone-11, a step only dark mode uses).
 - **Ink** (`foreground`): titles, track titles, entry labels, the large title.
 - **Graphite** (`secondary`): artists, counts, durations, furniture lines, catalog lines, inactive spine letters, helper copy.
 - **Pewter** (`tertiary`): non-text only. Disabled icon buttons, the missing-file glyph, the placeholder note on artless covers.
 - **Rule** (`separator`): one-pixel hairlines between entries and around setting rows.
 - **Field** (`fill`): the square behind artwork that has no image, and empty cover slots.
 
-The full ramp lives in `global.css` as `tone-0` (lightest, `#eff4f6`) to `tone-10` (darkest, `#121b1d`); each semantic token is a step on it, in both themes. `surface` is the tint laid over the glass of the floating chrome (at about 72%); `grouped` and `on-accent` are also declared there but are not yet used by this world's components.
+The full ramp lives in `global.css` as `tone-0` (lightest, `#eff4f6`) to `tone-11` (darkest, `#0a1113`); each semantic token is a step on it, in both themes. Light mode uses `tone-0` to `tone-10` (its ink is `tone-10`); `tone-11` is dark mode's ground only, and dark cards and fills (`tone-10`) and hairlines (`tone-9`) climb one step each from it, evenly spaced, so light mode never changes when dark mode gets darker. Core's `packages/core/src/theme.ts` holds the same values (`DEFAULT_THEME`, `TONES`) and checks WCAG AA for every pair the app draws (`themeContrastIssues`); an app test fails if `global.css` or the launch splash drift from it. `surface` is the tint laid over the glass of the floating chrome (at about 72%); `scrim` is the veil behind dialog and menu cards, laid at a quarter strength: the ink in light mode, the ground in dark. `grouped` and `on-accent` are also declared there but are not yet used by this world's components.
+
+These are the shipped colours. In Settings › Theme the owner picks a background for each mode and a primary (`accent`) and secondary (`highlight`) from preset swatches; Core's `themeFor` derives every other token from the chosen background (each neutral keeps its shipped contrast against the ground, so cards still stand off a true-black ground) and deepens or brightens an ink until it meets its contrast minimum. The app lays the result over `global.css` at runtime with `Uniwind.updateCSSVariables`, so every class and `useThemeColor` reader recolours at once; `global.css` and the launch splash stay the shipped theme.
 
 ### Named Rules
 
@@ -172,7 +182,7 @@ The full ramp lives in `global.css` as `tone-0` (lightest, `#eff4f6`) to `tone-1
 
 **The Tinted Ground Rule.** The ground is fog or night slate. Never ship a screen on `#ffffff` or `#000000`.
 
-**The Two Voices Rule.** Teal means active, ember means favorite or playing. If a colour on screen means neither, it should be a neutral.
+**The Two Voices Rule.** Teal means active, ember means favorite or playing. If a colour on screen means neither, it should be a neutral. The one exception is the destructive red on a Delete or Remove button.
 
 **The Pewter Is Not Text Rule.** `tertiary` sits near 3:1 on the ground: enough for an icon, not for words. Text uses `foreground` or `secondary`.
 
@@ -226,17 +236,19 @@ The A–Z spine sits 24dp in from the right edge, not on it, to stay clear of An
 
 ## Elevation & Depth
 
-The world is flat. There are no shadows, no elevation and no gradients (save the Now Playing ground, below); depth comes from the tone ramp (field squares and hairlines a step off the ground) and from artwork itself. Two things float: the spine's letter field (the ground at 90% opacity laid over the list, with the huge letter centred in it) and the floating chrome at the bottom, which is glass.
+The world is flat. There are no shadows, no elevation and no gradients (save the Now Playing ground, below); depth comes from the tone ramp (field squares and hairlines a step off the ground) and from artwork itself. Three things float: the spine's letter field (the ground at 90% opacity laid over the list, with the huge letter centred in it) the floating chrome at the bottom, and dialogs and menus; the last two are glass.
 
-**Glass** (the chrome only): a live blur of the content scrolling underneath, a slight lens-like refraction at the rounded edge with a specular rim lit from the top left, and the `surface` tone laid over it so text stays legible. It is native (`modules/wave-glass`, RenderEffect + AGSL on the RenderThread) and sized for 120 Hz; the blur + tint + rim fallback is one line away (`GLASS` in `src/glass/Glass.tsx`). See `docs/glass-spike.md`.
+**Glass** (the floating chrome, dialogs and menus): a live blur of the content underneath, a slight lens-like refraction at the rounded edge with a specular rim lit from the top left, and the `surface` tone laid over it so text stays legible. It is native (`modules/wave-glass`, RenderEffect + AGSL on the RenderThread) and sized for 120 Hz; blur, refraction, tint and rim are tuned in Settings › Glass (defaults in Core `GLASS_SETTINGS`), and refraction 0 is the blur + tint + rim fallback. See `docs/glass-spike.md`. Below Android 12 (no RenderEffect) glass is an opaque `surface`.
+
+**Dialogs and menus** float as glass cards over the app: rounded (24dp), sized to their content, centred a margin clear of the system bars (a card with a text field, like the playlist name prompt, sits a margin below the status bar instead, and any card stays clear of the keyboard; a long-press menu opens next to its row or tile instead: below it, or above when there is no room, clear of the floating chrome too), over the app dimmed lightly (the scheme's darkest tone at 25%). They fade and grow in over the tap duration (fade only with reduce motion, instant at 0). They are drawn at the app root by `src/overlay/OverlayHost.tsx` rather than in a `Modal` (a separate window the blur can't see through). Back or a tap outside closes them, and screen readers move into the card. A long-press menu keeps the finger that opened it: slide onto an entry and lift to run it (`src/overlay/useSlideToChoose.ts`, hit-testing in Core's `slideEntry`); lists hold still while that finger is down (`useListScrollable`).
 
 ### Named Rules
 
-**The Flat Field Rule.** Surfaces never cast shadows. Separate things with a ramp step or a hairline. Glass belongs to the floating chrome alone (tab bar, Search pill, mini player); content surfaces stay flat.
+**The Flat Field Rule.** Surfaces never cast shadows. Separate things with a ramp step or a hairline. Glass belongs to what floats (tab bar, Search pill, mini player, dialog and menu cards); content surfaces stay flat.
 
 ## Shapes
 
-Square everywhere. Artwork, empty cover slots, track thumbnails and placeholder fields have no corner radius and no frame. Structure is drawn with one-pixel hairlines in the separator tone, running the full content width between entries; there are no boxed cards and no chips. The floating chrome is the one exception: its glass surfaces are pills (fully rounded ends), set apart from the square content beneath. The recurring silhouettes are the thin vertical column of spine letters on the right and the pills at the bottom.
+Square everywhere. Artwork, empty cover slots, track thumbnails and placeholder fields have no corner radius and no frame. Structure is drawn with one-pixel hairlines in the separator tone, running the full content width between entries; there are no boxed cards and no chips. What floats is the exception: the chrome's glass surfaces are pills (fully rounded ends) and dialog cards have 24dp corners, set apart from the square content beneath. The recurring silhouettes are the thin vertical column of spine letters on the right and the pills at the bottom.
 
 ### Named Rules
 
@@ -257,6 +269,12 @@ Every tappable element is built on one press primitive, so the whole world feels
 
 - **Shape:** a 48dp square target, no visible container (0px radius, no fill).
 - **Icon button:** a 24dp line icon (1.5 stroke) in teal; disabled drops to pewter. Used for Settings, Back and the stepper's minus/plus.
+- **Text button:** a Body 500 label in teal (red for a destructive action, graphite when disabled), no container, a 48dp target.
+
+### Alert Dialog
+
+A glass dialog card (`src/overlay/alert.tsx`, opened from anywhere with `showMessage` / `confirmAction`): the title in Title3 ink, the message below in Subheadline graphite, then the buttons as text buttons right-aligned along the bottom. A message has a single OK; a confirmation has Cancel then the action, which is red when it deletes or removes. Back or a tap outside does what Cancel or OK does. Screen readers hear the title and message as it opens. There are no system alerts.
+
 - **Hover / Focus:** touch only; the Press dim-and-sink is the whole feedback.
 
 ### Entry Row
@@ -280,7 +298,8 @@ Small tracked caps (Label) in graphite by default, with teal and ember tones ava
 - **Tab screens** open on a light large title at top-left, with at most one trailing icon button on the title line.
 - **Pushed screens** show a Back icon button aligned so its glyph sits on the 24dp margin, then the title in Title type. System and predictive Back both work.
 - **In-screen switches** (Albums / Songs) are text tabs in Body: selected is 600 ink with a 2dp teal underline, unselected is 400 graphite; each tab is at least 48dp tall.
-- **Tab bar** floats a cell above the system inset with 24dp side margins: Home and Library share one 64dp glass pill (24dp line icon over a Caption 600 label, teal when current, graphite otherwise), and Search sits beside it, a cell apart, in its own 64dp round glass pill with the icon only. Tabs press with `selection` haptics.
+- **Tab bar** floats a cell above the system inset with 24dp side margins: Home and Library share one 64dp glass pill (24dp line icon over a Caption 600 label, teal when current, graphite otherwise), joined by the shortcut tab (a Library section chosen in Settings, with its section's icon) when there is one, and Search sits beside it, a cell apart, in its own 64dp round glass pill with the icon only. Tabs press with `selection` haptics.
+- **Shortcut tab:** what it opens (an artist, an album…) is pushed inside the tab, under the tab bar, and stays open while another tab is showing; the same screens opened from the Library are pushed over the tabs.
 - **Mini player** floats a cell above the tab bar (or above the system inset on pushed Library screens) in a 56dp glass pill with the same side margins: a 40dp square thumbnail, title (Body 500) over artist (Body 400 graphite), then play/pause and next as icon buttons. Tap it, or swipe it up, to open Now Playing. Swipe left for the next track, right for the previous one: the content follows the finger and fades, and a skip leaves the way it was pushed with a light `impact` haptic; a short slow drag springs back. Screen readers get "Next track" / "Previous track" actions instead of the swipe.
 
 ### Now Playing
@@ -290,7 +309,7 @@ Small tracked caps (Label) in graphite by default, with teal and ember tones ava
 - **Player view:** the artwork as the largest square the space allows (still a photograph: square, unframed), stepping back to 84% on a soft spring while paused. Under it the title (Title3 500, ink) with the favorite star in its own 48dp cell, then the artist and the album (Body graphite), each opening its screen.
 - **Scrubber:** a 2dp pewter rule with the elapsed part and an 8dp square thumb in teal; touching anywhere scrubs (the rule thickens and the thumb grows to 16dp), and the track seeks when the finger lifts, with a light `impact`. Elapsed and remaining (`-m:ss`) in tabular Footnote graphite below.
 - **Transport:** previous, play/pause and next as filled glyphs in ink (32 / 48 / 32dp), each in a target a cell and a half larger on every side, with `impact` haptics. Previous restarts the track after its first three seconds.
-- **Sleep timer:** the Zzz glyph beside Lyrics at the bottom left (graphite when off, teal while a timer runs, with the time left beside it in tabular Footnote teal, or "End of track"). It opens a menu laid out like the long-press menu: a "Sleep timer" catalog line over what the running timer will do, then 15 / 30 / 45 / 60 Minutes, Custom… (a stepper: minute steps under 10 min, 5 under an hour, 15 above, up to 12 h), End of Track and, while one runs, Turn Off Timer. The playback service enforces it, so it pauses with Wave in the background.
+- **Sleep timer:** the Zzz glyph beside Lyrics at the bottom left (graphite when off, teal while a timer runs, with the time left beside it in tabular Footnote teal, or "End of track"). It opens a glass dialog card laid out like the long-press menu: a "Sleep timer" catalog line over what the running timer will do, then 15 / 30 / 45 / 60 Minutes, Custom… (a stepper: minute steps under 10 min, 5 under an hour, 15 above, up to 12 h), End of Track and, while one runs, Turn Off Timer. The playback service enforces it, so it pauses with Wave in the background.
 - **Queue view:** the Queue icon (teal while open) swaps the player view for the playing track in a small row, Shuffle and Repeat as labelled toggles (teal and 600 when on, graphite when off; Repeat cycles off → all → one), then the Up Next catalog line with its count and the list. Each Up Next row is a Songs-list row with a remove X and a drag handle (both graphite, 48dp). Dragging the handle lifts the row onto the `surface` tone under the finger while the others step aside; near the list's edges the list scrolls. Screen readers get Remove / Move up / Move down actions.
 - **Lyrics view:** the Lyrics icon (bottom left, teal while open) swaps the player view for the same small track row, then the lyrics in Title2 500. Synced lyrics (embedded LRC or a sidecar `.lrc`; Core's `pickLyrics` prefers synced, then the sidecar) tint the sung line ink and the rest graphite, easing over 240 ms, and keep the sung line a third of the way down as the song plays. A pause between lines shows as three 4dp squares. Scrolling by hand stops the follow until three seconds after the finger lifts; tapping a line seeks there with a `selection` haptic. Unsynced lyrics are plain ink text to scroll; a song without lyrics shows the empty state. Lyrics are read from the file each time the view opens, so a newly added `.lrc` shows up without a rescan.
 
@@ -326,5 +345,5 @@ A 40dp line icon in pewter, an Entry-type title in ink, a Subheadline message in
 - **Don't** use bold large titles; titles are weight 300.
 - **Don't** add icons or chevrons to Library entry rows.
 - **Don't** set text in `tertiary`.
-- **Don't** add shadows, gradients or blur; separate with a ramp step or a hairline. Glass is for the floating chrome only, and the artwork gradient for the Now Playing ground only.
-- **Don't** introduce a third accent colour.
+- **Don't** add shadows, gradients or blur; separate with a ramp step or a hairline. Glass is for the floating chrome and dialog cards only, and the artwork gradient for the Now Playing ground only.
+- **Don't** introduce a third accent colour. The destructive red is for Delete and Remove buttons only.

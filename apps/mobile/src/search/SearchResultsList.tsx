@@ -17,12 +17,15 @@ import { useCurrentTrackId } from "@/playback/hooks";
 import {
   openAlbumActions,
   openArtistActions,
+  openGenreActions,
+  openPlaylistActions,
   openTrackActions,
-} from "@/playback/TrackActionsSheet";
+} from "@/playback/ActionsMenu";
 
 import { ArtworkRow } from "./ArtworkRow";
 import type { ResultRow } from "./rows";
 import type { SearchHit } from "./searchIndex";
+import { useListScrollable } from "@/motion/heldTouch";
 
 /** Tapping a song plays the song results from it. */
 const SEARCH_CONTEXT: QueueContext = { kind: "search", id: null };
@@ -105,6 +108,7 @@ function Hit({
           name={hit.name}
           detail={`${top ? "Playlist · " : ""}${counted(hit.playlist.trackCount, "song")}`}
           onPress={open(() => openPlaylist(hit.playlist.id))}
+          onLongPress={() => openPlaylistActions(hit.playlist)}
         />
       );
     case "genre":
@@ -113,6 +117,7 @@ function Hit({
           name={hit.name}
           detail={`${top ? "Genre · " : ""}${counted(hit.genre.trackCount, "song")}`}
           onPress={open(() => openGenre(hit.genre.id))}
+          onLongPress={() => openGenreActions(hit.genre)}
         />
       );
   }
@@ -123,6 +128,7 @@ function Hit({
  * results and "Show all". Scrolling or tapping a row lets the keyboard go.
  */
 export function SearchResultsList({ rows, onOpen, onShowAll }: Props) {
+  const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
   const currentId = useCurrentTrackId();
 
@@ -169,6 +175,7 @@ export function SearchResultsList({ rows, onOpen, onShowAll }: Props) {
 
   return (
     <LegendList
+      scrollEnabled={scrollable}
       className="flex-1"
       data={rows}
       keyExtractor={keyExtractor}

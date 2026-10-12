@@ -109,6 +109,7 @@ export type {
   PlayTrackerState,
   PlaybackSignal,
   PlaySource,
+  PlayListening,
 } from "./playEvents.ts";
 export { favoriteStar, starWriteSettled, starWriteStarted } from "./favorites.ts";
 export type { FavoriteStar } from "./favorites.ts";
@@ -152,3 +153,72 @@ export type {
   AutoTrackList,
   AutoTrackListKind,
 } from "./auto.ts";
+export { LIBRARY_SECTION_SLUGS, sectionSongs } from "./librarySections.ts";
+export type {
+  LibrarySectionSlug,
+  LibrarySectionSource,
+  SectionCollection,
+} from "./librarySections.ts";
+export { placeOverlayCard } from "./overlay.ts";
+export type { OverlayCardFrame, OverlayCardInput, OverlayInsets } from "./overlay.ts";
+export type { OverlayAnchor, OverlayRect } from "./overlay.ts";
+export type { OverlayAlign } from "./overlay.ts";
+export { moveSlide, slideEntry, slideTicks, startSlide } from "./slideToChoose.ts";
+export type { MenuSlide, SlidePoint } from "./slideToChoose.ts";
+export { SHORTCUT_TAB_CHOICES, parseShortcutTab, tabBarTabs } from "./shortcutTab.ts";
+export type { TabBarTab } from "./shortcutTab.ts";
+export { TAB_PATH, detailPath, inLibraryStack, isDetailPath, tabOfPath } from "./navigation.ts";
+export type { DetailScreen } from "./navigation.ts";
+export { planAlert } from "./alert.ts";
+export type { AlertButton, AlertChoice, AlertPlan, AlertSpec } from "./alert.ts";
+export { DEFAULT_THEME, TONES, themeContrastIssues } from "./theme.ts";
+export type { ContrastIssue, Theme, ThemeColors } from "./theme.ts";
+export {
+  DEFAULT_THEME_CHOICE,
+  THEME_SWATCHES,
+  isDefaultThemeChoice,
+  readThemeChoice,
+  themeFor,
+  themeSwatchRows,
+} from "./themeChoice.ts";
+export type {
+  BackgroundSwatch,
+  InkSwatch,
+  Scheme,
+  ThemeChoice,
+  ThemeSwatchOption,
+  ThemeSwatchRow,
+} from "./themeChoice.ts";
+export { sliderFraction, sliderValueAt, snapSliderValue, stepSlider } from "./slider.ts";
+export type { SliderRange } from "./slider.ts";
+export {
+  DEFAULT_GLASS_SETTINGS,
+  GLASS_SETTINGS,
+  glassTintAlpha,
+  isDefaultGlassSettings,
+  readGlassSettings,
+} from "./glassSettings.ts";
+export type { GlassSettings } from "./glassSettings.ts";
+export { listeningOverview, listeningTotals } from "./listening.ts";
+export type {
+  LibraryTotals,
+  ListeningFilter,
+  ListeningOverview,
+  ListeningTotals,
+  SongListening,
+} from "./listening.ts";
+export { ARTIST_MOST_PLAYED, artistStats } from "./artistStats.ts";
+export type { ArtistStats, ArtistStatsInput } from "./artistStats.ts";
+export {
+  DEFAULT_SONG_SORT,
+  defaultSongSort,
+  readSongSort,
+  sameSongSort,
+  SONG_SORTS,
+  songSortLabel,
+  songSortsFor,
+  songSpineKeys,
+  sortSongs,
+  writeSongSort,
+} from "./songSort.ts";
+export type { SongListKind, SongSort, SongSortKey, SortableSong } from "./songSort.ts";

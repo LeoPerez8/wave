@@ -1,23 +1,43 @@
 /**
  * Play events: one per time a track starts playing, with how long it was
- * listened to and how it ended. A play is counted (towards play counts and
- * Most Played) once it was listened to for half the track or four minutes,
- * whichever comes first.
+ * listened to and how it ended. A play is counted (towards play counts, Most
+ * Played and the stats) once it was listened to for more than 15 seconds; a
+ * song of 15 seconds or less counts when it's played to the end.
  */
 
 import { RESTART_THRESHOLD_MS, type QueueCommand } from "./queue.ts";
 
-/** Listening this long counts a play whatever the track's length. */
-export const COUNTED_PLAY_MS = 240_000;
-
-/** Whether a play counts: ≥ 50% of the track or ≥ 4 minutes listened. */
-export const isCountedPlay = (listenedMs: number, durationMs: number | null): boolean =>
-  listenedMs > 0 &&
-  (listenedMs >= COUNTED_PLAY_MS ||
-    (durationMs !== null && durationMs > 0 && listenedMs * 2 >= durationMs));
+/**
+ * Listening longer than this counts a play; a song this long or shorter
+ * counts when it's played to the end.
+ */
+export const COUNTED_PLAY_MS = 15_000;
 
 /** How a play ended. */
 export type PlayEndReason = "completed" | "skipped" | "stopped" | "interrupted";
+
+/** What decides whether a play counts. */
+export interface PlayListening {
+  /** Time actually spent playing. */
+  readonly listenedMs: number;
+  /** The track's length, or null while it isn't known. */
+  readonly durationMs: number | null;
+  readonly endReason: PlayEndReason;
+}
+
+/**
+ * Whether a play counts: listened to for more than 15 seconds, or a song of
+ * 15 seconds or less played to the end. Each play event counts at most once.
+ * This is the one home of the rule; the migration that recounted past plays
+ * (`0007_recount_plays` in the app) mirrors it.
+ */
+export const isCountedPlay = ({ listenedMs, durationMs, endReason }: PlayListening): boolean =>
+  listenedMs > COUNTED_PLAY_MS ||
+  (listenedMs > 0 &&
+    endReason === "completed" &&
+    durationMs !== null &&
+    durationMs > 0 &&
+    durationMs <= COUNTED_PLAY_MS);
 
 /** What a playback was started from (Core's queue context); null for Play Next / Add to Queue. */
 export interface PlayContext {
@@ -149,7 +169,7 @@ const toEvent = (play: OpenPlay, at: number, endReason: PlayEndReason): PlayEven
     listenedMs,
     durationMs: play.durationMs,
     endReason,
-    counted: isCountedPlay(listenedMs, play.durationMs),
+    counted: isCountedPlay({ listenedMs, durationMs: play.durationMs, endReason }),
     source: play.source,
   };
 };

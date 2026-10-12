@@ -9,14 +9,20 @@ import { TextButton } from "@/components/TextButton";
 import { folderPhrase } from "./folderPhrase";
 import { useScanRoots, useScanState, useSongs } from "./hooks";
 import { promptForMusicFolder } from "./promptForMusicFolder";
+import { SongSortButton } from "./SongSortButton";
+import { useSortedSongs } from "./songSort";
 import { ListIntro, songCount, TrackList } from "./TrackList";
 
 /** Tapping a song plays the whole Songs list from it. */
 const SONGS_CONTEXT = { kind: "songs", id: null } as const;
 
-/** Library › Songs: every track by title, virtualised for libraries of tens of thousands. */
+/**
+ * Library › Songs: every track in the sort you chose (by title until then),
+ * virtualised for libraries of tens of thousands.
+ */
 export function SongsList() {
-  const songs = useSongs();
+  const library = useSongs();
+  const { sort, songs } = useSortedSongs("songs", library);
   const scan = useScanState();
   const roots = useScanRoots();
 
@@ -46,11 +52,16 @@ export function SongsList() {
     <TrackList
       songs={songs}
       context={SONGS_CONTEXT}
-      indexed
+      sort={sort}
       header={
         <View>
           <ScanProgressBanner />
-          <ListIntro line={songCount(songs.length)} songs={songs} context={SONGS_CONTEXT} />
+          <ListIntro
+            line={songCount(songs.length)}
+            songs={songs}
+            context={SONGS_CONTEXT}
+            sortControl={<SongSortButton kind="songs" />}
+          />
         </View>
       }
     />
