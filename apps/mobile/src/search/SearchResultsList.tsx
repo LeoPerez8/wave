@@ -1,5 +1,5 @@
 import { LegendList } from "@legendapp/list/react-native";
-import type { QueueContext, SearchKind } from "@wave/core";
+import { counted, type QueueContext, type SearchKind } from "@wave/core";
 import { useCallback, useMemo } from "react";
 import { Text, View } from "react-native";
 
@@ -30,9 +30,6 @@ import type { ListSelection } from "@/selection/useListSelection";
 
 /** Tapping a song plays the song results from it. */
 const SEARCH_CONTEXT: QueueContext = { kind: "search", id: null };
-
-const counted = (count: number, word: string): string =>
-  `${count.toLocaleString("en")} ${count === 1 ? word : `${word}s`}`;
 
 const HEIGHT: Readonly<Record<ResultRow["type"], number>> = {
   heading: CELL * 6,

@@ -1,6 +1,6 @@
 import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
 import { useScrollToTop } from "expo-router";
-import { songSpineKeys, type QueueContext, type SongSort } from "@wave/core";
+import { counted, songSpineKeys, type QueueContext, type SongSort } from "@wave/core";
 import { useCallback, useMemo, useRef, type ReactElement, type ReactNode } from "react";
 import { View } from "react-native";
 
@@ -29,8 +29,7 @@ export const toTrackSummary = (song: SongRow): TrackSummary => ({
   artworkUri: song.thumbPath === null ? undefined : `file://${song.thumbPath}`,
 });
 
-export const songCount = (count: number): string =>
-  `${count.toLocaleString("en")} ${count === 1 ? "song" : "songs"}`;
+export const songCount = (count: number): string => counted(count, "song");
 
 /**
  * A list's opening: a catalog line (the count, a path…) over Play and Shuffle,

@@ -1,7 +1,7 @@
 import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
 import { useScrollToTop } from "expo-router";
 import { IconStack2 } from "@tabler/icons-react-native";
-import { describeFolder } from "@wave/core";
+import { counted, describeFolder } from "@wave/core";
 import { useCallback, useMemo, useRef, type ReactElement } from "react";
 import { View } from "react-native";
 
@@ -28,9 +28,6 @@ import type { AlbumRow, ArtistRow, FolderRow, GenreRow } from "./LibraryStore";
 import { openArtist, openFolder, openGenre } from "./routes";
 import { useSpine } from "./useSpine";
 import { useListScrollable } from "@/motion/heldTouch";
-
-const counted = (count: number, word: string): string =>
-  `${count.toLocaleString("en")} ${count === 1 ? word : `${word}s`}`;
 
 function ListHead({ line }: { line: string }) {
   return (

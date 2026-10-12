@@ -1,4 +1,4 @@
-import { describeFolder } from "@wave/core";
+import { counted, describeFolder } from "@wave/core";
 import { IconMinus } from "@tabler/icons-react-native";
 import { ScrollView, Text, View } from "react-native";
 
@@ -14,8 +14,6 @@ import { promptForExcludedFolder } from "@/library/promptForExcludedFolder";
 import { promptForMusicFolder } from "@/library/promptForMusicFolder";
 import { includeMusicFolder, removeMusicFolder } from "@/library/runtime";
 import { confirmAction, showError } from "@/overlay/alert";
-
-const songCount = (n: number): string => `${n.toLocaleString("en")} ${n === 1 ? "song" : "songs"}`;
 
 const failed = (title: string) => (error: unknown) => showError(title, error);
 
@@ -95,7 +93,7 @@ export default function MusicFoldersScreen() {
           <FolderRow
             key={root.path}
             path={root.path}
-            detail={root.lastScannedAt === null ? "" : songCount(root.trackCount)}
+            detail={root.lastScannedAt === null ? "" : counted(root.trackCount, "song")}
             removeLabel="Remove"
             removable={roots.length > 1 && !scanning}
             onRemove={() => void confirmRemove(root.path, describeFolder(root.path).name)}

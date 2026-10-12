@@ -9,6 +9,7 @@ import {
 import {
   currentEntry,
   reorderShift,
+  counted,
   reorderTarget,
   upNext,
   type QueueEntry,
@@ -136,7 +137,7 @@ export function QueueHeader({ item }: { item: NonNullable<PlaybackState["item"]>
             className="font-sans text-footnote text-secondary"
             style={{ fontVariant: ["tabular-nums"] }}
           >
-            {`${count.toLocaleString("en")} ${count === 1 ? "song" : "songs"}`}
+            {counted(count, "song")}
           </Text>
         )}
       </View>

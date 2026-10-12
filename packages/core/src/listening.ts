@@ -87,8 +87,11 @@ export interface ListeningOverview {
   readonly listening: readonly string[];
 }
 
-/** `count` with thousands separators, then the singular for one and the plural otherwise. */
-export const counted = (count: number, singular: string, plural: string): string =>
+/**
+ * `count` with thousands separators, then the singular for one and the plural
+ * otherwise ("1 song", "12,500 songs"); the plural defaults to the singular + "s".
+ */
+export const counted = (count: number, singular: string, plural = `${singular}s`): string =>
   `${count.toLocaleString("en")} ${count === 1 ? singular : plural}`;
 
 /** The overview's lines, in the order they read. */

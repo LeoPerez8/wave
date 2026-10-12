@@ -1,6 +1,7 @@
 import {
   commonKind,
   confirmsFirst,
+  counted,
   groupSongs,
   isDestructiveAction,
   isDetailPath,
@@ -101,9 +102,6 @@ interface KindInfo<T> {
   readonly noun: string;
 }
 
-const plural = (count: number, word: string): string =>
-  `${count.toLocaleString("en")} ${count === 1 ? word : `${word}s`}`;
-
 const cover = (thumbPath: string | null): readonly string[] =>
   thumbPath === null ? [] : [thumbPath];
 
@@ -143,7 +141,7 @@ const KINDS: { readonly [K in ItemKind]: KindInfo<ItemOf[K]> } = {
     songs: (artist) => itemSongs("artists", artist.id),
     heading: (artist) => ({
       title: artist.name,
-      subtitle: plural(artist.trackCount, "song"),
+      subtitle: counted(artist.trackCount, "song"),
       covers: undefined,
       artist,
     }),
@@ -155,7 +153,7 @@ const KINDS: { readonly [K in ItemKind]: KindInfo<ItemOf[K]> } = {
     songs: (playlist) => itemSongs("playlists", playlist.id),
     heading: (playlist) => ({
       title: playlist.name,
-      subtitle: plural(playlist.trackCount, "song"),
+      subtitle: counted(playlist.trackCount, "song"),
       covers: playlist.thumbPaths,
     }),
     facts: () => NO_FACTS,
@@ -165,7 +163,7 @@ const KINDS: { readonly [K in ItemKind]: KindInfo<ItemOf[K]> } = {
     songs: (genre) => itemSongs("genres", genre.id),
     heading: (genre) => ({
       title: genre.name,
-      subtitle: plural(genre.trackCount, "song"),
+      subtitle: counted(genre.trackCount, "song"),
       covers: undefined,
     }),
     facts: () => NO_FACTS,
@@ -175,7 +173,7 @@ const KINDS: { readonly [K in ItemKind]: KindInfo<ItemOf[K]> } = {
     songs: (folder) => itemSongs("folders", folder.id),
     heading: (folder) => ({
       title: folder.name,
-      subtitle: plural(folder.trackCount, "song"),
+      subtitle: counted(folder.trackCount, "song"),
       covers: undefined,
     }),
     facts: () => NO_FACTS,
@@ -187,7 +185,7 @@ const KINDS: { readonly [K in ItemKind]: KindInfo<ItemOf[K]> } = {
       const count = sectionSongs?.[section.slug];
       return {
         title: section.label,
-        subtitle: count === undefined ? "" : plural(count, "song"),
+        subtitle: count === undefined ? "" : counted(count, "song"),
         covers: undefined,
       };
     },
@@ -258,7 +256,7 @@ export const targetHeading = (
 
 /** "12 songs", "3 albums": what a count of the target's items is called. */
 export const targetCount = (target: ActionItems): string =>
-  plural(target.items.length, info(target).noun);
+  counted(target.items.length, info(target).noun);
 
 /** One entry, as a menu row or a bar button shows it. */
 export interface ActionEntry {

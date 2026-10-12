@@ -202,7 +202,7 @@ export {
   readGlassSettings,
 } from "./glassSettings.ts";
 export type { GlassSettings } from "./glassSettings.ts";
-export { listeningOverview, listeningTotals } from "./listening.ts";
+export { counted, listeningOverview, listeningTotals } from "./listening.ts";
 export type {
   LibraryTotals,
   ListeningFilter,

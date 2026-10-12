@@ -2,6 +2,7 @@ import { IconPlus } from "@tabler/icons-react-native";
 import {
   checkPlaylistName,
   confirmPlaylistDeletion,
+  counted,
   describePlaylistAdd,
   nextPlaylistName,
   type PlaylistNameCheck,
@@ -31,9 +32,6 @@ import {
 } from "./playlists";
 
 const toast = (message: string): void => ToastAndroid.show(message, ToastAndroid.SHORT);
-
-const songCount = (count: number): string =>
-  `${count.toLocaleString("en")} ${count === 1 ? "song" : "songs"}`;
 
 const failed = (what: string) => (): void => toast(`Couldn't ${what}`);
 
@@ -177,7 +175,7 @@ function AddCard({ subject, close }: { subject: AddSubject; close: () => void })
             <Hairline />
             <PlaylistEntry
               name={playlist.name}
-              detail={songCount(playlist.trackCount)}
+              detail={counted(playlist.trackCount, "song")}
               paths={playlist.thumbPaths}
               onPress={() => {
                 close();

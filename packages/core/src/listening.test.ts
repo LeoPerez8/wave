@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { listeningOverview, listeningTotals, type SongListening } from "./index.ts";
+import { counted, listeningOverview, listeningTotals, type SongListening } from "./index.ts";
 
 const MINUTE = 60_000;
 
@@ -113,5 +113,14 @@ describe("listeningOverview", () => {
       listeningOverview({ songs: 0, albums: 0, artists: 0 }, listeningTotals([])).listening,
       ["0 minutes listened", "0 songs listened", "0 plays"],
     );
+  });
+});
+
+describe("counted", () => {
+  test("a count with thousands separators, the singular for one and the plural otherwise", () => {
+    assert.equal(counted(1, "song"), "1 song");
+    assert.equal(counted(0, "song"), "0 songs");
+    assert.equal(counted(12_500, "album"), "12,500 albums");
+    assert.equal(counted(2, "minute listened", "minutes listened"), "2 minutes listened");
   });
 });
