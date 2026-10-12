@@ -25,6 +25,13 @@ export interface PlayContext {
   readonly id: string | null;
 }
 
+/**
+ * Where a play was started from: `auto` when Android Auto started the
+ * playback, `phone` otherwise (the app, the notification, the lock screen,
+ * Bluetooth).
+ */
+export type PlaySource = "phone" | "auto";
+
 /** One play of a track, as the library stores it. */
 export interface PlayEvent {
   readonly trackId: string;
@@ -37,12 +44,15 @@ export interface PlayEvent {
   readonly durationMs: number | null;
   readonly endReason: PlayEndReason;
   readonly counted: boolean;
+  readonly source: PlaySource;
 }
 
 /** The track behind a player entry. */
 export interface PlayTrack {
   readonly trackId: string;
   readonly context: PlayContext | null;
+  /** Where the playback that reached this entry was started from. */
+  readonly source: PlaySource;
 }
 
 /**
@@ -128,6 +138,7 @@ const toEvent = (play: OpenPlay, at: number, endReason: PlayEndReason): PlayEven
     durationMs: play.durationMs,
     endReason,
     counted: isCountedPlay(listenedMs, play.durationMs),
+    source: play.source,
   };
 };
 
@@ -135,6 +146,7 @@ const open = (key: string, track: PlayTrack, at: number, durationMs: number | nu
   key,
   trackId: track.trackId,
   context: track.context,
+  source: track.source,
   startedAt: at,
   durationMs,
   listenedMs: 0,
@@ -182,6 +194,8 @@ export const resumePlay = (
       key,
       trackId: track.trackId,
       context: track.context,
+      // The play on record keeps where it was started from.
+      source: recorded.source,
       startedAt: recorded.startedAt,
       durationMs: signal.durationMs ?? recorded.durationMs,
       listenedMs: recorded.listenedMs,

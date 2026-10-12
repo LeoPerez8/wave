@@ -22,6 +22,7 @@ const play = (
   durationMs: 180_000,
   endReason: "completed",
   counted: true,
+  source: "phone",
   ...overrides,
 });
 
