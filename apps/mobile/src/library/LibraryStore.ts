@@ -279,17 +279,15 @@ export class LibraryStore extends Context.Service<
     readonly listSongs: Effect.Effect<readonly SongRow[], LibraryStoreError>;
     /** Every album by title, then album artist, for Library › Albums. */
     readonly listAlbums: Effect.Effect<readonly AlbumRow[], LibraryStoreError>;
-    /** [limit] albums from [offset] in the same order, for lists that page (Auto). */
+    /** [page] of the albums in the same order, for lists that page (Auto). */
     readonly listAlbumsPage: (
-      offset: number,
-      limit: number,
+      page: RowPage,
     ) => Effect.Effect<readonly AlbumRow[], LibraryStoreError>;
     /** Every artist with songs, by name, for Library › Artists. */
     readonly listArtists: Effect.Effect<readonly ArtistRow[], LibraryStoreError>;
-    /** [limit] artists from [offset] in the same order, for lists that page (Auto). */
+    /** [page] of the artists in the same order, for lists that page (Auto). */
     readonly listArtistsPage: (
-      offset: number,
-      limit: number,
+      page: RowPage,
     ) => Effect.Effect<readonly ArtistRow[], LibraryStoreError>;
     /** [page] of an artist's songs, in their screen's order (by title), for Auto. */
     readonly listArtistSongsPage: (
@@ -1135,13 +1133,11 @@ const make = Effect.gen(function* () {
 
     listAlbums: attempt("list albums", () => selectAlbums(db, undefined)),
 
-    listAlbumsPage: (offset, limit) =>
-      attempt("list albums", () => selectAlbums(db, undefined, { offset, limit })),
+    listAlbumsPage: (page) => attempt("list albums", () => selectAlbums(db, undefined, page)),
 
     listArtists: attempt("list artists", () => listArtistsSync(db)),
 
-    listArtistsPage: (offset, limit) =>
-      attempt("list artists", () => selectArtists(db, { page: { offset, limit } })),
+    listArtistsPage: (page) => attempt("list artists", () => selectArtists(db, { page })),
 
     listArtistSongsPage: (id, page) =>
       attempt("list the artist's songs", () => selectArtistSongs(db, id, page)),

@@ -128,30 +128,23 @@ export const layer = Layer.effect(
     /** The rows of [source] one page lists, as items. */
     const fetch = (
       source: AutoSource,
-      offset: number,
-      limit: number,
+      page: RowPage,
     ): Effect.Effect<readonly AutoItem[], Failure> => {
       switch (source.type) {
         case "albums":
-          return store
-            .listAlbumsPage(offset, limit)
-            .pipe(Effect.map((albums) => albums.map(autoAlbumItem)));
+          return store.listAlbumsPage(page).pipe(Effect.map((albums) => albums.map(autoAlbumItem)));
         // A handful of rows: page the Library's own list.
         case "playlists":
           return store.listPlaylists.pipe(
-            Effect.map((playlists) =>
-              playlists.slice(offset, offset + limit).map(autoPlaylistItem),
-            ),
+            Effect.map((playlists) => pageOf(playlists, page).map(autoPlaylistItem)),
           );
         // The app's Home shelf: a handful of albums.
         case "recentlyPlayed":
           return store.home.pipe(
-            Effect.map((home) =>
-              home.recentlyPlayed.slice(offset, offset + limit).map(autoAlbumItem),
-            ),
+            Effect.map((home) => pageOf(home.recentlyPlayed, page).map(autoAlbumItem)),
           );
         case "artists":
-          return store.listArtistsPage(offset, limit).pipe(
+          return store.listArtistsPage(page).pipe(
             Effect.flatMap(withCovers),
             Effect.map((artists) => artists.map(autoArtistItem)),
           );
@@ -163,15 +156,13 @@ export const layer = Layer.effect(
                 detail === null
                   ? notFound
                   : Effect.succeed(
-                      [...detail.albums, ...detail.appearsOn]
-                        .slice(offset, offset + limit)
-                        .map(autoAlbumItem),
+                      pageOf([...detail.albums, ...detail.appearsOn], page).map(autoAlbumItem),
                     ),
               ),
             );
         case "tracks":
-          return pageSongs[source.list.kind](source.list.id, { offset, limit }).pipe(
-            Effect.map((songs) => autoTrackItems(source.list, songs.map(toAutoTrack), offset)),
+          return pageSongs[source.list.kind](source.list.id, page).pipe(
+            Effect.map((songs) => autoTrackItems(source.list, songs.map(toAutoTrack), page.offset)),
           );
       }
     };
@@ -181,10 +172,7 @@ export const layer = Layer.effect(
         const node = yield* decode(parentId);
         const result = autoChildren(node, page, pageSize);
         if (result === null) return [];
-        const rows =
-          result.fetch === null
-            ? []
-            : yield* fetch(result.fetch.source, result.fetch.offset, result.fetch.limit);
+        const rows = result.fetch === null ? [] : yield* fetch(result.fetch.source, result.fetch);
         return autoPageItems(node, page, [...result.items, ...rows]);
       });
 
