@@ -80,6 +80,13 @@ export const layer = Layer.effect(
       // In playlist order, which Core keeps.
       playlist: (id) =>
         store.getPlaylist(Number(id)).pipe(Effect.map((detail) => detail?.items ?? null)),
+      // The app's Home tab lists, in their order, which Core keeps.
+      home: (id) =>
+        store.home.pipe(
+          Effect.map((home) =>
+            id === "most-played" ? home.mostPlayed : id === "favorites" ? home.favorites : null,
+          ),
+        ),
     };
 
     const songsOf = (list: AutoTrackList) =>
@@ -103,6 +110,13 @@ export const layer = Layer.effect(
           return store.listPlaylists.pipe(
             Effect.map((playlists) =>
               playlists.slice(offset, offset + limit).map(autoPlaylistItem),
+            ),
+          );
+        // The app's Home shelf: a handful of albums.
+        case "recentlyPlayed":
+          return store.home.pipe(
+            Effect.map((home) =>
+              home.recentlyPlayed.slice(offset, offset + limit).map(autoAlbumItem),
             ),
           );
         case "tracks":
