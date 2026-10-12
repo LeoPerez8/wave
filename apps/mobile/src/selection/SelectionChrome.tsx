@@ -81,9 +81,8 @@ function BarButton({
   opensMenu?: boolean;
   destructive?: boolean;
 }) {
-  const accent = useThemeColor("accent");
-  const danger = useThemeColor("destructive");
-  const tone = destructive ? danger : accent;
+  // The icon's colour is a native prop; the caption takes the same token as a class.
+  const tone = useThemeColor(destructive ? "destructive" : "accent");
   return (
     <Press
       accessibilityRole="button"
@@ -101,8 +100,9 @@ function BarButton({
         android_hyphenationFrequency="normal"
         adjustsFontSizeToFit
         minimumFontScale={0.85}
-        className="text-center font-sans text-caption font-semibold"
-        style={{ color: tone }}
+        className={`text-center font-sans text-caption font-semibold ${
+          destructive ? "text-destructive" : "text-accent"
+        }`}
       >
         {caption}
       </Text>
