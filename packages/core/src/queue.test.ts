@@ -435,3 +435,55 @@ describe("nextRepeatMode", () => {
     assert.equal(nextRepeatMode("one"), "off");
   });
 });
+
+describe("removeTracks (deleted songs)", () => {
+  test("drops every entry of the tracks, played, queued or upcoming, and keeps playing", () => {
+    const playing = apply(start("a b c d", 1), { type: "addToQueue", trackIds: ["d"] });
+    const { state, playback } = reduceQueue(playing, { type: "removeTracks", trackIds: ["a", "d"] });
+    assert.equal(show(state), "[b] c");
+    assert.equal(currentEntry(state)?.key, keyOf(playing, "b"));
+    assert.equal(playback, "keep");
+  });
+
+  test("deleting the current track moves on to the next one", () => {
+    const playing = start("a b c", 1);
+    const { state, playback } = reduceQueue(playing, { type: "removeTracks", trackIds: ["b"] });
+    assert.equal(show(state), "a [c]");
+    assert.equal(playback, "keep");
+  });
+
+  test("with repeat one, deleting the current track still moves on", () => {
+    const playing = apply(start("a b c", 1), { type: "setRepeat", mode: "one" });
+    assert.equal(show(apply(playing, { type: "removeTracks", trackIds: ["b"] })), "a [c]");
+  });
+
+  test("deleting the last track with nothing after it stops on the one before", () => {
+    const { state, playback } = reduceQueue(start("a b c", 2), {
+      type: "removeTracks",
+      trackIds: ["c"],
+    });
+    assert.equal(show(state), "a [b]");
+    assert.equal(playback, "stop");
+  });
+
+  test("with repeat all, deleting the last track wraps to the first", () => {
+    const last = apply(start("a b c", 2), { type: "setRepeat", mode: "all" });
+    const { state, playback } = reduceQueue(last, { type: "removeTracks", trackIds: ["c"] });
+    assert.equal(show(state), "[a] b");
+    assert.equal(playback, "keep");
+  });
+
+  test("deleting every track empties the queue", () => {
+    const { state } = reduceQueue(start("a b", 0), { type: "removeTracks", trackIds: ["a", "b"] });
+    assert.deepEqual(state.entries, []);
+    assert.equal(state.index, -1);
+    assert.equal(currentEntry(state), null);
+  });
+
+  test("tracks the queue doesn't hold change nothing", () => {
+    const playing = start("a b c", 1);
+    const { state, playback } = reduceQueue(playing, { type: "removeTracks", trackIds: ["x"] });
+    assert.equal(state, playing);
+    assert.equal(playback, "keep");
+  });
+});
