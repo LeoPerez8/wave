@@ -303,7 +303,7 @@ function ActionsMenu({ target, close }: { target: ActionTarget; close: () => voi
       <Hairline />
       {/* Scrolls only where the card can't fit every entry (small windows, landscape). */}
       <View ref={trackList} collapsable={false} style={{ flexShrink: 1 }}>
-        <ScrollView bounces={false} overScrollMode="never">
+        <ScrollView bounces={false} overScrollMode="never" keyboardShouldPersistTaps="handled">
           {entries.map((entry, index) => (
             <View key={entry.label} ref={trackEntry(index)} collapsable={false}>
               <EntryRow

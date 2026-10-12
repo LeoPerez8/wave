@@ -169,7 +169,7 @@ function AddCard({ subject, close }: { subject: AddSubject; close: () => void })
       </Press>
       {/* The card stops short of the screen edges; a long list scrolls inside it.
           Each playlist follows a divider, so none trails the last. */}
-      <ScrollView style={{ flexGrow: 0, flexShrink: 1 }}>
+      <ScrollView keyboardShouldPersistTaps="handled" style={{ flexGrow: 0, flexShrink: 1 }}>
         {playlists.map((playlist) => (
           <Fragment key={playlist.id}>
             <Hairline />

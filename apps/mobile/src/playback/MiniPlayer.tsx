@@ -3,7 +3,7 @@ import {
   IconPlayerPlayFilled,
   IconPlayerTrackNextFilled,
 } from "@tabler/icons-react-native";
-import { resolveSkipSwipe, type SkipDirection } from "@wave/core";
+import { concentricRadius, resolveSkipSwipe, type SkipDirection } from "@wave/core";
 import * as Haptics from "expo-haptics";
 import { useRef, useSyncExternalStore } from "react";
 import { Text, View } from "react-native";
@@ -36,6 +36,17 @@ import { skipToNext, skipToPrevious, togglePlayPause } from "./actions";
 import { playbackState } from "./Player";
 
 const RADIUS = chrome.miniPlayer / 2;
+
+const ART = CELL * 5;
+/** Gap between the artwork and the pill's leading edge. */
+const ART_INSET = CELL * 1.5;
+/** Artwork corners concentric with the pill's, worked out from its dimensions. */
+const ART_RADIUS = concentricRadius({
+  outerRadius: RADIUS,
+  insetX: ART_INSET,
+  insetY: (chrome.miniPlayer - ART) / 2,
+  size: ART,
+});
 
 /** Horizontal travel before the drag takes over from a tap, in dp. */
 const DRAG_SLOP = CELL * 1.5;
@@ -170,9 +181,9 @@ export function MiniPlayer({ backdropId, onOpen }: Props) {
                 haptic="selection"
                 depth={0.015}
                 className="flex-1 flex-row items-center self-stretch"
-                style={{ gap: CELL * 1.5, paddingLeft: CELL * 1.5 }}
+                style={{ gap: CELL * 1.5, paddingLeft: ART_INSET }}
               >
-                <Artwork uri={item.artworkUri ?? undefined} size={CELL * 5} />
+                <Artwork uri={item.artworkUri ?? undefined} size={ART} radius={ART_RADIUS} />
                 <View className="flex-1">
                   <Text
                     numberOfLines={1}

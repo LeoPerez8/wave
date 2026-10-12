@@ -26,7 +26,12 @@ function SortMenu({ kind, close }: { kind: SongListKind; close: () => void }) {
       </Text>
       <Hairline />
       {/* Scrolls only where the card can't fit every sort (small windows, landscape). */}
-      <ScrollView bounces={false} overScrollMode="never" style={{ flexShrink: 1 }}>
+      <ScrollView
+        bounces={false}
+        overScrollMode="never"
+        keyboardShouldPersistTaps="handled"
+        style={{ flexShrink: 1 }}
+      >
         {sorts.map((sort, index) => (
           <EntryRow
             key={songSortLabel(sort)}
