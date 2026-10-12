@@ -106,6 +106,7 @@ export type {
   PlayTrackerResult,
   PlayTrackerState,
   PlaybackSignal,
+  PlaySource,
 } from "./playEvents.ts";
 export { favoriteStar, starWriteSettled, starWriteStarted } from "./favorites.ts";
 export type { FavoriteStar } from "./favorites.ts";
@@ -141,3 +142,7 @@ export type {
   AutoTrackList,
   AutoTrackListKind,
 } from "./auto.ts";
+export { autoPageItems, autoPlaylistItem } from "./auto.ts";
+export type { AutoPlaylist } from "./auto.ts";
+export { autoArtistItem } from "./auto.ts";
+export type { AutoArtist } from "./auto.ts";

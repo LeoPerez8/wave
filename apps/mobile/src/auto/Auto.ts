@@ -1,9 +1,12 @@
 import {
   AUTO_ROOT,
   autoAlbumItem,
+  autoArtistItem,
   autoChildren,
   autoItem,
+  autoPageItems,
   autoPlayList,
+  autoPlaylistItem,
   autoQueueStart,
   autoTrackItems,
   decodeAutoMediaId,
@@ -76,6 +79,11 @@ export const layer = Layer.effect(
     > = {
       album: (id) =>
         store.getAlbum(Number(id)).pipe(Effect.map((detail) => detail?.tracks ?? null)),
+      // In playlist order, which Core keeps.
+      playlist: (id) =>
+        store.getPlaylist(Number(id)).pipe(Effect.map((detail) => detail?.items ?? null)),
+      artistSongs: (id) =>
+        store.getArtist(Number(id)).pipe(Effect.map((detail) => detail?.songs ?? null)),
     };
 
     const songsOf = (list: AutoTrackList) =>
@@ -94,6 +102,31 @@ export const layer = Layer.effect(
           return store
             .listAlbumsPage(offset, limit)
             .pipe(Effect.map((albums) => albums.map(autoAlbumItem)));
+        // A handful of rows: page the Library's own list.
+        case "playlists":
+          return store.listPlaylists.pipe(
+            Effect.map((playlists) =>
+              playlists.slice(offset, offset + limit).map(autoPlaylistItem),
+            ),
+          );
+        case "artists":
+          return store
+            .listArtistsPage(offset, limit)
+            .pipe(Effect.map((artists) => artists.map(autoArtistItem)));
+        case "artistAlbums":
+          return store
+            .getArtist(Number(source.id))
+            .pipe(
+              Effect.flatMap((detail) =>
+                detail === null
+                  ? notFound
+                  : Effect.succeed(
+                      [...detail.albums, ...detail.appearsOn]
+                        .slice(offset, offset + limit)
+                        .map(autoAlbumItem),
+                    ),
+              ),
+            );
         case "tracks":
           return songsOf(source.list).pipe(
             Effect.map((songs) =>
@@ -105,11 +138,14 @@ export const layer = Layer.effect(
 
     const children = (parentId: string, page: number, pageSize: number) =>
       Effect.gen(function* () {
-        const result = autoChildren(yield* decode(parentId), page, pageSize);
+        const node = yield* decode(parentId);
+        const result = autoChildren(node, page, pageSize);
         if (result === null) return [];
-        if (result.fetch === null) return result.items;
-        const rows = yield* fetch(result.fetch.source, result.fetch.offset, result.fetch.limit);
-        return [...result.items, ...rows];
+        const rows =
+          result.fetch === null
+            ? []
+            : yield* fetch(result.fetch.source, result.fetch.offset, result.fetch.limit);
+        return autoPageItems(node, page, [...result.items, ...rows]);
       });
 
     /** A node's item; the ones built from a library row load it. */
@@ -124,7 +160,15 @@ export const layer = Layer.effect(
               const detail = yield* store.getAlbum(Number(node.list.id));
               return detail === null ? yield* notFound : autoAlbumItem(detail.album);
             }
+            case "playlist": {
+              const detail = yield* store.getPlaylist(Number(node.list.id));
+              return detail === null ? yield* notFound : autoPlaylistItem(detail.playlist);
+            }
           }
+        }
+        if (node.type === "artist") {
+          const detail = yield* store.getArtist(Number(node.id));
+          return detail === null ? yield* notFound : autoArtistItem(detail.artist);
         }
         if (node.type === "track") {
           const songs = yield* songsOf(node.list);

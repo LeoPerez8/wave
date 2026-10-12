@@ -28,6 +28,7 @@ import * as Layer from "effect/Layer";
 import { openDatabaseSync } from "expo-sqlite";
 
 import { selectAlbums } from "./db/albums";
+import { selectArtists } from "./db/artists";
 import migrations from "./db/migrations";
 import {
   homeSections,
@@ -282,6 +283,11 @@ export class LibraryStore extends Context.Service<
     ) => Effect.Effect<readonly AlbumRow[], LibraryStoreError>;
     /** Every artist with songs, by name, for Library › Artists. */
     readonly listArtists: Effect.Effect<readonly ArtistRow[], LibraryStoreError>;
+    /** [limit] artists from [offset] in the same order, for lists that page (Auto). */
+    readonly listArtistsPage: (
+      offset: number,
+      limit: number,
+    ) => Effect.Effect<readonly ArtistRow[], LibraryStoreError>;
     /** Every genre with songs, by name, for Library › Genres. */
     readonly listGenres: Effect.Effect<readonly GenreRow[], LibraryStoreError>;
     /** Every folder holding songs, by name, for Library › Folders. */
@@ -695,31 +701,9 @@ const BY_TITLE = [
   asc(schema.tracks.path),
 ] as const;
 
-/**
- * Artists with songs: a song belongs to its track artist and to the album
- * artist of its album (so Watch the Throne counts for Kanye West as well).
- */
+/** Artists with songs (see `selectArtists`), only [ids] if given. */
 const listArtistsSync = (db: Database, ids?: readonly number[]): ArtistRow[] =>
-  db.all<ArtistRow>(sql`
-    WITH links AS (
-      SELECT id AS track_id, artist_id FROM tracks
-      UNION
-      SELECT tracks.id, albums.album_artist_id FROM tracks JOIN albums ON albums.id = tracks.album_id
-    )
-    SELECT artists.id AS "id", artists.name AS "name", artists.sort AS "sort",
-      (SELECT count(*) FROM albums WHERE albums.album_artist_id = artists.id) AS "albumCount",
-      count(links.track_id) AS "trackCount"
-    FROM artists JOIN links ON links.artist_id = artists.id
-    ${
-      ids === undefined
-        ? sql``
-        : sql`WHERE artists.id IN (${sql.join(
-            ids.map((id) => sql`${id}`),
-            sql`, `,
-          )})`
-    }
-    GROUP BY artists.id
-    ORDER BY artists.sort, artists.id`);
+  selectArtists(db, { ids });
 
 const getAlbumSync = (db: Database, id: number): AlbumDetail | null => {
   const { tracks, genres } = schema;
@@ -1205,6 +1189,9 @@ const make = Effect.gen(function* () {
       attempt("list albums", () => selectAlbums(db, undefined, { offset, limit })),
 
     listArtists: attempt("list artists", () => listArtistsSync(db)),
+
+    listArtistsPage: (offset, limit) =>
+      attempt("list artists", () => selectArtists(db, { page: { offset, limit } })),
 
     listGenres: attempt("list genres", () => {
       const { genres, tracks } = schema;
