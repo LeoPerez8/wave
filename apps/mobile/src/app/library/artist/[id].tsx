@@ -18,6 +18,7 @@ import type { AlbumRow, ArtistDetail, SongRow } from "@/library/LibraryStore";
 import { parseId } from "@/library/routes";
 import { ListIntro, songCount, toTrackSummary } from "@/library/TrackList";
 import { useListScrollable } from "@/motion/heldTouch";
+import { ArtistStatsBlock } from "@/stats/ArtistStatsBlock";
 
 type Item =
   | { readonly type: "section"; readonly label: string }
@@ -120,7 +121,12 @@ function ArtistContent({ detail }: { detail: ArtistDetail }) {
       estimatedItemSize={grid.row}
       recycleItems
       contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottomInset }}
-      ListHeaderComponent={<ListIntro line={line} songs={songs} context={context} />}
+      ListHeaderComponent={
+        <>
+          <ListIntro line={line} songs={songs} context={context} />
+          <ArtistStatsBlock artistId={detail.artist.id} songs={songs} />
+        </>
+      }
     />
   );
 }

@@ -184,3 +184,5 @@ export type {
   ListeningTotals,
   SongListening,
 } from "./listening.ts";
+export { ARTIST_MOST_PLAYED, artistStats } from "./artistStats.ts";
+export type { ArtistStats, ArtistStatsInput } from "./artistStats.ts";

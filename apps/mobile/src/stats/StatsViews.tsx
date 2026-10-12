@@ -1,6 +1,6 @@
 import { IconChartBar } from "@tabler/icons-react-native";
 import { LegendList } from "@legendapp/list/react-native";
-import { STATS_PERIODS, type StatsPeriod } from "@wave/core";
+import { STATS_PERIODS, type QueueContext, type StatsPeriod } from "@wave/core";
 import { useCallback, useMemo, type ReactElement } from "react";
 import { Text, View } from "react-native";
 
@@ -29,6 +29,12 @@ import { useListScrollable } from "@/motion/heldTouch";
 /** "3 plays", "1 play". */
 export const playCount = (count: number): string =>
   `${count.toLocaleString("en")} ${count === 1 ? "play" : "plays"}`;
+
+/** What tapping a song in a period's song ranking plays: that ranking. */
+export const statsSongsContext = (period: StatsPeriod): QueueContext => ({
+  kind: "stats",
+  id: `songs-${period}`,
+});
 
 /** The period selector: text tabs, the selected one in ink with a teal underline. */
 export function PeriodTabs({
@@ -81,7 +87,7 @@ function RankedSongRow({
   entry: { item: song, countedPlays },
   index,
   songs,
-  period,
+  context,
   currentId,
   favorites,
 }: {
@@ -89,7 +95,7 @@ function RankedSongRow({
   index: number;
   /** The whole ranking's songs: tapping a row plays them from it. */
   songs: readonly SongRow[];
-  period: StatsPeriod;
+  context: QueueContext;
   currentId: string | null;
   favorites: ReadonlySet<number>;
 }) {
@@ -104,7 +110,7 @@ function RankedSongRow({
       favorite={favorites.has(song.id)}
       leading="number"
       topNumber={index === 0}
-      onPress={() => playSongs(songs, index, { kind: "stats", id: `songs-${period}` })}
+      onPress={() => playSongs(songs, index, context)}
       onLongPress={() => openTrackActions(song)}
     />
   );
@@ -117,10 +123,11 @@ function RankedSongRow({
  */
 export function RankedSongs({
   ranking,
-  period,
+  context,
 }: {
   ranking: readonly Ranked<SongRow>[];
-  period: StatsPeriod;
+  /** What tapping a song plays: the ranking, from the song (see `statsSongsContext`). */
+  context: QueueContext;
 }) {
   const currentId = useCurrentTrackId();
   const favorites = useFavoriteIds();
@@ -133,7 +140,7 @@ export function RankedSongs({
           entry={entry}
           index={index}
           songs={songs}
-          period={period}
+          context={context}
           currentId={currentId}
           favorites={favorites}
         />
@@ -270,18 +277,19 @@ export function RankedSongList({
   const favorites = useFavoriteIds();
   const rowState = useMemo(() => ({ currentId, favorites }), [currentId, favorites]);
   const songs = useMemo(() => ranking.map((entry) => entry.item), [ranking]);
+  const context = useMemo(() => statsSongsContext(period), [period]);
   const renderItem = useCallback(
     ({ item, index }: { item: Ranked<SongRow>; index: number }) => (
       <RankedSongRow
         entry={item}
         index={index}
         songs={songs}
-        period={period}
+        context={context}
         currentId={currentId}
         favorites={favorites}
       />
     ),
-    [songs, period, currentId, favorites],
+    [songs, context, currentId, favorites],
   );
   return (
     <LegendList
