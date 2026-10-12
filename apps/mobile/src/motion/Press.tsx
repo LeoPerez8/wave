@@ -19,6 +19,7 @@ import {
 import { withUniwind } from "uniwind";
 
 import { useIsOverlayOrigin } from "@/overlay/overlay";
+import { useLongPressDelayMs } from "@/settings/longPressDelay";
 import { useTapAnimationMs } from "@/settings/tapAnimation";
 
 import { cancelHeldTouch, holdTouch, moveHeldTouch, releaseHeldTouch } from "./heldTouch";
@@ -59,7 +60,8 @@ const pointOf = ({ nativeEvent }: GestureResponderEvent) =>
 /**
  * Every tappable thing in Wave. The press animation takes the duration set in
  * Settings (tap animation, in ms); 0 or the system's reduce-motion setting
- * makes it an instant dim instead.
+ * makes it an instant dim instead. A long-press fires after the delay set in
+ * Settings (long-press delay) unless the caller passes its own `delayLongPress`.
  */
 export function Press({
   haptic,
@@ -69,6 +71,7 @@ export function Press({
   onPressOut,
   onPress,
   onLongPress,
+  delayLongPress,
   opensMenu = false,
   highlighted = false,
   onTouchMove,
@@ -79,6 +82,7 @@ export function Press({
   ...rest
 }: Props) {
   const ms = useTapAnimationMs();
+  const longPressDelay = useLongPressDelayMs();
   const reduceMotion = useReducedMotion();
   const pressed = useSharedValue(0);
   const lit = useSharedValue(highlighted ? 1 : 0);
@@ -146,6 +150,7 @@ export function Press({
         opensMenu && onPress != null ? (event) => void runAnchored(() => onPress(event)) : onPress
       }
       onLongPress={onLongPress == null ? undefined : longPress}
+      delayLongPress={delayLongPress ?? longPressDelay}
       onTouchMove={(event) => {
         const point = pointOf(event);
         if (holding.current && point !== undefined) moveHeldTouch(point);
