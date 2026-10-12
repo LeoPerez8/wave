@@ -1,4 +1,4 @@
-import { DEFAULT_SONG_SORT } from "@wave/core";
+import { sortSongs } from "@wave/core";
 import { useLocalSearchParams } from "expo-router";
 import { useMemo } from "react";
 
@@ -6,6 +6,8 @@ import { DetailFrame } from "@/library/DetailFrame";
 import { useGenre } from "@/library/hooks";
 import type { GenreDetail } from "@/library/LibraryStore";
 import { parseId } from "@/library/routes";
+import { SongSortButton } from "@/library/SongSortButton";
+import { useSongSort } from "@/library/songSort";
 import { ListIntro, songCount, TrackList } from "@/library/TrackList";
 
 function GenreSongs({ detail }: { detail: GenreDetail }) {
@@ -13,19 +15,27 @@ function GenreSongs({ detail }: { detail: GenreDetail }) {
     () => ({ kind: "genre", id: String(detail.genre.id) }) as const,
     [detail.genre.id],
   );
+  const sort = useSongSort("genre");
+  // Play, Shuffle and rows all play this displayed order.
+  const songs = useMemo(() => sortSongs(detail.songs, sort), [detail.songs, sort]);
   return (
     <TrackList
-      songs={detail.songs}
+      songs={songs}
       context={context}
-      sort={DEFAULT_SONG_SORT}
+      sort={sort}
       header={
-        <ListIntro line={songCount(detail.songs.length)} songs={detail.songs} context={context} />
+        <ListIntro
+          line={songCount(songs.length)}
+          songs={songs}
+          context={context}
+          sortControl={<SongSortButton kind="genre" />}
+        />
       }
     />
   );
 }
 
-/** A genre: its songs by title, with Play / Shuffle and the A–Z spine. */
+/** A genre: its songs in the sort chosen for genres (by title until then), with Play / Shuffle and the A–Z spine. */
 export default function GenreScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const detail = useGenre(parseId(id));

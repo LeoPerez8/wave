@@ -4,7 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { beforeEach, describe, test } from "node:test";
 
-import { homeSections, latestPlay, recordPlay, updatePlay } from "./playHistory.ts";
+import { homeSections, latestPlay, listFavorites, recordPlay, updatePlay } from "./playHistory.ts";
 import * as schema from "./schema.ts";
 import { trackPlayTotals } from "./stats.ts";
 import {
@@ -90,6 +90,22 @@ describe("Favorites", () => {
     assert.deepEqual(
       homeSections(db).favorites.map((row) => row.title),
       ["Starred late", "Starred early"],
+    );
+  });
+
+  test("the Favorites list carries when each song was starred, for sorting by it", () => {
+    const early = addTrack(db, { title: "Starred early" });
+    const late = addTrack(db, { title: "Starred late" });
+    addTrack(db, { title: "Not starred" });
+    star(db, early, 1_000);
+    star(db, late, 2_000);
+
+    assert.deepEqual(
+      listFavorites(db).map((row) => [row.title, row.starredAt]),
+      [
+        ["Starred late", 2_000],
+        ["Starred early", 1_000],
+      ],
     );
   });
 });

@@ -28,7 +28,10 @@ const collection = <D>(
     ),
 });
 
-/** The sections made of items (albums, artists…), each item's songs as its screen lists them. */
+/**
+ * The sections made of items (albums, artists…), each item's songs as its screen
+ * lists them: artists', genres' and folders' in the sort chosen for their kind.
+ */
 const collections = {
   albums: collection(
     (store) => store.listAlbums,
@@ -38,17 +41,17 @@ const collections = {
   artists: collection(
     (store) => store.listArtists,
     (store, id) => store.getArtist(id),
-    (artist) => artist.songs,
+    (artist) => sortSongs(artist.songs, currentSongSort("artist")),
   ),
   genres: collection(
     (store) => store.listGenres,
     (store, id) => store.getGenre(id),
-    (genre) => genre.songs,
+    (genre) => sortSongs(genre.songs, currentSongSort("genre")),
   ),
   folders: collection(
     (store) => store.listFolders,
     (store, id) => store.getFolder(id),
-    (folder) => folder.songs,
+    (folder) => sortSongs(folder.songs, currentSongSort("folder")),
   ),
   playlists: collection(
     (store) => store.listPlaylists,
@@ -72,6 +75,9 @@ export const librarySectionSongs = (section: LibrarySectionSlug): Promise<readon
     // As Library › Songs shows them, in the sort chosen there.
     songs: () =>
       run((store) => store.listSongs).then((songs) => sortSongs(songs, currentSongSort("songs"))),
-    favorites: () => run((store) => store.listFavorites),
+    favorites: () =>
+      run((store) => store.listFavorites).then((songs) =>
+        sortSongs(songs, currentSongSort("favorites")),
+      ),
     ...collections,
   });

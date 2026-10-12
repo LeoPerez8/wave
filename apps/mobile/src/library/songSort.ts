@@ -1,9 +1,8 @@
-import { readSongSort, writeSongSort, type SongSort } from "@wave/core";
+import { readSongSort, writeSongSort, type SongListKind, type SongSort } from "@wave/core";
 import { Storage } from "expo-sqlite/kv-store";
 import { useSyncExternalStore } from "react";
 
-/** The kinds of song list that remember a sort; every list of a kind shares it. */
-export type SongListKind = "songs";
+export type { SongListKind };
 
 const storageKey = (kind: SongListKind): string => `settings.songSort.${kind}`;
 
@@ -14,7 +13,7 @@ const listeners = new Set<() => void>();
 export const currentSongSort = (kind: SongListKind): SongSort => {
   let sort = current.get(kind);
   if (sort === undefined) {
-    sort = readSongSort(Storage.getItemSync(storageKey(kind)));
+    sort = readSongSort(Storage.getItemSync(storageKey(kind)), kind);
     current.set(kind, sort);
   }
   return sort;
@@ -34,6 +33,6 @@ const subscribe = (listener: () => void): (() => void) => {
   return () => listeners.delete(listener);
 };
 
-/** The sort [kind] lists use (Song name A to Z until changed); re-renders when it changes. */
+/** The sort every [kind] list uses (its own order until changed); re-renders when it changes. */
 export const useSongSort = (kind: SongListKind): SongSort =>
   useSyncExternalStore(subscribe, () => currentSongSort(kind));

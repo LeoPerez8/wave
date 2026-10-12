@@ -192,11 +192,14 @@ export { ARTIST_MOST_PLAYED, artistStats } from "./artistStats.ts";
 export type { ArtistStats, ArtistStatsInput } from "./artistStats.ts";
 export {
   DEFAULT_SONG_SORT,
+  defaultSongSort,
   readSongSort,
+  SONG_LIST_KINDS,
   SONG_SORTS,
   songSortLabel,
+  songSortsFor,
   songSpineKeys,
   sortSongs,
   writeSongSort,
 } from "./songSort.ts";
-export type { SongSort, SongSortKey, SortableSong } from "./songSort.ts";
+export type { SongListKind, SongSort, SongSortKey, SortableSong } from "./songSort.ts";

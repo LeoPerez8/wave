@@ -16,6 +16,7 @@ import {
   type ArtistDetail,
   type ArtistRow,
   type FolderDetail,
+  type FavoriteRow,
   type FolderRow,
   type GenreDetail,
   type GenreRow,
@@ -236,8 +237,12 @@ export const usePlaylist = (id: number): PlaylistDetail | null | undefined => {
 };
 
 /** Library › Favorites: starred songs, most recently starred first. */
-export const useFavoriteSongs = (): readonly SongRow[] | undefined =>
-  useLibraryQuery<readonly SongRow[] | undefined>(listFavorites, undefined, useFavoritesSaved());
+export const useFavoriteSongs = (): readonly FavoriteRow[] | undefined =>
+  useLibraryQuery<readonly FavoriteRow[] | undefined>(
+    listFavorites,
+    undefined,
+    useFavoritesSaved(),
+  );
 
 const readHome = LibraryStore.use((store) => store.home);
 
