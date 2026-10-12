@@ -20,6 +20,7 @@ export {
   EMPTY_QUEUE,
   RESTART_THRESHOLD_MS,
   currentEntry,
+  nextRepeatMode,
   parseQueueState,
   reduceQueue,
   upNext,

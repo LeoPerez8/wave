@@ -63,6 +63,11 @@ export class Player extends Context.Service<
       items: readonly PlayerItem[],
     ) => Effect.Effect<void, PlayerError>;
     readonly setRepeatMode: (mode: "off" | "all" | "one") => Effect.Effect<void, PlayerError>;
+    /** Shows the queue's shuffle and repeat on Android Auto's player screen. */
+    readonly setModes: (
+      shuffle: boolean,
+      repeat: "off" | "all" | "one",
+    ) => Effect.Effect<void, PlayerError>;
     readonly getItemIds: Effect.Effect<NativeItemIds, PlayerError>;
     readonly saveQueue: (json: string) => Effect.Effect<void>;
     readonly savedQueue: Effect.Effect<string | null>;
@@ -129,6 +134,8 @@ export const layer = Layer.effect(
       applySync: (steps, items) =>
         call("update the queue", () => WavePlayer.applySync(steps, items)),
       setRepeatMode: (mode) => call("set repeat", () => WavePlayer.setRepeatMode(mode)),
+      setModes: (shuffle, repeat) =>
+        call("show shuffle and repeat", () => WavePlayer.setModes(shuffle, repeat)),
       getItemIds: call("read the queue", () => WavePlayer.getItemIds()),
       saveQueue: (json) => Effect.sync(() => WavePlayer.saveQueue(json)),
       savedQueue: Effect.sync(() => WavePlayer.savedQueue()),
