@@ -1,0 +1,104 @@
+/**
+ * Listening totals over all time: minutes listened, songs listened and plays,
+ * for the whole history (Home's listening overview) or one artist's songs,
+ * credited by track artist as in Stats (the artist page). Which plays count is
+ * the play event's `counted` flag, set by `isCountedPlay`.
+ */
+
+/** What the library sums up for one song over all its plays. */
+export interface SongListening {
+  readonly trackId: number;
+  /** The song's track artist; null once the song is no longer in the library. */
+  readonly artistId: number | null;
+  /** Its counted plays. */
+  readonly countedPlays: number;
+  /** Time listened over every play, skipped and uncounted ones included. */
+  readonly listenedMs: number;
+  /** When its latest play (counted or not) started. */
+  readonly lastPlayedAt: number;
+}
+
+/** All-time listening totals. */
+export interface ListeningTotals {
+  /** Whole minutes listened over every play, skipped and uncounted ones included. */
+  readonly minutesListened: number;
+  /** Distinct songs, still in the library, with at least one counted play. */
+  readonly songsListened: number;
+  /** Counted plays. */
+  readonly plays: number;
+  /** When the latest play (counted or not) started; null when nothing was played. */
+  readonly lastPlayedAt: number | null;
+}
+
+/** Narrows the totals to one artist's songs (by track artist). */
+export interface ListeningFilter {
+  readonly artistId?: number;
+}
+
+const MINUTE_MS = 60_000;
+
+/**
+ * Sums each song's listening into all-time totals. Unfiltered, the totals
+ * cover the whole history: plays and minutes of songs since removed from the
+ * library still count (they were listened to), but such songs aren't among
+ * the songs listened. Filtered to an artist, only that artist's songs in the
+ * library count.
+ */
+export const listeningTotals = (
+  songs: readonly SongListening[],
+  filter: ListeningFilter = {},
+): ListeningTotals => {
+  let listenedMs = 0;
+  let songsListened = 0;
+  let plays = 0;
+  let lastPlayedAt: number | null = null;
+  for (const song of songs) {
+    if (filter.artistId !== undefined && song.artistId !== filter.artistId) continue;
+    listenedMs += song.listenedMs;
+    plays += song.countedPlays;
+    if (song.artistId !== null && song.countedPlays > 0) songsListened += 1;
+    lastPlayedAt = Math.max(lastPlayedAt ?? song.lastPlayedAt, song.lastPlayedAt);
+  }
+  return {
+    minutesListened: Math.floor(listenedMs / MINUTE_MS),
+    songsListened,
+    plays,
+    lastPlayedAt,
+  };
+};
+
+/** The library totals the overview shows, as Library's Songs, Albums and Artists count them. */
+export interface LibraryTotals {
+  readonly songs: number;
+  readonly albums: number;
+  readonly artists: number;
+}
+
+/** Home's listening overview: each total as it reads, e.g. "2,500 songs" or "1 play". */
+export interface ListeningOverview {
+  /** Songs, albums, artists. */
+  readonly library: readonly string[];
+  /** Minutes listened, songs listened, plays. */
+  readonly listening: readonly string[];
+}
+
+/** `count` with thousands separators, then the singular for one and the plural otherwise. */
+const counted = (count: number, singular: string, plural: string): string =>
+  `${count.toLocaleString("en")} ${count === 1 ? singular : plural}`;
+
+/** The overview's lines, in the order they read. */
+export const listeningOverview = (
+  library: LibraryTotals,
+  listening: ListeningTotals,
+): ListeningOverview => ({
+  library: [
+    counted(library.songs, "song", "songs"),
+    counted(library.albums, "album", "albums"),
+    counted(library.artists, "artist", "artists"),
+  ],
+  listening: [
+    counted(listening.minutesListened, "minute listened", "minutes listened"),
+    counted(listening.songsListened, "song listened", "songs listened"),
+    counted(listening.plays, "play", "plays"),
+  ],
+});
