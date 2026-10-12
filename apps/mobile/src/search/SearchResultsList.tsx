@@ -1,6 +1,6 @@
 import { LegendList } from "@legendapp/list/react-native";
 import type { QueueContext, SearchKind } from "@wave/core";
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { Text, View } from "react-native";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
@@ -26,6 +26,7 @@ import { ArtworkRow } from "./ArtworkRow";
 import type { ResultRow } from "./rows";
 import type { SearchHit } from "./searchIndex";
 import { useListScrollable } from "@/motion/heldTouch";
+import type { ListSelection } from "@/selection/useListSelection";
 
 /** Tapping a song plays the song results from it. */
 const SEARCH_CONTEXT: QueueContext = { kind: "search", id: null };
@@ -49,7 +50,12 @@ type Props = {
   /** Called when a result opens, so the search is kept among the recent ones. */
   onOpen: () => void;
   onShowAll: (kind: SearchKind) => void;
+  /** Song results are selectable; other results ignore taps while selecting. */
+  selection: ListSelection<SongRow>;
 };
+
+/** While selecting, non-song results and long-presses do nothing. */
+const ignore = (): void => undefined;
 
 function Hit({
   hit,
@@ -57,17 +63,24 @@ function Hit({
   songs,
   playing,
   onOpen,
+  selection,
 }: {
   hit: SearchHit;
   top: boolean;
   songs: readonly SongRow[];
   playing: boolean;
   onOpen: () => void;
+  selection: ListSelection<SongRow>;
 }) {
-  const open = (action: () => void) => () => {
-    onOpen();
-    action();
-  };
+  const { selecting } = selection;
+  const open = (action: () => void) =>
+    selecting
+      ? ignore
+      : () => {
+          onOpen();
+          action();
+        };
+  const menu = (action: () => void) => (selecting ? ignore : action);
   switch (hit.kind) {
     case "artist":
       return (
@@ -76,7 +89,7 @@ function Hit({
           artist={hit.artist}
           detail={top ? "Artist" : counted(hit.artist.trackCount, "song")}
           onPress={open(() => openArtist(hit.artist.id))}
-          onLongPress={() => openArtistActions(hit.artist)}
+          onLongPress={menu(() => openArtistActions(hit.artist))}
         />
       );
     case "album":
@@ -86,7 +99,7 @@ function Hit({
           detail={top ? `Album · ${hit.album.albumArtist}` : hit.album.albumArtist}
           artworkUri={hit.album.thumbPath === null ? undefined : `file://${hit.album.thumbPath}`}
           onPress={open(() => openAlbum(hit.album.id))}
-          onLongPress={() => openAlbumActions(hit.album)}
+          onLongPress={menu(() => openAlbumActions(hit.album))}
         />
       );
     case "song": {
@@ -96,10 +109,17 @@ function Hit({
           track={top ? { ...track, artist: `Song · ${track.artist}` } : track}
           state={playing ? "playing" : undefined}
           leading="artwork"
-          onPress={open(() =>
-            playSongs(songs, Math.max(0, songs.indexOf(hit.song)), SEARCH_CONTEXT),
-          )}
-          onLongPress={() => openTrackActions(hit.song)}
+          checked={selecting ? selection.isChecked(hit.song) : undefined}
+          onPress={
+            selecting
+              ? () => selection.toggle(hit.song)
+              : open(() => playSongs(songs, Math.max(0, songs.indexOf(hit.song)), SEARCH_CONTEXT))
+          }
+          onLongPress={
+            selecting
+              ? ignore
+              : () => openTrackActions(hit.song, { onSelect: () => selection.start(hit.song) })
+          }
         />
       );
     }
@@ -109,7 +129,7 @@ function Hit({
           name={hit.name}
           detail={`${top ? "Playlist · " : ""}${counted(hit.playlist.trackCount, "song")}`}
           onPress={open(() => openPlaylist(hit.playlist.id))}
-          onLongPress={() => openPlaylistActions(hit.playlist)}
+          onLongPress={menu(() => openPlaylistActions(hit.playlist))}
         />
       );
     case "genre":
@@ -118,7 +138,7 @@ function Hit({
           name={hit.name}
           detail={`${top ? "Genre · " : ""}${counted(hit.genre.trackCount, "song")}`}
           onPress={open(() => openGenre(hit.genre.id))}
-          onLongPress={() => openGenreActions(hit.genre)}
+          onLongPress={menu(() => openGenreActions(hit.genre))}
         />
       );
   }
@@ -128,10 +148,14 @@ function Hit({
  * Search results in one virtualised list of fixed-height rows: section heads,
  * results and "Show all". Scrolling or tapping a row lets the keyboard go.
  */
-export function SearchResultsList({ rows, onOpen, onShowAll }: Props) {
+export function SearchResultsList({ rows, onOpen, onShowAll, selection }: Props) {
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
   const currentId = useCurrentTrackId();
+  const rowState = useMemo(
+    () => ({ currentId, selection: selection.selection }),
+    [currentId, selection.selection],
+  );
 
   const renderItem = useCallback(
     ({ item }: { item: ResultRow }) => {
@@ -150,6 +174,7 @@ export function SearchResultsList({ rows, onOpen, onShowAll }: Props) {
               songs={item.songs}
               playing={item.hit.kind === "song" && String(item.hit.song.id) === currentId}
               onOpen={onOpen}
+              selection={selection}
             />
           );
         case "more":
@@ -171,7 +196,7 @@ export function SearchResultsList({ rows, onOpen, onShowAll }: Props) {
           );
       }
     },
-    [currentId, onOpen, onShowAll],
+    [currentId, onOpen, onShowAll, selection],
   );
 
   return (
@@ -182,7 +207,7 @@ export function SearchResultsList({ rows, onOpen, onShowAll }: Props) {
       keyExtractor={keyExtractor}
       getItemType={itemType}
       renderItem={renderItem}
-      extraData={currentId}
+      extraData={rowState}
       estimatedItemSize={grid.row}
       getFixedItemSize={itemSize}
       recycleItems

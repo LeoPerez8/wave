@@ -66,15 +66,19 @@ export const deleteSongs = <S extends DeletableSong>(
   );
 
 /**
- * Asks first ("Delete "Song"?"), then deletes the songs (`deleteSongs`) and
- * says which couldn't be deleted. Resolves with the songs deleted: none when
- * cancelled.
+ * Asks first ("Delete "Song"?", "Delete 12 songs?"), then deletes the songs
+ * (`deleteSongs`) and says how many couldn't be deleted, in one error.
+ * [onConfirm] runs once the user confirms, before the files go (the selection
+ * bar ends selection mode there, so Cancel keeps it). Resolves with the songs
+ * deleted: none when cancelled.
  */
 export const confirmDeleteSongs = async <S extends DeletableSong>(
   songs: readonly S[],
+  { onConfirm }: { readonly onConfirm?: (() => void) | undefined } = {},
 ): Promise<readonly S[]> => {
   if (songs.length === 0) return [];
   if (!(await confirmAction(confirmSongDeletion(songs)))) return [];
+  onConfirm?.();
   try {
     const { deleted, failed } = await deleteSongs(songs);
     const error = songDeletionFailure(

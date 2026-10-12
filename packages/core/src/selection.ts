@@ -15,7 +15,10 @@ export const NO_SELECTION: Selection<never> = { keys: new Set() };
 /** A selection of these keys. */
 export const selectionOf = <K>(keys: Iterable<K>): Selection<K> => ({ keys: new Set(keys) });
 
-/** Checks [key], or unchecks it when it is already checked. */
+/**
+ * Checks [key], or unchecks it when it is already checked. A selection
+ * remembers the order its keys were checked in.
+ */
 export const toggleSelected = <K>(selection: Selection<K>, key: K): Selection<K> => {
   const keys = new Set(selection.keys);
   if (keys.has(key)) keys.delete(key);
@@ -54,3 +57,25 @@ export const selectedInOrder = <T, K>(
   list: readonly T[],
   keyOf: (item: T) => K,
 ): T[] => list.filter((item) => selection.keys.has(keyOf(item)));
+
+/**
+ * [list] followed by the checked items that are no longer in it (found with
+ * [lookup]), in the order they were checked: a list whose content changes
+ * (search results as the query changes) keeps its checked items, and they act
+ * after the ones it shows. Keys [lookup] doesn't know are left out.
+ */
+export const withSelectedKept = <T, K>(
+  list: readonly T[],
+  selection: Selection<K>,
+  keyOf: (item: T) => K,
+  lookup: (key: K) => T | undefined,
+): T[] => {
+  const shown = new Set(list.map(keyOf));
+  const kept: T[] = [];
+  for (const key of selection.keys) {
+    if (shown.has(key)) continue;
+    const item = lookup(key);
+    if (item !== undefined) kept.push(item);
+  }
+  return kept.length === 0 ? [...list] : [...list, ...kept];
+};
