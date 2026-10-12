@@ -12,6 +12,7 @@ import {
   autoTrackItems,
   decodeAutoMediaId,
   nextRepeatMode,
+  type AutoHomeList,
   type AutoItem,
   type AutoNode,
   type AutoSource,
@@ -25,6 +26,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
 import type { RowPage } from "@/library/db/database";
+import type { HomeSections } from "@/library/db/playHistory";
 import { LibraryStore, type LibraryStoreError, type SongRow } from "@/library/LibraryStore";
 import type { AutoPlayback, AutoRequest } from "@/native/wavePlayer";
 import type { PlayerError } from "@/playback/Player";
@@ -68,6 +70,14 @@ const toAutoTrack = (song: SongRow): AutoTrack => ({
 const pageOf = <A>(rows: readonly A[], page: RowPage): readonly A[] =>
   rows.slice(page.offset, page.offset + page.limit);
 
+/** The songs of each of Home's song sections, as the app's Home tab lists them. */
+const HOME_SONGS: Record<AutoHomeList, (home: HomeSections) => readonly SongRow[]> = {
+  "most-played": (home) => home.mostPlayed,
+  favorites: (home) => home.favorites,
+};
+
+const isHomeList = (id: string): id is AutoHomeList => Object.hasOwn(HOME_SONGS, id);
+
 export const layer = Layer.effect(
   Auto,
   Effect.gen(function* () {
@@ -85,11 +95,7 @@ export const layer = Layer.effect(
         store.getPlaylist(Number(id)).pipe(Effect.map((detail) => detail?.items ?? null)),
       // The app's Home tab lists.
       home: (id) =>
-        store.home.pipe(
-          Effect.map((home) =>
-            id === "most-played" ? home.mostPlayed : id === "favorites" ? home.favorites : null,
-          ),
-        ),
+        store.home.pipe(Effect.map((home) => (isHomeList(id) ? HOME_SONGS[id](home) : null))),
       artistSongs: (id) =>
         store.getArtist(Number(id)).pipe(Effect.map((detail) => detail?.songs ?? null)),
     };
