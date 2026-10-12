@@ -12,7 +12,7 @@ import {
   IconStarOff,
   IconTrash,
 } from "@tabler/icons-react-native";
-import { entryDivider, splitActionBar, type ItemAction } from "@wave/core";
+import { actionBarLabel, entryDivider, splitActionBar, type ItemAction } from "@wave/core";
 import type { ComponentType } from "react";
 import { Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -49,7 +49,11 @@ const ICONS: { readonly [A in ItemAction]: ComponentType<IconProps> } = {
   delete: IconTrash,
 };
 
-/** Buttons the bar has room for, More included. */
+/**
+ * Buttons the bar has room for, More included. A kind's primary actions may
+ * take one more (Core's `splitActionBar`): six still fit a ~412dp phone with
+ * captions on up to two lines.
+ */
 const BAR_SLOTS = 5;
 
 const RADIUS = chrome.selectionBar / 2;
@@ -57,12 +61,15 @@ const RADIUS = chrome.selectionBar / 2;
 function BarButton({
   icon: Icon,
   label,
+  caption = label,
   onPress,
   opensMenu = false,
   destructive = false,
 }: {
   icon: ComponentType<IconProps>;
   label: string;
+  /** What the button says under its icon, when shorter than [label]. */
+  caption?: string;
   onPress: () => void;
   opensMenu?: boolean;
   destructive?: boolean;
@@ -79,16 +86,17 @@ function BarButton({
       haptic="selection"
       depth={0.1}
       className="flex-1 items-center justify-center"
-      style={{ gap: 2 }}
+      style={{ gap: 2, paddingHorizontal: 2 }}
     >
       <Icon size={24} color={tone} strokeWidth={1.5} />
       <Text
-        numberOfLines={1}
+        numberOfLines={2}
         adjustsFontSizeToFit
-        className="font-sans text-caption font-semibold"
+        minimumFontScale={0.85}
+        className="text-center font-sans text-caption font-semibold"
         style={{ color: tone }}
       >
-        {label}
+        {caption}
       </Text>
     </Press>
   );
@@ -138,6 +146,7 @@ function ActionBar({ target, backdropId }: { target: ActionItems; backdropId: st
           key={entry.action}
           icon={ICONS[entry.action]}
           label={entry.label}
+          caption={actionBarLabel(entry.action)}
           onPress={entry.onPress}
           destructive={entry.destructive}
         />

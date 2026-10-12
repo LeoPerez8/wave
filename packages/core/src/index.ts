@@ -238,6 +238,7 @@ export {
 } from "./selection.ts";
 export type { Selection } from "./selection.ts";
 export {
+  actionBarLabel,
   confirmsFirst,
   isDestructiveAction,
   ITEM_ACTION_LABELS,

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  actionBarLabel,
   confirmsFirst,
   isDestructiveAction,
   ITEM_ACTION_LABELS,
@@ -205,18 +206,81 @@ describe("itemActions", () => {
 });
 
 describe("splitActionBar", () => {
+  const bar = (actions: readonly ItemAction[], slots = 5) => {
+    const split = splitActionBar(
+      actions.map((action) => ({ action })),
+      slots,
+    );
+    return { bar: split.bar.map((e) => e.action), more: split.more.map((e) => e.action) };
+  };
+
   test("every entry gets a button when they fit", () => {
-    assert.deepEqual(splitActionBar(["a", "b", "c"], 5), { bar: ["a", "b", "c"], more: [] });
-    assert.deepEqual(splitActionBar(["a", "b", "c", "d", "e"], 5), {
-      bar: ["a", "b", "c", "d", "e"],
+    assert.deepEqual(bar(["playNext", "addToQueue", "addToPlaylist", "goToArtist"]), {
+      bar: ["playNext", "addToQueue", "addToPlaylist", "goToArtist"],
       more: [],
     });
   });
 
-  test("past the slots, the last slot becomes More and holds the rest, in order", () => {
-    assert.deepEqual(splitActionBar(["a", "b", "c", "d", "e", "f"], 5), {
-      bar: ["a", "b", "c", "d"],
-      more: ["e", "f"],
-    });
+  test("past the slots, the rest goes behind More, in order", () => {
+    assert.deepEqual(
+      bar([
+        "playNext",
+        "addToQueue",
+        "addToPlaylist",
+        "favorite",
+        "goToAlbum",
+        "goToArtist",
+        "delete",
+      ]),
+      {
+        bar: ["playNext", "addToQueue", "addToPlaylist", "favorite"],
+        more: ["goToAlbum", "goToArtist", "delete"],
+      },
+    );
+  });
+
+  test("a playlist's tracks keep every primary action on the bar, with a sixth slot for More", () => {
+    assert.deepEqual(
+      bar([
+        "playNext",
+        "addToQueue",
+        "addToPlaylist",
+        "unfavorite",
+        "removeFromPlaylist",
+        "goToAlbum",
+        "goToArtist",
+        "delete",
+      ]),
+      {
+        bar: ["playNext", "addToQueue", "addToPlaylist", "unfavorite", "removeFromPlaylist"],
+        more: ["goToAlbum", "goToArtist", "delete"],
+      },
+    );
+    assert.deepEqual(
+      bar(["playNext", "addToQueue", "addToPlaylist", "favorite", "removeFromPlaylist", "delete"]),
+      {
+        bar: ["playNext", "addToQueue", "addToPlaylist", "favorite", "removeFromPlaylist"],
+        more: ["delete"],
+      },
+    );
+  });
+
+  test("secondary entries fill spare slots before More", () => {
+    assert.deepEqual(
+      bar(["playNext", "addToQueue", "goToAlbum", "goToArtist", "renamePlaylist", "delete"]),
+      {
+        bar: ["playNext", "addToQueue", "goToAlbum", "goToArtist"],
+        more: ["renamePlaylist", "delete"],
+      },
+    );
+  });
+});
+
+describe("actionBarLabel", () => {
+  test("long labels get a short caption for a bar button; the rest keep their label", () => {
+    assert.equal(actionBarLabel("removeFromPlaylist"), "Remove");
+    assert.equal(actionBarLabel("unfavorite"), "Unfavorite");
+    assert.equal(actionBarLabel("playNext"), "Play Next");
+    assert.equal(actionBarLabel("addToPlaylist"), "Add to Playlist");
   });
 });
