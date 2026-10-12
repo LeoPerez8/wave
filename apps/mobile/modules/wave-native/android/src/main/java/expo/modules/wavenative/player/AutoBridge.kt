@@ -1,6 +1,7 @@
 package expo.modules.wavenative.player
 
 import com.google.common.util.concurrent.ListenableFuture
+import com.google.common.util.concurrent.MoreExecutors
 import com.google.common.util.concurrent.SettableFuture
 
 /** JS's answer to an Auto request: its JSON, or why it couldn't answer. */
@@ -17,7 +18,7 @@ fun interface AutoEmitter {
 
 /** What the bridge needs from Android: a timer. */
 interface AutoBridgeHost {
-  /** Runs [action] after [delayMs]; the returned function cancels it. */
+  /** Runs [action] after [delayMs], on any thread; the returned function cancels it. */
   fun schedule(delayMs: Long, action: () -> Unit): () -> Unit
 }
 
@@ -28,16 +29,22 @@ interface AutoBridgeHost {
  * timeout fails with [STILL_LOADING], so Auto never waits forever.
  *
  * Requests made before JS has attached (a cold start: the runtime is still
- * loading) wait for [attach], within the same timeout.
+ * loading) wait for [attach], within the same timeout. Such a request may
+ * pass `onLateAnswer`: if it times out, it is still sent to JS, and once JS
+ * answers it `onLateAnswer` runs, so Auto can be told to ask again instead of
+ * showing the loading message until the user retries.
  */
 class AutoBridge(private val host: AutoBridgeHost) {
   private class Pending(
     val type: String,
     val payload: String,
     val future: SettableFuture<AutoReply>,
+    /** Only for a request made before JS attached: it then outlives its timeout. */
+    val onLateAnswer: (() -> Unit)?,
   ) {
     var cancelTimeout: () -> Unit = {}
     var sent = false
+    var timedOut = false
   }
 
   private val lock = Any()
@@ -49,18 +56,24 @@ class AutoBridge(private val host: AutoBridgeHost) {
   val attached: Boolean
     get() = synchronized(lock) { emitter != null }
 
-  fun request(type: String, payload: String, timeoutMs: Long): ListenableFuture<AutoReply> {
+  fun request(
+    type: String,
+    payload: String,
+    timeoutMs: Long,
+    onLateAnswer: (() -> Unit)? = null,
+  ): ListenableFuture<AutoReply> {
     val future = SettableFuture.create<AutoReply>()
-    val entry = Pending(type, payload, future)
     val id: Int
     val target: AutoEmitter?
+    val entry: Pending
     synchronized(lock) {
+      entry = Pending(type, payload, future, onLateAnswer.takeIf { emitter == null })
       id = nextId++
       pending[id] = entry
       target = emitter
       entry.sent = target != null
     }
-    entry.cancelTimeout = host.schedule(timeoutMs) { complete(id, AutoReply.Failed(STILL_LOADING)) }
+    entry.cancelTimeout = host.schedule(timeoutMs) { timeOut(id) }
     target?.emit(id, type, payload)
     return future
   }
@@ -71,8 +84,25 @@ class AutoBridge(private val host: AutoBridgeHost) {
   /** Completes request [id] with an error Auto shows as [message]. */
   fun fail(id: Int, message: String): Boolean = complete(id, AutoReply.Failed(message))
 
+  /** Request [id] fails with [STILL_LOADING]; one with an `onLateAnswer` stays pending for JS. */
+  private fun timeOut(id: Int) {
+    val entry = synchronized(lock) {
+      val entry = pending[id] ?: return
+      if (entry.onLateAnswer != null) entry.timedOut = true else pending.remove(id)
+      entry
+    }
+    entry.future.set(AutoReply.Failed(STILL_LOADING))
+  }
+
   private fun complete(id: Int, reply: AutoReply): Boolean {
     val entry = synchronized(lock) { pending.remove(id) } ?: return false
+    if (entry.timedOut) {
+      // After the timeout's failure is out, so Auto is told to ask again only once it has seen it.
+      if (reply is AutoReply.Ok) {
+        entry.future.addListener({ entry.onLateAnswer?.invoke() }, MoreExecutors.directExecutor())
+      }
+      return false
+    }
     entry.cancelTimeout()
     entry.future.set(reply)
     return true

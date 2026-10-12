@@ -1,7 +1,5 @@
 package expo.modules.wavenative.player
 
-import android.os.Handler
-import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
 import androidx.annotation.OptIn
@@ -21,6 +19,8 @@ import com.google.common.util.concurrent.MoreExecutors
 import expo.modules.wavenative.artwork.ArtworkProvider
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /** Auto's play request couldn't start anything; [message] is for Auto to show. */
 class AutoPlayException(message: String) : Exception(message)
@@ -32,14 +32,20 @@ class AutoPlayException(message: String) : Exception(message)
  * their JSON are described by `AutoRequest` in `apps/mobile/src/native/wavePlayer.ts`.
  */
 object AutoLibrary {
-  private val main = Handler(Looper.getMainLooper())
+  /** The bridge's timeouts, off the main thread so they fire even while Media3 blocks it ([root]). */
+  private val timeouts = Executors.newSingleThreadScheduledExecutor { runnable ->
+    Thread(runnable, "WaveAutoTimeouts").apply { isDaemon = true }
+  }
+
+  /** Told the parent ID of a browse page JS answered after Auto gave up on it (a cold start). */
+  @Volatile
+  var onChildrenRecovered: ((parentId: String) -> Unit)? = null
 
   val bridge = AutoBridge(
     object : AutoBridgeHost {
       override fun schedule(delayMs: Long, action: () -> Unit): () -> Unit {
-        val runnable = Runnable(action)
-        main.postDelayed(runnable, delayMs)
-        return { main.removeCallbacks(runnable) }
+        val task = timeouts.schedule(action, delayMs, TimeUnit.MILLISECONDS)
+        return { task.cancel(false) }
       }
     },
   )
@@ -53,9 +59,18 @@ object AutoLibrary {
   /** Shown when JS's answer can't be read (a bug, not a state the user can fix). */
   private const val UNREADABLE = "Wave couldn't load this."
 
-  /** Asks JS for the browse root (an `AutoItem`). */
+  /**
+   * The browse root, answered here rather than by JS: Media3 blocks the main
+   * thread until a legacy browser (Auto on a phone) gets it, while a cold JS
+   * start needs that thread. Core's `AUTO_ROOT` (`packages/core/src/auto.ts`).
+   */
   fun root(params: LibraryParams?): ListenableFuture<LibraryResult<MediaItem>> =
-    ask("root", JSONObject()) { json -> LibraryResult.ofItem(item(JSONObject(json)), params) }
+    Futures.immediateFuture(
+      LibraryResult.ofItem(
+        browseItem(mediaId = "root", title = "Wave", subtitle = null, browsable = true, playable = false),
+        params,
+      ),
+    )
 
   /** Asks JS for one page of [parentId]'s children (an `AutoItem[]`). */
   fun children(
@@ -65,7 +80,12 @@ object AutoLibrary {
     params: LibraryParams?,
   ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
     val payload = JSONObject().put("parentId", parentId).put("page", page).put("pageSize", pageSize)
-    return ask("children", payload) { json ->
+    val reload = {
+      Log.i(JsRuntime.LOG_TAG, "children of $parentId answered late; asking Auto to reload them")
+      onChildrenRecovered?.invoke(parentId)
+      Unit
+    }
+    return ask("children", payload, onLateAnswer = reload) { json ->
       val array = JSONArray(json)
       LibraryResult.ofItemList((0 until array.length()).map { item(array.getJSONObject(it)) }, params)
     }
@@ -135,10 +155,19 @@ object AutoLibrary {
     )
 
   /** Sends one request, with the timeout for JS's state, and logs how long the answer took. */
-  private fun request(type: String, payload: JSONObject): ListenableFuture<AutoReply> {
+  private fun request(
+    type: String,
+    payload: JSONObject,
+    onLateAnswer: (() -> Unit)? = null,
+  ): ListenableFuture<AutoReply> {
     val cold = !bridge.attached
     val askedAt = SystemClock.elapsedRealtime()
-    val reply = bridge.request(type, payload.toString(), if (cold) COLD_TIMEOUT_MS else WARM_TIMEOUT_MS)
+    val reply = bridge.request(
+      type,
+      payload.toString(),
+      if (cold) COLD_TIMEOUT_MS else WARM_TIMEOUT_MS,
+      onLateAnswer,
+    )
     reply.addListener(
       {
         val now = SystemClock.elapsedRealtime()
@@ -162,10 +191,11 @@ object AutoLibrary {
   private fun <T : Any> ask(
     type: String,
     payload: JSONObject,
+    onLateAnswer: (() -> Unit)? = null,
     toResult: (String) -> LibraryResult<T>,
   ): ListenableFuture<LibraryResult<T>> =
     Futures.transform(
-      request(type, payload),
+      request(type, payload, onLateAnswer),
       { answer ->
         when (answer) {
           is AutoReply.Ok -> runCatching { toResult(answer.json) }.getOrElse { error ->
@@ -193,20 +223,37 @@ object AutoLibrary {
   }
 
   /** An `AutoItem` (Core's `packages/core/src/auto.ts`) as a Media3 item. */
-  private fun item(json: JSONObject): MediaItem {
-    val browsable = json.getBoolean("browsable")
+  private fun item(json: JSONObject): MediaItem =
+    browseItem(
+      mediaId = json.getString("mediaId"),
+      title = json.getString("title"),
+      subtitle = json.stringOrNull("subtitle"),
+      browsable = json.getBoolean("browsable"),
+      playable = json.getBoolean("playable"),
+      artwork = json.stringList("artwork"),
+    )
+
+  /** A browse node as a Media3 item. */
+  private fun browseItem(
+    mediaId: String,
+    title: String,
+    subtitle: String?,
+    browsable: Boolean,
+    playable: Boolean,
+    artwork: List<String> = emptyList(),
+  ): MediaItem {
     val metadata = MediaMetadata.Builder()
-      .setTitle(json.getString("title"))
-      .setSubtitle(json.stringOrNull("subtitle"))
+      .setTitle(title)
+      .setSubtitle(subtitle)
       .setIsBrowsable(browsable)
-      .setIsPlayable(json.getBoolean("playable"))
+      .setIsPlayable(playable)
       .setMediaType(
         if (browsable) MediaMetadata.MEDIA_TYPE_FOLDER_MIXED else MediaMetadata.MEDIA_TYPE_MUSIC,
       )
       // Without artwork Auto shows its own placeholder.
-      .setArtworkUri(ArtworkProvider.uriFor(json.stringList("artwork")))
+      .setArtworkUri(ArtworkProvider.uriFor(artwork))
       .build()
-    return MediaItem.Builder().setMediaId(json.getString("mediaId")).setMediaMetadata(metadata).build()
+    return MediaItem.Builder().setMediaId(mediaId).setMediaMetadata(metadata).build()
   }
 
   /** An `AutoPlayback`: the player items (`PlayerItem`s) and the one to start at. */

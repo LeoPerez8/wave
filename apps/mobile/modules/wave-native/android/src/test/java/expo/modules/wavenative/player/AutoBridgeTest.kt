@@ -128,13 +128,71 @@ class AutoBridgeTest {
 
   @Test
   fun `the timeout covers the wait for JS to start`() {
-    val reply = bridge.request("root", "{}", timeoutMs = 8_000)
+    val reply = bridge.request("children", "{}", timeoutMs = 8_000)
 
+    host.advanceBy(8_000)
+
+    assertEquals(AutoReply.Failed(AutoBridge.STILL_LOADING), reply.value())
+  }
+
+  @Test
+  fun `a request that timed out while JS was starting is still sent, and its answer reported`() {
+    var late = 0
+    val reply = bridge.request("children", "{}", timeoutMs = 8_000, onLateAnswer = { late++ })
+    host.advanceBy(8_000)
+    assertEquals(AutoReply.Failed(AutoBridge.STILL_LOADING), reply.value())
+
+    bridge.attach(js)
+    assertEquals(0, late)
+    bridge.respond(js.requests.single().first, "[]")
+
+    assertEquals(1, late)
+  }
+
+  @Test
+  fun `a request sent while JS was starting reports its late answer`() {
+    var late = 0
+    bridge.request("children", "{}", timeoutMs = 8_000, onLateAnswer = { late++ })
+    bridge.attach(js)
+    host.advanceBy(8_000)
+
+    bridge.respond(js.requests.single().first, "[]")
+
+    assertEquals(1, late)
+  }
+
+  @Test
+  fun `a late answer to a request made with JS running isn't reported`() {
+    var late = 0
+    bridge.attach(js)
+    bridge.request("children", "{}", timeoutMs = 5_000, onLateAnswer = { late++ })
+    host.advanceBy(5_000)
+
+    assertFalse(bridge.respond(js.requests.single().first, "[]"))
+
+    assertEquals(0, late)
+  }
+
+  @Test
+  fun `a timed-out request that JS fails isn't reported`() {
+    var late = 0
+    bridge.request("children", "{}", timeoutMs = 8_000, onLateAnswer = { late++ })
     host.advanceBy(8_000)
     bridge.attach(js)
 
-    assertEquals(AutoReply.Failed(AutoBridge.STILL_LOADING), reply.value())
-    assertTrue("a timed-out request isn't sent", js.requests.isEmpty())
+    bridge.fail(js.requests.single().first, "No such album")
+
+    assertEquals(0, late)
+  }
+
+  @Test
+  fun `a timed-out request without onLateAnswer is never sent`() {
+    bridge.request("add", "{}", timeoutMs = 8_000)
+    host.advanceBy(8_000)
+
+    bridge.attach(js)
+
+    assertTrue("Auto was told it failed, so JS mustn't act on it", js.requests.isEmpty())
   }
 
   @Test

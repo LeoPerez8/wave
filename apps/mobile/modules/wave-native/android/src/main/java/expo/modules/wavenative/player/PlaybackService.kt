@@ -36,9 +36,11 @@ import com.google.common.util.concurrent.ListenableFuture
  * The sleep timer runs here too, so it pauses playback with Wave in the
  * background (the JS side may be suspended by then).
  *
- * It is a media library service so Android Auto can browse Wave: browse
- * requests go to JS over [AutoLibrary.bridge], starting the JS runtime
- * headless first when Wave isn't running ([JsRuntime]). Auto's play requests
+ * It is a media library service so Android Auto can browse Wave: the root is
+ * answered here, and other browse requests go to JS over [AutoLibrary.bridge],
+ * starting the JS runtime headless first when Wave isn't running ([JsRuntime]).
+ * A page JS answers only after Auto gave up on it is reloaded in Auto
+ * ([AutoLibrary.onChildrenRecovered]). Auto's play requests
  * go to JS too, whose queue engine answers with the items to play
  * ([SessionCallback.onSetMediaItems]).
  *
@@ -150,6 +152,10 @@ class PlaybackService : MediaLibraryService() {
       .build()
     showModes(AutoModes.state.current)
     stopModes = AutoModes.state.listen(::showModes)
+    AutoLibrary.onChildrenRecovered = { parentId ->
+      // The count is unknown here; Auto asks for the pages again.
+      main.post { session?.notifyChildrenChanged(parentId, Int.MAX_VALUE, null) }
+    }
   }
 
   /** Stops following JS's shuffle and repeat ([AutoModes.state]). */
@@ -200,6 +206,7 @@ class PlaybackService : MediaLibraryService() {
   override fun onDestroy() {
     stopModes?.invoke()
     stopModes = null
+    AutoLibrary.onChildrenRecovered = null
     browsers.clear()
     JsRuntime.release()
     main.removeCallbacks(sleepCheck)
@@ -269,6 +276,21 @@ class PlaybackService : MediaLibraryService() {
       Log.i(JsRuntime.LOG_TAG, "Root requested at ${SystemClock.elapsedRealtime()} ms by ${browser.packageName}")
       keepJsFor(browser)
       return AutoLibrary.root(params)
+    }
+
+    /**
+     * Accepts every subscription without asking JS (the default asks [onGetItem]):
+     * a subscription failing on a cold start would stop
+     * [AutoLibrary.onChildrenRecovered] from reaching Auto.
+     */
+    override fun onSubscribe(
+      session: MediaLibrarySession,
+      browser: MediaSession.ControllerInfo,
+      parentId: String,
+      params: LibraryParams?,
+    ): ListenableFuture<LibraryResult<Void>> {
+      keepJsFor(browser)
+      return Futures.immediateFuture(LibraryResult.ofVoid(params))
     }
 
     override fun onGetChildren(
