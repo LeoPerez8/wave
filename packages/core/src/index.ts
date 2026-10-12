@@ -237,6 +237,7 @@ export {
   withSelectedKept,
 } from "./selection.ts";
 export type { Selection } from "./selection.ts";
+export { groupSongs } from "./groupSongs.ts";
 export {
   actionBarLabel,
   confirmsFirst,

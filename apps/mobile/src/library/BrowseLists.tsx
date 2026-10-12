@@ -14,7 +14,13 @@ import { EmptyState } from "@/components/EmptyState";
 import { ScanProgressBanner } from "@/components/ScanProgressBanner";
 import { openArtistActions, openFolderActions, openGenreActions } from "@/playback/ActionsMenu";
 
-import { albumPairs, albumRowHeight, AlbumPair, useAlbumTileSize } from "./AlbumGrid";
+import {
+  albumPairs,
+  albumRowHeight,
+  AlbumPair,
+  useAlbumSelection,
+  useAlbumTileSize,
+} from "./AlbumGrid";
 import { useAlbums, useArtists, useFolders, useGenres, useScanState } from "./hooks";
 import type { AlbumRow, ArtistRow, FolderRow, GenreRow } from "./LibraryStore";
 import { openArtist, openFolder, openGenre } from "./routes";
@@ -196,9 +202,13 @@ export function AlbumsList({ empty }: { empty: string }) {
   const spine = useSpine(sortKeys, list, pairRow);
   const tile = useAlbumTileSize(spine.paddingRight);
   const rows = useMemo(() => albumPairs(albums), [albums]);
+  const selection = useAlbumSelection(albums);
+  const rowState = useMemo(() => ({ tile, selection }), [tile, selection]);
   const renderItem = useCallback(
-    ({ item }: { item: readonly AlbumRow[] }) => <AlbumPair albums={item} size={tile} />,
-    [tile],
+    ({ item }: { item: readonly AlbumRow[] }) => (
+      <AlbumPair albums={item} size={tile} selection={selection} />
+    ),
+    [tile, selection],
   );
 
   if (albums.length === 0) return <NothingYet message={empty} />;
@@ -211,7 +221,7 @@ export function AlbumsList({ empty }: { empty: string }) {
         data={rows}
         keyExtractor={pairKey}
         renderItem={renderItem}
-        extraData={tile}
+        extraData={rowState}
         estimatedItemSize={albumRowHeight(tile)}
         getFixedItemSize={() => albumRowHeight(tile)}
         recycleItems
