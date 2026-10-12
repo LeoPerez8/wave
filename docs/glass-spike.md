@@ -78,11 +78,11 @@ Snapshot cost for B (from the readout): ___ × ___ px in ___ ms.
 
 **Technique A, chosen for #8 pending on-device numbers.** The tab bar, the Search pill and
 the mini player use `WaveGlassView` with a 24 dp blur and 12 dp edge refraction
-(`GLASS` in `apps/mobile/src/glass/Glass.tsx`). A was the expected winner going in: it is
+(defaults in Core `GLASS_SETTINGS`, tunable in Settings › Glass). A was the expected winner going in: it is
 live (B is a still that goes stale), it runs entirely on the RenderThread, and its
 fallback is the same view with the shader off. B stays in the spike screen only.
 
-- **Fallback is one line:** set `refraction: 0` in `GLASS` to get blur + tint + rim. Below
+- **Fallback is one line:** set Refraction to 0 in Settings › Glass (or its default in Core `GLASS_SETTINGS`) to get blur + tint + rim. Below
   API 33 the view already drops the shader by itself.
 - **Production change from the spike:** the view no longer invalidates itself on every
   pre-draw. It re-records the backdrop whenever the window draws a frame anyway (a scroll,
