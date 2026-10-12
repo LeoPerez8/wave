@@ -60,6 +60,7 @@ const toAutoTrack = (song: SongRow & Partial<Pick<AutoTrack, "discNumber" | "tra
   trackNumber: song.trackNumber ?? null,
   titleSort: song.titleSort,
   path: song.path,
+  artworkPath: song.artworkPath,
 });
 
 export const layer = Layer.effect(

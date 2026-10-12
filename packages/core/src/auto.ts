@@ -11,7 +11,9 @@
  *   their context): add its kind to `AutoTrackListKind` and `TRACK_LISTS`;
  * - another browsable node (say, an artist): add an `AutoNode` variant, its
  *   segments in `encodeAutoMediaId`/`decodeAutoMediaId`, its children in
- *   `listing` and, if it plays, its list in `autoPlayList`.
+ *   `listing` and, if it plays, its list in `autoPlayList`;
+ * - artwork on an item built from a row: pass the row's artwork files as the
+ *   last argument of `folder`/`playable` (a cover, or `playlistMosaic`'s four).
  *
  * The app side (`apps/mobile/src/auto/Auto.ts`) loads a source's rows in
  * `fetch` and a track list's songs in `listSongs`.
@@ -41,6 +43,8 @@ export interface AutoTrack {
   readonly trackNumber: number | null;
   readonly titleSort: string;
   readonly path: string;
+  /** The track's cached artwork file, if it has one. */
+  readonly artworkPath?: string | null;
 }
 
 /** The kinds of track list Auto can open or play. */
@@ -155,22 +159,53 @@ export interface AutoItem {
   readonly browsable: boolean;
   /** Starts playback. */
   readonly playable: boolean;
+  /**
+   * Cached artwork files to show (paths as the library stores them): one
+   * cover, or four for a mosaic (Core's `playlistMosaic`). Absent without
+   * artwork, so Auto shows its placeholder.
+   */
+  readonly artwork?: AutoArtwork;
 }
 
-const folder = (node: AutoNode, title: string, subtitle: string | null = null): AutoItem => ({
+/** An item's artwork files: one cover, or four for a 2×2 mosaic. */
+export type AutoArtwork = readonly string[];
+
+/**
+ * The artwork part of an item: the known files among [files] (missing ones
+ * are skipped), or nothing at all when none is known. Every item builder
+ * passes its row's artwork here.
+ */
+const artworkOf = (files: readonly (string | null | undefined)[]): { artwork?: AutoArtwork } => {
+  const known = files.filter((file): file is string => typeof file === "string" && file !== "");
+  return known.length === 0 ? {} : { artwork: known };
+};
+
+const folder = (
+  node: AutoNode,
+  title: string,
+  subtitle: string | null = null,
+  artwork: readonly (string | null | undefined)[] = [],
+): AutoItem => ({
   mediaId: encodeAutoMediaId(node),
   title,
   subtitle,
   browsable: true,
   playable: false,
+  ...artworkOf(artwork),
 });
 
-const playable = (node: AutoNode, title: string, subtitle: string | null = null): AutoItem => ({
+const playable = (
+  node: AutoNode,
+  title: string,
+  subtitle: string | null = null,
+  artwork: readonly (string | null | undefined)[] = [],
+): AutoItem => ({
   mediaId: encodeAutoMediaId(node),
   title,
   subtitle,
   browsable: false,
   playable: true,
+  ...artworkOf(artwork),
 });
 
 /** The browse root Auto asks for first; its children are the tabs. */
@@ -260,6 +295,8 @@ export interface AutoAlbum {
   readonly id: number;
   readonly title: string;
   readonly albumArtist: string;
+  /** The album's cached cover file, if it has one. */
+  readonly artworkPath?: string | null;
 }
 
 /** An album in a list (the Albums tab): opens its tracks. */
@@ -268,6 +305,7 @@ export const autoAlbumItem = (album: AutoAlbum): AutoItem =>
     { type: "list", list: { kind: "album", id: String(album.id) } },
     album.title,
     album.albumArtist,
+    [album.artworkPath],
   );
 
 /** Every track of `list` in its order (an album: by disc and track number). */
@@ -330,6 +368,7 @@ export const autoTrackItems = (
         { type: "track", list, index: offset + i, trackId: track.id },
         track.title,
         track.artist,
+        [track.artworkPath],
       ),
     );
 

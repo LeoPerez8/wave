@@ -129,6 +129,7 @@ export {
 } from "./auto.ts";
 export type {
   AutoAlbum,
+  AutoArtwork,
   AutoChildren,
   AutoFetch,
   AutoItem,

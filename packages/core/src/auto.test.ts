@@ -298,3 +298,46 @@ describe("Auto album", () => {
     );
   });
 });
+
+describe("Auto artwork", () => {
+  const cover = "/data/artwork/0123456789abcdef0123456789abcdef01234567.jpg";
+
+  test("an album shows its cover", () => {
+    const item = autoAlbumItem({
+      id: 12,
+      title: "OK Computer",
+      albumArtist: "Radiohead",
+      artworkPath: cover,
+    });
+    assert.deepEqual(item.artwork, [cover]);
+  });
+
+  test("an album without a cover has no artwork, so Auto shows its placeholder", () => {
+    const item = autoAlbumItem({
+      id: 12,
+      title: "OK Computer",
+      albumArtist: "Radiohead",
+      artworkPath: null,
+    });
+    assert.equal("artwork" in item, false);
+  });
+
+  test("tracks show their own artwork, and none when they have none", () => {
+    const tracks = [
+      { ...track("11", 1, 1), artworkPath: cover },
+      { ...track("12", 1, 2), artworkPath: null },
+    ];
+    const [first, second] = autoTrackItems(album, tracks, 0, 2);
+    assert.deepEqual(first?.artwork, [cover]);
+    assert.equal(second !== undefined && "artwork" in second, false);
+  });
+
+  test("Shuffle, tabs and the root have no artwork", () => {
+    const items = [
+      AUTO_ROOT,
+      ...(autoChildren({ type: "root" }, 0, 10)?.items ?? []),
+      ...(autoChildren({ type: "list", list: album }, 0, 10)?.items ?? []),
+    ];
+    for (const item of items) assert.equal("artwork" in item, false);
+  });
+});
