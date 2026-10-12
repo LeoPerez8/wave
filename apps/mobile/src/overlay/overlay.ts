@@ -1,8 +1,10 @@
+import { highlightedOrigin, originOfNewCard } from "@wave/core";
 import type { OverlayAlign, OverlayRect } from "@wave/core";
 import type { ReactNode } from "react";
 import { useSyncExternalStore } from "react";
 
 import { makeExternalStore } from "@/lib/externalStore";
+import { pressedElement, type PressedElement } from "@/motion/pressedRect";
 
 /**
  * Wave's dialogs and menus: floating glass cards drawn by `OverlayHost` at the
@@ -35,11 +37,22 @@ export interface OverlayEntry {
   readonly request: OverlayRequest;
   /** Fading out; the host removes it once the animation ends. */
   readonly closing: boolean;
+  /**
+   * The row, tile or button whose press opened it (or the card it follows up
+   * on), highlighted while it is open; undefined when no press opened it.
+   */
+  readonly origin: PressedElement | undefined;
 }
 
 /** Open cards, bottom to top. */
 const entries = makeExternalStore<readonly OverlayEntry[]>([]);
 let nextId = 1;
+/** Origins kept by `followUp` across async work, innermost last. */
+let held: readonly { readonly origin: PressedElement | undefined }[] = [];
+
+/** What a card opening now is about (see Core `originOfNewCard`). */
+const originNow = (): PressedElement | undefined =>
+  originOfNewCard({ pressed: pressedElement(), held: held.at(-1)?.origin, cards: entries.get() });
 
 /** Fades a card out (the host passes this to `render`). */
 export const closeOverlay = (id: number): void =>
@@ -52,7 +65,8 @@ export const closeOverlay = (id: number): void =>
 /** Shows a card over everything; it stays until closed or dismissed. */
 export const openOverlay = (request: OverlayRequest): OverlayHandle => {
   const id = nextId++;
-  entries.update((list) => [...list, { id, request, closing: false }]);
+  const origin = originNow();
+  entries.update((list) => [...list, { id, request, closing: false, origin }]);
   return { close: () => closeOverlay(id) };
 };
 
@@ -84,6 +98,28 @@ export const presentOverlay = <T>(request: {
       onDismiss: () => settle(request.dismissed),
     });
   });
+
+/**
+ * Runs async work that ends in a follow-up card (a name prompt after loading
+ * names), keeping what the press or card that started it is about, so the
+ * follow-up highlights the same element. Call it from the press or the card's
+ * choice, before anything awaits.
+ */
+export const followUp = <T>(work: () => Promise<T>): Promise<T> => {
+  const hold = { origin: originNow() };
+  held = [...held, hold];
+  const release = (): void => {
+    held = held.filter((other) => other !== hold);
+  };
+  return work().finally(release);
+};
+
+/**
+ * Whether the `Press` known as `key` is what the frontmost card is about: it
+ * reads as selected while its card (or a follow-up) is open.
+ */
+export const useIsOverlayOrigin = (key: number): boolean =>
+  useSyncExternalStore(entries.subscribe, () => highlightedOrigin(entries.get())?.key === key);
 
 /** Whether a card is showing (and not on its way out). */
 export const hasOpenOverlay = (): boolean => entries.get().some((entry) => !entry.closing);
