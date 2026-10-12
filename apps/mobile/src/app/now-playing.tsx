@@ -1,7 +1,7 @@
 import { IconChevronDown, IconListNumbers, IconQuote } from "@tabler/icons-react-native";
 import type { ComponentType } from "react";
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { BackHandler, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -19,6 +19,7 @@ import { closeNowPlaying, nowPlayingMounted, sheetHeight, sheetOffset } from "@/
 import { SleepTimerButton } from "@/nowPlaying/SleepTimer";
 import { TrackHeader } from "@/nowPlaying/TrackHeader";
 import { Transport } from "@/nowPlaying/Transport";
+import { addScreenBackHandler } from "@/overlay/back";
 import { useCurrentTrackId } from "@/playback/hooks";
 import { playbackState } from "@/playback/Player";
 import { useThemeColor } from "@/theme/useThemeColor";
@@ -85,13 +86,14 @@ export default function NowPlayingScreen() {
   useEffect(nowPlayingMounted, []);
 
   // Back slides the sheet away instead of cutting to the tabs.
-  useEffect(() => {
-    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-      closeNowPlaying();
-      return true;
-    });
-    return () => subscription.remove();
-  }, []);
+  useEffect(
+    () =>
+      addScreenBackHandler(() => {
+        closeNowPlaying();
+        return true;
+      }),
+    [],
+  );
 
   const sheetStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: sheetOffset.get() }],

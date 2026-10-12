@@ -85,6 +85,9 @@ export const presentOverlay = <T>(request: {
     });
   });
 
+/** Whether a card is showing (and not on its way out). */
+export const hasOpenOverlay = (): boolean => entries.get().some((entry) => !entry.closing);
+
 // For OverlayHost.
 
 export const useOverlayEntries = (): readonly OverlayEntry[] =>
