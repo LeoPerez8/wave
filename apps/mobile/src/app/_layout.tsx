@@ -7,7 +7,6 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { useAllFilesAccess } from "@/library/hooks";
-import { PlaylistSheets } from "@/library/PlaylistSheets";
 import { OverlayHost } from "@/overlay/OverlayHost";
 import { startInitialScan } from "@/library/runtime";
 import { TrackActionsSheet } from "@/playback/TrackActionsSheet";
@@ -52,7 +51,6 @@ export default function RootLayout() {
           </Stack>
         </OverlayHost>
         <TrackActionsSheet />
-        <PlaylistSheets />
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

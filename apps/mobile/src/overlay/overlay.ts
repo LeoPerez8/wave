@@ -1,3 +1,4 @@
+import type { OverlayAlign } from "@wave/core";
 import type { ReactNode } from "react";
 import { useSyncExternalStore } from "react";
 
@@ -15,6 +16,8 @@ export interface OverlayRequest {
   readonly render: (close: () => void) => ReactNode;
   /** Runs when Back or a tap outside the card dismisses it (not when content calls `close`). */
   readonly onDismiss?: () => void;
+  /** "top" for a card with a text field: it sits near the top, clear of the keyboard. Centred by default. */
+  readonly align?: OverlayAlign;
 }
 
 export interface OverlayHandle {
@@ -56,6 +59,7 @@ export const presentOverlay = <T>(request: {
   readonly label: string;
   readonly render: (finish: (value: T) => void) => ReactNode;
   readonly dismissed: T;
+  readonly align?: OverlayAlign;
 }): Promise<T> =>
   new Promise<T>((resolve) => {
     let settled = false;
@@ -66,6 +70,7 @@ export const presentOverlay = <T>(request: {
     };
     const handle = openOverlay({
       label: request.label,
+      align: request.align,
       render: () =>
         request.render((value) => {
           settle(value);

@@ -160,5 +160,6 @@ export type {
 } from "./librarySections.ts";
 export { placeOverlayCard } from "./overlay.ts";
 export type { OverlayCardFrame, OverlayCardInput, OverlayInsets } from "./overlay.ts";
+export type { OverlayAlign } from "./overlay.ts";
 export { planAlert } from "./alert.ts";
 export type { AlertButton, AlertChoice, AlertPlan, AlertSpec } from "./alert.ts";
