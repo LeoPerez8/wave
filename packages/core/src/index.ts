@@ -167,6 +167,8 @@ export { moveSlide, slideEntry, slideTicks, startSlide } from "./slideToChoose.t
 export type { MenuSlide, SlidePoint } from "./slideToChoose.ts";
 export { planAlert } from "./alert.ts";
 export type { AlertButton, AlertChoice, AlertPlan, AlertSpec } from "./alert.ts";
+export { DEFAULT_THEME, TONES, themeContrastIssues } from "./theme.ts";
+export type { ContrastIssue, Theme, ThemeColors } from "./theme.ts";
 export { sliderFraction, sliderValueAt, snapSliderValue, stepSlider } from "./slider.ts";
 export type { SliderRange } from "./slider.ts";
 export {

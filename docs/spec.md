@@ -157,7 +157,7 @@ One row per playback start: track, started-at, listened milliseconds, track dura
 
 - The visual world is **The Quiet Catalog** (ECM Records' cover program as the reference): artwork in calm, tinted fields, small and exact type. The decision, its direction contract and the product record live in `apps/mobile/PRODUCT.md` and `apps/mobile/.impeccable/`; `apps/mobile/DESIGN.md` documents the built system.
 - Components are fully custom (Apple Music is inspiration only); system and predictive Back always work.
-- Theme follows the system. Fog ground in light, night slate in dark, every neutral from one tonal ramp; teal accent, ember highlight. Tokens live in `apps/mobile/global.css`.
+- Theme follows the system. Fog ground in light (`#e0ecef`), a deep, faintly blue night slate in dark (`#0a1113`, a ramp step only dark mode uses, so light mode's text is untouched); dark cards, fills and separators climb one ramp step each from it. Every neutral comes from one tonal ramp; teal accent, ember highlight. Text, accent and highlight meet WCAG AA on the ground and cards in both themes. Tokens live in `apps/mobile/global.css`, mirrored and contrast-checked in Core (`packages/core/src/theme.ts`); the launch splash uses the same grounds.
 - Inter as the typeface, with a light large title and tracked-caps catalog lines; Tabler line icons.
 - Signature move: a thin A–Z spine on long lists that sets one huge letter in the field while scrubbing, with a haptic tick per letter.
 - Every tap animates through one press primitive whose duration comes from Settings (0–600 ms, default 140 ms) and respects the system's reduce-motion setting.
