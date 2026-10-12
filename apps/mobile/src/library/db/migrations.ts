@@ -192,6 +192,17 @@ const m0006 = `
 ALTER TABLE \`play_events\` ADD \`source\` text DEFAULT 'phone' NOT NULL;
 `;
 
+// Recounts every play on record under the 15-second rule, mirroring Core's
+// \`isCountedPlay\` (COUNTED_PLAY_MS = 15000): more than 15 s listened, or a song
+// of 15 s or less played to the end. The store test checks they agree.
+const m0007 = `
+UPDATE \`play_events\` SET \`counted\` = CASE
+	WHEN \`listened_ms\` > 15000 THEN 1
+	WHEN \`listened_ms\` > 0 AND \`end_reason\` = 'completed' AND \`duration_ms\` > 0 AND \`duration_ms\` <= 15000 THEN 1
+	ELSE 0
+END;
+`;
+
 export default {
   journal: {
     entries: [
@@ -202,7 +213,8 @@ export default {
       { idx: 4, when: 1_792_152_000_000, tag: "0004_playlists_favorites", breakpoints: true },
       { idx: 5, when: 1_792_238_400_000, tag: "0005_play_events", breakpoints: true },
       { idx: 6, when: 1_792_324_800_000, tag: "0006_play_source", breakpoints: true },
+      { idx: 7, when: 1_792_411_200_000, tag: "0007_recount_plays", breakpoints: true },
     ],
   },
-  migrations: { m0000, m0001, m0002, m0003, m0004, m0005, m0006 },
+  migrations: { m0000, m0001, m0002, m0003, m0004, m0005, m0006, m0007 },
 };
