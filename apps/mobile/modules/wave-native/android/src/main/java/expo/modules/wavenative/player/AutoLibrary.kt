@@ -17,6 +17,7 @@ import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
+import expo.modules.wavenative.artwork.ArtworkProvider
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -149,6 +150,12 @@ object AutoLibrary {
 
   private fun JSONObject.stringOrNull(name: String): String? = if (isNull(name)) null else getString(name)
 
+  /** The strings of array [name], or none when it's absent. */
+  private fun JSONObject.stringList(name: String): List<String> {
+    val array = optJSONArray(name) ?: return emptyList()
+    return (0 until array.length()).mapNotNull { array.optString(it, null) }
+  }
+
   /** An `AutoItem` (Core's `packages/core/src/auto.ts`) as a Media3 item. */
   private fun item(json: JSONObject): MediaItem {
     val browsable = json.getBoolean("browsable")
@@ -160,6 +167,8 @@ object AutoLibrary {
       .setMediaType(
         if (browsable) MediaMetadata.MEDIA_TYPE_FOLDER_MIXED else MediaMetadata.MEDIA_TYPE_MUSIC,
       )
+      // Without artwork Auto shows its own placeholder.
+      .setArtworkUri(ArtworkProvider.uriFor(json.stringList("artwork")))
       .build()
     return MediaItem.Builder().setMediaId(json.getString("mediaId")).setMediaMetadata(metadata).build()
   }

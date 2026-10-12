@@ -22,6 +22,12 @@
       </intent-filter>
     </service>
 
+    <!-- Cached artwork as content URIs: Android Auto can't read Wave's files (ArtworkProvider). -->
+    <provider
+      android:name="expo.modules.wavenative.artwork.ArtworkProvider"
+      android:authorities="${applicationId}.artwork"
+      android:exported="true" />
+
     <!-- Lists Wave as a media app in Android Auto. -->
     <meta-data
       android:name="com.google.android.gms.car.application"

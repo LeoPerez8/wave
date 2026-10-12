@@ -375,7 +375,7 @@ class WavePlayerModule : Module() {
           "title" to it.mediaMetadata.title?.toString(),
           "artist" to it.mediaMetadata.artist?.toString(),
           "album" to it.mediaMetadata.albumTitle?.toString(),
-          "artworkUri" to it.mediaMetadata.artworkUri?.toString(),
+          "artworkUri" to PlayerMediaItems.appArtworkUri(it.mediaMetadata),
         )
       },
     )
