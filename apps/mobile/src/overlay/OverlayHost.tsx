@@ -153,7 +153,7 @@ function OverlayCard({ entry, top }: { entry: OverlayEntry; top: boolean }) {
     >
       <Animated.View style={[StyleSheet.absoluteFill, veilStyle]}>
         <Pressable
-          className="flex-1 bg-tone-10/25"
+          className="flex-1 bg-tone-10/25 dark:bg-tone-11/25"
           accessibilityRole="button"
           accessibilityLabel="Close"
           onPress={() => dismissOverlay(entry)}

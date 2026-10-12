@@ -39,7 +39,7 @@ const config: ExpoConfig = {
         backgroundColor: "#E0ECEF",
         dark: {
           image: "./assets/splash-icon.png",
-          backgroundColor: "#121B1D",
+          backgroundColor: "#0A1113",
         },
       },
     ],

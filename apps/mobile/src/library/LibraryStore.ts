@@ -15,6 +15,7 @@ import {
   type CreditedPlayTotals,
   type PlayEvent,
   type PlayTotals,
+  type SongListening,
   type StatsWindow,
 } from "@wave/core";
 import { and, asc, desc, eq, inArray, ne, or, sql, type SQL } from "drizzle-orm";
@@ -44,7 +45,7 @@ import {
 import { selectPlaylistSongs } from "./db/playlists";
 import * as schema from "./db/schema";
 import { BY_TITLE, trackQuery } from "./db/tracks";
-import { creditedPlayTotals, trackPlayTotals } from "./db/stats";
+import { creditedPlayTotals, songListening, trackPlayTotals } from "./db/stats";
 import type { KnownFile } from "./NativeScanner";
 
 const DATABASE_NAME = "wave.db";
@@ -419,6 +420,11 @@ export class LibraryStore extends Context.Service<
     readonly artistsByIds: (
       ids: readonly number[],
     ) => Effect.Effect<readonly ArtistRow[], LibraryStoreError>;
+    /**
+     * Each played song's all-time listening (every play's time, counted plays,
+     * latest play, track artist), in no order; Core's `listeningTotals` sums it.
+     */
+    readonly songListening: Effect.Effect<readonly SongListening[], LibraryStoreError>;
   }
 >()("@wave/mobile/library/LibraryStore") {}
 
@@ -1380,6 +1386,8 @@ const make = Effect.gen(function* () {
 
     artistsByIds: (ids) =>
       attempt("read ranked artists", () => (ids.length === 0 ? [] : listArtistsSync(db, ids))),
+
+    songListening: attempt("sum up listening", () => songListening(db)),
   });
 });
 

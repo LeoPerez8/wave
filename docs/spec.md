@@ -24,7 +24,7 @@ v1 delivers the core player and library. v2 adds the advanced audio and library-
 - **Play context** — what a playback was started from (album, artist, playlist, genre, folder, search, all songs, favorites, home section).
 - **Queue** — the ordered list of tracks to be played, including the current one and **Up Next**.
 - **Play event** — one record per time a track starts playing, with how long it was listened to and how it ended.
-- **Counted play** — a play event that counts towards play counts: listened ≥ 50% of the track or ≥ 4 minutes, whichever comes first.
+- **Counted play** — a play event that counts towards play counts: listened to for more than 15 seconds, or, for a song of 15 seconds or less, played to the end. Each play event counts at most once, however long it goes on.
 - **Favorite** — a starred track (Apple Music's star).
 - **Now Playing** — the full-screen player; **Mini player** — the floating glass pill above the tab bar.
 
@@ -106,7 +106,7 @@ v1 delivers the core player and library. v2 adds the advanced audio and library-
 ### Home tab and play history
 
 56. As a user, I want every play recorded with start time, listened time, how it ended (completed, skipped, stopped, interrupted) and its play context, so that statistics can be computed later over my full history.
-57. As a user, I want play counts to follow the counted-play rule (≥ 50% or ≥ 4 minutes), so that counts are meaningful and compatible with future Last.fm scrobbling.
+57. As a user, I want a play to count once I have listened to a song for more than 15 seconds (or played a song of 15 seconds or less to the end), so that play counts reflect what I actually listened to.
 58. As a user, I want a Home tab with Recently Added (albums), Recently Played, Most Played and Favorites sections, so that my most relevant music is one tap away.
 
 ### Look and feel
@@ -157,7 +157,7 @@ One row per playback start: track, started-at, listened milliseconds, track dura
 
 - The visual world is **The Quiet Catalog** (ECM Records' cover program as the reference): artwork in calm, tinted fields, small and exact type. The decision, its direction contract and the product record live in `apps/mobile/PRODUCT.md` and `apps/mobile/.impeccable/`; `apps/mobile/DESIGN.md` documents the built system.
 - Components are fully custom (Apple Music is inspiration only); system and predictive Back always work.
-- Theme follows the system. Fog ground in light, night slate in dark, every neutral from one tonal ramp; teal accent, ember highlight. Tokens live in `apps/mobile/global.css`.
+- Theme follows the system. Fog ground in light (`#e0ecef`), a deep, faintly blue night slate in dark (`#0a1113`, a ramp step only dark mode uses, so light mode's text is untouched); dark cards, fills and separators climb one ramp step each from it. Every neutral comes from one tonal ramp; teal accent, ember highlight. Text, accent and highlight meet WCAG AA on the ground and cards in both themes. Tokens live in `apps/mobile/global.css`, mirrored and contrast-checked in Core (`packages/core/src/theme.ts`); the launch splash uses the same grounds.
 - Inter as the typeface, with a light large title and tracked-caps catalog lines; Tabler line icons.
 - Signature move: a thin A–Z spine on long lists that sets one huge letter in the field while scrubbing, with a haptic tick per letter.
 - Every tap animates through one press primitive whose duration comes from Settings (0–600 ms, default 140 ms) and respects the system's reduce-motion setting.

@@ -1,3 +1,4 @@
+import { snapSliderValue } from "@wave/core";
 import { Storage } from "expo-sqlite/kv-store";
 import { useSyncExternalStore } from "react";
 
@@ -6,10 +7,7 @@ export const TAP_ANIMATION = { min: 0, max: 600, step: 20, default: 140 } as con
 
 const KEY = "settings.tapAnimationMs";
 
-const clamp = (ms: number): number => {
-  const stepped = Math.round(ms / TAP_ANIMATION.step) * TAP_ANIMATION.step;
-  return Math.min(TAP_ANIMATION.max, Math.max(TAP_ANIMATION.min, stepped));
-};
+const clamp = (ms: number): number => snapSliderValue(ms, TAP_ANIMATION);
 
 const read = (): number => {
   const stored = Storage.getItemSync(KEY);
