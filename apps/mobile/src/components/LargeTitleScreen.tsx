@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { grid } from "@/catalog/grid";
 import { useChromeInset } from "@/chrome/chrome";
+import { useListScrollable } from "@/motion/heldTouch";
 
 type Props = {
   title: string;
@@ -16,10 +17,12 @@ type Props = {
 
 /** A screen with a quiet large title that scrolls with the content, under the floating chrome. */
 export function LargeTitleScreen({ title, action, children, refreshControl }: Props) {
+  const scrollable = useListScrollable();
   const insets = useSafeAreaInsets();
   const bottom = useChromeInset();
   return (
     <ScrollView
+      scrollEnabled={scrollable}
       className="flex-1 bg-background"
       contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: bottom }}
       contentInsetAdjustmentBehavior="never"

@@ -24,6 +24,7 @@ import {
 import { ArtworkRow } from "@/search/ArtworkRow";
 
 import type { Ranked } from "./Stats";
+import { useListScrollable } from "@/motion/heldTouch";
 
 /** "3 plays", "1 play". */
 export const playCount = (count: number): string =>
@@ -203,6 +204,7 @@ function RankedEntityList<A extends { readonly id: number }>({
   renderRow: (entry: Ranked<A>, index: number) => ReactElement;
   header?: ReactElement | undefined;
 }) {
+  const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
   const renderItem = useCallback(
     ({ item, index }: { item: Ranked<A>; index: number }) => renderRow(item, index),
@@ -210,6 +212,7 @@ function RankedEntityList<A extends { readonly id: number }>({
   );
   return (
     <LegendList
+      scrollEnabled={scrollable}
       className="flex-1"
       data={ranking}
       keyExtractor={rankedKey}
@@ -261,6 +264,7 @@ export function RankedSongList({
   period: StatsPeriod;
   header?: ReactElement;
 }) {
+  const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
   const currentId = useCurrentTrackId();
   const favorites = useFavoriteIds();
@@ -281,6 +285,7 @@ export function RankedSongList({
   );
   return (
     <LegendList
+      scrollEnabled={scrollable}
       className="flex-1"
       data={ranking}
       keyExtractor={rankedKey}

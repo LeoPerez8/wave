@@ -54,7 +54,7 @@ v1 delivers the core player and library. v2 adds the advanced audio and library-
 17. As a user, I want genre and folder screens listing their tracks, so that I can browse by genre or by my folder structure.
 18. As a user, I want long lists (tens of thousands of songs) to scroll smoothly at 120 Hz, so that the app feels native on my phone.
 19. As a user, I want a fast-scroll alphabet index on long lists, so that I can jump to a letter.
-20. As a user, I want long-press context menus on tracks, albums, artists and playlists (Play Next, Add to Queue, Add to Playlist, Favorite, Go to Album/Artist), so that I can act without opening screens.
+20. As a user, I want long-press context menus on tracks, albums, artists and playlists (Play Next, Add to Queue, Add to Playlist, Favorite, Go to Album/Artist), so that I can act without opening screens. The finger that long-pressed can stay down and slide onto an entry: lifting it there runs that entry, so one gesture does it (lifting anywhere else, or without sliding, leaves the menu open to tap; the list underneath holds still meanwhile).
 
 ### Playback
 

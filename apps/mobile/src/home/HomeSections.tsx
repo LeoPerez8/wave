@@ -15,6 +15,7 @@ import { toTrackSummary } from "@/library/TrackList";
 import { playSongs } from "@/playback/actions";
 import { useCurrentTrackId } from "@/playback/hooks";
 import { openAlbumActions, openTrackActions } from "@/playback/TrackActionsSheet";
+import { useListScrollable } from "@/motion/heldTouch";
 
 /** Shelf covers leave the next one peeking in at the right edge, so the row reads as scrollable. */
 const SHELF_TILE = CELL * 19;
@@ -47,8 +48,10 @@ export function HomeSection({
 
 /** A row of album covers that scrolls sideways, edge to edge. */
 export function AlbumShelf({ albums }: { albums: readonly AlbumRow[] }) {
+  const scrollable = useListScrollable();
   return (
     <ScrollView
+      scrollEnabled={scrollable}
       horizontal
       showsHorizontalScrollIndicator={false}
       style={{ marginHorizontal: -grid.margin }}

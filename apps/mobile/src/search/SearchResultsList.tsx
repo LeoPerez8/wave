@@ -25,6 +25,7 @@ import {
 import { ArtworkRow } from "./ArtworkRow";
 import type { ResultRow } from "./rows";
 import type { SearchHit } from "./searchIndex";
+import { useListScrollable } from "@/motion/heldTouch";
 
 /** Tapping a song plays the song results from it. */
 const SEARCH_CONTEXT: QueueContext = { kind: "search", id: null };
@@ -127,6 +128,7 @@ function Hit({
  * results and "Show all". Scrolling or tapping a row lets the keyboard go.
  */
 export function SearchResultsList({ rows, onOpen, onShowAll }: Props) {
+  const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
   const currentId = useCurrentTrackId();
 
@@ -173,6 +175,7 @@ export function SearchResultsList({ rows, onOpen, onShowAll }: Props) {
 
   return (
     <LegendList
+      scrollEnabled={scrollable}
       className="flex-1"
       data={rows}
       keyExtractor={keyExtractor}
