@@ -166,3 +166,12 @@ export { moveSlide, slideEntry, slideTicks, startSlide } from "./slideToChoose.t
 export type { MenuSlide, SlidePoint } from "./slideToChoose.ts";
 export { planAlert } from "./alert.ts";
 export type { AlertButton, AlertChoice, AlertPlan, AlertSpec } from "./alert.ts";
+export { sliderFraction, sliderValueAt, snapSliderValue, stepSlider } from "./slider.ts";
+export type { SliderRange } from "./slider.ts";
+export {
+  DEFAULT_GLASS_SETTINGS,
+  GLASS_SETTINGS,
+  glassTintAlpha,
+  readGlassSettings,
+} from "./glassSettings.ts";
+export type { GlassSettings } from "./glassSettings.ts";
