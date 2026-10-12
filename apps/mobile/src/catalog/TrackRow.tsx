@@ -25,6 +25,8 @@ type Props = {
   favorite?: boolean;
   /** Songs lists show a thumbnail; album track lists show the track number. */
   leading: "artwork" | "number";
+  /** Sets the number in ember: the top entry of a ranking, whose number is its rank. */
+  topNumber?: boolean;
   onPress: () => void;
   onLongPress?: () => void;
   /** Screen-reader actions standing in for gestures (move, remove in a playlist). */
@@ -50,6 +52,7 @@ export function TrackRow({
   state,
   favorite = false,
   leading,
+  topNumber = false,
   onPress,
   onLongPress,
   accessibilityActions,
@@ -84,7 +87,9 @@ export function TrackRow({
           <View className="items-center" style={{ width: grid.stateCell }}>
             {state === undefined && track.trackNumber !== undefined ? (
               <Text
-                className="font-sans text-body text-secondary"
+                className={`font-sans text-body ${
+                  topNumber ? "font-medium text-highlight" : "text-secondary"
+                }`}
                 style={{ fontVariant: ["tabular-nums"] }}
               >
                 {track.trackNumber}

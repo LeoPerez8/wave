@@ -265,7 +265,7 @@ The Library's entries (Playlists, Artists, Albums, Songs, Genres, Folders, Favor
 
 ### Track Row
 
-56dp, fixed cells, one type size. Songs lists lead with a 40dp square thumbnail and put the state cell after the text; album track lists lead with the track number in a 32dp cell, which the state glyph replaces. Playing: title and speaker glyph in ember. Missing file: title in graphite, artist line reads "File not found", a file-off glyph in pewter, and the row is disabled. Favorite: a small filled star in ember in its own 24dp cell. Duration in tabular Footnote, right-aligned.
+56dp, fixed cells, one type size. Songs lists lead with a 40dp square thumbnail and put the state cell after the text; album track lists lead with the track number in a 32dp cell, which the state glyph replaces. Playing: title and speaker glyph in ember. Missing file: title in graphite, artist line reads "File not found", a file-off glyph in pewter, and the row is disabled. Favorite: a small filled star in ember in its own 24dp cell. Duration in tabular Footnote, right-aligned. Stats rankings use the numbered row with the rank as the number (the top one in ember, 500) and the counted plays after the artist ("Artist · 12 plays").
 
 ### Album Tile
 

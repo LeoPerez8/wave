@@ -13,6 +13,8 @@ import {
   type IndexedFile,
   type LibraryTrack,
   type PlayEvent,
+  type PlayTotals,
+  type StatsWindow,
 } from "@wave/core";
 import { and, asc, desc, eq, inArray, ne, or, sql, type SQL } from "drizzle-orm";
 import { drizzle, type ExpoSQLiteDatabase } from "drizzle-orm/expo-sqlite";
@@ -34,6 +36,7 @@ import {
   type RecordedPlay,
 } from "./db/playHistory";
 import * as schema from "./db/schema";
+import { trackPlayTotals } from "./db/stats";
 import type { KnownFile } from "./NativeScanner";
 
 const DATABASE_NAME = "wave.db";
@@ -360,6 +363,10 @@ export class LibraryStore extends Context.Service<
     readonly home: Effect.Effect<HomeSections, LibraryStoreError>;
     /** The play recorded last, to pick back up when JS restarts while the player kept going. */
     readonly latestPlay: Effect.Effect<RecordedPlay | null, LibraryStoreError>;
+    /** Each track's counted plays within [window] (tracks still in the library), in no order. */
+    readonly trackPlayTotals: (
+      window: StatsWindow,
+    ) => Effect.Effect<readonly PlayTotals[], LibraryStoreError>;
   }
 >()("@wave/mobile/library/LibraryStore") {}
 
@@ -1404,6 +1411,8 @@ const make = Effect.gen(function* () {
     home: attempt("read Home", () => homeSections(db)),
 
     latestPlay: attempt("read the latest play", () => latestPlay(db)),
+
+    trackPlayTotals: (window) => attempt("sum up song plays", () => trackPlayTotals(db, window)),
   });
 });
 

@@ -33,8 +33,7 @@ beforeEach(async () => {
   db = await openTestDatabase();
 });
 
-const byId = (rows: ReturnType<typeof trackPlayTotals>) =>
-  [...rows].sort((a, b) => a.id - b.id);
+const byId = (rows: ReturnType<typeof trackPlayTotals>) => rows.toSorted((a, b) => a.id - b.id);
 
 describe("Per-track play totals", () => {
   test("sum each track's counted plays, listened time and latest counted play", () => {

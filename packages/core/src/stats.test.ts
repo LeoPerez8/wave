@@ -38,14 +38,14 @@ describe("statsWindow", () => {
     assert.deepEqual(statsWindow("all", now), { from: null, to: now });
   });
 
-  test("the periods are offered from the shortest to all time", () => {
+  test("the periods are offered from the shortest to all time, with a short tab label", () => {
     assert.deepEqual(
-      STATS_PERIODS.map((period) => [period.id, period.label]),
+      STATS_PERIODS.map((period) => [period.id, period.label, period.tab]),
       [
-        ["week", "Last 7 days"],
-        ["month", "Last 30 days"],
-        ["year", "Last 12 months"],
-        ["all", "All time"],
+        ["week", "Last 7 days", "7 days"],
+        ["month", "Last 30 days", "30 days"],
+        ["year", "Last 12 months", "12 months"],
+        ["all", "All time", "All time"],
       ],
     );
   });
@@ -92,7 +92,7 @@ describe("rankPlays", () => {
       totals(1, { sortKey: "c" }),
     ];
     assert.deepEqual(ids(rankPlays(tied, STATS_TOP)), [2, 3, 4, 1]);
-    assert.deepEqual(ids(rankPlays([...tied].reverse(), STATS_TOP)), [2, 3, 4, 1]);
+    assert.deepEqual(ids(rankPlays(tied.toReversed(), STATS_TOP)), [2, 3, 4, 1]);
   });
 
   test("leaves out entities without a counted play", () => {

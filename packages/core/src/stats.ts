@@ -8,11 +8,16 @@
 export type StatsPeriod = "week" | "month" | "year" | "all";
 
 /** The periods the Stats screen offers, from the shortest to all time. */
-export const STATS_PERIODS: readonly { readonly id: StatsPeriod; readonly label: string }[] = [
-  { id: "week", label: "Last 7 days" },
-  { id: "month", label: "Last 30 days" },
-  { id: "year", label: "Last 12 months" },
-  { id: "all", label: "All time" },
+export const STATS_PERIODS: readonly {
+  readonly id: StatsPeriod;
+  readonly label: string;
+  /** The label on the period selector's tab, where four must fit across. */
+  readonly tab: string;
+}[] = [
+  { id: "week", label: "Last 7 days", tab: "7 days" },
+  { id: "month", label: "Last 30 days", tab: "30 days" },
+  { id: "year", label: "Last 12 months", tab: "12 months" },
+  { id: "all", label: "All time", tab: "All time" },
 ];
 
 /** The plays a period covers: started at or after `from` (no start for all time) and at or before `to`. */
@@ -68,6 +73,7 @@ const compareRanked = (a: PlayTotals, b: PlayTotals): number =>
 export const rankPlays = <A extends PlayTotals>(totals: readonly A[], limit: number): A[] =>
   totals
     .filter((entry) => entry.countedPlays > 0)
+    // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
     .sort(compareRanked)
     .slice(0, limit);
 

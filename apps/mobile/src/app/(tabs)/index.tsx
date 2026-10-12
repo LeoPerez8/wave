@@ -1,13 +1,16 @@
 import { IconMusic } from "@tabler/icons-react-native";
 import { Link, router } from "expo-router";
-import { Pressable, Text } from "react-native";
+import { Pressable, Text, View } from "react-native";
 
+import { EntryRow } from "@/catalog/EntryRow";
 import { CELL } from "@/catalog/grid";
+import { Hairline } from "@/catalog/Hairline";
 import { EmptyState } from "@/components/EmptyState";
 import { LargeTitleScreen } from "@/components/LargeTitleScreen";
 import { AlbumShelf, HomeSection, SongRows } from "@/home/HomeSections";
 import type { MostPlayedRow } from "@/library/db/playHistory";
 import { useHome } from "@/library/hooks";
+import { openStats } from "@/library/routes";
 
 /** Songs played from Home's lists are queued from the section they were in. */
 const MOST_PLAYED_CONTEXT = { kind: "home", id: "most-played" } as const;
@@ -62,6 +65,10 @@ export default function HomeScreen() {
               <SongRows songs={home.favorites} context={FAVORITES_CONTEXT} />
             </HomeSection>
           )}
+          <View style={{ marginTop: CELL * 5 }}>
+            <Hairline />
+            <EntryRow label="Stats" onPress={openStats} />
+          </View>
         </>
       )}
       {/* Temporary entry to the glass spike (#4), kept until its numbers confirm the technique. */}
