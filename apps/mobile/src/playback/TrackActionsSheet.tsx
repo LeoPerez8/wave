@@ -307,9 +307,11 @@ function ActionsMenu({ target, close }: { target: ActionTarget; close: () => voi
       : []),
   ];
 
-  // The finger that long-pressed the row can slide onto an entry and lift to run it.
-  // (It also tells which entry is under the finger, `underFinger`.)
-  const { trackEntry, trackList } = useSlideToChoose((index) => entries[index]?.onPress());
+  // The finger that long-pressed the row can slide onto an entry and lift to run it;
+  // the entry under it shows pressed meanwhile.
+  const { underFinger, trackEntry, trackList } = useSlideToChoose((index) =>
+    entries[index]?.onPress(),
+  );
 
   return (
     <>
@@ -337,6 +339,7 @@ function ActionsMenu({ target, close }: { target: ActionTarget; close: () => voi
                 label={entry.label}
                 onPress={entry.onPress}
                 divider={index < entries.length - 1}
+                highlighted={index === underFinger}
               />
             </View>
           ))}

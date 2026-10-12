@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { moveSlide, slideEntry, startSlide } from "./index.ts";
+import { moveSlide, slideEntry, slideTicks, startSlide } from "./index.ts";
 
 // A menu card's entries in the window, in dp: three 56 dp lines below a heading.
 const entries = [
@@ -56,5 +56,24 @@ describe("slide to choose", () => {
   test("an entry not laid out yet is skipped", () => {
     const slide = moveSlide(held, { x: 200, y: 470 }, SLOP);
     assert.equal(slideEntry(slide, { x: 200, y: 470 }, [entries[0], undefined]), undefined);
+  });
+});
+
+describe("haptic tick while sliding", () => {
+  test("moving onto an entry from another ticks", () => {
+    assert.equal(slideTicks(0, 1), true);
+  });
+
+  test("sliding off every entry doesn't tick", () => {
+    assert.equal(slideTicks(1, undefined), false);
+  });
+
+  test("moving within the same entry ticks only once", () => {
+    assert.equal(slideTicks(undefined, 2), true);
+    assert.equal(slideTicks(2, 2), false);
+  });
+
+  test("coming back onto an entry after leaving every entry ticks again", () => {
+    assert.equal(slideTicks(undefined, 1), true);
   });
 });

@@ -14,10 +14,19 @@ type Props = {
   onLongPress?: (() => void) | undefined;
   /** The hairline under the entry; the last entry in a card goes without. */
   divider?: boolean;
+  /** Looks pressed: the entry a finger sliding across its menu would run. */
+  highlighted?: boolean;
 };
 
 /** A Library entry (Playlists, Artists, …): one quiet line of type, no icon, no chevron. */
-export function EntryRow({ label, count, onPress, onLongPress, divider = true }: Props) {
+export function EntryRow({
+  label,
+  count,
+  onPress,
+  onLongPress,
+  divider = true,
+  highlighted = false,
+}: Props) {
   return (
     <Press
       accessibilityRole="button"
@@ -25,6 +34,7 @@ export function EntryRow({ label, count, onPress, onLongPress, divider = true }:
       onPress={onPress}
       onLongPress={onLongPress}
       haptic="selection"
+      highlighted={highlighted}
     >
       <View className="flex-row items-center" style={{ height: grid.row }}>
         <Text className="flex-1 font-sans text-title3 font-normal text-foreground">{label}</Text>

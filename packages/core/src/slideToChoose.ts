@@ -48,3 +48,10 @@ export const slideEntry = (
   const index = entries.findIndex((rect) => rect !== undefined && contains(rect, point));
   return index === -1 ? undefined : index;
 };
+
+/**
+ * Whether the finger moving from entry `previous` to entry `next` (indexes as
+ * from `slideEntry`) should tick: it just moved onto an entry.
+ */
+export const slideTicks = (previous: number | undefined, next: number | undefined): boolean =>
+  next !== undefined && next !== previous;
