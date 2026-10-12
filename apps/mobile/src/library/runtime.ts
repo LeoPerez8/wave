@@ -9,6 +9,7 @@ import * as PlaybackPersistence from "@/playback/PlaybackPersistence";
 import * as PlayHistory from "@/playback/PlayHistory";
 import * as Player from "@/playback/Player";
 import * as Queue from "@/playback/Queue";
+import * as Stats from "@/stats/Stats";
 
 import {
   chooseExcludedFolder,
@@ -31,9 +32,11 @@ const services = Layer.mergeAll(
   Queue.layer.pipe(Layer.provideMerge(Player.layer)),
 );
 
-export const appLayer = Layer.mergeAll(PlaybackPersistence.layer, PlayHistory.layer).pipe(
-  Layer.provideMerge(services),
-);
+export const appLayer = Layer.mergeAll(
+  PlaybackPersistence.layer,
+  PlayHistory.layer,
+  Stats.layer,
+).pipe(Layer.provideMerge(services));
 
 export const appRuntime = ManagedRuntime.make(appLayer);
 

@@ -14,6 +14,10 @@ export const openFolder = (id: number): void => router.push(folderHref(id));
 export const playlistHref = (id: number) => `/library/playlist/${id}` as const;
 export const openPlaylist = (id: number): void => router.push(playlistHref(id));
 
+/** Stats, pushed from Home; a Library stack screen so the mini player stays. */
+export const statsHref = "/library/stats" as const;
+export const openStats = (): void => router.push(statsHref);
+
 /** Parses a route's `[id]` param; NaN-safe (an unknown id shows the "gone" state). */
 export const parseId = (param: string | string[] | undefined): number => {
   const id = Number(Array.isArray(param) ? param[0] : param);

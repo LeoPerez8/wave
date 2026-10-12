@@ -109,3 +109,5 @@ export type {
 export { favoriteStar, starWriteSettled, starWriteStarted } from "./favorites.ts";
 export type { FavoriteStar } from "./favorites.ts";
 export { compareStrings } from "./library.ts";
+export { STATS_PERIODS, STATS_SEE_ALL, STATS_TOP, rankPlays, statsWindow } from "./stats.ts";
+export type { PlayTotals, StatsPeriod, StatsWindow } from "./stats.ts";
