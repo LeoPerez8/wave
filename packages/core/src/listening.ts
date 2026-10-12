@@ -83,7 +83,7 @@ export interface ListeningOverview {
 }
 
 /** `count` with thousands separators, then the singular for one and the plural otherwise. */
-const counted = (count: number, singular: string, plural: string): string =>
+export const counted = (count: number, singular: string, plural: string): string =>
   `${count.toLocaleString("en")} ${count === 1 ? singular : plural}`;
 
 /** The overview's lines, in the order they read. */

@@ -10,7 +10,7 @@ import { HomeSection } from "./HomeSections";
  * total is its own text, so screen readers read it whole and wrapping never
  * splits a number from its label; the dots are left out for screen readers.
  */
-function TotalsLine({ totals }: { totals: readonly string[] }) {
+export function TotalsLine({ totals }: { totals: readonly string[] }) {
   return (
     <View className="flex-row flex-wrap">
       {totals.map((total, index) => (

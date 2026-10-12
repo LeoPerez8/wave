@@ -21,6 +21,7 @@ import { SongSortButton } from "@/library/SongSortButton";
 import { useSongSort } from "@/library/songSort";
 import { ListIntro, songCount, toTrackSummary } from "@/library/TrackList";
 import { useListScrollable } from "@/motion/heldTouch";
+import { ArtistStatsBlock } from "@/stats/ArtistStatsBlock";
 
 type Item =
   | { readonly type: "section"; readonly label: string }
@@ -126,12 +127,15 @@ function ArtistContent({ detail }: { detail: ArtistDetail }) {
       recycleItems
       contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottomInset }}
       ListHeaderComponent={
-        <ListIntro
-          line={line}
-          songs={songs}
-          context={context}
-          sortControl={<SongSortButton kind="artist" />}
-        />
+        <>
+          <ListIntro
+            line={line}
+            songs={songs}
+            context={context}
+            sortControl={<SongSortButton kind="artist" />}
+          />
+          <ArtistStatsBlock artistId={detail.artist.id} songs={detail.songs} />
+        </>
       }
     />
   );
