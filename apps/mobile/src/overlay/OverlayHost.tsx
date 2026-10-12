@@ -31,6 +31,7 @@ import {
   useOverlayEntries,
   type OverlayEntry,
 } from "./overlay";
+import { OverlayFlowContext } from "./flow";
 import { useKeyboardHeight } from "./keyboard";
 
 /** Rounded corners of a dialog card. */
@@ -202,7 +203,9 @@ function OverlayCard({ entry, frontmost }: { entry: OverlayEntry; frontmost: boo
         ]}
       >
         <Glass backdropId={BACKDROP.root} cornerRadius={OVERLAY_RADIUS} />
-        {entry.request.render(() => closeOverlay(entry.id))}
+        <OverlayFlowContext value={frame.flow}>
+          {entry.request.render(() => closeOverlay(entry.id))}
+        </OverlayFlowContext>
       </Animated.View>
     </View>
   );
