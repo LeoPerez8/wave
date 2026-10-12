@@ -18,6 +18,7 @@ describe("DEFAULT_THEME", () => {
       "on-accent": "#eff4f6",
       highlight: "#a14f09",
       destructive: "#b3261e",
+      scrim: "#121b1d",
     });
   });
 

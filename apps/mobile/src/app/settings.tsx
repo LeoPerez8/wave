@@ -11,6 +11,7 @@ import { TextButton } from "@/components/TextButton";
 import { useScanRoots, useScanState } from "@/library/hooks";
 import { startRescan } from "@/library/runtime";
 import { GlassSettingsSection } from "@/settings/GlassSettingsSection";
+import { ThemeSettingsSection } from "@/settings/ThemeSettingsSection";
 import { setTapAnimationMs, TAP_ANIMATION, useTapAnimationMs } from "@/settings/tapAnimation";
 
 export default function SettingsScreen() {
@@ -60,6 +61,8 @@ export default function SettingsScreen() {
         </Text>
 
         <GlassSettingsSection />
+
+        <ThemeSettingsSection />
 
         <CatalogLine className="mb-2 mt-12">Developer</CatalogLine>
         <Hairline />

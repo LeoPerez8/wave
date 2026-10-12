@@ -1,4 +1,7 @@
 import "../../global.css";
+// Lays the chosen theme colours over global.css's before anything renders.
+// oxlint-disable-next-line import/no-unassigned-import
+import "@/settings/theme";
 
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";

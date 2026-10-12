@@ -15,7 +15,9 @@
  *
  * Teal is the accent (active, progress, toggles); ember is the highlight
  * (favorites, now playing). Native props that can't take a className read
- * these with useThemeColor().
+ * these with useThemeColor(). These are the defaults: Settings › Theme
+ * overrides every value at runtime (src/settings/theme.ts, derived in Core's
+ * themeChoice.ts).
  */
 @layer theme {
   :root {
@@ -32,6 +34,7 @@
       --color-on-accent: #eff4f6;
       --color-highlight: #a14f09;
       --color-destructive: #b3261e;
+      --color-scrim: #121b1d;
     }
 
     @variant dark {
@@ -47,6 +50,7 @@
       --color-on-accent: #0a1113;
       --color-highlight: #ec9d53;
       --color-destructive: #f2867a;
+      --color-scrim: #0a1113;
     }
   }
 }
