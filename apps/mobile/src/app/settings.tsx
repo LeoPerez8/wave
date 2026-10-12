@@ -17,6 +17,11 @@ import { Press } from "@/motion/Press";
 import { GlassSettingsSection } from "@/settings/GlassSettingsSection";
 import { setShortcutTab, useShortcutTab } from "@/settings/shortcutTab";
 import { ThemeSettingsSection } from "@/settings/ThemeSettingsSection";
+import {
+  LONG_PRESS_DELAY,
+  setLongPressDelayMs,
+  useLongPressDelayMs,
+} from "@/settings/longPressDelay";
 import { setTapAnimationMs, TAP_ANIMATION, useTapAnimationMs } from "@/settings/tapAnimation";
 import { useThemeColor } from "@/theme/useThemeColor";
 
@@ -50,6 +55,7 @@ function ShortcutChoice({
 
 export default function SettingsScreen() {
   const ms = useTapAnimationMs();
+  const longPressMs = useLongPressDelayMs();
   const shortcut = useShortcutTab();
   const roots = useScanRoots();
   const scanning = useScanState().status === "scanning";
@@ -114,6 +120,21 @@ export default function SettingsScreen() {
         </Text>
 
         <ThemeSettingsSection />
+
+        <CatalogLine className="mb-2 mt-12">Touch</CatalogLine>
+        <Hairline />
+        <SettingsSlider
+          label="Long-press delay"
+          value={longPressMs}
+          range={LONG_PRESS_DELAY}
+          format={(value) => `${value} ms`}
+          onChange={setLongPressDelayMs}
+        />
+        <Hairline />
+        <Text className="mt-2 font-sans text-footnote text-secondary">
+          How long to hold a song, album or list entry before its menu opens. The default is{" "}
+          {LONG_PRESS_DELAY.default} ms.
+        </Text>
 
         <CatalogLine className="mb-2 mt-12">Developer</CatalogLine>
         <Hairline />
