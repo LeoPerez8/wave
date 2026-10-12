@@ -352,7 +352,10 @@ describe("queueSourceAfter", () => {
   test("skips, mode changes and queue edits keep the source of the playback going on", () => {
     assert.equal(queueSourceAfter("auto", { type: "next" }, "phone"), "auto");
     assert.equal(queueSourceAfter("auto", { type: "jumpTo", key: "2" }, "phone"), "auto");
-    assert.equal(queueSourceAfter("auto", { type: "addToQueue", trackIds: ["b"] }, "phone"), "auto");
+    assert.equal(
+      queueSourceAfter("auto", { type: "addToQueue", trackIds: ["b"] }, "phone"),
+      "auto",
+    );
     assert.equal(queueSourceAfter("phone", { type: "setShuffle", on: true }, "auto"), "phone");
   });
 });
