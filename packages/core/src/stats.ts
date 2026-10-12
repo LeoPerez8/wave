@@ -1,7 +1,7 @@
 /**
- * Listening stats: rankings of the songs (and later albums and artists) played
- * most over a stats period, a rolling window ending now. Only counted plays
- * (see `isCountedPlay`) enter a ranking.
+ * Listening stats: rankings of the songs, albums and artists played most over
+ * a stats period, a rolling window ending now. Only counted plays (see
+ * `isCountedPlay`) enter a ranking, and artists are credited by track artist.
  */
 
 /** A stats period: a rolling window ending now. */
@@ -76,6 +76,54 @@ export const rankPlays = <A extends PlayTotals>(totals: readonly A[], limit: num
     // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
     .sort(compareRanked)
     .slice(0, limit);
+
+/**
+ * What the library sums up for the tracks of one album by one track artist
+ * over a stats window, counting only counted plays. Albums and artists are
+ * both ranked from these.
+ */
+export interface CreditedPlayTotals {
+  /** The album (title + album artist, as in the Library). */
+  readonly albumId: number;
+  readonly albumSort: string;
+  /** The track artist: on a compilation, the real artist, not "Various Artists". */
+  readonly artistId: number;
+  readonly artistSort: string;
+  readonly countedPlays: number;
+  readonly listenedMs: number;
+  readonly latestPlayAt: number;
+}
+
+/** Sums credited totals into one entry per entity, as `entity` picks it. */
+const sumBy = (
+  credits: readonly CreditedPlayTotals[],
+  entity: (credit: CreditedPlayTotals) => { readonly id: number; readonly sortKey: string },
+): PlayTotals[] => {
+  const byId = new Map<number, PlayTotals>();
+  for (const credit of credits) {
+    const { id, sortKey } = entity(credit);
+    const sum = byId.get(id);
+    byId.set(id, {
+      id,
+      sortKey,
+      countedPlays: (sum?.countedPlays ?? 0) + credit.countedPlays,
+      listenedMs: (sum?.listenedMs ?? 0) + credit.listenedMs,
+      latestPlayAt: Math.max(sum?.latestPlayAt ?? 0, credit.latestPlayAt),
+    });
+  }
+  return [...byId.values()];
+};
+
+/** Each album's totals: the plays of all its tracks, whoever the track artists. Ranked by `rankPlays`. */
+export const albumPlayTotals = (credits: readonly CreditedPlayTotals[]): PlayTotals[] =>
+  sumBy(credits, (credit) => ({ id: credit.albumId, sortKey: credit.albumSort }));
+
+/**
+ * Each artist's totals, credited by track artist: a compilation's plays go to
+ * the artists on its tracks, never to its album artist. Ranked by `rankPlays`.
+ */
+export const artistPlayTotals = (credits: readonly CreditedPlayTotals[]): PlayTotals[] =>
+  sumBy(credits, (credit) => ({ id: credit.artistId, sortKey: credit.artistSort }));
 
 /** The window `period` covers when the ranking is read at `now`. */
 export const statsWindow = (period: StatsPeriod, now: number): StatsWindow => {

@@ -1,10 +1,11 @@
 /**
  * The play totals Stats ranks, as thin queries over the library database:
  * they only filter (counted plays in a window, tracks still in the library)
- * and sum. Ordering and the cut-off are Core's `rankPlays`. Kept free of Expo
+ * and sum. Grouping into albums and artists, ordering and the cut-off are
+ * Core's (`albumPlayTotals`, `artistPlayTotals`, `rankPlays`). Kept free of Expo
  * so the store tests run them against a real SQLite (`testDatabase.ts`).
  */
-import type { PlayTotals, StatsWindow } from "@wave/core";
+import type { CreditedPlayTotals, PlayTotals, StatsWindow } from "@wave/core";
 import { and, eq, gte, lte, sql, type SQL } from "drizzle-orm";
 
 import type { LibraryDatabase } from "./playHistory.ts";
@@ -36,5 +37,31 @@ export const trackPlayTotals = (db: LibraryDatabase, window: StatsWindow): PlayT
     .innerJoin(tracks, eq(playEvents.trackId, tracks.id))
     .where(countedIn(window))
     .groupBy(tracks.id)
+    .all();
+};
+
+/**
+ * Counted plays within `window` per album and track artist (a compilation
+ * gives one row per artist on it), for tracks still in the library, in no order.
+ */
+export const creditedPlayTotals = (
+  db: LibraryDatabase,
+  window: StatsWindow,
+): CreditedPlayTotals[] => {
+  const { playEvents, tracks, albums, artists } = schema;
+  return db
+    .select({
+      albumId: tracks.albumId,
+      albumSort: albums.titleSort,
+      artistId: tracks.artistId,
+      artistSort: artists.sort,
+      ...sums,
+    })
+    .from(playEvents)
+    .innerJoin(tracks, eq(playEvents.trackId, tracks.id))
+    .innerJoin(albums, eq(tracks.albumId, albums.id))
+    .innerJoin(artists, eq(tracks.artistId, artists.id))
+    .where(countedIn(window))
+    .groupBy(tracks.albumId, tracks.artistId)
     .all();
 };
