@@ -203,6 +203,12 @@ UPDATE \`play_events\` SET \`counted\` = CASE
 END;
 `;
 
+// Artist images (Core's \`artistArtwork\`): filled in by the store after the
+// next scan, so artists show their placeholder until then.
+const m0008 = `
+ALTER TABLE \`artists\` ADD \`artwork_hash\` text REFERENCES \`artwork\`(\`hash\`);
+`;
+
 export default {
   journal: {
     entries: [
@@ -214,7 +220,8 @@ export default {
       { idx: 5, when: 1_792_238_400_000, tag: "0005_play_events", breakpoints: true },
       { idx: 6, when: 1_792_324_800_000, tag: "0006_play_source", breakpoints: true },
       { idx: 7, when: 1_792_411_200_000, tag: "0007_recount_plays", breakpoints: true },
+      { idx: 8, when: 1_792_497_600_000, tag: "0008_artist_images", breakpoints: true },
     ],
   },
-  migrations: { m0000, m0001, m0002, m0003, m0004, m0005, m0006, m0007 },
+  migrations: { m0000, m0001, m0002, m0003, m0004, m0005, m0006, m0007, m0008 },
 };

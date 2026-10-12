@@ -29,7 +29,12 @@ import * as Layer from "effect/Layer";
 import { openDatabaseSync } from "expo-sqlite";
 
 import { selectAlbums } from "./db/albums";
-import { selectArtistCovers, selectArtistSongs, selectArtists } from "./db/artists";
+import {
+  refreshArtistImages,
+  selectArtistCovers,
+  selectArtistSongs,
+  selectArtists,
+} from "./db/artists";
 import { libraryCounts, sectionSongCounts, type LibraryCounts } from "./db/counts";
 import { selectGenreSongs } from "./db/genres";
 import type { RowPage } from "./db/database";
@@ -142,6 +147,12 @@ export interface ArtistRow {
   readonly albumCount: number;
   /** Songs by the artist or on their albums. */
   readonly trackCount: number;
+  /**
+   * The artist's image (an album cover, Core's `artistArtwork`): thumbnail for
+   * rows, full size for the artist page; null for the initial placeholder.
+   */
+  readonly thumbPath: string | null;
+  readonly artworkPath: string | null;
 }
 
 export interface GenreRow {
@@ -643,7 +654,10 @@ const chunks = <A>(items: readonly A[]): A[][] => {
 
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
-/** Deletes the albums, artists, genres and folders no track uses any more. */
+/**
+ * Deletes the albums, artists, genres and folders no track uses any more, then
+ * re-picks the artists' images from the albums left.
+ */
 const pruneOrphans = (tx: Transaction): void => {
   // Albums first: they hold the album artist.
   tx.run(sql`DELETE FROM albums WHERE id NOT IN (SELECT album_id FROM tracks)`);
@@ -652,6 +666,7 @@ const pruneOrphans = (tx: Transaction): void => {
   tx.run(sql`DELETE FROM genres
     WHERE id NOT IN (SELECT genre_id FROM tracks WHERE genre_id IS NOT NULL)`);
   tx.run(sql`DELETE FROM folders WHERE id NOT IN (SELECT folder_id FROM tracks)`);
+  refreshArtistImages(tx);
 };
 
 const removeTracksSync = (db: Database, paths: readonly string[]): void => {
@@ -728,8 +743,15 @@ const getAlbumSync = (db: Database, id: number): AlbumDetail | null => {
 const getArtistSync = (db: Database, id: number): ArtistDetail | null => {
   const { artists, albums, tracks } = schema;
   const artist = db
-    .select({ id: artists.id, name: artists.name, sort: artists.sort })
+    .select({
+      id: artists.id,
+      name: artists.name,
+      sort: artists.sort,
+      thumbPath: schema.artwork.thumbPath,
+      artworkPath: schema.artwork.path,
+    })
     .from(artists)
+    .leftJoin(schema.artwork, eq(artists.artworkHash, schema.artwork.hash))
     .where(eq(artists.id, id))
     .get();
   if (artist === undefined) return null;

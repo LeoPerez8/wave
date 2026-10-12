@@ -52,10 +52,10 @@ describe("artistArtwork", () => {
     const both = (a: ArtistAlbumLink, b: ArtistAlbumLink) => [imageOf([a, b]), imageOf([b, a])];
 
     test("the newest album", () => {
-      assert.deepEqual(
-        both(link({ albumId: 1, year: 1997 }), link({ albumId: 2, year: 2000 })),
-        ["cover-2", "cover-2"],
-      );
+      assert.deepEqual(both(link({ albumId: 1, year: 1997 }), link({ albumId: 2, year: 2000 })), [
+        "cover-2",
+        "cover-2",
+      ]);
     });
 
     test("a dated album before an undated one", () => {
@@ -90,10 +90,7 @@ describe("artistArtwork", () => {
 
     test("own albums without covers give way to an album they appear on", () => {
       assert.equal(
-        imageOf([
-          link({ albumId: 1, artwork: null }),
-          link({ albumId: 2, own: false, songs: 1 }),
-        ]),
+        imageOf([link({ albumId: 1, artwork: null }), link({ albumId: 2, own: false, songs: 1 })]),
         "cover-2",
       );
     });
