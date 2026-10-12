@@ -1,6 +1,7 @@
 import { IconPlus } from "@tabler/icons-react-native";
 import {
   checkPlaylistName,
+  confirmPlaylistDeletion,
   describePlaylistAdd,
   nextPlaylistName,
   type PlaylistNameCheck,
@@ -256,19 +257,31 @@ const renameNamedPlaylist = async (playlist: {
   await renamePlaylist(playlist.id, name).catch(failed("rename the playlist"));
 };
 
-/** Asks before deleting; `onDeleted` runs once it's gone (leave its screen). */
-export const confirmDeletePlaylist = (
-  playlist: { readonly id: number; readonly name: string },
-  onDeleted?: () => void,
-): void =>
-  void confirmAction({
-    title: `Delete ${playlist.name}?`,
-    message: "Its songs stay in your library.",
-    action: { label: "Delete", destructive: true },
-  }).then((confirmed) =>
-    confirmed
-      ? deletePlaylist(playlist.id)
-          .then(() => onDeleted?.())
-          .catch(failed("delete the playlist"))
-      : undefined,
-  );
+/**
+ * Asks once before deleting [playlists] ("Delete 3 playlists?"). `onConfirm`
+ * runs once confirmed, before they go (the selection bar ends selection mode
+ * there, so Cancel keeps it); `onDeleted` once they're gone (leave a deleted
+ * playlist's screen).
+ */
+export const confirmDeletePlaylists = (
+  playlists: readonly { readonly id: number; readonly name: string }[],
+  {
+    onConfirm,
+    onDeleted,
+  }: {
+    readonly onConfirm?: (() => void) | undefined;
+    readonly onDeleted?: (() => void) | undefined;
+  } = {},
+): void => {
+  if (playlists.length === 0) return;
+  void confirmAction(confirmPlaylistDeletion(playlists)).then(async (confirmed) => {
+    if (!confirmed) return;
+    onConfirm?.();
+    try {
+      for (const playlist of playlists) await deletePlaylist(playlist.id);
+      onDeleted?.();
+    } catch {
+      failed(playlists.length === 1 ? "delete the playlist" : "delete the playlists")();
+    }
+  });
+};

@@ -16,6 +16,7 @@ import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.wavenative.artwork.AndroidArtworkProcessor
+import expo.modules.wavenative.artwork.ArtistPhotoStore
 import expo.modules.wavenative.artwork.ArtworkInfo
 import expo.modules.wavenative.artwork.ArtworkStore
 import expo.modules.wavenative.files.DeleteOutcome
@@ -38,7 +39,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Wave's native side: all-files access, the folder picker, the library scanner,
- * lyrics and deleting songs' files. Scans run one at
+ * lyrics, deleting songs' files and saving artist photos. Scans run one at
  * a time on a background thread and stream results to JS as events:
  * `onScanProgress`, `onScanMissing`, `onScanBatch`, `onScanComplete` and
  * `onScanError`, each carrying the `scanId` returned by `startScan`.
@@ -175,11 +176,25 @@ class WaveNativeModule : Module() {
       outcomes.map { it.id }
     }
 
+    /**
+     * Downloads an artist's photo in both sizes beside the album artwork and
+     * resolves `{ path, thumbPath }`; rejects when either download fails or
+     * isn't an image (nothing is kept then). Runs off the main thread.
+     */
+    AsyncFunction("saveArtistPhoto") { artistKey: String, thumbUrl: String, largeUrl: String ->
+      artistPhotos().save(artistKey, thumbUrl, largeUrl).toMap()
+    }
+
+    /** Deletes every downloaded artist photo. */
+    AsyncFunction("clearArtistPhotos") { artistPhotos().clear() }
+
     OnDestroy {
       currentScan?.second?.set(true)
       scanExecutor.shutdownNow()
     }
   }
+
+  private fun artistPhotos() = ArtistPhotoStore(File(File(context.filesDir, "artwork"), "artists"))
 
   /** The root of a storage volume: `primary` or the UUID of an SD card or USB drive. */
   private fun volumeDirectory(volumeId: String): File? {

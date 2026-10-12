@@ -6,6 +6,7 @@ import {
   confirmsFirst,
   isDestructiveAction,
   ITEM_ACTION_LABELS,
+  commonKind,
   itemActions,
   splitActionBar,
   type ActionSubject,
@@ -61,7 +62,7 @@ describe("itemActions", () => {
   test("Delete asks first, so the selection only ends once it's confirmed", () => {
     assert.deepEqual(
       Object.keys(ITEM_ACTION_LABELS).filter((action) => confirmsFirst(action as ItemAction)),
-      ["delete"],
+      ["deletePlaylist", "deletePlaylists", "delete"],
     );
   });
 
@@ -207,6 +208,17 @@ describe("itemActions", () => {
     );
   });
 
+  test("selected artists, genres or folders: the bar offers their menu's entries, but Select", () => {
+    for (const kind of ["artist", "genre", "folder"] as const) {
+      const menu = names(itemActions({ kind, items: [{}], selectable: true, here: "/library" }));
+      const bar = names(
+        itemActions({ kind, items: [{}, {}, {}], surface: "selection", here: "/library" }),
+      );
+      assert.deepEqual(menu, ["playNext", "addToQueue", "addToPlaylist", "select"]);
+      assert.deepEqual(bar, ["playNext", "addToQueue", "addToPlaylist"]);
+    }
+  });
+
   test("a playlist can be renamed and deleted, one at a time", () => {
     const one = names(itemActions({ kind: "playlist", items: [{}], here: "/" }));
     assert.deepEqual(one.slice(-2), ["renamePlaylist", "deletePlaylist"]);
@@ -214,6 +226,27 @@ describe("itemActions", () => {
       itemActions({ kind: "playlist", items: [{}, {}], here: "/", surface: "selection" }),
     );
     assert.ok(!two.includes("renamePlaylist"));
+  });
+
+  test("selected playlists: queue them, add them to a playlist, Rename and Delete Playlist only for one", () => {
+    const selected = (count: number) =>
+      names(
+        itemActions({
+          kind: "playlist",
+          items: Array.from({ length: count }, () => ({})),
+          here: "/library/playlists",
+          surface: "selection",
+        }),
+      );
+    assert.deepEqual(selected(1), [
+      "playNext",
+      "addToQueue",
+      "addToPlaylist",
+      "renamePlaylist",
+      "deletePlaylist",
+    ]);
+    assert.deepEqual(selected(3), ["playNext", "addToQueue", "addToPlaylist", "deletePlaylists"]);
+    assert.equal(ITEM_ACTION_LABELS.deletePlaylists, "Delete Playlists");
   });
 
   test("a genre, folder, artist or Library entry: queue it and add it to a playlist", () => {
@@ -228,6 +261,48 @@ describe("itemActions", () => {
 
   test("an empty selection offers nothing", () => {
     assert.deepEqual(itemActions(tracks([], { surface: "selection" })), []);
+  });
+});
+
+/** Albums and songs checked together on an artist's page. */
+const mixed = (items: ActionSubject["items"], here = "/library/artist/10"): ActionSubject => ({
+  kind: "mixed",
+  items,
+  surface: "selection",
+  here,
+});
+
+describe("itemActions on albums and songs checked together", () => {
+  test("offers the entries an album's and a song's menus share, not Favorite or Delete", () => {
+    const entries = itemActions(mixed([{ albumId: 2, artistId: 10 }, song({ favorite: true })]));
+    assert.deepEqual(names(entries), ["playNext", "addToQueue", "addToPlaylist"]);
+  });
+
+  test("Go to Artist when they share an artist, unless it's the page you're on", () => {
+    const items = [{ albumId: 2, artistId: 10 }, song({ albumId: 1, artistId: 10 })];
+    assert.deepEqual(names(itemActions(mixed(items, "/library/albums"))), [
+      "playNext",
+      "addToQueue",
+      "addToPlaylist",
+      "goToArtist",
+    ]);
+    assert.ok(!names(itemActions(mixed(items))).includes("goToArtist"));
+  });
+
+  test("Go to Album when the songs are from the album checked with them", () => {
+    const entries = itemActions(mixed([{ albumId: 2, artistId: 30 }, song({ albumId: 2 })]));
+    assert.deepEqual(entries.at(-1), { action: "goToAlbum", albumId: 2 });
+  });
+});
+
+describe("commonKind", () => {
+  test("items of one kind keep it", () => {
+    assert.equal(commonKind(["track", "track"]), "track");
+    assert.equal(commonKind(["album"]), "album");
+  });
+
+  test("albums and songs together are mixed", () => {
+    assert.equal(commonKind(["album", "track", "album"]), "mixed");
   });
 });
 

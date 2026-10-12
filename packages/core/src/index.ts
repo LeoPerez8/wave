@@ -69,6 +69,7 @@ export type {
 export {
   PLAYLIST_NAME_MAX,
   checkPlaylistName,
+  confirmPlaylistDeletion,
   describePlaylistAdd,
   moveItem,
   nextPlaylistName,
@@ -239,6 +240,7 @@ export {
 export type { Selection } from "./selection.ts";
 export { groupSongs } from "./groupSongs.ts";
 export {
+  commonKind,
   actionBarLabel,
   confirmsFirst,
   isDestructiveAction,
@@ -266,3 +268,18 @@ export { artistArtwork, artistInitial } from "./artistImage.ts";
 export type { ArtistAlbumLink } from "./artistImage.ts";
 export { rowWindow, windowRows } from "./rowWindow.ts";
 export type { RowView, RowWindow } from "./rowWindow.ts";
+export {
+  ARTIST_PHOTO_RETRY_MS,
+  artistPhotoLookups,
+  artistPhotoName,
+  artistPhotoQuery,
+  deezerArtistCandidates,
+  deezerArtistSearchUrl,
+  pickArtistPhoto,
+} from "./artistPhoto.ts";
+export type {
+  ArtistPhotoCandidate,
+  ArtistPhotoCheck,
+  ArtistPhotoOutcome,
+  ArtistPhotoUrls,
+} from "./artistPhoto.ts";
