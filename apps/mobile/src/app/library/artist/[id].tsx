@@ -11,17 +11,18 @@ import { useChromeInset } from "@/chrome/chrome";
 import { playSongs } from "@/playback/actions";
 import { useCurrentTrackId } from "@/playback/hooks";
 import { openTrackActions } from "@/playback/ActionsMenu";
-import { mixedTarget, type MixedItem } from "@/playback/itemActions";
+import { mixedTarget, type MixedItem } from "@/playback/actionTargets";
 import { albumPairs, albumRowHeight, AlbumPair, useAlbumTileSize } from "@/library/AlbumGrid";
 import { DetailFrame } from "@/library/DetailFrame";
 import { useFavoriteIds } from "@/library/favorites";
 import { useArtist } from "@/library/hooks";
 import type { AlbumRow, ArtistDetail, ArtistRow, SongRow } from "@/library/LibraryStore";
-import { parseId } from "@/library/routes";
+import { parseId, useKnownRow } from "@/library/routes";
 import { SongSortButton } from "@/library/SongSortButton";
 import { useSortedSongs } from "@/library/songSort";
 import { ListIntro, songCount, toTrackSummary } from "@/library/TrackList";
 import { useListScrollable } from "@/motion/heldTouch";
+import { selectableRow } from "@/selection/selectableRow";
 import { useListSelection, type ListSelection } from "@/selection/useListSelection";
 import { ArtistStatsBlock } from "@/stats/ArtistStatsBlock";
 
@@ -82,9 +83,6 @@ const albumSelectionOf = (page: ListSelection<MixedItem>): ListSelection<AlbumRo
   toggle: (album) => page.toggle(albumItem(album)),
 });
 
-/** While selecting, a long-press does nothing (rather than toggling the row on release). */
-const ignoreLongPress = (): void => undefined;
-
 /** The artist page's head: their image as a large circle, then their name. */
 function ArtistHead({ artist }: { artist: ArtistRow }) {
   const { width } = useWindowDimensions();
@@ -107,7 +105,24 @@ function ArtistHead({ artist }: { artist: ArtistRow }) {
 
 const albumsLine = (count: number): string => `${count} ${count === 1 ? "album" : "albums"}`;
 
-function ArtistContent({ detail }: { detail: ArtistDetail }) {
+/** What the screen shows: the artist, and their page once it is read. */
+interface Shown {
+  readonly artist: ArtistRow;
+  /** Undefined until the page is read; the head doesn't wait for it. */
+  readonly detail: ArtistDetail | undefined;
+}
+
+/** The page before it's read: the artist alone, no albums or songs yet. */
+const unread = (artist: ArtistRow): ArtistDetail => ({
+  artist,
+  albums: [],
+  appearsOn: [],
+  songs: [],
+});
+
+function ArtistContent({ shown }: { shown: Shown }) {
+  const loaded = shown.detail !== undefined;
+  const detail = useMemo(() => shown.detail ?? unread(shown.artist), [shown.detail, shown.artist]);
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
   const currentId = useCurrentTrackId();
@@ -120,7 +135,7 @@ function ArtistContent({ detail }: { detail: ArtistDetail }) {
   const selectable = useMemo(() => selectableItems(detail, songs), [detail, songs]);
   const page = useListSelection({ items: selectable, keyOf: selectableKey, target: mixedTarget });
   const albumSelection = useMemo(() => albumSelectionOf(page), [page]);
-  const { selection, isChecked, start, toggle } = page;
+  const { selection } = page;
   const rowState = useMemo(
     () => ({ currentId, favorites, tile, selection }),
     [currentId, favorites, tile, selection],
@@ -148,39 +163,22 @@ function ArtistContent({ detail }: { detail: ArtistDetail }) {
               state={String(item.song.id) === currentId ? "playing" : undefined}
               favorite={favorites.has(item.song.id)}
               leading="artwork"
-              checked={selection === null ? undefined : isChecked(trackItem(item.song))}
-              onPress={
-                selection === null
-                  ? () => playSongs(songs, item.index, context)
-                  : () => toggle(trackItem(item.song))
-              }
-              onLongPress={
-                selection === null
-                  ? () =>
-                      openTrackActions(item.song, { onSelect: () => start(trackItem(item.song)) })
-                  : ignoreLongPress
-              }
+              {...selectableRow(
+                trackItem(item.song),
+                page,
+                () => playSongs(songs, item.index, context),
+                (options) => openTrackActions(item.song, options),
+              )}
             />
           );
       }
     },
-    [
-      context,
-      currentId,
-      favorites,
-      songs,
-      tile,
-      albumSelection,
-      selection,
-      isChecked,
-      start,
-      toggle,
-    ],
+    [context, currentId, favorites, songs, tile, albumSelection, page],
   );
 
   const line = [
     detail.artist.albumCount > 0 ? albumsLine(detail.artist.albumCount) : null,
-    songCount(songs.length),
+    songCount(loaded ? songs.length : detail.artist.trackCount),
   ]
     .filter((part) => part !== null)
     .join(" · ");
@@ -209,24 +207,38 @@ function ArtistContent({ detail }: { detail: ArtistDetail }) {
           <ArtistHead artist={detail.artist} />
           <ListIntro
             line={line}
-            songs={songs}
+            songs={loaded ? songs : undefined}
             context={context}
             sortControl={<SongSortButton kind="artist" />}
           />
-          <ArtistStatsBlock artistId={detail.artist.id} songs={detail.songs} />
+          {loaded && <ArtistStatsBlock artistId={detail.artist.id} songs={detail.songs} />}
         </>
       }
     />
   );
 }
 
-/** An artist: their albums, the albums they appear on, and their songs. */
+/**
+ * An artist: their albums, the albums they appear on, and their songs. Opened
+ * from a list that knows the artist, the head is there on the first frame and
+ * the rest follows once read.
+ */
 export default function ArtistScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const detail = useArtist(parseId(id));
+  const artistId = parseId(id);
+  const detail = useArtist(artistId);
+  const known = useKnownRow("artist", artistId);
+  const shown: Shown | null | undefined =
+    detail === undefined
+      ? known === undefined
+        ? undefined
+        : { artist: known, detail: undefined }
+      : detail === null
+        ? null
+        : { artist: detail.artist, detail };
   return (
-    <DetailFrame detail={detail} noun="artist">
-      {(artist) => <ArtistContent detail={artist} />}
+    <DetailFrame detail={shown} noun="artist">
+      {(artist) => <ArtistContent shown={artist} />}
     </DetailFrame>
   );
 }

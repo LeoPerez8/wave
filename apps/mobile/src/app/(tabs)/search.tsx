@@ -16,7 +16,7 @@ import { TextButton } from "@/components/TextButton";
 import { rise, riseReduced } from "@/motion/entry";
 import { clearRecentSearches, rememberSearch, useRecentSearches } from "@/search/recentSearches";
 import type { SongRow } from "@/library/LibraryStore";
-import type { ActionItems } from "@/playback/itemActions";
+import type { ActionItems } from "@/playback/actionTargets";
 import { RESULT_LIMIT, resultRows, songResults } from "@/search/rows";
 import { onSearchFocusRequest, takeSearchFocusRequest } from "@/search/focusRequest";
 import { SearchField } from "@/search/SearchField";

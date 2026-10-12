@@ -220,6 +220,14 @@ CREATE TABLE \`artist_photos\` (
 );
 `;
 
+// Plays keep their song's album and track artist once the song leaves the
+// library (written then, by the store), so deleting songs doesn't change Stats.
+const m0010 = `
+ALTER TABLE \`play_events\` ADD \`album_id\` integer;
+--> statement-breakpoint
+ALTER TABLE \`play_events\` ADD \`artist_id\` integer;
+`;
+
 export default {
   journal: {
     entries: [
@@ -233,7 +241,8 @@ export default {
       { idx: 7, when: 1_792_411_200_000, tag: "0007_recount_plays", breakpoints: true },
       { idx: 8, when: 1_792_497_600_000, tag: "0008_artist_images", breakpoints: true },
       { idx: 9, when: 1_792_584_000_000, tag: "0009_artist_photos", breakpoints: true },
+      { idx: 10, when: 1_792_670_400_000, tag: "0010_play_credits", breakpoints: true },
     ],
   },
-  migrations: { m0000, m0001, m0002, m0003, m0004, m0005, m0006, m0007, m0008, m0009 },
+  migrations: { m0000, m0001, m0002, m0003, m0004, m0005, m0006, m0007, m0008, m0009, m0010 },
 };

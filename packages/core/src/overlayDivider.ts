@@ -6,11 +6,10 @@
  * backdrop, theme or glass setting while staying far from text contrast.
  */
 
+import { withOpacity } from "./colour.ts";
+
 /** How much of the text colour the divider lays down, 0–1. */
 const STRENGTH = 0.24;
 
-/** The divider of an overlay card: `foreground` (`#rrggbb`) as `#rrggbbaa`. */
-export const overlayDivider = (foreground: string): string =>
-  `${foreground.slice(0, 7)}${Math.round(STRENGTH * 255)
-    .toString(16)
-    .padStart(2, "0")}`;
+/** The divider of an overlay card: `foreground` (`#rrggbb`) as `#rrggbbaa` (see `withOpacity`). */
+export const overlayDivider = (foreground: string): string => withOpacity(foreground, STRENGTH);

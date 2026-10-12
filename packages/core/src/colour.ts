@@ -103,6 +103,17 @@ export const withLuminance = (target: number, hue: number, chroma: number): stri
   return toHex([fromLinear(r), fromLinear(g), fromLinear(b)]);
 };
 
+/**
+ * [colour] (`#rrggbb`, or `#rrggbbaa` whose alpha is replaced) laid at
+ * [opacity] (0–1) as `#rrggbbaa`. Anything else (a theme colour not loaded
+ * yet, such as `transparent`) is returned as it is.
+ */
+export const withOpacity = (colour: string, opacity: number): string => {
+  if (!/^#[\da-f]{6}([\da-f]{2})?$/i.test(colour)) return colour;
+  const alpha = Math.round(Math.min(1, Math.max(0, opacity)) * 255);
+  return `${colour.slice(0, 7)}${alpha.toString(16).padStart(2, "0")}`;
+};
+
 /** `from` moved `amount` (0–1) of the way to `to`, in sRGB. */
 export const mix = (from: string, to: string, amount: number): string => {
   const [r1, g1, b1] = parseHex(from);

@@ -11,7 +11,7 @@ import {
 import { useMemo, useSyncExternalStore } from "react";
 
 import { makeExternalStore } from "@/lib/externalStore";
-import type { ActionItems } from "@/playback/itemActions";
+import type { ActionItems } from "@/playback/actionTargets";
 
 /**
  * Selection mode: one list at a time has checked items, and while it does the

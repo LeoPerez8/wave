@@ -1,6 +1,5 @@
 import { IconDots } from "@tabler/icons-react-native";
 import { useLocalSearchParams } from "expo-router";
-import { useState } from "react";
 import { Text, useWindowDimensions, View } from "react-native";
 
 import { CELL, grid } from "@/catalog/grid";
@@ -13,8 +12,7 @@ import { DetailFrame } from "@/library/DetailFrame";
 import { usePlaylist } from "@/library/hooks";
 import { LibraryStore, type PlaylistItemRow, type PlaylistRow } from "@/library/LibraryStore";
 import { PlaylistItems } from "@/library/PlaylistItems";
-import { knownPlaylist } from "@/library/playlists";
-import { parseId } from "@/library/routes";
+import { parseId, useKnownRow } from "@/library/routes";
 import { appRuntime } from "@/library/runtime";
 import { songCount } from "@/library/TrackList";
 
@@ -106,7 +104,7 @@ export default function PlaylistScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const playlistId = parseId(id);
   const detail = usePlaylist(playlistId);
-  const [known] = useState(() => knownPlaylist(playlistId));
+  const known = useKnownRow("playlist", playlistId);
   const shown: Shown | null | undefined =
     detail === undefined && known !== undefined ? { playlist: known, items: undefined } : detail;
   return (

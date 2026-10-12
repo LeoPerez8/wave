@@ -1,9 +1,8 @@
 import { detailPath, type DetailScreen, type StatsPeriod, type StatsRanking } from "@wave/core";
 import { router, usePathname, type Href } from "expo-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
-import type { PlaylistRow } from "./LibraryStore";
-import { openingPlaylist } from "./playlists";
+import type { AlbumRow, ArtistRow, FolderRow, GenreRow, PlaylistRow } from "./LibraryStore";
 
 /** The current screen's path, for opening screens from outside React. */
 let here = "/";
@@ -16,24 +15,50 @@ export const useTrackCurrentPath = (): void => {
   }, [pathname]);
 };
 
+/** The row a list shows for each detail screen's item. */
+interface DetailRows {
+  readonly album: AlbumRow;
+  readonly artist: ArtistRow;
+  readonly genre: GenreRow;
+  readonly folder: FolderRow;
+  readonly playlist: PlaylistRow;
+}
+
+/** The row of the item last opened from a list that had it, for its screen's first frame. */
+let opening: { readonly screen: DetailScreen; readonly row: { readonly id: number } } | undefined;
+
 /**
  * Opens a detail screen (ids are DB integer ids): inside the shortcut tab when
- * opened from it, on the Library stack otherwise (Core's `detailPath`).
+ * opened from it, on the Library stack otherwise (Core's `detailPath`). Given
+ * the row the tapped list shows ([known]), the screen draws its header from it
+ * on its first frame instead of waiting for its whole query (`useKnownRow`).
  */
-const open = (screen: DetailScreen, id: number): void =>
+const open = <S extends DetailScreen>(screen: S, id: number, known?: DetailRows[S]): void => {
+  opening = known === undefined ? undefined : { screen, row: known };
   router.push(detailPath(here, screen, id) as Href);
+};
 
-export const openAlbum = (id: number): void => open("album", id);
-export const openArtist = (id: number): void => open("artist", id);
-export const openGenre = (id: number): void => open("genre", id);
-export const openFolder = (id: number): void => open("folder", id);
+export const openAlbum = (id: number, known?: AlbumRow): void => open("album", id, known);
+export const openArtist = (id: number, known?: ArtistRow): void => open("artist", id, known);
+export const openGenre = (id: number, known?: GenreRow): void => open("genre", id, known);
+export const openFolder = (id: number, known?: FolderRow): void => open("folder", id, known);
+export const openPlaylist = (id: number, known?: PlaylistRow): void => open("playlist", id, known);
+
 /**
- * Opens a playlist. Given its row (from the list tapped), its screen shows
- * the header on its first frame rather than after reading every song.
+ * What the list knew about the item a detail screen shows when it was tapped
+ * (`open*(id, row)`), read once as the screen mounts; undefined when it was
+ * opened another way (Go to Album, Now Playing…).
  */
-export const openPlaylist = (id: number, known?: PlaylistRow): void => {
-  if (known !== undefined) openingPlaylist(known);
-  open("playlist", id);
+export const useKnownRow = <S extends DetailScreen>(
+  screen: S,
+  id: number,
+): DetailRows[S] | undefined => {
+  const [known] = useState(() =>
+    opening?.screen === screen && opening.row.id === id
+      ? (opening.row as DetailRows[S])
+      : undefined,
+  );
+  return known;
 };
 
 /** Stats, pushed from Home; a Library stack screen so the mini player stays. */

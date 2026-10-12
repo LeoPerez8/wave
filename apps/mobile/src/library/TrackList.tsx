@@ -1,6 +1,6 @@
 import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
 import { useScrollToTop } from "expo-router";
-import { songSpineKeys, type QueueContext, type SongSort } from "@wave/core";
+import { counted, songSpineKeys, type QueueContext, type SongSort } from "@wave/core";
 import { useCallback, useMemo, useRef, type ReactElement, type ReactNode } from "react";
 import { View } from "react-native";
 
@@ -11,9 +11,10 @@ import { PlayShuffle } from "@/catalog/PlayShuffle";
 import { type TrackSummary, TrackRow } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { playSongs } from "@/playback/actions";
-import { useCurrentTrackId } from "@/playback/hooks";
+import { useCurrentTrackId, usePlaySongs } from "@/playback/hooks";
 import { openTrackActions } from "@/playback/ActionsMenu";
-import type { ActionItems } from "@/playback/itemActions";
+import type { ActionItems } from "@/playback/actionTargets";
+import { selectableRow } from "@/selection/selectableRow";
 import { useListSelection } from "@/selection/useListSelection";
 
 import { useFavoriteIds } from "./favorites";
@@ -29,8 +30,7 @@ export const toTrackSummary = (song: SongRow): TrackSummary => ({
   artworkUri: song.thumbPath === null ? undefined : `file://${song.thumbPath}`,
 });
 
-export const songCount = (count: number): string =>
-  `${count.toLocaleString("en")} ${count === 1 ? "song" : "songs"}`;
+export const songCount = (count: number): string => counted(count, "song");
 
 /**
  * A list's opening: a catalog line (the count, a path…) over Play and Shuffle,
@@ -43,19 +43,20 @@ export function ListIntro({
   sortControl,
 }: {
   line: string;
-  /** In the order the list shows them: Play and Shuffle play them so. */
-  songs: readonly SongRow[];
+  /**
+   * In the order the list shows them: Play and Shuffle play them so.
+   * Undefined while they load: a press then plays them once read.
+   */
+  songs: readonly SongRow[] | undefined;
   context: QueueContext;
   sortControl?: ReactNode;
 }) {
+  const play = usePlaySongs(songs, context);
   return (
     <View style={{ gap: CELL, paddingBottom: CELL }}>
       <CatalogLine>{line}</CatalogLine>
       <View className="flex-row items-center justify-between">
-        <PlayShuffle
-          onPlay={() => playSongs(songs, undefined, context, { shuffle: false })}
-          onShuffle={() => playSongs(songs, undefined, context, { shuffle: true })}
-        />
+        <PlayShuffle onPlay={() => play(false)} onShuffle={() => play(true)} />
         {sortControl}
       </View>
     </View>
@@ -65,9 +66,6 @@ export function ListIntro({
 const NO_KEYS: readonly string[] = [];
 
 const keyExtractor = (song: SongRow): string => String(song.id);
-
-/** While selecting, a long-press does nothing (rather than toggling the row on release). */
-const ignoreLongPress = (): void => undefined;
 
 /** The actions in selection mode act on the checked songs. */
 const tracksOf = (songs: readonly SongRow[]): ActionItems => ({
@@ -100,14 +98,14 @@ export function TrackList({ songs, context, header, sort }: Props) {
   const bottomInset = useChromeInset();
   const currentId = useCurrentTrackId();
   const favorites = useFavoriteIds();
-  const { selection, isChecked, start, toggle } = useListSelection({
+  const listSelection = useListSelection({
     items: songs,
     keyOf: keyExtractor,
     target: tracksOf,
   });
   const rowState = useMemo(
-    () => ({ currentId, favorites, selection }),
-    [currentId, favorites, selection],
+    () => ({ currentId, favorites, selection: listSelection.selection }),
+    [currentId, favorites, listSelection.selection],
   );
   const sortKeys = useMemo(
     () => (sort === undefined ? NO_KEYS : (songSpineKeys(songs, sort) ?? NO_KEYS)),
@@ -122,16 +120,15 @@ export function TrackList({ songs, context, header, sort }: Props) {
         state={String(item.id) === currentId ? "playing" : undefined}
         favorite={favorites.has(item.id)}
         leading="artwork"
-        checked={selection === null ? undefined : isChecked(item)}
-        onPress={selection === null ? () => playSongs(songs, index, context) : () => toggle(item)}
-        onLongPress={
-          selection === null
-            ? () => openTrackActions(item, { onSelect: () => start(item) })
-            : ignoreLongPress
-        }
+        {...selectableRow(
+          item,
+          listSelection,
+          () => playSongs(songs, index, context),
+          (options) => openTrackActions(item, options),
+        )}
       />
     ),
-    [context, currentId, favorites, songs, selection, isChecked, start, toggle],
+    [context, currentId, favorites, songs, listSelection],
   );
 
   return (

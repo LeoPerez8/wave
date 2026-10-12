@@ -1,6 +1,6 @@
 /// <reference types="node" />
 import { artistPlayTotals, artistStats, type PlayEvent } from "@wave/core";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { beforeEach, describe, test } from "node:test";
 
@@ -8,6 +8,7 @@ import { recordPlay } from "./playHistory.ts";
 import * as schema from "./schema.ts";
 import { creditedPlayTotals, songListening, trackPlayTotals } from "./stats.ts";
 import { addTrack, openTestDatabase, type TestDatabase } from "./testDatabase.ts";
+import { deleteTracks } from "./tracks.ts";
 
 /** A counted play of `trackId` that started at `startedAt`. */
 const play = (
@@ -29,6 +30,16 @@ const play = (
 const skip = { endReason: "skipped", listenedMs: 10_000, counted: false } as const;
 
 let db: TestDatabase;
+
+/** Deletes the tracks as the store does when their files go (deleted, or gone from a scan). */
+const deleteSongs = (...ids: number[]): void => {
+  const paths = ids.map((id) => {
+    const track = db.select().from(schema.tracks).where(eq(schema.tracks.id, id)).get();
+    if (track === undefined) throw new Error(`no track ${id}`);
+    return track.path;
+  });
+  deleteTracks(db, paths);
+};
 
 beforeEach(async () => {
   db = await openTestDatabase();
@@ -191,12 +202,34 @@ describe("Per-album, per-track-artist play totals", () => {
     assert.deepEqual(creditedPlayTotals(db, { from: 5_000, to: 10_000 }), []);
   });
 
-  test("tracks that left the library drop out", () => {
+  test("a deleted song's plays still count for its album and track artist", () => {
+    const gone = addTrack(db, { title: "Deleted", artist: "Ghost", album: "Here" });
+    const kept = addTrack(db, { title: "Kept", artist: "Keeper", album: "Here" });
+    recordPlay(db, play(gone, 1_000));
+    recordPlay(db, play(gone, 3_000, skip));
+    recordPlay(db, play(kept, 2_000));
+    const all = { from: null, to: 10_000 };
+    const before = creditedPlayTotals(db, all);
+
+    deleteSongs(gone);
+
+    assert.deepEqual(byCredit(creditedPlayTotals(db, all)), byCredit(before));
+    assert.deepEqual(
+      byCredit(creditedPlayTotals(db, all)).map((row) => [row.artistSort, row.countedPlays]),
+      [
+        ["ghost", 1],
+        ["keeper", 1],
+      ],
+    );
+  });
+
+  test("an album or artist that left the library drops out", () => {
     const gone = addTrack(db, { title: "Deleted", artist: "Ghost", album: "Gone" });
     const kept = addTrack(db, { title: "Kept", artist: "Keeper", album: "Here" });
     recordPlay(db, play(gone, 1_000));
     recordPlay(db, play(kept, 2_000));
-    db.delete(schema.tracks).where(eq(schema.tracks.id, gone)).run();
+    deleteSongs(gone);
+    db.run(sql`DELETE FROM albums WHERE id NOT IN (SELECT album_id FROM tracks)`);
 
     assert.deepEqual(
       creditedPlayTotals(db, { from: null, to: 10_000 }).map((row) => row.artistSort),
@@ -221,6 +254,7 @@ describe("Per-song listening over all time", () => {
       {
         trackId: so,
         artistId: creditOf(so).artistId,
+        inLibrary: true,
         countedPlays: 1,
         listenedMs: 110_000,
         lastPlayedAt: 3_000,
@@ -228,6 +262,7 @@ describe("Per-song listening over all time", () => {
       {
         trackId: naima,
         artistId: creditOf(naima).artistId,
+        inLibrary: true,
         countedPlays: 0,
         listenedMs: 10_000,
         lastPlayedAt: 2_000,
@@ -235,14 +270,39 @@ describe("Per-song listening over all time", () => {
     ]);
   });
 
-  test("a song that left the library keeps its history, without an artist", () => {
-    const gone = addTrack(db, { title: "Deleted" });
+  test("a deleted song keeps its history and its track artist", () => {
+    const gone = addTrack(db, { title: "Deleted", artist: "Ghost" });
     recordPlay(db, play(gone, 1_000));
     recordPlay(db, play(gone, 2_000));
+    const { artistId } = creditOf(gone);
+    deleteSongs(gone);
+
+    assert.deepEqual(songListening(db), [
+      {
+        trackId: gone,
+        artistId,
+        inLibrary: false,
+        countedPlays: 2,
+        listenedMs: 360_000,
+        lastPlayedAt: 2_000,
+      },
+    ]);
+  });
+
+  test("a song that left the library before Wave kept credits has no artist", () => {
+    const gone = addTrack(db, { title: "Deleted" });
+    recordPlay(db, play(gone, 1_000));
     db.delete(schema.tracks).where(eq(schema.tracks.id, gone)).run();
 
     assert.deepEqual(songListening(db), [
-      { trackId: gone, artistId: null, countedPlays: 2, listenedMs: 360_000, lastPlayedAt: 2_000 },
+      {
+        trackId: gone,
+        artistId: null,
+        inLibrary: false,
+        countedPlays: 1,
+        listenedMs: 180_000,
+        lastPlayedAt: 1_000,
+      },
     ]);
   });
 });
@@ -274,7 +334,7 @@ describe("Artist page stats", () => {
     recordPlay(db, play(milesOnHits, 4_000));
     recordPlay(db, play(trane, 5_000));
     recordPlay(db, play(gone, 6_000));
-    db.delete(schema.tracks).where(eq(schema.tracks.id, gone)).run();
+    deleteSongs(gone);
 
     const miles = creditOf(so).artistId;
     const all = { from: null, to: 10_000 };
@@ -287,9 +347,10 @@ describe("Artist page stats", () => {
     });
     const inStats = artistPlayTotals(creditedPlayTotals(db, all)).find((a) => a.id === miles);
 
-    assert.equal(inStats?.countedPlays, 3);
+    // The deleted song's play still counts, on the page as in Stats.
+    assert.equal(inStats?.countedPlays, 4);
     assert.ok(stats.played);
-    assert.equal(stats.plays, "3 plays");
+    assert.equal(stats.plays, "4 plays");
     assert.equal(stats.songsListened, "2 of 3 songs");
     assert.deepEqual(
       stats.mostPlayed.map((song) => song.id),

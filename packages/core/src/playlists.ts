@@ -118,6 +118,32 @@ export const playlistMosaic = <A>(covers: readonly (A | null)[]): readonly A[] =
   return distinct.slice(0, 1);
 };
 
+/** One entry of a playlist: a song's place there (the same song may have several). */
+export interface PlaylistPlace {
+  readonly playlistId: number;
+  readonly itemId: number;
+}
+
+/** What Remove from Playlist edits in one playlist. */
+export interface PlaylistRemoval {
+  readonly playlistId: number;
+  readonly itemIds: readonly number[];
+}
+
+/**
+ * Remove from Playlist on checked entries: exactly those entries (not every
+ * copy of their songs), one edit per playlist, in the order first checked.
+ */
+export const playlistRemovals = (places: readonly PlaylistPlace[]): PlaylistRemoval[] => {
+  const byPlaylist = new Map<number, number[]>();
+  for (const { playlistId, itemId } of places) {
+    const itemIds = byPlaylist.get(playlistId);
+    if (itemIds === undefined) byPlaylist.set(playlistId, [itemId]);
+    else itemIds.push(itemId);
+  }
+  return [...byPlaylist].map(([playlistId, itemIds]) => ({ playlistId, itemIds }));
+};
+
 /**
  * The alert that asks before deleting playlists, once however many: one is
  * named, several are counted. Their songs stay in the library.

@@ -1,12 +1,15 @@
 /**
  * Artist photos (docs/spec.md, "Artist photos"): looked up online by name in
  * the background, a few at a time, and cached as files beside the album
- * artwork. Which artist to look up and which result to take is Core's
- * (`artistPhotoLookups`, `pickArtistPhoto`); this file fetches and saves.
+ * artwork. Which artist to look up, which result to take and when to give up
+ * is Core's (`artistPhotoLookups`, `pickArtistPhoto`, `artistPhotosUnreachable`);
+ * this file fetches and saves.
  */
 import {
+  artistPhotosUnreachable,
   deezerArtistCandidates,
   deezerArtistSearchUrl,
+  failuresInARow,
   identityKey,
   pickArtistPhoto,
 } from "@wave/core";
@@ -42,9 +45,6 @@ export const useArtistPhotoCount = (): number =>
 const CONCURRENCY = 3;
 /** A lookup (search and both downloads) that takes longer than this has failed. */
 const LOOKUP_TIMEOUT = "30 seconds";
-/** This many failed lookups in a row means the service can't be reached: stop until next time. */
-const OFFLINE_AFTER_FAILURES = 3;
-
 class Offline extends Data.TaggedError("Offline")<{}> {}
 
 /** Searches [artist], picks the confident match and saves its photo. */
@@ -79,14 +79,14 @@ export const downloadArtistPhotos = Effect.gen(function* () {
   const store = yield* LibraryStore;
   yield* loadArtistPhotos;
   const due = yield* store.artistPhotoLookups;
-  let failuresInARow = 0;
+  let failures = 0;
   yield* Effect.forEach(
     due,
     (artist) =>
       Effect.gen(function* () {
-        if (failuresInARow >= OFFLINE_AFTER_FAILURES) return yield* new Offline();
+        if (artistPhotosUnreachable(failures)) return yield* new Offline();
         const record = yield* lookUp(artist);
-        failuresInARow = record.outcome === "failed" ? failuresInARow + 1 : 0;
+        failures = failuresInARow(failures, record.outcome);
         yield* store.recordArtistPhoto(artist.key, record);
         if (record.outcome === "found") {
           const { path, thumbPath } = record;

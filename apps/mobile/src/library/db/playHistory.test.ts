@@ -304,7 +304,11 @@ describe("Recounting past plays", () => {
       durationMs: number | null,
       endReason: PlayEvent["endReason"],
       counted: boolean,
-    ) => recordPlay(v2, play(trackId, startedAt, { listenedMs, durationMs, endReason, counted }));
+    ) =>
+      v2.run(
+        sql`INSERT INTO play_events (track_id, started_at, listened_ms, duration_ms, end_reason, counted)
+              VALUES (${trackId}, ${startedAt}, ${listenedMs}, ${durationMs}, ${endReason}, ${counted ? 1 : 0})`,
+      );
     v2Play(song, 1_000, 20_000, 180_000, "skipped", false); // now counted
     v2Play(song, 2_000, 15_000, 180_000, "stopped", false); // 15 s exactly: not counted
     v2Play(song, 3_000, 10_000, 180_000, "completed", false); // seeked to the end: not counted

@@ -5,8 +5,10 @@ import {
   artistPhotoLookups,
   artistPhotoName,
   artistPhotoQuery,
+  artistPhotosUnreachable,
   deezerArtistCandidates,
   deezerArtistSearchUrl,
+  failuresInARow,
   pickArtistPhoto,
 } from "./index.ts";
 import type { ArtistPhotoCandidate, ArtistPhotoCheck } from "./index.ts";
@@ -225,5 +227,26 @@ describe("artistPhotoLookups", () => {
     assert.deepEqual(due({ björk: { outcome: "failed", checkedAt: now + 30 * DAY } }), [
       "radiohead",
     ]);
+  });
+});
+
+describe("artistPhotosUnreachable", () => {
+  test("three failed lookups in a row mean the service can't be reached", () => {
+    let failures = 0;
+    for (const outcome of ["failed", "failed"] as const)
+      failures = failuresInARow(failures, outcome);
+    assert.equal(artistPhotosUnreachable(failures), false);
+    failures = failuresInARow(failures, "failed");
+    assert.equal(artistPhotosUnreachable(failures), true);
+  });
+
+  test("an answer, found or not, starts the count again", () => {
+    for (const answer of ["found", "unmatched"] as const) {
+      let failures = failuresInARow(failuresInARow(0, "failed"), "failed");
+      failures = failuresInARow(failures, answer);
+      assert.equal(failures, 0);
+      failures = failuresInARow(failuresInARow(failures, "failed"), "failed");
+      assert.equal(artistPhotosUnreachable(failures), false);
+    }
   });
 });

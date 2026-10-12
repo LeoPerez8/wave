@@ -1,5 +1,5 @@
 import { LegendList } from "@legendapp/list/react-native";
-import type { QueueContext, SearchKind } from "@wave/core";
+import { counted, type QueueContext, type SearchKind } from "@wave/core";
 import { useCallback, useMemo } from "react";
 import { Text, View } from "react-native";
 
@@ -26,13 +26,11 @@ import { ArtworkRow } from "./ArtworkRow";
 import type { ResultRow } from "./rows";
 import type { SearchHit } from "./searchIndex";
 import { useListScrollable } from "@/motion/heldTouch";
+import { selectableRow } from "@/selection/selectableRow";
 import type { ListSelection } from "@/selection/useListSelection";
 
 /** Tapping a song plays the song results from it. */
 const SEARCH_CONTEXT: QueueContext = { kind: "search", id: null };
-
-const counted = (count: number, word: string): string =>
-  `${count.toLocaleString("en")} ${count === 1 ? word : `${word}s`}`;
 
 const HEIGHT: Readonly<Record<ResultRow["type"], number>> = {
   heading: CELL * 6,
@@ -54,7 +52,7 @@ type Props = {
   selection: ListSelection<SongRow>;
 };
 
-/** While selecting, non-song results and long-presses do nothing. */
+/** While selecting, non-song results do nothing. */
 const ignore = (): void => undefined;
 
 function Hit({
@@ -88,7 +86,7 @@ function Hit({
           name={hit.name}
           artist={hit.artist}
           detail={top ? "Artist" : counted(hit.artist.trackCount, "song")}
-          onPress={open(() => openArtist(hit.artist.id))}
+          onPress={open(() => openArtist(hit.artist.id, hit.artist))}
           onLongPress={menu(() => openArtistActions(hit.artist))}
         />
       );
@@ -98,7 +96,7 @@ function Hit({
           title={hit.name}
           detail={top ? `Album · ${hit.album.albumArtist}` : hit.album.albumArtist}
           artworkUri={hit.album.thumbPath === null ? undefined : `file://${hit.album.thumbPath}`}
-          onPress={open(() => openAlbum(hit.album.id))}
+          onPress={open(() => openAlbum(hit.album.id, hit.album))}
           onLongPress={menu(() => openAlbumActions(hit.album))}
         />
       );
@@ -109,17 +107,12 @@ function Hit({
           track={top ? { ...track, artist: `Song · ${track.artist}` } : track}
           state={playing ? "playing" : undefined}
           leading="artwork"
-          checked={selecting ? selection.isChecked(hit.song) : undefined}
-          onPress={
-            selecting
-              ? () => selection.toggle(hit.song)
-              : open(() => playSongs(songs, Math.max(0, songs.indexOf(hit.song)), SEARCH_CONTEXT))
-          }
-          onLongPress={
-            selecting
-              ? ignore
-              : () => openTrackActions(hit.song, { onSelect: () => selection.start(hit.song) })
-          }
+          {...selectableRow(
+            hit.song,
+            selection,
+            open(() => playSongs(songs, Math.max(0, songs.indexOf(hit.song)), SEARCH_CONTEXT)),
+            (options) => openTrackActions(hit.song, options),
+          )}
         />
       );
     }
@@ -137,7 +130,7 @@ function Hit({
         <NameRow
           name={hit.name}
           detail={`${top ? "Genre · " : ""}${counted(hit.genre.trackCount, "song")}`}
-          onPress={open(() => openGenre(hit.genre.id))}
+          onPress={open(() => openGenre(hit.genre.id, hit.genre))}
           onLongPress={menu(() => openGenreActions(hit.genre))}
         />
       );

@@ -75,8 +75,14 @@ export {
   nextPlaylistName,
   planPlaylistAdd,
   playlistMosaic,
+  playlistRemovals,
 } from "./playlists.ts";
-export type { PlaylistAdd, PlaylistNameCheck } from "./playlists.ts";
+export type {
+  PlaylistAdd,
+  PlaylistNameCheck,
+  PlaylistPlace,
+  PlaylistRemoval,
+} from "./playlists.ts";
 export { resolveRemoveSwipe } from "./rowGestures.ts";
 export { currentLyricIndex, parseLyrics, pickLyrics } from "./lyrics.ts";
 export type { LyricLine, Lyrics, LyricsSources } from "./lyrics.ts";
@@ -173,6 +179,7 @@ export type { DetailScreen } from "./navigation.ts";
 export { planAlert } from "./alert.ts";
 export type { AlertButton, AlertChoice, AlertPlan, AlertSpec } from "./alert.ts";
 export { DEFAULT_THEME, TONES, themeContrastIssues } from "./theme.ts";
+export { withOpacity } from "./colour.ts";
 export { overlayDivider } from "./overlayDivider.ts";
 export type { ContrastIssue, Theme, ThemeColors } from "./theme.ts";
 export {
@@ -202,7 +209,7 @@ export {
   readGlassSettings,
 } from "./glassSettings.ts";
 export type { GlassSettings } from "./glassSettings.ts";
-export { listeningOverview, listeningTotals } from "./listening.ts";
+export { counted, listeningOverview, listeningTotals } from "./listening.ts";
 export type {
   LibraryTotals,
   ListeningFilter,
@@ -273,8 +280,10 @@ export {
   artistPhotoLookups,
   artistPhotoName,
   artistPhotoQuery,
+  artistPhotosUnreachable,
   deezerArtistCandidates,
   deezerArtistSearchUrl,
+  failuresInARow,
   pickArtistPhoto,
 } from "./artistPhoto.ts";
 export type {

@@ -27,7 +27,7 @@ export function Hairline({ className = "" }: { className?: string }) {
         className={className}
         style={{
           height: OVERLAY_DIVIDER_WIDTH,
-          backgroundColor: foreground.startsWith("#") ? overlayDivider(foreground) : foreground,
+          backgroundColor: overlayDivider(foreground),
         }}
       />
     );

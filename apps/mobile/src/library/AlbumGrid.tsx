@@ -3,7 +3,8 @@ import { useWindowDimensions, View } from "react-native";
 import { type AlbumSummary, AlbumTile } from "@/catalog/AlbumTile";
 import { CELL, grid } from "@/catalog/grid";
 import { openAlbumActions } from "@/playback/ActionsMenu";
-import type { ActionItems } from "@/playback/itemActions";
+import type { ActionItems } from "@/playback/actionTargets";
+import { selectableRow } from "@/selection/selectableRow";
 import { useListSelection, type ListSelection } from "@/selection/useListSelection";
 
 import type { AlbumRow } from "./LibraryStore";
@@ -49,9 +50,6 @@ const albumsOf = (albums: readonly AlbumRow[]): ActionItems => ({ kind: "album",
 export const useAlbumSelection = (albums: readonly AlbumRow[]): ListSelection<AlbumRow> =>
   useListSelection({ items: albums, keyOf: albumKey, target: albumsOf });
 
-/** While selecting, a long-press does nothing (rather than toggling the tile on release). */
-const ignoreLongPress = (): void => undefined;
-
 /**
  * One row of a two-column album grid. Tap opens the album; long-press opens its
  * menu. Given the grid's [selection] (`useAlbumSelection`), the menu offers
@@ -67,7 +65,6 @@ export function AlbumPair({
   size: number;
   selection?: ListSelection<AlbumRow> | undefined;
 }) {
-  const selecting = selection?.selecting === true;
   return (
     <View className="flex-row" style={{ gap: grid.gutter, height: albumRowHeight(size) }}>
       {albums.map((album) => (
@@ -75,14 +72,12 @@ export function AlbumPair({
           key={album.id}
           album={toAlbumSummary(album)}
           size={size}
-          checked={selecting ? selection.isChecked(album) : undefined}
-          onPress={selecting ? () => selection.toggle(album) : () => openAlbum(album.id)}
-          onLongPress={
-            selecting
-              ? ignoreLongPress
-              : () =>
-                  openAlbumActions(album, selection && { onSelect: () => selection.start(album) })
-          }
+          {...selectableRow(
+            album,
+            selection,
+            () => openAlbum(album.id, album),
+            (options) => openAlbumActions(album, options),
+          )}
         />
       ))}
     </View>
