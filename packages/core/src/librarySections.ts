@@ -23,7 +23,7 @@ export interface SectionCollection<Song> {
 
 /** Where the library's sections come from. */
 export interface LibrarySectionSource<Song> {
-  /** Every song, as Library › Songs lists them (by title). */
+  /** Every song, as Library › Songs lists them (in the sort chosen there). */
   readonly songs: () => Promise<readonly Song[]>;
   /** Favorites, most recently starred first. */
   readonly favorites: () => Promise<readonly Song[]>;

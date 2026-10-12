@@ -188,3 +188,13 @@ export type {
   ListeningTotals,
   SongListening,
 } from "./listening.ts";
+export {
+  DEFAULT_SONG_SORT,
+  readSongSort,
+  SONG_SORTS,
+  songSortLabel,
+  songSpineKeys,
+  sortSongs,
+  writeSongSort,
+} from "./songSort.ts";
+export type { SongSort, SongSortKey, SortableSong } from "./songSort.ts";
