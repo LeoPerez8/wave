@@ -17,6 +17,8 @@ import { useCurrentTrackId } from "@/playback/hooks";
 import {
   openAlbumActions,
   openArtistActions,
+  openGenreActions,
+  openPlaylistActions,
   openTrackActions,
 } from "@/playback/TrackActionsSheet";
 
@@ -105,6 +107,7 @@ function Hit({
           name={hit.name}
           detail={`${top ? "Playlist · " : ""}${counted(hit.playlist.trackCount, "song")}`}
           onPress={open(() => openPlaylist(hit.playlist.id))}
+          onLongPress={() => openPlaylistActions(hit.playlist)}
         />
       );
     case "genre":
@@ -113,6 +116,7 @@ function Hit({
           name={hit.name}
           detail={`${top ? "Genre · " : ""}${counted(hit.genre.trackCount, "song")}`}
           onPress={open(() => openGenre(hit.genre.id))}
+          onLongPress={() => openGenreActions(hit.genre)}
         />
       );
   }

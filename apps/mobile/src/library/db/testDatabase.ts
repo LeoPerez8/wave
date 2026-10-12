@@ -57,6 +57,8 @@ export interface FixtureTrack {
   /** When the file entered the library. */
   readonly addedAt?: number;
   readonly artworkHash?: string;
+  /** Files the track under this genre (made on first use). */
+  readonly genre?: string;
 }
 
 /** Stars a track at `addedAt`. */
@@ -69,7 +71,7 @@ const upsertId = <T extends { id: number }>(existing: T | undefined, insert: () 
 
 /** Adds a track (with its artist, album and folder, made on first use); returns its id. */
 export const addTrack = (db: TestDatabase, track: FixtureTrack): number => {
-  const { artists, albums, folders, tracks, artwork } = schema;
+  const { artists, albums, folders, genres, tracks, artwork } = schema;
   const artistName = track.artist ?? "Artist";
   const albumTitle = track.album ?? `${track.title} (single)`;
   const albumArtistName = track.albumArtist ?? artistName;
@@ -119,6 +121,23 @@ export const addTrack = (db: TestDatabase, track: FixtureTrack): number => {
   const folderId = upsertId(db.select().from(folders).all()[0], () =>
     db.insert(folders).values({ path: "/Music", name: "Music" }).returning().get(),
   );
+  const genre = track.genre;
+  const genreId =
+    genre === undefined
+      ? null
+      : upsertId(
+          db
+            .select()
+            .from(genres)
+            .all()
+            .find((row) => row.name === genre),
+          () =>
+            db
+              .insert(genres)
+              .values({ key: genre, name: genre, sort: genre.toLowerCase() })
+              .returning()
+              .get(),
+        );
   const addedAt = track.addedAt ?? 0;
   return db
     .insert(tracks)
@@ -132,6 +151,7 @@ export const addTrack = (db: TestDatabase, track: FixtureTrack): number => {
       titleSort: track.title.toLowerCase(),
       artistId: artistId(artistName),
       albumId,
+      genreId,
       durationMs: track.durationMs ?? 180_000,
       artworkHash: track.artworkHash ?? null,
       addedAt,

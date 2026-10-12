@@ -8,17 +8,11 @@ import {
   type AlbumRow,
   type ArtistRow,
   type GenreRow,
+  type PlaylistRow,
   type SongRow,
 } from "@/library/LibraryStore";
 import { usePlaylistsVersion } from "@/library/playlists";
 import { appRuntime } from "@/library/runtime";
-
-/** A playlist as search shows it (a `PlaylistRow` from the store). */
-export interface PlaylistHit {
-  readonly id: number;
-  readonly name: string;
-  readonly trackCount: number;
-}
 
 /** Something search found, with the row the screens need to show and open it. */
 export type SearchHit =
@@ -35,7 +29,7 @@ export type SearchHit =
       readonly also: readonly string[];
       readonly song: SongRow;
     }
-  | { readonly kind: "playlist"; readonly name: string; readonly playlist: PlaylistHit }
+  | { readonly kind: "playlist"; readonly name: string; readonly playlist: PlaylistRow }
   | { readonly kind: "genre"; readonly name: string; readonly genre: GenreRow };
 
 interface Sources {
@@ -43,7 +37,7 @@ interface Sources {
   readonly albums: readonly AlbumRow[];
   readonly artists: readonly ArtistRow[];
   readonly genres: readonly GenreRow[];
-  readonly playlists: readonly PlaylistHit[];
+  readonly playlists: readonly PlaylistRow[];
 }
 
 const loadSources: Effect.Effect<Sources, unknown, LibraryStore> = Effect.gen(function* () {
