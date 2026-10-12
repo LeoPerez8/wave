@@ -207,6 +207,17 @@ describe("itemActions", () => {
     );
   });
 
+  test("selected artists, genres or folders: the bar offers their menu's entries, but Select", () => {
+    for (const kind of ["artist", "genre", "folder"] as const) {
+      const menu = names(itemActions({ kind, items: [{}], selectable: true, here: "/library" }));
+      const bar = names(
+        itemActions({ kind, items: [{}, {}, {}], surface: "selection", here: "/library" }),
+      );
+      assert.deepEqual(menu, ["playNext", "addToQueue", "addToPlaylist", "select"]);
+      assert.deepEqual(bar, ["playNext", "addToQueue", "addToPlaylist"]);
+    }
+  });
+
   test("a playlist can be renamed and deleted, one at a time", () => {
     const one = names(itemActions({ kind: "playlist", items: [{}], here: "/" }));
     assert.deepEqual(one.slice(-2), ["renamePlaylist", "deletePlaylist"]);
