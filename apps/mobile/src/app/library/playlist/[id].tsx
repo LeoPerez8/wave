@@ -1,5 +1,6 @@
 import { IconDots } from "@tabler/icons-react-native";
 import { useLocalSearchParams } from "expo-router";
+import { useState } from "react";
 import { Text, useWindowDimensions, View } from "react-native";
 
 import { CELL, grid } from "@/catalog/grid";
@@ -10,22 +11,45 @@ import { playSongs } from "@/playback/actions";
 import { openPlaylistActions } from "@/playback/ActionsMenu";
 import { DetailFrame } from "@/library/DetailFrame";
 import { usePlaylist } from "@/library/hooks";
-import type { PlaylistDetail } from "@/library/LibraryStore";
+import { LibraryStore, type PlaylistItemRow, type PlaylistRow } from "@/library/LibraryStore";
 import { PlaylistItems } from "@/library/PlaylistItems";
+import { knownPlaylist } from "@/library/playlists";
 import { parseId } from "@/library/routes";
+import { appRuntime } from "@/library/runtime";
 import { songCount } from "@/library/TrackList";
 
-function PlaylistHead({ detail }: { detail: PlaylistDetail }) {
+/** What the screen shows: the playlist, and its songs once they are read. */
+interface Shown {
+  readonly playlist: PlaylistRow;
+  /** Undefined until the songs are read; the header doesn't wait for them. */
+  readonly items: readonly PlaylistItemRow[] | undefined;
+}
+
+const readPlaylist = (id: number) => LibraryStore.use((store) => store.getPlaylist(id));
+
+function PlaylistHead({ shown }: { shown: Shown }) {
   const { width } = useWindowDimensions();
-  const { playlist, items } = detail;
+  const { playlist, items } = shown;
   const context = { kind: "playlist", id: String(playlist.id) } as const;
+  const play = (shuffle: boolean) => {
+    if (items !== undefined) {
+      playSongs(items, undefined, context, { shuffle });
+      return;
+    }
+    // Tapped before the songs were read: read them now.
+    void appRuntime.runPromise(readPlaylist(playlist.id)).then((detail) => {
+      if (detail !== null && detail.items.length > 0)
+        playSongs(detail.items, undefined, context, { shuffle });
+    });
+  };
+  const count = items?.length ?? playlist.trackCount;
   const furniture =
-    items.length === 0
+    count === 0
       ? songCount(0)
       : `${songCount(playlist.trackCount)} · ${Math.max(1, Math.round(playlist.durationMs / 60_000))} min`;
   return (
     <View style={{ gap: CELL * 2, paddingBottom: CELL }}>
-      <Mosaic paths={detail.artworkPaths} size={width - grid.margin * 2} />
+      <Mosaic paths={playlist.artworkPaths} size={width - grid.margin * 2} />
       <View style={{ gap: CELL / 2 }}>
         <Text
           accessibilityRole="header"
@@ -42,11 +66,8 @@ function PlaylistHead({ detail }: { detail: PlaylistDetail }) {
         </Text>
       </View>
       <View className="flex-row items-center justify-between">
-        {items.length > 0 ? (
-          <PlayShuffle
-            onPlay={() => playSongs(items, undefined, context, { shuffle: false })}
-            onShuffle={() => playSongs(items, undefined, context, { shuffle: true })}
-          />
+        {count > 0 ? (
+          <PlayShuffle onPlay={() => play(false)} onShuffle={() => play(true)} />
         ) : (
           <View />
         )}
@@ -77,17 +98,24 @@ function NoSongs() {
 
 /**
  * A playlist: its mosaic, name and length, Play / Shuffle, then its songs in
- * order (drag the grip to reorder, swipe left to remove).
+ * order (drag the grip to reorder, swipe left to remove). Opened from a list
+ * that knows the playlist, the header is there on the first frame and the
+ * songs follow once read.
  */
 export default function PlaylistScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const detail = usePlaylist(parseId(id));
+  const playlistId = parseId(id);
+  const detail = usePlaylist(playlistId);
+  const [known] = useState(() => knownPlaylist(playlistId));
+  const shown: Shown | null | undefined =
+    detail === undefined && known !== undefined ? { playlist: known, items: undefined } : detail;
   return (
-    <DetailFrame detail={detail} noun="playlist" goneMessage="It was deleted.">
-      {(playlist) => (
+    <DetailFrame detail={shown} noun="playlist" goneMessage="It was deleted.">
+      {({ playlist, items }) => (
         <PlaylistItems
-          detail={playlist}
-          header={<PlaylistHead detail={playlist} />}
+          playlistId={playlist.id}
+          items={items}
+          header={<PlaylistHead shown={{ playlist, items }} />}
           empty={<NoSongs />}
         />
       )}

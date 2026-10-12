@@ -33,7 +33,7 @@ const renderPlaylist = ({ item }: { item: PlaylistRow }) => (
     name={item.name}
     detail={songCount(item.trackCount)}
     paths={item.thumbPaths}
-    onPress={() => openPlaylist(item.id)}
+    onPress={() => openPlaylist(item.id, item)}
     onLongPress={() => openPlaylistActions(item)}
   />
 );

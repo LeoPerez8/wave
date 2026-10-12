@@ -128,7 +128,7 @@ function Hit({
         <NameRow
           name={hit.name}
           detail={`${top ? "Playlist · " : ""}${counted(hit.playlist.trackCount, "song")}`}
-          onPress={open(() => openPlaylist(hit.playlist.id))}
+          onPress={open(() => openPlaylist(hit.playlist.id, hit.playlist))}
           onLongPress={menu(() => openPlaylistActions(hit.playlist))}
         />
       );
