@@ -144,7 +144,6 @@ declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
   /** The queue's shuffle and repeat, for the toggles on Auto's player screen. */
   setModes(shuffle: boolean, repeat: RepeatMode): Promise<void>;
   getItemIds(): Promise<NativeItemIds>;
-  /** Keeps the queue (JSON) in the native process, for when JS restarts. */
   /**
    * Keeps the queue (JSON) in the native process, for when JS restarts, and on
    * disk with where it was started from, for a cold start (playback resumption).
