@@ -26,6 +26,7 @@ v1 delivers the core player and library. v2 adds the advanced audio and library-
 - **Play event** — one record per time a track starts playing, with how long it was listened to and how it ended.
 - **Counted play** — a play event that counts towards play counts: listened to for more than 15 seconds, or, for a song of 15 seconds or less, played to the end. Each play event counts at most once, however long it goes on.
 - **Favorite** — a starred track (Apple Music's star).
+- **Artist image** — the circle an artist is shown with: their **artist photo** (downloaded online, see Artist photos) when there is one, else the cover of the album that represents them, else their initial.
 - **Now Playing** — the full-screen player; **Mini player** — the floating glass pill above the tab bar.
 
 ## User Stories
@@ -126,7 +127,14 @@ v1 delivers the core player and library. v2 adds the advanced audio and library-
 - Android only. Minimum Android 12 (API 31, required for native blur), target the latest SDK. Tuned for the Galaxy S24+ (120 Hz).
 - App name **Wave**, application id `dev.leoperez.wave` (permanent).
 - Personal use, sideloaded APK. No Play Store, so `MANAGE_EXTERNAL_STORAGE` (all-files access) is acceptable.
-- No backend, no accounts, no network features in v1.
+- No backend and no accounts. The one network feature is downloading artist photos (below); everything else works offline.
+
+### Artist photos
+
+- Wave downloads a photo of each artist from **Deezer's open API** (no account or key): it searches the artist's name and takes the best match's picture. Artist names are the only thing sent. A "Download artist photos" switch in Settings (on by default) says so; off, Wave makes no requests and artists show their album artwork. "Clear artist photos" deletes the downloaded ones.
+- **Matching** is Core's (`artistPhoto.ts`): names compare with case, accents, a leading "The", punctuation and "&"/"and" ignored; only an exact match counts, and of namesakes the most followed one (its photo or none). "Various Artists", "Unknown Artist" and names without letters are never looked up.
+- **Caching.** Lookups run in the background after each library scan, three at a time, and stop after a few failures in a row (offline). Photos are saved beside the album artwork (`files/artwork/artists/`) as a thumbnail (lists, menus) and a large image (artist page), and are never fetched again. A lookup with no match is retried after a week, a failed one after a day (`artist_photos` table, by artist key).
+- **Fallback.** Until a photo arrives, without a match, offline or with downloads off, the artist's album-artwork image shows.
 
 ### Stack (mirrors the T3 Code mobile app)
 
@@ -179,7 +187,7 @@ One row per playback start: track, started-at, listened milliseconds, track dura
 
 ## Out of Scope
 
-- v2 features: equalizer and presets, crossfade, ReplayGain, tag editor, smart playlists, M3U import/export, Last.fm scrobbling, home-screen widgets, artwork download, statistics/metrics screens (v1 only records the data).
+- v2 features: equalizer and presets, crossfade, ReplayGain, tag editor, smart playlists, M3U import/export, Last.fm scrobbling, home-screen widgets, album artwork download, statistics/metrics screens (v1 only records the data).
 - iOS, desktop, web.
 - Streaming services, cloud libraries, network shares.
 - Accounts, sync, backup.

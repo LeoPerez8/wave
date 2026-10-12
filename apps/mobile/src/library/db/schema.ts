@@ -126,6 +126,23 @@ export const tracks = sqliteTable(
   ],
 );
 
+/**
+ * Artist photos downloaded from an online service, and lookups that found
+ * none: one row per artist key (`artists.key`), kept when the artist leaves
+ * the library so the photo isn't fetched again if they come back.
+ */
+export const artistPhotos = sqliteTable("artist_photos", {
+  artistKey: text("artist_key").primaryKey(),
+  /** Core's `ArtistPhotoOutcome`. */
+  outcome: text("outcome", { enum: ["found", "unmatched", "failed"] }).notNull(),
+  /** When the lookup was made (Core's `artistPhotoLookups` decides when to retry a miss). */
+  checkedAt: integer("checked_at").notNull(),
+  /** The large photo (artist page); set when `found`. */
+  path: text("path"),
+  /** The thumbnail (lists, menus); set when `found`. */
+  thumbPath: text("thumb_path"),
+});
+
 /** Folders Wave indexes. */
 export const scanRoots = sqliteTable("scan_roots", {
   path: text("path").primaryKey(),
