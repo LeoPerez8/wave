@@ -1,9 +1,22 @@
-import { rankPlays, statsWindow, type PlayTotals, type StatsPeriod } from "@wave/core";
+import {
+  albumPlayTotals,
+  artistPlayTotals,
+  rankPlays,
+  statsWindow,
+  type PlayTotals,
+  type StatsPeriod,
+} from "@wave/core";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
-import { LibraryStore, type LibraryStoreError, type SongRow } from "@/library/LibraryStore";
+import {
+  LibraryStore,
+  type AlbumRow,
+  type ArtistRow,
+  type LibraryStoreError,
+  type SongRow,
+} from "@/library/LibraryStore";
 
 /** A ranked entity with its counted plays in the period. */
 export interface Ranked<A> {
@@ -19,6 +32,16 @@ export class Stats extends Context.Service<
       period: StatsPeriod,
       limit: number,
     ) => Effect.Effect<readonly Ranked<SongRow>[], LibraryStoreError>;
+    /** The `limit` albums played most in `period` (title + album artist, as in the Library). */
+    readonly topAlbums: (
+      period: StatsPeriod,
+      limit: number,
+    ) => Effect.Effect<readonly Ranked<AlbumRow>[], LibraryStoreError>;
+    /** The `limit` artists played most in `period`, credited by track artist. */
+    readonly topArtists: (
+      period: StatsPeriod,
+      limit: number,
+    ) => Effect.Effect<readonly Ranked<ArtistRow>[], LibraryStoreError>;
   }
 >()("@wave/mobile/stats/Stats") {}
 
@@ -51,6 +74,14 @@ export const layer = Layer.effect(
       topSongs: (period, limit) =>
         Effect.flatMap(store.trackPlayTotals(statsWindow(period, Date.now())), (totals) =>
           rank(totals, limit, store.songsByIds),
+        ),
+      topAlbums: (period, limit) =>
+        Effect.flatMap(store.creditedPlayTotals(statsWindow(period, Date.now())), (credits) =>
+          rank(albumPlayTotals(credits), limit, store.albumsByIds),
+        ),
+      topArtists: (period, limit) =>
+        Effect.flatMap(store.creditedPlayTotals(statsWindow(period, Date.now())), (credits) =>
+          rank(artistPlayTotals(credits), limit, store.artistsByIds),
         ),
     };
   }),

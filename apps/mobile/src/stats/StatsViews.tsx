@@ -2,14 +2,21 @@ import { STATS_PERIODS, type StatsPeriod } from "@wave/core";
 import { Text, View } from "react-native";
 
 import { CELL } from "@/catalog/grid";
+import { NameRow } from "@/catalog/NameRow";
 import { TrackRow } from "@/catalog/TrackRow";
 import { useFavoriteIds } from "@/library/favorites";
-import type { SongRow } from "@/library/LibraryStore";
+import type { AlbumRow, ArtistRow, SongRow } from "@/library/LibraryStore";
+import { openAlbum, openArtist } from "@/library/routes";
 import { toTrackSummary } from "@/library/TrackList";
 import { Press } from "@/motion/Press";
 import { playSongs } from "@/playback/actions";
 import { useCurrentTrackId } from "@/playback/hooks";
-import { openTrackActions } from "@/playback/TrackActionsSheet";
+import {
+  openAlbumActions,
+  openArtistActions,
+  openTrackActions,
+} from "@/playback/TrackActionsSheet";
+import { ArtworkRow } from "@/search/ArtworkRow";
 
 import type { Ranked } from "./Stats";
 
@@ -95,6 +102,49 @@ export function RankedSongs({
           topNumber={index === 0}
           onPress={() => playSongs(songs, index, context)}
           onLongPress={() => openTrackActions(song)}
+        />
+      ))}
+    </View>
+  );
+}
+
+/**
+ * An album ranking: rank, cover, title over the album artist and its counted
+ * plays. Tapping opens the album; long-press opens the album's menu.
+ */
+export function RankedAlbums({ ranking }: { ranking: readonly Ranked<AlbumRow>[] }) {
+  return (
+    <View>
+      {ranking.map(({ item: album, countedPlays }, index) => (
+        <ArtworkRow
+          key={album.id}
+          title={album.title}
+          detail={`${album.albumArtist} · ${playCount(countedPlays)}`}
+          artworkUri={album.thumbPath === null ? undefined : `file://${album.thumbPath}`}
+          rank={{ number: index + 1, top: index === 0 }}
+          onPress={() => openAlbum(album.id)}
+          onLongPress={() => openAlbumActions(album)}
+        />
+      ))}
+    </View>
+  );
+}
+
+/**
+ * An artist ranking (credited by track artist): rank, name over its counted
+ * plays. Tapping opens the artist; long-press opens the artist's menu.
+ */
+export function RankedArtists({ ranking }: { ranking: readonly Ranked<ArtistRow>[] }) {
+  return (
+    <View>
+      {ranking.map(({ item: artist, countedPlays }, index) => (
+        <NameRow
+          key={artist.id}
+          name={artist.name}
+          detail={playCount(countedPlays)}
+          rank={{ number: index + 1, top: index === 0 }}
+          onPress={() => openArtist(artist.id)}
+          onLongPress={() => openArtistActions(artist)}
         />
       ))}
     </View>
