@@ -115,3 +115,28 @@ export { albumPlayTotals, artistPlayTotals } from "./stats.ts";
 export type { CreditedPlayTotals } from "./stats.ts";
 export { STATS_RANKINGS, statsSeeAll } from "./statsSeeAll.ts";
 export type { StatsRanking, StatsSeeAll } from "./statsSeeAll.ts";
+export {
+  AUTO_ROOT,
+  AUTO_TABS,
+  autoAlbumItem,
+  autoChildren,
+  autoItem,
+  autoPlayList,
+  autoQueueStart,
+  autoTrackItems,
+  decodeAutoMediaId,
+  encodeAutoMediaId,
+} from "./auto.ts";
+export type {
+  AutoAlbum,
+  AutoChildren,
+  AutoFetch,
+  AutoItem,
+  AutoNode,
+  AutoQueueStart,
+  AutoSource,
+  AutoTab,
+  AutoTrack,
+  AutoTrackList,
+  AutoTrackListKind,
+} from "./auto.ts";

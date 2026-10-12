@@ -24,6 +24,7 @@ import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionError
 import androidx.media3.session.SessionResult
 import com.google.common.collect.ImmutableList
+import com.google.common.util.concurrent.FutureCallback
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 
@@ -37,7 +38,9 @@ import com.google.common.util.concurrent.ListenableFuture
  *
  * It is a media library service so Android Auto can browse Wave: browse
  * requests go to JS over [AutoLibrary.bridge], starting the JS runtime
- * headless first when Wave isn't running ([JsRuntime]).
+ * headless first when Wave isn't running ([JsRuntime]). Auto's play requests
+ * go to JS too, whose queue engine answers with the items to play
+ * ([SessionCallback.onSetMediaItems]).
  */
 class PlaybackService : MediaLibraryService() {
   private var session: MediaLibrarySession? = null
@@ -218,6 +221,54 @@ class PlaybackService : MediaLibraryService() {
     ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
       keepJsFor(browser)
       return AutoLibrary.children(parentId, page, pageSize, params)
+    }
+
+    override fun onGetItem(
+      session: MediaLibrarySession,
+      browser: MediaSession.ControllerInfo,
+      mediaId: String,
+    ): ListenableFuture<LibraryResult<MediaItem>> {
+      keepJsFor(browser)
+      return AutoLibrary.item(mediaId)
+    }
+
+    /**
+     * Wave's own controller sets items it built itself (see [onAddMediaItems]).
+     * Anything else (Auto playing a node of the browse tree) names a media ID:
+     * JS starts that queue through its queue engine and answers with the
+     * player items. A request JS can't serve sends Auto its message and
+     * changes nothing.
+     */
+    override fun onSetMediaItems(
+      mediaSession: MediaSession,
+      controller: MediaSession.ControllerInfo,
+      mediaItems: MutableList<MediaItem>,
+      startIndex: Int,
+      startPositionMs: Long,
+    ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+      if (controller.packageName == packageName) {
+        return super.onSetMediaItems(mediaSession, controller, mediaItems, startIndex, startPositionMs)
+      }
+      val requested = mediaItems.getOrNull(startIndex) ?: mediaItems.firstOrNull()
+        ?: return Futures.immediateFailedFuture(AutoPlayException("Nothing to play."))
+      keepJsFor(controller)
+      val playback = AutoLibrary.play(requested.mediaId)
+      Futures.addCallback(
+        playback,
+        object : FutureCallback<MediaSession.MediaItemsWithStartPosition> {
+          override fun onSuccess(result: MediaSession.MediaItemsWithStartPosition) = Unit
+
+          override fun onFailure(error: Throwable) {
+            Log.w(JsRuntime.LOG_TAG, "Couldn't play ${requested.mediaId}", error)
+            mediaSession.sendError(
+              controller,
+              SessionError(SessionError.ERROR_UNKNOWN, error.message ?: AutoBridge.STILL_LOADING),
+            )
+          }
+        },
+        mainExecutor,
+      )
+      return playback
     }
 
     override fun onCustomCommand(

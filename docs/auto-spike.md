@@ -46,9 +46,9 @@ placeholder browse tree.
    (cold start) queue up and are sent by `attachAuto()`. A request without an answer in
    time (8 s while JS is starting, 5 s when it runs) fails with "Wave is still loading
    your library. Try again in a moment.", which Auto shows as an error.
-5. **Placeholder tree** (`src/auto/placeholder.ts`). The root has one tab, "Wave". Inside it,
-   a status line says who started the services (`app` or `headless`), how many times
-   `startServices` was called, and how long ago.
+5. **Placeholder tree** (removed by #32). The spike answered a one-tab "Wave" tree with a
+   status line. #32 replaced it with the real browse tree (Core's Auto browse model and the
+   `Auto` service in `src/auto/Auto.ts`), so the checks below read the log instead.
 
 ## How to verify on the DHU
 
@@ -75,15 +75,14 @@ Checks (the ticket's acceptance criteria):
 1. **Listed:** Wave appears in the DHU's media app list.
 2. **Cold start:** stop the DHU. Run `adb shell am force-stop dev.leoperez.wave` and confirm
    with `adb shell pidof dev.leoperez.wave` that nothing prints. Start the DHU and open Wave.
-   The "Wave" tab shows **"Started by the headless"** with "1 start call". The log shows
-   `Starting JS runtime headless`, then `[wave] services started by the headless`.
+   The Albums tab lists the library. The log shows `Starting JS runtime headless`, then
+   `[wave] services started by the headless`.
 3. **Shared runtime:** with the DHU still connected, open Wave on the phone. The log shows
    `[wave] services already started by the headless; the app reuses them`, and never a
-   second `services started` line. In the DHU, leave the tab and come back. The status
-   reads "2 start calls". The app shows the same queue the service plays.
+   second `services started` line. The app shows the same queue the service plays.
 4. **Activity closing:** play something from the phone, then swipe Wave away from Recents.
-   Playback continues. The DHU still browses (the status line's "s ago" keeps counting from
-   the same start), and `pidof` shows the same pid.
+   Playback continues. The DHU still browses (no new `services started` line), and `pidof`
+   shows the same pid.
 5. **Warm start:** with Wave already open, connect the DHU. The `root answered` line says
    `(JS running)`.
 

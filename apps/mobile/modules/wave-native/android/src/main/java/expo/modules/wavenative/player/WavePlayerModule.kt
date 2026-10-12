@@ -2,12 +2,10 @@ package expo.modules.wavenative.player
 
 import android.content.ComponentName
 import android.content.Context
-import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import androidx.media3.common.MediaItem
-import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
@@ -23,7 +21,6 @@ import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.kotlin.records.Field
 import expo.modules.kotlin.records.Record
-import java.io.File
 
 /** One track handed to the player. */
 class PlayerItem : Record {
@@ -355,21 +352,8 @@ class WavePlayerModule : Module() {
     )
   }
 
-  private fun toMediaItem(item: PlayerItem): MediaItem {
-    val uri = Uri.fromFile(File(item.path))
-    val metadata = MediaMetadata.Builder()
-      .setTitle(item.title)
-      .setArtist(item.artist)
-      .setAlbumTitle(item.album)
-      .setArtworkUri(item.artworkPath?.let { Uri.fromFile(File(it)) })
-      .build()
-    return MediaItem.Builder()
-      .setMediaId(item.id)
-      .setUri(uri)
-      .setRequestMetadata(MediaItem.RequestMetadata.Builder().setMediaUri(uri).build())
-      .setMediaMetadata(metadata)
-      .build()
-  }
+  private fun toMediaItem(item: PlayerItem): MediaItem =
+    PlayerMediaItems.build(item.id, item.path, item.title, item.artist, item.album, item.artworkPath)
 
   private fun position(player: Player): Map<String, Any?> =
     mapOf(

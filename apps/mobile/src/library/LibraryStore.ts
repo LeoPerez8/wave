@@ -27,6 +27,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { openDatabaseSync } from "expo-sqlite";
 
+import { selectAlbums } from "./db/albums";
 import migrations from "./db/migrations";
 import {
   homeSections,
@@ -274,6 +275,11 @@ export class LibraryStore extends Context.Service<
     readonly listSongs: Effect.Effect<readonly SongRow[], LibraryStoreError>;
     /** Every album by title, then album artist, for Library › Albums. */
     readonly listAlbums: Effect.Effect<readonly AlbumRow[], LibraryStoreError>;
+    /** [limit] albums from [offset] in the same order, for lists that page (Auto). */
+    readonly listAlbumsPage: (
+      offset: number,
+      limit: number,
+    ) => Effect.Effect<readonly AlbumRow[], LibraryStoreError>;
     /** Every artist with songs, by name, for Library › Artists. */
     readonly listArtists: Effect.Effect<readonly ArtistRow[], LibraryStoreError>;
     /** Every genre with songs, by name, for Library › Genres. */
@@ -683,32 +689,6 @@ const trackQuery = (db: Database) => {
 };
 
 /** Albums with their track count and length; albums left without tracks don't appear. */
-const albumQuery = (db: Database, where: SQL | undefined): AlbumRow[] => {
-  const { tracks, artists, albums, artwork } = schema;
-  return db
-    .select({
-      id: albums.id,
-      title: albums.title,
-      titleSort: albums.titleSort,
-      albumArtist: artists.name,
-      albumArtistId: albums.albumArtistId,
-      year: albums.year,
-      compilation: albums.compilation,
-      trackCount: sql<number>`count(${tracks.id})`,
-      durationMs: sql<number>`coalesce(sum(${tracks.durationMs}), 0)`,
-      thumbPath: artwork.thumbPath,
-      artworkPath: artwork.path,
-    })
-    .from(albums)
-    .innerJoin(artists, eq(albums.albumArtistId, artists.id))
-    .innerJoin(tracks, eq(tracks.albumId, albums.id))
-    .leftJoin(artwork, eq(albums.artworkHash, artwork.hash))
-    .where(where)
-    .groupBy(albums.id)
-    .orderBy(asc(albums.titleSort), asc(artists.sort), asc(albums.id))
-    .all();
-};
-
 const BY_TITLE = [
   asc(schema.tracks.titleSort),
   asc(schema.artists.sort),
@@ -743,7 +723,7 @@ const listArtistsSync = (db: Database, ids?: readonly number[]): ArtistRow[] =>
 
 const getAlbumSync = (db: Database, id: number): AlbumDetail | null => {
   const { tracks, genres } = schema;
-  const album = albumQuery(db, eq(schema.albums.id, id))[0];
+  const album = selectAlbums(db, eq(schema.albums.id, id))[0];
   if (album === undefined) return null;
   const genre = db
     .select({ name: genres.name })
@@ -780,7 +760,7 @@ const getArtistSync = (db: Database, id: number): ArtistDetail | null => {
     .all();
   const split = artistAlbums(
     id,
-    albumQuery(
+    selectAlbums(
       db,
       or(
         eq(albums.albumArtistId, id),
@@ -1219,7 +1199,10 @@ const make = Effect.gen(function* () {
             .get() ?? null,
       ),
 
-    listAlbums: attempt("list albums", () => albumQuery(db, undefined)),
+    listAlbums: attempt("list albums", () => selectAlbums(db, undefined)),
+
+    listAlbumsPage: (offset, limit) =>
+      attempt("list albums", () => selectAlbums(db, undefined, { offset, limit })),
 
     listArtists: attempt("list artists", () => listArtistsSync(db)),
 
@@ -1443,7 +1426,7 @@ const make = Effect.gen(function* () {
 
     albumsByIds: (ids) =>
       attempt("read ranked albums", () =>
-        ids.length === 0 ? [] : albumQuery(db, inArray(schema.albums.id, [...ids])),
+        ids.length === 0 ? [] : selectAlbums(db, inArray(schema.albums.id, [...ids])),
       ),
 
     artistsByIds: (ids) =>

@@ -84,10 +84,26 @@ export class Queue extends Context.Service<
       tracks: readonly QueueTrack[],
       positionMs: number,
     ) => Effect.Effect<boolean, PlayerError>;
+    /**
+     * Runs a queue command whose items the media session sets on the player
+     * itself (a play request from Android Auto): instead of syncing the
+     * player, returns every entry of the new queue as a player item and the
+     * one to start at. `tracks` must describe every track id the command adds.
+     */
+    readonly handOver: (
+      command: QueueCommand,
+      tracks: readonly QueueTrack[],
+    ) => Effect.Effect<QueueHandOver, PlayerError>;
     /** Serialises a queue change still settling right away (Wave is leaving the foreground). */
     readonly flush: Effect.Effect<void>;
   }
 >()("@wave/mobile/playback/Queue") {}
+
+/** The player list a session request gets (see `Queue.handOver`). */
+export interface QueueHandOver {
+  readonly items: readonly PlayerItem[];
+  readonly startIndex: number;
+}
 
 const toNative = (step: SyncStep): NativeSyncStep => {
   switch (step.type) {
@@ -219,6 +235,28 @@ export const layer = Layer.effect(
     const dispatch = (command: QueueCommand, added: readonly QueueTrack[] = []) =>
       lane.withPermit(run(command, added));
 
+    const handOver = (command: QueueCommand, added: readonly QueueTrack[]) =>
+      lane.withPermit(
+        Effect.gen(function* () {
+          if (command.type === "play") tracks.clear();
+          for (const track of added) tracks.set(track.id, track);
+          const { state } = reduceQueue(queueState.get(), command);
+          const items = yield* Effect.forEach(state.entries, itemFor);
+          queueState.set(state);
+          queueChanged();
+          // What the player holds once the session has set the items.
+          native = {
+            keys: state.entries.map((entry) => entry.key),
+            currentKey: state.entries[state.index]?.key ?? null,
+          };
+          if (state.repeat !== appliedRepeat) {
+            yield* player.setRepeatMode(state.repeat);
+            appliedRepeat = state.repeat;
+          }
+          return { items, startIndex: Math.max(0, state.index) };
+        }),
+      );
+
     /**
      * Picks the queue back up when JS restarts while the player kept going
      * (Wave was backgrounded and its activity or JS runtime went away).
@@ -270,6 +308,6 @@ export const layer = Layer.effect(
 
     yield* Effect.addFinalizer(() => flush);
 
-    return Queue.of({ dispatch, restore: restoreSaved, flush });
+    return Queue.of({ dispatch, handOver, restore: restoreSaved, flush });
   }),
 );
