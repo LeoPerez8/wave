@@ -157,7 +157,7 @@ A cool, low-chroma tonal ramp carrying two small, saturated voices: teal and emb
 
 ### Secondary
 
-- **Ember** (`highlight`; burnt orange in light, a warm apricot in dark): favorite and now playing. The playing track's title and speaker glyph, the favorite star. Ember means "this one is yours, or this one is sounding".
+- **Ember** (`highlight`; burnt orange in light, a warm apricot in dark): favorite and now playing. The playing track's title and its wavy underline, the favorite star. Ember means "this one is yours, or this one is sounding".
 
 ### Destructive
 
@@ -284,7 +284,7 @@ The Library's entries (Playlists, Artists, Albums, Songs, Genres, Folders, Favor
 
 ### Track Row
 
-56dp, fixed cells, one type size. Songs lists lead with a 40dp square thumbnail and put the state cell after the text; album track lists lead with the track number in a 32dp cell, which the state glyph replaces. Playing: title and speaker glyph in ember. Missing file: title in graphite, artist line reads "File not found", a file-off glyph in pewter, and the row is disabled. Favorite: a small filled star in ember in its own 24dp cell. Duration in tabular Footnote, right-aligned. Stats rankings use the numbered row with the rank as the number (the top one in ember, 500) and the counted plays after the artist ("Artist · 12 plays").
+56dp, fixed cells, one type size. Songs lists lead with a 40dp square thumbnail; album track lists lead with the track number in a 32dp cell. Playing: title in ember with a thin ember wavy underline spanning its visible text, rippling while music plays and still when paused (static under reduce motion or tap animation 0 ms). Missing file: title in graphite, artist line reads "File not found", a file-off glyph in pewter (after the text in Songs lists, in place of the number in album lists), and the row is disabled. Favorite: a small filled star in ember in its own 24dp cell. Duration in tabular Footnote, right-aligned. Stats rankings use the numbered row with the rank as the number (the top one in ember, 500) and the counted plays after the artist ("Artist · 12 plays").
 
 ### Album Tile
 

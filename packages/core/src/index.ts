@@ -226,3 +226,5 @@ export {
 export type { SongListKind, SongSort, SongSortKey, SortableSong } from "./songSort.ts";
 export { concentricRadius } from "./corners.ts";
 export type { InsetSquare } from "./corners.ts";
+export { underlineMotion, wavePath } from "./wavyUnderline.ts";
+export type { UnderlineMotion, UnderlineMotionInput, WaveShape } from "./wavyUnderline.ts";
