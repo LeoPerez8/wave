@@ -1,5 +1,5 @@
 import { IconChartBar } from "@tabler/icons-react-native";
-import { STATS_PERIODS, type StatsPeriod } from "@wave/core";
+import type { StatsPeriod } from "@wave/core";
 import { useState } from "react";
 import { ScrollView, View } from "react-native";
 
@@ -8,16 +8,9 @@ import { useChromeInset } from "@/chrome/chrome";
 import { EmptyState } from "@/components/EmptyState";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { HomeSection } from "@/home/HomeSections";
+import { openStatsSeeAll } from "@/library/routes";
 import { useTopSongs } from "@/stats/hooks";
-import { PeriodTabs, RankedSongs } from "@/stats/StatsViews";
-
-/** "No plays in the last 7 days", or "No plays yet" for all time. */
-const nothingPlayed = (period: StatsPeriod): string => {
-  const label = STATS_PERIODS.find((option) => option.id === period)?.label;
-  return period === "all" || label === undefined
-    ? "No plays yet"
-    : `No plays in the ${label.toLowerCase()}`;
-};
+import { nothingPlayed, PeriodTabs, RankedSongs } from "@/stats/StatsViews";
 
 /** Stats: what was played most over a rolling period ending now. */
 export default function StatsScreen() {
@@ -40,7 +33,10 @@ export default function StatsScreen() {
           />
         )}
         {topSongs !== undefined && topSongs.length > 0 && (
-          <HomeSection title="Top songs">
+          <HomeSection
+            title="Top songs"
+            action={{ label: "See all", onPress: () => openStatsSeeAll("songs", period) }}
+          >
             <RankedSongs ranking={topSongs} period={period} />
           </HomeSection>
         )}

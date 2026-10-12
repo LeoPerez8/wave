@@ -1,3 +1,4 @@
+import type { StatsPeriod, StatsRanking } from "@wave/core";
 import { router } from "expo-router";
 
 /** Detail screens (ids are DB integer ids); other tickets link to these. */
@@ -17,6 +18,12 @@ export const openPlaylist = (id: number): void => router.push(playlistHref(id));
 /** Stats, pushed from Home; a Library stack screen so the mini player stays. */
 export const statsHref = "/library/stats" as const;
 export const openStats = (): void => router.push(statsHref);
+
+/** A ranking's See all, for the period selected on Stats (read back with Core's `statsSeeAll`). */
+export const statsSeeAllHref = (ranking: StatsRanking, period: StatsPeriod) =>
+  `/library/stats/${ranking}?period=${period}` as const;
+export const openStatsSeeAll = (ranking: StatsRanking, period: StatsPeriod): void =>
+  router.push(statsSeeAllHref(ranking, period));
 
 /** Parses a route's `[id]` param; NaN-safe (an unknown id shows the "gone" state). */
 export const parseId = (param: string | string[] | undefined): number => {
