@@ -36,6 +36,7 @@ export function CardEntries({ children, listRef }: Props) {
         ref={scroll}
         bounces={false}
         overScrollMode="never"
+        keyboardShouldPersistTaps="handled"
         // Reversed on screen only: the views (and so screen readers) keep the logical order.
         contentContainerStyle={up ? { flexDirection: "column-reverse" } : undefined}
         onLayout={showFirst}

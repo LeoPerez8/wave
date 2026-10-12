@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { entryDivider, placeOverlayCard } from "./index.ts";
+import { cardKeyboard, entryDivider, placeOverlayCard } from "./index.ts";
 
 // A phone in portrait, in dp: status bar on top, gesture bar below.
 const phone = {
@@ -164,5 +164,22 @@ describe("entryDivider", () => {
   test("entries listed upwards end at the first one, which goes without a hairline", () => {
     const lines = [0, 1, 2].map((index) => entryDivider(index, 3, "up"));
     assert.deepEqual(lines, [false, true, true]);
+  });
+});
+
+describe("cardKeyboard", () => {
+  test("a card nobody types into closes an open keyboard and lays out as if it were gone", () => {
+    assert.deepEqual(cardKeyboard({ keyboard: 320 }), { closeKeyboard: true, keyboard: 0 });
+  });
+
+  test("a card someone types into keeps the keyboard and stays clear of it", () => {
+    assert.deepEqual(cardKeyboard({ align: "top", keyboard: 320 }), {
+      closeKeyboard: false,
+      keyboard: 320,
+    });
+  });
+
+  test("with the keyboard closed there is nothing to close", () => {
+    assert.deepEqual(cardKeyboard({ keyboard: 0 }), { closeKeyboard: false, keyboard: 0 });
   });
 });

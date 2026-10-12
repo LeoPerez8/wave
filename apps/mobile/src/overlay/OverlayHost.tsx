@@ -1,8 +1,9 @@
-import { placeOverlayCard } from "@wave/core";
+import { cardKeyboard, placeOverlayCard } from "@wave/core";
 import { useEffect, useRef, useState, type ComponentRef, type ReactNode } from "react";
 import {
   AccessibilityInfo,
   BackHandler,
+  Keyboard,
   Pressable,
   StyleSheet,
   View,
@@ -101,7 +102,9 @@ export function OverlayHost({ children }: { children: ReactNode }) {
 function OverlayCard({ entry, frontmost }: { entry: OverlayEntry; frontmost: boolean }) {
   const window = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const keyboard = useKeyboardHeight();
+  const keyboardHeight = useKeyboardHeight();
+  // A card without a text field closes the keyboard (one tap then runs an entry).
+  const keyboard = cardKeyboard({ align: entry.request.align, keyboard: keyboardHeight });
   const ms = useTapAnimationMs();
   const scrim = useThemeColor("scrim");
   const reduceMotion = useReducedMotion();
@@ -122,8 +125,14 @@ function OverlayCard({ entry, frontmost }: { entry: OverlayEntry; frontmost: boo
       ? {}
       : { anchor: { rect: anchor, gap: CELL, minHeight: MIN_ANCHORED_HEIGHT }, chromeBottom }),
     align: entry.request.align,
-    keyboard,
+    keyboard: keyboard.keyboard,
   });
+
+  // Only as the card opens: a card someone types into above it may bring the keyboard back.
+  const [closeKeyboard] = useState(keyboard.closeKeyboard);
+  useEffect(() => {
+    if (closeKeyboard) Keyboard.dismiss();
+  }, [closeKeyboard]);
 
   // Fade in once the card knows its size (so it appears where it settles), out when closing.
   useEffect(() => {
