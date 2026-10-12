@@ -5,8 +5,8 @@ import {
   nextPlaylistName,
   type PlaylistNameCheck,
 } from "@wave/core";
-import { useState } from "react";
-import { ScrollView, Text, TextInput, ToastAndroid, View } from "react-native";
+import { Fragment, useState } from "react";
+import { Text, TextInput, ToastAndroid, View } from "react-native";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
@@ -15,6 +15,7 @@ import { PlaylistEntry } from "@/catalog/PlaylistEntry";
 import { TextButton } from "@/components/TextButton";
 import { Press } from "@/motion/Press";
 import { confirmAction } from "@/overlay/alert";
+import { CardEntries } from "@/overlay/CardEntries";
 import { openOverlay, presentOverlay } from "@/overlay/overlay";
 import { useThemeColor } from "@/theme/useThemeColor";
 
@@ -167,21 +168,24 @@ function AddCard({ subject, close }: { subject: AddSubject; close: () => void })
         </View>
         <Text className="font-sans text-body font-medium text-accent">New Playlist</Text>
       </Press>
-      {/* The card stops short of the screen edges; a long list scrolls inside it. */}
-      <ScrollView style={{ flexGrow: 0, flexShrink: 1 }}>
+      {/* The card stops short of the screen edges; a long list scrolls inside it.
+          Each playlist follows a divider, so none trails the last. */}
+      <CardEntries>
         {playlists.map((playlist) => (
-          <PlaylistEntry
-            key={playlist.id}
-            name={playlist.name}
-            detail={songCount(playlist.trackCount)}
-            paths={playlist.thumbPaths}
-            onPress={() => {
-              close();
-              addSongs(playlist.id, subject.songs);
-            }}
-          />
+          <Fragment key={playlist.id}>
+            <Hairline />
+            <PlaylistEntry
+              name={playlist.name}
+              detail={songCount(playlist.trackCount)}
+              paths={playlist.thumbPaths}
+              onPress={() => {
+                close();
+                addSongs(playlist.id, subject.songs);
+              }}
+            />
+          </Fragment>
         ))}
-      </ScrollView>
+      </CardEntries>
     </>
   );
 }

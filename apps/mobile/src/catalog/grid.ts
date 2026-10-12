@@ -12,7 +12,7 @@ export const grid = {
   gutter: CELL * 2,
   /** Height of a track or entry row. */
   row: CELL * 7,
-  /** Width of a row's fixed state cell (track number, playing, missing). */
+  /** Width of a numbered row's leading cell (track number, missing). */
   stateCell: CELL * 4,
   /** Width of the drawn A–Z spine. */
   spine: CELL * 3,
