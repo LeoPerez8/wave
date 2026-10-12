@@ -42,13 +42,15 @@ type Props = {
   size: number;
   onPress: () => void;
   onLongPress?: () => void;
+  /** Replaces the furniture line (e.g. "12 plays" on a Most played shelf), read out after the title. */
+  detail?: string | undefined;
 };
 
-export function AlbumTile({ album, size, onPress, onLongPress }: Props) {
+export function AlbumTile({ album, size, onPress, onLongPress, detail }: Props) {
   return (
     <Press
       accessibilityRole="button"
-      accessibilityLabel={`${album.title} by ${album.albumArtist}, ${furnitureLabel(album)}`}
+      accessibilityLabel={`${album.title} by ${album.albumArtist}, ${detail ?? furnitureLabel(album)}`}
       onPress={onPress}
       onLongPress={onLongPress}
       depth={0.02}
@@ -70,7 +72,7 @@ export function AlbumTile({ album, size, onPress, onLongPress }: Props) {
           className="font-sans text-footnote text-secondary"
           style={{ fontVariant: ["tabular-nums"] }}
         >
-          {furnitureLine(album)}
+          {detail ?? furnitureLine(album)}
         </Text>
       </View>
     </Press>

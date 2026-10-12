@@ -1,3 +1,4 @@
+import { listeningOverview, listeningTotals, type ListeningOverview } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { AppState } from "react-native";
@@ -238,4 +239,20 @@ export const useHome = (): HomeSections | undefined => {
     undefined,
     plays + useFavoritesSaved(),
   );
+};
+
+const readListeningOverview = LibraryStore.use((store) =>
+  Effect.map(Effect.all([store.countLibrary, store.songListening]), ([counts, songs]) =>
+    listeningOverview(counts, listeningTotals(songs)),
+  ),
+);
+
+/**
+ * Home's listening overview (library and all-time listening totals), or
+ * undefined while loading. Re-read after scan batches and as soon as a play
+ * starts or ends.
+ */
+export const useListeningOverview = (): ListeningOverview | undefined => {
+  const plays = useSyncExternalStore(playHistoryVersion.subscribe, playHistoryVersion.get);
+  return useLibraryQuery<ListeningOverview | undefined>(readListeningOverview, undefined, plays);
 };
