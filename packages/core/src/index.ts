@@ -160,3 +160,4 @@ export type {
 } from "./librarySections.ts";
 export { placeOverlayCard } from "./overlay.ts";
 export type { OverlayCardFrame, OverlayCardInput, OverlayInsets } from "./overlay.ts";
+export type { OverlayAlign } from "./overlay.ts";

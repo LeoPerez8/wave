@@ -30,6 +30,7 @@ import {
   useOverlayEntries,
   type OverlayEntry,
 } from "./overlay";
+import { useKeyboardHeight } from "./keyboard";
 
 /** Rounded corners of a dialog card. */
 export const OVERLAY_RADIUS = CELL * 3;
@@ -88,6 +89,7 @@ export function OverlayHost({ children }: { children: ReactNode }) {
 function OverlayCard({ entry, top }: { entry: OverlayEntry; top: boolean }) {
   const window = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const keyboard = useKeyboardHeight();
   const ms = useTapAnimationMs();
   const reduceMotion = useReducedMotion();
   const card = useRef<ComponentRef<typeof View>>(null);
@@ -101,6 +103,8 @@ function OverlayCard({ entry, top }: { entry: OverlayEntry; top: boolean }) {
     margin: grid.margin,
     maxWidth: MAX_WIDTH,
     cardHeight: cardHeight ?? 0,
+    align: entry.request.align,
+    keyboard,
   });
 
   // Fade in once the card knows its size (so it appears where it settles), out when closing.

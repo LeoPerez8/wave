@@ -36,4 +36,25 @@ describe("placeOverlayCard", () => {
     });
     assert.deepEqual(frame, { left: 234, top: 118, width: 480, maxHeight: 340 });
   });
+
+  test("a card someone types into sits a margin below the status bar, whatever its height", () => {
+    assert.deepEqual(placeOverlayCard({ ...phone, cardHeight: 200, align: "top" }), {
+      left: 24,
+      top: 56,
+      width: 364,
+      maxHeight: 811,
+    });
+  });
+
+  test("an open keyboard shortens the card so the keyboard never covers it", () => {
+    // 300dp of keyboard above the 24dp gesture bar: 915 - 32 - 24 - 300 - 2 × 24.
+    const frame = placeOverlayCard({ ...phone, cardHeight: 200, align: "top", keyboard: 300 });
+    assert.deepEqual(frame, { left: 24, top: 56, width: 364, maxHeight: 511 });
+  });
+
+  test("a centred card centres in the space above an open keyboard", () => {
+    // Space from 32 to 915 - 24 - 300 = 591, so a 200dp card starts at 32 + (559 - 200) / 2.
+    const frame = placeOverlayCard({ ...phone, cardHeight: 200, keyboard: 300 });
+    assert.equal(frame.top, 212);
+  });
 });
