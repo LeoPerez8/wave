@@ -5,26 +5,21 @@ import Animated from "react-native-reanimated";
 
 import { BACKDROP, ChromeProvider } from "@/chrome/chrome";
 import { TabBar } from "@/chrome/TabBar";
-import { type TabName, useTabEntry } from "@/chrome/tabEntry";
+import { TAB_PATH, tabOfPath, useTabEntry } from "@/chrome/tabEntry";
 import { openNowPlaying } from "@/nowPlaying/sheet";
 import { MiniPlayer } from "@/playback/MiniPlayer";
 import { useThemeColor } from "@/theme/useThemeColor";
 
-const TAB_OF_PATH: Readonly<Record<string, TabName>> = {
-  "/": "index",
-  "/library": "library",
-  "/search": "search",
-};
-
 /**
- * Home, Library and Search under the floating glass chrome. The screens sit in
- * the backdrop the glass shows through; the tab bar and mini player float over
- * it as siblings, so the glass never has to draw itself. A tapped switch
- * slides the new screen in from the tapped tab's side; the chrome stays put.
+ * Home, Library, the shortcut tab chosen in Settings (if any) and Search under
+ * the floating glass chrome. The screens sit in the backdrop the glass shows
+ * through; the tab bar and mini player float over it as siblings, so the glass
+ * never has to draw itself. A tapped switch slides the new screen in from the
+ * tapped tab's side; the chrome stays put.
  */
 export default function TabsLayout() {
   const background = useThemeColor("background");
-  const entry = useTabEntry(TAB_OF_PATH[usePathname()] ?? null);
+  const entry = useTabEntry(tabOfPath(usePathname()));
   return (
     <ChromeProvider tabBar>
       <Tabs style={{ flex: 1, backgroundColor: background }}>
@@ -33,11 +28,12 @@ export default function TabsLayout() {
             <TabSlot />
           </Animated.View>
         </View>
-        {/* Declares the tabs; the visible triggers live in TabBar. */}
+        {/* Declares the tabs; the visible triggers live in TabBar (the shortcut only when chosen). */}
         <TabList style={{ display: "none" }}>
-          <TabTrigger name="index" href="/" />
-          <TabTrigger name="library" href="/library" />
-          <TabTrigger name="search" href="/search" />
+          <TabTrigger name="index" href={TAB_PATH.index} />
+          <TabTrigger name="library" href={TAB_PATH.library} />
+          <TabTrigger name="shortcut" href={TAB_PATH.shortcut} />
+          <TabTrigger name="search" href={TAB_PATH.search} />
         </TabList>
         <MiniPlayer backdropId={BACKDROP.tabs} onOpen={openNowPlaying} />
         <TabBar onTabTap={entry.noteTap} />

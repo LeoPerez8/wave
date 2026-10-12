@@ -165,6 +165,8 @@ export type { OverlayAnchor, OverlayRect } from "./overlay.ts";
 export type { OverlayAlign } from "./overlay.ts";
 export { moveSlide, slideEntry, slideTicks, startSlide } from "./slideToChoose.ts";
 export type { MenuSlide, SlidePoint } from "./slideToChoose.ts";
+export { SHORTCUT_TAB_CHOICES, parseShortcutTab, tabBarTabs } from "./shortcutTab.ts";
+export type { TabBarTab } from "./shortcutTab.ts";
 export { planAlert } from "./alert.ts";
 export type { AlertButton, AlertChoice, AlertPlan, AlertSpec } from "./alert.ts";
 export { DEFAULT_THEME, TONES, themeContrastIssues } from "./theme.ts";

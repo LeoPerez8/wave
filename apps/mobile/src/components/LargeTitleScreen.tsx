@@ -1,5 +1,12 @@
-import type { ReactElement, ReactNode } from "react";
-import { ScrollView, Text, View, type RefreshControlProps } from "react-native";
+import { useScrollToTop } from "expo-router";
+import { useRef, type ReactElement, type ReactNode } from "react";
+import {
+  ScrollView,
+  type ScrollViewInstance,
+  Text,
+  View,
+  type RefreshControlProps,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { grid } from "@/catalog/grid";
@@ -15,13 +22,19 @@ type Props = {
   refreshControl?: ReactElement<RefreshControlProps>;
 };
 
-/** A screen with a quiet large title that scrolls with the content, under the floating chrome. */
+/**
+ * A screen with a quiet large title that scrolls with the content, under the
+ * floating chrome. Tapping its tab while it is current scrolls back to the top.
+ */
 export function LargeTitleScreen({ title, action, children, refreshControl }: Props) {
   const scrollable = useListScrollable();
   const insets = useSafeAreaInsets();
   const bottom = useChromeInset();
+  const scroll = useRef<ScrollViewInstance>(null);
+  useScrollToTop(scroll);
   return (
     <ScrollView
+      ref={scroll}
       scrollEnabled={scrollable}
       className="flex-1 bg-background"
       contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: bottom }}
