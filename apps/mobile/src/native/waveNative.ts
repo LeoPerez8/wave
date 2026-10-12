@@ -126,6 +126,19 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
    * order. MediaStore is told about the deleted ones.
    */
   deleteFiles(paths: readonly string[]): Promise<readonly FileDeleteOutcome[]>;
+  /**
+   * Downloads an artist's photo in both sizes beside the album artwork (files
+   * named after [artistKey]); rejects when a download fails or isn't an image.
+   */
+  saveArtistPhoto(artistKey: string, thumbUrl: string, largeUrl: string): Promise<ArtistPhotoFiles>;
+  /** Deletes every downloaded artist photo. */
+  clearArtistPhotos(): Promise<void>;
+}
+
+/** A saved artist photo: the large image (artist page) and the thumbnail (lists). */
+export interface ArtistPhotoFiles {
+  readonly path: string;
+  readonly thumbPath: string;
 }
 
 /** What became of a file `deleteFiles` was asked to delete (Core's `SongDeleteFailureReason` otherwise). */

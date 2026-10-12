@@ -23,6 +23,7 @@ import {
   type ExclusionChoice,
   type FolderChoice,
 } from "./LibraryScan";
+import { clearArtistPhotos, downloadArtistPhotos, loadArtistPhotos } from "./artistPhotos";
 import * as LibraryStore from "./LibraryStore";
 import * as NativeScanner from "./NativeScanner";
 
@@ -57,6 +58,8 @@ const startScan = (scan: Effect.Effect<unknown, never, AppServices>): Promise<vo
   lastScanStartedAt = Date.now();
   currentScan = appRuntime.runPromiseExit(scan).then((exit) => {
     currentScan = null;
+    // New artists may have arrived; looking them up waits for the scan so it never competes with it.
+    startArtistPhotoDownloads();
     // Scan failures are reported by the scan itself; this catches the services failing to start.
     if (Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause)) {
       const error = Cause.squash(exit.cause);
@@ -90,6 +93,8 @@ export const startRescan = (): Promise<void> => startScan(runRescan);
  * Safe to call repeatedly.
  */
 export const startInitialScan = (): void => {
+  // Cached artist photos show at once; new lookups wait for the scan.
+  void appRuntime.runPromiseExit(loadArtistPhotos);
   void startRescan();
   rescanOnReturn ??= AppState.addEventListener("change", (state) => {
     if (state === "active" && Date.now() - lastScanStartedAt >= RESCAN_ON_RETURN_AFTER_MS) {
@@ -119,4 +124,44 @@ export const chooseExcludedMusicFolder = async (): Promise<ExclusionChoice> => {
 export const includeMusicFolder = async (path: string): Promise<void> => {
   await appRuntime.runPromise(includeFolder(path));
   void startScanAfterCurrent(runRescan);
+};
+
+/** The artist photo lookups running now, so they can be stopped. */
+let photoDownloads: AbortController | null = null;
+/** Asked to start while running: run once more when the current run ends. */
+let photosAgain = false;
+
+/**
+ * Downloads the photos of artists that are due, in the background (see
+ * `downloadArtistPhotos`); does nothing when Settings turned downloads off.
+ * Safe to call repeatedly.
+ */
+export const startArtistPhotoDownloads = (): void => {
+  if (photoDownloads !== null) {
+    photosAgain = true;
+    return;
+  }
+  const controller = new AbortController();
+  photoDownloads = controller;
+  void appRuntime.runPromiseExit(downloadArtistPhotos, { signal: controller.signal }).then(() => {
+    if (photoDownloads !== controller) return;
+    photoDownloads = null;
+    if (photosAgain) {
+      photosAgain = false;
+      startArtistPhotoDownloads();
+    }
+  });
+};
+
+/** Stops every artist photo request at once (Settings turned downloads off). */
+export const stopArtistPhotoDownloads = (): void => {
+  photosAgain = false;
+  photoDownloads?.abort();
+  photoDownloads = null;
+};
+
+/** Deletes every downloaded artist photo; they're downloaded again later while downloads are on. */
+export const clearArtistPhotoCache = (): Promise<void> => {
+  stopArtistPhotoDownloads();
+  return appRuntime.runPromise(clearArtistPhotos);
 };

@@ -14,6 +14,7 @@ import { TextButton } from "@/components/TextButton";
 import { useScanRoots, useScanState } from "@/library/hooks";
 import { startRescan } from "@/library/runtime";
 import { Press } from "@/motion/Press";
+import { ArtistPhotosSettingsSection } from "@/settings/ArtistPhotosSettingsSection";
 import { GlassSettingsSection } from "@/settings/GlassSettingsSection";
 import { setShortcutTab, useShortcutTab } from "@/settings/shortcutTab";
 import { ThemeSettingsSection } from "@/settings/ThemeSettingsSection";
@@ -135,6 +136,8 @@ export default function SettingsScreen() {
           How long to hold a song, album or list entry before its menu opens. The default is{" "}
           {LONG_PRESS_DELAY.default} ms.
         </Text>
+
+        <ArtistPhotosSettingsSection />
 
         <CatalogLine className="mb-2 mt-12">Developer</CatalogLine>
         <Hairline />

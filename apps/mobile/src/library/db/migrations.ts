@@ -209,6 +209,17 @@ const m0008 = `
 ALTER TABLE \`artists\` ADD \`artwork_hash\` text REFERENCES \`artwork\`(\`hash\`);
 `;
 
+// Artist photos (docs/spec.md): downloaded files and misses, by artist key.
+const m0009 = `
+CREATE TABLE \`artist_photos\` (
+	\`artist_key\` text PRIMARY KEY NOT NULL,
+	\`outcome\` text NOT NULL,
+	\`checked_at\` integer NOT NULL,
+	\`path\` text,
+	\`thumb_path\` text
+);
+`;
+
 export default {
   journal: {
     entries: [
@@ -221,7 +232,8 @@ export default {
       { idx: 6, when: 1_792_324_800_000, tag: "0006_play_source", breakpoints: true },
       { idx: 7, when: 1_792_411_200_000, tag: "0007_recount_plays", breakpoints: true },
       { idx: 8, when: 1_792_497_600_000, tag: "0008_artist_images", breakpoints: true },
+      { idx: 9, when: 1_792_584_000_000, tag: "0009_artist_photos", breakpoints: true },
     ],
   },
-  migrations: { m0000, m0001, m0002, m0003, m0004, m0005, m0006, m0007, m0008 },
+  migrations: { m0000, m0001, m0002, m0003, m0004, m0005, m0006, m0007, m0008, m0009 },
 };
