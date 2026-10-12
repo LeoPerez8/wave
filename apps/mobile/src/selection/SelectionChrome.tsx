@@ -46,6 +46,7 @@ const ICONS: { readonly [A in ItemAction]: ComponentType<IconProps> } = {
   renamePlaylist: IconPencil,
   deletePlaylist: IconTrash,
   select: IconListCheck,
+  delete: IconTrash,
 };
 
 /** Buttons the bar has room for, More included. */
@@ -58,13 +59,17 @@ function BarButton({
   label,
   onPress,
   opensMenu = false,
+  destructive = false,
 }: {
   icon: ComponentType<IconProps>;
   label: string;
   onPress: () => void;
   opensMenu?: boolean;
+  destructive?: boolean;
 }) {
   const accent = useThemeColor("accent");
+  const danger = useThemeColor("destructive");
+  const tone = destructive ? danger : accent;
   return (
     <Press
       accessibilityRole="button"
@@ -76,11 +81,12 @@ function BarButton({
       className="flex-1 items-center justify-center"
       style={{ gap: 2 }}
     >
-      <Icon size={24} color={accent} strokeWidth={1.5} />
+      <Icon size={24} color={tone} strokeWidth={1.5} />
       <Text
         numberOfLines={1}
         adjustsFontSizeToFit
-        className="font-sans text-caption font-semibold text-accent"
+        className="font-sans text-caption font-semibold"
+        style={{ color: tone }}
       >
         {label}
       </Text>
@@ -102,6 +108,7 @@ function MoreCard({ entries, close }: { entries: readonly ActionEntry[]; close: 
             entry.onPress();
           }}
           divider={entryDivider(index, entries.length, flow)}
+          destructive={entry.destructive}
         />
       ))}
     </CardEntries>
@@ -132,6 +139,7 @@ function ActionBar({ target, backdropId }: { target: ActionItems; backdropId: st
           icon={ICONS[entry.action]}
           label={entry.label}
           onPress={entry.onPress}
+          destructive={entry.destructive}
         />
       ))}
       {more.length > 0 && (

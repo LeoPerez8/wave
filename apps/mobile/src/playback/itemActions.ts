@@ -1,4 +1,5 @@
 import {
+  isDestructiveAction,
   isDetailPath,
   ITEM_ACTION_LABELS,
   itemActions,
@@ -10,8 +11,10 @@ import {
 import * as Haptics from "expo-haptics";
 import { router, usePathname } from "expo-router";
 
+import type { ArtistImageSource } from "@/catalog/ArtistImage";
 import type { LibrarySection } from "@/catalog/sections";
 import type { LibraryCounts } from "@/library/db/counts";
+import { confirmDeleteSongs } from "@/library/deleteSongs";
 import { setFavorites, useFavoriteIds } from "@/library/favorites";
 import type {
   AlbumRow,
@@ -73,6 +76,8 @@ export interface Heading {
   readonly subtitle: string;
   /** Artwork beside the title; undefined for a text-only heading. */
   readonly covers: readonly string[] | undefined;
+  /** An artist's heading shows their image (a circle) instead of covers. */
+  readonly artist?: ArtistImageSource;
 }
 
 /** What the actions need to know about one kind of item. */
@@ -121,17 +126,18 @@ const KINDS: { readonly [K in ItemKind]: KindInfo<ItemOf[K]> } = {
     facts: (album) => ({ artistId: album.albumArtistId }),
     noun: "album",
   },
-  // Artists, genres and folders have no picture; their headings are text only.
   artist: {
     songs: (artist) => itemSongs("artists", artist.id),
     heading: (artist) => ({
       title: artist.name,
       subtitle: plural(artist.trackCount, "song"),
       covers: undefined,
+      artist,
     }),
     facts: () => NO_FACTS,
     noun: "artist",
   },
+  // Genres and folders have no picture; their headings are text only.
   playlist: {
     songs: (playlist) => itemSongs("playlists", playlist.id),
     heading: (playlist) => ({
@@ -211,6 +217,8 @@ export interface ActionEntry {
   readonly action: ItemAction;
   readonly label: string;
   readonly onPress: () => void;
+  /** Deletes something for good: shown in the destructive colour. */
+  readonly destructive: boolean;
 }
 
 export interface ActionOptions {
@@ -272,7 +280,12 @@ export function useItemActions(
     here,
   }).map((entry): ActionEntry => {
     const label = ITEM_ACTION_LABELS[entry.action];
-    const make = (onPress: () => void): ActionEntry => ({ action: entry.action, label, onPress });
+    const make = (onPress: () => void): ActionEntry => ({
+      action: entry.action,
+      label,
+      onPress,
+      destructive: isDestructiveAction(entry.action),
+    });
     switch (entry.action) {
       case "playNext":
         return make(queue(playNext));
@@ -317,6 +330,8 @@ export function useItemActions(
         );
       case "select":
         return make(run(() => onSelect?.()));
+      case "delete":
+        return make(run(() => void confirmDeleteSongs(tracks.map(({ song }) => song))));
     }
   });
 }

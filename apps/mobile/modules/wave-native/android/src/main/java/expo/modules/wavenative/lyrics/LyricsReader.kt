@@ -18,7 +18,7 @@ data class LyricsSources(val embedded: String?, val sidecar: String?)
  */
 class LyricsReader(private val tagReader: TagReader) {
   fun read(audio: File): LyricsSources =
-    LyricsSources(embedded = tagReader.read(audio).lyrics, sidecar = findSidecar(audio)?.let(::readSidecar))
+    LyricsSources(embedded = tagReader.read(audio).lyrics, sidecar = Sidecars.find(audio)?.let(::readSidecar))
 
   /** The sidecar's text: UTF-8 or UTF-16 (by byte order mark), else Windows Latin-1. */
   private fun readSidecar(file: File): String? {
@@ -49,20 +49,6 @@ class LyricsReader(private val tagReader: TagReader) {
 
   private fun ByteArray.startsWith(vararg prefix: Int): Boolean =
     size >= prefix.size && prefix.indices.all { this[it] == prefix[it].toByte() }
-
-  /**
-   * `Song.lrc` beside `Song.mp3`, or `Song.mp3.lrc`; names match ignoring case,
-   * as they do on the phone's own storage.
-   */
-  private fun findSidecar(audio: File): File? {
-    val names = listOf("${audio.nameWithoutExtension}.lrc", "${audio.name}.lrc")
-    val folder = audio.parentFile ?: return null
-    names.map { File(folder, it) }.firstOrNull { it.isFile }?.let { return it }
-    val files = folder.listFiles { file -> file.extension.equals("lrc", ignoreCase = true) } ?: return null
-    return names.firstNotNullOfOrNull { name ->
-      files.firstOrNull { it.name.equals(name, ignoreCase = true) && it.isFile }
-    }
-  }
 
   private companion object {
     /** Real `.lrc` files are a few KB; anything this big isn't one. */

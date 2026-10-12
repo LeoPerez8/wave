@@ -73,6 +73,7 @@ function Hit({
       return (
         <NameRow
           name={hit.name}
+          artist={hit.artist}
           detail={top ? "Artist" : counted(hit.artist.trackCount, "song")}
           onPress={open(() => openArtist(hit.artist.id))}
           onLongPress={() => openArtistActions(hit.artist)}

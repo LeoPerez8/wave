@@ -236,7 +236,12 @@ export {
   toggleSelected,
 } from "./selection.ts";
 export type { Selection } from "./selection.ts";
-export { ITEM_ACTION_LABELS, itemActions, splitActionBar } from "./itemActions.ts";
+export {
+  isDestructiveAction,
+  ITEM_ACTION_LABELS,
+  itemActions,
+  splitActionBar,
+} from "./itemActions.ts";
 export type {
   ActionItem,
   ActionSubject,
@@ -251,3 +256,7 @@ export { underlineMotion, wavePath } from "./wavyUnderline.ts";
 export type { UnderlineMotion, UnderlineMotionInput, WaveShape } from "./wavyUnderline.ts";
 export { highlightedOrigin, originOfNewCard, veilAround } from "./overlayOrigin.ts";
 export type { NewCardInput, OriginCard } from "./overlayOrigin.ts";
+export { confirmSongDeletion, songDeletionFailure } from "./songDeletion.ts";
+export type { SongDeleteFailure, SongDeleteFailureReason } from "./songDeletion.ts";
+export { artistArtwork, artistInitial } from "./artistImage.ts";
+export type { ArtistAlbumLink } from "./artistImage.ts";

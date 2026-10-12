@@ -56,7 +56,9 @@ export type QueueCommand =
   | { readonly type: "playNext"; readonly trackIds: readonly string[] }
   | { readonly type: "addToQueue"; readonly trackIds: readonly string[] }
   | { readonly type: "move"; readonly key: string; readonly toUpNextIndex: number }
-  | { readonly type: "remove"; readonly key: string };
+  | { readonly type: "remove"; readonly key: string }
+  /** These tracks left the library (their files were deleted): every entry of theirs goes. */
+  | { readonly type: "removeTracks"; readonly trackIds: readonly string[] };
 
 /**
  * What the app should do to playback besides syncing the list:
@@ -282,6 +284,27 @@ const remove = (state: QueueState, key: string): QueueResult => {
   return result({ ...state, entries, index: at < state.index ? state.index - 1 : state.index });
 };
 
+/**
+ * Drops every entry of the tracks. If the current one goes, playback moves on
+ * to the next entry left (wrapping with repeat all); with nothing after it, it
+ * stops on the entry before.
+ */
+const removeTracks = (state: QueueState, trackIds: readonly string[]): QueueResult => {
+  const gone = new Set(trackIds);
+  if (!state.entries.some((entry) => gone.has(entry.trackId))) return result(state);
+  const entries = state.entries.filter((entry) => !gone.has(entry.trackId));
+  if (entries.length === 0) return result({ ...state, entries, index: -1 });
+  const current = currentEntry(state);
+  if (current !== null && !gone.has(current.trackId)) {
+    return result({ ...state, entries, index: entries.indexOf(current) });
+  }
+  // The entries before the current one that stay: the next one left takes its place.
+  const before = state.entries.slice(0, state.index).filter((entry) => !gone.has(entry.trackId));
+  if (before.length < entries.length) return result({ ...state, entries, index: before.length });
+  if (state.repeat === "all") return result(wrapToStart({ ...state, entries, index: 0 }));
+  return result({ ...state, entries, index: entries.length - 1 }, "stop");
+};
+
 /** Applies one command. `random` returns numbers in [0, 1); pass a seeded one in tests. */
 export const reduceQueue = (
   state: QueueState,
@@ -313,6 +336,8 @@ export const reduceQueue = (
       return move(state, command.key, command.toUpNextIndex);
     case "remove":
       return remove(state, command.key);
+    case "removeTracks":
+      return removeTracks(state, command.trackIds);
   }
 };
 

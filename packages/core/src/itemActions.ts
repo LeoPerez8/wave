@@ -49,7 +49,8 @@ export type ItemAction =
   | "goToArtist"
   | "renamePlaylist"
   | "deletePlaylist"
-  | "select";
+  | "select"
+  | "delete";
 
 /** One entry, in the order shown; Go to entries carry where they lead. */
 export type ItemActionEntry =
@@ -70,7 +71,11 @@ export const ITEM_ACTION_LABELS: { readonly [A in ItemAction]: string } = {
   renamePlaylist: "Rename Playlist",
   deletePlaylist: "Delete Playlist",
   select: "Select",
+  delete: "Delete",
 };
+
+/** Entries that delete something for good, shown in the destructive colour. */
+export const isDestructiveAction = (action: ItemAction): boolean => action === "delete";
 
 /** The value every item has, or undefined when they differ or any lacks one. */
 const shared = (values: readonly (number | undefined)[]): number | undefined => {
@@ -101,6 +106,8 @@ export const itemActions = (subject: ActionSubject): ItemActionEntry[] => {
   if (kind === "playlist" && items.length === 1)
     entries.push({ action: "renamePlaylist" }, { action: "deletePlaylist" });
   if (surface === "menu" && subject.selectable === true) entries.push({ action: "select" });
+  // Last, and destructive: deletes the songs' files from the phone (after asking).
+  if (kind === "track") entries.push({ action: "delete" });
   return entries;
 };
 

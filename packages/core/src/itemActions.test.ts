@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { itemActions, splitActionBar, type ActionSubject, type ItemActionEntry } from "./index.ts";
+import {
+  isDestructiveAction,
+  ITEM_ACTION_LABELS,
+  itemActions,
+  splitActionBar,
+  type ActionSubject,
+  type ItemAction,
+  type ItemActionEntry,
+} from "./index.ts";
 
 const names = (entries: readonly ItemActionEntry[]): string[] =>
   entries.map((entry) => entry.action);
@@ -18,7 +26,7 @@ const tracks = (
 ): ActionSubject => ({ kind: "track", items, surface: "menu", here: "/library/songs", ...rest });
 
 describe("itemActions", () => {
-  test("a song's menu: queue it, add it to a playlist, star it, go to its album and artist", () => {
+  test("a song's menu: queue it, add it to a playlist, star it, go to its album and artist, delete it", () => {
     assert.deepEqual(names(itemActions(tracks([song()]))), [
       "playNext",
       "addToQueue",
@@ -26,7 +34,18 @@ describe("itemActions", () => {
       "favorite",
       "goToAlbum",
       "goToArtist",
+      "delete",
     ]);
+  });
+
+  test("Delete comes last for songs, after Select, and is the destructive one", () => {
+    const menu = itemActions(tracks([song()], { selectable: true }));
+    assert.deepEqual(names(menu).slice(-2), ["select", "delete"]);
+    assert.deepEqual(
+      Object.keys(ITEM_ACTION_LABELS).filter((action) => isDestructiveAction(action as ItemAction)),
+      ["delete"],
+    );
+    assert.ok(!names(itemActions({ kind: "album", items: [{}], here: "/" })).includes("delete"));
   });
 
   test("a starred song offers Remove from Favorites instead", () => {
@@ -37,7 +56,7 @@ describe("itemActions", () => {
   });
 
   test("Select shows in the menu of a list that can select, never in the selection bar", () => {
-    assert.equal(names(itemActions(tracks([song()], { selectable: true }))).at(-1), "select");
+    assert.ok(names(itemActions(tracks([song()], { selectable: true }))).includes("select"));
     assert.ok(!names(itemActions(tracks([song()]))).includes("select"));
     assert.ok(
       !names(itemActions(tracks([song()], { selectable: true, surface: "selection" }))).includes(

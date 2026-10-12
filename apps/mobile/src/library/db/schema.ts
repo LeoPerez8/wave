@@ -1,4 +1,4 @@
-import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { type AnySQLiteColumn, index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 /**
  * Library schema. The store is the single owner of these tables; every change
@@ -16,6 +16,11 @@ export const artists = sqliteTable(
     key: text("key").notNull().unique(),
     name: text("name").notNull(),
     sort: text("sort").notNull(),
+    /**
+     * The artist's image, an album cover picked by Core's `artistArtwork`;
+     * null for none (the initial placeholder). Re-picked after every scan.
+     */
+    artworkHash: text("artwork_hash").references((): AnySQLiteColumn => artwork.hash),
   },
   (t) => [index("artists_sort_idx").on(t.sort)],
 );

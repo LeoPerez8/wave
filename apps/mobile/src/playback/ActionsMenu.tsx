@@ -1,6 +1,7 @@
 import { entryDivider } from "@wave/core";
 import { Text, View } from "react-native";
 
+import { ArtistImage } from "@/catalog/ArtistImage";
 import { EntryRow } from "@/catalog/EntryRow";
 import { CELL } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
@@ -109,6 +110,7 @@ function ActionsMenu({
           style={{ paddingBottom: CELL * 1.5, gap: CELL * 1.5 }}
         >
           {head.covers !== undefined && <Mosaic paths={head.covers} size={CELL * 5} />}
+          {head.artist !== undefined && <ArtistImage artist={head.artist} size={CELL * 5} />}
           <View className="flex-1">
             <Text numberOfLines={1} className="font-sans text-body font-medium text-foreground">
               {head.title}
@@ -129,6 +131,7 @@ function ActionsMenu({
               onPress={entry.onPress}
               divider={entryDivider(index, entries.length, flow)}
               highlighted={index === underFinger}
+              destructive={entry.destructive}
             />
           </View>
         ))}
