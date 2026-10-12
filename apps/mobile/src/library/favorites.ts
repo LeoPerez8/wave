@@ -47,42 +47,65 @@ const loadFavorites = (): void => {
     });
 };
 
-const withStar = (ids: ReadonlySet<number>, trackId: number, on: boolean): ReadonlySet<number> => {
-  const next = new Set(ids);
-  if (on) next.add(trackId);
-  else next.delete(trackId);
-  return next;
-};
-
 /** Stars with writes in flight; a star with none shows what `favorites` holds. */
 const writing = new Map<number, FavoriteStar>();
 
-/** Records a star's new state and shows it. */
-const showStar = (trackId: number, star: FavoriteStar, saved: boolean): void => {
-  if (star.pending === 0) writing.delete(trackId);
-  else writing.set(trackId, star);
-  favorites.update((state) => ({
-    ...state,
-    ids:
-      state.ids.has(trackId) === star.shown ? state.ids : withStar(state.ids, trackId, star.shown),
-    edits: state.edits + 1,
-    saved: saved ? state.saved + 1 : state.saved,
-  }));
+/** Records the stars' new states and shows them, in one update however many there are. */
+const showStars = (stars: ReadonlyMap<number, FavoriteStar>, saved: boolean): void => {
+  for (const [trackId, star] of stars) {
+    if (star.pending === 0) writing.delete(trackId);
+    else writing.set(trackId, star);
+  }
+  favorites.update((state) => {
+    let ids: Set<number> | undefined;
+    for (const [trackId, star] of stars) {
+      if (state.ids.has(trackId) === star.shown) continue;
+      ids ??= new Set(state.ids);
+      if (star.shown) ids.add(trackId);
+      else ids.delete(trackId);
+    }
+    return {
+      ...state,
+      ids: ids ?? state.ids,
+      edits: state.edits + 1,
+      saved: saved ? state.saved + 1 : state.saved,
+    };
+  });
+};
+
+/**
+ * Stars or unstars tracks (a selection's, say) with one write. Accepts queue
+ * track ids (strings) as well.
+ */
+export const setFavorites = (
+  trackIds: readonly (number | string)[],
+  on: boolean,
+): Promise<void> => {
+  const ids = [...new Set(trackIds.map(Number))];
+  if (ids.length === 0) return Promise.resolve();
+  const current = favorites.get().ids;
+  showStars(
+    new Map(
+      ids.map((id) => [id, starWriteStarted(writing.get(id) ?? favoriteStar(current.has(id)), on)]),
+    ),
+    false,
+  );
+  const settle = (saved: boolean | null) => () => {
+    const settled = new Map<number, FavoriteStar>();
+    for (const id of ids) {
+      const star = writing.get(id);
+      if (star !== undefined) settled.set(id, starWriteSettled(star, saved));
+    }
+    showStars(settled, saved !== null);
+  };
+  return appRuntime
+    .runPromise(LibraryStore.use((store) => store.setFavorites(ids, on)))
+    .then(settle(on), settle(null));
 };
 
 /** Stars or unstars a track. Accepts a queue track id (a string) as well. */
-export const setFavorite = (trackId: number | string, on: boolean): Promise<void> => {
-  const id = Number(trackId);
-  const star = writing.get(id) ?? favoriteStar(favorites.get().ids.has(id));
-  showStar(id, starWriteStarted(star, on), false);
-  const settle = (saved: boolean | null) => () => {
-    const current = writing.get(id);
-    if (current !== undefined) showStar(id, starWriteSettled(current, saved), saved !== null);
-  };
-  return appRuntime
-    .runPromise(LibraryStore.use((store) => store.setFavorite(id, on)))
-    .then(settle(on), settle(null));
-};
+export const setFavorite = (trackId: number | string, on: boolean): Promise<void> =>
+  setFavorites([trackId], on);
 
 /**
  * Unstars tracks that left the library (their files were deleted; the store

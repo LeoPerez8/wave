@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CELL } from "@/catalog/grid";
 import { playbackState } from "@/playback/Player";
+import { useIsSelecting } from "@/selection/selection";
 
 /**
  * The floating chrome: a glass tab bar and a glass mini player hovering over
@@ -16,6 +17,8 @@ export const chrome = {
   tabBar: CELL * 8,
   /** Height of the mini player pill. */
   miniPlayer: CELL * 7,
+  /** Height of the selection bar, which stands in for the tab bar and mini player while selecting. */
+  selectionBar: CELL * 8,
   /** Gap between the pills, and between the lowest pill and the system inset. */
   gap: CELL,
 } as const;
@@ -53,6 +56,8 @@ export const useTabBarTop = (): number => {
 export const useFloatingChromeHeight = (): number => {
   const pathname = usePathname();
   const playing = useHasNowPlaying();
+  const selecting = useIsSelecting();
+  if (selecting) return chrome.gap + chrome.selectionBar;
   // Tab screens, and screens opened inside the shortcut tab, are drawn under the floating tab bar.
   const tabBar = tabOfPath(pathname) !== null;
   const miniPlayer = playing && (tabBar || inLibraryStack(pathname));
@@ -63,7 +68,10 @@ export const useFloatingChromeHeight = (): number => {
 
 /** Bottom padding that lets a list's last row scroll clear of the floating chrome. */
 export const useChromeInset = (): number => {
+  const insets = useSafeAreaInsets();
   const tabBarTop = useTabBarTop();
   const playing = useHasNowPlaying();
+  const selecting = useIsSelecting();
+  if (selecting) return insets.bottom + chrome.gap + chrome.selectionBar + CELL * 3;
   return tabBarTop + (playing ? chrome.miniPlayer + chrome.gap : 0) + CELL * 3;
 };
