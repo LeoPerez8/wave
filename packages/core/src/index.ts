@@ -234,10 +234,12 @@ export {
   selectedInOrder,
   selectionOf,
   toggleSelected,
+  withSelectedKept,
 } from "./selection.ts";
 export type { Selection } from "./selection.ts";
 export { groupSongs } from "./groupSongs.ts";
 export {
+  confirmsFirst,
   isDestructiveAction,
   ITEM_ACTION_LABELS,
   itemActions,

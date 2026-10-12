@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  confirmsFirst,
   isDestructiveAction,
   ITEM_ACTION_LABELS,
   itemActions,
@@ -54,6 +55,13 @@ describe("itemActions", () => {
       ["delete"],
     );
     assert.ok(!names(itemActions({ kind: "album", items: [{}], here: "/" })).includes("delete"));
+  });
+
+  test("Delete asks first, so the selection only ends once it's confirmed", () => {
+    assert.deepEqual(
+      Object.keys(ITEM_ACTION_LABELS).filter((action) => confirmsFirst(action as ItemAction)),
+      ["delete"],
+    );
   });
 
   test("a starred song offers Remove from Favorites instead", () => {
@@ -122,6 +130,37 @@ describe("itemActions", () => {
     );
     assert.ok(!entries.includes("goToAlbum"));
     assert.ok(entries.includes("goToArtist"));
+  });
+
+  test("an album page's selection bar: Go to Artist when the songs share one, never Go to Album", () => {
+    for (const here of ["/library/album/4", "/shortcut/album/4"]) {
+      const shared = names(
+        itemActions(
+          tracks([song({ albumId: 4, artistId: 9 }), song({ albumId: 4, artistId: 9 })], {
+            surface: "selection",
+            here,
+          }),
+        ),
+      );
+      assert.deepEqual(shared, [
+        "playNext",
+        "addToQueue",
+        "addToPlaylist",
+        "favorite",
+        "goToArtist",
+        "delete",
+      ]);
+      const mixed = names(
+        itemActions(
+          tracks([song({ albumId: 4, artistId: 9 }), song({ albumId: 4, artistId: 2 })], {
+            surface: "selection",
+            here,
+          }),
+        ),
+      );
+      assert.ok(!mixed.includes("goToAlbum"));
+      assert.ok(!mixed.includes("goToArtist"));
+    }
   });
 
   test("Favorite stars the selection unless every song in it is starred already", () => {

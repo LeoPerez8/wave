@@ -1,10 +1,11 @@
-import { isSelected, type Selection } from "@wave/core";
+import { isSelected, withSelectedKept, type Selection } from "@wave/core";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { addScreenBackHandler } from "@/overlay/back";
 import type { ActionItems } from "@/playback/itemActions";
 
 import {
+  currentSelection,
   endSelectionOf,
   startSelection,
   toggleInSelection,
@@ -29,15 +30,21 @@ export interface ListSelection<T> {
  * Makes a list selectable: give it the items in the order it shows them, how
  * to key them (stable across sorts), and what the actions act on. Android
  * Back leaves selection mode, and so does the list going away.
+ *
+ * A list whose items come and go while selecting (Search, as the query
+ * changes) gives `lookup`: checked items that leave it stay checked, and the
+ * actions take them after the shown ones, in the order they were checked.
  */
 export function useListSelection<T>({
   items,
   keyOf,
   target,
+  lookup,
 }: {
   items: readonly T[];
   keyOf: (item: T) => string;
   target: (selected: readonly T[]) => ActionItems;
+  lookup?: ((key: string) => T | undefined) | undefined;
 }): ListSelection<T> {
   // A stable identity for this list, which no other list can share.
   const [owner] = useState(() => ({}));
@@ -45,8 +52,15 @@ export function useListSelection<T>({
   const selecting = selection !== null;
 
   const source = useMemo<SelectionSource<T>>(
-    () => ({ items: () => items, keyOf, target }),
-    [items, keyOf, target],
+    () => ({
+      items:
+        lookup === undefined
+          ? () => items
+          : () => withSelectedKept(items, currentSelection(), keyOf, lookup),
+      keyOf,
+      target,
+    }),
+    [items, keyOf, target, lookup],
   );
 
   useEffect(() => () => endSelectionOf(owner), [owner]);

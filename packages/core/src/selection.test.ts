@@ -11,6 +11,7 @@ import {
   selectedInOrder,
   selectionOf,
   toggleSelected,
+  withSelectedKept,
   type Selection,
 } from "./index.ts";
 
@@ -109,5 +110,43 @@ describe("selection", () => {
       selectedInOrder(selectionOf(["a", "gone"]), ["a", "b"], (key) => key),
       ["a"],
     );
+  });
+});
+
+type Song = { readonly id: string };
+const song = (id: string): Song => ({ id });
+const byId = (item: Song) => item.id;
+
+describe("checked items that left the list (a search query changed)", () => {
+  const known = new Map(["a", "b", "c", "d", "e"].map((id) => [id, song(id)]));
+  const lookup = (id: string) => known.get(id);
+
+  test("stay checked: they follow the shown items, in the order they were checked", () => {
+    // Checked d, then a, then b, then c while other queries showed them.
+    const checked = ["d", "a", "b", "c"].reduce(toggleSelected<string>, NO_SELECTION);
+    const shown = [song("c"), song("e"), song("a")];
+
+    const list = withSelectedKept(shown, checked, byId, lookup);
+
+    assert.deepEqual(list.map(byId), ["c", "e", "a", "d", "b"]);
+    assert.deepEqual(selectedInOrder(checked, list, byId).map(byId), ["c", "a", "d", "b"]);
+    assert.equal(selectedCount(checked), 4);
+  });
+
+  test("Select All covers the shown items without dropping the kept ones", () => {
+    const checked = selectionOf(["d"]);
+    const shown = [song("a"), song("b")];
+    assert.equal(allSelected(checked, withSelectedKept(shown, checked, byId, lookup), byId), false);
+
+    const list = withSelectedKept(shown, checked, byId, lookup);
+    const all = selectAll(list, byId);
+    assert.equal(allSelected(all, withSelectedKept(shown, all, byId, lookup), byId), true);
+    assert.equal(selectedCount(all), 3);
+  });
+
+  test("a checked key the lookup no longer knows is left out", () => {
+    const checked = selectionOf(["gone", "a"]);
+    const list = withSelectedKept([song("b")], checked, byId, lookup);
+    assert.deepEqual(list.map(byId), ["b", "a"]);
   });
 });

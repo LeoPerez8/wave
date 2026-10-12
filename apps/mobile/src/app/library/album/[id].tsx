@@ -20,12 +20,25 @@ import type { AlbumDetail, AlbumTrackRow } from "@/library/LibraryStore";
 import { openArtist, parseId } from "@/library/routes";
 import { songCount, toTrackSummary } from "@/library/TrackList";
 import { useListScrollable } from "@/motion/heldTouch";
+import type { ActionItems } from "@/playback/itemActions";
+import { useListSelection } from "@/selection/useListSelection";
 
 type Item =
   | { readonly type: "disc"; readonly disc: number }
   | { readonly type: "track"; readonly track: AlbumTrackRow; readonly index: number };
 
 const DISC_HEAD = CELL * 6;
+
+const trackKey = (track: AlbumTrackRow): string => String(track.id);
+
+/** In selection mode the bar acts on the checked tracks, in disc and track order. */
+const tracksOf = (tracks: readonly AlbumTrackRow[]): ActionItems => ({
+  kind: "track",
+  items: tracks.map((song) => ({ song })),
+});
+
+/** While selecting, a long-press does nothing (rather than toggling the row on release). */
+const ignoreLongPress = (): void => undefined;
 
 /** Tracks in album order, with a "Disc n" head before each disc when there is more than one. */
 const albumItems = (tracks: readonly AlbumTrackRow[]): Item[] => {
@@ -101,7 +114,16 @@ function AlbumTracks({ detail }: { detail: AlbumDetail }) {
   const bottomInset = useChromeInset();
   const currentId = useCurrentTrackId();
   const favorites = useFavoriteIds();
-  const rowState = useMemo(() => ({ currentId, favorites }), [currentId, favorites]);
+  // Selection keys the tracks themselves (every disc), not the disc heads.
+  const { selection, isChecked, start, toggle } = useListSelection({
+    items: detail.tracks,
+    keyOf: trackKey,
+    target: tracksOf,
+  });
+  const rowState = useMemo(
+    () => ({ currentId, favorites, selection }),
+    [currentId, favorites, selection],
+  );
   const items = useMemo(() => albumItems(detail.tracks), [detail.tracks]);
   const context = useMemo(
     () => ({ kind: "album", id: String(detail.album.id) }) as const,
@@ -123,11 +145,20 @@ function AlbumTracks({ detail }: { detail: AlbumDetail }) {
           state={String(item.track.id) === currentId ? "playing" : undefined}
           favorite={favorites.has(item.track.id)}
           leading="number"
-          onPress={() => playSongs(detail.tracks, item.index, context)}
-          onLongPress={() => openTrackActions(item.track)}
+          checked={selection === null ? undefined : isChecked(item.track)}
+          onPress={
+            selection === null
+              ? () => playSongs(detail.tracks, item.index, context)
+              : () => toggle(item.track)
+          }
+          onLongPress={
+            selection === null
+              ? () => openTrackActions(item.track, { onSelect: () => start(item.track) })
+              : ignoreLongPress
+          }
         />
       ),
-    [context, currentId, detail.tracks, favorites],
+    [context, currentId, detail.tracks, favorites, selection, isChecked, start, toggle],
   );
 
   return (

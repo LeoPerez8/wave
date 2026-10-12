@@ -1,4 +1,5 @@
 import {
+  confirmsFirst,
   groupSongs,
   isDestructiveAction,
   isDetailPath,
@@ -337,8 +338,15 @@ export function useItemActions(
         );
       case "select":
         return make(run(() => onSelect?.()));
-      case "delete":
-        return make(run(() => void confirmDeleteSongs(tracks.map(({ song }) => song))));
+      case "delete": {
+        const songs = tracks.map(({ song }) => song);
+        // It asks first: selection mode ends only once confirmed, so Cancel keeps it.
+        return make(
+          surface === "selection" && confirmsFirst(entry.action)
+            ? () => void confirmDeleteSongs(songs, { onConfirm: finish })
+            : run(() => void confirmDeleteSongs(songs)),
+        );
+      }
     }
   });
 }
