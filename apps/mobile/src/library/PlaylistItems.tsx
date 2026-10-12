@@ -25,7 +25,7 @@ import { TrackRow } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { playSongs } from "@/playback/actions";
 import { useCurrentTrackId } from "@/playback/hooks";
-import { openTrackActions } from "@/playback/TrackActionsSheet";
+import { openTrackActions } from "@/playback/ActionsMenu";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { useFavoriteIds } from "./favorites";

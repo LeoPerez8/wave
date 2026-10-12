@@ -11,11 +11,7 @@ import { NameRow } from "@/catalog/NameRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { EmptyState } from "@/components/EmptyState";
 import { ScanProgressBanner } from "@/components/ScanProgressBanner";
-import {
-  openArtistActions,
-  openFolderActions,
-  openGenreActions,
-} from "@/playback/TrackActionsSheet";
+import { openArtistActions, openFolderActions, openGenreActions } from "@/playback/ActionsMenu";
 
 import { albumPairs, albumRowHeight, AlbumPair, useAlbumTileSize } from "./AlbumGrid";
 import { useAlbums, useArtists, useFolders, useGenres, useScanState } from "./hooks";

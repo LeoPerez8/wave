@@ -22,6 +22,41 @@ const collection = <D>(
     ),
 });
 
+/** The sections made of items (albums, artists…), each item's songs as its screen lists them. */
+const collections = {
+  albums: collection(
+    (store) => store.listAlbums,
+    (store, id) => store.getAlbum(id),
+    (album) => album.tracks,
+  ),
+  artists: collection(
+    (store) => store.listArtists,
+    (store, id) => store.getArtist(id),
+    (artist) => artist.songs,
+  ),
+  genres: collection(
+    (store) => store.listGenres,
+    (store, id) => store.getGenre(id),
+    (genre) => genre.songs,
+  ),
+  folders: collection(
+    (store) => store.listFolders,
+    (store, id) => store.getFolder(id),
+    (folder) => folder.songs,
+  ),
+  playlists: collection(
+    (store) => store.listPlaylists,
+    (store, id) => store.getPlaylist(id),
+    (playlist) => playlist.items,
+  ),
+};
+
+/** One album's, artist's, genre's, folder's or playlist's songs, as its own screen lists them. */
+export const itemSongs = (
+  section: keyof typeof collections,
+  id: number,
+): Promise<readonly SongRow[]> => collections[section].songs(id);
+
 /**
  * Every song a Library entry holds, in the order its section lists them: what
  * its long-press menu queues or adds to a playlist.
@@ -30,29 +65,5 @@ export const librarySectionSongs = (section: LibrarySectionSlug): Promise<readon
   sectionSongs(section, {
     songs: () => run((store) => store.listSongs),
     favorites: () => run((store) => store.listFavorites),
-    albums: collection(
-      (store) => store.listAlbums,
-      (store, id) => store.getAlbum(id),
-      (album) => album.tracks,
-    ),
-    artists: collection(
-      (store) => store.listArtists,
-      (store, id) => store.getArtist(id),
-      (artist) => artist.songs,
-    ),
-    genres: collection(
-      (store) => store.listGenres,
-      (store, id) => store.getGenre(id),
-      (genre) => genre.songs,
-    ),
-    folders: collection(
-      (store) => store.listFolders,
-      (store, id) => store.getFolder(id),
-      (folder) => folder.songs,
-    ),
-    playlists: collection(
-      (store) => store.listPlaylists,
-      (store, id) => store.getPlaylist(id),
-      (playlist) => playlist.items,
-    ),
+    ...collections,
   });

@@ -2,7 +2,7 @@ import { useWindowDimensions, View } from "react-native";
 
 import { type AlbumSummary, AlbumTile } from "@/catalog/AlbumTile";
 import { CELL, grid } from "@/catalog/grid";
-import { openAlbumActions } from "@/playback/TrackActionsSheet";
+import { openAlbumActions } from "@/playback/ActionsMenu";
 
 import type { AlbumRow } from "./LibraryStore";
 import { openAlbum } from "./routes";

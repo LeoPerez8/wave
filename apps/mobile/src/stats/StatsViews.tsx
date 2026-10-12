@@ -16,11 +16,7 @@ import { toTrackSummary } from "@/library/TrackList";
 import { Press } from "@/motion/Press";
 import { playSongs } from "@/playback/actions";
 import { useCurrentTrackId } from "@/playback/hooks";
-import {
-  openAlbumActions,
-  openArtistActions,
-  openTrackActions,
-} from "@/playback/TrackActionsSheet";
+import { openAlbumActions, openArtistActions, openTrackActions } from "@/playback/ActionsMenu";
 import { ArtworkRow } from "@/search/ArtworkRow";
 
 import type { Ranked } from "./Stats";

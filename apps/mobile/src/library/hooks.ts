@@ -147,6 +147,19 @@ export const useLibraryCounts = (): LibraryCounts | undefined =>
     usePlaylistsVersion() + useFavoritesSaved(),
   );
 
+const countSectionSongs = LibraryStore.use((store) => store.countSectionSongs);
+
+/**
+ * How many songs each Library entry's menu acts on, or undefined before the
+ * first count arrives. Re-counted as `useLibraryCounts` is.
+ */
+export const useSectionSongCounts = (): LibraryCounts | undefined =>
+  useLibraryQuery<LibraryCounts | undefined>(
+    countSectionSongs,
+    undefined,
+    usePlaylistsVersion() + useFavoritesSaved(),
+  );
+
 const listRoots = Effect.gen(function* () {
   const store = yield* LibraryStore;
   return yield* store.listRoots;

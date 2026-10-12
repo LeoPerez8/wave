@@ -152,7 +152,7 @@ export type {
   AutoTrackList,
   AutoTrackListKind,
 } from "./auto.ts";
-export { sectionSongs } from "./librarySections.ts";
+export { LIBRARY_SECTION_SLUGS, sectionSongs } from "./librarySections.ts";
 export type {
   LibrarySectionSlug,
   LibrarySectionSource,

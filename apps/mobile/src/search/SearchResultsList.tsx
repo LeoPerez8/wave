@@ -20,7 +20,7 @@ import {
   openGenreActions,
   openPlaylistActions,
   openTrackActions,
-} from "@/playback/TrackActionsSheet";
+} from "@/playback/ActionsMenu";
 
 import { ArtworkRow } from "./ArtworkRow";
 import type { ResultRow } from "./rows";

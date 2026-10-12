@@ -12,7 +12,7 @@ import { useChromeInset } from "@/chrome/chrome";
 import { Press } from "@/motion/Press";
 import { playSongs } from "@/playback/actions";
 import { useCurrentTrackId } from "@/playback/hooks";
-import { openTrackActions } from "@/playback/TrackActionsSheet";
+import { openTrackActions } from "@/playback/ActionsMenu";
 import { DetailFrame } from "@/library/DetailFrame";
 import { useFavoriteIds } from "@/library/favorites";
 import { useAlbum } from "@/library/hooks";
