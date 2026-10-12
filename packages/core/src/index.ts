@@ -144,5 +144,6 @@ export type {
 } from "./auto.ts";
 export { autoPageItems, autoPlaylistItem } from "./auto.ts";
 export type { AutoPlaylist } from "./auto.ts";
+export type { AutoHomeList } from "./auto.ts";
 export { autoArtistItem } from "./auto.ts";
 export type { AutoArtist } from "./auto.ts";
