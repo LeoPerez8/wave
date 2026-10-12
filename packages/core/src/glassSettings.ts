@@ -1,3 +1,4 @@
+import { readStoredRecord } from "./storedJson.ts";
 import { snapSliderValue, type SliderRange } from "./slider.ts";
 
 /** How the glass surfaces (tab bar, mini player, overlay cards) are tuned in Settings. */
@@ -31,6 +32,13 @@ export const DEFAULT_GLASS_SETTINGS: GlassSettings = {
   rim: GLASS_SETTINGS.rim.default,
 };
 
+/** Whether `glass` is the glass as shipped (nothing to reset). */
+export const isDefaultGlassSettings = (glass: GlassSettings): boolean =>
+  glass.blur === DEFAULT_GLASS_SETTINGS.blur &&
+  glass.refraction === DEFAULT_GLASS_SETTINGS.refraction &&
+  glass.tint === DEFAULT_GLASS_SETTINGS.tint &&
+  glass.rim === DEFAULT_GLASS_SETTINGS.rim;
+
 const readNumber = (value: unknown, range: SliderRange & { default: number }): number =>
   typeof value === "number" && Number.isFinite(value)
     ? snapSliderValue(value, range)
@@ -38,16 +46,7 @@ const readNumber = (value: unknown, range: SliderRange & { default: number }): n
 
 /** The glass settings from their stored JSON; anything missing or unreadable is its default. */
 export const readGlassSettings = (stored: string | null): GlassSettings => {
-  let raw: unknown = null;
-  try {
-    raw = stored === null ? null : JSON.parse(stored);
-  } catch {
-    raw = null;
-  }
-  const record: Record<string, unknown> =
-    typeof raw === "object" && raw !== null && !Array.isArray(raw)
-      ? (raw as Record<string, unknown>)
-      : {};
+  const record = readStoredRecord(stored);
   return {
     blur: readNumber(record.blur, GLASS_SETTINGS.blur),
     refraction: readNumber(record.refraction, GLASS_SETTINGS.refraction),

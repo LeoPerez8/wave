@@ -3,9 +3,9 @@ import { useState } from "react";
 import { ScrollView, View } from "react-native";
 
 import { grid } from "@/catalog/grid";
+import { TitledSection } from "@/catalog/TitledSection";
 import { useChromeInset } from "@/chrome/chrome";
 import { ScreenHeader } from "@/components/ScreenHeader";
-import { HomeSection } from "@/home/HomeSections";
 import { openStatsSeeAll } from "@/library/routes";
 import { useListScrollable } from "@/motion/heldTouch";
 import { useTopAlbums, useTopArtists, useTopSongs } from "@/stats/hooks";
@@ -37,28 +37,28 @@ export default function StatsScreen() {
         <PeriodTabs period={period} onChange={setPeriod} />
         {topSongs !== undefined && topSongs.length === 0 && <NothingPlayed period={period} />}
         {topSongs !== undefined && topSongs.length > 0 && (
-          <HomeSection
+          <TitledSection
             title="Top songs"
             action={{ label: "See all", onPress: () => openStatsSeeAll("songs", period) }}
           >
             <RankedSongs ranking={topSongs} context={statsSongsContext(period)} />
-          </HomeSection>
+          </TitledSection>
         )}
         {topAlbums !== undefined && topAlbums.length > 0 && (
-          <HomeSection
+          <TitledSection
             title="Top albums"
             action={{ label: "See all", onPress: () => openStatsSeeAll("albums", period) }}
           >
             <RankedAlbums ranking={topAlbums} />
-          </HomeSection>
+          </TitledSection>
         )}
         {topArtists !== undefined && topArtists.length > 0 && (
-          <HomeSection
+          <TitledSection
             title="Top artists"
             action={{ label: "See all", onPress: () => openStatsSeeAll("artists", period) }}
           >
             <RankedArtists ranking={topArtists} />
-          </HomeSection>
+          </TitledSection>
         )}
       </ScrollView>
     </View>

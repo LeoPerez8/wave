@@ -1,5 +1,5 @@
 import { IconArrowsSort } from "@tabler/icons-react-native";
-import { songSortLabel, songSortsFor, type SongSort } from "@wave/core";
+import { sameSongSort, songSortLabel, songSortsFor, type SongListKind } from "@wave/core";
 import { ScrollView, Text, View } from "react-native";
 
 import { EntryRow } from "@/catalog/EntryRow";
@@ -9,10 +9,7 @@ import { IconButton } from "@/components/IconButton";
 import { pressedRect } from "@/motion/pressedRect";
 import { openOverlay } from "@/overlay/overlay";
 
-import { setSongSort, useSongSort, type SongListKind } from "./songSort";
-
-const same = (a: SongSort, b: SongSort): boolean =>
-  a.key === b.key && a.descending === b.descending;
+import { setSongSort, useSongSort } from "./songSort";
 
 /** The sorts on offer, the current one checked; choosing one closes the card. */
 function SortMenu({ kind, close }: { kind: SongListKind; close: () => void }) {
@@ -34,7 +31,7 @@ function SortMenu({ kind, close }: { kind: SongListKind; close: () => void }) {
           <EntryRow
             key={songSortLabel(sort)}
             label={songSortLabel(sort)}
-            selected={same(sort, current)}
+            selected={sameSongSort(sort, current)}
             divider={index < sorts.length - 1}
             onPress={() => {
               setSongSort(kind, sort);
@@ -55,7 +52,7 @@ export function SongSortButton({ kind }: { kind: SongListKind }) {
   const sort = useSongSort(kind);
   return (
     // Its glyph sits on the right margin, like Back on the left.
-    <View style={{ marginRight: -12 }}>
+    <View className="-mr-3">
       <IconButton
         icon={IconArrowsSort}
         label={`Sort, ${songSortLabel(sort)}`}

@@ -1,5 +1,4 @@
 import { LegendList } from "@legendapp/list/react-native";
-import { sortSongs } from "@wave/core";
 import { useLocalSearchParams } from "expo-router";
 import { useCallback, useMemo } from "react";
 import { View } from "react-native";
@@ -18,7 +17,7 @@ import { useArtist } from "@/library/hooks";
 import type { AlbumRow, ArtistDetail, SongRow } from "@/library/LibraryStore";
 import { parseId } from "@/library/routes";
 import { SongSortButton } from "@/library/SongSortButton";
-import { useSongSort } from "@/library/songSort";
+import { useSortedSongs } from "@/library/songSort";
 import { ListIntro, songCount, toTrackSummary } from "@/library/TrackList";
 import { useListScrollable } from "@/motion/heldTouch";
 import { ArtistStatsBlock } from "@/stats/ArtistStatsBlock";
@@ -64,9 +63,8 @@ function ArtistContent({ detail }: { detail: ArtistDetail }) {
   const favorites = useFavoriteIds();
   const tile = useAlbumTileSize(grid.margin);
   const rowState = useMemo(() => ({ currentId, favorites, tile }), [currentId, favorites, tile]);
-  const sort = useSongSort("artist");
   // In the sort chosen for artists; Play, Shuffle and rows all play this displayed order.
-  const songs = useMemo(() => sortSongs(detail.songs, sort), [detail.songs, sort]);
+  const { songs } = useSortedSongs("artist", detail.songs);
   const items = useMemo(() => artistItems(detail, songs), [detail, songs]);
   const context = useMemo(
     () => ({ kind: "artist", id: String(detail.artist.id) }) as const,

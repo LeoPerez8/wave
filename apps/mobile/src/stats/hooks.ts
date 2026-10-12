@@ -10,86 +10,71 @@ import { playHistoryVersion } from "@/playback/PlayHistory";
 import { Stats, type ArtistStats, type Ranked } from "./Stats";
 
 /**
- * The top `limit` of a ranking for `period`, or undefined while it first
- * loads. Re-read when the screen comes back into focus (the window ends now),
- * when the period changes and when a play starts or ends. `read` must be stable.
+ * What `read` gives from Stats, or undefined while it first loads. Re-read
+ * when the screen comes back into focus (windows end now), when `read`
+ * changes and when a play starts or ends. `read` must be stable.
  */
-const useRanking = <A>(
-  period: StatsPeriod,
-  limit: number,
-  read: (
-    stats: Stats["Service"],
-    period: StatsPeriod,
-    limit: number,
-  ) => Effect.Effect<readonly Ranked<A>[], LibraryStoreError>,
-): readonly Ranked<A>[] | undefined => {
+const useStatsRead = <A>(
+  read: (stats: Stats["Service"]) => Effect.Effect<A, LibraryStoreError>,
+): A | undefined => {
   const plays = useSyncExternalStore(playHistoryVersion.subscribe, playHistoryVersion.get);
-  const [ranking, setRanking] = useState<readonly Ranked<A>[] | undefined>(undefined);
+  const [value, setValue] = useState<A | undefined>(undefined);
 
   useFocusEffect(
     useCallback(() => {
       let current = true;
       appRuntime
-        .runPromise(Stats.use((stats) => read(stats, period, limit)))
+        .runPromise(Stats.use(read))
         .then((result) => {
-          if (current) setRanking(result);
+          if (current) setValue(result);
         })
         .catch(() => {
-          // Keep showing the last good ranking.
+          // Keep showing the last good value.
         });
       return () => {
         current = false;
       };
-      // `plays` isn't read in here: a change re-reads the ranking after a play.
+      // `plays` isn't read in here: a change re-reads after a play.
       // oxlint-disable-next-line react-hooks/exhaustive-deps, react/memo-dependencies
-    }, [period, limit, read, plays]),
+    }, [read, plays]),
   );
 
-  return ranking;
+  return value;
 };
 
-const readTopSongs = (stats: Stats["Service"], period: StatsPeriod, limit: number) =>
-  stats.topSongs(period, limit);
+type ReadRanking<A> = (
+  stats: Stats["Service"],
+  period: StatsPeriod,
+  limit: number,
+) => Effect.Effect<readonly Ranked<A>[], LibraryStoreError>;
 
-const readTopAlbums = (stats: Stats["Service"], period: StatsPeriod, limit: number) =>
+/** The top `limit` of a ranking for `period`, or undefined while it first loads. `read` must be stable. */
+const useRanking = <A>(
+  period: StatsPeriod,
+  limit: number,
+  read: ReadRanking<A>,
+): readonly Ranked<A>[] | undefined =>
+  useStatsRead(useCallback((stats) => read(stats, period, limit), [read, period, limit]));
+
+const readTopSongs: ReadRanking<SongRow> = (stats, period, limit) => stats.topSongs(period, limit);
+
+const readTopAlbums: ReadRanking<AlbumRow> = (stats, period, limit) =>
   stats.topAlbums(period, limit);
 
-const readTopArtists = (stats: Stats["Service"], period: StatsPeriod, limit: number) =>
+const readTopArtists: ReadRanking<ArtistRow> = (stats, period, limit) =>
   stats.topArtists(period, limit);
 
 /**
  * An artist page's stats block for `artistId`, whose songs are `songIds`, or
- * undefined while it first loads. Re-read when the page comes back into
- * focus, when the artist's songs change and when a play starts or ends.
+ * undefined while it first loads. Also re-read when the artist's songs change.
  */
 export const useArtistStats = (
   artistId: number,
   songIds: readonly number[],
-): ArtistStats | undefined => {
-  const plays = useSyncExternalStore(playHistoryVersion.subscribe, playHistoryVersion.get);
-  const [stats, setStats] = useState<ArtistStats | undefined>(undefined);
-
-  useFocusEffect(
-    useCallback(() => {
-      let current = true;
-      appRuntime
-        .runPromise(Stats.use((service) => service.artist(artistId, songIds)))
-        .then((result) => {
-          if (current) setStats(result);
-        })
-        .catch(() => {
-          // Keep showing the last good stats.
-        });
-      return () => {
-        current = false;
-      };
-      // `plays` isn't read in here: a change re-reads the stats after a play.
-      // oxlint-disable-next-line react-hooks/exhaustive-deps, react/memo-dependencies
-    }, [artistId, songIds, plays]),
+): ArtistStats | undefined =>
+  useStatsRead(
+    useCallback((stats: Stats["Service"]) => stats.artist(artistId, songIds), [artistId, songIds]),
   );
-
-  return stats;
-};
 
 /** Top songs: the `limit` songs played most in `period` (10 on Stats, 100 in See all). */
 export const useTopSongs = (

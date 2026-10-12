@@ -1,3 +1,4 @@
+import { isDetailPath } from "@wave/core";
 import * as Haptics from "expo-haptics";
 import { router, usePathname } from "expo-router";
 import { ScrollView, Text, View } from "react-native";
@@ -24,7 +25,7 @@ import {
   renamePlaylistFlow,
 } from "@/library/PlaylistSheets";
 import { removePlaylistItem } from "@/library/playlists";
-import { albumHref, artistHref, openAlbum, openArtist, playlistHref } from "@/library/routes";
+import { openAlbum, openArtist } from "@/library/routes";
 import { itemSongs, librarySectionSongs } from "@/library/sectionSongs";
 import { pressedRect } from "@/motion/pressedRect";
 import { showError } from "@/overlay/alert";
@@ -252,10 +253,10 @@ function ActionsMenu({ target, close }: { target: ActionTarget; close: () => voi
             onPress: go(() => void removePlaylistItem(place.playlistId, place.itemId)),
           },
         ]),
-    ...(albumId === undefined || pathname === albumHref(albumId)
+    ...(albumId === undefined || isDetailPath(pathname, "album", albumId)
       ? []
       : [{ label: "Go to Album", onPress: go(() => openAlbum(albumId)) }]),
-    ...(artistId === undefined || pathname === artistHref(artistId)
+    ...(artistId === undefined || isDetailPath(pathname, "artist", artistId)
       ? []
       : [{ label: "Go to Artist", onPress: go(() => openArtist(artistId)) }]),
     ...(target.kind === "playlist"
@@ -269,7 +270,7 @@ function ActionsMenu({ target, close }: { target: ActionTarget; close: () => voi
             onPress: go(() =>
               confirmDeletePlaylist(target.playlist, () => {
                 // Leave the playlist's screen once it's gone.
-                if (pathname === playlistHref(target.playlist.id)) router.back();
+                if (isDetailPath(pathname, "playlist", target.playlist.id)) router.back();
               }),
             ),
           },

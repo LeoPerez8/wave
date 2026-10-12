@@ -5,9 +5,10 @@ import { Pressable, Text, View } from "react-native";
 import { EntryRow } from "@/catalog/EntryRow";
 import { CELL } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
+import { TitledSection } from "@/catalog/TitledSection";
 import { EmptyState } from "@/components/EmptyState";
 import { LargeTitleScreen } from "@/components/LargeTitleScreen";
-import { AlbumShelf, ArtistRows, HomeSection, SongRows } from "@/home/HomeSections";
+import { AlbumShelf, ArtistShelf, SongRows } from "@/home/HomeSections";
 import { ListeningOverview } from "@/home/ListeningOverview";
 import type { MostPlayedRow } from "@/library/db/playHistory";
 import { useHome } from "@/library/hooks";
@@ -53,9 +54,9 @@ export default function HomeScreen() {
       )}
       {home !== undefined && !empty && (
         <>
-          <HomeSection title="Recently added" first>
+          <TitledSection title="Recently added" first>
             <AlbumShelf albums={home.recentlyAdded} />
-          </HomeSection>
+          </TitledSection>
           {nothingPlayed && (
             <Text
               className="font-sans text-subheadline text-secondary"
@@ -65,53 +66,57 @@ export default function HomeScreen() {
             </Text>
           )}
           {home.recentlyPlayed.length > 0 && (
-            <HomeSection title="Recently played">
+            <TitledSection title="Recently played">
               <AlbumShelf albums={home.recentlyPlayed} />
-            </HomeSection>
+            </TitledSection>
           )}
           {home.mostPlayed.length > 0 && (
-            <HomeSection title="Most played">
+            <TitledSection title="Most played">
               <SongRows songs={home.mostPlayed} context={MOST_PLAYED_CONTEXT} artistLine={plays} />
-            </HomeSection>
+            </TitledSection>
           )}
           {mostPlayedAlbums.length > 0 && (
-            <HomeSection
+            <TitledSection
               title="Most played albums"
               action={{ label: "See all", onPress: () => openStatsSeeAll("albums", "all") }}
             >
               <AlbumShelf albums={mostPlayedAlbums} detail={countedPlays} />
-            </HomeSection>
+            </TitledSection>
           )}
           {mostPlayedArtists.length > 0 && (
-            <HomeSection
+            <TitledSection
               title="Most played artists"
               action={{ label: "See all", onPress: () => openStatsSeeAll("artists", "all") }}
             >
-              <ArtistRows artists={mostPlayedArtists} detail={countedPlays} />
-            </HomeSection>
+              <ArtistShelf artists={mostPlayedArtists} detail={countedPlays} />
+            </TitledSection>
           )}
           {home.favorites.length > 0 && (
-            <HomeSection
+            <TitledSection
               title="Favorites"
               action={{ label: "See all", onPress: () => router.push("/library/favorites") }}
             >
               <SongRows songs={home.favorites} context={FAVORITES_CONTEXT} />
-            </HomeSection>
+            </TitledSection>
           )}
           <View style={{ marginTop: CELL * 5 }}>
             <Hairline />
             <EntryRow label="Stats" onPress={openStats} />
           </View>
+          {/* Temporary entry to the glass spike (#4), kept until its numbers confirm the technique. */}
+          {__DEV__ && (
+            <Link href="/dev/glass" asChild>
+              <Pressable className="mt-12 self-center py-2">
+                <Text className="font-sans text-footnote text-tertiary">
+                  Developer: glass spike
+                </Text>
+              </Pressable>
+            </Link>
+          )}
           {/* Keep the overview last, below every other section. */}
           <ListeningOverview />
         </>
       )}
-      {/* Temporary entry to the glass spike (#4), kept until its numbers confirm the technique. */}
-      <Link href="/dev/glass" asChild>
-        <Pressable className="mt-12 self-center py-2">
-          <Text className="font-sans text-footnote text-tertiary">Developer: glass spike</Text>
-        </Pressable>
-      </Link>
     </LargeTitleScreen>
   );
 }

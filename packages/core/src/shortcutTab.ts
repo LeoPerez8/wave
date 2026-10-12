@@ -3,18 +3,12 @@
  * third tab in the Home/Library pill. None (null) is the default and leaves
  * the tab bar as it always was.
  */
-import type { LibrarySectionSlug } from "./librarySections.ts";
+import { LIBRARY_SECTION_SLUGS, type LibrarySectionSlug } from "./librarySections.ts";
 
 /** Settings' choices, in the order they are listed: None, then the Library's sections. */
 export const SHORTCUT_TAB_CHOICES: readonly (LibrarySectionSlug | null)[] = [
   null,
-  "playlists",
-  "artists",
-  "albums",
-  "songs",
-  "genres",
-  "folders",
-  "favorites",
+  ...LIBRARY_SECTION_SLUGS,
 ];
 
 /** The shortcut a stored value names; nothing stored, or anything unknown, is None. */

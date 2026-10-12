@@ -1,38 +1,65 @@
-import { readSongSort, writeSongSort, type SongListKind, type SongSort } from "@wave/core";
-import { Storage } from "expo-sqlite/kv-store";
-import { useSyncExternalStore } from "react";
+import {
+  readSongSort,
+  sameSongSort,
+  sortSongs,
+  writeSongSort,
+  type SongListKind,
+  type SongSort,
+  type SortableSong,
+} from "@wave/core";
+import { useMemo } from "react";
 
-export type { SongListKind };
+import { persistedSetting, type PersistedSetting } from "@/lib/persistedSetting";
 
-const storageKey = (kind: SongListKind): string => `settings.songSort.${kind}`;
+const settings = new Map<SongListKind, PersistedSetting<SongSort>>();
 
-const current = new Map<SongListKind, SongSort>();
-const listeners = new Set<() => void>();
-
-/** The sort [kind] lists use, for code outside React. */
-export const currentSongSort = (kind: SongListKind): SongSort => {
-  let sort = current.get(kind);
-  if (sort === undefined) {
-    sort = readSongSort(Storage.getItemSync(storageKey(kind)), kind);
-    current.set(kind, sort);
+/** Each kind's sort, saved under its own key. */
+const setting = (kind: SongListKind): PersistedSetting<SongSort> => {
+  let found = settings.get(kind);
+  if (found === undefined) {
+    found = persistedSetting({
+      key: `settings.songSort.${kind}`,
+      read: (stored) => readSongSort(stored, kind),
+      write: writeSongSort,
+      equals: sameSongSort,
+    });
+    settings.set(kind, found);
   }
-  return sort;
+  return found;
 };
+
+/** [songs] in the sort [kind] lists use, for code outside React. */
+export const sortedForKind = <S extends SortableSong>(
+  kind: SongListKind,
+  songs: readonly S[],
+): S[] => sortSongs(songs, setting(kind).get());
 
 /** Sorts every [kind] list by [sort] from now on, across restarts. */
-export const setSongSort = (kind: SongListKind, sort: SongSort): void => {
-  const was = currentSongSort(kind);
-  if (was.key === sort.key && was.descending === sort.descending) return;
-  current.set(kind, sort);
-  Storage.setItemSync(storageKey(kind), writeSongSort(sort));
-  for (const listener of listeners) listener();
-};
-
-const subscribe = (listener: () => void): (() => void) => {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-};
+export const setSongSort = (kind: SongListKind, sort: SongSort): void => setting(kind).set(sort);
 
 /** The sort every [kind] list uses (its own order until changed); re-renders when it changes. */
-export const useSongSort = (kind: SongListKind): SongSort =>
-  useSyncExternalStore(subscribe, () => currentSongSort(kind));
+export const useSongSort = (kind: SongListKind): SongSort => setting(kind).useValue();
+
+/**
+ * A [kind] list's songs in its chosen sort, re-sorted only when the songs or
+ * the sort change; Play, Shuffle and rows all play this displayed order.
+ */
+export function useSortedSongs<S extends SortableSong>(
+  kind: SongListKind,
+  songs: readonly S[],
+): { readonly sort: SongSort; readonly songs: S[] };
+export function useSortedSongs<S extends SortableSong>(
+  kind: SongListKind,
+  songs: readonly S[] | undefined,
+): { readonly sort: SongSort; readonly songs: S[] | undefined };
+export function useSortedSongs<S extends SortableSong>(
+  kind: SongListKind,
+  songs: readonly S[] | undefined,
+) {
+  const sort = useSongSort(kind);
+  const sorted = useMemo(
+    () => (songs === undefined ? undefined : sortSongs(songs, sort)),
+    [songs, sort],
+  );
+  return { sort, songs: sorted };
+}

@@ -6,6 +6,7 @@ import {
   DEFAULT_THEME_CHOICE,
   THEME_SWATCHES,
   contrastRatio,
+  isDefaultThemeChoice,
   readThemeChoice,
   themeContrastIssues,
   themeFor,
@@ -137,5 +138,21 @@ describe("themeSwatchRows", () => {
     assert.ok(lime !== undefined && lime.colour !== "#8cc63f");
     assert.ok(contrastRatio(lime.colour, DEFAULT_THEME.light.background) >= 4.5);
     assert.equal(primary?.swatches[0]?.colour, DEFAULT_THEME.light.accent);
+  });
+
+  test("the chosen swatch's check mark is black on a pale swatch and white on a deep one", () => {
+    const rows = themeSwatchRows(DEFAULT_THEME_CHOICE, "light");
+    const swatch = (group: number, id: string) => rows[group]?.swatches.find((s) => s.id === id);
+    assert.equal(swatch(0, "paper")?.mark, "#000000");
+    assert.equal(swatch(1, "black")?.mark, "#ffffff");
+    assert.equal(swatch(1, "navy")?.mark, "#ffffff");
+  });
+});
+
+describe("isDefaultThemeChoice", () => {
+  test("only the shipped choice is the default, so Reset is off until something changes", () => {
+    assert.equal(isDefaultThemeChoice(DEFAULT_THEME_CHOICE), true);
+    assert.equal(isDefaultThemeChoice(readThemeChoice(null)), true);
+    assert.equal(isDefaultThemeChoice(choose({ secondary: "gold" })), false);
   });
 });

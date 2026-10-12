@@ -1,4 +1,3 @@
-import { sortSongs } from "@wave/core";
 import { useLocalSearchParams } from "expo-router";
 import { useMemo } from "react";
 
@@ -7,7 +6,7 @@ import { useGenre } from "@/library/hooks";
 import type { GenreDetail } from "@/library/LibraryStore";
 import { parseId } from "@/library/routes";
 import { SongSortButton } from "@/library/SongSortButton";
-import { useSongSort } from "@/library/songSort";
+import { useSortedSongs } from "@/library/songSort";
 import { ListIntro, songCount, TrackList } from "@/library/TrackList";
 
 function GenreSongs({ detail }: { detail: GenreDetail }) {
@@ -15,9 +14,7 @@ function GenreSongs({ detail }: { detail: GenreDetail }) {
     () => ({ kind: "genre", id: String(detail.genre.id) }) as const,
     [detail.genre.id],
   );
-  const sort = useSongSort("genre");
-  // Play, Shuffle and rows all play this displayed order.
-  const songs = useMemo(() => sortSongs(detail.songs, sort), [detail.songs, sort]);
+  const { sort, songs } = useSortedSongs("genre", detail.songs);
   return (
     <TrackList
       songs={songs}

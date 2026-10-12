@@ -11,6 +11,7 @@ colors:
   accent: "#006a5f"
   highlight: "#a14f09"
   destructive: "#b3261e"
+  scrim: "#121b1d"
   background-dark: "#0a1113"
   foreground-dark: "#e0ecef"
   secondary-dark: "#a5b0b3"
@@ -20,6 +21,7 @@ colors:
   accent-dark: "#59c0ad"
   highlight-dark: "#ec9d53"
   destructive-dark: "#f2867a"
+  scrim-dark: "#0a1113"
 typography:
   display:
     fontFamily: "Inter"
@@ -170,7 +172,9 @@ A cool, low-chroma tonal ramp carrying two small, saturated voices: teal and emb
 - **Rule** (`separator`): one-pixel hairlines between entries and around setting rows.
 - **Field** (`fill`): the square behind artwork that has no image, and empty cover slots.
 
-The full ramp lives in `global.css` as `tone-0` (lightest, `#eff4f6`) to `tone-11` (darkest, `#0a1113`); each semantic token is a step on it, in both themes. Light mode uses `tone-0` to `tone-10` (its ink is `tone-10`); `tone-11` is dark mode's ground only, and dark cards and fills (`tone-10`) and hairlines (`tone-9`) climb one step each from it, evenly spaced, so light mode never changes when dark mode gets darker. Core's `packages/core/src/theme.ts` holds the same values (`DEFAULT_THEME`, `TONES`) and checks WCAG AA for every pair the app draws (`themeContrastIssues`); an app test fails if `global.css` or the launch splash drift from it. `surface` is the tint laid over the glass of the floating chrome (at about 72%); `grouped` and `on-accent` are also declared there but are not yet used by this world's components.
+The full ramp lives in `global.css` as `tone-0` (lightest, `#eff4f6`) to `tone-11` (darkest, `#0a1113`); each semantic token is a step on it, in both themes. Light mode uses `tone-0` to `tone-10` (its ink is `tone-10`); `tone-11` is dark mode's ground only, and dark cards and fills (`tone-10`) and hairlines (`tone-9`) climb one step each from it, evenly spaced, so light mode never changes when dark mode gets darker. Core's `packages/core/src/theme.ts` holds the same values (`DEFAULT_THEME`, `TONES`) and checks WCAG AA for every pair the app draws (`themeContrastIssues`); an app test fails if `global.css` or the launch splash drift from it. `surface` is the tint laid over the glass of the floating chrome (at about 72%); `scrim` is the veil behind dialog and menu cards, laid at a quarter strength: the ink in light mode, the ground in dark. `grouped` and `on-accent` are also declared there but are not yet used by this world's components.
+
+These are the shipped colours. In Settings › Theme the owner picks a background for each mode and a primary (`accent`) and secondary (`highlight`) from preset swatches; Core's `themeFor` derives every other token from the chosen background (each neutral keeps its shipped contrast against the ground, so cards still stand off a true-black ground) and deepens or brightens an ink until it meets its contrast minimum. The app lays the result over `global.css` at runtime with `Uniwind.updateCSSVariables`, so every class and `useThemeColor` reader recolours at once; `global.css` and the launch splash stay the shipped theme.
 
 ### Named Rules
 
@@ -294,7 +298,8 @@ Small tracked caps (Label) in graphite by default, with teal and ember tones ava
 - **Tab screens** open on a light large title at top-left, with at most one trailing icon button on the title line.
 - **Pushed screens** show a Back icon button aligned so its glyph sits on the 24dp margin, then the title in Title type. System and predictive Back both work.
 - **In-screen switches** (Albums / Songs) are text tabs in Body: selected is 600 ink with a 2dp teal underline, unselected is 400 graphite; each tab is at least 48dp tall.
-- **Tab bar** floats a cell above the system inset with 24dp side margins: Home and Library share one 64dp glass pill (24dp line icon over a Caption 600 label, teal when current, graphite otherwise), and Search sits beside it, a cell apart, in its own 64dp round glass pill with the icon only. Tabs press with `selection` haptics.
+- **Tab bar** floats a cell above the system inset with 24dp side margins: Home and Library share one 64dp glass pill (24dp line icon over a Caption 600 label, teal when current, graphite otherwise), joined by the shortcut tab (a Library section chosen in Settings, with its section's icon) when there is one, and Search sits beside it, a cell apart, in its own 64dp round glass pill with the icon only. Tabs press with `selection` haptics.
+- **Shortcut tab:** what it opens (an artist, an album…) is pushed inside the tab, under the tab bar, and stays open while another tab is showing; the same screens opened from the Library are pushed over the tabs.
 - **Mini player** floats a cell above the tab bar (or above the system inset on pushed Library screens) in a 56dp glass pill with the same side margins: a 40dp square thumbnail, title (Body 500) over artist (Body 400 graphite), then play/pause and next as icon buttons. Tap it, or swipe it up, to open Now Playing. Swipe left for the next track, right for the previous one: the content follows the finger and fades, and a skip leaves the way it was pushed with a light `impact` haptic; a short slow drag springs back. Screen readers get "Next track" / "Previous track" actions instead of the swipe.
 
 ### Now Playing

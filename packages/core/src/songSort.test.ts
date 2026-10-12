@@ -6,7 +6,7 @@ import {
   DEFAULT_SONG_SORT,
   defaultSongSort,
   readSongSort,
-  SONG_LIST_KINDS,
+  sameSongSort,
   SONG_SORTS,
   songSortsFor,
   songSortLabel,
@@ -262,11 +262,12 @@ describe("sortSongs by date added", () => {
   });
 });
 
+const file = (name: string): SortableSong & { readonly name: string } => ({
+  ...song(name, { title: "Same" }),
+  path: `/music/Album/${name}`,
+});
+
 describe("sortSongs by file name", () => {
-  const file = (name: string): SortableSong & { readonly name: string } => ({
-    ...song(name, { title: "Same" }),
-    path: `/music/Album/${name}`,
-  });
   const songs = [file("10 Ten.mp3"), file("b.mp3"), file("2 Two.mp3"), file("A.flac")];
 
   test("orders like a file manager: 2 before 10, letters ignoring case", () => {
@@ -303,8 +304,9 @@ describe("sortSongs by file name", () => {
   });
 });
 
+const starred = (name: string, starredAt: number) => ({ ...song(name), starredAt });
+
 describe("sortSongs by date starred", () => {
-  const starred = (name: string, starredAt: number) => ({ ...song(name), starredAt });
   const songs = [
     starred("Early", 1_000),
     starred("Late", 3_000),
@@ -335,8 +337,11 @@ describe("sortSongs by date starred", () => {
   });
 });
 
+const labels = (kind: SongListKind) => songSortsFor(kind).map(songSortLabel);
+
+const KINDS: readonly SongListKind[] = ["songs", "artist", "genre", "folder", "favorites"];
+
 describe("sorts per kind of song list", () => {
-  const labels = (kind: SongListKind) => songSortsFor(kind).map(songSortLabel);
   const shared = SONG_SORTS.map(songSortLabel);
 
   test("Songs, artist and genre lists offer the shared sorts, song name A to Z first", () => {
@@ -361,14 +366,13 @@ describe("sorts per kind of song list", () => {
   });
 
   test("a saved sort reads back as itself for every kind", () => {
-    for (const kind of SONG_LIST_KINDS)
+    for (const kind of KINDS)
       for (const sort of songSortsFor(kind))
         assert.deepEqual(readSongSort(writeSongSort(sort), kind), sort);
   });
 
   test("nothing saved reads as the kind's default", () => {
-    for (const kind of SONG_LIST_KINDS)
-      assert.deepEqual(readSongSort(null, kind), defaultSongSort(kind));
+    for (const kind of KINDS) assert.deepEqual(readSongSort(null, kind), defaultSongSort(kind));
   });
 
   test("a sort the kind doesn't offer reads as its default", () => {
@@ -379,6 +383,20 @@ describe("sorts per kind of song list", () => {
     assert.deepEqual(
       readSongSort(writeSongSort({ key: "starred", descending: false }), "folder"),
       defaultSongSort("folder"),
+    );
+  });
+});
+
+describe("sameSongSort", () => {
+  test("the same key in the same direction is the same sort", () => {
+    assert.equal(sameSongSort({ key: "title", descending: false }, DEFAULT_SONG_SORT), true);
+    assert.equal(
+      sameSongSort({ key: "title", descending: true }, { key: "title", descending: false }),
+      false,
+    );
+    assert.equal(
+      sameSongSort({ key: "artist", descending: false }, { key: "album", descending: false }),
+      false,
     );
   });
 });

@@ -456,13 +456,13 @@ describe("resumePlay", () => {
   });
 });
 
-describe("isCountedPlay", () => {
-  const counted = (
-    listenedMs: number,
-    durationMs: number | null,
-    endReason: PlayEvent["endReason"] = "skipped",
-  ): boolean => isCountedPlay({ listenedMs, durationMs, endReason });
+const counted = (
+  listenedMs: number,
+  durationMs: number | null,
+  endReason: PlayEvent["endReason"] = "skipped",
+): boolean => isCountedPlay({ listenedMs, durationMs, endReason });
 
+describe("isCountedPlay", () => {
   test("counts a play listened to for more than 15 seconds", () => {
     assert.equal(counted(15_001, 3 * MIN), true);
     assert.equal(counted(15_000, 3 * MIN), false);

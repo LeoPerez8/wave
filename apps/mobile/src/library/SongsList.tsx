@@ -1,6 +1,4 @@
 import { IconMusic } from "@tabler/icons-react-native";
-import { sortSongs } from "@wave/core";
-import { useMemo } from "react";
 import { View } from "react-native";
 
 import { grid } from "@/catalog/grid";
@@ -12,7 +10,7 @@ import { folderPhrase } from "./folderPhrase";
 import { useScanRoots, useScanState, useSongs } from "./hooks";
 import { promptForMusicFolder } from "./promptForMusicFolder";
 import { SongSortButton } from "./SongSortButton";
-import { useSongSort } from "./songSort";
+import { useSortedSongs } from "./songSort";
 import { ListIntro, songCount, TrackList } from "./TrackList";
 
 /** Tapping a song plays the whole Songs list from it. */
@@ -24,10 +22,7 @@ const SONGS_CONTEXT = { kind: "songs", id: null } as const;
  */
 export function SongsList() {
   const library = useSongs();
-  const sort = useSongSort("songs");
-  // A fresh sorted copy only when the library or the sort changes; Play,
-  // Shuffle and rows all play this displayed order.
-  const songs = useMemo(() => sortSongs(library, sort), [library, sort]);
+  const { sort, songs } = useSortedSongs("songs", library);
   const scan = useScanState();
   const roots = useScanRoots();
 
