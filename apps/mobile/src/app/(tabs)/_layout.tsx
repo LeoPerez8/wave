@@ -1,3 +1,4 @@
+import { TAB_PATH, tabOfPath } from "@wave/core";
 import { usePathname } from "expo-router";
 import { TabList, TabSlot, TabTrigger, Tabs } from "expo-router/ui";
 import { View } from "react-native";
@@ -5,7 +6,7 @@ import Animated from "react-native-reanimated";
 
 import { BACKDROP, ChromeProvider } from "@/chrome/chrome";
 import { TabBar } from "@/chrome/TabBar";
-import { TAB_PATH, tabOfPath, useTabEntry } from "@/chrome/tabEntry";
+import { useTabEntry } from "@/chrome/tabEntry";
 import { openNowPlaying } from "@/nowPlaying/sheet";
 import { MiniPlayer } from "@/playback/MiniPlayer";
 import { useThemeColor } from "@/theme/useThemeColor";

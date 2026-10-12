@@ -1,11 +1,10 @@
+import { inLibraryStack, tabOfPath } from "@wave/core";
 import { usePathname } from "expo-router";
 import { createContext, useContext, useSyncExternalStore, type ReactNode } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CELL } from "@/catalog/grid";
 import { playbackState } from "@/playback/Player";
-
-import { inLibraryStack, tabOfPath } from "./tabEntry";
 
 /**
  * The floating chrome: a glass tab bar and a glass mini player hovering over
@@ -54,7 +53,7 @@ export const useTabBarTop = (): number => {
 export const useFloatingChromeHeight = (): number => {
   const pathname = usePathname();
   const playing = useHasNowPlaying();
-  // Tab screens (the shortcut tab included) are drawn under the floating tab bar.
+  // Tab screens, and screens opened inside the shortcut tab, are drawn under the floating tab bar.
   const tabBar = tabOfPath(pathname) !== null;
   const miniPlayer = playing && (tabBar || inLibraryStack(pathname));
   return (

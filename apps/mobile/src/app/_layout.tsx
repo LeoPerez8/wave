@@ -11,6 +11,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { useAllFilesAccess } from "@/library/hooks";
 import { OverlayHost } from "@/overlay/OverlayHost";
+import { useTrackCurrentPath } from "@/library/routes";
 import { startInitialScan } from "@/library/runtime";
 import { startServices } from "@/services";
 import { useThemeColor } from "@/theme/useThemeColor";
@@ -18,6 +19,8 @@ import { useThemeColor } from "@/theme/useThemeColor";
 export default function RootLayout() {
   const background = useThemeColor("background");
   const { granted } = useAllFilesAccess();
+  // Lets library screens open inside the tab they were opened from.
+  useTrackCurrentPath();
 
   // A no-op when Android Auto already started them headless (src/services.ts).
   useEffect(() => startServices("app"), []);

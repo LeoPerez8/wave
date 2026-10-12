@@ -1,4 +1,5 @@
 import { IconHome, IconSearch, IconStack2 } from "@tabler/icons-react-native";
+import type { TabBarTab } from "@wave/core";
 import { useTabTrigger } from "expo-router/ui";
 import type { ComponentType } from "react";
 import { Text, View } from "react-native";
@@ -13,18 +14,17 @@ import { useShortcutTab } from "@/settings/shortcutTab";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { BACKDROP, chrome } from "./chrome";
-import type { TabName } from "./tabEntry";
 
 type IconProps = { size?: number; color?: string; strokeWidth?: number };
 
 type TabProps = {
-  name: TabName;
+  name: TabBarTab;
   label: string;
   icon: ComponentType<IconProps>;
   /** Show the label under the icon (the Search pill is icon-only). */
   showLabel?: boolean;
   /** Runs before switching to this tab. */
-  onSwitch: (to: TabName) => void;
+  onSwitch: (to: TabBarTab) => void;
   /** Runs on every tap, the current tab included. */
   onTap?: () => void;
 };
@@ -69,7 +69,7 @@ const RADIUS = chrome.tabBar / 2;
  * Settings (if any) share one pill, and Search sits beside it in a pill of its
  * own. Tapping Search brings the keyboard up.
  */
-export function TabBar({ onTabTap }: { onTabTap: (to: TabName) => void }) {
+export function TabBar({ onTabTap }: { onTabTap: (to: TabBarTab) => void }) {
   const insets = useSafeAreaInsets();
   const slug = useShortcutTab();
   const shortcut = slug === null ? undefined : findSection(slug);

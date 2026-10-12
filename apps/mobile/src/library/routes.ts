@@ -1,19 +1,30 @@
-import type { StatsPeriod, StatsRanking } from "@wave/core";
-import { router } from "expo-router";
+import { detailPath, type DetailScreen, type StatsPeriod, type StatsRanking } from "@wave/core";
+import { router, usePathname, type Href } from "expo-router";
+import { useEffect } from "react";
 
-/** Detail screens (ids are DB integer ids); other tickets link to these. */
-export const albumHref = (id: number) => `/library/album/${id}` as const;
-export const artistHref = (id: number) => `/library/artist/${id}` as const;
-export const genreHref = (id: number) => `/library/genre/${id}` as const;
-export const folderHref = (id: number) => `/library/folder/${id}` as const;
+/** The current screen's path, for opening screens from outside React. */
+let here = "/";
 
-export const openAlbum = (id: number): void => router.push(albumHref(id));
-export const openArtist = (id: number): void => router.push(artistHref(id));
-export const openGenre = (id: number): void => router.push(genreHref(id));
-export const openFolder = (id: number): void => router.push(folderHref(id));
+/** Keeps `here` current. Called once, by the root layout. */
+export const useTrackCurrentPath = (): void => {
+  const pathname = usePathname();
+  useEffect(() => {
+    here = pathname;
+  }, [pathname]);
+};
 
-export const playlistHref = (id: number) => `/library/playlist/${id}` as const;
-export const openPlaylist = (id: number): void => router.push(playlistHref(id));
+/**
+ * Opens a detail screen (ids are DB integer ids): inside the shortcut tab when
+ * opened from it, on the Library stack otherwise (Core's `detailPath`).
+ */
+const open = (screen: DetailScreen, id: number): void =>
+  router.push(detailPath(here, screen, id) as Href);
+
+export const openAlbum = (id: number): void => open("album", id);
+export const openArtist = (id: number): void => open("artist", id);
+export const openGenre = (id: number): void => open("genre", id);
+export const openFolder = (id: number): void => open("folder", id);
+export const openPlaylist = (id: number): void => open("playlist", id);
 
 /** Stats, pushed from Home; a Library stack screen so the mini player stays. */
 export const statsHref = "/library/stats" as const;
