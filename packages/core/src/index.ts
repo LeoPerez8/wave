@@ -279,8 +279,10 @@ export {
   artistPhotoLookups,
   artistPhotoName,
   artistPhotoQuery,
+  artistPhotosUnreachable,
   deezerArtistCandidates,
   deezerArtistSearchUrl,
+  failuresInARow,
   pickArtistPhoto,
 } from "./artistPhoto.ts";
 export type {

@@ -144,3 +144,17 @@ export const artistPhotoLookups = <A extends { readonly key: string; readonly na
     const query = artistPhotoQuery(artist.name);
     return query !== null && isDue(checks.get(artist.key), now) ? [{ ...artist, query }] : [];
   });
+
+/** Failed lookups in a row at which the service counts as unreachable. */
+const UNREACHABLE_AFTER_FAILURES = 3;
+
+/** Failed lookups in a row, once one more lookup went [outcome]: any answer starts again from 0. */
+export const failuresInARow = (before: number, outcome: ArtistPhotoOutcome): number =>
+  outcome === "failed" ? before + 1 : 0;
+
+/**
+ * Whether [failures] in a row mean the photo service can't be reached (no
+ * connection): lookups stop until the next run rather than fail one by one.
+ */
+export const artistPhotosUnreachable = (failures: number): boolean =>
+  failures >= UNREACHABLE_AFTER_FAILURES;
