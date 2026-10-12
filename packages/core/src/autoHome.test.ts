@@ -19,16 +19,7 @@ const homeTab = { type: "tab", tab: "home" } as const;
 const mostPlayed = { kind: "home", id: "most-played" } as const;
 const favorites = { kind: "home", id: "favorites" } as const;
 
-/** A song with track numbers that would reorder it if the list sorted like an album. */
-const song = (id: string, title: string): AutoTrack => ({
-  id,
-  title,
-  artist: "Artist",
-  discNumber: 1,
-  trackNumber: 10 - Number(id),
-  titleSort: title,
-  path: `/music/${id}.flac`,
-});
+const song = (id: string, title: string): AutoTrack => ({ id, title, artist: "Artist" });
 
 describe("Auto Home tab", () => {
   test("lists Recently Played, Most Played and Favorites folders, and nothing to fetch", () => {
@@ -87,7 +78,7 @@ describe("Auto Home sections", () => {
   });
 
   test("their songs keep the section's order, each playing the section from itself", () => {
-    const items = autoTrackItems(mostPlayed, [song("9", "Most"), song("3", "Next")], 0, 10);
+    const items = autoTrackItems(mostPlayed, [song("9", "Most"), song("3", "Next")], 0);
     assert.deepEqual(
       items.map((item) => [item.title, item.playable, decodeAutoMediaId(item.mediaId)]),
       [
@@ -126,7 +117,7 @@ describe("Auto Home empty sections", () => {
     const node: AutoNode = { type: "list", list: favorites };
     const page = [
       ...firstPageWithoutRows(node),
-      ...autoTrackItems(favorites, [song("1", "One")], 0, 9),
+      ...autoTrackItems(favorites, [song("1", "One")], 0),
     ];
     assert.deepEqual(
       autoPageItems(node, 0, page).map((item) => item.title),

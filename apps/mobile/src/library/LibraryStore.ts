@@ -29,6 +29,7 @@ import { openDatabaseSync } from "expo-sqlite";
 
 import { selectAlbums } from "./db/albums";
 import { selectArtistCovers, selectArtistSongs, selectArtists } from "./db/artists";
+import type { RowPage } from "./db/database";
 import migrations from "./db/migrations";
 import {
   homeSections,
@@ -290,6 +291,16 @@ export class LibraryStore extends Context.Service<
       offset: number,
       limit: number,
     ) => Effect.Effect<readonly ArtistRow[], LibraryStoreError>;
+    /** [page] of an artist's songs, in their screen's order (by title), for Auto. */
+    readonly listArtistSongsPage: (
+      id: number,
+      page: RowPage,
+    ) => Effect.Effect<readonly SongRow[], LibraryStoreError>;
+    /** [page] of a playlist's songs, in playlist order, for Auto. */
+    readonly listPlaylistSongsPage: (
+      id: number,
+      page: RowPage,
+    ) => Effect.Effect<readonly SongRow[], LibraryStoreError>;
     /** A cover for each of [ids] that has one (an album or song of theirs), for Auto. */
     readonly artistCovers: (
       ids: readonly number[],
@@ -1131,6 +1142,12 @@ const make = Effect.gen(function* () {
 
     listArtistsPage: (offset, limit) =>
       attempt("list artists", () => selectArtists(db, { page: { offset, limit } })),
+
+    listArtistSongsPage: (id, page) =>
+      attempt("list the artist's songs", () => selectArtistSongs(db, id, page)),
+
+    listPlaylistSongsPage: (id, page) =>
+      attempt("list the playlist's songs", () => selectPlaylistSongs(db, id, page)),
 
     artistCovers: (ids) => attempt("load artist covers", () => selectArtistCovers(db, ids)),
 

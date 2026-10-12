@@ -16,6 +16,7 @@ import {
   decodeAutoMediaId,
   encodeAutoMediaId,
   type AutoNode,
+  type AutoTrack,
 } from "./index.ts";
 
 const album = { kind: "album", id: "12" } as const;
@@ -152,25 +153,11 @@ describe("Auto Albums tab", () => {
   });
 });
 
-/** An album track; `n` is its track number on disc `disc`. */
-const track = (id: string, disc: number | null, n: number | null, title = `Song ${id}`) => ({
-  id,
-  title,
-  artist: "Radiohead",
-  discNumber: disc,
-  trackNumber: n,
-  titleSort: title.toLowerCase(),
-  path: `/music/${id}.flac`,
-});
+/** A track of a list. */
+const track = (id: string, title = `Song ${id}`): AutoTrack => ({ id, title, artist: "Radiohead" });
 
-// Out of order on purpose: disc 2 first, an unnumbered track, a missing disc (= disc 1).
-const albumTracks = [
-  track("21", 2, 1),
-  track("13", 1, 3),
-  track("1x", 1, null, "Bonus"),
-  track("11", null, 1),
-  track("12", 1, 2),
-];
+// In album order, as the app loads an album (disc, then track number).
+const albumTracks = [track("11"), track("12"), track("13"), track("1x", "Bonus"), track("21")];
 const inAlbumOrder = ["11", "12", "13", "1x", "21"];
 
 describe("Auto items by media ID", () => {
@@ -270,7 +257,11 @@ const albumPageTitles = (node: AutoNode, n: number, size: number): string[] => {
   const fetched =
     children?.fetch == null
       ? []
-      : autoTrackItems(album, albumTracks, children.fetch.offset, children.fetch.limit);
+      : autoTrackItems(
+          album,
+          albumTracks.slice(children.fetch.offset, children.fetch.offset + children.fetch.limit),
+          children.fetch.offset,
+        );
   return [...(children?.items ?? []), ...fetched].map((item) => item.title);
 };
 
@@ -295,8 +286,8 @@ describe("Auto album", () => {
     });
   });
 
-  test("tracks come in disc and track order, each playing the album from itself", () => {
-    const items = autoTrackItems(album, albumTracks, 0, 99);
+  test("tracks come in the order the app lists them, each playing the album from itself", () => {
+    const items = autoTrackItems(album, albumTracks, 0);
     assert.deepEqual(
       items.map((item) => decodeAutoMediaId(item.mediaId)),
       inAlbumOrder.map((trackId, index) => ({ type: "track", list: album, index, trackId })),
@@ -351,10 +342,10 @@ describe("Auto artwork", () => {
 
   test("tracks show their own artwork, and none when they have none", () => {
     const tracks = [
-      { ...track("11", 1, 1), artworkPath: cover },
-      { ...track("12", 1, 2), artworkPath: null },
+      { ...track("11"), artworkPath: cover },
+      { ...track("12"), artworkPath: null },
     ];
-    const [first, second] = autoTrackItems(album, tracks, 0, 2);
+    const [first, second] = autoTrackItems(album, tracks, 0);
     assert.deepEqual(first?.artwork, [cover]);
     assert.equal(second !== undefined && "artwork" in second, false);
   });
@@ -443,8 +434,7 @@ describe("Auto Playlists tab", () => {
     assert.equal(decodeAutoMediaId("tab/playlists/empty/empty"), null);
   });
 
-  // Playlist order is the order the app loads them in, unlike an album's.
-  const playlistTracks = [track("30", 2, 5), track("10", 1, 1), track("20", null, 3)];
+  const playlistTracks = [track("30"), track("10"), track("20")];
 
   test("a playlist starts with Shuffle, then its tracks in playlist order", () => {
     const open = { type: "list", list: playlist } as const;
@@ -459,7 +449,7 @@ describe("Auto Playlists tab", () => {
       limit: 9,
     });
     assert.deepEqual(
-      autoTrackItems(playlist, playlistTracks, 0, 9).map((item) => decodeAutoMediaId(item.mediaId)),
+      autoTrackItems(playlist, playlistTracks, 0).map((item) => decodeAutoMediaId(item.mediaId)),
       [
         { type: "track", list: playlist, index: 0, trackId: "30" },
         { type: "track", list: playlist, index: 1, trackId: "10" },
@@ -560,11 +550,8 @@ describe("Auto artist", () => {
     const node = decodeAutoMediaId(shuffleAll.mediaId);
     assert.ok(node !== null);
     assert.deepEqual(autoPlayList(node), { kind: "artistSongs", id: "7" });
-    const songs = [
-      track("3", 1, 1, "Creep"),
-      track("1", 1, 2, "Airbag"),
-      track("2", 1, 3, "Bloom"),
-    ];
+    // By title, as the app lists an artist's songs.
+    const songs = [track("1", "Airbag"), track("2", "Bloom"), track("3", "Creep")];
     assert.deepEqual(autoQueueStart(node, songs), {
       context: { kind: "artist", id: "7" },
       trackIds: ["1", "2", "3"],

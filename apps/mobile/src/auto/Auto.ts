@@ -24,6 +24,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
+import type { RowPage } from "@/library/db/database";
 import { LibraryStore, type LibraryStoreError, type SongRow } from "@/library/LibraryStore";
 import type { AutoPlayback, AutoRequest } from "@/native/wavePlayer";
 import type { PlayerError } from "@/playback/Player";
@@ -57,16 +58,15 @@ const decode = (mediaId: string): Effect.Effect<AutoNode, AutoError> => {
 };
 
 /** A library song as Core's track lists need it. */
-const toAutoTrack = (song: SongRow & Partial<Pick<AutoTrack, "discNumber" | "trackNumber">>) => ({
+const toAutoTrack = (song: SongRow): AutoTrack => ({
   id: String(song.id),
   title: song.title,
   artist: song.artist,
-  discNumber: song.discNumber ?? null,
-  trackNumber: song.trackNumber ?? null,
-  titleSort: song.titleSort,
-  path: song.path,
   artworkPath: song.artworkPath,
 });
+
+const pageOf = <A>(rows: readonly A[], page: RowPage): readonly A[] =>
+  rows.slice(page.offset, page.offset + page.limit);
 
 export const layer = Layer.effect(
   Auto,
@@ -74,17 +74,16 @@ export const layer = Layer.effect(
     const store = yield* LibraryStore;
     const queue = yield* Queue;
 
-    /** Every song of a track list (any order; Core orders them), or null once it's gone. */
+    /** Every song of a track list, in the order the app lists them, or null once it's gone. */
     const listSongs: Record<
       AutoTrackListKind,
       (id: string) => Effect.Effect<readonly SongRow[] | null, LibraryStoreError>
     > = {
       album: (id) =>
         store.getAlbum(Number(id)).pipe(Effect.map((detail) => detail?.tracks ?? null)),
-      // In playlist order, which Core keeps.
       playlist: (id) =>
         store.getPlaylist(Number(id)).pipe(Effect.map((detail) => detail?.items ?? null)),
-      // The app's Home tab lists, in their order, which Core keeps.
+      // The app's Home tab lists.
       home: (id) =>
         store.home.pipe(
           Effect.map((home) =>
@@ -99,6 +98,22 @@ export const layer = Layer.effect(
       listSongs[list.kind](list.id).pipe(
         Effect.flatMap((songs) => (songs === null ? notFound : Effect.succeed(songs))),
       );
+
+    /**
+     * [page] of a track list's songs, in the same order. Long lists page in
+     * the store; an album or a Home section is a handful of songs.
+     */
+    const pageSongs: Record<
+      AutoTrackListKind,
+      (id: string, page: RowPage) => Effect.Effect<readonly SongRow[], Failure>
+    > = {
+      album: (id, page) =>
+        songsOf({ kind: "album", id }).pipe(Effect.map((songs) => pageOf(songs, page))),
+      playlist: (id, page) => store.listPlaylistSongsPage(Number(id), page),
+      home: (id, page) =>
+        songsOf({ kind: "home", id }).pipe(Effect.map((songs) => pageOf(songs, page))),
+      artistSongs: (id, page) => store.listArtistSongsPage(Number(id), page),
+    };
 
     /** [artists] with a cover of theirs, where they have one. */
     const withCovers = <A extends { readonly id: number }>(artists: readonly A[]) =>
@@ -155,10 +170,8 @@ export const layer = Layer.effect(
               ),
             );
         case "tracks":
-          return songsOf(source.list).pipe(
-            Effect.map((songs) =>
-              autoTrackItems(source.list, songs.map(toAutoTrack), offset, limit),
-            ),
+          return pageSongs[source.list.kind](source.list.id, { offset, limit }).pipe(
+            Effect.map((songs) => autoTrackItems(source.list, songs.map(toAutoTrack), offset)),
           );
       }
     };
@@ -204,7 +217,9 @@ export const layer = Layer.effect(
           const tracks = songs.map(toAutoTrack);
           const index = autoQueueStart(node, tracks)?.startIndex;
           const found =
-            index === undefined ? undefined : autoTrackItems(node.list, tracks, index, 1)[0];
+            index === undefined
+              ? undefined
+              : autoTrackItems(node.list, tracks.slice(index, index + 1), index)[0];
           return found ?? (yield* notFound);
         }
         return yield* notFound;
