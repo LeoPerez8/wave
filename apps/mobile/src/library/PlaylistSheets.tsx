@@ -168,7 +168,7 @@ function AddCard({ subject, close }: { subject: AddSubject; close: () => void })
         <Text className="font-sans text-body font-medium text-accent">New Playlist</Text>
       </Press>
       {/* The card stops short of the screen edges; a long list scrolls inside it. */}
-      <ScrollView style={{ flexGrow: 0, flexShrink: 1 }}>
+      <ScrollView keyboardShouldPersistTaps="handled" style={{ flexGrow: 0, flexShrink: 1 }}>
         {playlists.map((playlist) => (
           <PlaylistEntry
             key={playlist.id}

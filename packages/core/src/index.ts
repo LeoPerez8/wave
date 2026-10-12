@@ -159,10 +159,10 @@ export type {
   LibrarySectionSource,
   SectionCollection,
 } from "./librarySections.ts";
-export { placeOverlayCard } from "./overlay.ts";
+export { cardKeyboard, placeOverlayCard } from "./overlay.ts";
 export type { OverlayCardFrame, OverlayCardInput, OverlayInsets } from "./overlay.ts";
 export type { OverlayAnchor, OverlayRect } from "./overlay.ts";
-export type { OverlayAlign } from "./overlay.ts";
+export type { CardKeyboard, OverlayAlign } from "./overlay.ts";
 export { moveSlide, slideEntry, slideTicks, startSlide } from "./slideToChoose.ts";
 export type { MenuSlide, SlidePoint } from "./slideToChoose.ts";
 export { SHORTCUT_TAB_CHOICES, parseShortcutTab, tabBarTabs } from "./shortcutTab.ts";
@@ -191,6 +191,7 @@ export type {
 } from "./themeChoice.ts";
 export { sliderFraction, sliderValueAt, snapSliderValue, stepSlider } from "./slider.ts";
 export type { SliderRange } from "./slider.ts";
+export { LONG_PRESS_DELAY, readLongPressDelay, snapLongPressDelay } from "./longPress.ts";
 export {
   DEFAULT_GLASS_SETTINGS,
   GLASS_SETTINGS,
@@ -222,5 +223,7 @@ export {
   writeSongSort,
 } from "./songSort.ts";
 export type { SongListKind, SongSort, SongSortKey, SortableSong } from "./songSort.ts";
+export { concentricRadius } from "./corners.ts";
+export type { InsetSquare } from "./corners.ts";
 export { underlineMotion, wavePath } from "./wavyUnderline.ts";
 export type { UnderlineMotion, UnderlineMotionInput, WaveShape } from "./wavyUnderline.ts";

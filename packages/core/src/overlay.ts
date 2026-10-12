@@ -72,6 +72,28 @@ export interface OverlayCardFrame {
   readonly side?: "below" | "above";
 }
 
+export interface CardKeyboard {
+  /** Close the open keyboard as the card opens. */
+  readonly closeKeyboard: boolean;
+  /** The keyboard height to place the card with (`placeOverlayCard`'s `keyboard`), in dp. */
+  readonly keyboard: number;
+}
+
+/**
+ * What a card does with an open on-screen keyboard. Only a card someone types
+ * into (`align` "top") keeps it. Any other card closes it as it opens, so the
+ * first tap on an entry runs the entry rather than just closing the keyboard,
+ * and lays out as if it were already gone so it doesn't jump when it goes.
+ */
+export const cardKeyboard = (input: {
+  readonly align?: OverlayAlign | undefined;
+  /** Height of the open keyboard, in dp; 0 when closed. */
+  readonly keyboard: number;
+}): CardKeyboard =>
+  input.align === "top"
+    ? { closeKeyboard: false, keyboard: input.keyboard }
+    : { closeKeyboard: input.keyboard > 0, keyboard: 0 };
+
 /**
  * A card in the space between the system bars, a margin clear of everything:
  * centred, or a margin below the top bar when `align` is "top". An open
