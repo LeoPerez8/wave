@@ -1,9 +1,9 @@
-import { STATS_TOP, type StatsPeriod } from "@wave/core";
+import { STATS_SEE_ALL, STATS_TOP, type StatsPeriod } from "@wave/core";
 import type * as Effect from "effect/Effect";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useState, useSyncExternalStore } from "react";
 
-import type { LibraryStoreError, SongRow } from "@/library/LibraryStore";
+import type { AlbumRow, ArtistRow, LibraryStoreError, SongRow } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { playHistoryVersion } from "@/playback/PlayHistory";
 
@@ -52,3 +52,37 @@ const readTopSongs = (stats: Stats["Service"], period: StatsPeriod) =>
 /** Stats › Top Songs: the 10 songs played most in `period`. */
 export const useTopSongs = (period: StatsPeriod): readonly Ranked<SongRow>[] | undefined =>
   useRanking(period, readTopSongs);
+
+const readTopAlbums = (stats: Stats["Service"], period: StatsPeriod) =>
+  stats.topAlbums(period, STATS_TOP);
+
+/** Stats › Top Albums: the 10 albums played most in `period`. */
+export const useTopAlbums = (period: StatsPeriod): readonly Ranked<AlbumRow>[] | undefined =>
+  useRanking(period, readTopAlbums);
+
+const readTopArtists = (stats: Stats["Service"], period: StatsPeriod) =>
+  stats.topArtists(period, STATS_TOP);
+
+/** Stats › Top Artists: the 10 artists played most in `period`, credited by track artist. */
+export const useTopArtists = (period: StatsPeriod): readonly Ranked<ArtistRow>[] | undefined =>
+  useRanking(period, readTopArtists);
+const readAllTopSongs = (stats: Stats["Service"], period: StatsPeriod) =>
+  stats.topSongs(period, STATS_SEE_ALL);
+
+/** See all › Top songs: the 100 songs played most in `period`. */
+export const useAllTopSongs = (period: StatsPeriod): readonly Ranked<SongRow>[] | undefined =>
+  useRanking(period, readAllTopSongs);
+
+const readAllTopAlbums = (stats: Stats["Service"], period: StatsPeriod) =>
+  stats.topAlbums(period, STATS_SEE_ALL);
+
+/** See all › Top albums: the 100 albums played most in `period`. */
+export const useAllTopAlbums = (period: StatsPeriod): readonly Ranked<AlbumRow>[] | undefined =>
+  useRanking(period, readAllTopAlbums);
+
+const readAllTopArtists = (stats: Stats["Service"], period: StatsPeriod) =>
+  stats.topArtists(period, STATS_SEE_ALL);
+
+/** See all › Top artists: the 100 artists played most in `period`, credited by track artist. */
+export const useAllTopArtists = (period: StatsPeriod): readonly Ranked<ArtistRow>[] | undefined =>
+  useRanking(period, readAllTopArtists);

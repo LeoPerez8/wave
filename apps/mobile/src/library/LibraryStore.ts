@@ -12,6 +12,7 @@ import {
   sortKey,
   type IndexedFile,
   type LibraryTrack,
+  type CreditedPlayTotals,
   type PlayEvent,
   type PlayTotals,
   type StatsWindow,
@@ -36,7 +37,7 @@ import {
   type RecordedPlay,
 } from "./db/playHistory";
 import * as schema from "./db/schema";
-import { trackPlayTotals } from "./db/stats";
+import { creditedPlayTotals, trackPlayTotals } from "./db/stats";
 import type { KnownFile } from "./NativeScanner";
 
 const DATABASE_NAME = "wave.db";
@@ -367,6 +368,21 @@ export class LibraryStore extends Context.Service<
     readonly trackPlayTotals: (
       window: StatsWindow,
     ) => Effect.Effect<readonly PlayTotals[], LibraryStoreError>;
+    /**
+     * Counted plays within [window] per album and track artist (tracks still in
+     * the library), in no order; Core's `albumPlayTotals` / `artistPlayTotals` group them.
+     */
+    readonly creditedPlayTotals: (
+      window: StatsWindow,
+    ) => Effect.Effect<readonly CreditedPlayTotals[], LibraryStoreError>;
+    /** The albums with these ids, in no particular order; albums no longer in the library are left out. */
+    readonly albumsByIds: (
+      ids: readonly number[],
+    ) => Effect.Effect<readonly AlbumRow[], LibraryStoreError>;
+    /** The artists with these ids, in no particular order; artists without songs are left out. */
+    readonly artistsByIds: (
+      ids: readonly number[],
+    ) => Effect.Effect<readonly ArtistRow[], LibraryStoreError>;
   }
 >()("@wave/mobile/library/LibraryStore") {}
 
@@ -703,7 +719,7 @@ const BY_TITLE = [
  * Artists with songs: a song belongs to its track artist and to the album
  * artist of its album (so Watch the Throne counts for Kanye West as well).
  */
-const listArtistsSync = (db: Database): ArtistRow[] =>
+const listArtistsSync = (db: Database, ids?: readonly number[]): ArtistRow[] =>
   db.all<ArtistRow>(sql`
     WITH links AS (
       SELECT id AS track_id, artist_id FROM tracks
@@ -714,6 +730,14 @@ const listArtistsSync = (db: Database): ArtistRow[] =>
       (SELECT count(*) FROM albums WHERE albums.album_artist_id = artists.id) AS "albumCount",
       count(links.track_id) AS "trackCount"
     FROM artists JOIN links ON links.artist_id = artists.id
+    ${
+      ids === undefined
+        ? sql``
+        : sql`WHERE artists.id IN (${sql.join(
+            ids.map((id) => sql`${id}`),
+            sql`, `,
+          )})`
+    }
     GROUP BY artists.id
     ORDER BY artists.sort, artists.id`);
 
@@ -1413,6 +1437,17 @@ const make = Effect.gen(function* () {
     latestPlay: attempt("read the latest play", () => latestPlay(db)),
 
     trackPlayTotals: (window) => attempt("sum up song plays", () => trackPlayTotals(db, window)),
+
+    creditedPlayTotals: (window) =>
+      attempt("sum up album and artist plays", () => creditedPlayTotals(db, window)),
+
+    albumsByIds: (ids) =>
+      attempt("read ranked albums", () =>
+        ids.length === 0 ? [] : albumQuery(db, inArray(schema.albums.id, [...ids])),
+      ),
+
+    artistsByIds: (ids) =>
+      attempt("read ranked artists", () => (ids.length === 0 ? [] : listArtistsSync(db, ids))),
   });
 });
 

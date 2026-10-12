@@ -5,8 +5,11 @@ import {
   STATS_PERIODS,
   STATS_SEE_ALL,
   STATS_TOP,
+  albumPlayTotals,
+  artistPlayTotals,
   rankPlays,
   statsWindow,
+  type CreditedPlayTotals,
   type PlayTotals,
 } from "./index.ts";
 
@@ -122,5 +125,100 @@ describe("rankPlays", () => {
   test("keeps the caller's own fields on each entry", () => {
     const [entry] = rankPlays([{ ...totals(7), title: "Blue in Green" }], STATS_TOP);
     assert.equal(entry?.title, "Blue in Green");
+  });
+});
+
+/** Totals for the tracks of one album by one track artist. */
+const credit = (
+  album: { id: number; sort: string },
+  artist: { id: number; sort: string },
+  overrides: Partial<CreditedPlayTotals> = {},
+): CreditedPlayTotals => ({
+  albumId: album.id,
+  albumSort: album.sort,
+  artistId: artist.id,
+  artistSort: artist.sort,
+  countedPlays: 1,
+  listenedMs: 180_000,
+  latestPlayAt: 1_000,
+  ...overrides,
+});
+
+const kindOfBlue = { id: 1, sort: "kind of blue" };
+const jazzHits = { id: 2, sort: "jazz hits" };
+const miles = { id: 10, sort: "davis, miles" };
+const coltrane = { id: 11, sort: "coltrane, john" };
+const evans = { id: 12, sort: "evans, bill" };
+
+describe("album and artist rankings", () => {
+  // Jazz Hits is a compilation (album artist "Various Artists", id 99): its
+  // tracks are by Miles Davis and John Coltrane.
+  const credits = [
+    credit(kindOfBlue, miles, { countedPlays: 3, listenedMs: 600_000, latestPlayAt: 5_000 }),
+    credit(jazzHits, miles, { countedPlays: 2, listenedMs: 300_000, latestPlayAt: 9_000 }),
+    credit(jazzHits, coltrane, { countedPlays: 4, listenedMs: 700_000, latestPlayAt: 2_000 }),
+    credit(kindOfBlue, evans, { countedPlays: 0, listenedMs: 0, latestPlayAt: 0 }),
+  ];
+
+  test("an album sums the plays of all its tracks, whoever plays on them", () => {
+    assert.deepEqual(rankPlays(albumPlayTotals(credits), STATS_TOP), [
+      {
+        id: jazzHits.id,
+        sortKey: "jazz hits",
+        countedPlays: 6,
+        listenedMs: 1_000_000,
+        latestPlayAt: 9_000,
+      },
+      {
+        id: kindOfBlue.id,
+        sortKey: "kind of blue",
+        countedPlays: 3,
+        listenedMs: 600_000,
+        latestPlayAt: 5_000,
+      },
+    ]);
+  });
+
+  test("artists are credited by track artist, so a compilation credits its real artists", () => {
+    const ranking = rankPlays(artistPlayTotals(credits), STATS_TOP);
+    assert.deepEqual(ranking, [
+      {
+        id: miles.id,
+        sortKey: "davis, miles",
+        countedPlays: 5,
+        listenedMs: 900_000,
+        latestPlayAt: 9_000,
+      },
+      {
+        id: coltrane.id,
+        sortKey: "coltrane, john",
+        countedPlays: 4,
+        listenedMs: 700_000,
+        latestPlayAt: 2_000,
+      },
+    ]);
+    assert.ok(!ranking.some((entry) => entry.id === 99), "Various Artists is never credited");
+  });
+
+  test("albums and artists rank and cut like songs", () => {
+    const many = Array.from({ length: 30 }, (_, i) =>
+      credit(
+        { id: i + 1, sort: `album ${i}` },
+        { id: 100 + i, sort: `artist ${i}` },
+        {
+          countedPlays: 50 - i,
+        },
+      ),
+    );
+    assert.deepEqual(
+      ids(rankPlays(albumPlayTotals(many), STATS_TOP)),
+      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    );
+    assert.deepEqual(ids(rankPlays(artistPlayTotals(many), 3)), [100, 101, 102]);
+  });
+
+  test("nothing played, nothing ranked", () => {
+    assert.deepEqual(albumPlayTotals([]), []);
+    assert.deepEqual(artistPlayTotals([]), []);
   });
 });
