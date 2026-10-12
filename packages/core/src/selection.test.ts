@@ -113,10 +113,11 @@ describe("selection", () => {
   });
 });
 
+type Song = { readonly id: string };
+const song = (id: string): Song => ({ id });
+const byId = (item: Song) => item.id;
+
 describe("checked items that left the list (a search query changed)", () => {
-  type Song = { readonly id: string };
-  const song = (id: string): Song => ({ id });
-  const byId = (item: Song) => item.id;
   const known = new Map(["a", "b", "c", "d", "e"].map((id) => [id, song(id)]));
   const lookup = (id: string) => known.get(id);
 
