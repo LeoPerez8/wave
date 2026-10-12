@@ -1,3 +1,4 @@
+import { IconChartBar } from "@tabler/icons-react-native";
 import { LegendList } from "@legendapp/list/react-native";
 import { STATS_PERIODS, type StatsPeriod } from "@wave/core";
 import { useCallback, useMemo, type ReactElement } from "react";
@@ -7,6 +8,7 @@ import { CELL, grid } from "@/catalog/grid";
 import { NameRow } from "@/catalog/NameRow";
 import { TrackRow } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
+import { EmptyState } from "@/components/EmptyState";
 import { useFavoriteIds } from "@/library/favorites";
 import type { AlbumRow, ArtistRow, SongRow } from "@/library/LibraryStore";
 import { openAlbum, openArtist } from "@/library/routes";
@@ -293,10 +295,22 @@ export function RankedSongList({
   );
 }
 
+/** The period's label: "Last 7 days", "All time"… */
+export const periodLabel = (period: StatsPeriod): string =>
+  STATS_PERIODS.find((option) => option.id === period)?.label ?? "";
+
 /** "No plays in the last 7 days", or "No plays yet" for all time. */
-export const nothingPlayed = (period: StatsPeriod): string => {
-  const label = STATS_PERIODS.find((option) => option.id === period)?.label;
-  return period === "all" || label === undefined
-    ? "No plays yet"
-    : `No plays in the ${label.toLowerCase()}`;
-};
+const nothingPlayed = (period: StatsPeriod): string =>
+  period === "all" ? "No plays yet" : `No plays in the ${periodLabel(period).toLowerCase()}`;
+
+/** A ranking's empty state: nothing was played enough to count in `period`. */
+export function NothingPlayed({ period }: { period: StatsPeriod }) {
+  return (
+    <EmptyState
+      icon={IconChartBar}
+      title={nothingPlayed(period)}
+      // Core's counted-play rule (`isCountedPlay`).
+      message="Songs you listen to for half their length, or four minutes, are counted here."
+    />
+  );
+}
