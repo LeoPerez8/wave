@@ -77,6 +77,12 @@ export const ITEM_ACTION_LABELS: { readonly [A in ItemAction]: string } = {
 /** Entries that delete something for good, shown in the destructive colour. */
 export const isDestructiveAction = (action: ItemAction): boolean => action === "delete";
 
+/**
+ * Entries that ask before acting: selection mode stays until the question is
+ * answered, so Cancel leaves the checked items as they were.
+ */
+export const confirmsFirst = (action: ItemAction): boolean => action === "delete";
+
 /** The value every item has, or undefined when they differ or any lacks one. */
 const shared = (values: readonly (number | undefined)[]): number | undefined => {
   const first = values[0];

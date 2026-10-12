@@ -15,13 +15,29 @@ describe("confirmSongDeletion", () => {
   test("counts several songs", () => {
     assert.deepEqual(confirmSongDeletion([{ title: "A" }, { title: "B" }, { title: "C" }]), {
       title: "Delete 3 songs?",
-      message: "Their files are removed from your phone.",
+      message: "The files are removed from your phone.",
       action: { label: "Delete", destructive: true },
     });
+  });
+
+  test("a large selection's count is grouped", () => {
+    const songs = Array.from({ length: 1200 }, (_, i) => ({ title: `Song ${i}` }));
+    assert.equal(confirmSongDeletion(songs).title, "Delete 1,200 songs?");
   });
 });
 
 describe("songDeletionFailure", () => {
+  test("a large selection's counts are grouped", () => {
+    const failures = Array.from({ length: 1001 }, () => ({
+      title: "X",
+      reason: "denied" as const,
+    }));
+    assert.equal(
+      songDeletionFailure(failures, 1500)?.title,
+      "Couldn't delete 1,001 of 1,500 songs",
+    );
+  });
+
   test("nothing failed: no error to show", () => {
     assert.equal(songDeletionFailure([], 2), null);
   });
