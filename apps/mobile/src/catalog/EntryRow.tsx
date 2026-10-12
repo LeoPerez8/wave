@@ -19,7 +19,7 @@ export function EntryRow({ label, count, onPress, onLongPress }: Props) {
   return (
     <Press
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={count === undefined ? label : `${label}, ${count.toLocaleString("en")}`}
       onPress={onPress}
       onLongPress={onLongPress}
       haptic="selection"

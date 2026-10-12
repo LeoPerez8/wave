@@ -29,6 +29,8 @@ import { openDatabaseSync } from "expo-sqlite";
 
 import { selectAlbums } from "./db/albums";
 import { selectArtistCovers, selectArtistSongs, selectArtists } from "./db/artists";
+import { libraryCounts, type LibraryCounts } from "./db/counts";
+import { selectGenreSongs } from "./db/genres";
 import type { RowPage } from "./db/database";
 import migrations from "./db/migrations";
 import {
@@ -275,6 +277,8 @@ export class LibraryStore extends Context.Service<
       at: number,
     ) => Effect.Effect<void, LibraryStoreError>;
     readonly countTracks: Effect.Effect<number, LibraryStoreError>;
+    /** How many items each Library entry holds, for the Library tab. */
+    readonly countLibrary: Effect.Effect<LibraryCounts, LibraryStoreError>;
     /** Every track ordered by title, for Library › Songs. */
     readonly listSongs: Effect.Effect<readonly SongRow[], LibraryStoreError>;
     /** Every album by title, then album artist, for Library › Albums. */
@@ -735,17 +739,14 @@ const getArtistSync = (db: Database, id: number): ArtistDetail | null => {
 };
 
 const getGenreSync = (db: Database, id: number): GenreDetail | null => {
-  const { genres, tracks } = schema;
+  const { genres } = schema;
   const genre = db
     .select({ id: genres.id, name: genres.name, sort: genres.sort })
     .from(genres)
     .where(eq(genres.id, id))
     .get();
   if (genre === undefined) return null;
-  const songs = trackQuery(db)
-    .where(eq(tracks.genreId, id))
-    .orderBy(...BY_TITLE)
-    .all();
+  const songs = selectGenreSongs(db, id);
   return { genre: { ...genre, trackCount: songs.length }, songs };
 };
 
@@ -1102,6 +1103,8 @@ const make = Effect.gen(function* () {
           .from(schema.tracks)
           .get()?.count ?? 0,
     ),
+
+    countLibrary: attempt("count the library", () => libraryCounts(db)),
 
     listSongs: attempt("list songs", () =>
       trackQuery(db)
