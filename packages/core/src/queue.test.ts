@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { EMPTY_QUEUE, currentEntry, parseQueueState, reduceQueue, upNext } from "./index.ts";
+import {
+  EMPTY_QUEUE,
+  currentEntry,
+  nextRepeatMode,
+  parseQueueState,
+  reduceQueue,
+  upNext,
+} from "./index.ts";
 import type { QueueCommand, QueueState } from "./index.ts";
 
 const songs = { kind: "songs", id: null } as const;
@@ -418,5 +425,13 @@ describe("trackEnded", () => {
     assert.equal(reduceQueue(start("a b", 1), { type: "trackEnded" }).playback, "stop");
     const all = apply(start("a b", 1), { type: "setRepeat", mode: "all" });
     assert.equal(show(apply(all, { type: "trackEnded" })), "[a] b");
+  });
+});
+
+describe("nextRepeatMode", () => {
+  test("cycles off, all, one, then back to off", () => {
+    assert.equal(nextRepeatMode("off"), "all");
+    assert.equal(nextRepeatMode("all"), "one");
+    assert.equal(nextRepeatMode("one"), "off");
   });
 });

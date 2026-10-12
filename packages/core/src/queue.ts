@@ -203,6 +203,11 @@ const wrapToStart = (state: QueueState): QueueState => {
   return { ...state, entries: context.length > 0 ? context : state.entries, index: 0 };
 };
 
+const NEXT_REPEAT: Record<RepeatMode, RepeatMode> = { off: "all", all: "one", one: "off" };
+
+/** What the repeat button switches to: off → all → one → off, like Apple Music's. */
+export const nextRepeatMode = (mode: RepeatMode): RepeatMode => NEXT_REPEAT[mode];
+
 /** Past this much of a track, previous restarts it instead (as Apple Music and Media3 do). */
 export const RESTART_THRESHOLD_MS = 3000;
 

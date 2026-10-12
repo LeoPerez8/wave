@@ -109,7 +109,12 @@ export type AutoRequest =
   /** One node by media ID: an `AutoItem`. */
   | { readonly type: "item"; readonly mediaId: string }
   /** Auto played a node: start its queue and answer the items the session sets on the player. */
-  | { readonly type: "play"; readonly mediaId: string };
+  | { readonly type: "play"; readonly mediaId: string }
+  /**
+   * A tap on Auto's shuffle or repeat button: change the queue's mode as the
+   * app's buttons do, then answer `null` (the new modes go out with `setModes`).
+   */
+  | { readonly type: "command"; readonly command: "toggleShuffle" | "cycleRepeat" };
 
 /** The answer to a `play` request: the new player list and the item to start at. */
 export interface AutoPlayback {
@@ -131,6 +136,8 @@ declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
   /** Edits the item list per the plan; `items` holds only the keys new to the player. */
   applySync(steps: readonly NativeSyncStep[], items: readonly PlayerItem[]): Promise<void>;
   setRepeatMode(mode: "off" | "all" | "one"): Promise<void>;
+  /** The queue's shuffle and repeat, for the toggles on Auto's player screen. */
+  setModes(shuffle: boolean, repeat: "off" | "all" | "one"): Promise<void>;
   getItemIds(): Promise<NativeItemIds>;
   /** Keeps the queue (JSON) in the native process, for when JS restarts. */
   saveQueue(json: string): void;

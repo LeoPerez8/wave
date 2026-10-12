@@ -117,7 +117,26 @@ class PlaybackService : MediaLibraryService() {
     session = MediaLibrarySession.Builder(this, player, SessionCallback())
       .apply { openAppIntent()?.let(::setSessionActivity) }
       .build()
+    showModes(AutoModes.state.current)
+    stopModes = AutoModes.state.listen(::showModes)
   }
+
+  /** Stops following JS's shuffle and repeat ([AutoModes.state]). */
+  private var stopModes: (() -> Unit)? = null
+
+  /** Shows the queue's shuffle and repeat on the mode buttons (Auto's player screen). */
+  private fun showModes(modes: PlaybackModes) {
+    session?.setMediaButtonPreferences(AutoModesSession.buttons(modes))
+  }
+
+  /**
+   * The controllers that show the shuffle and repeat buttons: Auto, and the
+   * media notification, whose buttons legacy controllers (Auto on a phone) share.
+   */
+  private fun showsModeButtons(session: MediaSession, controller: MediaSession.ControllerInfo) =
+    session.isAutoCompanionController(controller) ||
+      session.isAutomotiveController(controller) ||
+      session.isMediaNotificationController(controller)
 
   override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? = session
 
@@ -148,6 +167,8 @@ class PlaybackService : MediaLibraryService() {
   }
 
   override fun onDestroy() {
+    stopModes?.invoke()
+    stopModes = null
     browsers.clear()
     JsRuntime.release()
     main.removeCallbacks(sleepCheck)
@@ -193,6 +214,12 @@ class PlaybackService : MediaLibraryService() {
       } else if (session.isAutoCompanionController(controller) || session.isAutomotiveController(controller)) {
         Log.i(JsRuntime.LOG_TAG, "Auto connected at ${SystemClock.elapsedRealtime()} ms")
         keepJsFor(controller)
+      }
+      // Shuffle and repeat are custom commands for JS's queue engine; the player's own stay unused.
+      if (showsModeButtons(session, controller)) {
+        result
+          .setAvailableSessionCommands(AutoModesSession.sessionCommands)
+          .setAvailablePlayerCommands(AutoModesSession.playerCommands)
       }
       return result.build()
     }
@@ -277,6 +304,13 @@ class PlaybackService : MediaLibraryService() {
       customCommand: SessionCommand,
       args: Bundle,
     ): ListenableFuture<SessionResult> {
+      // A shuffle or repeat button: JS's queue engine changes the mode and reports it back.
+      AutoModes.request(customCommand.customAction)?.let { request ->
+        if (session.isAutoCompanionController(controller) || session.isAutomotiveController(controller)) {
+          keepJsFor(controller)
+        }
+        return AutoLibrary.command(request)
+      }
       val code = when (customCommand.customAction) {
         SleepTimerSession.START.customAction ->
           SleepTimerSession.fromBundle(args)
