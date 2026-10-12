@@ -302,6 +302,65 @@ describe("Auto album", () => {
   });
 });
 
+describe("Auto artwork", () => {
+  const cover = "/data/artwork/0123456789abcdef0123456789abcdef01234567.jpg";
+
+  test("an album shows its cover", () => {
+    const item = autoAlbumItem({
+      id: 12,
+      title: "OK Computer",
+      albumArtist: "Radiohead",
+      artworkPath: cover,
+    });
+    assert.deepEqual(item.artwork, [cover]);
+  });
+
+  test("an album without a cover has no artwork, so Auto shows its placeholder", () => {
+    const item = autoAlbumItem({
+      id: 12,
+      title: "OK Computer",
+      albumArtist: "Radiohead",
+      artworkPath: null,
+    });
+    assert.equal("artwork" in item, false);
+  });
+
+  test("tracks show their own artwork, and none when they have none", () => {
+    const tracks = [
+      { ...track("11", 1, 1), artworkPath: cover },
+      { ...track("12", 1, 2), artworkPath: null },
+    ];
+    const [first, second] = autoTrackItems(album, tracks, 0, 2);
+    assert.deepEqual(first?.artwork, [cover]);
+    assert.equal(second !== undefined && "artwork" in second, false);
+  });
+
+  test("Shuffle, tabs and the root have no artwork", () => {
+    const items = [
+      AUTO_ROOT,
+      ...(autoChildren({ type: "root" }, 0, 10)?.items ?? []),
+      ...(autoChildren({ type: "list", list: album }, 0, 10)?.items ?? []),
+    ];
+    for (const item of items) assert.equal("artwork" in item, false);
+  });
+
+  test("a playlist shows its mosaic, or its single cover", () => {
+    const tiles = ["/a_thumb.jpg", "/b_thumb.jpg", "/c_thumb.jpg", "/d_thumb.jpg"];
+    const mosaic = autoPlaylistItem({ id: 7, name: "Drive", trackCount: 9, thumbPaths: tiles });
+    assert.deepEqual(mosaic.artwork, tiles);
+    const single = autoPlaylistItem({ id: 7, name: "Drive", trackCount: 1, thumbPaths: [cover] });
+    assert.deepEqual(single.artwork, [cover]);
+    const empty = autoPlaylistItem({ id: 7, name: "Drive", trackCount: 0, thumbPaths: [] });
+    assert.equal("artwork" in empty, false);
+  });
+
+  test("an artist shows a cover of theirs when there is one", () => {
+    const shown = autoArtistItem({ id: 3, name: "Radiohead", artworkPath: cover });
+    assert.deepEqual(shown.artwork, [cover]);
+    assert.equal("artwork" in autoArtistItem({ id: 3, name: "Radiohead" }), false);
+  });
+});
+
 describe("Auto Playlists tab", () => {
   const playlists = { type: "tab", tab: "playlists" } as const;
   const playlist = { kind: "playlist", id: "7" } as const;

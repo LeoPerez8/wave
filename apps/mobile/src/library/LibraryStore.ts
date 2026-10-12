@@ -28,7 +28,7 @@ import * as Layer from "effect/Layer";
 import { openDatabaseSync } from "expo-sqlite";
 
 import { selectAlbums } from "./db/albums";
-import { selectArtists } from "./db/artists";
+import { selectArtistCovers, selectArtists } from "./db/artists";
 import migrations from "./db/migrations";
 import {
   homeSections,
@@ -288,6 +288,10 @@ export class LibraryStore extends Context.Service<
       offset: number,
       limit: number,
     ) => Effect.Effect<readonly ArtistRow[], LibraryStoreError>;
+    /** A cover for each of [ids] that has one (an album or song of theirs), for Auto. */
+    readonly artistCovers: (
+      ids: readonly number[],
+    ) => Effect.Effect<ReadonlyMap<number, string>, LibraryStoreError>;
     /** Every genre with songs, by name, for Library › Genres. */
     readonly listGenres: Effect.Effect<readonly GenreRow[], LibraryStoreError>;
     /** Every folder holding songs, by name, for Library › Folders. */
@@ -1192,6 +1196,8 @@ const make = Effect.gen(function* () {
 
     listArtistsPage: (offset, limit) =>
       attempt("list artists", () => selectArtists(db, { page: { offset, limit } })),
+
+    artistCovers: (ids) => attempt("load artist covers", () => selectArtistCovers(db, ids)),
 
     listGenres: attempt("list genres", () => {
       const { genres, tracks } = schema;

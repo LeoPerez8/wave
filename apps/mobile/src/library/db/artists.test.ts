@@ -4,7 +4,7 @@ import { beforeEach, describe, test } from "node:test";
 
 import { eq } from "drizzle-orm";
 
-import { selectArtists } from "./artists.ts";
+import { selectArtistCovers, selectArtists } from "./artists.ts";
 import * as schema from "./schema.ts";
 import { addTrack, openTestDatabase, type TestDatabase } from "./testDatabase.ts";
 
@@ -57,5 +57,39 @@ describe("selectArtists", () => {
       selectArtists(db, { ids }).map((artist) => artist.name),
       ["Daft Punk", "Radiohead"],
     );
+  });
+});
+
+const idOf = (name: string) =>
+  selectArtists(db, {}).find((artist) => artist.name === name)?.id ?? -1;
+
+describe("selectArtistCovers", () => {
+  test("an artist's cover is the first of their albums with one, by title", () => {
+    addTrack(db, {
+      title: "15 Step",
+      album: "In Rainbows",
+      artist: "Radiohead",
+      artworkHash: "rainbows",
+    });
+    addTrack(db, { title: "Everything", album: "Kid A", artist: "Radiohead", artworkHash: "kida" });
+    const covers = selectArtistCovers(db, [idOf("Radiohead")]);
+    assert.equal(covers.get(idOf("Radiohead")), "/covers/rainbows.jpg");
+  });
+
+  test("an artist with no album of their own takes a cover from their songs", () => {
+    addTrack(db, {
+      title: "Debaser",
+      album: "Indie Hits",
+      artist: "Pixies",
+      albumArtist: "Various",
+      artworkHash: "indie",
+    });
+    assert.equal(selectArtistCovers(db, [idOf("Pixies")]).get(idOf("Pixies")), "/covers/indie.jpg");
+  });
+
+  test("artists without any artwork have no cover", () => {
+    const covers = selectArtistCovers(db, [idOf("Björk"), idOf("Daft Punk")]);
+    assert.equal(covers.size, 0);
+    assert.equal(selectArtistCovers(db, []).size, 0);
   });
 });
