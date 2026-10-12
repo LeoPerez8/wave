@@ -195,6 +195,17 @@ class WavePlayerModule : Module() {
       }
     }.runOnQueue(Queues.MAIN)
 
+    /**
+     * The queue's shuffle and repeat (`off`, `all` or `one`), after every change
+     * made in the app or in the car: the service shows them on Auto's buttons.
+     */
+    AsyncFunction("setModes") { shuffle: Boolean, repeat: String, promise: Promise ->
+      val modes = AutoModes.fromJs(shuffle, repeat)
+        ?: return@AsyncFunction promise.reject("ERR_PLAYER_MODES", "Unknown repeat mode: $repeat", null)
+      AutoModes.state.publish(modes)
+      promise.resolve(null)
+    }.runOnQueue(Queues.MAIN)
+
     /** The loaded entry keys and the one playing, for JS to check a saved queue against. */
     AsyncFunction("getItemIds") { promise: Promise ->
       withController(promise) { player ->
