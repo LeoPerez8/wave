@@ -5,6 +5,7 @@
  * (a folder's file names, when Favorites were starred).
  */
 
+import { readStoredRecord } from "./storedJson.ts";
 import { compareFileNames } from "./browse.ts";
 import { compareAlbumTracks, compareByTitle, compareStrings } from "./library.ts";
 
@@ -125,13 +126,9 @@ export const SONG_SORTS: readonly SongSort[] = [
  */
 export type SongListKind = "songs" | "artist" | "genre" | "folder" | "favorites";
 
-export const SONG_LIST_KINDS: readonly SongListKind[] = [
-  "songs",
-  "artist",
-  "genre",
-  "folder",
-  "favorites",
-];
+/** Whether two sorts are the same: one key, one direction. */
+export const sameSongSort = (a: SongSort, b: SongSort): boolean =>
+  a.key === b.key && a.descending === b.descending;
 
 /** A list's own order, offered first (and its default) where it isn't song name A to Z. */
 const OWN_ORDER: Partial<Record<SongListKind, readonly [SongSort, SongSort]>> = {
@@ -195,17 +192,9 @@ export const writeSongSort = (sort: SongSort): string =>
  * (readable, and on offer for the kind) was saved.
  */
 export const readSongSort = (saved: string | null, kind: SongListKind = "songs"): SongSort => {
-  const fallback = defaultSongSort(kind);
-  if (saved === null) return fallback;
-  try {
-    const parsed: unknown = JSON.parse(saved);
-    if (typeof parsed !== "object" || parsed === null) return fallback;
-    const { key, descending } = parsed as Record<string, unknown>;
-    const known = songSortsFor(kind).find(
-      (sort) => sort.key === key && sort.descending === descending,
-    );
-    return known ?? fallback;
-  } catch {
-    return fallback;
-  }
+  const { key, descending } = readStoredRecord(saved);
+  return (
+    songSortsFor(kind).find((sort) => sort.key === key && sort.descending === descending) ??
+    defaultSongSort(kind)
+  );
 };

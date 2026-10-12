@@ -4,6 +4,7 @@
  * colour is derived from the background so contrast and spacing hold.
  */
 
+import { readStoredRecord } from "./storedJson.ts";
 import { luminance, mix, toOklch, withLuminance } from "./colour.ts";
 import { contrastRatio } from "./palette.ts";
 import { CONTRAST_REQUIREMENTS, DEFAULT_THEME, type Theme, type ThemeColors } from "./theme.ts";
@@ -102,16 +103,7 @@ const has = (group: Group, id: unknown): id is string =>
 
 /** The theme choice from its stored JSON; anything missing or unknown is its default. */
 export const readThemeChoice = (stored: string | null): ThemeChoice => {
-  let raw: unknown = null;
-  try {
-    raw = stored === null ? null : JSON.parse(stored);
-  } catch {
-    raw = null;
-  }
-  const record: Record<string, unknown> =
-    typeof raw === "object" && raw !== null && !Array.isArray(raw)
-      ? (raw as Record<string, unknown>)
-      : {};
+  const record = readStoredRecord(stored);
   const pick = (group: Group): string => {
     const id = record[group];
     return has(group, id) ? id : DEFAULT_THEME_CHOICE[group];
@@ -124,14 +116,28 @@ export const readThemeChoice = (stored: string | null): ThemeChoice => {
   };
 };
 
+/** Whether `choice` is the shipped theme (nothing to reset). */
+export const isDefaultThemeChoice = (choice: ThemeChoice): boolean =>
+  GROUPS.every((group) => choice[group] === DEFAULT_THEME_CHOICE[group]);
+
 const background = (scheme: Scheme, id: string): string =>
   THEME_SWATCHES[scheme].find((swatch) => swatch.id === id)?.colour ??
   DEFAULT_THEME[scheme].background;
 
-const ink = (group: "primary" | "secondary", id: string, scheme: Scheme): string => {
+type InkGroup = "primary" | "secondary";
+
+/** The token each ink group colours. */
+const INK_TOKEN = { primary: "accent", secondary: "highlight" } as const satisfies Record<
+  InkGroup,
+  keyof ThemeColors
+>;
+
+type Mutable<T> = { -readonly [K in keyof T]: T[K] };
+
+const ink = (group: InkGroup, id: string, scheme: Scheme): string => {
   const swatch =
     THEME_SWATCHES[group].find((candidate) => candidate.id === id) ?? THEME_SWATCHES[group][0];
-  return swatch?.[scheme] ?? DEFAULT_THEME[scheme][group === "primary" ? "accent" : "highlight"];
+  return swatch?.[scheme] ?? DEFAULT_THEME[scheme][INK_TOKEN[group]];
 };
 
 /** The neutral tokens, laid out from the background. */
@@ -153,13 +159,13 @@ const MAX_NEUTRAL_CHROMA = 0.05;
  * same side (lighter or darker), in the new ground's hue. Contrast rather than
  * fixed lightness steps, so cards still stand off a true-black ground.
  */
-const deriveNeutrals = (scheme: Scheme, ground: string): Record<string, string> => {
+const deriveNeutrals = (scheme: Scheme, ground: string): Mutable<ThemeColors> => {
   const shipped = DEFAULT_THEME[scheme];
   if (ground.toLowerCase() === shipped.background) return { ...shipped };
   const groundY = luminance(ground);
   const groundTone = toOklch(ground);
   const shippedTone = toOklch(shipped.background);
-  const result: Record<string, string> = { background: ground };
+  const result: Mutable<ThemeColors> = { ...shipped, background: ground };
   for (const token of NEUTRALS) {
     const reference = shipped[token];
     if (reference === shipped.background) {
@@ -176,6 +182,9 @@ const deriveNeutrals = (scheme: Scheme, ground: string): Record<string, string> 
   return result;
 };
 
+const BLACK = "#000000";
+const WHITE = "#ffffff";
+
 /** How finely an ink is pushed toward black or white until it reads. */
 const READABLE_STEPS = 40;
 
@@ -186,7 +195,7 @@ const readable = (
   minimum: number,
   scheme: Scheme,
 ): string => {
-  const extreme = scheme === "light" ? "#000000" : "#ffffff";
+  const extreme = scheme === "light" ? BLACK : WHITE;
   for (let step = 0; step <= READABLE_STEPS; step++) {
     const candidate = mix(colour, extreme, step / READABLE_STEPS);
     if (grounds.every((ground) => contrastRatio(candidate, ground) >= minimum)) return candidate;
@@ -201,7 +210,7 @@ const deriveScheme = (
   accent: string,
   highlight: string,
 ): ThemeColors => {
-  const colours: Record<string, string> = {
+  const colours: Mutable<ThemeColors> = {
     ...deriveNeutrals(scheme, ground),
     accent,
     highlight,
@@ -209,19 +218,18 @@ const deriveScheme = (
   };
   for (const { ink: token, on, minimum } of CONTRAST_REQUIREMENTS) {
     if (token === "on-accent") continue;
-    const current = colours[token] ?? "#000000";
     colours[token] = readable(
-      current,
-      on.map((under) => colours[under] ?? "#000000"),
+      colours[token],
+      on.map((under) => colours[under]),
       minimum,
       scheme,
     );
   }
   // Text on an accent fill is the lightest ground (light) or the ground itself (dark).
-  const onAccent = scheme === "light" ? colours.surface : colours.background;
+  colours["on-accent"] = scheme === "light" ? colours.surface : colours.background;
   // The dialog veil darkens: with the text colour in light mode, the ground in dark.
-  const scrim = scheme === "light" ? colours.foreground : colours.background;
-  return { ...colours, "on-accent": onAccent, scrim } as unknown as ThemeColors;
+  colours.scrim = scheme === "light" ? colours.foreground : colours.background;
+  return colours;
 };
 
 /** The full theme for a choice: both schemes, everything derived and readable. */
@@ -236,12 +244,17 @@ export const themeFor = (choice: ThemeChoice): Theme => {
   return { light: scheme("light"), dark: scheme("dark") };
 };
 
+const markOn = (colour: string): string =>
+  contrastRatio(BLACK, colour) >= contrastRatio(WHITE, colour) ? BLACK : WHITE;
+
 /** A swatch as Settings shows it: the colour it gives, and whether it's chosen. */
 export interface ThemeSwatchOption {
   readonly id: string;
   readonly label: string;
   readonly colour: string;
   readonly selected: boolean;
+  /** The check mark drawn on it when chosen: black or white, whichever reads better. */
+  readonly mark: string;
 }
 
 export interface ThemeSwatchRow {
@@ -261,7 +274,13 @@ export const themeSwatchRows = (choice: ThemeChoice, scheme: Scheme): readonly T
       const colour =
         group === "light" || group === "dark"
           ? theme[group].background
-          : theme[scheme][group === "primary" ? "accent" : "highlight"];
-      return { id: swatch.id, label: swatch.label, colour, selected: choice[group] === swatch.id };
+          : theme[scheme][INK_TOKEN[group]];
+      return {
+        id: swatch.id,
+        label: swatch.label,
+        colour,
+        selected: choice[group] === swatch.id,
+        mark: markOn(colour),
+      };
     }),
   }));

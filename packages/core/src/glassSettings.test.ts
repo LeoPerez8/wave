@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { GLASS_SETTINGS, glassTintAlpha, readGlassSettings } from "./index.ts";
+import {
+  GLASS_SETTINGS,
+  glassTintAlpha,
+  isDefaultGlassSettings,
+  readGlassSettings,
+} from "./index.ts";
 
 /** Wave's glass before it could be tuned: 24 dp blur, 12 dp refraction, tint alpha B8, rim on. */
 const TODAY = { blur: 24, refraction: 12, tint: 72, rim: true };
@@ -53,5 +58,14 @@ describe("glassTintAlpha", () => {
     assert.equal(glassTintAlpha(50), "80");
     assert.equal(glassTintAlpha(72), "B8");
     assert.equal(glassTintAlpha(5), "0D");
+  });
+});
+
+describe("isDefaultGlassSettings", () => {
+  test("only the glass as shipped is the default, so Reset is off until a setting moves", () => {
+    assert.equal(isDefaultGlassSettings(readGlassSettings(null)), true);
+    assert.equal(isDefaultGlassSettings({ blur: 24, refraction: 12, tint: 72, rim: true }), true);
+    assert.equal(isDefaultGlassSettings({ blur: 24, refraction: 12, tint: 72, rim: false }), false);
+    assert.equal(isDefaultGlassSettings({ blur: 30, refraction: 12, tint: 72, rim: true }), false);
   });
 });
