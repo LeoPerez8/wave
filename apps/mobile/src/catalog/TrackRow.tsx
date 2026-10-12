@@ -6,6 +6,7 @@ import { useThemeColor } from "@/theme/useThemeColor";
 
 import { Artwork } from "./Artwork";
 import { CELL, grid } from "./grid";
+import { RankNumber } from "./RankNumber";
 
 export type TrackSummary = {
   id: string;
@@ -25,6 +26,8 @@ type Props = {
   favorite?: boolean;
   /** Songs lists show a thumbnail; album track lists show the track number. */
   leading: "artwork" | "number";
+  /** Sets the number in ember: the top entry of a ranking, whose number is its rank. */
+  topNumber?: boolean;
   onPress: () => void;
   onLongPress?: () => void;
   /** Screen-reader actions standing in for gestures (move, remove in a playlist). */
@@ -50,6 +53,7 @@ export function TrackRow({
   state,
   favorite = false,
   leading,
+  topNumber = false,
   onPress,
   onLongPress,
   accessibilityActions,
@@ -80,18 +84,11 @@ export function TrackRow({
       <View className="flex-row items-center" style={{ height: grid.row, gap: CELL * 1.5 }}>
         {leading === "artwork" ? (
           <Artwork uri={track.artworkUri} tint={track.tint} size={THUMB} />
+        ) : state === undefined && track.trackNumber !== undefined ? (
+          <RankNumber rank={track.trackNumber} top={topNumber} />
         ) : (
           <View className="items-center" style={{ width: grid.stateCell }}>
-            {state === undefined && track.trackNumber !== undefined ? (
-              <Text
-                className="font-sans text-body text-secondary"
-                style={{ fontVariant: ["tabular-nums"] }}
-              >
-                {track.trackNumber}
-              </Text>
-            ) : (
-              stateIcon
-            )}
+            {stateIcon}
           </View>
         )}
         <View className="flex-1">

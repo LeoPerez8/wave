@@ -11,13 +11,38 @@
   <uses-permission android:name="android.permission.WAKE_LOCK" />
 
   <application>
+    <!-- A media library service: Android Auto browses Wave through it (docs/auto-spike.md). -->
     <service
       android:name="expo.modules.wavenative.player.PlaybackService"
       android:exported="true"
       android:foregroundServiceType="mediaPlayback">
       <intent-filter>
-        <action android:name="androidx.media3.session.MediaSessionService" />
+        <action android:name="androidx.media3.session.MediaLibraryService" />
+        <action android:name="android.media.browse.MediaBrowserService" />
       </intent-filter>
     </service>
+
+    <!--
+      Media buttons with nothing playing resume the last queue (playback resumption,
+      PlaybackService.onPlaybackResumption); Media3 requires it to be declared.
+    -->
+    <receiver
+      android:name="androidx.media3.session.MediaButtonReceiver"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.MEDIA_BUTTON" />
+      </intent-filter>
+    </receiver>
+
+    <!-- Cached artwork as content URIs: Android Auto can't read Wave's files (ArtworkProvider). -->
+    <provider
+      android:name="expo.modules.wavenative.artwork.ArtworkProvider"
+      android:authorities="${applicationId}.artwork"
+      android:exported="true" />
+
+    <!-- Lists Wave as a media app in Android Auto. -->
+    <meta-data
+      android:name="com.google.android.gms.car.application"
+      android:resource="@xml/automotive_app_desc" />
   </application>
 </manifest>

@@ -12,7 +12,10 @@ import {
   sortKey,
   type IndexedFile,
   type LibraryTrack,
+  type CreditedPlayTotals,
   type PlayEvent,
+  type PlayTotals,
+  type StatsWindow,
 } from "@wave/core";
 import { and, asc, desc, eq, inArray, ne, or, sql, type SQL } from "drizzle-orm";
 import { drizzle, type ExpoSQLiteDatabase } from "drizzle-orm/expo-sqlite";
@@ -24,6 +27,9 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { openDatabaseSync } from "expo-sqlite";
 
+import { selectAlbums } from "./db/albums";
+import { selectArtistCovers, selectArtistSongs, selectArtists } from "./db/artists";
+import type { RowPage } from "./db/database";
 import migrations from "./db/migrations";
 import {
   homeSections,
@@ -33,7 +39,10 @@ import {
   type HomeSections,
   type RecordedPlay,
 } from "./db/playHistory";
+import { selectPlaylistSongs } from "./db/playlists";
 import * as schema from "./db/schema";
+import { BY_TITLE, trackQuery } from "./db/tracks";
+import { creditedPlayTotals, trackPlayTotals } from "./db/stats";
 import type { KnownFile } from "./NativeScanner";
 
 const DATABASE_NAME = "wave.db";
@@ -270,8 +279,30 @@ export class LibraryStore extends Context.Service<
     readonly listSongs: Effect.Effect<readonly SongRow[], LibraryStoreError>;
     /** Every album by title, then album artist, for Library › Albums. */
     readonly listAlbums: Effect.Effect<readonly AlbumRow[], LibraryStoreError>;
+    /** [page] of the albums in the same order, for lists that page (Auto). */
+    readonly listAlbumsPage: (
+      page: RowPage,
+    ) => Effect.Effect<readonly AlbumRow[], LibraryStoreError>;
     /** Every artist with songs, by name, for Library › Artists. */
     readonly listArtists: Effect.Effect<readonly ArtistRow[], LibraryStoreError>;
+    /** [page] of the artists in the same order, for lists that page (Auto). */
+    readonly listArtistsPage: (
+      page: RowPage,
+    ) => Effect.Effect<readonly ArtistRow[], LibraryStoreError>;
+    /** [page] of an artist's songs, in their screen's order (by title), for Auto. */
+    readonly listArtistSongsPage: (
+      id: number,
+      page: RowPage,
+    ) => Effect.Effect<readonly SongRow[], LibraryStoreError>;
+    /** [page] of a playlist's songs, in playlist order, for Auto. */
+    readonly listPlaylistSongsPage: (
+      id: number,
+      page: RowPage,
+    ) => Effect.Effect<readonly SongRow[], LibraryStoreError>;
+    /** A cover for each of [ids] that has one (an album or song of theirs), for Auto. */
+    readonly artistCovers: (
+      ids: readonly number[],
+    ) => Effect.Effect<ReadonlyMap<number, string>, LibraryStoreError>;
     /** Every genre with songs, by name, for Library › Genres. */
     readonly listGenres: Effect.Effect<readonly GenreRow[], LibraryStoreError>;
     /** Every folder holding songs, by name, for Library › Folders. */
@@ -360,6 +391,25 @@ export class LibraryStore extends Context.Service<
     readonly home: Effect.Effect<HomeSections, LibraryStoreError>;
     /** The play recorded last, to pick back up when JS restarts while the player kept going. */
     readonly latestPlay: Effect.Effect<RecordedPlay | null, LibraryStoreError>;
+    /** Each track's counted plays within [window] (tracks still in the library), in no order. */
+    readonly trackPlayTotals: (
+      window: StatsWindow,
+    ) => Effect.Effect<readonly PlayTotals[], LibraryStoreError>;
+    /**
+     * Counted plays within [window] per album and track artist (tracks still in
+     * the library), in no order; Core's `albumPlayTotals` / `artistPlayTotals` group them.
+     */
+    readonly creditedPlayTotals: (
+      window: StatsWindow,
+    ) => Effect.Effect<readonly CreditedPlayTotals[], LibraryStoreError>;
+    /** The albums with these ids, in no particular order; albums no longer in the library are left out. */
+    readonly albumsByIds: (
+      ids: readonly number[],
+    ) => Effect.Effect<readonly AlbumRow[], LibraryStoreError>;
+    /** The artists with these ids, in no particular order; artists without songs are left out. */
+    readonly artistsByIds: (
+      ids: readonly number[],
+    ) => Effect.Effect<readonly ArtistRow[], LibraryStoreError>;
   }
 >()("@wave/mobile/library/LibraryStore") {}
 
@@ -633,86 +683,13 @@ const removeRootSync = (db: Database, path: string): void => {
   });
 };
 
-/** Tracks with what every track list shows (a `SongRow`), plus what orders albums and folders. */
-const trackQuery = (db: Database) => {
-  const { tracks, artists, albums, artwork } = schema;
-  return db
-    .select({
-      id: tracks.id,
-      path: tracks.path,
-      title: tracks.title,
-      artist: artists.name,
-      album: albums.title,
-      durationMs: tracks.durationMs,
-      thumbPath: artwork.thumbPath,
-      artworkPath: artwork.path,
-      titleSort: tracks.titleSort,
-      albumId: tracks.albumId,
-      artistId: tracks.artistId,
-      discNumber: tracks.discNumber,
-      trackNumber: tracks.trackNumber,
-      fileName: tracks.fileName,
-    })
-    .from(tracks)
-    .innerJoin(artists, eq(tracks.artistId, artists.id))
-    .innerJoin(albums, eq(tracks.albumId, albums.id))
-    .leftJoin(artwork, eq(tracks.artworkHash, artwork.hash));
-};
-
-/** Albums with their track count and length; albums left without tracks don't appear. */
-const albumQuery = (db: Database, where: SQL | undefined): AlbumRow[] => {
-  const { tracks, artists, albums, artwork } = schema;
-  return db
-    .select({
-      id: albums.id,
-      title: albums.title,
-      titleSort: albums.titleSort,
-      albumArtist: artists.name,
-      albumArtistId: albums.albumArtistId,
-      year: albums.year,
-      compilation: albums.compilation,
-      trackCount: sql<number>`count(${tracks.id})`,
-      durationMs: sql<number>`coalesce(sum(${tracks.durationMs}), 0)`,
-      thumbPath: artwork.thumbPath,
-      artworkPath: artwork.path,
-    })
-    .from(albums)
-    .innerJoin(artists, eq(albums.albumArtistId, artists.id))
-    .innerJoin(tracks, eq(tracks.albumId, albums.id))
-    .leftJoin(artwork, eq(albums.artworkHash, artwork.hash))
-    .where(where)
-    .groupBy(albums.id)
-    .orderBy(asc(albums.titleSort), asc(artists.sort), asc(albums.id))
-    .all();
-};
-
-const BY_TITLE = [
-  asc(schema.tracks.titleSort),
-  asc(schema.artists.sort),
-  asc(schema.tracks.path),
-] as const;
-
-/**
- * Artists with songs: a song belongs to its track artist and to the album
- * artist of its album (so Watch the Throne counts for Kanye West as well).
- */
-const listArtistsSync = (db: Database): ArtistRow[] =>
-  db.all<ArtistRow>(sql`
-    WITH links AS (
-      SELECT id AS track_id, artist_id FROM tracks
-      UNION
-      SELECT tracks.id, albums.album_artist_id FROM tracks JOIN albums ON albums.id = tracks.album_id
-    )
-    SELECT artists.id AS "id", artists.name AS "name", artists.sort AS "sort",
-      (SELECT count(*) FROM albums WHERE albums.album_artist_id = artists.id) AS "albumCount",
-      count(links.track_id) AS "trackCount"
-    FROM artists JOIN links ON links.artist_id = artists.id
-    GROUP BY artists.id
-    ORDER BY artists.sort, artists.id`);
+/** Artists with songs (see `selectArtists`), only [ids] if given. */
+const listArtistsSync = (db: Database, ids?: readonly number[]): ArtistRow[] =>
+  selectArtists(db, { ids });
 
 const getAlbumSync = (db: Database, id: number): AlbumDetail | null => {
   const { tracks, genres } = schema;
-  const album = albumQuery(db, eq(schema.albums.id, id))[0];
+  const album = selectAlbums(db, eq(schema.albums.id, id))[0];
   if (album === undefined) return null;
   const genre = db
     .select({ name: genres.name })
@@ -735,21 +712,10 @@ const getArtistSync = (db: Database, id: number): ArtistDetail | null => {
     .where(eq(artists.id, id))
     .get();
   if (artist === undefined) return null;
-  const songs = trackQuery(db)
-    .where(
-      or(
-        eq(tracks.artistId, id),
-        inArray(
-          tracks.albumId,
-          db.select({ id: albums.id }).from(albums).where(eq(albums.albumArtistId, id)),
-        ),
-      ),
-    )
-    .orderBy(...BY_TITLE)
-    .all();
+  const songs = selectArtistSongs(db, id);
   const split = artistAlbums(
     id,
-    albumQuery(
+    selectAlbums(
       db,
       or(
         eq(albums.albumArtistId, id),
@@ -848,16 +814,6 @@ const rememberSearchSync = (db: Database, query: string, now: number): readonly 
 /** Rows per multi-row insert, well under SQLite's bound-parameter limit. */
 const INSERT_CHUNK = 200;
 
-/** Songs (`SongRow`s) by track id, fetched in chunks. */
-const songsById = (db: Database, ids: readonly number[]) => {
-  const songs = new Map<number, ReturnType<ReturnType<typeof trackQuery>["all"]>[number]>();
-  for (const chunk of chunks(ids)) {
-    for (const song of trackQuery(db).where(inArray(schema.tracks.id, chunk)).all())
-      songs.set(song.id, song);
-  }
-  return songs;
-};
-
 interface PlaylistCovers {
   readonly thumbPaths: readonly string[];
   readonly artworkPaths: readonly string[];
@@ -926,27 +882,14 @@ const listPlaylistsSync = (db: Database): PlaylistRow[] => {
 };
 
 const getPlaylistSync = (db: Database, id: number): PlaylistDetail | null => {
-  const { playlists, playlistItems } = schema;
+  const { playlists } = schema;
   const playlist = db
     .select({ id: playlists.id, name: playlists.name })
     .from(playlists)
     .where(eq(playlists.id, id))
     .get();
   if (playlist === undefined) return null;
-  const order = db
-    .select({ itemId: playlistItems.id, trackId: playlistItems.trackId })
-    .from(playlistItems)
-    .where(eq(playlistItems.playlistId, id))
-    .orderBy(asc(playlistItems.position), asc(playlistItems.id))
-    .all();
-  const songs = songsById(
-    db,
-    order.map((item) => item.trackId),
-  );
-  const items = order.flatMap((item) => {
-    const song = songs.get(item.trackId);
-    return song === undefined ? [] : [{ ...song, itemId: item.itemId }];
-  });
+  const items = selectPlaylistSongs(db, id);
   const covers = playlistCovers(db, id).get(id) ?? NO_COVERS;
   return {
     playlist: {
@@ -1188,9 +1131,21 @@ const make = Effect.gen(function* () {
             .get() ?? null,
       ),
 
-    listAlbums: attempt("list albums", () => albumQuery(db, undefined)),
+    listAlbums: attempt("list albums", () => selectAlbums(db, undefined)),
+
+    listAlbumsPage: (page) => attempt("list albums", () => selectAlbums(db, undefined, page)),
 
     listArtists: attempt("list artists", () => listArtistsSync(db)),
+
+    listArtistsPage: (page) => attempt("list artists", () => selectArtists(db, { page })),
+
+    listArtistSongsPage: (id, page) =>
+      attempt("list the artist's songs", () => selectArtistSongs(db, id, page)),
+
+    listPlaylistSongsPage: (id, page) =>
+      attempt("list the playlist's songs", () => selectPlaylistSongs(db, id, page)),
+
+    artistCovers: (ids) => attempt("load artist covers", () => selectArtistCovers(db, ids)),
 
     listGenres: attempt("list genres", () => {
       const { genres, tracks } = schema;
@@ -1404,6 +1359,19 @@ const make = Effect.gen(function* () {
     home: attempt("read Home", () => homeSections(db)),
 
     latestPlay: attempt("read the latest play", () => latestPlay(db)),
+
+    trackPlayTotals: (window) => attempt("sum up song plays", () => trackPlayTotals(db, window)),
+
+    creditedPlayTotals: (window) =>
+      attempt("sum up album and artist plays", () => creditedPlayTotals(db, window)),
+
+    albumsByIds: (ids) =>
+      attempt("read ranked albums", () =>
+        ids.length === 0 ? [] : selectAlbums(db, inArray(schema.albums.id, [...ids])),
+      ),
+
+    artistsByIds: (ids) =>
+      attempt("read ranked artists", () => (ids.length === 0 ? [] : listArtistsSync(db, ids))),
   });
 });
 

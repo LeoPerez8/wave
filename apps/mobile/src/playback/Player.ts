@@ -1,4 +1,4 @@
-import type { SleepTimer } from "@wave/core";
+import type { PlaySource, RepeatMode, SleepTimer } from "@wave/core";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -62,10 +62,15 @@ export class Player extends Context.Service<
       steps: readonly NativeSyncStep[],
       items: readonly PlayerItem[],
     ) => Effect.Effect<void, PlayerError>;
-    readonly setRepeatMode: (mode: "off" | "all" | "one") => Effect.Effect<void, PlayerError>;
+    readonly setRepeatMode: (mode: RepeatMode) => Effect.Effect<void, PlayerError>;
+    /** Shows the queue's shuffle and repeat on Android Auto's player screen. */
+    readonly setModes: (shuffle: boolean, repeat: RepeatMode) => Effect.Effect<void, PlayerError>;
     readonly getItemIds: Effect.Effect<NativeItemIds, PlayerError>;
-    readonly saveQueue: (json: string) => Effect.Effect<void>;
+    readonly saveQueue: (json: string, source: PlaySource) => Effect.Effect<void>;
     readonly savedQueue: Effect.Effect<string | null>;
+    readonly savedQueueSource: Effect.Effect<PlaySource | null>;
+    /** Whether the player resumed the saved queue on its own (a cold start); clears it. */
+    readonly takeResumed: Effect.Effect<boolean>;
     /** Calls `listener` for every item transition while the scope lives. */
     readonly onItemTransition: (
       listener: (event: ItemTransitionEvent) => void,
@@ -129,9 +134,13 @@ export const layer = Layer.effect(
       applySync: (steps, items) =>
         call("update the queue", () => WavePlayer.applySync(steps, items)),
       setRepeatMode: (mode) => call("set repeat", () => WavePlayer.setRepeatMode(mode)),
+      setModes: (shuffle, repeat) =>
+        call("show shuffle and repeat", () => WavePlayer.setModes(shuffle, repeat)),
       getItemIds: call("read the queue", () => WavePlayer.getItemIds()),
-      saveQueue: (json) => Effect.sync(() => WavePlayer.saveQueue(json)),
+      saveQueue: (json, source) => Effect.sync(() => WavePlayer.saveQueue(json, source)),
       savedQueue: Effect.sync(() => WavePlayer.savedQueue()),
+      savedQueueSource: Effect.sync(() => WavePlayer.savedQueueSource()),
+      takeResumed: Effect.sync(() => WavePlayer.takeResumed()),
       onItemTransition: (listener) =>
         Effect.asVoid(
           Effect.acquireRelease(

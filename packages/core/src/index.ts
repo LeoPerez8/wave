@@ -20,6 +20,7 @@ export {
   EMPTY_QUEUE,
   RESTART_THRESHOLD_MS,
   currentEntry,
+  nextRepeatMode,
   parseQueueState,
   reduceQueue,
   upNext,
@@ -92,7 +93,9 @@ export {
   COUNTED_PLAY_MS,
   EMPTY_PLAY_TRACKER,
   isCountedPlay,
+  keptPlayingEntry,
   playSoFar,
+  queueSourceAfter,
   resumePlay,
   trackPlays,
 } from "./playEvents.ts";
@@ -105,7 +108,47 @@ export type {
   PlayTrackerResult,
   PlayTrackerState,
   PlaybackSignal,
+  PlaySource,
 } from "./playEvents.ts";
 export { favoriteStar, starWriteSettled, starWriteStarted } from "./favorites.ts";
 export type { FavoriteStar } from "./favorites.ts";
 export { compareStrings } from "./library.ts";
+export { STATS_PERIODS, STATS_SEE_ALL, STATS_TOP, rankPlays, statsWindow } from "./stats.ts";
+export type { PlayTotals, StatsPeriod, StatsWindow } from "./stats.ts";
+export { albumPlayTotals, artistPlayTotals } from "./stats.ts";
+export type { CreditedPlayTotals } from "./stats.ts";
+export { STATS_RANKINGS, statsSeeAll } from "./statsSeeAll.ts";
+export type { StatsRanking, StatsSeeAll } from "./statsSeeAll.ts";
+export {
+  AUTO_ROOT,
+  AUTO_TABS,
+  autoAlbumItem,
+  autoArtistItem,
+  autoChildren,
+  autoItem,
+  autoPageItems,
+  autoPlayList,
+  autoPlaylistItem,
+  autoQueueAdd,
+  autoQueueStart,
+  autoTrackItems,
+  decodeAutoMediaId,
+  encodeAutoMediaId,
+} from "./auto.ts";
+export type {
+  AutoAlbum,
+  AutoArtist,
+  AutoArtwork,
+  AutoChildren,
+  AutoFetch,
+  AutoHomeList,
+  AutoItem,
+  AutoNode,
+  AutoPlaylist,
+  AutoQueueStart,
+  AutoSource,
+  AutoTab,
+  AutoTrack,
+  AutoTrackList,
+  AutoTrackListKind,
+} from "./auto.ts";

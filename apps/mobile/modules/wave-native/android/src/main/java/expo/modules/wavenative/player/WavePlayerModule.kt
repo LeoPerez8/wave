@@ -2,12 +2,10 @@ package expo.modules.wavenative.player
 
 import android.content.ComponentName
 import android.content.Context
-import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import androidx.media3.common.MediaItem
-import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
@@ -23,7 +21,6 @@ import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.kotlin.records.Field
 import expo.modules.kotlin.records.Record
-import java.io.File
 
 /** One track handed to the player. */
 class PlayerItem : Record {
@@ -49,9 +46,20 @@ class SyncStepRecord : Record {
  * The last queue JS saved, kept for the life of the process: the activity and
  * the JS runtime can go away while [PlaybackService] keeps playing, and JS
  * picks its queue (shuffle, repeat, Up Next) back up from here when it returns.
+ * After a cold start, playback resumption seeds it from the resume snapshot.
  */
 object QueueSnapshot {
   @Volatile var json: String? = null
+
+  /** Where the queue was started from (`phone` or `auto`), for the plays JS records. */
+  @Volatile var source: String? = null
+
+  /**
+   * Whether the player's list came from playback resumption (Wave's process
+   * had died) and JS hasn't taken it over yet: its plays are new ones, not the
+   * ones on record going on.
+   */
+  @Volatile var resumed = false
 }
 
 /** The controller's item list, edited in place so the playing item keeps playing. */
@@ -153,9 +161,20 @@ class WavePlayerModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("WavePlayer")
 
-    Events("onPlaybackState", "onPosition", "onItemTransition", "onSeek", "onPlayerError", "onSleepTimer")
+    Events(
+      "onPlaybackState",
+      "onPosition",
+      "onItemTransition",
+      "onSeek",
+      "onPlayerError",
+      "onSleepTimer",
+      "onAutoRequest",
+    )
 
-    OnCreate { main.post(::connect) }
+    OnCreate {
+      ResumeStore.init(context)
+      main.post(::connect)
+    }
 
     /**
      * Applies Core's sync plan. Items already loaded are reused by key, so JS
@@ -168,6 +187,7 @@ class WavePlayerModule : Module() {
           .associateBy { it.mediaId }
         val incoming = items.associate { it.id to toMediaItem(it) }
         syncing = true
+        QueueSnapshot.resumed = false
         try {
           val plan = steps.map { SyncStep.of(it.type, it.at, it.removeCount, it.keys, it.index, it.key) }
           QueueSync.apply(plan, ControllerPlaylist(player)) { key -> incoming[key] ?: loaded[key] }
@@ -190,6 +210,17 @@ class WavePlayerModule : Module() {
       }
     }.runOnQueue(Queues.MAIN)
 
+    /**
+     * The queue's shuffle and repeat (`off`, `all` or `one`), after every change
+     * made in the app or in the car: the service shows them on Auto's buttons.
+     */
+    AsyncFunction("setModes") { shuffle: Boolean, repeat: String, promise: Promise ->
+      val modes = AutoModes.fromJs(shuffle, repeat)
+        ?: return@AsyncFunction promise.reject("ERR_PLAYER_MODES", "Unknown repeat mode: $repeat", null)
+      AutoModes.state.publish(modes)
+      promise.resolve(null)
+    }.runOnQueue(Queues.MAIN)
+
     /** The loaded entry keys and the one playing, for JS to check a saved queue against. */
     AsyncFunction("getItemIds") { promise: Promise ->
       withController(promise) { player ->
@@ -202,10 +233,26 @@ class WavePlayerModule : Module() {
       }
     }.runOnQueue(Queues.MAIN)
 
-    /** Keeps the queue for when JS comes back (see [QueueSnapshot]). */
-    Function("saveQueue") { json: String -> QueueSnapshot.json = json }
+    /**
+     * Keeps the queue for when JS comes back (see [QueueSnapshot]), and for a
+     * cold start ([ResumeStore]), with where it was started from.
+     */
+    Function("saveQueue") { json: String, source: String? ->
+      QueueSnapshot.json = json
+      if (source != null) QueueSnapshot.source = source
+      ResumeStore.saveQueue(json, source)
+    }
 
     Function("savedQueue") { QueueSnapshot.json }
+
+    Function("savedQueueSource") { QueueSnapshot.source }
+
+    /** Whether the player resumed the saved queue on its own (see [QueueSnapshot.resumed]); clears it. */
+    Function("takeResumed") {
+      val resumed = QueueSnapshot.resumed
+      QueueSnapshot.resumed = false
+      resumed
+    }
 
     AsyncFunction("play") { promise: Promise ->
       withController(promise) { player ->
@@ -257,7 +304,22 @@ class WavePlayerModule : Module() {
       withController(promise) { player -> promise.resolve(state(player)) }
     }.runOnQueue(Queues.MAIN)
 
+    /**
+     * JS answers Android Auto from now on ([AutoLibrary.bridge]): `onAutoRequest`
+     * carries each request, including those made while the runtime was starting.
+     */
+    Function("attachAuto") {
+      AutoLibrary.bridge.attach { id, type, payload ->
+        sendEvent("onAutoRequest", mapOf("id" to id, "type" to type, "payload" to payload))
+      }
+    }
+
+    Function("respondAuto") { id: Int, json: String -> AutoLibrary.bridge.respond(id, json) }
+
+    Function("failAuto") { id: Int, message: String -> AutoLibrary.bridge.fail(id, message) }
+
     OnDestroy {
+      AutoLibrary.bridge.detach()
       main.post {
         main.removeCallbacks(positionTicker)
         controller?.removeListener(listener)
@@ -332,21 +394,8 @@ class WavePlayerModule : Module() {
     )
   }
 
-  private fun toMediaItem(item: PlayerItem): MediaItem {
-    val uri = Uri.fromFile(File(item.path))
-    val metadata = MediaMetadata.Builder()
-      .setTitle(item.title)
-      .setArtist(item.artist)
-      .setAlbumTitle(item.album)
-      .setArtworkUri(item.artworkPath?.let { Uri.fromFile(File(it)) })
-      .build()
-    return MediaItem.Builder()
-      .setMediaId(item.id)
-      .setUri(uri)
-      .setRequestMetadata(MediaItem.RequestMetadata.Builder().setMediaUri(uri).build())
-      .setMediaMetadata(metadata)
-      .build()
-  }
+  private fun toMediaItem(item: PlayerItem): MediaItem =
+    PlayerMediaItems.build(item.id, item.path, item.title, item.artist, item.album, item.artworkPath)
 
   private fun position(player: Player): Map<String, Any?> =
     mapOf(
@@ -368,7 +417,7 @@ class WavePlayerModule : Module() {
           "title" to it.mediaMetadata.title?.toString(),
           "artist" to it.mediaMetadata.artist?.toString(),
           "album" to it.mediaMetadata.albumTitle?.toString(),
-          "artworkUri" to it.mediaMetadata.artworkUri?.toString(),
+          "artworkUri" to PlayerMediaItems.appArtworkUri(it.mediaMetadata),
         )
       },
     )

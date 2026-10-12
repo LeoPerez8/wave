@@ -1,4 +1,4 @@
-import type { SleepTimer } from "@wave/core";
+import type { PlaySource, RepeatMode, SleepTimer } from "@wave/core";
 import { NativeModule, requireNativeModule } from "expo";
 
 /** One track handed to the native player (`modules/wave-native`, `WavePlayerModule`). */
@@ -80,6 +80,53 @@ export interface SleepTimerEvent {
   readonly timer: SleepTimer | null;
 }
 
+/**
+ * A question from Android Auto, forwarded by the media library service. Answer
+ * every one with `respondAuto` or `failAuto`: the service gives up after a few
+ * seconds and shows Auto a "still loading" message.
+ */
+export interface AutoRequestEvent {
+  readonly id: number;
+  readonly type: AutoRequest["type"];
+  /** JSON: the request's other fields (see `AutoRequest`). */
+  readonly payload: string;
+}
+
+/**
+ * An Auto request with its payload. Browse requests are answered with Core's
+ * `AutoItem` (or `AutoItem[]`) as JSON; `play` with an `AutoPlayback`.
+ */
+export type AutoRequest =
+  /** The browse root: an `AutoItem`. */
+  | { readonly type: "root" }
+  /** One page of a node's children: an `AutoItem[]`. */
+  | {
+      readonly type: "children";
+      readonly parentId: string;
+      readonly page: number;
+      readonly pageSize: number;
+    }
+  /** One node by media ID: an `AutoItem`. */
+  | { readonly type: "item"; readonly mediaId: string }
+  /** Auto played a node: start its queue and answer the items the session sets on the player. */
+  | { readonly type: "play"; readonly mediaId: string }
+  /**
+   * Auto added nodes to the queue: add their tracks through the queue engine
+   * (which puts them on the player), then answer `null`.
+   */
+  | { readonly type: "add"; readonly mediaIds: readonly string[] }
+  /**
+   * A tap on Auto's shuffle or repeat button: change the queue's mode as the
+   * app's buttons do, then answer `null` (the new modes go out with `setModes`).
+   */
+  | { readonly type: "command"; readonly command: "toggleShuffle" | "cycleRepeat" };
+
+/** The answer to a `play` request: the new player list and the item to start at. */
+export interface AutoPlayback {
+  readonly items: readonly PlayerItem[];
+  readonly startIndex: number;
+}
+
 type WavePlayerEvents = {
   onPlaybackState: (state: NativePlayerState) => void;
   onPosition: (position: PlayerPosition) => void;
@@ -87,16 +134,29 @@ type WavePlayerEvents = {
   onSeek: (event: SeekEvent) => void;
   onPlayerError: (event: PlayerErrorEvent) => void;
   onSleepTimer: (event: SleepTimerEvent) => void;
+  onAutoRequest: (event: AutoRequestEvent) => void;
 };
 
 declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
   /** Edits the item list per the plan; `items` holds only the keys new to the player. */
   applySync(steps: readonly NativeSyncStep[], items: readonly PlayerItem[]): Promise<void>;
-  setRepeatMode(mode: "off" | "all" | "one"): Promise<void>;
+  setRepeatMode(mode: RepeatMode): Promise<void>;
+  /** The queue's shuffle and repeat, for the toggles on Auto's player screen. */
+  setModes(shuffle: boolean, repeat: RepeatMode): Promise<void>;
   getItemIds(): Promise<NativeItemIds>;
-  /** Keeps the queue (JSON) in the native process, for when JS restarts. */
-  saveQueue(json: string): void;
+  /**
+   * Keeps the queue (JSON) in the native process, for when JS restarts, and on
+   * disk with where it was started from, for a cold start (playback resumption).
+   */
+  saveQueue(json: string, source: PlaySource): void;
   savedQueue(): string | null;
+  /** Where the saved queue was started from; null before any was saved. */
+  savedQueueSource(): PlaySource | null;
+  /**
+   * Whether the player resumed the saved queue on its own after Wave's process
+   * died (its plays are new, not ones on record going on). Reading it clears it.
+   */
+  takeResumed(): boolean;
   play(): Promise<void>;
   pause(): Promise<void>;
   seekTo(positionMs: number): Promise<void>;
@@ -108,6 +168,15 @@ declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
   setSleepTimer(type: SleepTimer["type"], endsAt: number | null): Promise<void>;
   cancelSleepTimer(): Promise<void>;
   getSleepTimer(): Promise<SleepTimer | null>;
+  /**
+   * Starts sending `onAutoRequest`, including the requests that queued up while
+   * the runtime was starting. Call it once a listener is in place.
+   */
+  attachAuto(): void;
+  /** Answers request `id` with JSON (see `AutoRequest`). */
+  respondAuto(id: number, json: string): void;
+  /** Answers request `id` with an error Auto shows as `message`. */
+  failAuto(id: number, message: string): void;
 }
 
 export const WavePlayer = requireNativeModule<WavePlayerModule>("WavePlayer");
