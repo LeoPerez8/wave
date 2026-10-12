@@ -222,3 +222,5 @@ export {
   writeSongSort,
 } from "./songSort.ts";
 export type { SongListKind, SongSort, SongSortKey, SortableSong } from "./songSort.ts";
+export { confirmSongDeletion, songDeletionFailure } from "./songDeletion.ts";
+export type { SongDeleteFailure, SongDeleteFailureReason } from "./songDeletion.ts";
