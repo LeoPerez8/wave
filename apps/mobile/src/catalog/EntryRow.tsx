@@ -1,6 +1,8 @@
+import { IconCheck } from "@tabler/icons-react-native";
 import { Text, View } from "react-native";
 
 import { Press } from "@/motion/Press";
+import { useThemeColor } from "@/theme/useThemeColor";
 
 import { grid } from "./grid";
 import { Hairline } from "./Hairline";
@@ -16,6 +18,8 @@ type Props = {
   divider?: boolean;
   /** Looks pressed: the entry a finger sliding across its menu would run. */
   highlighted?: boolean;
+  /** The current choice among the card's entries (a sort): marked with a check. */
+  selected?: boolean;
 };
 
 /** A Library entry (Playlists, Artists, …): one quiet line of type, no icon, no chevron. */
@@ -26,24 +30,31 @@ export function EntryRow({
   onLongPress,
   divider = true,
   highlighted = false,
+  selected = false,
 }: Props) {
+  const accent = useThemeColor("accent");
   return (
     <Press
       accessibilityRole="button"
       accessibilityLabel={count === undefined ? label : `${label}, ${count.toLocaleString("en")}`}
       onPress={onPress}
       onLongPress={onLongPress}
+      accessibilityState={{ selected }}
       haptic="selection"
       highlighted={highlighted}
     >
       <View className="flex-row items-center" style={{ height: grid.row }}>
         <Text className="flex-1 font-sans text-title3 font-normal text-foreground">{label}</Text>
-        <Text
-          className="font-sans text-subheadline text-secondary"
-          style={{ fontVariant: ["tabular-nums"] }}
-        >
-          {count === undefined ? "" : count.toLocaleString("en")}
-        </Text>
+        {selected ? (
+          <IconCheck size={22} color={accent} strokeWidth={1.75} />
+        ) : (
+          <Text
+            className="font-sans text-subheadline text-secondary"
+            style={{ fontVariant: ["tabular-nums"] }}
+          >
+            {count === undefined ? "" : count.toLocaleString("en")}
+          </Text>
+        )}
       </View>
       {divider && <Hairline />}
     </Press>

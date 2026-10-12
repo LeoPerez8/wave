@@ -15,6 +15,7 @@ import {
   type CreditedPlayTotals,
   type PlayEvent,
   type PlayTotals,
+  type SongListening,
   type StatsWindow,
 } from "@wave/core";
 import { and, asc, desc, eq, inArray, ne, or, sql, type SQL } from "drizzle-orm";
@@ -44,7 +45,7 @@ import {
 import { selectPlaylistSongs } from "./db/playlists";
 import * as schema from "./db/schema";
 import { BY_TITLE, trackQuery } from "./db/tracks";
-import { creditedPlayTotals, trackPlayTotals } from "./db/stats";
+import { creditedPlayTotals, songListening, trackPlayTotals } from "./db/stats";
 import type { KnownFile } from "./NativeScanner";
 
 const DATABASE_NAME = "wave.db";
@@ -97,16 +98,21 @@ export interface SongRow {
   readonly artworkPath: string | null;
   /** Core sort key of the title (files the row on the A–Z spine). */
   readonly titleSort: string;
+  /** Core sort keys of the artist and album, for sorting song lists. */
+  readonly artistSort: string;
+  readonly albumSort: string;
+  /** When the file entered the library (epoch ms). */
+  readonly addedAt: number;
   readonly albumId: number;
   /** The track artist. */
   readonly artistId: number;
-}
-
-/** A track on an album screen, with what orders it there. */
-export interface AlbumTrackRow extends SongRow {
+  /** Orders the album's tracks, and so sorts by artist and by album. */
   readonly discNumber: number | null;
   readonly trackNumber: number | null;
 }
+
+/** A track on an album screen, with what orders it there. */
+export type AlbumTrackRow = SongRow;
 
 /** One album of the Albums grid (and of an artist's albums). */
 export interface AlbumRow {
@@ -416,6 +422,11 @@ export class LibraryStore extends Context.Service<
     readonly artistsByIds: (
       ids: readonly number[],
     ) => Effect.Effect<readonly ArtistRow[], LibraryStoreError>;
+    /**
+     * Each played song's all-time listening (every play's time, counted plays,
+     * latest play, track artist), in no order; Core's `listeningTotals` sums it.
+     */
+    readonly songListening: Effect.Effect<readonly SongListening[], LibraryStoreError>;
   }
 >()("@wave/mobile/library/LibraryStore") {}
 
@@ -1378,6 +1389,8 @@ const make = Effect.gen(function* () {
 
     artistsByIds: (ids) =>
       attempt("read ranked artists", () => (ids.length === 0 ? [] : listArtistsSync(db, ids))),
+
+    songListening: attempt("sum up listening", () => songListening(db)),
   });
 });
 

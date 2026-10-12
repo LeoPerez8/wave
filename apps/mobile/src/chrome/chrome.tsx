@@ -54,6 +54,7 @@ export const useTabBarTop = (): number => {
 export const useFloatingChromeHeight = (): number => {
   const pathname = usePathname();
   const playing = useHasNowPlaying();
+  // Tab screens (the shortcut tab included) are drawn under the floating tab bar.
   const tabBar = tabOfPath(pathname) !== null;
   const miniPlayer = playing && (tabBar || inLibraryStack(pathname));
   return (

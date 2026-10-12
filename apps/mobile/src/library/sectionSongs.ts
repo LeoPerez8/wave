@@ -1,8 +1,14 @@
-import { sectionSongs, type LibrarySectionSlug, type SectionCollection } from "@wave/core";
+import {
+  sectionSongs,
+  sortSongs,
+  type LibrarySectionSlug,
+  type SectionCollection,
+} from "@wave/core";
 import * as Effect from "effect/Effect";
 
 import { LibraryStore, type LibraryStoreError, type SongRow } from "./LibraryStore";
 import { appRuntime } from "./runtime";
+import { currentSongSort } from "./songSort";
 
 type Store = LibraryStore["Service"];
 type Query<A> = (store: Store) => Effect.Effect<A, LibraryStoreError>;
@@ -63,7 +69,9 @@ export const itemSongs = (
  */
 export const librarySectionSongs = (section: LibrarySectionSlug): Promise<readonly SongRow[]> =>
   sectionSongs(section, {
-    songs: () => run((store) => store.listSongs),
+    // As Library › Songs shows them, in the sort chosen there.
+    songs: () =>
+      run((store) => store.listSongs).then((songs) => sortSongs(songs, currentSongSort("songs"))),
     favorites: () => run((store) => store.listFavorites),
     ...collections,
   });

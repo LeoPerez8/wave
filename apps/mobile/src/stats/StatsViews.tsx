@@ -311,7 +311,7 @@ export function NothingPlayed({ period }: { period: StatsPeriod }) {
       icon={IconChartBar}
       title={nothingPlayed(period)}
       // Core's counted-play rule (`isCountedPlay`).
-      message="Songs you listen to for half their length, or four minutes, are counted here."
+      message="Songs you listen to for more than 15 seconds are counted here."
     />
   );
 }
