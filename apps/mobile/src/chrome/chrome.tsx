@@ -1,3 +1,4 @@
+import { usePathname } from "expo-router";
 import { createContext, useContext, useSyncExternalStore, type ReactNode } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -42,6 +43,24 @@ export const useTabBarTop = (): number => {
   const insets = useSafeAreaInsets();
   const { tabBar } = useContext(ChromeContext);
   return insets.bottom + chrome.gap + (tabBar ? chrome.tabBar + chrome.gap : 0);
+};
+
+/** Routes drawn under the floating tab bar (src/app/(tabs)/_layout.tsx). */
+const TAB_PATHS: ReadonlySet<string> = new Set(["/", "/library", "/search"]);
+
+/**
+ * How far the floating chrome on the current screen reaches above the system
+ * inset, for things drawn at the root (outside `ChromeProvider`), like menus.
+ */
+export const useFloatingChromeHeight = (): number => {
+  const pathname = usePathname();
+  const playing = useHasNowPlaying();
+  const tabBar = TAB_PATHS.has(pathname);
+  // The library stack keeps the mini player too (src/app/library/_layout.tsx).
+  const miniPlayer = playing && (tabBar || pathname.startsWith("/library/"));
+  return (
+    (tabBar ? chrome.gap + chrome.tabBar : 0) + (miniPlayer ? chrome.gap + chrome.miniPlayer : 0)
+  );
 };
 
 /** Bottom padding that lets a list's last row scroll clear of the floating chrome. */

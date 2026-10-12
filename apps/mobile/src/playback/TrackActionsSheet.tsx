@@ -1,11 +1,10 @@
 import * as Haptics from "expo-haptics";
 import { router, usePathname } from "expo-router";
-import { useEffect, useState, useSyncExternalStore } from "react";
-import { Modal, Pressable, Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useEffect, useState } from "react";
+import { ScrollView, Text, View } from "react-native";
 
 import { EntryRow } from "@/catalog/EntryRow";
-import { CELL, grid } from "@/catalog/grid";
+import { CELL } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { Mosaic } from "@/catalog/Mosaic";
 import type { LibrarySection } from "@/catalog/sections";
@@ -28,7 +27,8 @@ import { removePlaylistItem } from "@/library/playlists";
 import { albumHref, artistHref, openAlbum, openArtist, playlistHref } from "@/library/routes";
 import { appRuntime } from "@/library/runtime";
 import { librarySectionSongs } from "@/library/sectionSongs";
-import { makeExternalStore } from "@/lib/externalStore";
+import { pressedRect } from "@/motion/pressedRect";
+import { openOverlay } from "@/overlay/overlay";
 
 import { addToQueue, playNext } from "./actions";
 
@@ -58,35 +58,43 @@ export type ActionTarget =
       readonly songs: Promise<readonly SongRow[]>;
     };
 
-const openTarget = makeExternalStore<ActionTarget | null>(null);
+/**
+ * Floats the menu next to the row (or button) whose press opened it, centred
+ * when opened some other way.
+ */
+const openActions = (target: ActionTarget): void => {
+  openOverlay({
+    label: heading(target, undefined).title,
+    anchor: pressedRect(),
+    render: (close) => <ActionsMenu target={target} close={close} />,
+  });
+};
 
 /** Opens the long-press menu for a track (in a playlist, pass its place there). */
 export const openTrackActions = (song: SongRow, playlistItem?: PlaylistPlace): void =>
-  openTarget.set({ kind: "track", song, playlistItem });
+  openActions({ kind: "track", song, playlistItem });
 
 /** Opens the menu for a playlist: queue it, add it to another, rename or delete it. */
 export const openPlaylistActions = (playlist: PlaylistRow): void =>
-  openTarget.set({ kind: "playlist", playlist });
+  openActions({ kind: "playlist", playlist });
 
 /** Opens the long-press menu for an album (Play Next and Add to Queue take the whole album). */
-export const openAlbumActions = (album: AlbumRow): void => openTarget.set({ kind: "album", album });
+export const openAlbumActions = (album: AlbumRow): void => openActions({ kind: "album", album });
 
 /** Opens the long-press menu for an artist (their songs, in the artist screen's order). */
 export const openArtistActions = (artist: ArtistRow): void =>
-  openTarget.set({ kind: "artist", artist });
+  openActions({ kind: "artist", artist });
 
 /** Opens the long-press menu for a genre (its songs, in the genre screen's order). */
-export const openGenreActions = (genre: GenreRow): void => openTarget.set({ kind: "genre", genre });
+export const openGenreActions = (genre: GenreRow): void => openActions({ kind: "genre", genre });
 
 /** Opens the long-press menu for a folder (its songs, in the folder screen's order). */
 export const openFolderActions = (folder: FolderRow): void =>
-  openTarget.set({ kind: "folder", folder });
+  openActions({ kind: "folder", folder });
 
 /** Opens the menu for a Library entry (Songs, Albums…): every song it holds, in its order. */
 export const openLibrarySectionActions = (section: LibrarySection): void =>
-  openTarget.set({ kind: "section", section, songs: librarySectionSongs(section.slug) });
-
-const close = (): void => openTarget.set(null);
+  openActions({ kind: "section", section, songs: librarySectionSongs(section.slug) });
 
 /** The tracks a menu's queue actions act on, in play order. */
 export const targetSongs = (target: ActionTarget): Promise<readonly SongRow[]> => {
@@ -195,8 +203,8 @@ const destinations = (target: ActionTarget): { albumId?: number; artistId?: numb
 };
 
 /** How many songs a Library entry's menu acts on, once they have loaded. */
-function useSectionSongCount(target: ActionTarget | null): number | undefined {
-  const songs = target?.kind === "section" ? target.songs : undefined;
+function useSectionSongCount(target: ActionTarget): number | undefined {
+  const songs = target.kind === "section" ? target.songs : undefined;
   const [loaded, setLoaded] = useState<{ songs: Promise<unknown>; count: number }>();
   useEffect(() => {
     if (songs === undefined) return;
@@ -214,35 +222,26 @@ function useSectionSongCount(target: ActionTarget | null): number | undefined {
   return loaded !== undefined && loaded.songs === songs ? loaded.count : undefined;
 }
 
-/** Favorite / Remove from Favorites for a track; stars stay in sync everywhere. */
-function FavoriteEntry({ song, onDone }: { song: SongRow; onDone: () => void }) {
-  const favorite = useIsFavorite(song.id);
-  return (
-    <EntryRow
-      label={favorite ? "Remove from Favorites" : "Favorite"}
-      onPress={() => {
-        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        void setFavorite(song.id, !favorite);
-        onDone();
-      }}
-    />
-  );
+/** One line of the menu. */
+interface MenuEntry {
+  readonly label: string;
+  readonly onPress: () => void;
 }
 
 /**
  * The long-press menu for a track, an album, an artist, a playlist, a genre, a
- * folder or a Library entry: what it is, then one quiet line per action. Flat,
- * square and set on the ground over
- * a 90% ground veil, like the spine's letter field. Mounted once at the root.
+ * folder or a Library entry: what it is, then one quiet line per action. A
+ * glass card on the overlay, floating next to the row it was opened from.
  */
-export function TrackActionsSheet() {
-  const target = useSyncExternalStore(openTarget.subscribe, openTarget.get);
+function ActionsMenu({ target, close }: { target: ActionTarget; close: () => void }) {
   const pathname = usePathname();
-  const insets = useSafeAreaInsets();
   const sectionSongCount = useSectionSongCount(target);
+  const song = target.kind === "track" ? target.song : null;
+  // Stars stay in sync everywhere.
+  const favorite = useIsFavorite(song?.id ?? null);
 
   const queue = (action: (songs: readonly SongRow[]) => void) => () => {
-    if (target !== null) void targetSongs(target).then(action);
+    void targetSongs(target).then(action);
     close();
   };
 
@@ -251,88 +250,90 @@ export function TrackActionsSheet() {
     open();
   };
 
-  const head = target === null ? null : heading(target, sectionSongCount);
-  const { albumId, artistId } = target === null ? {} : destinations(target);
-  const place = target?.kind === "track" ? target.playlistItem : undefined;
+  const head = heading(target, sectionSongCount);
+  const { albumId, artistId } = destinations(target);
+  const place = target.kind === "track" ? target.playlistItem : undefined;
+
+  const entries: readonly MenuEntry[] = [
+    { label: "Play Next", onPress: queue(playNext) },
+    { label: "Add to Queue", onPress: queue(addToQueue) },
+    {
+      label: "Add to Playlist",
+      onPress: go(() => openAddToPlaylist({ title: head.title, songs: () => targetSongs(target) })),
+    },
+    ...(song === null
+      ? []
+      : [
+          {
+            label: favorite ? "Remove from Favorites" : "Favorite",
+            onPress: () => {
+              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              void setFavorite(song.id, !favorite);
+              close();
+            },
+          },
+        ]),
+    ...(place === undefined
+      ? []
+      : [
+          {
+            label: "Remove from Playlist",
+            onPress: go(() => void removePlaylistItem(place.playlistId, place.itemId)),
+          },
+        ]),
+    ...(albumId === undefined || pathname === albumHref(albumId)
+      ? []
+      : [{ label: "Go to Album", onPress: go(() => openAlbum(albumId)) }]),
+    ...(artistId === undefined || pathname === artistHref(artistId)
+      ? []
+      : [{ label: "Go to Artist", onPress: go(() => openArtist(artistId)) }]),
+    ...(target.kind === "playlist"
+      ? [
+          {
+            label: "Rename Playlist",
+            onPress: go(() => void renamePlaylistFlow(target.playlist)),
+          },
+          {
+            label: "Delete Playlist",
+            onPress: go(() =>
+              confirmDeletePlaylist(target.playlist, () => {
+                // Leave the playlist's screen once it's gone.
+                if (pathname === playlistHref(target.playlist.id)) router.back();
+              }),
+            ),
+          },
+        ]
+      : []),
+  ];
 
   return (
-    <Modal
-      visible={target !== null}
-      transparent
-      animationType="fade"
-      statusBarTranslucent
-      navigationBarTranslucent
-      onRequestClose={close}
-    >
-      <Pressable
-        className="flex-1 bg-background/90"
-        accessibilityRole="button"
-        accessibilityLabel="Close"
-        onPress={close}
-      />
-      {head !== null && (
-        <View
-          className="bg-background"
-          style={{ paddingHorizontal: grid.margin, paddingBottom: insets.bottom + CELL * 2 }}
-        >
-          <Hairline />
-          <View
-            className="flex-row items-center"
-            style={{ height: grid.row + CELL * 2, gap: CELL * 1.5 }}
-          >
-            {head.covers !== undefined && <Mosaic paths={head.covers} size={CELL * 5} />}
-            <View className="flex-1">
-              <Text numberOfLines={1} className="font-sans text-body font-medium text-foreground">
-                {head.title}
-              </Text>
-              <Text numberOfLines={1} className="font-sans text-body text-secondary">
-                {head.subtitle}
-              </Text>
-            </View>
-          </View>
-          <Hairline />
-          <EntryRow label="Play Next" onPress={queue(playNext)} />
-          <EntryRow label="Add to Queue" onPress={queue(addToQueue)} />
-          {target !== null && (
-            <EntryRow
-              label="Add to Playlist"
-              onPress={go(() =>
-                openAddToPlaylist({ title: head.title, songs: () => targetSongs(target) }),
-              )}
-            />
-          )}
-          {target?.kind === "track" && <FavoriteEntry song={target.song} onDone={close} />}
-          {place !== undefined && (
-            <EntryRow
-              label="Remove from Playlist"
-              onPress={go(() => void removePlaylistItem(place.playlistId, place.itemId))}
-            />
-          )}
-          {albumId !== undefined && pathname !== albumHref(albumId) && (
-            <EntryRow label="Go to Album" onPress={go(() => openAlbum(albumId))} />
-          )}
-          {artistId !== undefined && pathname !== artistHref(artistId) && (
-            <EntryRow label="Go to Artist" onPress={go(() => openArtist(artistId))} />
-          )}
-          {target?.kind === "playlist" && (
-            <>
-              <EntryRow
-                label="Rename Playlist"
-                onPress={go(() => void renamePlaylistFlow(target.playlist))}
-              />
-              <EntryRow
-                label="Delete Playlist"
-                onPress={go(() =>
-                  confirmDeletePlaylist(target.playlist, () => {
-                    // Leave the playlist's screen once it's gone.
-                    if (pathname === playlistHref(target.playlist.id)) router.back();
-                  }),
-                )}
-              />
-            </>
-          )}
+    <>
+      <View
+        className="flex-row items-center"
+        style={{ paddingBottom: CELL * 1.5, gap: CELL * 1.5 }}
+      >
+        {head.covers !== undefined && <Mosaic paths={head.covers} size={CELL * 5} />}
+        <View className="flex-1">
+          <Text numberOfLines={1} className="font-sans text-body font-medium text-foreground">
+            {head.title}
+          </Text>
+          <Text numberOfLines={1} className="font-sans text-body text-secondary">
+            {head.subtitle}
+          </Text>
         </View>
-      )}
-    </Modal>
+      </View>
+      <Hairline />
+      {/* Scrolls only where the card can't fit every entry (small windows, landscape). */}
+      <ScrollView bounces={false} overScrollMode="never">
+        {entries.map((entry, index) => (
+          <EntryRow
+            key={entry.label}
+            label={entry.label}
+            onPress={entry.onPress}
+            divider={index < entries.length - 1}
+          />
+        ))}
+      </ScrollView>
+    </>
   );
 }
