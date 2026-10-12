@@ -1,4 +1,5 @@
 import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
+import { useScrollToTop } from "expo-router";
 import type { QueueContext } from "@wave/core";
 import { useCallback, useMemo, useRef, type ReactElement } from "react";
 import { View } from "react-native";
@@ -69,6 +70,7 @@ type Props = {
 export function TrackList({ songs, context, header, indexed = false }: Props) {
   const scrollable = useListScrollable();
   const list = useRef<LegendListRef>(null);
+  useScrollToTop(list);
   const bottomInset = useChromeInset();
   const currentId = useCurrentTrackId();
   const favorites = useFavoriteIds();
