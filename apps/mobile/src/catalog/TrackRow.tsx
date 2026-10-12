@@ -1,15 +1,11 @@
-import {
-  IconCircle,
-  IconCircleCheckFilled,
-  IconFileOff,
-  IconStarFilled,
-} from "@tabler/icons-react-native";
+import { IconFileOff, IconStarFilled } from "@tabler/icons-react-native";
 import { Text, View, type PressableProps as PressProps } from "react-native";
 
 import { Press } from "@/motion/Press";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { Artwork } from "./Artwork";
+import { CheckCell } from "./CheckCell";
 import { CELL, grid } from "./grid";
 import { RankNumber } from "./RankNumber";
 import { WavyUnderline } from "./WavyUnderline";
@@ -74,7 +70,6 @@ export function TrackRow({
   onAccessibilityAction,
 }: Props) {
   const highlight = useThemeColor("highlight");
-  const accent = useThemeColor("accent");
   const tertiary = useThemeColor("tertiary");
   const missing = state === "missing";
   const playing = state === "playing";
@@ -96,15 +91,7 @@ export function TrackRow({
       depth={0.015}
     >
       <View className="flex-row items-center" style={{ height: grid.row, gap: CELL * 1.5 }}>
-        {selecting && (
-          <View className="items-center" style={{ width: grid.stateCell }}>
-            {checked ? (
-              <IconCircleCheckFilled size={24} color={accent} />
-            ) : (
-              <IconCircle size={24} color={tertiary} strokeWidth={1.5} />
-            )}
-          </View>
-        )}
+        {selecting && <CheckCell checked={checked} />}
         {leading === "artwork" ? (
           <Artwork uri={track.artworkUri} tint={track.tint} size={THUMB} />
         ) : !missing && track.trackNumber !== undefined ? (
