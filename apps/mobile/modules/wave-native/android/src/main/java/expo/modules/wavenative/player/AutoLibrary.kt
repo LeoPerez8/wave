@@ -107,7 +107,8 @@ object AutoLibrary {
         val now = SystemClock.elapsedRealtime()
         Log.i(
           JsRuntime.LOG_TAG,
-          "$type answered in ${now - askedAt} ms (${if (cold) "JS was starting" else "JS running"}): " +
+          "$type answered at $now ms, ${now - askedAt} ms after asking " +
+            "(${if (cold) "JS was starting" else "JS running"}): " +
             runCatching { reply.get()?.javaClass?.simpleName }.getOrNull(),
         )
       },
