@@ -266,6 +266,8 @@ export { confirmSongDeletion, songDeletionFailure } from "./songDeletion.ts";
 export type { SongDeleteFailure, SongDeleteFailureReason } from "./songDeletion.ts";
 export { artistArtwork, artistInitial } from "./artistImage.ts";
 export type { ArtistAlbumLink } from "./artistImage.ts";
+export { rowWindow, windowRows } from "./rowWindow.ts";
+export type { RowView, RowWindow } from "./rowWindow.ts";
 export {
   ARTIST_PHOTO_RETRY_MS,
   artistPhotoLookups,

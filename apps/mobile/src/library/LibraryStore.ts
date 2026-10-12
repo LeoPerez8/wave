@@ -247,6 +247,8 @@ export interface PlaylistRow {
   readonly durationMs: number;
   /** Thumbnails of its mosaic (Core's `playlistMosaic`): none, one or four. */
   readonly thumbPaths: readonly string[];
+  /** Full-size covers of the same mosaic, for the playlist screen's header. */
+  readonly artworkPaths: readonly string[];
 }
 
 /** A song in a playlist; the same track may only appear once. */
@@ -256,8 +258,6 @@ export interface PlaylistItemRow extends SongRow {
 
 export interface PlaylistDetail {
   readonly playlist: PlaylistRow;
-  /** Full-size covers of its mosaic, for the playlist screen. */
-  readonly artworkPaths: readonly string[];
   /** In playlist order. */
   readonly items: readonly PlaylistItemRow[];
 }
@@ -940,7 +940,7 @@ const listPlaylistsSync = (db: Database): PlaylistRow[] => {
       .map((row) => ({
         ...row,
         sort: sortKey(row.name),
-        thumbPaths: (covers.get(row.id) ?? NO_COVERS).thumbPaths,
+        ...(covers.get(row.id) ?? NO_COVERS),
       }))
       // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
       .sort((a, b) => compareStrings(a.sort, b.sort) || a.id - b.id)
@@ -964,8 +964,8 @@ const getPlaylistSync = (db: Database, id: number): PlaylistDetail | null => {
       trackCount: items.length,
       durationMs: items.reduce((total, item) => total + item.durationMs, 0),
       thumbPaths: covers.thumbPaths,
+      artworkPaths: covers.artworkPaths,
     },
-    artworkPaths: covers.artworkPaths,
     items,
   };
 };

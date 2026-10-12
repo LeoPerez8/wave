@@ -3,8 +3,28 @@ import { useSyncExternalStore } from "react";
 
 import { makeExternalStore } from "@/lib/externalStore";
 
-import { LibraryStore, type LibraryStoreError, type PlaylistAddResult } from "./LibraryStore";
+import {
+  LibraryStore,
+  type LibraryStoreError,
+  type PlaylistAddResult,
+  type PlaylistRow,
+} from "./LibraryStore";
 import { appRuntime } from "./runtime";
+
+/** The playlist last opened from a list that already had its row, for the screen's first frame. */
+let opening: PlaylistRow | undefined;
+
+/** Hands the row the tapped list shows to the playlist screen about to open. */
+export const openingPlaylist = (playlist: PlaylistRow): void => {
+  opening = playlist;
+};
+
+/**
+ * What the list knew about playlist [id] when it was tapped (name, length,
+ * mosaic), so its screen draws the header before its songs are read.
+ */
+export const knownPlaylist = (id: number): PlaylistRow | undefined =>
+  opening?.id === id ? opening : undefined;
 
 /** Bumped after every playlist edit; playlist queries re-run on it straight away. */
 const playlistsVersion = makeExternalStore(0);

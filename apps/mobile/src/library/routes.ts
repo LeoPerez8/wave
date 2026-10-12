@@ -2,6 +2,9 @@ import { detailPath, type DetailScreen, type StatsPeriod, type StatsRanking } fr
 import { router, usePathname, type Href } from "expo-router";
 import { useEffect } from "react";
 
+import type { PlaylistRow } from "./LibraryStore";
+import { openingPlaylist } from "./playlists";
+
 /** The current screen's path, for opening screens from outside React. */
 let here = "/";
 
@@ -24,7 +27,14 @@ export const openAlbum = (id: number): void => open("album", id);
 export const openArtist = (id: number): void => open("artist", id);
 export const openGenre = (id: number): void => open("genre", id);
 export const openFolder = (id: number): void => open("folder", id);
-export const openPlaylist = (id: number): void => open("playlist", id);
+/**
+ * Opens a playlist. Given its row (from the list tapped), its screen shows
+ * the header on its first frame rather than after reading every song.
+ */
+export const openPlaylist = (id: number, known?: PlaylistRow): void => {
+  if (known !== undefined) openingPlaylist(known);
+  open("playlist", id);
+};
 
 /** Stats, pushed from Home; a Library stack screen so the mini player stays. */
 export const statsHref = "/library/stats" as const;

@@ -57,7 +57,9 @@ function PlaylistItem({
       detail={songCount(playlist.trackCount)}
       paths={playlist.thumbPaths}
       checked={selecting ? selection.isChecked(playlist) : undefined}
-      onPress={selecting ? () => selection.toggle(playlist) : () => openPlaylist(playlist.id)}
+      onPress={
+        selecting ? () => selection.toggle(playlist) : () => openPlaylist(playlist.id, playlist)
+      }
       onLongPress={
         selecting
           ? ignoreLongPress
