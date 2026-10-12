@@ -5,13 +5,10 @@
  */
 import type { PlayEvent } from "@wave/core";
 import { desc, eq, inArray, max, sql } from "drizzle-orm";
-import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
 
 import type { AlbumRow, SongRow } from "../LibraryStore.ts";
+import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
-
-/** The library database, on the phone (expo-sqlite) or in tests (sql.js). */
-export type LibraryDatabase = BaseSQLiteDatabase<"sync", unknown, typeof schema>;
 
 /** A Most Played song with its number of counted plays. */
 export interface MostPlayedRow extends SongRow {

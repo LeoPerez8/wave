@@ -8,7 +8,7 @@
 import type { CreditedPlayTotals, PlayTotals, StatsWindow } from "@wave/core";
 import { and, eq, gte, lte, sql, type SQL } from "drizzle-orm";
 
-import type { LibraryDatabase } from "./playHistory.ts";
+import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
 
 /** Counted plays that started within `window`. */

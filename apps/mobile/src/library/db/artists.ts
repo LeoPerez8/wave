@@ -6,8 +6,7 @@
 import { sql } from "drizzle-orm";
 
 import type { ArtistRow } from "../LibraryStore.ts";
-import type { RowPage } from "./albums.ts";
-import type { LibraryDatabase } from "./playHistory.ts";
+import type { LibraryDatabase, RowPage } from "./database.ts";
 
 export interface ArtistsQuery {
   /** Only these artists. */
