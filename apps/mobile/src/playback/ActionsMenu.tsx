@@ -1,7 +1,7 @@
-import { isDetailPath } from "@wave/core";
+import { entryDivider, isDetailPath } from "@wave/core";
 import * as Haptics from "expo-haptics";
 import { router, usePathname } from "expo-router";
-import { ScrollView, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
 import { EntryRow } from "@/catalog/EntryRow";
 import { CELL } from "@/catalog/grid";
@@ -29,6 +29,8 @@ import { openAlbum, openArtist } from "@/library/routes";
 import { itemSongs, librarySectionSongs } from "@/library/sectionSongs";
 import { pressedRect } from "@/motion/pressedRect";
 import { showError } from "@/overlay/alert";
+import { CardEntries } from "@/overlay/CardEntries";
+import { useOverlayFlow } from "@/overlay/flow";
 import { openOverlay } from "@/overlay/overlay";
 import { useSlideToChoose } from "@/overlay/useSlideToChoose";
 
@@ -283,6 +285,7 @@ function ActionsMenu({ target, close }: { target: ActionTarget; close: () => voi
   const { underFinger, trackEntry, trackList } = useSlideToChoose((index) =>
     entries[index]?.onPress(),
   );
+  const flow = useOverlayFlow();
 
   return (
     <>
@@ -301,21 +304,19 @@ function ActionsMenu({ target, close }: { target: ActionTarget; close: () => voi
         </View>
       </View>
       <Hairline />
-      {/* Scrolls only where the card can't fit every entry (small windows, landscape). */}
-      <View ref={trackList} collapsable={false} style={{ flexShrink: 1 }}>
-        <ScrollView bounces={false} overScrollMode="never">
-          {entries.map((entry, index) => (
-            <View key={entry.label} ref={trackEntry(index)} collapsable={false}>
-              <EntryRow
-                label={entry.label}
-                onPress={entry.onPress}
-                divider={index < entries.length - 1}
-                highlighted={index === underFinger}
-              />
-            </View>
-          ))}
-        </ScrollView>
-      </View>
+      {/* Play Next sits nearest the finger, whichever side of the row the card opened on. */}
+      <CardEntries listRef={trackList}>
+        {entries.map((entry, index) => (
+          <View key={entry.label} ref={trackEntry(index)} collapsable={false}>
+            <EntryRow
+              label={entry.label}
+              onPress={entry.onPress}
+              divider={entryDivider(index, entries.length, flow)}
+              highlighted={index === underFinger}
+            />
+          </View>
+        ))}
+      </CardEntries>
     </>
   );
 }

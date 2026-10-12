@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { pressedRect, runPressedAt } from "./pressedRect.ts";
+import { pressedElement, pressedRect, runPressedAt } from "./pressedRect.ts";
 
 const row = { left: 0, top: 200, right: 412, bottom: 256 };
 
@@ -15,6 +15,20 @@ describe("runPressedAt", () => {
     assert.deepEqual(seen, row);
     assert.equal(opened, true);
     assert.equal(pressedRect(), undefined);
+  });
+
+  test("a handler that opens a card sees which Press it runs for, and says so", () => {
+    let seen;
+    const opened = runPressedAt(
+      row,
+      () => {
+        seen = pressedElement();
+      },
+      7,
+    );
+    assert.deepEqual(seen, { key: 7, rect: row });
+    assert.equal(opened, true);
+    assert.equal(pressedElement(), undefined);
   });
 
   test("a handler that doesn't open a menu (a tab's long-press) says it didn't", () => {

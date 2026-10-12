@@ -159,10 +159,10 @@ export type {
   LibrarySectionSource,
   SectionCollection,
 } from "./librarySections.ts";
-export { placeOverlayCard } from "./overlay.ts";
+export { cardKeyboard, entryDivider, placeOverlayCard } from "./overlay.ts";
 export type { OverlayCardFrame, OverlayCardInput, OverlayInsets } from "./overlay.ts";
 export type { OverlayAnchor, OverlayRect } from "./overlay.ts";
-export type { OverlayAlign } from "./overlay.ts";
+export type { CardKeyboard, OverlayAlign, OverlayFlow } from "./overlay.ts";
 export { moveSlide, slideEntry, slideTicks, startSlide } from "./slideToChoose.ts";
 export type { MenuSlide, SlidePoint } from "./slideToChoose.ts";
 export { SHORTCUT_TAB_CHOICES, parseShortcutTab, tabBarTabs } from "./shortcutTab.ts";
@@ -172,6 +172,7 @@ export type { DetailScreen } from "./navigation.ts";
 export { planAlert } from "./alert.ts";
 export type { AlertButton, AlertChoice, AlertPlan, AlertSpec } from "./alert.ts";
 export { DEFAULT_THEME, TONES, themeContrastIssues } from "./theme.ts";
+export { overlayDivider } from "./overlayDivider.ts";
 export type { ContrastIssue, Theme, ThemeColors } from "./theme.ts";
 export {
   DEFAULT_THEME_CHOICE,
@@ -191,6 +192,7 @@ export type {
 } from "./themeChoice.ts";
 export { sliderFraction, sliderValueAt, snapSliderValue, stepSlider } from "./slider.ts";
 export type { SliderRange } from "./slider.ts";
+export { LONG_PRESS_DELAY, readLongPressDelay, snapLongPressDelay } from "./longPress.ts";
 export {
   DEFAULT_GLASS_SETTINGS,
   GLASS_SETTINGS,
@@ -243,3 +245,9 @@ export type {
   ItemActionEntry,
   ItemKind,
 } from "./itemActions.ts";
+export { concentricRadius } from "./corners.ts";
+export type { InsetSquare } from "./corners.ts";
+export { underlineMotion, wavePath } from "./wavyUnderline.ts";
+export type { UnderlineMotion, UnderlineMotionInput, WaveShape } from "./wavyUnderline.ts";
+export { highlightedOrigin, originOfNewCard, veilAround } from "./overlayOrigin.ts";
+export type { NewCardInput, OriginCard } from "./overlayOrigin.ts";

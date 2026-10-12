@@ -1,12 +1,20 @@
 import { IconArrowsSort } from "@tabler/icons-react-native";
-import { sameSongSort, songSortLabel, songSortsFor, type SongListKind } from "@wave/core";
-import { ScrollView, Text, View } from "react-native";
+import {
+  entryDivider,
+  sameSongSort,
+  songSortLabel,
+  songSortsFor,
+  type SongListKind,
+} from "@wave/core";
+import { Text, View } from "react-native";
 
 import { EntryRow } from "@/catalog/EntryRow";
 import { CELL } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { IconButton } from "@/components/IconButton";
 import { pressedRect } from "@/motion/pressedRect";
+import { CardEntries } from "@/overlay/CardEntries";
+import { useOverlayFlow } from "@/overlay/flow";
 import { openOverlay } from "@/overlay/overlay";
 
 import { setSongSort, useSongSort } from "./songSort";
@@ -15,6 +23,7 @@ import { setSongSort, useSongSort } from "./songSort";
 function SortMenu({ kind, close }: { kind: SongListKind; close: () => void }) {
   const current = useSongSort(kind);
   const sorts = songSortsFor(kind);
+  const flow = useOverlayFlow();
   return (
     <>
       <Text
@@ -25,21 +34,20 @@ function SortMenu({ kind, close }: { kind: SongListKind; close: () => void }) {
         Sort by
       </Text>
       <Hairline />
-      {/* Scrolls only where the card can't fit every sort (small windows, landscape). */}
-      <ScrollView bounces={false} overScrollMode="never" style={{ flexShrink: 1 }}>
+      <CardEntries>
         {sorts.map((sort, index) => (
           <EntryRow
             key={songSortLabel(sort)}
             label={songSortLabel(sort)}
             selected={sameSongSort(sort, current)}
-            divider={index < sorts.length - 1}
+            divider={entryDivider(index, sorts.length, flow)}
             onPress={() => {
               setSongSort(kind, sort);
               close();
             }}
           />
         ))}
-      </ScrollView>
+      </CardEntries>
     </>
   );
 }
