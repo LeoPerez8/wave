@@ -24,17 +24,14 @@ const failureMessage = (type: string, error: unknown): string => {
 const readRequest = (event: AutoRequestEvent): AutoRequest =>
   ({ ...(JSON.parse(event.payload) as object), type: event.type }) as AutoRequest;
 
-let started = false;
-
 /**
  * Answers the media library service's Auto requests with [answer], then tells
  * native to send them (including those that queued up during a cold start).
  * Every request gets an answer: a failure becomes `failAuto`, so Auto shows a
- * message instead of waiting for the timeout. Only the first call subscribes.
+ * message instead of waiting for the timeout. Call it once per JS runtime
+ * (`startServices` does).
  */
 export const startAutoResponder = (answer: AutoAnswer): void => {
-  if (started) return;
-  started = true;
   WavePlayer.addListener("onAutoRequest", (event) => {
     Promise.resolve()
       .then(() => answer(readRequest(event)))

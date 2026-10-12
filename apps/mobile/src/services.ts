@@ -6,16 +6,11 @@ import { appRuntime } from "@/library/runtime";
 import type { AutoRequest } from "@/native/wavePlayer";
 import { connectPlayer } from "@/playback/actions";
 
-/** Who started the app services in this JS runtime. */
-export interface ServicesStart {
-  readonly by: "app" | "headless";
-  /** Wall-clock time (ms) of the first call. */
-  readonly at: number;
-  /** How many times `startServices` was called; only the first one starts anything. */
-  readonly calls: number;
-}
+/** What starts the app services: the Activity's root layout or the headless `WaveService` task. */
+export type ServicesStarter = "app" | "headless";
 
-let start: ServicesStart | null = null;
+/** Who started the app services in this JS runtime, once they are. */
+let startedBy: ServicesStarter | null = null;
 
 /**
  * Answers one Auto request through the `Auto` service. What Auto shows when it
@@ -37,13 +32,12 @@ const answerAuto = (request: AutoRequest): Promise<unknown> =>
  * them, and later calls change nothing, so one JS runtime never initialises
  * them twice. The library scan stays with the UI.
  */
-export const startServices = (by: ServicesStart["by"]): void => {
-  if (start !== null) {
-    start = { ...start, calls: start.calls + 1 };
-    console.log(`[wave] services already started by the ${start.by}; the ${by} reuses them`);
+export const startServices = (by: ServicesStarter): void => {
+  if (startedBy !== null) {
+    console.log(`[wave] services already started by the ${startedBy}; the ${by} reuses them`);
     return;
   }
-  start = { by, at: Date.now(), calls: 1 };
+  startedBy = by;
   console.log(`[wave] services started by the ${by}`);
   connectPlayer();
   startAutoResponder(answerAuto);
