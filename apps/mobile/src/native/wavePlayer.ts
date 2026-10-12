@@ -1,4 +1,4 @@
-import type { PlaySource, SleepTimer } from "@wave/core";
+import type { PlaySource, RepeatMode, SleepTimer } from "@wave/core";
 import { NativeModule, requireNativeModule } from "expo";
 
 /** One track handed to the native player (`modules/wave-native`, `WavePlayerModule`). */
@@ -111,6 +111,11 @@ export type AutoRequest =
   /** Auto played a node: start its queue and answer the items the session sets on the player. */
   | { readonly type: "play"; readonly mediaId: string }
   /**
+   * Auto added nodes to the queue: add their tracks through the queue engine
+   * (which puts them on the player), then answer `null`.
+   */
+  | { readonly type: "add"; readonly mediaIds: readonly string[] }
+  /**
    * A tap on Auto's shuffle or repeat button: change the queue's mode as the
    * app's buttons do, then answer `null` (the new modes go out with `setModes`).
    */
@@ -135,11 +140,10 @@ type WavePlayerEvents = {
 declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
   /** Edits the item list per the plan; `items` holds only the keys new to the player. */
   applySync(steps: readonly NativeSyncStep[], items: readonly PlayerItem[]): Promise<void>;
-  setRepeatMode(mode: "off" | "all" | "one"): Promise<void>;
+  setRepeatMode(mode: RepeatMode): Promise<void>;
   /** The queue's shuffle and repeat, for the toggles on Auto's player screen. */
-  setModes(shuffle: boolean, repeat: "off" | "all" | "one"): Promise<void>;
+  setModes(shuffle: boolean, repeat: RepeatMode): Promise<void>;
   getItemIds(): Promise<NativeItemIds>;
-  /** Keeps the queue (JSON) in the native process, for when JS restarts. */
   /**
    * Keeps the queue (JSON) in the native process, for when JS restarts, and on
    * disk with where it was started from, for a cold start (playback resumption).

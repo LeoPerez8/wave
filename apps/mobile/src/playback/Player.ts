@@ -1,4 +1,4 @@
-import type { PlaySource, SleepTimer } from "@wave/core";
+import type { PlaySource, RepeatMode, SleepTimer } from "@wave/core";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -62,12 +62,9 @@ export class Player extends Context.Service<
       steps: readonly NativeSyncStep[],
       items: readonly PlayerItem[],
     ) => Effect.Effect<void, PlayerError>;
-    readonly setRepeatMode: (mode: "off" | "all" | "one") => Effect.Effect<void, PlayerError>;
+    readonly setRepeatMode: (mode: RepeatMode) => Effect.Effect<void, PlayerError>;
     /** Shows the queue's shuffle and repeat on Android Auto's player screen. */
-    readonly setModes: (
-      shuffle: boolean,
-      repeat: "off" | "all" | "one",
-    ) => Effect.Effect<void, PlayerError>;
+    readonly setModes: (shuffle: boolean, repeat: RepeatMode) => Effect.Effect<void, PlayerError>;
     readonly getItemIds: Effect.Effect<NativeItemIds, PlayerError>;
     readonly saveQueue: (json: string, source: PlaySource) => Effect.Effect<void>;
     readonly savedQueue: Effect.Effect<string | null>;

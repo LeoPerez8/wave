@@ -312,14 +312,26 @@ class PlaybackService : MediaLibraryService() {
       val requested = mediaItems.getOrNull(startIndex) ?: mediaItems.firstOrNull()
         ?: return Futures.immediateFailedFuture(AutoPlayException("Nothing to play."))
       keepJsFor(controller)
-      val playback = AutoLibrary.play(requested.mediaId)
+      return AutoLibrary.play(requested.mediaId)
+        .alsoReportFailure(mediaSession, controller, "play ${requested.mediaId}")
+    }
+
+    /**
+     * Sends [controller] the message of a failed play or add request, so Auto
+     * shows it; the session itself changes nothing.
+     */
+    private fun <T> ListenableFuture<T>.alsoReportFailure(
+      mediaSession: MediaSession,
+      controller: MediaSession.ControllerInfo,
+      what: String,
+    ): ListenableFuture<T> {
       Futures.addCallback(
-        playback,
-        object : FutureCallback<MediaSession.MediaItemsWithStartPosition> {
-          override fun onSuccess(result: MediaSession.MediaItemsWithStartPosition) = Unit
+        this,
+        object : FutureCallback<T> {
+          override fun onSuccess(result: T) = Unit
 
           override fun onFailure(error: Throwable) {
-            Log.w(JsRuntime.LOG_TAG, "Couldn't play ${requested.mediaId}", error)
+            Log.w(JsRuntime.LOG_TAG, "Couldn't $what", error)
             mediaSession.sendError(
               controller,
               SessionError(SessionError.ERROR_UNKNOWN, error.message ?: AutoBridge.STILL_LOADING),
@@ -328,7 +340,7 @@ class PlaybackService : MediaLibraryService() {
         },
         mainExecutor,
       )
-      return playback
+      return this
     }
 
     override fun onCustomCommand(
@@ -397,20 +409,30 @@ class PlaybackService : MediaLibraryService() {
     }
 
     /**
-     * Items from a controller may arrive without their local configuration; Wave
-     * puts the file URI in the request metadata so the session can rebuild it.
+     * Items from Wave's own controller may arrive without their local
+     * configuration; Wave puts the file URI in the request metadata so the
+     * session can rebuild it. Anything else (Auto adding a node of the browse
+     * tree to the queue) names media IDs: JS adds them through its queue
+     * engine, which puts them on the player itself, so the session adds
+     * nothing here. A request JS can't serve sends Auto its message.
      */
     override fun onAddMediaItems(
       mediaSession: MediaSession,
       controller: MediaSession.ControllerInfo,
       mediaItems: MutableList<MediaItem>,
-    ): ListenableFuture<MutableList<MediaItem>> =
-      Futures.immediateFuture(
+    ): ListenableFuture<MutableList<MediaItem>> {
+      if (controller.packageName != packageName) {
+        keepJsFor(controller)
+        val mediaIds = mediaItems.map { it.mediaId }
+        return AutoLibrary.add(mediaIds).alsoReportFailure(mediaSession, controller, "add $mediaIds")
+      }
+      return Futures.immediateFuture(
         mediaItems.mapTo(mutableListOf()) { item ->
           val uri: Uri? = item.localConfiguration?.uri ?: item.requestMetadata.mediaUri
           if (item.localConfiguration != null || uri == null) item else item.buildUpon().setUri(uri).build()
         },
       )
+    }
   }
 
   private companion object {

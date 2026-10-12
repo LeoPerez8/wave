@@ -93,7 +93,9 @@ export {
   COUNTED_PLAY_MS,
   EMPTY_PLAY_TRACKER,
   isCountedPlay,
+  keptPlayingEntry,
   playSoFar,
+  queueSourceAfter,
   resumePlay,
   trackPlays,
 } from "./playEvents.ts";
@@ -121,9 +123,13 @@ export {
   AUTO_ROOT,
   AUTO_TABS,
   autoAlbumItem,
+  autoArtistItem,
   autoChildren,
   autoItem,
+  autoPageItems,
   autoPlayList,
+  autoPlaylistItem,
+  autoQueueAdd,
   autoQueueStart,
   autoTrackItems,
   decodeAutoMediaId,
@@ -131,11 +137,14 @@ export {
 } from "./auto.ts";
 export type {
   AutoAlbum,
+  AutoArtist,
   AutoArtwork,
   AutoChildren,
   AutoFetch,
+  AutoHomeList,
   AutoItem,
   AutoNode,
+  AutoPlaylist,
   AutoQueueStart,
   AutoSource,
   AutoTab,
@@ -143,8 +152,3 @@ export type {
   AutoTrackList,
   AutoTrackListKind,
 } from "./auto.ts";
-export { autoPageItems, autoPlaylistItem } from "./auto.ts";
-export type { AutoPlaylist } from "./auto.ts";
-export type { AutoHomeList } from "./auto.ts";
-export { autoArtistItem } from "./auto.ts";
-export type { AutoArtist } from "./auto.ts";

@@ -28,7 +28,8 @@ import * as Layer from "effect/Layer";
 import { openDatabaseSync } from "expo-sqlite";
 
 import { selectAlbums } from "./db/albums";
-import { selectArtistCovers, selectArtists } from "./db/artists";
+import { selectArtistCovers, selectArtistSongs, selectArtists } from "./db/artists";
+import type { RowPage } from "./db/database";
 import migrations from "./db/migrations";
 import {
   homeSections,
@@ -38,7 +39,9 @@ import {
   type HomeSections,
   type RecordedPlay,
 } from "./db/playHistory";
+import { selectPlaylistSongs } from "./db/playlists";
 import * as schema from "./db/schema";
+import { BY_TITLE, trackQuery } from "./db/tracks";
 import { creditedPlayTotals, trackPlayTotals } from "./db/stats";
 import type { KnownFile } from "./NativeScanner";
 
@@ -276,18 +279,26 @@ export class LibraryStore extends Context.Service<
     readonly listSongs: Effect.Effect<readonly SongRow[], LibraryStoreError>;
     /** Every album by title, then album artist, for Library › Albums. */
     readonly listAlbums: Effect.Effect<readonly AlbumRow[], LibraryStoreError>;
-    /** [limit] albums from [offset] in the same order, for lists that page (Auto). */
+    /** [page] of the albums in the same order, for lists that page (Auto). */
     readonly listAlbumsPage: (
-      offset: number,
-      limit: number,
+      page: RowPage,
     ) => Effect.Effect<readonly AlbumRow[], LibraryStoreError>;
     /** Every artist with songs, by name, for Library › Artists. */
     readonly listArtists: Effect.Effect<readonly ArtistRow[], LibraryStoreError>;
-    /** [limit] artists from [offset] in the same order, for lists that page (Auto). */
+    /** [page] of the artists in the same order, for lists that page (Auto). */
     readonly listArtistsPage: (
-      offset: number,
-      limit: number,
+      page: RowPage,
     ) => Effect.Effect<readonly ArtistRow[], LibraryStoreError>;
+    /** [page] of an artist's songs, in their screen's order (by title), for Auto. */
+    readonly listArtistSongsPage: (
+      id: number,
+      page: RowPage,
+    ) => Effect.Effect<readonly SongRow[], LibraryStoreError>;
+    /** [page] of a playlist's songs, in playlist order, for Auto. */
+    readonly listPlaylistSongsPage: (
+      id: number,
+      page: RowPage,
+    ) => Effect.Effect<readonly SongRow[], LibraryStoreError>;
     /** A cover for each of [ids] that has one (an album or song of theirs), for Auto. */
     readonly artistCovers: (
       ids: readonly number[],
@@ -672,39 +683,6 @@ const removeRootSync = (db: Database, path: string): void => {
   });
 };
 
-/** Tracks with what every track list shows (a `SongRow`), plus what orders albums and folders. */
-const trackQuery = (db: Database) => {
-  const { tracks, artists, albums, artwork } = schema;
-  return db
-    .select({
-      id: tracks.id,
-      path: tracks.path,
-      title: tracks.title,
-      artist: artists.name,
-      album: albums.title,
-      durationMs: tracks.durationMs,
-      thumbPath: artwork.thumbPath,
-      artworkPath: artwork.path,
-      titleSort: tracks.titleSort,
-      albumId: tracks.albumId,
-      artistId: tracks.artistId,
-      discNumber: tracks.discNumber,
-      trackNumber: tracks.trackNumber,
-      fileName: tracks.fileName,
-    })
-    .from(tracks)
-    .innerJoin(artists, eq(tracks.artistId, artists.id))
-    .innerJoin(albums, eq(tracks.albumId, albums.id))
-    .leftJoin(artwork, eq(tracks.artworkHash, artwork.hash));
-};
-
-/** Albums with their track count and length; albums left without tracks don't appear. */
-const BY_TITLE = [
-  asc(schema.tracks.titleSort),
-  asc(schema.artists.sort),
-  asc(schema.tracks.path),
-] as const;
-
 /** Artists with songs (see `selectArtists`), only [ids] if given. */
 const listArtistsSync = (db: Database, ids?: readonly number[]): ArtistRow[] =>
   selectArtists(db, { ids });
@@ -734,18 +712,7 @@ const getArtistSync = (db: Database, id: number): ArtistDetail | null => {
     .where(eq(artists.id, id))
     .get();
   if (artist === undefined) return null;
-  const songs = trackQuery(db)
-    .where(
-      or(
-        eq(tracks.artistId, id),
-        inArray(
-          tracks.albumId,
-          db.select({ id: albums.id }).from(albums).where(eq(albums.albumArtistId, id)),
-        ),
-      ),
-    )
-    .orderBy(...BY_TITLE)
-    .all();
+  const songs = selectArtistSongs(db, id);
   const split = artistAlbums(
     id,
     selectAlbums(
@@ -847,16 +814,6 @@ const rememberSearchSync = (db: Database, query: string, now: number): readonly 
 /** Rows per multi-row insert, well under SQLite's bound-parameter limit. */
 const INSERT_CHUNK = 200;
 
-/** Songs (`SongRow`s) by track id, fetched in chunks. */
-const songsById = (db: Database, ids: readonly number[]) => {
-  const songs = new Map<number, ReturnType<ReturnType<typeof trackQuery>["all"]>[number]>();
-  for (const chunk of chunks(ids)) {
-    for (const song of trackQuery(db).where(inArray(schema.tracks.id, chunk)).all())
-      songs.set(song.id, song);
-  }
-  return songs;
-};
-
 interface PlaylistCovers {
   readonly thumbPaths: readonly string[];
   readonly artworkPaths: readonly string[];
@@ -925,27 +882,14 @@ const listPlaylistsSync = (db: Database): PlaylistRow[] => {
 };
 
 const getPlaylistSync = (db: Database, id: number): PlaylistDetail | null => {
-  const { playlists, playlistItems } = schema;
+  const { playlists } = schema;
   const playlist = db
     .select({ id: playlists.id, name: playlists.name })
     .from(playlists)
     .where(eq(playlists.id, id))
     .get();
   if (playlist === undefined) return null;
-  const order = db
-    .select({ itemId: playlistItems.id, trackId: playlistItems.trackId })
-    .from(playlistItems)
-    .where(eq(playlistItems.playlistId, id))
-    .orderBy(asc(playlistItems.position), asc(playlistItems.id))
-    .all();
-  const songs = songsById(
-    db,
-    order.map((item) => item.trackId),
-  );
-  const items = order.flatMap((item) => {
-    const song = songs.get(item.trackId);
-    return song === undefined ? [] : [{ ...song, itemId: item.itemId }];
-  });
+  const items = selectPlaylistSongs(db, id);
   const covers = playlistCovers(db, id).get(id) ?? NO_COVERS;
   return {
     playlist: {
@@ -1189,13 +1133,17 @@ const make = Effect.gen(function* () {
 
     listAlbums: attempt("list albums", () => selectAlbums(db, undefined)),
 
-    listAlbumsPage: (offset, limit) =>
-      attempt("list albums", () => selectAlbums(db, undefined, { offset, limit })),
+    listAlbumsPage: (page) => attempt("list albums", () => selectAlbums(db, undefined, page)),
 
     listArtists: attempt("list artists", () => listArtistsSync(db)),
 
-    listArtistsPage: (offset, limit) =>
-      attempt("list artists", () => selectArtists(db, { page: { offset, limit } })),
+    listArtistsPage: (page) => attempt("list artists", () => selectArtists(db, { page })),
+
+    listArtistSongsPage: (id, page) =>
+      attempt("list the artist's songs", () => selectArtistSongs(db, id, page)),
+
+    listPlaylistSongsPage: (id, page) =>
+      attempt("list the playlist's songs", () => selectPlaylistSongs(db, id, page)),
 
     artistCovers: (ids) => attempt("load artist covers", () => selectArtistCovers(db, ids)),
 

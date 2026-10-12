@@ -3,11 +3,12 @@
  * Auto's Artists tab). Kept free of Expo so the store tests run it against a
  * real SQLite (`testDatabase.ts`).
  */
-import { sql } from "drizzle-orm";
+import { eq, inArray, or, sql } from "drizzle-orm";
 
 import type { ArtistRow } from "../LibraryStore.ts";
-import type { RowPage } from "./albums.ts";
-import type { LibraryDatabase } from "./playHistory.ts";
+import type { LibraryDatabase, RowPage } from "./database.ts";
+import * as schema from "./schema.ts";
+import { BY_TITLE, trackQuery } from "./tracks.ts";
 
 export interface ArtistsQuery {
   /** Only these artists. */
@@ -67,4 +68,24 @@ export const selectArtistCovers = (
       sql`, `,
     )})`);
   return new Map(rows.flatMap((row) => (row.path === null ? [] : [[row.id, row.path] as const])));
+};
+
+/**
+ * An artist's songs, as their screen lists them: theirs as track artist and
+ * every song on their albums, by title (`BY_TITLE`); [page] of them if given.
+ */
+export const selectArtistSongs = (db: LibraryDatabase, artistId: number, page?: RowPage) => {
+  const { albums, tracks } = schema;
+  const query = trackQuery(db)
+    .where(
+      or(
+        eq(tracks.artistId, artistId),
+        inArray(
+          tracks.albumId,
+          db.select({ id: albums.id }).from(albums).where(eq(albums.albumArtistId, artistId)),
+        ),
+      ),
+    )
+    .orderBy(...BY_TITLE);
+  return page === undefined ? query.all() : query.limit(page.limit).offset(page.offset).all();
 };

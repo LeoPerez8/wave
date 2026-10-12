@@ -6,14 +6,8 @@
 import { asc, eq, sql, type SQL } from "drizzle-orm";
 
 import type { AlbumRow } from "../LibraryStore.ts";
-import type { LibraryDatabase } from "./playHistory.ts";
+import type { LibraryDatabase, RowPage } from "./database.ts";
 import * as schema from "./schema.ts";
-
-/** A window of a list: `limit` rows from `offset`. */
-export interface RowPage {
-  readonly offset: number;
-  readonly limit: number;
-}
 
 /** The albums matching [where], by title, then album artist (the Library's order); [page] of them if given. */
 export const selectAlbums = (

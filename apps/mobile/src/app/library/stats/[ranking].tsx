@@ -1,7 +1,7 @@
 import { IconChartBar } from "@tabler/icons-react-native";
 import {
-  STATS_PERIODS,
   STATS_RANKINGS,
+  STATS_SEE_ALL,
   statsSeeAll,
   type StatsPeriod,
   type StatsSeeAll,
@@ -13,9 +13,10 @@ import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { EmptyState } from "@/components/EmptyState";
 import { ScreenHeader } from "@/components/ScreenHeader";
-import { useAllTopAlbums, useAllTopArtists, useAllTopSongs } from "@/stats/hooks";
+import { useTopAlbums, useTopArtists, useTopSongs } from "@/stats/hooks";
 import {
-  nothingPlayed,
+  NothingPlayed,
+  periodLabel,
   RankedAlbumList,
   RankedArtistList,
   RankedSongList,
@@ -23,46 +24,41 @@ import {
 
 /** The list's opening: the period it covers. */
 function PeriodLine({ period }: { period: StatsPeriod }) {
-  const label = STATS_PERIODS.find((option) => option.id === period)?.label ?? "";
   return (
     <View style={{ paddingBottom: CELL }}>
-      <CatalogLine>{label}</CatalogLine>
+      <CatalogLine>{periodLabel(period)}</CatalogLine>
     </View>
   );
 }
 
-function NothingPlayed({ period }: { period: StatsPeriod }) {
+function NothingPlayedHere({ period }: { period: StatsPeriod }) {
   return (
     <View style={{ paddingHorizontal: grid.margin }}>
-      <EmptyState
-        icon={IconChartBar}
-        title={nothingPlayed(period)}
-        message="Songs you listen to for half their length, or four minutes, are counted here."
-      />
+      <NothingPlayed period={period} />
     </View>
   );
 }
 
 function AllTopSongs({ period }: { period: StatsPeriod }) {
-  const ranking = useAllTopSongs(period);
+  const ranking = useTopSongs(period, STATS_SEE_ALL);
   if (ranking === undefined) return null;
-  if (ranking.length === 0) return <NothingPlayed period={period} />;
+  if (ranking.length === 0) return <NothingPlayedHere period={period} />;
   return (
     <RankedSongList ranking={ranking} period={period} header={<PeriodLine period={period} />} />
   );
 }
 
 function AllTopAlbums({ period }: { period: StatsPeriod }) {
-  const ranking = useAllTopAlbums(period);
+  const ranking = useTopAlbums(period, STATS_SEE_ALL);
   if (ranking === undefined) return null;
-  if (ranking.length === 0) return <NothingPlayed period={period} />;
+  if (ranking.length === 0) return <NothingPlayedHere period={period} />;
   return <RankedAlbumList ranking={ranking} header={<PeriodLine period={period} />} />;
 }
 
 function AllTopArtists({ period }: { period: StatsPeriod }) {
-  const ranking = useAllTopArtists(period);
+  const ranking = useTopArtists(period, STATS_SEE_ALL);
   if (ranking === undefined) return null;
-  if (ranking.length === 0) return <NothingPlayed period={period} />;
+  if (ranking.length === 0) return <NothingPlayedHere period={period} />;
   return <RankedArtistList ranking={ranking} header={<PeriodLine period={period} />} />;
 }
 

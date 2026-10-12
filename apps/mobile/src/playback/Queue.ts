@@ -2,8 +2,10 @@ import {
   EMPTY_QUEUE,
   applyPlayerSync,
   extrapolatePosition,
+  keptPlayingEntry,
   parseQueueState,
   planPlayerSync,
+  queueSourceAfter,
   reduceQueue,
   type PlayerList,
   type PlaySource,
@@ -93,19 +95,22 @@ export class Queue extends Context.Service<
       positionMs: number,
     ) => Effect.Effect<boolean, PlayerError>;
     /**
-     * Runs a queue command whose items the media session sets on the player
-     * itself (a play request from Android Auto): instead of syncing the
-     * player, returns every entry of the new queue as a player item and the
-     * one to start at. `tracks` must describe every track id the command adds.
+     * Starts playback whose items the media session sets on the player itself
+     * (a play request from Android Auto): instead of syncing the player,
+     * returns every entry of the new queue as a player item and the one to
+     * start at. `tracks` must describe every track id the command plays.
      */
     readonly handOver: (
-      command: QueueCommand,
+      command: PlayCommand,
       tracks: readonly QueueTrack[],
     ) => Effect.Effect<QueueHandOver, PlayerError>;
     /** Serialises a queue change still settling right away (Wave is leaving the foreground). */
     readonly flush: Effect.Effect<void>;
   }
 >()("@wave/mobile/playback/Queue") {}
+
+/** Starting playback of a list: the only command a session request hands over. */
+export type PlayCommand = Extract<QueueCommand, { readonly type: "play" }>;
 
 /** The player list a session request gets (see `Queue.handOver`). */
 export interface QueueHandOver {
@@ -148,6 +153,10 @@ export const layer = Layer.effect(
     // What the native player holds, as far as JS knows. Only the lane edits the
     // list; the player moves `currentKey` on its own (auto-advance, notification).
     let native: PlayerList = { keys: [], currentKey: null };
+    // False once the media session was handed a list to set (`handOver`): JS
+    // can't tell whether it did (Auto may have given up waiting, or couldn't
+    // read the answer), so the next sync reads what the player holds first.
+    let nativeKnown = true;
     let appliedRepeat: RepeatMode | null = null;
     let settleTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -197,21 +206,38 @@ export const layer = Layer.effect(
         native = applyPlayerSync(native, steps);
       });
 
+    const readNative = Effect.gen(function* () {
+      native = yield* player.getItemIds;
+      nativeKnown = true;
+    });
+
     /** Syncs the player; if JS's picture of it was off, re-reads it and tries once more. */
     const sync = (state: QueueState) =>
-      applyPlan(state).pipe(
+      (nativeKnown ? applyPlan(state) : Effect.andThen(readNative, applyPlan(state))).pipe(
         Effect.catch(() =>
           Effect.gen(function* () {
-            native = yield* player.getItemIds;
+            yield* readNative;
             yield* applyPlan(state);
           }),
         ),
       );
 
+    /** Learns the tracks a command adds; a new play forgets the old queue's. */
+    const learnTracks = (command: QueueCommand, added: readonly QueueTrack[]): void => {
+      if (command.type === "play") tracks.clear();
+      for (const track of added) tracks.set(track.id, track);
+    };
+
+    const applyRepeat = (state: QueueState) =>
+      Effect.gen(function* () {
+        if (state.repeat === appliedRepeat) return;
+        yield* player.setRepeatMode(state.repeat);
+        appliedRepeat = state.repeat;
+      });
+
     const run = (command: QueueCommand, added: readonly QueueTrack[]) =>
       Effect.gen(function* () {
-        if (command.type === "play") tracks.clear();
-        for (const track of added) tracks.set(track.id, track);
+        learnTracks(command, added);
         if (command.type === "playerMoved") native = { ...native, currentKey: command.key };
         const before = queueState.get();
         const { state, playback } = reduceQueue(before, command);
@@ -219,10 +245,7 @@ export const layer = Layer.effect(
         queueState.set(state);
         if (state !== before) queueChanged();
         yield* sync(state);
-        if (state.repeat !== appliedRepeat) {
-          yield* player.setRepeatMode(state.repeat);
-          appliedRepeat = state.repeat;
-        }
+        yield* applyRepeat(state);
         switch (playback) {
           case "play":
             yield* player.play;
@@ -243,30 +266,28 @@ export const layer = Layer.effect(
     const dispatch = (command: QueueCommand, added: readonly QueueTrack[] = []) =>
       lane.withPermit(
         Effect.gen(function* () {
-          if (command.type === "play") queueSource.set("phone");
+          queueSource.update((source) => queueSourceAfter(source, command, "phone"));
           yield* run(command, added);
         }),
       );
 
-    const handOver = (command: QueueCommand, added: readonly QueueTrack[]) =>
+    const handOver = (command: PlayCommand, added: readonly QueueTrack[]) =>
       lane.withPermit(
         Effect.gen(function* () {
-          if (command.type === "play") tracks.clear();
-          for (const track of added) tracks.set(track.id, track);
+          learnTracks(command, added);
           const { state } = reduceQueue(queueState.get(), command);
           const items = yield* Effect.forEach(state.entries, itemFor);
-          if (command.type === "play") queueSource.set("auto");
+          queueSource.update((source) => queueSourceAfter(source, command, "auto"));
           queueState.set(state);
           queueChanged();
-          // What the player holds once the session has set the items.
+          // What the player holds once the session has set the items; the next
+          // sync checks it did (`nativeKnown`) before planning from it.
           native = {
             keys: state.entries.map((entry) => entry.key),
             currentKey: state.entries[state.index]?.key ?? null,
           };
-          if (state.repeat !== appliedRepeat) {
-            yield* player.setRepeatMode(state.repeat);
-            appliedRepeat = state.repeat;
-          }
+          nativeKnown = false;
+          yield* applyRepeat(state);
           return { items, startIndex: Math.max(0, state.index) };
         }),
       );
@@ -276,13 +297,12 @@ export const layer = Layer.effect(
      * (Wave was backgrounded and its activity or JS runtime went away).
      */
     const restore = Effect.gen(function* () {
-      native = yield* player.getItemIds;
+      yield* readNative;
       const json = yield* player.savedQueue;
       const saved = json === null ? null : parseQueueState(JSON.parse(json));
       if (saved === null || !sameKeys(saved.entries, native.keys)) return;
-      // After a cold start the player resumed the queue itself: its plays are new ones.
-      const resumed = yield* player.takeResumed;
-      keptPlayingKey.set(resumed ? null : native.currentKey);
+      const resumedByPlayer = yield* player.takeResumed;
+      keptPlayingKey.set(keptPlayingEntry(native.currentKey, { resumedByPlayer }));
       const source = yield* player.savedQueueSource;
       if (source !== null) queueSource.set(source);
       queueState.set(saved);
@@ -343,7 +363,7 @@ export const layer = Layer.effect(
       lane.withPermit(
         Effect.gen(function* () {
           if (queueState.get().entries.length > 0) return false;
-          native = yield* player.getItemIds;
+          yield* readNative;
           if (native.keys.length > 0) return false;
           for (const track of added) tracks.set(track.id, track);
           queueState.set(state);

@@ -6,6 +6,7 @@ import { useThemeColor } from "@/theme/useThemeColor";
 
 import { Artwork } from "./Artwork";
 import { CELL, grid } from "./grid";
+import { RankNumber } from "./RankNumber";
 
 export type TrackSummary = {
   id: string;
@@ -83,20 +84,11 @@ export function TrackRow({
       <View className="flex-row items-center" style={{ height: grid.row, gap: CELL * 1.5 }}>
         {leading === "artwork" ? (
           <Artwork uri={track.artworkUri} tint={track.tint} size={THUMB} />
+        ) : state === undefined && track.trackNumber !== undefined ? (
+          <RankNumber rank={track.trackNumber} top={topNumber} />
         ) : (
           <View className="items-center" style={{ width: grid.stateCell }}>
-            {state === undefined && track.trackNumber !== undefined ? (
-              <Text
-                className={`font-sans text-body ${
-                  topNumber ? "font-medium text-highlight" : "text-secondary"
-                }`}
-                style={{ fontVariant: ["tabular-nums"] }}
-              >
-                {track.trackNumber}
-              </Text>
-            ) : (
-              stateIcon
-            )}
+            {stateIcon}
           </View>
         )}
         <View className="flex-1">

@@ -22,7 +22,6 @@
  */
 
 import type { QueueContext } from "./queue.ts";
-import { compareAlbumTracks, compareStrings } from "./library.ts";
 
 /** Auto's tabs: the root's children, in order. */
 export type AutoTab = "home" | "playlists" | "albums" | "artists";
@@ -36,15 +35,16 @@ const TAB_TITLES: Record<AutoTab, string> = {
   artists: "Artists",
 };
 
-/** A track as a track list needs it: shown in Auto, ordered, and played. */
+/**
+ * A track as a track list needs it: shown in Auto and played. A list's tracks
+ * come in the order the app lists them (an album by disc and track number, a
+ * playlist in playlist order, an artist's songs by title, Home's sections in
+ * Home's order), so Auto and the phone show and play them alike.
+ */
 export interface AutoTrack {
   readonly id: string;
   readonly title: string;
   readonly artist: string;
-  readonly discNumber: number | null;
-  readonly trackNumber: number | null;
-  readonly titleSort: string;
-  readonly path: string;
   /** The track's cached artwork file, if it has one. */
   readonly artworkPath?: string | null;
 }
@@ -76,43 +76,20 @@ export interface AutoTrackList {
 interface TrackListKind {
   /** The play context the app uses for the same list. */
   readonly context: (id: string) => QueueContext;
-  /** The list's tracks in list order (a new array). */
-  readonly order: (tracks: readonly AutoTrack[]) => readonly AutoTrack[];
   /** The only ids the kind has, when it has a fixed set (Home's sections). */
   readonly ids?: readonly string[];
   /** The title of its Shuffle item, when not "Shuffle". */
   readonly shuffleTitle?: string;
 }
 
-const compareSongTitles = (a: AutoTrack, b: AutoTrack): number =>
-  compareStrings(a.titleSort, b.titleSort) || compareStrings(a.path, b.path);
-
 /** One entry per track list kind; the media ID segment is the kind itself. */
 const TRACK_LISTS: Record<AutoTrackListKind, TrackListKind> = {
-  album: {
-    context: (id) => ({ kind: "album", id }),
-    // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
-    order: (tracks) => [...tracks].sort(compareAlbumTracks),
-  },
-  playlist: {
-    context: (id) => ({ kind: "playlist", id }),
-    // The app loads a playlist's tracks in playlist order already.
-    order: (tracks) => [...tracks],
-  },
-  // Home's song sections, in the app's Home order (the app loads them in it).
-  home: {
-    context: (id) => ({ kind: "home", id }),
-    order: (tracks) => [...tracks],
-    ids: AUTO_HOME_LISTS,
-  },
+  album: { context: (id) => ({ kind: "album", id }) },
+  playlist: { context: (id) => ({ kind: "playlist", id }) },
+  // Home's song sections.
+  home: { context: (id) => ({ kind: "home", id }), ids: AUTO_HOME_LISTS },
   // Not `artist`: that segment names the browsable artist.
-  artistSongs: {
-    context: (id) => ({ kind: "artist", id }),
-    // By title, as the artist screen lists them.
-    // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
-    order: (tracks) => [...tracks].sort(compareSongTitles),
-    shuffleTitle: "Shuffle all",
-  },
+  artistSongs: { context: (id) => ({ kind: "artist", id }), shuffleTitle: "Shuffle all" },
 };
 
 const isTrackListKind = (kind: string): kind is AutoTrackListKind =>
@@ -300,7 +277,7 @@ export type AutoSource =
   | { readonly type: "artists" }
   /** The albums an artist's screen shows: theirs, then the ones they appear on. */
   | { readonly type: "artistAlbums"; readonly id: string }
-  /** A track list's tracks: the app loads all of them, `autoTrackItems` orders and pages them. */
+  /** A track list's tracks, in list order (see `AutoTrack`); `autoTrackItems` builds each. */
   | { readonly type: "tracks"; readonly list: AutoTrackList }
   /** The albums of Home's Recently Played, as the app's Home tab lists them. */
   | { readonly type: "recentlyPlayed" };
@@ -498,10 +475,6 @@ export const autoPlaylistItem = (playlist: AutoPlaylist): AutoItem =>
     playlist.thumbPaths ?? [],
   );
 
-/** Every track of `list` in its order (an album: by disc and track number). */
-const ordered = (list: AutoTrackList, tracks: readonly AutoTrack[]): readonly AutoTrack[] =>
-  TRACK_LISTS[list.kind].order(tracks);
-
 /**
  * What playing a node starts, for the queue engine's `play` command: the
  * list's tracks in order, as `context`, from `startIndex` (undefined: anywhere,
@@ -521,8 +494,8 @@ export const autoPlayList = (node: AutoNode): AutoTrackList | null =>
 
 /**
  * What playing `node` starts, given every track of its list (`autoPlayList`)
- * in any order; null when there's nothing to play: a browsable node, an empty
- * list, or a track that has left the list.
+ * in list order; null when there's nothing to play: a browsable node, an
+ * empty list, or a track that has left the list.
  */
 export const autoQueueStart = (
   node: AutoNode,
@@ -530,7 +503,7 @@ export const autoQueueStart = (
 ): AutoQueueStart | null => {
   const list = autoPlayList(node);
   if (list === null) return null;
-  const trackIds = ordered(list, tracks).map((track) => track.id);
+  const trackIds = tracks.map((track) => track.id);
   const context = TRACK_LISTS[list.kind].context(list.id);
   if (node.type === "track") {
     // The list may have changed since Auto showed it: find the track again.
@@ -542,25 +515,42 @@ export const autoQueueStart = (
 };
 
 /**
- * `limit` of a track list's tracks from `offset`, in list order: `tracks` is
- * the whole list, in any order. Each plays the list from itself.
+ * What adding `node` to the queue adds (a controller asked to add it rather
+ * than play it), given every track of its list (`autoPlayList`) in list order:
+ * a track adds itself; Shuffle adds its whole list, in list order. Null when
+ * there's nothing to add: a browsable node, an empty list, or a track that
+ * has left the list.
+ */
+export const autoQueueAdd = (
+  node: AutoNode,
+  tracks: readonly AutoTrack[],
+): readonly string[] | null => {
+  const start = autoQueueStart(node, tracks);
+  if (start === null) return null;
+  const { trackIds, startIndex } = start;
+  return node.type === "track" && startIndex !== undefined
+    ? trackIds.slice(startIndex, startIndex + 1)
+    : trackIds;
+};
+
+/**
+ * The items of a page of a track list: `tracks` are the list's tracks from
+ * `offset` on, in list order (the rows an `AutoFetch` asks for). Each plays
+ * the list from itself.
  */
 export const autoTrackItems = (
   list: AutoTrackList,
   tracks: readonly AutoTrack[],
   offset: number,
-  limit: number,
 ): readonly AutoItem[] =>
-  ordered(list, tracks)
-    .slice(offset, offset + limit)
-    .map((track, i) =>
-      playable(
-        { type: "track", list, index: offset + i, trackId: track.id },
-        track.title,
-        track.artist,
-        [track.artworkPath],
-      ),
-    );
+  tracks.map((track, i) =>
+    playable(
+      { type: "track", list, index: offset + i, trackId: track.id },
+      track.title,
+      track.artist,
+      [track.artworkPath],
+    ),
+  );
 
 /**
  * Page `page` (of `pageSize` children) of a browsable node, or null when the

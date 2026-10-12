@@ -4,7 +4,7 @@ import { beforeEach, describe, test } from "node:test";
 
 import { eq } from "drizzle-orm";
 
-import { selectArtistCovers, selectArtists } from "./artists.ts";
+import { selectArtistCovers, selectArtistSongs, selectArtists } from "./artists.ts";
 import * as schema from "./schema.ts";
 import { addTrack, openTestDatabase, type TestDatabase } from "./testDatabase.ts";
 
@@ -91,5 +91,33 @@ describe("selectArtistCovers", () => {
     const covers = selectArtistCovers(db, [idOf("Björk"), idOf("Daft Punk")]);
     assert.equal(covers.size, 0);
     assert.equal(selectArtistCovers(db, []).size, 0);
+  });
+});
+
+const songsOf = (name: string, page?: { offset: number; limit: number }) =>
+  selectArtistSongs(db, idOf(name), page).map((song) => song.title);
+
+describe("selectArtistSongs", () => {
+  beforeEach(() => {
+    addTrack(db, { title: "Reckoner", album: "In Rainbows", artist: "Radiohead" });
+    addTrack(db, { title: "Creep", album: "Pablo Honey", artist: "Radiohead" });
+    addTrack(db, {
+      title: "Fake Plastic Trees",
+      album: "Covers",
+      artist: "Someone",
+      albumArtist: "Radiohead",
+    });
+  });
+
+  test("lists an artist's songs and the songs on their albums, by title", () => {
+    assert.deepEqual(songsOf("Radiohead"), ["Airbag", "Creep", "Fake Plastic Trees", "Reckoner"]);
+  });
+
+  test("a page is a window of that order", () => {
+    assert.deepEqual(songsOf("Radiohead", { offset: 1, limit: 2 }), [
+      "Creep",
+      "Fake Plastic Trees",
+    ]);
+    assert.deepEqual(songsOf("Radiohead", { offset: 4, limit: 2 }), []);
   });
 });
