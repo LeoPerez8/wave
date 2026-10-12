@@ -1,38 +1,13 @@
-import {
-  moveSlide,
-  slideEntry,
-  slideTicks,
-  startSlide,
-  type OverlayRect,
-  type SlidePoint,
-} from "@wave/core";
+import { moveSlide, slideEntry, slideTicks, startSlide, type SlidePoint } from "@wave/core";
 import * as Haptics from "expo-haptics";
 import { useEffect, useEffectEvent, useState } from "react";
 
 import { CELL } from "@/catalog/grid";
 import { heldTouchStart, onHeldTouch } from "@/motion/heldTouch";
+import { measureRect, type Measurable } from "@/motion/measureRect";
 
 /** How far the held finger must slide before it chooses anything (Android's touch slop). */
 const SLOP = CELL;
-
-interface Measurable {
-  measureInWindow: (
-    callback: (x: number, y: number, width: number, height: number) => void,
-  ) => void;
-}
-
-const measure = (node: Measurable | null | undefined): Promise<OverlayRect | undefined> =>
-  node == null
-    ? Promise.resolve(undefined)
-    : new Promise((resolve) =>
-        node.measureInWindow((x, y, width, height) =>
-          resolve(
-            width > 0 && height > 0
-              ? { left: x, top: y, right: x + width, bottom: y + height }
-              : undefined,
-          ),
-        ),
-      );
 
 export interface SlideToChoose {
   /**
@@ -63,16 +38,16 @@ export function useSlideToChoose(choose: (index: number) => void): SlideToChoose
   }));
 
   const [refs] = useState(() => {
-    const trackEntrys = new Map<number, (node: Measurable | null) => void>();
+    const entryRefs = new Map<number, (node: Measurable | null) => void>();
     return {
       trackEntry: (index: number) => {
-        let ref = trackEntrys.get(index);
+        let ref = entryRefs.get(index);
         if (ref === undefined) {
           ref = (node) => {
             if (node === null) nodes.entries.delete(index);
             else nodes.entries.set(index, node);
           };
-          trackEntrys.set(index, ref);
+          entryRefs.set(index, ref);
         }
         return ref;
       },
@@ -95,8 +70,8 @@ export function useSlideToChoose(choose: (index: number) => void): SlideToChoose
     const entryAt = async (point: SlidePoint): Promise<number | undefined> => {
       const count = Math.max(-1, ...nodes.entries.keys()) + 1;
       const [viewport, ...rects] = await Promise.all([
-        measure(nodes.list),
-        ...Array.from({ length: count }, (_, index) => measure(nodes.entries.get(index))),
+        measureRect(nodes.list),
+        ...Array.from({ length: count }, (_, index) => measureRect(nodes.entries.get(index))),
       ]);
       return slideEntry(slide, point, rects, viewport);
     };
