@@ -3,6 +3,7 @@ import { Text, View } from "react-native";
 import { Press } from "@/motion/Press";
 
 import { ArtistImage, type ArtistImageSource } from "./ArtistImage";
+import { CheckCell } from "./CheckCell";
 import { CELL, grid } from "./grid";
 import { RankNumber } from "./RankNumber";
 
@@ -16,6 +17,11 @@ type Props = {
   rank?: { readonly number: number; readonly top: boolean } | undefined;
   /** An artist row: the artist, whose image leads the row (after the rank). */
   artist?: ArtistImageSource | undefined;
+  /**
+   * In selection mode, whether the row is checked: it leads with a check cell
+   * and reads as a checkbox. Undefined outside selection mode.
+   */
+  checked?: boolean | undefined;
 };
 
 /** The artist circle in a row: a track row's thumbnail size. */
@@ -26,17 +32,20 @@ const ARTIST_THUMB = CELL * 5;
  * at one size like a track row, 56dp so long lists lay out by index. Artists
  * lead with their image.
  */
-export function NameRow({ name, detail, onPress, onLongPress, rank, artist }: Props) {
+export function NameRow({ name, detail, onPress, onLongPress, rank, artist, checked }: Props) {
+  const selecting = checked !== undefined;
   return (
     <Press
-      accessibilityRole="button"
+      accessibilityRole={selecting ? "checkbox" : "button"}
       accessibilityLabel={`${name}, ${detail}`}
+      accessibilityState={selecting ? { checked } : undefined}
       onPress={onPress}
       onLongPress={onLongPress}
       haptic="selection"
       depth={0.015}
     >
       <View className="flex-row items-center" style={{ height: grid.row, gap: CELL * 1.5 }}>
+        {selecting && <CheckCell checked={checked} />}
         {rank !== undefined && <RankNumber rank={rank.number} top={rank.top} />}
         {artist !== undefined && <ArtistImage artist={artist} size={ARTIST_THUMB} />}
         <View className="flex-1 justify-center">
