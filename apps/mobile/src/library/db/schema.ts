@@ -212,7 +212,7 @@ export const playEvents = sqliteTable(
     endReason: text("end_reason", {
       enum: ["completed", "skipped", "stopped", "interrupted"],
     }).notNull(),
-    /** Core's counted-play rule (≥ 50% or ≥ 4 min listened). */
+    /** Core's counted-play rule (`isCountedPlay`: more than 15 s listened, or a short song played through). */
     counted: integer("counted", { mode: "boolean" }).notNull(),
     /** The play context (album, playlist, search…); null for Play Next / Add to Queue. */
     contextType: text("context_type"),

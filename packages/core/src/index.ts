@@ -109,6 +109,7 @@ export type {
   PlayTrackerState,
   PlaybackSignal,
   PlaySource,
+  PlayListening,
 } from "./playEvents.ts";
 export { favoriteStar, starWriteSettled, starWriteStarted } from "./favorites.ts";
 export type { FavoriteStar } from "./favorites.ts";
