@@ -11,6 +11,7 @@ import { useChromeInset } from "@/chrome/chrome";
 import { playSongs } from "@/playback/actions";
 import { useCurrentTrackId } from "@/playback/hooks";
 import { openTrackActions } from "@/playback/ActionsMenu";
+import { mixedTarget, type MixedItem } from "@/playback/itemActions";
 import { albumPairs, albumRowHeight, AlbumPair, useAlbumTileSize } from "@/library/AlbumGrid";
 import { DetailFrame } from "@/library/DetailFrame";
 import { useFavoriteIds } from "@/library/favorites";
@@ -21,6 +22,7 @@ import { SongSortButton } from "@/library/SongSortButton";
 import { useSortedSongs } from "@/library/songSort";
 import { ListIntro, songCount, toTrackSummary } from "@/library/TrackList";
 import { useListScrollable } from "@/motion/heldTouch";
+import { useListSelection, type ListSelection } from "@/selection/useListSelection";
 import { ArtistStatsBlock } from "@/stats/ArtistStatsBlock";
 
 type Item =
@@ -55,6 +57,34 @@ const itemKey = (item: Item): string => {
   }
 };
 
+const albumItem = (album: AlbumRow): MixedItem => ({ kind: "album", item: album });
+const trackItem = (song: SongRow): MixedItem => ({ kind: "track", item: { song } });
+
+/**
+ * What can be checked on the page, in page order: the albums (their shelf,
+ * then Appears on), then the songs. Albums and songs check together.
+ */
+const selectableItems = (detail: ArtistDetail, songs: readonly SongRow[]): MixedItem[] => [
+  ...detail.albums.map(albumItem),
+  ...detail.appearsOn.map(albumItem),
+  ...songs.map(trackItem),
+];
+
+const selectableKey = (mixed: MixedItem): string =>
+  mixed.kind === "album" ? `album-${mixed.item.id}` : `track-${mixed.item.song.id}`;
+
+/** The page's selection as the album tiles see it. */
+const albumSelectionOf = (page: ListSelection<MixedItem>): ListSelection<AlbumRow> => ({
+  selecting: page.selecting,
+  selection: page.selection,
+  isChecked: (album) => page.isChecked(albumItem(album)),
+  start: (album) => page.start(albumItem(album)),
+  toggle: (album) => page.toggle(albumItem(album)),
+});
+
+/** While selecting, a long-press does nothing (rather than toggling the row on release). */
+const ignoreLongPress = (): void => undefined;
+
 /** The artist page's head: their image as a large circle, then their name. */
 function ArtistHead({ artist }: { artist: ArtistRow }) {
   const { width } = useWindowDimensions();
@@ -83,10 +113,18 @@ function ArtistContent({ detail }: { detail: ArtistDetail }) {
   const currentId = useCurrentTrackId();
   const favorites = useFavoriteIds();
   const tile = useAlbumTileSize(grid.margin);
-  const rowState = useMemo(() => ({ currentId, favorites, tile }), [currentId, favorites, tile]);
   // In the sort chosen for artists; Play, Shuffle and rows all play this displayed order.
   const { songs } = useSortedSongs("artist", detail.songs);
   const items = useMemo(() => artistItems(detail, songs), [detail, songs]);
+  // Albums and songs select together; the bar acts on them in page order.
+  const selectable = useMemo(() => selectableItems(detail, songs), [detail, songs]);
+  const page = useListSelection({ items: selectable, keyOf: selectableKey, target: mixedTarget });
+  const albumSelection = useMemo(() => albumSelectionOf(page), [page]);
+  const { selection, isChecked, start, toggle } = page;
+  const rowState = useMemo(
+    () => ({ currentId, favorites, tile, selection }),
+    [currentId, favorites, tile, selection],
+  );
   const context = useMemo(
     () => ({ kind: "artist", id: String(detail.artist.id) }) as const,
     [detail.artist.id],
@@ -102,7 +140,7 @@ function ArtistContent({ detail }: { detail: ArtistDetail }) {
             </View>
           );
         case "albums":
-          return <AlbumPair albums={item.albums} size={tile} />;
+          return <AlbumPair albums={item.albums} size={tile} selection={albumSelection} />;
         case "track":
           return (
             <TrackRow
@@ -110,13 +148,34 @@ function ArtistContent({ detail }: { detail: ArtistDetail }) {
               state={String(item.song.id) === currentId ? "playing" : undefined}
               favorite={favorites.has(item.song.id)}
               leading="artwork"
-              onPress={() => playSongs(songs, item.index, context)}
-              onLongPress={() => openTrackActions(item.song)}
+              checked={selection === null ? undefined : isChecked(trackItem(item.song))}
+              onPress={
+                selection === null
+                  ? () => playSongs(songs, item.index, context)
+                  : () => toggle(trackItem(item.song))
+              }
+              onLongPress={
+                selection === null
+                  ? () =>
+                      openTrackActions(item.song, { onSelect: () => start(trackItem(item.song)) })
+                  : ignoreLongPress
+              }
             />
           );
       }
     },
-    [context, currentId, favorites, songs, tile],
+    [
+      context,
+      currentId,
+      favorites,
+      songs,
+      tile,
+      albumSelection,
+      selection,
+      isChecked,
+      start,
+      toggle,
+    ],
   );
 
   const line = [

@@ -201,8 +201,8 @@ export function SelectionHeader() {
           numberOfLines={1}
           className="flex-1 font-sans text-title3 font-medium text-foreground"
         >
-          {/* Songs say "12 selected"; other kinds name themselves ("3 albums"). */}
-          {target === null || target.kind === "track"
+          {/* Songs (and albums with songs) say "12 selected"; other kinds name themselves ("3 albums"). */}
+          {target === null || target.kind === "track" || target.kind === "mixed"
             ? `${summary.count.toLocaleString("en")} selected`
             : targetCount(target)}
         </Text>

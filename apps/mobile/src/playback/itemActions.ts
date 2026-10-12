@@ -1,4 +1,5 @@
 import {
+  commonKind,
   confirmsFirst,
   groupSongs,
   isDestructiveAction,
@@ -57,6 +58,11 @@ export interface TrackItem {
   readonly playlistItem?: PlaylistPlace | undefined;
 }
 
+/** An item of a page that shows several kinds together (an artist's albums and songs). */
+export type MixedItem =
+  | { readonly kind: "track"; readonly item: TrackItem }
+  | { readonly kind: "album"; readonly item: AlbumRow };
+
 /** The item type of each kind. */
 export interface ItemOf {
   readonly track: TrackItem;
@@ -66,6 +72,7 @@ export interface ItemOf {
   readonly genre: GenreRow;
   readonly folder: FolderRow;
   readonly section: LibrarySection;
+  readonly mixed: MixedItem;
 }
 
 /** What actions act on: items of one kind, in the order shown (one, for a menu). */
@@ -102,32 +109,36 @@ const cover = (thumbPath: string | null): readonly string[] =>
 
 const NO_FACTS: ActionItem = {};
 
+const KIND_TRACK: KindInfo<TrackItem> = {
+  songs: ({ song }) => Promise.resolve([song]),
+  heading: ({ song }) => ({
+    title: song.title,
+    subtitle: song.artist,
+    covers: cover(song.thumbPath),
+  }),
+  facts: ({ song, playlistItem }, favorites) => ({
+    albumId: song.albumId,
+    artistId: song.artistId,
+    favorite: favorites.has(song.id),
+    inPlaylist: playlistItem !== undefined,
+  }),
+  noun: "song",
+};
+
+const KIND_ALBUM: KindInfo<AlbumRow> = {
+  songs: (album) => itemSongs("albums", album.id),
+  heading: (album) => ({
+    title: album.title,
+    subtitle: album.albumArtist,
+    covers: cover(album.thumbPath),
+  }),
+  facts: (album) => ({ artistId: album.albumArtistId }),
+  noun: "album",
+};
+
 const KINDS: { readonly [K in ItemKind]: KindInfo<ItemOf[K]> } = {
-  track: {
-    songs: ({ song }) => Promise.resolve([song]),
-    heading: ({ song }) => ({
-      title: song.title,
-      subtitle: song.artist,
-      covers: cover(song.thumbPath),
-    }),
-    facts: ({ song, playlistItem }, favorites) => ({
-      albumId: song.albumId,
-      artistId: song.artistId,
-      favorite: favorites.has(song.id),
-      inPlaylist: playlistItem !== undefined,
-    }),
-    noun: "song",
-  },
-  album: {
-    songs: (album) => itemSongs("albums", album.id),
-    heading: (album) => ({
-      title: album.title,
-      subtitle: album.albumArtist,
-      covers: cover(album.thumbPath),
-    }),
-    facts: (album) => ({ artistId: album.albumArtistId }),
-    noun: "album",
-  },
+  track: KIND_TRACK,
+  album: KIND_ALBUM,
   artist: {
     songs: (artist) => itemSongs("artists", artist.id),
     heading: (artist) => ({
@@ -183,6 +194,21 @@ const KINDS: { readonly [K in ItemKind]: KindInfo<ItemOf[K]> } = {
     facts: () => NO_FACTS,
     noun: "section",
   },
+  // Albums and songs checked together: each acts as its own kind would.
+  mixed: {
+    songs: (mixed) =>
+      mixed.kind === "track" ? KIND_TRACK.songs(mixed.item) : KIND_ALBUM.songs(mixed.item),
+    heading: (mixed, sectionSongs) =>
+      mixed.kind === "track"
+        ? KIND_TRACK.heading(mixed.item, sectionSongs)
+        : KIND_ALBUM.heading(mixed.item, sectionSongs),
+    // An album counts as its own album, so songs checked with it share it (Go to Album).
+    facts: (mixed, favorites) =>
+      mixed.kind === "track"
+        ? KIND_TRACK.facts(mixed.item, favorites)
+        : { albumId: mixed.item.id, artistId: mixed.item.albumArtistId },
+    noun: "item",
+  },
 };
 
 /** The kind's info, typed for its items (TypeScript can't correlate the union on its own). */
@@ -205,6 +231,20 @@ export const targetSongs = async (target: ActionItems): Promise<readonly SongRow
   const kind = info(target);
   const lists = await Promise.all((target as Items).items.map((item) => kind.songs(item)));
   return target.kind === "track" ? lists.flat() : groupSongs(lists, songId);
+};
+
+/**
+ * What the actions act on when albums and songs are checked together, in page
+ * order: all songs act as songs (Favorite, Delete), all albums as albums, and
+ * a mix as `mixed` (the entries both share).
+ */
+export const mixedTarget = (items: readonly MixedItem[]): ActionItems => {
+  const kind = commonKind(items.map((item) => item.kind));
+  if (kind === "track")
+    return { kind, items: items.flatMap((item) => (item.kind === "track" ? [item.item] : [])) };
+  if (kind === "album")
+    return { kind, items: items.flatMap((item) => (item.kind === "album" ? [item.item] : [])) };
+  return { kind: "mixed", items };
 };
 
 /** A menu's heading: what its one item is. */

@@ -239,6 +239,7 @@ export {
 export type { Selection } from "./selection.ts";
 export { groupSongs } from "./groupSongs.ts";
 export {
+  commonKind,
   confirmsFirst,
   isDestructiveAction,
   ITEM_ACTION_LABELS,

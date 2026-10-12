@@ -5,6 +5,7 @@ import {
   confirmsFirst,
   isDestructiveAction,
   ITEM_ACTION_LABELS,
+  commonKind,
   itemActions,
   splitActionBar,
   type ActionSubject,
@@ -227,6 +228,48 @@ describe("itemActions", () => {
 
   test("an empty selection offers nothing", () => {
     assert.deepEqual(itemActions(tracks([], { surface: "selection" })), []);
+  });
+});
+
+/** Albums and songs checked together on an artist's page. */
+const mixed = (items: ActionSubject["items"], here = "/library/artist/10"): ActionSubject => ({
+  kind: "mixed",
+  items,
+  surface: "selection",
+  here,
+});
+
+describe("itemActions on albums and songs checked together", () => {
+  test("offers the entries an album's and a song's menus share, not Favorite or Delete", () => {
+    const entries = itemActions(mixed([{ albumId: 2, artistId: 10 }, song({ favorite: true })]));
+    assert.deepEqual(names(entries), ["playNext", "addToQueue", "addToPlaylist"]);
+  });
+
+  test("Go to Artist when they share an artist, unless it's the page you're on", () => {
+    const items = [{ albumId: 2, artistId: 10 }, song({ albumId: 1, artistId: 10 })];
+    assert.deepEqual(names(itemActions(mixed(items, "/library/albums"))), [
+      "playNext",
+      "addToQueue",
+      "addToPlaylist",
+      "goToArtist",
+    ]);
+    assert.ok(!names(itemActions(mixed(items))).includes("goToArtist"));
+  });
+
+  test("Go to Album when the songs are from the album checked with them", () => {
+    const entries = itemActions(mixed([{ albumId: 2, artistId: 30 }, song({ albumId: 2 })]));
+    assert.deepEqual(entries.at(-1), { action: "goToAlbum", albumId: 2 });
+  });
+});
+
+describe("commonKind", () => {
+  test("items of one kind keep it", () => {
+    assert.equal(commonKind(["track", "track"]), "track");
+    assert.equal(commonKind(["album"]), "album");
+  });
+
+  test("albums and songs together are mixed", () => {
+    assert.equal(commonKind(["album", "track", "album"]), "mixed");
   });
 });
 
