@@ -13,8 +13,13 @@ import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { EmptyState } from "@/components/EmptyState";
 import { ScreenHeader } from "@/components/ScreenHeader";
-import { useAllTopSongs } from "@/stats/hooks";
-import { nothingPlayed, RankedSongList } from "@/stats/StatsViews";
+import { useAllTopAlbums, useAllTopArtists, useAllTopSongs } from "@/stats/hooks";
+import {
+  nothingPlayed,
+  RankedAlbumList,
+  RankedArtistList,
+  RankedSongList,
+} from "@/stats/StatsViews";
 
 /** The list's opening: the period it covers. */
 function PeriodLine({ period }: { period: StatsPeriod }) {
@@ -47,11 +52,29 @@ function AllTopSongs({ period }: { period: StatsPeriod }) {
   );
 }
 
+function AllTopAlbums({ period }: { period: StatsPeriod }) {
+  const ranking = useAllTopAlbums(period);
+  if (ranking === undefined) return null;
+  if (ranking.length === 0) return <NothingPlayed period={period} />;
+  return <RankedAlbumList ranking={ranking} header={<PeriodLine period={period} />} />;
+}
+
+function AllTopArtists({ period }: { period: StatsPeriod }) {
+  const ranking = useAllTopArtists(period);
+  if (ranking === undefined) return null;
+  if (ranking.length === 0) return <NothingPlayed period={period} />;
+  return <RankedArtistList ranking={ranking} header={<PeriodLine period={period} />} />;
+}
+
 /** One ranking's full list; a ranking without one yet shows the "gone" state. */
 function SeeAllList({ seeAll }: { seeAll: StatsSeeAll | undefined }) {
   switch (seeAll?.ranking) {
     case "songs":
       return <AllTopSongs period={seeAll.period} />;
+    case "albums":
+      return <AllTopAlbums period={seeAll.period} />;
+    case "artists":
+      return <AllTopArtists period={seeAll.period} />;
     default:
       return (
         <View style={{ paddingHorizontal: grid.margin }}>
