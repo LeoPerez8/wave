@@ -439,7 +439,10 @@ describe("nextRepeatMode", () => {
 describe("removeTracks (deleted songs)", () => {
   test("drops every entry of the tracks, played, queued or upcoming, and keeps playing", () => {
     const playing = apply(start("a b c d", 1), { type: "addToQueue", trackIds: ["d"] });
-    const { state, playback } = reduceQueue(playing, { type: "removeTracks", trackIds: ["a", "d"] });
+    const { state, playback } = reduceQueue(playing, {
+      type: "removeTracks",
+      trackIds: ["a", "d"],
+    });
     assert.equal(show(state), "[b] c");
     assert.equal(currentEntry(state)?.key, keyOf(playing, "b"));
     assert.equal(playback, "keep");

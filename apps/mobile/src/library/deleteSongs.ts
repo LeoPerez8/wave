@@ -1,8 +1,4 @@
-import {
-  confirmSongDeletion,
-  songDeletionFailure,
-  type SongDeleteFailureReason,
-} from "@wave/core";
+import { confirmSongDeletion, songDeletionFailure, type SongDeleteFailureReason } from "@wave/core";
 import * as Effect from "effect/Effect";
 
 import { WaveNative, type FileDeleteOutcome } from "@/native/waveNative";
