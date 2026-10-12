@@ -21,6 +21,7 @@ import { withUniwind } from "uniwind";
 import { useTapAnimationMs } from "@/settings/tapAnimation";
 
 import { cancelHeldTouch, holdTouch, moveHeldTouch, releaseHeldTouch } from "./heldTouch";
+import { measureRect } from "./measureRect";
 import { runPressedAt } from "./pressedRect";
 
 const AnimatedPressable = withUniwind(createAnimatedComponent(Pressable));
@@ -41,8 +42,6 @@ type Props = Omit<PressableProps, "children" | "style"> & {
   /** Looks pressed without a touch of its own (e.g. the menu entry a sliding finger is over). */
   highlighted?: boolean;
 };
-
-type Handler = PressableProps["onLongPress"];
 
 /** Where a touch event's finger is in the window, if it carries one. */
 const pointOf = ({ nativeEvent }: GestureResponderEvent) =>
@@ -87,32 +86,26 @@ export function Press({
     [],
   );
 
-  // Long-presses open menus: measure where this sits first, so the menu can float next to it.
-  const anchored = (handler: Handler): ((event: GestureResponderEvent) => void) | undefined =>
-    handler == null
-      ? undefined
-      : (event) => {
-          const node = view.current;
-          if (node === null || typeof node.measureInWindow !== "function") {
-            runPressedAt(undefined, () => handler(event));
-            return;
-          }
-          node.measureInWindow((x, y, width, height) =>
-            runPressedAt(
-              width > 0 ? { left: x, top: y, right: x + width, bottom: y + height } : undefined,
-              () => handler(event),
-            ),
-          );
-        };
+  // Runs a handler that may open a menu, measuring where this sits first so the
+  // menu can float next to it. Resolves with whether it opened one.
+  const runAnchored = (handler: () => void): Promise<boolean> =>
+    measureRect(view.current).then((rect) => runPressedAt(rect, handler));
 
-  // The finger stays down as the menu opens and can slide onto an entry (slide to choose).
+  // The finger stays down as a long-press menu opens and can slide onto an entry
+  // (slide to choose). A long-press that opens no menu (a tab's) lets it go again.
   const longPress = (event: GestureResponderEvent): void => {
+    if (onLongPress == null) return;
     const point = pointOf(event);
     if (point !== undefined) {
       holding.current = true;
       holdTouch(point);
     }
-    anchored(onLongPress)?.(event);
+    void runAnchored(() => onLongPress(event)).then((opened) => {
+      if (!opened && holding.current) {
+        holding.current = false;
+        cancelHeldTouch();
+      }
+    });
   };
 
   const pressStyle = useAnimatedStyle(() => {
@@ -137,7 +130,9 @@ export function Press({
     <AnimatedPressable
       {...rest}
       ref={view}
-      onPress={opensMenu ? anchored(onPress) : onPress}
+      onPress={
+        opensMenu && onPress != null ? (event) => void runAnchored(() => onPress(event)) : onPress
+      }
       onLongPress={onLongPress == null ? undefined : longPress}
       onTouchMove={(event) => {
         const point = pointOf(event);

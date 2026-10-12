@@ -44,7 +44,7 @@ export const showAlert = (spec: AlertSpec): Promise<AlertChoice> => {
   const plan = planAlert(spec);
   return presentOverlay<AlertChoice>({
     label: plan.announcement,
-    dismissed: plan.dismissed,
+    dismissed: "dismiss",
     render: (finish) => <AlertCard spec={spec} plan={plan} finish={finish} />,
   });
 };

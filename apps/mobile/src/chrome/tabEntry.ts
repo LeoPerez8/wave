@@ -30,6 +30,13 @@ export const tabOfPath = (pathname: string): TabName | null =>
   TABS.find((tab) => TAB_PATH[tab] === pathname) ?? null;
 
 /**
+ * Whether `pathname` is in the Library tab's stack (src/app/library/), pushed
+ * over the tabs; it keeps the mini player but not the tab bar.
+ */
+export const inLibraryStack = (pathname: string): boolean =>
+  pathname.startsWith(`${TAB_PATH.library}/`);
+
+/**
  * The style for the view holding the tab screens: after a tapped switch the
  * new screen fades in while sliding from the tapped tab's side. The tab bar
  * calls `noteTap` before switching, so only a tap animates: launching, deep

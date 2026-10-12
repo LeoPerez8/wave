@@ -15,11 +15,7 @@ import { openAlbum, openArtist } from "@/library/routes";
 import { toTrackSummary } from "@/library/TrackList";
 import { playSongs } from "@/playback/actions";
 import { useCurrentTrackId } from "@/playback/hooks";
-import {
-  openAlbumActions,
-  openArtistActions,
-  openTrackActions,
-} from "@/playback/TrackActionsSheet";
+import { openAlbumActions, openArtistActions, openTrackActions } from "@/playback/ActionsMenu";
 import { useListScrollable } from "@/motion/heldTouch";
 
 /** Shelf covers leave the next one peeking in at the right edge, so the row reads as scrollable. */
