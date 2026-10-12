@@ -35,6 +35,15 @@ import {
   selectArtistSongs,
   selectArtists,
 } from "./db/artists";
+import {
+  clearArtistPhotos,
+  recordArtistPhoto,
+  selectArtistPhotoLookups,
+  selectArtistPhotos,
+  type ArtistPhotoLookup,
+  type ArtistPhotoRecord,
+  type ArtistPhotoRow,
+} from "./db/artistPhotos";
 import { libraryCounts, sectionSongCounts, type LibraryCounts } from "./db/counts";
 import { selectGenreSongs } from "./db/genres";
 import type { RowPage } from "./db/database";
@@ -442,6 +451,17 @@ export class LibraryStore extends Context.Service<
      * latest play, track artist), in no order; Core's `listeningTotals` sums it.
      */
     readonly songListening: Effect.Effect<readonly SongListening[], LibraryStoreError>;
+    /** The artists whose photo is due for a lookup now (Core's `artistPhotoLookups`). */
+    readonly artistPhotoLookups: Effect.Effect<readonly ArtistPhotoLookup[], LibraryStoreError>;
+    /** Records how an artist's photo lookup went, by artist key. */
+    readonly recordArtistPhoto: (
+      artistKey: string,
+      record: ArtistPhotoRecord,
+    ) => Effect.Effect<void, LibraryStoreError>;
+    /** Every downloaded artist photo. */
+    readonly listArtistPhotos: Effect.Effect<readonly ArtistPhotoRow[], LibraryStoreError>;
+    /** Forgets every artist photo and miss (the files are deleted by the caller). */
+    readonly clearArtistPhotos: Effect.Effect<void, LibraryStoreError>;
   }
 >()("@wave/mobile/library/LibraryStore") {}
 
@@ -1412,6 +1432,17 @@ const make = Effect.gen(function* () {
       attempt("read ranked artists", () => (ids.length === 0 ? [] : listArtistsSync(db, ids))),
 
     songListening: attempt("sum up listening", () => songListening(db)),
+
+    artistPhotoLookups: attempt("list artist photo lookups", () =>
+      selectArtistPhotoLookups(db, Date.now()),
+    ),
+
+    recordArtistPhoto: (artistKey, record) =>
+      attempt("record an artist photo", () => recordArtistPhoto(db, artistKey, record)),
+
+    listArtistPhotos: attempt("list artist photos", () => selectArtistPhotos(db)),
+
+    clearArtistPhotos: attempt("clear artist photos", () => clearArtistPhotos(db)),
   });
 });
 
