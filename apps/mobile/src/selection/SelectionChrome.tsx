@@ -178,7 +178,7 @@ export function SelectionBar({ backdropId }: { backdropId: string }) {
 }
 
 /**
- * The top of the screen while a list is selecting: the count ("3 albums"), Select All
+ * The top of the screen while a list is selecting: the count ("12 selected", "3 albums"), Select All
  * and Done, over the screen's own header.
  */
 export function SelectionHeader() {
@@ -201,8 +201,10 @@ export function SelectionHeader() {
           numberOfLines={1}
           className="flex-1 font-sans text-title3 font-medium text-foreground"
         >
-          {/* Names the kind: "3 albums", "12 songs". */}
-          {target === null ? `${summary.count.toLocaleString("en")} selected` : targetCount(target)}
+          {/* Songs say "12 selected"; other kinds name themselves ("3 albums"). */}
+          {target === null || target.kind === "track"
+            ? `${summary.count.toLocaleString("en")} selected`
+            : targetCount(target)}
         </Text>
         <TextButton label="Select All" disabled={summary.all} onPress={selectAllInList} />
         <TextButton label="Done" onPress={endSelection} />
