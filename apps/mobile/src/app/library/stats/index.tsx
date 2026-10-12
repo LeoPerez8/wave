@@ -15,6 +15,7 @@ import {
   RankedAlbums,
   RankedArtists,
   RankedSongs,
+  statsSongsContext,
 } from "@/stats/StatsViews";
 
 /** Stats: what was played most over a rolling period ending now. */
@@ -40,7 +41,7 @@ export default function StatsScreen() {
             title="Top songs"
             action={{ label: "See all", onPress: () => openStatsSeeAll("songs", period) }}
           >
-            <RankedSongs ranking={topSongs} period={period} />
+            <RankedSongs ranking={topSongs} context={statsSongsContext(period)} />
           </HomeSection>
         )}
         {topAlbums !== undefined && topAlbums.length > 0 && (
