@@ -27,12 +27,8 @@ import { pressedRect } from "@/motion/pressedRect";
 import { CardEntries } from "@/overlay/CardEntries";
 import { useOverlayFlow } from "@/overlay/flow";
 import { openOverlay } from "@/overlay/overlay";
-import {
-  targetCount,
-  useItemActions,
-  type ActionEntry,
-  type ActionItems,
-} from "@/playback/itemActions";
+import { targetCount, type ActionItems } from "@/playback/actionTargets";
+import { useItemActions, type ActionEntry } from "@/playback/itemActions";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { endSelection, selectAllInList, useSelectedTarget, useSelectionSummary } from "./selection";

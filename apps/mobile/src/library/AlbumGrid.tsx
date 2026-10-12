@@ -3,7 +3,7 @@ import { useWindowDimensions, View } from "react-native";
 import { type AlbumSummary, AlbumTile } from "@/catalog/AlbumTile";
 import { CELL, grid } from "@/catalog/grid";
 import { openAlbumActions } from "@/playback/ActionsMenu";
-import type { ActionItems } from "@/playback/itemActions";
+import type { ActionItems } from "@/playback/actionTargets";
 import { useListSelection, type ListSelection } from "@/selection/useListSelection";
 
 import type { AlbumRow } from "./LibraryStore";

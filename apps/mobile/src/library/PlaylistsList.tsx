@@ -11,7 +11,7 @@ import { useChromeInset } from "@/chrome/chrome";
 import { EmptyState } from "@/components/EmptyState";
 import { TextButton } from "@/components/TextButton";
 import { openPlaylistActions } from "@/playback/ActionsMenu";
-import type { ActionItems } from "@/playback/itemActions";
+import type { ActionItems } from "@/playback/actionTargets";
 import { useListSelection, type ListSelection } from "@/selection/useListSelection";
 
 import { usePlaylists } from "./hooks";

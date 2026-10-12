@@ -13,7 +13,7 @@ import { useChromeInset } from "@/chrome/chrome";
 import { playSongs } from "@/playback/actions";
 import { useCurrentTrackId } from "@/playback/hooks";
 import { openTrackActions } from "@/playback/ActionsMenu";
-import type { ActionItems } from "@/playback/itemActions";
+import type { ActionItems } from "@/playback/actionTargets";
 import { useListSelection } from "@/selection/useListSelection";
 
 import { useFavoriteIds } from "./favorites";

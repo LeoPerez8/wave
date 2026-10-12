@@ -13,7 +13,7 @@ import { useChromeInset } from "@/chrome/chrome";
 import { EmptyState } from "@/components/EmptyState";
 import { ScanProgressBanner } from "@/components/ScanProgressBanner";
 import { openArtistActions, openFolderActions, openGenreActions } from "@/playback/ActionsMenu";
-import type { ActionItems } from "@/playback/itemActions";
+import type { ActionItems } from "@/playback/actionTargets";
 import { useListSelection, type ListSelection } from "@/selection/useListSelection";
 
 import {

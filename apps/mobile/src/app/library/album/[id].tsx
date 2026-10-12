@@ -20,7 +20,7 @@ import type { AlbumDetail, AlbumTrackRow } from "@/library/LibraryStore";
 import { openArtist, parseId } from "@/library/routes";
 import { songCount, toTrackSummary } from "@/library/TrackList";
 import { useListScrollable } from "@/motion/heldTouch";
-import type { ActionItems } from "@/playback/itemActions";
+import type { ActionItems } from "@/playback/actionTargets";
 import { useListSelection } from "@/selection/useListSelection";
 
 type Item =

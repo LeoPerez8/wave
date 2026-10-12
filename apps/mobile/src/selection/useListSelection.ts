@@ -2,7 +2,7 @@ import { isSelected, withSelectedKept, type Selection } from "@wave/core";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { addScreenBackHandler } from "@/overlay/back";
-import type { ActionItems } from "@/playback/itemActions";
+import type { ActionItems } from "@/playback/actionTargets";
 
 import {
   currentSelection,

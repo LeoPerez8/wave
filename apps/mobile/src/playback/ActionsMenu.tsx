@@ -22,9 +22,8 @@ import { useOverlayFlow } from "@/overlay/flow";
 import { openOverlay } from "@/overlay/overlay";
 import { useSlideToChoose } from "@/overlay/useSlideToChoose";
 
-import { targetHeading, useItemActions, type ActionItems, type PlaylistPlace } from "./itemActions";
-
-export type { PlaylistPlace } from "./itemActions";
+import { targetHeading, type ActionItems, type PlaylistPlace } from "./actionTargets";
+import { useItemActions } from "./itemActions";
 
 /** How a menu was opened. */
 export interface MenuOptions {
