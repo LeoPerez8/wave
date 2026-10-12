@@ -152,7 +152,7 @@ function renderRankedAlbum({ item: album, countedPlays }: Ranked<AlbumRow>, inde
       detail={`${album.albumArtist} · ${playCount(countedPlays)}`}
       artworkUri={album.thumbPath === null ? undefined : `file://${album.thumbPath}`}
       rank={{ number: index + 1, top: index === 0 }}
-      onPress={() => openAlbum(album.id)}
+      onPress={() => openAlbum(album.id, album)}
       onLongPress={() => openAlbumActions(album)}
     />
   );
@@ -166,7 +166,7 @@ function renderRankedArtist({ item: artist, countedPlays }: Ranked<ArtistRow>, i
       artist={artist}
       detail={playCount(countedPlays)}
       rank={{ number: index + 1, top: index === 0 }}
-      onPress={() => openArtist(artist.id)}
+      onPress={() => openArtist(artist.id, artist)}
       onLongPress={() => openArtistActions(artist)}
     />
   );

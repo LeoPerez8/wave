@@ -86,7 +86,7 @@ function Hit({
           name={hit.name}
           artist={hit.artist}
           detail={top ? "Artist" : counted(hit.artist.trackCount, "song")}
-          onPress={open(() => openArtist(hit.artist.id))}
+          onPress={open(() => openArtist(hit.artist.id, hit.artist))}
           onLongPress={menu(() => openArtistActions(hit.artist))}
         />
       );
@@ -96,7 +96,7 @@ function Hit({
           title={hit.name}
           detail={top ? `Album · ${hit.album.albumArtist}` : hit.album.albumArtist}
           artworkUri={hit.album.thumbPath === null ? undefined : `file://${hit.album.thumbPath}`}
-          onPress={open(() => openAlbum(hit.album.id))}
+          onPress={open(() => openAlbum(hit.album.id, hit.album))}
           onLongPress={menu(() => openAlbumActions(hit.album))}
         />
       );
@@ -130,7 +130,7 @@ function Hit({
         <NameRow
           name={hit.name}
           detail={`${top ? "Genre · " : ""}${counted(hit.genre.trackCount, "song")}`}
-          onPress={open(() => openGenre(hit.genre.id))}
+          onPress={open(() => openGenre(hit.genre.id, hit.genre))}
           onLongPress={menu(() => openGenreActions(hit.genre))}
         />
       );

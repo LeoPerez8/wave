@@ -17,7 +17,7 @@ import { DetailFrame } from "@/library/DetailFrame";
 import { useFavoriteIds } from "@/library/favorites";
 import { useArtist } from "@/library/hooks";
 import type { AlbumRow, ArtistDetail, ArtistRow, SongRow } from "@/library/LibraryStore";
-import { parseId } from "@/library/routes";
+import { parseId, useKnownRow } from "@/library/routes";
 import { SongSortButton } from "@/library/SongSortButton";
 import { useSortedSongs } from "@/library/songSort";
 import { ListIntro, songCount, toTrackSummary } from "@/library/TrackList";
@@ -105,7 +105,24 @@ function ArtistHead({ artist }: { artist: ArtistRow }) {
 
 const albumsLine = (count: number): string => `${count} ${count === 1 ? "album" : "albums"}`;
 
-function ArtistContent({ detail }: { detail: ArtistDetail }) {
+/** What the screen shows: the artist, and their page once it is read. */
+interface Shown {
+  readonly artist: ArtistRow;
+  /** Undefined until the page is read; the head doesn't wait for it. */
+  readonly detail: ArtistDetail | undefined;
+}
+
+/** The page before it's read: the artist alone, no albums or songs yet. */
+const unread = (artist: ArtistRow): ArtistDetail => ({
+  artist,
+  albums: [],
+  appearsOn: [],
+  songs: [],
+});
+
+function ArtistContent({ shown }: { shown: Shown }) {
+  const loaded = shown.detail !== undefined;
+  const detail = useMemo(() => shown.detail ?? unread(shown.artist), [shown.detail, shown.artist]);
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
   const currentId = useCurrentTrackId();
@@ -161,7 +178,7 @@ function ArtistContent({ detail }: { detail: ArtistDetail }) {
 
   const line = [
     detail.artist.albumCount > 0 ? albumsLine(detail.artist.albumCount) : null,
-    songCount(songs.length),
+    songCount(loaded ? songs.length : detail.artist.trackCount),
   ]
     .filter((part) => part !== null)
     .join(" · ");
@@ -190,24 +207,38 @@ function ArtistContent({ detail }: { detail: ArtistDetail }) {
           <ArtistHead artist={detail.artist} />
           <ListIntro
             line={line}
-            songs={songs}
+            songs={loaded ? songs : undefined}
             context={context}
             sortControl={<SongSortButton kind="artist" />}
           />
-          <ArtistStatsBlock artistId={detail.artist.id} songs={detail.songs} />
+          {loaded && <ArtistStatsBlock artistId={detail.artist.id} songs={detail.songs} />}
         </>
       }
     />
   );
 }
 
-/** An artist: their albums, the albums they appear on, and their songs. */
+/**
+ * An artist: their albums, the albums they appear on, and their songs. Opened
+ * from a list that knows the artist, the head is there on the first frame and
+ * the rest follows once read.
+ */
 export default function ArtistScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const detail = useArtist(parseId(id));
+  const artistId = parseId(id);
+  const detail = useArtist(artistId);
+  const known = useKnownRow("artist", artistId);
+  const shown: Shown | null | undefined =
+    detail === undefined
+      ? known === undefined
+        ? undefined
+        : { artist: known, detail: undefined }
+      : detail === null
+        ? null
+        : { artist: detail.artist, detail };
   return (
-    <DetailFrame detail={detail} noun="artist">
-      {(artist) => <ArtistContent detail={artist} />}
+    <DetailFrame detail={shown} noun="artist">
+      {(artist) => <ArtistContent shown={artist} />}
     </DetailFrame>
   );
 }

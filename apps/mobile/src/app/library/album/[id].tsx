@@ -11,13 +11,13 @@ import { TrackRow } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { Press } from "@/motion/Press";
 import { playSongs } from "@/playback/actions";
-import { useCurrentTrackId } from "@/playback/hooks";
+import { useCurrentTrackId, usePlaySongs } from "@/playback/hooks";
 import { openTrackActions } from "@/playback/ActionsMenu";
 import { DetailFrame } from "@/library/DetailFrame";
 import { useFavoriteIds } from "@/library/favorites";
 import { useAlbum } from "@/library/hooks";
-import type { AlbumDetail, AlbumTrackRow } from "@/library/LibraryStore";
-import { openArtist, parseId } from "@/library/routes";
+import type { AlbumRow, AlbumTrackRow } from "@/library/LibraryStore";
+import { openArtist, parseId, useKnownRow } from "@/library/routes";
 import { songCount, toTrackSummary } from "@/library/TrackList";
 import { useListScrollable } from "@/motion/heldTouch";
 import type { ActionItems } from "@/playback/actionTargets";
@@ -52,13 +52,24 @@ const albumItems = (tracks: readonly AlbumTrackRow[]): Item[] => {
   return items;
 };
 
+/** What the screen shows: the album, and its tracks (and genre) once they are read. */
+interface Shown {
+  readonly album: AlbumRow;
+  readonly genre: string | null;
+  /** Undefined until the tracks are read; the header doesn't wait for them. */
+  readonly tracks: readonly AlbumTrackRow[] | undefined;
+}
+
+const NO_TRACKS: readonly AlbumTrackRow[] = [];
+
 const itemKey = (item: Item): string =>
   item.type === "disc" ? `disc-${item.disc}` : String(item.track.id);
 
-function AlbumHead({ detail }: { detail: AlbumDetail }) {
+function AlbumHead({ shown }: { shown: Shown }) {
   const { width } = useWindowDimensions();
-  const { album, genre, tracks } = detail;
-  const context = { kind: "album", id: String(album.id) } as const;
+  const { album, genre, tracks } = shown;
+  const context = useMemo(() => ({ kind: "album", id: String(album.id) }) as const, [album.id]);
+  const play = usePlaySongs(tracks, context);
   // "Rock · 1997 · 12 songs · 52 min": the grid's furniture line, spelled out.
   const furniture = [
     genre,
@@ -99,22 +110,20 @@ function AlbumHead({ detail }: { detail: AlbumDetail }) {
           {furniture}
         </Text>
       </View>
-      <PlayShuffle
-        onPlay={() => playSongs(tracks, undefined, context, { shuffle: false })}
-        onShuffle={() => playSongs(tracks, undefined, context, { shuffle: true })}
-      />
+      <PlayShuffle onPlay={() => play(false)} onShuffle={() => play(true)} />
     </View>
   );
 }
 
-function AlbumTracks({ detail }: { detail: AlbumDetail }) {
+function AlbumTracks({ shown }: { shown: Shown }) {
+  const tracks = shown.tracks ?? NO_TRACKS;
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
   const currentId = useCurrentTrackId();
   const favorites = useFavoriteIds();
   // Selection keys the tracks themselves (every disc), not the disc heads.
   const listSelection = useListSelection({
-    items: detail.tracks,
+    items: tracks,
     keyOf: trackKey,
     target: tracksOf,
   });
@@ -122,10 +131,10 @@ function AlbumTracks({ detail }: { detail: AlbumDetail }) {
     () => ({ currentId, favorites, selection: listSelection.selection }),
     [currentId, favorites, listSelection.selection],
   );
-  const items = useMemo(() => albumItems(detail.tracks), [detail.tracks]);
+  const items = useMemo(() => albumItems(tracks), [tracks]);
   const context = useMemo(
-    () => ({ kind: "album", id: String(detail.album.id) }) as const,
-    [detail.album.id],
+    () => ({ kind: "album", id: String(shown.album.id) }) as const,
+    [shown.album.id],
   );
 
   const renderItem = useCallback(
@@ -146,12 +155,12 @@ function AlbumTracks({ detail }: { detail: AlbumDetail }) {
           {...selectableRow(
             item.track,
             listSelection,
-            () => playSongs(detail.tracks, item.index, context),
+            () => playSongs(tracks, item.index, context),
             (options) => openTrackActions(item.track, options),
           )}
         />
       ),
-    [context, currentId, detail.tracks, favorites, listSelection],
+    [context, currentId, tracks, favorites, listSelection],
   );
 
   return (
@@ -167,18 +176,28 @@ function AlbumTracks({ detail }: { detail: AlbumDetail }) {
       estimatedItemSize={grid.row}
       recycleItems
       contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottomInset }}
-      ListHeaderComponent={<AlbumHead detail={detail} />}
+      ListHeaderComponent={<AlbumHead shown={shown} />}
     />
   );
 }
 
-/** An album: large cover, title, album artist, furniture, Play / Shuffle, tracks by disc and number. */
+/**
+ * An album: large cover, title, album artist, furniture, Play / Shuffle,
+ * tracks by disc and number. Opened from a list that knows the album, the
+ * header is there on the first frame and the tracks follow once read.
+ */
 export default function AlbumScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const detail = useAlbum(parseId(id));
+  const albumId = parseId(id);
+  const detail = useAlbum(albumId);
+  const known = useKnownRow("album", albumId);
+  const shown: Shown | null | undefined =
+    detail === undefined && known !== undefined
+      ? { album: known, genre: null, tracks: undefined }
+      : detail;
   return (
-    <DetailFrame detail={detail} noun="album">
-      {(album) => <AlbumTracks detail={album} />}
+    <DetailFrame detail={shown} noun="album">
+      {(album) => <AlbumTracks shown={album} />}
     </DetailFrame>
   );
 }

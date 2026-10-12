@@ -45,7 +45,7 @@ export function AlbumShelf<A extends AlbumRow>({
           album={toAlbumSummary(album)}
           size={SHELF_TILE}
           detail={detail?.(album)}
-          onPress={() => openAlbum(album.id)}
+          onPress={() => openAlbum(album.id, album)}
           onLongPress={() => openAlbumActions(album)}
         />
       ))}
@@ -118,7 +118,7 @@ export function ArtistShelf<A extends ArtistRow>({
           key={artist.id}
           accessibilityRole="button"
           accessibilityLabel={`${artist.name}, ${detail(artist)}`}
-          onPress={() => openArtist(artist.id)}
+          onPress={() => openArtist(artist.id, artist)}
           onLongPress={() => openArtistActions(artist)}
           depth={0.02}
           className="gap-0.5"

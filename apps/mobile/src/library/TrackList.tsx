@@ -11,7 +11,7 @@ import { PlayShuffle } from "@/catalog/PlayShuffle";
 import { type TrackSummary, TrackRow } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { playSongs } from "@/playback/actions";
-import { useCurrentTrackId } from "@/playback/hooks";
+import { useCurrentTrackId, usePlaySongs } from "@/playback/hooks";
 import { openTrackActions } from "@/playback/ActionsMenu";
 import type { ActionItems } from "@/playback/actionTargets";
 import { selectableRow } from "@/selection/selectableRow";
@@ -43,19 +43,20 @@ export function ListIntro({
   sortControl,
 }: {
   line: string;
-  /** In the order the list shows them: Play and Shuffle play them so. */
-  songs: readonly SongRow[];
+  /**
+   * In the order the list shows them: Play and Shuffle play them so.
+   * Undefined while they load: a press then plays them once read.
+   */
+  songs: readonly SongRow[] | undefined;
   context: QueueContext;
   sortControl?: ReactNode;
 }) {
+  const play = usePlaySongs(songs, context);
   return (
     <View style={{ gap: CELL, paddingBottom: CELL }}>
       <CatalogLine>{line}</CatalogLine>
       <View className="flex-row items-center justify-between">
-        <PlayShuffle
-          onPlay={() => playSongs(songs, undefined, context, { shuffle: false })}
-          onShuffle={() => playSongs(songs, undefined, context, { shuffle: true })}
-        />
+        <PlayShuffle onPlay={() => play(false)} onShuffle={() => play(true)} />
         {sortControl}
       </View>
     </View>

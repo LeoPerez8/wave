@@ -124,7 +124,7 @@ const renderArtist = (artist: ArtistRow, selection: ListSelection<ArtistRow>) =>
     {...selectableRow(
       artist,
       selection,
-      () => openArtist(artist.id),
+      () => openArtist(artist.id, artist),
       (options) => openArtistActions(artist, options),
     )}
   />
@@ -155,7 +155,7 @@ const renderGenre = (genre: GenreRow, selection: ListSelection<GenreRow>) => (
     {...selectableRow(
       genre,
       selection,
-      () => openGenre(genre.id),
+      () => openGenre(genre.id, genre),
       (options) => openGenreActions(genre, options),
     )}
   />
@@ -198,7 +198,7 @@ const renderFolder = (folder: FolderRow, selection: ListSelection<FolderRow>) =>
       {...selectableRow(
         folder,
         selection,
-        () => openFolder(folder.id),
+        () => openFolder(folder.id, folder),
         (options) => openFolderActions(folder, options),
       )}
     />

@@ -75,7 +75,7 @@ export function AlbumPair({
           {...selectableRow(
             album,
             selection,
-            () => openAlbum(album.id),
+            () => openAlbum(album.id, album),
             (options) => openAlbumActions(album, options),
           )}
         />
