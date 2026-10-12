@@ -116,6 +116,37 @@ describe("itemActions", () => {
     assert.ok(entries.includes("goToArtist"));
   });
 
+  test("an album page's selection bar: Go to Artist when the songs share one, never Go to Album", () => {
+    for (const here of ["/library/album/4", "/shortcut/album/4"]) {
+      const shared = names(
+        itemActions(
+          tracks([song({ albumId: 4, artistId: 9 }), song({ albumId: 4, artistId: 9 })], {
+            surface: "selection",
+            here,
+          }),
+        ),
+      );
+      assert.deepEqual(shared, [
+        "playNext",
+        "addToQueue",
+        "addToPlaylist",
+        "favorite",
+        "goToArtist",
+        "delete",
+      ]);
+      const mixed = names(
+        itemActions(
+          tracks([song({ albumId: 4, artistId: 9 }), song({ albumId: 4, artistId: 2 })], {
+            surface: "selection",
+            here,
+          }),
+        ),
+      );
+      assert.ok(!mixed.includes("goToAlbum"));
+      assert.ok(!mixed.includes("goToArtist"));
+    }
+  });
+
   test("Favorite stars the selection unless every song in it is starred already", () => {
     const mixed = tracks([song({ favorite: true }), song()], { surface: "selection" });
     const starred = tracks([song({ favorite: true }), song({ favorite: true })], {
