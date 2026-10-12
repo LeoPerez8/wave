@@ -222,3 +222,5 @@ export {
   writeSongSort,
 } from "./songSort.ts";
 export type { SongListKind, SongSort, SongSortKey, SortableSong } from "./songSort.ts";
+export { artistArtwork, artistInitial } from "./artistImage.ts";
+export type { ArtistAlbumLink } from "./artistImage.ts";
