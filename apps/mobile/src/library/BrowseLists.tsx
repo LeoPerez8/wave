@@ -11,7 +11,11 @@ import { NameRow } from "@/catalog/NameRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { EmptyState } from "@/components/EmptyState";
 import { ScanProgressBanner } from "@/components/ScanProgressBanner";
-import { openArtistActions, openGenreActions } from "@/playback/TrackActionsSheet";
+import {
+  openArtistActions,
+  openFolderActions,
+  openGenreActions,
+} from "@/playback/TrackActionsSheet";
 
 import { albumPairs, albumRowHeight, AlbumPair, useAlbumTileSize } from "./AlbumGrid";
 import { useAlbums, useArtists, useFolders, useGenres, useScanState } from "./hooks";
@@ -157,6 +161,7 @@ const renderFolder = (folder: FolderRow) => {
       name={folder.name}
       detail={parent === "" ? count : `${count} · ${parent}`}
       onPress={() => openFolder(folder.id)}
+      onLongPress={() => openFolderActions(folder)}
     />
   );
 };
