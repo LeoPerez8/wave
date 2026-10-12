@@ -166,3 +166,13 @@ export { moveSlide, slideEntry, slideTicks, startSlide } from "./slideToChoose.t
 export type { MenuSlide, SlidePoint } from "./slideToChoose.ts";
 export { planAlert } from "./alert.ts";
 export type { AlertButton, AlertChoice, AlertPlan, AlertSpec } from "./alert.ts";
+export {
+  DEFAULT_SONG_SORT,
+  readSongSort,
+  SONG_SORTS,
+  songSortLabel,
+  songSpineKeys,
+  sortSongs,
+  writeSongSort,
+} from "./songSort.ts";
+export type { SongSort, SongSortKey, SortableSong } from "./songSort.ts";
