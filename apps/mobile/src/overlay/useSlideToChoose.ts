@@ -1,4 +1,12 @@
-import { moveSlide, slideEntry, startSlide, type OverlayRect, type SlidePoint } from "@wave/core";
+import {
+  moveSlide,
+  slideEntry,
+  slideTicks,
+  startSlide,
+  type OverlayRect,
+  type SlidePoint,
+} from "@wave/core";
+import * as Haptics from "expo-haptics";
 import { useEffect, useEffectEvent, useState } from "react";
 
 import { CELL } from "@/catalog/grid";
@@ -40,9 +48,10 @@ export interface SlideToChoose {
 
 /**
  * Slide to choose, for a menu opened by a long-press: the finger still down
- * slides onto an entry, and lifting it there calls `choose(index)`. Lifting it
- * anywhere else (or without sliding) leaves the menu open. Menus opened any
- * other way (a tap, a screen reader) see no held finger and work as before.
+ * slides onto an entry (a selection tick as it moves onto each one), and
+ * lifting it there calls `choose(index)`. Lifting it anywhere else (or
+ * without sliding) leaves the menu open. Menus opened any other way (a tap, a
+ * screen reader) see no held finger and work as before.
  */
 export function useSlideToChoose(choose: (index: number) => void): SlideToChoose {
   const [underFinger, setUnderFinger] = useState<number | undefined>(undefined);
@@ -80,6 +89,8 @@ export function useSlideToChoose(choose: (index: number) => void): SlideToChoose
     let live = true;
     // Moves resolve in order; one that lands after the finger lifted is dropped.
     let latest = 0;
+    // The entry under the finger as of the last move, for the haptic tick onto a new one.
+    let under: number | undefined;
 
     const entryAt = async (point: SlidePoint): Promise<number | undefined> => {
       const count = Math.max(-1, ...nodes.entries.keys()) + 1;
@@ -102,6 +113,8 @@ export function useSlideToChoose(choose: (index: number) => void): SlideToChoose
       void entryAt(event.point).then((index) => {
         if (!live || ticket !== latest) return;
         if (event.type === "move") {
+          if (slideTicks(under, index)) void Haptics.selectionAsync();
+          under = index;
           setUnderFinger(index);
           return;
         }

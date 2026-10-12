@@ -38,6 +38,8 @@ type Props = Omit<PressableProps, "children" | "style"> & {
   depth?: number;
   /** Its tap opens a menu, which floats next to it (`pressedRect`), as long-press menus do. */
   opensMenu?: boolean;
+  /** Looks pressed without a touch of its own (e.g. the menu entry a sliding finger is over). */
+  highlighted?: boolean;
 };
 
 type Handler = PressableProps["onLongPress"];
@@ -62,6 +64,7 @@ export function Press({
   onPress,
   onLongPress,
   opensMenu = false,
+  highlighted = false,
   onTouchMove,
   onTouchEnd,
   onTouchCancel,
@@ -71,6 +74,7 @@ export function Press({
   const ms = useTapAnimationMs();
   const reduceMotion = useReducedMotion();
   const pressed = useSharedValue(0);
+  const lit = useSharedValue(highlighted ? 1 : 0);
   const view = useRef<ComponentRef<typeof View>>(null);
   // This press's finger long-pressed and is still down: it reports where it goes (`heldTouch`).
   const holding = useRef(false);
@@ -111,14 +115,23 @@ export function Press({
     anchored(onLongPress)?.(event);
   };
 
-  const pressStyle = useAnimatedStyle(() => ({
-    opacity: 1 - pressed.get() * 0.35,
-    transform: [{ scale: reduceMotion ? 1 : 1 - pressed.get() * depth }],
-  }));
+  const pressStyle = useAnimatedStyle(() => {
+    const amount = Math.max(pressed.get(), lit.get());
+    return {
+      opacity: 1 - amount * 0.35,
+      transform: [{ scale: reduceMotion ? 1 : 1 - amount * depth }],
+    };
+  });
 
   const animateTo = (value: number) => {
     pressed.set(ms === 0 ? value : withTiming(value, { duration: ms, easing: EASE }));
   };
+
+  // Highlighted sinks and dims just like a press, with the same timing.
+  useEffect(() => {
+    const value = highlighted ? 1 : 0;
+    lit.set(ms === 0 ? value : withTiming(value, { duration: ms, easing: EASE }));
+  }, [highlighted, lit, ms]);
 
   return (
     <AnimatedPressable
