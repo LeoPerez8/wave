@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { placeOverlayCard } from "./index.ts";
+import { cardKeyboard, placeOverlayCard } from "./index.ts";
 
 // A phone in portrait, in dp: status bar on top, gesture bar below.
 const phone = {
@@ -135,5 +135,22 @@ describe("placeOverlayCard next to an anchor", () => {
     assert.equal(placeOverlayCard({ ...tablet, anchor: tile(360, 840) }).left, 360);
     assert.equal(placeOverlayCard({ ...tablet, anchor: tile(520, 980) }).left, 496);
     assert.equal(placeOverlayCard({ ...tablet, anchor: tile(20, 480) }).left, 24);
+  });
+});
+
+describe("cardKeyboard", () => {
+  test("a card nobody types into closes an open keyboard and lays out as if it were gone", () => {
+    assert.deepEqual(cardKeyboard({ keyboard: 320 }), { closeKeyboard: true, keyboard: 0 });
+  });
+
+  test("a card someone types into keeps the keyboard and stays clear of it", () => {
+    assert.deepEqual(cardKeyboard({ align: "top", keyboard: 320 }), {
+      closeKeyboard: false,
+      keyboard: 320,
+    });
+  });
+
+  test("with the keyboard closed there is nothing to close", () => {
+    assert.deepEqual(cardKeyboard({ keyboard: 0 }), { closeKeyboard: false, keyboard: 0 });
   });
 });
