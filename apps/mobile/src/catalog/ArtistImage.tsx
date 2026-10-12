@@ -3,6 +3,7 @@ import { IconUser } from "@tabler/icons-react-native";
 import { Image } from "expo-image";
 import { Text, View } from "react-native";
 
+import { useArtistPhoto } from "@/library/artistPhotos";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 /** What an artist image needs: the artist's name and image (see `ArtistRow`). */
@@ -21,12 +22,16 @@ type Props = {
 
 /**
  * An artist, as a circle (the one round image in the catalog, so artists read
- * apart from albums): their image, else their initial on a tinted field.
+ * apart from albums): their downloaded photo, else their album-artwork image,
+ * else their initial on a tinted field.
  */
 export function ArtistImage({ artist, size, large = false }: Props) {
   const secondary = useThemeColor("secondary");
   const fill = useThemeColor("fill");
-  const path = large ? (artist.artworkPath ?? artist.thumbPath) : artist.thumbPath;
+  const photo = useArtistPhoto(artist.name);
+  const path = large
+    ? (photo?.path ?? artist.artworkPath ?? artist.thumbPath)
+    : (photo?.thumbPath ?? artist.thumbPath);
   const circle = { width: size, height: size, borderRadius: size / 2 };
   if (path !== null) {
     return (

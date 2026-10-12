@@ -13,6 +13,8 @@ import { useChromeInset } from "@/chrome/chrome";
 import { EmptyState } from "@/components/EmptyState";
 import { ScanProgressBanner } from "@/components/ScanProgressBanner";
 import { openArtistActions, openFolderActions, openGenreActions } from "@/playback/ActionsMenu";
+import type { ActionItems } from "@/playback/itemActions";
+import { useListSelection, type ListSelection } from "@/selection/useListSelection";
 
 import {
   albumPairs,
@@ -60,18 +62,50 @@ type NameListProps<A> = {
   empty: string;
   sortKey: (item: A) => string;
   keyOf: (item: A) => string;
-  renderRow: (item: A) => ReactElement;
+  /** What the selection bar acts on: the checked items, in list order. */
+  target: (selected: readonly A[]) => ActionItems;
+  /** A row; [selection] tells it whether the list is selecting and what's checked. */
+  renderRow: (item: A, selection: ListSelection<A>) => ReactElement;
 };
 
-/** A virtualised list of names (artists, genres, folders) with the A–Z spine. */
-function NameList<A>({ items, noun, empty, sortKey, keyOf, renderRow }: NameListProps<A>) {
+/** While selecting, a long-press does nothing (rather than toggling the row on release). */
+const ignoreLongPress = (): void => undefined;
+
+/**
+ * How a row in a selectable list behaves: tap opens it and long-press opens its
+ * menu (with Select); while selecting, it shows a check and taps toggle it.
+ */
+const selectableRow = <A,>(
+  item: A,
+  selection: ListSelection<A>,
+  open: () => void,
+  openMenu: (options: { onSelect: () => void }) => void,
+) =>
+  selection.selecting
+    ? {
+        checked: selection.isChecked(item),
+        onPress: () => selection.toggle(item),
+        onLongPress: ignoreLongPress,
+      }
+    : {
+        checked: undefined,
+        onPress: open,
+        onLongPress: () => openMenu({ onSelect: () => selection.start(item) }),
+      };
+
+/** A virtualised, selectable list of names (artists, genres, folders) with the A–Z spine. */
+function NameList<A>({ items, noun, empty, sortKey, keyOf, target, renderRow }: NameListProps<A>) {
   const scrollable = useListScrollable();
   const list = useRef<LegendListRef>(null);
   useScrollToTop(list);
   const bottomInset = useChromeInset();
   const sortKeys = useMemo(() => items.map(sortKey), [items, sortKey]);
   const spine = useSpine(sortKeys, list);
-  const renderItem = useCallback(({ item }: { item: A }) => renderRow(item), [renderRow]);
+  const selection = useListSelection({ items, keyOf, target });
+  const renderItem = useCallback(
+    ({ item }: { item: A }) => renderRow(item, selection),
+    [renderRow, selection],
+  );
 
   if (items.length === 0) return <NothingYet message={empty} />;
   return (
@@ -83,6 +117,7 @@ function NameList<A>({ items, noun, empty, sortKey, keyOf, renderRow }: NameList
         data={items}
         keyExtractor={keyOf}
         renderItem={renderItem}
+        extraData={selection}
         estimatedItemSize={grid.row}
         getFixedItemSize={() => grid.row}
         recycleItems
@@ -104,13 +139,21 @@ const artistDetail = (artist: ArtistRow): string =>
   artist.albumCount > 0
     ? `${counted(artist.albumCount, "album")} · ${counted(artist.trackCount, "song")}`
     : counted(artist.trackCount, "song");
-const renderArtist = (artist: ArtistRow) => (
+const artistsOf = (artists: readonly ArtistRow[]): ActionItems => ({
+  kind: "artist",
+  items: artists,
+});
+const renderArtist = (artist: ArtistRow, selection: ListSelection<ArtistRow>) => (
   <NameRow
     name={artist.name}
     artist={artist}
     detail={artistDetail(artist)}
-    onPress={() => openArtist(artist.id)}
-    onLongPress={() => openArtistActions(artist)}
+    {...selectableRow(
+      artist,
+      selection,
+      () => openArtist(artist.id),
+      (options) => openArtistActions(artist, options),
+    )}
   />
 );
 
@@ -123,6 +166,7 @@ export function ArtistsList({ empty }: { empty: string }) {
       empty={empty}
       sortKey={artistSort}
       keyOf={artistKey}
+      target={artistsOf}
       renderRow={renderArtist}
     />
   );
@@ -130,12 +174,17 @@ export function ArtistsList({ empty }: { empty: string }) {
 
 const genreSort = (genre: GenreRow) => genre.sort;
 const genreKey = (genre: GenreRow) => String(genre.id);
-const renderGenre = (genre: GenreRow) => (
+const genresOf = (genres: readonly GenreRow[]): ActionItems => ({ kind: "genre", items: genres });
+const renderGenre = (genre: GenreRow, selection: ListSelection<GenreRow>) => (
   <NameRow
     name={genre.name}
     detail={counted(genre.trackCount, "song")}
-    onPress={() => openGenre(genre.id)}
-    onLongPress={() => openGenreActions(genre)}
+    {...selectableRow(
+      genre,
+      selection,
+      () => openGenre(genre.id),
+      (options) => openGenreActions(genre, options),
+    )}
   />
 );
 
@@ -147,6 +196,7 @@ export function GenresList({ empty }: { empty: string }) {
       empty={empty}
       sortKey={genreSort}
       keyOf={genreKey}
+      target={genresOf}
       renderRow={renderGenre}
     />
   );
@@ -161,15 +211,23 @@ export const folderParent = (path: string): string => {
 
 const folderSort = (folder: FolderRow) => folder.sort;
 const folderKey = (folder: FolderRow) => String(folder.id);
-const renderFolder = (folder: FolderRow) => {
+const foldersOf = (folders: readonly FolderRow[]): ActionItems => ({
+  kind: "folder",
+  items: folders,
+});
+const renderFolder = (folder: FolderRow, selection: ListSelection<FolderRow>) => {
   const parent = folderParent(folder.path);
   const count = counted(folder.trackCount, "song");
   return (
     <NameRow
       name={folder.name}
       detail={parent === "" ? count : `${count} · ${parent}`}
-      onPress={() => openFolder(folder.id)}
-      onLongPress={() => openFolderActions(folder)}
+      {...selectableRow(
+        folder,
+        selection,
+        () => openFolder(folder.id),
+        (options) => openFolderActions(folder, options),
+      )}
     />
   );
 };
@@ -183,6 +241,7 @@ export function FoldersList({ empty }: { empty: string }) {
       empty={empty}
       sortKey={folderSort}
       keyOf={folderKey}
+      target={foldersOf}
       renderRow={renderFolder}
     />
   );

@@ -2,7 +2,7 @@
  * The playlist rows the playlist screen and Auto's playlists read. Kept free
  * of Expo so the store tests run them against a real SQLite (`testDatabase.ts`).
  */
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 
 import type { LibraryDatabase, RowPage } from "./database.ts";
 import * as schema from "./schema.ts";
@@ -24,4 +24,24 @@ export const selectPlaylistSongs = (db: LibraryDatabase, playlistId: number, pag
     .where(eq(playlistItems.playlistId, playlistId))
     .orderBy(asc(playlistItems.position), asc(playlistItems.id));
   return page === undefined ? query.all() : query.limit(page.limit).offset(page.offset).all();
+};
+
+/**
+ * Removes the given entries from a playlist in one go (each entry on its own,
+ * so another copy of the same song stays); ids from other playlists are ignored.
+ */
+export const removePlaylistItems = (
+  db: LibraryDatabase,
+  playlistId: number,
+  itemIds: readonly number[],
+  now: number,
+): void => {
+  if (itemIds.length === 0) return;
+  db.transaction((tx) => {
+    const { playlists, playlistItems } = schema;
+    tx.delete(playlistItems)
+      .where(and(eq(playlistItems.playlistId, playlistId), inArray(playlistItems.id, [...itemIds])))
+      .run();
+    tx.update(playlists).set({ updatedAt: now }).where(eq(playlists.id, playlistId)).run();
+  });
 };
