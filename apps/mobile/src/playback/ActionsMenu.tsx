@@ -1,6 +1,5 @@
 import * as Haptics from "expo-haptics";
 import { router, usePathname } from "expo-router";
-import { useEffect, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 
 import { EntryRow } from "@/catalog/EntryRow";
@@ -8,15 +7,16 @@ import { CELL } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { Mosaic } from "@/catalog/Mosaic";
 import type { LibrarySection } from "@/catalog/sections";
+import type { LibraryCounts } from "@/library/db/counts";
 import { setFavorite, useIsFavorite } from "@/library/favorites";
-import {
-  LibraryStore,
-  type AlbumRow,
-  type ArtistRow,
-  type FolderRow,
-  type GenreRow,
-  type PlaylistRow,
-  type SongRow,
+import { useSectionSongCounts } from "@/library/hooks";
+import type {
+  AlbumRow,
+  ArtistRow,
+  FolderRow,
+  GenreRow,
+  PlaylistRow,
+  SongRow,
 } from "@/library/LibraryStore";
 import {
   confirmDeletePlaylist,
@@ -25,9 +25,9 @@ import {
 } from "@/library/PlaylistSheets";
 import { removePlaylistItem } from "@/library/playlists";
 import { albumHref, artistHref, openAlbum, openArtist, playlistHref } from "@/library/routes";
-import { appRuntime } from "@/library/runtime";
-import { librarySectionSongs } from "@/library/sectionSongs";
+import { itemSongs, librarySectionSongs } from "@/library/sectionSongs";
 import { pressedRect } from "@/motion/pressedRect";
+import { showError } from "@/overlay/alert";
 import { openOverlay } from "@/overlay/overlay";
 import { useSlideToChoose } from "@/overlay/useSlideToChoose";
 
@@ -52,12 +52,104 @@ export type ActionTarget =
   | { readonly kind: "playlist"; readonly playlist: PlaylistRow }
   | { readonly kind: "genre"; readonly genre: GenreRow }
   | { readonly kind: "folder"; readonly folder: FolderRow }
-  | {
-      readonly kind: "section";
-      readonly section: LibrarySection;
-      /** Every song the section holds, in its order; loading starts as the menu opens. */
-      readonly songs: Promise<readonly SongRow[]>;
-    };
+  | { readonly kind: "section"; readonly section: LibrarySection };
+
+type TargetOf<K extends ActionTarget["kind"]> = Extract<ActionTarget, { kind: K }>;
+
+interface Heading {
+  readonly title: string;
+  readonly subtitle: string;
+  /** Artwork beside the title; undefined for a text-only heading. */
+  readonly covers: readonly string[] | undefined;
+}
+
+/** What a menu needs to know about one kind of target. */
+interface TargetKind<T extends ActionTarget> {
+  /** The tracks its queue actions act on, in play order. */
+  readonly songs: (target: T) => Promise<readonly SongRow[]>;
+  /** What the menu says it's about; `sectionSongs` counts each Library entry's songs, once known. */
+  readonly heading: (target: T, sectionSongs: LibraryCounts | undefined) => Heading;
+  /** Where Go to Album / Go to Artist lead; neither when absent. */
+  readonly goesTo?: (target: T) => { readonly albumId?: number; readonly artistId?: number };
+}
+
+const plural = (count: number, word: string): string =>
+  `${count.toLocaleString("en")} ${count === 1 ? word : `${word}s`}`;
+
+const cover = (thumbPath: string | null): readonly string[] =>
+  thumbPath === null ? [] : [thumbPath];
+
+const KINDS: { readonly [K in ActionTarget["kind"]]: TargetKind<TargetOf<K>> } = {
+  track: {
+    songs: ({ song }) => Promise.resolve([song]),
+    heading: ({ song }) => ({
+      title: song.title,
+      subtitle: song.artist,
+      covers: cover(song.thumbPath),
+    }),
+    goesTo: ({ song }) => ({ albumId: song.albumId, artistId: song.artistId }),
+  },
+  album: {
+    songs: ({ album }) => itemSongs("albums", album.id),
+    heading: ({ album }) => ({
+      title: album.title,
+      subtitle: album.albumArtist,
+      covers: cover(album.thumbPath),
+    }),
+    goesTo: ({ album }) => ({ artistId: album.albumArtistId }),
+  },
+  // Artists, genres and folders have no picture; their headings are text only.
+  artist: {
+    songs: ({ artist }) => itemSongs("artists", artist.id),
+    heading: ({ artist }) => ({
+      title: artist.name,
+      subtitle: plural(artist.trackCount, "song"),
+      covers: undefined,
+    }),
+  },
+  playlist: {
+    songs: ({ playlist }) => itemSongs("playlists", playlist.id),
+    heading: ({ playlist }) => ({
+      title: playlist.name,
+      subtitle: plural(playlist.trackCount, "song"),
+      covers: playlist.thumbPaths,
+    }),
+  },
+  genre: {
+    songs: ({ genre }) => itemSongs("genres", genre.id),
+    heading: ({ genre }) => ({
+      title: genre.name,
+      subtitle: plural(genre.trackCount, "song"),
+      covers: undefined,
+    }),
+  },
+  folder: {
+    songs: ({ folder }) => itemSongs("folders", folder.id),
+    heading: ({ folder }) => ({
+      title: folder.name,
+      subtitle: plural(folder.trackCount, "song"),
+      covers: undefined,
+    }),
+  },
+  section: {
+    songs: ({ section }) => librarySectionSongs(section.slug),
+    heading: ({ section }, sectionSongs) => {
+      const count = sectionSongs?.[section.slug];
+      return {
+        title: section.label,
+        subtitle: count === undefined ? "" : plural(count, "song"),
+        covers: undefined,
+      };
+    },
+  },
+};
+
+const kindOf = <T extends ActionTarget>(target: T): TargetKind<T> =>
+  KINDS[target.kind] as unknown as TargetKind<T>;
+
+/** The tracks a menu's queue actions act on, in play order. */
+export const targetSongs = (target: ActionTarget): Promise<readonly SongRow[]> =>
+  kindOf(target).songs(target);
 
 /**
  * Floats the menu next to the row (or button) whose press opened it, centred
@@ -65,7 +157,7 @@ export type ActionTarget =
  */
 const openActions = (target: ActionTarget): void => {
   openOverlay({
-    label: heading(target, undefined).title,
+    label: kindOf(target).heading(target, undefined).title,
     anchor: pressedRect(),
     render: (close) => <ActionsMenu target={target} close={close} />,
   });
@@ -95,133 +187,7 @@ export const openFolderActions = (folder: FolderRow): void =>
 
 /** Opens the menu for a Library entry (Songs, Albums…): every song it holds, in its order. */
 export const openLibrarySectionActions = (section: LibrarySection): void =>
-  openActions({ kind: "section", section, songs: librarySectionSongs(section.slug) });
-
-/** The tracks a menu's queue actions act on, in play order. */
-export const targetSongs = (target: ActionTarget): Promise<readonly SongRow[]> => {
-  switch (target.kind) {
-    case "track":
-      return Promise.resolve([target.song]);
-    case "album":
-      return appRuntime
-        .runPromise(LibraryStore.use((store) => store.getAlbum(target.album.id)))
-        .then((detail) => detail?.tracks ?? []);
-    case "artist":
-      return appRuntime
-        .runPromise(LibraryStore.use((store) => store.getArtist(target.artist.id)))
-        .then((detail) => detail?.songs ?? []);
-    case "playlist":
-      return appRuntime
-        .runPromise(LibraryStore.use((store) => store.getPlaylist(target.playlist.id)))
-        .then((detail) => detail?.items ?? []);
-    case "genre":
-      return appRuntime
-        .runPromise(LibraryStore.use((store) => store.getGenre(target.genre.id)))
-        .then((detail) => detail?.songs ?? []);
-    case "folder":
-      return appRuntime
-        .runPromise(LibraryStore.use((store) => store.getFolder(target.folder.id)))
-        .then((detail) => detail?.songs ?? []);
-    case "section":
-      return target.songs;
-  }
-};
-
-const plural = (count: number, word: string): string =>
-  `${count.toLocaleString("en")} ${count === 1 ? word : `${word}s`}`;
-
-const cover = (thumbPath: string | null): readonly string[] =>
-  thumbPath === null ? [] : [thumbPath];
-
-const heading = (
-  target: ActionTarget,
-  /** How many songs a Library entry holds, once known. */
-  songCount: number | undefined,
-): { title: string; subtitle: string; covers: readonly string[] | undefined } => {
-  switch (target.kind) {
-    case "track":
-      return {
-        title: target.song.title,
-        subtitle: target.song.artist,
-        covers: cover(target.song.thumbPath),
-      };
-    case "album":
-      return {
-        title: target.album.title,
-        subtitle: target.album.albumArtist,
-        covers: cover(target.album.thumbPath),
-      };
-    case "artist":
-      return {
-        title: target.artist.name,
-        subtitle: plural(target.artist.trackCount, "song"),
-        // Artists have no picture; the heading is text only.
-        covers: undefined,
-      };
-    case "playlist":
-      return {
-        title: target.playlist.name,
-        subtitle: plural(target.playlist.trackCount, "song"),
-        covers: target.playlist.thumbPaths,
-      };
-    case "genre":
-      return {
-        title: target.genre.name,
-        subtitle: plural(target.genre.trackCount, "song"),
-        // Genres have no picture; the heading is text only.
-        covers: undefined,
-      };
-    case "folder":
-      return {
-        title: target.folder.name,
-        subtitle: plural(target.folder.trackCount, "song"),
-        // Folders have no picture; the heading is text only.
-        covers: undefined,
-      };
-    case "section":
-      return {
-        title: target.section.label,
-        subtitle: songCount === undefined ? "" : plural(songCount, "song"),
-        covers: undefined,
-      };
-  }
-};
-
-/** Where Go to Album / Go to Artist lead, if anywhere. */
-const destinations = (target: ActionTarget): { albumId?: number; artistId?: number } => {
-  switch (target.kind) {
-    case "track":
-      return { albumId: target.song.albumId, artistId: target.song.artistId };
-    case "album":
-      return { artistId: target.album.albumArtistId };
-    case "artist":
-    case "playlist":
-    case "genre":
-    case "folder":
-    case "section":
-      return {};
-  }
-};
-
-/** How many songs a Library entry's menu acts on, once they have loaded. */
-function useSectionSongCount(target: ActionTarget): number | undefined {
-  const songs = target.kind === "section" ? target.songs : undefined;
-  const [loaded, setLoaded] = useState<{ songs: Promise<unknown>; count: number }>();
-  useEffect(() => {
-    if (songs === undefined) return;
-    let live = true;
-    songs.then(
-      (list) => {
-        if (live) setLoaded({ songs, count: list.length });
-      },
-      () => {},
-    );
-    return () => {
-      live = false;
-    };
-  }, [songs]);
-  return loaded !== undefined && loaded.songs === songs ? loaded.count : undefined;
-}
+  openActions({ kind: "section", section });
 
 /** One line of the menu. */
 interface MenuEntry {
@@ -236,13 +202,16 @@ interface MenuEntry {
  */
 function ActionsMenu({ target, close }: { target: ActionTarget; close: () => void }) {
   const pathname = usePathname();
-  const sectionSongCount = useSectionSongCount(target);
+  // Only a Library entry's heading needs these; the count is one cheap query.
+  const sectionSongs = useSectionSongCounts();
   const song = target.kind === "track" ? target.song : null;
   // Stars stay in sync everywhere.
   const favorite = useIsFavorite(song?.id ?? null);
 
   const queue = (action: (songs: readonly SongRow[]) => void) => () => {
-    void targetSongs(target).then(action);
+    targetSongs(target)
+      .then(action)
+      .catch((error: unknown) => showError("Couldn't load the songs", error));
     close();
   };
 
@@ -251,8 +220,9 @@ function ActionsMenu({ target, close }: { target: ActionTarget; close: () => voi
     open();
   };
 
-  const head = heading(target, sectionSongCount);
-  const { albumId, artistId } = destinations(target);
+  const kind = kindOf(target);
+  const head = kind.heading(target, sectionSongs);
+  const { albumId, artistId } = kind.goesTo?.(target) ?? {};
   const place = target.kind === "track" ? target.playlistItem : undefined;
 
   const entries: readonly MenuEntry[] = [

@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CELL } from "@/catalog/grid";
 import { playbackState } from "@/playback/Player";
 
-import { tabOfPath } from "./tabEntry";
+import { inLibraryStack, tabOfPath } from "./tabEntry";
 
 /**
  * The floating chrome: a glass tab bar and a glass mini player hovering over
@@ -56,8 +56,7 @@ export const useFloatingChromeHeight = (): number => {
   const playing = useHasNowPlaying();
   // Tab screens (the shortcut tab included) are drawn under the floating tab bar.
   const tabBar = tabOfPath(pathname) !== null;
-  // The library stack keeps the mini player too (src/app/library/_layout.tsx).
-  const miniPlayer = playing && (tabBar || pathname.startsWith("/library/"));
+  const miniPlayer = playing && (tabBar || inLibraryStack(pathname));
   return (
     (tabBar ? chrome.gap + chrome.tabBar : 0) + (miniPlayer ? chrome.gap + chrome.miniPlayer : 0)
   );

@@ -6,7 +6,19 @@
     "suspicious": "warn"
   },
   "rules": {
-    "react/react-in-jsx-scope": "off"
+    "react/react-in-jsx-scope": "off",
+    "no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "react-native",
+            "importNames": ["BackHandler"],
+            "message": "Use addScreenBackHandler (src/overlay/back.ts) so open cards take Back first."
+          }
+        ]
+      }
+    ]
   },
   "ignorePatterns": [
     "**/node_modules/**",
@@ -14,5 +26,13 @@
     "**/ios/**",
     "**/.expo/**",
     "apps/mobile/uniwind-types.d.ts"
+  ],
+  "overrides": [
+    {
+      "files": ["apps/mobile/src/overlay/**"],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
   ]
 }

@@ -10,7 +10,7 @@ import { PlaylistEntry } from "@/catalog/PlaylistEntry";
 import { useChromeInset } from "@/chrome/chrome";
 import { EmptyState } from "@/components/EmptyState";
 import { TextButton } from "@/components/TextButton";
-import { openPlaylistActions } from "@/playback/TrackActionsSheet";
+import { openPlaylistActions } from "@/playback/ActionsMenu";
 
 import { usePlaylists } from "./hooks";
 import type { PlaylistRow } from "./LibraryStore";

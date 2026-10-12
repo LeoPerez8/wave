@@ -30,7 +30,7 @@ import { openDatabaseSync } from "expo-sqlite";
 
 import { selectAlbums } from "./db/albums";
 import { selectArtistCovers, selectArtistSongs, selectArtists } from "./db/artists";
-import { libraryCounts, type LibraryCounts } from "./db/counts";
+import { libraryCounts, sectionSongCounts, type LibraryCounts } from "./db/counts";
 import { selectGenreSongs } from "./db/genres";
 import type { RowPage } from "./db/database";
 import migrations from "./db/migrations";
@@ -285,6 +285,8 @@ export class LibraryStore extends Context.Service<
     readonly countTracks: Effect.Effect<number, LibraryStoreError>;
     /** How many items each Library entry holds, for the Library tab. */
     readonly countLibrary: Effect.Effect<LibraryCounts, LibraryStoreError>;
+    /** How many songs each Library entry's menu acts on, for its heading. */
+    readonly countSectionSongs: Effect.Effect<LibraryCounts, LibraryStoreError>;
     /** Every track ordered by title, for Library › Songs. */
     readonly listSongs: Effect.Effect<readonly SongRow[], LibraryStoreError>;
     /** Every album by title, then album artist, for Library › Albums. */
@@ -1116,6 +1118,7 @@ const make = Effect.gen(function* () {
     ),
 
     countLibrary: attempt("count the library", () => libraryCounts(db)),
+    countSectionSongs: attempt("count the library's songs", () => sectionSongCounts(db)),
 
     listSongs: attempt("list songs", () =>
       trackQuery(db)

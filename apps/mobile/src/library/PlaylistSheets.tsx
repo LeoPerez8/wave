@@ -190,12 +190,16 @@ function AddCard({ subject, close }: { subject: AddSubject; close: () => void })
 // Flows
 
 /**
- * Asks for a name and creates a playlist, holding [songs] when given. Resolves
- * with the new playlist's id, or null when cancelled.
+ * Asks for a name and creates a playlist, holding [songs] when given. Given
+ * songs that turn out to be none (an empty Favorites), it creates nothing.
+ * Resolves with the new playlist's id, or null when cancelled or not created.
  */
 export const newPlaylist = async (
   songs?: () => Promise<readonly SongRow[]>,
 ): Promise<number | null> => {
+  // Loads while the name is typed; a failure surfaces once the songs are needed.
+  const loading = songs?.();
+  loading?.catch(() => {});
   const names = await playlistNames();
   const name = await askName({
     title: "New playlist",
@@ -205,7 +209,11 @@ export const newPlaylist = async (
   });
   if (name === null) return null;
   try {
-    const rows = songs === undefined ? [] : await songs();
+    const rows = loading === undefined ? [] : await loading;
+    if (loading !== undefined && rows.length === 0) {
+      toast(describePlaylistAdd(name, 0, 0));
+      return null;
+    }
     const result = await createPlaylist(name, trackIds(rows));
     toast(
       songs === undefined
