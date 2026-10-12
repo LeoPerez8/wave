@@ -67,6 +67,7 @@ export type ItemAction =
   | "goToArtist"
   | "renamePlaylist"
   | "deletePlaylist"
+  | "deletePlaylists"
   | "select"
   | "delete";
 
@@ -88,6 +89,7 @@ export const ITEM_ACTION_LABELS: { readonly [A in ItemAction]: string } = {
   goToArtist: "Go to Artist",
   renamePlaylist: "Rename Playlist",
   deletePlaylist: "Delete Playlist",
+  deletePlaylists: "Delete Playlists",
   select: "Select",
   delete: "Delete",
 };
@@ -99,7 +101,8 @@ export const isDestructiveAction = (action: ItemAction): boolean => action === "
  * Entries that ask before acting: selection mode stays until the question is
  * answered, so Cancel leaves the checked items as they were.
  */
-export const confirmsFirst = (action: ItemAction): boolean => action === "delete";
+export const confirmsFirst = (action: ItemAction): boolean =>
+  action === "delete" || action === "deletePlaylist" || action === "deletePlaylists";
 
 /** The value every item has, or undefined when they differ or any lacks one. */
 const shared = (values: readonly (number | undefined)[]): number | undefined => {
@@ -127,8 +130,12 @@ export const itemActions = (subject: ActionSubject): ItemActionEntry[] => {
   const artistId = shared(items.map((item) => item.artistId));
   if (artistId !== undefined && !isDetailPath(here, "artist", artistId))
     entries.push({ action: "goToArtist", artistId });
-  if (kind === "playlist" && items.length === 1)
-    entries.push({ action: "renamePlaylist" }, { action: "deletePlaylist" });
+  if (kind === "playlist")
+    entries.push(
+      ...(items.length === 1
+        ? [{ action: "renamePlaylist" } as const, { action: "deletePlaylist" } as const]
+        : [{ action: "deletePlaylists" } as const]),
+    );
   if (surface === "menu" && subject.selectable === true) entries.push({ action: "select" });
   // Last, and destructive: deletes the songs' files from the phone (after asking).
   if (kind === "track") entries.push({ action: "delete" });

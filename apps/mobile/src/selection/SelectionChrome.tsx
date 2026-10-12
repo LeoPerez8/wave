@@ -50,6 +50,7 @@ const ICONS: { readonly [A in ItemAction]: ComponentType<IconProps> } = {
   goToArtist: IconMicrophone2,
   renamePlaylist: IconPencil,
   deletePlaylist: IconTrash,
+  deletePlaylists: IconTrash,
   select: IconListCheck,
   delete: IconTrash,
 };

@@ -62,7 +62,7 @@ describe("itemActions", () => {
   test("Delete asks first, so the selection only ends once it's confirmed", () => {
     assert.deepEqual(
       Object.keys(ITEM_ACTION_LABELS).filter((action) => confirmsFirst(action as ItemAction)),
-      ["delete"],
+      ["deletePlaylist", "deletePlaylists", "delete"],
     );
   });
 
@@ -226,6 +226,27 @@ describe("itemActions", () => {
       itemActions({ kind: "playlist", items: [{}, {}], here: "/", surface: "selection" }),
     );
     assert.ok(!two.includes("renamePlaylist"));
+  });
+
+  test("selected playlists: queue them, add them to a playlist, Rename and Delete Playlist only for one", () => {
+    const selected = (count: number) =>
+      names(
+        itemActions({
+          kind: "playlist",
+          items: Array.from({ length: count }, () => ({})),
+          here: "/library/playlists",
+          surface: "selection",
+        }),
+      );
+    assert.deepEqual(selected(1), [
+      "playNext",
+      "addToQueue",
+      "addToPlaylist",
+      "renamePlaylist",
+      "deletePlaylist",
+    ]);
+    assert.deepEqual(selected(3), ["playNext", "addToQueue", "addToPlaylist", "deletePlaylists"]);
+    assert.equal(ITEM_ACTION_LABELS.deletePlaylists, "Delete Playlists");
   });
 
   test("a genre, folder, artist or Library entry: queue it and add it to a playlist", () => {
