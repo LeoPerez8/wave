@@ -22,6 +22,16 @@ export interface OverlayCardInput {
   /** The card's laid-out content height, in dp. */
   readonly cardHeight: number;
   /**
+   * Where the card sits: centred (the default), or near the top for a card
+   * someone types into, so it stays put as the keyboard comes and goes.
+   */
+  readonly align?: OverlayAlign;
+  /**
+   * Height of an open on-screen keyboard, in dp, measured above the bottom
+   * inset (Android reports it without the navigation bar). 0 or absent when closed.
+   */
+  readonly keyboard?: number;
+  /**
    * Floating app chrome along the bottom (tab bar, mini player) an anchored
    * card stays clear of: its height above the system inset, in dp.
    */
@@ -45,6 +55,8 @@ export interface OverlayAnchor {
   readonly gap: number;
 }
 
+export type OverlayAlign = "center" | "top";
+
 export interface OverlayCardFrame {
   readonly left: number;
   readonly top: number;
@@ -56,20 +68,22 @@ export interface OverlayCardFrame {
 }
 
 /**
- * A card centred in the space between the system bars, a margin clear of
- * everything. With an `anchor`, next to it instead (`placeNextTo`).
+ * A card in the space between the system bars, a margin clear of everything:
+ * centred, or a margin below the top bar when `align` is "top". An open
+ * keyboard takes its height off the bottom of that space. With an `anchor`,
+ * next to it instead (`placeNextTo`).
  */
 export const placeOverlayCard = (input: OverlayCardInput): OverlayCardFrame => {
   if (input.anchor !== undefined) return placeNextTo(input, input.anchor);
-  const { window, insets, margin, maxWidth, cardHeight } = input;
+  const { window, insets, margin, maxWidth, cardHeight, align = "center", keyboard = 0 } = input;
   const areaWidth = window.width - insets.left - insets.right;
-  const areaHeight = window.height - insets.top - insets.bottom;
+  const areaHeight = window.height - insets.top - insets.bottom - keyboard;
   const width = Math.min(areaWidth - margin * 2, maxWidth);
   const maxHeight = areaHeight - margin * 2;
   const height = Math.min(cardHeight, maxHeight);
   return {
     left: Math.round(insets.left + (areaWidth - width) / 2),
-    top: Math.round(insets.top + (areaHeight - height) / 2),
+    top: Math.round(insets.top + (align === "top" ? margin : (areaHeight - height) / 2)),
     width,
     maxHeight,
   };
