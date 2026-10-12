@@ -141,3 +141,5 @@ export type {
   AutoTrackList,
   AutoTrackListKind,
 } from "./auto.ts";
+export { autoPageItems, autoPlaylistItem } from "./auto.ts";
+export type { AutoPlaylist } from "./auto.ts";

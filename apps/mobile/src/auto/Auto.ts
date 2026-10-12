@@ -3,7 +3,9 @@ import {
   autoAlbumItem,
   autoChildren,
   autoItem,
+  autoPageItems,
   autoPlayList,
+  autoPlaylistItem,
   autoQueueStart,
   autoTrackItems,
   decodeAutoMediaId,
@@ -75,6 +77,9 @@ export const layer = Layer.effect(
     > = {
       album: (id) =>
         store.getAlbum(Number(id)).pipe(Effect.map((detail) => detail?.tracks ?? null)),
+      // In playlist order, which Core keeps.
+      playlist: (id) =>
+        store.getPlaylist(Number(id)).pipe(Effect.map((detail) => detail?.items ?? null)),
     };
 
     const songsOf = (list: AutoTrackList) =>
@@ -93,6 +98,13 @@ export const layer = Layer.effect(
           return store
             .listAlbumsPage(offset, limit)
             .pipe(Effect.map((albums) => albums.map(autoAlbumItem)));
+        // A handful of rows: page the Library's own list.
+        case "playlists":
+          return store.listPlaylists.pipe(
+            Effect.map((playlists) =>
+              playlists.slice(offset, offset + limit).map(autoPlaylistItem),
+            ),
+          );
         case "tracks":
           return songsOf(source.list).pipe(
             Effect.map((songs) =>
@@ -104,11 +116,14 @@ export const layer = Layer.effect(
 
     const children = (parentId: string, page: number, pageSize: number) =>
       Effect.gen(function* () {
-        const result = autoChildren(yield* decode(parentId), page, pageSize);
+        const node = yield* decode(parentId);
+        const result = autoChildren(node, page, pageSize);
         if (result === null) return [];
-        if (result.fetch === null) return result.items;
-        const rows = yield* fetch(result.fetch.source, result.fetch.offset, result.fetch.limit);
-        return [...result.items, ...rows];
+        const rows =
+          result.fetch === null
+            ? []
+            : yield* fetch(result.fetch.source, result.fetch.offset, result.fetch.limit);
+        return autoPageItems(node, page, [...result.items, ...rows]);
       });
 
     /** A node's item; the ones built from a library row load it. */
@@ -122,6 +137,10 @@ export const layer = Layer.effect(
             case "album": {
               const detail = yield* store.getAlbum(Number(node.list.id));
               return detail === null ? yield* notFound : autoAlbumItem(detail.album);
+            }
+            case "playlist": {
+              const detail = yield* store.getPlaylist(Number(node.list.id));
+              return detail === null ? yield* notFound : autoPlaylistItem(detail.playlist);
             }
           }
         }
