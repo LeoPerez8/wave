@@ -70,7 +70,16 @@ export interface OverlayCardFrame {
   readonly maxHeight: number;
   /** Which side of its anchor an anchored card opened on. */
   readonly side?: "below" | "above";
+  /**
+   * Which way a card's entries run, first to last: "down" from its top edge,
+   * or "up" from its bottom edge, so the first one is always nearest the
+   * finger that opened it.
+   */
+  readonly flow: OverlayFlow;
 }
+
+/** Which way a card's entries run, first to last. */
+export type OverlayFlow = "down" | "up";
 
 export interface CardKeyboard {
   /** Close the open keyboard as the card opens. */
@@ -113,6 +122,7 @@ export const placeOverlayCard = (input: OverlayCardInput): OverlayCardFrame => {
     top: Math.round(insets.top + (align === "top" ? margin : (areaHeight - height) / 2)),
     width,
     maxHeight,
+    flow: "down",
   };
 };
 
@@ -155,5 +165,14 @@ const placeNextTo = (
     width,
     maxHeight,
     side,
+    flow: side === "below" ? "down" : "up",
   };
 };
+
+/**
+ * Whether entry `index` of a card's `count` entries (in their logical
+ * order, first one nearest the finger) draws a hairline under it: every entry
+ * but the one at the card's bottom edge, whichever way they run.
+ */
+export const entryDivider = (index: number, count: number, flow: OverlayFlow): boolean =>
+  flow === "down" ? index < count - 1 : index > 0;

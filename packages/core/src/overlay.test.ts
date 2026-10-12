@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { cardKeyboard, placeOverlayCard } from "./index.ts";
+import { cardKeyboard, entryDivider, placeOverlayCard } from "./index.ts";
 
 // A phone in portrait, in dp: status bar on top, gesture bar below.
 const phone = {
@@ -18,6 +18,7 @@ describe("placeOverlayCard", () => {
       top: 312,
       width: 364,
       maxHeight: 811,
+      flow: "down",
     });
   });
 
@@ -34,7 +35,7 @@ describe("placeOverlayCard", () => {
       insets: { top: 24, bottom: 0, left: 32, right: 0 },
       cardHeight: 200,
     });
-    assert.deepEqual(frame, { left: 234, top: 118, width: 480, maxHeight: 340 });
+    assert.deepEqual(frame, { left: 234, top: 118, width: 480, maxHeight: 340, flow: "down" });
   });
 
   test("a card someone types into sits a margin below the status bar, whatever its height", () => {
@@ -43,13 +44,14 @@ describe("placeOverlayCard", () => {
       top: 56,
       width: 364,
       maxHeight: 811,
+      flow: "down",
     });
   });
 
   test("an open keyboard shortens the card so the keyboard never covers it", () => {
     // 300dp of keyboard above the 24dp gesture bar: 915 - 32 - 24 - 300 - 2 × 24.
     const frame = placeOverlayCard({ ...phone, cardHeight: 200, align: "top", keyboard: 300 });
-    assert.deepEqual(frame, { left: 24, top: 56, width: 364, maxHeight: 511 });
+    assert.deepEqual(frame, { left: 24, top: 56, width: 364, maxHeight: 511, flow: "down" });
   });
 
   test("a centred card centres in the space above an open keyboard", () => {
@@ -77,6 +79,7 @@ describe("placeOverlayCard next to an anchor", () => {
       // The room below the row: content scrolls rather than run past it.
       maxHeight: 603,
       side: "below",
+      flow: "down",
     });
   });
 
@@ -135,6 +138,32 @@ describe("placeOverlayCard next to an anchor", () => {
     assert.equal(placeOverlayCard({ ...tablet, anchor: tile(360, 840) }).left, 360);
     assert.equal(placeOverlayCard({ ...tablet, anchor: tile(520, 980) }).left, 496);
     assert.equal(placeOverlayCard({ ...tablet, anchor: tile(20, 480) }).left, 24);
+  });
+});
+
+describe("which way a card's entries run", () => {
+  test("a menu below its row lists its entries downwards, the first one nearest the finger", () => {
+    assert.equal(placeOverlayCard({ ...phone, cardHeight: 400, anchor: near(200) }).flow, "down");
+  });
+
+  test("a menu above its row lists its entries upwards, so the first one sits next to the row", () => {
+    assert.equal(placeOverlayCard({ ...phone, cardHeight: 400, anchor: near(600) }).flow, "up");
+  });
+
+  test("a centred card, opened without a finger on a row, lists its entries downwards", () => {
+    assert.equal(placeOverlayCard({ ...phone, cardHeight: 400 }).flow, "down");
+  });
+});
+
+describe("entryDivider", () => {
+  test("entries listed downwards have a hairline under each one but the last", () => {
+    const lines = [0, 1, 2].map((index) => entryDivider(index, 3, "down"));
+    assert.deepEqual(lines, [true, true, false]);
+  });
+
+  test("entries listed upwards end at the first one, which goes without a hairline", () => {
+    const lines = [0, 1, 2].map((index) => entryDivider(index, 3, "up"));
+    assert.deepEqual(lines, [false, true, true]);
   });
 });
 

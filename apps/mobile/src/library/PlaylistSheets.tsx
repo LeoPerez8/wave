@@ -6,7 +6,7 @@ import {
   type PlaylistNameCheck,
 } from "@wave/core";
 import { Fragment, useState } from "react";
-import { ScrollView, Text, TextInput, ToastAndroid, View } from "react-native";
+import { Text, TextInput, ToastAndroid, View } from "react-native";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
@@ -15,6 +15,7 @@ import { PlaylistEntry } from "@/catalog/PlaylistEntry";
 import { TextButton } from "@/components/TextButton";
 import { Press } from "@/motion/Press";
 import { confirmAction } from "@/overlay/alert";
+import { CardEntries } from "@/overlay/CardEntries";
 import { openOverlay, presentOverlay } from "@/overlay/overlay";
 import { useThemeColor } from "@/theme/useThemeColor";
 
@@ -169,7 +170,7 @@ function AddCard({ subject, close }: { subject: AddSubject; close: () => void })
       </Press>
       {/* The card stops short of the screen edges; a long list scrolls inside it.
           Each playlist follows a divider, so none trails the last. */}
-      <ScrollView keyboardShouldPersistTaps="handled" style={{ flexGrow: 0, flexShrink: 1 }}>
+      <CardEntries>
         {playlists.map((playlist) => (
           <Fragment key={playlist.id}>
             <Hairline />
@@ -184,7 +185,7 @@ function AddCard({ subject, close }: { subject: AddSubject; close: () => void })
             />
           </Fragment>
         ))}
-      </ScrollView>
+      </CardEntries>
     </>
   );
 }
