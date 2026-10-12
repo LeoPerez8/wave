@@ -5,7 +5,7 @@ import {
   nextPlaylistName,
   type PlaylistNameCheck,
 } from "@wave/core";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { ScrollView, Text, TextInput, ToastAndroid, View } from "react-native";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
@@ -167,19 +167,22 @@ function AddCard({ subject, close }: { subject: AddSubject; close: () => void })
         </View>
         <Text className="font-sans text-body font-medium text-accent">New Playlist</Text>
       </Press>
-      {/* The card stops short of the screen edges; a long list scrolls inside it. */}
+      {/* The card stops short of the screen edges; a long list scrolls inside it.
+          Each playlist follows a divider, so none trails the last. */}
       <ScrollView keyboardShouldPersistTaps="handled" style={{ flexGrow: 0, flexShrink: 1 }}>
         {playlists.map((playlist) => (
-          <PlaylistEntry
-            key={playlist.id}
-            name={playlist.name}
-            detail={songCount(playlist.trackCount)}
-            paths={playlist.thumbPaths}
-            onPress={() => {
-              close();
-              addSongs(playlist.id, subject.songs);
-            }}
-          />
+          <Fragment key={playlist.id}>
+            <Hairline />
+            <PlaylistEntry
+              name={playlist.name}
+              detail={songCount(playlist.trackCount)}
+              paths={playlist.thumbPaths}
+              onPress={() => {
+                close();
+                addSongs(playlist.id, subject.songs);
+              }}
+            />
+          </Fragment>
         ))}
       </ScrollView>
     </>
