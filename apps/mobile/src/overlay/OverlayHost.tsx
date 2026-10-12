@@ -1,4 +1,10 @@
-import { cardKeyboard, placeOverlayCard, veilAround, type OverlayRect } from "@wave/core";
+import {
+  cardKeyboard,
+  placeOverlayCard,
+  veilAround,
+  withOpacity,
+  type OverlayRect,
+} from "@wave/core";
 import { useEffect, useRef, useState, type ComponentRef, type ReactNode } from "react";
 import {
   AccessibilityInfo,
@@ -56,14 +62,14 @@ const ENTER_SCALE = 0.94;
 
 const EASE = Easing.out(Easing.exp);
 
-/** The veil behind a card: the theme's scrim colour at a quarter strength (hex alpha). */
-const SCRIM_ALPHA = "40";
+/** The veil behind a card: the theme's scrim colour at a quarter strength. */
+const SCRIM_OPACITY = 0.25;
 
 /**
  * What a card was opened from stays clear of the veil, washed with the accent
- * at this strength (hex alpha) so it stands out on any theme.
+ * at this strength so it stands out on any theme.
  */
-const ORIGIN_TINT_ALPHA = "29";
+const ORIGIN_TINT_OPACITY = 0.16;
 
 /** Rounded corners of the highlight over what a card was opened from. */
 const ORIGIN_RADIUS = CELL;
@@ -206,7 +212,7 @@ function OverlayCard({ entry, frontmost }: { entry: OverlayEntry; frontmost: boo
             <View
               key={`${band.left},${band.top}`}
               pointerEvents="none"
-              style={{ ...frameOf(band), backgroundColor: `${scrim}${SCRIM_ALPHA}` }}
+              style={{ ...frameOf(band), backgroundColor: withOpacity(scrim, SCRIM_OPACITY) }}
             />
           ))}
           {/* Only the frontmost card's veil tints it, so stacked cards don't deepen it. */}
@@ -216,7 +222,7 @@ function OverlayCard({ entry, frontmost }: { entry: OverlayEntry; frontmost: boo
               style={{
                 ...frameOf(highlight),
                 borderRadius: ORIGIN_RADIUS,
-                backgroundColor: `${accent}${ORIGIN_TINT_ALPHA}`,
+                backgroundColor: withOpacity(accent, ORIGIN_TINT_OPACITY),
               }}
             />
           )}
