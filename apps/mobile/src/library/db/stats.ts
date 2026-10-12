@@ -2,10 +2,11 @@
  * The play totals Stats ranks, as thin queries over the library database:
  * they only filter (counted plays in a window, tracks still in the library)
  * and sum. Grouping into albums and artists, ordering and the cut-off are
- * Core's (`albumPlayTotals`, `artistPlayTotals`, `rankPlays`). Kept free of Expo
+ * Core's (`albumPlayTotals`, `artistPlayTotals`, `rankPlays`); so are the
+ * all-time listening totals (`listeningTotals`) summed from `songListening`. Kept free of Expo
  * so the store tests run them against a real SQLite (`testDatabase.ts`).
  */
-import type { CreditedPlayTotals, PlayTotals, StatsWindow } from "@wave/core";
+import type { CreditedPlayTotals, PlayTotals, SongListening, StatsWindow } from "@wave/core";
 import { and, eq, gte, lte, sql, type SQL } from "drizzle-orm";
 
 import type { LibraryDatabase } from "./database.ts";
@@ -63,5 +64,26 @@ export const creditedPlayTotals = (
     .innerJoin(artists, eq(tracks.artistId, artists.id))
     .where(countedIn(window))
     .groupBy(tracks.albumId, tracks.artistId)
+    .all();
+};
+
+/**
+ * Each played song's listening over all time, one row per song in no order:
+ * time listened over every play, its counted plays, its latest play, and its
+ * track artist (null once the song left the library, whose history stays).
+ */
+export const songListening = (db: LibraryDatabase): SongListening[] => {
+  const { playEvents, tracks } = schema;
+  return db
+    .select({
+      trackId: playEvents.trackId,
+      artistId: tracks.artistId,
+      countedPlays: sql<number>`sum(${playEvents.counted})`,
+      listenedMs: sql<number>`sum(${playEvents.listenedMs})`,
+      lastPlayedAt: sql<number>`max(${playEvents.startedAt})`,
+    })
+    .from(playEvents)
+    .leftJoin(tracks, eq(playEvents.trackId, tracks.id))
+    .groupBy(playEvents.trackId)
     .all();
 };
