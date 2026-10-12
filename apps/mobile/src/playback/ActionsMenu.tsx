@@ -10,6 +10,7 @@ import { Mosaic } from "@/catalog/Mosaic";
 import type { LibrarySection } from "@/catalog/sections";
 import type { LibraryCounts } from "@/library/db/counts";
 import { setFavorite, useIsFavorite } from "@/library/favorites";
+import { confirmDeleteSongs } from "@/library/deleteSongs";
 import { useSectionSongCounts } from "@/library/hooks";
 import type {
   AlbumRow,
@@ -196,6 +197,8 @@ export const openLibrarySectionActions = (section: LibrarySection): void =>
 interface MenuEntry {
   readonly label: string;
   readonly onPress: () => void;
+  /** Deletes something for good: shown in the destructive colour. */
+  readonly destructive?: boolean;
 }
 
 /**
@@ -278,6 +281,16 @@ function ActionsMenu({ target, close }: { target: ActionTarget; close: () => voi
           },
         ]
       : []),
+    // Last, and destructive: deletes the song's file from the phone (after asking).
+    ...(song === null
+      ? []
+      : [
+          {
+            label: "Delete",
+            destructive: true,
+            onPress: go(() => void confirmDeleteSongs([song])),
+          },
+        ]),
   ];
 
   // The finger that long-pressed the row can slide onto an entry and lift to run it;
@@ -313,6 +326,7 @@ function ActionsMenu({ target, close }: { target: ActionTarget; close: () => voi
               onPress={entry.onPress}
               divider={entryDivider(index, entries.length, flow)}
               highlighted={index === underFinger}
+              destructive={entry.destructive}
             />
           </View>
         ))}

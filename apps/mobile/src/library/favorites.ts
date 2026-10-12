@@ -84,6 +84,21 @@ export const setFavorite = (trackId: number | string, on: boolean): Promise<void
     .then(settle(on), settle(null));
 };
 
+/**
+ * Unstars tracks that left the library (their files were deleted; the store
+ * dropped their stars with them), so no star or Favorites list shows them.
+ */
+export const forgetFavorites = (trackIds: readonly number[]): void => {
+  const gone = new Set(trackIds);
+  for (const id of trackIds) writing.delete(id);
+  favorites.update((state) => ({
+    ...state,
+    ids: new Set([...state.ids].filter((id) => !gone.has(id))),
+    edits: state.edits + 1,
+    saved: state.saved + 1,
+  }));
+};
+
 export const isFavorite = (trackId: number | string): boolean =>
   favorites.get().ids.has(Number(trackId));
 
