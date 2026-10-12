@@ -39,6 +39,7 @@ import {
   latestPlay,
   listFavorites,
   recordPlay,
+  setFavorites,
   updatePlay,
   type FavoriteRow,
   type HomeSections,
@@ -396,7 +397,11 @@ export class LibraryStore extends Context.Service<
     ) => Effect.Effect<void, LibraryStoreError>;
     /** The ids of every starred track. */
     readonly favoriteTrackIds: Effect.Effect<readonly number[], LibraryStoreError>;
-    readonly setFavorite: (trackId: number, on: boolean) => Effect.Effect<void, LibraryStoreError>;
+    /** Stars (or unstars) the tracks; those starred already keep when they were starred. */
+    readonly setFavorites: (
+      trackIds: readonly number[],
+      on: boolean,
+    ) => Effect.Effect<void, LibraryStoreError>;
     /** Starred tracks, most recently starred first, for Library › Favorites. */
     readonly listFavorites: Effect.Effect<readonly FavoriteRow[], LibraryStoreError>;
     /** Records a play as it starts (Core's `PlayEvent`); returns its id, to update it as it goes on. */
@@ -1358,13 +1363,10 @@ const make = Effect.gen(function* () {
         .map((row) => row.trackId),
     ),
 
-    setFavorite: (trackId, on) =>
-      attempt(on ? "add a favorite" : "remove a favorite", () => {
-        const { favorites } = schema;
-        if (on)
-          db.insert(favorites).values({ trackId, addedAt: Date.now() }).onConflictDoNothing().run();
-        else db.delete(favorites).where(eq(favorites.trackId, trackId)).run();
-      }),
+    setFavorites: (trackIds, on) =>
+      attempt(on ? "add favorites" : "remove favorites", () =>
+        setFavorites(db, trackIds, on, Date.now()),
+      ),
 
     listFavorites: attempt("list favorites", () => listFavorites(db)),
 

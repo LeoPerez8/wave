@@ -200,7 +200,34 @@ export const listFavorites = (db: LibraryDatabase): FavoriteRow[] => {
     .all();
 };
 
-export const homeSections = (db: LibraryDatabase): HomeSections => ({
+/** SQLite caps the variables in one statement; batches stay well under it. */
+const BATCH = 500;
+
+/**
+ * Stars ([on]) or unstars many tracks in one transaction. Tracks starred
+ * already keep when they were starred.
+ */
+export const setFavorites = (
+  db: LibraryDatabase,
+  trackIds: readonly number[],
+  on: boolean,
+  now: number,
+): void => {
+  const { favorites } = schema;
+  db.transaction((tx) => {
+    for (let start = 0; start < trackIds.length; start += BATCH) {
+      const batch = trackIds.slice(start, start + BATCH);
+      if (on)
+        tx.insert(favorites)
+          .values(batch.map((trackId) => ({ trackId, addedAt: now })))
+          .onConflictDoNothing()
+          .run();
+      else tx.delete(favorites).where(inArray(favorites.trackId, batch)).run();
+    }
+  });
+};
+
+export const homeSections =(db: LibraryDatabase): HomeSections => ({
   recentlyAdded: recentlyAddedAlbums(db),
   recentlyPlayed: recentlyPlayedAlbums(db),
   mostPlayed: mostPlayedSongs(db),
