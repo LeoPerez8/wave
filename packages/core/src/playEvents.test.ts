@@ -22,7 +22,11 @@ const playing = (
   at: number,
   key: string,
   trackId: string,
-  options: { durationMs?: number | null; context?: PlayEvent["context"] } = {},
+  options: {
+    durationMs?: number | null;
+    context?: PlayEvent["context"];
+    source?: PlayEvent["source"];
+  } = {},
 ): StateSignal => ({
   type: "state",
   at,
@@ -30,7 +34,11 @@ const playing = (
   status: "ready",
   playing: true,
   durationMs: options.durationMs === undefined ? 3 * MIN : options.durationMs,
-  track: { trackId, context: options.context === undefined ? album : options.context },
+  track: {
+    trackId,
+    context: options.context === undefined ? album : options.context,
+    source: options.source ?? "phone",
+  },
 });
 
 const paused = (at: number, key: string, trackId: string): StateSignal => ({
@@ -85,6 +93,7 @@ describe("trackPlays", () => {
         durationMs: 3 * MIN,
         endReason: "completed",
         counted: true,
+        source: "phone",
       },
     ]);
   });
@@ -287,6 +296,49 @@ describe("playSoFar", () => {
   });
 });
 
+describe("play source", () => {
+  test("a play records where its playback was started from, through to its end", () => {
+    const { started, ended } = run([
+      playing(0, "1", "a", { source: "auto" }),
+      moved(180_000, "2", "auto"),
+      playing(180_000, "2", "b", { source: "phone" }),
+      moved(200_000, "3", "sync"),
+    ]);
+    assert.deepEqual(
+      started.map((play) => [play.trackId, play.source]),
+      [
+        ["a", "auto"],
+        ["b", "phone"],
+      ],
+    );
+    assert.deepEqual(
+      ended.map((play) => [play.trackId, play.source]),
+      [
+        ["a", "auto"],
+        ["b", "phone"],
+      ],
+    );
+  });
+
+  test("a play picked back up after a JS restart keeps the source on record", () => {
+    const resumed = resumePlay(
+      {
+        trackId: "a",
+        context: album,
+        startedAt: 0,
+        listenedMs: 60_000,
+        durationMs: 3 * MIN,
+        endReason: "interrupted",
+        counted: false,
+        source: "auto",
+      },
+      playing(70_000, "1", "a"),
+    );
+    assert.ok(resumed);
+    assert.equal(playSoFar(resumed, 80_000)?.source, "auto");
+  });
+});
+
 describe("resumePlay", () => {
   /** What was on record for a play of `a` when Wave's JS went away. */
   const recorded = (overrides: Partial<PlayEvent> = {}): PlayEvent => ({
@@ -297,6 +349,7 @@ describe("resumePlay", () => {
     durationMs: 3 * MIN,
     endReason: "interrupted",
     counted: false,
+    source: "phone",
     ...overrides,
   });
 
@@ -323,6 +376,7 @@ describe("resumePlay", () => {
         durationMs: 3 * MIN,
         endReason: "completed",
         counted: true,
+        source: "phone",
       },
     ]);
   });

@@ -217,6 +217,10 @@ export const playEvents = sqliteTable(
     /** The play context (album, playlist, search…); null for Play Next / Add to Queue. */
     contextType: text("context_type"),
     contextId: text("context_id"),
+    /** Where the play was started from (Core's `PlaySource`); plays from before v2 are `phone`. */
+    source: text("source", { enum: ["phone", "auto"] })
+      .notNull()
+      .default("phone"),
   },
   (t) => [
     index("play_events_track_idx").on(t.trackId),

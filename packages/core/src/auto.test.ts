@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import {
   AUTO_ROOT,
   autoAlbumItem,
+  autoArtistItem,
   autoChildren,
   autoItem,
   autoPageItems,
@@ -397,5 +398,101 @@ describe("Auto Playlists tab", () => {
       startIndex: undefined,
       shuffle: true,
     });
+  });
+});
+
+describe("Auto Artists tab", () => {
+  const artists = { type: "tab", tab: "artists" } as const;
+
+  test("lists every artist, fetched a page at a time in Library order", () => {
+    assert.deepEqual(autoChildren(artists, 0, 50), {
+      items: [],
+      fetch: { source: { type: "artists" }, offset: 0, limit: 50 },
+    });
+    assert.deepEqual(autoChildren(artists, 2, 50)?.fetch, {
+      source: { type: "artists" },
+      offset: 100,
+      limit: 50,
+    });
+  });
+
+  test("an artist opens by name", () => {
+    assert.deepEqual(autoArtistItem({ id: 7, name: "Radiohead" }), {
+      mediaId: "artist/7",
+      title: "Radiohead",
+      subtitle: null,
+      browsable: true,
+      playable: false,
+    });
+    assert.deepEqual(decodeAutoMediaId("artist/7"), { type: "artist", id: "7" });
+  });
+
+  test("artist media IDs round-trip and stay distinct from the artist's songs", () => {
+    const nodes: AutoNode[] = [
+      { type: "artist", id: "7" },
+      { type: "artist", id: "a/b c" },
+      { type: "shuffle", list: { kind: "artistSongs", id: "7" } },
+    ];
+    for (const node of nodes) assert.deepEqual(decodeAutoMediaId(encodeAutoMediaId(node)), node);
+    assert.notEqual(encodeAutoMediaId(nodes[0]!), encodeAutoMediaId(nodes[2]!));
+    for (const id of ["artist", "artist/", "artist/7/shuffle", "artist/7/albums"]) {
+      assert.equal(decodeAutoMediaId(id), null, id);
+    }
+  });
+});
+
+describe("Auto artist", () => {
+  const artist = { type: "artist", id: "7" } as const;
+  const shuffleAll = {
+    mediaId: encodeAutoMediaId({ type: "shuffle", list: { kind: "artistSongs", id: "7" } }),
+    title: "Shuffle all",
+    subtitle: null,
+    browsable: false,
+    playable: true,
+  };
+
+  test("starts with Shuffle all, then the artist's albums", () => {
+    assert.deepEqual(autoChildren(artist, 0, 50), {
+      items: [shuffleAll],
+      fetch: { source: { type: "artistAlbums", id: "7" }, offset: 0, limit: 49 },
+    });
+  });
+
+  test("pages count Shuffle all, so no album is skipped or repeated", () => {
+    assert.deepEqual(autoChildren(artist, 1, 50), {
+      items: [],
+      fetch: { source: { type: "artistAlbums", id: "7" }, offset: 49, limit: 50 },
+    });
+  });
+
+  test("Shuffle all is known without the library; the artist needs its row", () => {
+    assert.deepEqual(
+      autoItem({ type: "shuffle", list: { kind: "artistSongs", id: "7" } }),
+      shuffleAll,
+    );
+    assert.equal(autoItem(artist), null);
+  });
+
+  test("Shuffle all plays every song of the artist shuffled, with the artist as context", () => {
+    const node = decodeAutoMediaId(shuffleAll.mediaId);
+    assert.ok(node !== null);
+    assert.deepEqual(autoPlayList(node), { kind: "artistSongs", id: "7" });
+    const songs = [
+      track("3", 1, 1, "Creep"),
+      track("1", 1, 2, "Airbag"),
+      track("2", 1, 3, "Bloom"),
+    ];
+    assert.deepEqual(autoQueueStart(node, songs), {
+      context: { kind: "artist", id: "7" },
+      trackIds: ["1", "2", "3"],
+      startIndex: undefined,
+      shuffle: true,
+    });
+    assert.equal(autoQueueStart(node, []), null);
+  });
+
+  test("an artist doesn't play by itself", () => {
+    assert.equal(autoPlayList(artist), null);
+    assert.equal(autoQueueStart(artist, albumTracks), null);
   });
 });

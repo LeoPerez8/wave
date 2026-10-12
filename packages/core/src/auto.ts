@@ -20,7 +20,7 @@
  */
 
 import type { QueueContext } from "./queue.ts";
-import { compareAlbumTracks } from "./library.ts";
+import { compareAlbumTracks, compareStrings } from "./library.ts";
 
 /** Auto's tabs: the root's children, in order. */
 export type AutoTab = "home" | "playlists" | "albums" | "artists";
@@ -51,7 +51,13 @@ export type AutoHomeList = "most-played" | "favorites";
 const AUTO_HOME_LISTS: readonly AutoHomeList[] = ["most-played", "favorites"];
 
 /** The kinds of track list Auto can open or play. */
-export type AutoTrackListKind = "album" | "playlist" | "home";
+export type AutoTrackListKind =
+  | "album"
+  | "playlist"
+  /** Every song by an artist or on their albums (the artist's Shuffle all). */
+  | "artistSongs"
+  /** Home's song sections (`AutoHomeList`). */
+  | "home";
 
 /**
  * A list of tracks Auto plays as one context: its Shuffle item plays it
@@ -72,7 +78,12 @@ interface TrackListKind {
   readonly ids?: readonly string[];
   /** False when the list opens straight onto its tracks, without a Shuffle item. */
   readonly shuffle?: boolean;
+  /** The title of its Shuffle item, when not "Shuffle". */
+  readonly shuffleTitle?: string;
 }
+
+const compareSongTitles = (a: AutoTrack, b: AutoTrack): number =>
+  compareStrings(a.titleSort, b.titleSort) || compareStrings(a.path, b.path);
 
 /** One entry per track list kind; the media ID segment is the kind itself. */
 const TRACK_LISTS: Record<AutoTrackListKind, TrackListKind> = {
@@ -93,6 +104,14 @@ const TRACK_LISTS: Record<AutoTrackListKind, TrackListKind> = {
     order: (tracks) => [...tracks],
     ids: AUTO_HOME_LISTS,
     shuffle: false,
+  },
+  // Not `artist`: that segment names the browsable artist.
+  artistSongs: {
+    context: (id) => ({ kind: "artist", id }),
+    // By title, as the artist screen lists them.
+    // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
+    order: (tracks) => [...tracks].sort(compareSongTitles),
+    shuffleTitle: "Shuffle all",
   },
 };
 
@@ -122,7 +141,9 @@ export type AutoNode =
       readonly trackId: string;
     }
   /** What a list shows when it has nothing to list (`autoPageItems`); does nothing. */
-  | { readonly type: "empty"; readonly parent: AutoNode };
+  | { readonly type: "empty"; readonly parent: AutoNode }
+  /** An artist to open: Shuffle all, then their albums. `id` is the artist id. */
+  | { readonly type: "artist"; readonly id: string };
 
 const ROOT_ID = "root";
 /** Recently Played's media ID is `home/recently-played`, beside Home's track lists. */
@@ -149,6 +170,8 @@ export const encodeAutoMediaId = (node: AutoNode): string => {
         return [node.list.kind, node.list.id, "shuffle"];
       case "track":
         return [node.list.kind, node.list.id, "track", String(node.index), node.trackId];
+      case "artist":
+        return ["artist", node.id];
     }
   })();
   return segments.map(encodeURIComponent).join("/");
@@ -187,6 +210,9 @@ const decodeListed = (mediaId: string): AutoNode | null => {
   }
   if (head === HOME && rest[0] === RECENTLY_PLAYED) {
     return rest.length === 1 ? { type: "recentlyPlayed" } : null;
+  }
+  if (head === "artist") {
+    return rest.length === 1 && rest[0] !== "" ? { type: "artist", id: rest[0] ?? "" } : null;
   }
   if (!isTrackListKind(head)) return null;
   const [id = "", what, index = "", trackId = "", ...more] = rest;
@@ -243,6 +269,10 @@ export type AutoSource =
   | { readonly type: "albums" }
   /** Every playlist, by name (Library order); `autoPlaylistItem` builds each. */
   | { readonly type: "playlists" }
+  /** Every artist with songs, in Library order (leading articles and accents ignored). */
+  | { readonly type: "artists" }
+  /** The albums an artist's screen shows: theirs, then the ones they appear on. */
+  | { readonly type: "artistAlbums"; readonly id: string }
   /** A track list's tracks: the app loads all of them, `autoTrackItems` orders and pages them. */
   | { readonly type: "tracks"; readonly list: AutoTrackList }
   /** The albums of Home's Recently Played, as the app's Home tab lists them. */
@@ -298,16 +328,15 @@ const tabChildren = (tab: AutoTab): Listing => {
         ],
         source: null,
       };
-    // Filled by their own tickets.
     case "artists":
-      return { items: [], source: null };
+      return { items: [], source: { type: "artists" } };
   }
 };
 
 const tabItem = (tab: AutoTab): AutoItem => folder({ type: "tab", tab }, TAB_TITLES[tab]);
 
 const shuffleItem = (list: AutoTrackList): AutoItem =>
-  playable({ type: "shuffle", list }, "Shuffle");
+  playable({ type: "shuffle", list }, TRACK_LISTS[list.kind].shuffleTitle ?? "Shuffle");
 
 const listing = (node: AutoNode): Listing | null => {
   switch (node.type) {
@@ -326,6 +355,11 @@ const listing = (node: AutoNode): Listing | null => {
     case "track":
     case "empty":
       return null;
+    case "artist":
+      return {
+        items: [shuffleItem({ kind: "artistSongs", id: node.id })],
+        source: { type: "artistAlbums", id: node.id },
+      };
   }
 };
 
@@ -396,6 +430,7 @@ export const autoItem = (node: AutoNode): AutoItem | null => {
     case "list":
       return homeListItem(node.list);
     case "track":
+    case "artist":
       return null;
   }
 };
@@ -521,3 +556,13 @@ export const autoChildren = (
         : { source: children.source, offset: from - fixed, limit },
   };
 };
+
+/** What an artist row needs to show in Auto. */
+export interface AutoArtist {
+  readonly id: number;
+  readonly name: string;
+}
+
+/** An artist in a list (the Artists tab): opens Shuffle all and their albums. */
+export const autoArtistItem = (artist: AutoArtist): AutoItem =>
+  folder({ type: "artist", id: String(artist.id) }, artist.name);
