@@ -48,6 +48,9 @@ export const startSelection = <T>(owner: object, source: SelectionSource<T>, key
     source: source as unknown as SelectionSource<unknown>,
   });
 
+/** The checked keys now (empty outside selection mode). */
+export const currentSelection = (): Selection<string> => state.get().selection;
+
 /** Leaves selection mode (Done, Back, an action run, the list going away…). */
 export const endSelection = (): void => state.set(IDLE);
 

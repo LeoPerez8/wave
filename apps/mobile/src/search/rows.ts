@@ -69,6 +69,10 @@ const hitKey = (hit: SearchHit): string => `${hit.kind}:${hitId(hit)}`;
 const songsOf = (hits: readonly SearchHit[]): SongRow[] =>
   hits.flatMap((hit) => (hit.kind === "song" ? [hit.song] : []));
 
+/** The song results, in the order search ranks them. */
+export const songResults = (results: SearchResults<SearchHit>): SongRow[] =>
+  songsOf(results.groups.find((group) => group.kind === "song")?.items ?? []);
+
 /**
  * Lays out results: the top result, then each group (in Core's order) with a
  * preview of its best matches and "Show all". A group the owner expanded, or
@@ -79,7 +83,7 @@ export const resultRows = (
   expanded: ReadonlySet<SearchKind>,
 ): ResultRow[] => {
   const rows: ResultRow[] = [];
-  const songs = songsOf(results.groups.find((group) => group.kind === "song")?.items ?? []);
+  const songs = songResults(results);
   if (results.top !== null) {
     rows.push(
       { type: "heading", key: "heading:top", label: "Top result" },
