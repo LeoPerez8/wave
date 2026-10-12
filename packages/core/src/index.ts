@@ -93,7 +93,9 @@ export {
   COUNTED_PLAY_MS,
   EMPTY_PLAY_TRACKER,
   isCountedPlay,
+  keptPlayingEntry,
   playSoFar,
+  queueSourceAfter,
   resumePlay,
   trackPlays,
 } from "./playEvents.ts";

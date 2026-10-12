@@ -4,7 +4,9 @@ import { describe, test } from "node:test";
 import {
   EMPTY_PLAY_TRACKER,
   isCountedPlay,
+  keptPlayingEntry,
   playSoFar,
+  queueSourceAfter,
   resumePlay,
   trackPlays,
   type PlayEvent,
@@ -336,6 +338,36 @@ describe("play source", () => {
     );
     assert.ok(resumed);
     assert.equal(playSoFar(resumed, 80_000)?.source, "auto");
+  });
+});
+
+describe("queueSourceAfter", () => {
+  const play = { type: "play", trackIds: ["a"], context: album } as const;
+
+  test("starting playback credits whoever started it", () => {
+    assert.equal(queueSourceAfter("phone", play, "auto"), "auto");
+    assert.equal(queueSourceAfter("auto", play, "phone"), "phone");
+  });
+
+  test("skips, mode changes and queue edits keep the source of the playback going on", () => {
+    assert.equal(queueSourceAfter("auto", { type: "next" }, "phone"), "auto");
+    assert.equal(queueSourceAfter("auto", { type: "jumpTo", key: "2" }, "phone"), "auto");
+    assert.equal(queueSourceAfter("auto", { type: "addToQueue", trackIds: ["b"] }, "phone"), "auto");
+    assert.equal(queueSourceAfter("phone", { type: "setShuffle", on: true }, "auto"), "phone");
+  });
+});
+
+describe("keptPlayingEntry", () => {
+  test("when the player kept playing through a JS restart, its play on record goes on", () => {
+    assert.equal(keptPlayingEntry("3", { resumedByPlayer: false }), "3");
+  });
+
+  test("when the player resumed the saved queue after a cold start, its plays are new ones", () => {
+    assert.equal(keptPlayingEntry("3", { resumedByPlayer: true }), null);
+  });
+
+  test("with nothing current, no play goes on", () => {
+    assert.equal(keptPlayingEntry(null, { resumedByPlayer: false }), null);
   });
 });
 

@@ -2,8 +2,10 @@ import {
   EMPTY_QUEUE,
   applyPlayerSync,
   extrapolatePosition,
+  keptPlayingEntry,
   parseQueueState,
   planPlayerSync,
+  queueSourceAfter,
   reduceQueue,
   type PlayerList,
   type PlaySource,
@@ -243,7 +245,7 @@ export const layer = Layer.effect(
     const dispatch = (command: QueueCommand, added: readonly QueueTrack[] = []) =>
       lane.withPermit(
         Effect.gen(function* () {
-          if (command.type === "play") queueSource.set("phone");
+          queueSource.update((source) => queueSourceAfter(source, command, "phone"));
           yield* run(command, added);
         }),
       );
@@ -255,7 +257,7 @@ export const layer = Layer.effect(
           for (const track of added) tracks.set(track.id, track);
           const { state } = reduceQueue(queueState.get(), command);
           const items = yield* Effect.forEach(state.entries, itemFor);
-          if (command.type === "play") queueSource.set("auto");
+          queueSource.update((source) => queueSourceAfter(source, command, "auto"));
           queueState.set(state);
           queueChanged();
           // What the player holds once the session has set the items.
@@ -280,9 +282,8 @@ export const layer = Layer.effect(
       const json = yield* player.savedQueue;
       const saved = json === null ? null : parseQueueState(JSON.parse(json));
       if (saved === null || !sameKeys(saved.entries, native.keys)) return;
-      // After a cold start the player resumed the queue itself: its plays are new ones.
-      const resumed = yield* player.takeResumed;
-      keptPlayingKey.set(resumed ? null : native.currentKey);
+      const resumedByPlayer = yield* player.takeResumed;
+      keptPlayingKey.set(keptPlayingEntry(native.currentKey, { resumedByPlayer }));
       const source = yield* player.savedQueueSource;
       if (source !== null) queueSource.set(source);
       queueState.set(saved);

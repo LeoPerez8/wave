@@ -5,7 +5,7 @@
  * whichever comes first.
  */
 
-import { RESTART_THRESHOLD_MS } from "./queue.ts";
+import { RESTART_THRESHOLD_MS, type QueueCommand } from "./queue.ts";
 
 /** Listening this long counts a play whatever the track's length. */
 export const COUNTED_PLAY_MS = 240_000;
@@ -31,6 +31,18 @@ export interface PlayContext {
  * Bluetooth).
  */
 export type PlaySource = "phone" | "auto";
+
+/**
+ * The source of the queue's plays after `command`, sent from `by`: starting
+ * playback (a `play` command) credits whoever started it; anything else
+ * (skips, jumps, mode changes, queue edits) keeps the source of the playback
+ * going on, whoever sends it.
+ */
+export const queueSourceAfter = (
+  current: PlaySource,
+  command: QueueCommand,
+  by: PlaySource,
+): PlaySource => (command.type === "play" ? by : current);
 
 /** One play of a track, as the library stores it. */
 export interface PlayEvent {
@@ -203,6 +215,17 @@ export const resumePlay = (
     },
   };
 };
+
+/**
+ * The entry whose play on record goes on when JS picks the queue back up with
+ * the player on `currentKey` (see `resumePlay`): that entry when the player
+ * kept playing while JS restarted; none when the player resumed the saved
+ * queue itself after a cold start (`resumedByPlayer`), as its plays are new.
+ */
+export const keptPlayingEntry = (
+  currentKey: string | null,
+  { resumedByPlayer }: { readonly resumedByPlayer: boolean },
+): string | null => (resumedByPlayer ? null : currentKey);
 
 /** Starts or stops the listening clock. */
 const setPlaying = (play: OpenPlay, playing: boolean, at: number): OpenPlay => {
