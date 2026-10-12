@@ -164,6 +164,7 @@ function renderRankedArtist({ item: artist, countedPlays }: Ranked<ArtistRow>, i
   return (
     <NameRow
       name={artist.name}
+      artist={artist}
       detail={playCount(countedPlays)}
       rank={{ number: index + 1, top: index === 0 }}
       onPress={() => openArtist(artist.id)}

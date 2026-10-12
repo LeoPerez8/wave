@@ -18,6 +18,9 @@ const link = (overrides: Partial<ArtistAlbumLink> & { albumId: number }): Artist
 const imageOf = (links: readonly ArtistAlbumLink[], artistId = 1) =>
   artistArtwork(links).get(artistId);
 
+/** The image picked from two albums, given in both orders. */
+const both = (a: ArtistAlbumLink, b: ArtistAlbumLink) => [imageOf([a, b]), imageOf([b, a])];
+
 describe("artistArtwork", () => {
   test("an artist's image is the cover of their own album with the most songs", () => {
     assert.equal(
@@ -49,8 +52,6 @@ describe("artistArtwork", () => {
   });
 
   describe("ties on songs go to the album listed first on the artist page, whatever the order", () => {
-    const both = (a: ArtistAlbumLink, b: ArtistAlbumLink) => [imageOf([a, b]), imageOf([b, a])];
-
     test("the newest album", () => {
       assert.deepEqual(both(link({ albumId: 1, year: 1997 }), link({ albumId: 2, year: 2000 })), [
         "cover-2",
