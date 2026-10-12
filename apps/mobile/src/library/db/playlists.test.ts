@@ -4,7 +4,7 @@ import { beforeEach, describe, test } from "node:test";
 
 import { eq } from "drizzle-orm";
 
-import { selectPlaylistSongs } from "./playlists.ts";
+import { removePlaylistItems, selectPlaylistSongs } from "./playlists.ts";
 import * as schema from "./schema.ts";
 import { addTrack, openTestDatabase, type TestDatabase } from "./testDatabase.ts";
 
@@ -59,5 +59,41 @@ describe("selectPlaylistSongs", () => {
       .where(eq(schema.tracks.id, ids.Creep ?? -1))
       .run();
     assert.deepEqual(titles(), ["Daydreaming", "Airbag", "Airbag"]);
+  });
+});
+
+describe("removePlaylistItems", () => {
+  const items = () => selectPlaylistSongs(db, playlistId);
+
+  test("removes exactly the given entries; a repeat of the song left unchecked stays", () => {
+    const [daydreaming, firstAirbag, creep] = items();
+    removePlaylistItems(db, playlistId, [firstAirbag?.itemId ?? -1, creep?.itemId ?? -1], 1000);
+    assert.deepEqual(titles(), ["Daydreaming", "Airbag"]);
+    assert.equal(items()[0]?.itemId, daydreaming?.itemId);
+  });
+
+  test("marks the playlist as edited", () => {
+    removePlaylistItems(db, playlistId, [items()[0]?.itemId ?? -1], 1000);
+    const playlist = db
+      .select()
+      .from(schema.playlists)
+      .where(eq(schema.playlists.id, playlistId))
+      .get();
+    assert.equal(playlist?.updatedAt, 1000);
+  });
+
+  test("leaves other playlists' entries alone", () => {
+    const otherId = db
+      .insert(schema.playlists)
+      .values({ name: "Other", createdAt: 0, updatedAt: 0 })
+      .returning()
+      .get().id;
+    removePlaylistItems(
+      db,
+      otherId,
+      items().map((song) => song.itemId),
+      1000,
+    );
+    assert.equal(items().length, 4);
   });
 });

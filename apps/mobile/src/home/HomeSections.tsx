@@ -2,6 +2,7 @@ import type { QueueContext } from "@wave/core";
 import { ScrollView, Text, View } from "react-native";
 
 import { AlbumTile } from "@/catalog/AlbumTile";
+import { ArtistImage } from "@/catalog/ArtistImage";
 import { CELL, grid } from "@/catalog/grid";
 import { TrackRow } from "@/catalog/TrackRow";
 import { toAlbumSummary } from "@/library/AlbumGrid";
@@ -44,7 +45,7 @@ export function AlbumShelf<A extends AlbumRow>({
           album={toAlbumSummary(album)}
           size={SHELF_TILE}
           detail={detail?.(album)}
-          onPress={() => openAlbum(album.id)}
+          onPress={() => openAlbum(album.id, album)}
           onLongPress={() => openAlbumActions(album)}
         />
       ))}
@@ -93,7 +94,7 @@ const ARTIST_TILE = CELL * 15;
 
 /**
  * A row of artists that scrolls sideways, edge to edge, like the album
- * shelves: each name (two lines reserved) over a detail line (its play count
+ * shelves: each artist's circle, then the name (two lines reserved) over a detail line (its play count
  * on Most played artists). Tapping one opens it; long-press opens its menu.
  */
 export function ArtistShelf<A extends ArtistRow>({
@@ -117,12 +118,15 @@ export function ArtistShelf<A extends ArtistRow>({
           key={artist.id}
           accessibilityRole="button"
           accessibilityLabel={`${artist.name}, ${detail(artist)}`}
-          onPress={() => openArtist(artist.id)}
+          onPress={() => openArtist(artist.id, artist)}
           onLongPress={() => openArtistActions(artist)}
           depth={0.02}
-          className="gap-0.5 border-t border-separator pt-3"
+          className="gap-0.5"
           style={{ width: ARTIST_TILE }}
         >
+          <View style={{ marginBottom: CELL * 1.5 }}>
+            <ArtistImage artist={artist} size={ARTIST_TILE} large />
+          </View>
           {/* Two lines reserved, so the detail lines align along the row. */}
           <Text
             numberOfLines={2}

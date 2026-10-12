@@ -1,7 +1,7 @@
 import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
 import { IconPlaylist } from "@tabler/icons-react-native";
 import { useScrollToTop } from "expo-router";
-import { useRef } from "react";
+import { useCallback, useRef } from "react";
 import { View } from "react-native";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
@@ -11,6 +11,9 @@ import { useChromeInset } from "@/chrome/chrome";
 import { EmptyState } from "@/components/EmptyState";
 import { TextButton } from "@/components/TextButton";
 import { openPlaylistActions } from "@/playback/ActionsMenu";
+import type { ActionItems } from "@/playback/actionTargets";
+import { selectableRow } from "@/selection/selectableRow";
+import { useListSelection, type ListSelection } from "@/selection/useListSelection";
 
 import { usePlaylists } from "./hooks";
 import type { PlaylistRow } from "./LibraryStore";
@@ -28,15 +31,37 @@ const createAndOpen = (): void => {
 
 const keyOf = (playlist: PlaylistRow): string => String(playlist.id);
 
-const renderPlaylist = ({ item }: { item: PlaylistRow }) => (
-  <PlaylistEntry
-    name={item.name}
-    detail={songCount(item.trackCount)}
-    paths={item.thumbPaths}
-    onPress={() => openPlaylist(item.id)}
-    onLongPress={() => openPlaylistActions(item)}
-  />
-);
+/** In selection mode the actions act on the checked playlists (their songs, by Core's `groupSongs`). */
+const playlistsOf = (playlists: readonly PlaylistRow[]): ActionItems => ({
+  kind: "playlist",
+  items: playlists,
+});
+
+/**
+ * A playlist row. Tap opens it; long-press opens its menu, which offers
+ * Select. While selecting, rows show a check and taps check and uncheck.
+ */
+function PlaylistItem({
+  playlist,
+  selection,
+}: {
+  playlist: PlaylistRow;
+  selection: ListSelection<PlaylistRow>;
+}) {
+  return (
+    <PlaylistEntry
+      name={playlist.name}
+      detail={songCount(playlist.trackCount)}
+      paths={playlist.thumbPaths}
+      {...selectableRow(
+        playlist,
+        selection,
+        () => openPlaylist(playlist.id, playlist),
+        (options) => openPlaylistActions(playlist, options),
+      )}
+    />
+  );
+}
 
 /** Library › Playlists: every playlist by name, with New Playlist above them. */
 export function PlaylistsList({ empty }: { empty: string }) {
@@ -45,6 +70,11 @@ export function PlaylistsList({ empty }: { empty: string }) {
   const bottomInset = useChromeInset();
   const list = useRef<LegendListRef>(null);
   useScrollToTop(list);
+  const selection = useListSelection({ items: playlists, keyOf, target: playlistsOf });
+  const renderPlaylist = useCallback(
+    ({ item }: { item: PlaylistRow }) => <PlaylistItem playlist={item} selection={selection} />,
+    [selection],
+  );
 
   if (playlists.length === 0) {
     return (
@@ -53,7 +83,7 @@ export function PlaylistsList({ empty }: { empty: string }) {
           icon={IconPlaylist}
           title="No playlists"
           message={empty}
-          action={<TextButton label="New Playlist" onPress={createAndOpen} />}
+          action={<TextButton label="New Playlist" opensMenu onPress={createAndOpen} />}
         />
       </View>
     );
@@ -67,6 +97,7 @@ export function PlaylistsList({ empty }: { empty: string }) {
       data={playlists}
       keyExtractor={keyOf}
       renderItem={renderPlaylist}
+      extraData={selection}
       estimatedItemSize={grid.row}
       getFixedItemSize={() => grid.row}
       recycleItems
@@ -78,7 +109,7 @@ export function PlaylistsList({ empty }: { empty: string }) {
               {`${playlists.length} ${playlists.length === 1 ? "playlist" : "playlists"}`}
             </CatalogLine>
           </View>
-          <TextButton label="New Playlist" onPress={createAndOpen} />
+          <TextButton label="New Playlist" opensMenu onPress={createAndOpen} />
         </View>
       }
     />

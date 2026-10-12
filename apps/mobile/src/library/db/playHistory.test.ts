@@ -4,7 +4,14 @@ import { eq, sql } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { beforeEach, describe, test } from "node:test";
 
-import { homeSections, latestPlay, listFavorites, recordPlay, updatePlay } from "./playHistory.ts";
+import {
+  homeSections,
+  latestPlay,
+  listFavorites,
+  recordPlay,
+  setFavorites,
+  updatePlay,
+} from "./playHistory.ts";
 import * as schema from "./schema.ts";
 import { trackPlayTotals } from "./stats.ts";
 import {
@@ -106,6 +113,38 @@ describe("Favorites", () => {
         ["Starred late", 2_000],
         ["Starred early", 1_000],
       ],
+    );
+  });
+
+  test("stars many songs at once; songs starred already keep when they were starred", () => {
+    const old = addTrack(db, { title: "Starred before" });
+    const a = addTrack(db, { title: "Airbag" });
+    const b = addTrack(db, { title: "Bloom" });
+    star(db, old, 1_000);
+
+    setFavorites(db, [a, old, b], true, 5_000);
+
+    assert.deepEqual(
+      listFavorites(db).map((row) => [row.title, row.starredAt]),
+      [
+        ["Airbag", 5_000],
+        ["Bloom", 5_000],
+        ["Starred before", 1_000],
+      ],
+    );
+  });
+
+  test("unstars many songs at once", () => {
+    const a = addTrack(db, { title: "Airbag" });
+    const b = addTrack(db, { title: "Bloom" });
+    const c = addTrack(db, { title: "Creep" });
+    for (const id of [a, b, c]) star(db, id, 1_000);
+
+    setFavorites(db, [a, c], false, 5_000);
+
+    assert.deepEqual(
+      listFavorites(db).map((row) => row.title),
+      ["Bloom"],
     );
   });
 });
@@ -265,7 +304,11 @@ describe("Recounting past plays", () => {
       durationMs: number | null,
       endReason: PlayEvent["endReason"],
       counted: boolean,
-    ) => recordPlay(v2, play(trackId, startedAt, { listenedMs, durationMs, endReason, counted }));
+    ) =>
+      v2.run(
+        sql`INSERT INTO play_events (track_id, started_at, listened_ms, duration_ms, end_reason, counted)
+              VALUES (${trackId}, ${startedAt}, ${listenedMs}, ${durationMs}, ${endReason}, ${counted ? 1 : 0})`,
+      );
     v2Play(song, 1_000, 20_000, 180_000, "skipped", false); // now counted
     v2Play(song, 2_000, 15_000, 180_000, "stopped", false); // 15 s exactly: not counted
     v2Play(song, 3_000, 10_000, 180_000, "completed", false); // seeked to the end: not counted

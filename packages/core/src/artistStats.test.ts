@@ -12,6 +12,7 @@ const now = Date.UTC(2026, 9, 12, 12);
 const listened = (trackId: number, overrides: Partial<SongListening> = {}): SongListening => ({
   trackId,
   artistId: 7,
+  inLibrary: true,
   countedPlays: 1,
   listenedMs: 3 * MINUTE,
   lastPlayedAt: now - HOUR,

@@ -1,8 +1,16 @@
 import { IconGripVertical, IconTrash } from "@tabler/icons-react-native";
-import { moveItem, reorderTarget, resolveRemoveSwipe } from "@wave/core";
+import {
+  moveItem,
+  reorderTarget,
+  resolveRemoveSwipe,
+  rowWindow,
+  windowRows,
+  type RowView,
+  type RowWindow,
+} from "@wave/core";
 import * as Haptics from "expo-haptics";
-import { useLayoutEffect, useRef, useState, type ReactElement } from "react";
-import { Text, View } from "react-native";
+import { useCallback, useLayoutEffect, useRef, useState, type ReactElement } from "react";
+import { Text, useWindowDimensions, View } from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 import Animated, {
   measure,
@@ -26,11 +34,14 @@ import { useChromeInset } from "@/chrome/chrome";
 import { playSongs } from "@/playback/actions";
 import { useCurrentTrackId } from "@/playback/hooks";
 import { openTrackActions } from "@/playback/ActionsMenu";
+import type { ActionItems } from "@/playback/actionTargets";
+import { selectableRow } from "@/selection/selectableRow";
+import { useListSelection } from "@/selection/useListSelection";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { useFavoriteIds } from "./favorites";
-import type { PlaylistDetail, PlaylistItemRow } from "./LibraryStore";
-import { movePlaylistItem, removePlaylistItem } from "./playlists";
+import type { PlaylistItemRow } from "./LibraryStore";
+import { movePlaylistItem, removePlaylistItems } from "./playlists";
 import { toTrackSummary } from "./TrackList";
 import { useListScrollable } from "@/motion/heldTouch";
 
@@ -64,6 +75,8 @@ type RowProps = {
   drag: DragState;
   playing: boolean;
   favorite: boolean;
+  /** In selection mode, whether the row is checked; undefined otherwise. Selecting turns off dragging and swiping. */
+  checked: boolean | undefined;
   onPress: () => void;
   onLongPress: () => void;
   onDragBegin: (index: number) => void;
@@ -84,6 +97,7 @@ function PlaylistItem({
   drag,
   playing,
   favorite,
+  checked,
   onPress,
   onLongPress,
   onDragBegin,
@@ -96,7 +110,8 @@ function PlaylistItem({
   const secondary = useThemeColor("secondary");
   const reduceMotion = useReducedMotion();
   // No swipe-to-remove while the long-pressed finger slides to choose in the menu.
-  const swipeable = useListScrollable();
+  const selecting = checked !== undefined;
+  const swipeable = useListScrollable() && !selecting;
   const { active, hover, dragY, translation, fingerY, startScroll, scroll } = drag;
 
   // Other rows make way for the dragged one.
@@ -174,6 +189,7 @@ function PlaylistItem({
   });
 
   const grip = usePanGesture({
+    enabled: !selecting,
     minDistance: 0,
     onActivate: (event) => {
       "worklet";
@@ -200,7 +216,8 @@ function PlaylistItem({
 
   return (
     <Animated.View
-      style={rowStyle}
+      // Placed by index: only a window of rows is mounted (see `rowWindow`).
+      style={[{ position: "absolute", top: index * ROW, left: 0, right: 0 }, rowStyle]}
       onLayout={(event) => {
         const measured = Math.max(1, event.nativeEvent.layout.width);
         widthRef.current = measured;
@@ -223,13 +240,18 @@ function PlaylistItem({
               state={playing ? "playing" : undefined}
               favorite={favorite}
               leading="artwork"
+              checked={checked}
               onPress={onPress}
               onLongPress={onLongPress}
-              accessibilityActions={[
-                ...(index > 0 ? [{ name: "moveUp", label: "Move up" }] : []),
-                ...(index < count - 1 ? [{ name: "moveDown", label: "Move down" }] : []),
-                { name: "remove", label: "Remove from playlist" },
-              ]}
+              accessibilityActions={
+                selecting
+                  ? []
+                  : [
+                      ...(index > 0 ? [{ name: "moveUp", label: "Move up" }] : []),
+                      ...(index < count - 1 ? [{ name: "moveDown", label: "Move down" }] : []),
+                      { name: "remove", label: "Remove from playlist" },
+                    ]
+              }
               onAccessibilityAction={(event) => {
                 const action = event.nativeEvent.actionName;
                 if (action === "moveUp") onMove(index, index - 1);
@@ -247,7 +269,8 @@ function PlaylistItem({
             // 48dp of target for a grip drawn in the 32dp state cell.
             style={{ width: grid.stateCell + CELL * 2, height: ROW, marginLeft: -CELL * 2 }}
           >
-            <IconGripVertical size={20} color={secondary} strokeWidth={1.5} />
+            {/* Hidden, not removed, while selecting: the rows keep their width. */}
+            {!selecting && <IconGripVertical size={20} color={secondary} strokeWidth={1.5} />}
           </View>
         </GestureDetector>
       </Animated.View>
@@ -256,38 +279,61 @@ function PlaylistItem({
 }
 
 type Props = {
-  detail: PlaylistDetail;
+  playlistId: number;
+  /** In playlist order; undefined until they are read (only the header shows). */
+  items: readonly PlaylistItemRow[] | undefined;
   /** The playlist's head (mosaic, title, Play / Shuffle). */
   header: ReactElement;
   /** Shown under the head when the playlist has no songs. */
   empty: ReactElement;
 };
 
+const NO_ITEMS: readonly PlaylistItemRow[] = [];
+
+/** Each entry is its own selection item, so a song in the playlist twice is checked per copy. */
+const entryKey = (item: PlaylistItemRow): string => String(item.itemId);
+
 /**
  * A playlist's songs in order: tap plays the playlist from the song, the grip
  * drags it to a new place (scrolling the list near its edges), a left swipe
- * removes it, long-press opens its menu.
+ * removes it, long-press opens its menu. The menu's Select starts selection
+ * mode (check cells, taps toggle, no dragging or swiping), whose bar adds
+ * Remove from Playlist.
  */
-export function PlaylistItems({ detail, header, empty }: Props) {
+export function PlaylistItems({ playlistId, items, header, empty }: Props) {
   const scrollable = useListScrollable();
-  const playlistId = detail.playlist.id;
+  const read = items ?? NO_ITEMS;
   const bottomInset = useChromeInset();
   const currentId = useCurrentTrackId();
   const favorites = useFavoriteIds();
+  const placeOf = useCallback(
+    (item: PlaylistItemRow) => ({ playlistId, itemId: item.itemId }),
+    [playlistId],
+  );
 
-  // The owner's last edit, shown until the store's next read replaces `detail.items`.
+  // The owner's last edit, shown until the store's next read replaces `items`.
   const [edit, setEdit] = useState<{
     readonly base: readonly PlaylistItemRow[];
     readonly order: readonly PlaylistItemRow[];
   } | null>(null);
-  const order = edit !== null && edit.base === detail.items ? edit.order : detail.items;
+  const order = edit !== null && edit.base === read ? edit.order : read;
   const setOrder = (next: (current: readonly PlaylistItemRow[]) => readonly PlaylistItemRow[]) =>
     setEdit((previous) => ({
-      base: detail.items,
-      order: next(
-        previous !== null && previous.base === detail.items ? previous.order : detail.items,
-      ),
+      base: read,
+      order: next(previous !== null && previous.base === read ? previous.order : read),
     }));
+  const tracksOf = useCallback(
+    (selected: readonly PlaylistItemRow[]): ActionItems => ({
+      kind: "track",
+      items: selected.map((item) => ({ song: item, playlistItem: placeOf(item) })),
+    }),
+    [placeOf],
+  );
+  const listSelection = useListSelection({
+    items: order,
+    keyOf: entryKey,
+    target: tracksOf,
+  });
   const orderRef = useRef(order);
   useLayoutEffect(() => {
     orderRef.current = order;
@@ -306,7 +352,43 @@ export function PlaylistItems({ detail, header, empty }: Props) {
   useScrollOffset(scrollRef, drag.scroll);
   const contentHeight = useSharedValue(0);
 
+  // Only the rows around the screen are mounted, so a long playlist opens as
+  // fast as a short one. Until laid out, the list is assumed to fill the
+  // screen with no header above it: that mounts too many rows, never too few.
+  const { height: screenHeight } = useWindowDimensions();
+  const [viewport, setViewport] = useState(screenHeight);
+  const [top, setTop] = useState(0);
+  const count = order.length;
   const from = useRef(-1);
+  // The window as of the last scroll that moved it, and the row being dragged then.
+  const [shown, setShown] = useState<{
+    readonly scroll: number;
+    readonly rows: RowWindow;
+    readonly keep: number;
+  }>({ scroll: 0, rows: { start: 0, end: 0 }, keep: -1 });
+  const viewAt = useCallback(
+    (scroll: number): RowView => ({ scroll, viewport, top, rowHeight: ROW, count }),
+    [viewport, top, count],
+  );
+  // Layout and length changes apply at once; scrolling moves the window in `follow`.
+  const rows = rowWindow(viewAt(shown.scroll), shown.rows);
+  const follow = useCallback(
+    (scroll: number) =>
+      setShown((previous) => {
+        const current = rowWindow(viewAt(previous.scroll), previous.rows);
+        const next = rowWindow(viewAt(scroll), current);
+        return next === previous.rows ? previous : { scroll, rows: next, keep: from.current };
+      }),
+    [viewAt],
+  );
+  // Checked every row scrolled; the window moves only now and then.
+  useAnimatedReaction(
+    () => Math.round(drag.scroll.get() / ROW),
+    (step, previous) => {
+      if (previous !== null && step !== previous) scheduleOnRN(follow, drag.scroll.get());
+    },
+    [follow],
+  );
   const target = useRef(-1);
   const resetAfterRender = useRef(false);
 
@@ -363,7 +445,7 @@ export function PlaylistItems({ detail, header, empty }: Props) {
 
   const onRemove = (item: PlaylistItemRow) => {
     setOrder((current) => current.filter((row) => row.itemId !== item.itemId));
-    void removePlaylistItem(playlistId, item.itemId);
+    void removePlaylistItems(playlistId, [item.itemId]);
   };
 
   // Near the top or bottom edge, a dragged row scrolls the list, faster the closer it gets.
@@ -388,35 +470,51 @@ export function PlaylistItems({ detail, header, empty }: Props) {
 
   const context = { kind: "playlist", id: String(playlistId) } as const;
 
+  const renderRow = (index: number) => {
+    const item = order[index];
+    if (item === undefined) return null;
+    return (
+      <PlaylistItem
+        key={item.itemId}
+        item={item}
+        index={index}
+        count={order.length}
+        drag={drag}
+        playing={String(item.id) === currentId}
+        favorite={favorites.has(item.id)}
+        {...selectableRow(
+          item,
+          listSelection,
+          () => playSongs(order, index, context),
+          (options) => openTrackActions(item, { ...options, playlistItem: placeOf(item) }),
+        )}
+        onDragBegin={onDragBegin}
+        onDragMove={onDragMove}
+        onDrop={onDrop}
+        onMove={reorder}
+        onRemove={onRemove}
+      />
+    );
+  };
+
   return (
     <Animated.ScrollView
       scrollEnabled={scrollable}
       ref={scrollRef}
       className="flex-1"
+      onLayout={(event) => setViewport(event.nativeEvent.layout.height)}
       onContentSizeChange={(_, height) => contentHeight.set(height)}
       contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottomInset }}
     >
-      {header}
-      {order.length === 0
-        ? empty
-        : order.map((item, index) => (
-            <PlaylistItem
-              key={item.itemId}
-              item={item}
-              index={index}
-              count={order.length}
-              drag={drag}
-              playing={String(item.id) === currentId}
-              favorite={favorites.has(item.id)}
-              onPress={() => playSongs(order, index, context)}
-              onLongPress={() => openTrackActions(item, { playlistId, itemId: item.itemId })}
-              onDragBegin={onDragBegin}
-              onDragMove={onDragMove}
-              onDrop={onDrop}
-              onMove={reorder}
-              onRemove={onRemove}
-            />
-          ))}
+      <View onLayout={(event) => setTop(event.nativeEvent.layout.height)}>{header}</View>
+      {items === undefined ? null : order.length === 0 ? (
+        empty
+      ) : (
+        <View style={{ height: order.length * ROW }}>
+          {/* The dragged row stays mounted however far auto-scroll takes the list. */}
+          {windowRows(rows, shown.keep).map(renderRow)}
+        </View>
+      )}
     </Animated.ScrollView>
   );
 }

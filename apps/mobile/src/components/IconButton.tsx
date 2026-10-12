@@ -10,7 +10,7 @@ type Props = {
   label: string;
   onPress: () => void;
   disabled?: boolean;
-  /** It opens a menu, which floats next to the button. */
+  /** It opens a card (a menu floats next to it), and stays highlighted while the card is open. */
   opensMenu?: boolean;
 };
 

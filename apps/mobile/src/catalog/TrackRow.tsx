@@ -1,12 +1,14 @@
-import { IconFileOff, IconStarFilled, IconVolume } from "@tabler/icons-react-native";
+import { IconFileOff, IconStarFilled } from "@tabler/icons-react-native";
 import { Text, View, type PressableProps as PressProps } from "react-native";
 
 import { Press } from "@/motion/Press";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { Artwork } from "./Artwork";
+import { CheckCell } from "./CheckCell";
 import { CELL, grid } from "./grid";
 import { RankNumber } from "./RankNumber";
+import { WavyUnderline } from "./WavyUnderline";
 
 export type TrackSummary = {
   id: string;
@@ -28,6 +30,11 @@ type Props = {
   leading: "artwork" | "number";
   /** Sets the number in ember: the top entry of a ranking, whose number is its rank. */
   topNumber?: boolean;
+  /**
+   * In selection mode, whether the row is checked: it shows a leading check
+   * cell and reads as a checkbox. Undefined outside selection mode.
+   */
+  checked?: boolean | undefined;
   onPress: () => void;
   onLongPress?: () => void;
   /** Screen-reader actions standing in for gestures (move, remove in a playlist). */
@@ -43,10 +50,12 @@ export const formatDuration = (ms: number): string => {
 const THUMB = CELL * 5;
 
 /**
- * A track. Every row reserves the same fixed cells, so state never shifts the
- * layout: the state cell (playing / missing; leading in numbered lists, where
- * it replaces the number, trailing in artwork lists), the
- * favorite cell and the duration. Title and artist share one size; rank is weight and tint.
+ * A track: leading thumbnail or track number, title over artist, then the
+ * favorite cell and the duration. The playing track's title is in ember with a
+ * wavy underline under its visible text. A missing file shows its icon (in
+ * place of the number in numbered lists, trailing in artwork lists). Title and
+ * artist share one size; rank is weight and tint. In selection mode a check
+ * cell leads the row.
  */
 export function TrackRow({
   track,
@@ -54,6 +63,7 @@ export function TrackRow({
   favorite = false,
   leading,
   topNumber = false,
+  checked,
   onPress,
   onLongPress,
   accessibilityActions,
@@ -62,18 +72,17 @@ export function TrackRow({
   const highlight = useThemeColor("highlight");
   const tertiary = useThemeColor("tertiary");
   const missing = state === "missing";
-  const stateIcon =
-    state === "playing" ? (
-      <IconVolume size={18} color={highlight} strokeWidth={1.75} />
-    ) : missing ? (
-      <IconFileOff size={18} color={tertiary} strokeWidth={1.5} />
-    ) : null;
+  const playing = state === "playing";
+  const selecting = checked !== undefined;
+  const missingIcon = <IconFileOff size={18} color={tertiary} strokeWidth={1.5} />;
 
   return (
     <Press
-      accessibilityRole="button"
-      accessibilityLabel={`${track.title}, ${track.artist}`}
-      accessibilityState={{ disabled: missing, selected: state === "playing" }}
+      accessibilityRole={selecting ? "checkbox" : "button"}
+      accessibilityLabel={`${track.title}, ${track.artist}${playing ? ", now playing" : ""}`}
+      accessibilityState={
+        selecting ? { disabled: missing, checked } : { disabled: missing, selected: playing }
+      }
       disabled={missing}
       onPress={onPress}
       onLongPress={onLongPress}
@@ -82,35 +91,36 @@ export function TrackRow({
       depth={0.015}
     >
       <View className="flex-row items-center" style={{ height: grid.row, gap: CELL * 1.5 }}>
+        {selecting && <CheckCell checked={checked} />}
         {leading === "artwork" ? (
           <Artwork uri={track.artworkUri} tint={track.tint} size={THUMB} />
-        ) : state === undefined && track.trackNumber !== undefined ? (
+        ) : !missing && track.trackNumber !== undefined ? (
           <RankNumber rank={track.trackNumber} top={topNumber} />
         ) : (
           <View className="items-center" style={{ width: grid.stateCell }}>
-            {stateIcon}
+            {missing && missingIcon}
           </View>
         )}
         <View className="flex-1">
-          <Text
-            numberOfLines={1}
-            className={`font-sans text-body font-medium ${
-              state === "playing"
-                ? "text-highlight"
-                : missing
-                  ? "text-secondary"
-                  : "text-foreground"
-            }`}
-          >
-            {track.title}
-          </Text>
+          {/* Hugs the title's visible (possibly truncated) text, so the underline spans just that. */}
+          <View style={{ alignSelf: "flex-start", maxWidth: "100%" }}>
+            <Text
+              numberOfLines={1}
+              className={`font-sans text-body font-medium ${
+                playing ? "text-highlight" : missing ? "text-secondary" : "text-foreground"
+              }`}
+            >
+              {track.title}
+            </Text>
+            {playing && <WavyUnderline />}
+          </View>
           <Text numberOfLines={1} className="font-sans text-body text-secondary">
             {missing ? "File not found" : track.artist}
           </Text>
         </View>
-        {leading === "artwork" && (
+        {leading === "artwork" && missing && (
           <View className="items-center" style={{ width: CELL * 3 }}>
-            {stateIcon}
+            {missingIcon}
           </View>
         )}
         <View className="items-center" style={{ width: CELL * 3 }}>

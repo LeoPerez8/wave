@@ -1,8 +1,9 @@
 import { LegendList } from "@legendapp/list/react-native";
 import { useLocalSearchParams } from "expo-router";
 import { useCallback, useMemo } from "react";
-import { View } from "react-native";
+import { Text, useWindowDimensions, View } from "react-native";
 
+import { ArtistImage } from "@/catalog/ArtistImage";
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { TrackRow } from "@/catalog/TrackRow";
@@ -10,16 +11,19 @@ import { useChromeInset } from "@/chrome/chrome";
 import { playSongs } from "@/playback/actions";
 import { useCurrentTrackId } from "@/playback/hooks";
 import { openTrackActions } from "@/playback/ActionsMenu";
+import { mixedTarget, type MixedItem } from "@/playback/actionTargets";
 import { albumPairs, albumRowHeight, AlbumPair, useAlbumTileSize } from "@/library/AlbumGrid";
 import { DetailFrame } from "@/library/DetailFrame";
 import { useFavoriteIds } from "@/library/favorites";
 import { useArtist } from "@/library/hooks";
-import type { AlbumRow, ArtistDetail, SongRow } from "@/library/LibraryStore";
-import { parseId } from "@/library/routes";
+import type { AlbumRow, ArtistDetail, ArtistRow, SongRow } from "@/library/LibraryStore";
+import { parseId, useKnownRow } from "@/library/routes";
 import { SongSortButton } from "@/library/SongSortButton";
 import { useSortedSongs } from "@/library/songSort";
 import { ListIntro, songCount, toTrackSummary } from "@/library/TrackList";
 import { useListScrollable } from "@/motion/heldTouch";
+import { selectableRow } from "@/selection/selectableRow";
+import { useListSelection, type ListSelection } from "@/selection/useListSelection";
 import { ArtistStatsBlock } from "@/stats/ArtistStatsBlock";
 
 type Item =
@@ -54,18 +58,88 @@ const itemKey = (item: Item): string => {
   }
 };
 
+const albumItem = (album: AlbumRow): MixedItem => ({ kind: "album", item: album });
+const trackItem = (song: SongRow): MixedItem => ({ kind: "track", item: { song } });
+
+/**
+ * What can be checked on the page, in page order: the albums (their shelf,
+ * then Appears on), then the songs. Albums and songs check together.
+ */
+const selectableItems = (detail: ArtistDetail, songs: readonly SongRow[]): MixedItem[] => [
+  ...detail.albums.map(albumItem),
+  ...detail.appearsOn.map(albumItem),
+  ...songs.map(trackItem),
+];
+
+const selectableKey = (mixed: MixedItem): string =>
+  mixed.kind === "album" ? `album-${mixed.item.id}` : `track-${mixed.item.song.id}`;
+
+/** The page's selection as the album tiles see it. */
+const albumSelectionOf = (page: ListSelection<MixedItem>): ListSelection<AlbumRow> => ({
+  selecting: page.selecting,
+  selection: page.selection,
+  isChecked: (album) => page.isChecked(albumItem(album)),
+  start: (album) => page.start(albumItem(album)),
+  toggle: (album) => page.toggle(albumItem(album)),
+});
+
+/** The artist page's head: their image as a large circle, then their name. */
+function ArtistHead({ artist }: { artist: ArtistRow }) {
+  const { width } = useWindowDimensions();
+  // Three fifths of the content width, on the cell grid.
+  const size = Math.floor(((width - grid.margin * 2) * 0.6) / CELL) * CELL;
+  return (
+    <View className="items-center" style={{ gap: CELL * 2, paddingBottom: CELL * 2 }}>
+      <ArtistImage artist={artist} size={size} large />
+      <Text
+        accessibilityRole="header"
+        numberOfLines={2}
+        className="text-center font-sans text-title1 font-light text-foreground"
+        style={{ letterSpacing: -0.4 }}
+      >
+        {artist.name}
+      </Text>
+    </View>
+  );
+}
+
 const albumsLine = (count: number): string => `${count} ${count === 1 ? "album" : "albums"}`;
 
-function ArtistContent({ detail }: { detail: ArtistDetail }) {
+/** What the screen shows: the artist, and their page once it is read. */
+interface Shown {
+  readonly artist: ArtistRow;
+  /** Undefined until the page is read; the head doesn't wait for it. */
+  readonly detail: ArtistDetail | undefined;
+}
+
+/** The page before it's read: the artist alone, no albums or songs yet. */
+const unread = (artist: ArtistRow): ArtistDetail => ({
+  artist,
+  albums: [],
+  appearsOn: [],
+  songs: [],
+});
+
+function ArtistContent({ shown }: { shown: Shown }) {
+  const loaded = shown.detail !== undefined;
+  const detail = useMemo(() => shown.detail ?? unread(shown.artist), [shown.detail, shown.artist]);
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
   const currentId = useCurrentTrackId();
   const favorites = useFavoriteIds();
   const tile = useAlbumTileSize(grid.margin);
-  const rowState = useMemo(() => ({ currentId, favorites, tile }), [currentId, favorites, tile]);
   // In the sort chosen for artists; Play, Shuffle and rows all play this displayed order.
   const { songs } = useSortedSongs("artist", detail.songs);
   const items = useMemo(() => artistItems(detail, songs), [detail, songs]);
+  // Albums and songs select together; the bar acts on them in page order.
+  const selectable = useMemo(() => selectableItems(detail, songs), [detail, songs]);
+  const page = useListSelection({ items: selectable, keyOf: selectableKey, target: mixedTarget });
+  const albumSelection = useMemo(() => albumSelectionOf(page), [page]);
+  const { selection } = page;
+  const rowState = useMemo(
+    () => ({ currentId, favorites, tile, selection }),
+    [currentId, favorites, tile, selection],
+  );
   const context = useMemo(
     () => ({ kind: "artist", id: String(detail.artist.id) }) as const,
     [detail.artist.id],
@@ -81,7 +155,7 @@ function ArtistContent({ detail }: { detail: ArtistDetail }) {
             </View>
           );
         case "albums":
-          return <AlbumPair albums={item.albums} size={tile} />;
+          return <AlbumPair albums={item.albums} size={tile} selection={albumSelection} />;
         case "track":
           return (
             <TrackRow
@@ -89,18 +163,22 @@ function ArtistContent({ detail }: { detail: ArtistDetail }) {
               state={String(item.song.id) === currentId ? "playing" : undefined}
               favorite={favorites.has(item.song.id)}
               leading="artwork"
-              onPress={() => playSongs(songs, item.index, context)}
-              onLongPress={() => openTrackActions(item.song)}
+              {...selectableRow(
+                trackItem(item.song),
+                page,
+                () => playSongs(songs, item.index, context),
+                (options) => openTrackActions(item.song, options),
+              )}
             />
           );
       }
     },
-    [context, currentId, favorites, songs, tile],
+    [context, currentId, favorites, songs, tile, albumSelection, page],
   );
 
   const line = [
     detail.artist.albumCount > 0 ? albumsLine(detail.artist.albumCount) : null,
-    songCount(songs.length),
+    songCount(loaded ? songs.length : detail.artist.trackCount),
   ]
     .filter((part) => part !== null)
     .join(" · ");
@@ -126,26 +204,41 @@ function ArtistContent({ detail }: { detail: ArtistDetail }) {
       contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottomInset }}
       ListHeaderComponent={
         <>
+          <ArtistHead artist={detail.artist} />
           <ListIntro
             line={line}
-            songs={songs}
+            songs={loaded ? songs : undefined}
             context={context}
             sortControl={<SongSortButton kind="artist" />}
           />
-          <ArtistStatsBlock artistId={detail.artist.id} songs={detail.songs} />
+          {loaded && <ArtistStatsBlock artistId={detail.artist.id} songs={detail.songs} />}
         </>
       }
     />
   );
 }
 
-/** An artist: their albums, the albums they appear on, and their songs. */
+/**
+ * An artist: their albums, the albums they appear on, and their songs. Opened
+ * from a list that knows the artist, the head is there on the first frame and
+ * the rest follows once read.
+ */
 export default function ArtistScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const detail = useArtist(parseId(id));
+  const artistId = parseId(id);
+  const detail = useArtist(artistId);
+  const known = useKnownRow("artist", artistId);
+  const shown: Shown | null | undefined =
+    detail === undefined
+      ? known === undefined
+        ? undefined
+        : { artist: known, detail: undefined }
+      : detail === null
+        ? null
+        : { artist: detail.artist, detail };
   return (
-    <DetailFrame detail={detail} noun="artist" title={(artist) => artist.artist.name}>
-      {(artist) => <ArtistContent detail={artist} />}
+    <DetailFrame detail={shown} noun="artist">
+      {(artist) => <ArtistContent shown={artist} />}
     </DetailFrame>
   );
 }

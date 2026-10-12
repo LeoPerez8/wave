@@ -140,7 +140,7 @@ The world rejects the category default it was chosen against: bold large titles,
 
 - Tinted fog / night-slate ground; neutrals from one ramp (OKLCH hue ~215).
 - One 8dp cell module for every dimension.
-- Artwork as photographs: square, unrounded, unframed.
+- Artwork as photographs: square, unrounded, unframed (artists are circles; the mini player's thumbnail follows its pill).
 - Light large titles; one size per list, rank by weight and tint.
 - Small tracked-caps catalog lines for section heads and cover captions.
 - Teal for active, ember for favorite and now playing; nothing else is coloured, save the red on a Delete or Remove button.
@@ -157,7 +157,7 @@ A cool, low-chroma tonal ramp carrying two small, saturated voices: teal and emb
 
 ### Secondary
 
-- **Ember** (`highlight`; burnt orange in light, a warm apricot in dark): favorite and now playing. The playing track's title and speaker glyph, the favorite star. Ember means "this one is yours, or this one is sounding".
+- **Ember** (`highlight`; burnt orange in light, a warm apricot in dark): favorite and now playing. The playing track's title and its wavy underline, the favorite star. Ember means "this one is yours, or this one is sounding".
 
 ### Destructive
 
@@ -170,6 +170,7 @@ A cool, low-chroma tonal ramp carrying two small, saturated voices: teal and emb
 - **Graphite** (`secondary`): artists, counts, durations, furniture lines, catalog lines, inactive spine letters, helper copy.
 - **Pewter** (`tertiary`): non-text only. Disabled icon buttons, the missing-file glyph, the placeholder note on artless covers.
 - **Rule** (`separator`): one-pixel hairlines between entries and around setting rows.
+- **Card divider**: on overlay cards (menus, dialogs) the separator tone vanishes on glass, so their rules are the ink laid at about a quarter strength, two pixels thick (Core's `overlayDivider`). `Hairline` draws it by itself inside any overlay card; one sits between each pair of entries, never after the last.
 - **Field** (`fill`): the square behind artwork that has no image, and empty cover slots.
 
 The full ramp lives in `global.css` as `tone-0` (lightest, `#eff4f6`) to `tone-11` (darkest, `#0a1113`); each semantic token is a step on it, in both themes. Light mode uses `tone-0` to `tone-10` (its ink is `tone-10`); `tone-11` is dark mode's ground only, and dark cards and fills (`tone-10`) and hairlines (`tone-9`) climb one step each from it, evenly spaced, so light mode never changes when dark mode gets darker. Core's `packages/core/src/theme.ts` holds the same values (`DEFAULT_THEME`, `TONES`) and checks WCAG AA for every pair the app draws (`themeContrastIssues`); an app test fails if `global.css` or the launch splash drift from it. `surface` is the tint laid over the glass of the floating chrome (at about 72%); `scrim` is the veil behind dialog and menu cards, laid at a quarter strength: the ink in light mode, the ground in dark. `grouped` and `on-accent` are also declared there but are not yet used by this world's components.
@@ -222,7 +223,7 @@ Everything is a whole (or half/quarter) multiple of the 8dp cell (`CELL` in `src
 
 Album grids are two columns. Tile width is computed from the window: screen width minus the left margin, the spine and its inset, and one gutter, halved. Each tile reserves a fixed 96dp caption block (catalog line, two lines of title, furniture line), so every furniture line lands in the same place.
 
-Rows are fixed-height (56dp), so long lists can be laid out by index and scroll at 120 Hz. Every track row reserves the same cells whether or not they are filled: leading thumbnail or track-number cell, title and artist, a state cell (playing / missing), a favorite cell, and a right-aligned 40dp duration. State never shifts the layout.
+Rows are fixed-height (56dp), so long lists can be laid out by index and scroll at 120 Hz. Every track row reserves the same cells whether or not they are filled: leading thumbnail or track-number cell (in selection mode, a check cell before it), title and artist, a favorite cell, and a right-aligned 40dp duration. The playing track needs no cell of its own: it is marked on the title itself (ember, with a wavy underline). A missing file's glyph takes the track-number cell in album lists and, in Songs lists, sits after the text, taking its room from the title. State never moves the favorite or duration cells.
 
 The A–Z spine sits 24dp in from the right edge, not on it, to stay clear of Android's system Back gesture zone (Android only lets an app exclude 200dp per edge). Lists that carry a spine pad their right side by spine plus inset (48dp). The spine's touch target is 48dp wide even though only 24dp is drawn.
 
@@ -230,7 +231,7 @@ The A–Z spine sits 24dp in from the right edge, not on it, to stay clear of An
 
 **The One Module Rule.** If a dimension isn't a multiple of 8dp (or a half/quarter of it, for type-adjacent gaps), it's wrong.
 
-**The Fixed Cell Rule.** Each piece of row state owns a fixed cell in every row. Reserve the cell even when empty.
+**The Fixed Cell Rule.** Each piece of row state drawn as a glyph (favorite, check, track number) owns a fixed cell in every row; reserve the cell even when empty. Playing is marked on the title, not in a cell.
 
 **The Back Zone Rule.** Nothing draggable lives in the outer 24dp of a screen edge.
 
@@ -248,11 +249,11 @@ The world is flat. There are no shadows, no elevation and no gradients (save the
 
 ## Shapes
 
-Square everywhere. Artwork, empty cover slots, track thumbnails and placeholder fields have no corner radius and no frame. Structure is drawn with one-pixel hairlines in the separator tone, running the full content width between entries; there are no boxed cards and no chips. What floats is the exception: the chrome's glass surfaces are pills (fully rounded ends) and dialog cards have 24dp corners, set apart from the square content beneath. The recurring silhouettes are the thin vertical column of spine letters on the right and the pills at the bottom.
+Square everywhere. Artwork, empty cover slots, track thumbnails and placeholder fields have no corner radius and no frame, with two exceptions that take the shape of what holds them: artists' circles (below) and the mini player's thumbnail, whose corners are concentric with its glass pill. Structure is drawn with one-pixel hairlines in the separator tone, running the full content width between entries; there are no boxed cards and no chips. What floats is the exception: the chrome's glass surfaces are pills (fully rounded ends) and dialog cards have 24dp corners, set apart from the square content beneath. Artists are circles: their image (their downloaded photo when there is one, else Core's `artistArtwork`: the cover of their own album with the most songs, else the album they appear on most), or their initial in graphite on a `fill` circle when they have no artwork, so artists read apart from albums. Rows lead with a 40dp circle, Home's artist shelf and the artist page head with a large one. The recurring silhouettes are the thin vertical column of spine letters on the right and the pills at the bottom.
 
 ### Named Rules
 
-**The Photograph Rule.** Artwork is a photograph: square, unrounded, unbordered, never inside card chrome.
+**The Photograph Rule.** Artwork is a photograph: square, unrounded, unbordered, never inside card chrome. Two exceptions, both deliberate: an artist's image is a circle, so artists read apart from albums; and the mini player's thumbnail rounds its corners concentric with the glass pill around it (the pill's radius minus the thumbnail's inset, Core's `concentricRadius`), so it follows the pill's curve. Nowhere else does artwork round.
 
 ## Components
 
@@ -283,7 +284,7 @@ The Library's entries (Playlists, Artists, Albums, Songs, Genres, Folders, Favor
 
 ### Track Row
 
-56dp, fixed cells, one type size. Songs lists lead with a 40dp square thumbnail and put the state cell after the text; album track lists lead with the track number in a 32dp cell, which the state glyph replaces. Playing: title and speaker glyph in ember. Missing file: title in graphite, artist line reads "File not found", a file-off glyph in pewter, and the row is disabled. Favorite: a small filled star in ember in its own 24dp cell. Duration in tabular Footnote, right-aligned. Stats rankings use the numbered row with the rank as the number (the top one in ember, 500) and the counted plays after the artist ("Artist · 12 plays").
+56dp, fixed cells, one type size. Songs lists lead with a 40dp square thumbnail; album track lists lead with the track number in a 32dp cell. Playing: title in ember with a thin ember wavy underline spanning its visible text, rippling while music plays and still when paused (static under reduce motion or tap animation 0 ms). Missing file: title in graphite, artist line reads "File not found", a file-off glyph in pewter (after the text in Songs lists, in place of the number in album lists), and the row is disabled. Favorite: a small filled star in ember in its own 24dp cell. Duration in tabular Footnote, right-aligned. Stats rankings use the numbered row with the rank as the number (the top one in ember, 500) and the counted plays after the artist ("Artist · 12 plays").
 
 ### Album Tile
 
@@ -300,7 +301,7 @@ Small tracked caps (Label) in graphite by default, with teal and ember tones ava
 - **In-screen switches** (Albums / Songs) are text tabs in Body: selected is 600 ink with a 2dp teal underline, unselected is 400 graphite; each tab is at least 48dp tall.
 - **Tab bar** floats a cell above the system inset with 24dp side margins: Home and Library share one 64dp glass pill (24dp line icon over a Caption 600 label, teal when current, graphite otherwise), joined by the shortcut tab (a Library section chosen in Settings, with its section's icon) when there is one, and Search sits beside it, a cell apart, in its own 64dp round glass pill with the icon only. Tabs press with `selection` haptics.
 - **Shortcut tab:** what it opens (an artist, an album…) is pushed inside the tab, under the tab bar, and stays open while another tab is showing; the same screens opened from the Library are pushed over the tabs.
-- **Mini player** floats a cell above the tab bar (or above the system inset on pushed Library screens) in a 56dp glass pill with the same side margins: a 40dp square thumbnail, title (Body 500) over artist (Body 400 graphite), then play/pause and next as icon buttons. Tap it, or swipe it up, to open Now Playing. Swipe left for the next track, right for the previous one: the content follows the finger and fades, and a skip leaves the way it was pushed with a light `impact` haptic; a short slow drag springs back. Screen readers get "Next track" / "Previous track" actions instead of the swipe.
+- **Mini player** floats a cell above the tab bar (or above the system inset on pushed Library screens) in a 56dp glass pill with the same side margins: a 40dp thumbnail whose corners are concentric with the pill (Core's `concentricRadius` works the radius out from the pill's height, radius and the thumbnail's 12dp inset; the no-artwork placeholder has the same corners), title (Body 500) over artist (Body 400 graphite), then play/pause and next as icon buttons. Tap it, or swipe it up, to open Now Playing. Swipe left for the next track, right for the previous one: the content follows the finger and fades, and a skip leaves the way it was pushed with a light `impact` haptic; a short slow drag springs back. Screen readers get "Next track" / "Previous track" actions instead of the swipe.
 
 ### Now Playing
 
@@ -333,7 +334,7 @@ A 40dp line icon in pewter, an Entry-type title in ink, a Subheadline message in
 - **Do** take every neutral from the tone ramp and name it by its semantic token (`background`, `foreground`, `secondary`, `tertiary`, `separator`, `fill`).
 - **Do** keep teal for active state and ember for favorite / now playing.
 - **Do** rank list text by weight and tint at one size, and use tabular figures for counts, durations and furniture lines.
-- **Do** reserve every row's state, favorite and duration cells even when empty.
+- **Do** reserve every row's leading, favorite and duration cells even when empty; mark the playing track on its title, not in a cell.
 - **Do** build every tappable element on Press, so the owner's tap animation setting reaches it.
 - **Do** keep draggable controls at least 24dp in from the screen edge, clear of the Back gesture zone.
 - **Do** give every target at least 48dp, even when the drawn element is smaller.
@@ -341,7 +342,7 @@ A 40dp line icon in pewter, an Entry-type title in ink, a Subheadline message in
 ### Don't:
 
 - **Don't** put a screen on plain `#ffffff` or `#000000`.
-- **Don't** round, frame or shadow artwork, or wrap it in a card.
+- **Don't** round, frame or shadow artwork, or wrap it in a card. The only rounded images are artists' circles and the mini player's thumbnail, concentric with its pill.
 - **Don't** use bold large titles; titles are weight 300.
 - **Don't** add icons or chevrons to Library entry rows.
 - **Don't** set text in `tertiary`.

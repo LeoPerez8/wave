@@ -8,7 +8,7 @@ import { playHistoryVersion } from "@/playback/PlayHistory";
 
 import type { LibraryCounts } from "./db/counts";
 import type { HomeSections } from "./db/playHistory";
-import { libraryVersion, scanState, type ScanState } from "./LibraryScan";
+import { libraryEdits, libraryVersion, scanState, type ScanState } from "./LibraryScan";
 import {
   LibraryStore,
   type AlbumDetail,
@@ -76,10 +76,11 @@ const useLibraryQuery = <A>(
   query: Effect.Effect<A, LibraryStoreError, LibraryStore>,
   initial: A,
   /** Changes when the owner edits what the query reads (a playlist, a star): re-run at once. */
-  edits = 0,
+  queryEdits = 0,
 ): A => {
   const [value, setValue] = useState(initial);
   const version = useSyncExternalStore(libraryVersion.subscribe, libraryVersion.get);
+  const edits = queryEdits + useSyncExternalStore(libraryEdits.subscribe, libraryEdits.get);
   const lastRun = useRef(0);
   const lastEdits = useRef(edits);
   const mounted = useRef(true);

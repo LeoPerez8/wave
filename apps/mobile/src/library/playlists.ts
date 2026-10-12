@@ -47,5 +47,8 @@ export const movePlaylistItem = (
   toIndex: number,
 ): Promise<void> => edit((store) => store.movePlaylistItem(playlistId, itemId, toIndex));
 
-export const removePlaylistItem = (playlistId: number, itemId: number): Promise<void> =>
-  edit((store) => store.removePlaylistItem(playlistId, itemId));
+/** Removes these entries (not every copy of their songs) from the playlist. */
+export const removePlaylistItems = (
+  playlistId: number,
+  itemIds: readonly number[],
+): Promise<void> => edit((store) => store.removePlaylistItems(playlistId, itemIds));

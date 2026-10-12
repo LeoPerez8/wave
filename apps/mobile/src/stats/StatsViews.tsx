@@ -1,6 +1,6 @@
 import { IconChartBar } from "@tabler/icons-react-native";
 import { LegendList } from "@legendapp/list/react-native";
-import { STATS_PERIODS, type QueueContext, type StatsPeriod } from "@wave/core";
+import { counted, STATS_PERIODS, type QueueContext, type StatsPeriod } from "@wave/core";
 import { useCallback, useMemo, type ReactElement } from "react";
 import { Text, View } from "react-native";
 
@@ -23,8 +23,7 @@ import type { Ranked } from "./Stats";
 import { useListScrollable } from "@/motion/heldTouch";
 
 /** "3 plays", "1 play". */
-export const playCount = (count: number): string =>
-  `${count.toLocaleString("en")} ${count === 1 ? "play" : "plays"}`;
+export const playCount = (count: number): string => counted(count, "play");
 
 /** What tapping a song in a period's song ranking plays: that ranking. */
 export const statsSongsContext = (period: StatsPeriod): QueueContext => ({
@@ -153,7 +152,7 @@ function renderRankedAlbum({ item: album, countedPlays }: Ranked<AlbumRow>, inde
       detail={`${album.albumArtist} · ${playCount(countedPlays)}`}
       artworkUri={album.thumbPath === null ? undefined : `file://${album.thumbPath}`}
       rank={{ number: index + 1, top: index === 0 }}
-      onPress={() => openAlbum(album.id)}
+      onPress={() => openAlbum(album.id, album)}
       onLongPress={() => openAlbumActions(album)}
     />
   );
@@ -164,9 +163,10 @@ function renderRankedArtist({ item: artist, countedPlays }: Ranked<ArtistRow>, i
   return (
     <NameRow
       name={artist.name}
+      artist={artist}
       detail={playCount(countedPlays)}
       rank={{ number: index + 1, top: index === 0 }}
-      onPress={() => openArtist(artist.id)}
+      onPress={() => openArtist(artist.id, artist)}
       onLongPress={() => openArtistActions(artist)}
     />
   );

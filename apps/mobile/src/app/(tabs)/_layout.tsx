@@ -9,6 +9,8 @@ import { TabBar } from "@/chrome/TabBar";
 import { useTabEntry } from "@/chrome/tabEntry";
 import { openNowPlaying } from "@/nowPlaying/sheet";
 import { MiniPlayer } from "@/playback/MiniPlayer";
+import { useIsSelecting } from "@/selection/selection";
+import { SelectionChrome } from "@/selection/SelectionChrome";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 /**
@@ -21,6 +23,7 @@ import { useThemeColor } from "@/theme/useThemeColor";
 export default function TabsLayout() {
   const background = useThemeColor("background");
   const entry = useTabEntry(tabOfPath(usePathname()));
+  const selecting = useIsSelecting();
   return (
     <ChromeProvider tabBar>
       <Tabs style={{ flex: 1, backgroundColor: background }}>
@@ -36,8 +39,15 @@ export default function TabsLayout() {
           <TabTrigger name="shortcut" href={TAB_PATH.shortcut} />
           <TabTrigger name="search" href={TAB_PATH.search} />
         </TabList>
-        <MiniPlayer backdropId={BACKDROP.tabs} onOpen={openNowPlaying} />
-        <TabBar onTabTap={entry.noteTap} />
+        {/* A list selecting swaps the mini player and tab bar for its selection bar. */}
+        {selecting ? (
+          <SelectionChrome backdropId={BACKDROP.tabs} />
+        ) : (
+          <>
+            <MiniPlayer backdropId={BACKDROP.tabs} onOpen={openNowPlaying} />
+            <TabBar onTabTap={entry.noteTap} />
+          </>
+        )}
       </Tabs>
     </ChromeProvider>
   );

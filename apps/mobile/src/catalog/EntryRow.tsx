@@ -20,6 +20,8 @@ type Props = {
   highlighted?: boolean;
   /** The current choice among the card's entries (a sort): marked with a check. */
   selected?: boolean;
+  /** Deletes something (a song's file): the label in the destructive colour. */
+  destructive?: boolean;
 };
 
 /** A Library entry (Playlists, Artists, …): one quiet line of type, no icon, no chevron. */
@@ -31,6 +33,7 @@ export function EntryRow({
   divider = true,
   highlighted = false,
   selected = false,
+  destructive = false,
 }: Props) {
   const accent = useThemeColor("accent");
   return (
@@ -44,7 +47,11 @@ export function EntryRow({
       highlighted={highlighted}
     >
       <View className="flex-row items-center" style={{ height: grid.row }}>
-        <Text className="flex-1 font-sans text-title3 font-normal text-foreground">{label}</Text>
+        <Text
+          className={`flex-1 font-sans text-title3 font-normal ${destructive ? "text-destructive" : "text-foreground"}`}
+        >
+          {label}
+        </Text>
         {selected ? (
           <IconCheck size={22} color={accent} strokeWidth={1.75} />
         ) : (

@@ -1,4 +1,4 @@
-import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { type AnySQLiteColumn, index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 /**
  * Library schema. The store is the single owner of these tables; every change
@@ -16,6 +16,11 @@ export const artists = sqliteTable(
     key: text("key").notNull().unique(),
     name: text("name").notNull(),
     sort: text("sort").notNull(),
+    /**
+     * The artist's image, an album cover picked by Core's `artistArtwork`;
+     * null for none (the initial placeholder). Re-picked after every scan.
+     */
+    artworkHash: text("artwork_hash").references((): AnySQLiteColumn => artwork.hash),
   },
   (t) => [index("artists_sort_idx").on(t.sort)],
 );
@@ -121,6 +126,23 @@ export const tracks = sqliteTable(
   ],
 );
 
+/**
+ * Artist photos downloaded from an online service, and lookups that found
+ * none: one row per artist key (`artists.key`), kept when the artist leaves
+ * the library so the photo isn't fetched again if they come back.
+ */
+export const artistPhotos = sqliteTable("artist_photos", {
+  artistKey: text("artist_key").primaryKey(),
+  /** Core's `ArtistPhotoOutcome`. */
+  outcome: text("outcome", { enum: ["found", "unmatched", "failed"] }).notNull(),
+  /** When the lookup was made (Core's `artistPhotoLookups` decides when to retry a miss). */
+  checkedAt: integer("checked_at").notNull(),
+  /** The large photo (artist page); set when `found`. */
+  path: text("path"),
+  /** The thumbnail (lists, menus); set when `found`. */
+  thumbPath: text("thumb_path"),
+});
+
 /** Folders Wave indexes. */
 export const scanRoots = sqliteTable("scan_roots", {
   path: text("path").primaryKey(),
@@ -221,6 +243,14 @@ export const playEvents = sqliteTable(
     source: text("source", { enum: ["phone", "auto"] })
       .notNull()
       .default("phone"),
+    /**
+     * The track's album and track artist, written when the track leaves the
+     * library (`deleteTracks`) so its plays keep counting for them in Stats.
+     * Null while the track is in the library (read the track instead), and for
+     * tracks that left before Wave kept them.
+     */
+    albumId: integer("album_id"),
+    artistId: integer("artist_id"),
   },
   (t) => [
     index("play_events_track_idx").on(t.trackId),

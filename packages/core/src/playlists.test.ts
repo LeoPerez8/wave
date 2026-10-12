@@ -3,11 +3,13 @@ import { describe, test } from "node:test";
 
 import {
   checkPlaylistName,
+  confirmPlaylistDeletion,
   describePlaylistAdd,
   moveItem,
   nextPlaylistName,
   planPlaylistAdd,
   playlistMosaic,
+  playlistRemovals,
 } from "./index.ts";
 
 describe("checkPlaylistName", () => {
@@ -140,5 +142,44 @@ describe("playlistMosaic", () => {
   test("an empty playlist, or one with no artwork at all, has no covers", () => {
     assert.deepEqual(playlistMosaic([]), []);
     assert.deepEqual(playlistMosaic([null, null]), []);
+  });
+});
+
+describe("confirmPlaylistDeletion", () => {
+  test("one playlist is named; its songs stay", () => {
+    assert.deepEqual(confirmPlaylistDeletion([{ name: "Road Trip" }]), {
+      title: "Delete Road Trip?",
+      message: "Its songs stay in your library.",
+      action: { label: "Delete", destructive: true },
+    });
+  });
+
+  test("several are counted, asked once", () => {
+    assert.deepEqual(confirmPlaylistDeletion([{ name: "A" }, { name: "B" }, { name: "C" }]), {
+      title: "Delete 3 playlists?",
+      message: "Their songs stay in your library.",
+      action: { label: "Delete", destructive: true },
+    });
+  });
+});
+
+describe("playlistRemovals", () => {
+  test("one removal per playlist, in the order first checked, with exactly the checked entries", () => {
+    assert.deepEqual(
+      playlistRemovals([
+        { playlistId: 2, itemId: 20 },
+        { playlistId: 1, itemId: 10 },
+        { playlistId: 2, itemId: 21 },
+        { playlistId: 2, itemId: 25 },
+      ]),
+      [
+        { playlistId: 2, itemIds: [20, 21, 25] },
+        { playlistId: 1, itemIds: [10] },
+      ],
+    );
+  });
+
+  test("nothing checked removes nothing", () => {
+    assert.deepEqual(playlistRemovals([]), []);
   });
 });

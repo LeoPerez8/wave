@@ -1,12 +1,14 @@
 import { IconPlus } from "@tabler/icons-react-native";
 import {
   checkPlaylistName,
+  confirmPlaylistDeletion,
+  counted,
   describePlaylistAdd,
   nextPlaylistName,
   type PlaylistNameCheck,
 } from "@wave/core";
-import { useState } from "react";
-import { ScrollView, Text, TextInput, ToastAndroid, View } from "react-native";
+import { Fragment, useState } from "react";
+import { Text, TextInput, ToastAndroid, View } from "react-native";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
@@ -15,11 +17,12 @@ import { PlaylistEntry } from "@/catalog/PlaylistEntry";
 import { TextButton } from "@/components/TextButton";
 import { Press } from "@/motion/Press";
 import { confirmAction } from "@/overlay/alert";
-import { openOverlay, presentOverlay } from "@/overlay/overlay";
+import { CardEntries } from "@/overlay/CardEntries";
+import { followUp, openOverlay, presentOverlay } from "@/overlay/overlay";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { usePlaylists } from "./hooks";
-import type { SongRow } from "./LibraryStore";
+import type { PlaylistRow, SongRow } from "./LibraryStore";
 import {
   addToPlaylist,
   createPlaylist,
@@ -29,9 +32,6 @@ import {
 } from "./playlists";
 
 const toast = (message: string): void => ToastAndroid.show(message, ToastAndroid.SHORT);
-
-const songCount = (count: number): string =>
-  `${count.toLocaleString("en")} ${count === 1 ? "song" : "songs"}`;
 
 const failed = (what: string) => (): void => toast(`Couldn't ${what}`);
 
@@ -167,21 +167,24 @@ function AddCard({ subject, close }: { subject: AddSubject; close: () => void })
         </View>
         <Text className="font-sans text-body font-medium text-accent">New Playlist</Text>
       </Press>
-      {/* The card stops short of the screen edges; a long list scrolls inside it. */}
-      <ScrollView style={{ flexGrow: 0, flexShrink: 1 }}>
+      {/* The card stops short of the screen edges; a long list scrolls inside it.
+          Each playlist follows a divider, so none trails the last. */}
+      <CardEntries>
         {playlists.map((playlist) => (
-          <PlaylistEntry
-            key={playlist.id}
-            name={playlist.name}
-            detail={songCount(playlist.trackCount)}
-            paths={playlist.thumbPaths}
-            onPress={() => {
-              close();
-              addSongs(playlist.id, subject.songs);
-            }}
-          />
+          <Fragment key={playlist.id}>
+            <Hairline />
+            <PlaylistEntry
+              name={playlist.name}
+              detail={counted(playlist.trackCount, "song")}
+              paths={playlist.thumbPaths}
+              onPress={() => {
+                close();
+                addSongs(playlist.id, subject.songs);
+              }}
+            />
+          </Fragment>
         ))}
-      </ScrollView>
+      </CardEntries>
     </>
   );
 }
@@ -194,7 +197,11 @@ function AddCard({ subject, close }: { subject: AddSubject; close: () => void })
  * songs that turn out to be none (an empty Favorites), it creates nothing.
  * Resolves with the new playlist's id, or null when cancelled or not created.
  */
-export const newPlaylist = async (
+export const newPlaylist = (songs?: () => Promise<readonly SongRow[]>): Promise<number | null> =>
+  // The name prompt highlights what the flow was started from.
+  followUp(() => createNamedPlaylist(songs));
+
+const createNamedPlaylist = async (
   songs?: () => Promise<readonly SongRow[]>,
 ): Promise<number | null> => {
   // Loads while the name is typed; a failure surfaces once the songs are needed.
@@ -227,10 +234,13 @@ export const newPlaylist = async (
   }
 };
 
-export const renamePlaylistFlow = async (playlist: {
-  readonly id: number;
-  readonly name: string;
-}): Promise<void> => {
+/** What renaming or deleting a playlist needs to know about it (any `PlaylistRow` will do). */
+export type NamedPlaylist = Pick<PlaylistRow, "id" | "name">;
+
+export const renamePlaylistFlow = (playlist: NamedPlaylist): Promise<void> =>
+  followUp(() => renameNamedPlaylist(playlist));
+
+const renameNamedPlaylist = async (playlist: NamedPlaylist): Promise<void> => {
   const names = await playlistNames();
   const name = await askName({
     title: "Rename playlist",
@@ -243,19 +253,31 @@ export const renamePlaylistFlow = async (playlist: {
   await renamePlaylist(playlist.id, name).catch(failed("rename the playlist"));
 };
 
-/** Asks before deleting; `onDeleted` runs once it's gone (leave its screen). */
-export const confirmDeletePlaylist = (
-  playlist: { readonly id: number; readonly name: string },
-  onDeleted?: () => void,
-): void =>
-  void confirmAction({
-    title: `Delete ${playlist.name}?`,
-    message: "Its songs stay in your library.",
-    action: { label: "Delete", destructive: true },
-  }).then((confirmed) =>
-    confirmed
-      ? deletePlaylist(playlist.id)
-          .then(() => onDeleted?.())
-          .catch(failed("delete the playlist"))
-      : undefined,
-  );
+/**
+ * Asks once before deleting [playlists] ("Delete 3 playlists?"). `onConfirm`
+ * runs once confirmed, before they go (the selection bar ends selection mode
+ * there, so Cancel keeps it); `onDeleted` once they're gone (leave a deleted
+ * playlist's screen).
+ */
+export const confirmDeletePlaylists = (
+  playlists: readonly NamedPlaylist[],
+  {
+    onConfirm,
+    onDeleted,
+  }: {
+    readonly onConfirm?: (() => void) | undefined;
+    readonly onDeleted?: (() => void) | undefined;
+  } = {},
+): void => {
+  if (playlists.length === 0) return;
+  void confirmAction(confirmPlaylistDeletion(playlists)).then(async (confirmed) => {
+    if (!confirmed) return;
+    onConfirm?.();
+    try {
+      for (const playlist of playlists) await deletePlaylist(playlist.id);
+      onDeleted?.();
+    } catch {
+      failed(playlists.length === 1 ? "delete the playlist" : "delete the playlists")();
+    }
+  });
+};

@@ -69,13 +69,20 @@ export type {
 export {
   PLAYLIST_NAME_MAX,
   checkPlaylistName,
+  confirmPlaylistDeletion,
   describePlaylistAdd,
   moveItem,
   nextPlaylistName,
   planPlaylistAdd,
   playlistMosaic,
+  playlistRemovals,
 } from "./playlists.ts";
-export type { PlaylistAdd, PlaylistNameCheck } from "./playlists.ts";
+export type {
+  PlaylistAdd,
+  PlaylistNameCheck,
+  PlaylistPlace,
+  PlaylistRemoval,
+} from "./playlists.ts";
 export { resolveRemoveSwipe } from "./rowGestures.ts";
 export { currentLyricIndex, parseLyrics, pickLyrics } from "./lyrics.ts";
 export type { LyricLine, Lyrics, LyricsSources } from "./lyrics.ts";
@@ -159,10 +166,10 @@ export type {
   LibrarySectionSource,
   SectionCollection,
 } from "./librarySections.ts";
-export { placeOverlayCard } from "./overlay.ts";
+export { cardKeyboard, entryDivider, placeOverlayCard } from "./overlay.ts";
 export type { OverlayCardFrame, OverlayCardInput, OverlayInsets } from "./overlay.ts";
 export type { OverlayAnchor, OverlayRect } from "./overlay.ts";
-export type { OverlayAlign } from "./overlay.ts";
+export type { CardKeyboard, OverlayAlign, OverlayFlow } from "./overlay.ts";
 export { moveSlide, slideEntry, slideTicks, startSlide } from "./slideToChoose.ts";
 export type { MenuSlide, SlidePoint } from "./slideToChoose.ts";
 export { SHORTCUT_TAB_CHOICES, parseShortcutTab, tabBarTabs } from "./shortcutTab.ts";
@@ -172,6 +179,8 @@ export type { DetailScreen } from "./navigation.ts";
 export { planAlert } from "./alert.ts";
 export type { AlertButton, AlertChoice, AlertPlan, AlertSpec } from "./alert.ts";
 export { DEFAULT_THEME, TONES, themeContrastIssues } from "./theme.ts";
+export { withOpacity } from "./colour.ts";
+export { overlayDivider } from "./overlayDivider.ts";
 export type { ContrastIssue, Theme, ThemeColors } from "./theme.ts";
 export {
   DEFAULT_THEME_CHOICE,
@@ -191,6 +200,7 @@ export type {
 } from "./themeChoice.ts";
 export { sliderFraction, sliderValueAt, snapSliderValue, stepSlider } from "./slider.ts";
 export type { SliderRange } from "./slider.ts";
+export { LONG_PRESS_DELAY, readLongPressDelay, snapLongPressDelay } from "./longPress.ts";
 export {
   DEFAULT_GLASS_SETTINGS,
   GLASS_SETTINGS,
@@ -199,7 +209,7 @@ export {
   readGlassSettings,
 } from "./glassSettings.ts";
 export type { GlassSettings } from "./glassSettings.ts";
-export { listeningOverview, listeningTotals } from "./listening.ts";
+export { counted, listeningOverview, listeningTotals } from "./listening.ts";
 export type {
   LibraryTotals,
   ListeningFilter,
@@ -222,3 +232,63 @@ export {
   writeSongSort,
 } from "./songSort.ts";
 export type { SongListKind, SongSort, SongSortKey, SortableSong } from "./songSort.ts";
+export {
+  allSelected,
+  clearSelection,
+  isSelected,
+  NO_SELECTION,
+  selectAll,
+  selectedCount,
+  selectedInOrder,
+  selectionOf,
+  toggleSelected,
+  withSelectedKept,
+} from "./selection.ts";
+export type { Selection } from "./selection.ts";
+export { groupSongs } from "./groupSongs.ts";
+export {
+  commonKind,
+  actionBarLabel,
+  confirmsFirst,
+  isDestructiveAction,
+  ITEM_ACTION_LABELS,
+  itemActions,
+  splitActionBar,
+} from "./itemActions.ts";
+export type {
+  ActionItem,
+  ActionSubject,
+  ActionSurface,
+  ItemAction,
+  ItemActionEntry,
+  ItemKind,
+} from "./itemActions.ts";
+export { concentricRadius } from "./corners.ts";
+export type { InsetSquare } from "./corners.ts";
+export { underlineMotion, wavePath } from "./wavyUnderline.ts";
+export type { UnderlineMotion, UnderlineMotionInput, WaveShape } from "./wavyUnderline.ts";
+export { highlightedOrigin, originOfNewCard, veilAround } from "./overlayOrigin.ts";
+export type { NewCardInput, OriginCard } from "./overlayOrigin.ts";
+export { confirmSongDeletion, songDeletionFailure } from "./songDeletion.ts";
+export type { SongDeleteFailure, SongDeleteFailureReason } from "./songDeletion.ts";
+export { artistArtwork, artistInitial } from "./artistImage.ts";
+export type { ArtistAlbumLink } from "./artistImage.ts";
+export { rowWindow, windowRows } from "./rowWindow.ts";
+export type { RowView, RowWindow } from "./rowWindow.ts";
+export {
+  ARTIST_PHOTO_RETRY_MS,
+  artistPhotoLookups,
+  artistPhotoName,
+  artistPhotoQuery,
+  artistPhotosUnreachable,
+  deezerArtistCandidates,
+  deezerArtistSearchUrl,
+  failuresInARow,
+  pickArtistPhoto,
+} from "./artistPhoto.ts";
+export type {
+  ArtistPhotoCandidate,
+  ArtistPhotoCheck,
+  ArtistPhotoOutcome,
+  ArtistPhotoUrls,
+} from "./artistPhoto.ts";

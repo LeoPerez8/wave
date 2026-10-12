@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Environment
 import android.os.storage.StorageManager
@@ -15,8 +16,11 @@ import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.wavenative.artwork.AndroidArtworkProcessor
+import expo.modules.wavenative.artwork.ArtistPhotoStore
 import expo.modules.wavenative.artwork.ArtworkInfo
 import expo.modules.wavenative.artwork.ArtworkStore
+import expo.modules.wavenative.files.DeleteOutcome
+import expo.modules.wavenative.files.TrackFileDeleter
 import expo.modules.wavenative.folders.TreeUris
 import expo.modules.wavenative.lyrics.LyricsReader
 import expo.modules.wavenative.scan.KnownFile
@@ -34,8 +38,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * Wave's native side: all-files access, the folder picker, the library scanner and
- * lyrics. Scans run one at
+ * Wave's native side: all-files access, the folder picker, the library scanner,
+ * lyrics, deleting songs' files and saving artist photos. Scans run one at
  * a time on a background thread and stream results to JS as events:
  * `onScanProgress`, `onScanMissing`, `onScanBatch`, `onScanComplete` and
  * `onScanError`, each carrying the `scanId` returned by `startScan`.
@@ -155,11 +159,42 @@ class WaveNativeModule : Module() {
       mapOf("embedded" to sources.embedded, "sidecar" to sources.sidecar)
     }
 
+    /**
+     * Deletes songs' audio files (and their sidecar `.lrc`), one outcome per
+     * path, in order: `deleted`, `missing`, `denied`, `readOnly` or `failed`.
+     * Other apps' view of the media (MediaStore) is told about the deleted ones.
+     */
+    AsyncFunction("deleteFiles") { paths: List<String> ->
+      val deleter = TrackFileDeleter(isReadOnly = { file ->
+        Environment.getExternalStorageState(file) == Environment.MEDIA_MOUNTED_READ_ONLY
+      })
+      val outcomes = paths.map { deleter.delete(File(it)) }
+      val deleted = paths.filterIndexed { i, _ -> outcomes[i] == DeleteOutcome.DELETED }
+      if (deleted.isNotEmpty()) {
+        MediaScannerConnection.scanFile(context, deleted.toTypedArray(), null, null)
+      }
+      outcomes.map { it.id }
+    }
+
+    /**
+     * Downloads an artist's photo in both sizes beside the album artwork and
+     * resolves `{ path, thumbPath }`; rejects when either download fails or
+     * isn't an image (nothing is kept then). Runs off the main thread.
+     */
+    AsyncFunction("saveArtistPhoto") { artistKey: String, thumbUrl: String, largeUrl: String ->
+      artistPhotos().save(artistKey, thumbUrl, largeUrl).toMap()
+    }
+
+    /** Deletes every downloaded artist photo. */
+    AsyncFunction("clearArtistPhotos") { artistPhotos().clear() }
+
     OnDestroy {
       currentScan?.second?.set(true)
       scanExecutor.shutdownNow()
     }
   }
+
+  private fun artistPhotos() = ArtistPhotoStore(File(File(context.filesDir, "artwork"), "artists"))
 
   /** The root of a storage volume: `primary` or the UUID of an SD card or USB drive. */
   private fun volumeDirectory(volumeId: String): File? {

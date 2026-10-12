@@ -4,6 +4,7 @@
  * migrator, exactly as the app applies them on the phone, and helpers that
  * seed fixture tracks.
  */
+import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/sql-js";
 import { migrate } from "drizzle-orm/expo-sqlite/migrator";
 import initSqlJs from "sql.js";
@@ -76,15 +77,20 @@ export const addTrack = (db: TestDatabase, track: FixtureTrack): number => {
   const albumTitle = track.album ?? `${track.title} (single)`;
   const albumArtistName = track.albumArtist ?? artistName;
 
+  // Only the columns every schema version has, so databases opened `through`
+  // an older migration can be seeded too.
   const artistId = (name: string): number =>
     upsertId(
       db
-        .select()
+        .select({ id: artists.id, name: artists.name })
         .from(artists)
         .all()
         .find((row) => row.name === name),
       () =>
-        db.insert(artists).values({ key: name, name, sort: name.toLowerCase() }).returning().get(),
+        // Drizzle's insert names every column of today's schema.
+        db.get<{ id: number }>(
+          sql`INSERT INTO artists (key, name, sort) VALUES (${name}, ${name}, ${name.toLowerCase()}) RETURNING id`,
+        ),
     );
   if (track.artworkHash !== undefined) {
     db.insert(artwork)

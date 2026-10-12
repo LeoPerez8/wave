@@ -1,6 +1,6 @@
 import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
 import { useScrollToTop } from "expo-router";
-import { songSpineKeys, type QueueContext, type SongSort } from "@wave/core";
+import { counted, songSpineKeys, type QueueContext, type SongSort } from "@wave/core";
 import { useCallback, useMemo, useRef, type ReactElement, type ReactNode } from "react";
 import { View } from "react-native";
 
@@ -11,8 +11,11 @@ import { PlayShuffle } from "@/catalog/PlayShuffle";
 import { type TrackSummary, TrackRow } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { playSongs } from "@/playback/actions";
-import { useCurrentTrackId } from "@/playback/hooks";
+import { useCurrentTrackId, usePlaySongs } from "@/playback/hooks";
 import { openTrackActions } from "@/playback/ActionsMenu";
+import type { ActionItems } from "@/playback/actionTargets";
+import { selectableRow } from "@/selection/selectableRow";
+import { useListSelection } from "@/selection/useListSelection";
 
 import { useFavoriteIds } from "./favorites";
 import type { SongRow } from "./LibraryStore";
@@ -27,8 +30,7 @@ export const toTrackSummary = (song: SongRow): TrackSummary => ({
   artworkUri: song.thumbPath === null ? undefined : `file://${song.thumbPath}`,
 });
 
-export const songCount = (count: number): string =>
-  `${count.toLocaleString("en")} ${count === 1 ? "song" : "songs"}`;
+export const songCount = (count: number): string => counted(count, "song");
 
 /**
  * A list's opening: a catalog line (the count, a path…) over Play and Shuffle,
@@ -41,19 +43,20 @@ export function ListIntro({
   sortControl,
 }: {
   line: string;
-  /** In the order the list shows them: Play and Shuffle play them so. */
-  songs: readonly SongRow[];
+  /**
+   * In the order the list shows them: Play and Shuffle play them so.
+   * Undefined while they load: a press then plays them once read.
+   */
+  songs: readonly SongRow[] | undefined;
   context: QueueContext;
   sortControl?: ReactNode;
 }) {
+  const play = usePlaySongs(songs, context);
   return (
     <View style={{ gap: CELL, paddingBottom: CELL }}>
       <CatalogLine>{line}</CatalogLine>
       <View className="flex-row items-center justify-between">
-        <PlayShuffle
-          onPlay={() => playSongs(songs, undefined, context, { shuffle: false })}
-          onShuffle={() => playSongs(songs, undefined, context, { shuffle: true })}
-        />
+        <PlayShuffle onPlay={() => play(false)} onShuffle={() => play(true)} />
         {sortControl}
       </View>
     </View>
@@ -63,6 +66,12 @@ export function ListIntro({
 const NO_KEYS: readonly string[] = [];
 
 const keyExtractor = (song: SongRow): string => String(song.id);
+
+/** The actions in selection mode act on the checked songs. */
+const tracksOf = (songs: readonly SongRow[]): ActionItems => ({
+  kind: "track",
+  items: songs.map((song) => ({ song })),
+});
 
 type Props = {
   songs: readonly SongRow[];
@@ -79,7 +88,8 @@ type Props = {
 /**
  * Tracks with thumbnails (Songs, a genre, a folder, an artist's songs),
  * virtualised for tens of thousands of rows. Tap plays the list from the row;
- * long-press opens the track's menu.
+ * long-press opens the track's menu, whose Select starts selection mode: then
+ * every row shows a check cell and taps check and uncheck.
  */
 export function TrackList({ songs, context, header, sort }: Props) {
   const scrollable = useListScrollable();
@@ -88,7 +98,15 @@ export function TrackList({ songs, context, header, sort }: Props) {
   const bottomInset = useChromeInset();
   const currentId = useCurrentTrackId();
   const favorites = useFavoriteIds();
-  const rowState = useMemo(() => ({ currentId, favorites }), [currentId, favorites]);
+  const listSelection = useListSelection({
+    items: songs,
+    keyOf: keyExtractor,
+    target: tracksOf,
+  });
+  const rowState = useMemo(
+    () => ({ currentId, favorites, selection: listSelection.selection }),
+    [currentId, favorites, listSelection.selection],
+  );
   const sortKeys = useMemo(
     () => (sort === undefined ? NO_KEYS : (songSpineKeys(songs, sort) ?? NO_KEYS)),
     [sort, songs],
@@ -102,11 +120,15 @@ export function TrackList({ songs, context, header, sort }: Props) {
         state={String(item.id) === currentId ? "playing" : undefined}
         favorite={favorites.has(item.id)}
         leading="artwork"
-        onPress={() => playSongs(songs, index, context)}
-        onLongPress={() => openTrackActions(item)}
+        {...selectableRow(
+          item,
+          listSelection,
+          () => playSongs(songs, index, context),
+          (options) => openTrackActions(item, options),
+        )}
       />
     ),
-    [context, currentId, favorites, songs],
+    [context, currentId, favorites, songs, listSelection],
   );
 
   return (
@@ -125,7 +147,7 @@ export function TrackList({ songs, context, header, sort }: Props) {
         contentContainerStyle={{
           paddingLeft: grid.margin,
           paddingRight: spine.paddingRight,
-          // Lets the last row scroll out from under the floating mini player.
+          // Lets the last row scroll out from under the floating mini player (or selection bar).
           paddingBottom: bottomInset,
         }}
         ListHeaderComponent={header}

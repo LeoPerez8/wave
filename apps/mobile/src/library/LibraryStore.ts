@@ -18,7 +18,7 @@ import {
   type SongListening,
   type StatsWindow,
 } from "@wave/core";
-import { and, asc, desc, eq, inArray, ne, or, sql, type SQL } from "drizzle-orm";
+import { asc, desc, eq, inArray, ne, or, sql, type SQL } from "drizzle-orm";
 import { drizzle, type ExpoSQLiteDatabase } from "drizzle-orm/expo-sqlite";
 import { migrate } from "drizzle-orm/expo-sqlite/migrator";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
@@ -29,7 +29,21 @@ import * as Layer from "effect/Layer";
 import { openDatabaseSync } from "expo-sqlite";
 
 import { selectAlbums } from "./db/albums";
-import { selectArtistCovers, selectArtistSongs, selectArtists } from "./db/artists";
+import {
+  refreshArtistImages,
+  selectArtistCovers,
+  selectArtistSongs,
+  selectArtists,
+} from "./db/artists";
+import {
+  clearArtistPhotos,
+  recordArtistPhoto,
+  selectArtistPhotoLookups,
+  selectArtistPhotos,
+  type ArtistPhotoLookup,
+  type ArtistPhotoRecord,
+  type ArtistPhotoRow,
+} from "./db/artistPhotos";
 import { libraryCounts, sectionSongCounts, type LibraryCounts } from "./db/counts";
 import { selectGenreSongs } from "./db/genres";
 import type { RowPage } from "./db/database";
@@ -39,14 +53,15 @@ import {
   latestPlay,
   listFavorites,
   recordPlay,
+  setFavorites,
   updatePlay,
   type FavoriteRow,
   type HomeSections,
   type RecordedPlay,
 } from "./db/playHistory";
-import { selectPlaylistSongs } from "./db/playlists";
+import { removePlaylistItems, selectPlaylistSongs } from "./db/playlists";
 import * as schema from "./db/schema";
-import { BY_TITLE, trackQuery } from "./db/tracks";
+import { BY_TITLE, deleteTracks, trackQuery } from "./db/tracks";
 import { creditedPlayTotals, songListening, trackPlayTotals } from "./db/stats";
 import type { KnownFile } from "./NativeScanner";
 
@@ -142,6 +157,12 @@ export interface ArtistRow {
   readonly albumCount: number;
   /** Songs by the artist or on their albums. */
   readonly trackCount: number;
+  /**
+   * The artist's image (an album cover, Core's `artistArtwork`): thumbnail for
+   * rows, full size for the artist page; null for the initial placeholder.
+   */
+  readonly thumbPath: string | null;
+  readonly artworkPath: string | null;
 }
 
 export interface GenreRow {
@@ -226,6 +247,8 @@ export interface PlaylistRow {
   readonly durationMs: number;
   /** Thumbnails of its mosaic (Core's `playlistMosaic`): none, one or four. */
   readonly thumbPaths: readonly string[];
+  /** Full-size covers of the same mosaic, for the playlist screen's header. */
+  readonly artworkPaths: readonly string[];
 }
 
 /** A song in a playlist; the same track may only appear once. */
@@ -235,8 +258,6 @@ export interface PlaylistItemRow extends SongRow {
 
 export interface PlaylistDetail {
   readonly playlist: PlaylistRow;
-  /** Full-size covers of its mosaic, for the playlist screen. */
-  readonly artworkPaths: readonly string[];
   /** In playlist order. */
   readonly items: readonly PlaylistItemRow[];
 }
@@ -390,13 +411,18 @@ export class LibraryStore extends Context.Service<
       itemId: number,
       toIndex: number,
     ) => Effect.Effect<void, LibraryStoreError>;
-    readonly removePlaylistItem: (
+    /** Removes these entries from the playlist (other copies of the same songs stay). */
+    readonly removePlaylistItems: (
       playlistId: number,
-      itemId: number,
+      itemIds: readonly number[],
     ) => Effect.Effect<void, LibraryStoreError>;
     /** The ids of every starred track. */
     readonly favoriteTrackIds: Effect.Effect<readonly number[], LibraryStoreError>;
-    readonly setFavorite: (trackId: number, on: boolean) => Effect.Effect<void, LibraryStoreError>;
+    /** Stars (or unstars) the tracks; those starred already keep when they were starred. */
+    readonly setFavorites: (
+      trackIds: readonly number[],
+      on: boolean,
+    ) => Effect.Effect<void, LibraryStoreError>;
     /** Starred tracks, most recently starred first, for Library › Favorites. */
     readonly listFavorites: Effect.Effect<readonly FavoriteRow[], LibraryStoreError>;
     /** Records a play as it starts (Core's `PlayEvent`); returns its id, to update it as it goes on. */
@@ -412,8 +438,8 @@ export class LibraryStore extends Context.Service<
       window: StatsWindow,
     ) => Effect.Effect<readonly PlayTotals[], LibraryStoreError>;
     /**
-     * Counted plays within [window] per album and track artist (tracks still in
-     * the library), in no order; Core's `albumPlayTotals` / `artistPlayTotals` group them.
+     * Counted plays within [window] per album and track artist (deleted songs
+     * included), in no order; Core's `albumPlayTotals` / `artistPlayTotals` group them.
      */
     readonly creditedPlayTotals: (
       window: StatsWindow,
@@ -431,6 +457,17 @@ export class LibraryStore extends Context.Service<
      * latest play, track artist), in no order; Core's `listeningTotals` sums it.
      */
     readonly songListening: Effect.Effect<readonly SongListening[], LibraryStoreError>;
+    /** The artists whose photo is due for a lookup now (Core's `artistPhotoLookups`). */
+    readonly artistPhotoLookups: Effect.Effect<readonly ArtistPhotoLookup[], LibraryStoreError>;
+    /** Records how an artist's photo lookup went, by artist key. */
+    readonly recordArtistPhoto: (
+      artistKey: string,
+      record: ArtistPhotoRecord,
+    ) => Effect.Effect<void, LibraryStoreError>;
+    /** Every downloaded artist photo. */
+    readonly listArtistPhotos: Effect.Effect<readonly ArtistPhotoRow[], LibraryStoreError>;
+    /** Forgets every artist photo and miss (the files are deleted by the caller). */
+    readonly clearArtistPhotos: Effect.Effect<void, LibraryStoreError>;
   }
 >()("@wave/mobile/library/LibraryStore") {}
 
@@ -643,7 +680,10 @@ const chunks = <A>(items: readonly A[]): A[][] => {
 
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
-/** Deletes the albums, artists, genres and folders no track uses any more. */
+/**
+ * Deletes the albums, artists, genres and folders no track uses any more, then
+ * re-picks the artists' images from the albums left.
+ */
 const pruneOrphans = (tx: Transaction): void => {
   // Albums first: they hold the album artist.
   tx.run(sql`DELETE FROM albums WHERE id NOT IN (SELECT album_id FROM tracks)`);
@@ -652,13 +692,12 @@ const pruneOrphans = (tx: Transaction): void => {
   tx.run(sql`DELETE FROM genres
     WHERE id NOT IN (SELECT genre_id FROM tracks WHERE genre_id IS NOT NULL)`);
   tx.run(sql`DELETE FROM folders WHERE id NOT IN (SELECT folder_id FROM tracks)`);
+  refreshArtistImages(tx);
 };
 
 const removeTracksSync = (db: Database, paths: readonly string[]): void => {
   db.transaction((tx) => {
-    for (const chunk of chunks(paths)) {
-      tx.delete(schema.tracks).where(inArray(schema.tracks.path, chunk)).run();
-    }
+    deleteTracks(tx, paths);
     pruneOrphans(tx);
   });
 };
@@ -682,9 +721,7 @@ const removeRootSync = (db: Database, path: string): void => {
       .all()
       .map((row) => row.path);
     const leaving = filesLeavingWithRoot(under, path, remaining);
-    for (const chunk of chunks(leaving)) {
-      tx.delete(tracks).where(inArray(tracks.path, chunk)).run();
-    }
+    deleteTracks(tx, leaving);
     tx.delete(scanRoots).where(eq(scanRoots.path, path)).run();
 
     // Exclusions only mean something inside a root.
@@ -728,8 +765,15 @@ const getAlbumSync = (db: Database, id: number): AlbumDetail | null => {
 const getArtistSync = (db: Database, id: number): ArtistDetail | null => {
   const { artists, albums, tracks } = schema;
   const artist = db
-    .select({ id: artists.id, name: artists.name, sort: artists.sort })
+    .select({
+      id: artists.id,
+      name: artists.name,
+      sort: artists.sort,
+      thumbPath: schema.artwork.thumbPath,
+      artworkPath: schema.artwork.path,
+    })
     .from(artists)
+    .leftJoin(schema.artwork, eq(artists.artworkHash, schema.artwork.hash))
     .where(eq(artists.id, id))
     .get();
   if (artist === undefined) return null;
@@ -892,7 +936,7 @@ const listPlaylistsSync = (db: Database): PlaylistRow[] => {
       .map((row) => ({
         ...row,
         sort: sortKey(row.name),
-        thumbPaths: (covers.get(row.id) ?? NO_COVERS).thumbPaths,
+        ...(covers.get(row.id) ?? NO_COVERS),
       }))
       // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
       .sort((a, b) => compareStrings(a.sort, b.sort) || a.id - b.id)
@@ -916,8 +960,8 @@ const getPlaylistSync = (db: Database, id: number): PlaylistDetail | null => {
       trackCount: items.length,
       durationMs: items.reduce((total, item) => total + item.durationMs, 0),
       thumbPaths: covers.thumbPaths,
+      artworkPaths: covers.artworkPaths,
     },
-    artworkPaths: covers.artworkPaths,
     items,
   };
 };
@@ -1336,18 +1380,9 @@ const make = Effect.gen(function* () {
         movePlaylistItemSync(db, playlistId, itemId, toIndex, Date.now()),
       ),
 
-    removePlaylistItem: (playlistId, itemId) =>
+    removePlaylistItems: (playlistId, itemIds) =>
       attempt("remove from the playlist", () =>
-        db.transaction((tx) => {
-          const { playlists, playlistItems } = schema;
-          tx.delete(playlistItems)
-            .where(and(eq(playlistItems.id, itemId), eq(playlistItems.playlistId, playlistId)))
-            .run();
-          tx.update(playlists)
-            .set({ updatedAt: Date.now() })
-            .where(eq(playlists.id, playlistId))
-            .run();
-        }),
+        removePlaylistItems(db, playlistId, itemIds, Date.now()),
       ),
 
     favoriteTrackIds: attempt("read favorites", () =>
@@ -1358,13 +1393,10 @@ const make = Effect.gen(function* () {
         .map((row) => row.trackId),
     ),
 
-    setFavorite: (trackId, on) =>
-      attempt(on ? "add a favorite" : "remove a favorite", () => {
-        const { favorites } = schema;
-        if (on)
-          db.insert(favorites).values({ trackId, addedAt: Date.now() }).onConflictDoNothing().run();
-        else db.delete(favorites).where(eq(favorites.trackId, trackId)).run();
-      }),
+    setFavorites: (trackIds, on) =>
+      attempt(on ? "add favorites" : "remove favorites", () =>
+        setFavorites(db, trackIds, on, Date.now()),
+      ),
 
     listFavorites: attempt("list favorites", () => listFavorites(db)),
 
@@ -1390,6 +1422,17 @@ const make = Effect.gen(function* () {
       attempt("read ranked artists", () => (ids.length === 0 ? [] : listArtistsSync(db, ids))),
 
     songListening: attempt("sum up listening", () => songListening(db)),
+
+    artistPhotoLookups: attempt("list artist photo lookups", () =>
+      selectArtistPhotoLookups(db, Date.now()),
+    ),
+
+    recordArtistPhoto: (artistKey, record) =>
+      attempt("record an artist photo", () => recordArtistPhoto(db, artistKey, record)),
+
+    listArtistPhotos: attempt("list artist photos", () => selectArtistPhotos(db)),
+
+    clearArtistPhotos: attempt("clear artist photos", () => clearArtistPhotos(db)),
   });
 });
 

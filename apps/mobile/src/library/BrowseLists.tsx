@@ -1,7 +1,7 @@
 import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
 import { useScrollToTop } from "expo-router";
 import { IconStack2 } from "@tabler/icons-react-native";
-import { describeFolder } from "@wave/core";
+import { counted, describeFolder } from "@wave/core";
 import { useCallback, useMemo, useRef, type ReactElement } from "react";
 import { View } from "react-native";
 
@@ -13,16 +13,22 @@ import { useChromeInset } from "@/chrome/chrome";
 import { EmptyState } from "@/components/EmptyState";
 import { ScanProgressBanner } from "@/components/ScanProgressBanner";
 import { openArtistActions, openFolderActions, openGenreActions } from "@/playback/ActionsMenu";
+import type { ActionItems } from "@/playback/actionTargets";
+import { selectableRow } from "@/selection/selectableRow";
+import { useListSelection, type ListSelection } from "@/selection/useListSelection";
 
-import { albumPairs, albumRowHeight, AlbumPair, useAlbumTileSize } from "./AlbumGrid";
+import {
+  albumPairs,
+  albumRowHeight,
+  AlbumPair,
+  useAlbumSelection,
+  useAlbumTileSize,
+} from "./AlbumGrid";
 import { useAlbums, useArtists, useFolders, useGenres, useScanState } from "./hooks";
 import type { AlbumRow, ArtistRow, FolderRow, GenreRow } from "./LibraryStore";
 import { openArtist, openFolder, openGenre } from "./routes";
 import { useSpine } from "./useSpine";
 import { useListScrollable } from "@/motion/heldTouch";
-
-const counted = (count: number, word: string): string =>
-  `${count.toLocaleString("en")} ${count === 1 ? word : `${word}s`}`;
 
 function ListHead({ line }: { line: string }) {
   return (
@@ -54,18 +60,25 @@ type NameListProps<A> = {
   empty: string;
   sortKey: (item: A) => string;
   keyOf: (item: A) => string;
-  renderRow: (item: A) => ReactElement;
+  /** What the selection bar acts on: the checked items, in list order. */
+  target: (selected: readonly A[]) => ActionItems;
+  /** A row; [selection] tells it whether the list is selecting and what's checked. */
+  renderRow: (item: A, selection: ListSelection<A>) => ReactElement;
 };
 
-/** A virtualised list of names (artists, genres, folders) with the A–Z spine. */
-function NameList<A>({ items, noun, empty, sortKey, keyOf, renderRow }: NameListProps<A>) {
+/** A virtualised, selectable list of names (artists, genres, folders) with the A–Z spine. */
+function NameList<A>({ items, noun, empty, sortKey, keyOf, target, renderRow }: NameListProps<A>) {
   const scrollable = useListScrollable();
   const list = useRef<LegendListRef>(null);
   useScrollToTop(list);
   const bottomInset = useChromeInset();
   const sortKeys = useMemo(() => items.map(sortKey), [items, sortKey]);
   const spine = useSpine(sortKeys, list);
-  const renderItem = useCallback(({ item }: { item: A }) => renderRow(item), [renderRow]);
+  const selection = useListSelection({ items, keyOf, target });
+  const renderItem = useCallback(
+    ({ item }: { item: A }) => renderRow(item, selection),
+    [renderRow, selection],
+  );
 
   if (items.length === 0) return <NothingYet message={empty} />;
   return (
@@ -77,6 +90,7 @@ function NameList<A>({ items, noun, empty, sortKey, keyOf, renderRow }: NameList
         data={items}
         keyExtractor={keyOf}
         renderItem={renderItem}
+        extraData={selection}
         estimatedItemSize={grid.row}
         getFixedItemSize={() => grid.row}
         recycleItems
@@ -98,12 +112,21 @@ const artistDetail = (artist: ArtistRow): string =>
   artist.albumCount > 0
     ? `${counted(artist.albumCount, "album")} · ${counted(artist.trackCount, "song")}`
     : counted(artist.trackCount, "song");
-const renderArtist = (artist: ArtistRow) => (
+const artistsOf = (artists: readonly ArtistRow[]): ActionItems => ({
+  kind: "artist",
+  items: artists,
+});
+const renderArtist = (artist: ArtistRow, selection: ListSelection<ArtistRow>) => (
   <NameRow
     name={artist.name}
+    artist={artist}
     detail={artistDetail(artist)}
-    onPress={() => openArtist(artist.id)}
-    onLongPress={() => openArtistActions(artist)}
+    {...selectableRow(
+      artist,
+      selection,
+      () => openArtist(artist.id, artist),
+      (options) => openArtistActions(artist, options),
+    )}
   />
 );
 
@@ -116,6 +139,7 @@ export function ArtistsList({ empty }: { empty: string }) {
       empty={empty}
       sortKey={artistSort}
       keyOf={artistKey}
+      target={artistsOf}
       renderRow={renderArtist}
     />
   );
@@ -123,12 +147,17 @@ export function ArtistsList({ empty }: { empty: string }) {
 
 const genreSort = (genre: GenreRow) => genre.sort;
 const genreKey = (genre: GenreRow) => String(genre.id);
-const renderGenre = (genre: GenreRow) => (
+const genresOf = (genres: readonly GenreRow[]): ActionItems => ({ kind: "genre", items: genres });
+const renderGenre = (genre: GenreRow, selection: ListSelection<GenreRow>) => (
   <NameRow
     name={genre.name}
     detail={counted(genre.trackCount, "song")}
-    onPress={() => openGenre(genre.id)}
-    onLongPress={() => openGenreActions(genre)}
+    {...selectableRow(
+      genre,
+      selection,
+      () => openGenre(genre.id, genre),
+      (options) => openGenreActions(genre, options),
+    )}
   />
 );
 
@@ -140,6 +169,7 @@ export function GenresList({ empty }: { empty: string }) {
       empty={empty}
       sortKey={genreSort}
       keyOf={genreKey}
+      target={genresOf}
       renderRow={renderGenre}
     />
   );
@@ -154,15 +184,23 @@ export const folderParent = (path: string): string => {
 
 const folderSort = (folder: FolderRow) => folder.sort;
 const folderKey = (folder: FolderRow) => String(folder.id);
-const renderFolder = (folder: FolderRow) => {
+const foldersOf = (folders: readonly FolderRow[]): ActionItems => ({
+  kind: "folder",
+  items: folders,
+});
+const renderFolder = (folder: FolderRow, selection: ListSelection<FolderRow>) => {
   const parent = folderParent(folder.path);
   const count = counted(folder.trackCount, "song");
   return (
     <NameRow
       name={folder.name}
       detail={parent === "" ? count : `${count} · ${parent}`}
-      onPress={() => openFolder(folder.id)}
-      onLongPress={() => openFolderActions(folder)}
+      {...selectableRow(
+        folder,
+        selection,
+        () => openFolder(folder.id, folder),
+        (options) => openFolderActions(folder, options),
+      )}
     />
   );
 };
@@ -176,6 +214,7 @@ export function FoldersList({ empty }: { empty: string }) {
       empty={empty}
       sortKey={folderSort}
       keyOf={folderKey}
+      target={foldersOf}
       renderRow={renderFolder}
     />
   );
@@ -195,9 +234,13 @@ export function AlbumsList({ empty }: { empty: string }) {
   const spine = useSpine(sortKeys, list, pairRow);
   const tile = useAlbumTileSize(spine.paddingRight);
   const rows = useMemo(() => albumPairs(albums), [albums]);
+  const selection = useAlbumSelection(albums);
+  const rowState = useMemo(() => ({ tile, selection }), [tile, selection]);
   const renderItem = useCallback(
-    ({ item }: { item: readonly AlbumRow[] }) => <AlbumPair albums={item} size={tile} />,
-    [tile],
+    ({ item }: { item: readonly AlbumRow[] }) => (
+      <AlbumPair albums={item} size={tile} selection={selection} />
+    ),
+    [tile, selection],
   );
 
   if (albums.length === 0) return <NothingYet message={empty} />;
@@ -210,7 +253,7 @@ export function AlbumsList({ empty }: { empty: string }) {
         data={rows}
         keyExtractor={pairKey}
         renderItem={renderItem}
-        extraData={tile}
+        extraData={rowState}
         estimatedItemSize={albumRowHeight(tile)}
         getFixedItemSize={() => albumRowHeight(tile)}
         recycleItems
