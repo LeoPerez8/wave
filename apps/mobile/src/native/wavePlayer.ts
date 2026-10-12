@@ -97,8 +97,6 @@ export interface AutoRequestEvent {
  * `AutoItem` (or `AutoItem[]`) as JSON; `play` with an `AutoPlayback`.
  */
 export type AutoRequest =
-  /** The browse root: an `AutoItem`. */
-  | { readonly type: "root" }
   /** One page of a node's children: an `AutoItem[]`. */
   | {
       readonly type: "children";

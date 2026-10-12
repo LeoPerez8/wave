@@ -39,8 +39,9 @@ placeholder browse tree.
    the first call builds `appRuntime` (library store, queue and player sync, playback
    persistence, play history) and starts the Auto responder. Later calls only count
    themselves. The library scan stays with the UI.
-4. **Request/response bridge** (`AutoBridge`, JVM-tested). A browse callback calls
-   `AutoLibrary.root` or `AutoLibrary.children`, which hand `{type, payload}` to the bridge
+4. **Request/response bridge** (`AutoBridge`, JVM-tested). The root is answered natively
+   (see the decision below). Other browse callbacks call `AutoLibrary.children` or
+   `AutoLibrary.item`, which hand `{type, payload}` to the bridge
    and return Media3 a future. The bridge emits `onAutoRequest` with an id. JS answers with
    `respondAuto(id, json)` or `failAuto(id, message)`. Requests made before JS has attached
    (cold start) queue up and are sent by `attachAuto()`. A request without an answer in
@@ -68,7 +69,7 @@ One-time setup:
 
 Keep a log open: `adb logcat -s WaveAuto ReactNativeJS`. Every `WaveAuto` line carries
 `SystemClock.elapsedRealtime()` in ms. `Bound … process started at …` gives the process
-start time. `root answered at … ms, … ms after asking (JS was starting)` gives the answer.
+start time. `children answered at … ms, … ms after asking (JS was starting)` gives the first answer from JS (the root is native and logs only `Root requested`).
 
 Checks (the ticket's acceptance criteria):
 
@@ -83,21 +84,21 @@ Checks (the ticket's acceptance criteria):
 4. **Activity closing:** play something from the phone, then swipe Wave away from Recents.
    Playback continues. The DHU still browses (no new `services started` line), and `pidof`
    shows the same pid.
-5. **Warm start:** with Wave already open, connect the DHU. The `root answered` line says
+5. **Warm start:** with Wave already open, connect the DHU. The first `children answered` line says
    `(JS running)`.
 
 ## Measurements (S24+, release APK)
 
-Fill in from the `WaveAuto` lines. Bind → answer = `root answered at` minus the first
+Fill in from the `WaveAuto` lines. Bind → answer = the first `children answered at` minus the first
 `Bound` line. Do at least three cold runs.
 
-| Run    | Process start → bind (ms) | Bind → root answer (ms) | Root asked → answered (ms) | Bind → first children (ms) | Notes |
-| ------ | ------------------------- | ----------------------- | -------------------------- | -------------------------- | ----- |
-| Cold 1 |                           |                         |                            |                            |       |
-| Cold 2 |                           |                         |                            |                            |       |
-| Cold 3 |                           |                         |                            |                            |       |
-| Warm 1 |                           |                         |                            |                            |       |
-| Warm 2 |                           |                         |                            |                            |       |
+| Run    | Process start → bind (ms) | Bind → root requested (ms) | First children asked → answered (ms) | Bind → first children (ms) | Notes |
+| ------ | ------------------------- | -------------------------- | ------------------------------------ | -------------------------- | ----- |
+| Cold 1 |                           |                            |                                      |                            |       |
+| Cold 2 |                           |                            |                                      |                            |       |
+| Cold 3 |                           |                            |                                      |                            |       |
+| Warm 1 |                           |                            |                                      |                            |       |
+| Warm 2 |                           |                            |                                      |                            |       |
 
 Did Auto ever show "still loading" or an empty / error screen on a cold start? ___
 
@@ -107,13 +108,20 @@ Did Auto ever show "still loading" or an empty / error screen on a cold start? _
 own work for an answer is small (one event and one JSON string), so a cold start costs
 roughly the Hermes bundle load plus the app services' first build.
 
-- **Go** if the cold bind → root answer stays well inside the 8 s timeout and Auto shows the
+- **Go** if the cold bind → first children answer stays well inside the 8 s timeout and Auto shows the
   tree without an error. Then tune `AutoLibrary.COLD_TIMEOUT_MS` / `WARM_TIMEOUT_MS` to
   the numbers above.
-- **Cheaper mitigations before any fallback.** The spec allows both. (a) Answer
-  `onGetLibraryRoot` natively, since the root's four tabs are static, and only forward
-  `onGetChildren`, so Auto's first call never waits on JS. (b) Let a cold `onGetChildren`
-  fail with the "still loading" message, then call `notifyChildrenChanged` once JS attaches.
+- **Cheaper mitigations before any fallback.** Both are now in place, after a cold start
+  left the car stuck on Auto's refresh screen and the phone stuck on the splash. Diagnosed
+  from the code and the Media3 1.11.1 bytecode, not yet confirmed on a device: Auto on a
+  phone connects as a legacy `MediaBrowserService` client, and Media3 blocks the main
+  thread with no timeout until `onGetLibraryRoot` answers. The JS start, the headless task
+  and the bridge's timeouts all needed that thread, so nothing could ever answer.
+  (a) `onGetLibraryRoot` is answered natively (the root is static), and the bridge's
+  timeouts run on their own thread. (b) A cold `onGetChildren` that times out is still
+  sent to JS. When JS answers it, the service calls `notifyChildrenChanged`, so Auto
+  reloads the page by itself. `onSubscribe` is accepted natively, since by default it asks
+  `onGetItem` (JS) and a failed subscription would drop that notification.
 - **Fallback** (spec, Further Notes): a native read-only view of the SQLite database for
   browsing, with plays buffered natively and imported by JS later. This is the owner's
   call. Don't switch to it silently.

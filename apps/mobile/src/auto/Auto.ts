@@ -1,5 +1,4 @@
 import {
-  AUTO_ROOT,
   autoAlbumItem,
   autoArtistItem,
   autoChildren,
@@ -276,8 +275,6 @@ export const layer = Layer.effect(
 
     const answer = (request: AutoRequest): Effect.Effect<unknown, Failure> => {
       switch (request.type) {
-        case "root":
-          return Effect.succeed(AUTO_ROOT);
         case "children":
           return children(request.parentId, request.page, request.pageSize);
         case "item":
