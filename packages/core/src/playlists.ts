@@ -3,6 +3,7 @@
  * does, how its items move, and which covers make its mosaic.
  */
 
+import type { AlertSpec } from "./alert.ts";
 import { foldAccentsAndCase } from "./library.ts";
 
 export type PlaylistNameCheck =
@@ -115,4 +116,23 @@ export const playlistMosaic = <A>(covers: readonly (A | null)[]): readonly A[] =
     if (distinct.length === MOSAIC_TILES) return distinct;
   }
   return distinct.slice(0, 1);
+};
+
+/**
+ * The alert that asks before deleting playlists, once however many: one is
+ * named, several are counted. Their songs stay in the library.
+ */
+export const confirmPlaylistDeletion = (
+  playlists: readonly { readonly name: string }[],
+): AlertSpec & { readonly action: NonNullable<AlertSpec["action"]> } => {
+  const only = playlists.length === 1 ? playlists[0] : undefined;
+  return {
+    title:
+      only === undefined
+        ? `Delete ${playlists.length.toLocaleString("en")} playlists?`
+        : `Delete ${only.name}?`,
+    message:
+      only === undefined ? "Their songs stay in your library." : "Its songs stay in your library.",
+    action: { label: "Delete", destructive: true },
+  };
 };

@@ -69,6 +69,7 @@ export type {
 export {
   PLAYLIST_NAME_MAX,
   checkPlaylistName,
+  confirmPlaylistDeletion,
   describePlaylistAdd,
   moveItem,
   nextPlaylistName,

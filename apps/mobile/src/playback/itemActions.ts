@@ -27,7 +27,7 @@ import type {
   SongRow,
 } from "@/library/LibraryStore";
 import {
-  confirmDeletePlaylist,
+  confirmDeletePlaylists,
   openAddToPlaylist,
   renamePlaylistFlow,
 } from "@/library/PlaylistSheets";
@@ -327,15 +327,19 @@ export function useItemActions(
       case "renamePlaylist":
         return make(run(() => playlist !== undefined && void renamePlaylistFlow(playlist)));
       case "deletePlaylist":
+      case "deletePlaylists": {
+        const doomed = target.kind === "playlist" ? target.items : [];
+        const onDeleted = () => {
+          // Leave a playlist's screen once it's gone.
+          if (doomed.some(({ id }) => isDetailPath(here, "playlist", id))) router.back();
+        };
+        // It asks first: selection mode ends only once confirmed, so Cancel keeps it.
         return make(
-          run(() => {
-            if (playlist === undefined) return;
-            confirmDeletePlaylist(playlist, () => {
-              // Leave the playlist's screen once it's gone.
-              if (isDetailPath(here, "playlist", playlist.id)) router.back();
-            });
-          }),
+          surface === "selection" && confirmsFirst(entry.action)
+            ? () => confirmDeletePlaylists(doomed, { onConfirm: finish, onDeleted })
+            : run(() => confirmDeletePlaylists(doomed, { onDeleted })),
         );
+      }
       case "select":
         return make(run(() => onSelect?.()));
       case "delete": {
