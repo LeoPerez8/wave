@@ -1,4 +1,3 @@
-import { IconMinus, IconPlus } from "@tabler/icons-react-native";
 import { router } from "expo-router";
 import { ScrollView, Text, View } from "react-native";
 
@@ -6,11 +5,12 @@ import { CatalogLine } from "@/catalog/CatalogLine";
 import { EntryRow } from "@/catalog/EntryRow";
 import { grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
-import { IconButton } from "@/components/IconButton";
 import { ScreenHeader } from "@/components/ScreenHeader";
+import { SettingsSlider } from "@/components/SettingsSlider";
 import { TextButton } from "@/components/TextButton";
 import { useScanRoots, useScanState } from "@/library/hooks";
 import { startRescan } from "@/library/runtime";
+import { GlassSettingsSection } from "@/settings/GlassSettingsSection";
 import { setTapAnimationMs, TAP_ANIMATION, useTapAnimationMs } from "@/settings/tapAnimation";
 
 export default function SettingsScreen() {
@@ -46,36 +46,20 @@ export default function SettingsScreen() {
 
         <CatalogLine className="mb-2 mt-12">Motion</CatalogLine>
         <Hairline />
-        <View className="flex-row items-center" style={{ minHeight: grid.row }}>
-          <Text className="flex-1 font-sans text-title3 font-normal text-foreground">
-            Tap animation
-          </Text>
-          <IconButton
-            icon={IconMinus}
-            label="Shorter tap animation"
-            disabled={ms <= TAP_ANIMATION.min}
-            onPress={() => setTapAnimationMs(ms - TAP_ANIMATION.step)}
-          />
-          <Text
-            accessibilityLiveRegion="polite"
-            className="text-center font-sans text-body font-medium text-foreground"
-            numberOfLines={1}
-            style={{ minWidth: 72, fontVariant: ["tabular-nums"] }}
-          >
-            {ms} ms
-          </Text>
-          <IconButton
-            icon={IconPlus}
-            label="Longer tap animation"
-            disabled={ms >= TAP_ANIMATION.max}
-            onPress={() => setTapAnimationMs(ms + TAP_ANIMATION.step)}
-          />
-        </View>
+        <SettingsSlider
+          label="Tap animation"
+          value={ms}
+          range={TAP_ANIMATION}
+          format={(value) => `${value} ms`}
+          onChange={setTapAnimationMs}
+        />
         <Hairline />
         <Text className="mt-2 font-sans text-footnote text-secondary">
           How long a tap takes to sink and settle. 0 ms turns the animation off; the default is{" "}
           {TAP_ANIMATION.default} ms.
         </Text>
+
+        <GlassSettingsSection />
 
         <CatalogLine className="mb-2 mt-12">Developer</CatalogLine>
         <Hairline />
