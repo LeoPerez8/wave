@@ -11,12 +11,12 @@ colors:
   accent: "#006a5f"
   highlight: "#a14f09"
   destructive: "#b3261e"
-  background-dark: "#121b1d"
+  background-dark: "#0a1113"
   foreground-dark: "#e0ecef"
   secondary-dark: "#a5b0b3"
   tertiary-dark: "#606b6e"
-  separator-dark: "#293235"
-  fill-dark: "#1c2628"
+  separator-dark: "#1c2628"
+  fill-dark: "#121b1d"
   accent-dark: "#59c0ad"
   highlight-dark: "#ec9d53"
   destructive-dark: "#f2867a"
@@ -163,14 +163,14 @@ A cool, low-chroma tonal ramp carrying two small, saturated voices: teal and emb
 
 ### Neutral
 
-- **Fog / Night Slate** (`background`): the ground of every screen. Fog blue-grey in light (tone-1), night slate in dark (tone-10).
+- **Fog / Night Slate** (`background`): the ground of every screen. Fog blue-grey in light (tone-1), a deep night slate in dark (tone-11, a step only dark mode uses).
 - **Ink** (`foreground`): titles, track titles, entry labels, the large title.
 - **Graphite** (`secondary`): artists, counts, durations, furniture lines, catalog lines, inactive spine letters, helper copy.
 - **Pewter** (`tertiary`): non-text only. Disabled icon buttons, the missing-file glyph, the placeholder note on artless covers.
 - **Rule** (`separator`): one-pixel hairlines between entries and around setting rows.
 - **Field** (`fill`): the square behind artwork that has no image, and empty cover slots.
 
-The full ramp lives in `global.css` as `tone-0` (lightest, `#eff4f6`) to `tone-10` (darkest, `#121b1d`); each semantic token is a step on it, in both themes. `surface` is the tint laid over the glass of the floating chrome (at about 72%); `grouped` and `on-accent` are also declared there but are not yet used by this world's components.
+The full ramp lives in `global.css` as `tone-0` (lightest, `#eff4f6`) to `tone-11` (darkest, `#0a1113`); each semantic token is a step on it, in both themes. Light mode uses `tone-0` to `tone-10` (its ink is `tone-10`); `tone-11` is dark mode's ground only, and dark cards and fills (`tone-10`) and hairlines (`tone-9`) climb one step each from it, evenly spaced, so light mode never changes when dark mode gets darker. Core's `packages/core/src/theme.ts` holds the same values (`DEFAULT_THEME`, `TONES`) and checks WCAG AA for every pair the app draws (`themeContrastIssues`); an app test fails if `global.css` or the launch splash drift from it. `surface` is the tint laid over the glass of the floating chrome (at about 72%); `grouped` and `on-accent` are also declared there but are not yet used by this world's components.
 
 ### Named Rules
 
@@ -236,7 +236,7 @@ The world is flat. There are no shadows, no elevation and no gradients (save the
 
 **Glass** (the floating chrome, dialogs and menus): a live blur of the content underneath, a slight lens-like refraction at the rounded edge with a specular rim lit from the top left, and the `surface` tone laid over it so text stays legible. It is native (`modules/wave-glass`, RenderEffect + AGSL on the RenderThread) and sized for 120 Hz; the blur + tint + rim fallback is one line away (`GLASS` in `src/glass/Glass.tsx`). See `docs/glass-spike.md`. Below Android 12 (no RenderEffect) glass is an opaque `surface`.
 
-**Dialogs and menus** float as glass cards over the app: rounded (24dp), sized to their content, centred a margin clear of the system bars (a card with a text field, like the playlist name prompt, sits a margin below the status bar instead, and any card stays clear of the keyboard; a long-press menu opens next to its row or tile instead: below it, or above when there is no room, clear of the floating chrome too), over the app dimmed lightly (darkest tone at 25%). They fade and grow in over the tap duration (fade only with reduce motion, instant at 0). They are drawn at the app root by `src/overlay/OverlayHost.tsx` rather than in a `Modal` (a separate window the blur can't see through). Back or a tap outside closes them, and screen readers move into the card. A long-press menu keeps the finger that opened it: slide onto an entry and lift to run it (`src/overlay/useSlideToChoose.ts`, hit-testing in Core's `slideEntry`); lists hold still while that finger is down (`useListScrollable`).
+**Dialogs and menus** float as glass cards over the app: rounded (24dp), sized to their content, centred a margin clear of the system bars (a card with a text field, like the playlist name prompt, sits a margin below the status bar instead, and any card stays clear of the keyboard; a long-press menu opens next to its row or tile instead: below it, or above when there is no room, clear of the floating chrome too), over the app dimmed lightly (the scheme's darkest tone at 25%). They fade and grow in over the tap duration (fade only with reduce motion, instant at 0). They are drawn at the app root by `src/overlay/OverlayHost.tsx` rather than in a `Modal` (a separate window the blur can't see through). Back or a tap outside closes them, and screen readers move into the card. A long-press menu keeps the finger that opened it: slide onto an entry and lift to run it (`src/overlay/useSlideToChoose.ts`, hit-testing in Core's `slideEntry`); lists hold still while that finger is down (`useListScrollable`).
 
 ### Named Rules
 
