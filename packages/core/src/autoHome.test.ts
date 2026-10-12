@@ -70,13 +70,19 @@ describe("Auto Home sections", () => {
     });
   });
 
-  test("Most Played and Favorites list their songs straight away, with no Shuffle", () => {
+  test("Most Played and Favorites start with Shuffle, then list their songs", () => {
     for (const list of [mostPlayed, favorites]) {
-      assert.deepEqual(autoChildren({ type: "list", list }, 0, 10), {
-        items: [],
-        fetch: { source: { type: "tracks", list }, offset: 0, limit: 10 },
+      const children = autoChildren({ type: "list", list }, 0, 10);
+      assert.deepEqual(
+        children?.items.map((item) => [item.title, item.playable, decodeAutoMediaId(item.mediaId)]),
+        [["Shuffle", true, { type: "shuffle", list }]],
+      );
+      assert.deepEqual(children?.fetch, {
+        source: { type: "tracks", list },
+        offset: 0,
+        limit: 9,
       });
-      assert.deepEqual(autoChildren({ type: "list", list }, 2, 10)?.fetch?.offset, 20);
+      assert.deepEqual(autoChildren({ type: "list", list }, 2, 10)?.fetch?.offset, 19);
     }
   });
 
@@ -92,6 +98,9 @@ describe("Auto Home sections", () => {
   });
 });
 
+/** Page 0 as the app builds it: the node's fixed items (Shuffle), then no rows. */
+const firstPageWithoutRows = (node: AutoNode) => autoChildren(node, 0, 10)?.items ?? [];
+
 describe("Auto Home empty sections", () => {
   const sections: [AutoNode, string][] = [
     [{ type: "recentlyPlayed" }, "Nothing played yet"],
@@ -99,9 +108,9 @@ describe("Auto Home empty sections", () => {
     [{ type: "list", list: favorites }, "No favorites yet"],
   ];
 
-  test("an empty section shows a single item saying so, which neither opens nor plays", () => {
+  test("an empty section shows a single item saying so (no Shuffle), which neither opens nor plays", () => {
     for (const [node, title] of sections) {
-      const [item, ...more] = autoPageItems(node, 0, []);
+      const [item, ...more] = autoPageItems(node, 0, firstPageWithoutRows(node));
       assert.equal(more.length, 0);
       assert.equal(item?.title, title);
       assert.equal(item?.browsable, false);
@@ -113,9 +122,16 @@ describe("Auto Home empty sections", () => {
     }
   });
 
-  test("a section with rows shows them as they are", () => {
-    const rows = autoTrackItems(favorites, [song("1", "One")], 0, 10);
-    assert.deepEqual(autoPageItems({ type: "list", list: favorites }, 0, rows), rows);
+  test("a section with rows shows them as they are, Shuffle first", () => {
+    const node: AutoNode = { type: "list", list: favorites };
+    const page = [
+      ...firstPageWithoutRows(node),
+      ...autoTrackItems(favorites, [song("1", "One")], 0, 9),
+    ];
+    assert.deepEqual(
+      autoPageItems(node, 0, page).map((item) => item.title),
+      ["Shuffle", "One"],
+    );
   });
 
   test("a page past the end of a section stays empty", () => {
@@ -157,6 +173,16 @@ describe("Auto Home queue start", () => {
     assert.equal(autoQueueStart(node, songs)?.startIndex, 2);
   });
 
+  test("Shuffle plays the whole section shuffled, as the Home section", () => {
+    assert.deepEqual(autoQueueStart({ type: "shuffle", list: favorites }, songs), {
+      context: { kind: "home", id: "favorites" },
+      trackIds: ["9", "3", "5"],
+      startIndex: undefined,
+      shuffle: true,
+    });
+    assert.equal(autoQueueStart({ type: "shuffle", list: mostPlayed }, []), null);
+  });
+
   test("the sections themselves don't play", () => {
     assert.equal(autoPlayList({ type: "recentlyPlayed" }), null);
     assert.equal(autoQueueStart({ type: "list", list: favorites }, songs), null);
@@ -169,6 +195,7 @@ describe("Auto Home media IDs", () => {
       [{ type: "recentlyPlayed" }, "home/recently-played"],
       [{ type: "list", list: mostPlayed }, "home/most-played"],
       [{ type: "list", list: favorites }, "home/favorites"],
+      [{ type: "shuffle", list: mostPlayed }, "home/most-played/shuffle"],
       [{ type: "track", list: favorites, index: 2, trackId: "45" }, "home/favorites/track/2/45"],
     ];
     for (const [node, id] of nodes) {
@@ -182,8 +209,8 @@ describe("Auto Home media IDs", () => {
       "home",
       "home/recently-added",
       "home/recently-played/more",
-      "home/most-played/shuffle",
-      "home/favorites/shuffle",
+      "home/most-played/shuffle/again",
+      "home/top-rated",
       "home/favorites/track/2",
     ]) {
       assert.equal(decodeAutoMediaId(id), null, id);

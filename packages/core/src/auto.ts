@@ -9,7 +9,7 @@
  *   `tabChildren` (fixed items and/or an `AutoSource`);
  * - a track list (something with a Shuffle item and tracks that play it as
  *   their context): add its kind to `AutoTrackListKind` and `TRACK_LISTS`
- *   (`shuffle: false` drops the Shuffle item, `ids` fixes the ids it has);
+ *   (`ids` when the kind has a fixed set of ids);
  * - another browsable node (say, an artist): add an `AutoNode` variant, its
  *   segments in `encodeAutoMediaId`/`decodeAutoMediaId`, its children in
  *   `listing` and, if it plays, its list in `autoPlayList`;
@@ -76,8 +76,6 @@ interface TrackListKind {
   readonly order: (tracks: readonly AutoTrack[]) => readonly AutoTrack[];
   /** The only ids the kind has, when it has a fixed set (Home's sections). */
   readonly ids?: readonly string[];
-  /** False when the list opens straight onto its tracks, without a Shuffle item. */
-  readonly shuffle?: boolean;
   /** The title of its Shuffle item, when not "Shuffle". */
   readonly shuffleTitle?: string;
 }
@@ -97,13 +95,11 @@ const TRACK_LISTS: Record<AutoTrackListKind, TrackListKind> = {
     // The app loads a playlist's tracks in playlist order already.
     order: (tracks) => [...tracks],
   },
-  // Home's song sections mirror the app's Home tab: its order (the app loads
-  // them in it), no Shuffle.
+  // Home's song sections, in the app's Home order (the app loads them in it).
   home: {
     context: (id) => ({ kind: "home", id }),
     order: (tracks) => [...tracks],
     ids: AUTO_HOME_LISTS,
-    shuffle: false,
   },
   // Not `artist`: that segment names the browsable artist.
   artistSongs: {
@@ -117,8 +113,6 @@ const TRACK_LISTS: Record<AutoTrackListKind, TrackListKind> = {
 
 const isTrackListKind = (kind: string): kind is AutoTrackListKind =>
   Object.prototype.hasOwnProperty.call(TRACK_LISTS, kind);
-
-const hasShuffle = (list: AutoTrackList): boolean => TRACK_LISTS[list.kind].shuffle !== false;
 
 /** A node of the browse tree, as its media ID says. */
 export type AutoNode =
@@ -221,9 +215,7 @@ const decodeListed = (mediaId: string): AutoNode | null => {
   if (ids !== undefined && !ids.includes(id)) return null;
   const list: AutoTrackList = { kind: head, id };
   if (rest.length === 1) return { type: "list", list };
-  if (what === "shuffle" && rest.length === 2) {
-    return hasShuffle(list) ? { type: "shuffle", list } : null;
-  }
+  if (what === "shuffle" && rest.length === 2) return { type: "shuffle", list };
   if (what === "track" && rest.length === 4 && isIndex(index) && trackId !== "") {
     return { type: "track", list, index: Number(index), trackId };
   }
@@ -347,10 +339,7 @@ const listing = (node: AutoNode): Listing | null => {
     case "recentlyPlayed":
       return { items: [], source: { type: "recentlyPlayed" } };
     case "list":
-      return {
-        items: hasShuffle(node.list) ? [shuffleItem(node.list)] : [],
-        source: { type: "tracks", list: node.list },
-      };
+      return { items: [shuffleItem(node.list)], source: { type: "tracks", list: node.list } };
     case "shuffle":
     case "track":
     case "empty":
@@ -399,14 +388,15 @@ const emptyItem = (parent: AutoNode): AutoItem | null => {
 /**
  * What page `page` of `node` shows, given its items (fixed ones, then the
  * fetched rows): those items, or the node's empty item when its first page
- * has none.
+ * has no rows (a Shuffle with nothing to shuffle goes with them).
  */
 export const autoPageItems = (
   node: AutoNode,
   page: number,
   items: readonly AutoItem[],
 ): readonly AutoItem[] => {
-  const empty = page === 0 && items.length === 0 ? emptyItem(node) : null;
+  const fixed = listing(node)?.items.length ?? 0;
+  const empty = page === 0 && items.length <= fixed ? emptyItem(node) : null;
   return empty === null ? items : [empty];
 };
 
