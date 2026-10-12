@@ -7,6 +7,7 @@ import { useChromeInset } from "@/chrome/chrome";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { HomeSection } from "@/home/HomeSections";
 import { openStatsSeeAll } from "@/library/routes";
+import { useListScrollable } from "@/motion/heldTouch";
 import { useTopAlbums, useTopArtists, useTopSongs } from "@/stats/hooks";
 import {
   NothingPlayed,
@@ -23,11 +24,13 @@ export default function StatsScreen() {
   const topAlbums = useTopAlbums(period);
   const topArtists = useTopArtists(period);
   const bottomInset = useChromeInset();
+  const scrollable = useListScrollable();
 
   return (
     <View className="flex-1 bg-background">
       <ScreenHeader title="Stats" />
       <ScrollView
+        scrollEnabled={scrollable}
         contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottomInset }}
       >
         <PeriodTabs period={period} onChange={setPeriod} />

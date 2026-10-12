@@ -19,6 +19,7 @@ import { useAlbum } from "@/library/hooks";
 import type { AlbumDetail, AlbumTrackRow } from "@/library/LibraryStore";
 import { openArtist, parseId } from "@/library/routes";
 import { songCount, toTrackSummary } from "@/library/TrackList";
+import { useListScrollable } from "@/motion/heldTouch";
 
 type Item =
   | { readonly type: "disc"; readonly disc: number }
@@ -96,6 +97,7 @@ function AlbumHead({ detail }: { detail: AlbumDetail }) {
 }
 
 function AlbumTracks({ detail }: { detail: AlbumDetail }) {
+  const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
   const currentId = useCurrentTrackId();
   const favorites = useFavoriteIds();
@@ -130,6 +132,7 @@ function AlbumTracks({ detail }: { detail: AlbumDetail }) {
 
   return (
     <LegendList
+      scrollEnabled={scrollable}
       className="flex-1"
       data={items}
       keyExtractor={itemKey}

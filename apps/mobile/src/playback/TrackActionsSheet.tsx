@@ -29,6 +29,7 @@ import { appRuntime } from "@/library/runtime";
 import { librarySectionSongs } from "@/library/sectionSongs";
 import { pressedRect } from "@/motion/pressedRect";
 import { openOverlay } from "@/overlay/overlay";
+import { useSlideToChoose } from "@/overlay/useSlideToChoose";
 
 import { addToQueue, playNext } from "./actions";
 
@@ -306,6 +307,10 @@ function ActionsMenu({ target, close }: { target: ActionTarget; close: () => voi
       : []),
   ];
 
+  // The finger that long-pressed the row can slide onto an entry and lift to run it.
+  // (It also tells which entry is under the finger, `underFinger`.)
+  const { trackEntry, trackList } = useSlideToChoose((index) => entries[index]?.onPress());
+
   return (
     <>
       <View
@@ -324,16 +329,19 @@ function ActionsMenu({ target, close }: { target: ActionTarget; close: () => voi
       </View>
       <Hairline />
       {/* Scrolls only where the card can't fit every entry (small windows, landscape). */}
-      <ScrollView bounces={false} overScrollMode="never">
-        {entries.map((entry, index) => (
-          <EntryRow
-            key={entry.label}
-            label={entry.label}
-            onPress={entry.onPress}
-            divider={index < entries.length - 1}
-          />
-        ))}
-      </ScrollView>
+      <View ref={trackList} collapsable={false} style={{ flexShrink: 1 }}>
+        <ScrollView bounces={false} overScrollMode="never">
+          {entries.map((entry, index) => (
+            <View key={entry.label} ref={trackEntry(index)} collapsable={false}>
+              <EntryRow
+                label={entry.label}
+                onPress={entry.onPress}
+                divider={index < entries.length - 1}
+              />
+            </View>
+          ))}
+        </ScrollView>
+      </View>
     </>
   );
 }

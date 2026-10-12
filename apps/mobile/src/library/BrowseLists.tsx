@@ -22,6 +22,7 @@ import { useAlbums, useArtists, useFolders, useGenres, useScanState } from "./ho
 import type { AlbumRow, ArtistRow, FolderRow, GenreRow } from "./LibraryStore";
 import { openArtist, openFolder, openGenre } from "./routes";
 import { useSpine } from "./useSpine";
+import { useListScrollable } from "@/motion/heldTouch";
 
 const counted = (count: number, word: string): string =>
   `${count.toLocaleString("en")} ${count === 1 ? word : `${word}s`}`;
@@ -61,6 +62,7 @@ type NameListProps<A> = {
 
 /** A virtualised list of names (artists, genres, folders) with the A–Z spine. */
 function NameList<A>({ items, noun, empty, sortKey, keyOf, renderRow }: NameListProps<A>) {
+  const scrollable = useListScrollable();
   const list = useRef<LegendListRef>(null);
   const bottomInset = useChromeInset();
   const sortKeys = useMemo(() => items.map(sortKey), [items, sortKey]);
@@ -71,6 +73,7 @@ function NameList<A>({ items, noun, empty, sortKey, keyOf, renderRow }: NameList
   return (
     <View className="flex-1">
       <LegendList
+        scrollEnabled={scrollable}
         ref={list}
         className="flex-1"
         data={items}
@@ -185,6 +188,7 @@ const pairRow = (index: number): number => Math.floor(index / 2);
 
 /** Library › Albums: a two-column artwork grid by title, with the A–Z spine. */
 export function AlbumsList({ empty }: { empty: string }) {
+  const scrollable = useListScrollable();
   const albums = useAlbums();
   const list = useRef<LegendListRef>(null);
   const bottomInset = useChromeInset();
@@ -201,6 +205,7 @@ export function AlbumsList({ empty }: { empty: string }) {
   return (
     <View className="flex-1">
       <LegendList
+        scrollEnabled={scrollable}
         ref={list}
         className="flex-1"
         data={rows}

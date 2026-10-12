@@ -16,6 +16,7 @@ import { openTrackActions } from "@/playback/TrackActionsSheet";
 import { useFavoriteIds } from "./favorites";
 import type { SongRow } from "./LibraryStore";
 import { useSpine } from "./useSpine";
+import { useListScrollable } from "@/motion/heldTouch";
 
 export const toTrackSummary = (song: SongRow): TrackSummary => ({
   id: String(song.id),
@@ -66,6 +67,7 @@ type Props = {
  * long-press opens the track's menu.
  */
 export function TrackList({ songs, context, header, indexed = false }: Props) {
+  const scrollable = useListScrollable();
   const list = useRef<LegendListRef>(null);
   const bottomInset = useChromeInset();
   const currentId = useCurrentTrackId();
@@ -94,6 +96,7 @@ export function TrackList({ songs, context, header, indexed = false }: Props) {
   return (
     <View className="flex-1">
       <LegendList
+        scrollEnabled={scrollable}
         ref={list}
         className="flex-1"
         data={songs}

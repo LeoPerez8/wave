@@ -1,5 +1,5 @@
 import * as Haptics from "expo-haptics";
-import { useRef, type ComponentRef, type ReactNode } from "react";
+import { useEffect, useRef, type ComponentRef, type ReactNode } from "react";
 import {
   Pressable,
   type GestureResponderEvent,
@@ -20,6 +20,7 @@ import { withUniwind } from "uniwind";
 
 import { useTapAnimationMs } from "@/settings/tapAnimation";
 
+import { cancelHeldTouch, holdTouch, moveHeldTouch, releaseHeldTouch } from "./heldTouch";
 import { runPressedAt } from "./pressedRect";
 
 const AnimatedPressable = withUniwind(createAnimatedComponent(Pressable));
@@ -41,6 +42,12 @@ type Props = Omit<PressableProps, "children" | "style"> & {
 
 type Handler = PressableProps["onLongPress"];
 
+/** Where a touch event's finger is in the window, if it carries one. */
+const pointOf = ({ nativeEvent }: GestureResponderEvent) =>
+  Number.isFinite(nativeEvent.pageX) && Number.isFinite(nativeEvent.pageY)
+    ? { x: nativeEvent.pageX, y: nativeEvent.pageY }
+    : undefined;
+
 /**
  * Every tappable thing in Wave. The press animation takes the duration set in
  * Settings (tap animation, in ms); 0 or the system's reduce-motion setting
@@ -55,6 +62,9 @@ export function Press({
   onPress,
   onLongPress,
   opensMenu = false,
+  onTouchMove,
+  onTouchEnd,
+  onTouchCancel,
   children,
   ...rest
 }: Props) {
@@ -62,6 +72,16 @@ export function Press({
   const reduceMotion = useReducedMotion();
   const pressed = useSharedValue(0);
   const view = useRef<ComponentRef<typeof View>>(null);
+  // This press's finger long-pressed and is still down: it reports where it goes (`heldTouch`).
+  const holding = useRef(false);
+
+  // A row that unmounts mid-hold can't report the finger lifting.
+  useEffect(
+    () => () => {
+      if (holding.current) cancelHeldTouch();
+    },
+    [],
+  );
 
   // Long-presses open menus: measure where this sits first, so the menu can float next to it.
   const anchored = (handler: Handler): ((event: GestureResponderEvent) => void) | undefined =>
@@ -81,6 +101,16 @@ export function Press({
           );
         };
 
+  // The finger stays down as the menu opens and can slide onto an entry (slide to choose).
+  const longPress = (event: GestureResponderEvent): void => {
+    const point = pointOf(event);
+    if (point !== undefined) {
+      holding.current = true;
+      holdTouch(point);
+    }
+    anchored(onLongPress)?.(event);
+  };
+
   const pressStyle = useAnimatedStyle(() => ({
     opacity: 1 - pressed.get() * 0.35,
     transform: [{ scale: reduceMotion ? 1 : 1 - pressed.get() * depth }],
@@ -95,7 +125,28 @@ export function Press({
       {...rest}
       ref={view}
       onPress={opensMenu ? anchored(onPress) : onPress}
-      onLongPress={anchored(onLongPress)}
+      onLongPress={onLongPress == null ? undefined : longPress}
+      onTouchMove={(event) => {
+        const point = pointOf(event);
+        if (holding.current && point !== undefined) moveHeldTouch(point);
+        onTouchMove?.(event);
+      }}
+      onTouchEnd={(event) => {
+        if (holding.current) {
+          holding.current = false;
+          const point = pointOf(event);
+          if (point === undefined) cancelHeldTouch();
+          else releaseHeldTouch(point);
+        }
+        onTouchEnd?.(event);
+      }}
+      onTouchCancel={(event) => {
+        if (holding.current) {
+          holding.current = false;
+          cancelHeldTouch();
+        }
+        onTouchCancel?.(event);
+      }}
       style={[staticStyle, pressStyle]}
       onPressIn={(event) => {
         animateTo(1);

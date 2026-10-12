@@ -32,6 +32,7 @@ import { useFavoriteIds } from "./favorites";
 import type { PlaylistDetail, PlaylistItemRow } from "./LibraryStore";
 import { movePlaylistItem, removePlaylistItem } from "./playlists";
 import { toTrackSummary } from "./TrackList";
+import { useListScrollable } from "@/motion/heldTouch";
 
 const ROW = grid.row;
 /** How close to the top or bottom of the list a dragged row starts scrolling it. */
@@ -94,6 +95,8 @@ function PlaylistItem({
   const fill = useThemeColor("fill");
   const secondary = useThemeColor("secondary");
   const reduceMotion = useReducedMotion();
+  // No swipe-to-remove while the long-pressed finger slides to choose in the menu.
+  const swipeable = useListScrollable();
   const { active, hover, dragY, translation, fingerY, startScroll, scroll } = drag;
 
   // Other rows make way for the dragged one.
@@ -156,6 +159,7 @@ function PlaylistItem({
   };
 
   const swipe = usePanGesture({
+    enabled: swipeable,
     // Leftwards only; a vertical move belongs to the list.
     activeOffsetX: -DRAG_SLOP,
     failOffsetY: [-DRAG_SLOP, DRAG_SLOP],
@@ -265,6 +269,7 @@ type Props = {
  * removes it, long-press opens its menu.
  */
 export function PlaylistItems({ detail, header, empty }: Props) {
+  const scrollable = useListScrollable();
   const playlistId = detail.playlist.id;
   const bottomInset = useChromeInset();
   const currentId = useCurrentTrackId();
@@ -385,6 +390,7 @@ export function PlaylistItems({ detail, header, empty }: Props) {
 
   return (
     <Animated.ScrollView
+      scrollEnabled={scrollable}
       ref={scrollRef}
       className="flex-1"
       onContentSizeChange={(_, height) => contentHeight.set(height)}

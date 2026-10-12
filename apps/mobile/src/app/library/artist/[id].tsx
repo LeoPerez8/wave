@@ -17,6 +17,7 @@ import { useArtist } from "@/library/hooks";
 import type { AlbumRow, ArtistDetail, SongRow } from "@/library/LibraryStore";
 import { parseId } from "@/library/routes";
 import { ListIntro, songCount, toTrackSummary } from "@/library/TrackList";
+import { useListScrollable } from "@/motion/heldTouch";
 
 type Item =
   | { readonly type: "section"; readonly label: string }
@@ -53,6 +54,7 @@ const itemKey = (item: Item): string => {
 const albumsLine = (count: number): string => `${count} ${count === 1 ? "album" : "albums"}`;
 
 function ArtistContent({ detail }: { detail: ArtistDetail }) {
+  const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
   const currentId = useCurrentTrackId();
   const favorites = useFavoriteIds();
@@ -101,6 +103,7 @@ function ArtistContent({ detail }: { detail: ArtistDetail }) {
 
   return (
     <LegendList
+      scrollEnabled={scrollable}
       className="flex-1"
       data={items}
       keyExtractor={itemKey}
