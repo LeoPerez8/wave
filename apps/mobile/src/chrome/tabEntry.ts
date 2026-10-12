@@ -12,6 +12,24 @@ import { ENTRY } from "@/motion/entry";
 export const TABS = ["index", "library", "search"] as const;
 export type TabName = (typeof TABS)[number];
 
+/** Where each tab lives (src/app/(tabs)/). */
+export const TAB_HREF = {
+  index: "/",
+  library: "/library",
+  search: "/search",
+} as const satisfies Record<TabName, string>;
+
+/** The tab showing at `pathname`, or null on a screen without the tab bar. */
+export const tabOfPath = (pathname: string): TabName | null =>
+  TABS.find((tab) => TAB_HREF[tab] === pathname) ?? null;
+
+/**
+ * Whether `pathname` is in the Library tab's stack (src/app/library/), pushed
+ * over the tabs; it keeps the mini player but not the tab bar.
+ */
+export const inLibraryStack = (pathname: string): boolean =>
+  pathname.startsWith(`${TAB_HREF.library}/`);
+
 /**
  * The style for the view holding the tab screens: after a tapped switch the
  * new screen fades in while sliding from the tapped tab's side. The tab bar

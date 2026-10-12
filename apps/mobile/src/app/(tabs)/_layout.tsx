@@ -5,16 +5,10 @@ import Animated from "react-native-reanimated";
 
 import { BACKDROP, ChromeProvider } from "@/chrome/chrome";
 import { TabBar } from "@/chrome/TabBar";
-import { type TabName, useTabEntry } from "@/chrome/tabEntry";
+import { TAB_HREF, TABS, tabOfPath, useTabEntry } from "@/chrome/tabEntry";
 import { openNowPlaying } from "@/nowPlaying/sheet";
 import { MiniPlayer } from "@/playback/MiniPlayer";
 import { useThemeColor } from "@/theme/useThemeColor";
-
-const TAB_OF_PATH: Readonly<Record<string, TabName>> = {
-  "/": "index",
-  "/library": "library",
-  "/search": "search",
-};
 
 /**
  * Home, Library and Search under the floating glass chrome. The screens sit in
@@ -24,7 +18,7 @@ const TAB_OF_PATH: Readonly<Record<string, TabName>> = {
  */
 export default function TabsLayout() {
   const background = useThemeColor("background");
-  const entry = useTabEntry(TAB_OF_PATH[usePathname()] ?? null);
+  const entry = useTabEntry(tabOfPath(usePathname()));
   return (
     <ChromeProvider tabBar>
       <Tabs style={{ flex: 1, backgroundColor: background }}>
@@ -35,9 +29,9 @@ export default function TabsLayout() {
         </View>
         {/* Declares the tabs; the visible triggers live in TabBar. */}
         <TabList style={{ display: "none" }}>
-          <TabTrigger name="index" href="/" />
-          <TabTrigger name="library" href="/library" />
-          <TabTrigger name="search" href="/search" />
+          {TABS.map((tab) => (
+            <TabTrigger key={tab} name={tab} href={TAB_HREF[tab]} />
+          ))}
         </TabList>
         <MiniPlayer backdropId={BACKDROP.tabs} onOpen={openNowPlaying} />
         <TabBar onTabTap={entry.noteTap} />

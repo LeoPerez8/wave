@@ -14,7 +14,7 @@ export interface AlertSpec {
   };
 }
 
-/** What the person chose: the action, or Cancel / OK. */
+/** What the person chose: the action, or Cancel / OK (which Back or a tap outside the card also chooses). */
 export type AlertChoice = "action" | "dismiss";
 
 export interface AlertButton {
@@ -26,8 +26,6 @@ export interface AlertButton {
 export interface AlertPlan {
   /** Left to right. */
   readonly buttons: readonly AlertButton[];
-  /** The choice Back or a tap outside the card makes: Cancel or OK. */
-  readonly dismissed: AlertChoice;
   /** What a screen reader says as the card opens: the title, then the message. */
   readonly announcement: string;
 }
@@ -48,5 +46,4 @@ export const planAlert = ({ title, message, action }: AlertSpec): AlertPlan => (
             choice: "action",
           },
         ],
-  dismissed: "dismiss",
 });

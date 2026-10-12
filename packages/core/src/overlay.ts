@@ -3,12 +3,16 @@
  * card sits on screen, given its measured height.
  */
 
-export interface OverlayInsets {
+/** Four edges, in dp: how far in each one sits (insets), or where (a rect in the window). */
+interface Edges {
   readonly top: number;
   readonly bottom: number;
   readonly left: number;
   readonly right: number;
 }
+
+/** How far system bars (and cutouts) reach in from each edge of the window. */
+export type OverlayInsets = Edges;
 
 export interface OverlayCardInput {
   /** The app window, in dp. */
@@ -41,12 +45,7 @@ export interface OverlayCardInput {
 }
 
 /** A rectangle in the app window, in dp. */
-export interface OverlayRect {
-  readonly top: number;
-  readonly bottom: number;
-  readonly left: number;
-  readonly right: number;
-}
+export type OverlayRect = Edges;
 
 export interface OverlayAnchor {
   /** What the card opens next to, e.g. the long-pressed row. */
