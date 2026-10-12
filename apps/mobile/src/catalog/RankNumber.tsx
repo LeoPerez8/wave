@@ -3,8 +3,8 @@ import { Text, View } from "react-native";
 import { grid } from "./grid";
 
 /**
- * A ranking's number cell, as a numbered track row lays it out: graphite
- * tabular figures, the top entry in ember.
+ * The number cell of a numbered row (a track number, or a ranking's number):
+ * graphite tabular figures, the top entry of a ranking in ember.
  */
 export function RankNumber({ rank, top }: { rank: number; top: boolean }) {
   return (
