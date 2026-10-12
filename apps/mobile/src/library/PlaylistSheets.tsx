@@ -15,7 +15,7 @@ import { PlaylistEntry } from "@/catalog/PlaylistEntry";
 import { TextButton } from "@/components/TextButton";
 import { Press } from "@/motion/Press";
 import { confirmAction } from "@/overlay/alert";
-import { openOverlay, presentOverlay } from "@/overlay/overlay";
+import { followUp, openOverlay, presentOverlay } from "@/overlay/overlay";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { usePlaylists } from "./hooks";
@@ -194,7 +194,11 @@ function AddCard({ subject, close }: { subject: AddSubject; close: () => void })
  * songs that turn out to be none (an empty Favorites), it creates nothing.
  * Resolves with the new playlist's id, or null when cancelled or not created.
  */
-export const newPlaylist = async (
+export const newPlaylist = (songs?: () => Promise<readonly SongRow[]>): Promise<number | null> =>
+  // The name prompt highlights what the flow was started from.
+  followUp(() => createNamedPlaylist(songs));
+
+const createNamedPlaylist = async (
   songs?: () => Promise<readonly SongRow[]>,
 ): Promise<number | null> => {
   // Loads while the name is typed; a failure surfaces once the songs are needed.
@@ -227,7 +231,12 @@ export const newPlaylist = async (
   }
 };
 
-export const renamePlaylistFlow = async (playlist: {
+export const renamePlaylistFlow = (playlist: {
+  readonly id: number;
+  readonly name: string;
+}): Promise<void> => followUp(() => renameNamedPlaylist(playlist));
+
+const renameNamedPlaylist = async (playlist: {
   readonly id: number;
   readonly name: string;
 }): Promise<void> => {

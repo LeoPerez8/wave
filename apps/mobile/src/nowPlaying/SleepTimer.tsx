@@ -189,6 +189,7 @@ export function SleepTimerButton() {
         text: timer === null ? "Off" : timer.type === "endOfTrack" ? "End of track" : "On",
       }}
       onPress={openSleepTimer}
+      opensMenu
       haptic="selection"
       depth={0.1}
       className="flex-row items-center"

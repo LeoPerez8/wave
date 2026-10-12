@@ -222,3 +222,5 @@ export {
   writeSongSort,
 } from "./songSort.ts";
 export type { SongListKind, SongSort, SongSortKey, SortableSong } from "./songSort.ts";
+export { highlightedOrigin, originOfNewCard, veilAround } from "./overlayOrigin.ts";
+export type { NewCardInput, OriginCard } from "./overlayOrigin.ts";

@@ -1,4 +1,4 @@
-import { placeOverlayCard } from "@wave/core";
+import { placeOverlayCard, veilAround, type OverlayRect } from "@wave/core";
 import { useEffect, useRef, useState, type ComponentRef, type ReactNode } from "react";
 import {
   AccessibilityInfo,
@@ -57,6 +57,15 @@ const EASE = Easing.out(Easing.exp);
 const SCRIM_ALPHA = "40";
 
 /**
+ * What a card was opened from stays clear of the veil, washed with the accent
+ * at this strength (hex alpha) so it stands out on any theme.
+ */
+const ORIGIN_TINT_ALPHA = "29";
+
+/** Rounded corners of the highlight over what a card was opened from. */
+const ORIGIN_RADIUS = CELL;
+
+/**
  * Hosts Wave's glass dialogs. Wrap the app's navigator with it: the navigator
  * becomes the backdrop the cards' glass shows through, and the cards float
  * above it in the same window. Android Back dismisses the top card.
@@ -103,12 +112,16 @@ function OverlayCard({ entry, frontmost }: { entry: OverlayEntry; frontmost: boo
   const keyboard = useKeyboardHeight();
   const ms = useTapAnimationMs();
   const scrim = useThemeColor("scrim");
+  const accent = useThemeColor("accent");
   const reduceMotion = useReducedMotion();
   const card = useRef<ComponentRef<typeof View>>(null);
   const [cardHeight, setCardHeight] = useState<number | null>(null);
   const progress = useSharedValue(0);
   const measured = cardHeight !== null;
   const anchor = entry.request.anchor;
+  const highlight = entry.origin?.rect;
+  // The veil's own size: the window, unless edge-to-edge drawing makes it taller.
+  const [veil, setVeil] = useState<{ width: number; height: number } | null>(null);
   const chromeBottom = useFloatingChromeHeight();
 
   const frame = placeOverlayCard({
@@ -165,13 +178,38 @@ function OverlayCard({ entry, frontmost }: { entry: OverlayEntry; frontmost: boo
       pointerEvents={entry.closing ? "none" : "box-none"}
       importantForAccessibility={frontmost ? "auto" : "no-hide-descendants"}
     >
-      <Animated.View style={[StyleSheet.absoluteFill, veilStyle]}>
+      <Animated.View
+        style={[StyleSheet.absoluteFill, veilStyle]}
+        onLayout={({ nativeEvent: { layout } }) =>
+          setVeil({ width: layout.width, height: layout.height })
+        }
+      >
+        {/* The whole veil closes the card, the clear highlight included. */}
         <Pressable
-          style={{ flex: 1, backgroundColor: `${scrim}${SCRIM_ALPHA}` }}
+          style={{ flex: 1 }}
           accessibilityRole="button"
           accessibilityLabel="Close"
           onPress={() => dismissOverlay(entry)}
-        />
+        >
+          {veilAround(veil ?? window, highlight).map((band) => (
+            <View
+              key={`${band.left},${band.top}`}
+              pointerEvents="none"
+              style={{ ...frameOf(band), backgroundColor: `${scrim}${SCRIM_ALPHA}` }}
+            />
+          ))}
+          {/* Only the frontmost card's veil tints it, so stacked cards don't deepen it. */}
+          {highlight !== undefined && frontmost && (
+            <View
+              pointerEvents="none"
+              style={{
+                ...frameOf(highlight),
+                borderRadius: ORIGIN_RADIUS,
+                backgroundColor: `${accent}${ORIGIN_TINT_ALPHA}`,
+              }}
+            />
+          )}
+        </Pressable>
       </Animated.View>
       <Animated.View
         ref={card}
@@ -207,3 +245,13 @@ function OverlayCard({ entry, frontmost }: { entry: OverlayEntry; frontmost: boo
     </View>
   );
 }
+
+/** Absolute position and size of a window rect. */
+const frameOf = (rect: OverlayRect) =>
+  ({
+    position: "absolute",
+    left: rect.left,
+    top: rect.top,
+    width: rect.right - rect.left,
+    height: rect.bottom - rect.top,
+  }) as const;

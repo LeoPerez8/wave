@@ -53,7 +53,7 @@ export function PlaylistsList({ empty }: { empty: string }) {
           icon={IconPlaylist}
           title="No playlists"
           message={empty}
-          action={<TextButton label="New Playlist" onPress={createAndOpen} />}
+          action={<TextButton label="New Playlist" opensMenu onPress={createAndOpen} />}
         />
       </View>
     );
@@ -78,7 +78,7 @@ export function PlaylistsList({ empty }: { empty: string }) {
               {`${playlists.length} ${playlists.length === 1 ? "playlist" : "playlists"}`}
             </CatalogLine>
           </View>
-          <TextButton label="New Playlist" onPress={createAndOpen} />
+          <TextButton label="New Playlist" opensMenu onPress={createAndOpen} />
         </View>
       }
     />

@@ -1,5 +1,5 @@
 import * as Haptics from "expo-haptics";
-import { useEffect, useRef, type ComponentRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ComponentRef, type ReactNode } from "react";
 import {
   Pressable,
   type GestureResponderEvent,
@@ -18,6 +18,7 @@ import {
 } from "react-native-reanimated";
 import { withUniwind } from "uniwind";
 
+import { useIsOverlayOrigin } from "@/overlay/overlay";
 import { useTapAnimationMs } from "@/settings/tapAnimation";
 
 import { cancelHeldTouch, holdTouch, moveHeldTouch, releaseHeldTouch } from "./heldTouch";
@@ -25,6 +26,9 @@ import { measureRect } from "./measureRect";
 import { runPressedAt } from "./pressedRect";
 
 const AnimatedPressable = withUniwind(createAnimatedComponent(Pressable));
+
+/** Hands each `Press` its own key (`PressedElement.key`). */
+let lastKey = 0;
 
 /** Ease-out exponential: fast to respond, quiet to settle. */
 const EASE = Easing.out(Easing.exp);
@@ -37,7 +41,10 @@ type Props = Omit<PressableProps, "children" | "style"> & {
   haptic?: "selection" | "impact";
   /** How far the target sinks on press; large tiles sink less than small buttons. */
   depth?: number;
-  /** Its tap opens a menu, which floats next to it (`pressedRect`), as long-press menus do. */
+  /**
+   * Its tap opens a card (a menu floats next to it, `pressedRect`), as a
+   * long-press does: it stays highlighted while the card is open.
+   */
   opensMenu?: boolean;
   /** Looks pressed without a touch of its own (e.g. the menu entry a sliding finger is over). */
   highlighted?: boolean;
@@ -68,6 +75,7 @@ export function Press({
   onTouchEnd,
   onTouchCancel,
   children,
+  accessibilityState,
   ...rest
 }: Props) {
   const ms = useTapAnimationMs();
@@ -77,6 +85,9 @@ export function Press({
   const view = useRef<ComponentRef<typeof View>>(null);
   // This press's finger long-pressed and is still down: it reports where it goes (`heldTouch`).
   const holding = useRef(false);
+  const [key] = useState(() => ++lastKey);
+  // Opened the card on screen: screen readers call it selected until the card closes.
+  const origin = useIsOverlayOrigin(key);
 
   // A row that unmounts mid-hold can't report the finger lifting.
   useEffect(
@@ -89,7 +100,7 @@ export function Press({
   // Runs a handler that may open a menu, measuring where this sits first so the
   // menu can float next to it. Resolves with whether it opened one.
   const runAnchored = (handler: () => void): Promise<boolean> =>
-    measureRect(view.current).then((rect) => runPressedAt(rect, handler));
+    measureRect(view.current).then((rect) => runPressedAt(rect, handler, key));
 
   // The finger stays down as a long-press menu opens and can slide onto an entry
   // (slide to choose). A long-press that opens no menu (a tab's) lets it go again.
@@ -129,6 +140,7 @@ export function Press({
   return (
     <AnimatedPressable
       {...rest}
+      accessibilityState={origin ? { ...accessibilityState, selected: true } : accessibilityState}
       ref={view}
       onPress={
         opensMenu && onPress != null ? (event) => void runAnchored(() => onPress(event)) : onPress
