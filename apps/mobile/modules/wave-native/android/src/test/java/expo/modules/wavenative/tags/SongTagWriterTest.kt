@@ -6,6 +6,7 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -130,6 +131,21 @@ class SongTagWriterTest {
     val file = copyOf("tagged.flac")
     writer.write(file, lyrics = NEW_LYRICS, genre = null)
     assertNull(File(file.parentFile, "tagged.lrc").takeIf { it.exists() })
+  }
+
+  /** A file it can't write throws (Find Lyrics and Genre counts it as failed) and is left as it was. */
+  @Test
+  fun aFileThatCantBeWrittenThrowsAndIsLeftAsItWas() {
+    val file = copyOf("tagged.mp3")
+    val before = file.readBytes()
+    assertTrue(file.setReadOnly())
+    try {
+      assertThrows(Exception::class.java) { writer.write(file, lyrics = NEW_LYRICS, genre = "Post-Rock") }
+      assertArrayEquals(before, file.readBytes())
+      assertFalse(File(file.parentFile, "tagged.lrc").exists())
+    } finally {
+      file.setWritable(true)
+    }
   }
 
   private companion object {
