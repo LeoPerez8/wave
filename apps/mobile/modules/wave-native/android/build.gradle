@@ -25,6 +25,8 @@ dependencies {
   // Playback: ExoPlayer in a MediaSessionService (notification, lock screen, headset buttons).
   implementation 'androidx.media3:media3-exoplayer:1.11.1'
   implementation 'androidx.media3:media3-session:1.11.1'
+  // Whether Android Auto is connected, so the Auto lyric line never outlasts the drive.
+  implementation 'androidx.car.app:app:1.7.0'
   // Starting the JS runtime headless for Android Auto (JsRuntime). The app provides it;
   // React Native's Gradle plugin picks the version.
   compileOnly 'com.facebook.react:react-android'

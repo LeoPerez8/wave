@@ -130,6 +130,12 @@ export interface AutoPlayback {
   readonly startIndex: number;
 }
 
+/** The Lyrics toggle on Auto's player screen, and whether Auto is connected. */
+export interface AutoLyricsEvent {
+  readonly on: boolean;
+  readonly carConnected: boolean;
+}
+
 type WavePlayerEvents = {
   onPlaybackState: (state: NativePlayerState) => void;
   onPosition: (position: PlayerPosition) => void;
@@ -138,6 +144,7 @@ type WavePlayerEvents = {
   onPlayerError: (event: PlayerErrorEvent) => void;
   onSleepTimer: (event: SleepTimerEvent) => void;
   onAutoRequest: (event: AutoRequestEvent) => void;
+  onAutoLyrics: (event: AutoLyricsEvent) => void;
 };
 
 declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
@@ -185,6 +192,14 @@ declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
   respondAuto(id: number, json: string): void;
   /** Answers request `id` with an error Auto shows as `message`. */
   failAuto(id: number, message: string): void;
+  /** The Lyrics toggle and Auto's connection; `onAutoLyrics` reports changes. */
+  getAutoLyrics(): Promise<AutoLyricsEvent>;
+  /**
+   * Shows `line` under the title of item `itemId` (its queue entry key) on
+   * Auto's player screen in place of the artist; null shows the artist. The
+   * service ignores it while the toggle is off or Auto isn't connected.
+   */
+  setAutoLyricLine(itemId: string | null, line: string | null): Promise<void>;
 }
 
 export const WavePlayer = requireNativeModule<WavePlayerModule>("WavePlayer");
