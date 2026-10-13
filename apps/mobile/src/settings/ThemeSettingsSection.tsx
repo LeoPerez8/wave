@@ -11,6 +11,7 @@ import { CatalogLine } from "@/catalog/CatalogLine";
 import { Hairline } from "@/catalog/Hairline";
 import { TextButton } from "@/components/TextButton";
 import { Press } from "@/motion/Press";
+import { confirmAction } from "@/overlay/alert";
 
 import { resetTheme, setThemeSwatch, useThemeChoice } from "./theme";
 
@@ -30,7 +31,7 @@ function Swatch({ swatch, group }: { swatch: ThemeSwatchOption; group: keyof The
       accessibilityRole="radio"
       accessibilityLabel={swatch.label}
       accessibilityState={{ checked: swatch.selected }}
-      onPress={() => setThemeSwatch(group, swatch.id)}
+      onPress={() => void setThemeSwatch(group, swatch.id, confirmAction)}
       haptic="selection"
       className="items-center justify-center"
       style={{ width: TARGET, height: TARGET }}
@@ -86,13 +87,13 @@ export function ThemeSettingsSection() {
         Cards, groups, separators and text follow the background you choose for each mode. Primary
         colours progress, toggles and what&apos;s active; secondary marks favorites and what&apos;s
         playing. A colour that wouldn&apos;t read on your background is deepened or brightened until
-        it does.
+        it does. The app icon takes your primary and secondary once you leave Wave.
       </Text>
       <View className="mt-4 items-start">
         <TextButton
           label="Reset to defaults"
           disabled={isDefaultThemeChoice(choice)}
-          onPress={resetTheme}
+          onPress={() => void resetTheme(confirmAction)}
         />
       </View>
     </>

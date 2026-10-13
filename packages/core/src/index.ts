@@ -206,6 +206,14 @@ export type {
   ThemeSwatchOption,
   ThemeSwatchRow,
 } from "./themeChoice.ts";
+export {
+  LAUNCHER_ICONS,
+  LAUNCHER_ICON_ART,
+  LAUNCHER_ICON_RADIUS,
+  launcherIconFor,
+  launcherIconSwitch,
+} from "./launcherIcon.ts";
+export type { LauncherBehaviour, LauncherIcon, LauncherIconSwitch } from "./launcherIcon.ts";
 export { LAUNCH_SPLASH_THEMES, launchTheme } from "./launchTheme.ts";
 export type { LaunchColors, LaunchSplashTheme, LaunchTheme } from "./launchTheme.ts";
 export { sliderFraction, sliderValueAt, snapSliderValue, stepSlider } from "./slider.ts";

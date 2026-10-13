@@ -145,6 +145,11 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
   /** Deletes every downloaded artist photo. */
   clearArtistPhotos(): Promise<void>;
   /**
+   * Makes `alias` (one of `aliases`, activity-alias names without the package)
+   * Wave's launcher icon. It switches once Wave leaves the screen.
+   */
+  setLauncherIcon(alias: string, aliases: readonly string[]): Promise<void>;
+  /**
    * Saves what the next cold start opens on (Core's `launchTheme`) and, on
    * Android 13+, picks its splash style for Android to draw.
    */

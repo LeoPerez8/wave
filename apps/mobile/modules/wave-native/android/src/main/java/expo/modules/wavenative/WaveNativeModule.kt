@@ -1,6 +1,7 @@
 package expo.modules.wavenative
 
 import android.app.Activity
+import android.app.Application
 import android.content.ActivityNotFoundException
 import android.content.ContentUris
 import android.content.Context
@@ -26,6 +27,7 @@ import expo.modules.wavenative.artwork.ArtworkStore
 import expo.modules.wavenative.files.DeleteOutcome
 import expo.modules.wavenative.files.TrackFileDeleter
 import expo.modules.wavenative.folders.TreeUris
+import expo.modules.wavenative.launcher.LauncherIconSwitcher
 import expo.modules.wavenative.launch.LaunchTheme
 import expo.modules.wavenative.launch.LaunchThemeStore
 import expo.modules.wavenative.lyrics.LyricsReader
@@ -49,8 +51,9 @@ import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Wave's native side: all-files access, the folder and playlist file pickers, the library scanner,
- * lyrics, writing found lyrics and genre into files, deleting songs' files, saving artist photos
- * and the launch theme. Scans run one at a time on a background thread and stream results to JS as events:
+ * lyrics, writing found lyrics and genre into files, deleting songs' files, saving artist photos,
+ * the launch theme and the launcher icon. Scans run one at a time on a background thread and
+ * stream results to JS as events:
  * `onScanProgress`, `onScanMissing`, `onScanBatch`, `onScanComplete` and
  * `onScanError`, each carrying the `scanId` returned by `startScan`.
  */
@@ -210,6 +213,14 @@ class WaveNativeModule : Module() {
     AsyncFunction("clearArtistPhotos") { artistPhotos().clear() }
 
     /**
+     * Makes [alias] (one of [aliases], activity-alias names without the package)
+     * Wave's launcher icon once Wave leaves the screen; see [LauncherIconSwitcher].
+     */
+    AsyncFunction("setLauncherIcon") { alias: String, aliases: List<String> ->
+      launcherIcons().request(alias, aliases)
+    }.runOnQueue(Queues.MAIN)
+
+    /**
      * Writes found lyrics (LRC or plain text) and genre into a song's file,
      * replacing what is there; null leaves that field alone (see
      * [SongTagWriter]). Resolves `{ lyrics, genre }`, where each went
@@ -243,8 +254,26 @@ class WaveNativeModule : Module() {
     OnDestroy {
       currentScan?.second?.set(true)
       scanExecutor.shutdownNow()
+      launcherIconSwitcher?.let { switcher ->
+        appContext.reactContext?.let { (it.applicationContext as Application).unregisterActivityLifecycleCallbacks(switcher) }
+      }
+      launcherIconSwitcher = null
     }
   }
+
+  /** Created on first use (on the main thread) and told when Wave's activities stop. */
+  private var launcherIconSwitcher: LauncherIconSwitcher? = null
+
+  private fun launcherIcons(): LauncherIconSwitcher =
+    launcherIconSwitcher
+      ?: LauncherIconSwitcher(
+        context.applicationContext,
+        // A picker Wave opened is over it: switching now could close Wave's task under it.
+        isBusy = { pendingFolderPick != null || pendingPlaylistPick != null },
+      ).also {
+        (context.applicationContext as Application).registerActivityLifecycleCallbacks(it)
+        launcherIconSwitcher = it
+      }
 
   private fun onFolderPicked(payload: OnActivityResultPayload) {
     val promise = pendingFolderPick ?: return
@@ -300,7 +329,7 @@ class WaveNativeModule : Module() {
     }
   }.getOrNull()
 
-  private fun artistPhotos() =ArtistPhotoStore(File(File(context.filesDir, "artwork"), "artists"))
+  private fun artistPhotos() = ArtistPhotoStore(File(File(context.filesDir, "artwork"), "artists"))
 
   /** Reads single files the way a scan does (same tag reader and artwork store). */
   private fun singleFileScanner() =

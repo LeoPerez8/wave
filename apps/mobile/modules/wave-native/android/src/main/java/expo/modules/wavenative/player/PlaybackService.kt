@@ -31,6 +31,7 @@ import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.FutureCallback
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import expo.modules.wavenative.launcher.LauncherIconSwitcher
 
 /**
  * Hosts the player. Media3 provides the media notification, lock-screen and
@@ -272,9 +273,13 @@ class PlaybackService : MediaLibraryService() {
     super.onDestroy()
   }
 
-  /** Tapping the notification opens Wave. */
+  /**
+   * Tapping the notification opens Wave. It points at MainActivity rather than
+   * the launcher icon's alias, which a theme change can turn off.
+   */
   private fun openAppIntent(): PendingIntent? {
     val launch = packageManager.getLaunchIntentForPackage(packageName) ?: return null
+    launch.component?.let { launch.component = LauncherIconSwitcher.launchTarget(packageManager, it) }
     return PendingIntent.getActivity(
       this,
       0,
