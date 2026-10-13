@@ -204,6 +204,8 @@ export type {
   ThemeSwatchOption,
   ThemeSwatchRow,
 } from "./themeChoice.ts";
+export { LAUNCH_SPLASH_THEMES, launchTheme } from "./launchTheme.ts";
+export type { LaunchColors, LaunchSplashTheme, LaunchTheme } from "./launchTheme.ts";
 export { sliderFraction, sliderValueAt, snapSliderValue, stepSlider } from "./slider.ts";
 export type { SliderRange } from "./slider.ts";
 export { LONG_PRESS_DELAY, readLongPressDelay, snapLongPressDelay } from "./longPress.ts";
