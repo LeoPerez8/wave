@@ -92,6 +92,8 @@ export type {
 export { resolveRemoveSwipe } from "./rowGestures.ts";
 export { currentLyricIndex, parseLyrics, pickLyrics } from "./lyrics.ts";
 export type { LyricLine, Lyrics, LyricsSources } from "./lyrics.ts";
+export { autoLyricLine } from "./autoLyricLine.ts";
+export type { AutoLyricLine, AutoLyricLineInput } from "./autoLyricLine.ts";
 export {
   CUSTOM_SLEEP_MINUTES,
   SLEEP_TIMER_PRESETS,

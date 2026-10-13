@@ -11,6 +11,9 @@ import android.os.Process
 import android.os.SystemClock
 import android.util.Log
 import androidx.annotation.OptIn
+import androidx.car.app.connection.CarConnection
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.Observer
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -47,6 +50,9 @@ import com.google.common.util.concurrent.ListenableFuture
  * The player's state is kept on disk ([ResumeStore]), so after Wave's process
  * died, Auto and the system media controls can resume the last queue before
  * JS is up ([SessionCallback.onPlaybackResumption]).
+ *
+ * While Auto is connected and its Lyrics toggle is on, the session shows the
+ * lyric line JS sends in place of the artist ([AutoLyrics], [LyricLinePlayer]).
  */
 class PlaybackService : MediaLibraryService() {
   private var session: MediaLibrarySession? = null
@@ -147,11 +153,18 @@ class PlaybackService : MediaLibraryService() {
     player.addListener(sleepTimerListener)
     player.addListener(resumeListener)
     exoPlayer = player
-    session = MediaLibrarySession.Builder(this, player, SessionCallback())
+    AutoLyrics.state.init(PreferencesLyricsToggleStore(this))
+    val shown = LyricLinePlayer(player, AutoLyrics.state::lineFor)
+    session = MediaLibrarySession.Builder(this, shown, SessionCallback())
       .apply { openAppIntent()?.let(::setSessionActivity) }
       .build()
     showModes(AutoModes.state.current)
     stopModes = AutoModes.state.listen(::showModes)
+    stopLyrics = AutoLyrics.state.listen {
+      shown.refresh()
+      showModes(AutoModes.state.current)
+    }
+    carConnection = CarConnection(this).type.also { it.observeForever(carConnectionObserver) }
     AutoLibrary.onChildrenRecovered = { parentId ->
       // The count is unknown here; Auto asks for the pages again.
       main.post { session?.notifyChildrenChanged(parentId, Int.MAX_VALUE, null) }
@@ -161,9 +174,23 @@ class PlaybackService : MediaLibraryService() {
   /** Stops following JS's shuffle and repeat ([AutoModes.state]). */
   private var stopModes: (() -> Unit)? = null
 
-  /** Shows the queue's shuffle and repeat on the mode buttons (Auto's player screen). */
+  /** Stops following the Lyrics toggle and line ([AutoLyrics.state]). */
+  private var stopLyrics: (() -> Unit)? = null
+
+  /** Whether Android Auto is connected (projected on a car's screen, or Android Automotive). */
+  private var carConnection: LiveData<Int>? = null
+  private val carConnectionObserver = Observer<Int> { type ->
+    AutoLyrics.state.setCarConnected(type != CarConnection.CONNECTION_TYPE_NOT_CONNECTED)
+  }
+
+  /**
+   * Shows the queue's shuffle and repeat on the mode buttons (Auto's player
+   * screen), and the Lyrics toggle after them.
+   */
   private fun showModes(modes: PlaybackModes) {
-    session?.setMediaButtonPreferences(AutoModesSession.buttons(modes))
+    session?.setMediaButtonPreferences(
+      AutoModesSession.buttons(modes) + AutoLyricsSession.button(AutoLyrics.state.on),
+    )
   }
 
   /**
@@ -206,6 +233,11 @@ class PlaybackService : MediaLibraryService() {
   override fun onDestroy() {
     stopModes?.invoke()
     stopModes = null
+    stopLyrics?.invoke()
+    stopLyrics = null
+    carConnection?.removeObserver(carConnectionObserver)
+    carConnection = null
+    AutoLyrics.state.setCarConnected(false)
     AutoLibrary.onChildrenRecovered = null
     browsers.clear()
     JsRuntime.release()
@@ -258,7 +290,9 @@ class PlaybackService : MediaLibraryService() {
       // Shuffle and repeat are custom commands for JS's queue engine; the player's own stay unused.
       if (showsModeButtons(session, controller)) {
         result
-          .setAvailableSessionCommands(AutoModesSession.sessionCommands)
+          .setAvailableSessionCommands(
+            AutoModesSession.sessionCommands.buildUpon().add(AutoLyricsSession.TOGGLE).build(),
+          )
           .setAvailablePlayerCommands(AutoModesSession.playerCommands)
       }
       return result.build()
@@ -371,6 +405,11 @@ class PlaybackService : MediaLibraryService() {
       customCommand: SessionCommand,
       args: Bundle,
     ): ListenableFuture<SessionResult> {
+      // The Lyrics toggle: JS hears of it and sends lines while it's on.
+      if (customCommand.customAction == AutoLyrics.TOGGLE_ACTION) {
+        AutoLyrics.state.toggle()
+        return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+      }
       // A shuffle or repeat button: JS's queue engine changes the mode and reports it back.
       AutoModes.request(customCommand.customAction)?.let { request ->
         if (session.isAutoCompanionController(controller) || session.isAutomotiveController(controller)) {
