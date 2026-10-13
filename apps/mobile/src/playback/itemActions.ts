@@ -13,6 +13,7 @@ import { router, usePathname } from "expo-router";
 
 import { confirmDeleteSongs } from "@/library/deleteSongs";
 import { setFavorites, useFavoriteIds } from "@/library/favorites";
+import { useLinkRows } from "@/library/hooks";
 import type { SongRow } from "@/library/LibraryStore";
 import {
   confirmDeletePlaylists,
@@ -109,13 +110,24 @@ export function useItemActions(
       ? (targetHeading(target, undefined)?.title ?? targetCount(target))
       : targetCount(target);
 
-  return itemActions({
+  const planned = itemActions({
     kind: target.kind,
     items: facts,
     surface,
     selectable: onSelect !== undefined,
     here,
-  }).map((entry): ActionEntry => {
+  });
+
+  // Read ahead, so Go to Album / Go to Artist open header-first.
+  let goAlbumId: number | undefined;
+  let goArtistId: number | undefined;
+  for (const entry of planned) {
+    if (entry.action === "goToAlbum") goAlbumId = entry.albumId;
+    if (entry.action === "goToArtist") goArtistId = entry.artistId;
+  }
+  const links = useLinkRows(goAlbumId, goArtistId);
+
+  return planned.map((entry): ActionEntry => {
     const label = ITEM_ACTION_LABELS[entry.action];
     const make = (onPress: () => void): ActionEntry => ({
       action: entry.action,
@@ -149,11 +161,11 @@ export function useItemActions(
         );
       case "goToAlbum": {
         const { albumId } = entry;
-        return make(run(() => openAlbum(albumId)));
+        return make(run(() => openAlbum(albumId, links.album)));
       }
       case "goToArtist": {
         const { artistId } = entry;
-        return make(run(() => openArtist(artistId)));
+        return make(run(() => openArtist(artistId, links.artist)));
       }
       case "renamePlaylist":
         return make(run(() => playlist !== undefined && void renamePlaylistFlow(playlist)));

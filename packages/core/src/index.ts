@@ -292,5 +292,7 @@ export type {
   ArtistPhotoOutcome,
   ArtistPhotoUrls,
 } from "./artistPhoto.ts";
+export { focusedVersion, startFocusedVersion } from "./focusedVersion.ts";
+export type { FocusedVersion, FocusedVersionEvent } from "./focusedVersion.ts";
 export { stepNowPlayingSheet } from "./sheetLifecycle.ts";
 export type { SheetEvent, SheetPhase, SheetStep } from "./sheetLifecycle.ts";

@@ -11,6 +11,7 @@ import Animated, {
 
 import { CELL } from "@/catalog/grid";
 import { toggleFavorite, useIsFavorite } from "@/library/favorites";
+import { useLinkRows } from "@/library/hooks";
 import type { TrackDetails } from "@/library/LibraryStore";
 import { openAlbum, openArtist } from "@/library/routes";
 import { Press } from "@/motion/Press";
@@ -152,6 +153,8 @@ export function PlayerView({ item, details, playing }: Props) {
   const title = item.title ?? "Unknown title";
   const artist = details?.artist ?? item.artist ?? "Unknown Artist";
   const album = details?.album ?? item.album ?? "Unknown Album";
+  // Read ahead, so the screens open header-first.
+  const links = useLinkRows(details?.albumId, details?.artistId);
   return (
     <View className="flex-1" style={{ gap: CELL * 4 }}>
       <NowPlayingArtwork uri={item.artworkUri} playing={playing} />
@@ -166,13 +169,13 @@ export function PlayerView({ item, details, playing }: Props) {
           </Text>
           <MetaLink
             label={artist}
-            open={details === null ? null : () => openArtist(details.artistId)}
+            open={details === null ? null : () => openArtist(details.artistId, links.artist)}
             hint="Opens the artist"
             className="font-sans text-body text-secondary"
           />
           <MetaLink
             label={album}
-            open={details === null ? null : () => openAlbum(details.albumId)}
+            open={details === null ? null : () => openAlbum(details.albumId, links.album)}
             hint="Opens the album"
             className="font-sans text-body text-secondary"
           />

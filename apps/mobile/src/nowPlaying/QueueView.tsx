@@ -32,7 +32,6 @@ import { Artwork } from "@/catalog/Artwork";
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
-import type { SongRow } from "@/library/LibraryStore";
 import { Press } from "@/motion/Press";
 import {
   cycleRepeat,
@@ -43,9 +42,10 @@ import {
 } from "@/playback/actions";
 import { useQueue } from "@/playback/hooks";
 import type { PlaybackState } from "@/playback/Player";
+import type { QueueTrack } from "@/playback/queueTracks";
 import { useThemeColor } from "@/theme/useThemeColor";
 
-import { useQueueSongs } from "./hooks";
+import { useQueueTracks } from "./hooks";
 import { TrackHeader } from "./TrackHeader";
 
 type IconProps = { size?: number; color?: string; strokeWidth?: number };
@@ -59,7 +59,7 @@ const AUTOSCROLL_EDGE = ROW;
 /** Auto-scroll speed at the very edge, in dp per second. */
 const AUTOSCROLL_SPEED = ROW * 12;
 
-const thumbUri = (song: SongRow | undefined): string | undefined =>
+const thumbUri = (song: QueueTrack | undefined): string | undefined =>
   song?.thumbPath == null ? undefined : `file://${song.thumbPath}`;
 
 type ToggleProps = {
@@ -146,7 +146,7 @@ export function QueueHeader({ item }: { item: NonNullable<PlaybackState["item"]>
 }
 
 type RowContentProps = {
-  song: SongRow | undefined;
+  song: QueueTrack | undefined;
 };
 
 /** Thumbnail, title and artist: the part of an Up Next row that a drag lifts. */
@@ -175,7 +175,7 @@ type DragHandlers = {
 type RowProps = {
   entry: QueueEntry;
   index: number;
-  song: SongRow | undefined;
+  song: QueueTrack | undefined;
   /** Rows to step aside while another row is dragged over this one: -1, 0 or 1. */
   shift: number;
   /** Shifts animate while a drag is going on and snap once the new order lands. */
@@ -302,7 +302,7 @@ type Drag = {
 export function UpNextList({ bottomInset }: { bottomInset: number }) {
   const queue = useQueue();
   const entries = useMemo(() => upNext(queue), [queue]);
-  const songs = useQueueSongs(queue.entries);
+  const songs = useQueueTracks(queue.entries);
   const playingKey = currentEntry(queue)?.key ?? null;
 
   const listRef = useRef<LegendListRef>(null);
@@ -467,8 +467,8 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
     ),
     [songs, active, handlers, translation, entries.length],
   );
-  // Legend List re-renders a row only when its item or extraData changes, and the
-  // songs arrive after the first render.
+  // Legend List re-renders a row only when its item or extraData changes, and a
+  // queue picked back up after JS restarted learns its songs after the first render.
   const rowState = useMemo(() => ({ songs, active }), [songs, active]);
 
   if (entries.length === 0) {
