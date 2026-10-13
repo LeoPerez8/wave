@@ -19,7 +19,7 @@ import { useCurrentTrackId } from "@/playback/hooks";
 import type { PlaybackState } from "@/playback/Player";
 import { useThemeColor } from "@/theme/useThemeColor";
 
-import { closeNowPlaying } from "./sheet";
+import { closeNowPlaying, useNowPlayingShown } from "./sheet";
 
 /** How far the artwork steps back while paused. */
 const PAUSED_SCALE = 0.84;
@@ -153,8 +153,13 @@ export function PlayerView({ item, details, playing }: Props) {
   const title = item.title ?? "Unknown title";
   const artist = details?.artist ?? item.artist ?? "Unknown Artist";
   const album = details?.album ?? item.album ?? "Unknown Album";
-  // Read ahead, so the screens open header-first.
-  const links = useLinkRows(details?.albumId, details?.artistId);
+  // Read ahead, so the screens open header-first; only while the sheet is
+  // shown, so track changes behind a closed Now Playing don't pay for it.
+  const shown = useNowPlayingShown();
+  const links = useLinkRows(
+    shown ? details?.albumId : undefined,
+    shown ? details?.artistId : undefined,
+  );
   return (
     <View className="flex-1" style={{ gap: CELL * 4 }}>
       <NowPlayingArtwork uri={item.artworkUri} playing={playing} />

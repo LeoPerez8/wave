@@ -33,16 +33,20 @@ let opening: { readonly screen: DetailScreen; readonly row: { readonly id: numbe
  * the row the tapped list shows ([known]), the screen draws its header from it
  * on its first frame instead of waiting for its whole query (`useKnownRow`).
  */
-const open = <S extends DetailScreen>(screen: S, id: number, known?: DetailRows[S]): void => {
-  opening = known === undefined ? undefined : { screen, row: known };
+const open = <S extends DetailScreen>(
+  screen: S,
+  id: number,
+  known?: DetailRows[S] | null,
+): void => {
+  opening = known === undefined || known === null ? undefined : { screen, row: known };
   router.push(detailPath(here, screen, id) as Href);
 };
 
-export const openAlbum = (id: number, known?: AlbumRow): void => open("album", id, known);
-export const openArtist = (id: number, known?: ArtistRow): void => open("artist", id, known);
-export const openGenre = (id: number, known?: GenreRow): void => open("genre", id, known);
-export const openFolder = (id: number, known?: FolderRow): void => open("folder", id, known);
-export const openPlaylist = (id: number, known?: PlaylistRow): void => open("playlist", id, known);
+export const openAlbum = (id: number, known?: AlbumRow | null): void => open("album", id, known);
+export const openArtist = (id: number, known?: ArtistRow | null): void => open("artist", id, known);
+export const openGenre = (id: number, known?: GenreRow | null): void => open("genre", id, known);
+export const openFolder = (id: number, known?: FolderRow | null): void => open("folder", id, known);
+export const openPlaylist = (id: number, known?: PlaylistRow | null): void => open("playlist", id, known);
 
 /**
  * What the list or link knew about the item a detail screen shows when it was
