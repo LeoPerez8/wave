@@ -12,11 +12,21 @@ import {
   counted,
   reorderTarget,
   upNext,
+  withPendingMoves,
+  type PendingMove,
   type QueueEntry,
   type RepeatMode,
 } from "@wave/core";
 import * as Haptics from "expo-haptics";
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentType,
+} from "react";
 import { Text, View } from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 import Animated, {
@@ -170,16 +180,18 @@ type DragHandlers = {
   start: (key: string, index: number) => void;
   move: (translationY: number) => void;
   end: (canceled: boolean) => void;
+  /**
+   * Hands the list a mounted row's offset, so a drag can move the row aside
+   * without re-rendering it. Sets the offset for the row's index right away;
+   * returns the call that lets it go.
+   */
+  track: (index: number, offset: SharedValue<number>) => () => void;
 };
 
 type RowProps = {
   entry: QueueEntry;
   index: number;
   song: QueueTrack | undefined;
-  /** Rows to step aside while another row is dragged over this one: -1, 0 or 1. */
-  shift: number;
-  /** Shifts animate while a drag is going on and snap once the new order lands. */
-  animateShift: boolean;
   /** The row being dragged leaves a gap; its lifted copy follows the finger. */
   lifted: boolean;
   drag: DragHandlers;
@@ -187,29 +199,15 @@ type RowProps = {
   count: number;
 };
 
-function UpNextRow({
-  entry,
-  index,
-  song,
-  shift,
-  animateShift,
-  lifted,
-  drag,
-  translation,
-  count,
-}: RowProps) {
+function UpNextRow({ entry, index, song, lifted, drag, translation, count }: RowProps) {
   const secondary = useThemeColor("secondary");
-  const offset = useSharedValue(shift * ROW);
-
-  useEffect(() => {
-    offset.set(
-      animateShift ? withTiming(shift * ROW, { duration: 160, easing: EASE_OUT }) : shift * ROW,
-    );
-  }, [shift, animateShift, offset]);
+  const offset = useSharedValue(0);
+  const { start, move, end, track } = drag;
+  // A layout effect, so a new order and the offsets reset for it land together.
+  useLayoutEffect(() => track(index, offset), [track, index, offset]);
 
   const style = useAnimatedStyle(() => ({ transform: [{ translateY: offset.get() }] }));
 
-  const { start, move, end } = drag;
   const key = entry.key;
   const pan = usePanGesture(
     useMemo(
@@ -250,8 +248,8 @@ function UpNextRow({
           onAccessibilityAction={(event) => {
             const action = event.nativeEvent.actionName;
             if (action === "remove") removeQueueEntry(key);
-            if (action === "moveUp") moveQueueEntry(key, index - 1);
-            if (action === "moveDown") moveQueueEntry(key, index + 1);
+            if (action === "moveUp") void moveQueueEntry(key, index - 1);
+            if (action === "moveDown") void moveQueueEntry(key, index + 1);
           }}
           onPress={() => playQueueEntry(key)}
           depth={0.015}
@@ -286,22 +284,30 @@ function UpNextRow({
   );
 }
 
-/** A drag in progress, or one dropped and waiting for the queue to take the new order. */
+/** How many rows' places the row at [index] stands aside for a drag over the list. */
+const shiftAt = (index: number, target: { from: number; to: number } | null): number =>
+  target === null ? 0 : reorderShift({ index, from: target.from, to: target.to });
+
+/** The row being dragged, or dropped and settling into its slot. */
 type Drag = {
   readonly key: string;
   readonly from: number;
-  readonly to: number;
-  /** Set on drop: the Up Next list the drop was made against. */
-  readonly droppedOn: readonly QueueEntry[] | null;
 };
 
 /**
  * Up Next: tap a row to play it, X to remove it, and drag its handle to move
  * it. Near the list's top or bottom edge a drag scrolls the list.
+ *
+ * While a row is dragged, the others step aside on the UI thread (no React
+ * render per drop target). On drop the lifted copy settles into its slot,
+ * then the new order lands in one render with the offsets reset, and stays
+ * shown (`withPendingMoves`) until the queue has it.
  */
 export function UpNextList({ bottomInset }: { bottomInset: number }) {
   const queue = useQueue();
-  const entries = useMemo(() => upNext(queue), [queue]);
+  const [pending, setPending] = useState<readonly PendingMove[]>([]);
+  const shown = useMemo(() => withPendingMoves(queue, pending), [queue, pending]);
+  const entries = useMemo(() => upNext(shown), [shown]);
   const songs = useQueueTracks(queue.entries);
   const playingKey = currentEntry(queue)?.key ?? null;
 
@@ -317,6 +323,14 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
     translation: number;
     to: number;
   } | null>(null);
+  // Where the rows stand aside for: the live drag's target, or the drop while it settles.
+  const shifted = useRef<{ from: number; to: number } | null>(null);
+  // Mounted rows' offsets, with the index and shift each was last given.
+  const rows = useRef(new Map<SharedValue<number>, { index: number; shift: number }>());
+  // Lands a drop that is settling; null when none is.
+  const settling = useRef<(() => void) | null>(null);
+  // True from a drop landing until the list has rendered its new order.
+  const landing = useRef(false);
   const autoscroll = useRef<{ speed: number; frame: number | null; last: number }>({
     speed: 0,
     frame: null,
@@ -325,14 +339,34 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
   const translation = useSharedValue(0);
   const liftedTop = useSharedValue(0);
 
-  // A drop is over once the queue has the new order (or after a second, if it never comes).
-  const active =
-    drag !== null && (drag.droppedOn === null || drag.droppedOn === entries) ? drag : null;
-  useEffect(() => {
-    if (drag?.droppedOn == null) return undefined;
-    const timer = setTimeout(() => setDrag(null), 1000);
-    return () => clearTimeout(timer);
-  }, [drag]);
+  /** Moves every mounted row whose shift changed: gliding during a drag, at once otherwise. */
+  const applyShifts = useCallback((animate: boolean) => {
+    for (const [offset, row] of rows.current) {
+      const shift = shiftAt(row.index, shifted.current);
+      if (shift === row.shift) continue;
+      row.shift = shift;
+      offset.set(
+        animate ? withTiming(shift * ROW, { duration: 160, easing: EASE_OUT }) : shift * ROW,
+      );
+    }
+  }, []);
+
+  const track = useCallback((index: number, offset: SharedValue<number>) => {
+    const shift = shiftAt(index, shifted.current);
+    offset.set(shift * ROW);
+    const tracked = rows.current;
+    tracked.set(offset, { index, shift });
+    return () => {
+      tracked.delete(offset);
+    };
+  }, []);
+
+  // After the render a drop landed in: any row that kept its index lets go of its shift too.
+  useLayoutEffect(() => {
+    if (!landing.current) return;
+    landing.current = false;
+    applyShifts(false);
+  });
 
   const retarget = useCallback(() => {
     const current = live.current;
@@ -345,9 +379,10 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
     });
     if (to === current.to) return;
     current.to = to;
+    shifted.current = { from: current.from, to };
     void Haptics.selectionAsync();
-    setDrag((previous) => (previous === null ? previous : { ...previous, to }));
-  }, [entries.length]);
+    applyShifts(true);
+  }, [entries.length, applyShifts]);
 
   const stopAutoscroll = useCallback(() => {
     const state = autoscroll.current;
@@ -379,10 +414,14 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
 
   const start = useCallback(
     (key: string, index: number) => {
+      // A drop still settling (or rendering its new order) would leave [index] stale.
+      settling.current?.();
+      if (landing.current) return;
       live.current = { key, from: index, startScroll: scrollY.current, translation: 0, to: index };
+      shifted.current = { from: index, to: index };
       liftedTop.set(index * ROW - scrollY.current);
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      setDrag({ key, from: index, to: index, droppedOn: null });
+      setDrag({ key, from: index });
     },
     [liftedTop],
   );
@@ -418,27 +457,48 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
       const current = live.current;
       live.current = null;
       if (current === null) return;
-      const to = canceled ? current.from : current.to;
+      const { key, from } = current;
+      const to = canceled ? from : current.to;
+      if (to !== current.to) {
+        shifted.current = { from, to };
+        applyShifts(true);
+      }
+      // Once the lifted copy is in its slot: the copy goes, and the new order
+      // lands with every row's offset reset for it, in one render.
+      const land = (): void => {
+        if (settling.current !== land) return;
+        settling.current = null;
+        shifted.current = null;
+        landing.current = true;
+        setDrag(null);
+        if (to === from) return;
+        const moved: PendingMove = { key, toUpNextIndex: to };
+        setPending((list) => [...list, moved]);
+        void moveQueueEntry(key, to).finally(() =>
+          setPending((list) => list.filter((pendingMove) => pendingMove !== moved)),
+        );
+      };
+      settling.current = land;
       // The lifted copy settles into the gap it was dropped on.
       translation.set(
-        withTiming(to * ROW - scrollY.current - (current.from * ROW - current.startScroll), {
-          duration: 120,
-          easing: EASE_OUT,
-        }),
+        withTiming(
+          to * ROW - scrollY.current - (from * ROW - current.startScroll),
+          { duration: 120, easing: EASE_OUT },
+          () => {
+            scheduleOnRN(land);
+          },
+        ),
       );
-      if (to === current.from) {
-        setDrag(null);
-        return;
-      }
-      setDrag({ key: current.key, from: current.from, to, droppedOn: entries });
-      moveQueueEntry(current.key, to);
     },
-    [entries, stopAutoscroll, translation],
+    [stopAutoscroll, translation, applyShifts],
   );
 
   useEffect(() => stopAutoscroll, [stopAutoscroll]);
 
-  const handlers = useMemo<DragHandlers>(() => ({ start, move, end }), [start, move, end]);
+  const handlers = useMemo<DragHandlers>(
+    () => ({ start, move, end, track }),
+    [start, move, end, track],
+  );
 
   const liftedStyle = useAnimatedStyle(() => ({
     transform: [
@@ -457,19 +517,17 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
         entry={item}
         index={index}
         song={songs.get(item.trackId)}
-        shift={active === null ? 0 : reorderShift({ index, from: active.from, to: active.to })}
-        animateShift={active !== null}
-        lifted={active?.key === item.key}
+        lifted={drag?.key === item.key}
         drag={handlers}
         translation={translation}
         count={entries.length}
       />
     ),
-    [songs, active, handlers, translation, entries.length],
+    [songs, drag, handlers, translation, entries.length],
   );
   // Legend List re-renders a row only when its item or extraData changes, and a
   // queue picked back up after JS restarted learns its songs after the first render.
-  const rowState = useMemo(() => ({ songs, active }), [songs, active]);
+  const rowState = useMemo(() => ({ songs, drag }), [songs, drag]);
 
   if (entries.length === 0) {
     return (
@@ -481,7 +539,7 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
     );
   }
 
-  const liftedSong = active === null ? undefined : songs.get(entries[active.from]?.trackId ?? "");
+  const liftedSong = drag === null ? undefined : songs.get(entries[drag.from]?.trackId ?? "");
 
   return (
     <View
@@ -498,15 +556,15 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
         renderItem={renderItem}
         extraData={rowState}
         estimatedItemSize={ROW}
-        alwaysRender={active === null ? undefined : { keys: [active.key] }}
-        scrollEnabled={active === null}
+        alwaysRender={drag === null ? undefined : { keys: [drag.key] }}
+        scrollEnabled={drag === null}
         onScroll={(event) => {
           scrollY.current = event.nativeEvent.contentOffset.y;
         }}
         scrollEventThrottle={16}
         contentContainerStyle={{ paddingBottom: bottomInset }}
       />
-      {active !== null && (
+      {drag !== null && (
         <Animated.View
           pointerEvents="none"
           className="absolute left-0 right-0 top-0 flex-row items-center bg-surface"

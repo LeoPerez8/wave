@@ -8,6 +8,7 @@ import {
   parseQueueState,
   reduceQueue,
   upNext,
+  withPendingMoves,
 } from "./index.ts";
 import type { QueueCommand, QueueState } from "./index.ts";
 
@@ -488,5 +489,24 @@ describe("removeTracks (deleted songs)", () => {
     const { state, playback } = reduceQueue(playing, { type: "removeTracks", trackIds: ["x"] });
     assert.equal(state, playing);
     assert.equal(playback, "keep");
+  });
+});
+
+describe("withPendingMoves", () => {
+  test("shows a dropped move before the queue has it, and the same order once it does", () => {
+    const playing = start("a b c d e", 1);
+    const move = { key: keyOf(playing, "e"), toUpNextIndex: 0 };
+    assert.equal(show(withPendingMoves(playing, [move])), "a [b] e c d");
+    const landed = apply(playing, { type: "move", ...move });
+    assert.equal(show(withPendingMoves(landed, [move])), "a [b] e c d");
+  });
+
+  test("keeps showing the move when an earlier command lands first", () => {
+    const playing = start("a b c d e", 1);
+    const move = { key: keyOf(playing, "e"), toUpNextIndex: 1 };
+    const advanced = apply(playing, { type: "next" });
+    assert.equal(show(withPendingMoves(advanced, [move])), "a b [c] d e");
+    const removed = apply(playing, { type: "remove", key: keyOf(playing, "d") });
+    assert.equal(show(withPendingMoves(removed, [move])), "a [b] c e");
   });
 });

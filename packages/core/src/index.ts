@@ -24,8 +24,10 @@ export {
   parseQueueState,
   reduceQueue,
   upNext,
+  withPendingMoves,
 } from "./queue.ts";
 export type {
+  PendingMove,
   QueueCommand,
   QueueContext,
   QueueEntry,
