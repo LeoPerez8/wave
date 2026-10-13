@@ -344,10 +344,7 @@ export class LibraryStore extends Context.Service<
      * Every song with what a lyrics and genre lookup sends, its genre and
      * whether it has lyrics, for the whole-Library run.
      */
-    readonly listLibraryLookupSongs: Effect.Effect<
-      readonly LibraryLookupSong[],
-      LibraryStoreError
-    >;
+    readonly listLibraryLookupSongs: Effect.Effect<readonly LibraryLookupSong[], LibraryStoreError>;
     /** Every album by title, then album artist, for Library › Albums. */
     readonly listAlbums: Effect.Effect<readonly AlbumRow[], LibraryStoreError>;
     /** [page] of the albums in the same order, for lists that page (Auto). */
@@ -1281,8 +1278,7 @@ const make = Effect.gen(function* () {
 
     getFolder: (id) => attempt("open the folder", () => getFolderSync(db, id)),
 
-    knownFiles: (roots) =>
-      attempt("read the library index", () => selectKnownFiles(db, roots)),
+    knownFiles: (roots) => attempt("read the library index", () => selectKnownFiles(db, roots)),
 
     indexedFiles: (paths) =>
       attempt("read missing files", () =>

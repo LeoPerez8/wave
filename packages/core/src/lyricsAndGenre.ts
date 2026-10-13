@@ -407,8 +407,7 @@ export const describeTagLookups = (
           ? "The only song already has lyrics and a genre."
           : `All ${count(skipped)} songs already have lyrics and a genre.`,
     };
-  const only =
-    results.length === 1 && stop === undefined && skipped === 0 ? results[0] : undefined;
+  const only = results.length === 1 && stop === undefined && skipped === 0 ? results[0] : undefined;
   if (only !== undefined) {
     const { title, outcome } = only;
     switch (outcome.kind) {
