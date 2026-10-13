@@ -235,7 +235,9 @@ class WaveNativeModule : Module() {
       val report = SongTagWriter().write(file, lyrics, genre)
       val tagsChanged =
         report.lyrics == LyricsDestination.TAGS || report.genre == GenreDestination.TAGS
-      val (track, artwork) = if (tagsChanged) singleFileScanner().index(file) else null to null
+      // A sidecar alone leaves the tags as they were, but the index learns the song has lyrics.
+      val reindex = tagsChanged || report.lyrics == LyricsDestination.SIDECAR
+      val (track, artwork) = if (reindex) singleFileScanner().index(file) else null to null
       if (tagsChanged) MediaScannerConnection.scanFile(context, arrayOf(path), null, null)
       report.toMap() +
         mapOf("track" to track?.let(::trackToMap), "artwork" to artwork?.let(::artworkToMap))

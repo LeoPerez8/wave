@@ -19,6 +19,8 @@ export interface NativeScannedTrack {
   readonly sampleRate: number | null;
   readonly bitrateKbps: number | null;
   readonly artworkHash: string | null;
+  /** Lyrics in its tags or a sidecar `.lrc` beside it. */
+  readonly hasLyrics: boolean;
 }
 
 /** Colours picked from an artwork, as signed ARGB ints. */
@@ -169,7 +171,8 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
 
 /**
  * Where `writeLyricsAndGenre` put what it was given (Core's `TagWriteReport`)
- * and, when the tags changed, the file read again as a scan reads it.
+ * and, when the tags changed or a sidecar was written, the file read again as
+ * a scan reads it.
  */
 export interface NativeTagWrite {
   readonly lyrics: "tags" | "sidecar" | "none";

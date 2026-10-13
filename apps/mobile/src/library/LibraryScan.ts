@@ -7,6 +7,7 @@ import {
 } from "@wave/core";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import { refreshDownloadPolicy } from "./downloadPolicy";
 import * as Stream from "effect/Stream";
 
 import { makeExternalStore } from "@/lib/externalStore";
@@ -60,6 +61,7 @@ export const toIndexedTrack = (native: NativeScannedTrack): IndexedTrack => ({
   sampleRate: native.sampleRate,
   bitrateKbps: native.bitrateKbps,
   artworkHash: native.artworkHash,
+  hasLyrics: native.hasLyrics,
 });
 
 export const toIndexedArtwork = (native: NativeArtwork): IndexedArtwork => {
@@ -208,6 +210,7 @@ export const chooseFolder = Effect.gen(function* () {
   const plan = planAddRoot(yield* store.listRoots, pick.path);
   if (plan.kind === "covered") return plan satisfies FolderChoice;
   yield* store.addRoot(pick.path, plan.drop);
+  yield* refreshDownloadPolicy;
   bumpLibraryVersion();
   return { kind: "added", path: pick.path } satisfies FolderChoice;
 });
@@ -217,6 +220,7 @@ export const removeFolder = (path: string) =>
   Effect.gen(function* () {
     const store = yield* LibraryStore;
     yield* store.removeRoot(path);
+    yield* refreshDownloadPolicy;
     bumpLibraryVersion();
   });
 
@@ -241,6 +245,7 @@ export const chooseExcludedFolder = Effect.gen(function* () {
   const plan = planExclusion(roots, yield* store.excludedFolders, pick.path);
   if (plan.kind !== "add") return plan satisfies ExclusionChoice;
   yield* store.addExcludedFolder(pick.path, plan.drop);
+  yield* refreshDownloadPolicy;
   bumpLibraryVersion();
   return { kind: "added", path: pick.path } satisfies ExclusionChoice;
 });
@@ -250,5 +255,6 @@ export const includeFolder = (path: string) =>
   Effect.gen(function* () {
     const store = yield* LibraryStore;
     yield* store.removeExcludedFolder(path);
+    yield* refreshDownloadPolicy;
     bumpLibraryVersion();
   });

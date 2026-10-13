@@ -4,7 +4,7 @@
  * migrator, exactly as the app applies them on the phone, and helpers that
  * seed fixture tracks.
  */
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/sql-js";
 import { migrate } from "drizzle-orm/expo-sqlite/migrator";
 import initSqlJs from "sql.js";
@@ -60,6 +60,8 @@ export interface FixtureTrack {
   readonly artworkHash?: string;
   /** Files the track under this genre (made on first use). */
   readonly genre?: string;
+  /** Lyrics in its tags or a sidecar (not recorded by databases from before 0011). */
+  readonly hasLyrics?: boolean;
 }
 
 /** Stars a track at `addedAt`. */
@@ -145,24 +147,35 @@ export const addTrack = (db: TestDatabase, track: FixtureTrack): number => {
               .get(),
         );
   const addedAt = track.addedAt ?? 0;
-  return db
-    .insert(tracks)
-    .values({
-      path: `/Music/${albumTitle}/${track.title}.mp3`,
-      folderId,
-      fileName: `${track.title}.mp3`,
-      sizeBytes: 1_000,
-      modifiedAt: addedAt,
-      title: track.title,
-      titleSort: track.title.toLowerCase(),
-      artistId: artistId(artistName),
-      albumId,
-      genreId,
-      durationMs: track.durationMs ?? 180_000,
-      artworkHash: track.artworkHash ?? null,
-      addedAt,
-      scannedAt: addedAt,
-    })
-    .returning()
-    .get().id;
+  const values = {
+    path: `/Music/${albumTitle}/${track.title}.mp3`,
+    folderId,
+    fileName: `${track.title}.mp3`,
+    sizeBytes: 1_000,
+    modifiedAt: addedAt,
+    title: track.title,
+    titleSort: track.title.toLowerCase(),
+    artistId: artistId(artistName),
+    albumId,
+    genreId,
+    durationMs: track.durationMs ?? 180_000,
+    artworkHash: track.artworkHash ?? null,
+    addedAt,
+    scannedAt: addedAt,
+  };
+  // Drizzle's insert names every column of today's schema; this names only the columns
+  // tracks had from the start.
+  const columns = Object.keys(values) as (keyof typeof values)[];
+  const id = db.get<{ id: number }>(
+    sql`INSERT INTO ${tracks} (${sql.join(
+      columns.map((column) => sql.identifier(tracks[column].name)),
+      sql`, `,
+    )}) VALUES (${sql.join(
+      columns.map((column) => sql`${values[column]}`),
+      sql`, `,
+    )}) RETURNING id`,
+  ).id;
+  if (track.hasLyrics !== undefined)
+    db.update(tracks).set({ hasLyrics: track.hasLyrics }).where(eq(tracks.id, id)).run();
+  return id;
 };

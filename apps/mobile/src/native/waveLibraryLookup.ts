@@ -16,11 +16,8 @@ declare class WaveLibraryLookupModule extends NativeModule<{
 
 /**
  * The whole-Library lyrics and genre run's foreground service and notification
- * (`modules/wave-native`, `LibraryLookupService`). It also holds the
- * `WaveLibraryLookup` headless task while the run goes on, so JS timers keep
- * running with Wave in the background.
+ * (`modules/wave-native`, `LibraryLookupService`). While the run goes on it
+ * also holds Wave's JS runtime (`JsRuntime`, the `WaveService` headless task),
+ * so JS timers keep running with Wave in the background.
  */
 export const WaveLibraryLookup = requireNativeModule<WaveLibraryLookupModule>("WaveLibraryLookup");
-
-/** The headless task native holds while the run goes on; JS registers it. */
-export const LIBRARY_LOOKUP_TASK = "WaveLibraryLookup";

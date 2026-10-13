@@ -15,14 +15,9 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
-import android.util.Log
-import com.facebook.react.ReactApplication
-import com.facebook.react.bridge.Arguments
-import com.facebook.react.bridge.ReactContext
-import com.facebook.react.jstasks.HeadlessJsTaskConfig
-import com.facebook.react.jstasks.HeadlessJsTaskContext
 import expo.modules.wavenative.R
 import expo.modules.wavenative.launcher.LauncherIconSwitcher
+import expo.modules.wavenative.player.JsRuntime
 
 /**
  * Keeps Wave running while Settings › Lyrics and genre's whole-Library run
@@ -123,9 +118,10 @@ class LibraryLookupService : Service() {
 
 /**
  * The whole-Library run as native sees it: whether it runs, how far it is
- * (the text comes from Core's `libraryLookupProgress`), who to tell about
- * Cancel, and the `WaveLibraryLookup` headless task held while it runs, so
- * React Native keeps JS timers going with Wave in the background. Starts
+ * (the text comes from Core's `libraryLookupProgress`) and who to tell about
+ * Cancel. While it runs it holds Wave's JS runtime ([JsRuntime], as downloads
+ * and Auto do), so React Native keeps JS timers going with Wave in the
+ * background. Starts
  * [LibraryLookupService] at [start]; [end] stops it and posts the summary.
  * Thread-safe; progress refreshes the notification at most a few times a second.
  */
@@ -138,8 +134,8 @@ internal object LibraryLookupNotice {
     val cancelling: Boolean = false,
   )
 
-  const val TASK_KEY = "WaveLibraryLookup"
-  private const val LOG_TAG = "WaveLookup"
+  /** This run's hold on [JsRuntime]. */
+  private const val OWNER = "libraryLookup"
   private const val REFRESH_MS = 500L
 
   private val main = Handler(Looper.getMainLooper())
@@ -147,14 +143,12 @@ internal object LibraryLookupNotice {
   @Volatile private var service: LibraryLookupService? = null
   @Volatile var onCancel: (() -> Unit)? = null
   private var lastRefreshAt = 0L
-  /** Main thread only. */
-  private var task: Pair<ReactContext, Int>? = null
 
   fun current(): Progress? = synchronized(this) { progress }
 
   fun start(context: Context, title: String, detail: String?) {
     synchronized(this) { progress = Progress(title, detail, 0, 0) }
-    main.post { holdTask(context) }
+    main.post { if (current() != null) JsRuntime.ensureStarted(context, OWNER) }
     if (service != null) return refresh(force = true)
     try {
       context.startForegroundService(Intent(context, LibraryLookupService::class.java))
@@ -173,7 +167,7 @@ internal object LibraryLookupNotice {
     refresh(force = false)
   }
 
-  /** The run is over: stops the service, lets go of the task and shows [summary] (title, message), if any. */
+  /** The run is over: stops the service, lets go of the JS runtime and shows [summary] (title, message), if any. */
   fun end(context: Context, summary: Pair<String, String>?) {
     synchronized(this) { progress = null }
     main.post {
@@ -181,7 +175,7 @@ internal object LibraryLookupNotice {
       if (current() != null) return@post
       service?.stop()
       service = null
-      releaseTask()
+      JsRuntime.release(OWNER)
     }
     if (summary != null) postSummary(context, summary.first, summary.second)
   }
@@ -253,28 +247,5 @@ internal object LibraryLookupNotice {
       lastRefreshAt = now
     }
     service?.let { running -> main.post { running.refresh() } }
-  }
-
-  /** Holds the headless task in the running React context, unless it already does. */
-  private fun holdTask(context: Context) {
-    if (current() == null) return
-    val react = (context.applicationContext as? ReactApplication)?.reactHost?.currentReactContext ?: run {
-      Log.w(LOG_TAG, "No React context: the run keeps JS timers only while Wave is open")
-      return
-    }
-    val held = task
-    val tasks = HeadlessJsTaskContext.getInstance(react)
-    if (held != null && held.first === react && tasks.isTaskRunning(held.second)) return
-    val id = tasks.startTask(
-      HeadlessJsTaskConfig(TASK_KEY, Arguments.createMap(), /* timeout = */ 0, /* isAllowedInForeground = */ true),
-    )
-    task = react to id
-  }
-
-  private fun releaseTask() {
-    val (react, id) = task ?: return
-    task = null
-    val tasks = HeadlessJsTaskContext.getInstance(react)
-    if (tasks.isTaskRunning(id)) tasks.finishTask(id)
   }
 }
