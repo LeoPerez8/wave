@@ -17,6 +17,7 @@ import { useListSelection, type ListSelection } from "@/selection/useListSelecti
 
 import { usePlaylists } from "./hooks";
 import type { PlaylistRow } from "./LibraryStore";
+import { emptyPlaylistRow } from "./playlists";
 import { newPlaylist } from "./PlaylistSheets";
 import { openPlaylist } from "./routes";
 import { songCount } from "./TrackList";
@@ -24,8 +25,8 @@ import { useListScrollable } from "@/motion/heldTouch";
 
 /** Makes an empty playlist and opens it. */
 const createAndOpen = (): void => {
-  void newPlaylist().then((id) => {
-    if (id !== null) openPlaylist(id);
+  void newPlaylist().then((created) => {
+    if (created !== null) openPlaylist(created.id, emptyPlaylistRow(created.id, created.name));
   });
 };
 

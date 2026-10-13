@@ -8,6 +8,7 @@ import { WaveNative } from "@/native/waveNative";
 import { playHistoryVersion } from "@/playback/PlayHistory";
 
 import type { LibraryCounts } from "./db/counts";
+import type { LinkRows } from "./db/links";
 import type { HomeSections } from "./db/playHistory";
 import { libraryEdits, libraryVersion, scanState, type ScanState } from "./LibraryScan";
 import {
@@ -205,6 +206,30 @@ const getAlbum = (store: LibraryStore["Service"], id: number) => store.getAlbum(
 const getArtist = (store: LibraryStore["Service"], id: number) => store.getArtist(id);
 const getGenre = (store: LibraryStore["Service"], id: number) => store.getGenre(id);
 const getFolder = (store: LibraryStore["Service"], id: number) => store.getFolder(id);
+
+const NO_LINKS: LinkRows = { album: null, artist: null };
+
+/**
+ * The album and artist rows behind links to them (Go to Album / Artist, Now
+ * Playing, an album's artist), read ahead of a tap so `openAlbum` /
+ * `openArtist` can hand them to the screen for its first frame. Undefined
+ * until read (or for an id not asked for).
+ */
+export const useLinkRows = (
+  albumId: number | undefined,
+  artistId: number | undefined,
+): { readonly album: AlbumRow | undefined; readonly artist: ArtistRow | undefined } => {
+  const query = useMemo(
+    () => LibraryStore.use((store) => store.linkRows({ albumId, artistId })),
+    [albumId, artistId],
+  );
+  const rows = useLibraryQuery(query, NO_LINKS);
+  // Until the new ids are read, the last result still names the old ones.
+  return {
+    album: rows.album !== null && rows.album.id === albumId ? rows.album : undefined,
+    artist: rows.artist !== null && rows.artist.id === artistId ? rows.artist : undefined,
+  };
+};
 
 export const useAlbum = (id: number): AlbumDetail | null | undefined => useDetail(id, getAlbum);
 export const useArtist = (id: number): ArtistDetail | null | undefined => useDetail(id, getArtist);

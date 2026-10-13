@@ -195,15 +195,18 @@ function AddCard({ subject, close }: { subject: AddSubject; close: () => void })
 /**
  * Asks for a name and creates a playlist, holding [songs] when given. Given
  * songs that turn out to be none (an empty Favorites), it creates nothing.
- * Resolves with the new playlist's id, or null when cancelled or not created.
+ * Resolves with the new playlist (its id and stored name), or null when
+ * cancelled or not created.
  */
-export const newPlaylist = (songs?: () => Promise<readonly SongRow[]>): Promise<number | null> =>
+export const newPlaylist = (
+  songs?: () => Promise<readonly SongRow[]>,
+): Promise<NamedPlaylist | null> =>
   // The name prompt highlights what the flow was started from.
   followUp(() => createNamedPlaylist(songs));
 
 const createNamedPlaylist = async (
   songs?: () => Promise<readonly SongRow[]>,
-): Promise<number | null> => {
+): Promise<NamedPlaylist | null> => {
   // Loads while the name is typed; a failure surfaces once the songs are needed.
   const loading = songs?.();
   loading?.catch(() => {});
@@ -227,7 +230,7 @@ const createNamedPlaylist = async (
         ? `Created ${result.name}`
         : describePlaylistAdd(result.name, result.added, result.alreadyIn),
     );
-    return result.playlistId;
+    return { id: result.playlistId, name: result.name };
   } catch {
     failed("create the playlist")();
     return null;
