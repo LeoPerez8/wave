@@ -17,7 +17,7 @@ import { LibraryStore } from "@/library/LibraryStore";
 import { Player, playbackState } from "./Player";
 import { keptPlayingKey, queueSource, queueState } from "./Queue";
 
-/** Bumped whenever a play starts or ends; Home re-reads on it. */
+/** Bumped whenever a play starts or ends; Home re-reads on it while focused (`useFocusedVersion`). */
 export const playHistoryVersion = makeExternalStore(0);
 
 /** How often a play still going on is brought up to date, should Wave's process die. */
