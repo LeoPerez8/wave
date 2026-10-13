@@ -39,6 +39,15 @@ object YtStreams {
   fun mimeType(mimeType: String, codecs: String?): String =
     if (codecs.isNullOrBlank() || "codecs=" in mimeType) mimeType else "$mimeType; codecs=\"$codecs\""
 
+  /**
+   * Whether a download refused halfway goes on from where it was with a fresh
+   * address: only when it's the same file, the same stream ([itag]) of the
+   * same [length]. Otherwise the bytes so far belong to another file and it
+   * starts over.
+   */
+  fun resumesDownload(wasItag: Int, wasLength: Long, itag: Int, length: Long?): Boolean =
+    itag == wasItag && length == wasLength
+
   /** How many times a rejected address is resolved again before the song fails. */
   private const val RESOLVE_AGAIN_TIMES = 2
 
