@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { DEFAULT_THEME, TONES, contrastRatio, themeContrastIssues } from "./index.ts";
+import { DEFAULT_THEME, NIGHT_SLATE, TONES, contrastRatio, themeContrastIssues } from "./index.ts";
 
 describe("DEFAULT_THEME", () => {
   test("light mode keeps the fog theme it shipped with", () => {
@@ -22,24 +22,54 @@ describe("DEFAULT_THEME", () => {
     });
   });
 
-  test("dark mode sits on a deep slate, with cards, fills and separators one step down each", () => {
-    const { background, grouped, surface, fill, separator } = DEFAULT_THEME.dark;
+  test("dark mode sits on true black, with groups, cards and separators climbing the ramp", () => {
+    const { background, grouped, surface, fill, separator, scrim } = DEFAULT_THEME.dark;
     assert.deepEqual(
-      { background, grouped, surface, fill, separator },
+      { background, grouped, surface, fill, separator, scrim },
       {
-        background: "#0a1113",
+        background: "#000000",
         grouped: "#0a1113",
         surface: "#121b1d",
         fill: "#121b1d",
         separator: "#1c2628",
+        scrim: "#000000",
       },
     );
   });
 
-  test("the dark ground is a ramp step of its own, darker than light mode's text", () => {
-    assert.equal(TONES.at(-1), DEFAULT_THEME.dark.background);
-    assert.ok(TONES.some((tone) => tone === DEFAULT_THEME.light.foreground));
-    assert.notEqual(DEFAULT_THEME.light.foreground, DEFAULT_THEME.dark.background);
+  test("on the black ground, groups, cards, fills and separators each stand off it", () => {
+    const dark = DEFAULT_THEME.dark;
+    for (const token of ["grouped", "surface", "fill", "separator"] as const) {
+      assert.ok(contrastRatio(dark[token], dark.background) > 1.05, token);
+    }
+    assert.ok(
+      contrastRatio(dark.separator, dark.background) > contrastRatio(dark.surface, dark.background),
+    );
+  });
+});
+
+describe("NIGHT_SLATE", () => {
+  test("keeps the dark theme Wave shipped before true black", () => {
+    assert.deepEqual(NIGHT_SLATE, {
+      background: "#0a1113",
+      grouped: "#0a1113",
+      surface: "#121b1d",
+      foreground: "#e0ecef",
+      secondary: "#a5b0b3",
+      tertiary: "#606b6e",
+      separator: "#1c2628",
+      fill: "#121b1d",
+      accent: "#59c0ad",
+      "on-accent": "#0a1113",
+      highlight: "#ec9d53",
+      destructive: "#f2867a",
+      scrim: "#0a1113",
+    });
+  });
+
+  test("its ground is the deepest ramp step, darker than light mode's text", () => {
+    assert.equal(TONES.at(-1), NIGHT_SLATE.background);
+    assert.notEqual(DEFAULT_THEME.light.foreground, NIGHT_SLATE.background);
   });
 });
 

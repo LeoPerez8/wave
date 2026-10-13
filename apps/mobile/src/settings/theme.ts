@@ -10,6 +10,7 @@ import {
 import { Uniwind } from "uniwind";
 
 import { persistedSetting, sameFields } from "@/lib/persistedSetting";
+import { WavePlayer } from "@/native/wavePlayer";
 
 import { LAUNCHER, showLauncherIconFor } from "./launcherIcon";
 
@@ -19,13 +20,17 @@ const cssVariables = (colors: ThemeColors): Record<string, string> =>
 
 /**
  * Lays the chosen colours over global.css's defaults. Every className and
- * `useThemeColor` reader (glass tint, native props) re-renders with them. The
- * launcher icon follows the primary and secondary.
+ * `useThemeColor` reader (glass tint, native props) re-renders with them, the
+ * media notification takes the primary, and the launcher icon follows the
+ * primary and secondary.
  */
 const apply = (choice: ThemeChoice): void => {
   const theme = themeFor(choice);
   Uniwind.updateCSSVariables("light", cssVariables(theme.light));
   Uniwind.updateCSSVariables("dark", cssVariables(theme.dark));
+  WavePlayer.setNotificationAccent(theme.light.accent, theme.dark.accent).catch((error: unknown) =>
+    console.warn("[wave] Couldn't colour the notification", error),
+  );
   showLauncherIconFor(choice);
 };
 

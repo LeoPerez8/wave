@@ -51,9 +51,9 @@ describe("launcherIconFor", () => {
   });
 });
 
-/** The points of an `M x y L x y …` path. */
+/** The points of an `M x y C … x y …` path, control points included (they bound the curve). */
 const pathPoints = (path: string): [number, number][] => {
-  assert.match(path, /^M[\d.\- ]+(L[\d.\- ]+)+$/);
+  assert.match(path, /^M[\d.\- ]+([LC][\d.\- ]+)+$/);
   const numbers = path.match(/-?\d+(\.\d+)?/g)?.map(Number) ?? [];
   return Array.from({ length: numbers.length / 2 }, (_, i) => [
     numbers[2 * i]!,

@@ -6,6 +6,7 @@
  */
 
 import type { AlertSpec } from "./alert.ts";
+import { LOGO_WAVES, logoIconPaths, logoWaveY } from "./logo.ts";
 import { THEME_SWATCHES, type InkSwatch, type ThemeChoice } from "./themeChoice.ts";
 
 /** One launcher icon: a primary × secondary pair and the colours its waves take on black. */
@@ -43,62 +44,29 @@ export const LAUNCHER_ICONS: readonly LauncherIcon[] = THEME_SWATCHES.primary.fl
   })),
 );
 
-type Point = readonly [number, number];
-
-/** A wave of the logo, in its own units (x runs -1..1), crest at `crestX`, shifted `dy` down. */
-const logoWave = (crestX: number, dy: number): readonly Point[] => {
-  const amplitude = 0.18;
-  const period = 1.6;
-  const steps = 240;
-  return Array.from({ length: steps + 1 }, (_, i): Point => {
-    const x = -1 + (2 * i) / steps;
-    return [x, dy - amplitude * Math.cos((2 * Math.PI * (x - crestX)) / period)];
-  });
-};
-
-/** Each wave's vertical offset from the logo's middle. */
-const GAP = 0.25;
-
-/**
- * Wave's logo: two rounded waves as polylines in the logo's own units (centred
- * on 0,0, x running -1..1), stroked `stroke` wide with round caps. The launcher
- * icons, splash logos and their PNGs (`apps/mobile/scripts/render-icons.ts`) all draw it.
- */
-export const WAVE_LOGO: {
-  readonly stroke: number;
-  readonly top: readonly Point[];
-  readonly bottom: readonly Point[];
-  /** Furthest any stroke edge reaches from the centre. */
-  readonly extent: number;
-} = (() => {
-  const stroke = 0.2;
-  const top = logoWave(-0.6, -GAP);
-  const bottom = logoWave(-0.76, GAP);
-  const extent = Math.max(...[...top, ...bottom].map(([x, y]) => Math.hypot(x, y))) + stroke / 2;
-  return { stroke, top, bottom, extent };
+/** Furthest any stroke edge of the logo reaches from its centre, in the logo's units. */
+const LOGO_EXTENT = (() => {
+  let max = 0;
+  for (const wave of ["top", "bottom"] as const)
+    for (let i = 0; i <= 240; i++) {
+      const x = -1 + i / 120;
+      max = Math.max(max, Math.hypot(x, logoWaveY(wave, x)));
+    }
+  return max + LOGO_WAVES.stroke / 2;
 })();
 
 /**
  * How far from the centre the logo reaches on a 108dp adaptive-icon layer, as a
  * fraction of its width. Every mask keeps at least the middle 66dp circle
- * (0.305 of the width), so 0.27 leaves a margin.
+ * (0.305 of the width), so 0.27 leaves a margin. The shipped PNG icons
+ * (`apps/mobile/scripts/render-icons.ts`) use it too.
  */
 export const LAUNCHER_ICON_RADIUS = 0.27;
 
-/** Path data of a wave on a `viewport`-wide layer, every `stride`-th point (round joins hide the corners). */
-const wavePath = (points: readonly Point[], viewport: number, scale: number, stride: number) =>
-  points
-    .filter((_, i) => i % stride === 0 || i === points.length - 1)
-    .map(
-      ([x, y], i) =>
-        `${i === 0 ? "M" : "L"}${(viewport / 2 + x * scale).toFixed(2)} ${(viewport / 2 + y * scale).toFixed(2)}`,
-    )
-    .join(" ");
-
 /**
- * The launcher icon's waves as vector paths on the adaptive icon's 108dp
- * foreground layer: each is stroked `strokeWidth` wide with round caps and
- * joins, in its icon's colour (or white for the monochrome themed icon).
+ * The launcher icon's waves (Core's logo) as vector paths on the adaptive
+ * icon's 108dp foreground layer: each is stroked `strokeWidth` wide with round
+ * caps, in its icon's colour (or white for the monochrome themed icon).
  */
 export const LAUNCHER_ICON_ART: {
   readonly viewport: 108;
@@ -107,13 +75,11 @@ export const LAUNCHER_ICON_ART: {
   readonly bottom: string;
 } = (() => {
   const viewport = 108;
-  const scale = (LAUNCHER_ICON_RADIUS * viewport) / WAVE_LOGO.extent;
-  return {
-    viewport,
-    strokeWidth: Number((WAVE_LOGO.stroke * scale).toFixed(2)),
-    top: wavePath(WAVE_LOGO.top, viewport, scale, 4),
-    bottom: wavePath(WAVE_LOGO.bottom, viewport, scale, 4),
-  };
+  const scale = (LAUNCHER_ICON_RADIUS * viewport) / LOGO_EXTENT;
+  // `logoIconPaths` fits the logo's width, caps included, between two insets.
+  const inset = (viewport - scale * (2 + LOGO_WAVES.stroke)) / 2;
+  const { top, bottom, stroke } = logoIconPaths({ size: viewport, inset });
+  return { viewport, strokeWidth: Number(stroke.toFixed(3)), top, bottom };
 })();
 
 /** The icon a theme choice shows; an unknown swatch counts as its group's default. */

@@ -1,12 +1,19 @@
-// Renders Wave's default launcher icons and splash logos: two rounded waves (Core's
-// WAVE_LOGO), teal over amber. Zero dependencies: each pixel's coverage comes from its
-// distance to the wave polylines, so the round caps and anti-aliasing are exact. Run with
-// `pnpm --filter @wave/mobile icons`. The icons for other primaries and secondaries are
-// vector drawables written at prebuild (plugins/launcherIcons.ts).
+// Renders Wave's default launcher icons and splash logos: two rounded waves, teal over amber.
+// Zero dependencies: each pixel's coverage comes from its distance to the wave polylines,
+// so the round caps and anti-aliasing are exact. Run with `pnpm --filter @wave/mobile icons`.
+// The icons for other primaries and secondaries are vector drawables written at prebuild
+// (plugins/launcherIcons.ts).
 import { writeFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
 
-import { DEFAULT_THEME, LAUNCHER_ICON_RADIUS, LAUNCHER_ICONS, WAVE_LOGO } from "@wave/core";
+import {
+  DEFAULT_THEME,
+  LAUNCHER_ICON_RADIUS,
+  LAUNCHER_ICONS,
+  LOGO_WAVES,
+  logoWaveY,
+  type LogoWave,
+} from "@wave/core";
 
 type Rgb = readonly [number, number, number];
 
@@ -31,12 +38,32 @@ const AMBER = rgb(SHIPPED_ICON.bottom);
 const LIGHT_TEAL = rgb(DEFAULT_THEME.light.accent);
 const LIGHT_AMBER = rgb(DEFAULT_THEME.light.highlight);
 
-const STROKE = WAVE_LOGO.stroke;
-const WAVES = WAVE_LOGO;
+// The logo's shape is Core's (`LOGO_WAVES`), which the notification icon also draws.
+const STROKE = LOGO_WAVES.stroke;
 
 type Point = readonly [number, number];
 
-function distanceToPolyline(px: number, py: number, points: readonly Point[]): number {
+/** One of the logo's waves as a fine polyline, x = -1..1. */
+function wave(which: LogoWave): Point[] {
+  const points: Point[] = [];
+  const steps = 240;
+  for (let i = 0; i <= steps; i++) {
+    const x = -1 + (2 * i) / steps;
+    points.push([x, logoWaveY(which, x)]);
+  }
+  return points;
+}
+
+const WAVES = { top: wave("top"), bottom: wave("bottom") };
+
+/** Furthest any stroke edge reaches from the logo's centre. */
+function radialExtent(): number {
+  let max = 0;
+  for (const [x, y] of [...WAVES.top, ...WAVES.bottom]) max = Math.max(max, Math.hypot(x, y));
+  return max + STROKE / 2;
+}
+
+function distanceToPolyline(px: number, py: number, points: Point[]): number {
   let best = Infinity;
   for (let i = 1; i < points.length; i++) {
     const [ax, ay] = points[i - 1]!;
@@ -60,7 +87,7 @@ type Icon = {
 };
 
 function render({ size, radius, background, top, bottom }: Icon): Buffer {
-  const scale = (radius * size) / WAVE_LOGO.extent;
+  const scale = (radius * size) / radialExtent();
   const half = STROKE / 2;
   const channels = background ? 3 : 4;
   const stride = size * channels + 1;
@@ -71,7 +98,7 @@ function render({ size, radius, background, top, bottom }: Icon): Buffer {
       const x = (col + 0.5 - size / 2) / scale;
       const y = (row + 0.5 - size / 2) / scale;
       // Coverage of a pixel by a stroke edge, one pixel wide for anti-aliasing.
-      const cover = (points: readonly Point[]) =>
+      const cover = (points: Point[]) =>
         Math.abs(y) > 0.6 || Math.abs(x) > 1.2
           ? 0
           : Math.max(0, Math.min(1, (half - distanceToPolyline(x, y, points)) * scale + 0.5));

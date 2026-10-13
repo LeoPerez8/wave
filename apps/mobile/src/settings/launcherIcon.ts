@@ -25,6 +25,6 @@ const ALIASES = LAUNCHER_ICONS.map(launcherAlias);
  */
 export const showLauncherIconFor = (choice: ThemeChoice): void => {
   WaveNative.setLauncherIcon(launcherAlias(launcherIconFor(choice)), ALIASES).catch(
-    (error: unknown) => console.warn("Couldn't switch the launcher icon", error),
+    (error: unknown) => console.warn("[wave] Couldn't switch the launcher icon", error),
   );
 };
