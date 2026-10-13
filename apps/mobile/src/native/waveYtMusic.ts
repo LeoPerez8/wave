@@ -1,4 +1,4 @@
-import type { YtSong } from "@wave/core";
+import type { YtSession, YtSong } from "@wave/core";
 import { NativeModule, requireNativeModule } from "expo";
 
 import type { NativeArtwork } from "./waveNative";
@@ -21,7 +21,12 @@ export interface NativeYtSearchPage {
  */
 export type YtErrorCode = "ERR_YT_OFFLINE" | "ERR_YT_FAILED" | "ERR_YT_DISABLED";
 
-declare class WaveYtMusicModule extends NativeModule<Record<never, never>> {
+type WaveYtMusicEvents = {
+  /** The session changed natively: YouTube ended it during a request, say. */
+  onSessionChanged: (session: YtSession) => void;
+};
+
+declare class WaveYtMusicModule extends NativeModule<WaveYtMusicEvents> {
   /**
    * Turns YT Music on or off. Off, every request rejects with
    * `ERR_YT_DISABLED` before reaching the network. Kept natively, so the
@@ -37,6 +42,21 @@ declare class WaveYtMusicModule extends NativeModule<Record<never, never>> {
    * track's, and Now Playing takes its tint.
    */
   cacheArtwork(url: string): Promise<NativeArtwork>;
+  /**
+   * The saved session, without asking YouTube. Its credentials stay native;
+   * JS only learns whose account it is.
+   */
+  session(): Promise<YtSession>;
+  /** The session after asking YouTube whose it is; as it was when there's no answer. */
+  checkSession(): Promise<YtSession>;
+  /**
+   * Opens Google's sign-in page over Wave. Resolves the signed-in session,
+   * or null when the owner backs out; rejects with an `ERR_YT_*` code when
+   * YouTube doesn't confirm the account.
+   */
+  signIn(): Promise<YtSession | null>;
+  /** Forgets the session and clears the sign-in web view's cookies and storage. */
+  signOut(): Promise<YtSession>;
 }
 
 /** YT Music through innertubex (`modules/wave-native`, package `yt`). */

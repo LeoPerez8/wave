@@ -216,6 +216,13 @@ export {
 export type { LauncherBehaviour, LauncherIcon, LauncherIconSwitch } from "./launcherIcon.ts";
 export { LAUNCH_SPLASH_THEMES, launchTheme } from "./launchTheme.ts";
 export type { LaunchColors, LaunchSplashTheme, LaunchTheme } from "./launchTheme.ts";
+export { LAUNCH_LOGO, launchLogoExit, launchLogoWaves } from "./launchLogo.ts";
+export type {
+  LaunchLogoExit,
+  LaunchLogoExitInput,
+  LaunchLogoTrim,
+  LaunchLogoWave,
+} from "./launchLogo.ts";
 export { sliderFraction, sliderValueAt, snapSliderValue, stepSlider } from "./slider.ts";
 export type { SliderRange } from "./slider.ts";
 export { LONG_PRESS_DELAY, readLongPressDelay, snapLongPressDelay } from "./longPress.ts";
@@ -322,6 +329,15 @@ export type { ArtistRankingInput, ArtistRankingSong } from "./moreFromArtist.ts"
 export type { SheetEvent, SheetPhase, SheetStep } from "./sheetLifecycle.ts";
 export { libraryMatcher, parseTrackId, ytSongArtist, ytSongCredit, ytTrackId } from "./ytMusic.ts";
 export type { LibrarySongKey, TrackRef, YtSong } from "./ytMusic.ts";
+export { YT_ACCOUNT_SIGNED_OUT, stepYtAccount, ytAccountView } from "./ytAccount.ts";
+export type {
+  YtAccount,
+  YtAccountEvent,
+  YtAccountNote,
+  YtAccountState,
+  YtAccountView,
+  YtSession,
+} from "./ytAccount.ts";
 export {
   YT_SEARCH_DEBOUNCE_MS,
   YT_SECTION_HIDDEN,
@@ -382,3 +398,35 @@ export type {
 } from "./m3u.ts";
 export { libraryTrackIds, playerErrorNotice, queuedYtTracks, restorableTrack } from "./ytQueue.ts";
 export type { PlayerErrorCode, RestorableTracks } from "./ytQueue.ts";
+export {
+  YT_MUSIC_FOLDER,
+  ytDownloadLookup,
+  ytDownloadRoot,
+  ytDownloadTags,
+  ytDownloadTarget,
+} from "./ytDownload.ts";
+export type {
+  YtAlbum,
+  YtAlbumTrack,
+  YtDownloadPlace,
+  YtDownloadTags,
+  YtDownloadTarget,
+} from "./ytDownload.ts";
+export {
+  YT_DOWNLOADS_NONE,
+  YT_DOWNLOAD_ACTION_LABELS,
+  stepYtDownloads,
+  ytDownloadActions,
+  ytDownloadLine,
+  ytDownloadProgress,
+  ytDownloadStatus,
+  ytDownloadsToStart,
+} from "./ytDownloads.ts";
+export type {
+  YtDownloadAction,
+  YtDownloadEvent,
+  YtDownloadFailure,
+  YtDownloadJob,
+  YtDownloadStatus,
+  YtDownloads,
+} from "./ytDownloads.ts";

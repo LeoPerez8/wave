@@ -1,5 +1,13 @@
 import { LegendList } from "@legendapp/list/react-native";
-import { counted, type QueueContext, type SearchKind, ytSongCredit, ytTrackId } from "@wave/core";
+import {
+  counted,
+  type QueueContext,
+  type SearchKind,
+  ytDownloadLine,
+  ytDownloadProgress,
+  ytSongCredit,
+  ytTrackId,
+} from "@wave/core";
 import { useCallback, useMemo } from "react";
 import { Text, View } from "react-native";
 
@@ -14,7 +22,6 @@ import type { NativeYtSong } from "@/native/waveYtMusic";
 import { openAlbum, openArtist, openGenre, openPlaylist } from "@/library/routes";
 import { toTrackSummary } from "@/library/TrackList";
 import { playSongs, playYtSongs } from "@/playback/actions";
-import { openYtSongActions } from "@/playback/YtSongActionsMenu";
 import { useCurrentTrackId } from "@/playback/hooks";
 import {
   openAlbumActions,
@@ -30,6 +37,8 @@ import type { SearchHit } from "./searchIndex";
 import { useListScrollable } from "@/motion/heldTouch";
 import { selectableRow } from "@/selection/selectableRow";
 import type { ListSelection } from "@/selection/useListSelection";
+import { useYtDownloadStatus } from "@/ytmusic/YtDownloads";
+import { openYtSongActions } from "@/ytmusic/YtSongActions";
 
 /** Tapping a song plays the song results from it. */
 const SEARCH_CONTEXT: QueueContext = { kind: "search", id: null };
@@ -49,7 +58,9 @@ const ignore = (): void => undefined;
 /**
  * A song YT Music found: a Songs-list row with YouTube's cover, its artists
  * and album. Tapping streams the section's songs from it; its long-press menu
- * queues it. While Library songs are being selected, it does nothing.
+ * queues or downloads it. While it downloads, the second line says how far
+ * along it is, over a progress rule. While Library songs are being selected,
+ * it does nothing.
  */
 function YtSongRow({
   song,
@@ -64,17 +75,19 @@ function YtSongRow({
   onOpen: () => void;
   selecting: boolean;
 }) {
+  const download = useYtDownloadStatus(song.videoId);
   return (
     <TrackRow
       track={{
         id: ytTrackId(song.videoId),
         title: song.title,
-        artist: ytSongCredit(song),
+        artist: ytDownloadLine(download) ?? ytSongCredit(song),
         durationMs: song.durationMs,
         artworkUri: song.artworkUrl ?? undefined,
       }}
       state={playing ? "playing" : undefined}
       leading="artwork"
+      progress={ytDownloadProgress(download)}
       onPress={
         selecting
           ? ignore

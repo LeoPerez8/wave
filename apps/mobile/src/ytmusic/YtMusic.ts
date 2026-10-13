@@ -1,4 +1,4 @@
-import type { YtQuietReason } from "@wave/core";
+import type { YtQuietReason, YtSession } from "@wave/core";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -36,9 +36,22 @@ export class YtMusic extends Context.Service<
     readonly searchSongs: (query: string) => Effect.Effect<NativeYtSearchPage, YtMusicError>;
     /** Caches a song's cover from [url] beside the Library's artwork, with its palette. */
     readonly cacheArtwork: (url: string) => Effect.Effect<IndexedArtwork, YtMusicError>;
+    /** The saved YouTube session (whose account, never its cookie), without asking YouTube. */
+    readonly session: Effect.Effect<YtSession>;
+    /** The session after asking YouTube whose it is; as it was when there's no answer. */
+    readonly checkSession: Effect.Effect<YtSession>;
+    /**
+     * Opens Google's sign-in page: the signed-in session, or null when the
+     * owner backs out. Every YT Music request goes out as the account after.
+     */
+    readonly signIn: Effect.Effect<YtSession | null, YtMusicError>;
+    /** Forgets the session and the sign-in page's cookies; requests go out signed out. */
+    readonly signOut: Effect.Effect<YtSession>;
   }
 >()("@wave/mobile/ytmusic/YtMusic") {}
 
+// Reading, checking or forgetting the session doesn't fail (no answer leaves it
+// as it was), so a rejection there is a defect.
 export const layer = Layer.succeed(YtMusic, {
   searchSongs: (query) =>
     Effect.tryPromise({ try: () => WaveYtMusic.searchSongs(query), catch: fromNative }),
@@ -46,4 +59,8 @@ export const layer = Layer.succeed(YtMusic, {
     Effect.tryPromise({ try: () => WaveYtMusic.cacheArtwork(url), catch: fromNative }).pipe(
       Effect.map(toIndexedArtwork),
     ),
+  session: Effect.promise(() => WaveYtMusic.session()),
+  checkSession: Effect.promise(() => WaveYtMusic.checkSession()),
+  signIn: Effect.tryPromise({ try: () => WaveYtMusic.signIn(), catch: fromNative }),
+  signOut: Effect.promise(() => WaveYtMusic.signOut()),
 });

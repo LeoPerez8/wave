@@ -36,6 +36,11 @@ type Props = {
    * cell and reads as a checkbox. Undefined outside selection mode.
    */
   checked?: boolean | undefined;
+  /**
+   * How much of a download has arrived (0–1): a thin teal rule under the
+   * title and second line, filling up. Undefined (or null) shows none.
+   */
+  progress?: number | null | undefined;
   onPress: () => void;
   onLongPress?: () => void;
   /** Screen-reader actions standing in for gestures (move, remove in a playlist). */
@@ -65,6 +70,7 @@ export function TrackRow({
   leading,
   topNumber = false,
   checked,
+  progress,
   onPress,
   onLongPress,
   accessibilityActions,
@@ -118,6 +124,14 @@ export function TrackRow({
           <Text numberOfLines={1} className="font-sans text-body text-secondary">
             {missing ? "File not found" : track.artist}
           </Text>
+          {progress !== undefined && progress !== null && (
+            <View className="bg-separator" style={{ height: 2, marginTop: CELL / 2 }}>
+              <View
+                className="bg-accent"
+                style={{ height: 2, width: `${Math.round(progress * 100)}%` }}
+              />
+            </View>
+          )}
         </View>
         {leading === "artwork" && missing && (
           <View className="items-center" style={{ width: CELL * 3 }}>

@@ -11,13 +11,18 @@ import expo.modules.wavenative.artwork.ArtistPhotoStore
 import expo.modules.wavenative.artwork.ArtworkStore
 import java.io.File
 import java.io.IOException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
+import kotlin.coroutines.resume
 
 /**
- * YT Music for JS (`WaveYtMusic`): the switch in Settings, song search and
- * caching a played song's cover. (Playing is the playback service's: it
- * streams `yt:` queue items, see [YtDataSource].)
- * Requests go through the process-wide [YtClient]; failures reject with the
- * codes of [YtFailure]. Nothing returned carries cookies or stream addresses.
+ * YT Music for JS (`WaveYtMusic`): the switch in Settings, song search, the
+ * account and caching a played song's cover. (Playing is the playback
+ * service's: it streams `yt:` queue items, see [YtDataSource].) Requests go
+ * through the process-wide [YtClient]; failures reject with the codes of
+ * [YtFailure]. Nothing returned carries cookies or stream addresses: the
+ * account is `{ status, account: { name, email, photoUrl } }`.
  */
 class YtMusicModule : Module() {
   private val context: Context
@@ -32,6 +37,18 @@ class YtMusicModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("WaveYtMusic")
 
+    /** The session changed natively: YouTube ended it during a request, say. */
+    Events("onSessionChanged")
+
+    // Only while JS listens (Settings is open), so starting Wave doesn't load the session.
+    OnStartObserving("onSessionChanged") {
+      client.session.onChange = { sendEvent("onSessionChanged", it.toMap()) }
+    }
+
+    OnStopObserving("onSessionChanged") {
+      client.session.onChange = null
+    }
+
     /** Turns YT Music on or off; off, every request is refused before reaching the network. */
     Function("setEnabled") { on: Boolean -> client.enabled = on }
 
@@ -39,11 +56,38 @@ class YtMusicModule : Module() {
 
     /** `{ songs, continuation }` for [query], or a rejection with an `ERR_YT_*` code. */
     AsyncFunction("searchSongs") Coroutine { query: String ->
-      try {
-        client.searchSongs(query).toMap()
-      } catch (e: YtException) {
-        throw CodedException(e.failure.code, e.message, e.cause)
+      coded { client.searchSongs(query).toMap() }
+    }
+
+    /** The saved session, without asking YouTube. */
+    AsyncFunction("session") Coroutine { ->
+      withContext(Dispatchers.IO) { client.session.state.toMap() }
+    }
+
+    /** The session after asking YouTube whose it is: refreshed, expired, or as it was without an answer. */
+    AsyncFunction("checkSession") Coroutine { ->
+      client.checkSession().toMap()
+    }
+
+    /**
+     * Opens Google's sign-in page; resolves the session once it's signed in,
+     * or null when the owner backs out. A session YouTube doesn't confirm
+     * rejects with an `ERR_YT_*` code.
+     */
+    AsyncFunction("signIn") Coroutine { ->
+      if (!client.enabled) throw CodedException(YtFailure.DISABLED.code, "YT Music is off", null)
+      val activity = appContext.currentActivity ?: throw Exceptions.MissingActivity()
+      val credentials = YtSignInActivity.signIn(activity) ?: return@Coroutine null
+      coded { client.signIn(credentials).toMap() }
+    }
+
+    /** Forgets the session and everything the sign-in web view kept. */
+    AsyncFunction("signOut") Coroutine { ->
+      withContext(Dispatchers.IO) { client.session.signOut() }
+      withContext(Dispatchers.Main) {
+        suspendCancellableCoroutine { done -> YtSignInActivity.clearWebData { done.resume(Unit) } }
       }
+      client.session.state.toMap()
     }
 
     /**
@@ -53,21 +97,26 @@ class YtMusicModule : Module() {
      * Playing takes its tint. Rejects with an `ERR_YT_*` code.
      */
     AsyncFunction("cacheArtwork") Coroutine { url: String ->
-      try {
-        val artwork = client.request {
+      val artwork = coded {
+        client.request {
           val bytes = ArtistPhotoStore.httpGet(url)
           if (ArtworkStore.extensionOf(bytes) == "img") throw IOException("Not an image")
           artworkStore.store(bytes) ?: throw IOException("Unreadable image")
         }
-        mapOf(
-          "hash" to artwork.hash,
-          "path" to artwork.path,
-          "thumbPath" to artwork.thumbPath,
-          "palette" to artwork.palette.toMap(),
-        )
-      } catch (e: YtException) {
-        throw CodedException(e.failure.code, e.message, e.cause)
       }
+      mapOf(
+        "hash" to artwork.hash,
+        "path" to artwork.path,
+        "thumbPath" to artwork.thumbPath,
+        "palette" to artwork.palette.toMap(),
+      )
     }
   }
+
+  private suspend fun <T> coded(block: suspend () -> T): T =
+    try {
+      block()
+    } catch (e: YtException) {
+      throw CodedException(e.failure.code, e.message, e.cause)
+    }
 }
