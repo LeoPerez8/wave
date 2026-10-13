@@ -12,6 +12,7 @@ import {
   counted,
   reorderTarget,
   upNext,
+  upNextMove,
   withPendingMoves,
   type PendingMove,
   type QueueEntry,
@@ -51,6 +52,7 @@ import {
   toggleShuffle,
 } from "@/playback/actions";
 import { useQueue } from "@/playback/hooks";
+import { queueState } from "@/playback/Queue";
 import type { PlaybackState } from "@/playback/Player";
 import type { QueueTrack } from "@/playback/queueTracks";
 import { useThemeColor } from "@/theme/useThemeColor";
@@ -248,8 +250,10 @@ function UpNextRow({ entry, index, song, lifted, drag, translation, count }: Row
           onAccessibilityAction={(event) => {
             const action = event.nativeEvent.actionName;
             if (action === "remove") removeQueueEntry(key);
-            if (action === "moveUp") void moveQueueEntry(key, index - 1);
-            if (action === "moveDown") void moveQueueEntry(key, index + 1);
+            if (action === "moveUp")
+              void moveQueueEntry(upNextMove(queueState.get(), key, index - 1));
+            if (action === "moveDown")
+              void moveQueueEntry(upNextMove(queueState.get(), key, index + 1));
           }}
           onPress={() => playQueueEntry(key)}
           depth={0.015}
@@ -331,6 +335,13 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
   const settling = useRef<(() => void) | null>(null);
   // True from a drop landing until the list has rendered its new order.
   const landing = useRef(false);
+  // A drag that started while a drop was landing: it starts once the new order is rendered.
+  const deferredStart = useRef<string | null>(null);
+  // The order on screen, for turning a drop index into a move.
+  const shownNow = useRef(shown);
+  useLayoutEffect(() => {
+    shownNow.current = shown;
+  }, [shown]);
   const autoscroll = useRef<{ speed: number; frame: number | null; last: number }>({
     speed: 0,
     frame: null,
@@ -361,11 +372,28 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
     };
   }, []);
 
-  // After the render a drop landed in: any row that kept its index lets go of its shift too.
+  const begin = useCallback(
+    (key: string, index: number) => {
+      live.current = { key, from: index, startScroll: scrollY.current, translation: 0, to: index };
+      shifted.current = { from: index, to: index };
+      liftedTop.set(index * ROW - scrollY.current);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      setDrag({ key, from: index });
+    },
+    [liftedTop],
+  );
+
+  // After the render a drop landed in: any row that kept its index lets go of
+  // its shift too, and a drag that began meanwhile starts from its new index.
   useLayoutEffect(() => {
     if (!landing.current) return;
     landing.current = false;
     applyShifts(false);
+    const key = deferredStart.current;
+    deferredStart.current = null;
+    if (key === null) return;
+    const index = entries.findIndex((entry) => entry.key === key);
+    if (index >= 0) begin(key, index);
   });
 
   const retarget = useCallback(() => {
@@ -414,16 +442,16 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
 
   const start = useCallback(
     (key: string, index: number) => {
-      // A drop still settling (or rendering its new order) would leave [index] stale.
+      // A drop still settling lands now. Until its new order is rendered
+      // [index] is stale, so the drag starts once it is.
       settling.current?.();
-      if (landing.current) return;
-      live.current = { key, from: index, startScroll: scrollY.current, translation: 0, to: index };
-      shifted.current = { from: index, to: index };
-      liftedTop.set(index * ROW - scrollY.current);
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      setDrag({ key, from: index });
+      if (landing.current) {
+        deferredStart.current = key;
+        return;
+      }
+      begin(key, index);
     },
-    [liftedTop],
+    [begin],
   );
 
   const move = useCallback(
@@ -454,11 +482,15 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
   const end = useCallback(
     (canceled: boolean) => {
       stopAutoscroll();
+      // Let go before a deferred drag could start: it never does.
+      deferredStart.current = null;
       const current = live.current;
       live.current = null;
       if (current === null) return;
       const { key, from } = current;
       const to = canceled ? from : current.to;
+      // Named by its neighbours, so a track change before the queue takes it keeps the order.
+      const moved: PendingMove = upNextMove(shownNow.current, key, to);
       if (to !== current.to) {
         shifted.current = { from, to };
         applyShifts(true);
@@ -472,9 +504,8 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
         landing.current = true;
         setDrag(null);
         if (to === from) return;
-        const moved: PendingMove = { key, toUpNextIndex: to };
         setPending((list) => [...list, moved]);
-        void moveQueueEntry(key, to).finally(() =>
+        void moveQueueEntry(moved).finally(() =>
           setPending((list) => list.filter((pendingMove) => pendingMove !== moved)),
         );
       };

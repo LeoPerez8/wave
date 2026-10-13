@@ -8,6 +8,7 @@ import {
   parseQueueState,
   reduceQueue,
   upNext,
+  upNextMove,
   withPendingMoves,
 } from "./index.ts";
 import type { QueueCommand, QueueState } from "./index.ts";
@@ -188,12 +189,16 @@ describe("Up Next editing", () => {
   test("move puts an upcoming entry at a new position in Up Next", () => {
     const playing = start("a b c d e", 1);
     assert.equal(
-      show(apply(playing, { type: "move", key: keyOf(playing, "e"), toUpNextIndex: 0 })),
+      show(apply(playing, { type: "move", ...upNextMove(playing, keyOf(playing, "e"), 0) })),
       "a [b] e c d",
     );
     assert.equal(
-      show(apply(playing, { type: "move", key: keyOf(playing, "c"), toUpNextIndex: 9 })),
+      show(apply(playing, { type: "move", ...upNextMove(playing, keyOf(playing, "c"), 9) })),
       "a [b] d e c",
+    );
+    assert.equal(
+      show(apply(playing, { type: "move", ...upNextMove(playing, keyOf(playing, "c"), 1) })),
+      "a [b] d c e",
     );
   });
 
@@ -203,7 +208,8 @@ describe("Up Next editing", () => {
       const moved = reduceQueue(playing, {
         type: "move",
         key: keyOf(playing, trackId),
-        toUpNextIndex: 1,
+        after: keyOf(playing, "c"),
+        before: null,
       });
       assert.equal(moved.state, playing, trackId);
     }
@@ -495,18 +501,30 @@ describe("removeTracks (deleted songs)", () => {
 describe("withPendingMoves", () => {
   test("shows a dropped move before the queue has it, and the same order once it does", () => {
     const playing = start("a b c d e", 1);
-    const move = { key: keyOf(playing, "e"), toUpNextIndex: 0 };
+    const move = upNextMove(playing, keyOf(playing, "e"), 0);
     assert.equal(show(withPendingMoves(playing, [move])), "a [b] e c d");
     const landed = apply(playing, { type: "move", ...move });
     assert.equal(show(withPendingMoves(landed, [move])), "a [b] e c d");
   });
 
-  test("keeps showing the move when an earlier command lands first", () => {
+  test("a track change before or after the queue takes the move keeps the dropped order", () => {
     const playing = start("a b c d e", 1);
-    const move = { key: keyOf(playing, "e"), toUpNextIndex: 1 };
+    // e dropped between c and d.
+    const move = upNextMove(playing, keyOf(playing, "e"), 1);
+    assert.equal(show(withPendingMoves(playing, [move])), "a [b] c e d");
     const advanced = apply(playing, { type: "next" });
-    assert.equal(show(withPendingMoves(advanced, [move])), "a b [c] d e");
-    const removed = apply(playing, { type: "remove", key: keyOf(playing, "d") });
-    assert.equal(show(withPendingMoves(removed, [move])), "a [b] c e");
+    assert.equal(show(withPendingMoves(advanced, [move])), "a b [c] e d");
+    const landedAfter = apply(advanced, { type: "move", ...move });
+    assert.equal(show(landedAfter), "a b [c] e d");
+    const advancedAfter = apply(playing, { type: "move", ...move }, { type: "next" });
+    assert.equal(show(withPendingMoves(advancedAfter, [move])), "a b [c] e d");
+  });
+
+  test("a neighbour removed before the queue takes the move keeps it beside the other one", () => {
+    const playing = start("a b c d e", 1);
+    const move = upNextMove(playing, keyOf(playing, "e"), 1);
+    const removed = apply(playing, { type: "remove", key: keyOf(playing, "c") });
+    assert.equal(show(withPendingMoves(removed, [move])), "a [b] e d");
+    assert.equal(show(apply(removed, { type: "move", ...move })), "a [b] e d");
   });
 });

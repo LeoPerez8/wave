@@ -53,7 +53,7 @@ const DRAG_SLOP = CELL * 1.5;
 
 const EASE_OUT = Easing.out(Easing.exp);
 
-const skip = (direction: SkipDirection): void =>
+const skip = (direction: SkipDirection): Promise<void> =>
   direction === "next" ? skipToNext() : skipToPrevious();
 
 // Separate selectors, so position ticks don't re-render the mini player.
