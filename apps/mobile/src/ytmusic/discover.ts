@@ -13,30 +13,15 @@ import {
   type DiscoverView,
   type YtSession,
 } from "@wave/core";
-import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 
 import type { SongRow } from "@/library/LibraryStore";
-import { appRuntime } from "@/library/runtime";
 import { WaveYtMusic, type NativeYtSong } from "@/native/waveYtMusic";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
 import { useLibraryFinder } from "./libraryFinder";
-import { YtMusic, type YtMusicError } from "./YtMusic";
-
-/** Runs a YT Music request, resolving its answer or why there wasn't one. */
-export const askYtMusic = <A>(
-  use: (ytMusic: YtMusic["Service"]) => Effect.Effect<A, YtMusicError>,
-) =>
-  appRuntime.runPromise(
-    Effect.result(
-      Effect.gen(function* () {
-        const ytMusic = yield* YtMusic;
-        return yield* use(ytMusic);
-      }),
-    ),
-  );
+import { askYtMusic } from "./askYtMusic";
 
 /**
  * Whether a YouTube account is signed in (an expired session isn't), or null
@@ -47,16 +32,9 @@ const useYtSignedIn = (): boolean | null => {
   useEffect(() => {
     let current = true;
     const subscription = WaveYtMusic.addListener("onSessionChanged", setSession);
-    void appRuntime
-      .runPromise(
-        Effect.gen(function* () {
-          const ytMusic = yield* YtMusic;
-          return yield* ytMusic.session;
-        }),
-      )
-      .then((saved) => {
-        if (current) setSession(saved);
-      });
+    void askYtMusic((ytMusic) => ytMusic.session).then((saved) => {
+      if (current && Result.isSuccess(saved)) setSession(saved.success);
+    });
     return () => {
       current = false;
       subscription.remove();
