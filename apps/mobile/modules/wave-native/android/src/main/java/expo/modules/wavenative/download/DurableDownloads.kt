@@ -28,15 +28,22 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
   @Volatile private var activeTransfer: String? = null
 
   init {
-    if (journal.isFile) {
-      @Suppress("UNCHECKED_CAST")
-      val saved = ObjectInputStream(FileInputStream(journal)).use { it.readObject() } as Map<String, Any?>
+    // An unreadable journal (never expected: writes are atomic) must not crash every launch.
+    @Suppress("UNCHECKED_CAST")
+    val saved = if (journal.isFile) runCatching {
+      FileInputStream(journal).use { ObjectInputStream(it).readObject() } as Map<String, Any?>
+    }.getOrNull() else null
+    if (saved != null) {
       for ((id, job) in saved.map("jobs")) {
         @Suppress("UNCHECKED_CAST")
         val record = job as Map<String, Any?>
         jobs[id] = record.toMutableMap()
       }
       policy = saved.map("libraryPolicy").toMutableMap()
+      // Imported and cancelled jobs have nothing left to show; failures keep Retry for a day.
+      jobs.values.removeAll {
+        it["phase"] == "cancelled" || it["acknowledged"] == true || (it["phase"] == "failed" && it.number("endedAt") + FORGET_FAILED_MS <= clock())
+      }
       // A socket cannot survive process recreation. Counts and absolute deadlines do.
       for (job in jobs.values) if (job["phase"] == "transferring") {
         cleanup(job)
@@ -60,6 +67,9 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
       if (existing["phase"] == "failed" || existing["phase"] == "cancelled" || existing["importFailure"] != null || deletedCompletion) {
         existing["generation"] = existing.number("generation") + 1
         existing.remove("token"); existing.remove("reason"); existing.remove("importFailure")
+        // Asked for again: it waits behind what's already queued.
+        val key = existing["id"] as String
+        jobs.remove(key); jobs[key] = existing
         existing["decisionAttempts"] = 0L; existing["deadline"] = clock() + JOB_MS
         if (deletedCompletion) {
           for (key in listOf("saved", "acknowledged", "finalPath", "digest", "publishSource")) existing.remove(key)
@@ -80,7 +90,7 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
     }
     jobs[id] = mutableMapOf(
       "id" to id, "song" to clean(song), "recording" to clean(recording), "generation" to 1L, "phase" to "queued", "policy" to "mp3-320",
-      "createdAt" to clock(), "deadline" to clock() + JOB_MS, "decisionAttempts" to 0L,
+      "createdAt" to clock(), "decisionAttempts" to 0L,
       "aliases" to emptyList<Map<String, Any?>>(), "attempts" to 0L, "candidateIndex" to 0L,
     )
     persist()
@@ -107,15 +117,21 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
         job.remove("token")
         job["retryAt"] = clock() + 2_000L
         if (job.number("decisionAttempts") >= MAX_DECISIONS) job["importFailure"] = reason
+      } else if (decision == "prepare" && reason == "offline" && job.number("decisionAttempts") < MAX_DECISIONS) {
+        // Searching reconnects the saved session; a dropped connection gets a few spaced retries.
+        job.remove("token")
+        job["retryAt"] = clock() + 5_000L * job.number("decisionAttempts")
       } else fail(job, reason)
       persist(); return true
     }
     when (decision) {
       "prepare" -> {
         val candidates = payload.maps("candidates").take(3)
-        require(candidates.isNotEmpty() && candidates.all { it.number("bitrateKbps") == 320L && (it["filename"] as? String)?.endsWith(".mp3", true) == true }) { "Only original MP3 320 candidates are supported" }
-        val target = File(payload["targetPath"] as String)
-        require(target.extension.equals("mp3", true))
+        val target = (payload["targetPath"] as? String)?.let(::File)
+        // Only original MP3 320 is eligible; anything else is no recording rather than a lower one.
+        if (target == null || !target.extension.equals("mp3", true) || candidates.isEmpty() ||
+          !candidates.all { it.number("bitrateKbps") == 320L && (it["filename"] as? String)?.endsWith(".mp3", true) == true }
+        ) { fail(job, "unavailable"); persist(); return true }
         job["candidates"] = clean(candidates); job["tags"] = clean(payload.map("tags")); job["targetPath"] = target.path
         job["sourcePath"] = DownloadFiles.partFileFor(target, "$id-$generation").path
         transition(job, "prepared")
@@ -150,7 +166,14 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
     return policy.number("revision")
   }
 
-  @Synchronized fun hasWork(): Boolean = jobs.values.any { it["phase"] !in TERMINAL && !(it["phase"] == "completed" && (it["acknowledged"] == true || it["importFailure"] != null)) }
+  @Synchronized fun hasWork(): Boolean = jobs.values.any(::pending)
+
+  /** The job the serial worker is on, else the next one waiting; what the notification shows. */
+  @Synchronized fun current(): Map<String, Any?>? = next()?.toMap()
+
+  private fun pending(job: Map<String, Any?>) = job["phase"] !in TERMINAL && !(job["phase"] == "completed" && (job["acknowledged"] == true || job["importFailure"] != null))
+  private fun next(): MutableMap<String, Any?>? =
+    jobs.values.firstOrNull { it["phase"] != "queued" && pending(it) } ?: jobs.values.firstOrNull { it["phase"] == "queued" }
 
   fun startWork() { stopped = false }
   /** Stops socket work immediately, without waiting for an IO operation's journal lock. */
@@ -167,6 +190,8 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
   @Synchronized fun expire(transport: DurableTransfer, stopAll: Boolean = false) {
     for (job in jobs.values) {
       if (job["phase"] in TERMINAL || job["acknowledged"] == true || job["importFailure"] != null) continue
+      // A queued job's time starts when the serial worker reaches it.
+      if (job["phase"] == "queued") continue
       if (stopAll || job.number("deadline") <= clock()) {
         if (job["phase"] == "completed") { job["importFailure"] = "failed"; job.remove("token") }
         else fail(job, "failed")
@@ -190,16 +215,16 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
     if (stopped) return
     expire(transport)
     val work = synchronized(this) {
-      val active = jobs.values.firstOrNull { it["phase"] !in TERMINAL && it["phase"] != "queued" && !(it["phase"] == "completed" && (it["acknowledged"] == true || it["importFailure"] != null)) }
-      val job = active ?: jobs.values.firstOrNull { it["phase"] == "queued" } ?: return
+      val job = next() ?: return
       if (job.number("retryAt") > clock()) return
-      if (job["phase"] == "queued") transition(job, "preparing")
+      if (job["phase"] == "queued") { job["deadline"] = clock() + JOB_MS; transition(job, "preparing") }
       if (job["phase"] == "prepared") {
         if (job.number("attempts") >= MAX_ATTEMPTS || job.number("candidateIndex") >= job.maps("candidates").size) { fail(job, "unavailable"); persist(); return }
         if (job.number("resumeAttemptDeadline") in 1..clock() || job.number("resumeQueueDeadline") in 1..clock()) { nextCandidate(job); persist(); return }
         job["attempts"] = job.number("attempts") + 1
         job["sourcePath"] = DownloadFiles.partFileFor(File(job["targetPath"] as String), "${job["id"]}-${job["generation"]}-${job["attempts"]}").path
         job["peer"] = job.maps("candidates")[job.number("candidateIndex").toInt()]
+        job.remove("received"); job.remove("total")
         job["queuePosition"] = null; job["queueDeadline"] = job.remove("resumeQueueDeadline") ?: minOf(clock() + QUEUE_MS, job.number("deadline"))
         job["attemptDeadline"] = job.remove("resumeAttemptDeadline") ?: minOf(clock() + ATTEMPT_MS, job.number("deadline"))
         transition(job, "transferring")
@@ -217,26 +242,28 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
           val durationMs = work.map("song").number("durationMs").takeIf { it > 0 } ?: work.map("peer").number("durationMs")
           val audio = transport.receive(id, work.map("peer"), source, durationMs) { received, total, queue ->
             synchronized(this) {
-              val job = current(id, generation, "transferring") ?: return@synchronized
+              val job = held(id, generation, "transferring") ?: return@synchronized
+              // Arriving bytes keep a slow peer's turn; one that goes quiet for STALL_MS is replaced.
+              if (received > job.number("received")) job["attemptDeadline"] = minOf(clock() + STALL_MS, job.number("deadline"))
               job["received"] = received; job["total"] = total; job["queuePosition"] = queue
               if (queue != null && job.number("queueDeadline") <= clock()) transport.cancel(id)
               if (queue != null || received == total || clock() - lastProgressAt >= 500) { lastProgressAt = clock(); persist() }
             }
           }
           synchronized(this) {
-            val job = current(id, generation, "transferring") ?: run { source.delete(); return }
+            val job = held(id, generation, "transferring") ?: run { source.delete(); return }
             if (stopped) { cleanup(job); transition(job, "prepared"); persist(); return }
             job["audio"] = clean(audio); job["receiptId"] = UUID.randomUUID().toString(); transition(job, "sourceReady"); persist()
           }
         }
         "tagging" -> synchronized(this) {
-          val job = current(id, generation, "tagging") ?: return
+          val job = held(id, generation, "tagging") ?: return
           publication.tag(File(work["sourcePath"] as String), work.map("tags"))
           if (stopped) return
           transition(job, "awaitingPublication"); persist()
         }
         "publishing" -> synchronized(this) {
-          val job = current(id, generation, "publishing") ?: return
+          val job = held(id, generation, "publishing") ?: return
           if (stopped) return
           if (job.number("policyRevision") != policy.number("revision")) { transition(job, "awaitingPublication"); persist(); return }
           if (!included(File(job["targetPath"] as String))) { fail(job, "noFolder"); persist(); return }
@@ -267,12 +294,14 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
       }
     } catch (error: Exception) {
       synchronized(this) {
-        val job = current(id, generation, work["phase"] as String) ?: return
+        val job = held(id, generation, work["phase"] as String) ?: return
         if (work["phase"] == "publishing" && job["finalPath"] != null && File(job["finalPath"] as String).isFile && job.number("publicationAttempts") < 3) {
           job["publicationAttempts"] = job.number("publicationAttempts") + 1
         } else if (work["phase"] == "transferring") {
           val reason = (error as? DurableFailure)?.reason ?: "unavailable"
-          if (reason == "offline" && job.number("attempts") < MAX_ATTEMPTS) { cleanup(job); transition(job, "prepared"); job["retryAt"] = clock() + 2_000L * job.number("attempts") }
+          // The service stopping isn't the peer's fault: the next start retries the same peer.
+          if (stopped) { cleanup(job); transition(job, "prepared"); job["attempts"] = maxOf(0L, job.number("attempts") - 1) }
+          else if (reason == "offline" && job.number("attempts") < MAX_ATTEMPTS) { cleanup(job); transition(job, "prepared"); job["retryAt"] = clock() + 2_000L * job.number("attempts") }
           else if (reason in listOf("account", "storage", "noFolder", "offline")) fail(job, reason)
           else nextCandidate(job)
         } else fail(job, "storage")
@@ -281,14 +310,14 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
     } finally { if (activeTransfer == id) activeTransfer = null }
   }
 
-  private fun current(id: String, generation: Long, phase: String): MutableMap<String, Any?>? = jobs[id]?.takeIf { it.number("generation") == generation && it["phase"] == phase }
+  private fun held(id: String, generation: Long, phase: String): MutableMap<String, Any?>? = jobs[id]?.takeIf { it.number("generation") == generation && it["phase"] == phase }
   private fun transition(job: MutableMap<String, Any?>, phase: String) { job["phase"] = phase; job.remove("token"); job["decisionAttempts"] = 0L; job.remove("retryAt") }
   private fun nextCandidate(job: MutableMap<String, Any?>) {
     job.remove("resumeAttemptDeadline"); job.remove("resumeQueueDeadline")
     cleanup(job); job["candidateIndex"] = job.number("candidateIndex") + 1
     if (job.number("candidateIndex") >= job.maps("candidates").size || job.number("attempts") >= MAX_ATTEMPTS) fail(job, "unavailable") else transition(job, "prepared")
   }
-  private fun fail(job: MutableMap<String, Any?>, reason: String) { job["reason"] = reason; transition(job, "failed"); job["generation"] = job.number("generation") + 1; cleanup(job) }
+  private fun fail(job: MutableMap<String, Any?>, reason: String) { job["reason"] = reason; job["endedAt"] = clock(); transition(job, "failed"); job["generation"] = job.number("generation") + 1; cleanup(job) }
   private fun cleanup(job: Map<String, Any?>) { for (key in listOf("sourcePath", "outputPath")) (job[key] as? String)?.let { if (it != job["finalPath"]) File(it).delete() } }
   private fun included(file: File): Boolean {
     val path = file.canonicalFile.toPath()
@@ -309,11 +338,17 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
 
   companion object {
     const val LEASE_MS = 45_000L
-    const val JOB_MS = 12 * 60_000L
+    /** A job's whole budget from leaving the queue: search, peers' queues, transfers and saving. */
+    const val JOB_MS = 20 * 60_000L
+    /** How long one peer may keep us in its upload queue. */
     const val QUEUE_MS = 120_000L
+    /** How long one peer has to start sending. */
     const val ATTEMPT_MS = 180_000L
+    /** How long a sending peer may go quiet. */
+    const val STALL_MS = 60_000L
     const val MAX_ATTEMPTS = 6L
     const val MAX_DECISIONS = 3L
+    const val FORGET_FAILED_MS = 24 * 60 * 60_000L
     private val TERMINAL = setOf("failed", "cancelled")
     private val DECISIONS = mapOf("preparing" to "prepare", "sourceReady" to "confirm", "awaitingPublication" to "publish", "completed" to "import")
   }
@@ -336,9 +371,9 @@ private fun digest(file: File): String {
   return sha.digest().joinToString("") { "%02x".format(it) }
 }
 
-/** Persist only standard JDK maps/lists/scalars; no app classes or credentials enter the journal. */
+/** Persist only standard JDK maps (in order)/lists/scalars; no app classes or credentials enter the journal. */
 private fun clean(value: Any?): Any? = when (value) {
-  is Map<*, *> -> HashMap<String, Any?>().apply { for ((key, item) in value) put(key as String, clean(item)) }
+  is Map<*, *> -> LinkedHashMap<String, Any?>().apply { for ((key, item) in value) put(key as String, clean(item)) }
   is List<*> -> ArrayList(value.map(::clean))
   is String, is Number, is Boolean, null -> value
   else -> throw IllegalArgumentException("Unsupported persisted value")

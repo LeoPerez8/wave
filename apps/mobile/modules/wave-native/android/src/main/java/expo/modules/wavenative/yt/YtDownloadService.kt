@@ -8,15 +8,23 @@ import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.IBinder
+import android.net.wifi.WifiManager
 import android.os.PowerManager
 import expo.modules.wavenative.R
 import expo.modules.wavenative.download.AndroidDownloads
 import expo.modules.wavenative.launcher.LauncherIconSwitcher
 
-/** The existing dataSync notification now owns the persisted native Soulseek queue. */
+/**
+ * Runs the persisted Soulseek download journal ([AndroidDownloads]) as a
+ * `dataSync` foreground service, so downloads continue with the screen off,
+ * beside playback and after Android recreates the process (sticky restart).
+ * Its notification shows the current job and offers Cancel; it stops once the
+ * journal has no work left.
+ */
 class YtDownloadService : Service() {
   private val downloads get() = AndroidDownloads.get(this)
   private var wakeLock: PowerManager.WakeLock? = null
+  private var wifiLock: WifiManager.WifiLock? = null
   override fun onBind(intent: Intent?): IBinder? = null
 
   override fun onCreate() {
@@ -26,13 +34,24 @@ class YtDownloadService : Service() {
         description = "Soulseek recordings being saved to the Library"; setShowBadge(false)
       },
     )
+    // With the screen off the CPU and Wi-Fi radio may sleep; both locks are renewed while work remains.
     wakeLock = getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "wave:downloads").also {
-      it.setReferenceCounted(false); it.acquire(15 * 60_000L)
+      it.setReferenceCounted(false); it.acquire(LOCK_MS)
+    }
+    @Suppress("DEPRECATION")
+    wifiLock = (applicationContext.getSystemService(WifiManager::class.java))?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "wave:downloads")?.also {
+      it.setReferenceCounted(false); it.acquire()
     }
   }
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-    startForeground(NOTIFICATION_ID, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+    try {
+      startForeground(NOTIFICATION_ID, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+    } catch (e: RuntimeException) {
+      // A sticky restart Android won't let into the foreground: the journal waits for Wave's next launch.
+      stopSelf()
+      return START_NOT_STICKY
+    }
     if (intent?.action == CANCEL) intent.getStringExtra("jobId")?.let { downloads.jobs.cancel(it, downloads.transport) }
     downloads.start(onIdle = { stopSelf() }, refresh = { refresh() })
     return START_STICKY
@@ -47,14 +66,27 @@ class YtDownloadService : Service() {
   override fun onDestroy() {
     downloads.stop()
     wakeLock?.let { if (it.isHeld) it.release() }; wakeLock = null
+    wifiLock?.let { if (it.isHeld) it.release() }; wifiLock = null
     super.onDestroy()
   }
 
-  private fun refresh() { getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification()) }
-  private fun notification(): Notification {
-    val current = downloads.jobs.snapshot().firstOrNull {
-      it["phase"] !in listOf("failed", "cancelled") && !(it["phase"] == "completed" && (it["acknowledged"] == true || it["importFailure"] != null))
-    }
+  private fun refresh() {
+    wakeLock?.acquire(LOCK_MS)
+    val current = downloads.jobs.current()
+    // Android drops notifications posted too often; only post what changed.
+    val shown = listOf(current?.get("id"), current?.get("phase"), current?.get("queuePosition"), percent(current))
+    if (shown == lastShown) return
+    lastShown = shown
+    getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification(current))
+  }
+  private var lastShown: List<Any?>? = null
+  private fun percent(job: Map<String, Any?>?): Int? {
+    val received = (job?.get("received") as? Number)?.toLong() ?: 0L
+    val total = (job?.get("total") as? Number)?.toLong() ?: 0L
+    return if (total > 0) (received * 100 / total).toInt().coerceIn(0, 100) else null
+  }
+
+  private fun notification(current: Map<String, Any?>? = downloads.jobs.current()): Notification {
     val builder = Notification.Builder(this, CHANNEL).setSmallIcon(R.drawable.wave_notification)
       .setOngoing(true).setOnlyAlertOnce(true).setCategory(Notification.CATEGORY_PROGRESS)
       .setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
@@ -68,10 +100,8 @@ class YtDownloadService : Service() {
     val queued = current?.get("queuePosition") != null || current?.get("phase") in listOf("queued", "preparing")
     builder.setContentTitle(if (saving) "Saving to the Library" else if (queued) "Waiting to download" else "Downloading")
       .setContentText(song?.get("title") as? String ?: "Soulseek")
-    val received = (current?.get("received") as? Number)?.toLong() ?: 0L
-    val total = (current?.get("total") as? Number)?.toLong() ?: 0L
-    if (total > 0 && !saving && !queued) builder.setProgress(100, (received * 100 / total).toInt().coerceIn(0, 100), false)
-    else builder.setProgress(0, 0, true)
+    val percent = percent(current)
+    if (percent != null && !saving && !queued) builder.setProgress(100, percent, false) else builder.setProgress(0, 0, true)
     if (current != null && !saving) {
       val intent = Intent(this, YtDownloadService::class.java).setAction(CANCEL).putExtra("jobId", current["id"] as String)
       builder.addAction(Notification.Action.Builder(null, "Cancel", PendingIntent.getService(this, 1, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)).build())
@@ -83,5 +113,6 @@ class YtDownloadService : Service() {
     const val CHANNEL = "wave_downloads"
     const val NOTIFICATION_ID = 0x5759
     const val CANCEL = "wave.download.CANCEL"
+    const val LOCK_MS = 15 * 60_000L
   }
 }

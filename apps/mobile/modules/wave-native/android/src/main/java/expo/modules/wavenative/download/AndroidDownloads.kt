@@ -5,6 +5,7 @@ import android.content.Intent
 import android.media.MediaScannerConnection
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import expo.modules.wavenative.artwork.AndroidArtworkProcessor
 import expo.modules.wavenative.artwork.ArtworkStore
 import expo.modules.wavenative.player.JsRuntime
@@ -41,7 +42,7 @@ class AndroidDownloads private constructor(private val context: Context) {
     override fun cancel(id: String) = soulseek.client.cancel(id)
     override fun receive(id: String, candidate: Map<String, Any?>, source: File, durationMs: Long, progress: (Long, Long, Long?) -> Unit): Map<String, Any?> = try {
       soulseek.download(id, SoulseekCandidate.fromJs(candidate), source, durationMs,
-        onProgress = { received, total -> progress(received, total, null); changed() },
+        onProgress = { received, total -> progress(received, total, null); changedSoon() },
         onQueued = { place -> progress(0, 0, place); changed() },
         isCancelled = { Thread.currentThread().isInterrupted },
       )
@@ -50,6 +51,7 @@ class AndroidDownloads private constructor(private val context: Context) {
         SoulseekFailure.AUTH, SoulseekFailure.SIGNED_OUT -> "account"
         SoulseekFailure.OFFLINE -> "offline"
         SoulseekFailure.STORAGE -> "storage"
+        SoulseekFailure.CANCELLED -> "cancelled"
         else -> "unavailable"
       }
       throw DurableFailure(reason, error)
@@ -73,13 +75,19 @@ class AndroidDownloads private constructor(private val context: Context) {
   }
 
   fun subscribe(listener: () -> Unit): () -> Unit { listeners.add(listener); return { listeners.remove(listener) } }
-  fun changed() { for (listener in listeners) runCatching(listener) }
+  fun changed() { lastChangedAt = SystemClock.elapsedRealtime(); for (listener in listeners) runCatching(listener) }
+  @Volatile private var lastChangedAt = 0L
+  /** Transfer progress arrives per chunk; JS and the notification only need a few updates a second. */
+  private fun changedSoon() { if (SystemClock.elapsedRealtime() - lastChangedAt >= 500) changed() }
 
   /** Called from the user's tap or the resumed Activity. Failure never starts unprotected work. */
   fun requestService() {
     if (!jobs.hasWork()) return
     try { context.startForegroundService(Intent(context, YtDownloadService::class.java)) }
-    catch (error: Exception) { jobs.stopWork(transport); jobs.expire(transport, stopAll = true); changed() }
+    catch (error: Exception) {
+      // Never unprotected work: started jobs fail with Retry; queued ones wait for the next launch.
+      if (synchronized(this) { worker == null }) { jobs.expire(transport, stopAll = true); changed() }
+    }
   }
 
   @Synchronized fun start(onIdle: () -> Unit, refresh: () -> Unit) {
@@ -87,11 +95,13 @@ class AndroidDownloads private constructor(private val context: Context) {
     jobs.startWork()
     main.post { JsRuntime.ensureStarted(context, OWNER) }
     deadlines = Executors.newSingleThreadScheduledExecutor().also { executor ->
-      executor.scheduleWithFixedDelay({ runCatching { jobs.expire(transport); changed() } }, 1, 1, TimeUnit.SECONDS)
+      // Also refreshes the notification while the worker is blocked in a transfer.
+      executor.scheduleWithFixedDelay({ runCatching { jobs.expire(transport); changed(); main.post(refresh) } }, 1, 1, TimeUnit.SECONDS)
     }
     worker = Executors.newSingleThreadScheduledExecutor().also { executor ->
       executor.scheduleWithFixedDelay({
-        runCatching { jobs.advance(transport, publication) }.onFailure { jobs.stopWork(transport); runCatching { jobs.expire(transport, true) } }
+        // An unexpected failure (a full disk can't even write the journal) ends the started jobs, never the queue.
+        runCatching { jobs.advance(transport, publication) }.onFailure { runCatching { jobs.expire(transport, true) } }
         changed()
         main.post { refresh(); if (!jobs.hasWork()) onIdle() }
       }, 0, 500, TimeUnit.MILLISECONDS)
