@@ -64,24 +64,28 @@ const artistNames = (credit: string): string[] =>
 
 const knownLength = (ms: number | null): number | null => (ms === null || ms <= 0 ? null : ms);
 
-interface Candidate {
+interface Candidate<L> {
+  readonly song: L;
   readonly artists: ReadonlySet<string>;
   readonly durationMs: number | null;
 }
 
 /**
- * Whether a YT Music song is already in the Library: a Library song has its
- * title (case, accents, punctuation and featured credits aside), shares an
+ * The Library song a YT Music song already is, or null: one with its title
+ * (case, accents, punctuation and featured credits aside) that shares an
  * artist with it and, when both lengths are known, is as long within a few
- * seconds, so a live take or an edit of the same song still shows.
+ * seconds, so a live take or an edit of the same song is a different song.
  */
-export const libraryMatcher = (library: readonly LibrarySongKey[]): ((song: YtSong) => boolean) => {
-  const byTitle = new Map<string, Candidate[]>();
+export const libraryFinder = <L extends LibrarySongKey>(
+  library: readonly L[],
+): ((song: YtSong) => L | null) => {
+  const byTitle = new Map<string, Candidate<L>[]>();
   for (const song of library) {
     const title = matchTitle(song.title);
     if (title === "") continue;
     const candidates = byTitle.get(title) ?? [];
     candidates.push({
+      song,
       artists: new Set(artistNames(song.artist)),
       durationMs: knownLength(song.durationMs),
     });
@@ -89,17 +93,27 @@ export const libraryMatcher = (library: readonly LibrarySongKey[]): ((song: YtSo
   }
   return (song) => {
     const candidates = byTitle.get(matchTitle(song.title));
-    if (candidates === undefined) return false;
+    if (candidates === undefined) return null;
     const artists = song.artists.flatMap(artistNames);
     const length = knownLength(song.durationMs);
-    return candidates.some(
+    const match = candidates.find(
       (candidate) =>
         artists.some((artist) => candidate.artists.has(artist)) &&
         (length === null ||
           candidate.durationMs === null ||
           Math.abs(candidate.durationMs - length) <= SAME_LENGTH_MS),
     );
+    return match?.song ?? null;
   };
+};
+
+/**
+ * Whether a YT Music song is already in the Library (see [libraryFinder]),
+ * so a live take or an edit of the same song still shows.
+ */
+export const libraryMatcher = (library: readonly LibrarySongKey[]): ((song: YtSong) => boolean) => {
+  const find = libraryFinder(library);
+  return (song) => find(song) !== null;
 };
 
 /** What a queue track id stands for: a Library track or a YT Music song. */
