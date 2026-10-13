@@ -10,6 +10,7 @@ import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.concurrent.thread
 
@@ -78,10 +79,51 @@ class SoulseekClientTest {
           client.connect("wave-fixture", "fixture-secret")
           val candidate = SoulseekCandidate("fixture-peer", "Fixture.mp3", 1000, 320, 1500, false, 0, 8)
           val failure = assertThrows(SoulseekException::class.java) {
-            client.download("cancelled", candidate, part, 1500, onQueued = { client.cancel("cancelled") })
+            client.download("cancelled", candidate, part, 1500, onQueued = { client.cancel("cancelled") }, isCancelled = giveUpAfterSeconds(5))
           }
           verified.get(2, TimeUnit.SECONDS)
           assertEquals(SoulseekFailure.CANCELLED, failure.failure)
+          assertFalse(part.exists())
+        } finally { ended.complete(Unit); client.close(); part.delete() }
+      }
+    }
+  }
+
+  /** The download journal decides how long a peer may take (start, queue, stall); the client has no flat limit of its own. */
+  @Test fun `a download waits for as long as its caller wants it and stops when it no longer does`() {
+    ServerSocket(0).use { server ->
+      ServerSocket(0).use { peer ->
+        val ended = CompletableFuture<Unit>()
+        thread(isDaemon = true) {
+          try {
+            server.accept().use { socket ->
+              login(socket)
+              SoulseekWire.read(socket.getInputStream())
+              SoulseekWire.write(socket.getOutputStream(), 3) { string("fixture-peer"); uint(0x0100007f); uint(peer.localPort.toLong()) }
+              peer.accept().use { connection ->
+                SoulseekWire.read(connection.getInputStream(), true)
+                val filename = SoulseekWire.reader(SoulseekWire.read(connection.getInputStream()).payload).string()
+                SoulseekWire.read(connection.getInputStream())
+                SoulseekWire.write(connection.getOutputStream(), 44) { string(filename); uint(8) }
+                ended.get(5, TimeUnit.SECONDS)
+              }
+            }
+          } catch (_: Exception) {
+            // The client closing its sockets ends the fixture.
+          }
+        }
+        val client = SoulseekClient(MemoryCredentials(), "127.0.0.1", server.localPort)
+        val part = Files.createTempFile("wave-unwanted", ".mp3").toFile()
+        try {
+          client.connect("wave-fixture", "fixture-secret")
+          val candidate = SoulseekCandidate("fixture-peer", "Fixture.mp3", 1000, 320, 1500, false, 0, 8)
+          var queuedAt = 0L
+          val failure = assertThrows(SoulseekException::class.java) {
+            client.download("unwanted", candidate, part, 1500, onQueued = { queuedAt = System.nanoTime() },
+              isCancelled = { queuedAt != 0L && System.nanoTime() - queuedAt > 300_000_000L })
+          }
+          assertEquals(SoulseekFailure.CANCELLED, failure.failure)
+          assertTrue((System.nanoTime() - queuedAt) < 2_000_000_000L)
           assertFalse(part.exists())
         } finally { ended.complete(Unit); client.close(); part.delete() }
       }
@@ -150,7 +192,7 @@ class SoulseekClientTest {
       try {
         client.connect("wave-fixture", "fixture-secret")
         val candidate = SoulseekCandidate("offline-peer", "Fixture.mp3", 1000, 320, 1500, false, 0, 0)
-        val failure = assertThrows(SoulseekException::class.java) { client.download("unavailable", candidate, part, 1500) }
+        val failure = assertThrows(SoulseekException::class.java) { client.download("unavailable", candidate, part, 1500, isCancelled = giveUpAfterSeconds(5)) }
         verified.get(2, TimeUnit.SECONDS)
         assertEquals(SoulseekFailure.PEER, failure.failure)
         assertFalse(part.exists())
@@ -204,7 +246,7 @@ class SoulseekClientTest {
         try {
           client.connect("wave-fixture", "fixture-secret")
           val candidate = SoulseekCandidate("fixture-peer", "Music\\Fixture Artist\\Fixture Title.mp3", fixture.size.toLong(), 320, 1500, false, 100000, 3)
-          val result = client.download("recording", candidate, part, 1500, onQueued = { queued.add(it) })
+          val result = client.download("recording", candidate, part, 1500, onQueued = { queued.add(it) }, isCancelled = giveUpAfterSeconds(5))
           verified.get(2, TimeUnit.SECONDS)
           assertEquals(listOf(3L), queued)
           assertEquals(fixture.size.toLong(), result.bytes)
@@ -259,8 +301,9 @@ class SoulseekClientTest {
         try {
           client.connect("wave-fixture", "fixture-secret")
           val candidate = SoulseekCandidate("fixture-peer", "Music\\Fixture Title.mp3", fixture.size.toLong(), 320, 1500, false, 100000, 0)
+          val started = System.nanoTime()
           val failure = assertThrows(SoulseekException::class.java) {
-            client.download("recording", candidate, part, 1500, onProgress = { _, _ -> throw OutOfMemoryError("fixture") }, queueTimeoutMs = 4_000)
+            client.download("recording", candidate, part, 1500, onProgress = { _, _ -> throw OutOfMemoryError("fixture") }, isCancelled = { System.nanoTime() - started > 4_000_000_000L })
           }
           assertEquals(SoulseekFailure.PEER, failure.failure)
           assertFalse(part.exists())
@@ -359,5 +402,11 @@ class SoulseekClientTest {
     private var credentials: SoulseekCredentials? = null
     override fun load() = credentials
     override fun save(value: SoulseekCredentials?) { credentials = value }
+  }
+
+  /** Keeps a broken fixture from hanging the test run. */
+  private fun giveUpAfterSeconds(seconds: Long): () -> Boolean {
+    val end = System.nanoTime() + seconds * 1_000_000_000L
+    return { System.nanoTime() > end }
   }
 }

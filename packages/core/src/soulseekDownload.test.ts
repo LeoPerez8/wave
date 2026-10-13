@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import {
   soulseekCandidates,
+  soulseekQuery,
   soulseekReceivedMatches,
   soulseekSameRecording,
   ytDownloadSharedJob,
@@ -258,4 +259,51 @@ test("no match, unsupported quality and invalid advertised values have no eligib
     ]),
     [],
   );
+});
+
+test("an artist or title that starts with a number isn't taken for a track number", () => {
+  const by = (artist: string, title: string): YtSong => ({
+    ...song,
+    title,
+    artists: [artist],
+    album: null,
+    durationMs: 230_000,
+  });
+  const file = (filename: string) => peer(filename, { durationMs: 230_000 });
+  for (const [artist, title, filename] of [
+    ["50 Cent", "In Da Club", "50 Cent - In Da Club.mp3"],
+    ["21 Savage", "a lot", "Music/21 Savage - a lot.mp3"],
+    ["3 Doors Down", "Kryptonite", "3 Doors Down - Kryptonite.mp3"],
+    ["30 Seconds to Mars", "The Kill", "30 Seconds to Mars - The Kill.mp3"],
+    ["50 Cent", "In Da Club", "03 - 50 Cent - In Da Club.mp3"],
+    ["3 Doors Down", "Kryptonite", "3 Doors Down/The Better Life/01 Kryptonite.mp3"],
+    ["Ariana Grande", "7 rings", "Ariana Grande/thank u, next/04. 7 rings.mp3"],
+    ["Ariana Grande", "7 rings", "Ariana Grande - 7 rings.mp3"],
+  ] as const) {
+    assert.equal(soulseekCandidates(by(artist, title), [file(filename)]).length, 1, filename);
+  }
+  assert.deepEqual(
+    soulseekCandidates(by("50 Cent", "In Da Club"), [file("Cent - In Da Club.mp3")]),
+    [],
+  );
+});
+
+test("the search asks for the artist and title words every matching file name has", () => {
+  const query = (title: string, artists: readonly string[]) =>
+    soulseekQuery({ ...song, title, artists });
+  assert.equal(query("Get Lucky (feat. Pharrell Williams)", ["Daft Punk"]), "Daft Punk Get Lucky");
+  assert.equal(query("Get Lucky", ["Daft Punk feat. Pharrell Williams"]), "Daft Punk Get Lucky");
+  assert.equal(query("Something - Remastered 2009", ["The Beatles"]), "The Beatles Something");
+  assert.equal(query("Bohemian Rhapsody (Remastered 2011)", ["Queen"]), "Queen Bohemian Rhapsody");
+  assert.equal(query("Halo", ["Beyoncé"]), "Beyoncé Halo");
+  assert.equal(query("Back In Black", ["AC/DC"]), "AC DC Back In Black");
+  // Peers split "Don't" differently; leaving such words out still finds the file.
+  assert.equal(query("Don't Stop Me Now", ["Queen"]), "Queen Stop Me Now");
+  assert.equal(query("Hey, Soul Sister!", ["Train"]), "Train Hey Soul Sister");
+  // A title meaning something different keeps its words.
+  assert.equal(
+    query("Mr. Brightside - Jacques Lu Cont Remix", ["The Killers"]),
+    "The Killers Mr Brightside",
+  );
+  assert.equal(query("Part 2 - Interlude", ["Band"]), "Band Part 2 Interlude");
 });

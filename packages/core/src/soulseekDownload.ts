@@ -34,19 +34,36 @@ const editions = (text: string, album = false): string[] => {
     notes.push(text);
   const suffix = text.match(/\s+-\s+(.+)$/)?.[1];
   if (suffix !== undefined) notes.push(suffix);
-  return [...new Set(notes.filter((note) => editionMarker.test(note)).map(fold))].toSorted();
+  // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
+  return [...new Set(notes.filter((note) => editionMarker.test(note)).map(fold))].sort();
 };
 
-const title = (text: string): string =>
-  fold(
-    credit(text)
-      .replace(/[([]([^\])]+)[\])]/g, (whole: string, note: string) =>
-        editionMarker.test(note) ? "" : whole,
-      )
-      .replace(/\s+-\s+(.+)$/, (whole: string, note: string) =>
-        editionMarker.test(note) ? "" : whole,
-      ),
-  );
+/** The title without guests and edition notes, as written. */
+const bareTitle = (text: string): string =>
+  credit(text)
+    .replace(/[([]([^\])]+)[\])]/g, (whole: string, note: string) =>
+      editionMarker.test(note) ? "" : whole,
+    )
+    .replace(/\s+-\s+(.+)$/, (whole: string, note: string) =>
+      editionMarker.test(note) ? "" : whole,
+    );
+const title = (text: string): string => fold(bareTitle(text));
+
+/**
+ * What to search Soulseek for. Peers only return files whose path has every
+ * query word, so this keeps the words Core matches on: the main artist and the
+ * title, without guests, edition notes or punctuation. Letters keep their
+ * accents, since peers don't fold them. A word with an apostrophe is left out,
+ * because peers split "Don't" in different ways.
+ */
+export const soulseekQuery = (song: YtSong): string =>
+  `${credit(song.artists[0] ?? "")} ${bareTitle(song.title)}`
+    .split(/\s+/)
+    .filter((word) => !/['’ʼ`´]/.test(word))
+    .join(" ")
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((word) => word !== "")
+    .join(" ");
 
 const positiveDuration = (value: number | null): value is number =>
   value !== null && Number.isFinite(value) && value > 0;
@@ -78,8 +95,10 @@ export const soulseekRecording = (song: YtSong): SoulseekRecording => ({
       ...song.artists.flatMap(featuredNames),
       ...featuredNames(song.title),
     ]),
-  ].toSorted(),
-  editions: [...new Set([...editions(song.title), ...editions(song.album ?? "", true)])].toSorted(),
+    // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
+  ].sort(),
+  // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
+  editions: [...new Set([...editions(song.title), ...editions(song.album ?? "", true)])].sort(),
   durationMs: positiveDuration(song.durationMs) ? song.durationMs : null,
 });
 
@@ -166,29 +185,30 @@ export const soulseekCandidates = (
     )
       return false;
     const path = candidate.filename.split(/[\\/]/);
-    let name = (path.at(-1) ?? "")
-      .replace(/\.mp3$/i, "")
-      .replace(/^\s*(?:\d{1,2}[-.]\d{1,3}|\d{1,3})\s*[. -]\s*/, "");
+    const file = (path.at(-1) ?? "").replace(/\.mp3$/i, "");
     const album = path.at(-2) ?? "";
     const folderArtist = path.at(-3) ?? "";
-    const split = name.indexOf(" - ");
-    const fileArtist = split < 0 ? "" : name.slice(0, split);
-    if (split >= 0) name = name.slice(split + 3);
-    if (
-      fileArtist !== ""
-        ? !artistMatches(fileArtist, recording)
-        : !artistMatches(folderArtist, recording) && !artistMatches(album, recording)
-    )
-      return false;
-    if (title(name) !== wantedTitle) return false;
-    if (!featuredNames(name).every((name) => recording.artistCredits.includes(name))) return false;
-    if (
-      !sameEditions(
-        wantedEditions,
-        [...new Set([...editions(name), ...editions(album, true)])].toSorted(),
-      )
-    )
-      return false;
+    const names = (named: string): boolean => {
+      const split = named.indexOf(" - ");
+      const fileArtist = split < 0 ? "" : named.slice(0, split);
+      const name = split < 0 ? named : named.slice(split + 3);
+      return (
+        (fileArtist !== ""
+          ? artistMatches(fileArtist, recording)
+          : artistMatches(folderArtist, recording) || artistMatches(album, recording)) &&
+        title(name) === wantedTitle &&
+        featuredNames(name).every((guest) => recording.artistCredits.includes(guest)) &&
+        sameEditions(
+          wantedEditions,
+          // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
+          [...new Set([...editions(name), ...editions(album, true)])].sort(),
+        )
+      );
+    };
+    // A leading number is a track number ("08 - Get Lucky") or part of a name ("50 Cent - …",
+    // "7 rings"): the file qualifies if either reading names the recording.
+    const untracked = file.replace(/^\s*(?:\d{1,2}[-.]\d{1,3}|\d{1,3})\s*[. -]\s*/, "");
+    if (!names(untracked) && (untracked === file || !names(file))) return false;
     if (!positiveDuration(song.durationMs) && !positiveDuration(candidate.durationMs)) return false;
     if (
       positiveDuration(song.durationMs) &&
@@ -207,15 +227,15 @@ export const soulseekCandidates = (
     fold(candidate.filename.split(/[\\/]/).at(-2) ?? "") === fold(song.album)
       ? 1
       : 0);
-  return suitable
-    .toSorted(
-      (a, b) =>
-        confidence(b) - confidence(a) ||
-        Number(b.freeSlot) - Number(a.freeSlot) ||
-        availableNumber(a.queueLength) - availableNumber(b.queueLength) ||
-        availableNumber(b.uploadSpeed) - availableNumber(a.uploadSpeed) ||
-        a.username.localeCompare(b.username) ||
-        a.filename.localeCompare(b.filename),
-    )
-    .slice(0, 3);
+  // oxlint-disable-next-line unicorn/no-array-sort -- filter made a fresh array; Hermes lacks toSorted
+  suitable.sort(
+    (a, b) =>
+      confidence(b) - confidence(a) ||
+      Number(b.freeSlot) - Number(a.freeSlot) ||
+      availableNumber(a.queueLength) - availableNumber(b.queueLength) ||
+      availableNumber(b.uploadSpeed) - availableNumber(a.uploadSpeed) ||
+      a.username.localeCompare(b.username) ||
+      a.filename.localeCompare(b.filename),
+  );
+  return suitable.slice(0, 3);
 };

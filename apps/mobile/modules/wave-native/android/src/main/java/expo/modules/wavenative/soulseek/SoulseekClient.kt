@@ -119,7 +119,11 @@ class SoulseekClient(
     } finally { searches.remove(id) }
   }
 
-  /** Gets one selected recording, preserving its bytes. Failed and cancelled attempts leave no part file. */
+  /**
+   * Gets one selected recording, preserving its bytes. Failed and cancelled attempts leave no part file.
+   * It waits (in the peer's queue, then for the transfer) until [isCancelled] says to stop: the
+   * download journal's start, queue and stall rules decide how long a peer may take, not a flat limit.
+   */
   fun download(
     id: String,
     candidate: SoulseekCandidate,
@@ -127,7 +131,7 @@ class SoulseekClient(
     expectedDurationMs: Long,
     onProgress: (Long, Long) -> Unit = { _, _ -> },
     onQueued: (Long) -> Unit = {},
-    queueTimeoutMs: Long = 120_000,
+    isCancelled: () -> Boolean,
   ): VerifiedMp3 {
     ensureConnected()
     if (candidate.bytes !in 1..SoulseekCandidate.MAX_AUDIO_BYTES || !candidate.filename.endsWith(".mp3", true)) {
@@ -142,12 +146,14 @@ class SoulseekClient(
       val peer = peer(candidate.username)
       SoulseekWire.write(peer.getOutputStream(), 43) { string(candidate.filename) }
       SoulseekWire.write(peer.getOutputStream(), 51) { string(candidate.filename) }
-      return pending.finished.get(queueTimeoutMs.coerceIn(100, 180_000), TimeUnit.MILLISECONDS)
+      while (true) {
+        try { return pending.finished.get(CANCEL_POLL_MS, TimeUnit.MILLISECONDS) }
+        catch (_: TimeoutException) { if (isCancelled()) throw SoulseekException(SoulseekFailure.CANCELLED) }
+      }
     } catch (e: Exception) {
       part.delete()
       val cause = if (e is ExecutionException) e.cause ?: e else e
       if (cause is SoulseekException) throw cause
-      if (cause is TimeoutException) throw SoulseekException(SoulseekFailure.QUEUED)
       throw SoulseekException(SoulseekFailure.PEER, cause = cause)
     } finally {
       downloads.remove(id, pending)
@@ -444,3 +450,6 @@ class SoulseekClient(
     addressRequests.clear()
   }
 }
+
+/** How often a waiting download asks whether it is still wanted. */
+private const val CANCEL_POLL_MS = 250L

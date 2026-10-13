@@ -55,7 +55,7 @@ class YtDownloadService : Service() {
     }
     if (intent?.action == CANCEL) intent.getStringExtra("jobId")?.let { id ->
       // Tagging or publication may hold the journal; the main thread never waits for it.
-      thread(name = "Wave download cancel") { runCatching { downloads.jobs.cancel(id, downloads.transport); downloads.changed() } }
+      thread(name = "Wave download cancel") { runCatching { downloads.jobs.cancelJob(id, downloads.transport); downloads.changed() } }
     }
     downloads.start(onIdle = { stopSelf() }, refresh = { refresh() })
     return START_STICKY

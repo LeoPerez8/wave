@@ -61,13 +61,25 @@ off restarts from zero with the same peer and its original deadlines.
 Bounds: searching retries a dropped connection three times; a job makes at
 most six transfer attempts over at most three peers; a peer may keep Wave in
 its queue for 2 minutes, has 3 minutes to start sending and may go quiet for
-1 minute; a job has 20 minutes after leaving the queue. Exhausted peers end in
+1 minute; a job has 20 minutes after leaving the queue. The client has no time
+limit of its own: it asks the journal whether the transfer is still wanted.
+Exhausted peers end in
 a short failure with Retry, never a different recording. Every failure,
 cancellation or recovery deletes the hidden part files and never replaces an
 existing Library file; publication renames a verified, tagged file into a free
 name, and import is an idempotent upsert by path, so repeated completion
 cannot create duplicate Tracks. If Android refuses to restart the service in
 the background, the journal waits for Wave's next launch.
+
+Several result ids of the same recording share one job. A row's Cancel
+Download removes only that song from it, and the download stops once no song
+that asked for it remains; the notification's Cancel stops it for all of them.
+A published file the Library couldn't import shows as a failure: Retry imports
+it again, and Cancel forgets the row and leaves the file in the folder.
+
+The search query is Core's `soulseekQuery`: the main artist and the title
+without guests, edition notes, punctuation or words with apostrophes, because
+peers only return files whose path contains every query word.
 
 ## Validation record
 

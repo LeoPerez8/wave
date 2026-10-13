@@ -24,10 +24,11 @@ class AndroidSoulseek private constructor(context: Context) {
     expectedDurationMs: Long,
     onProgress: (Long, Long) -> Unit = { _, _ -> },
     onQueued: (Long) -> Unit = {},
-    isCancelled: () -> Boolean = { false },
+    /** Polled while waiting for the peer and while decoding; the journal's deadlines end the transfer. */
+    isCancelled: () -> Boolean,
   ): Map<String, Any?> {
     try {
-      val verified = client.download(id, candidate, part, expectedDurationMs, onProgress, onQueued)
+      val verified = client.download(id, candidate, part, expectedDurationMs, onProgress, onQueued, isCancelled)
       AndroidMp3Decode.validate(part, verified, isCancelled)
       JAudioTaggerReader.configure()
       val tag = AudioFileIO.read(part).tag

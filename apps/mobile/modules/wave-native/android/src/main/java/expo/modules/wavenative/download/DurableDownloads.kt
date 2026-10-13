@@ -107,7 +107,11 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
   @Synchronized fun claim(id: String): Map<String, Any?>? {
     val job = jobs[id] ?: return null
     if (job["phase"] !in DECISIONS || job["token"] != null || job["acknowledged"] == true || job["importFailure"] != null || job.number("retryAt") > clock()) return null
-    if (job.number("deadline") <= clock()) { fail(job, "failed"); persist(); return null }
+    if (job.number("deadline") <= clock()) {
+      // As in expire(): a published file is never a failed download, only one the Library didn't import.
+      if (job["phase"] == "completed") job["importFailure"] = "failed" else fail(job, "failed")
+      persist(); return null
+    }
     job["decisionAttempts"] = job.number("decisionAttempts") + 1
     job["token"] = UUID.randomUUID().toString()
     job["leaseUntil"] = minOf(clock() + LEASE_MS, job.number("deadline"))
@@ -187,9 +191,46 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
   /** Stops socket work immediately, without waiting for an IO operation's journal lock. */
   fun stopWork(transport: DurableTransfer) { stopped = true; activeTransfer?.let(transport::cancel) }
 
-  @Synchronized fun cancel(id: String, transport: DurableTransfer) {
-    val job = jobs[id] ?: jobs.values.firstOrNull { it.maps("aliases").any { alias -> alias["videoId"] == id } } ?: return
-    if (job["phase"] in listOf("publishing", "completed")) return
+  /**
+   * Whether [id]'s transfer still has its turn: it is the job's current step and within its start,
+   * queue and stall deadlines. The transport polls this, so a transfer never outlives those rules,
+   * even when a cancel arrives before the transfer is registered. Reads the published copy.
+   */
+  fun transferWanted(id: String): Boolean {
+    if (stopped) return false
+    val job = published.firstOrNull { it["id"] == id } ?: return false
+    return job["phase"] == "transferring" && job.number("attemptDeadline") > clock() &&
+      (job["queuePosition"] == null || job.number("queueDeadline") > clock())
+  }
+
+  /**
+   * A row's Cancel Download for [videoId]: only that requester leaves a shared job. The download
+   * itself is cancelled once nobody else asked for it.
+   */
+  @Synchronized fun cancel(videoId: String, transport: DurableTransfer) {
+    val job = jobs.values.firstOrNull { it.map("song")["videoId"] == videoId || it.maps("aliases").any { alias -> alias["videoId"] == videoId } } ?: return
+    if (!cancellable(job)) return
+    val aliases = job.maps("aliases")
+    if (aliases.isEmpty()) { end(job, transport); return }
+    if (job.map("song")["videoId"] == videoId) { job["song"] = aliases.first(); job["aliases"] = aliases.drop(1) }
+    else job["aliases"] = aliases.filter { it["videoId"] != videoId }
+    persist()
+  }
+
+  /** The notification's Cancel: stops job [id] for every requester. */
+  @Synchronized fun cancelJob(id: String, transport: DurableTransfer) {
+    val job = jobs[id] ?: return
+    if (cancellable(job)) end(job, transport)
+  }
+
+  /**
+   * Too late while publishing or importing. A published file the Library couldn't import shows as a
+   * failure with Cancel: cancelling forgets the row and leaves the file in the Library folder.
+   */
+  private fun cancellable(job: Map<String, Any?>) =
+    job["phase"] != "publishing" && !(job["phase"] == "completed" && job["importFailure"] == null)
+
+  private fun end(job: MutableMap<String, Any?>, transport: DurableTransfer) {
     job["phase"] = "cancelled"; job["generation"] = job.number("generation") + 1; job.remove("token")
     persist(); transport.cancel(job["id"] as String); cleanup(job)
   }
