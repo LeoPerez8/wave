@@ -1,3 +1,4 @@
+import type { LaunchTheme } from "@wave/core";
 import { NativeModule, requireNativeModule } from "expo";
 
 /** One audio file as read by the native scanner (`modules/wave-native`). Tag values are raw. */
@@ -143,6 +144,11 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
   saveArtistPhoto(artistKey: string, thumbUrl: string, largeUrl: string): Promise<ArtistPhotoFiles>;
   /** Deletes every downloaded artist photo. */
   clearArtistPhotos(): Promise<void>;
+  /**
+   * Saves what the next cold start opens on (Core's `launchTheme`) and, on
+   * Android 13+, picks its splash style for Android to draw.
+   */
+  setLaunchTheme(theme: LaunchTheme): Promise<void>;
 }
 
 /** A saved artist photo: the large image (artist page) and the thumbnail (lists). */

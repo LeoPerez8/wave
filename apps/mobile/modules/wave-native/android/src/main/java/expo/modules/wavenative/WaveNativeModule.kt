@@ -26,6 +26,8 @@ import expo.modules.wavenative.artwork.ArtworkStore
 import expo.modules.wavenative.files.DeleteOutcome
 import expo.modules.wavenative.files.TrackFileDeleter
 import expo.modules.wavenative.folders.TreeUris
+import expo.modules.wavenative.launch.LaunchTheme
+import expo.modules.wavenative.launch.LaunchThemeStore
 import expo.modules.wavenative.lyrics.LyricsReader
 import expo.modules.wavenative.playlists.PlaylistFiles
 import expo.modules.wavenative.scan.KnownFile
@@ -44,7 +46,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Wave's native side: all-files access, the folder and playlist file pickers, the library scanner,
- * lyrics, deleting songs' files and saving artist photos. Scans run one at
+ * lyrics, deleting songs' files, saving artist photos and the launch theme. Scans run one at
  * a time on a background thread and stream results to JS as events:
  * `onScanProgress`, `onScanMissing`, `onScanBatch`, `onScanComplete` and
  * `onScanError`, each carrying the `scanId` returned by `startScan`.
@@ -203,6 +205,18 @@ class WaveNativeModule : Module() {
 
     /** Deletes every downloaded artist photo. */
     AsyncFunction("clearArtistPhotos") { artistPhotos().clear() }
+
+    /** Saves Core's `launchTheme` for the next cold start and picks its splash (Android 13+). */
+    AsyncFunction("setLaunchTheme") { theme: Map<String, Any?> ->
+      val launch = LaunchTheme.fromJs(theme) ?: throw IllegalArgumentException("Malformed launch theme: $theme")
+      LaunchThemeStore.save(context, launch)
+      appContext.currentActivity?.let { LaunchThemeStore.applySplash(it, launch) }
+    }
+
+    // JS may have saved the launch theme without an activity (Android Auto starts it headless).
+    OnActivityEntersForeground {
+      appContext.currentActivity?.let { LaunchThemeStore.applySplash(it, LaunchThemeStore.load(context)) }
+    }
 
     OnDestroy {
       currentScan?.second?.set(true)
