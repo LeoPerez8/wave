@@ -5,14 +5,14 @@ import {
   soulseekCandidates,
   soulseekReceivedMatches,
   soulseekRecording,
-  soulseekSameRecording,
   ytDownloadDestination,
   ytDownloadLookup,
+  ytDownloadSharedJob,
   ytDownloadStatus,
   ytDownloadTags,
+  ytDownloadsFromJournal,
   type FoundTags,
   type YtDownloadFailure,
-  type YtDownloadPhase,
   type YtDownloadStatus,
   type YtDownloads,
 } from "@wave/core";
@@ -27,7 +27,12 @@ import { refreshDownloadPolicy } from "@/library/downloadPolicy";
 import { lookUpLyricsAndGenre } from "@/library/lyricsAndGenre";
 import { appRuntime } from "@/library/runtime";
 import { makeExternalStore } from "@/lib/externalStore";
-import { WaveSoulseek, soulseekErrorCode, type NativeDownloadJob, type NativeDownloadDecision } from "@/native/waveSoulseek";
+import {
+  WaveSoulseek,
+  soulseekErrorCode,
+  type NativeDownloadDecision,
+  type NativeDownloadJob,
+} from "@/native/waveSoulseek";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import {
   WaveYtDownloads,
@@ -96,11 +101,8 @@ const metadata = (song: NativeYtSong) =>
     return ytDownloadTags(song, album, found, lyrics);
   });
 
-/** Reusable preparation for the durable native queue; #115 first persists the original request. */
-export const prepareSoulseekDownload = (
-  song: NativeYtSong,
-  onPhase: (phase: YtDownloadPhase) => void = () => {},
-) =>
+/** The journal's "prepare" decision: the peers with this recording, its tags and where it goes. */
+export const prepareSoulseekDownload = (song: NativeYtSong) =>
   Effect.gen(function* () {
     const store = yield* LibraryStore;
     const [roots, excludedFolders] = yield* Effect.all([
@@ -108,10 +110,8 @@ export const prepareSoulseekDownload = (
       store.excludedFolders,
     ]).pipe(Effect.mapError((cause) => new DownloadFailed({ reason: "storage", cause })));
     if (roots.length === 0) return yield* new DownloadFailed({ reason: "noFolder" });
-    onPhase("connecting");
     const session = yield* native(() => WaveSoulseek.session());
     if (session.status === "signedOut") return yield* new DownloadFailed({ reason: "account" });
-    onPhase("searching");
     const [reports, tags] = yield* Effect.all(
       [native(() => WaveSoulseek.search(`${song.artists[0] ?? ""} ${song.title}`)), metadata(song)],
       { concurrency: "unbounded" },
@@ -120,15 +120,7 @@ export const prepareSoulseekDownload = (
     if (candidates.length === 0) return yield* new DownloadFailed({ reason: "unavailable" });
     const target = ytDownloadDestination(roots, excludedFolders, tags);
     if (target === null) return yield* new DownloadFailed({ reason: "noFolder" });
-    return {
-      song,
-      candidates,
-      tags,
-      target,
-      includedRoots: roots.map((root) => root.path),
-      excludedFolders,
-      recording: soulseekRecording(song),
-    };
+    return { candidates, tags, target };
   });
 
 /** Recheck current folders both before publication and before recovered completion import. */
@@ -161,83 +153,116 @@ export const importSoulseekDownload = (saved: NativeSavedDownload) =>
   });
 
 const downloads = makeExternalStore<YtDownloads<NativeYtSong>>(YT_DOWNLOADS_NONE);
-const status = (job: NativeDownloadJob): YtDownloadStatus => {
-  if (job.importFailure !== undefined) return { kind: "failed", reason: job.importFailure };
-  switch (job.phase) {
-    case "queued": return { kind: "queued" };
-    case "failed": return { kind: "failed", reason: job.reason ?? "failed" };
-    case "completed": return job.acknowledged && job.saved !== undefined ? { kind: "done", path: job.saved.path } : { kind: "saving" };
-    case "tagging": case "awaitingPublication": case "publishing": return { kind: "saving" };
-    default: return { kind: "downloading", received: job.received ?? 0, total: job.total && job.total > 0 ? job.total : null,
-      phase: job.phase === "preparing" ? "searching" : job.phase === "sourceReady" ? "validating" : job.queuePosition != null ? "queued" : "transferring" };
+
+/** Re-reads folder policy so a publication never lands outside the current Library folders. */
+const publicationTarget = (claim: NativeDownloadDecision) =>
+  Effect.gen(function* () {
+    const { roots, excludedFolders, revision } = yield* refreshDownloadPolicy;
+    if (claim.tags === undefined) return yield* new DownloadFailed({ reason: "failed" });
+    const target = ytDownloadDestination(roots, excludedFolders, claim.tags);
+    if (target === null) return yield* new DownloadFailed({ reason: "noFolder" });
+    return { targetPath: target.path, revision };
+  });
+
+/** The answer to one decision the native journal leased to JS. */
+const answer = (claim: NativeDownloadDecision) =>
+  Effect.gen(function* () {
+    switch (claim.decision) {
+      case "prepare": {
+        const plan = yield* prepareSoulseekDownload(claim.song);
+        return { candidates: plan.candidates, tags: plan.tags, targetPath: plan.target.path };
+      }
+      case "confirm":
+        if (claim.audio === undefined) return yield* new DownloadFailed({ reason: "failed" });
+        return {
+          receiptId: claim.receiptId,
+          acceptable: soulseekReceivedMatches(
+            claim.song,
+            claim.audio.receivedTags,
+            claim.audio.durationMs,
+          ),
+        };
+      case "publish":
+        return yield* publicationTarget(claim);
+      case "import": {
+        if (claim.saved === undefined) return yield* new DownloadFailed({ reason: "failed" });
+        yield* refreshDownloadPolicy;
+        return { path: yield* importSoulseekDownload(claim.saved) };
+      }
+    }
+  }).pipe(
+    Effect.catch((error) =>
+      Effect.succeed({ failure: error instanceof DownloadFailed ? error.reason : "storage" }),
+    ),
+  );
+
+const answering = new Set<string>();
+/** Claims and answers [id]'s pending decision; an unanswered lease expires natively and is offered again. */
+const answerJob = async (id: string): Promise<void> => {
+  if (answering.has(id)) return;
+  answering.add(id);
+  try {
+    const claim = await WaveSoulseek.claimDecision(id);
+    if (claim === null) return;
+    const payload = await appRuntime.runPromise(answer(claim));
+    await WaveSoulseek.submitDecision(
+      claim.id,
+      claim.generation,
+      claim.token,
+      claim.decision,
+      payload,
+    );
+  } catch {
+    // JS or the bridge went away mid-answer: the native lease expires and replays the decision.
+  } finally {
+    answering.delete(id);
   }
 };
 
-const publicationContext = (claim: NativeDownloadDecision) => Effect.gen(function* () {
-  const { roots, excludedFolders, revision } = yield* refreshDownloadPolicy;
-  if (claim.tags === undefined) return yield* new DownloadFailed({ reason: "failed" });
-  const target = ytDownloadDestination(roots, excludedFolders, claim.tags);
-  if (target === null) return yield* new DownloadFailed({ reason: "noFolder" });
-  return { targetPath: target.path, revision };
-});
+const awaitsAnswer = (job: NativeDownloadJob): boolean =>
+  job.phase === "preparing" ||
+  job.phase === "sourceReady" ||
+  job.phase === "awaitingPublication" ||
+  (job.phase === "completed" && job.acknowledged !== true && job.importFailure === undefined);
 
-const answerDecision = (claim: NativeDownloadDecision) => Effect.gen(function* () {
-  switch (claim.decision) {
-    case "prepare": {
-      const plan = yield* prepareSoulseekDownload(claim.song);
-      return { candidates: plan.candidates, tags: plan.tags, targetPath: plan.target.path };
-    }
-    case "confirm": {
-      if (claim.audio === undefined) return yield* new DownloadFailed({ reason: "failed" });
-      return { receiptId: claim.receiptId, acceptable: soulseekReceivedMatches(claim.song, claim.audio.receivedTags, claim.audio.durationMs) };
-    }
-    case "publish": return yield* publicationContext(claim);
-    case "import": {
-      if (claim.saved === undefined) return yield* new DownloadFailed({ reason: "failed" });
-      yield* refreshDownloadPolicy;
-      const path = yield* importSoulseekDownload(claim.saved);
-      return { path };
-    }
-  }
-});
-
-let attached = false;
 let refreshing = false;
 let refreshAgain = false;
-const answering = new Set<string>();
+/** Mirrors the journal into the rows and answers what it waits on; coalesces overlapping calls. */
 const refresh = async (): Promise<void> => {
-  if (refreshing) { refreshAgain = true; return; }
+  if (refreshing) {
+    refreshAgain = true;
+    return;
+  }
   refreshing = true;
   try {
     do {
       refreshAgain = false;
       const jobs = await WaveSoulseek.jobsSnapshot();
-      downloads.set({ jobs: jobs.filter((job) => job.phase !== "cancelled").map((job) => ({ song: job.song, relatedSongs: job.aliases, status: status(job) })) });
-      for (const job of jobs) {
-        if (answering.has(job.id) || job.phase === "failed" || job.phase === "cancelled" || job.acknowledged || job.importFailure !== undefined) continue;
-        answering.add(job.id);
-        void (async () => {
-          try {
-            const claim = await WaveSoulseek.claimDecision(job.id);
-            if (claim === null) return;
-            const payload = await appRuntime.runPromise(answerDecision(claim).pipe(Effect.catch((error) => Effect.succeed({ failure: error instanceof DownloadFailed ? error.reason : "storage" }))));
-            await WaveSoulseek.submitDecision(claim.id, claim.generation, claim.token, claim.decision, payload);
-          } catch { /* The native lease expires and replays if JS or the bridge disappears. */ }
-          finally { answering.delete(job.id); }
-        })();
-      }
+      downloads.set(ytDownloadsFromJournal(jobs));
+      for (const job of jobs) if (awaitsAnswer(job)) void answerJob(job.id);
     } while (refreshAgain);
-  } finally { refreshing = false; }
+  } finally {
+    refreshing = false;
+  }
+};
+const refreshQuietly = (): void => {
+  void refresh().catch(() => undefined);
 };
 
-/** The app and headless service attach the same responder; native snapshots replay missed events. */
+let attached = false;
+/**
+ * Follows the native journal. The app and the headless task (started by the
+ * download service after process recreation) share this; the app also asks
+ * the service to resume work the journal still holds.
+ */
 export const startDownloads = (resume = false): void => {
   if (!attached) {
     attached = true;
-    WaveSoulseek.addListener("onJobsChanged", () => { void refresh().catch(() => undefined); });
-    setInterval(() => { void refresh().catch(() => undefined); }, 1_000);
+    WaveSoulseek.addListener("onJobsChanged", refreshQuietly);
+    // Snapshots replay anything an event missed, e.g. while JS was starting.
+    setInterval(refreshQuietly, 1_000);
   }
-  void refresh().catch(() => undefined);
+  refreshQuietly();
   if (resume) void WaveSoulseek.resumeJobs().catch(() => undefined);
 };
 
@@ -245,27 +270,29 @@ let askedForNotifications = false;
 const askForNotifications = (): void => {
   if (askedForNotifications || Platform.OS !== "android" || Number(Platform.Version) < 33) return;
   askedForNotifications = true;
-  void PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS).catch(() => undefined);
+  void PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS).catch(
+    () => undefined,
+  );
 };
 
 let requests = Promise.resolve();
 export const downloadYtSong = (song: NativeYtSong): void => {
   askForNotifications();
   startDownloads();
-  // Serialize tap deduplication against the authoritative journal, using Core's identity decision.
-  requests = requests.then(async () => {
-    const jobs = await WaveSoulseek.jobsSnapshot();
-    const equivalent = jobs.find((job) => job.phase !== "failed" && job.phase !== "cancelled" && !job.acknowledged && [job.song, ...(job.aliases ?? [])].every((existing) => soulseekSameRecording(existing, song)));
-    await WaveSoulseek.enqueueJob(song, soulseekRecording(song), equivalent?.id ?? null);
-    await refresh();
-  }).catch(() => {
-    downloads.update((state) => ({ jobs: [...state.jobs.filter((job) => job.song.videoId !== song.videoId), { song, status: { kind: "failed", reason: "storage" } }] }));
-  });
+  // One at a time, so a second tap sees the first one's job in the journal.
+  requests = requests
+    .then(async () => {
+      const shared = ytDownloadSharedJob(await WaveSoulseek.jobsSnapshot(), song);
+      await WaveSoulseek.enqueueJob(song, soulseekRecording(song), shared);
+      await refresh();
+    })
+    .catch(() => undefined);
 };
 
 export const cancelYtDownload = (videoId: string): void => {
-  void WaveSoulseek.cancelJob(videoId).then(refresh).catch(() => undefined);
+  void WaveSoulseek.cancelJob(videoId)
+    .then(refresh)
+    .catch(() => undefined);
 };
 export const useYtDownloadStatus = (videoId: string): YtDownloadStatus | null =>
   useSyncExternalStore(downloads.subscribe, () => ytDownloadStatus(downloads.get(), videoId));
-

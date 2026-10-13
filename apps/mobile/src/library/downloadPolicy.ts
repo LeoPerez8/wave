@@ -6,6 +6,11 @@ import { WaveSoulseek } from "@/native/waveSoulseek";
 export const refreshDownloadPolicy = Effect.gen(function* () {
   const store = yield* LibraryStore;
   const [roots, excludedFolders] = yield* Effect.all([store.listRoots, store.excludedFolders]);
-  const revision = yield* Effect.promise(() => WaveSoulseek.refreshDownloadPolicy(roots.map((root) => root.path), excludedFolders));
+  const revision = yield* Effect.promise(() =>
+    WaveSoulseek.refreshDownloadPolicy(
+      roots.map((root) => root.path),
+      excludedFolders,
+    ),
+  );
   return { roots, excludedFolders, revision };
 });

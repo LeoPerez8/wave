@@ -1,4 +1,4 @@
-import type { YtAlbum, YtAlbumTrack, YtDownloadTags } from "@wave/core";
+import type { YtAlbum, YtAlbumTrack } from "@wave/core";
 import { NativeModule, requireNativeModule } from "expo";
 
 import type { NativeArtwork, NativeScannedTrack } from "./waveNative";
@@ -25,7 +25,7 @@ export interface NativeYtWatchSong {
   readonly lyricsBrowseId: string | null;
 }
 
-/** A download saved into the Library: where it went, read as a scan reads it. */
+/** A download the native journal saved into the Library: where it went, read as a scan reads it. */
 export interface NativeSavedDownload {
   readonly path: string;
   readonly track: NativeScannedTrack;
@@ -49,16 +49,6 @@ declare class WaveYtDownloadsModule extends NativeModule {
   watchSong(videoId: string): Promise<NativeYtWatchSong>;
   /** YT Music's lyrics at [browseId], plain text; null when there are none. */
   lyrics(browseId: string): Promise<string | null>;
-  /** Tags verified Soulseek audio, publishes without overwriting a file, and reads it back. */
-  saveDownload(
-    videoId: string,
-    partPath: string,
-    targetPath: string,
-    tags: Omit<YtDownloadTags, "artworkUrl">,
-    artworkUrl: string | null,
-  ): Promise<NativeSavedDownload>;
-  /** Deletes a part file `saveDownload` won't get. */
-  discardDownload(videoId: string, partPath: string): Promise<void>;
 }
 
 /** Downloading YT Music songs (`modules/wave-native`, `YtDownloadModule`). */
