@@ -1,109 +1,113 @@
-import { settleSheet, type SheetState } from "@wave/core";
-import { router } from "expo-router";
+import { settleSheet, stepNowPlayingSheet, type SheetEvent, type SheetPhase } from "@wave/core";
+import { useSyncExternalStore } from "react";
 import { Dimensions } from "react-native";
 import { makeMutable, withSpring } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 
+import { makeExternalStore } from "@/lib/externalStore";
+
 /**
- * Now Playing is a route (`/now-playing`) presented as a transparent modal
- * over the tabs, and moves as a sheet: it follows the finger up from the mini
- * player and down to dismiss, and springs to wherever it settles. Its
- * position lives here so the mini player's swipe can drive a sheet that is
- * still mounting.
+ * Now Playing is a sheet that stays mounted over the app (src/nowPlaying/
+ * NowPlayingSheet.tsx), out of sight below the screen while it is closed. A
+ * tap on the mini player only starts its spring, so it moves on the next
+ * frame; a swipe up drags it under the finger. Core's `stepNowPlayingSheet`
+ * decides where each event takes it.
  */
 
 /** How far the sheet sits below its open position, in dp: 0 is open, `sheetHeight` is gone. */
 export const sheetOffset = makeMutable(Dimensions.get("window").height);
 
-/** The sheet's travel: the window height, kept current by the screen. */
+/** The sheet's travel: the window height, kept current by the sheet. */
 export const sheetHeight = makeMutable(Dimensions.get("window").height);
 
 /** Quick, with a little give and no wobble. */
 const SPRING = { damping: 30, stiffness: 300, mass: 1 } as const;
 
-/**
- * What the sheet is doing: rising or resting open, following a swipe up from
- * the mini player, or leaving. `idle` until the route is presented.
- */
-let intent: "idle" | "open" | "drag" | "closed" = "idle";
-let mounted = false;
+const phase = makeExternalStore<SheetPhase>("hidden");
 let afterClose: (() => void) | null = null;
 
-/** Pops the route once the sheet is out of sight (or as soon as the screen has mounted). */
-const pop = (): void => {
-  if (intent !== "closed" || !mounted) return;
-  intent = "idle";
+/** Whether Now Playing is on screen at all (open, opening, dragged or leaving). */
+export const useNowPlayingShown = (): boolean =>
+  useSyncExternalStore(phase.subscribe, () => phase.get() !== "hidden");
+
+/** Calls `listener` whenever the sheet has just gone out of sight. */
+const hiddenListeners = new Set<() => void>();
+export const onNowPlayingHidden = (listener: () => void): (() => void) => {
+  hiddenListeners.add(listener);
+  return () => hiddenListeners.delete(listener);
+};
+
+const runAfterClose = (): void => {
   const then = afterClose;
   afterClose = null;
-  router.back();
   then?.();
 };
 
-/** Springs the sheet open or away (then pops the route), carrying the finger's speed. */
-export const settleNowPlaying = (state: SheetState, velocity = 0): void => {
-  intent = state;
-  if (state === "open") {
-    sheetOffset.set(withSpring(0, { ...SPRING, velocity }));
-    return;
+const springDone = (): void => step({ type: "closed" });
+
+const step = (event: SheetEvent, velocity = 0): void => {
+  const next = stepNowPlayingSheet(phase.get(), event);
+  phase.set(next.phase);
+  switch (next.spring) {
+    case "rise":
+      sheetOffset.set(sheetHeight.get());
+      sheetOffset.set(withSpring(0, SPRING));
+      break;
+    case "open":
+      sheetOffset.set(withSpring(0, { ...SPRING, velocity }));
+      break;
+    case "closed":
+      sheetOffset.set(
+        withSpring(sheetHeight.get(), { ...SPRING, velocity }, (finished) => {
+          if (finished === true) scheduleOnRN(springDone);
+        }),
+      );
+      break;
+    case null:
+      break;
   }
-  sheetOffset.set(
-    withSpring(sheetHeight.get(), { ...SPRING, velocity }, (finished) => {
-      if (finished === true) scheduleOnRN(pop);
-    }),
-  );
+  if (next.hidden) {
+    for (const listener of hiddenListeners) listener();
+    runAfterClose();
+  }
 };
 
-const present = (next: "open" | "drag"): void => {
-  if (intent !== "idle") return;
-  intent = next;
-  // A swipe is already moving the sheet; a tap starts it out of sight.
-  if (next === "open") sheetOffset.set(sheetHeight.get());
-  router.push("/now-playing");
-};
+/** Opens Now Playing from a tap: the sheet starts rising on the next frame. */
+export const openNowPlaying = (): void => step({ type: "tap" });
 
-/** Opens Now Playing from a tap: the sheet rises on its own once it mounts. */
-export const openNowPlaying = (): void => present("open");
-
-/** A swipe up on the mini player has started: present the sheet under the finger. */
-export const beginNowPlayingDrag = (): void => present("drag");
+/** A swipe up on the mini player has started: the sheet follows the finger. */
+export const beginNowPlayingDrag = (): void => step({ type: "dragBegin" });
 
 /**
  * The swipe up ended `translationY` dp from where it started (negative is up):
  * open the sheet or let it fall back.
  */
 export const endNowPlayingDrag = (translationY: number, velocityY: number): void => {
-  if (intent !== "drag") return;
+  if (phase.get() !== "drag") return;
   const height = sheetHeight.get();
   const offset = Math.min(height, Math.max(0, height + translationY));
-  settleNowPlaying(settleSheet({ from: "closed", offset, velocity: velocityY, height }), velocityY);
+  const to = settleSheet({ from: "closed", offset, velocity: velocityY, height });
+  step({ type: "release", to }, velocityY);
 };
 
-/** Whether the mini player's swipe should move the sheet. */
-export const isDraggingNowPlaying = (): boolean => intent === "drag";
-
-/** Dismisses Now Playing with its spring, then runs `then` (e.g. opening the album). */
-export const closeNowPlaying = (then?: () => void): void => {
-  afterClose = then ?? null;
-  settleNowPlaying("closed");
+/** A drag down on the open sheet let go `offset` dp below open: dismiss it or spring back. */
+export const releaseNowPlaying = (offset: number, velocity: number): void => {
+  const to = settleSheet({ from: "open", offset, velocity, height: sheetHeight.get() });
+  step({ type: "release", to }, velocity);
 };
 
 /**
- * Called by the screen as it mounts; returns its unmount cleanup. A sheet
- * opened by a link (or restored by the system) rises like a tapped one.
+ * Dismisses Now Playing with its spring, then runs `then` (e.g. opening the
+ * album); straight away when it is already out of sight.
  */
-export const nowPlayingMounted = (): (() => void) => {
-  mounted = true;
-  if (intent === "idle") {
-    intent = "open";
-    sheetOffset.set(sheetHeight.get());
-  }
-  if (intent === "open") settleNowPlaying("open");
-  // A flick down that ended before the screen mounted: the spring may already be done.
-  if (intent === "closed" && sheetOffset.get() >= sheetHeight.get()) pop();
-  return () => {
-    mounted = false;
-    intent = "idle";
-    afterClose = null;
-    sheetOffset.set(sheetHeight.get());
-  };
+export const closeNowPlaying = (then?: () => void): void => {
+  afterClose = then ?? null;
+  step({ type: "close" });
+  if (phase.get() === "hidden") runAfterClose();
+};
+
+/** The window changed size: keep a closed sheet just out of sight. */
+export const resizeNowPlaying = (height: number): void => {
+  sheetHeight.set(height);
+  if (phase.get() === "hidden") sheetOffset.set(height);
 };

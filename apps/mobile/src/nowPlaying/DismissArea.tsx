@@ -1,4 +1,3 @@
-import { settleSheet } from "@wave/core";
 import type { ReactNode } from "react";
 import type { StyleProp, ViewStyle } from "react-native";
 import { View } from "react-native";
@@ -8,16 +7,10 @@ import { scheduleOnRN } from "react-native-worklets";
 
 import { CELL } from "@/catalog/grid";
 
-import { settleNowPlaying, sheetHeight, sheetOffset } from "./sheet";
+import { releaseNowPlaying, sheetOffset } from "./sheet";
 
 /** Downward travel before the drag takes over from a tap, in dp. */
 const DRAG_SLOP = CELL * 1.5;
-
-const release = (offset: number, velocity: number): void =>
-  settleNowPlaying(
-    settleSheet({ from: "open", offset, velocity, height: sheetHeight.get() }),
-    velocity,
-  );
 
 /**
  * Part of Now Playing that drags the sheet down to dismiss it. Lists sit
@@ -46,7 +39,11 @@ export function DismissArea({
     },
     onDeactivate: (event) => {
       "worklet";
-      scheduleOnRN(release, Math.max(0, start.get() + event.translationY), event.velocityY);
+      scheduleOnRN(
+        releaseNowPlaying,
+        Math.max(0, start.get() + event.translationY),
+        event.velocityY,
+      );
     },
   });
   return (

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { cardKeyboard, entryDivider, placeOverlayCard } from "./index.ts";
+import { cardContentHeight, cardKeyboard, entryDivider, placeOverlayCard } from "./index.ts";
 
 // A phone in portrait, in dp: status bar on top, gesture bar below.
 const phone = {
@@ -181,5 +181,23 @@ describe("cardKeyboard", () => {
 
   test("with the keyboard closed there is nothing to close", () => {
     assert.deepEqual(cardKeyboard({ keyboard: 0 }), { closeKeyboard: false, keyboard: 0 });
+  });
+});
+
+describe("cardContentHeight", () => {
+  test("a layout shorter than the card's limit is its content's height", () => {
+    assert.equal(cardContentHeight({ known: 300, laidOut: 250, maxHeight: 800 }), 250);
+  });
+
+  test("a layout cut short by the limit keeps the taller content height measured before", () => {
+    assert.equal(cardContentHeight({ known: 1200, laidOut: 800, maxHeight: 800 }), 1200);
+  });
+
+  test("content that grows into the limit is at least as tall as the limit", () => {
+    assert.equal(cardContentHeight({ known: 500, laidOut: 800, maxHeight: 800 }), 800);
+  });
+
+  test("a layout within a pixel of the limit counts as cut short", () => {
+    assert.equal(cardContentHeight({ known: 1200, laidOut: 799.5, maxHeight: 800 }), 1200);
   });
 });
