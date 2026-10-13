@@ -37,7 +37,7 @@ object SoulseekWire {
 
   fun reader(bytes: ByteArray) = Reader(ByteArrayInputStream(bytes))
   fun inflate(bytes: ByteArray): ByteArray = InflaterInputStream(ByteArrayInputStream(bytes)).use {
-    val plain = it.readNBytes(MAX_PACKET + 1)
+    val plain = readBounded(it, MAX_PACKET + 1)
     if (plain.size > MAX_PACKET) throw SoulseekException(SoulseekFailure.PROTOCOL)
     plain
   }
@@ -45,6 +45,27 @@ object SoulseekWire {
     val result = ByteArrayOutputStream()
     DeflaterOutputStream(result).use { it.write(bytes) }
     return result.toByteArray()
+  }
+
+  /** InputStream.readNBytes requires Android 13; this bounded loop also runs on Android 12. */
+  private fun readBounded(input: InputStream, limit: Int): ByteArray {
+    val output = ByteArrayOutputStream(minOf(limit, 8192))
+    val buffer = ByteArray(minOf(limit, 8192))
+    var received = 0
+    while (received < limit) {
+      val count = input.read(buffer, 0, minOf(buffer.size, limit - received))
+      if (count < 0) break
+      if (count == 0) {
+        val byte = input.read()
+        if (byte < 0) break
+        output.write(byte)
+        received++
+      } else {
+        output.write(buffer, 0, count)
+        received += count
+      }
+    }
+    return output.toByteArray()
   }
 
   class Reader(private val input: InputStream) {
@@ -57,7 +78,7 @@ object SoulseekWire {
     }
     fun bytes(size: Int): ByteArray {
       if (size < 0 || size > MAX_PACKET) throw SoulseekException(SoulseekFailure.PROTOCOL)
-      return input.readNBytes(size).also { if (it.size != size) throw EOFException("Incomplete Soulseek message") }
+      return readBounded(input, size).also { if (it.size != size) throw EOFException("Incomplete Soulseek message") }
     }
     fun string(): String {
       val size = uint()
