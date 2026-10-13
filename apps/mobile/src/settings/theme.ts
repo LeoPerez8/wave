@@ -10,6 +10,7 @@ import { Uniwind } from "uniwind";
 
 import { persistedSetting, sameFields } from "@/lib/persistedSetting";
 import { WaveNative } from "@/native/waveNative";
+import { WavePlayer } from "@/native/wavePlayer";
 
 /** The colours as CSS variables (`--color-<token>`), the names global.css declares. */
 const cssVariables = (colors: ThemeColors): Record<string, string> =>
@@ -17,14 +18,18 @@ const cssVariables = (colors: ThemeColors): Record<string, string> =>
 
 /**
  * Lays the chosen colours over global.css's defaults. Every className and
- * `useThemeColor` reader (glass tint, native props) re-renders with them.
- * The choice is also saved natively for the launch splash, which Android
- * draws before this code runs; on every start too, so it never drifts.
+ * `useThemeColor` reader (glass tint, native props) re-renders with them, and
+ * the media notification takes the primary. The choice is also saved natively
+ * for the launch splash, which Android draws before this code runs; on every
+ * start too, so it never drifts.
  */
 const apply = (choice: ThemeChoice): void => {
   const theme = themeFor(choice);
   Uniwind.updateCSSVariables("light", cssVariables(theme.light));
   Uniwind.updateCSSVariables("dark", cssVariables(theme.dark));
+  WavePlayer.setNotificationAccent(theme.light.accent, theme.dark.accent).catch((error: unknown) =>
+    console.warn("[wave] Couldn't colour the notification", error),
+  );
   WaveNative.setLaunchTheme(launchTheme(choice)).catch((error: unknown) =>
     console.warn("[wave] Saving the launch theme failed", error),
   );

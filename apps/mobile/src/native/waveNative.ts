@@ -89,6 +89,14 @@ export type FolderPick =
   /** A folder without a file path, such as the Downloads shortcut or a cloud drive. */
   | { readonly status: "unsupported" };
 
+/** A playlist file picked with `pickPlaylistFiles` (Core's `M3uFile`, text null when unreadable). */
+export interface PickedPlaylistFile {
+  readonly name: string;
+  /** Its absolute path, for its relative entries; null when its provider has none (a cloud drive). */
+  readonly path: string | null;
+  readonly text: string | null;
+}
+
 type WaveNativeEvents = {
   onScanProgress: (event: ScanProgressEvent) => void;
   onScanMissing: (event: ScanMissingEvent) => void;
@@ -106,6 +114,8 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
   getDefaultMusicFolder(): string;
   /** Opens the system folder picker and resolves the picked folder's absolute path. */
   pickFolder(): Promise<FolderPick>;
+  /** Opens the system file picker for M3U playlists; one result per picked file, none when cancelled. */
+  pickPlaylistFiles(): Promise<readonly PickedPlaylistFile[]>;
   /**
    * Starts a scan, cancelling any running one, and returns its id. The known
    * files (parallel lists) make it incremental: files with the same size and

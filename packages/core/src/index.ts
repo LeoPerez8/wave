@@ -1,4 +1,4 @@
-export {
+﻿export {
   UNKNOWN_ALBUM,
   UNKNOWN_ARTIST,
   VARIOUS_ARTISTS,
@@ -273,6 +273,8 @@ export type {
 } from "./itemActions.ts";
 export { concentricRadius } from "./corners.ts";
 export type { InsetSquare } from "./corners.ts";
+export { LOGO_WAVES, logoIconPaths, logoWaveY } from "./logo.ts";
+export type { LogoIconBox, LogoIconPaths, LogoWave } from "./logo.ts";
 export { UNDERLINE_WAVE, underlineMotion, wavePath } from "./wavyUnderline.ts";
 export type { UnderlineMotion, UnderlineMotionInput, WaveShape } from "./wavyUnderline.ts";
 export { highlightedOrigin, originOfNewCard, veilAround } from "./overlayOrigin.ts";
@@ -303,4 +305,26 @@ export type {
 export { focusedVersion, startFocusedVersion } from "./focusedVersion.ts";
 export type { FocusedVersion, FocusedVersionEvent } from "./focusedVersion.ts";
 export { stepNowPlayingSheet } from "./sheetLifecycle.ts";
+export { MORE_FROM_ARTIST } from "./queue.ts";
+export { artistRanking } from "./moreFromArtist.ts";
+export type { ArtistRankingInput, ArtistRankingSong } from "./moreFromArtist.ts";
 export type { SheetEvent, SheetPhase, SheetStep } from "./sheetLifecycle.ts";
+export {
+  confirmImportReplace,
+  importNameClash,
+  isM3uFileName,
+  keepBothName,
+  libraryPathIndex,
+  parseM3u,
+  planM3uImport,
+  resolveM3uPath,
+  summarizeM3uImport,
+} from "./m3u.ts";
+export type {
+  LibraryPathIndex,
+  M3uEntry,
+  M3uFile,
+  M3uImport,
+  M3uImportOutcome,
+  M3uImportSummary,
+} from "./m3u.ts";
