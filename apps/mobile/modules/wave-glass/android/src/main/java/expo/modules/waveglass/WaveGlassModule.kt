@@ -41,6 +41,14 @@ class WaveGlassModule : Module() {
       }
       Prop("rim") { view: WaveGlassView, enabled: Boolean -> view.rimEnabled = enabled }
     }
+
+    View(WaveUnderlineView::class) {
+      Name("WaveUnderline")
+      Prop("color") { view: WaveUnderlineView, color: Color? ->
+        view.color = color?.toArgb() ?: Color.TRANSPARENT
+      }
+      Prop("animating") { view: WaveUnderlineView, animating: Boolean -> view.animating = animating }
+    }
   }
 
   private fun startFrameStats() {

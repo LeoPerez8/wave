@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  One 64dp tile of the playing song's wavy underline (WaveUnderlineView repeats it
+  across the title). Wavelength 8, amplitude 1.25, stroke 1.25, all in dp. The path
+  is `wavePath({ width: 64, wavelength: 8, amplitude: 1.25 })` from @wave/core: it
+  runs one wavelength past the tile, so sliding the group left by a wavelength,
+  forever, reads as a continuous ripple and the tiles meet without a seam.
+
+  The slide is an AnimatedVectorDrawable so it runs on the RenderThread: the UI
+  thread draws no frames for it, so the glass views' pre-draw listeners don't fire.
+  The stroke is white; the view tints it with the theme's highlight colour.
+-->
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt">
+  <aapt:attr name="android:drawable">
+    <vector
+        android:width="64dp"
+        android:height="3.75dp"
+        android:viewportWidth="64"
+        android:viewportHeight="3.75">
+      <group android:translateY="0.625">
+        <group android:name="wave">
+          <path
+              android:pathData="M0 1.25Q2 -1.25 4 1.25T8 1.25T12 1.25T16 1.25T20 1.25T24 1.25T28 1.25T32 1.25T36 1.25T40 1.25T44 1.25T48 1.25T52 1.25T56 1.25T60 1.25T64 1.25T68 1.25T72 1.25"
+              android:strokeColor="#FFFFFFFF"
+              android:strokeWidth="1.25"
+              android:strokeLineCap="round" />
+        </group>
+      </group>
+    </vector>
+  </aapt:attr>
+  <target android:name="wave">
+    <aapt:attr name="android:animation">
+      <objectAnimator
+          android:propertyName="translateX"
+          android:valueFrom="0"
+          android:valueTo="-8"
+          android:valueType="floatType"
+          android:duration="700"
+          android:repeatCount="infinite"
+          android:repeatMode="restart"
+          android:interpolator="@android:anim/linear_interpolator" />
+    </aapt:attr>
+  </target>
+</animated-vector>

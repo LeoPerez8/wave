@@ -39,3 +39,13 @@ export interface NativeGlassViewProps extends ViewProps {
 
 export const NativeGlassView: ComponentType<NativeGlassViewProps> =
   requireNativeView<NativeGlassViewProps>("WaveGlass");
+
+export interface NativeWaveUnderlineProps extends ViewProps {
+  readonly color: ColorValue;
+  /** Slides the wave along (on the RenderThread) while true; lies still otherwise. */
+  readonly animating: boolean;
+}
+
+/** The playing song's wavy underline, animated on the RenderThread (see WaveUnderlineView.kt). */
+export const NativeWaveUnderline: ComponentType<NativeWaveUnderlineProps> =
+  requireNativeView<NativeWaveUnderlineProps>("WaveGlass", "WaveUnderline");
