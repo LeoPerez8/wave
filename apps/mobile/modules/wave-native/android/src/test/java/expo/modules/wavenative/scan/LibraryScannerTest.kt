@@ -216,4 +216,45 @@ class LibraryScannerTest {
       library.setReadable(true)
     }
   }
+
+  @Test
+  fun recordsWhetherEachSongHasLyricsInItsTagsOrASidecar() {
+    val songs = Fixtures.libraryOf(
+      "lyrics.mp3" to "Album/tagged.mp3",
+      "lyrics.opus" to "Album/tagged.opus",
+      "tagged.mp3" to "Album/sidecar.mp3",
+      "tagged.mp3" to "Album/named-with-extension.mp3",
+      "tagged.flac" to "Album/none.flac",
+      "tagged.mp3" to "Other/none.mp3",
+    )
+    // Sidecars match ignoring case, as on the phone's storage; one beside
+    // `none.mp3`'s namesake in another folder doesn't count.
+    File(songs, "Album/Sidecar.LRC").writeText("[00:01.00]Hello")
+    File(songs, "Album/named-with-extension.mp3.lrc").writeText("[00:01.00]Hello")
+    File(songs, "Album/none.mp3.lrc").writeText("[00:01.00]Not this one")
+
+    val recorder = Recorder()
+    scanner(batchSize = 10).scan(listOf(songs), emptyList(), recorder)
+
+    assertEquals(
+      mapOf(
+        "Album/tagged.mp3" to true,
+        "Album/tagged.opus" to true,
+        "Album/sidecar.mp3" to true,
+        "Album/named-with-extension.mp3" to true,
+        "Album/none.flac" to false,
+        "Other/none.mp3" to false,
+      ),
+      recorder.read.associate { File(it.path).let { file -> "${file.parentFile?.name}/${file.name}" } to it.hasLyrics },
+    )
+  }
+
+  @Test
+  fun indexingOneFileSeesASidecarWrittenSinceTheScan() {
+    val songs = Fixtures.libraryOf("tagged.mp3" to "Album/song.mp3")
+    val song = File(songs, "Album/song.mp3")
+    assertFalse(scanner(batchSize = 10).index(song).first.hasLyrics)
+    File(songs, "Album/song.lrc").writeText("[00:01.00]Hello")
+    assertTrue(scanner(batchSize = 10).index(song).first.hasLyrics)
+  }
 }

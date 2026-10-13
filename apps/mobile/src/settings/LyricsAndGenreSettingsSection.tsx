@@ -1,3 +1,4 @@
+import { libraryLookupProgress } from "@wave/core";
 import { Switch, Text, View } from "react-native";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
@@ -21,7 +22,8 @@ const setLookups = (on: boolean): void => {
 
 /**
  * Settings › Lyrics and genre: allowing lookups online, and finding lyrics and
- * genre for the whole Library in the background, with progress and Cancel.
+ * genre for the whole Library in the background, with progress and Cancel
+ * (also in the run's notification, and for a run started before Wave was reopened).
  */
 export function LyricsAndGenreSettingsSection() {
   const enabled = useLyricsAndGenreLookupsEnabled();
@@ -59,9 +61,7 @@ export function LyricsAndGenreSettingsSection() {
             accessibilityLiveRegion="polite"
             className="flex-1 font-sans text-footnote text-secondary"
           >
-            {run.total === 0
-              ? "Finding lyrics and genre…"
-              : `Finding lyrics and genre… ${run.done.toLocaleString("en")} of ${run.total.toLocaleString("en")}`}
+            {libraryLookupProgress(run.done, run.total).line}
           </Text>
           <TextButton label="Cancel" onPress={cancelLibraryLookup} />
         </View>

@@ -112,6 +112,11 @@ export const tracks = sqliteTable(
     sampleRate: integer("sample_rate"),
     bitrateKbps: integer("bitrate_kbps"),
     artworkHash: text("artwork_hash").references(() => artwork.hash),
+    /**
+     * Whether the song has lyrics, in its tags or a sidecar `.lrc`: the
+     * whole-Library lyrics and genre run skips songs that have them and a genre.
+     */
+    hasLyrics: integer("has_lyrics", { mode: "boolean" }).notNull().default(false),
     /** When the file first entered the library (drives Recently Added). */
     addedAt: integer("added_at").notNull(),
     /** When a scan last saw the file. */

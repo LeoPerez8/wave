@@ -372,6 +372,7 @@ export {
   deezerTrackCandidates,
   deezerTrackSearchUrl,
   describeTagLookups,
+  libraryLookupSongs,
   lookupsUnreachable,
   lrclibCandidates,
   lrclibSearchUrl,
@@ -385,6 +386,7 @@ export type {
   FoundLyrics,
   FoundTags,
   GenreCandidate,
+  IndexedLyricsAndGenre,
   LyricsCandidate,
   SongLookup,
   SongTagOutcome,
@@ -486,3 +488,9 @@ export type {
   SoulseekRecording,
   SoulseekReceivedTags,
 } from "./soulseekDownload.ts";
+export {
+  libraryLookupProgress,
+  readLibraryLookupSummary,
+  writeLibraryLookupSummary,
+} from "./libraryLookup.ts";
+export type { LibraryLookupProgress, LibraryLookupSummary } from "./libraryLookup.ts";

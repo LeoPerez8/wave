@@ -8,6 +8,7 @@ import {
   deezerTrackCandidates,
   deezerTrackSearchUrl,
   describeTagLookups,
+  libraryLookupSongs,
   lookupsUnreachable,
   lrclibCandidates,
   lrclibSearchUrl,
@@ -377,6 +378,43 @@ describe("lookupsUnreachable", () => {
   });
 });
 
+describe("libraryLookupSongs", () => {
+  const indexed = (title: string, hasLyrics: boolean, genre: string | null) => ({
+    title,
+    hasLyrics,
+    genre,
+  });
+
+  test("looks up the songs missing lyrics or a genre, in order, and skips those with both", () => {
+    const songs = [
+      indexed("Both", true, "Rock"),
+      indexed("No genre", true, null),
+      indexed("No lyrics", false, "Rock"),
+      indexed("Neither", false, null),
+      indexed("Both again", true, "Jazz"),
+    ];
+    const run = libraryLookupSongs(songs);
+    assert.deepEqual(
+      run.lookUp.map((song) => song.title),
+      ["No genre", "No lyrics", "Neither"],
+    );
+    assert.equal(run.skipped, 2);
+  });
+
+  test("hands back the songs as given, for the run to look them up", () => {
+    const song = indexed("Neither", false, null);
+    assert.equal(libraryLookupSongs([song]).lookUp[0], song);
+  });
+
+  test("counts a blank genre as none", () => {
+    assert.equal(libraryLookupSongs([indexed("Blank", true, "  ")]).lookUp.length, 1);
+  });
+
+  test("an empty Library looks up and skips nothing", () => {
+    assert.deepEqual(libraryLookupSongs([]), { lookUp: [], skipped: 0 });
+  });
+});
+
 const result = (title: string, outcome: SongTagOutcome) => ({ title, outcome });
 
 describe("describeTagLookups", () => {
@@ -438,6 +476,35 @@ describe("describeTagLookups", () => {
       result(title, updated("sidecar", "none")),
     );
     assert.match(describeTagLookups(results).message, /: A, B, C, D, E and 2 more\.$/);
+  });
+
+  test("says how many songs the whole-Library run skipped as already having both", () => {
+    const results = [result("A", updated()), result("B", notFound)];
+    assert.deepEqual(describeTagLookups(results, undefined, 1_204), {
+      title: "Lyrics and genre found",
+      message:
+        "1 updated · 1 not found · 0 failed\n\n1,204 songs already had lyrics and a genre, so they were skipped.",
+    });
+    assert.deepEqual(describeTagLookups(results, { left: 3, stopped: "cancelled" }, 1), {
+      title: "Lyrics and genre stopped",
+      message:
+        "1 updated · 1 not found · 0 failed\n\n1 song already had lyrics and a genre, so it was skipped.\n\n3 songs weren't looked up.",
+    });
+  });
+
+  test("sums up one song looked up beside skipped ones as a run, not as that song", () => {
+    assert.deepEqual(describeTagLookups([result("A", updated())], undefined, 2), {
+      title: "Lyrics and genre found",
+      message:
+        "1 updated · 0 not found · 0 failed\n\n2 songs already had lyrics and a genre, so they were skipped.",
+    });
+  });
+
+  test("says when every song already had lyrics and a genre", () => {
+    assert.deepEqual(describeTagLookups([], undefined, 40), {
+      title: "Nothing to look up",
+      message: "All 40 songs already have lyrics and a genre.",
+    });
   });
 
   test("says how a run that stopped early ended", () => {
