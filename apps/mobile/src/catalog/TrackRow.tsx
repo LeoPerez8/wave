@@ -14,7 +14,8 @@ export type TrackSummary = {
   id: string;
   title: string;
   artist: string;
-  durationMs: number;
+  /** Null when unknown (a YT Music song that doesn't say); the cell stays reserved. */
+  durationMs: number | null;
   trackNumber?: number | undefined;
   artworkUri?: string | undefined;
   tint?: string | undefined;
@@ -130,7 +131,7 @@ export function TrackRow({
           className="font-sans text-footnote text-secondary"
           style={{ fontVariant: ["tabular-nums"], width: CELL * 5, textAlign: "right" }}
         >
-          {formatDuration(track.durationMs)}
+          {track.durationMs === null ? "" : formatDuration(track.durationMs)}
         </Text>
       </View>
     </Press>

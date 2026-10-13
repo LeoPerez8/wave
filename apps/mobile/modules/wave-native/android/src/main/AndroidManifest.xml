@@ -5,8 +5,10 @@
     android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
     tools:ignore="ScopedStorage" />
 
-  <!-- Artist photos are downloaded from an online service (docs/spec.md, "Artist photos"). -->
+  <!-- Artist photos and YT Music are online (docs/spec.md, "Network"). -->
   <uses-permission android:name="android.permission.INTERNET" />
+  <!-- YT Music doesn't try a request without a network, and says it's offline instead. -->
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
   <!-- Background playback with a media notification. -->
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />

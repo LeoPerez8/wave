@@ -1,0 +1,118 @@
+import assert from "node:assert/strict";
+import { describe, test } from "node:test";
+
+import { libraryMatcher, parseTrackId, ytSongCredit, ytTrackId } from "./index.ts";
+import type { YtSong } from "./index.ts";
+
+const ytSong = (song: Partial<YtSong> & Pick<YtSong, "title" | "artists">): YtSong => ({
+  videoId: "v1",
+  album: null,
+  durationMs: null,
+  artworkUrl: null,
+  explicit: false,
+  ...song,
+});
+
+describe("libraryMatcher", () => {
+  const library = [
+    { title: "Jóga", artist: "Björk", durationMs: 305_400 },
+    {
+      title: "Get Lucky",
+      artist: "Daft Punk feat. Pharrell Williams & Nile Rodgers",
+      durationMs: 369_600,
+    },
+    { title: "The Boxer", artist: "Simon & Garfunkel", durationMs: 308_000 },
+    { title: "Untitled", artist: "Somebody", durationMs: 0 },
+  ];
+  const inLibrary = libraryMatcher(library);
+
+  test("a song with the Library's title, artist and length is already in the Library", () => {
+    const song = ytSong({ title: "Jóga", artists: ["Björk"], durationMs: 306_000 });
+    assert.equal(inLibrary(song), true);
+  });
+
+  test("case, accents and punctuation don't tell songs apart", () => {
+    assert.equal(
+      inLibrary(ytSong({ title: "JOGA!", artists: ["Bjork"], durationMs: 305_000 })),
+      true,
+    );
+  });
+
+  test("featured artists are credited either in the title or with the artist", () => {
+    const song = ytSong({
+      title: "Get Lucky (feat. Pharrell Williams and Nile Rodgers)",
+      artists: ["Daft Punk", "Pharrell Williams", "Nile Rodgers"],
+      durationMs: 370_000,
+    });
+    assert.equal(inLibrary(song), true);
+    const credited = ytSong({
+      title: "The Boxer",
+      artists: ["Simon & Garfunkel"],
+      durationMs: 308_000,
+    });
+    assert.equal(inLibrary(credited), true);
+  });
+
+  test("another artist's song of the same name is not the Library's", () => {
+    const cover = ytSong({ title: "Jóga", artists: ["Läura"], durationMs: 305_000 });
+    assert.equal(inLibrary(cover), false);
+  });
+
+  test("a version of a different length (a live take, an edit) is not the Library's", () => {
+    const live = ytSong({ title: "Jóga", artists: ["Björk"], durationMs: 335_000 });
+    assert.equal(inLibrary(live), false);
+    const edit = ytSong({
+      title: "Get Lucky (Radio Edit)",
+      artists: ["Daft Punk"],
+      durationMs: 249_000,
+    });
+    assert.equal(inLibrary(edit), false);
+  });
+
+  test("an unknown length on either side leaves title and artist to decide", () => {
+    assert.equal(inLibrary(ytSong({ title: "Jóga", artists: ["Björk"] })), true);
+    assert.equal(
+      inLibrary(ytSong({ title: "Untitled", artists: ["Somebody"], durationMs: 90_000 })),
+      true,
+    );
+  });
+
+  test("an empty Library has none of them", () => {
+    assert.equal(libraryMatcher([])(ytSong({ title: "Jóga", artists: ["Björk"] })), false);
+  });
+});
+
+describe("ytSongCredit", () => {
+  test("names every artist, then the album", () => {
+    const song = ytSong({
+      title: "Get Lucky",
+      artists: ["Daft Punk", "Pharrell Williams", "Nile Rodgers"],
+      album: "Random Access Memories",
+    });
+    assert.equal(
+      ytSongCredit(song),
+      "Daft Punk, Pharrell Williams & Nile Rodgers · Random Access Memories",
+    );
+  });
+
+  test("leaves out what YT Music doesn't say", () => {
+    assert.equal(ytSongCredit(ytSong({ title: "Jóga", artists: ["Björk"] })), "Björk");
+    assert.equal(ytSongCredit(ytSong({ title: "Duo", artists: ["A", "B"] })), "A & B");
+  });
+});
+
+describe("YT Music song ids", () => {
+  test("a YT Music song's track id carries its video id, apart from Library ids", () => {
+    const id = ytTrackId("4D7u5KF7SP8");
+    assert.deepEqual(parseTrackId(id), { kind: "yt", videoId: "4D7u5KF7SP8" });
+    assert.notEqual(id, "4D7u5KF7SP8");
+  });
+
+  test("Library track ids stay Library ids", () => {
+    assert.deepEqual(parseTrackId("42"), { kind: "library", id: 42 });
+  });
+
+  test("anything else is no track", () => {
+    for (const id of ["", "yt:", "abc", "4.5", "-3"]) assert.equal(parseTrackId(id), null, id);
+  });
+});

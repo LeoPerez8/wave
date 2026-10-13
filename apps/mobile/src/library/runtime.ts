@@ -11,6 +11,7 @@ import * as Player from "@/playback/Player";
 import * as Queue from "@/playback/Queue";
 import * as Stats from "@/stats/Stats";
 import * as Auto from "@/auto/Auto";
+import * as YtMusic from "@/ytmusic/YtMusic";
 
 import {
   chooseExcludedFolder,
@@ -39,6 +40,7 @@ export const appLayer = Layer.mergeAll(
   PlayHistory.layer,
   Stats.layer,
   Auto.layer,
+  YtMusic.layer,
 ).pipe(Layer.provideMerge(services));
 
 export const appRuntime = ManagedRuntime.make(appLayer);

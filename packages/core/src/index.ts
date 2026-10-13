@@ -319,6 +319,22 @@ export { MORE_FROM_ARTIST } from "./queue.ts";
 export { artistRanking } from "./moreFromArtist.ts";
 export type { ArtistRankingInput, ArtistRankingSong } from "./moreFromArtist.ts";
 export type { SheetEvent, SheetPhase, SheetStep } from "./sheetLifecycle.ts";
+export { libraryMatcher, parseTrackId, ytSongCredit, ytTrackId } from "./ytMusic.ts";
+export type { LibrarySongKey, TrackRef, YtSong } from "./ytMusic.ts";
+export {
+  YT_SEARCH_DEBOUNCE_MS,
+  YT_SECTION_HIDDEN,
+  stepYtSection,
+  ytSearchQuery,
+  ytSectionView,
+} from "./ytSearch.ts";
+export type {
+  YtQuietReason,
+  YtSection,
+  YtSectionEvent,
+  YtSectionNote,
+  YtSectionView,
+} from "./ytSearch.ts";
 export {
   LRCLIB_HEADERS,
   deezerAlbumGenre,

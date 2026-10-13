@@ -288,6 +288,8 @@ The Library's entries (Playlists, Artists, Albums, Songs, Genres, Folders, Favor
 
 56dp, fixed cells, one type size. Songs lists lead with a 40dp square thumbnail; album track lists lead with the track number in a 32dp cell. Playing: title in ember with a thin ember wavy underline spanning its visible text, rippling while music plays and still when paused (static under reduce motion or tap animation 0 ms). Missing file: title in graphite, artist line reads "File not found", a file-off glyph in pewter (after the text in Songs lists, in place of the number in album lists), and the row is disabled. Favorite: a small filled star in ember in its own 24dp cell. Duration in tabular Footnote, right-aligned. Stats rankings use the numbered row with the rank as the number (the top one in ember, 500) and the counted plays after the artist ("Artist · 12 plays").
 
+In Search, YT Music songs sit below the library's results under a "YT Music" catalog line, as Songs-list rows: YouTube's cover as the thumbnail (square, like any artwork), the artists and album as the second line ("Artist & Artist · Album"), the length in the duration cell (left empty when YouTube doesn't give one). Instead of songs the section can show one quiet line in Footnote graphite (searching, nothing found, all already in the library, offline, no answer); never an error card. When the library has nothing for the query, the same quiet line says so above the section.
+
 ### Album Tile
 
 A square cover at the computed tile width, then 12dp, then the caption: artist as a catalog line, the title in Body 500 with two lines always reserved, then the furniture line in Footnote graphite ("1975 · 9 · 41 min", tabular). Covers without art show a field square with a thin music note in pewter.

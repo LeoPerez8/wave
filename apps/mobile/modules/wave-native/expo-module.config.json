@@ -3,7 +3,8 @@
   "android": {
     "modules": [
       "expo.modules.wavenative.WaveNativeModule",
-      "expo.modules.wavenative.player.WavePlayerModule"
+      "expo.modules.wavenative.player.WavePlayerModule",
+      "expo.modules.wavenative.yt.YtMusicModule"
     ]
   }
 }

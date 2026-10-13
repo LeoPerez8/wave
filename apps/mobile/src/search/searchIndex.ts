@@ -1,4 +1,4 @@
-import { createSearchIndex, type SearchIndex } from "@wave/core";
+import { createSearchIndex, libraryMatcher, type SearchIndex, type YtSong } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
@@ -68,19 +68,25 @@ const toEntries = (sources: Sources): SearchHit[] => {
 /** During a scan the library changes every batch; the index catches up at most this often. */
 const REFRESH_MS = 3000;
 
+/** What Search looks things up in: the library's index, and whether a YT Music song is in the library. */
+export interface LibrarySearch {
+  readonly index: SearchIndex<SearchHit>;
+  readonly inLibrary: (song: YtSong) => boolean;
+}
+
 /**
  * The search index over the whole library, or null until it's first built.
  * It loads and builds only while `active` (the Search screen is in focus),
  * and rebuilds after the library changes, so typing only ever runs the
  * (prepared, narrowing) search itself.
  */
-export const useSearchIndex = (active: boolean): SearchIndex<SearchHit> | null => {
+export const useSearchIndex = (active: boolean): LibrarySearch | null => {
   // Both only ever go up, so their sum changes whenever either does.
   const version =
     useSyncExternalStore(libraryVersion.subscribe, libraryVersion.get) + usePlaylistsVersion();
   const [built, setBuilt] = useState<{
     readonly version: number;
-    readonly index: SearchIndex<SearchHit>;
+    readonly search: LibrarySearch;
   } | null>(null);
   const loading = useRef(false);
   const lastBuild = useRef(0);
@@ -102,8 +108,11 @@ export const useSearchIndex = (active: boolean): SearchIndex<SearchHit> | null =
         .runPromise(loadSources)
         .then((sources) => {
           lastBuild.current = Date.now();
-          const index = createSearchIndex(toEntries(sources));
-          if (mounted.current) setBuilt({ version, index });
+          const search = {
+            index: createSearchIndex(toEntries(sources)),
+            inLibrary: libraryMatcher(sources.songs),
+          };
+          if (mounted.current) setBuilt({ version, search });
         })
         .catch(() => {
           // Keep the last index; store errors surface elsewhere (scan banner).
@@ -115,5 +124,5 @@ export const useSearchIndex = (active: boolean): SearchIndex<SearchHit> | null =
     return () => clearTimeout(timer);
   }, [active, built, version]);
 
-  return built?.index ?? null;
+  return built?.search ?? null;
 };
