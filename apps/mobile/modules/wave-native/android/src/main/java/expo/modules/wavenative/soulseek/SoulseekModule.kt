@@ -7,7 +7,7 @@ import expo.modules.kotlin.functions.Coroutine
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.wavenative.download.DownloadFiles
-import expo.modules.wavenative.yt.YtDownloadNotice
+import expo.modules.wavenative.download.AndroidDownloads
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
@@ -20,10 +20,31 @@ class SoulseekModule : Module() {
   private val context: Context get() = appContext.reactContext ?: throw Exceptions.ReactContextLost()
   private val owner: AndroidSoulseek get() = AndroidSoulseek.get(context)
   private val running = ConcurrentHashMap<String, Job>()
+  private val downloads: AndroidDownloads get() = AndroidDownloads.get(context)
+  private var detachDownloads: (() -> Unit)? = null
 
   override fun definition() = ModuleDefinition {
     Name("WaveSoulseek")
-    Events("onDownloadProgress", "onSessionChanged")
+    Events("onDownloadProgress", "onSessionChanged", "onJobsChanged")
+    OnCreate { detachDownloads = downloads.subscribe { sendEvent("onJobsChanged", emptyMap<String, Any>()) } }
+    OnDestroy { detachDownloads?.invoke(); detachDownloads = null }
+
+    AsyncFunction("enqueueJob") Coroutine { song: Map<String, Any?>, recording: Map<String, Any?>, equivalentId: String? ->
+      withContext(Dispatchers.IO) {
+        val id = downloads.jobs.enqueue(song, equivalentId, recording)
+        downloads.changed(); downloads.requestService(); id
+      }
+    }
+    AsyncFunction("jobsSnapshot") Coroutine { -> withContext(Dispatchers.IO) { downloads.jobs.snapshot() } }
+    AsyncFunction("resumeJobs") Coroutine { -> withContext(Dispatchers.IO) { downloads.requestService() } }
+    AsyncFunction("claimDecision") Coroutine { id: String -> withContext(Dispatchers.IO) { downloads.jobs.claim(id) } }
+    AsyncFunction("submitDecision") Coroutine { id: String, generation: Double, token: String, decision: String, payload: Map<String, Any?> ->
+      withContext(Dispatchers.IO) { downloads.jobs.submit(id, generation.toLong(), token, decision, payload).also { downloads.changed() } }
+    }
+    AsyncFunction("refreshDownloadPolicy") Coroutine { roots: List<String>, excluded: List<String> ->
+      withContext(Dispatchers.IO) { downloads.jobs.refreshPolicy(roots, excluded) }
+    }
+    AsyncFunction("cancelJob") Coroutine { id: String -> withContext(Dispatchers.IO) { downloads.jobs.cancel(id, downloads.transport); downloads.changed() } }
 
     AsyncFunction("session") Coroutine { -> coded { withContext(Dispatchers.IO) { owner.client.session() } } }
     AsyncFunction("connect") Coroutine { username: String, password: String ->
@@ -46,7 +67,6 @@ class SoulseekModule : Module() {
       val part = DownloadFiles.partFileFor(target, videoId)
       val job = Job()
       running.put(videoId, job)?.let { it.cancel(); owner.client.cancel(videoId) }
-      YtDownloadNotice.start(context, videoId, title)
       var downloaded = false
       try {
         val result = coded {
@@ -55,7 +75,6 @@ class SoulseekModule : Module() {
             owner.download(
               videoId, SoulseekCandidate.fromJs(candidate), part, expectedDurationMs.toLong(),
               onProgress = { received, total ->
-                YtDownloadNotice.progress(videoId, received, total)
                 val now = System.currentTimeMillis()
                 if (now - lastSentAt >= 250 || received == total) {
                   lastSentAt = now
@@ -74,7 +93,7 @@ class SoulseekModule : Module() {
       } finally {
         running.remove(videoId, job)
         job.complete()
-        if (!downloaded) { part.delete(); YtDownloadNotice.finish(videoId) }
+        if (!downloaded) part.delete()
       }
     }
 

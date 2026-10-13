@@ -75,7 +75,6 @@ class YtDownloadModule : Module() {
         artworkUrl: String?,
       ->
       val part = File(partPath)
-      YtDownloadNotice.saving(videoId)
       try {
         val fields = DownloadTags.fromJs(tags) ?: throw IllegalArgumentException("Malformed tags: $tags")
         val cover = artworkUrl?.let { url -> withContext(Dispatchers.IO) { runCatching { fetchImage(url) }.getOrNull() } }
@@ -96,14 +95,12 @@ class YtDownloadModule : Module() {
           }
         }
       } finally {
-        YtDownloadNotice.finish(videoId)
       }
     }
 
     /** Gives up on a downloaded part file: deletes it. */
     AsyncFunction("discardDownload") { videoId: String, partPath: String ->
       File(partPath).delete()
-      YtDownloadNotice.finish(videoId)
     }
 
   }
