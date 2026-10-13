@@ -272,6 +272,7 @@ export {
   ITEM_ACTION_LABELS,
   itemActions,
   splitActionBar,
+  ytSongActions,
 } from "./itemActions.ts";
 export type {
   ActionItem,
@@ -319,7 +320,7 @@ export { MORE_FROM_ARTIST } from "./queue.ts";
 export { artistRanking } from "./moreFromArtist.ts";
 export type { ArtistRankingInput, ArtistRankingSong } from "./moreFromArtist.ts";
 export type { SheetEvent, SheetPhase, SheetStep } from "./sheetLifecycle.ts";
-export { libraryMatcher, parseTrackId, ytSongCredit, ytTrackId } from "./ytMusic.ts";
+export { libraryMatcher, parseTrackId, ytSongArtist, ytSongCredit, ytTrackId } from "./ytMusic.ts";
 export type { LibrarySongKey, TrackRef, YtSong } from "./ytMusic.ts";
 export {
   YT_SEARCH_DEBOUNCE_MS,
@@ -379,3 +380,5 @@ export type {
   M3uImportOutcome,
   M3uImportSummary,
 } from "./m3u.ts";
+export { libraryTrackIds, playerErrorNotice, queuedYtTracks, restorableTrack } from "./ytQueue.ts";
+export type { PlayerErrorCode, RestorableTracks } from "./ytQueue.ts";

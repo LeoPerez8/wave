@@ -6,6 +6,7 @@
  */
 
 import { RESTART_THRESHOLD_MS, type QueueCommand } from "./queue.ts";
+import { parseTrackId } from "./ytMusic.ts";
 
 /**
  * Listening longer than this counts a play; a song this long or shorter
@@ -294,6 +295,8 @@ export const trackPlays = (state: PlayTrackerState, signal: PlaybackSignal): Pla
         return next === play ? unchanged : { state: { play: next }, steps: [] };
       }
       if (!signal.playing || signal.key === null || signal.track === null) return unchanged;
+      // Play history and stats are about the Library: streamed songs are never on record.
+      if (parseTrackId(signal.track.trackId)?.kind === "yt") return unchanged;
       const started = open(signal.key, signal.track, signal.at, signal.durationMs);
       return {
         state: { play: started },
