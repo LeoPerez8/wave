@@ -321,6 +321,15 @@ export type { ArtistRankingInput, ArtistRankingSong } from "./moreFromArtist.ts"
 export type { SheetEvent, SheetPhase, SheetStep } from "./sheetLifecycle.ts";
 export { libraryMatcher, parseTrackId, ytSongCredit, ytTrackId } from "./ytMusic.ts";
 export type { LibrarySongKey, TrackRef, YtSong } from "./ytMusic.ts";
+export { YT_ACCOUNT_SIGNED_OUT, stepYtAccount, ytAccountView } from "./ytAccount.ts";
+export type {
+  YtAccount,
+  YtAccountEvent,
+  YtAccountNote,
+  YtAccountState,
+  YtAccountView,
+  YtSession,
+} from "./ytAccount.ts";
 export {
   YT_SEARCH_DEBOUNCE_MS,
   YT_SECTION_HIDDEN,
