@@ -60,6 +60,7 @@ export const toIndexedTrack = (native: NativeScannedTrack): IndexedTrack => ({
   sampleRate: native.sampleRate,
   bitrateKbps: native.bitrateKbps,
   artworkHash: native.artworkHash,
+  hasLyrics: native.hasLyrics,
 });
 
 export const toIndexedArtwork = (native: NativeArtwork): IndexedArtwork => {

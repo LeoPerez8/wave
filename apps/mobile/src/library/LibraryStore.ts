@@ -68,7 +68,13 @@ import {
   selectTrackPaths,
 } from "./db/playlists";
 import * as schema from "./db/schema";
-import { BY_TITLE, deleteTracks, trackQuery } from "./db/tracks";
+import {
+  BY_TITLE,
+  deleteTracks,
+  selectKnownFiles,
+  selectLibraryLookupSongs,
+  trackQuery,
+} from "./db/tracks";
 import { creditedPlayTotals, songListening, trackPlayTotals } from "./db/stats";
 import type { KnownFile } from "./NativeScanner";
 
@@ -90,6 +96,8 @@ export interface IndexedTrack extends LibraryTrack {
   readonly sampleRate: number | null;
   readonly bitrateKbps: number | null;
   readonly artworkHash: string | null;
+  /** Lyrics in its tags or a sidecar `.lrc`. */
+  readonly hasLyrics: boolean;
 }
 
 export interface IndexedArtwork {
@@ -108,6 +116,17 @@ export interface ScanRoot {
 /** A scan root with the number of indexed tracks under it, for Music folders. */
 export interface ScanRootSummary extends ScanRoot {
   readonly trackCount: number;
+}
+
+/** A song as the whole-Library lyrics and genre run sees it (Core's `libraryLookupSongs`). */
+export interface LibraryLookupSong {
+  readonly path: string;
+  readonly title: string;
+  readonly artist: string;
+  readonly album: string;
+  readonly durationMs: number;
+  readonly genre: string | null;
+  readonly hasLyrics: boolean;
 }
 
 /** One row of the Songs list. */
@@ -321,6 +340,14 @@ export class LibraryStore extends Context.Service<
     readonly countSectionSongs: Effect.Effect<LibraryCounts, LibraryStoreError>;
     /** Every track ordered by title, for Library › Songs. */
     readonly listSongs: Effect.Effect<readonly SongRow[], LibraryStoreError>;
+    /**
+     * Every song with what a lyrics and genre lookup sends, its genre and
+     * whether it has lyrics, for the whole-Library run.
+     */
+    readonly listLibraryLookupSongs: Effect.Effect<
+      readonly LibraryLookupSong[],
+      LibraryStoreError
+    >;
     /** Every album by title, then album artist, for Library › Albums. */
     readonly listAlbums: Effect.Effect<readonly AlbumRow[], LibraryStoreError>;
     /** [page] of the albums in the same order, for lists that page (Auto). */
@@ -653,6 +680,7 @@ const saveBatchSync = (
           sampleRate: track.sampleRate,
           bitrateKbps: track.bitrateKbps,
           artworkHash: track.artworkHash,
+          hasLyrics: track.hasLyrics,
           addedAt: now,
           scannedAt: now,
         })),
@@ -679,6 +707,7 @@ const saveBatchSync = (
           sampleRate: excluded(t.sampleRate),
           bitrateKbps: excluded(t.bitrateKbps),
           artworkHash: excluded(t.artworkHash),
+          hasLyrics: excluded(t.hasLyrics),
           scannedAt: excluded(t.scannedAt),
         },
       })
@@ -1186,6 +1215,8 @@ const make = Effect.gen(function* () {
         .all(),
     ),
 
+    listLibraryLookupSongs: attempt("list songs to look up", () => selectLibraryLookupSongs(db)),
+
     trackDetails: (id) =>
       attempt(
         "read the playing track",
@@ -1251,22 +1282,7 @@ const make = Effect.gen(function* () {
     getFolder: (id) => attempt("open the folder", () => getFolderSync(db, id)),
 
     knownFiles: (roots) =>
-      attempt("read the library index", () => {
-        if (roots.length === 0) return [];
-        const { tracks } = schema;
-        const under = roots.map(
-          (root) => sql`substr(${tracks.path}, 1, length(${root}) + 1) = ${`${root}/`}`,
-        );
-        return db
-          .select({
-            path: tracks.path,
-            sizeBytes: tracks.sizeBytes,
-            modifiedAt: tracks.modifiedAt,
-          })
-          .from(tracks)
-          .where(sql.join(under, sql` OR `))
-          .all();
-      }),
+      attempt("read the library index", () => selectKnownFiles(db, roots)),
 
     indexedFiles: (paths) =>
       attempt("read missing files", () =>

@@ -46,6 +46,45 @@ export const BY_TITLE = [
   asc(schema.tracks.path),
 ] as const;
 
+/**
+ * Every song with what a lyrics and genre lookup sends, its genre and whether
+ * it has lyrics, by title: the whole-Library run picks from these (Core's
+ * `libraryLookupSongs`).
+ */
+export const selectLibraryLookupSongs = (db: LibraryDatabase) => {
+  const { tracks, artists, albums, genres } = schema;
+  return db
+    .select({
+      path: tracks.path,
+      title: tracks.title,
+      artist: artists.name,
+      album: albums.title,
+      durationMs: tracks.durationMs,
+      genre: genres.name,
+      hasLyrics: tracks.hasLyrics,
+    })
+    .from(tracks)
+    .innerJoin(artists, eq(tracks.artistId, artists.id))
+    .innerJoin(albums, eq(tracks.albumId, albums.id))
+    .leftJoin(genres, eq(tracks.genreId, genres.id))
+    .orderBy(...BY_TITLE)
+    .all();
+};
+
+/** The indexed files under [roots], for an incremental scan to skip the unchanged ones. */
+export const selectKnownFiles = (db: LibraryDatabase, roots: readonly string[]) => {
+  if (roots.length === 0) return [];
+  const { tracks } = schema;
+  const under = roots.map(
+    (root) => sql`substr(${tracks.path}, 1, length(${root}) + 1) = ${`${root}/`}`,
+  );
+  return db
+    .select({ path: tracks.path, sizeBytes: tracks.sizeBytes, modifiedAt: tracks.modifiedAt })
+    .from(tracks)
+    .where(sql.join(under, sql` OR `))
+    .all();
+};
+
 /** Statements stay small; SQLite's limit on bound parameters is far above this. */
 const CHUNK = 500;
 

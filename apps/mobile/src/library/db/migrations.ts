@@ -228,6 +228,15 @@ ALTER TABLE \`play_events\` ADD \`album_id\` integer;
 ALTER TABLE \`play_events\` ADD \`artist_id\` integer;
 `;
 
+// Whether each song has lyrics (tags or sidecar), for the whole-Library lyrics
+// and genre run. Only a scan can tell, so every indexed file is marked as
+// changed (modified_at 0): the next scan reads them all again.
+const m0011 = `
+ALTER TABLE \`tracks\` ADD \`has_lyrics\` integer DEFAULT false NOT NULL;
+--> statement-breakpoint
+UPDATE \`tracks\` SET \`modified_at\` = 0;
+`;
+
 export default {
   journal: {
     entries: [
@@ -242,7 +251,8 @@ export default {
       { idx: 8, when: 1_792_497_600_000, tag: "0008_artist_images", breakpoints: true },
       { idx: 9, when: 1_792_584_000_000, tag: "0009_artist_photos", breakpoints: true },
       { idx: 10, when: 1_792_670_400_000, tag: "0010_play_credits", breakpoints: true },
+      { idx: 11, when: 1_792_756_800_000, tag: "0011_track_lyrics", breakpoints: true },
     ],
   },
-  migrations: { m0000, m0001, m0002, m0003, m0004, m0005, m0006, m0007, m0008, m0009, m0010 },
+  migrations: { m0000, m0001, m0002, m0003, m0004, m0005, m0006, m0007, m0008, m0009, m0010, m0011 },
 };

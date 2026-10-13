@@ -19,6 +19,8 @@ export interface NativeScannedTrack {
   readonly sampleRate: number | null;
   readonly bitrateKbps: number | null;
   readonly artworkHash: string | null;
+  /** Lyrics in its tags or a sidecar `.lrc` beside it. */
+  readonly hasLyrics: boolean;
 }
 
 /** Colours picked from an artwork, as signed ARGB ints. */
