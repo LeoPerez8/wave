@@ -1,3 +1,4 @@
+import type { LaunchTheme } from "@wave/core";
 import { NativeModule, requireNativeModule } from "expo";
 
 /** One audio file as read by the native scanner (`modules/wave-native`). Tag values are raw. */
@@ -88,6 +89,14 @@ export type FolderPick =
   /** A folder without a file path, such as the Downloads shortcut or a cloud drive. */
   | { readonly status: "unsupported" };
 
+/** A playlist file picked with `pickPlaylistFiles` (Core's `M3uFile`, text null when unreadable). */
+export interface PickedPlaylistFile {
+  readonly name: string;
+  /** Its absolute path, for its relative entries; null when its provider has none (a cloud drive). */
+  readonly path: string | null;
+  readonly text: string | null;
+}
+
 type WaveNativeEvents = {
   onScanProgress: (event: ScanProgressEvent) => void;
   onScanMissing: (event: ScanMissingEvent) => void;
@@ -105,6 +114,8 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
   getDefaultMusicFolder(): string;
   /** Opens the system folder picker and resolves the picked folder's absolute path. */
   pickFolder(): Promise<FolderPick>;
+  /** Opens the system file picker for M3U playlists; one result per picked file, none when cancelled. */
+  pickPlaylistFiles(): Promise<readonly PickedPlaylistFile[]>;
   /**
    * Starts a scan, cancelling any running one, and returns its id. The known
    * files (parallel lists) make it incremental: files with the same size and
@@ -133,6 +144,11 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
   saveArtistPhoto(artistKey: string, thumbUrl: string, largeUrl: string): Promise<ArtistPhotoFiles>;
   /** Deletes every downloaded artist photo. */
   clearArtistPhotos(): Promise<void>;
+  /**
+   * Saves what the next cold start opens on (Core's `launchTheme`) and, on
+   * Android 13+, picks its splash style for Android to draw.
+   */
+  setLaunchTheme(theme: LaunchTheme): Promise<void>;
   /**
    * Writes found lyrics (LRC or plain text) and genre into a song's file,
    * replacing what's there; null leaves a field alone. A format Wave can't

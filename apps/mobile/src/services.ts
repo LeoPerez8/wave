@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 
 import { Auto } from "@/auto/Auto";
+import { startAutoLyrics } from "@/auto/autoLyrics";
 import { startAutoResponder } from "@/auto/autoResponder";
 import { appRuntime } from "@/library/runtime";
 import type { AutoRequest } from "@/native/wavePlayer";
@@ -27,10 +28,10 @@ const answerAuto = (request: AutoRequest): Promise<unknown> =>
 /**
  * Starts the app services that work without UI: the library store, the queue
  * and player sync, playback persistence and play history (one `appRuntime`),
- * and the Android Auto responder. The Activity's root layout and the headless
- * `WaveService` task (index.ts) both call it; whichever comes first starts
- * them, and later calls change nothing, so one JS runtime never initialises
- * them twice. The library scan stays with the UI.
+ * the Android Auto responder and Auto's lyric line. The Activity's root
+ * layout and the headless `WaveService` task (index.ts) both call it;
+ * whichever comes first starts them, and later calls change nothing, so one
+ * JS runtime never initialises them twice. The library scan stays with the UI.
  */
 export const startServices = (by: ServicesStarter): void => {
   if (startedBy !== null) {
@@ -41,4 +42,5 @@ export const startServices = (by: ServicesStarter): void => {
   console.log(`[wave] services started by the ${by}`);
   connectPlayer();
   startAutoResponder(answerAuto);
+  startAutoLyrics();
 };
