@@ -13,6 +13,80 @@ import org.junit.Test
 import kotlin.concurrent.thread
 
 class SoulseekClientTest {
+  @Test fun `search keeps collecting results after more peers respond than the retained connection limit`() {
+    ServerSocket(0).use { server ->
+      ServerSocket(0).use { peer ->
+        val ended = CompletableFuture<Unit>()
+        val connections = mutableListOf<Socket>()
+        thread(isDaemon = true) {
+          try {
+            server.accept().use { socket ->
+              login(socket)
+              val token = SoulseekWire.reader(SoulseekWire.read(socket.getInputStream()).payload).uint()
+              repeat(34) { index ->
+                SoulseekWire.write(socket.getOutputStream(), 18) { string("fixture-peer-$index"); string("P"); uint(0x0100007f); uint(peer.localPort.toLong()); uint(index.toLong() + 1); byte(0) }
+                val connection = peer.accept()
+                connections.add(connection)
+                SoulseekWire.read(connection.getInputStream(), true)
+                val result = SoulseekWire.Writer().apply {
+                  string("fixture-peer-$index"); uint(token); uint(1); byte(1); string("Music\\Fixture Title.mp3"); ulong(61_648); string("")
+                  uint(2); uint(0); uint(320); uint(1); uint(2); byte(1); uint(100_000); uint(0)
+                }.result()
+                SoulseekWire.write(connection.getOutputStream(), 9) { bytes(SoulseekWire.deflate(result)) }
+              }
+              ended.get(3, TimeUnit.SECONDS)
+            }
+          } catch (_: java.net.SocketException) {
+            // Closing the test listeners also unblocks accept after a failed assertion.
+          } finally { connections.forEach { it.close() } }
+        }
+        val client = SoulseekClient(MemoryCredentials(), "127.0.0.1", server.localPort)
+        try {
+          client.connect("wave-fixture", "fixture-secret")
+          assertEquals(34, client.search("Fixture Title", 1500).size)
+        } finally { ended.complete(Unit); client.close() }
+      }
+    }
+  }
+
+  @Test fun `cancelling a queued recording stops waiting and deletes its part file`() {
+    ServerSocket(0).use { server ->
+      ServerSocket(0).use { peer ->
+        val verified = CompletableFuture<Unit>()
+        val ended = CompletableFuture<Unit>()
+        thread {
+          try {
+            server.accept().use { socket ->
+              login(socket)
+              assertEquals(3, SoulseekWire.read(socket.getInputStream()).code)
+              SoulseekWire.write(socket.getOutputStream(), 3) { string("fixture-peer"); uint(0x0100007f); uint(peer.localPort.toLong()) }
+              peer.accept().use { connection ->
+                SoulseekWire.read(connection.getInputStream(), true)
+                val filename = SoulseekWire.reader(SoulseekWire.read(connection.getInputStream()).payload).string()
+                assertEquals(51, SoulseekWire.read(connection.getInputStream()).code)
+                SoulseekWire.write(connection.getOutputStream(), 44) { string(filename); uint(8) }
+                verified.complete(Unit)
+                ended.get(2, TimeUnit.SECONDS)
+              }
+            }
+          } catch (e: Throwable) { verified.completeExceptionally(e) }
+        }
+        val client = SoulseekClient(MemoryCredentials(), "127.0.0.1", server.localPort)
+        val part = Files.createTempFile("wave-cancelled", ".mp3").toFile()
+        try {
+          client.connect("wave-fixture", "fixture-secret")
+          val candidate = SoulseekCandidate("fixture-peer", "Fixture.mp3", 1000, 320, 1500, false, 0, 8)
+          val failure = assertThrows(SoulseekException::class.java) {
+            client.download("cancelled", candidate, part, 1500, onQueued = { client.cancel("cancelled") })
+          }
+          verified.get(2, TimeUnit.SECONDS)
+          assertEquals(SoulseekFailure.CANCELLED, failure.failure)
+          assertFalse(part.exists())
+        } finally { ended.complete(Unit); client.close(); part.delete() }
+      }
+    }
+  }
+
   @Test fun `an incoming peer cannot browse the Library or ask Wave to upload or accept an unsolicited file`() {
     ServerSocket(0).use { server ->
       val verified = CompletableFuture<Unit>()
