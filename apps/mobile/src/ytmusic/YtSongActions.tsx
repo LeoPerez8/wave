@@ -12,10 +12,10 @@ import { Text, View } from "react-native";
 import { Artwork } from "@/catalog/Artwork";
 import { EntryRow } from "@/catalog/EntryRow";
 import { CELL } from "@/catalog/grid";
-import { Hairline } from "@/catalog/Hairline";
 import { pressedRect } from "@/motion/pressedRect";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { CardEntries } from "@/overlay/CardEntries";
+import { CardHeading } from "@/overlay/CardHeading";
 import { useOverlayFlow } from "@/overlay/flow";
 import { openOverlay } from "@/overlay/overlay";
 import { useSlideToChoose } from "@/overlay/useSlideToChoose";
@@ -70,7 +70,10 @@ const run = (entry: Entry, song: NativeYtSong): void => {
   }
 };
 
-/** The menu card: the song as its row shows it, then its entries, like a Library song's menu. */
+/**
+ * The menu card: the song as its row shows it (unless that row is highlighted),
+ * then its entries, like a Library song's menu.
+ */
 function YtSongActionsMenu({ song, close }: { song: NativeYtSong; close: () => void }) {
   const status = useYtDownloadStatus(song.videoId);
   // A song downloaded earlier and since deleted from the Library can be downloaded again
@@ -95,10 +98,7 @@ function YtSongActionsMenu({ song, close }: { song: NativeYtSong; close: () => v
 
   return (
     <>
-      <View
-        className="flex-row items-center"
-        style={{ paddingBottom: CELL * 1.5, gap: CELL * 1.5 }}
-      >
+      <CardHeading>
         <Artwork uri={song.artworkUrl ?? undefined} size={CELL * 5} />
         <View className="flex-1">
           <Text numberOfLines={1} className="font-sans text-body font-medium text-foreground">
@@ -108,8 +108,7 @@ function YtSongActionsMenu({ song, close }: { song: NativeYtSong; close: () => v
             {ytSongCredit(song)}
           </Text>
         </View>
-      </View>
-      <Hairline />
+      </CardHeading>
       <CardEntries listRef={trackList}>
         {entries.map((entry, index) => (
           <View key={entry.action} ref={trackEntry(index)} collapsable={false}>
