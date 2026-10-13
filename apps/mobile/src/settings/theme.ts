@@ -1,6 +1,7 @@
 import {
   DEFAULT_THEME_CHOICE,
   launcherIconSwitch,
+  launchTheme,
   readThemeChoice,
   themeFor,
   type LauncherIconSwitch,
@@ -10,6 +11,7 @@ import {
 import { Uniwind } from "uniwind";
 
 import { persistedSetting, sameFields } from "@/lib/persistedSetting";
+import { WaveNative } from "@/native/waveNative";
 import { WavePlayer } from "@/native/wavePlayer";
 
 import { LAUNCHER, showLauncherIconFor } from "./launcherIcon";
@@ -22,7 +24,9 @@ const cssVariables = (colors: ThemeColors): Record<string, string> =>
  * Lays the chosen colours over global.css's defaults. Every className and
  * `useThemeColor` reader (glass tint, native props) re-renders with them, the
  * media notification takes the primary, and the launcher icon follows the
- * primary and secondary.
+ * primary and secondary. The choice is also saved natively
+ * for the launch splash, which Android draws before this code runs; on every
+ * start too, so it never drifts.
  */
 const apply = (choice: ThemeChoice): void => {
   const theme = themeFor(choice);
@@ -32,6 +36,9 @@ const apply = (choice: ThemeChoice): void => {
     console.warn("[wave] Couldn't colour the notification", error),
   );
   showLauncherIconFor(choice);
+  WaveNative.setLaunchTheme(launchTheme(choice)).catch((error: unknown) =>
+    console.warn("[wave] Saving the launch theme failed", error),
+  );
 };
 
 const theme = persistedSetting<ThemeChoice>({

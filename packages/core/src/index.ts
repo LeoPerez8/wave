@@ -214,6 +214,8 @@ export {
   launcherIconSwitch,
 } from "./launcherIcon.ts";
 export type { LauncherBehaviour, LauncherIcon, LauncherIconSwitch } from "./launcherIcon.ts";
+export { LAUNCH_SPLASH_THEMES, launchTheme } from "./launchTheme.ts";
+export type { LaunchColors, LaunchSplashTheme, LaunchTheme } from "./launchTheme.ts";
 export { sliderFraction, sliderValueAt, snapSliderValue, stepSlider } from "./slider.ts";
 export type { SliderRange } from "./slider.ts";
 export { LONG_PRESS_DELAY, readLongPressDelay, snapLongPressDelay } from "./longPress.ts";
