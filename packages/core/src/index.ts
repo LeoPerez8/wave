@@ -320,6 +320,31 @@ export { artistRanking } from "./moreFromArtist.ts";
 export type { ArtistRankingInput, ArtistRankingSong } from "./moreFromArtist.ts";
 export type { SheetEvent, SheetPhase, SheetStep } from "./sheetLifecycle.ts";
 export {
+  LRCLIB_HEADERS,
+  deezerAlbumGenre,
+  deezerAlbumUrl,
+  deezerTrackCandidates,
+  deezerTrackSearchUrl,
+  describeTagLookups,
+  lookupsUnreachable,
+  lrclibCandidates,
+  lrclibSearchUrl,
+  pickFoundLyrics,
+  pickGenreAlbum,
+  songLookup,
+  songTagOutcome,
+} from "./lyricsAndGenre.ts";
+export type {
+  FoundLyrics,
+  FoundTags,
+  GenreCandidate,
+  LyricsCandidate,
+  SongLookup,
+  SongTagOutcome,
+  TagLookupStop,
+  TagWriteReport,
+} from "./lyricsAndGenre.ts";
+export {
   confirmImportReplace,
   importNameClash,
   isM3uFileName,

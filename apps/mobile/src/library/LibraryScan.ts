@@ -52,7 +52,8 @@ export const libraryEdited = (): void => {
   bumpLibraryVersion();
 };
 
-const toIndexedTrack = (native: NativeScannedTrack): IndexedTrack => ({
+/** A track as the scanner read it, as the index stores it. */
+export const toIndexedTrack = (native: NativeScannedTrack): IndexedTrack => ({
   ...normalizeTrack(native),
   sizeBytes: native.sizeBytes,
   modifiedAt: native.modifiedAt,
@@ -61,7 +62,7 @@ const toIndexedTrack = (native: NativeScannedTrack): IndexedTrack => ({
   artworkHash: native.artworkHash,
 });
 
-const toIndexedArtwork = (native: NativeArtwork): IndexedArtwork => {
+export const toIndexedArtwork = (native: NativeArtwork): IndexedArtwork => {
   const palette: Record<string, string> = {};
   for (const [name, argb] of Object.entries(native.palette)) {
     if (typeof argb === "number") palette[name] = argbToHex(argb);

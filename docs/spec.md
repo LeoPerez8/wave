@@ -25,6 +25,7 @@ v1 delivers the core player and library. v2 adds the advanced audio and library-
 - **Queue** — the ordered list of tracks to be played, including the current one and **Up Next**.
 - **Play event** — one record per time a track starts playing, with how long it was listened to and how it ended.
 - **Counted play** — a play event that counts towards play counts: listened to for more than 15 seconds, or, for a song of 15 seconds or less, played to the end. Each play event counts at most once, however long it goes on.
+- **Sidecar** — a `.lrc` lyrics file beside an audio file (`Song.lrc` or `Song.mp3.lrc`).
 - **Favorite** — a starred track (Apple Music's star).
 - **Artist image** — the circle an artist is shown with: their **artist photo** (downloaded online, see Artist photos) when there is one, else the cover of the album that represents them, else their initial.
 - **Now Playing** — the full-screen player; **Mini player** — the floating glass pill above the tab bar.
@@ -128,7 +129,7 @@ v1 delivers the core player and library. v2 adds the advanced audio and library-
 - Android only. Minimum Android 12 (API 31, required for native blur), target the latest SDK. Tuned for the Galaxy S24+ (120 Hz).
 - App name **Wave**, application id `dev.leoperez.wave` (permanent).
 - Personal use, sideloaded APK. No Play Store, so `MANAGE_EXTERNAL_STORAGE` (all-files access) is acceptable.
-- No backend and no accounts. The one network feature is downloading artist photos (below); everything else works offline.
+- No backend and no accounts. Wave talks to two free, keyless public services, and only for two features: artist photos (Deezer) and finding lyrics and genre (LRCLIB and Deezer), both below, each with a Settings switch that stops every request. Everything else works offline.
 
 ### Artist photos
 
@@ -136,6 +137,14 @@ v1 delivers the core player and library. v2 adds the advanced audio and library-
 - **Matching** is Core's (`artistPhoto.ts`): names compare with case, accents, a leading "The", punctuation and "&"/"and" ignored; only an exact match counts, and of namesakes the most followed one (its photo or none). "Various Artists", "Unknown Artist" and names without letters are never looked up.
 - **Caching.** Lookups run in the background after each library scan, three at a time, and stop after a few failures in a row (offline). Photos are saved beside the album artwork (`files/artwork/artists/`) as a thumbnail (lists, menus) and a large image (artist page), and are never fetched again. A lookup with no match is retried after a week, a failed one after a day (`artist_photos` table, by artist key).
 - **Fallback.** Until a photo arrives, without a match, offline or with downloads off, the artist's album-artwork image shows.
+
+### Lyrics and genre
+
+- **Find Lyrics and Genre** (a song's long-press menu and the selection bar) looks a song up online and writes what it finds into the file, replacing the lyrics and genre there. Settings › Lyrics and genre runs it on the whole Library in the background, with progress and Cancel, and ends with a summary: updated, not found, failed. It stops early when the services can't be reached (three lookups failing in a row).
+- **Sources.** Lyrics come from **LRCLIB** (`lrclib.net`, free, no key): synced (LRC) lyrics are preferred, plain lyrics are taken when that's all there is. The genre is that of the song's album on **Deezer's open API**: a track search, then the matched album's first genre. A song's **title, artist, album and duration** are the only things sent, and "Unknown Artist" / "Various Artists" songs are never looked up. A "Find lyrics and genre online" switch in Settings (on by default) says so; off, Wave makes no lookups and the menu entry is gone.
+- **Matching** is Core's (`lyricsAndGenre.ts`): titles and artists compare like artist photos (case, accents, punctuation, a leading "The" ignored), plus featured artists ("feat. X") and version notes in brackets or after a dash ("(Live)", "- Remastered 2011"). Lyrics must be within 2 seconds of the song's length; then synced beats plain, the song's own album beats another, and the closest length wins. The genre's album is the matched track's, preferring the song's own album, then the closest length. No match leaves that field alone; no match at all leaves the file untouched.
+- **Writing** is native (`SongTagWriter`, jaudiotagger): only the lyrics and genre fields change, and the audio and every other tag stay as they were (JVM tests check this for MP3, FLAC, M4A, Ogg Vorbis and WAV). A WAV file's lyrics go into an ID3 chunk (RIFF INFO has no lyrics field) and its genre into both. A format Wave can't write tags to (Opus, raw AAC) gets the lyrics in a sidecar `.lrc` and no genre, and the summary lists those songs. A sidecar already beside a file is replaced too, since it would win over the tags in the Lyrics view.
+- **After writing** the file is read again as a scan reads it and its index entry updated, so Genres, Search and an open Lyrics view show the new values without a rescan.
 
 ### Stack (mirrors the T3 Code mobile app)
 
