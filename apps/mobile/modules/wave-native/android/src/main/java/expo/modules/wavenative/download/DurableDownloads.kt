@@ -57,7 +57,9 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
         job["resumeAttemptDeadline"] = job["attemptDeadline"]
         job["resumeQueueDeadline"] = job["queueDeadline"]
       }
-      persist()
+      // A full disk mustn't stop Wave or the download service from opening the journal: the
+      // jobs stay in memory (and readable), and the next change that can be written saves them.
+      try { persist() } catch (_: java.io.IOException) {}
     }
   }
 

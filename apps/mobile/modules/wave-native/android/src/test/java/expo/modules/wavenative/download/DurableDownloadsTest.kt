@@ -191,6 +191,21 @@ class DurableDownloadsTest {
     } finally { folder.deleteRecursively() }
   }
 
+  /** The download service and Wave's start both open the journal; a full disk must not crash them. */
+  @Test fun aJournalThatCantBeRewrittenStillOpensWithItsDownloads() {
+    val folder = Files.createTempDirectory("wave-full-disk").toFile()
+    try {
+      val journal = File(folder, "jobs")
+      DurableDownloads(journal).enqueue(song, null)
+      val unwritable = File(folder, "jobs.tmp").apply { mkdirs() } // where the next write would go
+      val reopened = DurableDownloads(journal)
+      assertEquals("queued", reopened.snapshot().single()["phase"])
+      unwritable.delete()
+      reopened.enqueue(song + ("videoId" to "second"), null)
+      assertEquals(listOf("song", "second"), DurableDownloads(journal).snapshot().map { it["id"] })
+    } finally { folder.deleteRecursively() }
+  }
+
   @Test fun stoppingTheServiceMidTransferKeepsThePeerForTheNextStart() {
     val folder = Files.createTempDirectory("wave-stop").toFile()
     try {
