@@ -1,12 +1,15 @@
 import { extrapolatePosition, paletteGradient, type Gradient, type QueueEntry } from "@wave/core";
 import * as Effect from "effect/Effect";
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useColorScheme } from "react-native";
 
-import { LibraryStore, type SongRow, type TrackDetails } from "@/library/LibraryStore";
+import { LibraryStore, type TrackDetails } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { playbackState } from "@/playback/Player";
+import { learnUnknownQueueTracks, queueTracks, type QueueTrack } from "@/playback/queueTracks";
 import { useThemeColor } from "@/theme/useThemeColor";
+
+import { useNowPlayingShown } from "./sheet";
 
 /** The playing track's album and artist (for the links) and palette, from the library. */
 export const useTrackDetails = (trackId: string | null): TrackDetails | null => {
@@ -56,38 +59,36 @@ export const useNowPlayingGradient = (details: TrackDetails | null): Gradient =>
 
 const TICK_MS = 200;
 
-const usePositionReport = () => {
-  const positionMs = useSyncExternalStore(
-    playbackState.subscribe,
-    () => playbackState.get().positionMs,
-  );
-  const durationMs = useSyncExternalStore(
-    playbackState.subscribe,
-    () => playbackState.get().durationMs,
-  );
-  const at = useSyncExternalStore(playbackState.subscribe, () => playbackState.get().at);
-  const isPlaying = useSyncExternalStore(
-    playbackState.subscribe,
-    () => playbackState.get().isPlaying,
-  );
+const ignore = (): (() => void) => () => {};
+
+/** The player's position reports; not listened to while `live` is off, re-read when it turns on. */
+const usePositionReport = (live: boolean) => {
+  const subscribe = live ? playbackState.subscribe : ignore;
+  const positionMs = useSyncExternalStore(subscribe, () => playbackState.get().positionMs);
+  const durationMs = useSyncExternalStore(subscribe, () => playbackState.get().durationMs);
+  const at = useSyncExternalStore(subscribe, () => playbackState.get().at);
+  const isPlaying = useSyncExternalStore(subscribe, () => playbackState.get().isPlaying);
   return { positionMs, durationMs, at, isPlaying };
 };
 
 /**
  * Where the playhead is now, ticking between the player's reports (every
  * 500 ms) so the scrubber and the elapsed / remaining labels run smoothly.
+ * It stands still while Now Playing is out of sight.
  */
 export const usePlayhead = (): {
   readonly positionMs: number;
   readonly durationMs: number | null;
 } => {
-  const report = usePositionReport();
+  const live = useNowPlayingShown();
+  const report = usePositionReport(live);
   const [now, setNow] = useState(Date.now);
+  const ticking = live && report.isPlaying;
   useEffect(() => {
-    if (!report.isPlaying) return undefined;
+    if (!ticking) return undefined;
     const timer = setInterval(() => setNow(Date.now()), TICK_MS);
     return () => clearInterval(timer);
-  }, [report.isPlaying]);
+  }, [ticking]);
   return {
     positionMs: extrapolatePosition(report, Math.max(now, report.at)),
     durationMs: report.durationMs,
@@ -95,37 +96,17 @@ export const usePlayhead = (): {
 };
 
 /**
- * Library rows for the queue's tracks, looked up once per track id: the
- * queue only holds ids, and Up Next can be the whole library.
+ * The queue's tracks by id, as the Queue service learned them with the
+ * commands that queued them, so the rows are filled on the first frame. Only
+ * tracks it doesn't know (a queue picked back up from the player after JS
+ * restarted) are looked up in the library, once for the app's lifetime.
  */
-export const useQueueSongs = (entries: readonly QueueEntry[]): ReadonlyMap<string, SongRow> => {
-  const [songs, setSongs] = useState<ReadonlyMap<string, SongRow>>(() => new Map());
-  // Ids already asked for, found or not, so a track gone from the library isn't re-queried.
-  const requested = useRef(new Set<string>());
+export const useQueueTracks = (entries: readonly QueueEntry[]): ReadonlyMap<string, QueueTrack> => {
+  const tracks = useSyncExternalStore(queueTracks.subscribe, queueTracks.get);
   useEffect(() => {
-    const missing = [...new Set(entries.map((entry) => entry.trackId))].filter(
-      (id) => !requested.current.has(id),
+    void appRuntime.runPromise(
+      LibraryStore.use((store) => learnUnknownQueueTracks(entries, store.songsByIds)),
     );
-    if (missing.length === 0) return;
-    for (const id of missing) requested.current.add(id);
-    appRuntime
-      .runPromise(
-        Effect.gen(function* () {
-          const store = yield* LibraryStore;
-          return yield* store.songsByIds(missing.map(Number));
-        }),
-      )
-      .then((rows) => {
-        if (rows.length === 0) return;
-        setSongs((previous) => {
-          const next = new Map(previous);
-          for (const row of rows) next.set(String(row.id), row);
-          return next;
-        });
-      })
-      .catch(() => {
-        for (const id of missing) requested.current.delete(id);
-      });
   }, [entries]);
-  return songs;
+  return tracks;
 };

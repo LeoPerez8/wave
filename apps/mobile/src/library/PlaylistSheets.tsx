@@ -26,7 +26,9 @@ import type { PlaylistRow, SongRow } from "./LibraryStore";
 import {
   addToPlaylist,
   createPlaylist,
+  currentPlaylists,
   deletePlaylist,
+  knownPlaylists,
   playlistNames,
   renamePlaylist,
 } from "./playlists";
@@ -121,12 +123,20 @@ export interface AddSubject {
   readonly songs: () => Promise<readonly SongRow[]>;
 }
 
-/** Opens the playlist picker for a track, an album, an artist's songs or a playlist. */
+/**
+ * Opens the playlist picker for a track, an album, an artist's songs or a
+ * playlist, with its playlists listed from the start (so it never grows once
+ * shown): at once when they are remembered, else as soon as they are read.
+ */
 export const openAddToPlaylist = (subject: AddSubject): void => {
-  openOverlay({
-    label: "Add to playlist",
-    render: (close) => <AddCard subject={subject} close={close} />,
-  });
+  const open = (): void => {
+    openOverlay({
+      label: "Add to playlist",
+      render: (close) => <AddCard subject={subject} close={close} />,
+    });
+  };
+  if (knownPlaylists() !== undefined) open();
+  else void followUp(() => currentPlaylists().then(open, failed("list the playlists")));
 };
 
 const trackIds = (songs: readonly SongRow[]): number[] => songs.map((song) => song.id);
@@ -195,18 +205,20 @@ function AddCard({ subject, close }: { subject: AddSubject; close: () => void })
 /**
  * Asks for a name and creates a playlist, holding [songs] when given. Given
  * songs that turn out to be none (an empty Favorites), it creates nothing.
- * Resolves with the new playlist's id, or null when cancelled or not created.
+ * Resolves with the new playlist (its id and stored name), or null when
+ * cancelled or not created.
  */
-export const newPlaylist = (songs?: () => Promise<readonly SongRow[]>): Promise<number | null> =>
+export const newPlaylist = (
+  songs?: () => Promise<readonly SongRow[]>,
+): Promise<NamedPlaylist | null> =>
   // The name prompt highlights what the flow was started from.
   followUp(() => createNamedPlaylist(songs));
 
 const createNamedPlaylist = async (
   songs?: () => Promise<readonly SongRow[]>,
-): Promise<number | null> => {
-  // Loads while the name is typed; a failure surfaces once the songs are needed.
-  const loading = songs?.();
-  loading?.catch(() => {});
+): Promise<NamedPlaylist | null> => {
+  // Remembered names open the prompt at once. The songs (every song, from
+  // Library › Songs) are read only once a name is chosen, so they never hold it up.
   const names = await playlistNames();
   const name = await askName({
     title: "New playlist",
@@ -216,8 +228,8 @@ const createNamedPlaylist = async (
   });
   if (name === null) return null;
   try {
-    const rows = loading === undefined ? [] : await loading;
-    if (loading !== undefined && rows.length === 0) {
+    const rows = songs === undefined ? [] : await songs();
+    if (songs !== undefined && rows.length === 0) {
       toast(describePlaylistAdd(name, 0, 0));
       return null;
     }
@@ -227,7 +239,7 @@ const createNamedPlaylist = async (
         ? `Created ${result.name}`
         : describePlaylistAdd(result.name, result.added, result.alreadyIn),
     );
-    return result.playlistId;
+    return { id: result.playlistId, name: result.name };
   } catch {
     failed("create the playlist")();
     return null;

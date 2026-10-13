@@ -24,8 +24,12 @@ export {
   parseQueueState,
   reduceQueue,
   upNext,
+  upNextMove,
+  withPendingMoves,
 } from "./queue.ts";
 export type {
+  PendingMove,
+  UpNextMove,
   QueueCommand,
   QueueContext,
   QueueEntry,
@@ -46,6 +50,8 @@ export { restorePlayback } from "./playbackRestore.ts";
 export type { RestoredPlayback } from "./playbackRestore.ts";
 export { extrapolatePosition, scrubPosition } from "./position.ts";
 export type { PositionReport, ScrubTouch } from "./position.ts";
+export { elapsedWavePath } from "./elapsedWave.ts";
+export type { ElapsedWave } from "./elapsedWave.ts";
 export { contrastRatio, paletteGradient } from "./palette.ts";
 export type { ArtworkPalette, Gradient, GradientTheme } from "./palette.ts";
 export { settleSheet } from "./sheet.ts";
@@ -166,7 +172,7 @@ export type {
   LibrarySectionSource,
   SectionCollection,
 } from "./librarySections.ts";
-export { cardKeyboard, entryDivider, placeOverlayCard } from "./overlay.ts";
+export { cardContentHeight, cardKeyboard, entryDivider, placeOverlayCard } from "./overlay.ts";
 export type { OverlayCardFrame, OverlayCardInput, OverlayInsets } from "./overlay.ts";
 export type { OverlayAnchor, OverlayRect } from "./overlay.ts";
 export type { CardKeyboard, OverlayAlign, OverlayFlow } from "./overlay.ts";
@@ -265,7 +271,7 @@ export type {
 } from "./itemActions.ts";
 export { concentricRadius } from "./corners.ts";
 export type { InsetSquare } from "./corners.ts";
-export { underlineMotion, wavePath } from "./wavyUnderline.ts";
+export { UNDERLINE_WAVE, underlineMotion, wavePath } from "./wavyUnderline.ts";
 export type { UnderlineMotion, UnderlineMotionInput, WaveShape } from "./wavyUnderline.ts";
 export { highlightedOrigin, originOfNewCard, veilAround } from "./overlayOrigin.ts";
 export type { NewCardInput, OriginCard } from "./overlayOrigin.ts";
@@ -292,3 +298,7 @@ export type {
   ArtistPhotoOutcome,
   ArtistPhotoUrls,
 } from "./artistPhoto.ts";
+export { focusedVersion, startFocusedVersion } from "./focusedVersion.ts";
+export type { FocusedVersion, FocusedVersionEvent } from "./focusedVersion.ts";
+export { stepNowPlayingSheet } from "./sheetLifecycle.ts";
+export type { SheetEvent, SheetPhase, SheetStep } from "./sheetLifecycle.ts";

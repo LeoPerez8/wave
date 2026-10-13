@@ -1,11 +1,19 @@
-import { formatDuration, formatRemaining, scrubPosition } from "@wave/core";
+import {
+  UNDERLINE_WAVE,
+  elapsedWavePath,
+  formatDuration,
+  formatRemaining,
+  scrubPosition,
+} from "@wave/core";
 import * as Haptics from "expo-haptics";
 import { useMemo, useState } from "react";
 import { Text, View } from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
+import Svg, { Path } from "react-native-svg";
 
 import { CELL } from "@/catalog/grid";
 import { seekTo } from "@/playback/actions";
+import { useThemeColor } from "@/theme/useThemeColor";
 
 import { usePlayhead } from "./hooks";
 
@@ -14,13 +22,17 @@ const STEP_MS = 10_000;
 
 const BAR = 2;
 const BAR_SCRUBBING = CELL / 2;
-const THUMB = CELL;
-const THUMB_SCRUBBING = CELL * 2;
+/** The playing-song underline's wave, scaled up (same wavelength : amplitude). */
+const WAVELENGTH = CELL * 2;
+const AMPLITUDE = (WAVELENGTH * UNDERLINE_WAVE.amplitude) / UNDERLINE_WAVE.wavelength;
+/** Box tall enough for crest, trough and the boldest stroke around them. */
+const HEIGHT = AMPLITUDE * 2 + BAR_SCRUBBING;
 
 /**
- * The playhead: a thin graphite rule with the elapsed part in teal and a
- * small square thumb, then elapsed and remaining time. Touch anywhere on it
- * and drag to scrub; the track seeks when the finger lifts.
+ * The playhead: the elapsed part is a still teal wave, the shape of the
+ * playing song's underline, that meets a flat graphite line at the playhead;
+ * then elapsed and remaining time. Touch anywhere on it and drag to scrub;
+ * the bar gets bolder and the track seeks when the finger lifts.
  */
 export function Scrubber() {
   const { positionMs, durationMs } = usePlayhead();
@@ -53,8 +65,11 @@ export function Scrubber() {
     }, [enabled, width, duration]),
   );
 
+  const accent = useThemeColor("accent");
+  const tertiary = useThemeColor("tertiary");
   const bar = scrubbing ? BAR_SCRUBBING : BAR;
-  const thumb = scrubbing ? THUMB_SCRUBBING : THUMB;
+  const join = fraction * width;
+  const centre = HEIGHT / 2;
 
   return (
     <View>
@@ -75,18 +90,33 @@ export function Scrubber() {
           style={{ height: CELL * 4 }}
           onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
         >
-          <View className="bg-tertiary" style={{ height: bar }}>
-            <View className="bg-accent" style={{ height: bar, width: fraction * width }} />
-          </View>
-          {enabled && (
-            <View
-              className="absolute bg-accent"
-              style={{
-                width: thumb,
-                height: thumb,
-                left: Math.min(width - thumb, Math.max(0, fraction * width - thumb / 2)),
-              }}
-            />
+          {width > 0 && (
+            <Svg width={width} height={HEIGHT} pointerEvents="none">
+              {join < width && (
+                <Path
+                  d={`M${join} ${centre}H${width}`}
+                  stroke={tertiary}
+                  strokeWidth={bar}
+                  fill="none"
+                />
+              )}
+              {join > 0 && (
+                <Path
+                  d={elapsedWavePath({
+                    length: join,
+                    wavelength: WAVELENGTH,
+                    amplitude: AMPLITUDE,
+                  })}
+                  transform={`translate(0 ${centre - AMPLITUDE})`}
+                  stroke={accent}
+                  strokeWidth={bar}
+                  // Round ends cover the angle where the wave meets the line.
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  fill="none"
+                />
+              )}
+            </Svg>
           )}
         </View>
       </GestureDetector>

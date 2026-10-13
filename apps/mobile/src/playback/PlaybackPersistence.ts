@@ -6,7 +6,8 @@ import { AppState } from "react-native";
 import { LibraryStore } from "@/library/LibraryStore";
 
 import { playbackState } from "./Player";
-import { Queue, currentPositionMs, settledQueue, toQueueTrack } from "./Queue";
+import { Queue, currentPositionMs, queueState, settledQueue, toQueueTrack } from "./Queue";
+import { learnUnknownQueueTracks } from "./queueTracks";
 
 /** How often the position is written while playing; it's also written on pause and on leaving the app. */
 const POSITION_SAVE_INTERVAL_MS = 5_000;
@@ -51,6 +52,11 @@ export const layer = Layer.effectDiscard(
 
     yield* Effect.acquireRelease(
       Effect.sync(() => [
+        // A queue picked back up from the player comes without its tracks:
+        // read them as soon as it's there, before Up Next is opened.
+        queueState.subscribe(() => {
+          Effect.runFork(learnUnknownQueueTracks(queueState.get().entries, store.songsByIds));
+        }),
         // `Queue` serialises the queue once changes settle (skips, reorders come in bursts).
         settledQueue.subscribe(() => {
           const json = settledQueue.get();
