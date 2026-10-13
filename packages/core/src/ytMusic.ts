@@ -51,9 +51,35 @@ const TRAILING_FEATURE = new RegExp(String.raw`\s+(?:feat\.?|ft\.?|featuring)\s.
 const ARTIST_SEPARATORS =
   /\s*(?:,|&|;|\/|\+|\bx\b|\band\b|\bfeat\.?|\bft\.?|\bfeaturing\b|\bwith\b)\s*/giu;
 
-/** A title without its featured-artist credit, as matching compares it. */
+const REMASTER = /\bremaster(?:ed)?\b/iu;
+/** Words that make a note more than a remaster: another take or cut of the song. */
+const ANOTHER_VERSION =
+  /\b(?:live|edit|mix|remix|demo|acoustic|instrumental|session|take|karaoke|cover)\b/iu;
+const BRACKETED_NOTE = /\s*(?:\([^)]*\)|\[[^\]]*\])/gu;
+const DASHED_NOTE = /\s+[-–—]\s+([^-–—]*)$/u;
+
+/** Whether [note] only says the song was remastered ("Remastered 2011", "2011 Remaster"). */
+const isRemasterNote = (note: string): boolean =>
+  REMASTER.test(note) && !ANOTHER_VERSION.test(note);
+
+/**
+ * A title without its remaster notes ("(Remastered 2011)", "- 2011 Remaster",
+ * "[Remastered]"): a remaster is the same recording. A note that also names
+ * another version ("(Live)", "(Remastered Live Version)") stays.
+ */
+const withoutRemasterNotes = (title: string): string => {
+  const bare = title
+    .replace(BRACKETED_NOTE, (note) => (isRemasterNote(note) ? "" : note))
+    .replace(DASHED_NOTE, (whole, note: string) => (isRemasterNote(note) ? "" : whole))
+    .trim();
+  return bare === "" ? title : bare;
+};
+
+/** A title without its featured-artist credit and remaster notes, as matching compares it. */
 const matchTitle = (title: string): string =>
-  normalizeSearchText(title.replace(BRACKETED_FEATURE, "").replace(TRAILING_FEATURE, ""));
+  normalizeSearchText(
+    withoutRemasterNotes(title.replace(BRACKETED_FEATURE, "").replace(TRAILING_FEATURE, "")),
+  );
 
 /** The names in an artist credit ("A feat. B & C" is A, B and C), as matching compares them. */
 const artistNames = (credit: string): string[] =>
@@ -72,7 +98,7 @@ interface Candidate<L> {
 
 /**
  * The Library song a YT Music song already is, or null: one with its title
- * (case, accents, punctuation and featured credits aside) that shares an
+ * (case, accents, punctuation, featured credits and remaster notes aside) that shares an
  * artist with it and, when both lengths are known, is as long within a few
  * seconds, so a live take or an edit of the same song is a different song.
  */
