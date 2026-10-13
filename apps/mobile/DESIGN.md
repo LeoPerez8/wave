@@ -249,7 +249,7 @@ The world is flat. There are no shadows, no elevation and no gradients (save the
 
 ## Shapes
 
-Square everywhere. Artwork, empty cover slots, track thumbnails and placeholder fields have no corner radius and no frame, with two exceptions that take the shape of what holds them: artists' circles (below) and the mini player's thumbnail, whose corners are concentric with its glass pill. Structure is drawn with one-pixel hairlines in the separator tone, running the full content width between entries; there are no boxed cards and no chips. What floats is the exception: the chrome's glass surfaces are pills (fully rounded ends) and dialog cards have 24dp corners, set apart from the square content beneath. Artists are circles: their image (their downloaded photo when there is one, else Core's `artistArtwork`: the cover of their own album with the most songs, else the album they appear on most), or their initial in graphite on a `fill` circle when they have no artwork, so artists read apart from albums. Rows lead with a 40dp circle, Home's artist shelf and the artist page head with a large one. The recurring silhouettes are the thin vertical column of spine letters on the right and the pills at the bottom.
+Square everywhere. Artwork, empty cover slots, track thumbnails and placeholder fields have no corner radius and no frame, with two exceptions that take the shape of what holds them: artists' circles (below) and the mini player's thumbnail, whose corners are concentric with its glass pill. Structure is drawn with one-pixel hairlines in the separator tone, running the full content width between entries; there are no boxed cards and no chips. What floats is the exception: the chrome's glass surfaces are pills (fully rounded ends) and dialog cards have 24dp corners, set apart from the square content beneath. Artists are circles: their image (their downloaded photo when there is one, else Core's `artistArtwork`: the cover of their own album with the most songs, else the album they appear on most), or their initial in graphite on a `fill` circle when they have no artwork, so artists read apart from albums. Rows lead with a 40dp circle, Home's artist shelf and the artist page head with a large one. The YouTube account's picture in Settings is a 40dp circle too, a person like an artist. The recurring silhouettes are the thin vertical column of spine letters on the right and the pills at the bottom.
 
 ### Named Rules
 
@@ -321,6 +321,17 @@ Small tracked caps (Label) in graphite by default, with teal and ember tones ava
 ### Stepper (Settings)
 
 An Entry-type label, then minus / value / plus. The value is Body 500 tabular, centred in a minimum 72dp column on one line so it never wraps at large font scales; the buttons disable at the range ends. Helper text in Footnote sits below the row's closing hairline.
+
+### YT Music account (Settings)
+
+Below Use YT Music and its helper text, three cells down, between hairlines (`src/settings/YtMusicSettingsSection.tsx`; what shows is Core's `ytAccountView`):
+
+- **Signed out:** a Sign In text button in a 56dp row, and Footnote graphite under the closing hairline saying signing in is optional and what it changes. While Google's page is open the button reads "Signing In…" in graphite, disabled. A sign-in that didn't work only changes that footnote (no connection, or YouTube didn't confirm it); never an error card.
+- **Signed in:** the account as a 56dp row: its picture as a 40dp circle (a person, like an artist; their initial on a `fill` circle without one), the name in Body 500 ink over the email in Body graphite. Under the closing hairline, Sign Out as a text button in teal (it forgets a session, it doesn't delete anything) and a footnote saying what uses the account.
+- **Expired:** like signed out, with Sign In Again and a footnote saying the session ended.
+- **YT Music off:** no Sign In (it would talk to Google); a signed-in account still shows, so it can be signed out of.
+
+Sign In opens Google's own page full screen over Wave (a plain web view in the system's light or dark theme, clear of the system bars and the keyboard); Back steps back through Google's pages and then out. It closes by itself once the account is signed in.
 
 ### Alphabet Spine (signature)
 
