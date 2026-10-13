@@ -294,7 +294,12 @@ class SoulseekClient(
     try {
       while (!remote.isClosed) {
         val message = SoulseekWire.read(remote.getInputStream())
-        if (message.code == 9) receiveSearch(user, message.payload)
+        if (message.code == 9) {
+          receiveSearch(user, message.payload)
+          // Results are retained, sockets aren't. Otherwise the first 32 results would occupy
+          // every reader and prevent later peers and the selected file connection from arriving.
+          if (downloads.values.none { it.candidate.username == user }) remote.close()
+        }
         // A download-only client never exposes a scanner, local path or upload resolver.
         if (message.code == 4) SoulseekWire.write(remote.getOutputStream(), 5) {
           bytes(SoulseekWire.deflate(SoulseekWire.Writer().apply { uint(0) }.result()))
