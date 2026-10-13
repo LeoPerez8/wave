@@ -153,7 +153,11 @@ class LibraryScanner(
       .sorted()
   }
 
-  private fun index(file: File): Pair<ScannedTrack, ArtworkInfo?> {
+  /**
+   * Reads one file as a scan would: its track and its artwork (stored, if new).
+   * Also used after Wave writes a file's tags, to update its index entry.
+   */
+  fun index(file: File): Pair<ScannedTrack, ArtworkInfo?> {
     val tags = tagReader.read(file)
     val artwork = tags.artwork?.let(artworkStore::store)
     val track = ScannedTrack(

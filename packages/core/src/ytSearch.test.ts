@@ -17,10 +17,10 @@ const song = (videoId: string): YtSong => ({
 const typed = (state: YtSection, query: string, enabled = true): YtSection =>
   stepYtSection(state, { type: "typed", query, enabled });
 
-describe("ytSectionView", () => {
-  const inLibrary = (s: YtSong): boolean => s.videoId === "mine";
-  const results = (songs: YtSong[]): YtSection => ({ status: "results", query: "q", songs });
+const inLibrary = (s: YtSong): boolean => s.videoId === "mine";
+const results = (songs: YtSong[]): YtSection => ({ status: "results", query: "q", songs });
 
+describe("ytSectionView", () => {
   test("shows the songs that aren't in the Library, in YT Music's order", () => {
     const view = ytSectionView(results([song("b"), song("mine"), song("a")]), inLibrary);
     assert.deepEqual(view, { songs: [song("b"), song("a")], note: null });

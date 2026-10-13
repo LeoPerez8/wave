@@ -12,6 +12,8 @@ export interface AlertSpec {
     /** Deletes or removes something: shown in the destructive colour. */
     readonly destructive?: boolean;
   };
+  /** The label of the button Back or a tap outside also chooses, when not Cancel / OK. */
+  readonly dismissLabel?: string;
 }
 
 /** What the person chose: the action, or Cancel / OK (which Back or a tap outside the card also chooses). */
@@ -33,13 +35,13 @@ export interface AlertPlan {
 /** A title reads as a sentence: "Wave is scanning" gets a full stop, "Delete X?" keeps its mark. */
 const asSentence = (title: string): string => (/[.?!…]$/.test(title) ? title : `${title}.`);
 
-export const planAlert = ({ title, message, action }: AlertSpec): AlertPlan => ({
+export const planAlert = ({ title, message, action, dismissLabel }: AlertSpec): AlertPlan => ({
   announcement: `${asSentence(title)} ${message}`,
   buttons:
     action === undefined
-      ? [{ label: "OK", tone: "accent", choice: "dismiss" }]
+      ? [{ label: dismissLabel ?? "OK", tone: "accent", choice: "dismiss" }]
       : [
-          { label: "Cancel", tone: "accent", choice: "dismiss" },
+          { label: dismissLabel ?? "Cancel", tone: "accent", choice: "dismiss" },
           {
             label: action.label,
             tone: action.destructive === true ? "destructive" : "accent",

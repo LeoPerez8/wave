@@ -1,5 +1,8 @@
 import type { ExpoConfig } from "expo/config";
 
+import { withLauncherIcons } from "./plugins/withLauncherIcons.ts";
+import { withLaunchSplash } from "./plugins/withLaunchSplash.ts";
+
 // Font files ship inside the @expo-google-fonts/inter package and are embedded
 // natively at prebuild time, so text renders in Inter from the first frame.
 const inter = (file: string): string => `./node_modules/@expo-google-fonts/inter/${file}`;
@@ -77,4 +80,6 @@ const config: ExpoConfig = {
   ],
 };
 
-export default config;
+// Adds a launch splash for each pair of backgrounds Settings › Theme offers (Android 13+),
+// and one launcher icon per primary × secondary, switched from Settings › Theme.
+export default withLaunchSplash(withLauncherIcons(config));

@@ -169,11 +169,13 @@ class WavePlayerModule : Module() {
       "onPlayerError",
       "onSleepTimer",
       "onAutoRequest",
+      "onAutoLyrics",
     )
 
     OnCreate {
       ResumeStore.init(context)
       main.post(::connect)
+      main.post(::followAutoLyrics)
     }
 
     /**
@@ -218,6 +220,17 @@ class WavePlayerModule : Module() {
       val modes = AutoModes.fromJs(shuffle, repeat)
         ?: return@AsyncFunction promise.reject("ERR_PLAYER_MODES", "Unknown repeat mode: $repeat", null)
       AutoModes.state.publish(modes)
+      promise.resolve(null)
+    }.runOnQueue(Queues.MAIN)
+
+    /**
+     * The chosen primary (`#rrggbb`) in each scheme, for the media notification
+     * wherever the system colours it from the app ([NotificationAccent]).
+     */
+    AsyncFunction("setNotificationAccent") { light: String, dark: String, promise: Promise ->
+      val colours = NotificationAccent.fromJs(light, dark)
+        ?: return@AsyncFunction promise.reject("ERR_NOTIFICATION_ACCENT", "Not #rrggbb tones: $light, $dark", null)
+      NotificationAccent.publish(context, colours)
       promise.resolve(null)
     }.runOnQueue(Queues.MAIN)
 
@@ -318,14 +331,54 @@ class WavePlayerModule : Module() {
 
     Function("failAuto") { id: Int, message: String -> AutoLibrary.bridge.fail(id, message) }
 
+    /** The Lyrics toggle on Auto's player screen and whether Auto is connected; `onAutoLyrics` reports changes. */
+    AsyncFunction("getAutoLyrics") { promise: Promise ->
+      followAutoLyrics()
+      promise.resolve(autoLyrics())
+    }.runOnQueue(Queues.MAIN)
+
+    /**
+     * Shows [line] under the title of item [itemId] on Auto's player screen in
+     * place of the artist, or the artist again with null (see [AutoLyrics]).
+     */
+    AsyncFunction("setAutoLyricLine") { itemId: String?, line: String?, promise: Promise ->
+      AutoLyrics.state.showLine(itemId, line)
+      promise.resolve(null)
+    }.runOnQueue(Queues.MAIN)
+
     OnDestroy {
       AutoLibrary.bridge.detach()
       main.post {
+        stopAutoLyrics?.invoke()
+        stopAutoLyrics = null
         main.removeCallbacks(positionTicker)
         controller?.removeListener(listener)
         controllerFuture?.let(MediaController::releaseFuture)
         controller = null
         controllerFuture = null
+      }
+    }
+  }
+
+  /** Stops reporting [AutoLyrics.state]; null while not following it. */
+  private var stopAutoLyrics: (() -> Unit)? = null
+
+  /** The toggle and connection last reported, so new lines don't echo back to JS. */
+  private var reportedAutoLyrics: Map<String, Boolean>? = null
+
+  private fun autoLyrics(): Map<String, Boolean> =
+    mapOf("on" to AutoLyrics.state.on, "carConnected" to AutoLyrics.state.carConnected)
+
+  /** Reports the Lyrics toggle and Auto's connection to JS as they change. Main thread. */
+  private fun followAutoLyrics() {
+    if (stopAutoLyrics != null) return
+    AutoLyrics.state.init(PreferencesLyricsToggleStore(context))
+    reportedAutoLyrics = autoLyrics()
+    stopAutoLyrics = AutoLyrics.state.listen {
+      val current = autoLyrics()
+      if (current != reportedAutoLyrics) {
+        reportedAutoLyrics = current
+        sendEvent("onAutoLyrics", current)
       }
     }
   }

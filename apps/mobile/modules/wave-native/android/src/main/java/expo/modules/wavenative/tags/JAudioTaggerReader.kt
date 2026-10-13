@@ -6,6 +6,7 @@ import java.util.logging.Logger
 import kotlin.math.roundToLong
 import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.audio.mp3.MP3File
+import org.jaudiotagger.audio.wav.WavSaveOptions
 import org.jaudiotagger.tag.FieldKey
 import org.jaudiotagger.tag.Tag
 import org.jaudiotagger.tag.TagOptionSingleton
@@ -14,6 +15,7 @@ import org.jaudiotagger.tag.id3.AbstractID3v2Frame
 import org.jaudiotagger.tag.id3.AbstractID3v2Tag
 import org.jaudiotagger.tag.id3.framebody.FrameBodyTXXX
 import org.jaudiotagger.tag.vorbiscomment.VorbisCommentTag
+import org.jaudiotagger.tag.wav.WavTag
 
 /**
  * Reads MP3 (ID3), FLAC, M4A (AAC/ALAC), Ogg Vorbis and WAV tags with
@@ -28,28 +30,34 @@ class JAudioTaggerReader : TagReader {
     val audio = AudioFileIO.read(file)
     val header = audio.audioHeader
     val tag = audio.tag
-    val id3 = (tag as? AbstractID3v2Tag) ?: (audio as? MP3File)?.iD3v2Tag
+    // A WAV file can carry an ID3 chunk and a RIFF INFO chunk; each field is read from
+    // the ID3 one, else the INFO one (SongTagWriter adds an ID3 chunk for lyrics).
+    val tags = (tag as? WavTag)?.let { listOfNotNull(it.iD3Tag, it.infoTag) } ?: listOfNotNull(tag)
+    val id3 = (tag as? AbstractID3v2Tag) ?: (audio as? MP3File)?.iD3v2Tag ?: (tag as? WavTag)?.iD3Tag
+    fun field(key: FieldKey): String? = tags.firstNotNullOfOrNull { it.field(key) }
     val durationMs =
       header?.let {
         val precise = runCatching { it.preciseTrackLength }.getOrNull()
         if (precise != null && precise > 0) (precise * 1000).roundToLong() else it.trackLength * 1000L
       } ?: 0L
     return RawTags(
-      title = tag.field(FieldKey.TITLE),
-      artist = tag.field(FieldKey.ARTIST),
-      album = tag.field(FieldKey.ALBUM),
-      albumArtist = tag.field(FieldKey.ALBUM_ARTIST),
-      genre = tag.field(FieldKey.GENRE),
-      year = tag.field(FieldKey.YEAR),
-      trackNumber = numberOf(tag.field(FieldKey.TRACK), tag.field(FieldKey.TRACK_TOTAL)),
-      discNumber = numberOf(tag.field(FieldKey.DISC_NO), tag.field(FieldKey.DISC_TOTAL)),
+      title = field(FieldKey.TITLE),
+      artist = field(FieldKey.ARTIST),
+      album = field(FieldKey.ALBUM),
+      albumArtist = field(FieldKey.ALBUM_ARTIST),
+      genre = field(FieldKey.GENRE),
+      year = field(FieldKey.YEAR),
+      trackNumber = numberOf(field(FieldKey.TRACK), field(FieldKey.TRACK_TOTAL)),
+      discNumber = numberOf(field(FieldKey.DISC_NO), field(FieldKey.DISC_TOTAL)),
       compilation =
-        isTruthyFlag(tag.field(FieldKey.IS_COMPILATION)) || id3.hasUserCompilationFlag(),
+        isTruthyFlag(field(FieldKey.IS_COMPILATION)) || id3.hasUserCompilationFlag(),
       durationMs = durationMs,
       sampleRate = header?.let { runCatching { it.sampleRateAsNumber }.getOrNull() }?.takeIf { it > 0 },
       bitrateKbps = header?.let { runCatching { it.bitRateAsNumber }.getOrNull() }?.toInt()?.takeIf { it > 0 },
-      artwork = tag?.let { runCatching { it.firstArtwork?.binaryData }.getOrNull() }?.takeIf { it.isNotEmpty() },
-      lyrics = tag.field(FieldKey.LYRICS) ?: id3.userText(USER_LYRICS_KEYS) ?: tag.vorbisField(USER_LYRICS_KEYS),
+      artwork = tags.firstNotNullOfOrNull { source ->
+        runCatching { source.firstArtwork?.binaryData }.getOrNull()?.takeIf { it.isNotEmpty() }
+      },
+      lyrics = field(FieldKey.LYRICS) ?: id3.userText(USER_LYRICS_KEYS) ?: tag.vorbisField(USER_LYRICS_KEYS),
     )
   }
 
@@ -93,7 +101,7 @@ class JAudioTaggerReader : TagReader {
     }.getOrDefault(false)
   }
 
-  private companion object {
+  internal companion object {
     val USER_COMPILATION_KEYS = listOf("TCMP", "COMPILATION")
 
     /**
@@ -111,8 +119,14 @@ class JAudioTaggerReader : TagReader {
         if (configured) return
         // jaudiotagger logs every quirk it meets at INFO/WARNING; a large library floods logcat.
         Logger.getLogger("org.jaudiotagger").level = Level.OFF
+        val options = TagOptionSingleton.getInstance()
         // Avoids java.awt / javax.imageio code paths, which don't exist on Android.
-        TagOptionSingleton.getInstance().isAndroid = true
+        options.isAndroid = true
+        // Genres are written (SongTagWriter) as the text found, not as ID3v1 / iTunes genre numbers.
+        options.isWriteMp3GenresAsText = true
+        options.isWriteMp4GenresAsText = true
+        // A WAV file keeps the chunks it had (RIFF INFO) and gains the ID3 one lyrics need.
+        options.wavSaveOptions = WavSaveOptions.SAVE_BOTH
         configured = true
       }
     }

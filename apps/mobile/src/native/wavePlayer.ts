@@ -116,13 +116,24 @@ export type AutoRequest =
   /**
    * A tap on Auto's shuffle or repeat button: change the queue's mode as the
    * app's buttons do, then answer `null` (the new modes go out with `setModes`).
+   * `moreFromArtist` adds the current artist's next most played songs after
+   * the current track.
    */
-  | { readonly type: "command"; readonly command: "toggleShuffle" | "cycleRepeat" };
+  | {
+      readonly type: "command";
+      readonly command: "toggleShuffle" | "cycleRepeat" | "moreFromArtist";
+    };
 
 /** The answer to a `play` request: the new player list and the item to start at. */
 export interface AutoPlayback {
   readonly items: readonly PlayerItem[];
   readonly startIndex: number;
+}
+
+/** The Lyrics toggle on Auto's player screen, and whether Auto is connected. */
+export interface AutoLyricsEvent {
+  readonly on: boolean;
+  readonly carConnected: boolean;
 }
 
 type WavePlayerEvents = {
@@ -133,6 +144,7 @@ type WavePlayerEvents = {
   onPlayerError: (event: PlayerErrorEvent) => void;
   onSleepTimer: (event: SleepTimerEvent) => void;
   onAutoRequest: (event: AutoRequestEvent) => void;
+  onAutoLyrics: (event: AutoLyricsEvent) => void;
 };
 
 declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
@@ -141,6 +153,11 @@ declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
   setRepeatMode(mode: RepeatMode): Promise<void>;
   /** The queue's shuffle and repeat, for the toggles on Auto's player screen. */
   setModes(shuffle: boolean, repeat: RepeatMode): Promise<void>;
+  /**
+   * The chosen primary (`#rrggbb`) in each scheme, kept on disk for the media
+   * notification wherever the system colours it from the app.
+   */
+  setNotificationAccent(light: string, dark: string): Promise<void>;
   getItemIds(): Promise<NativeItemIds>;
   /**
    * Keeps the queue (JSON) in the native process, for when JS restarts, and on
@@ -175,6 +192,14 @@ declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
   respondAuto(id: number, json: string): void;
   /** Answers request `id` with an error Auto shows as `message`. */
   failAuto(id: number, message: string): void;
+  /** The Lyrics toggle and Auto's connection; `onAutoLyrics` reports changes. */
+  getAutoLyrics(): Promise<AutoLyricsEvent>;
+  /**
+   * Shows `line` under the title of item `itemId` (its queue entry key) on
+   * Auto's player screen in place of the artist; null shows the artist. The
+   * service ignores it while the toggle is off or Auto isn't connected.
+   */
+  setAutoLyricLine(itemId: string | null, line: string | null): Promise<void>;
 }
 
 export const WavePlayer = requireNativeModule<WavePlayerModule>("WavePlayer");

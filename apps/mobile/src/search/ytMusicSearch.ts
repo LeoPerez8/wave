@@ -5,6 +5,7 @@ import {
   type YtSection,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import { useEffect, useReducer } from "react";
 
 import { appRuntime } from "@/library/runtime";
@@ -34,7 +35,7 @@ export const useYtMusicSection = (query: string): YtSection<NativeYtSong> => {
     if (loading === null) return undefined;
     const timer = setTimeout(() => {
       void appRuntime.runPromise(Effect.result(searchSongs(loading))).then((result) => {
-        if (result._tag === "Success")
+        if (Result.isSuccess(result))
           dispatch({ type: "found", query: loading, songs: result.success.songs });
         // Turned off meanwhile: the section is already hidden.
         else if (result.failure.reason !== "disabled")
