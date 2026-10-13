@@ -10,6 +10,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { useAllFilesAccess } from "@/library/hooks";
+import { primePlaylists } from "@/library/playlists";
 import { OverlayHost } from "@/overlay/OverlayHost";
 import { useTrackCurrentPath } from "@/library/routes";
 import { startInitialScan } from "@/library/runtime";
@@ -28,7 +29,11 @@ export default function RootLayout() {
 
   // The first scan starts as soon as Wave can read the scan roots.
   useEffect(() => {
-    if (granted) startInitialScan();
+    if (granted) {
+      startInitialScan();
+      // Playlists don't wait for the scan: they live in the database already.
+      primePlaylists();
+    }
   }, [granted]);
 
   return (
