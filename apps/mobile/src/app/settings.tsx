@@ -16,6 +16,7 @@ import { startRescan } from "@/library/runtime";
 import { Press } from "@/motion/Press";
 import { ArtistPhotosSettingsSection } from "@/settings/ArtistPhotosSettingsSection";
 import { GlassSettingsSection } from "@/settings/GlassSettingsSection";
+import { LyricsAndGenreSettingsSection } from "@/settings/LyricsAndGenreSettingsSection";
 import { setShortcutTab, useShortcutTab } from "@/settings/shortcutTab";
 import { ThemeSettingsSection } from "@/settings/ThemeSettingsSection";
 import {
@@ -138,6 +139,8 @@ export default function SettingsScreen() {
         </Text>
 
         <ArtistPhotosSettingsSection />
+
+        <LyricsAndGenreSettingsSection />
 
         <CatalogLine className="mb-2 mt-12">Developer</CatalogLine>
         <Hairline />

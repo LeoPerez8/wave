@@ -66,6 +66,19 @@ describe("itemActions", () => {
     );
   });
 
+  test("songs offer Find Lyrics and Genre while online lookups are on, before Select and Delete", () => {
+    const menu = itemActions(tracks([song()], { selectable: true, onlineLookups: true }));
+    assert.deepEqual(names(menu).slice(-3), ["findLyricsAndGenre", "select", "delete"]);
+    assert.equal(ITEM_ACTION_LABELS.findLyricsAndGenre, "Find Lyrics and Genre");
+    const bar = itemActions(
+      tracks([song(), song()], { surface: "selection", onlineLookups: true }),
+    );
+    assert.ok(names(bar).includes("findLyricsAndGenre"));
+    assert.ok(!names(itemActions(tracks([song()]))).includes("findLyricsAndGenre"));
+    const album = itemActions({ kind: "album", items: [{}], here: "/", onlineLookups: true });
+    assert.ok(!names(album).includes("findLyricsAndGenre"));
+  });
+
   test("a starred song offers Remove from Favorites instead", () => {
     assert.deepEqual(
       names(itemActions(tracks([song({ favorite: true })]))).filter((name) => name.includes("av")),

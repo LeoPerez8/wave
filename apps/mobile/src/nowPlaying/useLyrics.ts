@@ -1,6 +1,7 @@
 import type { Lyrics } from "@wave/core";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
+import { lyricsEdits } from "@/library/lyricsEdits";
 import { cachedTrackLyrics, readTrackLyrics } from "@/playback/trackLyrics";
 
 /**
@@ -9,6 +10,11 @@ import { cachedTrackLyrics, readTrackLyrics } from "@/playback/trackLyrics";
  */
 export const useLyrics = (path: string | null): Lyrics | null => {
   const [read, setRead] = useState<{ path: string; lyrics: Lyrics } | null>(null);
+  // Lyrics Wave wrote into this file (Find Lyrics and Genre) are read again at once.
+  const edits = useSyncExternalStore(lyricsEdits.subscribe, () => {
+    const edit = lyricsEdits.get();
+    return edit.path === path ? edit.count : 0;
+  });
 
   useEffect(() => {
     if (path === null) return undefined;
@@ -19,7 +25,7 @@ export const useLyrics = (path: string | null): Lyrics | null => {
     return () => {
       current = false;
     };
-  }, [path]);
+  }, [path, edits]);
 
   if (path === null) return null;
   return read?.path === path ? read.lyrics : cachedTrackLyrics(path);
