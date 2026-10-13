@@ -37,7 +37,7 @@ class SoulseekClient(
   @Volatile private var server: Socket? = null
   private var listener: ServerSocket? = null
   private var credentials = credentialsStore.load()
-  private val token = AtomicInteger(java.security.SecureRandom().nextInt(1, Int.MAX_VALUE / 2))
+  private val token = AtomicInteger(java.security.SecureRandom().nextInt(Int.MAX_VALUE / 2 - 1) + 1)
   private val peers = ConcurrentHashMap<String, Socket>()
   private val peerSlots = Semaphore(32)
   private val sockets = ConcurrentHashMap.newKeySet<Socket>()
