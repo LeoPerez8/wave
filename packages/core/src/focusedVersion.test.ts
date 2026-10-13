@@ -41,4 +41,38 @@ describe("focused version", () => {
     assert.equal(focusedVersion(focused, { type: "focus", version: 2 }), focused);
     assert.equal(focusedVersion(focused, { type: "change", version: 2 }), focused);
   });
+
+  test("a focused screen under Now Playing doesn't follow plays (it's out of sight)", () => {
+    let state = focusedVersion(startFocusedVersion(0), { type: "focus", version: 0 });
+    state = focusedVersion(state, { type: "cover" });
+    const covered = state;
+    state = focusedVersion(state, { type: "change", version: 1 });
+    assert.equal(state, covered);
+    assert.equal(state.shown, 0);
+  });
+
+  test("uncovering catches up, and the screen follows plays again", () => {
+    let state = focusedVersion(startFocusedVersion(0), { type: "focus", version: 0 });
+    state = focusedVersion(state, { type: "cover" });
+    state = focusedVersion(state, { type: "change", version: 2 });
+    state = focusedVersion(state, { type: "uncover", version: 2 });
+    assert.equal(state.shown, 2);
+    state = focusedVersion(state, { type: "change", version: 3 });
+    assert.equal(state.shown, 3);
+  });
+
+  test("focusing a tab while Now Playing covers it waits until it's uncovered", () => {
+    let state = focusedVersion(startFocusedVersion(0), { type: "cover" });
+    state = focusedVersion(state, { type: "focus", version: 4 });
+    assert.equal(state.shown, 0);
+    state = focusedVersion(state, { type: "uncover", version: 5 });
+    assert.equal(state.shown, 5);
+  });
+
+  test("uncovering a hidden tab doesn't wake it", () => {
+    let state = focusedVersion(startFocusedVersion(0), { type: "cover" });
+    state = focusedVersion(state, { type: "uncover", version: 6 });
+    assert.equal(state.shown, 0);
+    assert.equal(focusedVersion(state, { type: "change", version: 7 }).shown, 0);
+  });
 });

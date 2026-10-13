@@ -1,4 +1,4 @@
-import { parseQueueState, restorePlayback, type QueueEntry } from "@wave/core";
+import { parseQueueState, restorePlayback } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { AppState } from "react-native";
@@ -7,7 +7,7 @@ import { LibraryStore } from "@/library/LibraryStore";
 
 import { playbackState } from "./Player";
 import { Queue, currentPositionMs, queueState, settledQueue, toQueueTrack } from "./Queue";
-import { learnQueueTracks, lookupFailed, tracksToLookUp } from "./queueTracks";
+import { learnUnknownQueueTracks } from "./queueTracks";
 
 /** How often the position is written while playing; it's also written on pause and on leaving the app. */
 const POSITION_SAVE_INTERVAL_MS = 5_000;
@@ -16,23 +16,6 @@ const POSITION_SAVE_INTERVAL_MS = 5_000;
 const run = (effect: Effect.Effect<void, unknown>): void => {
   Effect.runFork(effect.pipe(Effect.ignore));
 };
-
-/**
- * Looks up, once, the queued tracks the queue doesn't know (it was picked back
- * up from the player after JS restarted), so Up Next can show them.
- */
-export const learnUnknownQueueTracks = (
-  entries: readonly QueueEntry[],
-): Effect.Effect<void, never, LibraryStore> =>
-  Effect.suspend(() => {
-    const missing = tracksToLookUp(entries);
-    if (missing.length === 0) return Effect.void;
-    return Effect.gen(function* () {
-      const store = yield* LibraryStore;
-      const songs = yield* store.songsByIds(missing.map(Number));
-      learnQueueTracks(songs.map(toQueueTrack));
-    }).pipe(Effect.catch(() => Effect.sync(() => lookupFailed(missing))));
-  });
 
 /**
  * Keeps the queue, current track, position, shuffle and repeat in the library
@@ -72,11 +55,7 @@ export const layer = Layer.effectDiscard(
         // A queue picked back up from the player comes without its tracks:
         // read them as soon as it's there, before Up Next is opened.
         queueState.subscribe(() => {
-          Effect.runFork(
-            learnUnknownQueueTracks(queueState.get().entries).pipe(
-              Effect.provideService(LibraryStore, store),
-            ),
-          );
+          Effect.runFork(learnUnknownQueueTracks(queueState.get().entries, store.songsByIds));
         }),
         // `Queue` serialises the queue once changes settle (skips, reorders come in bursts).
         settledQueue.subscribe(() => {

@@ -55,7 +55,8 @@ export type QueueCommand =
   | { readonly type: "setRepeat"; readonly mode: RepeatMode }
   | { readonly type: "playNext"; readonly trackIds: readonly string[] }
   | { readonly type: "addToQueue"; readonly trackIds: readonly string[] }
-  | { readonly type: "move"; readonly key: string; readonly toUpNextIndex: number }
+  /** Moves an Up Next entry beside its new neighbours (see `UpNextMove`, made by `upNextMove`). */
+  | ({ readonly type: "move" } & UpNextMove)
   | { readonly type: "remove"; readonly key: string }
   /** These tracks left the library (their files were deleted): every entry of theirs goes. */
   | { readonly type: "removeTracks"; readonly trackIds: readonly string[] };
@@ -265,13 +266,20 @@ const playerMoved = (state: QueueState, key: string): QueueResult => {
 };
 
 /** Moves an Up Next entry to another Up Next position (clamped). */
-const move = (state: QueueState, key: string, toUpNextIndex: number): QueueResult => {
+const move = (state: QueueState, { key, after, before }: UpNextMove): QueueResult => {
   const from = indexOfKey(state, key);
   if (from <= state.index) return result(state);
   const entries = [...state.entries];
   const [entry] = entries.splice(from, 1);
-  const upNextLength = entries.length - state.index - 1;
-  const to = state.index + 1 + Math.max(0, Math.min(Math.trunc(toUpNextIndex), upNextLength));
+  const upcoming = (anchor: string | null): number => {
+    if (anchor === null) return -1;
+    const at = entries.findIndex((other) => other.key === anchor);
+    return at > state.index ? at : -1;
+  };
+  const afterAt = upcoming(after);
+  const beforeAt = upcoming(before);
+  const to = afterAt >= 0 ? afterAt + 1 : beforeAt >= 0 ? beforeAt : state.index + 1;
+  if (to === from) return result(state);
   entries.splice(to, 0, entry!);
   return result({ ...state, entries });
 };
@@ -333,7 +341,7 @@ export const reduceQueue = (
     case "playerMoved":
       return playerMoved(state, command.key);
     case "move":
-      return move(state, command.key, command.toUpNextIndex);
+      return move(state, command);
     case "remove":
       return remove(state, command.key);
     case "removeTracks":
@@ -341,11 +349,28 @@ export const reduceQueue = (
   }
 };
 
-/** A move dropped in Up Next that the queue may not have taken yet. */
-export interface PendingMove {
+/**
+ * An Up Next entry ([key]) moved between two neighbours, named by key rather
+ * than by position, so the move means the same once a track change or a
+ * removal has shifted the positions. It goes right after [after] while that
+ * one is still upcoming, else right before [before], else to the top of Up
+ * Next. Null neighbours: dropped at the top ([after]) or the bottom ([before]).
+ */
+export interface UpNextMove {
   readonly key: string;
-  readonly toUpNextIndex: number;
+  readonly after: string | null;
+  readonly before: string | null;
 }
+
+/** A move dropped in Up Next that the queue may not have taken yet. */
+export type PendingMove = UpNextMove;
+
+/** The move a drop of [key] at [toUpNextIndex] in [state]'s Up Next makes (clamped to the list). */
+export const upNextMove = (state: QueueState, key: string, toUpNextIndex: number): UpNextMove => {
+  const others = upNext(state).filter((entry) => entry.key !== key);
+  const to = Math.max(0, Math.min(Math.trunc(toUpNextIndex), others.length));
+  return { key, after: others[to - 1]?.key ?? null, before: others[to]?.key ?? null };
+};
 
 /**
  * The queue as Up Next shows it while moves are on their way to the player:
@@ -353,7 +378,7 @@ export interface PendingMove {
  * has changes nothing, so the list never shows the old order in between.
  */
 export const withPendingMoves = (state: QueueState, moves: readonly PendingMove[]): QueueState =>
-  moves.reduce((current, { key, toUpNextIndex }) => move(current, key, toUpNextIndex).state, state);
+  moves.reduce((current, pending) => move(current, pending).state, state);
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);

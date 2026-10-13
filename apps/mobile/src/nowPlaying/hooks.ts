@@ -6,8 +6,7 @@ import { useColorScheme } from "react-native";
 import { LibraryStore, type TrackDetails } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { playbackState } from "@/playback/Player";
-import { learnUnknownQueueTracks } from "@/playback/PlaybackPersistence";
-import { queueTracks, type QueueTrack } from "@/playback/queueTracks";
+import { learnUnknownQueueTracks, queueTracks, type QueueTrack } from "@/playback/queueTracks";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { useNowPlayingShown } from "./sheet";
@@ -105,7 +104,9 @@ export const usePlayhead = (): {
 export const useQueueTracks = (entries: readonly QueueEntry[]): ReadonlyMap<string, QueueTrack> => {
   const tracks = useSyncExternalStore(queueTracks.subscribe, queueTracks.get);
   useEffect(() => {
-    void appRuntime.runPromise(learnUnknownQueueTracks(entries));
+    void appRuntime.runPromise(
+      LibraryStore.use((store) => learnUnknownQueueTracks(entries, store.songsByIds)),
+    );
   }, [entries]);
   return tracks;
 };

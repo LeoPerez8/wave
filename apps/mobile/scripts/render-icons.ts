@@ -4,16 +4,27 @@
 import { writeFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
 
+import { DEFAULT_THEME } from "@wave/core";
+
 type Rgb = readonly [number, number, number];
 
 const TEAL: Rgb = [0x14, 0xb7, 0xa6];
 const AMBER: Rgb = [0xf5, 0xb8, 0x3d];
 const BLACK: Rgb = [0, 0, 0];
 const WHITE: Rgb = [0xff, 0xff, 0xff];
+
+/** `#rrggbb` as channels. */
+function rgb(hex: string): Rgb {
+  const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+  if (match === null) throw new Error(`Not a #rrggbb colour: ${hex}`);
+  return [parseInt(match[1]!, 16), parseInt(match[2]!, 16), parseInt(match[3]!, 16)];
+}
+
 // The light splash background (#E0ECEF) washes out the icon colours, so the light splash
-// uses the light theme's accent and highlight tokens from global.css instead.
-const LIGHT_TEAL: Rgb = [0x00, 0x6a, 0x5f];
-const LIGHT_AMBER: Rgb = [0xa1, 0x4f, 0x09];
+// uses the light theme's accent and highlight tokens instead (Core's theme, which
+// global.css mirrors).
+const LIGHT_TEAL = rgb(DEFAULT_THEME.light.accent);
+const LIGHT_AMBER = rgb(DEFAULT_THEME.light.highlight);
 
 // The logo in its own units: each wave runs x = -1..1.
 const STROKE = 0.2;

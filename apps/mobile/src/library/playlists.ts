@@ -47,6 +47,16 @@ export const listPlaylistsRemembered: Effect.Effect<
   return rows;
 });
 
+/**
+ * Reads the playlists once at app start, so the first New Playlist prompt or
+ * Add to Playlist card of the session opens at once too. Safe to call repeatedly.
+ */
+export const primePlaylists = (): void => {
+  if (knownPlaylists() === undefined) {
+    appRuntime.runPromise(listPlaylistsRemembered).catch(() => {});
+  }
+};
+
 /** The playlists, as remembered when no edit has happened since; undefined otherwise. */
 export const knownPlaylists = (): readonly PlaylistRow[] | undefined =>
   remembered?.version === playlistsVersion.get() ? remembered.rows : undefined;

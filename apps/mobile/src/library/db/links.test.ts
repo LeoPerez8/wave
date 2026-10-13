@@ -4,6 +4,7 @@ import { beforeEach, describe, test } from "node:test";
 
 import { eq } from "drizzle-orm";
 
+import { selectArtists, refreshArtistImages } from "./artists.ts";
 import { selectLinkRows } from "./links.ts";
 import * as schema from "./schema.ts";
 import { addTrack, openTestDatabase, type TestDatabase } from "./testDatabase.ts";
@@ -51,5 +52,24 @@ describe("selectLinkRows", () => {
       album: null,
       artist: null,
     });
+  });
+
+  test("an artist reads as the Artists list shows it, counting the songs on their albums", () => {
+    addTrack(db, {
+      title: "Otis",
+      album: "Watch the Throne",
+      artist: "Jay-Z",
+      albumArtist: "Kanye West",
+      artworkHash: "wtt",
+    });
+    const stronger = addTrack(db, { title: "Stronger", album: "Graduation", artist: "Kanye West" });
+    addTrack(db, { title: "Run This Town", album: "The Blueprint 3", artist: "Jay-Z" });
+    refreshArtistImages(db);
+    const kanyeId =
+      db.select().from(schema.tracks).where(eq(schema.tracks.id, stronger)).get()?.artistId ?? -1;
+    const { artist } = selectLinkRows(db, { artistId: kanyeId });
+    assert.equal(artist?.albumCount, 2);
+    assert.equal(artist?.trackCount, 2);
+    assert.deepEqual(artist, selectArtists(db, { ids: [kanyeId] })[0]);
   });
 });

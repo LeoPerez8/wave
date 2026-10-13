@@ -219,7 +219,7 @@ const createNamedPlaylist = async (
 ): Promise<NamedPlaylist | null> => {
   // Remembered names open the prompt at once. The songs (every song, from
   // Library › Songs) are read only once a name is chosen, so they never hold it up.
-  const names = knownPlaylists()?.map((playlist) => playlist.name) ?? (await playlistNames());
+  const names = await playlistNames();
   const name = await askName({
     title: "New playlist",
     confirmLabel: "Create",
@@ -253,7 +253,7 @@ export const renamePlaylistFlow = (playlist: NamedPlaylist): Promise<void> =>
   followUp(() => renameNamedPlaylist(playlist));
 
 const renameNamedPlaylist = async (playlist: NamedPlaylist): Promise<void> => {
-  const names = knownPlaylists()?.map((other) => other.name) ?? (await playlistNames());
+  const names = await playlistNames();
   const name = await askName({
     title: "Rename playlist",
     confirmLabel: "Rename",

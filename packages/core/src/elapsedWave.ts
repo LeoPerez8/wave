@@ -4,6 +4,8 @@
  * playhead.
  */
 
+import { halfWaves } from "./wavyUnderline.ts";
+
 export type ElapsedWave = {
   /** How far the playhead is from the bar's left end, in dp. */
   length: number;
@@ -17,9 +19,7 @@ export const elapsedWavePath = ({ length, wavelength, amplitude }: ElapsedWave):
   if (length <= 0) return "";
   const half = wavelength / 2;
   const whole = Math.floor(length / half);
-  let d = `M0 ${amplitude}`;
-  if (whole >= 1) d += `Q${half / 2} ${-amplitude} ${half} ${amplitude}`;
-  for (let i = 2; i <= whole; i++) d += `T${i * half} ${amplitude}`;
+  let d = halfWaves(whole, wavelength, amplitude);
   const start = whole * half;
   const rest = length - start;
   if (rest > 0) {

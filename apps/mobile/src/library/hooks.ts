@@ -212,13 +212,14 @@ const NO_LINKS: LinkRows = { album: null, artist: null };
 /**
  * The album and artist rows behind links to them (Go to Album / Artist, Now
  * Playing, an album's artist), read ahead of a tap so `openAlbum` /
- * `openArtist` can hand them to the screen for its first frame. Undefined
- * until read (or for an id not asked for).
+ * `openArtist` can hand them to the screen for its first frame. Null until
+ * read (or for an id not asked for). One targeted read per id: no
+ * library-wide count.
  */
 export const useLinkRows = (
   albumId: number | undefined,
   artistId: number | undefined,
-): { readonly album: AlbumRow | undefined; readonly artist: ArtistRow | undefined } => {
+): LinkRows => {
   const query = useMemo(
     () => LibraryStore.use((store) => store.linkRows({ albumId, artistId })),
     [albumId, artistId],
@@ -226,8 +227,8 @@ export const useLinkRows = (
   const rows = useLibraryQuery(query, NO_LINKS);
   // Until the new ids are read, the last result still names the old ones.
   return {
-    album: rows.album !== null && rows.album.id === albumId ? rows.album : undefined,
-    artist: rows.artist !== null && rows.artist.id === artistId ? rows.artist : undefined,
+    album: rows.album !== null && rows.album.id === albumId ? rows.album : null,
+    artist: rows.artist !== null && rows.artist.id === artistId ? rows.artist : null,
   };
 };
 

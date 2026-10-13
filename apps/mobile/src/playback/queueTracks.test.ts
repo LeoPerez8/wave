@@ -3,10 +3,12 @@ import assert from "node:assert/strict";
 import { beforeEach, describe, test } from "node:test";
 
 import type { QueueEntry } from "@wave/core";
+import * as Effect from "effect/Effect";
 
 import type { SongRow } from "../library/LibraryStore.ts";
 import {
   learnQueueTracks,
+  learnUnknownQueueTracks,
   lookupFailed,
   queueTracks,
   toQueueTrack,
@@ -92,5 +94,29 @@ describe("tracksToLookUp", () => {
     assert.deepEqual(tracksToLookUp([entry("40")]), ["40"]);
     lookupFailed(["40"]);
     assert.deepEqual(tracksToLookUp([entry("40")]), ["40"]);
+  });
+});
+
+describe("learnUnknownQueueTracks", () => {
+  test("looks up the unknown tracks once and learns them", async () => {
+    learnQueueTracks([song(1)].map(toQueueTrack));
+    const asked: number[][] = [];
+    const songsByIds = (ids: readonly number[]) =>
+      Effect.sync(() => {
+        asked.push([...ids]);
+        return ids.map((id) => song(id));
+      });
+    await Effect.runPromise(learnUnknownQueueTracks([entry("1"), entry("5")], songsByIds));
+    await Effect.runPromise(learnUnknownQueueTracks([entry("1"), entry("5")], songsByIds));
+    assert.deepEqual(asked, [[5]]);
+    assert.equal(queueTracks.get().get("5")?.title, "Song 5");
+  });
+
+  test("a failed lookup is tried again next time", async () => {
+    const failing = () => Effect.fail("no database");
+    await Effect.runPromise(learnUnknownQueueTracks([entry("6")], failing));
+    const found = (ids: readonly number[]) => Effect.succeed(ids.map((id) => song(id)));
+    await Effect.runPromise(learnUnknownQueueTracks([entry("6")], found));
+    assert.equal(queueTracks.get().get("6")?.title, "Song 6");
   });
 });

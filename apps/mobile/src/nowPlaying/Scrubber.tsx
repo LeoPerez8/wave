@@ -1,4 +1,10 @@
-import { elapsedWavePath, formatDuration, formatRemaining, scrubPosition } from "@wave/core";
+import {
+  UNDERLINE_WAVE,
+  elapsedWavePath,
+  formatDuration,
+  formatRemaining,
+  scrubPosition,
+} from "@wave/core";
 import * as Haptics from "expo-haptics";
 import { useMemo, useState } from "react";
 import { Text, View } from "react-native";
@@ -18,7 +24,7 @@ const BAR = 2;
 const BAR_SCRUBBING = CELL / 2;
 /** The playing-song underline's wave, scaled up (same wavelength : amplitude). */
 const WAVELENGTH = CELL * 2;
-const AMPLITUDE = WAVELENGTH / 6.4;
+const AMPLITUDE = (WAVELENGTH * UNDERLINE_WAVE.amplitude) / UNDERLINE_WAVE.wavelength;
 /** Box tall enough for crest, trough and the boldest stroke around them. */
 const HEIGHT = AMPLITUDE * 2 + BAR_SCRUBBING;
 

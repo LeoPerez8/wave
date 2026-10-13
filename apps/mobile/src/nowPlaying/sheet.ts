@@ -27,8 +27,18 @@ const phase = makeExternalStore<SheetPhase>("hidden");
 let afterClose: (() => void) | null = null;
 
 /** Whether Now Playing is on screen at all (open, opening, dragged or leaving). */
+export const isNowPlayingShown = (): boolean => phase.get() !== "hidden";
+
+/** `isNowPlayingShown`, re-rendering as it changes. */
 export const useNowPlayingShown = (): boolean =>
-  useSyncExternalStore(phase.subscribe, () => phase.get() !== "hidden");
+  useSyncExternalStore(phase.subscribe, isNowPlayingShown);
+
+/**
+ * Calls `listener` with `isNowPlayingShown()` whenever the sheet moves
+ * between phases (it may repeat a value); returns the unsubscribe.
+ */
+export const onNowPlayingShownChange = (listener: (shown: boolean) => void): (() => void) =>
+  phase.subscribe(() => listener(isNowPlayingShown()));
 
 /** Calls `listener` whenever the sheet has just gone out of sight. */
 const hiddenListeners = new Set<() => void>();
