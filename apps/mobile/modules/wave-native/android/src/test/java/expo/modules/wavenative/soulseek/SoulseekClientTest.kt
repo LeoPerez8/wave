@@ -5,6 +5,7 @@ import java.net.Socket
 import java.io.File
 import java.nio.file.Files
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -209,6 +210,66 @@ class SoulseekClientTest {
           assertEquals(fixture.size.toLong(), result.bytes)
           assertEquals(fixture.toList(), part.readBytes().toList())
         } finally { client.close(); part.delete() }
+      }
+    }
+  }
+
+  /**
+   * Peers are served on plain threads, where anything uncaught closes Wave. #119's crash was an
+   * Error (NoClassDefFoundError), not an Exception, so receiving has to contain both.
+   */
+  @Test fun `an error while receiving fails the download and never escapes the peer thread`() {
+    ServerSocket(0).use { server ->
+      ServerSocket(0).use { peer ->
+        val fixture = File(javaClass.getResource("/fixtures/soulseek-320.mp3")!!.toURI()).readBytes()
+        val ended = CompletableFuture<Unit>()
+        thread(isDaemon = true) {
+          try {
+            server.accept().use { socket ->
+              login(socket)
+              SoulseekWire.read(socket.getInputStream())
+              SoulseekWire.write(socket.getOutputStream(), 3) { string("fixture-peer"); uint(0x0100007f); uint(peer.localPort.toLong()) }
+              peer.accept().use { connection ->
+                SoulseekWire.read(connection.getInputStream(), true)
+                val filename = SoulseekWire.reader(SoulseekWire.read(connection.getInputStream()).payload).string()
+                SoulseekWire.read(connection.getInputStream())
+                SoulseekWire.write(connection.getOutputStream(), 40) { uint(1); uint(1234); string(filename); ulong(fixture.size.toLong()) }
+                SoulseekWire.read(connection.getInputStream())
+                SoulseekWire.write(socket.getOutputStream(), 18) { string("fixture-peer"); string("F"); uint(0x0100007f); uint(peer.localPort.toLong()); uint(56); byte(0) }
+                peer.accept().use { transfer ->
+                  SoulseekWire.read(transfer.getInputStream(), true)
+                  transfer.getOutputStream().write(SoulseekWire.Writer().apply { uint(1234) }.result())
+                  transfer.getOutputStream().flush()
+                  SoulseekWire.Reader(transfer.getInputStream()).ulong()
+                  transfer.getOutputStream().write(fixture)
+                  transfer.getOutputStream().flush()
+                  ended.get(5, TimeUnit.SECONDS)
+                }
+              }
+            }
+          } catch (_: Exception) {
+            // The client closing its sockets ends the fixture.
+          }
+        }
+        val uncaught = CopyOnWriteArrayList<Throwable>()
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { _, error -> uncaught.add(error) }
+        val client = SoulseekClient(MemoryCredentials(), "127.0.0.1", server.localPort)
+        val part = Files.createTempFile("wave-soulseek-error", ".mp3").toFile()
+        try {
+          client.connect("wave-fixture", "fixture-secret")
+          val candidate = SoulseekCandidate("fixture-peer", "Music\\Fixture Title.mp3", fixture.size.toLong(), 320, 1500, false, 100000, 0)
+          val failure = assertThrows(SoulseekException::class.java) {
+            client.download("recording", candidate, part, 1500, onProgress = { _, _ -> throw OutOfMemoryError("fixture") }, queueTimeoutMs = 4_000)
+          }
+          assertEquals(SoulseekFailure.PEER, failure.failure)
+          assertFalse(part.exists())
+          Thread.sleep(200)
+          assertEquals(emptyList<Throwable>(), uncaught.toList())
+        } finally {
+          Thread.setDefaultUncaughtExceptionHandler(previous)
+          ended.complete(Unit); client.close(); part.delete()
+        }
       }
     }
   }
