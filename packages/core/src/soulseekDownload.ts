@@ -169,30 +169,30 @@ export const soulseekCandidates = (
     )
       return false;
     const path = candidate.filename.split(/[\\/]/);
-    let name = (path.at(-1) ?? "")
-      .replace(/\.mp3$/i, "")
-      .replace(/^\s*(?:\d{1,2}[-.]\d{1,3}|\d{1,3})\s*[. -]\s*/, "");
+    const file = (path.at(-1) ?? "").replace(/\.mp3$/i, "");
     const album = path.at(-2) ?? "";
     const folderArtist = path.at(-3) ?? "";
-    const split = name.indexOf(" - ");
-    const fileArtist = split < 0 ? "" : name.slice(0, split);
-    if (split >= 0) name = name.slice(split + 3);
-    if (
-      fileArtist !== ""
-        ? !artistMatches(fileArtist, recording)
-        : !artistMatches(folderArtist, recording) && !artistMatches(album, recording)
-    )
-      return false;
-    if (title(name) !== wantedTitle) return false;
-    if (!featuredNames(name).every((name) => recording.artistCredits.includes(name))) return false;
-    if (
-      !sameEditions(
-        wantedEditions,
-        // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
-        [...new Set([...editions(name), ...editions(album, true)])].sort(),
-      )
-    )
-      return false;
+    const names = (named: string): boolean => {
+      const split = named.indexOf(" - ");
+      const fileArtist = split < 0 ? "" : named.slice(0, split);
+      const name = split < 0 ? named : named.slice(split + 3);
+      return (
+        (fileArtist !== ""
+          ? artistMatches(fileArtist, recording)
+          : artistMatches(folderArtist, recording) || artistMatches(album, recording)) &&
+        title(name) === wantedTitle &&
+        featuredNames(name).every((guest) => recording.artistCredits.includes(guest)) &&
+        sameEditions(
+          wantedEditions,
+          // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
+          [...new Set([...editions(name), ...editions(album, true)])].sort(),
+        )
+      );
+    };
+    // A leading number is a track number ("08 - Get Lucky") or part of a name ("50 Cent - …",
+    // "7 rings"): the file qualifies if either reading names the recording.
+    const untracked = file.replace(/^\s*(?:\d{1,2}[-.]\d{1,3}|\d{1,3})\s*[. -]\s*/, "");
+    if (!names(untracked) && (untracked === file || !names(file))) return false;
     if (!positiveDuration(song.durationMs) && !positiveDuration(candidate.durationMs)) return false;
     if (
       positiveDuration(song.durationMs) &&
