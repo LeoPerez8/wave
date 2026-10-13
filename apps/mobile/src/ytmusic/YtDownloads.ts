@@ -3,6 +3,7 @@ import {
   YT_DOWNLOADS_NONE,
   isWithin,
   soulseekCandidates,
+  soulseekQuery,
   soulseekReceivedMatches,
   soulseekRecording,
   ytDownloadDestination,
@@ -11,7 +12,6 @@ import {
   ytDownloadStatus,
   ytDownloadTags,
   ytDownloadsFromJournal,
-  type FoundTags,
   type YtDownloadFailure,
   type YtDownloadStatus,
   type YtDownloads,
@@ -38,6 +38,7 @@ import {
   WaveYtDownloads,
   ytDownloadErrorCode,
   type NativeSavedDownload,
+  type NativeYtWatchSong,
 } from "@/native/waveYtDownloads";
 
 export class DownloadFailed extends Data.TaggedError("DownloadFailed")<{
@@ -71,33 +72,34 @@ const optional = <A>(effect: Effect.Effect<A, unknown>): Effect.Effect<A | null>
     Effect.orElseSucceed(() => null),
   );
 
-/** Optional metadata cannot fail or indefinitely hold up valid audio acquisition. */
+/**
+ * Optional metadata cannot fail or indefinitely hold up valid audio acquisition. The watch page
+ * is asked for at most once (for the album, then YT Music's lyrics), and YT Music's lyrics only
+ * when LRCLIB has none.
+ */
 const metadata = (song: NativeYtSong) =>
   Effect.gen(function* () {
+    let watchPage: Promise<NativeYtWatchSong> | undefined;
+    const watch = () => native(() => (watchPage ??= WaveYtDownloads.watchSong(song.videoId)));
     const album = yield* optional(
       Effect.gen(function* () {
-        const albumId =
-          song.albumId ?? (yield* native(() => WaveYtDownloads.watchSong(song.videoId))).albumId;
+        const albumId = song.albumId ?? (yield* watch()).albumId;
         return albumId === null ? null : yield* native(() => WaveYtDownloads.album(albumId));
       }),
     );
     const lookup = ytDownloadLookup(song, album);
-    const [found, lyrics] = yield* Effect.all(
-      [
-        lookup === null
-          ? Effect.succeed<FoundTags | null>(null)
-          : optional(lookUpLyricsAndGenre(lookup)),
-        optional(
-          Effect.gen(function* () {
-            const page = yield* native(() => WaveYtDownloads.watchSong(song.videoId));
-            return page.lyricsBrowseId === null
-              ? null
-              : yield* native(() => WaveYtDownloads.lyrics(page.lyricsBrowseId!));
-          }),
-        ),
-      ],
-      { concurrency: "unbounded" },
-    );
+    const found = lookup === null ? null : yield* optional(lookUpLyricsAndGenre(lookup));
+    const lyrics =
+      found !== null && found.lyrics !== null
+        ? null
+        : yield* optional(
+            Effect.gen(function* () {
+              const { lyricsBrowseId } = yield* watch();
+              return lyricsBrowseId === null
+                ? null
+                : yield* native(() => WaveYtDownloads.lyrics(lyricsBrowseId));
+            }),
+          );
     return ytDownloadTags(song, album, found, lyrics);
   });
 
@@ -112,8 +114,10 @@ export const prepareSoulseekDownload = (song: NativeYtSong) =>
     if (roots.length === 0) return yield* new DownloadFailed({ reason: "noFolder" });
     const session = yield* native(() => WaveSoulseek.session());
     if (session.status === "signedOut") return yield* new DownloadFailed({ reason: "account" });
+    const query = soulseekQuery(song);
+    if (query === "") return yield* new DownloadFailed({ reason: "unavailable" });
     const [reports, tags] = yield* Effect.all(
-      [native(() => WaveSoulseek.search(`${song.artists[0] ?? ""} ${song.title}`)), metadata(song)],
+      [native(() => WaveSoulseek.search(query)), metadata(song)],
       { concurrency: "unbounded" },
     );
     const candidates = soulseekCandidates(song, reports);
@@ -225,6 +229,18 @@ const awaitsAnswer = (job: NativeDownloadJob): boolean =>
   job.phase === "awaitingPublication" ||
   (job.phase === "completed" && job.acknowledged !== true && job.importFailure === undefined);
 
+/** Still on its way: a failure, a cancel or an import ends it. */
+const unfinished = (job: NativeDownloadJob): boolean =>
+  job.phase !== "failed" &&
+  job.phase !== "cancelled" &&
+  job.acknowledged !== true &&
+  job.importFailure === undefined;
+
+/** The last snapshot rows were given, so an unchanged one doesn't re-render them. */
+let shown = "";
+/** A slow re-read while downloads are unfinished, in case an event was missed. */
+let poll: ReturnType<typeof setInterval> | null = null;
+
 let refreshing = false;
 let refreshAgain = false;
 /** Mirrors the journal into the rows and answers what it waits on; coalesces overlapping calls. */
@@ -238,8 +254,18 @@ const refresh = async (): Promise<void> => {
     do {
       refreshAgain = false;
       const jobs = await WaveSoulseek.jobsSnapshot();
-      downloads.set(ytDownloadsFromJournal(jobs));
+      const snapshot = JSON.stringify(jobs);
+      if (snapshot !== shown) {
+        shown = snapshot;
+        downloads.set(ytDownloadsFromJournal(jobs));
+      }
       for (const job of jobs) if (awaitsAnswer(job)) void answerJob(job.id);
+      const active = jobs.some(unfinished);
+      if (active && poll === null) poll = setInterval(refreshQuietly, 5_000);
+      if (!active && poll !== null) {
+        clearInterval(poll);
+        poll = null;
+      }
     } while (refreshAgain);
   } finally {
     refreshing = false;
@@ -259,9 +285,8 @@ export const startDownloads = (resume = false): void => {
   if (!attached) {
     attached = true;
     WaveSoulseek.addListener("onJobsChanged", refreshQuietly);
-    // Snapshots replay anything an event missed, e.g. while JS was starting.
-    setInterval(refreshQuietly, 1_000);
   }
+  // Replays anything that changed before the listener was attached, e.g. while JS was starting.
   refreshQuietly();
   if (resume) void WaveSoulseek.resumeJobs().catch(() => undefined);
 };
