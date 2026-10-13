@@ -44,7 +44,8 @@ class AndroidDownloads private constructor(private val context: Context) {
       soulseek.download(id, SoulseekCandidate.fromJs(candidate), source, durationMs,
         onProgress = { received, total -> progress(received, total, null); changedSoon() },
         onQueued = { place -> progress(0, 0, place); changed() },
-        isCancelled = { Thread.currentThread().isInterrupted },
+        // The journal's start, queue and stall rules bound the wait, even if a cancel goes missing.
+        isCancelled = { Thread.currentThread().isInterrupted || !jobs.transferWanted(id) },
       )
     } catch (error: SoulseekException) {
       val reason = when (error.failure) {

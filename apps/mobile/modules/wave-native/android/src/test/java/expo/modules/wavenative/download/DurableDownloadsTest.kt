@@ -456,6 +456,154 @@ class DurableDownloadsTest {
     } finally { folder.deleteRecursively() }
   }
 
+  @Test fun aTransferIsWantedOnlyWhileTheJournalsStartQueueAndStallRulesAllowIt() {
+    val folder = Files.createTempDirectory("wave-wanted").toFile()
+    try {
+      var now = 1_000L
+      val owner = DurableDownloads(File(folder, "jobs"), clock = { now })
+      owner.enqueue(song, null)
+      prepare(owner, File(folder, "Recording.mp3"), listOf(candidate, candidate + ("username" to "queued")))
+      val wanted = mutableListOf<Boolean>()
+      val slowToStart = object : DurableTransfer {
+        override fun cancel(id: String) {}
+        override fun receive(id: String, candidate: Map<String, Any?>, source: File, durationMs: Long, progress: (Long, Long, Long?) -> Unit): Map<String, Any?> {
+          wanted += owner.transferWanted(id)
+          now += DurableDownloads.ATTEMPT_MS - 1; wanted += owner.transferWanted(id)
+          progress(1, 8, null)
+          now += DurableDownloads.STALL_MS - 1; wanted += owner.transferWanted(id)
+          progress(2, 8, null)
+          now += DurableDownloads.STALL_MS - 1; wanted += owner.transferWanted(id)
+          now += 2; wanted += owner.transferWanted(id)
+          throw DurableFailure("cancelled")
+        }
+      }
+      owner.advance(slowToStart, GoodPublication)
+      // Well past a flat two minutes, a peer keeps its turn while it starts in time and keeps sending.
+      assertEquals(listOf(true, true, true, true, false), wanted)
+      assertEquals("prepared", owner.snapshot().single()["phase"])
+
+      wanted.clear()
+      val waiting = object : DurableTransfer {
+        override fun cancel(id: String) {}
+        override fun receive(id: String, candidate: Map<String, Any?>, source: File, durationMs: Long, progress: (Long, Long, Long?) -> Unit): Map<String, Any?> {
+          progress(0, 0, 4)
+          now += DurableDownloads.QUEUE_MS - 1; wanted += owner.transferWanted(id)
+          now += 2; wanted += owner.transferWanted(id)
+          throw DurableFailure("cancelled")
+        }
+      }
+      owner.advance(waiting, GoodPublication)
+      assertEquals(listOf(true, false), wanted)
+      assertFalse(owner.transferWanted("song"))
+    } finally { folder.deleteRecursively() }
+  }
+
+  @Test fun aCancelledTransferIsNoLongerWanted() {
+    val folder = Files.createTempDirectory("wave-unwanted").toFile()
+    try {
+      val owner = DurableDownloads(File(folder, "jobs"))
+      owner.enqueue(song, null)
+      prepare(owner, File(folder, "Recording.mp3"))
+      val wanted = mutableListOf<Boolean>()
+      val cancelled = object : DurableTransfer {
+        override fun cancel(id: String) {}
+        override fun receive(id: String, candidate: Map<String, Any?>, source: File, durationMs: Long, progress: (Long, Long, Long?) -> Unit): Map<String, Any?> {
+          wanted += owner.transferWanted(id)
+          owner.cancel("song", this)
+          wanted += owner.transferWanted(id)
+          throw DurableFailure("cancelled")
+        }
+      }
+      owner.advance(cancelled, GoodPublication)
+      assertEquals(listOf(true, false), wanted)
+    } finally { folder.deleteRecursively() }
+  }
+
+  @Test fun aPublishedFileAwaitingImportPastTheDeadlineIsAnImportFailureNotAFailedDownload() {
+    val folder = Files.createTempDirectory("wave-late-import").toFile()
+    try {
+      var now = 1_000L
+      val owner = DurableDownloads(File(folder, "jobs"), clock = { now })
+      val target = File(folder, "Recording.mp3")
+      owner.enqueue(song, null)
+      publish(owner, target)
+      now += DurableDownloads.JOB_MS + 1
+      assertNull(owner.claim("song"))
+      val job = owner.snapshot().single()
+      assertEquals("completed", job["phase"])
+      assertEquals("failed", job["importFailure"])
+      assertNull(job["reason"])
+      assertTrue(target.isFile)
+    } finally { folder.deleteRecursively() }
+  }
+
+  @Test fun cancellingAnImportFailureClearsItsRowAndKeepsTheLibraryFile() {
+    val folder = Files.createTempDirectory("wave-cancel-import").toFile()
+    try {
+      var now = 1_000L
+      val owner = DurableDownloads(File(folder, "jobs"), clock = { now })
+      val target = File(folder, "Recording.mp3")
+      owner.enqueue(song, null)
+      publish(owner, target)
+      // Waiting for the Library, the row offers no Cancel and there's nothing to cancel.
+      owner.cancel("song", NoTransfer)
+      assertEquals("completed", owner.snapshot().single()["phase"])
+      repeat(DurableDownloads.MAX_DECISIONS.toInt()) {
+        val lease = owner.claim("song")!!
+        assertTrue(owner.submit("song", lease["generation"] as Long, lease["token"] as String, "import", mapOf("failure" to "storage")))
+        now += 2_000
+      }
+      assertEquals("storage", owner.snapshot().single()["importFailure"])
+      // The row shows a failure with Retry and Cancel Download; Cancel clears it.
+      owner.cancel("song", NoTransfer)
+      assertEquals("cancelled", owner.snapshot().single()["phase"])
+      assertTrue(target.isFile)
+    } finally { folder.deleteRecursively() }
+  }
+
+  @Test fun cancellingOneRequesterLeavesASharedDownloadToTheOthers() {
+    val folder = Files.createTempDirectory("wave-alias-cancel").toFile()
+    try {
+      val owner = DurableDownloads(File(folder, "jobs"))
+      val other = song + ("videoId" to "other")
+      val cancelled = mutableListOf<String>()
+      val transport = object : DurableTransfer by NoTransfer {
+        override fun cancel(id: String) { cancelled += id }
+      }
+      fun requesters() = owner.snapshot().single().let { job ->
+        listOf((job["song"] as Map<*, *>)["videoId"]) + (job["aliases"] as List<*>).map { (it as Map<*, *>)["videoId"] }
+      }
+      owner.enqueue(song, null)
+      owner.enqueue(other, "song")
+      assertEquals(listOf("song", "other"), requesters())
+
+      owner.cancel("other", transport)
+      assertEquals("queued", owner.snapshot().single()["phase"])
+      assertEquals(listOf("song"), requesters())
+
+      owner.enqueue(other, "song")
+      owner.cancel("song", transport)
+      assertEquals("queued", owner.snapshot().single()["phase"])
+      assertEquals(listOf("other"), requesters())
+      assertEquals(emptyList<String>(), cancelled)
+
+      owner.cancel("other", transport)
+      assertEquals("cancelled", owner.snapshot().single()["phase"])
+      assertEquals(listOf("song"), cancelled)
+    } finally { folder.deleteRecursively() }
+  }
+
+  @Test fun theNotificationsCancelStopsTheDownloadForEveryRequester() {
+    val folder = Files.createTempDirectory("wave-notification-cancel").toFile()
+    try {
+      val owner = DurableDownloads(File(folder, "jobs"))
+      owner.enqueue(song, null)
+      owner.enqueue(song + ("videoId" to "other"), "song")
+      owner.cancelJob("song", NoTransfer)
+      assertEquals("cancelled", owner.snapshot().single()["phase"])
+    } finally { folder.deleteRecursively() }
+  }
+
   @Test fun anUnwritableLibraryFolderFailsWithoutTouchingExistingFiles() {
     val folder = Files.createTempDirectory("wave-unwritable").toFile()
     try {
@@ -497,6 +645,16 @@ class DurableDownloadsTest {
   private fun prepare(owner: DurableDownloads, target: File, candidates: List<Map<String, Any?>> = listOf(candidate)) {
     owner.advance(GoodTransfer, GoodPublication)
     answer(owner, "prepare", mapOf("candidates" to candidates, "targetPath" to target.path, "tags" to emptyMap<String, Any?>()))
+  }
+  /** Up to a published file the Library hasn't imported yet. */
+  private fun publish(owner: DurableDownloads, target: File) {
+    prepare(owner, target)
+    owner.advance(GoodTransfer, GoodPublication)
+    answer(owner, "confirm", mapOf("acceptable" to true))
+    owner.advance(GoodTransfer, GoodPublication)
+    answer(owner, "publish", mapOf("targetPath" to target.path, "revision" to owner.refreshPolicy(listOf(target.parentFile.path), emptyList())))
+    owner.advance(GoodTransfer, GoodPublication)
+    assertTrue(target.isFile)
   }
   private fun complete(owner: DurableDownloads, target: File) {
     prepare(owner, target)
