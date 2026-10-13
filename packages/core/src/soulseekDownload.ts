@@ -34,7 +34,8 @@ const editions = (text: string, album = false): string[] => {
     notes.push(text);
   const suffix = text.match(/\s+-\s+(.+)$/)?.[1];
   if (suffix !== undefined) notes.push(suffix);
-  return [...new Set(notes.filter((note) => editionMarker.test(note)).map(fold))].toSorted();
+  // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
+  return [...new Set(notes.filter((note) => editionMarker.test(note)).map(fold))].sort();
 };
 
 const title = (text: string): string =>
@@ -78,8 +79,10 @@ export const soulseekRecording = (song: YtSong): SoulseekRecording => ({
       ...song.artists.flatMap(featuredNames),
       ...featuredNames(song.title),
     ]),
-  ].toSorted(),
-  editions: [...new Set([...editions(song.title), ...editions(song.album ?? "", true)])].toSorted(),
+    // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
+  ].sort(),
+  // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
+  editions: [...new Set([...editions(song.title), ...editions(song.album ?? "", true)])].sort(),
   durationMs: positiveDuration(song.durationMs) ? song.durationMs : null,
 });
 
@@ -185,7 +188,8 @@ export const soulseekCandidates = (
     if (
       !sameEditions(
         wantedEditions,
-        [...new Set([...editions(name), ...editions(album, true)])].toSorted(),
+        // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
+        [...new Set([...editions(name), ...editions(album, true)])].sort(),
       )
     )
       return false;
@@ -207,15 +211,15 @@ export const soulseekCandidates = (
     fold(candidate.filename.split(/[\\/]/).at(-2) ?? "") === fold(song.album)
       ? 1
       : 0);
-  return suitable
-    .toSorted(
-      (a, b) =>
-        confidence(b) - confidence(a) ||
-        Number(b.freeSlot) - Number(a.freeSlot) ||
-        availableNumber(a.queueLength) - availableNumber(b.queueLength) ||
-        availableNumber(b.uploadSpeed) - availableNumber(a.uploadSpeed) ||
-        a.username.localeCompare(b.username) ||
-        a.filename.localeCompare(b.filename),
-    )
-    .slice(0, 3);
+  // oxlint-disable-next-line unicorn/no-array-sort -- filter made a fresh array; Hermes lacks toSorted
+  suitable.sort(
+    (a, b) =>
+      confidence(b) - confidence(a) ||
+      Number(b.freeSlot) - Number(a.freeSlot) ||
+      availableNumber(a.queueLength) - availableNumber(b.queueLength) ||
+      availableNumber(b.uploadSpeed) - availableNumber(a.uploadSpeed) ||
+      a.username.localeCompare(b.username) ||
+      a.filename.localeCompare(b.filename),
+  );
+  return suitable.slice(0, 3);
 };
