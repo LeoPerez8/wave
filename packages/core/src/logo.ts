@@ -52,7 +52,53 @@ export type LogoIconPaths = {
 /** Cubic segments per wave: enough that the curve stays within a hundredth of the cosine. */
 const SEGMENTS = 16;
 
-const format = (n: number): string => String(Math.round(n * 1000) / 1000);
+/** A point in the logo's units. */
+export type LogoPoint = readonly [x: number, y: number];
+
+/** A cubic Bézier curve: start, two control points, end. */
+export type LogoCubic = readonly [LogoPoint, LogoPoint, LogoPoint, LogoPoint];
+
+/**
+ * `wave`'s centre line from `from` to `to` (the cosine runs on past the
+ * logo's ends) as `segments` cubic curves matching the cosine's value and
+ * slope at their ends. Each curve's x moves evenly with its parameter.
+ */
+export const logoWaveCubics = (
+  wave: LogoWave,
+  from: number,
+  to: number,
+  segments: number,
+): LogoCubic[] => {
+  const step = (to - from) / segments;
+  return Array.from({ length: segments }, (_, i) => {
+    const x0 = from + i * step;
+    const x1 = x0 + step;
+    const y0 = logoWaveY(wave, x0);
+    const y1 = logoWaveY(wave, x1);
+    return [
+      [x0, y0],
+      [x0 + step / 3, y0 + (logoWaveSlope(wave, x0) * step) / 3],
+      [x1 - step / 3, y1 - (logoWaveSlope(wave, x1) * step) / 3],
+      [x1, y1],
+    ] as const;
+  });
+};
+
+const formatPathNumber = (n: number): string => String(Math.round(n * 1000) / 1000);
+
+/** SVG path data of cubic curves, each point mapped by `point`. */
+export const cubicPathData = (
+  cubics: readonly LogoCubic[],
+  point: (p: LogoPoint) => LogoPoint,
+): string => {
+  const format = (p: LogoPoint) => {
+    const [x, y] = point(p);
+    return `${formatPathNumber(x)} ${formatPathNumber(y)}`;
+  };
+  let d = `M${format(cubics[0]![0])}`;
+  for (const [, c1, c2, end] of cubics) d += `C${format(c1)} ${format(c2)} ${format(end)}`;
+  return d;
+};
 
 /**
  * The logo scaled into a `size` square, centred, its round caps reaching
@@ -62,21 +108,8 @@ const format = (n: number): string => String(Math.round(n * 1000) / 1000);
  */
 export const logoIconPaths = ({ size, inset }: LogoIconBox): LogoIconPaths => {
   const scale = (size - 2 * inset) / (2 + LOGO_WAVES.stroke);
-  const point = (x: number, y: number) =>
-    `${format(size / 2 + x * scale)} ${format(size / 2 + y * scale)}`;
-  const path = (wave: LogoWave): string => {
-    const step = 2 / SEGMENTS;
-    let d = `M${point(-1, logoWaveY(wave, -1))}`;
-    for (let i = 0; i < SEGMENTS; i++) {
-      const x0 = -1 + i * step;
-      const x1 = x0 + step;
-      const y0 = logoWaveY(wave, x0);
-      const y1 = logoWaveY(wave, x1);
-      const c1 = point(x0 + step / 3, y0 + (logoWaveSlope(wave, x0) * step) / 3);
-      const c2 = point(x1 - step / 3, y1 - (logoWaveSlope(wave, x1) * step) / 3);
-      d += `C${c1} ${c2} ${point(x1, y1)}`;
-    }
-    return d;
-  };
+  const point = ([x, y]: LogoPoint): LogoPoint => [size / 2 + x * scale, size / 2 + y * scale];
+  const path = (wave: LogoWave): string =>
+    cubicPathData(logoWaveCubics(wave, -1, 1, SEGMENTS), point);
   return { top: path("top"), bottom: path("bottom"), stroke: LOGO_WAVES.stroke * scale };
 };
