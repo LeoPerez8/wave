@@ -25,7 +25,7 @@ import { useListScrollable } from "@/motion/heldTouch";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { playDiscoverSongs } from "@/playback/actions";
 
-import { askYtMusic } from "./discover";
+import { askYtMusic } from "./askYtMusic";
 import { DiscoverSongRow } from "./DiscoverShelves";
 import { useLibraryFinder } from "./libraryFinder";
 import type { YtListHead, YtListScreen } from "./routes";

@@ -116,6 +116,32 @@ class RangeDownloadTest {
   }
 
   @Test
+  fun aSourceThatChangesStartsTheFileOverAtItsNewLength() {
+    val target = target()
+    val replacement = ByteArray(6_000) { (it * 17 % 241).toByte() }
+    var changed = false
+    val progress = mutableListOf<Long>()
+    val source = RangeSource { start, end ->
+      requested += start..end
+      if (changed) {
+        ByteArrayInputStream(replacement.copyOfRange(start.toInt(), minOf(end + 1, 6_000L).toInt()))
+      } else if (start >= 4_096) {
+        // The first stream is refused halfway; the one that replaces it is another file.
+        changed = true
+        throw RangeSourceChanged(replacement.size.toLong())
+      } else {
+        ByteArrayInputStream(remote.copyOfRange(start.toInt(), (end + 1).toInt()))
+      }
+    }
+
+    downloader().download(source, remote.size.toLong(), target, onProgress = { progress += it })
+
+    assertArrayEquals(replacement, target.readBytes())
+    assertEquals(listOf(0L..4_095L, 4_096L..8_191L, 0L..4_095L, 4_096L..5_999L), requested)
+    assertEquals(6_000L, progress.last())
+  }
+
+  @Test
   fun aPartFileLeftFromBeforeIsStartedOver() {
     val target = target()
     target.writeBytes(ByteArray(500) { 7 })

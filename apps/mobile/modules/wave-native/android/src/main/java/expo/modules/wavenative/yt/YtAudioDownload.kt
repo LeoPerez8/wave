@@ -3,6 +3,7 @@ package expo.modules.wavenative.yt
 import android.content.Context
 import expo.modules.wavenative.download.RangeDownload
 import expo.modules.wavenative.download.RangeSource
+import expo.modules.wavenative.download.RangeSourceChanged
 import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -25,7 +26,8 @@ data class YtAudioFile(val itag: Int, val bitrate: Int, val mimeType: String, va
  *
  * The audio is fetched in ranges into a part file ([RangeDownload]); an
  * address YouTube stops accepting (403/410) is resolved again and the
- * download goes on from where it was.
+ * download goes on from where it was, or starts over when the fresh address
+ * serves another stream ([YtStreams.resumesDownload]).
  */
 class YtAudioDownload(context: Context) {
   private val client = YtClient.get(context)
@@ -40,12 +42,8 @@ class YtAudioDownload(context: Context) {
   suspend fun download(videoId: String, part: File, onProgress: (Long, Long) -> Unit): YtAudioFile {
     val job = currentCoroutineContext()[Job]
     return client.request {
-      var stream = resolver.resolve(videoId, preferM4a = true)
-      if (!stream.mimeType.startsWith(M4A_MIME)) throw YtException(YtFailure.FAILED)
-      val length = stream.contentLength
-        ?: YtMediaUrls.contentLength(stream.url)
-        ?: headLength(stream)
-        ?: throw IOException("YouTube didn't say how long the file is")
+      var stream = m4a(resolver.resolve(videoId, preferM4a = true))
+      var length = lengthOf(stream) ?: throw IOException("YouTube didn't say how long the file is")
       var refreshes = 0
       val source = RangeSource { start, end ->
         val connection = open(stream, start, end)
@@ -56,7 +54,15 @@ class YtAudioDownload(context: Context) {
           if (refreshes++ < MAX_REFRESHES) {
             // Drops the cached address (and skips its client for a while) so a new one comes back.
             resolver.reject(videoId)
-            stream = runBlocking { resolver.resolve(videoId, preferM4a = true) }
+            val fresh = m4a(runBlocking { resolver.resolve(videoId, preferM4a = true) })
+            val freshLength = lengthOf(fresh)
+            val resumes = YtStreams.resumesDownload(stream.itag, length, fresh.itag, freshLength)
+            stream = fresh
+            if (!resumes) {
+              length = freshLength ?: throw IOException("YouTube didn't say how long the file is")
+              // Another file: the bytes so far don't belong to it.
+              throw RangeSourceChanged(length)
+            }
           }
           throw IOException("HTTP $code for the audio")
         }
@@ -66,16 +72,23 @@ class YtAudioDownload(context: Context) {
         }
         connection.inputStream
       }
-      RangeDownload().download(
+      val bytes = RangeDownload().download(
         source,
         length,
         part,
         onProgress = { onProgress(it, length) },
         isCancelled = { job?.isActive == false },
       )
-      YtAudioFile(stream.itag, stream.bitrate, stream.mimeType, length)
+      // The stream the file came from: the last one resolved, whichever that was.
+      YtAudioFile(stream.itag, stream.bitrate, stream.mimeType, bytes)
     }
   }
+
+  private fun m4a(stream: YtStream): YtStream =
+    if (stream.mimeType.startsWith(M4A_MIME)) stream else throw YtException(YtFailure.FAILED)
+
+  private fun lengthOf(stream: YtStream): Long? =
+    stream.contentLength ?: YtMediaUrls.contentLength(stream.url) ?: headLength(stream)
 
   private fun open(stream: YtStream, start: Long, end: Long): HttpURLConnection =
     (URL(YtMediaUrls.withRange(stream.url, start, end)).openConnection() as HttpURLConnection).apply {

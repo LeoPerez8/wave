@@ -20,6 +20,16 @@ const ytSong = (song: Partial<YtSong> & Pick<YtSong, "title" | "artists">): YtSo
   ...song,
 });
 
+/** A Library with remastered songs, as the phone showed it. */
+const remasteredLibrary = [
+  { title: "Bohemian Rhapsody (Remastered 2011)", artist: "Queen", durationMs: 356_000 },
+  { title: "Heroes - 2017 Remaster", artist: "David Bowie", durationMs: 371_000 },
+  { title: "Jóga", artist: "Björk", durationMs: 305_400 },
+];
+
+const by = (artist: string, title: string, durationMs: number): YtSong =>
+  ytSong({ title, artists: [artist], durationMs });
+
 describe("libraryMatcher", () => {
   const library = [
     { title: "Jóga", artist: "Björk", durationMs: 305_400 },
@@ -82,6 +92,31 @@ describe("libraryMatcher", () => {
       inLibrary(ytSong({ title: "Untitled", artists: ["Somebody"], durationMs: 90_000 })),
       true,
     );
+  });
+
+  test("a remaster is the same recording: its note doesn't tell songs apart, on either side", () => {
+    const remastered = libraryMatcher(remasteredLibrary);
+    assert.equal(remastered(by("Queen", "Bohemian Rhapsody", 355_000)), true);
+    assert.equal(remastered(by("Queen", "Bohemian Rhapsody (Remastered)", 355_000)), true);
+    assert.equal(remastered(by("Queen", "Bohemian Rhapsody - Remastered 2011", 355_000)), true);
+    assert.equal(remastered(by("Queen", "Bohemian Rhapsody (2011 Remaster)", 355_000)), true);
+    assert.equal(remastered(by("Queen", "Bohemian Rhapsody [Remastered]", 355_000)), true);
+    assert.equal(remastered(by("David Bowie", "Heroes", 371_000)), true);
+    assert.equal(remastered(by("David Bowie", "Heroes (Remastered 2017)", 371_000)), true);
+    assert.equal(remastered(by("Björk", "Jóga (Remastered)", 305_000)), true);
+    assert.equal(remastered(by("Björk", "Jóga - 2002 Remaster", 305_000)), true);
+  });
+
+  test("a live take or an edit still isn't the Library's, whatever its length", () => {
+    const remastered = libraryMatcher(remasteredLibrary);
+    const queen = [
+      "Bohemian Rhapsody (Live)",
+      "Bohemian Rhapsody (Live Aid 1985)",
+      "Bohemian Rhapsody - Live at Wembley",
+      "Bohemian Rhapsody (Radio Edit)",
+      "Bohemian Rhapsody (Live) [Remastered 2011]",
+    ];
+    for (const title of queen) assert.equal(remastered(by("Queen", title, 356_000)), false, title);
   });
 
   test("an empty Library has none of them", () => {

@@ -61,6 +61,7 @@ import {
   type RecordedPlay,
 } from "./db/playHistory";
 import {
+  insertPlaylistItems,
   removePlaylistItems,
   replacePlaylistSongs,
   selectPlaylistSongs,
@@ -891,9 +892,6 @@ const rememberSearchSync = (db: Database, query: string, now: number): readonly 
     return next;
   });
 
-/** Rows per multi-row insert, well under SQLite's bound-parameter limit. */
-const INSERT_CHUNK = 200;
-
 interface PlaylistCovers {
   readonly thumbPaths: readonly string[];
   readonly artworkPaths: readonly string[];
@@ -1018,11 +1016,7 @@ const appendItems = (
     position: last + 1 + i,
     addedAt: now,
   }));
-  for (let i = 0; i < rows.length; i += INSERT_CHUNK) {
-    tx.insert(playlistItems)
-      .values(rows.slice(i, i + INSERT_CHUNK))
-      .run();
-  }
+  insertPlaylistItems(tx, rows);
   return { added: plan.add.length, alreadyIn: plan.alreadyIn };
 };
 

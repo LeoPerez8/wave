@@ -57,7 +57,8 @@ const isActive = (status: YtDownloadStatus): boolean =>
 
 /** Whether [status] may become [next]; anything else is stale news and ignored. */
 const ACCEPTS: { readonly [K in YtDownloadEvent["type"]]: readonly YtDownloadStatus["kind"][] } = {
-  requested: ["failed"],
+  // Retry Download, or Download again once the file has left the Library.
+  requested: ["failed", "done"],
   started: ["queued"],
   progress: ["downloading"],
   saving: ["downloading"],
@@ -85,7 +86,7 @@ export const stepYtDownloads = <S extends YtSong>(
   });
   switch (event.type) {
     case "requested":
-      // A retry waits behind what's already queued.
+      // A retry (or a download again) waits behind what's already queued.
       return { jobs: [...others, { song: event.song, status: { kind: "queued" } }] };
     case "started":
       return replace({ kind: "downloading", received: 0, total: null });
@@ -124,8 +125,15 @@ export const YT_DOWNLOAD_ACTION_LABELS: { readonly [A in YtDownloadAction]: stri
   retryDownload: "Retry Download",
 };
 
-/** The download entries a YT Music song's menu offers, given its download's [status]. */
-export const ytDownloadActions = (status: YtDownloadStatus | null): YtDownloadAction[] => {
+/**
+ * The download entries a YT Music song's menu offers, given its download's
+ * [status]. A song downloaded this session offers Download again only once
+ * it's no longer in the Library ([inLibrary], from `libraryFinder`).
+ */
+export const ytDownloadActions = (
+  status: YtDownloadStatus | null,
+  { inLibrary }: { readonly inLibrary: boolean },
+): YtDownloadAction[] => {
   switch (status?.kind) {
     case undefined:
       return ["download"];
@@ -135,8 +143,9 @@ export const ytDownloadActions = (status: YtDownloadStatus | null): YtDownloadAc
     case "failed":
       return ["retryDownload", "cancelDownload"];
     case "saving":
-    case "done":
       return [];
+    case "done":
+      return inLibrary ? [] : ["download"];
   }
 };
 

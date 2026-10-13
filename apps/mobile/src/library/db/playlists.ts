@@ -33,6 +33,18 @@ export const selectTrackPaths = (db: LibraryDatabase) =>
 /** Rows per insert, well under SQLite's limit on bound values. */
 const INSERT_CHUNK = 200;
 
+/** Inserts playlist entries [rows] (any number), in inserts of a size SQLite takes. */
+export const insertPlaylistItems = (
+  db: LibraryDatabase,
+  rows: readonly (typeof schema.playlistItems.$inferInsert)[],
+): void => {
+  for (let i = 0; i < rows.length; i += INSERT_CHUNK) {
+    db.insert(schema.playlistItems)
+      .values(rows.slice(i, i + INSERT_CHUNK))
+      .run();
+  }
+};
+
 /**
  * Makes a playlist hold exactly [trackIds], in that order (an import's
  * Replace): the same playlist, so its name and place stay.
@@ -52,11 +64,7 @@ export const replacePlaylistSongs = (
       position,
       addedAt: now,
     }));
-    for (let i = 0; i < rows.length; i += INSERT_CHUNK) {
-      tx.insert(playlistItems)
-        .values(rows.slice(i, i + INSERT_CHUNK))
-        .run();
-    }
+    insertPlaylistItems(tx, rows);
     tx.update(playlists).set({ updatedAt: now }).where(eq(playlists.id, playlistId)).run();
   });
 };

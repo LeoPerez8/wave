@@ -28,6 +28,14 @@ class YtStreamsTest {
   }
 
   @Test
+  fun aDownloadGoesOnWithAFreshAddressOnlyForTheSameFile() {
+    assertTrue(YtStreams.resumesDownload(wasItag = 141, wasLength = 5_000, itag = 141, length = 5_000))
+    assertFalse(YtStreams.resumesDownload(wasItag = 141, wasLength = 5_000, itag = 140, length = 5_000))
+    assertFalse(YtStreams.resumesDownload(wasItag = 140, wasLength = 5_000, itag = 140, length = 4_999))
+    assertFalse(YtStreams.resumesDownload(wasItag = 140, wasLength = 5_000, itag = 140, length = null))
+  }
+
+  @Test
   fun downloadsAskForAacInM4aAndPlaybackForTheBestAudio() {
     assertEquals("MP4", YtStreams.audioQuality(preferM4a = true))
     assertEquals("HIGH", YtStreams.audioQuality(preferM4a = false))

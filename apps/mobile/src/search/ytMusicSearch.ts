@@ -4,20 +4,12 @@ import {
   stepYtSection,
   type YtSection,
 } from "@wave/core";
-import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { useEffect, useReducer } from "react";
 
-import { appRuntime } from "@/library/runtime";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
-import { YtMusic } from "@/ytmusic/YtMusic";
-
-const searchSongs = (query: string) =>
-  Effect.gen(function* () {
-    const ytMusic = yield* YtMusic;
-    return yield* ytMusic.searchSongs(query);
-  });
+import { askYtMusic } from "@/ytmusic/askYtMusic";
 
 /**
  * The YT Music section for [query]: asked once typing pauses, off the typing
@@ -34,7 +26,7 @@ export const useYtMusicSection = (query: string): YtSection<NativeYtSong> => {
   useEffect(() => {
     if (loading === null) return undefined;
     const timer = setTimeout(() => {
-      void appRuntime.runPromise(Effect.result(searchSongs(loading))).then((result) => {
+      void askYtMusic((ytMusic) => ytMusic.searchSongs(loading)).then((result) => {
         if (Result.isSuccess(result))
           dispatch({ type: "found", query: loading, songs: result.success.songs });
         // Turned off meanwhile: the section is already hidden.

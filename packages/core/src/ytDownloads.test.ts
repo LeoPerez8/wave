@@ -10,7 +10,7 @@ import {
   ytDownloadStatus,
   ytDownloadsToStart,
 } from "./index.ts";
-import type { YtDownloadEvent, YtDownloads, YtSong } from "./index.ts";
+import type { YtDownloadEvent, YtDownloads, YtDownloadStatus, YtSong } from "./index.ts";
 
 const song = (videoId: string): YtSong => ({
   videoId,
@@ -51,12 +51,24 @@ describe("the download queue", () => {
     );
   });
 
-  test("asking again for a song that's queued, downloading or done changes nothing", () => {
+  test("asking again for a song that's queued or downloading changes nothing", () => {
     const state = run(requested("a"), started("a"), requested("b"));
     assert.equal(stepYtDownloads(state, requested("a")), state);
     assert.equal(stepYtDownloads(state, requested("b")), state);
-    const done = stepYtDownloads(state, { type: "finished", videoId: "a", path: "/m/a.m4a" });
-    assert.equal(stepYtDownloads(done, requested("a")), done);
+  });
+
+  test("a song downloaded before (and since deleted from the Library) downloads again", () => {
+    const state = run(
+      requested("a"),
+      started("a"),
+      { type: "finished", videoId: "a", path: "/m/a.m4a" },
+      requested("a"),
+    );
+    assert.deepEqual(ytDownloadStatus(state, "a"), { kind: "queued" });
+    assert.deepEqual(
+      ytDownloadsToStart(state).map((s) => s.videoId),
+      ["a"],
+    );
   });
 
   test("a download reports how much has arrived, then that it's being saved, then where", () => {
@@ -137,19 +149,26 @@ describe("the download queue", () => {
   });
 });
 
+/** The download entries for a song that isn't in the Library. */
+const actions = (status: YtDownloadStatus | null) =>
+  ytDownloadActions(status, { inLibrary: false });
+
 describe("a YT Music song's download, as its row and menu show it", () => {
   test("the menu offers Download, Cancel Download while it's on its way, Retry after a failure", () => {
-    assert.deepEqual(ytDownloadActions(null), ["download"]);
-    assert.deepEqual(ytDownloadActions({ kind: "queued" }), ["cancelDownload"]);
-    assert.deepEqual(ytDownloadActions({ kind: "downloading", received: 1, total: 9 }), [
-      "cancelDownload",
-    ]);
-    assert.deepEqual(ytDownloadActions({ kind: "saving" }), []);
-    assert.deepEqual(ytDownloadActions({ kind: "failed", reason: "offline" }), [
+    assert.deepEqual(actions(null), ["download"]);
+    assert.deepEqual(actions({ kind: "queued" }), ["cancelDownload"]);
+    assert.deepEqual(actions({ kind: "downloading", received: 1, total: 9 }), ["cancelDownload"]);
+    assert.deepEqual(actions({ kind: "saving" }), []);
+    assert.deepEqual(actions({ kind: "failed", reason: "offline" }), [
       "retryDownload",
       "cancelDownload",
     ]);
-    assert.deepEqual(ytDownloadActions({ kind: "done", path: "/m/a.m4a" }), []);
+  });
+
+  test("a downloaded song deleted from the Library offers Download again", () => {
+    const done = { kind: "done", path: "/m/a.m4a" } as const;
+    assert.deepEqual(ytDownloadActions(done, { inLibrary: true }), []);
+    assert.deepEqual(ytDownloadActions(done, { inLibrary: false }), ["download"]);
   });
 
   test("the row's second line says where the download is", () => {

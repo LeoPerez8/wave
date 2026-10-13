@@ -19,11 +19,13 @@ import {
   lrclibSearchUrl,
   pickFoundLyrics,
   pickGenreAlbum,
+  settledTags,
   songLookup,
   songTagOutcome,
   type FoundTags,
   type SongLookup,
   type SongTagOutcome,
+  type TagLookup,
   type TagWriteReport,
 } from "@wave/core";
 import * as Data from "effect/Data";
@@ -91,29 +93,41 @@ const findGenre = async (song: SongLookup, signal: AbortSignal): Promise<string 
   return album.genre;
 };
 
+/** One service's lookup, settled: what it answered, or that it failed (or took too long). */
+const settle = <A>(find: (signal: AbortSignal) => Promise<A>): Effect.Effect<TagLookup<A>> =>
+  Effect.tryPromise(find).pipe(
+    Effect.timeout(LOOKUP_TIMEOUT),
+    Effect.match({
+      onSuccess: (value): TagLookup<A> => ({ ok: true, value }),
+      onFailure: (cause): TagLookup<A> => {
+        console.warn("[wave] lyrics and genre lookup failed", cause);
+        return { ok: false };
+      },
+    }),
+  );
+
 /**
  * Looks [song] up online: its lyrics on LRCLIB (synced preferred) and its
  * album's genre on Deezer, matched by Core. Only the title, artist, album and
- * length are sent. Finding nothing is `{ lyrics: null, genre: null }`; fails
- * with `LookupsOff` (and sends nothing) when Settings turned lookups off.
+ * length are sent. Each service is settled on its own, so lyrics found survive
+ * Deezer failing and the other way round (Core's `settledTags`). Finding
+ * nothing is `{ lyrics: null, genre: null }`; fails with `LookupFailed` only
+ * when neither service answered, and with `LookupsOff` (sending nothing) when
+ * Settings turned lookups off.
  */
 export const lookUpLyricsAndGenre = (
   song: SongLookup,
 ): Effect.Effect<FoundTags, LookupFailed | LookupsOff> =>
   lyricsAndGenreLookupsEnabled()
-    ? Effect.tryPromise({
-        try: async (signal): Promise<FoundTags> => {
-          const [lyrics, genre] = await Promise.all([
-            findLyrics(song, signal),
-            findGenre(song, signal),
-          ]);
-          return { lyrics, genre };
-        },
-        catch: (cause) => new LookupFailed({ cause }),
-      }).pipe(
-        Effect.timeoutOrElse({
-          duration: LOOKUP_TIMEOUT,
-          orElse: () => Effect.fail(new LookupFailed({ cause: "Timed out" })),
+    ? Effect.all(
+        [settle((signal) => findLyrics(song, signal)), settle((signal) => findGenre(song, signal))],
+        { concurrency: "unbounded" },
+      ).pipe(
+        Effect.flatMap(([lyrics, genre]) => {
+          const found = settledTags(lyrics, genre);
+          return found === null
+            ? Effect.fail(new LookupFailed({ cause: "Neither LRCLIB nor Deezer answered" }))
+            : Effect.succeed(found);
         }),
       )
     : Effect.fail(new LookupsOff());

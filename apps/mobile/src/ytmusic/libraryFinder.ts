@@ -1,10 +1,11 @@
 import { libraryFinder, type YtSong } from "@wave/core";
 import * as Effect from "effect/Effect";
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 
 import { libraryVersion } from "@/library/LibraryScan";
 import { LibraryStore, type SongRow } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
+import { makeVersionedCache } from "@/lib/versionedCache";
 
 /** The Library song a YT Music song already is (Core's `libraryFinder`), or null. */
 export type FindInLibrary = (song: YtSong) => SongRow | null;
@@ -17,47 +18,28 @@ const listSongs = Effect.gen(function* () {
 });
 
 /**
- * Finds the Library song a YT Music song already is, so Discover plays the
- * file instead of streaming it. Finds nothing until the Library is read, and
- * reads it again whenever it changes (a download lands, a scan goes on), one
- * read at a time.
+ * One finder for every screen: the Library is read and the finder built once
+ * per `libraryVersion` (a download lands, a scan goes on), and only while a
+ * screen uses it. Null until the Library is first read.
  */
-export const useLibraryFinder = (): FindInLibrary => {
-  const [find, setFind] = useState<FindInLibrary>(() => nothing);
+const sharedFinder = makeVersionedCache<FindInLibrary | null>({
+  version: libraryVersion,
+  initial: null,
+  build: () => appRuntime.runPromise(listSongs).then((songs) => libraryFinder(songs)),
+});
 
-  useEffect(() => {
-    let mounted = true;
-    let reading = false;
-    let stale = false;
-    const read = (): void => {
-      if (reading) {
-        stale = true;
-        return;
-      }
-      reading = true;
-      appRuntime
-        .runPromise(listSongs)
-        .then((songs) => {
-          if (mounted) setFind(() => libraryFinder(songs));
-        })
-        .catch(() => {
-          // Keep the last finder; store errors surface elsewhere (scan banner).
-        })
-        .finally(() => {
-          reading = false;
-          if (stale && mounted) {
-            stale = false;
-            read();
-          }
-        });
-    };
-    read();
-    const unsubscribe = libraryVersion.subscribe(read);
-    return () => {
-      mounted = false;
-      unsubscribe();
-    };
-  }, []);
+const idle = () => () => {};
 
-  return find;
-};
+/**
+ * The shared finder, or null until the Library is first read. It follows the
+ * Library only while [active]; inactive, it reads what was last built.
+ */
+export const useLoadedLibraryFinder = (active = true): FindInLibrary | null =>
+  useSyncExternalStore(active ? sharedFinder.subscribe : idle, sharedFinder.get);
+
+/**
+ * Finds the Library song a YT Music song already is, so Discover plays the
+ * file instead of streaming it and a song's menu knows whether it's still in
+ * the Library. Finds nothing until the Library is first read.
+ */
+export const useLibraryFinder = (): FindInLibrary => useLoadedLibraryFinder() ?? nothing;

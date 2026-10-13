@@ -8,19 +8,8 @@ import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { useCallback, useEffect, useReducer } from "react";
 
-import { appRuntime } from "@/library/runtime";
 import { WaveYtMusic } from "@/native/waveYtMusic";
-import { YtMusic } from "@/ytmusic/YtMusic";
-
-const withYtMusic = <A, E>(use: (ytMusic: YtMusic["Service"]) => Effect.Effect<A, E>) =>
-  appRuntime.runPromise(
-    Effect.result(
-      Effect.gen(function* () {
-        const ytMusic = yield* YtMusic;
-        return yield* use(ytMusic);
-      }),
-    ),
-  );
+import { askYtMusic } from "@/ytmusic/askYtMusic";
 
 /**
  * The YouTube account for Settings › YT Music (Core's `stepYtAccount`): the
@@ -38,7 +27,7 @@ export const useYtAccount = (): {
   useEffect(() => {
     const changed = (session: YtSession) => dispatch({ type: "sessionChanged", session });
     const subscription = WaveYtMusic.addListener("onSessionChanged", changed);
-    void withYtMusic((ytMusic) =>
+    void askYtMusic((ytMusic) =>
       Effect.gen(function* () {
         changed(yield* ytMusic.session);
         return yield* ytMusic.checkSession;
@@ -51,7 +40,7 @@ export const useYtAccount = (): {
 
   const signIn = useCallback(() => {
     dispatch({ type: "signInStarted" });
-    void withYtMusic((ytMusic) => ytMusic.signIn).then((result) => {
+    void askYtMusic((ytMusic) => ytMusic.signIn).then((result) => {
       if (Result.isFailure(result))
         dispatch({
           type: "signInFailed",
@@ -63,7 +52,7 @@ export const useYtAccount = (): {
   }, []);
 
   const signOut = useCallback(() => {
-    void withYtMusic((ytMusic) => ytMusic.signOut).then((result) => {
+    void askYtMusic((ytMusic) => ytMusic.signOut).then((result) => {
       if (Result.isSuccess(result)) dispatch({ type: "sessionChanged", session: result.success });
     });
   }, []);

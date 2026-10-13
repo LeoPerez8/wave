@@ -95,6 +95,37 @@ export const learnQueueTracks = (
   queueTracks.set(next);
 };
 
+/** How many YT Music covers are cached at once while a play goes on (`cacheYtCoversLater`). */
+export const YT_COVERS_AT_ONCE = 2;
+
+/**
+ * Caches [songs]' covers after their play has started, a few at a time, each
+ * filling in its queued track as it lands (Up Next's thumbnail, Now Playing's
+ * tint). A song that has left the queue meanwhile stays out of it; a cover
+ * that can't be cached leaves YouTube's. [cacheArtwork] is YT Music's, passed
+ * in so this stays free of Expo.
+ */
+export const cacheYtCoversLater = <E, R>(
+  songs: readonly YtSong[],
+  cacheArtwork: (url: string) => Effect.Effect<CachedArtwork, E, R>,
+): Effect.Effect<void, never, R> =>
+  Effect.forEach(
+    songs,
+    (song) =>
+      song.artworkUrl === null
+        ? Effect.void
+        : cacheArtwork(song.artworkUrl).pipe(
+            Effect.tap((artwork) =>
+              Effect.sync(() => {
+                const track = toYtQueueTrack(song, artwork);
+                if (queueTracks.get().has(track.id)) learnQueueTracks([track]);
+              }),
+            ),
+            Effect.ignore,
+          ),
+    { concurrency: YT_COVERS_AT_ONCE, discard: true },
+  );
+
 /** Ids looked up in the library and not failed, so they aren't asked for again. */
 const requested = new Set<string>();
 

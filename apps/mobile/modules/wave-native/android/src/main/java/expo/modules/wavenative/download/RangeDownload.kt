@@ -6,10 +6,16 @@ import java.io.IOException
 import java.io.InputStream
 import java.util.concurrent.CancellationException
 
-/** Opens bytes [start] to [end] (inclusive) of a remote file. Throws [IOException] when it can't. */
+/**
+ * Opens bytes [start] to [end] (inclusive) of a remote file. Throws [IOException] when it can't,
+ * and [RangeSourceChanged] when the file it serves is now another one.
+ */
 fun interface RangeSource {
   fun open(start: Long, end: Long): InputStream
 }
+
+/** The source now serves a different file, [length] bytes long: what arrived so far is thrown away. */
+class RangeSourceChanged(val length: Long) : Exception("The file changed; starting over")
 
 /**
  * Downloads a file of known length in byte ranges of [chunkBytes] into a part
@@ -29,7 +35,9 @@ class RangeDownload(
   /**
    * Downloads [length] bytes from [source] into [target], reporting the bytes
    * written so far. Throws [IOException] after too many failures and
-   * [CancellationException] once [isCancelled] says so.
+   * [CancellationException] once [isCancelled] says so. When the source says
+   * it changed ([RangeSourceChanged]) the part file starts over at the new
+   * length. Returns the length downloaded.
    */
   fun download(
     source: RangeSource,
@@ -37,8 +45,9 @@ class RangeDownload(
     target: File,
     onProgress: (Long) -> Unit = {},
     isCancelled: () -> Boolean = { false },
-  ) {
+  ): Long {
     var done = false
+    var length = length
     try {
       FileOutputStream(target, false).use { out ->
         var written = 0L
@@ -63,6 +72,13 @@ class RangeDownload(
             // A short answer is fine (the rest is asked for next), an empty one isn't.
             if (written == before) throw IOException("No bytes in the answer for $before-$end")
             failures = 0
+          } catch (e: RangeSourceChanged) {
+            out.channel.truncate(0)
+            out.channel.position(0)
+            written = 0
+            failures = 0
+            length = e.length
+            onProgress(0)
           } catch (e: IOException) {
             failures = if (written > before) 1 else failures + 1
             if (failures >= attempts) throw e
@@ -72,6 +88,7 @@ class RangeDownload(
         out.fd.sync()
       }
       done = true
+      return length
     } finally {
       if (!done) target.delete()
     }

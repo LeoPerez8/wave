@@ -14,6 +14,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.SystemClock
 import expo.modules.wavenative.R
+import expo.modules.wavenative.launcher.LauncherIconSwitcher
 
 /**
  * Keeps Wave running while YT Music songs download, with a notification
@@ -66,6 +67,8 @@ class YtDownloadService : Service() {
       .setCategory(Notification.CATEGORY_PROGRESS)
       .setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
     packageManager.getLaunchIntentForPackage(packageName)?.let { launch ->
+      // MainActivity rather than the launcher icon's alias, which a theme change can turn off.
+      launch.component?.let { launch.component = LauncherIconSwitcher.launchTarget(packageManager, it) }
       builder.setContentIntent(PendingIntent.getActivity(this, 0, launch, PendingIntent.FLAG_IMMUTABLE))
     }
     if (current == null) return builder.setContentTitle("Downloading").build()
