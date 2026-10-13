@@ -9,6 +9,7 @@ import { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import { followLibraryLookupSummary } from "@/library/findLyricsAndGenre";
 import { useAllFilesAccess } from "@/library/hooks";
 import { primePlaylists } from "@/library/playlists";
 import { OverlayHost } from "@/overlay/OverlayHost";
@@ -26,6 +27,9 @@ export default function RootLayout() {
 
   // A no-op when Android Auto already started them headless (src/services.ts).
   useEffect(() => startServices("app"), []);
+
+  // A whole-Library lyrics and genre run that ended in the background says how it went.
+  useEffect(followLibraryLookupSummary, []);
 
   // The first scan starts as soon as Wave can read the scan roots.
   useEffect(() => {

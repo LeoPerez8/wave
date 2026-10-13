@@ -295,7 +295,12 @@ export { LOGO_WAVES, logoIconPaths, logoWaveY } from "./logo.ts";
 export type { LogoIconBox, LogoIconPaths, LogoWave } from "./logo.ts";
 export { UNDERLINE_WAVE, underlineMotion, wavePath } from "./wavyUnderline.ts";
 export type { UnderlineMotion, UnderlineMotionInput, WaveShape } from "./wavyUnderline.ts";
-export { highlightedOrigin, originOfNewCard, veilAround } from "./overlayOrigin.ts";
+export {
+  cardShowsHeading,
+  highlightedOrigin,
+  originOfNewCard,
+  veilAround,
+} from "./overlayOrigin.ts";
 export type { NewCardInput, OriginCard } from "./overlayOrigin.ts";
 export { confirmSongDeletion, songDeletionFailure } from "./songDeletion.ts";
 export type { SongDeleteFailure, SongDeleteFailureReason } from "./songDeletion.ts";
@@ -367,6 +372,7 @@ export {
   deezerTrackCandidates,
   deezerTrackSearchUrl,
   describeTagLookups,
+  libraryLookupSongs,
   lookupsUnreachable,
   lrclibCandidates,
   lrclibSearchUrl,
@@ -380,6 +386,7 @@ export type {
   FoundLyrics,
   FoundTags,
   GenreCandidate,
+  IndexedLyricsAndGenre,
   LyricsCandidate,
   SongLookup,
   SongTagOutcome,
@@ -410,6 +417,7 @@ export { libraryTrackIds, playerErrorNotice, queuedYtTracks, restorableTrack } f
 export type { PlayerErrorCode, RestorableTracks } from "./ytQueue.ts";
 export {
   YT_MUSIC_FOLDER,
+  ytDownloadDestination,
   ytDownloadLookup,
   ytDownloadRoot,
   ytDownloadTags,
@@ -425,18 +433,20 @@ export type {
 export {
   YT_DOWNLOADS_NONE,
   YT_DOWNLOAD_ACTION_LABELS,
-  stepYtDownloads,
   ytDownloadActions,
   ytDownloadLine,
   ytDownloadProgress,
   ytDownloadStatus,
-  ytDownloadsToStart,
+  ytDownloadSharedJob,
+  ytDownloadsFromJournal,
 } from "./ytDownloads.ts";
 export type {
   YtDownloadAction,
-  YtDownloadEvent,
   YtDownloadFailure,
   YtDownloadJob,
+  YtDownloadJournalJob,
+  YtDownloadJournalPhase,
+  YtDownloadPhase,
   YtDownloadStatus,
   YtDownloads,
 } from "./ytDownloads.ts";
@@ -467,3 +477,21 @@ export type {
   YtShelf,
   YtShelfItem,
 } from "./ytDiscover.ts";
+export {
+  soulseekCandidates,
+  soulseekQuery,
+  soulseekRecording,
+  soulseekReceivedMatches,
+  soulseekSameRecording,
+} from "./soulseekDownload.ts";
+export type {
+  SoulseekCandidate,
+  SoulseekRecording,
+  SoulseekReceivedTags,
+} from "./soulseekDownload.ts";
+export {
+  libraryLookupProgress,
+  readLibraryLookupSummary,
+  writeLibraryLookupSummary,
+} from "./libraryLookup.ts";
+export type { LibraryLookupProgress, LibraryLookupSummary } from "./libraryLookup.ts";

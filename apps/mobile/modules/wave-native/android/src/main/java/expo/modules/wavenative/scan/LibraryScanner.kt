@@ -2,6 +2,7 @@ package expo.modules.wavenative.scan
 
 import expo.modules.wavenative.artwork.ArtworkInfo
 import expo.modules.wavenative.artwork.ArtworkStore
+import expo.modules.wavenative.lyrics.Sidecars
 import expo.modules.wavenative.tags.RawTags
 import expo.modules.wavenative.tags.TagReader
 import java.io.File
@@ -20,6 +21,8 @@ data class ScannedTrack(
    */
   val tags: RawTags,
   val artworkHash: String?,
+  /** Lyrics in the tags or a sidecar `.lrc`: the whole-Library lyrics and genre run skips songs with them and a genre. */
+  val hasLyrics: Boolean = false,
 )
 
 enum class ScanPhase(val id: String) {
@@ -121,12 +124,18 @@ class LibraryScanner(
     progress(ScanPhase.READING, 0, force = true)
 
     val reportedArtwork = ConcurrentHashMap.newKeySet<String>()
+    // Each folder's `.lrc` names, listed once per scan rather than once per song.
+    val sidecarNames = ConcurrentHashMap<String, Set<String>>()
     val pool = Executors.newFixedThreadPool(threads.coerceAtLeast(1))
     var read = 0
     try {
       for (chunk in files.chunked(batchSize.coerceAtLeast(1))) {
         if (isCancelled()) return summary(read, true)
-        val results = pool.invokeAll(chunk.map { file -> Callable { index(file) } }).map { it.get() }
+        val results = pool.invokeAll(
+          chunk.map { file ->
+            Callable { index(file, sidecarNames.computeIfAbsent(file.parent ?: "") { Sidecars.namesIn(file.parentFile) }) }
+          },
+        ).map { it.get() }
         val newArtwork = results.mapNotNull { it.second }.filter { reportedArtwork.add(it.hash) }
         read += results.size
         listener.onBatch(results.map { it.first }, newArtwork)
@@ -155,9 +164,10 @@ class LibraryScanner(
 
   /**
    * Reads one file as a scan would: its track and its artwork (stored, if new).
-   * Also used after Wave writes a file's tags, to update its index entry.
+   * Also used after Wave writes a file's tags or sidecar, to update its index
+   * entry. [sidecars] are the `.lrc` names in its folder (`Sidecars.namesIn`).
    */
-  fun index(file: File): Pair<ScannedTrack, ArtworkInfo?> {
+  fun index(file: File, sidecars: Set<String> = Sidecars.namesIn(file.parentFile)): Pair<ScannedTrack, ArtworkInfo?> {
     val tags = tagReader.read(file)
     val artwork = tags.artwork?.let(artworkStore::store)
     val track = ScannedTrack(
@@ -166,6 +176,7 @@ class LibraryScanner(
       modifiedAt = file.lastModified(),
       tags = tags.copy(artwork = null, lyrics = null),
       artworkHash = artwork?.hash,
+      hasLyrics = !tags.lyrics.isNullOrBlank() || Sidecars.hasOne(file, sidecars),
     )
     return track to artwork
   }

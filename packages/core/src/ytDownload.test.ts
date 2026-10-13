@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { ytDownloadLookup, ytDownloadRoot, ytDownloadTags, ytDownloadTarget } from "./index.ts";
+import {
+  ytDownloadDestination,
+  ytDownloadLookup,
+  ytDownloadRoot,
+  ytDownloadTags,
+  ytDownloadTarget,
+} from "./index.ts";
 import type { YtAlbum, YtSong } from "./index.ts";
 
 const ROOT = "/storage/emulated/0/Music";
@@ -33,12 +39,17 @@ const ram: YtAlbum = {
       videoId: "5NV6Rdv1a3I",
       title: "Get Lucky (feat. Pharrell Williams and Nile Rodgers)",
       trackNumber: 8,
+      discNumber: null,
     },
     { videoId: "ZbbTmR6Xaag", title: "Contact", trackNumber: 13 },
   ],
 };
 
 describe("ytDownloadTags", () => {
+  test("keeps an available disc number for MP3 tags", () => {
+    const album = { ...ram, tracks: [{ ...ram.tracks[1]!, discNumber: 2 }] };
+    assert.equal(ytDownloadTags(getLucky, album, null, null).discNumber, 2);
+  });
   test("tags a song with its album's title, artist, year and its track number", () => {
     const tags = ytDownloadTags(
       getLucky,
@@ -54,6 +65,7 @@ describe("ytDownloadTags", () => {
       year: 2013,
       // YT Music lists the album's own video of the song: the title tells it.
       trackNumber: 8,
+      discNumber: null,
       genre: "Dance",
       lyrics: "[00:01.00]Like the legend",
       artworkUrl: "https://yt3.googleusercontent.com/N55arCGj=w1200-h1200-l90-rj",
@@ -115,6 +127,19 @@ describe("ytDownloadTags", () => {
   });
 });
 
+test("download destination chooses an included final folder and always saves MP3", () => {
+  const tags = ytDownloadTags(getLucky, null, null, null);
+  const roots = [
+    { path: ROOT, isDefault: true },
+    { path: "/sdcard/Other", isDefault: false },
+  ];
+  assert.equal(
+    ytDownloadDestination(roots, [`${ROOT}/YT Music`], tags)?.path,
+    "/sdcard/Other/YT Music/Daft Punk, Pharrell Williams & Nile Rodgers/Random Access Memories/Get Lucky (feat. Pharrell Williams and Nile Rodgers).mp3",
+  );
+  assert.equal(ytDownloadDestination(roots, [ROOT, "/sdcard/Other"], tags), null);
+});
+
 describe("ytDownloadLookup", () => {
   test("looks a download up by its title, its first artist, album and length", () => {
     assert.deepEqual(ytDownloadLookup(getLucky, ram), {
@@ -163,11 +188,12 @@ describe("ytDownloadTarget", () => {
       album: "Random Access Memories",
       albumArtist: "Daft Punk",
       trackNumber: 8,
+      discNumber: null,
     });
     assert.deepEqual(target, {
       folder: "/storage/emulated/0/Music/YT Music/Daft Punk/Random Access Memories",
-      fileName: "08 Get Lucky (feat. Pharrell Williams and Nile Rodgers).m4a",
-      path: "/storage/emulated/0/Music/YT Music/Daft Punk/Random Access Memories/08 Get Lucky (feat. Pharrell Williams and Nile Rodgers).m4a",
+      fileName: "08 Get Lucky (feat. Pharrell Williams and Nile Rodgers).mp3",
+      path: "/storage/emulated/0/Music/YT Music/Daft Punk/Random Access Memories/08 Get Lucky (feat. Pharrell Williams and Nile Rodgers).mp3",
     });
   });
 
@@ -187,7 +213,7 @@ describe("ytDownloadTarget", () => {
       album: "Back\tin Black",
     });
     assert.equal(target.folder, `${ROOT}/YT Music/AC_DC/Back_in Black`);
-    assert.equal(target.fileName, "Who_ _Me__ _a_b_ _now__.m4a");
+    assert.equal(target.fileName, "Who_ _Me__ _a_b_ _now__.mp3");
   });
 
   test("never makes a hidden name or one ending in a dot or space", () => {
@@ -198,26 +224,26 @@ describe("ytDownloadTarget", () => {
       album: "Vol. 2. ",
     });
     assert.equal(target.folder, `${ROOT}/YT Music/hack/Vol. 2`);
-    assert.equal(target.fileName, "Baby One More Time.m4a");
+    assert.equal(target.fileName, "Baby One More Time.mp3");
   });
 
   test("names a folder or file that would be empty Unknown", () => {
     const target = ytDownloadTarget(ROOT, { ...place, title: "...", albumArtist: " / " });
     assert.equal(target.folder, `${ROOT}/YT Music/_/Album`);
-    assert.equal(target.fileName, "Unknown.m4a");
+    assert.equal(target.fileName, "Unknown.mp3");
   });
 
   test("without an album, the song sits in its artist's folder", () => {
     const target = ytDownloadTarget(ROOT, { ...place, album: null, albumArtist: null });
-    assert.equal(target.path, `${ROOT}/YT Music/Artist/Song.m4a`);
+    assert.equal(target.path, `${ROOT}/YT Music/Artist/Song.mp3`);
   });
 
   test("shortens long names to what the storage allows, counting bytes", () => {
     const long = ytDownloadTarget(ROOT, { ...place, title: "a".repeat(300), trackNumber: 1 });
-    assert.equal(long.fileName, `01 ${"a".repeat(MAX_NAME_BYTES - 3 - 4)}.m4a`);
+    assert.equal(long.fileName, `01 ${"a".repeat(MAX_NAME_BYTES - 3 - 4)}.mp3`);
     const wide = ytDownloadTarget(ROOT, { ...place, title: "音".repeat(200) });
     assert.ok(utf8Length(wide.fileName) <= MAX_NAME_BYTES);
-    assert.ok(wide.fileName.endsWith("音.m4a"));
+    assert.ok(wide.fileName.endsWith("音.mp3"));
     const folder = ytDownloadTarget(ROOT, { ...place, album: "b".repeat(400) });
     assert.equal(folder.folder.split("/").at(-1), "b".repeat(MAX_NAME_BYTES));
   });

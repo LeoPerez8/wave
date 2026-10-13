@@ -10,6 +10,16 @@ import org.junit.Test
 
 class DownloadFilesTest {
   @Test
+  fun separateJobsNeverShareAPartFileEvenForTheSameTarget() {
+    val target = File("/music/Album/Song.mp3")
+    val first = DownloadFiles.partFileFor(target, "video-one")
+    val second = DownloadFiles.partFileFor(target, "video-two")
+    org.junit.Assert.assertNotEquals(first, second)
+    org.junit.Assert.assertTrue(first.name.startsWith("."))
+    assertEquals("mp3", first.extension)
+    assertEquals(target.parentFile, first.parentFile)
+  }
+  @Test
   fun aPartFileSitsBesideItsTargetHiddenFromScansButKeepsItsFormat() {
     val root = Fixtures.tempDir()
     val target = File(root, "YT Music/Daft Punk/RAM/08 Get Lucky.m4a")

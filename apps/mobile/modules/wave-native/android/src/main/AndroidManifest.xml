@@ -15,7 +15,7 @@
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
   <uses-permission android:name="android.permission.WAKE_LOCK" />
 
-  <!-- YT Music downloads run in a data-sync foreground service, with a progress notification. -->
+  <!-- YT Music downloads and the whole-Library lyrics and genre run use data-sync foreground services, with progress notifications. -->
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
@@ -34,6 +34,12 @@
     <!-- Keeps YT Music downloads going with Wave in the background (YtDownloadService). -->
     <service
       android:name="expo.modules.wavenative.yt.YtDownloadService"
+      android:exported="false"
+      android:foregroundServiceType="dataSync" />
+
+    <!-- Keeps Settings' whole-Library lyrics and genre run going in the background (LibraryLookupService). -->
+    <service
+      android:name="expo.modules.wavenative.lookup.LibraryLookupService"
       android:exported="false"
       android:foregroundServiceType="dataSync" />
 

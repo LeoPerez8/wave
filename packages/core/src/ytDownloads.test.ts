@@ -2,15 +2,13 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
-  YT_DOWNLOADS_NONE,
-  stepYtDownloads,
   ytDownloadActions,
   ytDownloadLine,
   ytDownloadProgress,
   ytDownloadStatus,
-  ytDownloadsToStart,
+  ytDownloadsFromJournal,
 } from "./index.ts";
-import type { YtDownloadEvent, YtDownloads, YtDownloadStatus, YtSong } from "./index.ts";
+import type { YtDownloadJournalJob, YtDownloadStatus, YtSong } from "./index.ts";
 
 const song = (videoId: string): YtSong => ({
   videoId,
@@ -22,130 +20,91 @@ const song = (videoId: string): YtSong => ({
   explicit: false,
 });
 
-const run = (...events: YtDownloadEvent[]): YtDownloads =>
-  events.reduce<YtDownloads>(stepYtDownloads, YT_DOWNLOADS_NONE);
-
-const requested = (videoId: string): YtDownloadEvent => ({
-  type: "requested",
+const job = (videoId: string, patch: Partial<YtDownloadJournalJob> = {}): YtDownloadJournalJob => ({
+  id: videoId,
   song: song(videoId),
+  phase: "queued",
+  ...patch,
 });
-const started = (videoId: string): YtDownloadEvent => ({ type: "started", videoId });
 
-describe("the download queue", () => {
-  test("a requested song waits its turn, and starts when nothing else downloads", () => {
-    const state = run(requested("a"));
-    assert.deepEqual(ytDownloadStatus(state, "a"), { kind: "queued" });
+/** The status the rows show for [videoId], from the native journal's [jobs]. */
+const shown = (jobs: readonly YtDownloadJournalJob[], videoId: string) =>
+  ytDownloadStatus(ytDownloadsFromJournal(jobs), videoId);
+
+describe("the native download journal, as rows show it", () => {
+  test("a waiting download says so, in the order the journal keeps", () => {
+    const state = ytDownloadsFromJournal([job("a", { phase: "transferring" }), job("b")]);
     assert.deepEqual(
-      ytDownloadsToStart(state).map((s) => s.videoId),
-      ["a"],
+      state.jobs.map((item) => item.song.videoId),
+      ["a", "b"],
     );
+    assert.deepEqual(shown([job("b")], "b"), { kind: "queued" });
   });
 
-  test("songs download one at a time, in the order they were asked for", () => {
-    let state = run(requested("a"), requested("b"), requested("c"), started("a"));
-    assert.deepEqual(ytDownloadsToStart(state), []);
-    state = stepYtDownloads(state, { type: "finished", videoId: "a", path: "/m/a.m4a" });
-    assert.deepEqual(
-      ytDownloadsToStart(state).map((s) => s.videoId),
-      ["b"],
-    );
-  });
-
-  test("asking again for a song that's queued or downloading changes nothing", () => {
-    const state = run(requested("a"), started("a"), requested("b"));
-    assert.equal(stepYtDownloads(state, requested("a")), state);
-    assert.equal(stepYtDownloads(state, requested("b")), state);
-  });
-
-  test("a song downloaded before (and since deleted from the Library) downloads again", () => {
-    const state = run(
-      requested("a"),
-      started("a"),
-      { type: "finished", videoId: "a", path: "/m/a.m4a" },
-      requested("a"),
-    );
-    assert.deepEqual(ytDownloadStatus(state, "a"), { kind: "queued" });
-    assert.deepEqual(
-      ytDownloadsToStart(state).map((s) => s.videoId),
-      ["a"],
-    );
-  });
-
-  test("a download reports how much has arrived, then that it's being saved, then where", () => {
-    let state = run(requested("a"), started("a"));
-    assert.deepEqual(ytDownloadStatus(state, "a"), {
+  test("a download finds the recording, waits in a peer's queue, arrives, then is checked", () => {
+    assert.deepEqual(shown([job("a", { phase: "preparing" })], "a"), {
       kind: "downloading",
       received: 0,
       total: null,
+      phase: "searching",
     });
-    state = stepYtDownloads(state, {
-      type: "progress",
-      videoId: "a",
-      received: 2_500,
-      total: 10_000,
-    });
-    assert.deepEqual(ytDownloadStatus(state, "a"), {
+    assert.deepEqual(shown([job("a", { phase: "prepared" })], "a"), {
       kind: "downloading",
-      received: 2_500,
-      total: 10_000,
+      received: 0,
+      total: null,
+      phase: "connecting",
     });
-    state = stepYtDownloads(state, { type: "saving", videoId: "a" });
-    assert.deepEqual(ytDownloadStatus(state, "a"), { kind: "saving" });
-    assert.deepEqual(ytDownloadsToStart(stepYtDownloads(state, requested("b"))), []);
-    state = stepYtDownloads(state, { type: "finished", videoId: "a", path: "/m/a.m4a" });
-    assert.deepEqual(ytDownloadStatus(state, "a"), { kind: "done", path: "/m/a.m4a" });
-  });
-
-  test("a failed download says why, lets the next one start and can be retried", () => {
-    let state = run(requested("a"), requested("b"), started("a"));
-    state = stepYtDownloads(state, { type: "failed", videoId: "a", reason: "offline" });
-    assert.deepEqual(ytDownloadStatus(state, "a"), { kind: "failed", reason: "offline" });
     assert.deepEqual(
-      ytDownloadsToStart(state).map((s) => s.videoId),
-      ["b"],
+      shown([job("a", { phase: "transferring", received: 0, total: 0, queuePosition: 4 })], "a"),
+      { kind: "downloading", received: 0, total: null, phase: "queued" },
     );
-    state = stepYtDownloads(stepYtDownloads(state, started("b")), requested("a"));
-    assert.deepEqual(ytDownloadStatus(state, "a"), { kind: "queued" });
-  });
-
-  test("a retried download waits behind the songs already queued", () => {
-    let state = run(requested("a"), requested("b"), started("a"));
-    state = stepYtDownloads(state, { type: "failed", videoId: "a", reason: "failed" });
-    state = stepYtDownloads(state, requested("a"));
     assert.deepEqual(
-      ytDownloadsToStart(state).map((s) => s.videoId),
-      ["b"],
+      shown([job("a", { phase: "transferring", received: 2_500, total: 10_000 })], "a"),
+      { kind: "downloading", received: 2_500, total: 10_000, phase: "transferring" },
+    );
+    assert.deepEqual(shown([job("a", { phase: "sourceReady" })], "a"), {
+      kind: "downloading",
+      received: 0,
+      total: null,
+      phase: "validating",
+    });
+  });
+
+  test("tagging, publishing and importing show as saving until the Library has the Track", () => {
+    for (const phase of ["tagging", "awaitingPublication", "publishing", "completed"] as const) {
+      assert.deepEqual(shown([job("a", { phase })], "a"), { kind: "saving" });
+    }
+    assert.deepEqual(
+      shown(
+        [job("a", { phase: "completed", acknowledged: true, saved: { path: "/m/a.mp3" } })],
+        "a",
+      ),
+      { kind: "done", path: "/m/a.mp3" },
     );
   });
 
-  test("cancelling forgets a waiting, downloading or failed download", () => {
-    for (const events of [
-      [requested("a")],
-      [requested("a"), started("a")],
-      [requested("a"), started("a"), { type: "failed", videoId: "a", reason: "failed" } as const],
-    ]) {
-      const state = stepYtDownloads(run(...events), { type: "cancelled", videoId: "a" });
-      assert.equal(ytDownloadStatus(state, "a"), null);
-    }
+  test("a failure says why, including a file the Library couldn't import", () => {
+    assert.deepEqual(shown([job("a", { phase: "failed", reason: "unavailable" })], "a"), {
+      kind: "failed",
+      reason: "unavailable",
+    });
+    assert.deepEqual(shown([job("a", { phase: "failed" })], "a"), {
+      kind: "failed",
+      reason: "failed",
+    });
+    assert.deepEqual(shown([job("a", { phase: "completed", importFailure: "storage" })], "a"), {
+      kind: "failed",
+      reason: "storage",
+    });
   });
 
-  test("a download being saved or done can't be cancelled any more", () => {
-    const saving = run(requested("a"), started("a"), { type: "saving", videoId: "a" });
-    assert.equal(stepYtDownloads(saving, { type: "cancelled", videoId: "a" }), saving);
-    const done = stepYtDownloads(saving, { type: "finished", videoId: "a", path: "/m/a.m4a" });
-    assert.equal(stepYtDownloads(done, { type: "cancelled", videoId: "a" }), done);
+  test("a cancelled download is forgotten", () => {
+    assert.equal(shown([job("a", { phase: "cancelled" })], "a"), null);
   });
 
-  test("news about a cancelled download is ignored", () => {
-    const state = run(requested("a"), started("a"), { type: "cancelled", videoId: "a" });
-    for (const event of [
-      { type: "progress", videoId: "a", received: 1, total: 2 },
-      { type: "saving", videoId: "a" },
-      { type: "failed", videoId: "a", reason: "failed" },
-      { type: "finished", videoId: "a", path: "/m/a.m4a" },
-    ] as const) {
-      assert.equal(stepYtDownloads(state, event), state);
-    }
+  test("a result id positively matched to a job shows that job's status", () => {
+    const state = ytDownloadsFromJournal([job("a", { phase: "preparing", aliases: [song("b")] })]);
+    assert.deepEqual(ytDownloadStatus(state, "b"), ytDownloadStatus(state, "a"));
   });
 });
 

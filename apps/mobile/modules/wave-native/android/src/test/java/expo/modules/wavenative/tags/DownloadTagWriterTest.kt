@@ -30,6 +30,30 @@ class DownloadTagWriterTest {
   )
 
   @Test
+  fun writesMp3DiscTagsAndArtworkWithoutChangingMpegFrames() {
+    val file = Fixtures.libraryOf("soulseek-320.mp3" to ".download.part.mp3").resolve(".download.part.mp3")
+    val audioBefore = AudioPayload.of(file)
+    val fields = DownloadTags.fromJs(mapOf(
+      "title" to "Get Lucky", "artist" to "Daft Punk", "album" to "Random Access Memories",
+      "albumArtist" to "Daft Punk", "year" to 2013, "trackNumber" to 8, "discNumber" to 2,
+      "genre" to "Dance", "lyrics" to "[00:01.00]Like the legend",
+    ))!!
+    DownloadTagWriter().write(file, fields, Fixtures.cover())
+    val read = reader.read(file)
+    assertEquals("Get Lucky", read.title)
+    assertEquals("Daft Punk", read.artist)
+    assertEquals("Random Access Memories", read.album)
+    assertEquals("Daft Punk", read.albumArtist)
+    assertEquals("2013", read.year)
+    assertEquals("8", read.trackNumber)
+    assertEquals("2", read.discNumber)
+    assertEquals("Dance", read.genre)
+    assertEquals("[00:01.00]Like the legend", read.lyrics)
+    assertArrayEquals(Fixtures.cover(), read.artwork)
+    assertArrayEquals(audioBefore, AudioPayload.of(file))
+  }
+
+  @Test
   fun writesEveryFieldAndTheCoverAndKeepsTheAudio() {
     val file = download()
     val audioBefore = AudioPayload.of(file)

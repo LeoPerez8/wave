@@ -6,6 +6,7 @@ import { startAutoResponder } from "@/auto/autoResponder";
 import { appRuntime } from "@/library/runtime";
 import type { AutoRequest } from "@/native/wavePlayer";
 import { connectPlayer } from "@/playback/actions";
+import { startDownloads } from "@/ytmusic/YtDownloads";
 
 /** What starts the app services: the Activity's root layout or the headless `WaveService` task. */
 export type ServicesStarter = "app" | "headless";
@@ -34,6 +35,7 @@ const answerAuto = (request: AutoRequest): Promise<unknown> =>
  * JS runtime never initialises them twice. The library scan stays with the UI.
  */
 export const startServices = (by: ServicesStarter): void => {
+  startDownloads(by === "app");
   if (startedBy !== null) {
     console.log(`[wave] services already started by the ${startedBy}; the ${by} reuses them`);
     return;

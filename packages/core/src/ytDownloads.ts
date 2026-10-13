@@ -1,22 +1,35 @@
 /**
- * The queue of YT Music downloads: songs wait their turn and download one at
- * a time; a failed one says why and can be retried, a cancelled one is
- * forgotten. The app runs what `ytDownloadsToStart` says and reports back with
- * events; rows and menus read a song's status from here.
+ * YT Music downloads as rows and menus show them. The native journal owns the
+ * queue (one transfer at a time, in the order asked for; a failed one says why
+ * and can be retried, a cancelled one is forgotten); rows read its snapshot
+ * through `ytDownloadsFromJournal`.
  */
 
 import type { YtSong } from "./ytMusic.ts";
+import { soulseekSameRecording } from "./soulseekDownload.ts";
 
 /**
- * Why a download failed: no network, YouTube failed (or refused the stream),
- * there is no music folder to download into, or the file couldn't be saved.
+ * Why acquisition failed, including account setup and an unavailable recording.
  */
-export type YtDownloadFailure = "offline" | "failed" | "noFolder" | "storage";
+export type YtDownloadFailure =
+  | "offline"
+  | "failed"
+  | "noFolder"
+  | "storage"
+  | "account"
+  | "unavailable";
+
+export type YtDownloadPhase = "connecting" | "searching" | "queued" | "transferring" | "validating";
 
 export type YtDownloadStatus =
   | { readonly kind: "queued" }
   /** [total] is the file's size in bytes, once known. */
-  | { readonly kind: "downloading"; readonly received: number; readonly total: number | null }
+  | {
+      readonly kind: "downloading";
+      readonly received: number;
+      readonly total: number | null;
+      readonly phase?: YtDownloadPhase;
+    }
   /** Tagging the file and moving it into the Library: too late to cancel. */
   | { readonly kind: "saving" }
   | { readonly kind: "failed"; readonly reason: YtDownloadFailure }
@@ -25,6 +38,8 @@ export type YtDownloadStatus =
 export interface YtDownloadJob<S extends YtSong = YtSong> {
   readonly song: S;
   readonly status: YtDownloadStatus;
+  /** Different result ids positively matched to this recording; all lengths stay within tolerance. */
+  readonly relatedSongs?: readonly S[];
 }
 
 /** Every download of this session, in the order they were (last) asked for. */
@@ -32,90 +47,123 @@ export interface YtDownloads<S extends YtSong = YtSong> {
   readonly jobs: readonly YtDownloadJob<S>[];
 }
 
-export type YtDownloadEvent<S extends YtSong = YtSong> =
-  /** Download (or Retry Download) on [song]. */
-  | { readonly type: "requested"; readonly song: S }
-  | { readonly type: "started"; readonly videoId: string }
-  | {
-      readonly type: "progress";
-      readonly videoId: string;
-      readonly received: number;
-      readonly total: number | null;
-    }
-  | { readonly type: "saving"; readonly videoId: string }
-  | { readonly type: "finished"; readonly videoId: string; readonly path: string }
-  | { readonly type: "failed"; readonly videoId: string; readonly reason: YtDownloadFailure }
-  | { readonly type: "cancelled"; readonly videoId: string };
-
 export const YT_DOWNLOADS_NONE: YtDownloads<never> = { jobs: [] };
 
-/** How many songs download at once: one, so YouTube sees one steady transfer. */
-const AT_ONCE = 1;
+/**
+ * Where a job is in the native download journal (`DurableDownloads`), which
+ * owns the queue so it survives the screen going off and process recreation.
+ */
+export type YtDownloadJournalPhase =
+  | "queued"
+  | "preparing"
+  | "prepared"
+  | "transferring"
+  | "sourceReady"
+  | "tagging"
+  | "awaitingPublication"
+  | "publishing"
+  | "completed"
+  | "failed"
+  | "cancelled";
 
-const isActive = (status: YtDownloadStatus): boolean =>
-  status.kind === "downloading" || status.kind === "saving";
+/** A job as the native journal's snapshot reports it. */
+export interface YtDownloadJournalJob<S extends YtSong = YtSong> {
+  readonly id: string;
+  readonly song: S;
+  /** Other result ids positively matched to the same recording. */
+  readonly aliases?: readonly S[];
+  readonly phase: YtDownloadJournalPhase;
+  readonly received?: number;
+  readonly total?: number;
+  /** The peer's queue position while it keeps us waiting. */
+  readonly queuePosition?: number | null;
+  readonly reason?: YtDownloadFailure;
+  /** The file was published but the Library couldn't import it. */
+  readonly importFailure?: YtDownloadFailure;
+  /** The Library imported the file. */
+  readonly acknowledged?: boolean;
+  readonly saved?: { readonly path: string };
+}
 
-/** Whether [status] may become [next]; anything else is stale news and ignored. */
-const ACCEPTS: { readonly [K in YtDownloadEvent["type"]]: readonly YtDownloadStatus["kind"][] } = {
-  // Retry Download, or Download again once the file has left the Library.
-  requested: ["failed", "done"],
-  started: ["queued"],
-  progress: ["downloading"],
-  saving: ["downloading"],
-  finished: ["downloading", "saving"],
-  failed: ["queued", "downloading", "saving"],
-  cancelled: ["queued", "downloading", "failed"],
-};
+const downloading = (phase: YtDownloadPhase): YtDownloadStatus => ({
+  kind: "downloading",
+  received: 0,
+  total: null,
+  phase,
+});
 
-export const stepYtDownloads = <S extends YtSong>(
-  state: YtDownloads<S>,
-  event: YtDownloadEvent<S>,
-): YtDownloads<S> => {
-  const videoId = event.type === "requested" ? event.song.videoId : event.videoId;
-  const index = state.jobs.findIndex((job) => job.song.videoId === videoId);
-  const job = state.jobs[index];
-  if (job === undefined) {
-    return event.type === "requested"
-      ? { jobs: [...state.jobs, { song: event.song, status: { kind: "queued" } }] }
-      : state;
-  }
-  if (!ACCEPTS[event.type].includes(job.status.kind)) return state;
-  const others = state.jobs.filter((_, i) => i !== index);
-  const replace = (status: YtDownloadStatus): YtDownloads<S> => ({
-    jobs: state.jobs.map((other, i) => (i === index ? { song: other.song, status } : other)),
-  });
-  switch (event.type) {
-    case "requested":
-      // A retry (or a download again) waits behind what's already queued.
-      return { jobs: [...others, { song: event.song, status: { kind: "queued" } }] };
-    case "started":
-      return replace({ kind: "downloading", received: 0, total: null });
-    case "progress":
-      return replace({ kind: "downloading", received: event.received, total: event.total });
-    case "saving":
-      return replace({ kind: "saving" });
-    case "finished":
-      return replace({ kind: "done", path: event.path });
+const journalStatus = (job: YtDownloadJournalJob): YtDownloadStatus => {
+  if (job.importFailure !== undefined) return { kind: "failed", reason: job.importFailure };
+  switch (job.phase) {
+    case "queued":
+      return { kind: "queued" };
+    case "preparing":
+      return downloading("searching");
+    case "prepared":
+      return downloading("connecting");
+    case "transferring":
+      return job.queuePosition !== undefined && job.queuePosition !== null
+        ? downloading("queued")
+        : {
+            kind: "downloading",
+            received: job.received ?? 0,
+            total: job.total !== undefined && job.total > 0 ? job.total : null,
+            phase: "transferring",
+          };
+    case "sourceReady":
+      return downloading("validating");
+    case "tagging":
+    case "awaitingPublication":
+    case "publishing":
+      return { kind: "saving" };
+    case "completed":
+      return job.acknowledged === true && job.saved !== undefined
+        ? { kind: "done", path: job.saved.path }
+        : { kind: "saving" };
     case "failed":
-      return replace({ kind: "failed", reason: event.reason });
     case "cancelled":
-      return { jobs: others };
+      return { kind: "failed", reason: job.reason ?? "failed" };
   }
 };
 
-/** The songs to start now (each then reported `started`): the first queued, while nothing downloads. */
-export const ytDownloadsToStart = <S extends YtSong>(state: YtDownloads<S>): S[] => {
-  const free = AT_ONCE - state.jobs.filter((job) => isActive(job.status)).length;
-  if (free <= 0) return [];
-  return state.jobs
-    .filter((job) => job.status.kind === "queued")
-    .slice(0, free)
-    .map((job) => job.song);
-};
+/** The journal's jobs as rows and menus show them; a cancelled job is forgotten. */
+export const ytDownloadsFromJournal = <S extends YtSong>(
+  jobs: readonly YtDownloadJournalJob<S>[],
+): YtDownloads<S> => ({
+  jobs: jobs
+    .filter((job) => job.phase !== "cancelled")
+    .map((job) => ({
+      song: job.song,
+      status: journalStatus(job),
+      ...(job.aliases === undefined || job.aliases.length === 0
+        ? {}
+        : { relatedSongs: job.aliases }),
+    })),
+});
+
+/**
+ * The unfinished job that [song] (another result id) should share: every song
+ * already on it is positively the same recording, so lengths can't drift in a
+ * chain. Null when [song] needs a job of its own.
+ */
+export const ytDownloadSharedJob = <S extends YtSong>(
+  jobs: readonly YtDownloadJournalJob<S>[],
+  song: S,
+): string | null =>
+  jobs.find(
+    (job) =>
+      job.phase !== "failed" &&
+      job.phase !== "cancelled" &&
+      job.acknowledged !== true &&
+      [job.song, ...(job.aliases ?? [])].every((other) => soulseekSameRecording(other, song)),
+  )?.id ?? null;
 
 /** Where [videoId]'s download is, or null when it was never asked for (or was cancelled). */
 export const ytDownloadStatus = (state: YtDownloads, videoId: string): YtDownloadStatus | null =>
-  state.jobs.find((job) => job.song.videoId === videoId)?.status ?? null;
+  state.jobs.find(
+    (job) =>
+      job.song.videoId === videoId || job.relatedSongs?.some((song) => song.videoId === videoId),
+  )?.status ?? null;
 
 export type YtDownloadAction = "download" | "cancelDownload" | "retryDownload";
 
@@ -154,6 +202,8 @@ const FAILURE_LINES: { readonly [F in YtDownloadFailure]: string } = {
   failed: "Download failed",
   noFolder: "Download failed: no music folder",
   storage: "Download failed: couldn't save the file",
+  account: "Connect a free Soulseek account in Settings",
+  unavailable: "This recording is unavailable in 320 kbps",
 };
 
 /** The fraction of the file that has arrived, or null when there's no size to measure against. */
@@ -170,6 +220,10 @@ export const ytDownloadLine = (status: YtDownloadStatus | null): string | null =
     case "queued":
       return "Waiting to download";
     case "downloading": {
+      if (status.phase === "connecting") return "Connecting";
+      if (status.phase === "searching") return "Finding this recording";
+      if (status.phase === "queued") return "Waiting to download";
+      if (status.phase === "validating") return "Checking the download";
       const progress = ytDownloadProgress(status);
       return progress === null ? "Downloading" : `Downloading · ${Math.floor(progress * 100)}%`;
     }
