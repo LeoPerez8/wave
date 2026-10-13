@@ -60,11 +60,34 @@ export interface Theme {
 }
 
 /**
- * The shipped theme. The dark scale is anchored on its ground: cards and fills
- * sit one ramp step above the background, hairlines two, evenly spaced (about
- * 0.045 OKLCH lightness per step); grouped areas share the ground. Text,
- * accent and highlight are checked against ground and cards by
- * `themeContrastIssues`.
+ * Night Slate: the dark theme Wave shipped before true black, kept as the
+ * Slate swatch in Settings and as the reference other tinted dark grounds are
+ * derived from. Cards and fills sit one ramp step above its ground, hairlines
+ * two (about 0.045 OKLCH lightness per step); grouped areas share the ground.
+ */
+export const NIGHT_SLATE: ThemeColors = {
+  background: TONES[11],
+  grouped: TONES[11],
+  surface: TONES[10],
+  foreground: TONES[1],
+  secondary: TONES[4],
+  tertiary: TONES[6],
+  separator: TONES[9],
+  fill: TONES[10],
+  accent: "#59c0ad",
+  "on-accent": TONES[11],
+  highlight: "#ec9d53",
+  destructive: "#f2867a",
+  scrim: TONES[11],
+};
+
+const TRUE_BLACK = "#000000";
+
+/**
+ * The shipped theme. Dark mode sits on true black and climbs the ramp from it:
+ * grouped areas on the deepest step, cards and fills one above, hairlines one
+ * more, so each stands off the ground. Text, accent and highlight are checked
+ * against ground, groups and cards by `themeContrastIssues`.
  */
 export const DEFAULT_THEME: Theme = {
   light: {
@@ -83,19 +106,11 @@ export const DEFAULT_THEME: Theme = {
     scrim: TONES[10],
   },
   dark: {
-    background: TONES[11],
+    ...NIGHT_SLATE,
+    background: TRUE_BLACK,
     grouped: TONES[11],
-    surface: TONES[10],
-    foreground: TONES[1],
-    secondary: TONES[4],
-    tertiary: TONES[6],
-    separator: TONES[9],
-    fill: TONES[10],
-    accent: "#59c0ad",
-    "on-accent": TONES[11],
-    highlight: "#ec9d53",
-    destructive: "#f2867a",
-    scrim: TONES[11],
+    "on-accent": TRUE_BLACK,
+    scrim: TRUE_BLACK,
   },
 };
 
