@@ -6,6 +6,9 @@
   runs one wavelength past the tile, so sliding the group left by a wavelength,
   forever, reads as a continuous ripple and the tiles meet without a seam.
 
+  Every number here comes from Core's UNDERLINE_WAVE (the ripple slides one
+  wavelength per rippleMs); src/catalog/underlineDrawable.test.ts fails if they drift.
+
   The slide is an AnimatedVectorDrawable so it runs on the RenderThread: the UI
   thread draws no frames for it, so the glass views' pre-draw listeners don't fire.
   The stroke is white; the view tints it with the theme's highlight colour.

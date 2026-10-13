@@ -1,4 +1,4 @@
-import { underlineMotion } from "@wave/core";
+import { UNDERLINE_WAVE, underlineMotion } from "@wave/core";
 import { useReducedMotion } from "react-native-reanimated";
 
 import { NativeWaveUnderline } from "@/glass/waveGlass";
@@ -6,11 +6,12 @@ import { usePlayWhenReady } from "@/playback/hooks";
 import { useTapAnimationMs } from "@/settings/tapAnimation";
 import { useThemeColor } from "@/theme/useThemeColor";
 
-/** Wavelength 8, amplitude 1.25 and stroke 1.25 dp live in the native tile (`wave_underline.xml`). */
-const AMPLITUDE = 1.25;
-const STROKE = 1.25;
-/** Box tall enough for crest, trough and the stroke around them. */
-const HEIGHT = AMPLITUDE * 2 + STROKE;
+/**
+ * Box tall enough for crest, trough and the stroke around them. The wave
+ * itself lives in the native tile (`wave_underline.xml`), drawn from Core's
+ * `UNDERLINE_WAVE` (`underlineDrawable.test.ts` keeps them in step).
+ */
+const HEIGHT = UNDERLINE_WAVE.amplitude * 2 + UNDERLINE_WAVE.stroke;
 
 /**
  * The ember wave under the playing song's title. Lay it over the title's own

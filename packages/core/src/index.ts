@@ -271,7 +271,7 @@ export type {
 } from "./itemActions.ts";
 export { concentricRadius } from "./corners.ts";
 export type { InsetSquare } from "./corners.ts";
-export { underlineMotion, wavePath } from "./wavyUnderline.ts";
+export { UNDERLINE_WAVE, underlineMotion, wavePath } from "./wavyUnderline.ts";
 export type { UnderlineMotion, UnderlineMotionInput, WaveShape } from "./wavyUnderline.ts";
 export { highlightedOrigin, originOfNewCard, veilAround } from "./overlayOrigin.ts";
 export type { NewCardInput, OriginCard } from "./overlayOrigin.ts";
