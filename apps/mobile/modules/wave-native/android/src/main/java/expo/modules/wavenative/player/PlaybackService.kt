@@ -2,6 +2,7 @@ package expo.modules.wavenative.player
 
 import android.app.PendingIntent
 import android.content.Intent
+import android.content.res.Configuration
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
@@ -34,7 +35,9 @@ import com.google.common.util.concurrent.ListenableFuture
 /**
  * Hosts the player. Media3 provides the media notification, lock-screen and
  * Bluetooth/headset controls through the session, and the player handles
- * audio focus and pauses when headphones disconnect (becoming noisy).
+ * audio focus and pauses when headphones disconnect (becoming noisy). The
+ * notification shows Wave's two waves in the chosen primary
+ * ([WaveNotificationProvider]).
  *
  * The sleep timer runs here too, so it pauses playback with Wave in the
  * background (the JS side may be suspended by then).
@@ -153,6 +156,9 @@ class PlaybackService : MediaLibraryService() {
     player.addListener(sleepTimerListener)
     player.addListener(resumeListener)
     exoPlayer = player
+    NotificationAccent.init(this)
+    setMediaNotificationProvider(WaveNotificationProvider(this))
+    stopAccent = NotificationAccent.state.listen { triggerNotificationUpdate() }
     AutoLyrics.state.init(PreferencesLyricsToggleStore(this))
     val shown = LyricLinePlayer(player, AutoLyrics.state::lineFor)
     session = MediaLibrarySession.Builder(this, shown, SessionCallback())
@@ -183,13 +189,24 @@ class PlaybackService : MediaLibraryService() {
     AutoLyrics.state.setCarConnected(type != CarConnection.CONNECTION_TYPE_NOT_CONNECTED)
   }
 
+  /** Stops redrawing the notification when the primary changes ([NotificationAccent.state]). */
+  private var stopAccent: (() -> Unit)? = null
+
+  /** The notification takes the primary's tone for the scheme, so a scheme change redraws it. */
+  @OptIn(UnstableApi::class)
+  override fun onConfigurationChanged(newConfig: Configuration) {
+    super.onConfigurationChanged(newConfig)
+    triggerNotificationUpdate()
+  }
+
   /**
    * Shows the queue's shuffle and repeat on the mode buttons (Auto's player
-   * screen), and the Lyrics toggle after them.
+   * screen), with More from this artist and the Lyrics toggle after them.
    */
   private fun showModes(modes: PlaybackModes) {
     session?.setMediaButtonPreferences(
-      AutoModesSession.buttons(modes) + AutoLyricsSession.button(AutoLyrics.state.on),
+      AutoModesSession.buttons(modes) + MoreFromArtistSession.button +
+        AutoLyricsSession.button(AutoLyrics.state.on),
     )
   }
 
@@ -233,6 +250,8 @@ class PlaybackService : MediaLibraryService() {
   override fun onDestroy() {
     stopModes?.invoke()
     stopModes = null
+    stopAccent?.invoke()
+    stopAccent = null
     stopLyrics?.invoke()
     stopLyrics = null
     carConnection?.removeObserver(carConnectionObserver)
@@ -291,7 +310,7 @@ class PlaybackService : MediaLibraryService() {
       if (showsModeButtons(session, controller)) {
         result
           .setAvailableSessionCommands(
-            AutoModesSession.sessionCommands.buildUpon().add(AutoLyricsSession.TOGGLE).build(),
+            AutoLyricsSession.withCommand(MoreFromArtistSession.withCommand(AutoModesSession.sessionCommands)),
           )
           .setAvailablePlayerCommands(AutoModesSession.playerCommands)
       }
@@ -411,13 +430,15 @@ class PlaybackService : MediaLibraryService() {
         return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
       }
       // A shuffle or repeat button: JS's queue engine changes the mode and reports it back.
-      AutoModes.request(customCommand.customAction)?.let { request ->
+      // More from this artist: JS's queue engine adds the songs.
+      val action = customCommand.customAction
+      (AutoModes.request(action) ?: MoreFromArtist.request(action))?.let { request ->
         if (session.isAutoCompanionController(controller) || session.isAutomotiveController(controller)) {
           keepJsFor(controller)
         }
         return AutoLibrary.command(request)
       }
-      val code = when (customCommand.customAction) {
+      val code = when (action) {
         SleepTimerSession.START.customAction ->
           SleepTimerSession.fromBundle(args)
             ?.let { sleepTimer.start(it); SessionResult.RESULT_SUCCESS }

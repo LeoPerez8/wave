@@ -55,6 +55,11 @@ export type QueueCommand =
   | { readonly type: "setRepeat"; readonly mode: RepeatMode }
   | { readonly type: "playNext"; readonly trackIds: readonly string[] }
   | { readonly type: "addToQueue"; readonly trackIds: readonly string[] }
+  /**
+   * More from this artist: the next `MORE_FROM_ARTIST` songs of the artist's
+   * [ranking] (Core's `artistRanking`) go right after the current track.
+   */
+  | { readonly type: "moreFromArtist"; readonly ranking: readonly string[] }
   /** Moves an Up Next entry beside its new neighbours (see `UpNextMove`, made by `upNextMove`). */
   | ({ readonly type: "move" } & UpNextMove)
   | { readonly type: "remove"; readonly key: string }
@@ -245,6 +250,38 @@ const enqueue = (
   return result({ ...state, entries, nextKey });
 };
 
+/** How many songs a tap on More from this artist adds. */
+export const MORE_FROM_ARTIST = 3;
+
+/**
+ * Adds the first `MORE_FROM_ARTIST` songs of the artist's [ranking] that
+ * aren't queued: not playing, not in Up Next, and not lined up earlier and
+ * played since (a context entry behind the current one can come back). They go
+ * right after the current track, after the artist's songs lined up there
+ * already, which is where the earlier taps put theirs.
+ */
+const moreFromArtist = (state: QueueState, ranking: readonly string[]): QueueResult => {
+  if (state.index < 0) return result(state);
+  const queued = new Set(
+    state.entries
+      .filter((entry, i) => i >= state.index || isQueued(entry))
+      .map((entry) => entry.trackId),
+  );
+  const trackIds = ranking.filter((trackId) => !queued.has(trackId)).slice(0, MORE_FROM_ARTIST);
+  if (trackIds.length === 0) return result(state);
+  const artist = new Set(ranking);
+  // Past the artist's songs lined up right after the current track.
+  const { entries: added, nextKey } = makeEntries(trackIds, state.nextKey, () => null);
+  let at = state.index + 1;
+  while (at < state.entries.length) {
+    const entry = state.entries[at]!;
+    if (!isQueued(entry) || !artist.has(entry.trackId)) break;
+    at += 1;
+  }
+  const entries = [...state.entries.slice(0, at), ...added, ...state.entries.slice(at)];
+  return result({ ...state, entries, nextKey });
+};
+
 const indexOfKey = (state: QueueState, key: string): number =>
   state.entries.findIndex((entry) => entry.key === key);
 
@@ -336,6 +373,8 @@ export const reduceQueue = (
       return enqueue(state, command.trackIds, "next");
     case "addToQueue":
       return enqueue(state, command.trackIds, "last");
+    case "moreFromArtist":
+      return moreFromArtist(state, command.ranking);
     case "jumpTo":
       return jumpTo(state, command.key);
     case "playerMoved":

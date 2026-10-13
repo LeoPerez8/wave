@@ -2,6 +2,7 @@ package expo.modules.wavenative
 
 import android.app.Activity
 import android.content.ActivityNotFoundException
+import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
 import android.media.MediaScannerConnection
@@ -9,8 +10,11 @@ import android.net.Uri
 import android.os.Environment
 import android.os.storage.StorageManager
 import android.provider.DocumentsContract
+import android.provider.MediaStore
+import android.provider.OpenableColumns
 import android.provider.Settings
 import expo.modules.kotlin.Promise
+import expo.modules.kotlin.events.OnActivityResultPayload
 import expo.modules.kotlin.exception.Exceptions
 import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
@@ -23,6 +27,7 @@ import expo.modules.wavenative.files.DeleteOutcome
 import expo.modules.wavenative.files.TrackFileDeleter
 import expo.modules.wavenative.folders.TreeUris
 import expo.modules.wavenative.lyrics.LyricsReader
+import expo.modules.wavenative.playlists.PlaylistFiles
 import expo.modules.wavenative.scan.KnownFile
 import expo.modules.wavenative.scan.LibraryScanner
 import expo.modules.wavenative.scan.ScanListener
@@ -38,7 +43,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * Wave's native side: all-files access, the folder picker, the library scanner,
+ * Wave's native side: all-files access, the folder and playlist file pickers, the library scanner,
  * lyrics, deleting songs' files and saving artist photos. Scans run one at
  * a time on a background thread and stream results to JS as events:
  * `onScanProgress`, `onScanMissing`, `onScanBatch`, `onScanComplete` and
@@ -53,8 +58,9 @@ class WaveNativeModule : Module() {
   private val lyricsReader by lazy {
     LyricsReader(AudioTagReader(primary = JAudioTaggerReader(), fallback = MediaRetrieverTagReader()))
   }
-  /** Only touched on the main thread, where the picker starts and its result arrives. */
+  /** Only touched on the main thread, where the pickers start and their results arrive. */
   private var pendingFolderPick: Promise? = null
+  private var pendingPlaylistPick: Promise? = null
 
   private val context: Context
     get() = appContext.reactContext ?: throw Exceptions.ReactContextLost()
@@ -100,20 +106,30 @@ class WaveNativeModule : Module() {
       activity.startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE), PICK_FOLDER_REQUEST)
     }.runOnQueue(Queues.MAIN)
 
-    OnActivityResult { _, payload ->
-      if (payload.requestCode != PICK_FOLDER_REQUEST) return@OnActivityResult
-      val promise = pendingFolderPick ?: return@OnActivityResult
-      pendingFolderPick = null
-      val uri = payload.data?.data
-      if (payload.resultCode != Activity.RESULT_OK || uri == null) {
-        promise.resolve(mapOf("status" to "cancelled"))
-        return@OnActivityResult
+    /**
+     * Opens the system file picker for one or more M3U playlists. Resolves one
+     * `{ name, path, text }` per picked file (none when cancelled): its file
+     * name, its absolute path when its provider has one, and its text, or null
+     * when it couldn't be read. The files are read off the main thread.
+     */
+    AsyncFunction("pickPlaylistFiles") { promise: Promise ->
+      val activity = appContext.currentActivity ?: throw Exceptions.MissingActivity()
+      pendingPlaylistPick?.resolve(emptyList<Map<String, Any?>>())
+      pendingPlaylistPick = promise
+      val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+        addCategory(Intent.CATEGORY_OPENABLE)
+        type = "*/*"
+        putExtra(Intent.EXTRA_MIME_TYPES, PlaylistFiles.MIME_TYPES)
+        putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
       }
-      val documentId = runCatching { DocumentsContract.getTreeDocumentId(uri) }.getOrNull()
-      val path = TreeUris.toPath(uri.authority, documentId, ::volumeDirectory)
-      promise.resolve(
-        if (path == null) mapOf("status" to "unsupported") else mapOf("status" to "picked", "path" to path),
-      )
+      activity.startActivityForResult(intent, PICK_PLAYLISTS_REQUEST)
+    }.runOnQueue(Queues.MAIN)
+
+    OnActivityResult { _, payload ->
+      when (payload.requestCode) {
+        PICK_FOLDER_REQUEST -> onFolderPicked(payload)
+        PICK_PLAYLISTS_REQUEST -> onPlaylistsPicked(payload)
+      }
     }
 
     /**
@@ -194,7 +210,61 @@ class WaveNativeModule : Module() {
     }
   }
 
-  private fun artistPhotos() = ArtistPhotoStore(File(File(context.filesDir, "artwork"), "artists"))
+  private fun onFolderPicked(payload: OnActivityResultPayload) {
+    val promise = pendingFolderPick ?: return
+    pendingFolderPick = null
+    val uri = payload.data?.data
+    if (payload.resultCode != Activity.RESULT_OK || uri == null) {
+      promise.resolve(mapOf("status" to "cancelled"))
+      return
+    }
+    val documentId = runCatching { DocumentsContract.getTreeDocumentId(uri) }.getOrNull()
+    val path = TreeUris.toPath(uri.authority, documentId, ::volumeDirectory)
+    promise.resolve(
+      if (path == null) mapOf("status" to "unsupported") else mapOf("status" to "picked", "path" to path),
+    )
+  }
+
+  private fun onPlaylistsPicked(payload: OnActivityResultPayload) {
+    val promise = pendingPlaylistPick ?: return
+    pendingPlaylistPick = null
+    val data = payload.data
+    if (payload.resultCode != Activity.RESULT_OK || data == null) {
+      promise.resolve(emptyList<Map<String, Any?>>())
+      return
+    }
+    val clip = data.clipData
+    val uris = if (clip != null) List(clip.itemCount) { clip.getItemAt(it).uri } else listOfNotNull(data.data)
+    Thread({ promise.resolve(uris.map(::readPlaylistFile)) }, "wave-playlist-import").start()
+  }
+
+  /** `{ name, path, text }` of a picked playlist file; see `pickPlaylistFiles`. */
+  private fun readPlaylistFile(uri: Uri): Map<String, Any?> {
+    val resolver = context.contentResolver
+    val name = runCatching {
+      resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+        if (cursor.moveToFirst()) cursor.getString(0) else null
+      }
+    }.getOrNull() ?: uri.lastPathSegment ?: "Playlist"
+    val documentId = runCatching { DocumentsContract.getDocumentId(uri) }.getOrNull()
+    val path = PlaylistFiles.documentPath(uri.authority, documentId, ::volumeDirectory)
+      ?: PlaylistFiles.mediaStoreId(uri.authority, documentId)?.let(::mediaStorePath)
+    val text = runCatching {
+      resolver.openInputStream(uri)?.use(PlaylistFiles::readText)
+    }.getOrNull()
+    return mapOf("name" to name, "path" to path, "text" to text)
+  }
+
+  /** A MediaStore file's absolute path (readable with all-files access), for downloads picked by id. */
+  private fun mediaStorePath(id: Long): String? = runCatching {
+    val uri = ContentUris.withAppendedId(MediaStore.Files.getContentUri("external"), id)
+    @Suppress("DEPRECATION")
+    context.contentResolver.query(uri, arrayOf(MediaStore.MediaColumns.DATA), null, null, null)?.use { cursor ->
+      if (cursor.moveToFirst()) cursor.getString(0) else null
+    }
+  }.getOrNull()
+
+  private fun artistPhotos() =ArtistPhotoStore(File(File(context.filesDir, "artwork"), "artists"))
 
   /** The root of a storage volume: `primary` or the UUID of an SD card or USB drive. */
   private fun volumeDirectory(volumeId: String): File? {
@@ -303,5 +373,6 @@ class WaveNativeModule : Module() {
 
   private companion object {
     const val PICK_FOLDER_REQUEST = 0x5741
+    const val PICK_PLAYLISTS_REQUEST = 0x5742
   }
 }

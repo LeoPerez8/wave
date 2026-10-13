@@ -8,6 +8,7 @@ import {
 import { Uniwind } from "uniwind";
 
 import { persistedSetting, sameFields } from "@/lib/persistedSetting";
+import { WavePlayer } from "@/native/wavePlayer";
 
 /** The colours as CSS variables (`--color-<token>`), the names global.css declares. */
 const cssVariables = (colors: ThemeColors): Record<string, string> =>
@@ -15,12 +16,16 @@ const cssVariables = (colors: ThemeColors): Record<string, string> =>
 
 /**
  * Lays the chosen colours over global.css's defaults. Every className and
- * `useThemeColor` reader (glass tint, native props) re-renders with them.
+ * `useThemeColor` reader (glass tint, native props) re-renders with them, and
+ * the media notification takes the primary.
  */
 const apply = (choice: ThemeChoice): void => {
   const theme = themeFor(choice);
   Uniwind.updateCSSVariables("light", cssVariables(theme.light));
   Uniwind.updateCSSVariables("dark", cssVariables(theme.dark));
+  WavePlayer.setNotificationAccent(theme.light.accent, theme.dark.accent).catch((error: unknown) =>
+    console.warn("[wave] Couldn't colour the notification", error),
+  );
 };
 
 const theme = persistedSetting<ThemeChoice>({

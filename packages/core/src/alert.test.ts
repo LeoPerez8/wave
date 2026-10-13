@@ -24,6 +24,19 @@ describe("planAlert", () => {
     ]);
   });
 
+  test("a confirmation can name what dismissing it does instead of Cancel", () => {
+    const plan = planAlert({
+      title: "Replace Road Trip?",
+      message: "You already have a playlist called Road Trip.",
+      action: { label: "Replace", destructive: true },
+      dismissLabel: "Keep Both",
+    });
+    assert.deepEqual(plan.buttons, [
+      { label: "Keep Both", tone: "accent", choice: "dismiss" },
+      { label: "Replace", tone: "destructive", choice: "action" },
+    ]);
+  });
+
   test("screen readers hear the title, then the message", () => {
     assert.equal(
       planAlert({

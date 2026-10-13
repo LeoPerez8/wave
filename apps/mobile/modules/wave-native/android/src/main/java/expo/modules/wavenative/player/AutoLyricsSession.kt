@@ -8,6 +8,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.CommandButton
 import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionCommands
 
 /**
  * [AutoLyrics] in Media3 terms: the custom session command behind the Lyrics
@@ -16,6 +17,10 @@ import androidx.media3.session.SessionCommand
 @OptIn(UnstableApi::class)
 object AutoLyricsSession {
   val TOGGLE = SessionCommand(AutoLyrics.TOGGLE_ACTION, Bundle.EMPTY)
+
+  /** [commands] plus the toggle's. */
+  fun withCommand(commands: SessionCommands): SessionCommands =
+    commands.buildUpon().add(TOGGLE).build()
 
   /** The toggle showing [on], for the session's media button preferences. */
   fun button(on: Boolean): CommandButton =

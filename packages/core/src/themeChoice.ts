@@ -7,7 +7,13 @@
 import { readStoredRecord } from "./storedJson.ts";
 import { luminance, mix, toOklch, withLuminance } from "./colour.ts";
 import { contrastRatio } from "./palette.ts";
-import { CONTRAST_REQUIREMENTS, DEFAULT_THEME, type Theme, type ThemeColors } from "./theme.ts";
+import {
+  CONTRAST_REQUIREMENTS,
+  DEFAULT_THEME,
+  NIGHT_SLATE,
+  type Theme,
+  type ThemeColors,
+} from "./theme.ts";
 
 export type Scheme = "light" | "dark";
 
@@ -42,8 +48,8 @@ export const THEME_SWATCHES: {
     { id: "paper", label: "Paper", colour: "#f5f5f3" },
   ],
   dark: [
-    { id: "slate", label: "Slate", colour: DEFAULT_THEME.dark.background },
-    { id: "black", label: "True black", colour: "#000000" },
+    { id: "black", label: "True black", colour: DEFAULT_THEME.dark.background },
+    { id: "slate", label: "Slate", colour: NIGHT_SLATE.background },
     { id: "graphite", label: "Graphite", colour: "#141414" },
     { id: "navy", label: "Navy", colour: "#0a0f1f" },
     { id: "forest", label: "Forest", colour: "#0a130d" },
@@ -155,27 +161,39 @@ const NEUTRALS = [
 const MAX_NEUTRAL_CHROMA = 0.05;
 
 /**
- * Each neutral keeps the contrast it has against the shipped ground, on the
- * same side (lighter or darker), in the new ground's hue. Contrast rather than
- * fixed lightness steps, so cards still stand off a true-black ground.
+ * The hand-tuned schemes of each mode. The last is the reference the other
+ * grounds are derived from: fog in light, Night Slate in dark (true black has
+ * no hue to carry over to a tinted ground).
+ */
+const TUNED: Record<Scheme, readonly ThemeColors[]> = {
+  light: [DEFAULT_THEME.light],
+  dark: [DEFAULT_THEME.dark, NIGHT_SLATE],
+};
+
+/**
+ * A hand-tuned scheme on `ground` if there is one; otherwise each neutral
+ * keeps the contrast it has against the reference ground, on the same side
+ * (lighter or darker), in the new ground's hue. Contrast rather than fixed
+ * lightness steps, so cards stand off a very dark ground as well as a pale one.
  */
 const deriveNeutrals = (scheme: Scheme, ground: string): Mutable<ThemeColors> => {
-  const shipped = DEFAULT_THEME[scheme];
-  if (ground.toLowerCase() === shipped.background) return { ...shipped };
+  const tuned = TUNED[scheme].find((colours) => colours.background === ground.toLowerCase());
+  if (tuned !== undefined) return { ...tuned };
+  const base = TUNED[scheme].at(-1) ?? DEFAULT_THEME[scheme];
   const groundY = luminance(ground);
   const groundTone = toOklch(ground);
-  const shippedTone = toOklch(shipped.background);
-  const result: Mutable<ThemeColors> = { ...shipped, background: ground };
+  const baseTone = toOklch(base.background);
+  const result: Mutable<ThemeColors> = { ...base, background: ground };
   for (const token of NEUTRALS) {
-    const reference = shipped[token];
-    if (reference === shipped.background) {
+    const reference = base[token];
+    if (reference === base.background) {
       result[token] = ground;
       continue;
     }
-    const ratio = contrastRatio(reference, shipped.background);
-    const lighter = luminance(reference) > luminance(shipped.background);
+    const ratio = contrastRatio(reference, base.background);
+    const lighter = luminance(reference) > luminance(base.background);
     const target = lighter ? ratio * (groundY + 0.05) - 0.05 : (groundY + 0.05) / ratio - 0.05;
-    const chromaShare = shippedTone.c === 0 ? 1 : toOklch(reference).c / shippedTone.c;
+    const chromaShare = baseTone.c === 0 ? 1 : toOklch(reference).c / baseTone.c;
     const chroma = Math.min(MAX_NEUTRAL_CHROMA, groundTone.c * chromaShare);
     result[token] = withLuminance(target, groundTone.h, chroma);
   }

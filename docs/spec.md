@@ -103,22 +103,23 @@ v1 delivers the core player and library. v2 adds the advanced audio and library-
 53. As a user, I want to reorder and remove playlist tracks, so that I control the order.
 54. As a user, I want playlist artwork to be a mosaic of its first albums, so that playlists are recognisable.
 55. As a user, I want a Favorites list of all starred tracks, so that I can play my favorites.
+56. As a user, I want to import `.m3u` / `.m3u8` playlist files (several at once) from Library › Playlists, each becoming a playlist named after its file with its songs in file order, so that playlists I made in another player come with me. Entries not in my library are skipped and listed in a summary, and a name I already use asks whether to replace that playlist or keep both.
 
 ### Home tab and play history
 
-56. As a user, I want every play recorded with start time, listened time, how it ended (completed, skipped, stopped, interrupted) and its play context, so that statistics can be computed later over my full history.
-57. As a user, I want a play to count once I have listened to a song for more than 15 seconds (or played a song of 15 seconds or less to the end), so that play counts reflect what I actually listened to.
-58. As a user, I want a Home tab with Recently Added (albums), Recently Played, Most Played and Favorites sections, so that my most relevant music is one tap away.
+57. As a user, I want every play recorded with start time, listened time, how it ended (completed, skipped, stopped, interrupted) and its play context, so that statistics can be computed later over my full history.
+58. As a user, I want a play to count once I have listened to a song for more than 15 seconds (or played a song of 15 seconds or less to the end), so that play counts reflect what I actually listened to.
+59. As a user, I want a Home tab with Recently Added (albums), Recently Played, Most Played and Favorites sections, so that my most relevant music is one tap away.
 
 ### Look and feel
 
-59. As a user, I want the app to follow the system light/dark theme, so that it matches my phone.
-60. As a user, I want Wave to have its own visual identity (The Quiet Catalog: tinted grounds, a teal accent and an ember highlight for favorites and now playing), so that it feels like mine rather than a copy of another app.
-61. As a user, I want calm, uncluttered screens with no heavy effects, so that the app stays smooth at 120 Hz.
-62. As a user, I want small, exact typography and line icons, so that my library reads like a record label's catalog.
-63. As a user, I want haptic feedback on key interactions (play/pause, favorite, long-press, scrubbing ends), so that the app feels tactile.
-64. As a user, I want the entire interface in English, so that it is consistent.
-65. As a user, I want every tap to animate, with the animation duration adjustable in milliseconds in Settings, so that the app responds the way I like.
+60. As a user, I want the app to follow the system light/dark theme, so that it matches my phone.
+61. As a user, I want Wave to have its own visual identity (The Quiet Catalog: tinted grounds, a teal accent and an ember highlight for favorites and now playing), so that it feels like mine rather than a copy of another app.
+62. As a user, I want calm, uncluttered screens with no heavy effects, so that the app stays smooth at 120 Hz.
+63. As a user, I want small, exact typography and line icons, so that my library reads like a record label's catalog.
+64. As a user, I want haptic feedback on key interactions (play/pause, favorite, long-press, scrubbing ends), so that the app feels tactile.
+65. As a user, I want the entire interface in English, so that it is consistent.
+66. As a user, I want every tap to animate, with the animation duration adjustable in milliseconds in Settings, so that the app responds the way I like.
 
 ## Implementation Decisions
 
@@ -151,6 +152,7 @@ v1 delivers the core player and library. v2 adds the advanced audio and library-
    - _Search_ — normalisation (case, accents, punctuation), word-prefix matching and ranking across entity types.
    - _Lyrics_ — LRC parsing (timestamps, multiple stamps per line, offsets) and current-line lookup.
    - _Sleep timer_ — deadline/end-of-track logic.
+   - _M3U import_ — parsing `.m3u` / `.m3u8` (`#EXTM3U`, `#EXTINF`, comments), resolving entries (absolute, relative to the playlist file, `file://`, Windows separators) and matching them to Library tracks by path (case-insensitively, as Android's storage is), the playlist's name, Keep Both's numbered name and the import summary (`m3u.ts`). The native module's file picker reads the files and their paths.
 2. **Native player** (local Expo module, Kotlin, Media3). A `MediaSessionService` hosting ExoPlayer, so notification, lock screen, Bluetooth/headset buttons, audio focus and becoming-noisy handling come from Media3. The JS side owns ordering (from the queue engine) and pushes the ordered item list; the native side plays it gaplessly and reports state, throttled position, item transitions with a reason (auto-advance, skip, seek, error) and errors. Native shuffle is not used. The audio pipeline keeps a hook for custom audio processors so equalizer, crossfade and ReplayGain (v2) slot in without restructuring.
 3. **Native scanner** (same Kotlin module). Walks the scan roots minus exclusions, reads tags with a JVM tag library that also supports writing (needed by the v2 tag editor), extracts embedded artwork once per unique image (hashed, cached as files) together with a small colour palette (Android Palette) for the Now Playing tint, and finds sidecar `.lrc` files. It streams results to JS in batches of ~500 and supports an incremental mode driven by known path + modification time + size.
 4. **Library store** (app, Drizzle on expo-sqlite). The single owner of the schema and migrations. Tables for tracks, albums, artists, genres, folders, artwork (path + palette), playlists and playlist items, favorites, play events, scan roots/exclusions, recent searches, and persisted playback state. Home sections and play counts are queries over play events.
@@ -165,7 +167,7 @@ One row per playback start: track, started-at, listened milliseconds, track dura
 
 - The visual world is **The Quiet Catalog** (ECM Records' cover program as the reference): artwork in calm, tinted fields, small and exact type. The decision, its direction contract and the product record live in `apps/mobile/PRODUCT.md` and `apps/mobile/.impeccable/`; `apps/mobile/DESIGN.md` documents the built system.
 - Components are fully custom (Apple Music is inspiration only); system and predictive Back always work.
-- Theme follows the system. Fog ground in light (`#e0ecef`), a deep, faintly blue night slate in dark (`#0a1113`, a ramp step only dark mode uses, so light mode's text is untouched); dark cards, fills and separators climb one ramp step each from it. Every neutral comes from one tonal ramp; teal accent, ember highlight. Text, accent and highlight meet WCAG AA on the ground and cards in both themes. Tokens live in `apps/mobile/global.css`, mirrored and contrast-checked in Core (`packages/core/src/theme.ts`); the launch splash uses the same grounds. Settings › Theme picks a background per mode (true black included), a primary and a secondary from preset swatches; Core (`themeChoice.ts`) derives cards, groups, fills, separators, text and the dialog scrim from the background by keeping each token's contrast against it, and deepens or brightens inks that wouldn't read. The choice is applied at runtime over the CSS defaults; the splash keeps the default grounds.
+- Theme follows the system. Fog ground in light (`#e0ecef`), true black in dark (`#000000`); on it, dark grouped areas (`#0a1113`, a ramp step only dark mode uses, so light mode's text is untouched), cards and fills, and separators climb one ramp step each. Every neutral comes from one tonal ramp; teal accent, ember highlight. Text, accent and highlight meet WCAG AA on the ground and cards in both themes. Tokens live in `apps/mobile/global.css`, mirrored and contrast-checked in Core (`packages/core/src/theme.ts`); the launch splash uses the same grounds. Settings › Theme picks a background per mode (true black is the dark default; Slate, the night slate ground Wave shipped before, is still offered and looks as it did), a primary and a secondary from preset swatches; a background chosen before the default changed is kept. For the other backgrounds Core (`themeChoice.ts`) derives cards, groups, fills, separators, text and the dialog scrim by keeping each token's contrast against the ground, and deepens or brightens inks that wouldn't read. The choice is applied at runtime over the CSS defaults; the splash keeps the default grounds.
 - Inter as the typeface, with a light large title and tracked-caps catalog lines; Tabler line icons.
 - Signature move: a thin A–Z spine on long lists that sets one huge letter in the field while scrubbing, with a haptic tick per letter.
 - Every tap animates through one press primitive whose duration comes from Settings (0–600 ms, default 140 ms) and respects the system's reduce-motion setting.
@@ -187,7 +189,7 @@ One row per playback start: track, started-at, listened milliseconds, track dura
 
 ## Out of Scope
 
-- v2 features: equalizer and presets, crossfade, ReplayGain, tag editor, smart playlists, M3U import/export, Last.fm scrobbling, home-screen widgets, album artwork download, statistics/metrics screens (v1 only records the data).
+- v2 features: equalizer and presets, crossfade, ReplayGain, tag editor, smart playlists, M3U export, Last.fm scrobbling, home-screen widgets, album artwork download, statistics/metrics screens (v1 only records the data).
 - iOS, desktop, web.
 - Streaming services, cloud libraries, network shares.
 - Accounts, sync, backup.

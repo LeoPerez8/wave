@@ -12,7 +12,7 @@ colors:
   highlight: "#a14f09"
   destructive: "#b3261e"
   scrim: "#121b1d"
-  background-dark: "#0a1113"
+  background-dark: "#000000"
   foreground-dark: "#e0ecef"
   secondary-dark: "#a5b0b3"
   tertiary-dark: "#606b6e"
@@ -21,7 +21,7 @@ colors:
   accent-dark: "#59c0ad"
   highlight-dark: "#ec9d53"
   destructive-dark: "#f2867a"
-  scrim-dark: "#0a1113"
+  scrim-dark: "#000000"
 typography:
   display:
     fontFamily: "Inter"
@@ -132,13 +132,13 @@ components:
 
 Wave sets the owner's library the way a record label sets its catalog (the ECM cover program is the touchstone): artwork sits in wide, calm, tinted fields and the type around it is small and exact. Calm here comes from alignment, not from emptiness. Every margin, row, tile and the A–Z spine snaps to one 8dp cell, so a screen of tens of thousands of tracks still reads as ordered furniture rather than density.
 
-The ground is tinted, never plain white or black: fog blue-grey in light, night slate in dark, and every neutral is a step on one tonal ramp drawn from that ground. Hierarchy is quiet. The large title is light, not bold; lists use one type size and rank by weight and tint; labels are small tracked capitals, like the catalog line printed under a sleeve. Two chromatic voices only: a deep teal for what is active, an ember for what is loved or playing.
+The light ground is tinted, never plain white: fog blue-grey. The dark ground is true black, so an OLED screen goes dark around the artwork, and everything raised from it (groups, cards, hairlines) climbs the same tinted ramp. Every neutral is a step on that one ramp. Hierarchy is quiet. The large title is light, not bold; lists use one type size and rank by weight and tint; labels are small tracked capitals, like the catalog line printed under a sleeve. Two chromatic voices only: a deep teal for what is active, an ember for what is loved or playing.
 
-The world rejects the category default it was chosen against: bold large titles, chevron-and-icon rows, rounded "card" chrome around artwork, and a single accent on pure black or white. (The app icon is the one deliberate black ground: two waves, teal over amber, on black, so it holds up among other launcher icons; see #94.) Components are fully custom (chosen over Material 3), but Android's own conventions still hold: system and predictive Back work, touch targets are 48dp, and the theme follows the system light/dark setting.
+The world rejects the category default it was chosen against: bold large titles, chevron-and-icon rows, rounded "card" chrome around artwork, and a single accent on pure white. (The app icon sits on black too: two waves, teal over amber, so it holds up among other launcher icons; see #94.) Components are fully custom (chosen over Material 3), but Android's own conventions still hold: system and predictive Back work, touch targets are 48dp, and the theme follows the system light/dark setting.
 
 **Key Characteristics:**
 
-- Tinted fog / night-slate ground; neutrals from one ramp (OKLCH hue ~215).
+- Fog ground in light, true black in dark; neutrals from one ramp (OKLCH hue ~215).
 - One 8dp cell module for every dimension.
 - Artwork as photographs: square, unrounded, unframed (artists are circles; the mini player's thumbnail follows its pill).
 - Light large titles; one size per list, rank by weight and tint.
@@ -165,7 +165,7 @@ A cool, low-chroma tonal ramp carrying two small, saturated voices: teal and emb
 
 ### Neutral
 
-- **Fog / Night Slate** (`background`): the ground of every screen. Fog blue-grey in light (tone-1), a deep night slate in dark (tone-11, a step only dark mode uses).
+- **Fog / True Black** (`background`): the ground of every screen. Fog blue-grey in light (tone-1), true black (`#000000`) in dark.
 - **Ink** (`foreground`): titles, track titles, entry labels, the large title.
 - **Graphite** (`secondary`): artists, counts, durations, furniture lines, catalog lines, inactive spine letters, helper copy.
 - **Pewter** (`tertiary`): non-text only. Disabled icon buttons, the missing-file glyph, the placeholder note on artless covers.
@@ -173,15 +173,15 @@ A cool, low-chroma tonal ramp carrying two small, saturated voices: teal and emb
 - **Card divider**: on overlay cards (menus, dialogs) the separator tone vanishes on glass, so their rules are the ink laid at about a quarter strength, two pixels thick (Core's `overlayDivider`). `Hairline` draws it by itself inside any overlay card; one sits between each pair of entries, never after the last.
 - **Field** (`fill`): the square behind artwork that has no image, and empty cover slots.
 
-The full ramp lives in `global.css` as `tone-0` (lightest, `#eff4f6`) to `tone-11` (darkest, `#0a1113`); each semantic token is a step on it, in both themes. Light mode uses `tone-0` to `tone-10` (its ink is `tone-10`); `tone-11` is dark mode's ground only, and dark cards and fills (`tone-10`) and hairlines (`tone-9`) climb one step each from it, evenly spaced, so light mode never changes when dark mode gets darker. Core's `packages/core/src/theme.ts` holds the same values (`DEFAULT_THEME`, `TONES`) and checks WCAG AA for every pair the app draws (`themeContrastIssues`); an app test fails if `global.css` or the launch splash drift from it. `surface` is the tint laid over the glass of the floating chrome (at about 72%); `scrim` is the veil behind dialog and menu cards, laid at a quarter strength: the ink in light mode, the ground in dark. `grouped` and `on-accent` are also declared there but are not yet used by this world's components.
+The full ramp lives in `global.css` as `tone-0` (lightest, `#eff4f6`) to `tone-11` (darkest, `#0a1113`); each semantic token is a step on it, in both themes. Light mode uses `tone-0` to `tone-10` (its ink is `tone-10`); `tone-11` is used by dark mode only. On the black dark ground, grouped areas sit on `tone-11`, cards and fills on `tone-10` and hairlines on `tone-9`, so each stands off the ground and light mode never changes when dark mode gets darker. The ground dark mode shipped with before, Night Slate (`tone-11`, with grouped areas sharing it), is kept in Core as `NIGHT_SLATE` and offered as the Slate swatch. Core's `packages/core/src/theme.ts` holds the same values (`DEFAULT_THEME`, `TONES`) and checks WCAG AA for every pair the app draws (`themeContrastIssues`); an app test fails if `global.css` or the launch splash drift from it. `surface` is the tint laid over the glass of the floating chrome (at about 72%); `scrim` is the veil behind dialog and menu cards, laid at a quarter strength: the ink in light mode, the ground in dark. `grouped` and `on-accent` are also declared there but are not yet used by this world's components.
 
-These are the shipped colours. In Settings › Theme the owner picks a background for each mode and a primary (`accent`) and secondary (`highlight`) from preset swatches; Core's `themeFor` derives every other token from the chosen background (each neutral keeps its shipped contrast against the ground, so cards still stand off a true-black ground) and deepens or brightens an ink until it meets its contrast minimum. The app lays the result over `global.css` at runtime with `Uniwind.updateCSSVariables`, so every class and `useThemeColor` reader recolours at once; `global.css` and the launch splash stay the shipped theme.
+These are the shipped colours. In Settings › Theme the owner picks a background for each mode and a primary (`accent`) and secondary (`highlight`) from preset swatches; True black is the marked default for dark mode, and Slate gives Night Slate exactly; for any other background Core's `themeFor` derives every other token from it (each neutral keeps the contrast it has on fog or Night Slate, so cards stand off any ground) and deepens or brightens an ink until it meets its contrast minimum. The app lays the result over `global.css` at runtime with `Uniwind.updateCSSVariables`, so every class and `useThemeColor` reader recolours at once; `global.css` and the launch splash stay the shipped theme.
 
 ### Named Rules
 
 **The One Ramp Rule.** Every neutral is a step on the tone ramp. No ad-hoc greys, no opacity-on-black greys; if a new neutral is needed, pick a ramp step.
 
-**The Tinted Ground Rule.** The ground is fog or night slate. Never ship a screen on `#ffffff` or `#000000`.
+**The Ground Rule.** The ground is fog in light and true black in dark. Never ship a screen on `#ffffff`, and never put a card, group or hairline on black without a ramp step between them.
 
 **The Two Voices Rule.** Teal means active, ember means favorite or playing. If a colour on screen means neither, it should be a neutral. The one exception is the destructive red on a Delete or Remove button.
 
@@ -274,7 +274,9 @@ Every tappable element is built on one press primitive, so the whole world feels
 
 ### Alert Dialog
 
-A glass dialog card (`src/overlay/alert.tsx`, opened from anywhere with `showMessage` / `confirmAction`): the title in Title3 ink, the message below in Subheadline graphite, then the buttons as text buttons right-aligned along the bottom. A message has a single OK; a confirmation has Cancel then the action, which is red when it deletes or removes. Back or a tap outside does what Cancel or OK does. Screen readers hear the title and message as it opens. There are no system alerts.
+A glass dialog card (`src/overlay/alert.tsx`, opened from anywhere with `showMessage` / `confirmAction`): the title in Title3 ink, the message below in Subheadline graphite, then the buttons as text buttons right-aligned along the bottom. A message has a single OK; a confirmation has Cancel then the action, which is red when it deletes or removes. Back or a tap outside does what Cancel or OK does. A confirmation may rename Cancel when dismissing it does something gentler than nothing: an imported playlist whose name is taken asks Keep Both / Replace (red). Screen readers hear the title and message as it opens. There are no system alerts.
+
+Import Playlists ends on a summary card of the same make (`src/library/importPlaylists.tsx`): the title, then one section per picked file (its name in Body 500 ink, what it became in Subheadline graphite, then each entry left out in Footnote graphite), scrolling when long, and OK.
 
 - **Hover / Focus:** touch only; the Press dim-and-sink is the whole feedback.
 
