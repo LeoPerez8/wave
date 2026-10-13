@@ -26,6 +26,11 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
   private var policy = mutableMapOf<String, Any?>("roots" to emptyList<String>(), "excluded" to emptyList<String>(), "revision" to 0L)
   @Volatile private var stopped = false
   @Volatile private var activeTransfer: String? = null
+  /**
+   * What readers see, copied whenever the journal changes. The notification reads it on the main
+   * thread while the worker holds the lock for slow work (cover fetch, tag writing, publication).
+   */
+  @Volatile private var published: List<Map<String, Any?>> = emptyList()
 
   init {
     // An unreadable journal (never expected: writes are atomic) must not crash every launch.
@@ -52,11 +57,13 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
         job["resumeAttemptDeadline"] = job["attemptDeadline"]
         job["resumeQueueDeadline"] = job["queueDeadline"]
       }
-      persist()
+      // A full disk mustn't stop Wave or the download service from opening the journal: the
+      // jobs stay in memory (and readable), and the next change that can be written saves them.
+      try { persist() } catch (_: java.io.IOException) {}
     }
   }
 
-  @Synchronized fun snapshot(): List<Map<String, Any?>> = jobs.values.map { it.toMap() }
+  fun snapshot(): List<Map<String, Any?>> = published
 
   @Synchronized fun enqueue(song: Map<String, Any?>, equivalentId: String?, recording: Map<String, Any?> = emptyMap()): String {
     val id = song["videoId"] as String
@@ -166,14 +173,15 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
     return policy.number("revision")
   }
 
-  @Synchronized fun hasWork(): Boolean = jobs.values.any(::pending)
+  fun hasWork(): Boolean = published.any(::pending)
 
   /** The job the serial worker is on, else the next one waiting; what the notification shows. */
-  @Synchronized fun current(): Map<String, Any?>? = next()?.toMap()
+  fun current(): Map<String, Any?>? = next(published)
 
   private fun pending(job: Map<String, Any?>) = job["phase"] !in TERMINAL && !(job["phase"] == "completed" && (job["acknowledged"] == true || job["importFailure"] != null))
-  private fun next(): MutableMap<String, Any?>? =
-    jobs.values.firstOrNull { it["phase"] != "queued" && pending(it) } ?: jobs.values.firstOrNull { it["phase"] == "queued" }
+  private fun next(): MutableMap<String, Any?>? = next(jobs.values)
+  private fun <M : Map<String, Any?>> next(all: Collection<M>): M? =
+    all.firstOrNull { it["phase"] != "queued" && pending(it) } ?: all.firstOrNull { it["phase"] == "queued" }
 
   fun startWork() { stopped = false }
   /** Stops socket work immediately, without waiting for an IO operation's journal lock. */
@@ -247,7 +255,7 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
               if (received > job.number("received")) job["attemptDeadline"] = minOf(clock() + STALL_MS, job.number("deadline"))
               job["received"] = received; job["total"] = total; job["queuePosition"] = queue
               if (queue != null && job.number("queueDeadline") <= clock()) transport.cancel(id)
-              if (queue != null || received == total || clock() - lastProgressAt >= 500) { lastProgressAt = clock(); persist() }
+              if (queue != null || received == total || clock() - lastProgressAt >= 500) { lastProgressAt = clock(); persist() } else publish()
             }
           }
           synchronized(this) {
@@ -324,7 +332,11 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
     return policy.strings("roots").any { path.startsWith(File(it).canonicalFile.toPath()) } && !policy.strings("excluded").any { path.startsWith(File(it).canonicalFile.toPath()) }
   }
 
+  @Suppress("UNCHECKED_CAST")
+  private fun publish() { published = jobs.values.map { clean(it) as Map<String, Any?> } }
+
   private fun persist() {
+    publish()
     journal.parentFile?.mkdirs()
     val temp = File(journal.path + ".tmp")
     FileOutputStream(temp).use { output ->

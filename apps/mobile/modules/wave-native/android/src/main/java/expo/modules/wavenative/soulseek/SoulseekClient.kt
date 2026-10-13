@@ -241,7 +241,7 @@ class SoulseekClient(
             22 -> sendServer(23) { uint(fields.uint()) }
           }
         }
-      } catch (_: Exception) {
+      } catch (_: Throwable) {
         if (server === socket) {
           server = null
           socket.close()
@@ -268,10 +268,11 @@ class SoulseekClient(
     }
   }
 
+  /** Anything uncaught on these threads would close Wave, Errors included: one peer only loses its connection. */
   private fun launchPeer(remote: Socket? = null, work: () -> Unit) {
     if (!peerSlots.tryAcquire()) { remote?.close(); return }
     thread(isDaemon = true, name = "Wave Soulseek peer") {
-      try { work() } catch (_: Exception) { remote?.close() } finally { peerSlots.release() }
+      try { work() } catch (_: Throwable) { remote?.close() } finally { peerSlots.release() }
     }
   }
 
@@ -376,7 +377,8 @@ class SoulseekClient(
       }
       remote.close()
       transfer.finished.complete(Mp3Validation.validate(transfer.part, transfer.candidate.bytes, transfer.expectedDurationMs))
-    } catch (e: Exception) {
+    } catch (e: Throwable) {
+      // Fails this download (the next peer is tried) instead of leaving it waiting for its queue timeout.
       pending?.finished?.completeExceptionally(e)
     } finally {
       sockets.remove(remote)
