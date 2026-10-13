@@ -6,17 +6,30 @@
  */
 
 import type { YtSong } from "./ytMusic.ts";
+import { soulseekSameRecording } from "./soulseekDownload.ts";
 
 /**
- * Why a download failed: no network, YouTube failed (or refused the stream),
- * there is no music folder to download into, or the file couldn't be saved.
+ * Why acquisition failed, including account setup and an unavailable recording.
  */
-export type YtDownloadFailure = "offline" | "failed" | "noFolder" | "storage";
+export type YtDownloadFailure =
+  | "offline"
+  | "failed"
+  | "noFolder"
+  | "storage"
+  | "account"
+  | "unavailable";
+
+export type YtDownloadPhase = "connecting" | "searching" | "queued" | "transferring" | "validating";
 
 export type YtDownloadStatus =
   | { readonly kind: "queued" }
   /** [total] is the file's size in bytes, once known. */
-  | { readonly kind: "downloading"; readonly received: number; readonly total: number | null }
+  | {
+      readonly kind: "downloading";
+      readonly received: number;
+      readonly total: number | null;
+      readonly phase?: YtDownloadPhase;
+    }
   /** Tagging the file and moving it into the Library: too late to cancel. */
   | { readonly kind: "saving" }
   | { readonly kind: "failed"; readonly reason: YtDownloadFailure }
@@ -25,6 +38,8 @@ export type YtDownloadStatus =
 export interface YtDownloadJob<S extends YtSong = YtSong> {
   readonly song: S;
   readonly status: YtDownloadStatus;
+  /** Different result ids positively matched to this recording; all lengths stay within tolerance. */
+  readonly relatedSongs?: readonly S[];
 }
 
 /** Every download of this session, in the order they were (last) asked for. */
@@ -36,6 +51,7 @@ export type YtDownloadEvent<S extends YtSong = YtSong> =
   /** Download (or Retry Download) on [song]. */
   | { readonly type: "requested"; readonly song: S }
   | { readonly type: "started"; readonly videoId: string }
+  | { readonly type: "phase"; readonly videoId: string; readonly phase: YtDownloadPhase }
   | {
       readonly type: "progress";
       readonly videoId: string;
@@ -49,7 +65,7 @@ export type YtDownloadEvent<S extends YtSong = YtSong> =
 
 export const YT_DOWNLOADS_NONE: YtDownloads<never> = { jobs: [] };
 
-/** How many songs download at once: one, so YouTube sees one steady transfer. */
+/** One transfer at a time keeps progress and storage work predictable. */
 const AT_ONCE = 1;
 
 const isActive = (status: YtDownloadStatus): boolean =>
@@ -60,6 +76,7 @@ const ACCEPTS: { readonly [K in YtDownloadEvent["type"]]: readonly YtDownloadSta
   // Retry Download, or Download again once the file has left the Library.
   requested: ["failed", "done"],
   started: ["queued"],
+  phase: ["downloading"],
   progress: ["downloading"],
   saving: ["downloading"],
   finished: ["downloading", "saving"],
@@ -72,9 +89,29 @@ export const stepYtDownloads = <S extends YtSong>(
   event: YtDownloadEvent<S>,
 ): YtDownloads<S> => {
   const videoId = event.type === "requested" ? event.song.videoId : event.videoId;
-  const index = state.jobs.findIndex((job) => job.song.videoId === videoId);
+  const index = state.jobs.findIndex(
+    (job) =>
+      job.song.videoId === videoId || job.relatedSongs?.some((song) => song.videoId === videoId),
+  );
   const job = state.jobs[index];
   if (job === undefined) {
+    if (event.type === "requested") {
+      const duplicate = state.jobs.findIndex(
+        (other) =>
+          (other.status.kind === "queued" || isActive(other.status)) &&
+          [other.song, ...(other.relatedSongs ?? [])].every((song) =>
+            soulseekSameRecording(song, event.song),
+          ),
+      );
+      if (duplicate >= 0)
+        return {
+          jobs: state.jobs.map((other, i) =>
+            i === duplicate
+              ? { ...other, relatedSongs: [...(other.relatedSongs ?? []), event.song] }
+              : other,
+          ),
+        };
+    }
     return event.type === "requested"
       ? { jobs: [...state.jobs, { song: event.song, status: { kind: "queued" } }] }
       : state;
@@ -82,16 +119,27 @@ export const stepYtDownloads = <S extends YtSong>(
   if (!ACCEPTS[event.type].includes(job.status.kind)) return state;
   const others = state.jobs.filter((_, i) => i !== index);
   const replace = (status: YtDownloadStatus): YtDownloads<S> => ({
-    jobs: state.jobs.map((other, i) => (i === index ? { song: other.song, status } : other)),
+    jobs: state.jobs.map((other, i) => (i === index ? { ...other, status } : other)),
   });
   switch (event.type) {
     case "requested":
       // A retry (or a download again) waits behind what's already queued.
-      return { jobs: [...others, { song: event.song, status: { kind: "queued" } }] };
+      return {
+        jobs: [
+          ...others,
+          {
+            ...job,
+            song: event.song.videoId === job.song.videoId ? event.song : job.song,
+            status: { kind: "queued" },
+          },
+        ],
+      };
     case "started":
       return replace({ kind: "downloading", received: 0, total: null });
     case "progress":
       return replace({ kind: "downloading", received: event.received, total: event.total });
+    case "phase":
+      return replace({ kind: "downloading", received: 0, total: null, phase: event.phase });
     case "saving":
       return replace({ kind: "saving" });
     case "finished":
@@ -115,7 +163,10 @@ export const ytDownloadsToStart = <S extends YtSong>(state: YtDownloads<S>): S[]
 
 /** Where [videoId]'s download is, or null when it was never asked for (or was cancelled). */
 export const ytDownloadStatus = (state: YtDownloads, videoId: string): YtDownloadStatus | null =>
-  state.jobs.find((job) => job.song.videoId === videoId)?.status ?? null;
+  state.jobs.find(
+    (job) =>
+      job.song.videoId === videoId || job.relatedSongs?.some((song) => song.videoId === videoId),
+  )?.status ?? null;
 
 export type YtDownloadAction = "download" | "cancelDownload" | "retryDownload";
 
@@ -154,6 +205,8 @@ const FAILURE_LINES: { readonly [F in YtDownloadFailure]: string } = {
   failed: "Download failed",
   noFolder: "Download failed: no music folder",
   storage: "Download failed: couldn't save the file",
+  account: "Connect a free Soulseek account in Settings",
+  unavailable: "This recording is unavailable in 320 kbps",
 };
 
 /** The fraction of the file that has arrived, or null when there's no size to measure against. */
@@ -170,6 +223,10 @@ export const ytDownloadLine = (status: YtDownloadStatus | null): string | null =
     case "queued":
       return "Waiting to download";
     case "downloading": {
+      if (status.phase === "connecting") return "Connecting";
+      if (status.phase === "searching") return "Finding this recording";
+      if (status.phase === "queued") return "Waiting to download";
+      if (status.phase === "validating") return "Checking the download";
       const progress = ytDownloadProgress(status);
       return progress === null ? "Downloading" : `Downloading · ${Math.floor(progress * 100)}%`;
     }

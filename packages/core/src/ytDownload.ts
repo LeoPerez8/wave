@@ -1,13 +1,14 @@
 /**
  * Downloading a YT Music song into the Library (docs/spec.md, "YT Music"):
  * where the file goes, the tags it gets and the queue of downloads. The
- * native module fetches the audio, writes the tags and moves the file into
- * place; the app looks up lyrics and genre and runs the queue.
+ * native Soulseek client acquires verified MP3 320, and the existing writer
+ * and scanner publish it. Optional catalog metadata never establishes quality.
  */
 
 import { songLookup, type FoundTags, type SongLookup } from "./lyricsAndGenre.ts";
 import { normalizeSearchText } from "./search.ts";
 import { joinArtists, type YtSong } from "./ytMusic.ts";
+import { isWithin } from "./scanRoots.ts";
 
 /** A song on a YT Music album page. */
 export interface YtAlbumTrack {
@@ -15,6 +16,7 @@ export interface YtAlbumTrack {
   readonly title: string;
   /** Its number on the album, when the page says. */
   readonly trackNumber: number | null;
+  readonly discNumber?: number | null;
 }
 
 /** A YT Music album page: what a download's tags need from it. */
@@ -35,6 +37,7 @@ export interface YtDownloadTags {
   readonly albumArtist: string;
   readonly year: number | null;
   readonly trackNumber: number | null;
+  readonly discNumber: number | null;
   readonly genre: string | null;
   /** LRC for synced lyrics, plain text otherwise. */
   readonly lyrics: string | null;
@@ -87,6 +90,7 @@ export const ytDownloadTags = (
     albumArtist: album !== null && album.artists.length > 0 ? joinArtists(album.artists) : artist,
     year: album?.year ?? null,
     trackNumber: (album === null ? undefined : albumTrack(song, album))?.trackNumber ?? null,
+    discNumber: (album === null ? undefined : albumTrack(song, album))?.discNumber ?? null,
     genre: found?.genre ?? null,
     lyrics: found?.lyrics?.text ?? tidyLyrics(ytLyrics),
     artworkUrl: cover === null ? null : largeCover(cover),
@@ -117,8 +121,8 @@ export const ytDownloadRoot = (
   roots: readonly { readonly path: string; readonly isDefault: boolean }[],
 ): string | null => (roots.find((root) => root.isDefault) ?? roots[0])?.path ?? null;
 
-/** Downloads are stored as YouTube serves them: M4A (AAC), never re-encoded. */
-const EXTENSION = "m4a";
+/** The native Soulseek route preserves verified original MP3 320. */
+const EXTENSION = "mp3";
 
 /** What the file's place depends on. */
 export interface YtDownloadPlace {
@@ -127,6 +131,7 @@ export interface YtDownloadPlace {
   readonly album: string | null;
   readonly albumArtist: string | null;
   readonly trackNumber: number | null;
+  readonly discNumber?: number | null;
 }
 
 /** Where a download is saved: the folder, the file's name and both together. */
@@ -186,7 +191,7 @@ const byteLength = (text: string): number => {
 
 /**
  * Where a downloaded song goes: `<root>/YT Music/<album artist>/<album>/`,
- * named after its title, after its track number when known ("08 Title.m4a").
+ * named after its title, after its track number when known ("08 Title.mp3").
  * Names are made safe for the storage: see `safeName`.
  */
 export const ytDownloadTarget = (root: string, song: YtDownloadPlace): YtDownloadTarget => {
@@ -198,4 +203,21 @@ export const ytDownloadTarget = (root: string, song: YtDownloadPlace): YtDownloa
   const title = safeName(song.title, MAX_NAME_BYTES - byteLength(number) - byteLength(suffix));
   const fileName = `${number}${title}${suffix}`;
   return { folder, fileName, path: `${folder}/${fileName}` };
+};
+
+/** Prefer the default root, then owner roots, checking the actual destination against exclusions. */
+export const ytDownloadDestination = (
+  roots: readonly { readonly path: string; readonly isDefault: boolean }[],
+  excluded: readonly string[],
+  song: YtDownloadPlace,
+): YtDownloadTarget | null => {
+  const ordered = [
+    ...roots.filter((root) => root.isDefault),
+    ...roots.filter((root) => !root.isDefault),
+  ];
+  for (const root of ordered) {
+    const target = ytDownloadTarget(root.path, song);
+    if (!excluded.some((folder) => isWithin(target.path, folder))) return target;
+  }
+  return null;
 };

@@ -43,7 +43,7 @@ class SoulseekModule : Module() {
         videoId: String, candidate: Map<String, Any?>, targetPath: String, title: String, expectedDurationMs: Double ->
       val target = File(targetPath)
       if (!target.extension.equals("mp3", true)) throw CodedException(SoulseekFailure.INVALID_AUDIO.code, "MP3 target required", null)
-      val part = DownloadFiles.partFileFor(target)
+      val part = DownloadFiles.partFileFor(target, videoId)
       val job = Job()
       running.put(videoId, job)?.let { it.cancel(); owner.client.cancel(videoId) }
       YtDownloadNotice.start(context, videoId, title)
