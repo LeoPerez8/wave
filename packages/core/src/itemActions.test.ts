@@ -9,6 +9,7 @@ import {
   commonKind,
   itemActions,
   splitActionBar,
+  ytSongActions,
   type ActionSubject,
   type ItemAction,
   type ItemActionEntry,
@@ -411,5 +412,11 @@ describe("actionBarLabel", () => {
     assert.equal(actionBarLabel("unfavorite"), "Un\u00ADfavorite");
     assert.equal(actionBarLabel("playNext"), "Play Next");
     assert.equal(actionBarLabel("addToPlaylist"), "Add to Playlist");
+  });
+});
+
+describe("ytSongActions", () => {
+  test("a YT Music song can join the queue, mixed with the Library's songs", () => {
+    assert.deepEqual(names(ytSongActions()), ["playNext", "addToQueue"]);
   });
 });

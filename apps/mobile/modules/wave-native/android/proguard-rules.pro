@@ -16,6 +16,11 @@
     kotlinx.serialization.KSerializer serializer(...);
 }
 -keep class com.dokar.quickjs.** { *; }
+# The proof-of-origin token page calls back into Kotlin by method name.
+-keepattributes JavascriptInterface
+-keepclassmembers class expo.modules.wavenative.yt.potoken.YtPoTokenWebView {
+    @android.webkit.JavascriptInterface <methods>;
+}
 # Desktop JVM classes ktor mentions but never uses on Android.
 -dontwarn java.lang.management.**
 -dontwarn org.slf4j.impl.**

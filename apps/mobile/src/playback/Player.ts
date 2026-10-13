@@ -1,4 +1,4 @@
-import type { PlaySource, RepeatMode, SleepTimer } from "@wave/core";
+import { playerErrorNotice, type PlaySource, type RepeatMode, type SleepTimer } from "@wave/core";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -26,8 +26,17 @@ export class PlayerError extends Data.TaggedError("PlayerError")<{
 }
 
 export interface PlaybackState extends Omit<NativePlayerState, "index"> {
-  /** The last playback error for the current item, cleared when the item changes. */
+  /**
+   * The last playback error for the current item, cleared when the item
+   * changes or plays again.
+   */
   readonly error: string | null;
+  /**
+   * What the player says about that error in place of the artist (Core's
+   * `playerErrorNotice`): a file that couldn't play, or why a YT Music song
+   * couldn't stream. Null with no error from the player.
+   */
+  readonly notice: string | null;
 }
 
 const IDLE: PlaybackState = {
@@ -39,6 +48,7 @@ const IDLE: PlaybackState = {
   durationMs: null,
   at: 0,
   error: null,
+  notice: null,
 };
 
 /**
@@ -90,8 +100,14 @@ export class Player extends Context.Service<
 const call = <A>(operation: string, run: () => Promise<A>): Effect.Effect<A, PlayerError> =>
   Effect.tryPromise({ try: run, catch: (cause) => new PlayerError({ operation, cause }) });
 
-const fromNative = ({ index: _index, ...state }: NativePlayerState): Omit<PlaybackState, "error"> =>
-  state;
+const fromNative = ({
+  index: _index,
+  ...state
+}: NativePlayerState): Omit<PlaybackState, "error" | "notice"> => state;
+
+/** Whether the error on record still stands once the player reports [state]. */
+const errorStands = (previous: PlaybackState, state: NativePlayerState): boolean =>
+  previous.item?.id === state.item?.id && !state.isPlaying;
 
 /** Mirrors native player events into [playbackState] for as long as the layer lives. */
 const syncState = Effect.acquireRelease(
@@ -100,14 +116,19 @@ const syncState = Effect.acquireRelease(
       WavePlayer.addListener("onPlaybackState", (state) =>
         playbackState.update((previous) => ({
           ...fromNative(state),
-          error: previous.item?.id === state.item?.id ? previous.error : null,
+          error: errorStands(previous, state) ? previous.error : null,
+          notice: errorStands(previous, state) ? previous.notice : null,
         })),
       ),
       WavePlayer.addListener("onPosition", (position) =>
         playbackState.update((previous) => ({ ...previous, ...position })),
       ),
       WavePlayer.addListener("onPlayerError", (event) =>
-        playbackState.update((previous) => ({ ...previous, error: event.message })),
+        playbackState.update((previous) => ({
+          ...previous,
+          error: event.message,
+          notice: playerErrorNotice(event.code),
+        })),
       ),
       WavePlayer.addListener("onSleepTimer", (event) => sleepTimerState.set(event.timer)),
     ];

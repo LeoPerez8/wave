@@ -18,9 +18,13 @@ import androidx.lifecycle.Observer
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
@@ -32,6 +36,10 @@ import com.google.common.util.concurrent.FutureCallback
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import expo.modules.wavenative.launcher.LauncherIconSwitcher
+import expo.modules.wavenative.yt.YtClient
+import expo.modules.wavenative.yt.YtDataSource
+import expo.modules.wavenative.yt.YtMedia
+import expo.modules.wavenative.yt.YtStreamFailure
 
 /**
  * Hosts the player. Media3 provides the media notification, lock-screen and
@@ -130,6 +138,38 @@ class PlaybackService : MediaLibraryService() {
     }
   }
 
+  /** Whether playback paused because a YT Music song couldn't stream; moving on plays again. */
+  private var pausedOnStreamFailure = false
+
+  /**
+   * Streaming: keeps Wi-Fi awake while a YT Music song plays, and pauses on
+   * one that can't stream (offline, YT Music off, a song YouTube won't serve)
+   * instead of sitting idle as if playing; JS shows why. Skipping on (from
+   * Wave, the notification, Bluetooth) plays the next song, Library or not.
+   */
+  private val streamListener = object : Player.Listener {
+    override fun onPlayerError(error: PlaybackException) {
+      if (YtStreamFailure.codeOf(error.cause?.message) == null) return
+      pausedOnStreamFailure = true
+      exoPlayer?.pause()
+    }
+
+    override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+      val player = exoPlayer ?: return
+      val streamed = YtMedia.videoIdOf(mediaItem?.localConfiguration?.uri?.toString() ?: "") != null
+      player.setWakeMode(if (streamed) C.WAKE_MODE_NETWORK else C.WAKE_MODE_LOCAL)
+      if (pausedOnStreamFailure && reason == Player.MEDIA_ITEM_TRANSITION_REASON_SEEK) {
+        pausedOnStreamFailure = false
+        if (player.playbackState == Player.STATE_IDLE) player.prepare()
+        player.play()
+      }
+    }
+
+    override fun onIsPlayingChanged(isPlaying: Boolean) {
+      if (isPlaying) pausedOnStreamFailure = false
+    }
+  }
+
   /** Brings the snapshot's position up to date while playing, should the process die. */
   private val resumePositionSave: Runnable = object : Runnable {
     override fun run() {
@@ -143,7 +183,13 @@ class PlaybackService : MediaLibraryService() {
   override fun onCreate() {
     super.onCreate()
     ResumeStore.init(this)
+    // Library files play from storage; YT Music songs (`yt:` items) are streamed,
+    // their address resolved as the player loads them (YtDataSource).
+    val dataSources = YtDataSource.Factory(
+      DefaultDataSource.Factory(this, DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true)),
+    ) { YtClient.get(this) }
     val player = ExoPlayer.Builder(this, WaveRenderersFactory(this))
+      .setMediaSourceFactory(DefaultMediaSourceFactory(dataSources))
       .setAudioAttributes(
         AudioAttributes.Builder()
           .setUsage(C.USAGE_MEDIA)
@@ -156,6 +202,7 @@ class PlaybackService : MediaLibraryService() {
       .build()
     player.addListener(sleepTimerListener)
     player.addListener(resumeListener)
+    player.addListener(streamListener)
     exoPlayer = player
     NotificationAccent.init(this)
     setMediaNotificationProvider(WaveNotificationProvider(this))

@@ -150,6 +150,16 @@ export const itemActions = (subject: ActionSubject): ItemActionEntry[] => {
 };
 
 /**
+ * The entries a YT Music song's long-press menu offers: it can join the
+ * queue beside the Library's songs. The Library's other entries (playlists,
+ * favorites, Go to, Delete) are about its files, which a streamed song isn't.
+ */
+export const ytSongActions = (): ItemActionEntry[] => [
+  { action: "playNext" },
+  { action: "addToQueue" },
+];
+
+/**
  * What items are mostly selected for, and Delete (songs): always a button of
  * their own on the bar, never behind More.
  */

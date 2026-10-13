@@ -35,7 +35,7 @@ class YtClient private constructor(private val context: Context) {
   private val connectivity = context.getSystemService(ConnectivityManager::class.java)
 
   /** innertubex brings no HTTP engine and sends `@Serializable` bodies, hence content negotiation. */
-  private val http: HttpClient by lazy {
+  internal val http: HttpClient by lazy {
     HttpClient(OkHttp) {
       // innertubex checks statuses and retries transient failures itself.
       expectSuccess = false
@@ -56,6 +56,12 @@ class YtClient private constructor(private val context: Context) {
       locale = YouTubeLocale(gl = Locale.getDefault().country.ifEmpty { "US" }, hl = "en")
     }
   }
+
+  /**
+   * Stream addresses for playing and downloading YT Music songs, through this
+   * client's session ([YtStreamResolver]).
+   */
+  val streams: YtStreamResolver by lazy { YtStreamResolver(context) }
 
   /**
    * innertubex, with the session every request goes out with: the signed-in
@@ -161,7 +167,7 @@ class YtClient private constructor(private val context: Context) {
     }
   }
 
-  private fun hasNetwork(): Boolean {
+  internal fun hasNetwork(): Boolean {
     val network = connectivity?.activeNetwork ?: return false
     return connectivity.getNetworkCapabilities(network)
       ?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true

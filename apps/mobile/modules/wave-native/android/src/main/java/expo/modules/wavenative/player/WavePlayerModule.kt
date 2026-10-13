@@ -21,6 +21,7 @@ import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.kotlin.records.Field
 import expo.modules.kotlin.records.Record
+import expo.modules.wavenative.yt.YtStreamFailure
 
 /** One track handed to the player. */
 class PlayerItem : Record {
@@ -153,6 +154,8 @@ class WavePlayerModule : Module() {
         mapOf(
           "itemId" to controller?.currentMediaItem?.mediaId,
           "message" to (error.message ?: error.errorCodeName),
+          // Why a YT Music song couldn't stream (Core's `PlayerErrorCode`); null otherwise.
+          "code" to YtStreamFailure.codeOf(error.cause?.message),
         ),
       )
     }

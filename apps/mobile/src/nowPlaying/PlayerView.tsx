@@ -1,6 +1,7 @@
 import { IconMusic, IconStar, IconStarFilled } from "@tabler/icons-react-native";
+import { parseTrackId } from "@wave/core";
 import { Image } from "expo-image";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { Text, View } from "react-native";
 import Animated, {
   useAnimatedStyle,
@@ -16,7 +17,7 @@ import type { TrackDetails } from "@/library/LibraryStore";
 import { openAlbum, openArtist } from "@/library/routes";
 import { Press } from "@/motion/Press";
 import { useCurrentTrackId } from "@/playback/hooks";
-import type { PlaybackState } from "@/playback/Player";
+import { playbackState, type PlaybackState } from "@/playback/Player";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { closeNowPlaying, useNowPlayingShown } from "./sheet";
@@ -109,12 +110,16 @@ function MetaLink({ label, open, hint, className }: LinkProps) {
   );
 }
 
-/** Stars the current track; in sync with every other star (rows, menus). */
+/**
+ * Stars the current track; in sync with every other star (rows, menus). A
+ * YT Music song has none: favorites are the Library's.
+ */
 function FavoriteStar({ title }: { title: string }) {
   const accent = useThemeColor("accent");
   const highlight = useThemeColor("highlight");
   const trackId = useCurrentTrackId();
   const favorite = useIsFavorite(trackId);
+  if (trackId !== null && parseTrackId(trackId)?.kind === "yt") return null;
   return (
     <Press
       accessibilityRole="button"
@@ -153,6 +158,7 @@ export function PlayerView({ item, details, playing }: Props) {
   const title = item.title ?? "Unknown title";
   const artist = details?.artist ?? item.artist ?? "Unknown Artist";
   const album = details?.album ?? item.album ?? "Unknown Album";
+  const notice = useSyncExternalStore(playbackState.subscribe, () => playbackState.get().notice);
   // Read ahead, so the screens open header-first; only while the sheet is
   // shown, so track changes behind a closed Now Playing don't pay for it.
   const shown = useNowPlayingShown();
@@ -178,12 +184,25 @@ export function PlayerView({ item, details, playing }: Props) {
             hint="Opens the artist"
             className="font-sans text-body text-secondary"
           />
-          <MetaLink
-            label={album}
-            open={details === null ? null : () => openAlbum(details.albumId, links.album)}
-            hint="Opens the album"
-            className="font-sans text-body text-secondary"
-          />
+          {notice === null ? (
+            <MetaLink
+              label={album}
+              open={details === null ? null : () => openAlbum(details.albumId, links.album)}
+              hint="Opens the album"
+              className="font-sans text-body text-secondary"
+            />
+          ) : (
+            // Why playback stopped (a YT Music song offline…), in place of the album.
+            <View style={{ paddingVertical: CELL / 2 }}>
+              <Text
+                numberOfLines={2}
+                accessibilityLiveRegion="polite"
+                className="font-sans text-body text-secondary"
+              >
+                {notice}
+              </Text>
+            </View>
+          )}
         </View>
         <FavoriteStar title={title} />
       </View>

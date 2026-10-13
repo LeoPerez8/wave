@@ -29,7 +29,13 @@ export type ResultRow =
       readonly shown: number;
       readonly total: number;
     }
-  | { readonly type: "ytSong"; readonly key: string; readonly song: NativeYtSong }
+  | {
+      readonly type: "ytSong";
+      readonly key: string;
+      readonly song: NativeYtSong;
+      /** The section's songs, which tapping plays from this one. */
+      readonly songs: readonly NativeYtSong[];
+    }
   /** A quiet line in place of results: nothing in the library, YT Music offline… */
   | { readonly type: "note"; readonly key: string; readonly text: string };
 
@@ -135,7 +141,8 @@ const YT_NOTE: Readonly<Record<YtSectionNote, string>> = {
 export const ytMusicRows = (view: YtSectionView<NativeYtSong> | null): ResultRow[] => {
   if (view === null) return [];
   const rows: ResultRow[] = [{ type: "heading", key: "heading:yt", label: "YT Music" }];
-  for (const song of view.songs) rows.push({ type: "ytSong", key: `yt:${song.videoId}`, song });
+  for (const song of view.songs)
+    rows.push({ type: "ytSong", key: `yt:${song.videoId}`, song, songs: view.songs });
   if (view.note !== null) rows.push({ type: "note", key: "note:yt", text: YT_NOTE[view.note] });
   return rows;
 };

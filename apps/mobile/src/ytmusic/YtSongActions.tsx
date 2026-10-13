@@ -1,7 +1,9 @@
 import {
+  ITEM_ACTION_LABELS,
   YT_DOWNLOAD_ACTION_LABELS,
   entryDivider,
   ytDownloadActions,
+  ytSongActions,
   ytSongCredit,
   type YtDownloadAction,
 } from "@wave/core";
@@ -17,12 +19,14 @@ import { CardEntries } from "@/overlay/CardEntries";
 import { useOverlayFlow } from "@/overlay/flow";
 import { openOverlay } from "@/overlay/overlay";
 import { useSlideToChoose } from "@/overlay/useSlideToChoose";
+import { addYtToQueue, playYtNext } from "@/playback/actions";
 
 import { cancelYtDownload, downloadYtSong, useYtDownloadStatus } from "./YtDownloads";
 
 /**
- * Opens a YT Music song's long-press menu next to its row: Download, or
- * Cancel Download / Retry Download while one is on its way or has failed.
+ * Opens a YT Music song's long-press menu next to its row: Play Next and Add
+ * to Queue (Core's `ytSongActions`), then Download, or Cancel Download /
+ * Retry Download while one is on its way or has failed.
  */
 export const openYtSongActions = (song: NativeYtSong): void => {
   openOverlay({
@@ -32,8 +36,29 @@ export const openYtSongActions = (song: NativeYtSong): void => {
   });
 };
 
-const run = (action: YtDownloadAction, song: NativeYtSong): void => {
-  switch (action) {
+/** One entry: joining the queue, or a download entry. */
+type Entry =
+  | { readonly kind: "queue"; readonly action: "playNext" | "addToQueue" }
+  | { readonly kind: "download"; readonly action: YtDownloadAction };
+
+const queueEntries = (): Entry[] =>
+  ytSongActions().flatMap(({ action }): Entry[] =>
+    action === "playNext" || action === "addToQueue" ? [{ kind: "queue", action }] : [],
+  );
+
+const label = (entry: Entry): string =>
+  entry.kind === "queue"
+    ? ITEM_ACTION_LABELS[entry.action]
+    : YT_DOWNLOAD_ACTION_LABELS[entry.action];
+
+const run = (entry: Entry, song: NativeYtSong): void => {
+  switch (entry.action) {
+    case "playNext":
+      void playYtNext([song]);
+      return;
+    case "addToQueue":
+      void addYtToQueue([song]);
+      return;
     case "download":
     case "retryDownload":
       downloadYtSong(song);
@@ -47,12 +72,15 @@ const run = (action: YtDownloadAction, song: NativeYtSong): void => {
 /** The menu card: the song as its row shows it, then its entries, like a Library song's menu. */
 function YtSongActionsMenu({ song, close }: { song: NativeYtSong; close: () => void }) {
   const status = useYtDownloadStatus(song.videoId);
-  const actions = ytDownloadActions(status);
+  const entries: Entry[] = [
+    ...queueEntries(),
+    ...ytDownloadActions(status).map((action): Entry => ({ kind: "download", action })),
+  ];
   const choose = (index: number) => {
-    const action = actions[index];
-    if (action === undefined) return;
+    const entry = entries[index];
+    if (entry === undefined) return;
     close();
-    run(action, song);
+    run(entry, song);
   };
   const { underFinger, trackEntry, trackList } = useSlideToChoose(choose);
   const flow = useOverlayFlow();
@@ -73,14 +101,14 @@ function YtSongActionsMenu({ song, close }: { song: NativeYtSong; close: () => v
           </Text>
         </View>
       </View>
-      {actions.length > 0 && <Hairline />}
+      <Hairline />
       <CardEntries listRef={trackList}>
-        {actions.map((action, index) => (
-          <View key={action} ref={trackEntry(index)} collapsable={false}>
+        {entries.map((entry, index) => (
+          <View key={entry.action} ref={trackEntry(index)} collapsable={false}>
             <EntryRow
-              label={YT_DOWNLOAD_ACTION_LABELS[action]}
+              label={label(entry)}
               onPress={() => choose(index)}
-              divider={entryDivider(index, actions.length, flow)}
+              divider={entryDivider(index, entries.length, flow)}
               highlighted={index === underFinger}
             />
           </View>

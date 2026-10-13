@@ -29,7 +29,8 @@ data class YtAudioFile(val itag: Int, val bitrate: Int, val mimeType: String, va
  */
 class YtAudioDownload(context: Context) {
   private val client = YtClient.get(context)
-  private val resolver = YtStreamResolver(context)
+  // The process-wide resolver, so playback and downloads share addresses and the token web view.
+  private val resolver = client.streams
 
   /**
    * Downloads [videoId]'s audio into [part], reporting bytes received and the
@@ -52,7 +53,11 @@ class YtAudioDownload(context: Context) {
         if (code == HttpURLConnection.HTTP_FORBIDDEN || code == HttpURLConnection.HTTP_GONE) {
           connection.disconnect()
           // The address expired or was refused: a fresh one carries on from here.
-          if (refreshes++ < MAX_REFRESHES) stream = runBlocking { resolver.resolve(videoId, preferM4a = true) }
+          if (refreshes++ < MAX_REFRESHES) {
+            // Drops the cached address (and skips its client for a while) so a new one comes back.
+            resolver.reject(videoId)
+            stream = runBlocking { resolver.resolve(videoId, preferM4a = true) }
+          }
           throw IOException("HTTP $code for the audio")
         }
         if (code != HttpURLConnection.HTTP_OK && code != HttpURLConnection.HTTP_PARTIAL) {

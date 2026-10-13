@@ -125,11 +125,13 @@ object ResumeStore {
     val metadata = media.mediaMetadata
     return ResumeItem(
       id = media.mediaId,
-      path = uri?.path ?: "",
+      path = PlayerMediaItems.pathOf(uri),
       title = metadata.title?.toString() ?: "",
       artist = metadata.artist?.toString() ?: "",
       album = metadata.albumTitle?.toString(),
-      artworkPath = metadata.extras?.getString(PlayerMediaItems.ARTWORK_PATH),
+      // A YT Music cover that isn't cached is kept by its address.
+      artworkPath = metadata.extras?.getString(PlayerMediaItems.ARTWORK_PATH)
+        ?: metadata.artworkUri?.toString()?.takeIf(PlayerMediaItems::isAddress),
     )
   }
 }

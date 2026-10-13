@@ -5,11 +5,15 @@ import { NativeModule, requireNativeModule } from "expo";
 export interface PlayerItem {
   /** The queue entry key (unique per entry, not the track id). */
   readonly id: string;
+  /** The audio file, or a YT Music song's track id (`yt:<videoId>`), which the player streams. */
   readonly path: string;
   readonly title: string;
   readonly artist: string;
   readonly album: string | null;
-  /** Full-size artwork file for the notification and lock screen. */
+  /**
+   * Full-size artwork file for the notification and lock screen; for a YT
+   * Music song whose cover isn't cached, its address.
+   */
   readonly artworkPath: string | null;
 }
 
@@ -58,6 +62,8 @@ export interface SeekEvent {
 export interface PlayerErrorEvent {
   readonly itemId: string | null;
   readonly message: string;
+  /** Why a YT Music song couldn't stream (Core's `PlayerErrorCode`); null for anything else. */
+  readonly code: string | null;
 }
 
 /** One step of Core's `planPlayerSync`, flattened for the native module. */

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { libraryMatcher, parseTrackId, ytSongCredit, ytTrackId } from "./index.ts";
+import { libraryMatcher, parseTrackId, ytSongArtist, ytSongCredit, ytTrackId } from "./index.ts";
 import type { YtSong } from "./index.ts";
 
 const ytSong = (song: Partial<YtSong> & Pick<YtSong, "title" | "artists">): YtSong => ({
@@ -98,6 +98,17 @@ describe("ytSongCredit", () => {
   test("leaves out what YT Music doesn't say", () => {
     assert.equal(ytSongCredit(ytSong({ title: "Jóga", artists: ["Björk"] })), "Björk");
     assert.equal(ytSongCredit(ytSong({ title: "Duo", artists: ["A", "B"] })), "A & B");
+  });
+});
+
+describe("ytSongArtist", () => {
+  test("is the artist line a played YT Music song shows: its artists, without the album", () => {
+    const song = ytSong({
+      title: "Get Lucky",
+      artists: ["Daft Punk", "Pharrell Williams", "Nile Rodgers"],
+      album: "Random Access Memories",
+    });
+    assert.equal(ytSongArtist(song), "Daft Punk, Pharrell Williams & Nile Rodgers");
   });
 });
 
