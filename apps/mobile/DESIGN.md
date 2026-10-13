@@ -282,7 +282,7 @@ Import Playlists ends on a summary card of the same make (`src/library/importPla
 
 ### Entry Row
 
-The Library's entries (Playlists, Artists, Albums, Songs, Genres, Folders, Favorites) and settings links. One quiet line of Entry type, 56dp tall, with a right-aligned tabular count in Subheadline graphite whose column stays reserved when the count is unknown. A hairline below each; the list opens with a hairline above. No icon, no chevron.
+The Library's entries (Playlists, Artists, Albums, Songs, Genres, Folders, Favorites, then Discover while YT Music is on) and settings links. One quiet line of Entry type, 56dp tall, with a right-aligned tabular count in Subheadline graphite whose column stays reserved when the count is unknown. A hairline below each; the list opens with a hairline above. No icon, no chevron.
 
 ### Track Row
 
@@ -340,6 +340,17 @@ Below Use YT Music and its helper text, three cells down, between hairlines (`sr
 - **YT Music off:** no Sign In (it would talk to Google); a signed-in account still shows, so it can be signed out of.
 
 Sign In opens Google's own page full screen over Wave (a plain web view in the system's light or dark theme, clear of the system bars and the keyboard); Back steps back through Google's pages and then out. It closes by itself once the account is signed in.
+
+### Discover
+
+The YouTube account's recommendations, YouTube Music's home set in Wave's own layout (`src/app/library/discover.tsx`; what shows is Core's `discoverView`). The Library lists it as a plain entry row after Favorites, without a count; with YT Music off the row is gone.
+
+- **Screen:** a pushed screen with Back and the "Discover" title, then YouTube Music's shelves in its order, each under its catalog line (the shelf's name, as Home's sections are titled). Nothing YouTube serves as a prompt is drawn: no taste builder, no moods, no banners, no Premium. Pull to refresh asks again, in teal, and keeps the shelves up meanwhile.
+- **Song shelves** (Quick picks and the like, Core's `layout: "songs"`): Songs-list rows in columns of four, the columns scrolling sideways edge to edge, the next one peeking in a 32dp margin from the right (one column fills the width). A song the Library has is drawn as its Library row (its star, its menu) and plays the file; the others are YT Music rows (YouTube's cover, artists · album, the download line and rule while one is on its way) and stream.
+- **Cover shelves** (mixes, albums, playlists, or a shelf that mixes them): Home's shelf of album tiles, 152dp covers with the next one peeking in. The catalog line is who made it (the artists, the playlist's maker without YouTube's view count) and the furniture line says what it is ("Album · 2024", "Playlist", "Song"; Core's `discoverTileCaption`). A song tile plays the shelf's songs from it and long-presses to its menu; an album or playlist opens its songs.
+- **States**, each Wave's empty state (pewter line icon, Entry title, Subheadline graphite message), never an error card: signed out, "Recommendations come from your account" with Open Settings as a text button (an account sign-in, never a Premium upsell); offline, "You're offline"; no answer, "No answer from YouTube Music" and pull to try again; nothing to show, "Nothing to recommend yet". Until the first shelves arrive a quiet Subheadline graphite line says Wave is asking.
+
+An album or playlist from Discover opens a pushed screen laid out like a Library album (`src/ytmusic/YtSongList.tsx`): the cover as wide as the margins allow, the title in Title type, who made it in Body 500 graphite (plain text, not a link), the furniture line ("Album · 2013 · 12 songs · 52 min", "Playlist · 62 songs · 260 min"), Play and Shuffle, then its songs: an album's by number with the artists as the second line, a playlist's with their covers. They behave as on the shelves (the Library's file for songs it has, a YT Music song's menu with Play Next, Add to Queue and Download for the rest). The cover and title the tapped tile had show at once; offline or without an answer, the empty state takes the songs' place.
 
 ### Alphabet Spine (signature)
 

@@ -69,7 +69,7 @@ object YtSearchParser {
       ?: listOfNotNull(root.path("continuationContents", "musicShelfContinuation").obj)
     val songs = shelves
       .flatMap { it["contents"].arr.orEmpty() }
-      .mapNotNull { it.path("musicResponsiveListItemRenderer").obj?.let(::song) }
+      .mapNotNull { it.path("musicResponsiveListItemRenderer").obj?.let(::songRow) }
       .distinctBy { it.videoId }
     val continuation = shelves.firstNotNullOfOrNull { shelf ->
       shelf["continuations"].arr?.firstOrNull()?.path("nextContinuationData", "continuation").string
@@ -84,7 +84,12 @@ object YtSearchParser {
     return trimmed.split(':', '.', ',').fold(0L) { total, part -> total * 60 + part.toLong() } * 1000
   }
 
-  private fun song(row: JsonObject): YtSong? {
+  /**
+   * A song row (`musicResponsiveListItemRenderer`), as search, the home's
+   * Quick picks and playlists list them; null when it isn't a song. The length
+   * is in the second line (search) or a fixed column of its own (playlists).
+   */
+  fun songRow(row: JsonObject): YtSong? {
     val columns = row["flexColumns"].arr.orEmpty().map {
       it.path("musicResponsiveListItemFlexColumnRenderer", "text", "runs").arr.orEmpty()
         .mapNotNull { run -> run.obj }
@@ -106,7 +111,10 @@ object YtSearchParser {
       artists = artists,
       album = albumRun?.get("text").string,
       albumId = albumRun?.path("navigationEndpoint", "browseEndpoint", "browseId").string,
-      durationMs = details.firstNotNullOfOrNull { run -> run["text"].string?.let(::durationMs) },
+      durationMs = details.firstNotNullOfOrNull { run -> run["text"].string?.let(::durationMs) }
+        ?: row["fixedColumns"].arr?.firstOrNull()
+          ?.path("musicResponsiveListItemFixedColumnRenderer", "text", "runs").arr?.firstOrNull()
+          .path("text").string?.let(::durationMs),
       artworkUrl = row.path("thumbnail", "musicThumbnailRenderer", "thumbnail", "thumbnails").arr
         ?.lastOrNull()?.path("url").string,
       explicit = row["badges"].arr.orEmpty().any {

@@ -327,7 +327,15 @@ export { MORE_FROM_ARTIST } from "./queue.ts";
 export { artistRanking } from "./moreFromArtist.ts";
 export type { ArtistRankingInput, ArtistRankingSong } from "./moreFromArtist.ts";
 export type { SheetEvent, SheetPhase, SheetStep } from "./sheetLifecycle.ts";
-export { libraryMatcher, parseTrackId, ytSongArtist, ytSongCredit, ytTrackId } from "./ytMusic.ts";
+export {
+  joinArtists,
+  libraryFinder,
+  libraryMatcher,
+  parseTrackId,
+  ytSongArtist,
+  ytSongCredit,
+  ytTrackId,
+} from "./ytMusic.ts";
 export type { LibrarySongKey, TrackRef, YtSong } from "./ytMusic.ts";
 export { YT_ACCOUNT_SIGNED_OUT, stepYtAccount, ytAccountView } from "./ytAccount.ts";
 export type {
@@ -430,3 +438,30 @@ export type {
   YtDownloadStatus,
   YtDownloads,
 } from "./ytDownloads.ts";
+export {
+  DISCOVER_START,
+  discoverItemAction,
+  discoverShouldAsk,
+  discoverTileCaption,
+  discoverSongs,
+  discoverTrackId,
+  discoverView,
+  stepDiscover,
+  ytAlbumSongs,
+} from "./ytDiscover.ts";
+export type {
+  DiscoverAction,
+  DiscoverContext,
+  DiscoverEvent,
+  DiscoverItem,
+  DiscoverShelf,
+  DiscoverSong,
+  DiscoverTileCaption,
+  DiscoverState,
+  DiscoverView,
+  YtAlbumPageTrack,
+  YtAlbumSong,
+  YtHome,
+  YtShelf,
+  YtShelfItem,
+} from "./ytDiscover.ts";

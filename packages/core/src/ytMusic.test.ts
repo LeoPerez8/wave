@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { libraryMatcher, parseTrackId, ytSongArtist, ytSongCredit, ytTrackId } from "./index.ts";
+import {
+  libraryFinder,
+  libraryMatcher,
+  parseTrackId,
+  ytSongArtist,
+  ytSongCredit,
+  ytTrackId,
+} from "./index.ts";
 import type { YtSong } from "./index.ts";
 
 const ytSong = (song: Partial<YtSong> & Pick<YtSong, "title" | "artists">): YtSong => ({
@@ -79,6 +86,31 @@ describe("libraryMatcher", () => {
 
   test("an empty Library has none of them", () => {
     assert.equal(libraryMatcher([])(ytSong({ title: "Jóga", artists: ["Björk"] })), false);
+  });
+});
+
+describe("libraryFinder", () => {
+  const library = [
+    { id: 1, title: "Get Lucky", artist: "Daft Punk", durationMs: 369_600 },
+    { id: 2, title: "The Boxer", artist: "Simon & Garfunkel", durationMs: 308_000 },
+  ];
+  const find = libraryFinder(library);
+
+  test("finds the Library song a YT Music song is, so it can play the file", () => {
+    const song = ytSong({
+      title: "The Boxer",
+      artists: ["Simon & Garfunkel"],
+      durationMs: 309_000,
+    });
+    assert.equal(find(song), library[1]);
+  });
+
+  test("finds nothing for a song the Library lacks", () => {
+    assert.equal(find(ytSong({ title: "Instant Crush", artists: ["Daft Punk"] })), null);
+    assert.equal(
+      find(ytSong({ title: "Get Lucky", artists: ["Daft Punk"], durationMs: 250_000 })),
+      null,
+    );
   });
 });
 

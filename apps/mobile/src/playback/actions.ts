@@ -1,4 +1,6 @@
 import {
+  discoverTrackId,
+  type DiscoverSong,
   nextRepeatMode,
   type UpNextMove,
   startSleepTimer,
@@ -90,6 +92,40 @@ export const playYtSongs = (
   context: QueueContext,
 ): Promise<void> =>
   dispatchYt({ type: "play", trackIds: ytTrackIds(songs), startIndex, context }, songs);
+
+/**
+ * Plays Discover's songs from `startIndex` (or shuffled), queueing the rest:
+ * the Library's file for the songs it has, the others streamed.
+ */
+export const playDiscoverSongs = (
+  songs: readonly DiscoverSong<YtSong, SongRow>[],
+  startIndex: number | undefined,
+  context: QueueContext,
+  options: { readonly shuffle?: boolean } = {},
+): Promise<void> =>
+  run(
+    Effect.gen(function* () {
+      const tracks = yield* Effect.forEach(
+        songs,
+        (song) =>
+          song.source === "library"
+            ? Effect.succeed(toQueueTrack(song.track))
+            : ytQueueTrack(song.song),
+        { concurrency: "unbounded" },
+      );
+      const queue = yield* Queue;
+      yield* queue.dispatch(
+        {
+          type: "play",
+          trackIds: songs.map(discoverTrackId),
+          startIndex,
+          context,
+          shuffle: options.shuffle,
+        },
+        tracks,
+      );
+    }),
+  );
 
 export const playYtNext = (songs: readonly YtSong[]): Promise<void> =>
   dispatchYt({ type: "playNext", trackIds: ytTrackIds(songs) }, songs);
