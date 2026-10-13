@@ -98,9 +98,13 @@ export const useDiscover = (): Discover => {
     if (!loading) return;
     void askYtMusic((ytMusic) => ytMusic.home).then((result) => {
       if (Result.isSuccess(result)) dispatch({ type: "loaded", request, home: result.success });
-      // Turned off meanwhile: Discover is off already.
-      else if (result.failure.reason !== "disabled")
-        dispatch({ type: "failed", request, reason: result.failure.reason });
+      else
+        dispatch({
+          type: "failed",
+          request,
+          // Turned off meanwhile: Discover shows it's off, and asks again when pulled once back on.
+          reason: result.failure.reason === "offline" ? "offline" : "failed",
+        });
     });
   }, [request, loading]);
 
