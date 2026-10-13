@@ -4,7 +4,7 @@ import { Storage } from "expo-sqlite/kv-store";
 
 import { YtMusic } from "@/ytmusic/YtMusic";
 
-import { queueTracks, toYtQueueTrack, type QueueTrack } from "./queueTracks";
+import { cacheYtCoversLater, queueTracks, toYtQueueTrack, type QueueTrack } from "./queueTracks";
 
 /**
  * YT Music songs in the queue: the details the queue keeps of them (they
@@ -31,6 +31,19 @@ export const ytQueueTrack = (song: YtSong): Effect.Effect<QueueTrack, never, YtM
       Effect.orElseSucceed(() => null),
     );
     return toYtQueueTrack(song, artwork);
+  });
+
+/**
+ * Caches [songs]' covers in the background, a few at a time, once their play
+ * has started (`cacheYtCoversLater`); returns at once.
+ */
+export const cacheYtCoversInBackground = (
+  songs: readonly YtSong[],
+): Effect.Effect<void, never, YtMusic> =>
+  Effect.gen(function* () {
+    if (songs.every((song) => song.artworkUrl === null)) return;
+    const ytMusic = yield* YtMusic;
+    yield* Effect.forkDetach(cacheYtCoversLater(songs, ytMusic.cacheArtwork));
   });
 
 /** The YT Music songs' details saved with the last queue; none when nothing readable is. */

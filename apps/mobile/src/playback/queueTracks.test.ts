@@ -2,11 +2,13 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, test } from "node:test";
 
-import type { QueueEntry } from "@wave/core";
+import type { QueueEntry, YtSong } from "@wave/core";
 import * as Effect from "effect/Effect";
 
 import type { SongRow } from "../library/LibraryStore.ts";
 import {
+  YT_COVERS_AT_ONCE,
+  cacheYtCoversLater,
   learnQueueTracks,
   learnUnknownQueueTracks,
   lookupFailed,
@@ -34,6 +36,29 @@ const song = (id: number, thumbPath: string | null = `/covers/${id}.thumb.jpg`):
   discNumber: null,
   trackNumber: null,
 });
+
+const ytSong = (videoId: string): YtSong => ({
+  videoId,
+  title: `Song ${videoId}`,
+  artists: ["Artist"],
+  album: null,
+  durationMs: null,
+  artworkUrl: `https://covers/${videoId}`,
+  explicit: false,
+});
+
+const cover = (url: string) => ({
+  path: `${url}.jpg`,
+  thumbPath: `${url}.thumb.jpg`,
+  palette: { dominant: "#000" },
+});
+
+/** Caches a cover while a new play replaces the queue. */
+const cacheAfterNewPlay = (url: string) =>
+  Effect.sync(() => {
+    learnQueueTracks([song(1)].map(toQueueTrack), { forgetOthers: true });
+    return cover(url);
+  });
 
 const entry = (trackId: string, key = `k${trackId}`): QueueEntry => ({
   key,
@@ -119,6 +144,45 @@ describe("queue tracks", () => {
     learnQueueTracks([song(1)].map(toQueueTrack));
     learnQueueTracks([song(2)].map(toQueueTrack), { forgetOthers: true });
     assert.deepEqual([...queueTracks.get().keys()], ["2"]);
+  });
+
+  test("covers cached after a play starts fill in the queued YT Music songs, a few at a time", async () => {
+    const songs = ["a", "b", "c", "d", "e"].map(ytSong);
+    learnQueueTracks(
+      songs.map((s) => toYtQueueTrack(s, null)),
+      { forgetOthers: true },
+    );
+    let caching = 0;
+    let most = 0;
+    const cache = (url: string) =>
+      Effect.gen(function* () {
+        caching += 1;
+        most = Math.max(most, caching);
+        yield* Effect.sleep(5);
+        caching -= 1;
+        return cover(url);
+      });
+
+    await Effect.runPromise(cacheYtCoversLater(songs, cache));
+
+    assert.equal(most, YT_COVERS_AT_ONCE);
+    assert.equal(queueTracks.get().get("yt:c")?.thumbPath, "https://covers/c.thumb.jpg");
+    assert.equal(queueTracks.get().get("yt:e")?.artworkPath, "https://covers/e.jpg");
+  });
+
+  test("a cover cached after its song left the queue doesn't bring it back", async () => {
+    learnQueueTracks([toYtQueueTrack(ytSong("a"), null)], { forgetOthers: true });
+    await Effect.runPromise(cacheYtCoversLater([ytSong("a")], cacheAfterNewPlay));
+
+    assert.deepEqual([...queueTracks.get().keys()], ["1"]);
+  });
+
+  test("a cover that can't be cached leaves YouTube's", async () => {
+    learnQueueTracks([toYtQueueTrack(ytSong("a"), null)], { forgetOthers: true });
+
+    await Effect.runPromise(cacheYtCoversLater([ytSong("a")], () => Effect.fail("offline")));
+
+    assert.equal(queueTracks.get().get("yt:a")?.artworkPath, "https://covers/a");
   });
 
   test("nothing to learn leaves the tracks as they were", () => {
