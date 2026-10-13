@@ -3,12 +3,13 @@
 
 /* ─── Colour tokens: The Quiet Catalog ──────────────────────────────────
  * Wave's world is a record label's catalog: artwork in calm, tinted fields
- * and small, exact type. The ground is never plain white or black: fog in
- * light, deep night slate in dark. Every neutral comes from one tonal ramp
- * (tone-0 lightest … tone-11 darkest, OKLCH hue 215); semantic tokens pick
- * steps from it, so there are no ad-hoc greys. tone-11 is used only by dark
- * mode: its ground sits there and cards, fills and separators climb one ramp
- * step each from it, so light mode (whose text is tone-10) stays as it was.
+ * and small, exact type. Light mode sits on fog, never plain white; dark mode
+ * sits on true black. Every neutral comes from one tonal ramp (tone-0
+ * lightest … tone-11 darkest, OKLCH hue 215); semantic tokens pick steps from
+ * it, so there are no ad-hoc greys. In dark mode grouped areas sit on tone-11
+ * (a step only dark mode uses), cards and fills on tone-10, separators on
+ * tone-9, so each stands off the black ground and light mode (whose text is
+ * tone-10) stays as it was. tone-11 is also the ground of the Slate swatch.
  *
  * packages/core/src/theme.ts holds the same values (and the contrast checks);
  * src/theme/tokens.test.ts fails if the two drift apart.
@@ -38,7 +39,7 @@
     }
 
     @variant dark {
-      --color-background: #0a1113;
+      --color-background: #000000;
       --color-grouped: #0a1113;
       --color-surface: #121b1d;
       --color-foreground: #e0ecef;
@@ -47,10 +48,10 @@
       --color-separator: #1c2628;
       --color-fill: #121b1d;
       --color-accent: #59c0ad;
-      --color-on-accent: #0a1113;
+      --color-on-accent: #000000;
       --color-highlight: #ec9d53;
       --color-destructive: #f2867a;
-      --color-scrim: #0a1113;
+      --color-scrim: #000000;
     }
   }
 }
