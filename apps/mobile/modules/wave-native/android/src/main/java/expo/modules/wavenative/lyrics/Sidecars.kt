@@ -17,4 +17,16 @@ object Sidecars {
       files.firstOrNull { it.name.equals(name, ignoreCase = true) && it.isFile }
     }
   }
+
+  /** The `.lrc` file names in [folder], lower-cased, for `hasOne`: one listing for a whole folder. */
+  fun namesIn(folder: File?): Set<String> =
+    folder
+      ?.listFiles { file -> file.extension.equals("lrc", ignoreCase = true) && file.isFile }
+      ?.mapTo(HashSet()) { it.name.lowercase() }
+      ?: emptySet()
+
+  /** Whether [audio] has a sidecar among its folder's [names] (from `namesIn`), as `find` matches them. */
+  fun hasOne(audio: File, names: Set<String>): Boolean =
+    names.isNotEmpty() &&
+      ("${audio.nameWithoutExtension}.lrc".lowercase() in names || "${audio.name}.lrc".lowercase() in names)
 }
