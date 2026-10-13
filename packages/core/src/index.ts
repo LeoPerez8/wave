@@ -302,3 +302,12 @@ export { focusedVersion, startFocusedVersion } from "./focusedVersion.ts";
 export type { FocusedVersion, FocusedVersionEvent } from "./focusedVersion.ts";
 export { stepNowPlayingSheet } from "./sheetLifecycle.ts";
 export type { SheetEvent, SheetPhase, SheetStep } from "./sheetLifecycle.ts";
+export { libraryMatcher, parseTrackId, ytSongCredit, ytTrackId } from "./ytMusic.ts";
+export type { LibrarySongKey, TrackRef, YtSong } from "./ytMusic.ts";
+export {
+  YT_SEARCH_DEBOUNCE_MS,
+  YT_SECTION_HIDDEN,
+  stepYtSection,
+  ytSearchQuery,
+} from "./ytSearch.ts";
+export type { YtQuietReason, YtSection, YtSectionEvent } from "./ytSearch.ts";
