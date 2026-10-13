@@ -133,6 +133,11 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
   saveArtistPhoto(artistKey: string, thumbUrl: string, largeUrl: string): Promise<ArtistPhotoFiles>;
   /** Deletes every downloaded artist photo. */
   clearArtistPhotos(): Promise<void>;
+  /**
+   * Makes `alias` (one of `aliases`, activity-alias names without the package)
+   * Wave's launcher icon. It switches once Wave leaves the screen.
+   */
+  setLauncherIcon(alias: string, aliases: readonly string[]): Promise<void>;
 }
 
 /** A saved artist photo: the large image (artist page) and the thumbnail (lists). */

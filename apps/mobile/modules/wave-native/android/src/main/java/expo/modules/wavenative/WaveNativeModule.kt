@@ -1,6 +1,7 @@
 package expo.modules.wavenative
 
 import android.app.Activity
+import android.app.Application
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -22,6 +23,7 @@ import expo.modules.wavenative.artwork.ArtworkStore
 import expo.modules.wavenative.files.DeleteOutcome
 import expo.modules.wavenative.files.TrackFileDeleter
 import expo.modules.wavenative.folders.TreeUris
+import expo.modules.wavenative.launcher.LauncherIconSwitcher
 import expo.modules.wavenative.lyrics.LyricsReader
 import expo.modules.wavenative.scan.KnownFile
 import expo.modules.wavenative.scan.LibraryScanner
@@ -39,8 +41,8 @@ import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Wave's native side: all-files access, the folder picker, the library scanner,
- * lyrics, deleting songs' files and saving artist photos. Scans run one at
- * a time on a background thread and stream results to JS as events:
+ * lyrics, deleting songs' files, saving artist photos and the launcher icon.
+ * Scans run one at a time on a background thread and stream results to JS as events:
  * `onScanProgress`, `onScanMissing`, `onScanBatch`, `onScanComplete` and
  * `onScanError`, each carrying the `scanId` returned by `startScan`.
  */
@@ -188,13 +190,35 @@ class WaveNativeModule : Module() {
     /** Deletes every downloaded artist photo. */
     AsyncFunction("clearArtistPhotos") { artistPhotos().clear() }
 
+    /**
+     * Makes [alias] (one of [aliases], activity-alias names without the package)
+     * Wave's launcher icon once Wave leaves the screen; see [LauncherIconSwitcher].
+     */
+    AsyncFunction("setLauncherIcon") { alias: String, aliases: List<String> ->
+      launcherIcons().request(alias, aliases)
+    }.runOnQueue(Queues.MAIN)
+
     OnDestroy {
       currentScan?.second?.set(true)
       scanExecutor.shutdownNow()
+      launcherIconSwitcher?.let { switcher ->
+        appContext.reactContext?.let { (it.applicationContext as Application).unregisterActivityLifecycleCallbacks(switcher) }
+      }
+      launcherIconSwitcher = null
     }
   }
 
-  private fun artistPhotos() = ArtistPhotoStore(File(File(context.filesDir, "artwork"), "artists"))
+  /** Created on first use (on the main thread) and told when Wave's activities stop. */
+  private var launcherIconSwitcher: LauncherIconSwitcher? = null
+
+  private fun launcherIcons(): LauncherIconSwitcher =
+    launcherIconSwitcher
+      ?: LauncherIconSwitcher(context.applicationContext, isBusy = { pendingFolderPick != null }).also {
+        (context.applicationContext as Application).registerActivityLifecycleCallbacks(it)
+        launcherIconSwitcher = it
+      }
+
+  private fun artistPhotos() =ArtistPhotoStore(File(File(context.filesDir, "artwork"), "artists"))
 
   /** The root of a storage volume: `primary` or the UUID of an SD card or USB drive. */
   private fun volumeDirectory(volumeId: String): File? {

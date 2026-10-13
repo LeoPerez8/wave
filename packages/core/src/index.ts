@@ -204,6 +204,15 @@ export type {
   ThemeSwatchOption,
   ThemeSwatchRow,
 } from "./themeChoice.ts";
+export {
+  LAUNCHER_ICONS,
+  LAUNCHER_ICON_ART,
+  LAUNCHER_ICON_RADIUS,
+  WAVE_LOGO,
+  launcherIconFor,
+  launcherIconSwitch,
+} from "./launcherIcon.ts";
+export type { LauncherBehaviour, LauncherIcon, LauncherIconSwitch } from "./launcherIcon.ts";
 export { sliderFraction, sliderValueAt, snapSliderValue, stepSlider } from "./slider.ts";
 export type { SliderRange } from "./slider.ts";
 export { LONG_PRESS_DELAY, readLongPressDelay, snapLongPressDelay } from "./longPress.ts";

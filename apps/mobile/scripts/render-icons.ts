@@ -1,15 +1,15 @@
-// Renders Wave's launcher icons and splash logos: two rounded waves, teal over amber.
-// Zero dependencies: each pixel's coverage comes from its distance to the wave polylines,
-// so the round caps and anti-aliasing are exact. Run with `pnpm --filter @wave/mobile icons`.
+// Renders Wave's default launcher icons and splash logos: two rounded waves (Core's
+// WAVE_LOGO), teal over amber. Zero dependencies: each pixel's coverage comes from its
+// distance to the wave polylines, so the round caps and anti-aliasing are exact. Run with
+// `pnpm --filter @wave/mobile icons`. The icons for other primaries and secondaries are
+// vector drawables written at prebuild (plugins/launcherIcons.ts).
 import { writeFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
 
-import { DEFAULT_THEME } from "@wave/core";
+import { DEFAULT_THEME, LAUNCHER_ICON_RADIUS, LAUNCHER_ICONS, WAVE_LOGO } from "@wave/core";
 
 type Rgb = readonly [number, number, number];
 
-const TEAL: Rgb = [0x14, 0xb7, 0xa6];
-const AMBER: Rgb = [0xf5, 0xb8, 0x3d];
 const BLACK: Rgb = [0, 0, 0];
 const WHITE: Rgb = [0xff, 0xff, 0xff];
 
@@ -20,41 +20,23 @@ function rgb(hex: string): Rgb {
   return [parseInt(match[1]!, 16), parseInt(match[2]!, 16), parseInt(match[3]!, 16)];
 }
 
+// The shipped icon: the default primary and secondary (Core's first launcher icon).
+const SHIPPED_ICON = LAUNCHER_ICONS[0]!;
+const TEAL = rgb(SHIPPED_ICON.top);
+const AMBER = rgb(SHIPPED_ICON.bottom);
+
 // The light splash background (#E0ECEF) washes out the icon colours, so the light splash
 // uses the light theme's accent and highlight tokens instead (Core's theme, which
 // global.css mirrors).
 const LIGHT_TEAL = rgb(DEFAULT_THEME.light.accent);
 const LIGHT_AMBER = rgb(DEFAULT_THEME.light.highlight);
 
-// The logo in its own units: each wave runs x = -1..1.
-const STROKE = 0.2;
-const AMPLITUDE = 0.18;
-const PERIOD = 1.6;
-const GAP = 0.25; // vertical offset of each wave from the logo's middle
+const STROKE = WAVE_LOGO.stroke;
+const WAVES = WAVE_LOGO;
 
 type Point = readonly [number, number];
 
-/** A wave whose crest sits at `crestX`, shifted `dy` down from the middle. */
-function wave(crestX: number, dy: number): Point[] {
-  const points: Point[] = [];
-  const steps = 240;
-  for (let i = 0; i <= steps; i++) {
-    const x = -1 + (2 * i) / steps;
-    points.push([x, dy - AMPLITUDE * Math.cos((2 * Math.PI * (x - crestX)) / PERIOD)]);
-  }
-  return points;
-}
-
-const WAVES = { top: wave(-0.6, -GAP), bottom: wave(-0.76, GAP) };
-
-/** Furthest any stroke edge reaches from the logo's centre. */
-function radialExtent(): number {
-  let max = 0;
-  for (const [x, y] of [...WAVES.top, ...WAVES.bottom]) max = Math.max(max, Math.hypot(x, y));
-  return max + STROKE / 2;
-}
-
-function distanceToPolyline(px: number, py: number, points: Point[]): number {
+function distanceToPolyline(px: number, py: number, points: readonly Point[]): number {
   let best = Infinity;
   for (let i = 1; i < points.length; i++) {
     const [ax, ay] = points[i - 1]!;
@@ -78,7 +60,7 @@ type Icon = {
 };
 
 function render({ size, radius, background, top, bottom }: Icon): Buffer {
-  const scale = (radius * size) / radialExtent();
+  const scale = (radius * size) / WAVE_LOGO.extent;
   const half = STROKE / 2;
   const channels = background ? 3 : 4;
   const stride = size * channels + 1;
@@ -89,7 +71,7 @@ function render({ size, radius, background, top, bottom }: Icon): Buffer {
       const x = (col + 0.5 - size / 2) / scale;
       const y = (row + 0.5 - size / 2) / scale;
       // Coverage of a pixel by a stroke edge, one pixel wide for anti-aliasing.
-      const cover = (points: Point[]) =>
+      const cover = (points: readonly Point[]) =>
         Math.abs(y) > 0.6 || Math.abs(x) > 1.2
           ? 0
           : Math.max(0, Math.min(1, (half - distanceToPolyline(x, y, points)) * scale + 0.5));
@@ -149,7 +131,8 @@ function png(size: number, colourType: number, raw: Buffer): Buffer {
 }
 
 // Adaptive icons: the launcher shows the middle 72dp of the 108dp layer and every mask keeps
-// at least the 66dp circle (radius 0.305 of the width), so the waves stay inside 0.27.
+// at least the 66dp circle (radius 0.305 of the width), so the waves stay inside
+// LAUNCHER_ICON_RADIUS (0.27), as the vector icons do.
 // Splash logos: expo-splash-screen draws the image 160dp wide under a 192dp circle mask
 // (radius 0.6 of the width), so 0.5 leaves a margin.
 const ICONS: Icon[] = [
@@ -157,7 +140,7 @@ const ICONS: Icon[] = [
   {
     file: "adaptive-icon-foreground.png",
     size: 1024,
-    radius: 0.27,
+    radius: LAUNCHER_ICON_RADIUS,
     background: null,
     top: TEAL,
     bottom: AMBER,
@@ -165,7 +148,7 @@ const ICONS: Icon[] = [
   {
     file: "adaptive-icon-monochrome.png",
     size: 1024,
-    radius: 0.27,
+    radius: LAUNCHER_ICON_RADIUS,
     background: null,
     top: WHITE,
     bottom: WHITE,

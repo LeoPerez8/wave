@@ -1,5 +1,7 @@
 import type { ExpoConfig } from "expo/config";
 
+import { withLauncherIcons } from "./plugins/withLauncherIcons.ts";
+
 // Font files ship inside the @expo-google-fonts/inter package and are embedded
 // natively at prebuild time, so text renders in Inter from the first frame.
 const inter = (file: string): string => `./node_modules/@expo-google-fonts/inter/${file}`;
@@ -75,4 +77,5 @@ const config: ExpoConfig = {
   ],
 };
 
-export default config;
+// One launcher icon per primary × secondary, switched from Settings › Theme.
+export default withLauncherIcons(config);
