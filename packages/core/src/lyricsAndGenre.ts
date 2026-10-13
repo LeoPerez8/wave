@@ -335,6 +335,27 @@ export const lookupsUnreachable = (outcomes: readonly SongTagOutcome[]): boolean
   );
 };
 
+/** What the Library index knows about a song's lyrics and genre. */
+export interface IndexedLyricsAndGenre {
+  /** Lyrics in the file's tags or in a sidecar `.lrc`. */
+  readonly hasLyrics: boolean;
+  /** Null for a song without a genre tag. */
+  readonly genre: string | null;
+}
+
+/**
+ * Which songs the whole-Library run looks up: those missing lyrics or a genre,
+ * in the order given. Songs that already have both are skipped (and counted
+ * for the summary), so running it again only does new or incomplete songs.
+ * Songs the owner picks (a menu, the selection bar) are looked up regardless.
+ */
+export const libraryLookupSongs = <S extends IndexedLyricsAndGenre>(
+  songs: readonly S[],
+): { readonly lookUp: S[]; readonly skipped: number } => {
+  const lookUp = songs.filter((song) => !song.hasLyrics || (song.genre ?? "").trim() === "");
+  return { lookUp, skipped: songs.length - lookUp.length };
+};
+
 /** How a run over many songs ended early, and how many songs it didn't get to. */
 export interface TagLookupStop {
   readonly stopped: "cancelled" | "unreachable";
@@ -369,13 +390,25 @@ const describeUpdate = (title: string, written: TagWriteReport) => {
 /**
  * The message after finding lyrics and genre for [results] (in order): what
  * one song got, or for several the updated / not found / failed counts and the
- * songs whose lyrics went into a sidecar `.lrc`. [stop] says why a run ended early.
+ * songs whose lyrics went into a sidecar `.lrc`. [stop] says why a run ended early;
+ * [skipped] counts the songs the whole-Library run left out as already having
+ * lyrics and a genre (`libraryLookupSongs`).
  */
 export const describeTagLookups = (
   results: readonly { readonly title: string; readonly outcome: SongTagOutcome }[],
   stop?: TagLookupStop,
+  skipped = 0,
 ): { readonly title: string; readonly message: string } => {
-  const only = results.length === 1 && stop === undefined ? results[0] : undefined;
+  if (results.length === 0 && stop === undefined && skipped > 0)
+    return {
+      title: "Nothing to look up",
+      message:
+        skipped === 1
+          ? "The only song already has lyrics and a genre."
+          : `All ${count(skipped)} songs already have lyrics and a genre.`,
+    };
+  const only =
+    results.length === 1 && stop === undefined && skipped === 0 ? results[0] : undefined;
   if (only !== undefined) {
     const { title, outcome } = only;
     switch (outcome.kind) {
@@ -399,6 +432,10 @@ export const describeTagLookups = (
   const paragraphs = [
     `${count(tally.updated)} updated · ${count(tally.notFound)} not found · ${count(tally.failed)} failed`,
   ];
+  if (skipped > 0)
+    paragraphs.push(
+      `${songs(skipped)} already had lyrics and a genre, so ${skipped === 1 ? "it was" : "they were"} skipped.`,
+    );
   if (sidecars.length > 0) {
     const named = sidecars.slice(0, NAMED_SONGS).join(", ");
     const more = sidecars.length - NAMED_SONGS;
