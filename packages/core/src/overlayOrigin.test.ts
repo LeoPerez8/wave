@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { highlightedOrigin, originOfNewCard, veilAround } from "./index.ts";
+import { cardShowsHeading, highlightedOrigin, originOfNewCard, veilAround } from "./index.ts";
 
 const songRow = "song row";
 
@@ -121,5 +121,28 @@ describe("veilAround", () => {
   test("with nothing to highlight, or it is off screen, the veil covers everything", () => {
     assert.deepEqual(veilAround(window, undefined), [full]);
     assert.deepEqual(veilAround(window, { left: 0, top: 1000, right: 412, bottom: 1056 }), [full]);
+  });
+});
+
+describe("cardShowsHeading", () => {
+  const window = { width: 412, height: 915 };
+
+  test("a menu opened from a highlighted row drops its heading: the row already says what it's about", () => {
+    assert.equal(cardShowsHeading(window, { left: 0, top: 200, right: 412, bottom: 256 }), false);
+  });
+
+  test("a menu opened from a tile partly off screen still counts as highlighted", () => {
+    assert.equal(
+      cardShowsHeading(window, { left: 300, top: 860, right: 480, bottom: 1000 }),
+      false,
+    );
+  });
+
+  test("a menu with nothing highlighted keeps its heading", () => {
+    assert.equal(cardShowsHeading(window, undefined), true);
+  });
+
+  test("a menu whose origin sits off screen keeps its heading, since no highlight shows", () => {
+    assert.equal(cardShowsHeading(window, { left: 0, top: 1000, right: 412, bottom: 1056 }), true);
   });
 });

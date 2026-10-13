@@ -4,7 +4,6 @@ import { Text, View } from "react-native";
 import { ArtistImage } from "@/catalog/ArtistImage";
 import { EntryRow } from "@/catalog/EntryRow";
 import { CELL } from "@/catalog/grid";
-import { Hairline } from "@/catalog/Hairline";
 import { Mosaic } from "@/catalog/Mosaic";
 import type { LibrarySection } from "@/catalog/sections";
 import type { LibraryCounts } from "@/library/db/counts";
@@ -19,6 +18,7 @@ import type {
 } from "@/library/LibraryStore";
 import { pressedRect } from "@/motion/pressedRect";
 import { CardEntries } from "@/overlay/CardEntries";
+import { CardHeading } from "@/overlay/CardHeading";
 import { useOverlayFlow } from "@/overlay/flow";
 import { openOverlay } from "@/overlay/overlay";
 import { useSlideToChoose } from "@/overlay/useSlideToChoose";
@@ -90,7 +90,8 @@ function SectionActionsMenu({ target, close }: { target: ActionItems; close: () 
 
 /**
  * The long-press menu for a track, an album, an artist, a playlist, a genre, a
- * folder or a Library entry: what it is, then one quiet line per action (the
+ * folder or a Library entry: what it is (unless the row it was opened from is
+ * highlighted, which says so already), then one quiet line per action (the
  * shared list in `itemActions`, which the selection bar offers too). A glass
  * card on the overlay, floating next to the row it was opened from.
  */
@@ -119,10 +120,8 @@ function ActionsMenu({
   return (
     <>
       {head !== undefined && (
-        <View
-          className="flex-row items-center"
-          style={{ paddingBottom: CELL * 1.5, gap: CELL * 1.5 }}
-        >
+        // A Library entry's heading counts the songs it acts on, which its row doesn't show.
+        <CardHeading always={target.kind === "section"}>
           {head.covers !== undefined && <Mosaic paths={head.covers} size={CELL * 5} />}
           {head.artist !== undefined && <ArtistImage artist={head.artist} size={CELL * 5} />}
           <View className="flex-1">
@@ -133,9 +132,8 @@ function ActionsMenu({
               {head.subtitle}
             </Text>
           </View>
-        </View>
+        </CardHeading>
       )}
-      <Hairline />
       {/* Play Next sits nearest the finger, whichever side of the row the card opened on. */}
       <CardEntries listRef={trackList}>
         {entries.map((entry, index) => (

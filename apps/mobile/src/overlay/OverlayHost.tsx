@@ -1,6 +1,7 @@
 import {
   cardContentHeight,
   cardKeyboard,
+  cardShowsHeading,
   placeOverlayCard,
   veilAround,
   withOpacity,
@@ -47,6 +48,7 @@ import {
   useOverlayEntries,
   type OverlayEntry,
 } from "./overlay";
+import { CardHeadingContext } from "./CardHeading";
 import { OverlayFlowContext } from "./flow";
 import { useKeyboardHeight } from "./keyboard";
 
@@ -60,8 +62,8 @@ export const OVERLAY_PADDING = { horizontal: CELL * 3, vertical: CELL * 2 } as c
 const MAX_WIDTH = CELL * 56;
 
 /**
- * The shortest an anchored card (a menu) shrinks to stay beside its row: its
- * heading and a couple of entries. With less room it covers the row instead.
+ * The shortest an anchored card (a menu) shrinks to stay beside its row: a
+ * few entries (or a heading and a couple). With less room it covers the row instead.
  */
 const MIN_ANCHORED_HEIGHT = CELL * 20;
 
@@ -140,6 +142,8 @@ function OverlayCard({ entry, frontmost }: { entry: OverlayEntry; frontmost: boo
   const measured = cardHeight !== null;
   const anchor = entry.request.anchor;
   const highlight = entry.origin?.rect;
+  // Settled as the card opens: its heading never comes or goes under a sliding finger.
+  const [showsHeading] = useState(() => cardShowsHeading(window, highlight));
   // The veil's own size: the window, unless edge-to-edge drawing makes it taller.
   const [veil, setVeil] = useState<{ width: number; height: number } | null>(null);
   const chromeBottom = useFloatingChromeHeight();
@@ -286,7 +290,9 @@ function OverlayCard({ entry, frontmost }: { entry: OverlayEntry; frontmost: boo
         <Glass backdropId={BACKDROP.root} cornerRadius={OVERLAY_RADIUS} />
         <OnOverlayCard value>
           <OverlayFlowContext value={frame.flow}>
-            {entry.request.render(() => closeOverlay(entry.id))}
+            <CardHeadingContext value={showsHeading}>
+              {entry.request.render(() => closeOverlay(entry.id))}
+            </CardHeadingContext>
           </OverlayFlowContext>
         </OnOverlayCard>
       </Animated.View>

@@ -295,7 +295,12 @@ export { LOGO_WAVES, logoIconPaths, logoWaveY } from "./logo.ts";
 export type { LogoIconBox, LogoIconPaths, LogoWave } from "./logo.ts";
 export { UNDERLINE_WAVE, underlineMotion, wavePath } from "./wavyUnderline.ts";
 export type { UnderlineMotion, UnderlineMotionInput, WaveShape } from "./wavyUnderline.ts";
-export { highlightedOrigin, originOfNewCard, veilAround } from "./overlayOrigin.ts";
+export {
+  cardShowsHeading,
+  highlightedOrigin,
+  originOfNewCard,
+  veilAround,
+} from "./overlayOrigin.ts";
 export type { NewCardInput, OriginCard } from "./overlayOrigin.ts";
 export { confirmSongDeletion, songDeletionFailure } from "./songDeletion.ts";
 export type { SongDeleteFailure, SongDeleteFailureReason } from "./songDeletion.ts";
