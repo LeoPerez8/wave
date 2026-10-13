@@ -5,6 +5,7 @@ import {
   DISCOVER_START,
   discoverItemAction,
   discoverShouldAsk,
+  discoverTileCaption,
   discoverTrackId,
   discoverView,
   stepDiscover,
@@ -37,14 +38,15 @@ const loaded = (answer: YtHome): DiscoverState => {
   return stepDiscover(asked, { type: "loaded", request: asked.request, home: answer });
 };
 
+/** The titles of the shelves [state] shows, or what shows instead. */
+const titles = (state: DiscoverState): string[] => {
+  const view = discoverView(state, signedIn);
+  return view.kind === "shelves" ? view.shelves.map((shelf) => shelf.title) : [view.kind];
+};
+
 describe("stepDiscover", () => {
   const first = home(songShelf("Quick picks", song("a")));
   const fresh = home(songShelf("Mixed for you", song("b")));
-  const titles = (state: DiscoverState): string[] => {
-    const view = discoverView(state, signedIn);
-    return view.kind === "shelves" ? view.shelves.map((shelf) => shelf.title) : [view.kind];
-  };
-
   test("pulling to refresh keeps the shelves up until the new ones arrive", () => {
     const refreshing = stepDiscover(loaded(first), { type: "requested" });
     assert.equal(refreshing.loading, true);
@@ -107,6 +109,12 @@ describe("discoverShouldAsk", () => {
       reason: "offline",
     });
     assert.equal(discoverShouldAsk(failed, signedIn), false);
+  });
+
+  test("waits to know whether an account is signed in", () => {
+    const unknown = { ...signedIn, signedIn: null };
+    assert.equal(discoverShouldAsk(DISCOVER_START, unknown), false);
+    assert.deepEqual(discoverView(DISCOVER_START, unknown), { kind: "loading" });
   });
 
   test("never asks YouTube signed out or with YT Music off", () => {
@@ -203,6 +211,46 @@ describe("Discover's shelves", () => {
   test("a song queues as the Library track it is, or as a YT Music song", () => {
     assert.equal(discoverTrackId({ source: "library", song: song("m", "Mine"), track: mine }), "7");
     assert.equal(discoverTrackId({ source: "stream", song: song("a") }), "yt:a");
+  });
+});
+
+describe("discoverTileCaption", () => {
+  test("an album's cover is captioned with its artists, then its year", () => {
+    const album: YtShelfItem = {
+      kind: "album",
+      browseId: "MPREb_1",
+      title: "Album",
+      artists: ["A", "B"],
+      year: 2024,
+      artworkUrl: null,
+    };
+    assert.deepEqual(discoverTileCaption(album), { line: "A & B", detail: "Album · 2024" });
+    assert.deepEqual(discoverTileCaption({ ...album, artists: [], year: null }), {
+      line: "",
+      detail: "Album",
+    });
+  });
+
+  test("a playlist's is who made it, without YouTube's view count", () => {
+    const playlist: YtShelfItem = {
+      kind: "playlist",
+      playlistId: "PL1",
+      title: "2000's",
+      credit: "Casa de Rodapé • 15M views",
+      artworkUrl: null,
+    };
+    assert.deepEqual(discoverTileCaption(playlist), { line: "Casa de Rodapé", detail: "Playlist" });
+    assert.deepEqual(discoverTileCaption({ ...playlist, credit: null }), {
+      line: "",
+      detail: "Playlist",
+    });
+  });
+
+  test("a song's is its artists", () => {
+    assert.deepEqual(discoverTileCaption({ kind: "song", song: song("a") }), {
+      line: "Artist",
+      detail: "Song",
+    });
   });
 });
 

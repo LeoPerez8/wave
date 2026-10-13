@@ -1,13 +1,5 @@
 import { LegendList } from "@legendapp/list/react-native";
-import {
-  counted,
-  type QueueContext,
-  type SearchKind,
-  ytDownloadLine,
-  ytDownloadProgress,
-  ytSongCredit,
-  ytTrackId,
-} from "@wave/core";
+import { counted, type QueueContext, type SearchKind, ytTrackId } from "@wave/core";
 import { useCallback, useMemo } from "react";
 import { Text, View } from "react-native";
 
@@ -37,8 +29,7 @@ import type { SearchHit } from "./searchIndex";
 import { useListScrollable } from "@/motion/heldTouch";
 import { selectableRow } from "@/selection/selectableRow";
 import type { ListSelection } from "@/selection/useListSelection";
-import { useYtDownloadStatus } from "@/ytmusic/YtDownloads";
-import { openYtSongActions } from "@/ytmusic/YtSongActions";
+import { YtSongRow } from "@/ytmusic/YtSongRow";
 
 /** Tapping a song plays the song results from it. */
 const SEARCH_CONTEXT: QueueContext = { kind: "search", id: null };
@@ -56,13 +47,10 @@ const HEIGHT: Readonly<Record<ResultRow["type"], number>> = {
 const ignore = (): void => undefined;
 
 /**
- * A song YT Music found: a Songs-list row with YouTube's cover, its artists
- * and album. Tapping streams the section's songs from it; its long-press menu
- * queues or downloads it. While it downloads, the second line says how far
- * along it is, over a progress rule. While Library songs are being selected,
- * it does nothing.
+ * A song YT Music found. Tapping streams the section's songs from it. While
+ * Library songs are being selected, it does nothing.
  */
-function YtSongRow({
+function SearchYtSongRow({
   song,
   songs,
   playing,
@@ -75,19 +63,10 @@ function YtSongRow({
   onOpen: () => void;
   selecting: boolean;
 }) {
-  const download = useYtDownloadStatus(song.videoId);
   return (
-    <TrackRow
-      track={{
-        id: ytTrackId(song.videoId),
-        title: song.title,
-        artist: ytDownloadLine(download) ?? ytSongCredit(song),
-        durationMs: song.durationMs,
-        artworkUri: song.artworkUrl ?? undefined,
-      }}
-      state={playing ? "playing" : undefined}
-      leading="artwork"
-      progress={ytDownloadProgress(download)}
+    <YtSongRow
+      song={song}
+      playing={playing}
       onPress={
         selecting
           ? ignore
@@ -96,7 +75,7 @@ function YtSongRow({
               void playYtSongs(songs, Math.max(0, songs.indexOf(song)), SEARCH_CONTEXT);
             }
       }
-      onLongPress={selecting ? ignore : () => openYtSongActions(song)}
+      onLongPress={selecting ? ignore : undefined}
     />
   );
 }
@@ -248,7 +227,7 @@ export function SearchResultsList({ rows, onOpen, onShowAll, selection }: Props)
           );
         case "ytSong":
           return (
-            <YtSongRow
+            <SearchYtSongRow
               song={item.song}
               songs={item.songs}
               playing={ytTrackId(item.song.videoId) === currentId}

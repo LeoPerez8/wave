@@ -328,6 +328,7 @@ export { artistRanking } from "./moreFromArtist.ts";
 export type { ArtistRankingInput, ArtistRankingSong } from "./moreFromArtist.ts";
 export type { SheetEvent, SheetPhase, SheetStep } from "./sheetLifecycle.ts";
 export {
+  joinArtists,
   libraryFinder,
   libraryMatcher,
   parseTrackId,
@@ -441,6 +442,7 @@ export {
   DISCOVER_START,
   discoverItemAction,
   discoverShouldAsk,
+  discoverTileCaption,
   discoverSongs,
   discoverTrackId,
   discoverView,
@@ -454,6 +456,7 @@ export type {
   DiscoverItem,
   DiscoverShelf,
   DiscoverSong,
+  DiscoverTileCaption,
   DiscoverState,
   DiscoverView,
   YtAlbumPageTrack,

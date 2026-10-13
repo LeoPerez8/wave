@@ -8,7 +8,7 @@
 
 import type { YtAlbum, YtAlbumTrack } from "./ytDownload.ts";
 import type { YtQuietReason } from "./ytSearch.ts";
-import { ytTrackId, type YtSong } from "./ytMusic.ts";
+import { joinArtists, ytTrackId, type YtSong } from "./ytMusic.ts";
 
 /** Something on a shelf of YouTube Music's home that Wave can open or play. */
 export type YtShelfItem<S extends YtSong = YtSong> =
@@ -123,8 +123,8 @@ export type DiscoverView<S extends YtSong = YtSong, L = unknown> =
 export interface DiscoverContext<S extends YtSong, L = unknown> {
   /** Whether YT Music is on in Settings. */
   readonly enabled: boolean;
-  /** Whether a YouTube account is signed in (an expired session isn't). */
-  readonly signedIn: boolean;
+  /** Whether a YouTube account is signed in (an expired session isn't); null until known. */
+  readonly signedIn: boolean | null;
   /** The Library song a YT Music song already is, or null (Core's `libraryFinder`). */
   readonly find: (song: S) => L | null;
 }
@@ -164,7 +164,7 @@ export const discoverShouldAsk = <S extends YtSong, L>(
   context: DiscoverContext<S, L>,
 ): boolean =>
   context.enabled &&
-  context.signedIn &&
+  context.signedIn === true &&
   !state.loading &&
   state.home === null &&
   state.failure === null;
@@ -175,6 +175,7 @@ export const discoverView = <S extends YtSong, L>(
   context: DiscoverContext<S, L>,
 ): DiscoverView<S, L> => {
   if (!context.enabled) return { kind: "off" };
+  if (context.signedIn === null) return { kind: "loading" };
   if (!context.signedIn) return { kind: "signedOut" };
   if (state.home !== null) {
     const shelves = state.home.shelves
@@ -218,6 +219,35 @@ export const discoverItemAction = <S extends YtSong, L>(
       return { type: "openAlbum", browseId: item.browseId, title: item.title };
     case "playlist":
       return { type: "openPlaylist", playlistId: item.playlistId, title: item.title };
+  }
+};
+
+/** The caption under a Discover cover: a catalog line, then a detail line. */
+export interface DiscoverTileCaption {
+  /** Who made it: the artists, or the playlist's maker; empty when unknown. */
+  readonly line: string;
+  /** What it is: "Album · 2024", "Playlist", "Song". */
+  readonly detail: string;
+}
+
+/** What a Discover cover's caption says about [item]. */
+export const discoverTileCaption = <S extends YtSong>(
+  item: YtShelfItem<S> | DiscoverItem<S>,
+): DiscoverTileCaption => {
+  switch (item.kind) {
+    case "song":
+      return {
+        line: joinArtists("source" in item.song ? item.song.song.artists : item.song.artists),
+        detail: "Song",
+      };
+    case "album":
+      return {
+        line: joinArtists(item.artists),
+        detail: item.year === null ? "Album" : `Album · ${item.year}`,
+      };
+    case "playlist":
+      // "Owner • 15M views": the owner, without YouTube's count.
+      return { line: item.credit?.split(" • ")[0]?.trim() ?? "", detail: "Playlist" };
   }
 };
 
