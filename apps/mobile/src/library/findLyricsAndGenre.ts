@@ -3,7 +3,12 @@
  * selection bar, or on the whole Library from Settings, in the background
  * with progress and Cancel. Each ends with Core's summary (`describeTagLookups`).
  */
-import { describeTagLookups, type SongTagOutcome, type TagLookupStop } from "@wave/core";
+import {
+  describeTagLookups,
+  libraryLookupSongs,
+  type SongTagOutcome,
+  type TagLookupStop,
+} from "@wave/core";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -45,15 +50,22 @@ const run = async (
   return { stop: undefined, error };
 };
 
-const report = async (
-  results: readonly Result[],
-  outcome: { readonly stop: TagLookupStop | undefined; readonly error: unknown },
-): Promise<void> => {
+/**
+ * How a run ended: why it stopped early, what failed it, and (the whole-Library
+ * run) how many songs it skipped as already having lyrics and a genre.
+ */
+interface RunSummary {
+  readonly stop: TagLookupStop | undefined;
+  readonly error: unknown;
+  readonly skipped?: number;
+}
+
+const report = async (results: readonly Result[], outcome: RunSummary): Promise<void> => {
   if (outcome.error !== undefined && results.length === 0) {
     await showError("Couldn't find lyrics and genre", outcome.error);
     return;
   }
-  const { title, message } = describeTagLookups(results, outcome.stop);
+  const { title, message } = describeTagLookups(results, outcome.stop, outcome.skipped);
   await showMessage(title, message);
 };
 
@@ -81,9 +93,11 @@ export const useLibraryLookup = (): LibraryLookupState =>
   useSyncExternalStore(libraryLookup.subscribe, libraryLookup.get);
 
 /**
- * Finds lyrics and genre for every song in the Library, in the background,
- * with progress (`useLibraryLookup`); `cancelLibraryLookup` stops it. Ends with
- * the updated / not found / failed summary. Does nothing while one runs.
+ * Finds lyrics and genre for the songs in the Library missing either (Core's
+ * `libraryLookupSongs`), in the background, with progress over those songs
+ * (`useLibraryLookup`); `cancelLibraryLookup` stops it. Ends with the updated /
+ * not found / failed summary and the songs skipped as already having both.
+ * Does nothing while one runs.
  */
 export const startLibraryLookup = async (): Promise<void> => {
   if (libraryRun !== null) return;
@@ -91,10 +105,12 @@ export const startLibraryLookup = async (): Promise<void> => {
   libraryRun = controller;
   libraryLookup.set({ status: "running", done: 0, total: 0 });
   try {
-    const songs = await appRuntime.runPromise(
-      Effect.gen(function* () {
-        return yield* (yield* LibraryStore).listSongs;
-      }),
+    const { lookUp: songs, skipped } = libraryLookupSongs(
+      await appRuntime.runPromise(
+        Effect.gen(function* () {
+          return yield* (yield* LibraryStore).listLibraryLookupSongs;
+        }),
+      ),
     );
     const results: Result[] = [];
     libraryLookup.set({ status: "running", done: 0, total: songs.length });
@@ -108,7 +124,7 @@ export const startLibraryLookup = async (): Promise<void> => {
         );
     libraryLookup.set({ status: "idle" });
     libraryRun = null;
-    await report(results, outcome);
+    await report(results, { ...outcome, skipped });
   } catch (error) {
     libraryLookup.set({ status: "idle" });
     libraryRun = null;
