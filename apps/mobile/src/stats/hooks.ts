@@ -1,9 +1,10 @@
 import { STATS_TOP, type StatsPeriod } from "@wave/core";
 import type * as Effect from "effect/Effect";
 import { useFocusEffect } from "expo-router";
-import { useCallback, useState, useSyncExternalStore } from "react";
+import { useCallback, useState } from "react";
 
 import type { AlbumRow, ArtistRow, LibraryStoreError, SongRow } from "@/library/LibraryStore";
+import { useFocusedVersion } from "@/lib/useFocusedVersion";
 import { appRuntime } from "@/library/runtime";
 import { playHistoryVersion } from "@/playback/PlayHistory";
 
@@ -12,12 +13,12 @@ import { Stats, type ArtistStats, type Ranked } from "./Stats";
 /**
  * What `read` gives from Stats, or undefined while it first loads. Re-read
  * when the screen comes back into focus (windows end now), when `read`
- * changes and when a play starts or ends. `read` must be stable.
+ * changes and when a play starts or ends while it's focused. `read` must be stable.
  */
 const useStatsRead = <A>(
   read: (stats: Stats["Service"]) => Effect.Effect<A, LibraryStoreError>,
 ): A | undefined => {
-  const plays = useSyncExternalStore(playHistoryVersion.subscribe, playHistoryVersion.get);
+  const plays = useFocusedVersion(playHistoryVersion);
   const [value, setValue] = useState<A | undefined>(undefined);
 
   useFocusEffect(
