@@ -46,7 +46,8 @@ export const openAlbum = (id: number, known?: AlbumRow | null): void => open("al
 export const openArtist = (id: number, known?: ArtistRow | null): void => open("artist", id, known);
 export const openGenre = (id: number, known?: GenreRow | null): void => open("genre", id, known);
 export const openFolder = (id: number, known?: FolderRow | null): void => open("folder", id, known);
-export const openPlaylist = (id: number, known?: PlaylistRow | null): void => open("playlist", id, known);
+export const openPlaylist = (id: number, known?: PlaylistRow | null): void =>
+  open("playlist", id, known);
 
 /**
  * What the list or link knew about the item a detail screen shows when it was

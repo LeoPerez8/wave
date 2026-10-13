@@ -216,7 +216,10 @@ const NO_LINKS: LinkRows = { album: null, artist: null };
  * read (or for an id not asked for). One targeted read per id: no
  * library-wide count.
  */
-export const useLinkRows = (albumId: number | undefined, artistId: number | undefined): LinkRows => {
+export const useLinkRows = (
+  albumId: number | undefined,
+  artistId: number | undefined,
+): LinkRows => {
   const query = useMemo(
     () => LibraryStore.use((store) => store.linkRows({ albumId, artistId })),
     [albumId, artistId],
