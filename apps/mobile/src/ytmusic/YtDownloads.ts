@@ -37,6 +37,7 @@ import type { NativeYtSong } from "@/native/waveYtMusic";
 import {
   WaveYtDownloads,
   ytDownloadErrorCode,
+  type NativeDownloadedAudio,
   type NativeYtAlbum,
   type NativeYtWatchSong,
 } from "@/native/waveYtDownloads";
@@ -62,8 +63,17 @@ const native = <A>(call: () => Promise<A>): Effect.Effect<A, DownloadFailed> =>
 /** Every download of this session; rows and menus read their song's from it. */
 const downloads = makeExternalStore<YtDownloads<NativeYtSong>>(YT_DOWNLOADS_NONE);
 
+/**
+ * One run of a song's download. Cancel aborts it; whatever it does on the way
+ * out (stopping the native transfer) checks it is still the song's current
+ * attempt, so a late one can't touch a newer attempt for the same song.
+ */
+interface Attempt {
+  readonly controller: AbortController;
+}
+
 /** The running downloads, by video id, so Cancel can stop them. */
-const running = new Map<string, AbortController>();
+const running = new Map<string, Attempt>();
 
 const dispatch = (event: YtDownloadEvent<NativeYtSong>): void => {
   downloads.update((state) => stepYtDownloads(state, event));
@@ -92,8 +102,64 @@ const lookUp = (
     : lookUpLyricsAndGenre(lookup).pipe(Effect.orElseSucceed(() => null));
 };
 
-/** The steps that take [song] from YT Music into the Library; resolves the saved file's path. */
-const downloadSong = (song: NativeYtSong) =>
+/**
+ * [videoId]'s audio, downloaded into a part file beside [targetPath]. [onArrived]
+ * hears of the part file the moment it exists. Interrupted, it stops the native
+ * transfer (when [attempt] is still the song's current one) and waits for it to
+ * settle, so the next download never starts alongside it.
+ */
+const fetchAudio = (
+  attempt: Attempt,
+  videoId: string,
+  targetPath: string,
+  title: string,
+  onArrived: (audio: NativeDownloadedAudio) => void,
+) =>
+  Effect.callback<NativeDownloadedAudio, DownloadFailed>((resume) => {
+    const settled = WaveYtDownloads.downloadAudio(videoId, targetPath, title).then(
+      (audio) => {
+        onArrived(audio);
+        resume(Effect.succeed(audio));
+      },
+      (cause: unknown) => resume(Effect.fail(failure(cause))),
+    );
+    return Effect.promise(() => {
+      if (running.get(videoId) === attempt) WaveYtDownloads.cancelDownload(videoId);
+      return settled;
+    });
+  });
+
+/** Deletes a part file that won't be saved, and ends its notification. */
+const discard = (videoId: string, audio: NativeDownloadedAudio) =>
+  Effect.promise(() =>
+    WaveYtDownloads.discardDownload(videoId, audio.partPath).catch((error: unknown) =>
+      console.warn(`[wave] couldn't discard the download of ${videoId}`, error),
+    ),
+  );
+
+/**
+ * The steps that take [song] from YT Music into the Library; resolves the
+ * saved file's path. Once the audio has arrived, any way out but saving it
+ * (a failure, Cancel) discards the part file and ends its notification.
+ */
+const downloadSong = (song: NativeYtSong, attempt: Attempt) =>
+  Effect.suspend(() => {
+    // The part file while it's this download's to clean up: from its arrival until it's handed to `saveDownload`.
+    let unsaved: NativeDownloadedAudio | null = null;
+    return downloadSteps(song, attempt, {
+      arrived: (audio) => (unsaved = audio),
+      handedOver: () => (unsaved = null),
+    }).pipe(Effect.onExit(() => (unsaved === null ? Effect.void : discard(song.videoId, unsaved))));
+  });
+
+const downloadSteps = (
+  song: NativeYtSong,
+  attempt: Attempt,
+  part: {
+    readonly arrived: (audio: NativeDownloadedAudio) => void;
+    readonly handedOver: () => void;
+  },
+) =>
   Effect.gen(function* () {
     const store = yield* LibraryStore;
     const roots = yield* store.listRoots.pipe(
@@ -122,9 +188,7 @@ const downloadSong = (song: NativeYtSong) =>
     // The audio downloads while lyrics and genre are looked up.
     const [audio, found] = yield* Effect.all(
       [
-        native(() => WaveYtDownloads.downloadAudio(song.videoId, target.path, song.title)).pipe(
-          Effect.onInterrupt(() => Effect.sync(() => WaveYtDownloads.cancelDownload(song.videoId))),
-        ),
+        fetchAudio(attempt, song.videoId, target.path, song.title, part.arrived),
         lookUp(song, album),
       ],
       { concurrency: "unbounded" },
@@ -143,15 +207,17 @@ const downloadSong = (song: NativeYtSong) =>
             Effect.orElseSucceed(() => null),
           );
     const tags = ytDownloadTags(song, album, found, ytLyrics);
-    const saved = yield* native(() =>
-      WaveYtDownloads.saveDownload(
+    // From here the part file is `saveDownload`'s: it deletes it on failure and ends the notification.
+    const saved = yield* native(() => {
+      part.handedOver();
+      return WaveYtDownloads.saveDownload(
         song.videoId,
         audio.partPath,
         target.path,
         tags,
         tags.artworkUrl,
-      ),
-    ).pipe(Effect.uninterruptible);
+      );
+    }).pipe(Effect.uninterruptible);
 
     // In the Library (and out of YT Music's results) at once, without a rescan.
     yield* store
@@ -170,13 +236,14 @@ const downloadSong = (song: NativeYtSong) =>
 const start = (song: NativeYtSong): void => {
   const { videoId } = song;
   dispatch({ type: "started", videoId });
-  const controller = new AbortController();
-  running.set(videoId, controller);
-  void appRuntime.runPromiseExit(downloadSong(song), { signal: controller.signal }).then((exit) => {
-    if (running.get(videoId) === controller) running.delete(videoId);
+  const attempt: Attempt = { controller: new AbortController() };
+  running.set(videoId, attempt);
+  const signal = attempt.controller.signal;
+  void appRuntime.runPromiseExit(downloadSong(song, attempt), { signal }).then((exit) => {
+    if (running.get(videoId) === attempt) running.delete(videoId);
     if (Exit.isSuccess(exit)) return dispatch({ type: "finished", videoId, path: exit.value });
-    // Cancelled: the queue has already forgotten it.
-    if (Cause.hasInterruptsOnly(exit.cause)) return;
+    // Cancelled, and now stopped: the queue forgets it and moves on.
+    if (Cause.hasInterruptsOnly(exit.cause)) return dispatch({ type: "cancelled", videoId });
     const error = Cause.squash(exit.cause);
     const reason = error instanceof DownloadFailed ? error.reason : "failed";
     console.warn(`[wave] download of ${videoId} failed (${reason})`, error);
@@ -213,11 +280,16 @@ export const downloadYtSong = (song: NativeYtSong): void => {
   dispatch({ type: "requested", song });
 };
 
-/** Cancel Download: forgets [videoId]'s download and stops it, leaving no file behind. */
+/**
+ * Cancel Download: stops [videoId]'s download, leaving no file behind, and
+ * forgets it. A running one is forgotten once it has stopped (see `start`), so
+ * the next song never downloads alongside it.
+ */
 export const cancelYtDownload = (videoId: string): void => {
   const status = ytDownloadStatus(downloads.get(), videoId);
-  dispatch({ type: "cancelled", videoId });
-  if (status?.kind === "downloading") running.get(videoId)?.abort();
+  const attempt = running.get(videoId);
+  if (status?.kind === "downloading" && attempt !== undefined) attempt.controller.abort();
+  else dispatch({ type: "cancelled", videoId });
 };
 
 /** Where [videoId]'s download is (null without one); re-renders as it moves on. */
