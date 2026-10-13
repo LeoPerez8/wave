@@ -69,6 +69,8 @@ const config: ExpoConfig = {
         android: {
           // Android 12 is the floor (native RenderEffect is available should any blur be added).
           minSdkVersion: 31,
+          // innertubex (YT Music) is built with Kotlin 2.4; an older compiler can't read it.
+          kotlinVersion: "2.4.20",
         },
       },
     ],
