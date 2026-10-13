@@ -29,7 +29,7 @@ import {
   type SongRow,
 } from "./LibraryStore";
 import { useFavoritesSaved } from "./favorites";
-import { usePlaylistsVersion } from "./playlists";
+import { knownPlaylists, listPlaylistsRemembered, usePlaylistsVersion } from "./playlists";
 import { appRuntime } from "./runtime";
 
 export const useScanState = (): ScanState =>
@@ -244,14 +244,16 @@ const NO_EXCLUDED_FOLDERS: readonly string[] = [];
 export const useExcludedFolders = (): readonly string[] =>
   useLibraryQuery(listExcludedFolders, NO_EXCLUDED_FOLDERS);
 
-const listPlaylists = LibraryStore.use((store) => store.listPlaylists);
 const listFavorites = LibraryStore.use((store) => store.listFavorites);
 
 const NO_PLAYLISTS: readonly PlaylistRow[] = [];
 
-/** Library › Playlists, refreshed as soon as a playlist is edited. */
+/**
+ * Library › Playlists, refreshed as soon as a playlist is edited. Starts from
+ * the remembered list when it is up to date, so a card listing them opens full.
+ */
 export const usePlaylists = (): readonly PlaylistRow[] =>
-  useLibraryQuery(listPlaylists, NO_PLAYLISTS, usePlaylistsVersion());
+  useLibraryQuery(listPlaylistsRemembered, knownPlaylists() ?? NO_PLAYLISTS, usePlaylistsVersion());
 
 /** A playlist screen's data (see `useDetail`), refreshed as soon as it is edited. */
 export const usePlaylist = (id: number): PlaylistDetail | null | undefined => {
