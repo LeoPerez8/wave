@@ -372,6 +372,7 @@ export {
   lrclibSearchUrl,
   pickFoundLyrics,
   pickGenreAlbum,
+  settledTags,
   songLookup,
   songTagOutcome,
 } from "./lyricsAndGenre.ts";
@@ -382,6 +383,7 @@ export type {
   LyricsCandidate,
   SongLookup,
   SongTagOutcome,
+  TagLookup,
   TagLookupStop,
   TagWriteReport,
 } from "./lyricsAndGenre.ts";

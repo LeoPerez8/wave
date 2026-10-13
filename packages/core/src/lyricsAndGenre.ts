@@ -271,6 +271,23 @@ export type SongTagOutcome =
    */
   | { readonly kind: "failed"; readonly reason: "lookup" | "write" | "format" };
 
+/** How one service's lookup went: what it answered (null: nothing matched), or it couldn't be reached. */
+export type TagLookup<A> = { readonly ok: true; readonly value: A } | { readonly ok: false };
+
+/**
+ * What a song's two lookups found, each settled on its own: a service that
+ * couldn't be reached found nothing, and what the other found is kept. Null
+ * (a failed lookup, which counts towards `lookupsUnreachable`) only when
+ * neither LRCLIB nor Deezer answered.
+ */
+export const settledTags = (
+  lyrics: TagLookup<FoundLyrics | null>,
+  genre: TagLookup<string | null>,
+): FoundTags | null => {
+  if (!lyrics.ok && !genre.ok) return null;
+  return { lyrics: lyrics.ok ? lyrics.value : null, genre: genre.ok ? genre.value : null };
+};
+
 /** The outcome of a lookup that found [found] and, when anything was, wrote it as [written]. */
 export const songTagOutcome = (
   found: FoundTags,

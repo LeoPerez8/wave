@@ -13,6 +13,7 @@ import {
   lrclibSearchUrl,
   pickFoundLyrics,
   pickGenreAlbum,
+  settledTags,
   songLookup,
   songTagOutcome,
 } from "./index.ts";
@@ -329,6 +330,37 @@ describe("songTagOutcome", () => {
       title: "Couldn't update “Airbag”",
       message:
         "Only a genre was found, and Wave can't write tags to this file's format. It wasn't changed.",
+    });
+  });
+});
+
+describe("settledTags", () => {
+  const lyrics = { synced: false, text: "Karma police, arrest this man" };
+  const failedLookup = { ok: false } as const;
+
+  test("keeps what one service found when the other couldn't be reached", () => {
+    assert.deepEqual(settledTags({ ok: true, value: lyrics }, failedLookup), {
+      lyrics,
+      genre: null,
+    });
+    assert.deepEqual(settledTags(failedLookup, { ok: true, value: "Alternative" }), {
+      lyrics: null,
+      genre: "Alternative",
+    });
+  });
+
+  test("one service answering is not a failed lookup, even with nothing found", () => {
+    assert.deepEqual(settledTags(failedLookup, { ok: true, value: null }), {
+      lyrics: null,
+      genre: null,
+    });
+  });
+
+  test("is a failed lookup (null) only when neither service could be reached", () => {
+    assert.equal(settledTags(failedLookup, failedLookup), null);
+    assert.deepEqual(settledTags({ ok: true, value: lyrics }, { ok: true, value: "Rock" }), {
+      lyrics,
+      genre: "Rock",
     });
   });
 });
