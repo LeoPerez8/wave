@@ -1,6 +1,6 @@
 import { Canvas, LinearGradient, Rect, vec } from "@shopify/react-native-skia";
 import type { Gradient } from "@wave/core";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { StyleSheet, useWindowDimensions } from "react-native";
 import {
   Easing,
@@ -18,11 +18,18 @@ const CROSSFADE_MS = 700;
 /**
  * The Now Playing ground: a top-to-bottom gradient from the artwork's palette
  * (already toned for legibility by Core's `paletteGradient`). On a track
- * change it crossfades from wherever it is to the new colours, even mid-fade.
+ * change it crossfades from wherever it is to the new colours, even mid-fade;
+ * out of sight (`animate` off) it changes straight away, so the sheet opens on
+ * the right colours.
  */
-export function Background({ gradient }: { gradient: Gradient }) {
+export function Background({ gradient, animate }: { gradient: Gradient; animate: boolean }) {
   const { width, height } = useWindowDimensions();
   const reduceMotion = useReducedMotion();
+  // Read when the colours change, so opening the sheet doesn't restart a fade.
+  const animateRef = useRef(animate);
+  useEffect(() => {
+    animateRef.current = animate;
+  }, [animate]);
   const fromTop = useSharedValue(gradient.top);
   const fromBottom = useSharedValue(gradient.bottom);
   const toTop = useSharedValue(gradient.top);
@@ -31,6 +38,7 @@ export function Background({ gradient }: { gradient: Gradient }) {
 
   const { top, bottom } = gradient;
   useEffect(() => {
+    const instant = reduceMotion || !animateRef.current;
     scheduleOnUI(() => {
       "worklet";
       const p = progress.get();
@@ -40,9 +48,7 @@ export function Background({ gradient }: { gradient: Gradient }) {
       toBottom.set(bottom);
       progress.set(0);
       progress.set(
-        reduceMotion
-          ? 1
-          : withTiming(1, { duration: CROSSFADE_MS, easing: Easing.inOut(Easing.quad) }),
+        instant ? 1 : withTiming(1, { duration: CROSSFADE_MS, easing: Easing.inOut(Easing.quad) }),
       );
     });
   }, [top, bottom, reduceMotion, fromTop, fromBottom, toTop, toBottom, progress]);

@@ -26,9 +26,15 @@ const PAUSED_SCALE = 0.84;
 
 const SPRING = { damping: 18, stiffness: 180, mass: 1 } as const;
 
+/**
+ * The artwork's space as last measured, so the player view coming back (from
+ * the Queue or Lyrics) draws the artwork at its size straight away.
+ */
+let lastBox = { width: 0, height: 0 };
+
 /** Album art at the largest square the space allows; it shrinks back while paused. */
 function NowPlayingArtwork({ uri, playing }: { uri: string | null; playing: boolean }) {
-  const [box, setBox] = useState({ width: 0, height: 0 });
+  const [box, setBox] = useState(lastBox);
   const reduceMotion = useReducedMotion();
   const fill = useThemeColor("fill");
   const tertiary = useThemeColor("tertiary");
@@ -45,7 +51,11 @@ function NowPlayingArtwork({ uri, playing }: { uri: string | null; playing: bool
   return (
     <View
       className="flex-1 items-center justify-center"
-      onLayout={(event) => setBox(event.nativeEvent.layout)}
+      onLayout={(event) => {
+        const { width, height } = event.nativeEvent.layout;
+        lastBox = { width, height };
+        setBox(lastBox);
+      }}
     >
       <Animated.View style={[{ width: size, height: size, backgroundColor: fill }, style]}>
         {uri === null ? (
