@@ -25,13 +25,13 @@ class SoulseekModule : Module() {
     Name("WaveSoulseek")
     Events("onDownloadProgress", "onSessionChanged")
 
-    AsyncFunction("session") Coroutine { coded { withContext(Dispatchers.IO) { owner.client.session() } } }
+    AsyncFunction("session") Coroutine { -> coded { withContext(Dispatchers.IO) { owner.client.session() } } }
     AsyncFunction("connect") Coroutine { username: String, password: String ->
       val session = coded { withContext(Dispatchers.IO) { owner.client.connect(username, password) } }
       sendEvent("onSessionChanged", session)
       session
     }
-    AsyncFunction("disconnect") Coroutine {
+    AsyncFunction("disconnect") Coroutine { ->
       val session = coded { withContext(Dispatchers.IO) { owner.client.disconnect() } }
       sendEvent("onSessionChanged", session)
       session
