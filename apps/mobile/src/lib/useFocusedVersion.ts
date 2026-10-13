@@ -2,7 +2,7 @@ import { focusedVersion, startFocusedVersion, type FocusedVersionEvent } from "@
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 
-import { useNowPlayingShown } from "@/nowPlaying/sheet";
+import { isNowPlayingShown, onNowPlayingShownChange } from "@/nowPlaying/sheet";
 
 import type { ExternalStore } from "./externalStore";
 
@@ -14,7 +14,10 @@ import type { ExternalStore } from "./externalStore";
  * re-render. `store` must be stable.
  */
 export const useFocusedVersion = (store: ExternalStore<number>): number => {
-  const [state, setState] = useState(() => startFocusedVersion(store.get()));
+  const [state, setState] = useState(() => {
+    const start = startFocusedVersion(store.get());
+    return isNowPlayingShown() ? focusedVersion(start, { type: "cover" }) : start;
+  });
   const dispatch = useCallback(
     (event: FocusedVersionEvent) => setState((current) => focusedVersion(current, event)),
     [],
@@ -32,10 +35,13 @@ export const useFocusedVersion = (store: ExternalStore<number>): number => {
     }, [store, dispatch]),
   );
 
-  const covered = useNowPlayingShown();
-  useEffect(() => {
-    dispatch(covered ? { type: "cover" } : { type: "uncover", version: store.get() });
-  }, [covered, store, dispatch]);
+  useEffect(
+    () =>
+      onNowPlayingShownChange((shown) =>
+        dispatch(shown ? { type: "cover" } : { type: "uncover", version: store.get() }),
+      ),
+    [store, dispatch],
+  );
 
   return state.shown;
 };
