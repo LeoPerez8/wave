@@ -22,7 +22,7 @@ export interface YtSong {
 }
 
 /** The artists as one credit: "A", "A & B", "A, B & C". */
-const joinArtists = (artists: readonly string[]): string =>
+export const joinArtists = (artists: readonly string[]): string =>
   artists.length <= 1
     ? (artists[0] ?? "")
     : `${artists.slice(0, -1).join(", ")} & ${artists[artists.length - 1]}`;

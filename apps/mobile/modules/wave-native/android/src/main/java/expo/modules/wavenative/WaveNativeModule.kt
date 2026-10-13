@@ -37,6 +37,8 @@ import expo.modules.wavenative.scan.LibraryScanner
 import expo.modules.wavenative.scan.ScanListener
 import expo.modules.wavenative.scan.ScanProgress
 import expo.modules.wavenative.scan.ScannedTrack
+import expo.modules.wavenative.scan.artworkToMap
+import expo.modules.wavenative.scan.trackToMap
 import expo.modules.wavenative.tags.AudioTagReader
 import expo.modules.wavenative.tags.GenreDestination
 import expo.modules.wavenative.tags.JAudioTaggerReader
@@ -414,34 +416,6 @@ class WaveNativeModule : Module() {
       if (currentScan?.first == id) currentScan = null
     }
   }
-
-  private fun trackToMap(track: ScannedTrack): Map<String, Any?> =
-    mapOf(
-      "path" to track.path,
-      "sizeBytes" to track.sizeBytes.toDouble(),
-      "modifiedAt" to track.modifiedAt.toDouble(),
-      "title" to track.tags.title,
-      "artist" to track.tags.artist,
-      "album" to track.tags.album,
-      "albumArtist" to track.tags.albumArtist,
-      "genre" to track.tags.genre,
-      "year" to track.tags.year,
-      "trackNumber" to track.tags.trackNumber,
-      "discNumber" to track.tags.discNumber,
-      "compilation" to track.tags.compilation,
-      "durationMs" to track.tags.durationMs.toDouble(),
-      "sampleRate" to track.tags.sampleRate,
-      "bitrateKbps" to track.tags.bitrateKbps,
-      "artworkHash" to track.artworkHash,
-    )
-
-  private fun artworkToMap(artwork: ArtworkInfo): Map<String, Any?> =
-    mapOf(
-      "hash" to artwork.hash,
-      "path" to artwork.path,
-      "thumbPath" to artwork.thumbPath,
-      "palette" to artwork.palette.toMap(),
-    )
 
   private companion object {
     const val PICK_FOLDER_REQUEST = 0x5741

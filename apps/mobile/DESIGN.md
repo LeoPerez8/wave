@@ -290,6 +290,8 @@ The Library's entries (Playlists, Artists, Albums, Songs, Genres, Folders, Favor
 
 In Search, YT Music songs sit below the library's results under a "YT Music" catalog line, as Songs-list rows: YouTube's cover as the thumbnail (square, like any artwork), the artists and album as the second line ("Artist & Artist · Album"), the length in the duration cell (left empty when YouTube doesn't give one). Instead of songs the section can show one quiet line in Footnote graphite (searching, nothing found, all already in the library, offline, no answer); never an error card. When the library has nothing for the query, the same quiet line says so above the section.
 
+A YT Music song's long-press menu is the track menu's card (cover, title, credit, then quiet entries): Download, or Cancel Download while it's waiting or downloading, Retry Download and Cancel Download after a failure, nothing while it's being saved. While a download is on its way the row's second line says where it is instead of the credit ("Waiting to download", "Downloading · 42%", "Saving to the Library", "Download failed: offline"), and a 2dp teal rule under the two lines fills up as the audio arrives (on a separator-coloured track, only once the size is known). Once saved, the song is in the Library and leaves the section. The system notification shows the same: "Downloading" with the title and a progress bar, then "Saving to the Library".
+
 ### Album Tile
 
 A square cover at the computed tile width, then 12dp, then the caption: artist as a catalog line, the title in Body 500 with two lines always reserved, then the furniture line in Footnote graphite ("1975 · 9 · 41 min", tabular). Covers without art show a field square with a thin music note in pewter.
