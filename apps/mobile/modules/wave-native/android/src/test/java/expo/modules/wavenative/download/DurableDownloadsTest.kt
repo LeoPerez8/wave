@@ -2,6 +2,10 @@ package expo.modules.wavenative.download
 
 import java.io.File
 import java.nio.file.Files
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import kotlin.concurrent.thread
 import org.junit.Assert.*
 import org.junit.Test
 import expo.modules.wavenative.player.RuntimeOwners
@@ -527,6 +531,37 @@ class DurableDownloadsTest {
       assertFalse(owner.submit("song", completion["generation"] as Long, completion["token"] as String, "import", mapOf("path" to target.path)))
       assertEquals(listOf("Recording.mp3"), folder.listFiles()!!.filter { it.extension == "mp3" && !it.name.startsWith(".") }.map { it.name })
       assertNull(DurableDownloads(File(folder, "jobs")).claim("song"))
+    } finally { folder.deleteRecursively() }
+  }
+
+  /**
+   * The notification reads the journal on the main thread every half second. Tagging fetches the
+   * cover over the network and rewrites the file, so a reader that waits for it can freeze Wave.
+   */
+  @Test fun readingTheJournalDoesNotWaitWhileADownloadIsTagged() {
+    val folder = Files.createTempDirectory("wave-readers").toFile()
+    try {
+      val owner = DurableDownloads(File(folder, "jobs"))
+      owner.enqueue(song, null)
+      prepare(owner, File(folder, "Recording.mp3"))
+      owner.advance(GoodTransfer, GoodPublication)
+      answer(owner, "confirm", mapOf("acceptable" to true))
+      val tagging = CountDownLatch(1)
+      val coverArrives = CountDownLatch(1)
+      val slowCover = object : DurablePublication {
+        override fun tag(source: File, tags: Map<String, Any?>) { tagging.countDown(); coverArrives.await(10, TimeUnit.SECONDS) }
+        override fun index(file: File): Map<String, Any?> = error("No publication expected")
+      }
+      val worker = thread { owner.advance(GoodTransfer, slowCover) }
+      try {
+        assertTrue(tagging.await(2, TimeUnit.SECONDS))
+        val reads = CompletableFuture.supplyAsync { Triple(owner.current(), owner.hasWork(), owner.snapshot()) }
+        val (current, hasWork, snapshot) = reads.get(1, TimeUnit.SECONDS)
+        assertEquals("tagging", current!!["phase"])
+        assertTrue(hasWork)
+        assertEquals("tagging", snapshot.single()["phase"])
+      } finally { coverArrives.countDown(); worker.join(5_000) }
+      assertEquals("awaitingPublication", owner.snapshot().single()["phase"])
     } finally { folder.deleteRecursively() }
   }
 

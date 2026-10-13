@@ -13,6 +13,7 @@ import android.os.PowerManager
 import expo.modules.wavenative.R
 import expo.modules.wavenative.download.AndroidDownloads
 import expo.modules.wavenative.launcher.LauncherIconSwitcher
+import kotlin.concurrent.thread
 
 /**
  * Runs the persisted Soulseek download journal ([AndroidDownloads]) as a
@@ -52,7 +53,10 @@ class YtDownloadService : Service() {
       stopSelf()
       return START_NOT_STICKY
     }
-    if (intent?.action == CANCEL) intent.getStringExtra("jobId")?.let { downloads.jobs.cancel(it, downloads.transport) }
+    if (intent?.action == CANCEL) intent.getStringExtra("jobId")?.let { id ->
+      // Tagging or publication may hold the journal; the main thread never waits for it.
+      thread(name = "Wave download cancel") { runCatching { downloads.jobs.cancel(id, downloads.transport); downloads.changed() } }
+    }
     downloads.start(onIdle = { stopSelf() }, refresh = { refresh() })
     return START_STICKY
   }
