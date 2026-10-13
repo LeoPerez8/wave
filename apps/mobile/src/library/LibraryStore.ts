@@ -60,7 +60,13 @@ import {
   type HomeSections,
   type RecordedPlay,
 } from "./db/playHistory";
-import { removePlaylistItems, selectPlaylistSongs } from "./db/playlists";
+import {
+  insertPlaylistItems,
+  removePlaylistItems,
+  replacePlaylistSongs,
+  selectPlaylistSongs,
+  selectTrackPaths,
+} from "./db/playlists";
 import * as schema from "./db/schema";
 import { BY_TITLE, deleteTracks, trackQuery } from "./db/tracks";
 import { creditedPlayTotals, songListening, trackPlayTotals } from "./db/stats";
@@ -417,6 +423,16 @@ export class LibraryStore extends Context.Service<
       playlistId: number,
       itemIds: readonly number[],
     ) => Effect.Effect<void, LibraryStoreError>;
+    /** Makes the playlist hold exactly [trackIds], in that order (an import's Replace). */
+    readonly replacePlaylistSongs: (
+      playlistId: number,
+      trackIds: readonly number[],
+    ) => Effect.Effect<void, LibraryStoreError>;
+    /** Every track's id and file path, for matching an imported playlist's entries. */
+    readonly trackPaths: Effect.Effect<
+      readonly { readonly id: number; readonly path: string }[],
+      LibraryStoreError
+    >;
     /** The ids of every starred track. */
     readonly favoriteTrackIds: Effect.Effect<readonly number[], LibraryStoreError>;
     /** Stars (or unstars) the tracks; those starred already keep when they were starred. */
@@ -876,9 +892,6 @@ const rememberSearchSync = (db: Database, query: string, now: number): readonly 
     return next;
   });
 
-/** Rows per multi-row insert, well under SQLite's bound-parameter limit. */
-const INSERT_CHUNK = 200;
-
 interface PlaylistCovers {
   readonly thumbPaths: readonly string[];
   readonly artworkPaths: readonly string[];
@@ -1003,11 +1016,7 @@ const appendItems = (
     position: last + 1 + i,
     addedAt: now,
   }));
-  for (let i = 0; i < rows.length; i += INSERT_CHUNK) {
-    tx.insert(playlistItems)
-      .values(rows.slice(i, i + INSERT_CHUNK))
-      .run();
-  }
+  insertPlaylistItems(tx, rows);
   return { added: plan.add.length, alreadyIn: plan.alreadyIn };
 };
 
@@ -1387,6 +1396,13 @@ const make = Effect.gen(function* () {
       attempt("remove from the playlist", () =>
         removePlaylistItems(db, playlistId, itemIds, Date.now()),
       ),
+
+    replacePlaylistSongs: (playlistId, trackIds) =>
+      attempt("replace the playlist's songs", () =>
+        replacePlaylistSongs(db, playlistId, trackIds, Date.now()),
+      ),
+
+    trackPaths: attempt("read the library's files", () => selectTrackPaths(db)),
 
     favoriteTrackIds: attempt("read favorites", () =>
       db

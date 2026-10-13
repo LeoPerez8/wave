@@ -1,0 +1,19 @@
+import { useLocalSearchParams } from "expo-router";
+import { useMemo } from "react";
+
+import { useYtListHead } from "@/ytmusic/routes";
+import { useYtListPage, YtSongList } from "@/ytmusic/YtSongList";
+
+/**
+ * A YT Music playlist opened from Discover: cover, title, who made it,
+ * Play / Shuffle and its songs (the first page YouTube Music lists, up to a
+ * hundred).
+ */
+export default function YtPlaylistScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const playlistId = id ?? "";
+  const known = useYtListHead("yt-playlist", playlistId);
+  const load = useYtListPage("yt-playlist", playlistId);
+  const context = useMemo(() => ({ kind: "ytPlaylist", id: playlistId }) as const, [playlistId]);
+  return <YtSongList known={known} load={load} context={context} numbered={false} />;
+}

@@ -17,6 +17,8 @@ import { useLibraryCounts, useScanRoots, useScanState, useTrackCount } from "@/l
 import { promptForMusicFolder } from "@/library/promptForMusicFolder";
 import { RescanRefreshControl } from "@/library/RescanRefreshControl";
 import { openLibrarySectionActions } from "@/playback/ActionsMenu";
+import { useYtMusicEnabled } from "@/settings/ytMusic";
+import { openDiscover } from "@/ytmusic/routes";
 
 /** Empty cover slots stand in for Recently Added until the first scan. */
 const SLOT = CELL * 9;
@@ -26,6 +28,7 @@ export default function LibraryScreen() {
   const trackCount = useTrackCount();
   const roots = useScanRoots();
   const counts = useLibraryCounts();
+  const ytMusic = useYtMusicEnabled();
   const empty = scan.status === "done" && trackCount === 0;
 
   return (
@@ -57,6 +60,8 @@ export default function LibraryScreen() {
           onLongPress={() => openLibrarySectionActions(section)}
         />
       ))}
+      {/* YouTube Music's recommendations; gone while YT Music is off. */}
+      {ytMusic && <EntryRow label="Discover" onPress={openDiscover} />}
       <View style={{ marginTop: CELL * 5, gap: CELL * 1.5 }}>
         <CatalogLine>Recently added</CatalogLine>
         <View accessible={false} className="flex-row" style={{ gap: CELL * 2 }}>

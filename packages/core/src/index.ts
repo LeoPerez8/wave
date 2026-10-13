@@ -1,4 +1,4 @@
-export {
+﻿export {
   UNKNOWN_ALBUM,
   UNKNOWN_ARTIST,
   VARIOUS_ARTISTS,
@@ -92,6 +92,8 @@ export type {
 export { resolveRemoveSwipe } from "./rowGestures.ts";
 export { currentLyricIndex, parseLyrics, pickLyrics } from "./lyrics.ts";
 export type { LyricLine, Lyrics, LyricsSources } from "./lyrics.ts";
+export { autoLyricLine } from "./autoLyricLine.ts";
+export type { AutoLyricLine, AutoLyricLineInput } from "./autoLyricLine.ts";
 export {
   CUSTOM_SLEEP_MINUTES,
   SLEEP_TIMER_PRESETS,
@@ -184,7 +186,7 @@ export { TAB_PATH, detailPath, inLibraryStack, isDetailPath, tabOfPath } from ".
 export type { DetailScreen } from "./navigation.ts";
 export { planAlert } from "./alert.ts";
 export type { AlertButton, AlertChoice, AlertPlan, AlertSpec } from "./alert.ts";
-export { DEFAULT_THEME, TONES, themeContrastIssues } from "./theme.ts";
+export { DEFAULT_THEME, NIGHT_SLATE, TONES, themeContrastIssues } from "./theme.ts";
 export { withOpacity } from "./colour.ts";
 export { overlayDivider } from "./overlayDivider.ts";
 export type { ContrastIssue, Theme, ThemeColors } from "./theme.ts";
@@ -204,6 +206,23 @@ export type {
   ThemeSwatchOption,
   ThemeSwatchRow,
 } from "./themeChoice.ts";
+export {
+  LAUNCHER_ICONS,
+  LAUNCHER_ICON_ART,
+  LAUNCHER_ICON_RADIUS,
+  launcherIconFor,
+  launcherIconSwitch,
+} from "./launcherIcon.ts";
+export type { LauncherBehaviour, LauncherIcon, LauncherIconSwitch } from "./launcherIcon.ts";
+export { LAUNCH_SPLASH_THEMES, launchTheme } from "./launchTheme.ts";
+export type { LaunchColors, LaunchSplashTheme, LaunchTheme } from "./launchTheme.ts";
+export { LAUNCH_LOGO, launchLogoExit, launchLogoWaves } from "./launchLogo.ts";
+export type {
+  LaunchLogoExit,
+  LaunchLogoExitInput,
+  LaunchLogoTrim,
+  LaunchLogoWave,
+} from "./launchLogo.ts";
 export { sliderFraction, sliderValueAt, snapSliderValue, stepSlider } from "./slider.ts";
 export type { SliderRange } from "./slider.ts";
 export { LONG_PRESS_DELAY, readLongPressDelay, snapLongPressDelay } from "./longPress.ts";
@@ -260,6 +279,7 @@ export {
   ITEM_ACTION_LABELS,
   itemActions,
   splitActionBar,
+  ytSongActions,
 } from "./itemActions.ts";
 export type {
   ActionItem,
@@ -271,6 +291,8 @@ export type {
 } from "./itemActions.ts";
 export { concentricRadius } from "./corners.ts";
 export type { InsetSquare } from "./corners.ts";
+export { LOGO_WAVES, logoIconPaths, logoWaveY } from "./logo.ts";
+export type { LogoIconBox, LogoIconPaths, LogoWave } from "./logo.ts";
 export { UNDERLINE_WAVE, underlineMotion, wavePath } from "./wavyUnderline.ts";
 export type { UnderlineMotion, UnderlineMotionInput, WaveShape } from "./wavyUnderline.ts";
 export { highlightedOrigin, originOfNewCard, veilAround } from "./overlayOrigin.ts";
@@ -301,4 +323,147 @@ export type {
 export { focusedVersion, startFocusedVersion } from "./focusedVersion.ts";
 export type { FocusedVersion, FocusedVersionEvent } from "./focusedVersion.ts";
 export { stepNowPlayingSheet } from "./sheetLifecycle.ts";
+export { MORE_FROM_ARTIST } from "./queue.ts";
+export { artistRanking } from "./moreFromArtist.ts";
+export type { ArtistRankingInput, ArtistRankingSong } from "./moreFromArtist.ts";
 export type { SheetEvent, SheetPhase, SheetStep } from "./sheetLifecycle.ts";
+export {
+  joinArtists,
+  libraryFinder,
+  libraryMatcher,
+  parseTrackId,
+  ytSongArtist,
+  ytSongCredit,
+  ytTrackId,
+} from "./ytMusic.ts";
+export type { LibrarySongKey, TrackRef, YtSong } from "./ytMusic.ts";
+export { YT_ACCOUNT_SIGNED_OUT, stepYtAccount, ytAccountView } from "./ytAccount.ts";
+export type {
+  YtAccount,
+  YtAccountEvent,
+  YtAccountNote,
+  YtAccountState,
+  YtAccountView,
+  YtSession,
+} from "./ytAccount.ts";
+export {
+  YT_SEARCH_DEBOUNCE_MS,
+  YT_SECTION_HIDDEN,
+  stepYtSection,
+  ytSearchQuery,
+  ytSectionView,
+} from "./ytSearch.ts";
+export type {
+  YtQuietReason,
+  YtSection,
+  YtSectionEvent,
+  YtSectionNote,
+  YtSectionView,
+} from "./ytSearch.ts";
+export {
+  LRCLIB_HEADERS,
+  deezerAlbumGenre,
+  deezerAlbumUrl,
+  deezerTrackCandidates,
+  deezerTrackSearchUrl,
+  describeTagLookups,
+  lookupsUnreachable,
+  lrclibCandidates,
+  lrclibSearchUrl,
+  pickFoundLyrics,
+  pickGenreAlbum,
+  settledTags,
+  songLookup,
+  songTagOutcome,
+} from "./lyricsAndGenre.ts";
+export type {
+  FoundLyrics,
+  FoundTags,
+  GenreCandidate,
+  LyricsCandidate,
+  SongLookup,
+  SongTagOutcome,
+  TagLookup,
+  TagLookupStop,
+  TagWriteReport,
+} from "./lyricsAndGenre.ts";
+export {
+  confirmImportReplace,
+  importNameClash,
+  isM3uFileName,
+  keepBothName,
+  libraryPathIndex,
+  parseM3u,
+  planM3uImport,
+  resolveM3uPath,
+  summarizeM3uImport,
+} from "./m3u.ts";
+export type {
+  LibraryPathIndex,
+  M3uEntry,
+  M3uFile,
+  M3uImport,
+  M3uImportOutcome,
+  M3uImportSummary,
+} from "./m3u.ts";
+export { libraryTrackIds, playerErrorNotice, queuedYtTracks, restorableTrack } from "./ytQueue.ts";
+export type { PlayerErrorCode, RestorableTracks } from "./ytQueue.ts";
+export {
+  YT_MUSIC_FOLDER,
+  ytDownloadLookup,
+  ytDownloadRoot,
+  ytDownloadTags,
+  ytDownloadTarget,
+} from "./ytDownload.ts";
+export type {
+  YtAlbum,
+  YtAlbumTrack,
+  YtDownloadPlace,
+  YtDownloadTags,
+  YtDownloadTarget,
+} from "./ytDownload.ts";
+export {
+  YT_DOWNLOADS_NONE,
+  YT_DOWNLOAD_ACTION_LABELS,
+  stepYtDownloads,
+  ytDownloadActions,
+  ytDownloadLine,
+  ytDownloadProgress,
+  ytDownloadStatus,
+  ytDownloadsToStart,
+} from "./ytDownloads.ts";
+export type {
+  YtDownloadAction,
+  YtDownloadEvent,
+  YtDownloadFailure,
+  YtDownloadJob,
+  YtDownloadStatus,
+  YtDownloads,
+} from "./ytDownloads.ts";
+export {
+  DISCOVER_START,
+  discoverItemAction,
+  discoverShouldAsk,
+  discoverTileCaption,
+  discoverSongs,
+  discoverTrackId,
+  discoverView,
+  stepDiscover,
+  ytAlbumSongs,
+} from "./ytDiscover.ts";
+export type {
+  DiscoverAction,
+  DiscoverContext,
+  DiscoverEvent,
+  DiscoverItem,
+  DiscoverShelf,
+  DiscoverSong,
+  DiscoverTileCaption,
+  DiscoverState,
+  DiscoverView,
+  YtAlbumPageTrack,
+  YtAlbumSong,
+  YtHome,
+  YtShelf,
+  YtShelfItem,
+} from "./ytDiscover.ts";

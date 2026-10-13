@@ -5,13 +5,19 @@
     android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
     tools:ignore="ScopedStorage" />
 
-  <!-- Artist photos are downloaded from an online service (docs/spec.md, "Artist photos"). -->
+  <!-- Artist photos and YT Music are online (docs/spec.md, "Network"). -->
   <uses-permission android:name="android.permission.INTERNET" />
+  <!-- YT Music doesn't try a request without a network, and says it's offline instead. -->
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
   <!-- Background playback with a media notification. -->
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
   <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+  <!-- YT Music downloads run in a data-sync foreground service, with a progress notification. -->
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
   <application>
     <!-- A media library service: Android Auto browses Wave through it (docs/auto-spike.md). -->
@@ -25,6 +31,12 @@
       </intent-filter>
     </service>
 
+    <!-- Keeps YT Music downloads going with Wave in the background (YtDownloadService). -->
+    <service
+      android:name="expo.modules.wavenative.yt.YtDownloadService"
+      android:exported="false"
+      android:foregroundServiceType="dataSync" />
+
     <!--
       Media buttons with nothing playing resume the last queue (playback resumption,
       PlaybackService.onPlaybackResumption); Media3 requires it to be declared.
@@ -36,6 +48,17 @@
         <action android:name="android.intent.action.MEDIA_BUTTON" />
       </intent-filter>
     </receiver>
+
+    <!--
+      Settings › YT Music › Sign In: Google's sign-in page in a web view (YtSignInActivity).
+      It handles rotation and theme changes itself, so a half-typed sign-in isn't reloaded.
+    -->
+    <activity
+      android:name="expo.modules.wavenative.yt.YtSignInActivity"
+      android:exported="false"
+      android:theme="@android:style/Theme.DeviceDefault.DayNight"
+      android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|density|keyboard|keyboardHidden|navigation|uiMode|fontScale"
+      android:windowSoftInputMode="adjustResize" />
 
     <!-- Cached artwork as content URIs: Android Auto can't read Wave's files (ArtworkProvider). -->
     <provider

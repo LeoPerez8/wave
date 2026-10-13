@@ -25,9 +25,19 @@ dependencies {
   // Playback: ExoPlayer in a MediaSessionService (notification, lock screen, headset buttons).
   implementation 'androidx.media3:media3-exoplayer:1.11.1'
   implementation 'androidx.media3:media3-session:1.11.1'
+  // Whether Android Auto is connected, so the Auto lyric line never outlasts the drive.
+  implementation 'androidx.car.app:app:1.7.0'
   // Starting the JS runtime headless for Android Auto (JsRuntime). The app provides it;
   // React Native's Gradle plugin picks the version.
   compileOnly 'com.facebook.react:react-android'
+  // YT Music: innertubex (GPL-3.0, from JitPack) talks to YouTube Music; it ships no HTTP
+  // engine and sends @Serializable bodies, so the client needs OkHttp and content negotiation.
+  // Responses are parsed with kotlinx.serialization's JsonElement API (YtSearchParser).
+  implementation 'com.github.MetrolistGroup.innertubex:innertubex:0.8.6'
+  implementation 'io.ktor:ktor-client-okhttp:3.6.0'
+  implementation 'io.ktor:ktor-client-content-negotiation:3.6.0'
+  implementation 'io.ktor:ktor-serialization-kotlinx-json:3.6.0'
+  implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0'
 
   testImplementation 'junit:junit:4.13.2'
 }

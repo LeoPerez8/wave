@@ -13,6 +13,7 @@ import { router, usePathname } from "expo-router";
 
 import { confirmDeleteSongs } from "@/library/deleteSongs";
 import { setFavorites, useFavoriteIds } from "@/library/favorites";
+import { findLyricsAndGenreFor } from "@/library/findLyricsAndGenre";
 import { useLinkRows } from "@/library/hooks";
 import type { SongRow } from "@/library/LibraryStore";
 import {
@@ -23,6 +24,7 @@ import {
 import { removePlaylistItems } from "@/library/playlists";
 import { openAlbum, openArtist } from "@/library/routes";
 import { showError } from "@/overlay/alert";
+import { useLyricsAndGenreLookupsEnabled } from "@/settings/lyricsAndGenre";
 
 import {
   targetCount,
@@ -68,6 +70,7 @@ export function useItemActions(
 ): readonly ActionEntry[] {
   const here = usePathname();
   const favorites = useFavoriteIds();
+  const onlineLookups = useLyricsAndGenreLookupsEnabled();
   const facts = targetFacts(target, favorites);
   const tracks = target.kind === "track" ? target.items : [];
 
@@ -115,6 +118,7 @@ export function useItemActions(
     items: facts,
     surface,
     selectable: onSelect !== undefined,
+    onlineLookups,
     here,
   });
 
@@ -182,6 +186,8 @@ export function useItemActions(
           }),
         );
       }
+      case "findLyricsAndGenre":
+        return make(run(() => void findLyricsAndGenreFor(tracks.map(({ song }) => song))));
       case "select":
         return make(run(() => onSelect?.()));
       case "delete": {

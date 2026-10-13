@@ -1,6 +1,6 @@
-import { createSearchIndex, type SearchIndex } from "@wave/core";
+import { createSearchIndex, type SearchIndex, type YtSong } from "@wave/core";
 import * as Effect from "effect/Effect";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { libraryVersion } from "@/library/LibraryScan";
 import {
@@ -13,6 +13,7 @@ import {
 } from "@/library/LibraryStore";
 import { usePlaylistsVersion } from "@/library/playlists";
 import { appRuntime } from "@/library/runtime";
+import { useLoadedLibraryFinder } from "@/ytmusic/libraryFinder";
 
 /** Something search found, with the row the screens need to show and open it. */
 export type SearchHit =
@@ -68,13 +69,19 @@ const toEntries = (sources: Sources): SearchHit[] => {
 /** During a scan the library changes every batch; the index catches up at most this often. */
 const REFRESH_MS = 3000;
 
+/** What Search looks things up in: the library's index, and whether a YT Music song is in the library. */
+export interface LibrarySearch {
+  readonly index: SearchIndex<SearchHit>;
+  readonly inLibrary: (song: YtSong) => boolean;
+}
+
 /**
  * The search index over the whole library, or null until it's first built.
  * It loads and builds only while `active` (the Search screen is in focus),
  * and rebuilds after the library changes, so typing only ever runs the
  * (prepared, narrowing) search itself.
  */
-export const useSearchIndex = (active: boolean): SearchIndex<SearchHit> | null => {
+export const useSearchIndex = (active: boolean): LibrarySearch | null => {
   // Both only ever go up, so their sum changes whenever either does.
   const version =
     useSyncExternalStore(libraryVersion.subscribe, libraryVersion.get) + usePlaylistsVersion();
@@ -82,6 +89,12 @@ export const useSearchIndex = (active: boolean): SearchIndex<SearchHit> | null =
     readonly version: number;
     readonly index: SearchIndex<SearchHit>;
   } | null>(null);
+  // Whether a YT Music song is in the Library: the finder Discover shares.
+  const find = useLoadedLibraryFinder(active);
+  const inLibrary = useMemo(
+    () => (find === null ? null : (song: YtSong) => find(song) !== null),
+    [find],
+  );
   const loading = useRef(false);
   const lastBuild = useRef(0);
   const mounted = useRef(true);
@@ -115,5 +128,9 @@ export const useSearchIndex = (active: boolean): SearchIndex<SearchHit> | null =
     return () => clearTimeout(timer);
   }, [active, built, version]);
 
-  return built?.index ?? null;
+  const index = built?.index ?? null;
+  return useMemo(
+    () => (index === null || inLibrary === null ? null : { index, inLibrary }),
+    [index, inLibrary],
+  );
 };

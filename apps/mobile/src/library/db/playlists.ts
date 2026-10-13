@@ -26,6 +26,49 @@ export const selectPlaylistSongs = (db: LibraryDatabase, playlistId: number, pag
   return page === undefined ? query.all() : query.limit(page.limit).offset(page.offset).all();
 };
 
+/** Every track's id and file path, for matching an imported playlist's entries (Core's `libraryPathIndex`). */
+export const selectTrackPaths = (db: LibraryDatabase) =>
+  db.select({ id: schema.tracks.id, path: schema.tracks.path }).from(schema.tracks).all();
+
+/** Rows per insert, well under SQLite's limit on bound values. */
+const INSERT_CHUNK = 200;
+
+/** Inserts playlist entries [rows] (any number), in inserts of a size SQLite takes. */
+export const insertPlaylistItems = (
+  db: LibraryDatabase,
+  rows: readonly (typeof schema.playlistItems.$inferInsert)[],
+): void => {
+  for (let i = 0; i < rows.length; i += INSERT_CHUNK) {
+    db.insert(schema.playlistItems)
+      .values(rows.slice(i, i + INSERT_CHUNK))
+      .run();
+  }
+};
+
+/**
+ * Makes a playlist hold exactly [trackIds], in that order (an import's
+ * Replace): the same playlist, so its name and place stay.
+ */
+export const replacePlaylistSongs = (
+  db: LibraryDatabase,
+  playlistId: number,
+  trackIds: readonly number[],
+  now: number,
+): void => {
+  db.transaction((tx) => {
+    const { playlists, playlistItems } = schema;
+    tx.delete(playlistItems).where(eq(playlistItems.playlistId, playlistId)).run();
+    const rows = trackIds.map((trackId, position) => ({
+      playlistId,
+      trackId,
+      position,
+      addedAt: now,
+    }));
+    insertPlaylistItems(tx, rows);
+    tx.update(playlists).set({ updatedAt: now }).where(eq(playlists.id, playlistId)).run();
+  });
+};
+
 /**
  * Removes the given entries from a playlist in one go (each entry on its own,
  * so another copy of the same song stays); ids from other playlists are ignored.

@@ -1,5 +1,5 @@
 import { LegendList } from "@legendapp/list/react-native";
-import { counted, type QueueContext, type SearchKind } from "@wave/core";
+import { counted, type QueueContext, type SearchKind, ytTrackId } from "@wave/core";
 import { useCallback, useMemo } from "react";
 import { Text, View } from "react-native";
 
@@ -10,9 +10,10 @@ import { TrackRow } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { TextButton } from "@/components/TextButton";
 import type { SongRow } from "@/library/LibraryStore";
+import type { NativeYtSong } from "@/native/waveYtMusic";
 import { openAlbum, openArtist, openGenre, openPlaylist } from "@/library/routes";
 import { toTrackSummary } from "@/library/TrackList";
-import { playSongs } from "@/playback/actions";
+import { playSongs, playYtSongs } from "@/playback/actions";
 import { useCurrentTrackId } from "@/playback/hooks";
 import {
   openAlbumActions,
@@ -28,6 +29,7 @@ import type { SearchHit } from "./searchIndex";
 import { useListScrollable } from "@/motion/heldTouch";
 import { selectableRow } from "@/selection/selectableRow";
 import type { ListSelection } from "@/selection/useListSelection";
+import { YtSongRow } from "@/ytmusic/YtSongRow";
 
 /** Tapping a song plays the song results from it. */
 const SEARCH_CONTEXT: QueueContext = { kind: "search", id: null };
@@ -37,7 +39,46 @@ const HEIGHT: Readonly<Record<ResultRow["type"], number>> = {
   hit: grid.row,
   more: CELL * 6,
   capped: CELL * 6,
+  ytSong: grid.row,
+  note: CELL * 6,
 };
+
+/** While selecting, results other than Library songs do nothing. */
+const ignore = (): void => undefined;
+
+/**
+ * A song YT Music found. Tapping streams the section's songs from it. While
+ * Library songs are being selected, it does nothing.
+ */
+function SearchYtSongRow({
+  song,
+  songs,
+  playing,
+  onOpen,
+  selecting,
+}: {
+  song: NativeYtSong;
+  songs: readonly NativeYtSong[];
+  playing: boolean;
+  onOpen: () => void;
+  selecting: boolean;
+}) {
+  return (
+    <YtSongRow
+      song={song}
+      playing={playing}
+      onPress={
+        selecting
+          ? ignore
+          : () => {
+              onOpen();
+              void playYtSongs(songs, Math.max(0, songs.indexOf(song)), SEARCH_CONTEXT);
+            }
+      }
+      onLongPress={selecting ? ignore : undefined}
+    />
+  );
+}
 
 const keyExtractor = (row: ResultRow): string => row.key;
 const itemType = (row: ResultRow): ResultRow["type"] => row.type;
@@ -51,9 +92,6 @@ type Props = {
   /** Song results are selectable; other results ignore taps while selecting. */
   selection: ListSelection<SongRow>;
 };
-
-/** While selecting, non-song results do nothing. */
-const ignore = (): void => undefined;
 
 function Hit({
   hit,
@@ -184,6 +222,24 @@ export function SearchResultsList({ rows, onOpen, onShowAll, selection }: Props)
             <View className="justify-center" style={{ height: HEIGHT.capped }}>
               <Text className="font-sans text-footnote text-secondary">
                 {`The best ${item.shown.toLocaleString("en")} of ${item.total.toLocaleString("en")}. Keep typing to narrow them down.`}
+              </Text>
+            </View>
+          );
+        case "ytSong":
+          return (
+            <SearchYtSongRow
+              song={item.song}
+              songs={item.songs}
+              playing={ytTrackId(item.song.videoId) === currentId}
+              onOpen={onOpen}
+              selecting={selection.selecting}
+            />
+          );
+        case "note":
+          return (
+            <View className="justify-center" style={{ height: HEIGHT.note }}>
+              <Text numberOfLines={2} className="font-sans text-footnote text-secondary">
+                {item.text}
               </Text>
             </View>
           );

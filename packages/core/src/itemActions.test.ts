@@ -9,6 +9,7 @@ import {
   commonKind,
   itemActions,
   splitActionBar,
+  ytSongActions,
   type ActionSubject,
   type ItemAction,
   type ItemActionEntry,
@@ -64,6 +65,19 @@ describe("itemActions", () => {
       Object.keys(ITEM_ACTION_LABELS).filter((action) => confirmsFirst(action as ItemAction)),
       ["deletePlaylist", "deletePlaylists", "delete"],
     );
+  });
+
+  test("songs offer Find Lyrics and Genre while online lookups are on, before Select and Delete", () => {
+    const menu = itemActions(tracks([song()], { selectable: true, onlineLookups: true }));
+    assert.deepEqual(names(menu).slice(-3), ["findLyricsAndGenre", "select", "delete"]);
+    assert.equal(ITEM_ACTION_LABELS.findLyricsAndGenre, "Find Lyrics and Genre");
+    const bar = itemActions(
+      tracks([song(), song()], { surface: "selection", onlineLookups: true }),
+    );
+    assert.ok(names(bar).includes("findLyricsAndGenre"));
+    assert.ok(!names(itemActions(tracks([song()]))).includes("findLyricsAndGenre"));
+    const album = itemActions({ kind: "album", items: [{}], here: "/", onlineLookups: true });
+    assert.ok(!names(album).includes("findLyricsAndGenre"));
   });
 
   test("a starred song offers Remove from Favorites instead", () => {
@@ -398,5 +412,11 @@ describe("actionBarLabel", () => {
     assert.equal(actionBarLabel("unfavorite"), "Un\u00ADfavorite");
     assert.equal(actionBarLabel("playNext"), "Play Next");
     assert.equal(actionBarLabel("addToPlaylist"), "Add to Playlist");
+  });
+});
+
+describe("ytSongActions", () => {
+  test("a YT Music song can join the queue, mixed with the Library's songs", () => {
+    assert.deepEqual(names(ytSongActions()), ["playNext", "addToQueue"]);
   });
 });

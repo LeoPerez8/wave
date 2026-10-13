@@ -12,7 +12,7 @@ colors:
   highlight: "#a14f09"
   destructive: "#b3261e"
   scrim: "#121b1d"
-  background-dark: "#0a1113"
+  background-dark: "#000000"
   foreground-dark: "#e0ecef"
   secondary-dark: "#a5b0b3"
   tertiary-dark: "#606b6e"
@@ -21,7 +21,7 @@ colors:
   accent-dark: "#59c0ad"
   highlight-dark: "#ec9d53"
   destructive-dark: "#f2867a"
-  scrim-dark: "#0a1113"
+  scrim-dark: "#000000"
 typography:
   display:
     fontFamily: "Inter"
@@ -132,13 +132,13 @@ components:
 
 Wave sets the owner's library the way a record label sets its catalog (the ECM cover program is the touchstone): artwork sits in wide, calm, tinted fields and the type around it is small and exact. Calm here comes from alignment, not from emptiness. Every margin, row, tile and the A–Z spine snaps to one 8dp cell, so a screen of tens of thousands of tracks still reads as ordered furniture rather than density.
 
-The ground is tinted, never plain white or black: fog blue-grey in light, night slate in dark, and every neutral is a step on one tonal ramp drawn from that ground. Hierarchy is quiet. The large title is light, not bold; lists use one type size and rank by weight and tint; labels are small tracked capitals, like the catalog line printed under a sleeve. Two chromatic voices only: a deep teal for what is active, an ember for what is loved or playing.
+The light ground is tinted, never plain white: fog blue-grey. The dark ground is true black, so an OLED screen goes dark around the artwork, and everything raised from it (groups, cards, hairlines) climbs the same tinted ramp. Every neutral is a step on that one ramp. Hierarchy is quiet. The large title is light, not bold; lists use one type size and rank by weight and tint; labels are small tracked capitals, like the catalog line printed under a sleeve. Two chromatic voices only: a deep teal for what is active, an ember for what is loved or playing.
 
-The world rejects the category default it was chosen against: bold large titles, chevron-and-icon rows, rounded "card" chrome around artwork, and a single accent on pure black or white. (The app icon is the one deliberate black ground: two waves, teal over amber, on black, so it holds up among other launcher icons; see #94.) Components are fully custom (chosen over Material 3), but Android's own conventions still hold: system and predictive Back work, touch targets are 48dp, and the theme follows the system light/dark setting.
+The world rejects the category default it was chosen against: bold large titles, chevron-and-icon rows, rounded "card" chrome around artwork, and a single accent on pure white. (The app icon sits on black too: two waves, teal over amber, so it holds up among other launcher icons; see #94.) Components are fully custom (chosen over Material 3), but Android's own conventions still hold: system and predictive Back work, touch targets are 48dp, and the theme follows the system light/dark setting.
 
 **Key Characteristics:**
 
-- Tinted fog / night-slate ground; neutrals from one ramp (OKLCH hue ~215).
+- Fog ground in light, true black in dark; neutrals from one ramp (OKLCH hue ~215).
 - One 8dp cell module for every dimension.
 - Artwork as photographs: square, unrounded, unframed (artists are circles; the mini player's thumbnail follows its pill).
 - Light large titles; one size per list, rank by weight and tint.
@@ -165,7 +165,7 @@ A cool, low-chroma tonal ramp carrying two small, saturated voices: teal and emb
 
 ### Neutral
 
-- **Fog / Night Slate** (`background`): the ground of every screen. Fog blue-grey in light (tone-1), a deep night slate in dark (tone-11, a step only dark mode uses).
+- **Fog / True Black** (`background`): the ground of every screen. Fog blue-grey in light (tone-1), true black (`#000000`) in dark.
 - **Ink** (`foreground`): titles, track titles, entry labels, the large title.
 - **Graphite** (`secondary`): artists, counts, durations, furniture lines, catalog lines, inactive spine letters, helper copy.
 - **Pewter** (`tertiary`): non-text only. Disabled icon buttons, the missing-file glyph, the placeholder note on artless covers.
@@ -173,15 +173,15 @@ A cool, low-chroma tonal ramp carrying two small, saturated voices: teal and emb
 - **Card divider**: on overlay cards (menus, dialogs) the separator tone vanishes on glass, so their rules are the ink laid at about a quarter strength, two pixels thick (Core's `overlayDivider`). `Hairline` draws it by itself inside any overlay card; one sits between each pair of entries, never after the last.
 - **Field** (`fill`): the square behind artwork that has no image, and empty cover slots.
 
-The full ramp lives in `global.css` as `tone-0` (lightest, `#eff4f6`) to `tone-11` (darkest, `#0a1113`); each semantic token is a step on it, in both themes. Light mode uses `tone-0` to `tone-10` (its ink is `tone-10`); `tone-11` is dark mode's ground only, and dark cards and fills (`tone-10`) and hairlines (`tone-9`) climb one step each from it, evenly spaced, so light mode never changes when dark mode gets darker. Core's `packages/core/src/theme.ts` holds the same values (`DEFAULT_THEME`, `TONES`) and checks WCAG AA for every pair the app draws (`themeContrastIssues`); an app test fails if `global.css` or the launch splash drift from it. `surface` is the tint laid over the glass of the floating chrome (at about 72%); `scrim` is the veil behind dialog and menu cards, laid at a quarter strength: the ink in light mode, the ground in dark. `grouped` and `on-accent` are also declared there but are not yet used by this world's components.
+The full ramp lives in `global.css` as `tone-0` (lightest, `#eff4f6`) to `tone-11` (darkest, `#0a1113`); each semantic token is a step on it, in both themes. Light mode uses `tone-0` to `tone-10` (its ink is `tone-10`); `tone-11` is used by dark mode only. On the black dark ground, grouped areas sit on `tone-11`, cards and fills on `tone-10` and hairlines on `tone-9`, so each stands off the ground and light mode never changes when dark mode gets darker. The ground dark mode shipped with before, Night Slate (`tone-11`, with grouped areas sharing it), is kept in Core as `NIGHT_SLATE` and offered as the Slate swatch. Core's `packages/core/src/theme.ts` holds the same values (`DEFAULT_THEME`, `TONES`) and checks WCAG AA for every pair the app draws (`themeContrastIssues`); an app test fails if `global.css` or the launch splash drift from it. `surface` is the tint laid over the glass of the floating chrome (at about 72%); `scrim` is the veil behind dialog and menu cards, laid at a quarter strength: the ink in light mode, the ground in dark. `grouped` and `on-accent` are also declared there but are not yet used by this world's components.
 
-These are the shipped colours. In Settings › Theme the owner picks a background for each mode and a primary (`accent`) and secondary (`highlight`) from preset swatches; Core's `themeFor` derives every other token from the chosen background (each neutral keeps its shipped contrast against the ground, so cards still stand off a true-black ground) and deepens or brightens an ink until it meets its contrast minimum. The app lays the result over `global.css` at runtime with `Uniwind.updateCSSVariables`, so every class and `useThemeColor` reader recolours at once; `global.css` and the launch splash stay the shipped theme.
+These are the shipped colours. In Settings › Theme the owner picks a background for each mode and a primary (`accent`) and secondary (`highlight`) from preset swatches; True black is the marked default for dark mode, and Slate gives Night Slate exactly; for any other background Core's `themeFor` derives every other token from it (each neutral keeps the contrast it has on fog or Night Slate, so cards stand off any ground) and deepens or brightens an ink until it meets its contrast minimum. The app lays the result over `global.css` at runtime with `Uniwind.updateCSSVariables`, so every class and `useThemeColor` reader recolours at once; `global.css` stays the shipped theme. The launch splash follows the whole choice from the next cold start (Android 13 and later; Android 12 keeps the shipped theme): a config plugin (`plugins/withLaunchSplash.ts`) ships a splash style for each choice Settings › Theme can make (Core's `LAUNCH_SPLASH_THEMES`): its ground, and the logo's top wave in the primary and bottom wave in the secondary, each as readable on that ground as in the app. Every theme change saves Core's `launchTheme` natively (`modules/wave-native`, `launch/LaunchThemeStore.kt`), which picks the matching style for Android to open with, so the app opens on one ground from the splash to the first screen. See Launch Screen for the logo's motion. The launcher icon follows too: its top wave takes the primary and its bottom wave the secondary (their dark tones; the shipped pair keeps #94's teal and amber), still on black. Android can't recolour an icon, so Wave ships one per pair (Core's `LAUNCHER_ICONS`, vector drawables and activity aliases written at prebuild by `plugins/launcherIcons.ts`) and switches when Wave leaves the screen. Where the launcher drops the home-screen icon on a switch (`LAUNCHER` in `src/settings/launcherIcon.ts`), Settings asks first.
 
 ### Named Rules
 
 **The One Ramp Rule.** Every neutral is a step on the tone ramp. No ad-hoc greys, no opacity-on-black greys; if a new neutral is needed, pick a ramp step.
 
-**The Tinted Ground Rule.** The ground is fog or night slate. Never ship a screen on `#ffffff` or `#000000`.
+**The Ground Rule.** The ground is fog in light and true black in dark. Never ship a screen on `#ffffff`, and never put a card, group or hairline on black without a ramp step between them.
 
 **The Two Voices Rule.** Teal means active, ember means favorite or playing. If a colour on screen means neither, it should be a neutral. The one exception is the destructive red on a Delete or Remove button.
 
@@ -249,7 +249,7 @@ The world is flat. There are no shadows, no elevation and no gradients (save the
 
 ## Shapes
 
-Square everywhere. Artwork, empty cover slots, track thumbnails and placeholder fields have no corner radius and no frame, with two exceptions that take the shape of what holds them: artists' circles (below) and the mini player's thumbnail, whose corners are concentric with its glass pill. Structure is drawn with one-pixel hairlines in the separator tone, running the full content width between entries; there are no boxed cards and no chips. What floats is the exception: the chrome's glass surfaces are pills (fully rounded ends) and dialog cards have 24dp corners, set apart from the square content beneath. Artists are circles: their image (their downloaded photo when there is one, else Core's `artistArtwork`: the cover of their own album with the most songs, else the album they appear on most), or their initial in graphite on a `fill` circle when they have no artwork, so artists read apart from albums. Rows lead with a 40dp circle, Home's artist shelf and the artist page head with a large one. The recurring silhouettes are the thin vertical column of spine letters on the right and the pills at the bottom.
+Square everywhere. Artwork, empty cover slots, track thumbnails and placeholder fields have no corner radius and no frame, with two exceptions that take the shape of what holds them: artists' circles (below) and the mini player's thumbnail, whose corners are concentric with its glass pill. Structure is drawn with one-pixel hairlines in the separator tone, running the full content width between entries; there are no boxed cards and no chips. What floats is the exception: the chrome's glass surfaces are pills (fully rounded ends) and dialog cards have 24dp corners, set apart from the square content beneath. Artists are circles: their image (their downloaded photo when there is one, else Core's `artistArtwork`: the cover of their own album with the most songs, else the album they appear on most), or their initial in graphite on a `fill` circle when they have no artwork, so artists read apart from albums. Rows lead with a 40dp circle, Home's artist shelf and the artist page head with a large one. The YouTube account's picture in Settings is a 40dp circle too, a person like an artist. The recurring silhouettes are the thin vertical column of spine letters on the right and the pills at the bottom.
 
 ### Named Rules
 
@@ -274,17 +274,23 @@ Every tappable element is built on one press primitive, so the whole world feels
 
 ### Alert Dialog
 
-A glass dialog card (`src/overlay/alert.tsx`, opened from anywhere with `showMessage` / `confirmAction`): the title in Title3 ink, the message below in Subheadline graphite, then the buttons as text buttons right-aligned along the bottom. A message has a single OK; a confirmation has Cancel then the action, which is red when it deletes or removes. Back or a tap outside does what Cancel or OK does. Screen readers hear the title and message as it opens. There are no system alerts.
+A glass dialog card (`src/overlay/alert.tsx`, opened from anywhere with `showMessage` / `confirmAction`): the title in Title3 ink, the message below in Subheadline graphite, then the buttons as text buttons right-aligned along the bottom. A message has a single OK; a confirmation has Cancel then the action, which is red when it deletes or removes. Back or a tap outside does what Cancel or OK does. A confirmation may rename Cancel when dismissing it does something gentler than nothing: an imported playlist whose name is taken asks Keep Both / Replace (red). Screen readers hear the title and message as it opens. There are no system alerts.
+
+Import Playlists ends on a summary card of the same make (`src/library/importPlaylists.tsx`): the title, then one section per picked file (its name in Body 500 ink, what it became in Subheadline graphite, then each entry left out in Footnote graphite), scrolling when long, and OK.
 
 - **Hover / Focus:** touch only; the Press dim-and-sink is the whole feedback.
 
 ### Entry Row
 
-The Library's entries (Playlists, Artists, Albums, Songs, Genres, Folders, Favorites) and settings links. One quiet line of Entry type, 56dp tall, with a right-aligned tabular count in Subheadline graphite whose column stays reserved when the count is unknown. A hairline below each; the list opens with a hairline above. No icon, no chevron.
+The Library's entries (Playlists, Artists, Albums, Songs, Genres, Folders, Favorites, then Discover while YT Music is on) and settings links. One quiet line of Entry type, 56dp tall, with a right-aligned tabular count in Subheadline graphite whose column stays reserved when the count is unknown. A hairline below each; the list opens with a hairline above. No icon, no chevron.
 
 ### Track Row
 
 56dp, fixed cells, one type size. Songs lists lead with a 40dp square thumbnail; album track lists lead with the track number in a 32dp cell. Playing: title in ember with a thin ember wavy underline spanning its visible text, rippling while music plays and still when paused (static under reduce motion or tap animation 0 ms). Missing file: title in graphite, artist line reads "File not found", a file-off glyph in pewter (after the text in Songs lists, in place of the number in album lists), and the row is disabled. Favorite: a small filled star in ember in its own 24dp cell. Duration in tabular Footnote, right-aligned. Stats rankings use the numbered row with the rank as the number (the top one in ember, 500) and the counted plays after the artist ("Artist · 12 plays").
+
+In Search, YT Music songs sit below the library's results under a "YT Music" catalog line, as Songs-list rows: YouTube's cover as the thumbnail (square, like any artwork), the artists and album as the second line ("Artist & Artist · Album"), the length in the duration cell (left empty when YouTube doesn't give one). Instead of songs the section can show one quiet line in Footnote graphite (searching, nothing found, all already in the library, offline, no answer); never an error card. When the library has nothing for the query, the same quiet line says so above the section. A YT Music row plays like a Library song's (tap streams the section from it, the playing one in ember). Playing, a streamed song looks like any track (mini player, Now Playing with its cover's tint) but has no star and plain-text artist and album. When it can't stream, playback pauses and the line under the title (the artist in the mini player, the album in Now Playing) says why in graphite ("You're offline. YT Music songs need the network."); never a dialog.
+
+A YT Music song's long-press menu is the track menu's card (cover, title, credit, then quiet entries): Play Next and Add to Queue, then Download, or Cancel Download while it's waiting or downloading, Retry Download and Cancel Download after a failure, nothing while it's being saved. While a download is on its way the row's second line says where it is instead of the credit ("Waiting to download", "Downloading · 42%", "Saving to the Library", "Download failed: offline"), and a 2dp teal rule under the two lines fills up as the audio arrives (on a separator-coloured track, only once the size is known). Once saved, the song is in the Library and leaves the section. The system notification shows the same: "Downloading" with the title and a progress bar, then "Saving to the Library".
 
 ### Album Tile
 
@@ -312,11 +318,39 @@ Small tracked caps (Label) in graphite by default, with teal and ember tones ava
 - **Transport:** previous, play/pause and next as filled glyphs in ink (32 / 48 / 32dp), each in a target a cell and a half larger on every side, with `impact` haptics. Previous restarts the track after its first three seconds.
 - **Sleep timer:** the Zzz glyph beside Lyrics at the bottom left (graphite when off, teal while a timer runs, with the time left beside it in tabular Footnote teal, or "End of track"). It opens a glass dialog card laid out like the long-press menu: a "Sleep timer" catalog line over what the running timer will do, then 15 / 30 / 45 / 60 Minutes, Custom… (a stepper: minute steps under 10 min, 5 under an hour, 15 above, up to 12 h), End of Track and, while one runs, Turn Off Timer. The playback service enforces it, so it pauses with Wave in the background.
 - **Queue view:** the Queue icon (teal while open) swaps the player view for the playing track in a small row, Shuffle and Repeat as labelled toggles (teal and 600 when on, graphite when off; Repeat cycles off → all → one), then the Up Next catalog line with its count and the list. Each Up Next row is a Songs-list row with a remove X and a drag handle (both graphite, 48dp). Dragging the handle lifts the row onto the `surface` tone under the finger while the others step aside; near the list's edges the list scrolls. Screen readers get Remove / Move up / Move down actions.
-- **Lyrics view:** the Lyrics icon (bottom left, teal while open) swaps the player view for the same small track row, then the lyrics in Title2 500. Synced lyrics (embedded LRC or a sidecar `.lrc`; Core's `pickLyrics` prefers synced, then the sidecar) tint the sung line ink and the rest graphite, easing over 240 ms, and keep the sung line a third of the way down as the song plays. A pause between lines shows as three 4dp squares. Scrolling by hand stops the follow until three seconds after the finger lifts; tapping a line seeks there with a `selection` haptic. Unsynced lyrics are plain ink text to scroll; a song without lyrics shows the empty state. Lyrics are read from the file each time the view opens, so a newly added `.lrc` shows up without a rescan.
+- **Lyrics view:** the Lyrics icon (bottom left, teal while open) swaps the player view for the same small track row, then the lyrics in Title2 500. Synced lyrics (embedded LRC or a sidecar `.lrc`; Core's `pickLyrics` prefers synced, then the sidecar) tint the sung line ink and the rest graphite, easing over 240 ms, and keep the sung line a third of the way down as the song plays. A pause between lines shows as three 4dp squares. Scrolling by hand stops the follow until three seconds after the finger lifts; tapping a line seeks there with a `selection` haptic. Unsynced lyrics are plain ink text to scroll; a song without lyrics shows the empty state. Lyrics are read from the file each time the view opens, so a newly added `.lrc` shows up without a rescan, and again as soon as Find Lyrics and Genre writes new ones.
+
+### Launch Screen
+
+The splash Android draws while Wave starts: the chosen ground (see Colors) with the logo centred, its still shape as wide as the shipped splash's (80dp from the centre to its furthest edge, inside Android's 192dp icon circle). The logo moves from the first frame: both waves flow left together, one wavelength a second, between round caps that stay where the still logo's are, so the logo keeps its outline and only the water moves (Core's `launchLogoWaves`; `plugins/launchLogoDrawable.ts` writes it as an animated vector, which Android plays on its RenderThread). Each sweep starts and ends on the still logo, so wherever the motion stops, the logo is whole.
+
+The waves keep moving until Wave's first screen is ready, then the splash fades out over 400 ms and the first screen is underneath, already drawn. A quick start doesn't cut the first sweep short: the splash stays until the fade can end as the first sweep does (Core's `launchLogoExit`, run natively by `launch/LaunchSplashExit.kt`). With the system's Remove animations on, the logo stands still and the splash goes as it always did. Android 12 stops the motion after ten seconds and leaves the still logo.
 
 ### Stepper (Settings)
 
 An Entry-type label, then minus / value / plus. The value is Body 500 tabular, centred in a minimum 72dp column on one line so it never wraps at large font scales; the buttons disable at the range ends. Helper text in Footnote sits below the row's closing hairline.
+
+### YT Music account (Settings)
+
+Below Use YT Music and its helper text, three cells down, between hairlines (`src/settings/YtMusicSettingsSection.tsx`; what shows is Core's `ytAccountView`):
+
+- **Signed out:** a Sign In text button in a 56dp row, and Footnote graphite under the closing hairline saying signing in is optional and what it changes. While Google's page is open the button reads "Signing In…" in graphite, disabled. A sign-in that didn't work only changes that footnote (no connection, or YouTube didn't confirm it); never an error card.
+- **Signed in:** the account as a 56dp row: its picture as a 40dp circle (a person, like an artist; their initial on a `fill` circle without one), the name in Body 500 ink over the email in Body graphite. Under the closing hairline, Sign Out as a text button in teal (it forgets a session, it doesn't delete anything) and a footnote saying what uses the account.
+- **Expired:** like signed out, with Sign In Again and a footnote saying the session ended.
+- **YT Music off:** no Sign In (it would talk to Google); a signed-in account still shows, so it can be signed out of.
+
+Sign In opens Google's own page full screen over Wave (a plain web view in the system's light or dark theme, clear of the system bars and the keyboard); Back steps back through Google's pages and then out. It closes by itself once the account is signed in.
+
+### Discover
+
+The YouTube account's recommendations, YouTube Music's home set in Wave's own layout (`src/app/library/discover.tsx`; what shows is Core's `discoverView`). The Library lists it as a plain entry row after Favorites, without a count; with YT Music off the row is gone.
+
+- **Screen:** a pushed screen with Back and the "Discover" title, then YouTube Music's shelves in its order, each under its catalog line (the shelf's name, as Home's sections are titled). Nothing YouTube serves as a prompt is drawn: no taste builder, no moods, no banners, no Premium. Pull to refresh asks again, in teal, and keeps the shelves up meanwhile.
+- **Song shelves** (Quick picks and the like, Core's `layout: "songs"`): Songs-list rows in columns of four, the columns scrolling sideways edge to edge, the next one peeking in a 32dp margin from the right (one column fills the width). A song the Library has is drawn as its Library row (its star, its menu) and plays the file; the others are YT Music rows (YouTube's cover, artists · album, the download line and rule while one is on its way) and stream.
+- **Cover shelves** (mixes, albums, playlists, or a shelf that mixes them): Home's shelf of album tiles, 152dp covers with the next one peeking in. The catalog line is who made it (the artists, the playlist's maker without YouTube's view count) and the furniture line says what it is ("Album · 2024", "Playlist", "Song"; Core's `discoverTileCaption`). A song tile plays the shelf's songs from it and long-presses to its menu; an album or playlist opens its songs.
+- **States**, each Wave's empty state (pewter line icon, Entry title, Subheadline graphite message), never an error card: signed out, "Recommendations come from your account" with Open Settings as a text button (an account sign-in, never a Premium upsell); offline, "You're offline"; no answer, "No answer from YouTube Music" and pull to try again; nothing to show, "Nothing to recommend yet". Until the first shelves arrive a quiet Subheadline graphite line says Wave is asking.
+
+An album or playlist from Discover opens a pushed screen laid out like a Library album (`src/ytmusic/YtSongList.tsx`): the cover as wide as the margins allow, the title in Title type, who made it in Body 500 graphite (plain text, not a link), the furniture line ("Album · 2013 · 12 songs · 52 min", "Playlist · 62 songs · 260 min"), Play and Shuffle, then its songs: an album's by number with the artists as the second line, a playlist's with their covers. They behave as on the shelves (the Library's file for songs it has, a YT Music song's menu with Play Next, Add to Queue and Download for the rest). The cover and title the tapped tile had show at once; offline or without an answer, the empty state takes the songs' place.
 
 ### Alphabet Spine (signature)
 

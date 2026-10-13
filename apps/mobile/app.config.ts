@@ -1,5 +1,8 @@
 import type { ExpoConfig } from "expo/config";
 
+import { withLauncherIcons } from "./plugins/withLauncherIcons.ts";
+import { withLaunchSplash } from "./plugins/withLaunchSplash.ts";
+
 // Font files ship inside the @expo-google-fonts/inter package and are embedded
 // natively at prebuild time, so text renders in Inter from the first frame.
 const inter = (file: string): string => `./node_modules/@expo-google-fonts/inter/${file}`;
@@ -39,7 +42,7 @@ const config: ExpoConfig = {
         backgroundColor: "#E0ECEF",
         dark: {
           image: "./assets/splash-icon.png",
-          backgroundColor: "#0A1113",
+          backgroundColor: "#000000",
         },
       },
     ],
@@ -69,10 +72,16 @@ const config: ExpoConfig = {
         android: {
           // Android 12 is the floor (native RenderEffect is available should any blur be added).
           minSdkVersion: 31,
+          // innertubex (YT Music) is built with Kotlin 2.4; an older compiler can't read it.
+          kotlinVersion: "2.4.20",
         },
       },
     ],
   ],
 };
 
-export default config;
+// The moving logo on the launch splash and a splash for each choice Settings › Theme offers
+// (Android 13+), and one launcher icon per primary × secondary, switched from Settings › Theme.
+// Applied here, before the plugin list, so the splash's changes run after expo-splash-screen's
+// (Expo runs mods in reverse order) and can edit that splash's style.
+export default withLaunchSplash(withLauncherIcons(config));

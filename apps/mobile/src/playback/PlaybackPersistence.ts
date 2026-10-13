@@ -1,13 +1,15 @@
-import { parseQueueState, restorePlayback } from "@wave/core";
+import { libraryTrackIds, parseQueueState, restorableTrack, restorePlayback } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { AppState } from "react-native";
 
 import { LibraryStore } from "@/library/LibraryStore";
+import { ytMusicEnabled } from "@/settings/ytMusic";
 
 import { playbackState } from "./Player";
 import { Queue, currentPositionMs, queueState, settledQueue, toQueueTrack } from "./Queue";
 import { learnUnknownQueueTracks } from "./queueTracks";
+import { savedYtQueueTracks, saveYtQueueTracks } from "./ytQueueTracks";
 
 /** How often the position is written while playing; it's also written on pause and on leaving the app. */
 const POSITION_SAVE_INTERVAL_MS = 5_000;
@@ -32,12 +34,25 @@ export const layer = Layer.effectDiscard(
       if (saved === null) return;
       const state = parseQueueState(yield* Effect.try(() => JSON.parse(saved.queue) as unknown));
       if (state === null) return;
-      const ids = [...new Set(state.entries.map((entry) => Number(entry.trackId)))];
-      const songs = yield* store.songsByIds(ids.filter(Number.isInteger));
-      const available = new Set(songs.map((song) => String(song.id)));
-      const restored = restorePlayback(state, saved.positionMs, (id) => available.has(id));
+      const songs = yield* store.songsByIds(
+        libraryTrackIds(state.entries.map((entry) => entry.trackId)),
+      );
+      const ytTracks = savedYtQueueTracks();
+      const restored = restorePlayback(
+        state,
+        saved.positionMs,
+        restorableTrack({
+          libraryIds: new Set(songs.map((song) => song.id)),
+          savedYtTracks: new Set(ytTracks.map((track) => track.id)),
+          ytMusicOn: ytMusicEnabled(),
+        }),
+      );
       if (restored === null) return;
-      yield* queue.restore(restored.state, songs.map(toQueueTrack), restored.positionMs);
+      yield* queue.restore(
+        restored.state,
+        [...songs.map(toQueueTrack), ...ytTracks],
+        restored.positionMs,
+      );
     });
 
     let saving = false;
@@ -55,13 +70,17 @@ export const layer = Layer.effectDiscard(
         // A queue picked back up from the player comes without its tracks:
         // read them as soon as it's there, before Up Next is opened.
         queueState.subscribe(() => {
-          Effect.runFork(learnUnknownQueueTracks(queueState.get().entries, store.songsByIds));
+          Effect.runFork(
+            learnUnknownQueueTracks(queueState.get().entries, store.songsByIds, savedYtQueueTracks),
+          );
         }),
         // `Queue` serialises the queue once changes settle (skips, reorders come in bursts).
         settledQueue.subscribe(() => {
           const json = settledQueue.get();
           if (!saving || json === null) return;
           lastPositionSave = Date.now();
+          // Its YT Music songs aren't in the Library: their details go with it.
+          run(Effect.sync(() => saveYtQueueTracks(queueState.get().entries)));
           run(store.saveQueue(json, currentPositionMs()));
         }),
         playbackState.subscribe(() => {

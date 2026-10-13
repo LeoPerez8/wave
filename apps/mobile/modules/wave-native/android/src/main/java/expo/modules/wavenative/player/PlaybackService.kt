@@ -2,6 +2,7 @@ package expo.modules.wavenative.player
 
 import android.app.PendingIntent
 import android.content.Intent
+import android.content.res.Configuration
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
@@ -11,12 +12,19 @@ import android.os.Process
 import android.os.SystemClock
 import android.util.Log
 import androidx.annotation.OptIn
+import androidx.car.app.connection.CarConnection
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.Observer
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
@@ -27,11 +35,18 @@ import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.FutureCallback
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import expo.modules.wavenative.launcher.LauncherIconSwitcher
+import expo.modules.wavenative.yt.YtClient
+import expo.modules.wavenative.yt.YtDataSource
+import expo.modules.wavenative.yt.YtMedia
+import expo.modules.wavenative.yt.YtStreamFailure
 
 /**
  * Hosts the player. Media3 provides the media notification, lock-screen and
  * Bluetooth/headset controls through the session, and the player handles
- * audio focus and pauses when headphones disconnect (becoming noisy).
+ * audio focus and pauses when headphones disconnect (becoming noisy). The
+ * notification shows Wave's two waves in the chosen primary
+ * ([WaveNotificationProvider]).
  *
  * The sleep timer runs here too, so it pauses playback with Wave in the
  * background (the JS side may be suspended by then).
@@ -47,6 +62,9 @@ import com.google.common.util.concurrent.ListenableFuture
  * The player's state is kept on disk ([ResumeStore]), so after Wave's process
  * died, Auto and the system media controls can resume the last queue before
  * JS is up ([SessionCallback.onPlaybackResumption]).
+ *
+ * While Auto is connected and its Lyrics toggle is on, the session shows the
+ * lyric line JS sends in place of the artist ([AutoLyrics], [LyricLinePlayer]).
  */
 class PlaybackService : MediaLibraryService() {
   private var session: MediaLibrarySession? = null
@@ -120,6 +138,38 @@ class PlaybackService : MediaLibraryService() {
     }
   }
 
+  /** Whether playback paused because a YT Music song couldn't stream; moving on plays again. */
+  private var pausedOnStreamFailure = false
+
+  /**
+   * Streaming: keeps Wi-Fi awake while a YT Music song plays, and pauses on
+   * one that can't stream (offline, YT Music off, a song YouTube won't serve)
+   * instead of sitting idle as if playing; JS shows why. Skipping on (from
+   * Wave, the notification, Bluetooth) plays the next song, Library or not.
+   */
+  private val streamListener = object : Player.Listener {
+    override fun onPlayerError(error: PlaybackException) {
+      if (YtStreamFailure.codeOf(error.cause?.message) == null) return
+      pausedOnStreamFailure = true
+      exoPlayer?.pause()
+    }
+
+    override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+      val player = exoPlayer ?: return
+      val streamed = YtMedia.videoIdOf(mediaItem?.localConfiguration?.uri?.toString() ?: "") != null
+      player.setWakeMode(if (streamed) C.WAKE_MODE_NETWORK else C.WAKE_MODE_LOCAL)
+      if (pausedOnStreamFailure && reason == Player.MEDIA_ITEM_TRANSITION_REASON_SEEK) {
+        pausedOnStreamFailure = false
+        if (player.playbackState == Player.STATE_IDLE) player.prepare()
+        player.play()
+      }
+    }
+
+    override fun onIsPlayingChanged(isPlaying: Boolean) {
+      if (isPlaying) pausedOnStreamFailure = false
+    }
+  }
+
   /** Brings the snapshot's position up to date while playing, should the process die. */
   private val resumePositionSave: Runnable = object : Runnable {
     override fun run() {
@@ -133,7 +183,13 @@ class PlaybackService : MediaLibraryService() {
   override fun onCreate() {
     super.onCreate()
     ResumeStore.init(this)
+    // Library files play from storage; YT Music songs (`yt:` items) are streamed,
+    // their address resolved as the player loads them (YtDataSource).
+    val dataSources = YtDataSource.Factory(
+      DefaultDataSource.Factory(this, DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true)),
+    ) { YtClient.get(this) }
     val player = ExoPlayer.Builder(this, WaveRenderersFactory(this))
+      .setMediaSourceFactory(DefaultMediaSourceFactory(dataSources))
       .setAudioAttributes(
         AudioAttributes.Builder()
           .setUsage(C.USAGE_MEDIA)
@@ -146,12 +202,23 @@ class PlaybackService : MediaLibraryService() {
       .build()
     player.addListener(sleepTimerListener)
     player.addListener(resumeListener)
+    player.addListener(streamListener)
     exoPlayer = player
-    session = MediaLibrarySession.Builder(this, player, SessionCallback())
+    NotificationAccent.init(this)
+    setMediaNotificationProvider(WaveNotificationProvider(this))
+    stopAccent = NotificationAccent.state.listen { triggerNotificationUpdate() }
+    AutoLyrics.state.init(PreferencesLyricsToggleStore(this))
+    val shown = LyricLinePlayer(player, AutoLyrics.state::lineFor)
+    session = MediaLibrarySession.Builder(this, shown, SessionCallback())
       .apply { openAppIntent()?.let(::setSessionActivity) }
       .build()
     showModes(AutoModes.state.current)
     stopModes = AutoModes.state.listen(::showModes)
+    stopLyrics = AutoLyrics.state.listen {
+      shown.refresh()
+      showModes(AutoModes.state.current)
+    }
+    carConnection = CarConnection(this).type.also { it.observeForever(carConnectionObserver) }
     AutoLibrary.onChildrenRecovered = { parentId ->
       // The count is unknown here; Auto asks for the pages again.
       main.post { session?.notifyChildrenChanged(parentId, Int.MAX_VALUE, null) }
@@ -161,9 +228,34 @@ class PlaybackService : MediaLibraryService() {
   /** Stops following JS's shuffle and repeat ([AutoModes.state]). */
   private var stopModes: (() -> Unit)? = null
 
-  /** Shows the queue's shuffle and repeat on the mode buttons (Auto's player screen). */
+  /** Stops following the Lyrics toggle and line ([AutoLyrics.state]). */
+  private var stopLyrics: (() -> Unit)? = null
+
+  /** Whether Android Auto is connected (projected on a car's screen, or Android Automotive). */
+  private var carConnection: LiveData<Int>? = null
+  private val carConnectionObserver = Observer<Int> { type ->
+    AutoLyrics.state.setCarConnected(type != CarConnection.CONNECTION_TYPE_NOT_CONNECTED)
+  }
+
+  /** Stops redrawing the notification when the primary changes ([NotificationAccent.state]). */
+  private var stopAccent: (() -> Unit)? = null
+
+  /** The notification takes the primary's tone for the scheme, so a scheme change redraws it. */
+  @OptIn(UnstableApi::class)
+  override fun onConfigurationChanged(newConfig: Configuration) {
+    super.onConfigurationChanged(newConfig)
+    triggerNotificationUpdate()
+  }
+
+  /**
+   * Shows the queue's shuffle and repeat on the mode buttons (Auto's player
+   * screen), with More from this artist and the Lyrics toggle after them.
+   */
   private fun showModes(modes: PlaybackModes) {
-    session?.setMediaButtonPreferences(AutoModesSession.buttons(modes))
+    session?.setMediaButtonPreferences(
+      AutoModesSession.buttons(modes) + MoreFromArtistSession.button +
+        AutoLyricsSession.button(AutoLyrics.state.on),
+    )
   }
 
   /**
@@ -206,6 +298,13 @@ class PlaybackService : MediaLibraryService() {
   override fun onDestroy() {
     stopModes?.invoke()
     stopModes = null
+    stopAccent?.invoke()
+    stopAccent = null
+    stopLyrics?.invoke()
+    stopLyrics = null
+    carConnection?.removeObserver(carConnectionObserver)
+    carConnection = null
+    AutoLyrics.state.setCarConnected(false)
     AutoLibrary.onChildrenRecovered = null
     browsers.clear()
     JsRuntime.release()
@@ -221,9 +320,13 @@ class PlaybackService : MediaLibraryService() {
     super.onDestroy()
   }
 
-  /** Tapping the notification opens Wave. */
+  /**
+   * Tapping the notification opens Wave. It points at MainActivity rather than
+   * the launcher icon's alias, which a theme change can turn off.
+   */
   private fun openAppIntent(): PendingIntent? {
     val launch = packageManager.getLaunchIntentForPackage(packageName) ?: return null
+    launch.component?.let { launch.component = LauncherIconSwitcher.launchTarget(packageManager, it) }
     return PendingIntent.getActivity(
       this,
       0,
@@ -258,7 +361,9 @@ class PlaybackService : MediaLibraryService() {
       // Shuffle and repeat are custom commands for JS's queue engine; the player's own stay unused.
       if (showsModeButtons(session, controller)) {
         result
-          .setAvailableSessionCommands(AutoModesSession.sessionCommands)
+          .setAvailableSessionCommands(
+            AutoLyricsSession.withCommand(MoreFromArtistSession.withCommand(AutoModesSession.sessionCommands)),
+          )
           .setAvailablePlayerCommands(AutoModesSession.playerCommands)
       }
       return result.build()
@@ -371,14 +476,21 @@ class PlaybackService : MediaLibraryService() {
       customCommand: SessionCommand,
       args: Bundle,
     ): ListenableFuture<SessionResult> {
+      // The Lyrics toggle: JS hears of it and sends lines while it's on.
+      if (customCommand.customAction == AutoLyrics.TOGGLE_ACTION) {
+        AutoLyrics.state.toggle()
+        return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+      }
       // A shuffle or repeat button: JS's queue engine changes the mode and reports it back.
-      AutoModes.request(customCommand.customAction)?.let { request ->
+      // More from this artist: JS's queue engine adds the songs.
+      val action = customCommand.customAction
+      (AutoModes.request(action) ?: MoreFromArtist.request(action))?.let { request ->
         if (session.isAutoCompanionController(controller) || session.isAutomotiveController(controller)) {
           keepJsFor(controller)
         }
         return AutoLibrary.command(request)
       }
-      val code = when (customCommand.customAction) {
+      val code = when (action) {
         SleepTimerSession.START.customAction ->
           SleepTimerSession.fromBundle(args)
             ?.let { sleepTimer.start(it); SessionResult.RESULT_SUCCESS }

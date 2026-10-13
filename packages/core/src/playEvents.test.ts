@@ -125,6 +125,28 @@ describe("trackPlays", () => {
     );
   });
 
+  test("a streamed YT Music song is never on record, and the Library songs around it are", () => {
+    const { started, ended } = run([
+      playing(0, "1", "a"),
+      moved(MIN, "2", "auto"),
+      playing(MIN, "2", "yt:dQw4w9WgXcQ"),
+      moved(5 * MIN, "3", "auto"),
+      playing(5 * MIN, "3", "b"),
+      moved(8 * MIN, "4", "seek"),
+    ]);
+    assert.deepEqual(
+      started.map((play) => play.trackId),
+      ["a", "b"],
+    );
+    assert.deepEqual(
+      ended.map((play) => [play.trackId, play.endReason, play.listenedMs]),
+      [
+        ["a", "completed", MIN],
+        ["b", "skipped", 3 * MIN],
+      ],
+    );
+  });
+
   test("a short song counts when played through, not when skipped before the end", () => {
     const { ended } = run([
       playing(0, "1", "jingle", { durationMs: 10_000 }),

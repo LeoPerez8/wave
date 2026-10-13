@@ -57,7 +57,7 @@ const skip = (direction: SkipDirection): Promise<void> =>
   direction === "next" ? skipToNext() : skipToPrevious();
 
 // Separate selectors, so position ticks don't re-render the mini player.
-const usePlaybackField = <K extends "item" | "playWhenReady" | "error">(key: K) =>
+const usePlaybackField = <K extends "item" | "playWhenReady" | "error" | "notice">(key: K) =>
   useSyncExternalStore(playbackState.subscribe, () => playbackState.get()[key]);
 
 type Props = {
@@ -77,6 +77,7 @@ export function MiniPlayer({ backdropId, onOpen }: Props) {
   const item = usePlaybackField("item");
   const playing = usePlaybackField("playWhenReady");
   const error = usePlaybackField("error");
+  const notice = usePlaybackField("notice");
   const bottom = useTabBarTop();
   const reduceMotion = useReducedMotion();
 
@@ -148,7 +149,8 @@ export function MiniPlayer({ backdropId, onOpen }: Props) {
 
   if (item === null) return null;
   const title = item.title ?? "Unknown title";
-  const subtitle = error === null ? (item.artist ?? "Unknown Artist") : "Couldn't play this file";
+  const subtitle =
+    error === null ? (item.artist ?? "Unknown Artist") : (notice ?? "Couldn't play this file");
 
   return (
     <GestureDetector gesture={openPan}>
