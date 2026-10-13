@@ -7,6 +7,7 @@ import { CELL } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { Mosaic } from "@/catalog/Mosaic";
 import type { LibrarySection } from "@/catalog/sections";
+import type { LibraryCounts } from "@/library/db/counts";
 import { useSectionSongCounts } from "@/library/hooks";
 import type {
   AlbumRow,
@@ -39,7 +40,12 @@ const openActions = (target: ActionItems, options: MenuOptions = {}): void => {
   openOverlay({
     label: targetHeading(target, undefined)?.title ?? "Actions",
     anchor: pressedRect(),
-    render: (close) => <ActionsMenu target={target} close={close} onSelect={options.onSelect} />,
+    render: (close) =>
+      target.kind === "section" ? (
+        <SectionActionsMenu target={target} close={close} />
+      ) : (
+        <ActionsMenu target={target} close={close} onSelect={options.onSelect} />
+      ),
   });
 };
 
@@ -74,6 +80,14 @@ export const openFolderActions = (folder: FolderRow, options?: MenuOptions): voi
 export const openLibrarySectionActions = (section: LibrarySection): void =>
   openActions({ kind: "section", items: [section] });
 
+/** A Library entry's menu, which says how many songs it acts on: the only menu that counts. */
+function SectionActionsMenu({ target, close }: { target: ActionItems; close: () => void }) {
+  const sectionSongs = useSectionSongCounts();
+  return (
+    <ActionsMenu target={target} close={close} onSelect={undefined} sectionSongs={sectionSongs} />
+  );
+}
+
 /**
  * The long-press menu for a track, an album, an artist, a playlist, a genre, a
  * folder or a Library entry: what it is, then one quiet line per action (the
@@ -84,13 +98,14 @@ function ActionsMenu({
   target,
   close,
   onSelect,
+  sectionSongs,
 }: {
   target: ActionItems;
   close: () => void;
   onSelect: (() => void) | undefined;
+  /** Each Library entry's song count, for a Library entry's heading (`SectionActionsMenu`). */
+  sectionSongs?: LibraryCounts | undefined;
 }) {
-  // Only a Library entry's heading needs these; the count is one cheap query.
-  const sectionSongs = useSectionSongCounts();
   const head = targetHeading(target, sectionSongs);
   const entries = useItemActions(target, { surface: "menu", finish: close, onSelect });
 

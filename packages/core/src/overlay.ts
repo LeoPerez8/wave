@@ -176,3 +176,20 @@ const placeNextTo = (
  */
 export const entryDivider = (index: number, count: number, flow: OverlayFlow): boolean =>
   flow === "down" ? index < count - 1 : index > 0;
+
+/**
+ * A card's content height, for `placeOverlayCard`, from a fresh layout of it
+ * (`laidOut`) under its `maxHeight`. A layout shorter than the limit is the
+ * content's own height; one the limit cut short (to within a pixel) says only
+ * that the content is at least that tall, so the taller height measured
+ * before (`known`) still stands.
+ */
+export const cardContentHeight = (input: {
+  /** The content height measured before, in dp. */
+  readonly known: number;
+  /** The card's height in this layout, in dp. */
+  readonly laidOut: number;
+  /** The tallest the card was allowed to be in that layout, in dp. */
+  readonly maxHeight: number;
+}): number =>
+  input.laidOut < input.maxHeight - 1 ? input.laidOut : Math.max(input.known, input.laidOut);

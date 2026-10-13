@@ -166,7 +166,7 @@ export type {
   LibrarySectionSource,
   SectionCollection,
 } from "./librarySections.ts";
-export { cardKeyboard, entryDivider, placeOverlayCard } from "./overlay.ts";
+export { cardContentHeight, cardKeyboard, entryDivider, placeOverlayCard } from "./overlay.ts";
 export type { OverlayCardFrame, OverlayCardInput, OverlayInsets } from "./overlay.ts";
 export type { OverlayAnchor, OverlayRect } from "./overlay.ts";
 export type { CardKeyboard, OverlayAlign, OverlayFlow } from "./overlay.ts";
