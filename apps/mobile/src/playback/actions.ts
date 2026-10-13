@@ -14,22 +14,30 @@ import { appRuntime } from "@/library/runtime";
 import { Player, playbackState } from "./Player";
 import { Queue, currentPositionMs, queueState, toQueueTrack } from "./Queue";
 
-const run = (effect: Effect.Effect<void, unknown, Player | Queue>): void => {
-  void appRuntime.runPromise(effect).catch((error: unknown) =>
+/** Runs [effect] and reports a failure; the promise settles once it has run either way. */
+const runReported = (effect: Effect.Effect<void, unknown, Player | Queue>): Promise<void> =>
+  appRuntime.runPromise(effect).catch((error: unknown) =>
     playbackState.update((state) => ({
       ...state,
       error: error instanceof Error ? error.message : String(error),
     })),
   );
+
+const run = (effect: Effect.Effect<void, unknown, Player | Queue>): void => {
+  void runReported(effect);
 };
 
-const dispatch = (command: QueueCommand, songs: readonly SongRow[] = []): void =>
-  run(
+const dispatchReported = (command: QueueCommand, songs: readonly SongRow[] = []): Promise<void> =>
+  runReported(
     Effect.gen(function* () {
       const queue = yield* Queue;
       yield* queue.dispatch(command, songs.map(toQueueTrack));
     }),
   );
+
+const dispatch = (command: QueueCommand, songs: readonly SongRow[] = []): void => {
+  void dispatchReported(command, songs);
+};
 
 /** Starts the player's event sync and picks up a queue that is already playing. */
 export const connectPlayer = (): void => run(Effect.asVoid(Queue));
@@ -87,8 +95,12 @@ export const cycleRepeat = (): void => setRepeat(nextRepeatMode(queueState.get()
 /** Plays an Up Next entry. */
 export const playQueueEntry = (key: string): void => dispatch({ type: "jumpTo", key });
 
-export const moveQueueEntry = (key: string, toUpNextIndex: number): void =>
-  dispatch({ type: "move", key, toUpNextIndex });
+/**
+ * Moves an Up Next entry. The promise settles once the queue has the move
+ * (or it failed), which may wait on earlier commands and the native player.
+ */
+export const moveQueueEntry = (key: string, toUpNextIndex: number): Promise<void> =>
+  dispatchReported({ type: "move", key, toUpNextIndex });
 
 export const removeQueueEntry = (key: string): void => dispatch({ type: "remove", key });
 

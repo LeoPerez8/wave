@@ -1,5 +1,5 @@
 import { IconChevronDown, IconListNumbers, IconQuote } from "@tabler/icons-react-native";
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
@@ -8,21 +8,28 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CELL, grid } from "@/catalog/grid";
 import { IconButton } from "@/components/IconButton";
 import { Press } from "@/motion/Press";
-import { Background } from "@/nowPlaying/Background";
-import { DismissArea } from "@/nowPlaying/DismissArea";
-import { useNowPlayingGradient, useTrackDetails } from "@/nowPlaying/hooks";
-import { LyricsView } from "@/nowPlaying/LyricsView";
-import { PlayerView } from "@/nowPlaying/PlayerView";
-import { QueueHeader, UpNextList } from "@/nowPlaying/QueueView";
-import { Scrubber } from "@/nowPlaying/Scrubber";
-import { closeNowPlaying, nowPlayingMounted, sheetHeight, sheetOffset } from "@/nowPlaying/sheet";
-import { SleepTimerButton } from "@/nowPlaying/SleepTimer";
-import { TrackHeader } from "@/nowPlaying/TrackHeader";
-import { Transport } from "@/nowPlaying/Transport";
 import { addScreenBackHandler } from "@/overlay/back";
 import { useCurrentTrackId } from "@/playback/hooks";
 import { playbackState } from "@/playback/Player";
 import { useThemeColor } from "@/theme/useThemeColor";
+
+import { Background } from "./Background";
+import { DismissArea } from "./DismissArea";
+import { useNowPlayingGradient, useTrackDetails } from "./hooks";
+import { LyricsView } from "./LyricsView";
+import { PlayerView } from "./PlayerView";
+import { QueueHeader, UpNextList } from "./QueueView";
+import { Scrubber } from "./Scrubber";
+import {
+  closeNowPlaying,
+  onNowPlayingHidden,
+  resizeNowPlaying,
+  sheetOffset,
+  useNowPlayingShown,
+} from "./sheet";
+import { SleepTimerButton } from "./SleepTimer";
+import { TrackHeader } from "./TrackHeader";
+import { Transport } from "./Transport";
 
 /** What fills the space above the controls. */
 export type NowPlayingView = "player" | "queue" | "lyrics";
@@ -61,15 +68,34 @@ function ViewToggle({
 
 const close = (): void => closeNowPlaying();
 
+/** Wraps the screens under Now Playing: screen readers skip them while it is up. */
+export function UnderNowPlaying({ children }: { children: ReactNode }) {
+  const shown = useNowPlayingShown();
+  return (
+    <View
+      collapsable={false}
+      style={{ flex: 1 }}
+      importantForAccessibility={shown ? "no-hide-descendants" : "auto"}
+    >
+      {children}
+    </View>
+  );
+}
+
 /**
- * Now Playing: a sheet over the tabs, tinted by the artwork. The player view
+ * Now Playing: a sheet over the app, tinted by the artwork. The player view
  * (artwork, title, artist and album), the Queue view or the Lyrics view sits
  * above the scrubber and transport. Drag it down, tap the chevron or press Back to
  * dismiss it.
+ *
+ * It stays mounted out of sight below the screen, following the playing track
+ * (its colours, artwork and links) while closed, so opening it only starts the
+ * spring and its first frame is already right.
  */
-export default function NowPlayingScreen() {
+export function NowPlayingSheet() {
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
+  const shown = useNowPlayingShown();
   const item = useSyncExternalStore(playbackState.subscribe, () => playbackState.get().item);
   const playing = useSyncExternalStore(
     playbackState.subscribe,
@@ -79,21 +105,19 @@ export default function NowPlayingScreen() {
   const gradient = useNowPlayingGradient(details);
   const [view, setView] = useState<NowPlayingView>("player");
 
+  useEffect(() => resizeNowPlaying(height), [height]);
+
+  // Every open starts on the player.
+  useEffect(() => onNowPlayingHidden(() => setView("player")), []);
+
+  // Back slides the sheet away instead of leaving the screen under it.
   useEffect(() => {
-    sheetHeight.set(height);
-  }, [height]);
-
-  useEffect(nowPlayingMounted, []);
-
-  // Back slides the sheet away instead of cutting to the tabs.
-  useEffect(
-    () =>
-      addScreenBackHandler(() => {
-        closeNowPlaying();
-        return true;
-      }),
-    [],
-  );
+    if (!shown) return undefined;
+    return addScreenBackHandler(() => {
+      closeNowPlaying();
+      return true;
+    });
+  }, [shown]);
 
   const sheetStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: sheetOffset.get() }],
@@ -103,8 +127,14 @@ export default function NowPlayingScreen() {
   const toggleLyrics = () => setView((current) => (current === "lyrics" ? "player" : "lyrics"));
 
   return (
-    <Animated.View style={[StyleSheet.absoluteFill, sheetStyle]}>
-      <Background gradient={gradient} />
+    <Animated.View
+      style={[StyleSheet.absoluteFill, sheetStyle]}
+      // Out of sight, it takes no touches and screen readers skip it.
+      pointerEvents={shown ? "auto" : "none"}
+      importantForAccessibility={shown ? "auto" : "no-hide-descendants"}
+      accessibilityElementsHidden={!shown}
+    >
+      <Background gradient={gradient} animate={shown} />
       <View
         className="flex-1"
         style={{

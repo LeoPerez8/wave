@@ -18,7 +18,7 @@ const config: ExpoConfig = {
     adaptiveIcon: {
       foregroundImage: "./assets/adaptive-icon-foreground.png",
       monochromeImage: "./assets/adaptive-icon-monochrome.png",
-      backgroundColor: "#0D6B62",
+      backgroundColor: "#000000",
     },
     predictiveBackGestureEnabled: true,
     // All-files access lets the scanner read every audio file in the scan roots.
@@ -34,7 +34,7 @@ const config: ExpoConfig = {
     [
       "expo-splash-screen",
       {
-        image: "./assets/splash-icon.png",
+        image: "./assets/splash-icon-light.png",
         imageWidth: 160,
         backgroundColor: "#E0ECEF",
         dark: {

@@ -29,6 +29,7 @@ import { sleepTimerState } from "@/playback/Player";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { usePlayhead } from "./hooks";
+import { useNowPlayingShown } from "./sheet";
 
 /** How often a deadline's countdown re-reads the clock (it shows whole seconds). */
 const TICK_MS = 250;
@@ -40,7 +41,9 @@ const useSleepTimer = (): SleepTimer | null =>
 const useRemaining = (timer: SleepTimer): number | null => {
   const playhead = usePlayhead();
   const [now, setNow] = useState(Date.now);
-  const onClock = timer.type === "deadline";
+  // The countdown only runs while Now Playing (or the menu over it) is up.
+  const shown = useNowPlayingShown();
+  const onClock = timer.type === "deadline" && shown;
   useEffect(() => {
     if (!onClock) return undefined;
     const tick = setInterval(() => setNow(Date.now()), TICK_MS);

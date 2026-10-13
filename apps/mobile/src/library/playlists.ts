@@ -1,9 +1,15 @@
+import { sortKey } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { useSyncExternalStore } from "react";
 
 import { makeExternalStore } from "@/lib/externalStore";
 
-import { LibraryStore, type LibraryStoreError, type PlaylistAddResult } from "./LibraryStore";
+import {
+  LibraryStore,
+  type LibraryStoreError,
+  type PlaylistAddResult,
+  type PlaylistRow,
+} from "./LibraryStore";
 import { appRuntime } from "./runtime";
 
 /** Bumped after every playlist edit; playlist queries re-run on it straight away. */
@@ -15,20 +21,63 @@ export const usePlaylistsVersion = (): number =>
 const edit = <A>(
   run: (store: LibraryStore["Service"]) => Effect.Effect<A, LibraryStoreError>,
 ): Promise<A> =>
-  appRuntime
-    .runPromise(LibraryStore.use(run))
-    .finally(() => playlistsVersion.update((version) => version + 1));
+  appRuntime.runPromise(LibraryStore.use(run)).finally(() => {
+    playlistsVersion.update((version) => version + 1);
+    // Re-read now, so the next card that lists them doesn't wait for it.
+    appRuntime.runPromise(listPlaylistsRemembered).catch(() => {});
+  });
+
+/** The playlists as last read, and the `playlistsVersion` they were read at. */
+let remembered: { readonly version: number; readonly rows: readonly PlaylistRow[] } | undefined;
+
+/**
+ * Lists the playlists and remembers them, so cards that list them (Add to
+ * Playlist) or check names against them (the name prompt) open at once.
+ */
+export const listPlaylistsRemembered: Effect.Effect<
+  readonly PlaylistRow[],
+  LibraryStoreError,
+  LibraryStore
+> = Effect.gen(function* () {
+  // Read before the query: an edit landing meanwhile leaves these rows out of date.
+  const version = playlistsVersion.get();
+  const store = yield* LibraryStore;
+  const rows = yield* store.listPlaylists;
+  remembered = { version, rows };
+  return rows;
+});
+
+/** The playlists, as remembered when no edit has happened since; undefined otherwise. */
+export const knownPlaylists = (): readonly PlaylistRow[] | undefined =>
+  remembered?.version === playlistsVersion.get() ? remembered.rows : undefined;
+
+/** The playlists: remembered ones at once, else read now. */
+export const currentPlaylists = (): Promise<readonly PlaylistRow[]> => {
+  const known = knownPlaylists();
+  return known === undefined
+    ? appRuntime.runPromise(listPlaylistsRemembered)
+    : Promise.resolve(known);
+};
 
 /** Every playlist's name, for checking a new name with Core's `checkPlaylistName`. */
 export const playlistNames = (): Promise<readonly string[]> =>
-  appRuntime
-    .runPromise(LibraryStore.use((store) => store.listPlaylists))
-    .then((playlists) => playlists.map((playlist) => playlist.name));
+  currentPlaylists().then((playlists) => playlists.map((playlist) => playlist.name));
 
 export const createPlaylist = (
   name: string,
   trackIds: readonly number[] = [],
 ): Promise<PlaylistAddResult> => edit((store) => store.createPlaylist(name, trackIds));
+
+/** A playlist just created empty, as Library › Playlists will list it: for its screen's first frame. */
+export const emptyPlaylistRow = (id: number, name: string): PlaylistRow => ({
+  id,
+  name,
+  sort: sortKey(name),
+  trackCount: 0,
+  durationMs: 0,
+  thumbPaths: [],
+  artworkPaths: [],
+});
 
 export const renamePlaylist = (id: number, name: string): Promise<void> =>
   edit((store) => store.renamePlaylist(id, name));

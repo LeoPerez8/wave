@@ -1,11 +1,19 @@
 import {
+  cardContentHeight,
   cardKeyboard,
   placeOverlayCard,
   veilAround,
   withOpacity,
   type OverlayRect,
 } from "@wave/core";
-import { useEffect, useRef, useState, type ComponentRef, type ReactNode } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ComponentRef,
+  type ReactNode,
+} from "react";
 import {
   AccessibilityInfo,
   BackHandler,
@@ -126,6 +134,7 @@ function OverlayCard({ entry, frontmost }: { entry: OverlayEntry; frontmost: boo
   const accent = useThemeColor("accent");
   const reduceMotion = useReducedMotion();
   const card = useRef<ComponentRef<typeof View>>(null);
+  const layer = useRef<ComponentRef<typeof View>>(null);
   const [cardHeight, setCardHeight] = useState<number | null>(null);
   const progress = useSharedValue(0);
   const measured = cardHeight !== null;
@@ -154,8 +163,21 @@ function OverlayCard({ entry, frontmost }: { entry: OverlayEntry; frontmost: boo
     if (closeKeyboard) Keyboard.dismiss();
   }, [closeKeyboard]);
 
+  // Fabric lays the card out before this runs and answers measurements synchronously, so
+  // the hidden, unbounded first layout is read here and the card re-renders in place
+  // before anything is drawn: no wait for `onLayout` to come back through JS.
+  useLayoutEffect(() => {
+    const height = card.current?.offsetHeight ?? 0;
+    if (height > 0) setCardHeight(height);
+    const size = layer.current;
+    if (size != null && size.offsetWidth > 0 && size.offsetHeight > 0) {
+      setVeil({ width: size.offsetWidth, height: size.offsetHeight });
+    }
+  }, []);
+
   // Fade in once the card knows its size (so it appears where it settles), out when closing.
-  useEffect(() => {
+  // A layout effect, so the entrance starts with the frame the card is first drawn in.
+  useLayoutEffect(() => {
     if (!measured) return;
     const target = entry.closing ? 0 : 1;
     const remove = () => removeOverlay(entry.id);
@@ -191,6 +213,7 @@ function OverlayCard({ entry, frontmost }: { entry: OverlayEntry; frontmost: boo
 
   return (
     <View
+      ref={layer}
       style={StyleSheet.absoluteFill}
       pointerEvents={entry.closing ? "none" : "box-none"}
       importantForAccessibility={frontmost ? "auto" : "no-hide-descendants"}
@@ -232,9 +255,13 @@ function OverlayCard({ entry, frontmost }: { entry: OverlayEntry; frontmost: boo
         ref={card}
         accessibilityLabel={entry.request.label}
         onLayout={(event) => {
-          // Placement needs the content's own height: a layout cut short by maxHeight isn't it.
-          const { height } = event.nativeEvent.layout;
-          if (!measured || height < frame.maxHeight - 1) setCardHeight(height);
+          // Content that changes height later (a list that grows) re-places the card.
+          const laidOut = event.nativeEvent.layout.height;
+          setCardHeight((known) =>
+            known === null
+              ? laidOut
+              : cardContentHeight({ known, laidOut, maxHeight: frame.maxHeight }),
+          );
         }}
         style={[
           {

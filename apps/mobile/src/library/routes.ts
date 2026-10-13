@@ -45,9 +45,9 @@ export const openFolder = (id: number, known?: FolderRow): void => open("folder"
 export const openPlaylist = (id: number, known?: PlaylistRow): void => open("playlist", id, known);
 
 /**
- * What the list knew about the item a detail screen shows when it was tapped
- * (`open*(id, row)`), read once as the screen mounts; undefined when it was
- * opened another way (Go to Album, Now Playing…).
+ * What the list or link knew about the item a detail screen shows when it was
+ * tapped (`open*(id, row)`; links read theirs ahead with `useLinkRows`), read
+ * once as the screen mounts; undefined when it wasn't known yet.
  */
 export const useKnownRow = <S extends DetailScreen>(
   screen: S,

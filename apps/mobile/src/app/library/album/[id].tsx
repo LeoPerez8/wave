@@ -15,7 +15,7 @@ import { useCurrentTrackId, usePlaySongs } from "@/playback/hooks";
 import { openTrackActions } from "@/playback/ActionsMenu";
 import { DetailFrame } from "@/library/DetailFrame";
 import { useFavoriteIds } from "@/library/favorites";
-import { useAlbum } from "@/library/hooks";
+import { useAlbum, useLinkRows } from "@/library/hooks";
 import type { AlbumRow, AlbumTrackRow } from "@/library/LibraryStore";
 import { openArtist, parseId, useKnownRow } from "@/library/routes";
 import { songCount, toTrackSummary } from "@/library/TrackList";
@@ -70,6 +70,8 @@ function AlbumHead({ shown }: { shown: Shown }) {
   const { album, genre, tracks } = shown;
   const context = useMemo(() => ({ kind: "album", id: String(album.id) }) as const, [album.id]);
   const play = usePlaySongs(tracks, context);
+  // Read ahead, so the artist's screen opens header-first.
+  const { artist } = useLinkRows(undefined, album.albumArtistId);
   // "Rock · 1997 · 12 songs · 52 min": the grid's furniture line, spelled out.
   const furniture = [
     genre,
@@ -96,7 +98,7 @@ function AlbumHead({ shown }: { shown: Shown }) {
         <Press
           accessibilityRole="link"
           accessibilityLabel={`Go to ${album.albumArtist}`}
-          onPress={() => openArtist(album.albumArtistId)}
+          onPress={() => openArtist(album.albumArtistId, artist)}
           haptic="selection"
           className="self-start justify-center"
           style={{ minHeight: 48 }}

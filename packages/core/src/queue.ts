@@ -341,6 +341,20 @@ export const reduceQueue = (
   }
 };
 
+/** A move dropped in Up Next that the queue may not have taken yet. */
+export interface PendingMove {
+  readonly key: string;
+  readonly toUpNextIndex: number;
+}
+
+/**
+ * The queue as Up Next shows it while moves are on their way to the player:
+ * the queue with each pending move applied on top. A move the queue already
+ * has changes nothing, so the list never shows the old order in between.
+ */
+export const withPendingMoves = (state: QueueState, moves: readonly PendingMove[]): QueueState =>
+  moves.reduce((current, { key, toUpNextIndex }) => move(current, key, toUpNextIndex).state, state);
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
