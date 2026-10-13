@@ -16,6 +16,7 @@ import { selectableRow } from "@/selection/selectableRow";
 import { useListSelection, type ListSelection } from "@/selection/useListSelection";
 
 import { usePlaylists } from "./hooks";
+import { importPlaylists } from "./importPlaylists";
 import type { PlaylistRow } from "./LibraryStore";
 import { emptyPlaylistRow } from "./playlists";
 import { newPlaylist } from "./PlaylistSheets";
@@ -64,7 +65,7 @@ function PlaylistItem({
   );
 }
 
-/** Library › Playlists: every playlist by name, with New Playlist above them. */
+/** Library › Playlists: every playlist by name, with Import Playlists and New Playlist above them. */
 export function PlaylistsList({ empty }: { empty: string }) {
   const scrollable = useListScrollable();
   const playlists = usePlaylists();
@@ -84,7 +85,7 @@ export function PlaylistsList({ empty }: { empty: string }) {
           icon={IconPlaylist}
           title="No playlists"
           message={empty}
-          action={<TextButton label="New Playlist" opensMenu onPress={createAndOpen} />}
+          action={<PlaylistsActions />}
         />
       </View>
     );
@@ -110,9 +111,19 @@ export function PlaylistsList({ empty }: { empty: string }) {
               {`${playlists.length} ${playlists.length === 1 ? "playlist" : "playlists"}`}
             </CatalogLine>
           </View>
-          <TextButton label="New Playlist" opensMenu onPress={createAndOpen} />
+          <PlaylistsActions />
         </View>
       }
     />
+  );
+}
+
+/** Import Playlists (M3U files) and New Playlist, side by side. */
+function PlaylistsActions() {
+  return (
+    <View className="flex-row items-center" style={{ gap: CELL * 3 }}>
+      <TextButton label="Import Playlists" onPress={() => void importPlaylists()} />
+      <TextButton label="New Playlist" opensMenu onPress={createAndOpen} />
+    </View>
   );
 }
