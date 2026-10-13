@@ -21,26 +21,14 @@ import expo.modules.wavenative.tags.MediaRetrieverTagReader
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
-import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.withContext
 
 /**
- * Downloading YT Music songs into the Library, for JS (`WaveYtDownloads`).
- * JS runs the queue (Core's `stepYtDownloads`) and, per song:
- *
- * 1. `album` / `watchSong` / `lyrics`: the pages the tags come from;
- * 2. `downloadAudio`: the audio, as YouTube serves it, into a hidden part
- *    file beside where it will go (progress as `onDownloadProgress`;
- *    `cancelDownload` stops it and deletes the part file);
- * 3. `saveDownload`: tags it, moves it into place and reads it as a scan does,
- *    or `discardDownload` to give up on it.
- *
- * A notification shows the download from step 2 to the end of step 3
- * ([YtDownloadService]). Failures reject with the codes of [YtFailure], or
- * `ERR_YT_CANCELLED` and `ERR_YT_STORAGE` (the file couldn't be saved).
+ * Optional YT Music metadata and the existing tag/publication/scanner boundary.
+ * WaveSoulseek acquires and validates MP3 audio. Received tags must be checked
+ * before saveDownload; no YouTube audio acquisition API remains.
  */
 class YtDownloadModule : Module() {
   private val context: Context
@@ -49,13 +37,11 @@ class YtDownloadModule : Module() {
   private val client: YtClient
     get() = YtClient.get(context)
 
-  /** The audio downloads running now, by video id, so they can be cancelled. */
-  private val running = ConcurrentHashMap<String, Job>()
 
   override fun definition() = ModuleDefinition {
     Name("WaveYtDownloads")
 
-    Events("onDownloadProgress")
+
 
     /** The album page with browse id [browseId]: title, artists, year, cover and tracklist. */
     AsyncFunction("album") Coroutine { browseId: String ->
@@ -76,60 +62,9 @@ class YtDownloadModule : Module() {
     }
 
     /**
-     * Downloads [videoId]'s audio for the file at [targetPath] into a hidden
-     * part file beside it; resolves `{ partPath, itag, bitrate, mimeType, bytes }`.
-     * [title] is what the notification shows.
-     */
-    AsyncFunction("downloadAudio") Coroutine { videoId: String, targetPath: String, title: String ->
-      val target = File(targetPath)
-      val part = DownloadFiles.partFileFor(target)
-      // Its own job, so cancelling stops the download and the call still rejects.
-      val job = Job()
-      running.put(videoId, job)?.cancel()
-      YtDownloadNotice.start(context, videoId, title)
-      var downloaded = false
-      try {
-        coded {
-          withContext(Dispatchers.IO) {
-            val folder = target.parentFile
-            if (folder == null || (!folder.isDirectory && !folder.mkdirs())) {
-              throw CodedException(STORAGE, "Couldn't create the folder for $targetPath", null)
-            }
-          }
-          var lastSentAt = 0L
-          val audio = withContext(job) {
-            YtAudioDownload(context).download(videoId, part) { received, total ->
-              YtDownloadNotice.progress(videoId, received, total)
-              val now = System.currentTimeMillis()
-              if (now - lastSentAt >= PROGRESS_INTERVAL_MS || received == total) {
-                lastSentAt = now
-                sendEvent(
-                  "onDownloadProgress",
-                  mapOf("videoId" to videoId, "received" to received.toDouble(), "total" to total.toDouble()),
-                )
-              }
-            }
-          }
-          downloaded = true
-          audio.toMap() + ("partPath" to part.path)
-        }
-      } finally {
-        running.remove(videoId, job)
-        job.complete()
-        // The notification keeps showing the song until it's saved or discarded.
-        if (!downloaded) YtDownloadNotice.finish(videoId)
-      }
-    }
-
-    /** Stops [videoId]'s audio download; its part file is deleted. */
-    Function("cancelDownload") { videoId: String ->
-      running.remove(videoId)?.cancel()
-    }
-
-    /**
      * Tags the downloaded part file with [tags] (Core's `ytDownloadTags`) and
      * the cover at [artworkUrl], moves it to [targetPath] (or the first free
-     * "Name (2).m4a") and reads it as a scan does. Resolves `{ path, track,
+     * "Name (2).mp3") and reads it as a scan does. Resolves `{ path, track,
      * artwork }`; rejects with `ERR_YT_STORAGE` (the part file is deleted).
      */
     AsyncFunction("saveDownload") Coroutine {
@@ -143,7 +78,7 @@ class YtDownloadModule : Module() {
       YtDownloadNotice.saving(videoId)
       try {
         val fields = DownloadTags.fromJs(tags) ?: throw IllegalArgumentException("Malformed tags: $tags")
-        val cover = artworkUrl?.let { url -> runCatching { client.request { fetchImage(url) } }.getOrNull() }
+        val cover = artworkUrl?.let { url -> withContext(Dispatchers.IO) { runCatching { fetchImage(url) }.getOrNull() } }
         withContext(Dispatchers.IO) {
           try {
             DownloadTagWriter().write(part, fields, cover)
@@ -171,10 +106,6 @@ class YtDownloadModule : Module() {
       YtDownloadNotice.finish(videoId)
     }
 
-    OnDestroy {
-      running.values.forEach { it.cancel() }
-      running.clear()
-    }
   }
 
   /** Runs [block], turning a [YtException] into its code and a cancellation into `ERR_YT_CANCELLED`. */

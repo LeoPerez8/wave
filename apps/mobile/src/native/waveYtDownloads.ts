@@ -25,28 +25,11 @@ export interface NativeYtWatchSong {
   readonly lyricsBrowseId: string | null;
 }
 
-/** A downloaded song's audio, not yet tagged or in place: YouTube's stream as it is. */
-export interface NativeDownloadedAudio {
-  /** The hidden part file beside the target, which `saveDownload` finishes. */
-  readonly partPath: string;
-  /** 141 (AAC 256 kbps, Premium) or 140 (AAC 128 kbps). */
-  readonly itag: number;
-  readonly bitrate: number;
-  readonly mimeType: string;
-  readonly bytes: number;
-}
-
 /** A download saved into the Library: where it went, read as a scan reads it. */
 export interface NativeSavedDownload {
   readonly path: string;
   readonly track: NativeScannedTrack;
   readonly artwork: NativeArtwork | null;
-}
-
-export interface DownloadProgressEvent {
-  readonly videoId: string;
-  readonly received: number;
-  readonly total: number;
 }
 
 /**
@@ -61,18 +44,12 @@ export type YtDownloadErrorCode =
   | "ERR_YT_CANCELLED"
   | "ERR_YT_STORAGE";
 
-declare class WaveYtDownloadsModule extends NativeModule<{
-  onDownloadProgress: (event: DownloadProgressEvent) => void;
-}> {
+declare class WaveYtDownloadsModule extends NativeModule {
   album(browseId: string): Promise<NativeYtAlbum>;
   watchSong(videoId: string): Promise<NativeYtWatchSong>;
   /** YT Music's lyrics at [browseId], plain text; null when there are none. */
   lyrics(browseId: string): Promise<string | null>;
-  /** Downloads [videoId]'s audio into a part file beside [targetPath]; [title] is for the notification. */
-  downloadAudio(videoId: string, targetPath: string, title: string): Promise<NativeDownloadedAudio>;
-  /** Stops [videoId]'s audio download (it rejects with `ERR_YT_CANCELLED`) and deletes its part file. */
-  cancelDownload(videoId: string): void;
-  /** Tags the part file, moves it to [targetPath] (or "Name (2).m4a") and reads it back. */
+  /** Tags verified Soulseek audio, publishes without overwriting a file, and reads it back. */
   saveDownload(
     videoId: string,
     partPath: string,

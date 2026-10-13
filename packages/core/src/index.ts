@@ -410,6 +410,7 @@ export { libraryTrackIds, playerErrorNotice, queuedYtTracks, restorableTrack } f
 export type { PlayerErrorCode, RestorableTracks } from "./ytQueue.ts";
 export {
   YT_MUSIC_FOLDER,
+  ytDownloadDestination,
   ytDownloadLookup,
   ytDownloadRoot,
   ytDownloadTags,
@@ -437,6 +438,7 @@ export type {
   YtDownloadEvent,
   YtDownloadFailure,
   YtDownloadJob,
+  YtDownloadPhase,
   YtDownloadStatus,
   YtDownloads,
 } from "./ytDownloads.ts";
@@ -467,3 +469,14 @@ export type {
   YtShelf,
   YtShelfItem,
 } from "./ytDiscover.ts";
+export {
+  soulseekCandidates,
+  soulseekRecording,
+  soulseekReceivedMatches,
+  soulseekSameRecording,
+} from "./soulseekDownload.ts";
+export type {
+  SoulseekCandidate,
+  SoulseekRecording,
+  SoulseekReceivedTags,
+} from "./soulseekDownload.ts";

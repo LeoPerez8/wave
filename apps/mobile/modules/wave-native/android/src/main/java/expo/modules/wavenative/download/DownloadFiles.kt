@@ -5,6 +5,7 @@ import java.io.IOException
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.util.UUID
 
 /**
  * Where a download lives until it's finished, and how it becomes a Library
@@ -14,8 +15,9 @@ import java.nio.file.StandardCopyOption
  */
 object DownloadFiles {
   /** `.08 Song.part.m4a` beside `08 Song.m4a`: hidden, on the same storage, still an `.m4a` for the tagger. */
-  fun partFileFor(target: File): File =
-    File(target.parentFile, ".${target.nameWithoutExtension}.part.${target.extension}")
+  fun partFileFor(target: File, jobId: String? = null): File =
+    File(target.parentFile, if (jobId == null) ".${target.nameWithoutExtension}.part.${target.extension}"
+      else ".wave-${UUID.nameUUIDFromBytes(jobId.toByteArray(Charsets.UTF_8))}.part.${target.extension}")
 
   /**
    * Moves the finished [part] file to [target], creating its folders. A file

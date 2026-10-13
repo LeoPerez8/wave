@@ -16,6 +16,7 @@ data class DownloadTags(
   val genre: String?,
   /** LRC for synced lyrics, plain text otherwise. */
   val lyrics: String?,
+  val discNumber: Int? = null,
 ) {
   companion object {
     /** From JS: `{ title, artist, album, albumArtist, year, trackNumber, genre, lyrics }`. */
@@ -31,15 +32,15 @@ data class DownloadTags(
         trackNumber = number("trackNumber"),
         genre = text("genre"),
         lyrics = text("lyrics"),
+        discNumber = number("discNumber"),
       )
     }
   }
 }
 
 /**
- * Tags a downloaded file with jaudiotagger (YT Music downloads are M4A, which
- * takes every field): whatever tags it had are replaced by [DownloadTags] and
- * the cover. Throws when the file can't be read or written.
+ * Writes trusted download metadata and artwork with the existing format-aware
+ * writer. Recording and audio validation must happen before peer tags are replaced.
  */
 class DownloadTagWriter {
   init {
@@ -55,6 +56,7 @@ class DownloadTagWriter {
     tags.albumArtist?.let { tag.setField(FieldKey.ALBUM_ARTIST, it) }
     tags.year?.let { tag.setField(FieldKey.YEAR, it.toString()) }
     tags.trackNumber?.let { tag.setField(FieldKey.TRACK, it.toString()) }
+    tags.discNumber?.let { tag.setField(FieldKey.DISC_NO, it.toString()) }
     tags.genre?.let { tag.setField(FieldKey.GENRE, it) }
     tags.lyrics?.let { tag.setField(FieldKey.LYRICS, it) }
     if (artwork != null && artwork.isNotEmpty()) {
