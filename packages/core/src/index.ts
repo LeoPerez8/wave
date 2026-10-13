@@ -379,3 +379,35 @@ export type {
   M3uImportOutcome,
   M3uImportSummary,
 } from "./m3u.ts";
+export {
+  YT_MUSIC_FOLDER,
+  ytDownloadLookup,
+  ytDownloadRoot,
+  ytDownloadTags,
+  ytDownloadTarget,
+} from "./ytDownload.ts";
+export type {
+  YtAlbum,
+  YtAlbumTrack,
+  YtDownloadPlace,
+  YtDownloadTags,
+  YtDownloadTarget,
+} from "./ytDownload.ts";
+export {
+  YT_DOWNLOADS_NONE,
+  YT_DOWNLOAD_ACTION_LABELS,
+  stepYtDownloads,
+  ytDownloadActions,
+  ytDownloadLine,
+  ytDownloadProgress,
+  ytDownloadStatus,
+  ytDownloadsToStart,
+} from "./ytDownloads.ts";
+export type {
+  YtDownloadAction,
+  YtDownloadEvent,
+  YtDownloadFailure,
+  YtDownloadJob,
+  YtDownloadStatus,
+  YtDownloads,
+} from "./ytDownloads.ts";
