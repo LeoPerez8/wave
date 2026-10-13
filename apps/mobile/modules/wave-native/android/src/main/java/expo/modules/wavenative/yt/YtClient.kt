@@ -29,11 +29,12 @@ import kotlinx.serialization.json.Json
  * the audio stream itself, so no ad is requested or shown.
  */
 class YtClient private constructor(context: Context) {
+  private val appContext = context
   private val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
   private val connectivity = context.getSystemService(ConnectivityManager::class.java)
 
   /** innertubex brings no HTTP engine and sends `@Serializable` bodies, hence content negotiation. */
-  private val http: HttpClient by lazy {
+  internal val http: HttpClient by lazy {
     HttpClient(OkHttp) {
       // innertubex checks statuses and retries transient failures itself.
       expectSuccess = false
@@ -55,6 +56,12 @@ class YtClient private constructor(context: Context) {
       locale = YouTubeLocale(gl = Locale.getDefault().country.ifEmpty { "US" }, hl = "en")
     }
   }
+
+  /**
+   * Stream addresses for playing and downloading YT Music songs, through this
+   * client's session ([YtStreamResolver]).
+   */
+  val streams: YtStreamResolver by lazy { YtStreamResolver(appContext) }
 
   /** Whether YT Music is on (Settings); kept here so native callers see it without JS. */
   var enabled: Boolean
@@ -87,7 +94,7 @@ class YtClient private constructor(context: Context) {
     }
   }
 
-  private fun hasNetwork(): Boolean {
+  internal fun hasNetwork(): Boolean {
     val network = connectivity?.activeNetwork ?: return false
     return connectivity.getNetworkCapabilities(network)
       ?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
