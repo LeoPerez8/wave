@@ -1,3 +1,4 @@
+import { sortKey } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { useSyncExternalStore } from "react";
 
@@ -66,6 +67,17 @@ export const createPlaylist = (
   name: string,
   trackIds: readonly number[] = [],
 ): Promise<PlaylistAddResult> => edit((store) => store.createPlaylist(name, trackIds));
+
+/** A playlist just created empty, as Library › Playlists will list it: for its screen's first frame. */
+export const emptyPlaylistRow = (id: number, name: string): PlaylistRow => ({
+  id,
+  name,
+  sort: sortKey(name),
+  trackCount: 0,
+  durationMs: 0,
+  thumbPaths: [],
+  artworkPaths: [],
+});
 
 export const renamePlaylist = (id: number, name: string): Promise<void> =>
   edit((store) => store.renamePlaylist(id, name));

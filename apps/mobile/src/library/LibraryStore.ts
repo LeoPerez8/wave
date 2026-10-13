@@ -48,6 +48,7 @@ import { libraryCounts, sectionSongCounts, type LibraryCounts } from "./db/count
 import { selectGenreSongs } from "./db/genres";
 import type { RowPage } from "./db/database";
 import migrations from "./db/migrations";
+import { selectLinkRows, type LinkIds, type LinkRows } from "./db/links";
 import {
   homeSections,
   latestPlay,
@@ -452,6 +453,8 @@ export class LibraryStore extends Context.Service<
     readonly artistsByIds: (
       ids: readonly number[],
     ) => Effect.Effect<readonly ArtistRow[], LibraryStoreError>;
+    /** The album and artist rows behind links to them, read ahead of a tap (`db/links.ts`). */
+    readonly linkRows: (ids: LinkIds) => Effect.Effect<LinkRows, LibraryStoreError>;
     /**
      * Each played song's all-time listening (every play's time, counted plays,
      * latest play, track artist), in no order; Core's `listeningTotals` sums it.
@@ -1420,6 +1423,8 @@ const make = Effect.gen(function* () {
 
     artistsByIds: (ids) =>
       attempt("read ranked artists", () => (ids.length === 0 ? [] : listArtistsSync(db, ids))),
+
+    linkRows: (ids) => attempt("read linked rows", () => selectLinkRows(db, ids)),
 
     songListening: attempt("sum up listening", () => songListening(db)),
 

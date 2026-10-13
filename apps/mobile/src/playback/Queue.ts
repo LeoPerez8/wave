@@ -21,30 +21,12 @@ import * as Layer from "effect/Layer";
 import * as Semaphore from "effect/Semaphore";
 
 import { makeExternalStore } from "@/lib/externalStore";
-import type { SongRow } from "@/library/LibraryStore";
 import type { NativeSyncStep, PlayerItem } from "@/native/wavePlayer";
 
 import { Player, PlayerError, playbackState } from "./Player";
+import { learnQueueTracks, queueTracks, type QueueTrack } from "./queueTracks";
 
-/** What the player needs to know about a track to play it. */
-export interface QueueTrack {
-  readonly id: string;
-  readonly path: string;
-  readonly title: string;
-  readonly artist: string;
-  readonly album: string | null;
-  readonly artworkPath: string | null;
-}
-
-/** A library song as the player needs it. */
-export const toQueueTrack = (song: SongRow): QueueTrack => ({
-  id: String(song.id),
-  path: song.path,
-  title: song.title,
-  artist: song.artist,
-  album: song.album,
-  artworkPath: song.artworkPath,
-});
+export { toQueueTrack, type QueueTrack } from "./queueTracks";
 
 /** The queue as the app shows it (Up Next, shuffle and repeat toggles, the playing row). */
 export const queueState = makeExternalStore<QueueState>(EMPTY_QUEUE);
@@ -134,6 +116,28 @@ const toNative = (step: SyncStep): NativeSyncStep => {
 const sameKeys = (entries: readonly QueueEntry[], keys: readonly string[]): boolean =>
   entries.length === keys.length && entries.every((entry, i) => entry.key === keys[i]);
 
+/** The player item for [entry], from the tracks the queue learned. */
+const itemFor = (entry: QueueEntry): Effect.Effect<PlayerItem, PlayerError> => {
+  const track = queueTracks.get().get(entry.trackId);
+  if (track === undefined) {
+    return Effect.fail(
+      new PlayerError({
+        operation: "update the queue",
+        cause: `unknown track ${entry.trackId}`,
+      }),
+    );
+  }
+  const { path, title, artist, album, artworkPath } = track;
+  return Effect.succeed({ id: entry.key, path, title, artist, album, artworkPath });
+};
+
+/**
+ * Learns the tracks a command adds, before the queue changes, so Up Next
+ * shows them on its first frame; a new play forgets the old queue's.
+ */
+const learnTracks = (command: QueueCommand, added: readonly QueueTrack[]): void =>
+  learnQueueTracks(added, { forgetOthers: command.type === "play" });
+
 const reportError = (error: unknown): void =>
   playbackState.update((previous) => ({
     ...previous,
@@ -149,7 +153,6 @@ export const layer = Layer.effect(
     const player = yield* Player;
     // Every queue change, from the UI or the player, runs one at a time in this lane.
     const lane = yield* Semaphore.make(1);
-    const tracks = new Map<string, QueueTrack>();
     // What the native player holds, as far as JS knows. Only the lane edits the
     // list; the player moves `currentKey` on its own (auto-advance, notification).
     let native: PlayerList = { keys: [], currentKey: null };
@@ -176,19 +179,6 @@ export const layer = Layer.effect(
     const flush = Effect.sync(() => {
       if (settleTimer !== null) settle();
     });
-
-    const itemFor = (entry: QueueEntry): Effect.Effect<PlayerItem, PlayerError> => {
-      const track = tracks.get(entry.trackId);
-      if (track === undefined) {
-        return Effect.fail(
-          new PlayerError({
-            operation: "update the queue",
-            cause: `unknown track ${entry.trackId}`,
-          }),
-        );
-      }
-      return Effect.succeed({ ...track, id: entry.key });
-    };
 
     const applyPlan = (state: QueueState) =>
       Effect.gen(function* () {
@@ -221,12 +211,6 @@ export const layer = Layer.effect(
           }),
         ),
       );
-
-    /** Learns the tracks a command adds; a new play forgets the old queue's. */
-    const learnTracks = (command: QueueCommand, added: readonly QueueTrack[]): void => {
-      if (command.type === "play") tracks.clear();
-      for (const track of added) tracks.set(track.id, track);
-    };
 
     const applyRepeat = (state: QueueState) =>
       Effect.gen(function* () {
@@ -365,7 +349,7 @@ export const layer = Layer.effect(
           if (queueState.get().entries.length > 0) return false;
           yield* readNative;
           if (native.keys.length > 0) return false;
-          for (const track of added) tracks.set(track.id, track);
+          learnQueueTracks(added);
           queueState.set(state);
           // A fresh player stays paused: nothing here asks it to play.
           yield* sync(state);

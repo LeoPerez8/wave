@@ -3,10 +3,12 @@ import * as Effect from "effect/Effect";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { AppState } from "react-native";
 
+import { useFocusedVersion } from "@/lib/useFocusedVersion";
 import { WaveNative } from "@/native/waveNative";
 import { playHistoryVersion } from "@/playback/PlayHistory";
 
 import type { LibraryCounts } from "./db/counts";
+import type { LinkRows } from "./db/links";
 import type { HomeSections } from "./db/playHistory";
 import { libraryEdits, libraryVersion, scanState, type ScanState } from "./LibraryScan";
 import {
@@ -205,6 +207,30 @@ const getArtist = (store: LibraryStore["Service"], id: number) => store.getArtis
 const getGenre = (store: LibraryStore["Service"], id: number) => store.getGenre(id);
 const getFolder = (store: LibraryStore["Service"], id: number) => store.getFolder(id);
 
+const NO_LINKS: LinkRows = { album: null, artist: null };
+
+/**
+ * The album and artist rows behind links to them (Go to Album / Artist, Now
+ * Playing, an album's artist), read ahead of a tap so `openAlbum` /
+ * `openArtist` can hand them to the screen for its first frame. Undefined
+ * until read (or for an id not asked for).
+ */
+export const useLinkRows = (
+  albumId: number | undefined,
+  artistId: number | undefined,
+): { readonly album: AlbumRow | undefined; readonly artist: ArtistRow | undefined } => {
+  const query = useMemo(
+    () => LibraryStore.use((store) => store.linkRows({ albumId, artistId })),
+    [albumId, artistId],
+  );
+  const rows = useLibraryQuery(query, NO_LINKS);
+  // Until the new ids are read, the last result still names the old ones.
+  return {
+    album: rows.album !== null && rows.album.id === albumId ? rows.album : undefined,
+    artist: rows.artist !== null && rows.artist.id === artistId ? rows.artist : undefined,
+  };
+};
+
 export const useAlbum = (id: number): AlbumDetail | null | undefined => useDetail(id, getAlbum);
 export const useArtist = (id: number): ArtistDetail | null | undefined => useDetail(id, getArtist);
 export const useGenre = (id: number): GenreDetail | null | undefined => useDetail(id, getGenre);
@@ -251,10 +277,11 @@ const readHome = LibraryStore.use((store) => store.home);
 
 /**
  * The Home tab's sections, or undefined while loading. Re-read as soon as a
- * play starts or ends, or a star is saved.
+ * star is saved, and as soon as a play starts or ends while Home is focused
+ * (plays while it's hidden are read when it comes back).
  */
 export const useHome = (): HomeSections | undefined => {
-  const plays = useSyncExternalStore(playHistoryVersion.subscribe, playHistoryVersion.get);
+  const plays = useFocusedVersion(playHistoryVersion);
   return useLibraryQuery<HomeSections | undefined>(
     readHome,
     undefined,
@@ -270,10 +297,10 @@ const readListeningOverview = LibraryStore.use((store) =>
 
 /**
  * Home's listening overview (library and all-time listening totals), or
- * undefined while loading. Re-read after scan batches and as soon as a play
- * starts or ends.
+ * undefined while loading. Re-read after scan batches, and as soon as a play
+ * starts or ends while Home is focused (else when it comes back).
  */
 export const useListeningOverview = (): ListeningOverview | undefined => {
-  const plays = useSyncExternalStore(playHistoryVersion.subscribe, playHistoryVersion.get);
+  const plays = useFocusedVersion(playHistoryVersion);
   return useLibraryQuery<ListeningOverview | undefined>(readListeningOverview, undefined, plays);
 };
