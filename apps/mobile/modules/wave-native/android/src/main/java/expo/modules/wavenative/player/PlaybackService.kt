@@ -2,6 +2,7 @@ package expo.modules.wavenative.player
 
 import android.app.PendingIntent
 import android.content.Intent
+import android.content.res.Configuration
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
@@ -31,7 +32,9 @@ import com.google.common.util.concurrent.ListenableFuture
 /**
  * Hosts the player. Media3 provides the media notification, lock-screen and
  * Bluetooth/headset controls through the session, and the player handles
- * audio focus and pauses when headphones disconnect (becoming noisy).
+ * audio focus and pauses when headphones disconnect (becoming noisy). The
+ * notification shows Wave's two waves in the chosen primary
+ * ([WaveNotificationProvider]).
  *
  * The sleep timer runs here too, so it pauses playback with Wave in the
  * background (the JS side may be suspended by then).
@@ -147,6 +150,9 @@ class PlaybackService : MediaLibraryService() {
     player.addListener(sleepTimerListener)
     player.addListener(resumeListener)
     exoPlayer = player
+    NotificationAccent.init(this)
+    setMediaNotificationProvider(WaveNotificationProvider(this))
+    stopAccent = NotificationAccent.state.listen { triggerNotificationUpdate() }
     session = MediaLibrarySession.Builder(this, player, SessionCallback())
       .apply { openAppIntent()?.let(::setSessionActivity) }
       .build()
@@ -160,6 +166,16 @@ class PlaybackService : MediaLibraryService() {
 
   /** Stops following JS's shuffle and repeat ([AutoModes.state]). */
   private var stopModes: (() -> Unit)? = null
+
+  /** Stops redrawing the notification when the primary changes ([NotificationAccent.state]). */
+  private var stopAccent: (() -> Unit)? = null
+
+  /** The notification takes the primary's tone for the scheme, so a scheme change redraws it. */
+  @OptIn(UnstableApi::class)
+  override fun onConfigurationChanged(newConfig: Configuration) {
+    super.onConfigurationChanged(newConfig)
+    triggerNotificationUpdate()
+  }
 
   /** Shows the queue's shuffle and repeat on the mode buttons (Auto's player screen). */
   private fun showModes(modes: PlaybackModes) {
@@ -206,6 +222,8 @@ class PlaybackService : MediaLibraryService() {
   override fun onDestroy() {
     stopModes?.invoke()
     stopModes = null
+    stopAccent?.invoke()
+    stopAccent = null
     AutoLibrary.onChildrenRecovered = null
     browsers.clear()
     JsRuntime.release()

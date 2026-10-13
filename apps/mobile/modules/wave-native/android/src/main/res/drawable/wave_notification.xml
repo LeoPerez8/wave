@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The media notification's small icon (status bar, notification header, lock
+  screen): Wave's two waves as one white silhouette. Android keeps only the
+  alpha and draws it in the system's colours, or in the notification colour
+  (the chosen primary, see NotificationAccent) where it uses one.
+
+  The paths are logoIconPaths({ size: 24, inset: 1 }) from @wave/core, the
+  logo the launcher icons and splash logos are rendered from;
+  src/native/notificationIcon.test.ts fails if they drift.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+  <path
+      android:pathData="M2 9.5C2.417 9.205 2.833 8.911 3.25 8.651C3.667 8.392 4.083 8.167 4.5 8.003C4.917 7.84 5.333 7.738 5.75 7.709C6.167 7.68 6.583 7.724 7 7.837C7.417 7.95 7.833 8.13 8.25 8.358C8.667 8.586 9.083 8.86 9.5 9.149C9.917 9.438 10.333 9.741 10.75 10.023C11.167 10.304 11.583 10.565 12 10.773C12.417 10.981 12.833 11.137 13.25 11.222C13.667 11.308 14.083 11.323 14.5 11.265C14.917 11.208 15.333 11.078 15.75 10.891C16.167 10.705 16.583 10.461 17 10.189C17.417 9.917 17.833 9.617 18.25 9.324C18.667 9.03 19.083 8.745 19.5 8.5C19.917 8.255 20.333 8.051 20.75 7.913C21.167 7.774 21.583 7.7 22 7.7"
+      android:strokeColor="#FFFFFFFF"
+      android:strokeWidth="2"
+      android:strokeLineCap="round" />
+  <path
+      android:pathData="M2 13.442C2.417 13.204 2.833 13.009 3.25 12.88C3.667 12.752 4.083 12.69 4.5 12.701C4.917 12.713 5.333 12.798 5.75 12.947C6.167 13.096 6.583 13.308 7 13.56C7.417 13.811 7.833 14.1 8.25 14.394C8.667 14.688 9.083 14.986 9.5 15.254C9.917 15.521 10.333 15.757 10.75 15.935C11.167 16.113 11.583 16.232 12 16.278C12.417 16.324 12.833 16.297 13.25 16.201C13.667 16.104 14.083 15.938 14.5 15.722C14.917 15.506 15.333 15.239 15.75 14.954C16.167 14.67 16.583 14.366 17 14.08C17.417 13.793 17.833 13.525 18.25 13.304C18.667 13.084 19.083 12.913 19.5 12.811C19.917 12.709 20.333 12.677 20.75 12.717C21.167 12.757 21.583 12.871 22 13.044"
+      android:strokeColor="#FFFFFFFF"
+      android:strokeWidth="2"
+      android:strokeLineCap="round" />
+</vector>

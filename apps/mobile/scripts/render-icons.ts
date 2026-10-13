@@ -4,7 +4,7 @@
 import { writeFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
 
-import { DEFAULT_THEME } from "@wave/core";
+import { DEFAULT_THEME, LOGO_WAVES, logoWaveY, type LogoWave } from "@wave/core";
 
 type Rgb = readonly [number, number, number];
 
@@ -26,26 +26,23 @@ function rgb(hex: string): Rgb {
 const LIGHT_TEAL = rgb(DEFAULT_THEME.light.accent);
 const LIGHT_AMBER = rgb(DEFAULT_THEME.light.highlight);
 
-// The logo in its own units: each wave runs x = -1..1.
-const STROKE = 0.2;
-const AMPLITUDE = 0.18;
-const PERIOD = 1.6;
-const GAP = 0.25; // vertical offset of each wave from the logo's middle
+// The logo's shape is Core's (`LOGO_WAVES`), which the notification icon also draws.
+const STROKE = LOGO_WAVES.stroke;
 
 type Point = readonly [number, number];
 
-/** A wave whose crest sits at `crestX`, shifted `dy` down from the middle. */
-function wave(crestX: number, dy: number): Point[] {
+/** One of the logo's waves as a fine polyline, x = -1..1. */
+function wave(which: LogoWave): Point[] {
   const points: Point[] = [];
   const steps = 240;
   for (let i = 0; i <= steps; i++) {
     const x = -1 + (2 * i) / steps;
-    points.push([x, dy - AMPLITUDE * Math.cos((2 * Math.PI * (x - crestX)) / PERIOD)]);
+    points.push([x, logoWaveY(which, x)]);
   }
   return points;
 }
 
-const WAVES = { top: wave(-0.6, -GAP), bottom: wave(-0.76, GAP) };
+const WAVES = { top: wave("top"), bottom: wave("bottom") };
 
 /** Furthest any stroke edge reaches from the logo's centre. */
 function radialExtent(): number {
