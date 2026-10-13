@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import {
   DEFAULT_THEME,
   DEFAULT_THEME_CHOICE,
+  NIGHT_SLATE,
   THEME_SWATCHES,
   contrastRatio,
   isDefaultThemeChoice,
@@ -50,22 +51,30 @@ describe("themeFor", () => {
     assert.deepEqual(failures, []);
   });
 
-  test("the chosen background is the ground, and grouped areas share it in dark mode", () => {
-    const theme = themeFor(choose({ light: "sand", dark: "black" }));
-    assert.equal(theme.light.background, "#ede6da");
-    assert.equal(theme.dark.background, "#000000");
-    assert.equal(theme.dark.grouped, "#000000");
+  test("dark mode defaults to true black", () => {
+    assert.equal(DEFAULT_THEME_CHOICE.dark, "black");
+    assert.equal(themeFor(DEFAULT_THEME_CHOICE).dark.background, "#000000");
   });
 
-  test("on true black, cards and hairlines keep the shipped contrast steps instead of collapsing", () => {
-    const shipped = DEFAULT_THEME.dark;
-    const black = themeFor(choose({ dark: "black" })).dark;
+  test("Slate is still offered, and gives the night slate theme Wave shipped before", () => {
+    assert.deepEqual(themeFor(choose({ dark: "slate" })).dark, NIGHT_SLATE);
+  });
+
+  test("the chosen background is the ground, and grouped areas share a tinted dark ground", () => {
+    const theme = themeFor(choose({ light: "sand", dark: "navy" }));
+    assert.equal(theme.light.background, "#ede6da");
+    assert.equal(theme.dark.background, "#0a0f1f");
+    assert.equal(theme.dark.grouped, "#0a0f1f");
+  });
+
+  test("on another dark ground, cards and hairlines keep Night Slate's contrast steps", () => {
+    const graphite = themeFor(choose({ dark: "graphite" })).dark;
     for (const token of ["surface", "fill", "separator"] as const) {
-      const expected = contrastRatio(shipped[token], shipped.background);
-      const actual = contrastRatio(black[token], black.background);
+      const expected = contrastRatio(NIGHT_SLATE[token], NIGHT_SLATE.background);
+      const actual = contrastRatio(graphite[token], graphite.background);
       assert.ok(Math.abs(actual - expected) < 0.03, `${token}: ${actual} vs ${expected}`);
     }
-    assert.ok(brighter(black.separator, black.surface));
+    assert.ok(brighter(graphite.separator, graphite.surface));
   });
 
   test("a light ground derives cards lighter, and groups, fills and hairlines darker, than itself", () => {
@@ -103,6 +112,17 @@ describe("readThemeChoice", () => {
     assert.deepEqual(readThemeChoice(null), DEFAULT_THEME_CHOICE);
   });
 
+  test("a dark background picked before true black became the default is kept", () => {
+    const stored = JSON.stringify({
+      light: "fog",
+      dark: "slate",
+      primary: "teal",
+      secondary: "ember",
+    });
+    assert.equal(readThemeChoice(stored).dark, "slate");
+    assert.equal(themeFor(readThemeChoice(stored)).dark.background, "#0a1113");
+  });
+
   test("reads back a stored choice", () => {
     const stored = { light: "sage", dark: "black", primary: "violet", secondary: "gold" };
     assert.deepEqual(readThemeChoice(JSON.stringify(stored)), stored);
@@ -119,17 +139,29 @@ describe("readThemeChoice", () => {
 
 describe("themeSwatchRows", () => {
   test("lists light and dark backgrounds, primary and secondary, with the current choice marked", () => {
-    const rows = themeSwatchRows(choose({ dark: "black", primary: "rose" }), "dark");
+    const rows = themeSwatchRows(choose({ dark: "slate", primary: "rose" }), "dark");
     assert.deepEqual(
       rows.map((row) => [row.group, row.swatches.filter((s) => s.selected).map((s) => s.id)]),
       [
         ["light", ["fog"]],
-        ["dark", ["black"]],
+        ["dark", ["slate"]],
         ["primary", ["rose"]],
         ["secondary", ["ember"]],
       ],
     );
-    assert.equal(rows[1]?.swatches[1]?.label, "True black");
+  });
+
+  test("True black leads the dark row and is marked by default; Slate still follows it", () => {
+    const [, dark] = themeSwatchRows(DEFAULT_THEME_CHOICE, "dark");
+    assert.deepEqual(
+      dark?.swatches
+        .slice(0, 2)
+        .map(({ label, colour, selected }) => ({ label, colour, selected })),
+      [
+        { label: "True black", colour: "#000000", selected: true },
+        { label: "Slate", colour: "#0a1113", selected: false },
+      ],
+    );
   });
 
   test("ink swatches show the colour they would take, readability adjustment included", () => {
@@ -154,5 +186,6 @@ describe("isDefaultThemeChoice", () => {
     assert.equal(isDefaultThemeChoice(DEFAULT_THEME_CHOICE), true);
     assert.equal(isDefaultThemeChoice(readThemeChoice(null)), true);
     assert.equal(isDefaultThemeChoice(choose({ secondary: "gold" })), false);
+    assert.equal(isDefaultThemeChoice(choose({ dark: "slate" })), false);
   });
 });
