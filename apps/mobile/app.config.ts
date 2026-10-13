@@ -1,5 +1,6 @@
 import type { ExpoConfig } from "expo/config";
 
+import { withLauncherIcons } from "./plugins/withLauncherIcons.ts";
 import { withLaunchSplash } from "./plugins/withLaunchSplash.ts";
 
 // Font files ship inside the @expo-google-fonts/inter package and are embedded
@@ -71,13 +72,16 @@ const config: ExpoConfig = {
         android: {
           // Android 12 is the floor (native RenderEffect is available should any blur be added).
           minSdkVersion: 31,
+          // innertubex (YT Music) is built with Kotlin 2.4; an older compiler can't read it.
+          kotlinVersion: "2.4.20",
         },
       },
     ],
   ],
 };
 
-// The moving logo on the launch splash, and a splash for each choice Settings › Theme offers
-// (Android 13+). Applied here, before the plugin list, so its changes run after
-// expo-splash-screen's (Expo runs mods in reverse order) and it can edit that splash's style.
-export default withLaunchSplash(config);
+// The moving logo on the launch splash and a splash for each choice Settings › Theme offers
+// (Android 13+), and one launcher icon per primary × secondary, switched from Settings › Theme.
+// Applied here, before the plugin list, so the splash's changes run after expo-splash-screen's
+// (Expo runs mods in reverse order) and can edit that splash's style.
+export default withLaunchSplash(withLauncherIcons(config));

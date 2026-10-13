@@ -145,10 +145,37 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
   /** Deletes every downloaded artist photo. */
   clearArtistPhotos(): Promise<void>;
   /**
+   * Makes `alias` (one of `aliases`, activity-alias names without the package)
+   * Wave's launcher icon. It switches once Wave leaves the screen.
+   */
+  setLauncherIcon(alias: string, aliases: readonly string[]): Promise<void>;
+  /**
    * Saves what the next cold start opens on (Core's `launchTheme`) and, on
    * Android 13+, picks its splash style for Android to draw.
    */
   setLaunchTheme(theme: LaunchTheme): Promise<void>;
+  /**
+   * Writes found lyrics (LRC or plain text) and genre into a song's file,
+   * replacing what's there; null leaves a field alone. A format Wave can't
+   * write tags to gets the lyrics in a sidecar `.lrc` and no genre. Rejects
+   * when the file can't be written.
+   */
+  writeLyricsAndGenre(
+    path: string,
+    lyrics: string | null,
+    genre: string | null,
+  ): Promise<NativeTagWrite>;
+}
+
+/**
+ * Where `writeLyricsAndGenre` put what it was given (Core's `TagWriteReport`)
+ * and, when the tags changed, the file read again as a scan reads it.
+ */
+export interface NativeTagWrite {
+  readonly lyrics: "tags" | "sidecar" | "none";
+  readonly genre: "tags" | "notWritten" | "none";
+  readonly track: NativeScannedTrack | null;
+  readonly artwork: NativeArtwork | null;
 }
 
 /** A saved artist photo: the large image (artist page) and the thumbnail (lists). */

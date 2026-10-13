@@ -25,9 +25,11 @@ v1 delivers the core player and library. v2 adds the advanced audio and library-
 - **Queue** — the ordered list of tracks to be played, including the current one and **Up Next**.
 - **Play event** — one record per time a track starts playing, with how long it was listened to and how it ended.
 - **Counted play** — a play event that counts towards play counts: listened to for more than 15 seconds, or, for a song of 15 seconds or less, played to the end. Each play event counts at most once, however long it goes on.
+- **Sidecar** — a `.lrc` lyrics file beside an audio file (`Song.lrc` or `Song.mp3.lrc`).
 - **Favorite** — a starred track (Apple Music's star).
 - **Artist image** — the circle an artist is shown with: their **artist photo** (downloaded online, see Artist photos) when there is one, else the cover of the album that represents them, else their initial.
 - **Now Playing** — the full-screen player; **Mini player** — the floating glass pill above the tab bar.
+- **YT Music song** — a song found on YouTube Music rather than in the Library. It is identified by its YouTube video id (`yt:<videoId>` wherever a track id is expected, so it can't collide with a Library id), can be streamed or queued, and becomes a Track only once it's downloaded into the Library. A YT Music song the Library already has (see YT Music) is never offered as one. _Avoid_: online track, remote track, stream.
 
 ## User Stories
 
@@ -121,6 +123,14 @@ v1 delivers the core player and library. v2 adds the advanced audio and library-
 65. As a user, I want the entire interface in English, so that it is consistent.
 66. As a user, I want every tap to animate, with the animation duration adjustable in milliseconds in Settings, so that the app responds the way I like.
 
+### YT Music
+
+67. As a user, I want Search to also look on YouTube Music and list matching songs below my library's results, so that I can find music that isn't on my phone.
+68. As a user, I want songs I already have not to be repeated there, so that the section only shows what my library lacks.
+69. As a user, I want a quiet line instead of an error when I'm offline or YouTube Music doesn't answer, so that searching my library is never in the way.
+70. As a user, I want to turn YT Music off in Settings, after which Wave makes no YouTube requests at all, so that I decide what leaves my phone.
+71. As a user, I want no ads, no Premium upsell and nothing held back for a free account, so that Wave stays my own player.
+
 ## Implementation Decisions
 
 ### Platform and distribution
@@ -128,7 +138,15 @@ v1 delivers the core player and library. v2 adds the advanced audio and library-
 - Android only. Minimum Android 12 (API 31, required for native blur), target the latest SDK. Tuned for the Galaxy S24+ (120 Hz).
 - App name **Wave**, application id `dev.leoperez.wave` (permanent).
 - Personal use, sideloaded APK. No Play Store, so `MANAGE_EXTERNAL_STORAGE` (all-files access) is acceptable.
-- No backend and no accounts. The one network feature is downloading artist photos (below); everything else works offline.
+- No backend of Wave's own. The Library works offline; the online features are listed under Network.
+
+### Network
+
+Wave uses the network for three features, each behind its own Settings switch (on by default) that stops every request it makes.
+
+- **Artist photos** (Deezer's open API, free and keyless; below): sends artist names.
+- **Lyrics and genre** (LRCLIB and Deezer's open API, free and keyless; below): sends a song's title, artist, album and duration.
+- **YT Music** (YouTube Music, below): `music.youtube.com/youtubei/v1/*` for search (and, as later tickets land, browsing, song details and the player), `www.youtube.com` for the player script and visitor data, `*.googlevideo.com` for audio, `accounts.google.com` for sign-in. It sends what's typed in Search, the video ids of songs it plays or downloads, YouTube's visitor data and, once signed in, the account's session cookie. It never sends the Library's contents, play history or stats. Offline, or when YouTube fails, the YT Music parts show a quiet line and the Library works as before.
 
 ### Artist photos
 
@@ -136,6 +154,24 @@ v1 delivers the core player and library. v2 adds the advanced audio and library-
 - **Matching** is Core's (`artistPhoto.ts`): names compare with case, accents, a leading "The", punctuation and "&"/"and" ignored; only an exact match counts, and of namesakes the most followed one (its photo or none). "Various Artists", "Unknown Artist" and names without letters are never looked up.
 - **Caching.** Lookups run in the background after each library scan, three at a time, and stop after a few failures in a row (offline). Photos are saved beside the album artwork (`files/artwork/artists/`) as a thumbnail (lists, menus) and a large image (artist page), and are never fetched again. A lookup with no match is retried after a week, a failed one after a day (`artist_photos` table, by artist key).
 - **Fallback.** Until a photo arrives, without a match, offline or with downloads off, the artist's album-artwork image shows.
+
+### Lyrics and genre
+
+- **Find Lyrics and Genre** (a song's long-press menu and the selection bar) looks a song up online and writes what it finds into the file, replacing the lyrics and genre there. Settings › Lyrics and genre runs it on the whole Library in the background, with progress and Cancel, and ends with a summary: updated, not found, failed. It stops early when the services can't be reached (three lookups failing in a row).
+- **Sources.** Lyrics come from **LRCLIB** (`lrclib.net`, free, no key): synced (LRC) lyrics are preferred, plain lyrics are taken when that's all there is. The genre is that of the song's album on **Deezer's open API**: a track search, then the matched album's first genre. A song's **title, artist, album and duration** are the only things sent, and "Unknown Artist" / "Various Artists" songs are never looked up. A "Find lyrics and genre online" switch in Settings (on by default) says so; off, Wave makes no lookups and the menu entry is gone.
+- **Matching** is Core's (`lyricsAndGenre.ts`): titles and artists compare like artist photos (case, accents, punctuation, a leading "The" ignored), plus featured artists ("feat. X") and version notes in brackets or after a dash ("(Live)", "- Remastered 2011"). Lyrics must be within 2 seconds of the song's length; then synced beats plain, the song's own album beats another, and the closest length wins. The genre's album is the matched track's, preferring the song's own album, then the closest length. No match leaves that field alone; no match at all leaves the file untouched.
+- **Writing** is native (`SongTagWriter`, jaudiotagger): only the lyrics and genre fields change, and the audio and every other tag stay as they were (JVM tests check this for MP3, FLAC, M4A, Ogg Vorbis and WAV). A WAV file's lyrics go into an ID3 chunk (RIFF INFO has no lyrics field) and its genre into both. A format Wave can't write tags to (Opus, raw AAC) gets the lyrics in a sidecar `.lrc` and no genre, and the summary lists those songs. A sidecar already beside a file is replaced too, since it would win over the tags in the Lyrics view.
+- **After writing** the file is read again as a scan reads it and its index entry updated, so Genres, Search and an open Lyrics view show the new values without a rescan.
+
+### YT Music
+
+- YouTube Music has no official API. Wave talks to it the way Metrolist does: through **innertubex** (MetrolistGroup/innertubex, from JitPack), from the native module. innertubex sends requests and handles sessions, ciphers and stream extraction; reading the answers into songs is Wave's (`YtSearchParser`, after Metrolist's page parsers). Metrolist is the reference for anything the library leaves to the app.
+- **Licence.** innertubex is GPL-3.0, and so is any Metrolist code Wave ports, so the APK that ships them is a GPL-3.0 combined work.
+- **Wave is its own client, not YouTube's app.** Nothing YouTube serves as an ad is ever requested, shown or played (Wave plays the audio stream itself), there is no Premium upsell or nag, and nothing is limited because the account isn't Premium; the only difference is the audio bitrate YouTube's servers send. Wave doesn't report plays to YouTube.
+- **Search.** Below the Library's results, a YT Music section lists the songs YouTube Music's "Songs" search finds: artwork, title, artists · album, length. It asks once typing pauses (300 ms), never blocks typing or the Library's results, keeps the last results up while the next query loads and drops answers to queries no longer typed (Core's `stepYtSection`). Offline, or when YouTube fails, the section shows a quiet line (`ytSectionView`). With nothing in the Library matching, the section still shows under a "nothing in your library" line.
+- **Already in the Library.** A YT Music song is left out when a Library song has its title (case, accents, punctuation and a "feat." credit aside), shares an artist with it and, when both lengths are known, is as long within 3 seconds, so a live take or an edit still shows (Core's `libraryMatcher`).
+- **Off switch.** Settings › YT Music › Use YT Music (on by default). Off, the section isn't shown and the native client refuses every request before it reaches the network; the switch is kept natively too, so the playback service obeys it without JS.
+- **Native shape.** One process-wide `YtClient` (package `expo.modules.wavenative.yt`) owns the HTTP client and innertubex's session; the `WaveYtMusic` Expo module exposes it to JS (`setEnabled`, `searchSongs`; failures reject with `ERR_YT_OFFLINE`, `ERR_YT_FAILED` or `ERR_YT_DISABLED`), wrapped by the app's `YtMusic` Effect service. Building it needs Kotlin 2.4 (innertubex's), set through `expo-build-properties`.
 
 ### Stack (mirrors the T3 Code mobile app)
 
@@ -152,9 +188,10 @@ v1 delivers the core player and library. v2 adds the advanced audio and library-
    - _Search_ — normalisation (case, accents, punctuation), word-prefix matching and ranking across entity types.
    - _Lyrics_ — LRC parsing (timestamps, multiple stamps per line, offsets) and current-line lookup.
    - _Sleep timer_ — deadline/end-of-track logic.
+   - _YT Music_ — YT Music song ids (`ytTrackId`, `parseTrackId`), whether a song is already in the Library (`libraryMatcher`) and the Search section's state (`stepYtSection`, `ytSectionView`).
    - _M3U import_ — parsing `.m3u` / `.m3u8` (`#EXTM3U`, `#EXTINF`, comments), resolving entries (absolute, relative to the playlist file, `file://`, Windows separators) and matching them to Library tracks by path (case-insensitively, as Android's storage is), the playlist's name, Keep Both's numbered name and the import summary (`m3u.ts`). The native module's file picker reads the files and their paths.
 2. **Native player** (local Expo module, Kotlin, Media3). A `MediaSessionService` hosting ExoPlayer, so notification, lock screen, Bluetooth/headset buttons, audio focus and becoming-noisy handling come from Media3. The JS side owns ordering (from the queue engine) and pushes the ordered item list; the native side plays it gaplessly and reports state, throttled position, item transitions with a reason (auto-advance, skip, seek, error) and errors. Native shuffle is not used. The audio pipeline keeps a hook for custom audio processors so equalizer, crossfade and ReplayGain (v2) slot in without restructuring.
-3. **Native scanner** (same Kotlin module). Walks the scan roots minus exclusions, reads tags with a JVM tag library that also supports writing (needed by the v2 tag editor), extracts embedded artwork once per unique image (hashed, cached as files) together with a small colour palette (Android Palette) for the Now Playing tint, and finds sidecar `.lrc` files. It streams results to JS in batches of ~500 and supports an incremental mode driven by known path + modification time + size.
+3. **Native scanner** (same Kotlin module). Walks the scan roots minus exclusions, reads tags with a JVM tag library that also supports writing (needed by the v2 tag editor), extracts embedded artwork once per unique image (hashed, cached as files) together with a small colour palette (Android Palette) for the Now Playing tint, and finds sidecar `.lrc` files. It streams results to JS in batches of ~500 and supports an incremental mode driven by known path + modification time + size. The same module holds the YT Music client (`yt` package, see YT Music).
 4. **Library store** (app, Drizzle on expo-sqlite). The single owner of the schema and migrations. Tables for tracks, albums, artists, genres, folders, artwork (path + palette), playlists and playlist items, favorites, play events, scan roots/exclusions, recent searches, and persisted playback state. Home sections and play counts are queries over play events.
 5. **App services** (app, Effect). Wrap the native modules as typed services and event streams; orchestrate scans (core reconciliation → store); drive the queue engine and sync it to the native player; record play events through the classifier; persist and restore playback state.
 6. **UI** (app, Expo Router). Three tabs — Home, Library, Search (Search rendered as a separate glass pill). A custom glass tab bar, a floating glass mini player and a full-screen Now Playing presented over the tabs with an interactive drag-to-dismiss gesture. Detail screens for album, artist, playlist, genre and folder. Settings for scan roots, exclusions and rescan.
@@ -167,7 +204,7 @@ One row per playback start: track, started-at, listened milliseconds, track dura
 
 - The visual world is **The Quiet Catalog** (ECM Records' cover program as the reference): artwork in calm, tinted fields, small and exact type. The decision, its direction contract and the product record live in `apps/mobile/PRODUCT.md` and `apps/mobile/.impeccable/`; `apps/mobile/DESIGN.md` documents the built system.
 - Components are fully custom (Apple Music is inspiration only); system and predictive Back always work.
-- Theme follows the system. Fog ground in light (`#e0ecef`), true black in dark (`#000000`); on it, dark grouped areas (`#0a1113`, a ramp step only dark mode uses, so light mode's text is untouched), cards and fills, and separators climb one ramp step each. Every neutral comes from one tonal ramp; teal accent, ember highlight. Text, accent and highlight meet WCAG AA on the ground and cards in both themes. Tokens live in `apps/mobile/global.css`, mirrored and contrast-checked in Core (`packages/core/src/theme.ts`); the launch splash uses the same grounds. Settings › Theme picks a background per mode (true black is the dark default; Slate, the night slate ground Wave shipped before, is still offered and looks as it did), a primary and a secondary from preset swatches; a background chosen before the default changed is kept. For the other backgrounds Core (`themeChoice.ts`) derives cards, groups, fills, separators, text and the dialog scrim by keeping each token's contrast against the ground, and deepens or brightens inks that wouldn't read. The choice is applied at runtime over the CSS defaults. The launch splash shows the chosen backgrounds from the next cold start: Android draws it before Wave's code runs, so the app ships a splash style per pair of preset backgrounds and, whenever the theme changes, saves the choice natively (Core's `launchTheme`: the style to open with and each mode's ground, primary and secondary) and picks that style with `SplashScreen.setSplashScreenTheme`. That needs Android 13; on Android 12 the splash keeps the default theme. The splash ships a style per choice, so its logo wears the chosen primary (top wave) and secondary (bottom wave) too, and the logo moves: its waves flow from the first frame until the first screen is ready, then the splash fades out, never before the first sweep ends; with Remove animations on, the logo stands still (Core's `launchLogo.ts`).
+- Theme follows the system. Fog ground in light (`#e0ecef`), true black in dark (`#000000`); on it, dark grouped areas (`#0a1113`, a ramp step only dark mode uses, so light mode's text is untouched), cards and fills, and separators climb one ramp step each. Every neutral comes from one tonal ramp; teal accent, ember highlight. Text, accent and highlight meet WCAG AA on the ground and cards in both themes. Tokens live in `apps/mobile/global.css`, mirrored and contrast-checked in Core (`packages/core/src/theme.ts`); the launch splash uses the same grounds. Settings › Theme picks a background per mode (true black is the dark default; Slate, the night slate ground Wave shipped before, is still offered and looks as it did), a primary and a secondary from preset swatches; a background chosen before the default changed is kept. For the other backgrounds Core (`themeChoice.ts`) derives cards, groups, fills, separators, text and the dialog scrim by keeping each token's contrast against the ground, and deepens or brightens inks that wouldn't read. The choice is applied at runtime over the CSS defaults. The launch splash shows the chosen backgrounds from the next cold start: Android draws it before Wave's code runs, so the app ships a splash style per pair of preset backgrounds and, whenever the theme changes, saves the choice natively (Core's `launchTheme`: the style to open with and each mode's ground, primary and secondary) and picks that style with `SplashScreen.setSplashScreenTheme`. That needs Android 13; on Android 12 the splash keeps the default theme. The splash ships a style per choice, so its logo wears the chosen primary (top wave) and secondary (bottom wave) too, and the logo moves: its waves flow from the first frame until the first screen is ready, then the splash fades out, never before the first sweep ends; with Remove animations on, the logo stands still (Core's `launchLogo.ts`). The launcher icon follows the primary (top wave) and secondary (bottom wave) on black: Wave ships an icon per pair as activity aliases and switches when it leaves the screen, warning first if the launcher drops the home-screen icon on a switch.
 - Inter as the typeface, with a light large title and tracked-caps catalog lines; Tabler line icons.
 - Signature move: a thin A–Z spine on long lists that sets one huge letter in the field while scrubbing, with a haptic tick per letter.
 - Every tap animates through one press primitive whose duration comes from Settings (0–600 ms, default 140 ms) and respects the system's reduce-motion setting.
@@ -191,7 +228,7 @@ One row per playback start: track, started-at, listened milliseconds, track dura
 
 - v2 features: equalizer and presets, crossfade, ReplayGain, tag editor, smart playlists, M3U export, Last.fm scrobbling, home-screen widgets, album artwork download, statistics/metrics screens (v1 only records the data).
 - iOS, desktop, web.
-- Streaming services, cloud libraries, network shares.
+- Streaming services other than YouTube Music (see YT Music), cloud libraries, network shares.
 - Accounts, sync, backup.
 - Play Store distribution.
 - Chromecast / casting; Android Auto beyond what Media3 provides for free. Android Auto is one of the two primary listening scenes, so a browsable Auto library is the first v2 candidate.

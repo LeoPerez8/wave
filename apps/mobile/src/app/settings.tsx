@@ -16,6 +16,7 @@ import { startRescan } from "@/library/runtime";
 import { Press } from "@/motion/Press";
 import { ArtistPhotosSettingsSection } from "@/settings/ArtistPhotosSettingsSection";
 import { GlassSettingsSection } from "@/settings/GlassSettingsSection";
+import { LyricsAndGenreSettingsSection } from "@/settings/LyricsAndGenreSettingsSection";
 import { setShortcutTab, useShortcutTab } from "@/settings/shortcutTab";
 import { ThemeSettingsSection } from "@/settings/ThemeSettingsSection";
 import {
@@ -24,6 +25,7 @@ import {
   useLongPressDelayMs,
 } from "@/settings/longPressDelay";
 import { setTapAnimationMs, TAP_ANIMATION, useTapAnimationMs } from "@/settings/tapAnimation";
+import { YtMusicSettingsSection } from "@/settings/YtMusicSettingsSection";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 /** One of the shortcut tab choices; the current one carries a check. */
@@ -138,6 +140,10 @@ export default function SettingsScreen() {
         </Text>
 
         <ArtistPhotosSettingsSection />
+
+        <LyricsAndGenreSettingsSection />
+
+        <YtMusicSettingsSection />
 
         <CatalogLine className="mb-2 mt-12">Developer</CatalogLine>
         <Hairline />

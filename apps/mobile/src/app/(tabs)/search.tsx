@@ -1,5 +1,5 @@
 import { IconSearch } from "@tabler/icons-react-native";
-import type { SearchKind } from "@wave/core";
+import { type SearchKind, ytSectionView } from "@wave/core";
 import { useFocusEffect } from "expo-router";
 import { type ComponentRef, useCallback, useDeferredValue, useMemo, useRef, useState } from "react";
 import { ScrollView, Text, TextInput, View } from "react-native";
@@ -17,7 +17,14 @@ import { rise, riseReduced } from "@/motion/entry";
 import { clearRecentSearches, rememberSearch, useRecentSearches } from "@/search/recentSearches";
 import type { SongRow } from "@/library/LibraryStore";
 import type { ActionItems } from "@/playback/actionTargets";
-import { RESULT_LIMIT, resultRows, songResults } from "@/search/rows";
+import {
+  noLibraryResultsRow,
+  RESULT_LIMIT,
+  resultRows,
+  songResults,
+  ytMusicRows,
+} from "@/search/rows";
+import { useYtMusicSection } from "@/search/ytMusicSearch";
 import { onSearchFocusRequest, takeSearchFocusRequest } from "@/search/focusRequest";
 import { SearchField } from "@/search/SearchField";
 import { useSearchIndex } from "@/search/searchIndex";
@@ -101,17 +108,29 @@ export default function SearchScreen() {
     }, []),
   );
 
-  const index = useSearchIndex(focused || query !== "");
+  const library = useSearchIndex(focused || query !== "");
+  const index = library?.index ?? null;
   // The field updates on every keystroke; results follow as soon as they're ready.
   const deferredQuery = useDeferredValue(query);
   const results = useMemo(
     () => index?.search(deferredQuery, { limit: RESULT_LIMIT }) ?? null,
     [index, deferredQuery],
   );
-  const rows = useMemo(
-    () => (results === null ? [] : resultRows(results, expanded)),
-    [results, expanded],
+  // YT Music answers on its own time, below the library's results; songs the library has are left out.
+  const ytSection = useYtMusicSection(query);
+  const inLibrary = library?.inLibrary;
+  const ytView = useMemo(
+    () => (inLibrary === undefined ? null : ytSectionView(ytSection, inLibrary)),
+    [ytSection, inLibrary],
   );
+  const libraryEmpty = results !== null && results.groups.length === 0;
+  const rows = useMemo(() => {
+    if (results === null) return [];
+    const ours = libraryEmpty
+      ? [noLibraryResultsRow(deferredQuery)]
+      : resultRows(results, expanded);
+    return [...ours, ...ytMusicRows(ytView)];
+  }, [results, libraryEmpty, deferredQuery, expanded, ytView]);
 
   // Song results can be selected. The selection lives here, not in the list,
   // so a new query (or none matching) keeps it: checked songs that drop out of
@@ -139,7 +158,8 @@ export default function SearchScreen() {
   // What's shown; a change of it rises in. Results and no results count as
   // one, so refining a query never animates or remounts the list.
   const content = query.trim() === "" ? "recents" : index === null ? "preparing" : "results";
-  const noResults = results !== null && results.groups.length === 0 && deferredQuery === query;
+  // With YT Music on, its section shows even when the library has nothing.
+  const noResults = libraryEmpty && ytView === null && deferredQuery === query;
   return (
     <View className="flex-1 bg-background">
       <View style={{ paddingTop: insets.top + 16, paddingHorizontal: grid.margin, gap: 16 }}>

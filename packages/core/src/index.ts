@@ -206,6 +206,14 @@ export type {
   ThemeSwatchOption,
   ThemeSwatchRow,
 } from "./themeChoice.ts";
+export {
+  LAUNCHER_ICONS,
+  LAUNCHER_ICON_ART,
+  LAUNCHER_ICON_RADIUS,
+  launcherIconFor,
+  launcherIconSwitch,
+} from "./launcherIcon.ts";
+export type { LauncherBehaviour, LauncherIcon, LauncherIconSwitch } from "./launcherIcon.ts";
 export { LAUNCH_SPLASH_THEMES, launchTheme } from "./launchTheme.ts";
 export type { LaunchColors, LaunchSplashTheme, LaunchTheme } from "./launchTheme.ts";
 export { LAUNCH_LOGO, launchLogoExit, launchLogoWaves } from "./launchLogo.ts";
@@ -318,6 +326,47 @@ export { MORE_FROM_ARTIST } from "./queue.ts";
 export { artistRanking } from "./moreFromArtist.ts";
 export type { ArtistRankingInput, ArtistRankingSong } from "./moreFromArtist.ts";
 export type { SheetEvent, SheetPhase, SheetStep } from "./sheetLifecycle.ts";
+export { libraryMatcher, parseTrackId, ytSongCredit, ytTrackId } from "./ytMusic.ts";
+export type { LibrarySongKey, TrackRef, YtSong } from "./ytMusic.ts";
+export {
+  YT_SEARCH_DEBOUNCE_MS,
+  YT_SECTION_HIDDEN,
+  stepYtSection,
+  ytSearchQuery,
+  ytSectionView,
+} from "./ytSearch.ts";
+export type {
+  YtQuietReason,
+  YtSection,
+  YtSectionEvent,
+  YtSectionNote,
+  YtSectionView,
+} from "./ytSearch.ts";
+export {
+  LRCLIB_HEADERS,
+  deezerAlbumGenre,
+  deezerAlbumUrl,
+  deezerTrackCandidates,
+  deezerTrackSearchUrl,
+  describeTagLookups,
+  lookupsUnreachable,
+  lrclibCandidates,
+  lrclibSearchUrl,
+  pickFoundLyrics,
+  pickGenreAlbum,
+  songLookup,
+  songTagOutcome,
+} from "./lyricsAndGenre.ts";
+export type {
+  FoundLyrics,
+  FoundTags,
+  GenreCandidate,
+  LyricsCandidate,
+  SongLookup,
+  SongTagOutcome,
+  TagLookupStop,
+  TagWriteReport,
+} from "./lyricsAndGenre.ts";
 export {
   confirmImportReplace,
   importNameClash,

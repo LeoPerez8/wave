@@ -52,6 +52,8 @@ export interface ActionSubject {
   readonly surface?: ActionSurface | undefined;
   /** The menu was opened from a list that can select: it offers Select. */
   readonly selectable?: boolean | undefined;
+  /** Settings allows looking songs up online: songs offer Find Lyrics and Genre. */
+  readonly onlineLookups?: boolean | undefined;
   /** The current route, so Go to doesn't lead to the page you're on. */
   readonly here: string;
 }
@@ -68,6 +70,7 @@ export type ItemAction =
   | "renamePlaylist"
   | "deletePlaylist"
   | "deletePlaylists"
+  | "findLyricsAndGenre"
   | "select"
   | "delete";
 
@@ -90,6 +93,7 @@ export const ITEM_ACTION_LABELS: { readonly [A in ItemAction]: string } = {
   renamePlaylist: "Rename Playlist",
   deletePlaylist: "Delete Playlist",
   deletePlaylists: "Delete Playlists",
+  findLyricsAndGenre: "Find Lyrics and Genre",
   select: "Select",
   delete: "Delete",
 };
@@ -136,6 +140,9 @@ export const itemActions = (subject: ActionSubject): ItemActionEntry[] => {
         ? [{ action: "renamePlaylist" } as const, { action: "deletePlaylist" } as const]
         : [{ action: "deletePlaylists" } as const]),
     );
+  // Looks the songs up online and writes what it finds into their files.
+  if (kind === "track" && subject.onlineLookups === true)
+    entries.push({ action: "findLyricsAndGenre" });
   if (surface === "menu" && subject.selectable === true) entries.push({ action: "select" });
   // Last, and destructive: deletes the songs' files from the phone (after asking).
   if (kind === "track") entries.push({ action: "delete" });
