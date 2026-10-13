@@ -6,6 +6,7 @@
  * runs under plain Node tests.
  */
 import type { QueueEntry } from "@wave/core";
+import * as Effect from "effect/Effect";
 
 import { makeExternalStore } from "../lib/externalStore.ts";
 import type { SongRow } from "../library/LibraryStore.ts";
@@ -78,3 +79,22 @@ export const tracksToLookUp = (entries: readonly QueueEntry[]): readonly string[
 export const lookupFailed = (ids: readonly string[]): void => {
   for (const id of ids) requested.delete(id);
 };
+
+/**
+ * Looks up, once, the queued tracks the queue doesn't know (it was picked back
+ * up from the player after JS restarted), so Up Next can show them. A failed
+ * lookup is tried again next time. [songsByIds] is the library's
+ * (`LibraryStore.songsByIds`), passed in so this stays free of Expo.
+ */
+export const learnUnknownQueueTracks = <E, R>(
+  entries: readonly QueueEntry[],
+  songsByIds: (ids: readonly number[]) => Effect.Effect<readonly SongRow[], E, R>,
+): Effect.Effect<void, never, R> =>
+  Effect.suspend(() => {
+    const missing = tracksToLookUp(entries);
+    if (missing.length === 0) return Effect.void;
+    return songsByIds(missing.map(Number)).pipe(
+      Effect.map((songs) => learnQueueTracks(songs.map(toQueueTrack))),
+      Effect.catch(() => Effect.sync(() => lookupFailed(missing))),
+    );
+  });

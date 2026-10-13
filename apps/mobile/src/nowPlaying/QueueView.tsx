@@ -71,8 +71,8 @@ const AUTOSCROLL_EDGE = ROW;
 /** Auto-scroll speed at the very edge, in dp per second. */
 const AUTOSCROLL_SPEED = ROW * 12;
 
-const thumbUri = (song: QueueTrack | undefined): string | undefined =>
-  song?.thumbPath == null ? undefined : `file://${song.thumbPath}`;
+const thumbUri = (track: QueueTrack | undefined): string | undefined =>
+  track?.thumbPath == null ? undefined : `file://${track.thumbPath}`;
 
 type ToggleProps = {
   icon: ComponentType<IconProps>;
@@ -158,20 +158,20 @@ export function QueueHeader({ item }: { item: NonNullable<PlaybackState["item"]>
 }
 
 type RowContentProps = {
-  song: QueueTrack | undefined;
+  track: QueueTrack | undefined;
 };
 
 /** Thumbnail, title and artist: the part of an Up Next row that a drag lifts. */
-function RowText({ song }: RowContentProps) {
+function RowText({ track }: RowContentProps) {
   return (
     <>
-      <Artwork uri={thumbUri(song)} size={THUMB} />
+      <Artwork uri={thumbUri(track)} size={THUMB} />
       <View className="flex-1">
         <Text numberOfLines={1} className="font-sans text-body font-medium text-foreground">
-          {song?.title ?? " "}
+          {track?.title ?? " "}
         </Text>
         <Text numberOfLines={1} className="font-sans text-body text-secondary">
-          {song?.artist ?? " "}
+          {track?.artist ?? " "}
         </Text>
       </View>
     </>
@@ -187,13 +187,13 @@ type DragHandlers = {
    * without re-rendering it. Sets the offset for the row's index right away;
    * returns the call that lets it go.
    */
-  track: (index: number, offset: SharedValue<number>) => () => void;
+  trackOffset: (index: number, offset: SharedValue<number>) => () => void;
 };
 
 type RowProps = {
   entry: QueueEntry;
   index: number;
-  song: QueueTrack | undefined;
+  track: QueueTrack | undefined;
   /** The row being dragged leaves a gap; its lifted copy follows the finger. */
   lifted: boolean;
   drag: DragHandlers;
@@ -201,12 +201,12 @@ type RowProps = {
   count: number;
 };
 
-function UpNextRow({ entry, index, song, lifted, drag, translation, count }: RowProps) {
+function UpNextRow({ entry, index, track, lifted, drag, translation, count }: RowProps) {
   const secondary = useThemeColor("secondary");
   const offset = useSharedValue(0);
-  const { start, move, end, track } = drag;
+  const { start, move, end, trackOffset } = drag;
   // A layout effect, so a new order and the offsets reset for it land together.
-  useLayoutEffect(() => track(index, offset), [track, index, offset]);
+  useLayoutEffect(() => trackOffset(index, offset), [trackOffset, index, offset]);
 
   const style = useAnimatedStyle(() => ({ transform: [{ translateY: offset.get() }] }));
 
@@ -234,13 +234,13 @@ function UpNextRow({ entry, index, song, lifted, drag, translation, count }: Row
     ),
   );
 
-  const title = song?.title ?? "Song";
+  const title = track?.title ?? "Song";
   return (
     <Animated.View style={[{ height: ROW, opacity: lifted ? 0 : 1 }, style]}>
       <View className="flex-1 flex-row items-center">
         <Press
           accessibilityRole="button"
-          accessibilityLabel={`${title}, ${song?.artist ?? ""}`}
+          accessibilityLabel={`${title}, ${track?.artist ?? ""}`}
           accessibilityHint="Plays this song now"
           accessibilityActions={[
             { name: "remove", label: "Remove from Up Next" },
@@ -260,7 +260,7 @@ function UpNextRow({ entry, index, song, lifted, drag, translation, count }: Row
           className="flex-1 flex-row items-center self-stretch"
           style={{ gap: CELL * 1.5 }}
         >
-          <RowText song={song} />
+          <RowText track={track} />
         </Press>
         <Press
           accessibilityRole="button"
@@ -312,7 +312,7 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
   const [pending, setPending] = useState<readonly PendingMove[]>([]);
   const shown = useMemo(() => withPendingMoves(queue, pending), [queue, pending]);
   const entries = useMemo(() => upNext(shown), [shown]);
-  const songs = useQueueTracks(queue.entries);
+  const tracks = useQueueTracks(queue.entries);
   const playingKey = currentEntry(queue)?.key ?? null;
 
   const listRef = useRef<LegendListRef>(null);
@@ -362,7 +362,7 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
     }
   }, []);
 
-  const track = useCallback((index: number, offset: SharedValue<number>) => {
+  const trackOffset = useCallback((index: number, offset: SharedValue<number>) => {
     const shift = shiftAt(index, shifted.current);
     offset.set(shift * ROW);
     const tracked = rows.current;
@@ -527,8 +527,8 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
   useEffect(() => stopAutoscroll, [stopAutoscroll]);
 
   const handlers = useMemo<DragHandlers>(
-    () => ({ start, move, end, track }),
-    [start, move, end, track],
+    () => ({ start, move, end, trackOffset }),
+    [start, move, end, trackOffset],
   );
 
   const liftedStyle = useAnimatedStyle(() => ({
@@ -547,18 +547,18 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
       <UpNextRow
         entry={item}
         index={index}
-        song={songs.get(item.trackId)}
+        track={tracks.get(item.trackId)}
         lifted={drag?.key === item.key}
         drag={handlers}
         translation={translation}
         count={entries.length}
       />
     ),
-    [songs, drag, handlers, translation, entries.length],
+    [tracks, drag, handlers, translation, entries.length],
   );
   // Legend List re-renders a row only when its item or extraData changes, and a
-  // queue picked back up after JS restarted learns its songs after the first render.
-  const rowState = useMemo(() => ({ songs, drag }), [songs, drag]);
+  // queue picked back up after JS restarted learns its tracks after the first render.
+  const rowState = useMemo(() => ({ tracks, drag }), [tracks, drag]);
 
   if (entries.length === 0) {
     return (
@@ -570,7 +570,7 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
     );
   }
 
-  const liftedSong = drag === null ? undefined : songs.get(entries[drag.from]?.trackId ?? "");
+  const liftedTrack = drag === null ? undefined : tracks.get(entries[drag.from]?.trackId ?? "");
 
   return (
     <View
@@ -601,7 +601,7 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
           className="absolute left-0 right-0 top-0 flex-row items-center bg-surface"
           style={[{ height: ROW, gap: CELL * 1.5 }, liftedStyle]}
         >
-          <RowText song={liftedSong} />
+          <RowText track={liftedTrack} />
           <View style={{ width: CELL * 12 }} />
         </Animated.View>
       )}
