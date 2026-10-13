@@ -108,7 +108,10 @@ describe("ytDownloadTags", () => {
       ytDownloadTags(song, null, null, null).artworkUrl,
       "https://i.ytimg.com/vi/x/hqdefault.jpg",
     );
-    assert.equal(ytDownloadTags({ ...getLucky, artworkUrl: null }, null, null, null).artworkUrl, null);
+    assert.equal(
+      ytDownloadTags({ ...getLucky, artworkUrl: null }, null, null, null).artworkUrl,
+      null,
+    );
   });
 });
 
@@ -136,9 +139,9 @@ describe("ytDownloadLookup", () => {
   });
 });
 
-describe("ytDownloadRoot", () => {
-  const root = (path: string, isDefault = false) => ({ path, isDefault });
+const root = (path: string, isDefault = false) => ({ path, isDefault });
 
+describe("ytDownloadRoot", () => {
   test("downloads go into the default scan root", () => {
     assert.equal(ytDownloadRoot([root("/sd/Albums"), root(ROOT, true)]), ROOT);
   });

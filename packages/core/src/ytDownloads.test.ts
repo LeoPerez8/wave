@@ -25,7 +25,10 @@ const song = (videoId: string): YtSong => ({
 const run = (...events: YtDownloadEvent[]): YtDownloads =>
   events.reduce<YtDownloads>(stepYtDownloads, YT_DOWNLOADS_NONE);
 
-const requested = (videoId: string): YtDownloadEvent => ({ type: "requested", song: song(videoId) });
+const requested = (videoId: string): YtDownloadEvent => ({
+  type: "requested",
+  song: song(videoId),
+});
 const started = (videoId: string): YtDownloadEvent => ({ type: "started", videoId });
 
 describe("the download queue", () => {

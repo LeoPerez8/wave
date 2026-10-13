@@ -163,7 +163,11 @@ const fitBytes = (text: string, maxBytes: number): string => {
 };
 
 /** No leading dot (a hidden name, which scans skip) and no trailing dot or space (Windows-style storage drops them). */
-const tidyEnds = (name: string): string => name.trim().replace(/^\.+/, "").replace(/[. ]+$/, "");
+const tidyEnds = (name: string): string =>
+  name
+    .trim()
+    .replace(/^\.+/, "")
+    .replace(/[. ]+$/, "");
 
 /**
  * [text] as a folder or file name: unsafe characters become "_", it isn't

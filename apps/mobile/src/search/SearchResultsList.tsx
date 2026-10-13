@@ -1,5 +1,13 @@
 import { LegendList } from "@legendapp/list/react-native";
-import { counted, type QueueContext, type SearchKind, ytSongCredit, ytTrackId } from "@wave/core";
+import {
+  counted,
+  type QueueContext,
+  type SearchKind,
+  ytDownloadLine,
+  ytDownloadProgress,
+  ytSongCredit,
+  ytTrackId,
+} from "@wave/core";
 import { useCallback, useMemo } from "react";
 import { Text, View } from "react-native";
 
@@ -29,6 +37,8 @@ import type { SearchHit } from "./searchIndex";
 import { useListScrollable } from "@/motion/heldTouch";
 import { selectableRow } from "@/selection/selectableRow";
 import type { ListSelection } from "@/selection/useListSelection";
+import { useYtDownloadStatus } from "@/ytmusic/YtDownloads";
+import { openYtSongActions } from "@/ytmusic/YtSongActions";
 
 /** Tapping a song plays the song results from it. */
 const SEARCH_CONTEXT: QueueContext = { kind: "search", id: null };
@@ -45,19 +55,26 @@ const HEIGHT: Readonly<Record<ResultRow["type"], number>> = {
 /** Playing a YT Music song comes with streaming (#109); until then its row does nothing. */
 const notYet = (): void => undefined;
 
-/** A song YT Music found: a Songs-list row with YouTube's cover, its artists and album. */
+/**
+ * A song YT Music found: a Songs-list row with YouTube's cover, its artists
+ * and album. While it downloads, the second line says how far along it is,
+ * over a progress rule; its long-press menu offers Download.
+ */
 function YtSongRow({ song }: { song: NativeYtSong }) {
+  const download = useYtDownloadStatus(song.videoId);
   return (
     <TrackRow
       track={{
         id: ytTrackId(song.videoId),
         title: song.title,
-        artist: ytSongCredit(song),
+        artist: ytDownloadLine(download) ?? ytSongCredit(song),
         durationMs: song.durationMs,
         artworkUri: song.artworkUrl ?? undefined,
       }}
       leading="artwork"
+      progress={ytDownloadProgress(download)}
       onPress={notYet}
+      onLongPress={() => openYtSongActions(song)}
     />
   );
 }
