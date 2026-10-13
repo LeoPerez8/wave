@@ -116,8 +116,13 @@ export type AutoRequest =
   /**
    * A tap on Auto's shuffle or repeat button: change the queue's mode as the
    * app's buttons do, then answer `null` (the new modes go out with `setModes`).
+   * `moreFromArtist` adds the current artist's next most played songs after
+   * the current track.
    */
-  | { readonly type: "command"; readonly command: "toggleShuffle" | "cycleRepeat" };
+  | {
+      readonly type: "command";
+      readonly command: "toggleShuffle" | "cycleRepeat" | "moreFromArtist";
+    };
 
 /** The answer to a `play` request: the new player list and the item to start at. */
 export interface AutoPlayback {

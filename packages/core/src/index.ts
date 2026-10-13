@@ -303,4 +303,7 @@ export type {
 export { focusedVersion, startFocusedVersion } from "./focusedVersion.ts";
 export type { FocusedVersion, FocusedVersionEvent } from "./focusedVersion.ts";
 export { stepNowPlayingSheet } from "./sheetLifecycle.ts";
+export { MORE_FROM_ARTIST } from "./queue.ts";
+export { artistRanking } from "./moreFromArtist.ts";
+export type { ArtistRankingInput, ArtistRankingSong } from "./moreFromArtist.ts";
 export type { SheetEvent, SheetPhase, SheetStep } from "./sheetLifecycle.ts";

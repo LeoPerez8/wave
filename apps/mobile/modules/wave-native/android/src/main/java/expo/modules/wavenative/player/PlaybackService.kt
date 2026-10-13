@@ -177,9 +177,14 @@ class PlaybackService : MediaLibraryService() {
     triggerNotificationUpdate()
   }
 
-  /** Shows the queue's shuffle and repeat on the mode buttons (Auto's player screen). */
+  /**
+   * Shows the queue's shuffle and repeat on the mode buttons (Auto's player
+   * screen), with More from this artist after them.
+   */
   private fun showModes(modes: PlaybackModes) {
-    session?.setMediaButtonPreferences(AutoModesSession.buttons(modes))
+    session?.setMediaButtonPreferences(
+      AutoModesSession.buttons(modes) + MoreFromArtistSession.button,
+    )
   }
 
   /**
@@ -276,7 +281,9 @@ class PlaybackService : MediaLibraryService() {
       // Shuffle and repeat are custom commands for JS's queue engine; the player's own stay unused.
       if (showsModeButtons(session, controller)) {
         result
-          .setAvailableSessionCommands(AutoModesSession.sessionCommands)
+          .setAvailableSessionCommands(
+            MoreFromArtistSession.withCommand(AutoModesSession.sessionCommands),
+          )
           .setAvailablePlayerCommands(AutoModesSession.playerCommands)
       }
       return result.build()
@@ -390,13 +397,15 @@ class PlaybackService : MediaLibraryService() {
       args: Bundle,
     ): ListenableFuture<SessionResult> {
       // A shuffle or repeat button: JS's queue engine changes the mode and reports it back.
-      AutoModes.request(customCommand.customAction)?.let { request ->
+      // More from this artist: JS's queue engine adds the songs.
+      val action = customCommand.customAction
+      (AutoModes.request(action) ?: MoreFromArtist.request(action))?.let { request ->
         if (session.isAutoCompanionController(controller) || session.isAutomotiveController(controller)) {
           keepJsFor(controller)
         }
         return AutoLibrary.command(request)
       }
-      val code = when (customCommand.customAction) {
+      val code = when (action) {
         SleepTimerSession.START.customAction ->
           SleepTimerSession.fromBundle(args)
             ?.let { sleepTimer.start(it); SessionResult.RESULT_SUCCESS }

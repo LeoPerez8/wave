@@ -1,4 +1,5 @@
 import {
+  artistRanking,
   autoAlbumItem,
   autoArtistItem,
   autoChildren,
@@ -9,8 +10,10 @@ import {
   autoQueueAdd,
   autoQueueStart,
   autoTrackItems,
+  currentEntry,
   decodeAutoMediaId,
   nextRepeatMode,
+  statsWindow,
   type AutoHomeList,
   type AutoItem,
   type AutoNode,
@@ -259,11 +262,34 @@ export const layer = Layer.effect(
       });
 
     /**
+     * More from this artist: the current track's artist's songs, ranked by
+     * Core (`artistRanking`), go to the queue engine, which adds the next
+     * three that aren't queued. Nothing playing or a song gone: nothing to add.
+     */
+    const moreFromArtist = Effect.gen(function* () {
+      const current = currentEntry(queueState.get());
+      if (current === null) return null;
+      const [song] = yield* store.songsByIds([Number(current.trackId)]);
+      if (song === undefined) return null;
+      const detail = yield* store.getArtist(song.artistId);
+      if (detail === null) return null;
+      const plays = yield* store.trackPlayTotals(statsWindow("all", Date.now()));
+      const ranking = artistRanking({
+        albumIds: [...detail.albums, ...detail.appearsOn].map((album) => album.id),
+        songs: detail.songs,
+        plays,
+      });
+      yield* queue.dispatch({ type: "moreFromArtist", ranking }, detail.songs.map(toQueueTrack));
+      return null;
+    });
+
+    /**
      * Auto's shuffle and repeat buttons, through the queue engine like the
      * app's: shuffle keeps the current track, repeat goes off → all → one.
      */
     const command = (name: Extract<AutoRequest, { type: "command" }>["command"]) =>
       Effect.gen(function* () {
+        if (name === "moreFromArtist") return yield* moreFromArtist;
         const { shuffle, repeat } = queueState.get();
         yield* queue.dispatch(
           name === "toggleShuffle"
