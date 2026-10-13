@@ -34,20 +34,20 @@ object JsRuntime {
   private val main = Handler(Looper.getMainLooper())
   private var taskId: Int? = null
   private var taskContext: ReactContext? = null
-  private var wanted = false
+  private val owners = RuntimeOwners()
   private var listening = false
 
   private val listener = object : ReactInstanceEventListener {
     override fun onReactContextInitialized(context: ReactContext) {
       Log.i(LOG_TAG, "JS runtime ready at ${SystemClock.elapsedRealtime()} ms")
-      if (wanted) startTask(context)
+      if (owners.isWanted()) startTask(context)
     }
   }
 
   /** Starts the runtime (if needed) and holds the headless task. */
-  fun ensureStarted(context: Context) {
+  fun ensureStarted(context: Context, owner: String = "auto") {
     check(Looper.myLooper() == Looper.getMainLooper()) { "JsRuntime is main-thread only" }
-    wanted = true
+    owners.acquire(owner)
     val host = (context.applicationContext as? ReactApplication)?.reactHost ?: run {
       Log.w(LOG_TAG, "No ReactHost: can't start JS for Auto")
       return
@@ -67,8 +67,10 @@ object JsRuntime {
   }
 
   /** Ends the headless task, e.g. when Auto disconnects or the service is destroyed. */
-  fun release() {
-    wanted = false
+  fun release(owner: String = "auto") {
+    check(Looper.myLooper() == Looper.getMainLooper()) { "JsRuntime is main-thread only" }
+    owners.release(owner)
+    if (owners.isWanted()) return
     val id = taskId ?: return
     val context = taskContext
     taskId = null
@@ -85,7 +87,7 @@ object JsRuntime {
     main.post {
       val tasks = HeadlessJsTaskContext.getInstance(context)
       val running = taskId
-      if (!wanted || (running != null && taskContext === context && tasks.isTaskRunning(running))) {
+      if (!owners.isWanted() || (running != null && taskContext === context && tasks.isTaskRunning(running))) {
         return@post
       }
       Log.i(LOG_TAG, "Starting the $TASK_KEY headless task")

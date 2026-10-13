@@ -11,8 +11,8 @@ reviewed on 2026-10-13. [Seeker's Android client and embedded Soulseek.NET](http
 were used as interoperability references, not as dependencies or copied client
 code. Wave identifies its experimental client with protocol major version 177.
 
-`WaveSoulseek` provides session, connect, disconnect, search, downloadAudio and
-cancelDownload. `AndroidSoulseek.get(context)` owns the process-wide client for
+`WaveSoulseek` provides session, connect, disconnect, search and the download
+journal. `AndroidSoulseek.get(context)` owns the process-wide client for
 native background callers. Search yields bounded peer reports; Core selects
 the recording. The transport supports direct and indirect peer connections,
 QueueUpload, queue position reports, TransferRequest acceptance, direct and
@@ -36,6 +36,39 @@ single-file scanner remain the Library import path. Downloading never calls a
 Library upload resolver: Wave advertises zero shared files, returns empty
 browse results, and refuses upload requests and unsolicited incoming files.
 
+## Background execution
+
+Soulseek is Wave's only acquisition source. The owner connects a free account
+once in Settings; after that each Download tap queues a job with no further
+choices. `DurableDownloads` (package `download`) is the queue's owner, not
+JavaScript: it persists every job (request, chosen recording, candidates,
+current peer, attempt counts, absolute deadlines and the `mp3-320` policy) in
+`noBackupFilesDir/soulseek-download-jobs-v1`, rewritten atomically after each
+step. `YtDownloadService`, a `dataSync` foreground service, runs it one job at
+a time with a partial wake lock and a Wi-Fi lock, so it continues with the
+screen off and beside playback. Its notification shows the current job's
+waiting, downloading or saving state and offers Cancel.
+
+Decisions that need the Library or Core are leased to JavaScript with a
+token, a generation and a 45-second lease: prepare (search, Core's recording
+match, tags and destination), confirm (received tags), publish (the current
+folders and exclusions, versioned so a stale answer is refused) and import
+(the LibraryStore upsert). After process recreation the sticky service
+restarts, starts the headless JS runtime and replays the journal; an
+unanswered lease simply expires and is offered again. A transfer that was cut
+off restarts from zero with the same peer and its original deadlines.
+
+Bounds: searching retries a dropped connection three times; a job makes at
+most six transfer attempts over at most three peers; a peer may keep Wave in
+its queue for 2 minutes, has 3 minutes to start sending and may go quiet for
+1 minute; a job has 20 minutes after leaving the queue. Exhausted peers end in
+a short failure with Retry, never a different recording. Every failure,
+cancellation or recovery deletes the hidden part files and never replaces an
+existing Library file; publication renames a verified, tagged file into a free
+name, and import is an idempotent upsert by path, so repeated completion
+cannot create duplicate Tracks. If Android refuses to restart the service in
+the background, the journal waits for Wave's next launch.
+
 ## Validation record
 
 The native public API is tested against real localhost TCP fixtures, including
@@ -45,9 +78,17 @@ fixture is a generated 1.5-second 440 Hz tone encoded with libmp3lame at 320 kbp
 lower bitrate, truncated and wrong-duration files must fail. The credentials
 store is tested with authenticated AES-GCM encryption and tamper rejection.
 
+`DurableDownloadsTest` covers the journal through its public API: recreation
+mid-transfer and mid-decision, persisted queue position and deadlines,
+bounded failover, stalled and queued peers, offline retries, cancellation
+cleanup, duplicate completion, storage, account and unwritable-folder failures,
+and queue order.
+
 These tests are reproducible with the module's Kotlin JVM tests. They are
 protocol fixtures, not measurements of the public network. No authenticated
 phone download or representative recording benchmark has been run yet; those
 need the owner's account and recording set. Availability, queue wait times and
 matching coverage remain unmeasured. Android decoding must also be exercised
 on the target phone before treating the on-device prototype as validated.
+Screen-off acquisition, playback during a download and recovery after the
+process is killed have not yet been checked on the phone.
