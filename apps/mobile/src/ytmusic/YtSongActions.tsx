@@ -21,6 +21,7 @@ import { openOverlay } from "@/overlay/overlay";
 import { useSlideToChoose } from "@/overlay/useSlideToChoose";
 import { addYtToQueue, playYtNext } from "@/playback/actions";
 
+import { useLoadedLibraryFinder } from "./libraryFinder";
 import { cancelYtDownload, downloadYtSong, useYtDownloadStatus } from "./YtDownloads";
 
 /**
@@ -72,9 +73,16 @@ const run = (entry: Entry, song: NativeYtSong): void => {
 /** The menu card: the song as its row shows it, then its entries, like a Library song's menu. */
 function YtSongActionsMenu({ song, close }: { song: NativeYtSong; close: () => void }) {
   const status = useYtDownloadStatus(song.videoId);
+  // A song downloaded earlier and since deleted from the Library can be downloaded again
+  // (taken as still there until the Library has been read).
+  const find = useLoadedLibraryFinder();
+  const inLibrary = find === null || find(song) !== null;
   const entries: Entry[] = [
     ...queueEntries(),
-    ...ytDownloadActions(status).map((action): Entry => ({ kind: "download", action })),
+    ...ytDownloadActions(status, { inLibrary }).map((action): Entry => ({
+      kind: "download",
+      action,
+    })),
   ];
   const choose = (index: number) => {
     const entry = entries[index];
