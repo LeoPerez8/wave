@@ -62,3 +62,17 @@ export const veilAround = (
   ];
   return bands.filter((band) => band.right > band.left && band.bottom > band.top);
 };
+
+/**
+ * Whether a card names the item it acts on in a heading (artwork, title,
+ * subtitle). Not when the item it was opened from is highlighted above the
+ * veil, which already says what the card is about; yes when nothing is (no
+ * press opened it, or what was pressed sits off screen).
+ */
+export const cardShowsHeading = (
+  window: { readonly width: number; readonly height: number },
+  highlight: OverlayRect | undefined,
+): boolean =>
+  highlight === undefined ||
+  Math.max(highlight.left, 0) >= Math.min(highlight.right, window.width) ||
+  Math.max(highlight.top, 0) >= Math.min(highlight.bottom, window.height);
