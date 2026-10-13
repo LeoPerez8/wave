@@ -15,6 +15,10 @@
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
   <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+  <!-- YT Music downloads run in a data-sync foreground service, with a progress notification. -->
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
   <application>
     <!-- A media library service: Android Auto browses Wave through it (docs/auto-spike.md). -->
     <service
@@ -26,6 +30,12 @@
         <action android:name="android.media.browse.MediaBrowserService" />
       </intent-filter>
     </service>
+
+    <!-- Keeps YT Music downloads going with Wave in the background (YtDownloadService). -->
+    <service
+      android:name="expo.modules.wavenative.yt.YtDownloadService"
+      android:exported="false"
+      android:foregroundServiceType="dataSync" />
 
     <!--
       Media buttons with nothing playing resume the last queue (playback resumption,
