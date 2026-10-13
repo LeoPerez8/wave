@@ -14,8 +14,8 @@ import android.os.PowerManager
  * Turning off the alias Wave's task was opened from can make the system remove
  * that task, so the switch waits until Wave leaves the screen: it's asked for
  * with [request] and applied when Wave's activity stops, unless the screen
- * just went off (Wave is still what shows on unlock) or [isBusy] (the folder
- * picker is open over it). [PackageManager.DONT_KILL_APP] keeps the process,
+ * just went off (Wave is still what shows on unlock) or [isBusy] (a file
+ * picker Wave opened is over it). [PackageManager.DONT_KILL_APP] keeps the process,
  * and with it playback, running.
  */
 class LauncherIconSwitcher(

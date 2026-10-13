@@ -4,7 +4,12 @@ import { beforeEach, describe, test } from "node:test";
 
 import { eq } from "drizzle-orm";
 
-import { removePlaylistItems, selectPlaylistSongs } from "./playlists.ts";
+import {
+  removePlaylistItems,
+  replacePlaylistSongs,
+  selectPlaylistSongs,
+  selectTrackPaths,
+} from "./playlists.ts";
 import * as schema from "./schema.ts";
 import { addTrack, openTestDatabase, type TestDatabase } from "./testDatabase.ts";
 
@@ -95,5 +100,35 @@ describe("removePlaylistItems", () => {
       1000,
     );
     assert.equal(items().length, 4);
+  });
+});
+
+describe("replacePlaylistSongs", () => {
+  test("the playlist then holds exactly the given songs, in that order", () => {
+    replacePlaylistSongs(db, playlistId, [ids.Creep ?? -1, ids.Bloom ?? -1], 1000);
+    assert.deepEqual(titles(), ["Creep", "Bloom"]);
+  });
+
+  test("marks the playlist as edited and keeps it (and its name)", () => {
+    replacePlaylistSongs(db, playlistId, [ids.Bloom ?? -1], 1000);
+    const playlist = db
+      .select()
+      .from(schema.playlists)
+      .where(eq(schema.playlists.id, playlistId))
+      .get();
+    assert.equal(playlist?.name, "Drive");
+    assert.equal(playlist?.updatedAt, 1000);
+  });
+});
+
+describe("selectTrackPaths", () => {
+  test("lists every track's file with its id, for matching playlist files by path", () => {
+    assert.deepEqual(
+      selectTrackPaths(db).toSorted((a, b) => a.id - b.id),
+      ["Airbag", "Bloom", "Creep", "Daydreaming"].map((title) => ({
+        id: ids[title],
+        path: `/Music/Mix/${title}.mp3`,
+      })),
+    );
   });
 });

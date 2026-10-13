@@ -92,6 +92,8 @@ export type {
 export { resolveRemoveSwipe } from "./rowGestures.ts";
 export { currentLyricIndex, parseLyrics, pickLyrics } from "./lyrics.ts";
 export type { LyricLine, Lyrics, LyricsSources } from "./lyrics.ts";
+export { autoLyricLine } from "./autoLyricLine.ts";
+export type { AutoLyricLine, AutoLyricLineInput } from "./autoLyricLine.ts";
 export {
   CUSTOM_SLEEP_MINUTES,
   SLEEP_TIMER_PRESETS,
@@ -315,3 +317,22 @@ export { MORE_FROM_ARTIST } from "./queue.ts";
 export { artistRanking } from "./moreFromArtist.ts";
 export type { ArtistRankingInput, ArtistRankingSong } from "./moreFromArtist.ts";
 export type { SheetEvent, SheetPhase, SheetStep } from "./sheetLifecycle.ts";
+export {
+  confirmImportReplace,
+  importNameClash,
+  isM3uFileName,
+  keepBothName,
+  libraryPathIndex,
+  parseM3u,
+  planM3uImport,
+  resolveM3uPath,
+  summarizeM3uImport,
+} from "./m3u.ts";
+export type {
+  LibraryPathIndex,
+  M3uEntry,
+  M3uFile,
+  M3uImport,
+  M3uImportOutcome,
+  M3uImportSummary,
+} from "./m3u.ts";
