@@ -77,5 +77,7 @@ const config: ExpoConfig = {
   ],
 };
 
-// Adds a launch splash for each pair of backgrounds Settings › Theme offers (Android 13+).
+// The moving logo on the launch splash, and a splash for each choice Settings › Theme offers
+// (Android 13+). Applied here, before the plugin list, so its changes run after
+// expo-splash-screen's (Expo runs mods in reverse order) and it can edit that splash's style.
 export default withLaunchSplash(config);
