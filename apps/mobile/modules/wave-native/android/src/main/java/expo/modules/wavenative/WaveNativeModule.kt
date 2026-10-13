@@ -29,8 +29,11 @@ import expo.modules.wavenative.scan.ScanListener
 import expo.modules.wavenative.scan.ScanProgress
 import expo.modules.wavenative.scan.ScannedTrack
 import expo.modules.wavenative.tags.AudioTagReader
+import expo.modules.wavenative.tags.GenreDestination
 import expo.modules.wavenative.tags.JAudioTaggerReader
+import expo.modules.wavenative.tags.LyricsDestination
 import expo.modules.wavenative.tags.MediaRetrieverTagReader
+import expo.modules.wavenative.tags.SongTagWriter
 import java.io.File
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -39,7 +42,8 @@ import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Wave's native side: all-files access, the folder picker, the library scanner,
- * lyrics, deleting songs' files and saving artist photos. Scans run one at
+ * lyrics, writing found lyrics and genre into files, deleting songs' files and
+ * saving artist photos. Scans run one at
  * a time on a background thread and stream results to JS as events:
  * `onScanProgress`, `onScanMissing`, `onScanBatch`, `onScanComplete` and
  * `onScanError`, each carrying the `scanId` returned by `startScan`.
@@ -188,6 +192,25 @@ class WaveNativeModule : Module() {
     /** Deletes every downloaded artist photo. */
     AsyncFunction("clearArtistPhotos") { artistPhotos().clear() }
 
+    /**
+     * Writes found lyrics (LRC or plain text) and genre into a song's file,
+     * replacing what is there; null leaves that field alone (see
+     * [SongTagWriter]). Resolves `{ lyrics, genre }`, where each went
+     * (`tags`, `sidecar`, `notWritten` or `none`), and, when the tags changed,
+     * the file read again as a scan reads it (`track`, `artwork`) so the index
+     * can be updated. Rejects when the file can't be written. Off the main thread.
+     */
+    AsyncFunction("writeLyricsAndGenre") { path: String, lyrics: String?, genre: String? ->
+      val file = File(path)
+      val report = SongTagWriter().write(file, lyrics, genre)
+      val tagsChanged =
+        report.lyrics == LyricsDestination.TAGS || report.genre == GenreDestination.TAGS
+      val (track, artwork) = if (tagsChanged) singleFileScanner().index(file) else null to null
+      if (tagsChanged) MediaScannerConnection.scanFile(context, arrayOf(path), null, null)
+      report.toMap() +
+        mapOf("track" to track?.let(::trackToMap), "artwork" to artwork?.let(::artworkToMap))
+    }
+
     OnDestroy {
       currentScan?.second?.set(true)
       scanExecutor.shutdownNow()
@@ -195,6 +218,13 @@ class WaveNativeModule : Module() {
   }
 
   private fun artistPhotos() = ArtistPhotoStore(File(File(context.filesDir, "artwork"), "artists"))
+
+  /** Reads single files the way a scan does (same tag reader and artwork store). */
+  private fun singleFileScanner() =
+    LibraryScanner(
+      tagReader = AudioTagReader(primary = JAudioTaggerReader(), fallback = MediaRetrieverTagReader()),
+      artworkStore = ArtworkStore(File(context.filesDir, "artwork"), AndroidArtworkProcessor()),
+    )
 
   /** The root of a storage volume: `primary` or the UUID of an SD card or USB drive. */
   private fun volumeDirectory(volumeId: String): File? {

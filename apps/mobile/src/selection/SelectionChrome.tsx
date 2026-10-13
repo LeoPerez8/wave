@@ -4,6 +4,7 @@ import {
   IconDots,
   IconListCheck,
   IconMicrophone2,
+  IconMusicSearch,
   IconPencil,
   IconPlaylistAdd,
   IconPlaylistX,
@@ -47,6 +48,7 @@ const ICONS: { readonly [A in ItemAction]: ComponentType<IconProps> } = {
   renamePlaylist: IconPencil,
   deletePlaylist: IconTrash,
   deletePlaylists: IconTrash,
+  findLyricsAndGenre: IconMusicSearch,
   select: IconListCheck,
   delete: IconTrash,
 };
