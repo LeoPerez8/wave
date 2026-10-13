@@ -488,3 +488,9 @@ export type {
   SoulseekRecording,
   SoulseekReceivedTags,
 } from "./soulseekDownload.ts";
+export {
+  libraryLookupProgress,
+  readLibraryLookupSummary,
+  writeLibraryLookupSummary,
+} from "./libraryLookup.ts";
+export type { LibraryLookupProgress, LibraryLookupSummary } from "./libraryLookup.ts";
