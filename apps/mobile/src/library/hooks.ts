@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { AppState } from "react-native";
 
+import { useFocusedVersion } from "@/lib/useFocusedVersion";
 import { WaveNative } from "@/native/waveNative";
 import { playHistoryVersion } from "@/playback/PlayHistory";
 
@@ -249,10 +250,11 @@ const readHome = LibraryStore.use((store) => store.home);
 
 /**
  * The Home tab's sections, or undefined while loading. Re-read as soon as a
- * play starts or ends, or a star is saved.
+ * star is saved, and as soon as a play starts or ends while Home is focused
+ * (plays while it's hidden are read when it comes back).
  */
 export const useHome = (): HomeSections | undefined => {
-  const plays = useSyncExternalStore(playHistoryVersion.subscribe, playHistoryVersion.get);
+  const plays = useFocusedVersion(playHistoryVersion);
   return useLibraryQuery<HomeSections | undefined>(
     readHome,
     undefined,
@@ -268,10 +270,10 @@ const readListeningOverview = LibraryStore.use((store) =>
 
 /**
  * Home's listening overview (library and all-time listening totals), or
- * undefined while loading. Re-read after scan batches and as soon as a play
- * starts or ends.
+ * undefined while loading. Re-read after scan batches, and as soon as a play
+ * starts or ends while Home is focused (else when it comes back).
  */
 export const useListeningOverview = (): ListeningOverview | undefined => {
-  const plays = useSyncExternalStore(playHistoryVersion.subscribe, playHistoryVersion.get);
+  const plays = useFocusedVersion(playHistoryVersion);
   return useLibraryQuery<ListeningOverview | undefined>(readListeningOverview, undefined, plays);
 };
