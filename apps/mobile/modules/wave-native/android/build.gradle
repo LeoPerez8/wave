@@ -35,11 +35,18 @@ dependencies {
   // Responses are parsed with kotlinx.serialization's JsonElement API (YtSearchParser).
   implementation 'com.github.MetrolistGroup.innertubex:innertubex:0.8.6'
   implementation 'io.ktor:ktor-client-okhttp:3.6.0'
+  // ktor's OkHttp 5 replaces React Native's OkHttp 4 app-wide, but not React Native's
+  // okhttp-urlconnection 4 cookie jar, which calls OkHttp 4 internals: any fetch to a host that
+  // set a cookie (Deezer) then killed the app (#119). The BOM moves every OkHttp module to 5.
+  // Keep it at or above the OkHttp ktor-client-okhttp asks for.
+  implementation platform('com.squareup.okhttp3:okhttp-bom:5.5.0')
   implementation 'io.ktor:ktor-client-content-negotiation:3.6.0'
   implementation 'io.ktor:ktor-serialization-kotlinx-json:3.6.0'
   implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0'
 
   testImplementation 'junit:junit:4.13.2'
+  // React Native's networking (its OkHttp cookie jar), resolved next to ktor's OkHttp as in the app.
+  testImplementation 'com.facebook.react:react-android'
 }
 
 // Print assertion messages in CI logs, which are all the PR comment shows.
