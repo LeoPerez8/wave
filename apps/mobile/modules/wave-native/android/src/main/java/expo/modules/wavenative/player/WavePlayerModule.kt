@@ -221,6 +221,17 @@ class WavePlayerModule : Module() {
       promise.resolve(null)
     }.runOnQueue(Queues.MAIN)
 
+    /**
+     * The chosen primary (`#rrggbb`) in each scheme, for the media notification
+     * wherever the system colours it from the app ([NotificationAccent]).
+     */
+    AsyncFunction("setNotificationAccent") { light: String, dark: String, promise: Promise ->
+      val colours = NotificationAccent.fromJs(light, dark)
+        ?: return@AsyncFunction promise.reject("ERR_NOTIFICATION_ACCENT", "Not #rrggbb tones: $light, $dark", null)
+      NotificationAccent.publish(context, colours)
+      promise.resolve(null)
+    }.runOnQueue(Queues.MAIN)
+
     /** The loaded entry keys and the one playing, for JS to check a saved queue against. */
     AsyncFunction("getItemIds") { promise: Promise ->
       withController(promise) { player ->

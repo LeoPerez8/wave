@@ -141,6 +141,11 @@ declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
   setRepeatMode(mode: RepeatMode): Promise<void>;
   /** The queue's shuffle and repeat, for the toggles on Auto's player screen. */
   setModes(shuffle: boolean, repeat: RepeatMode): Promise<void>;
+  /**
+   * The chosen primary (`#rrggbb`) in each scheme, kept on disk for the media
+   * notification wherever the system colours it from the app.
+   */
+  setNotificationAccent(light: string, dark: string): Promise<void>;
   getItemIds(): Promise<NativeItemIds>;
   /**
    * Keeps the queue (JSON) in the native process, for when JS restarts, and on
