@@ -309,5 +309,12 @@ export {
   YT_SECTION_HIDDEN,
   stepYtSection,
   ytSearchQuery,
+  ytSectionView,
 } from "./ytSearch.ts";
-export type { YtQuietReason, YtSection, YtSectionEvent } from "./ytSearch.ts";
+export type {
+  YtQuietReason,
+  YtSection,
+  YtSectionEvent,
+  YtSectionNote,
+  YtSectionView,
+} from "./ytSearch.ts";

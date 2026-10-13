@@ -16,7 +16,11 @@ const ytSong = (song: Partial<YtSong> & Pick<YtSong, "title" | "artists">): YtSo
 describe("libraryMatcher", () => {
   const library = [
     { title: "Jóga", artist: "Björk", durationMs: 305_400 },
-    { title: "Get Lucky", artist: "Daft Punk feat. Pharrell Williams & Nile Rodgers", durationMs: 369_600 },
+    {
+      title: "Get Lucky",
+      artist: "Daft Punk feat. Pharrell Williams & Nile Rodgers",
+      durationMs: 369_600,
+    },
     { title: "The Boxer", artist: "Simon & Garfunkel", durationMs: 308_000 },
     { title: "Untitled", artist: "Somebody", durationMs: 0 },
   ];
@@ -28,7 +32,10 @@ describe("libraryMatcher", () => {
   });
 
   test("case, accents and punctuation don't tell songs apart", () => {
-    assert.equal(inLibrary(ytSong({ title: "JOGA!", artists: ["Bjork"], durationMs: 305_000 })), true);
+    assert.equal(
+      inLibrary(ytSong({ title: "JOGA!", artists: ["Bjork"], durationMs: 305_000 })),
+      true,
+    );
   });
 
   test("featured artists are credited either in the title or with the artist", () => {
@@ -38,7 +45,11 @@ describe("libraryMatcher", () => {
       durationMs: 370_000,
     });
     assert.equal(inLibrary(song), true);
-    const credited = ytSong({ title: "The Boxer", artists: ["Simon & Garfunkel"], durationMs: 308_000 });
+    const credited = ytSong({
+      title: "The Boxer",
+      artists: ["Simon & Garfunkel"],
+      durationMs: 308_000,
+    });
     assert.equal(inLibrary(credited), true);
   });
 
@@ -50,13 +61,20 @@ describe("libraryMatcher", () => {
   test("a version of a different length (a live take, an edit) is not the Library's", () => {
     const live = ytSong({ title: "Jóga", artists: ["Björk"], durationMs: 335_000 });
     assert.equal(inLibrary(live), false);
-    const edit = ytSong({ title: "Get Lucky (Radio Edit)", artists: ["Daft Punk"], durationMs: 249_000 });
+    const edit = ytSong({
+      title: "Get Lucky (Radio Edit)",
+      artists: ["Daft Punk"],
+      durationMs: 249_000,
+    });
     assert.equal(inLibrary(edit), false);
   });
 
   test("an unknown length on either side leaves title and artist to decide", () => {
     assert.equal(inLibrary(ytSong({ title: "Jóga", artists: ["Björk"] })), true);
-    assert.equal(inLibrary(ytSong({ title: "Untitled", artists: ["Somebody"], durationMs: 90_000 })), true);
+    assert.equal(
+      inLibrary(ytSong({ title: "Untitled", artists: ["Somebody"], durationMs: 90_000 })),
+      true,
+    );
   });
 
   test("an empty Library has none of them", () => {
@@ -71,7 +89,10 @@ describe("ytSongCredit", () => {
       artists: ["Daft Punk", "Pharrell Williams", "Nile Rodgers"],
       album: "Random Access Memories",
     });
-    assert.equal(ytSongCredit(song), "Daft Punk, Pharrell Williams & Nile Rodgers · Random Access Memories");
+    assert.equal(
+      ytSongCredit(song),
+      "Daft Punk, Pharrell Williams & Nile Rodgers · Random Access Memories",
+    );
   });
 
   test("leaves out what YT Music doesn't say", () => {

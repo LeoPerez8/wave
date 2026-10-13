@@ -1,6 +1,7 @@
-import type { SearchKind, SearchResults } from "@wave/core";
+import type { SearchKind, SearchResults, YtSectionNote, YtSectionView } from "@wave/core";
 
 import type { SongRow } from "@/library/LibraryStore";
+import type { NativeYtSong } from "@/native/waveYtMusic";
 
 import type { SearchHit } from "./searchIndex";
 
@@ -27,7 +28,10 @@ export type ResultRow =
       readonly key: string;
       readonly shown: number;
       readonly total: number;
-    };
+    }
+  | { readonly type: "ytSong"; readonly key: string; readonly song: NativeYtSong }
+  /** A quiet line in place of results: nothing in the library, YT Music offline… */
+  | { readonly type: "note"; readonly key: string; readonly text: string };
 
 /** The most results of one type the search returns (and a song tap queues). */
 export const RESULT_LIMIT = 200;
@@ -109,5 +113,29 @@ export const resultRows = (
         total: group.total,
       });
   }
+  return rows;
+};
+
+/** The line standing in for the library's results when nothing in it matches. */
+export const noLibraryResultsRow = (query: string): ResultRow => ({
+  type: "note",
+  key: "note:library",
+  text: `Nothing in your library matches “${query.trim()}”.`,
+});
+
+const YT_NOTE: Readonly<Record<YtSectionNote, string>> = {
+  searching: "Searching YT Music…",
+  noMatches: "Nothing on YT Music matches.",
+  allInLibrary: "What YT Music found is already in your library.",
+  offline: "You're offline. Songs from YT Music show here when you're back online.",
+  failed: "YT Music didn't answer. Try again in a moment.",
+};
+
+/** The YT Music section below the library's results: its head, then its songs or a quiet line. */
+export const ytMusicRows = (view: YtSectionView<NativeYtSong> | null): ResultRow[] => {
+  if (view === null) return [];
+  const rows: ResultRow[] = [{ type: "heading", key: "heading:yt", label: "YT Music" }];
+  for (const song of view.songs) rows.push({ type: "ytSong", key: `yt:${song.videoId}`, song });
+  if (view.note !== null) rows.push({ type: "note", key: "note:yt", text: YT_NOTE[view.note] });
   return rows;
 };

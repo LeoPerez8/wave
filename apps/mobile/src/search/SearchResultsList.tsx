@@ -1,5 +1,5 @@
 import { LegendList } from "@legendapp/list/react-native";
-import { counted, type QueueContext, type SearchKind } from "@wave/core";
+import { counted, type QueueContext, type SearchKind, ytSongCredit, ytTrackId } from "@wave/core";
 import { useCallback, useMemo } from "react";
 import { Text, View } from "react-native";
 
@@ -10,6 +10,7 @@ import { TrackRow } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { TextButton } from "@/components/TextButton";
 import type { SongRow } from "@/library/LibraryStore";
+import type { NativeYtSong } from "@/native/waveYtMusic";
 import { openAlbum, openArtist, openGenre, openPlaylist } from "@/library/routes";
 import { toTrackSummary } from "@/library/TrackList";
 import { playSongs } from "@/playback/actions";
@@ -37,7 +38,29 @@ const HEIGHT: Readonly<Record<ResultRow["type"], number>> = {
   hit: grid.row,
   more: CELL * 6,
   capped: CELL * 6,
+  ytSong: grid.row,
+  note: CELL * 6,
 };
+
+/** Playing a YT Music song comes with streaming (#109); until then its row does nothing. */
+const notYet = (): void => undefined;
+
+/** A song YT Music found: a Songs-list row with YouTube's cover, its artists and album. */
+function YtSongRow({ song }: { song: NativeYtSong }) {
+  return (
+    <TrackRow
+      track={{
+        id: ytTrackId(song.videoId),
+        title: song.title,
+        artist: ytSongCredit(song),
+        durationMs: song.durationMs,
+        artworkUri: song.artworkUrl ?? undefined,
+      }}
+      leading="artwork"
+      onPress={notYet}
+    />
+  );
+}
 
 const keyExtractor = (row: ResultRow): string => row.key;
 const itemType = (row: ResultRow): ResultRow["type"] => row.type;
@@ -184,6 +207,16 @@ export function SearchResultsList({ rows, onOpen, onShowAll, selection }: Props)
             <View className="justify-center" style={{ height: HEIGHT.capped }}>
               <Text className="font-sans text-footnote text-secondary">
                 {`The best ${item.shown.toLocaleString("en")} of ${item.total.toLocaleString("en")}. Keep typing to narrow them down.`}
+              </Text>
+            </View>
+          );
+        case "ytSong":
+          return <YtSongRow song={item.song} />;
+        case "note":
+          return (
+            <View className="justify-center" style={{ height: HEIGHT.note }}>
+              <Text numberOfLines={2} className="font-sans text-footnote text-secondary">
+                {item.text}
               </Text>
             </View>
           );

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { YT_SECTION_HIDDEN, stepYtSection, ytSearchQuery } from "./index.ts";
+import { YT_SECTION_HIDDEN, stepYtSection, ytSearchQuery, ytSectionView } from "./index.ts";
 import type { YtSection, YtSong } from "./index.ts";
 
 const song = (videoId: string): YtSong => ({
@@ -16,6 +16,40 @@ const song = (videoId: string): YtSong => ({
 
 const typed = (state: YtSection, query: string, enabled = true): YtSection =>
   stepYtSection(state, { type: "typed", query, enabled });
+
+describe("ytSectionView", () => {
+  const inLibrary = (s: YtSong): boolean => s.videoId === "mine";
+  const results = (songs: YtSong[]): YtSection => ({ status: "results", query: "q", songs });
+
+  test("shows the songs that aren't in the Library, in YT Music's order", () => {
+    const view = ytSectionView(results([song("b"), song("mine"), song("a")]), inLibrary);
+    assert.deepEqual(view, { songs: [song("b"), song("a")], note: null });
+  });
+
+  test("says when YT Music has nothing, or nothing the Library lacks", () => {
+    assert.deepEqual(ytSectionView(results([]), inLibrary), { songs: [], note: "noMatches" });
+    assert.deepEqual(ytSectionView(results([song("mine")]), inLibrary), {
+      songs: [],
+      note: "allInLibrary",
+    });
+  });
+
+  test("says it's searching until the first songs arrive, then keeps them up", () => {
+    const first: YtSection = { status: "loading", query: "q", songs: [] };
+    assert.deepEqual(ytSectionView(first, inLibrary), { songs: [], note: "searching" });
+    const next: YtSection = { status: "loading", query: "q", songs: [song("a")] };
+    assert.deepEqual(ytSectionView(next, inLibrary), { songs: [song("a")], note: null });
+  });
+
+  test("a failure is a quiet note", () => {
+    const quiet: YtSection = { status: "quiet", query: "q", reason: "offline" };
+    assert.deepEqual(ytSectionView(quiet, inLibrary), { songs: [], note: "offline" });
+  });
+
+  test("a hidden section shows nothing", () => {
+    assert.equal(ytSectionView(YT_SECTION_HIDDEN, inLibrary), null);
+  });
+});
 
 describe("ytSearchQuery", () => {
   test("is what's typed, tidied", () => {
@@ -46,7 +80,11 @@ describe("stepYtSection", () => {
     const loading = typed(typed(YT_SECTION_HIDDEN, "daft"), "daft punk");
     const stale = stepYtSection(loading, { type: "found", query: "daft", songs: [song("a")] });
     assert.equal(stale, loading);
-    const staleFailure = stepYtSection(loading, { type: "failed", query: "daft", reason: "offline" });
+    const staleFailure = stepYtSection(loading, {
+      type: "failed",
+      query: "daft",
+      reason: "offline",
+    });
     assert.equal(staleFailure, loading);
   });
 

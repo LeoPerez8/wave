@@ -29,7 +29,9 @@ const joinArtists = (artists: readonly string[]): string =>
 
 /** A YT Music song's line under its title: its artists, then its album when known. */
 export const ytSongCredit = (song: YtSong): string =>
-  [joinArtists(song.artists), song.album].filter((part) => part !== null && part !== "").join(" · ");
+  [joinArtists(song.artists), song.album]
+    .filter((part) => part !== null && part !== "")
+    .join(" · ");
 
 /** A Library song as matching sees it. */
 export interface LibrarySongKey {
@@ -45,7 +47,8 @@ const SAME_LENGTH_MS = 3000;
 const FEATURING = String.raw`(?:feat\.?|ft\.?|featuring|with)`;
 const BRACKETED_FEATURE = new RegExp(String.raw`\s*[([]${FEATURING}\s[^)\]]*[)\]]`, "giu");
 const TRAILING_FEATURE = new RegExp(String.raw`\s+(?:feat\.?|ft\.?|featuring)\s.*$`, "iu");
-const ARTIST_SEPARATORS = /\s*(?:,|&|;|\/|\+|\bx\b|\band\b|\bfeat\.?|\bft\.?|\bfeaturing\b|\bwith\b)\s*/giu;
+const ARTIST_SEPARATORS =
+  /\s*(?:,|&|;|\/|\+|\bx\b|\band\b|\bfeat\.?|\bft\.?|\bfeaturing\b|\bwith\b)\s*/giu;
 
 /** A title without its featured-artist credit, as matching compares it. */
 const matchTitle = (title: string): string =>
@@ -71,9 +74,7 @@ interface Candidate {
  * artist with it and, when both lengths are known, is as long within a few
  * seconds, so a live take or an edit of the same song still shows.
  */
-export const libraryMatcher = (
-  library: readonly LibrarySongKey[],
-): ((song: YtSong) => boolean) => {
+export const libraryMatcher = (library: readonly LibrarySongKey[]): ((song: YtSong) => boolean) => {
   const byTitle = new Map<string, Candidate[]>();
   for (const song of library) {
     const title = matchTitle(song.title);
