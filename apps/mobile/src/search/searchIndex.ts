@@ -1,6 +1,6 @@
-import { createSearchIndex, libraryMatcher, type SearchIndex, type YtSong } from "@wave/core";
+import { createSearchIndex, type SearchIndex, type YtSong } from "@wave/core";
 import * as Effect from "effect/Effect";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { libraryVersion } from "@/library/LibraryScan";
 import {
@@ -13,6 +13,7 @@ import {
 } from "@/library/LibraryStore";
 import { usePlaylistsVersion } from "@/library/playlists";
 import { appRuntime } from "@/library/runtime";
+import { useLoadedLibraryFinder } from "@/ytmusic/libraryFinder";
 
 /** Something search found, with the row the screens need to show and open it. */
 export type SearchHit =
@@ -86,8 +87,14 @@ export const useSearchIndex = (active: boolean): LibrarySearch | null => {
     useSyncExternalStore(libraryVersion.subscribe, libraryVersion.get) + usePlaylistsVersion();
   const [built, setBuilt] = useState<{
     readonly version: number;
-    readonly search: LibrarySearch;
+    readonly index: SearchIndex<SearchHit>;
   } | null>(null);
+  // Whether a YT Music song is in the Library: the finder Discover shares.
+  const find = useLoadedLibraryFinder(active);
+  const inLibrary = useMemo(
+    () => (find === null ? null : (song: YtSong) => find(song) !== null),
+    [find],
+  );
   const loading = useRef(false);
   const lastBuild = useRef(0);
   const mounted = useRef(true);
@@ -108,11 +115,8 @@ export const useSearchIndex = (active: boolean): LibrarySearch | null => {
         .runPromise(loadSources)
         .then((sources) => {
           lastBuild.current = Date.now();
-          const search = {
-            index: createSearchIndex(toEntries(sources)),
-            inLibrary: libraryMatcher(sources.songs),
-          };
-          if (mounted.current) setBuilt({ version, search });
+          const index = createSearchIndex(toEntries(sources));
+          if (mounted.current) setBuilt({ version, index });
         })
         .catch(() => {
           // Keep the last index; store errors surface elsewhere (scan banner).
@@ -124,5 +128,9 @@ export const useSearchIndex = (active: boolean): LibrarySearch | null => {
     return () => clearTimeout(timer);
   }, [active, built, version]);
 
-  return built?.search ?? null;
+  const index = built?.index ?? null;
+  return useMemo(
+    () => (index === null || inLibrary === null ? null : { index, inLibrary }),
+    [index, inLibrary],
+  );
 };
