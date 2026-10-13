@@ -116,8 +116,13 @@ export type AutoRequest =
   /**
    * A tap on Auto's shuffle or repeat button: change the queue's mode as the
    * app's buttons do, then answer `null` (the new modes go out with `setModes`).
+   * `moreFromArtist` adds the current artist's next most played songs after
+   * the current track.
    */
-  | { readonly type: "command"; readonly command: "toggleShuffle" | "cycleRepeat" };
+  | {
+      readonly type: "command";
+      readonly command: "toggleShuffle" | "cycleRepeat" | "moreFromArtist";
+    };
 
 /** The answer to a `play` request: the new player list and the item to start at. */
 export interface AutoPlayback {
@@ -141,6 +146,11 @@ declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
   setRepeatMode(mode: RepeatMode): Promise<void>;
   /** The queue's shuffle and repeat, for the toggles on Auto's player screen. */
   setModes(shuffle: boolean, repeat: RepeatMode): Promise<void>;
+  /**
+   * The chosen primary (`#rrggbb`) in each scheme, kept on disk for the media
+   * notification wherever the system colours it from the app.
+   */
+  setNotificationAccent(light: string, dark: string): Promise<void>;
   getItemIds(): Promise<NativeItemIds>;
   /**
    * Keeps the queue (JSON) in the native process, for when JS restarts, and on
