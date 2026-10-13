@@ -302,3 +302,22 @@ export { focusedVersion, startFocusedVersion } from "./focusedVersion.ts";
 export type { FocusedVersion, FocusedVersionEvent } from "./focusedVersion.ts";
 export { stepNowPlayingSheet } from "./sheetLifecycle.ts";
 export type { SheetEvent, SheetPhase, SheetStep } from "./sheetLifecycle.ts";
+export {
+  confirmImportReplace,
+  importNameClash,
+  isM3uFileName,
+  keepBothName,
+  libraryPathIndex,
+  parseM3u,
+  planM3uImport,
+  resolveM3uPath,
+  summarizeM3uImport,
+} from "./m3u.ts";
+export type {
+  LibraryPathIndex,
+  M3uEntry,
+  M3uFile,
+  M3uImport,
+  M3uImportOutcome,
+  M3uImportSummary,
+} from "./m3u.ts";

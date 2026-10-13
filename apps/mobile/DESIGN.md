@@ -274,7 +274,9 @@ Every tappable element is built on one press primitive, so the whole world feels
 
 ### Alert Dialog
 
-A glass dialog card (`src/overlay/alert.tsx`, opened from anywhere with `showMessage` / `confirmAction`): the title in Title3 ink, the message below in Subheadline graphite, then the buttons as text buttons right-aligned along the bottom. A message has a single OK; a confirmation has Cancel then the action, which is red when it deletes or removes. Back or a tap outside does what Cancel or OK does. Screen readers hear the title and message as it opens. There are no system alerts.
+A glass dialog card (`src/overlay/alert.tsx`, opened from anywhere with `showMessage` / `confirmAction`): the title in Title3 ink, the message below in Subheadline graphite, then the buttons as text buttons right-aligned along the bottom. A message has a single OK; a confirmation has Cancel then the action, which is red when it deletes or removes. Back or a tap outside does what Cancel or OK does. A confirmation may rename Cancel when dismissing it does something gentler than nothing: an imported playlist whose name is taken asks Keep Both / Replace (red). Screen readers hear the title and message as it opens. There are no system alerts.
+
+Import Playlists ends on a summary card of the same make (`src/library/importPlaylists.tsx`): the title, then one section per picked file (its name in Body 500 ink, what it became in Subheadline graphite, then each entry left out in Footnote graphite), scrolling when long, and OK.
 
 - **Hover / Focus:** touch only; the Press dim-and-sink is the whole feedback.
 

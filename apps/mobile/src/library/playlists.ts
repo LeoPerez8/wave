@@ -106,6 +106,12 @@ export const movePlaylistItem = (
   toIndex: number,
 ): Promise<void> => edit((store) => store.movePlaylistItem(playlistId, itemId, toIndex));
 
+/** Makes the playlist hold exactly these songs, in this order (an import's Replace). */
+export const replacePlaylistSongs = (
+  playlistId: number,
+  trackIds: readonly number[],
+): Promise<void> => edit((store) => store.replacePlaylistSongs(playlistId, trackIds));
+
 /** Removes these entries (not every copy of their songs) from the playlist. */
 export const removePlaylistItems = (
   playlistId: number,
