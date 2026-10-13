@@ -38,16 +38,32 @@ const editions = (text: string, album = false): string[] => {
   return [...new Set(notes.filter((note) => editionMarker.test(note)).map(fold))].sort();
 };
 
-const title = (text: string): string =>
-  fold(
-    credit(text)
-      .replace(/[([]([^\])]+)[\])]/g, (whole: string, note: string) =>
-        editionMarker.test(note) ? "" : whole,
-      )
-      .replace(/\s+-\s+(.+)$/, (whole: string, note: string) =>
-        editionMarker.test(note) ? "" : whole,
-      ),
-  );
+/** The title without guests and edition notes, as written. */
+const bareTitle = (text: string): string =>
+  credit(text)
+    .replace(/[([]([^\])]+)[\])]/g, (whole: string, note: string) =>
+      editionMarker.test(note) ? "" : whole,
+    )
+    .replace(/\s+-\s+(.+)$/, (whole: string, note: string) =>
+      editionMarker.test(note) ? "" : whole,
+    );
+const title = (text: string): string => fold(bareTitle(text));
+
+/**
+ * What to search Soulseek for. Peers only return files whose path has every
+ * query word, so this keeps the words Core matches on: the main artist and the
+ * title, without guests, edition notes or punctuation. Letters keep their
+ * accents, since peers don't fold them. A word with an apostrophe is left out,
+ * because peers split "Don't" in different ways.
+ */
+export const soulseekQuery = (song: YtSong): string =>
+  `${credit(song.artists[0] ?? "")} ${bareTitle(song.title)}`
+    .split(/\s+/)
+    .filter((word) => !/['’ʼ`´]/.test(word))
+    .join(" ")
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((word) => word !== "")
+    .join(" ");
 
 const positiveDuration = (value: number | null): value is number =>
   value !== null && Number.isFinite(value) && value > 0;

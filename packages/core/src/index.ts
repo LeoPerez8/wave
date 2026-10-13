@@ -479,6 +479,7 @@ export type {
 } from "./ytDiscover.ts";
 export {
   soulseekCandidates,
+  soulseekQuery,
   soulseekRecording,
   soulseekReceivedMatches,
   soulseekSameRecording,

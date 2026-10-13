@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import {
   soulseekCandidates,
+  soulseekQuery,
   soulseekReceivedMatches,
   soulseekSameRecording,
   ytDownloadSharedJob,
@@ -285,4 +286,24 @@ test("an artist or title that starts with a number isn't taken for a track numbe
     soulseekCandidates(by("50 Cent", "In Da Club"), [file("Cent - In Da Club.mp3")]),
     [],
   );
+});
+
+test("the search asks for the artist and title words every matching file name has", () => {
+  const query = (title: string, artists: readonly string[]) =>
+    soulseekQuery({ ...song, title, artists });
+  assert.equal(query("Get Lucky (feat. Pharrell Williams)", ["Daft Punk"]), "Daft Punk Get Lucky");
+  assert.equal(query("Get Lucky", ["Daft Punk feat. Pharrell Williams"]), "Daft Punk Get Lucky");
+  assert.equal(query("Something - Remastered 2009", ["The Beatles"]), "The Beatles Something");
+  assert.equal(query("Bohemian Rhapsody (Remastered 2011)", ["Queen"]), "Queen Bohemian Rhapsody");
+  assert.equal(query("Halo", ["Beyoncé"]), "Beyoncé Halo");
+  assert.equal(query("Back In Black", ["AC/DC"]), "AC DC Back In Black");
+  // Peers split "Don't" differently; leaving such words out still finds the file.
+  assert.equal(query("Don't Stop Me Now", ["Queen"]), "Queen Stop Me Now");
+  assert.equal(query("Hey, Soul Sister!", ["Train"]), "Train Hey Soul Sister");
+  // A title meaning something different keeps its words.
+  assert.equal(
+    query("Mr. Brightside - Jacques Lu Cont Remix", ["The Killers"]),
+    "The Killers Mr Brightside",
+  );
+  assert.equal(query("Part 2 - Interlude", ["Band"]), "Band Part 2 Interlude");
 });
