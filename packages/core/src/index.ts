@@ -433,18 +433,19 @@ export type {
 export {
   YT_DOWNLOADS_NONE,
   YT_DOWNLOAD_ACTION_LABELS,
-  stepYtDownloads,
   ytDownloadActions,
   ytDownloadLine,
   ytDownloadProgress,
   ytDownloadStatus,
-  ytDownloadsToStart,
+  ytDownloadSharedJob,
+  ytDownloadsFromJournal,
 } from "./ytDownloads.ts";
 export type {
   YtDownloadAction,
-  YtDownloadEvent,
   YtDownloadFailure,
   YtDownloadJob,
+  YtDownloadJournalJob,
+  YtDownloadJournalPhase,
   YtDownloadPhase,
   YtDownloadStatus,
   YtDownloads,

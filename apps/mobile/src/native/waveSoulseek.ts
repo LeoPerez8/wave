@@ -1,5 +1,32 @@
-import type { SoulseekCandidate, SoulseekReceivedTags } from "@wave/core";
+import type {
+  SoulseekCandidate,
+  SoulseekReceivedTags,
+  SoulseekRecording,
+  YtDownloadJournalJob,
+  YtDownloadTags,
+} from "@wave/core";
 import { NativeModule, requireNativeModule } from "expo";
+
+import type { NativeSavedDownload } from "./waveYtDownloads";
+import type { NativeYtSong } from "./waveYtMusic";
+
+/** A job in the native download journal (`DurableDownloads`), as its snapshot reports it. */
+export interface NativeDownloadJob extends YtDownloadJournalJob<NativeYtSong> {
+  readonly generation: number;
+  readonly policy: "mp3-320";
+  readonly saved?: NativeSavedDownload;
+  readonly tags?: YtDownloadTags;
+  readonly audio?: NativeSoulseekAudio;
+  readonly receiptId?: string;
+}
+
+/** A decision the journal leased to JS; answered with `submitDecision` before [leaseUntil]. */
+export interface NativeDownloadDecision extends NativeDownloadJob {
+  readonly token: string;
+  readonly decision: "prepare" | "confirm" | "publish" | "import";
+  readonly leaseUntil: number;
+  readonly deadline: number;
+}
 
 export interface SoulseekSession {
   readonly status: "signedOut" | "disconnected" | "connected";
@@ -18,30 +45,31 @@ export interface NativeSoulseekAudio {
   readonly receivedTags: SoulseekReceivedTags;
 }
 
-export interface SoulseekProgress {
-  readonly videoId: string;
-  readonly phase: "transferring" | "queued";
-  readonly received: number;
-  readonly total: number;
-  readonly queuePosition?: number;
-}
-
 declare class WaveSoulseekModule extends NativeModule<{
-  onDownloadProgress: (event: SoulseekProgress) => void;
   onSessionChanged: (event: SoulseekSession) => void;
+  onJobsChanged: () => void;
 }> {
+  enqueueJob(
+    song: NativeYtSong,
+    recording: SoulseekRecording,
+    equivalentId: string | null,
+  ): Promise<string>;
+  jobsSnapshot(): Promise<NativeDownloadJob[]>;
+  resumeJobs(): Promise<void>;
+  claimDecision(id: string): Promise<NativeDownloadDecision | null>;
+  submitDecision(
+    id: string,
+    generation: number,
+    token: string,
+    decision: NativeDownloadDecision["decision"],
+    payload: Readonly<Record<string, unknown>>,
+  ): Promise<boolean>;
+  refreshDownloadPolicy(roots: readonly string[], excluded: readonly string[]): Promise<number>;
+  cancelJob(id: string): Promise<void>;
   session(): Promise<SoulseekSession>;
   connect(username: string, password: string): Promise<SoulseekSession>;
   disconnect(): Promise<SoulseekSession>;
   search(query: string): Promise<SoulseekCandidate[]>;
-  downloadAudio(
-    videoId: string,
-    candidate: SoulseekCandidate,
-    targetPath: string,
-    title: string,
-    expectedDurationMs: number,
-  ): Promise<NativeSoulseekAudio>;
-  cancelDownload(videoId: string): void;
 }
 
 export const WaveSoulseek = requireNativeModule<WaveSoulseekModule>("WaveSoulseek");

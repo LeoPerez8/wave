@@ -5,11 +5,9 @@ import {
   soulseekCandidates,
   soulseekReceivedMatches,
   soulseekSameRecording,
-  stepYtDownloads,
-  ytDownloadStatus,
-  ytDownloadsToStart,
-  YT_DOWNLOADS_NONE,
+  ytDownloadSharedJob,
   type SoulseekCandidate,
+  type YtDownloadJournalJob,
   type YtSong,
 } from "./index.ts";
 
@@ -141,40 +139,20 @@ test("different result ids join only a known same recording without collapsing e
   );
 });
 
-test("simultaneous result ids share one queue job and progress while duration chains cannot widen identity", () => {
-  let state = stepYtDownloads(YT_DOWNLOADS_NONE, { type: "requested", song });
-  state = stepYtDownloads(state, {
-    type: "requested",
-    song: { ...song, videoId: "second", durationMs: 372_000 },
-  });
-  state = stepYtDownloads(state, {
-    type: "requested",
-    song: { ...song, videoId: "third", durationMs: 374_000 },
-  });
-  assert.equal(state.jobs.length, 2);
-  assert.deepEqual(
-    ytDownloadsToStart(state).map((item) => item.videoId),
-    ["requested"],
+test("simultaneous result ids share one journal job while duration chains cannot widen identity", () => {
+  const second = { ...song, videoId: "second", durationMs: 372_000 };
+  const third = { ...song, videoId: "third", durationMs: 374_000 };
+  const requested: YtDownloadJournalJob = { id: "requested", song, phase: "transferring" };
+  assert.equal(ytDownloadSharedJob([requested], second), "requested");
+  const shared = { ...requested, aliases: [second] };
+  // 374 s is within tolerance of 372 s but not of the requested 370 s.
+  assert.equal(ytDownloadSharedJob([shared], third), null);
+  assert.equal(ytDownloadSharedJob([{ ...shared, phase: "failed" }], second), null);
+  assert.equal(ytDownloadSharedJob([{ ...shared, phase: "cancelled" }], second), null);
+  assert.equal(
+    ytDownloadSharedJob([{ ...shared, phase: "completed", acknowledged: true }], second),
+    null,
   );
-  state = stepYtDownloads(state, { type: "started", videoId: "requested" });
-  state = stepYtDownloads(state, {
-    type: "progress",
-    videoId: "requested",
-    received: 100,
-    total: 200,
-  });
-  assert.deepEqual(ytDownloadStatus(state, "second"), {
-    kind: "downloading",
-    received: 100,
-    total: 200,
-  });
-  state = stepYtDownloads(state, { type: "failed", videoId: "requested", reason: "storage" });
-  state = stepYtDownloads(state, {
-    type: "requested",
-    song: { ...song, videoId: "second", durationMs: 372_000 },
-  });
-  assert.equal(state.jobs.at(-1)?.song.videoId, "requested");
-  assert.deepEqual(ytDownloadStatus(state, "second"), { kind: "queued" });
 });
 
 test("normalized names keep full artist identity, ordinary title words and featured credits", () => {
