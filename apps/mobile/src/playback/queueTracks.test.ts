@@ -12,6 +12,7 @@ import {
   lookupFailed,
   queueTracks,
   toQueueTrack,
+  toYtQueueTrack,
   tracksToLookUp,
 } from "./queueTracks.ts";
 
@@ -54,6 +55,53 @@ describe("queue tracks", () => {
       thumbPath: "/covers/7.thumb.jpg",
     });
     assert.equal(toQueueTrack(song(8, null)).thumbPath, null);
+  });
+
+  test("a YT Music song plays by its track id, with its credit and cached artwork", () => {
+    const track = toYtQueueTrack(
+      {
+        videoId: "kJQP7kiw5Fk",
+        title: "Despacito",
+        artists: ["Luis Fonsi", "Daddy Yankee"],
+        album: "VIDA",
+        durationMs: 229_000,
+        artworkUrl: "https://lh3.googleusercontent.com/despacito=w544-h544",
+        explicit: false,
+      },
+      {
+        path: "/files/artwork/abc.jpg",
+        thumbPath: "/files/artwork/abc_thumb.jpg",
+        palette: { dominant: "#203040" },
+      },
+    );
+    assert.deepEqual(track, {
+      id: "yt:kJQP7kiw5Fk",
+      path: "yt:kJQP7kiw5Fk",
+      title: "Despacito",
+      artist: "Luis Fonsi & Daddy Yankee",
+      album: "VIDA",
+      artworkPath: "/files/artwork/abc.jpg",
+      thumbPath: "/files/artwork/abc_thumb.jpg",
+      palette: { dominant: "#203040" },
+    });
+  });
+
+  test("without cached artwork, a YT Music song shows YouTube's cover", () => {
+    const track = toYtQueueTrack(
+      {
+        videoId: "kJQP7kiw5Fk",
+        title: "Despacito",
+        artists: ["Luis Fonsi"],
+        album: null,
+        durationMs: null,
+        artworkUrl: "https://lh3.googleusercontent.com/despacito=w544-h544",
+        explicit: false,
+      },
+      null,
+    );
+    assert.equal(track.artworkPath, "https://lh3.googleusercontent.com/despacito=w544-h544");
+    assert.equal(track.thumbPath, null);
+    assert.equal(track.palette, null);
   });
 
   test("learned tracks are there to read straight away, and tell subscribers", () => {
@@ -110,6 +158,39 @@ describe("learnUnknownQueueTracks", () => {
     await Effect.runPromise(learnUnknownQueueTracks([entry("1"), entry("5")], songsByIds));
     assert.deepEqual(asked, [[5]]);
     assert.equal(queueTracks.get().get("5")?.title, "Song 5");
+  });
+
+  test("a YT Music song is never looked up in the Library", async () => {
+    const asked: number[][] = [];
+    const songsByIds = (ids: readonly number[]) =>
+      Effect.sync(() => {
+        asked.push([...ids]);
+        return ids.map((id) => song(id));
+      });
+    await Effect.runPromise(
+      learnUnknownQueueTracks([entry("yt:dQw4w9WgXcQ"), entry("9")], songsByIds),
+    );
+    assert.deepEqual(asked, [[9]]);
+  });
+
+  test("a YT Music song the queue doesn't know is learned from the details saved with the queue", async () => {
+    const saved = toYtQueueTrack(
+      {
+        videoId: "dQw4w9WgXcQ",
+        title: "Never Gonna Give You Up",
+        artists: ["Rick Astley"],
+        album: "Whenever You Need Somebody",
+        durationMs: 213_000,
+        artworkUrl: "https://lh3.googleusercontent.com/cover=w544-h544",
+        explicit: false,
+      },
+      null,
+    );
+    const none = () => Effect.succeed([] as SongRow[]);
+    await Effect.runPromise(
+      learnUnknownQueueTracks([entry("yt:dQw4w9WgXcQ")], none, () => [saved]),
+    );
+    assert.equal(queueTracks.get().get("yt:dQw4w9WgXcQ")?.title, "Never Gonna Give You Up");
   });
 
   test("a failed lookup is tried again next time", async () => {

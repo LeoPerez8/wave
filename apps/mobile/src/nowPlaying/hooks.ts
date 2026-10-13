@@ -1,4 +1,11 @@
-import { extrapolatePosition, paletteGradient, type Gradient, type QueueEntry } from "@wave/core";
+import {
+  extrapolatePosition,
+  paletteGradient,
+  parseTrackId,
+  type ArtworkPalette,
+  type Gradient,
+  type QueueEntry,
+} from "@wave/core";
 import * as Effect from "effect/Effect";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useColorScheme } from "react-native";
@@ -7,21 +14,27 @@ import { LibraryStore, type TrackDetails } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { playbackState } from "@/playback/Player";
 import { learnUnknownQueueTracks, queueTracks, type QueueTrack } from "@/playback/queueTracks";
+import { savedYtQueueTracks } from "@/playback/ytQueueTracks";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { useNowPlayingShown } from "./sheet";
 
-/** The playing track's album and artist (for the links) and palette, from the library. */
+/**
+ * The playing track's album and artist (for the links) and palette, from the
+ * library; null for a YT Music song, which isn't in it.
+ */
 export const useTrackDetails = (trackId: string | null): TrackDetails | null => {
   const [details, setDetails] = useState<TrackDetails | null>(null);
+  const track = trackId === null ? null : parseTrackId(trackId);
+  const libraryId = track?.kind === "library" ? track.id : null;
   useEffect(() => {
-    if (trackId === null) return undefined;
+    if (libraryId === null) return undefined;
     let current = true;
     appRuntime
       .runPromise(
         Effect.gen(function* () {
           const store = yield* LibraryStore;
-          return yield* store.trackDetails(Number(trackId));
+          return yield* store.trackDetails(libraryId);
         }),
       )
       .then((result) => {
@@ -33,8 +46,22 @@ export const useTrackDetails = (trackId: string | null): TrackDetails | null => 
     return () => {
       current = false;
     };
-  }, [trackId]);
+  }, [libraryId]);
   return details !== null && String(details.id) === trackId ? details : null;
+};
+
+/**
+ * The palette Now Playing is tinted from: the Library track's artwork's, or a
+ * YT Music song's cached cover's (kept with the queue's tracks).
+ */
+export const useNowPlayingPalette = (
+  trackId: string | null,
+  details: TrackDetails | null,
+): ArtworkPalette | null => {
+  const streamed = useSyncExternalStore(queueTracks.subscribe, () =>
+    trackId === null || details !== null ? null : (queueTracks.get().get(trackId)?.palette ?? null),
+  );
+  return details?.palette ?? streamed;
 };
 
 const isHex = (colour: string): boolean => /^#[0-9a-f]{6}$/i.test(colour);
@@ -43,13 +70,12 @@ const isHex = (colour: string): boolean => /^#[0-9a-f]{6}$/i.test(colour);
  * The background gradient for the playing artwork, toned so Wave's ink,
  * graphite and teal stay readable on it. The plain ground without a palette.
  */
-export const useNowPlayingGradient = (details: TrackDetails | null): Gradient => {
+export const useNowPlayingGradient = (palette: ArtworkPalette | null): Gradient => {
   const scheme = useColorScheme() === "dark" ? "dark" : "light";
   const ground = useThemeColor("background");
   const foreground = useThemeColor("foreground");
   const secondary = useThemeColor("secondary");
   const accent = useThemeColor("accent");
-  const palette = details?.palette ?? null;
   return useMemo(() => {
     const ink = [foreground, secondary, accent];
     if (!isHex(ground) || !ink.every(isHex)) return { top: ground, bottom: ground };
@@ -105,7 +131,9 @@ export const useQueueTracks = (entries: readonly QueueEntry[]): ReadonlyMap<stri
   const tracks = useSyncExternalStore(queueTracks.subscribe, queueTracks.get);
   useEffect(() => {
     void appRuntime.runPromise(
-      LibraryStore.use((store) => learnUnknownQueueTracks(entries, store.songsByIds)),
+      LibraryStore.use((store) =>
+        learnUnknownQueueTracks(entries, store.songsByIds, savedYtQueueTracks),
+      ),
     );
   }, [entries]);
   return tracks;

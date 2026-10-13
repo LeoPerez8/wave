@@ -6,20 +6,24 @@ import {
   type QueueContext,
   type RepeatMode,
   type SleepTimerChoice,
+  type YtSong,
+  ytTrackId,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 
 import type { SongRow } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
+import type { YtMusic } from "@/ytmusic/YtMusic";
 
 import { Player, playbackState } from "./Player";
 import { Queue, currentPositionMs, queueState, toQueueTrack } from "./Queue";
+import { ytQueueTrack } from "./ytQueueTracks";
 
 /**
  * Runs [effect] and reports a failure. The promise settles once it has run
  * either way and never rejects, so callers that don't wait can drop it.
  */
-const run = (effect: Effect.Effect<void, unknown, Player | Queue>): Promise<void> =>
+const run = (effect: Effect.Effect<void, unknown, Player | Queue | YtMusic>): Promise<void> =>
   appRuntime.runPromise(effect).catch((error: unknown) =>
     playbackState.update((state) => ({
       ...state,
@@ -59,6 +63,39 @@ export const playSongs = (
     },
     songs,
   );
+
+/**
+ * Applies [command] to the queue with YT Music [songs] as the tracks it adds,
+ * once their covers are cached (or it gave up waiting for them).
+ */
+const dispatchYt = (command: QueueCommand, songs: readonly YtSong[]): Promise<void> =>
+  run(
+    Effect.gen(function* () {
+      const tracks = yield* Effect.forEach(songs, ytQueueTrack, { concurrency: "unbounded" });
+      const queue = yield* Queue;
+      yield* queue.dispatch(command, tracks);
+    }),
+  );
+
+const ytTrackIds = (songs: readonly YtSong[]): string[] =>
+  songs.map((song) => ytTrackId(song.videoId));
+
+/**
+ * Plays YT Music songs (the ones Search found) from `startIndex`, queueing the
+ * rest after it, streamed as each one's turn comes.
+ */
+export const playYtSongs = (
+  songs: readonly YtSong[],
+  startIndex: number,
+  context: QueueContext,
+): Promise<void> =>
+  dispatchYt({ type: "play", trackIds: ytTrackIds(songs), startIndex, context }, songs);
+
+export const playYtNext = (songs: readonly YtSong[]): Promise<void> =>
+  dispatchYt({ type: "playNext", trackIds: ytTrackIds(songs) }, songs);
+
+export const addYtToQueue = (songs: readonly YtSong[]): Promise<void> =>
+  dispatchYt({ type: "addToQueue", trackIds: ytTrackIds(songs) }, songs);
 
 export const togglePlayPause = (): Promise<void> =>
   run(

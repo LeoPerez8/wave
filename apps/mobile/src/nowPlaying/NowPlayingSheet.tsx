@@ -15,7 +15,7 @@ import { useThemeColor } from "@/theme/useThemeColor";
 
 import { Background } from "./Background";
 import { DismissArea } from "./DismissArea";
-import { useNowPlayingGradient, useTrackDetails } from "./hooks";
+import { useNowPlayingGradient, useNowPlayingPalette, useTrackDetails } from "./hooks";
 import { LyricsView } from "./LyricsView";
 import { PlayerView } from "./PlayerView";
 import { QueueHeader, UpNextList } from "./QueueView";
@@ -101,8 +101,9 @@ export function NowPlayingSheet() {
     playbackState.subscribe,
     () => playbackState.get().playWhenReady,
   );
-  const details = useTrackDetails(useCurrentTrackId());
-  const gradient = useNowPlayingGradient(details);
+  const trackId = useCurrentTrackId();
+  const details = useTrackDetails(trackId);
+  const gradient = useNowPlayingGradient(useNowPlayingPalette(trackId, details));
   const [view, setView] = useState<NowPlayingView>("player");
 
   useEffect(() => resizeNowPlaying(height), [height]);

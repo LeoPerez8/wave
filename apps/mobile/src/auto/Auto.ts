@@ -12,6 +12,7 @@ import {
   autoTrackItems,
   currentEntry,
   decodeAutoMediaId,
+  libraryTrackIds,
   nextRepeatMode,
   statsWindow,
   type AutoHomeList,
@@ -268,8 +269,10 @@ export const layer = Layer.effect(
      */
     const moreFromArtist = Effect.gen(function* () {
       const current = currentEntry(queueState.get());
-      if (current === null) return null;
-      const [song] = yield* store.songsByIds([Number(current.trackId)]);
+      // A YT Music song playing has no Library artist to take songs from.
+      const libraryIds = current === null ? [] : libraryTrackIds([current.trackId]);
+      if (libraryIds.length === 0) return null;
+      const [song] = yield* store.songsByIds(libraryIds);
       if (song === undefined) return null;
       const detail = yield* store.getArtist(song.artistId);
       if (detail === null) return null;

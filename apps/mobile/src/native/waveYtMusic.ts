@@ -1,6 +1,8 @@
 import type { YtSong } from "@wave/core";
 import { NativeModule, requireNativeModule } from "expo";
 
+import type { NativeArtwork } from "./waveNative";
+
 /** A song YT Music found, as the native parser reads it. */
 export interface NativeYtSong extends YtSong {
   /** The album's YT Music browse id (`MPREb_…`), for its tracklist and year. */
@@ -29,6 +31,12 @@ declare class WaveYtMusicModule extends NativeModule<Record<never, never>> {
   isEnabled(): boolean;
   /** Songs on YT Music for [query] (YouTube Music's "Songs" filter). */
   searchSongs(query: string): Promise<NativeYtSearchPage>;
+  /**
+   * Caches a YT Music song's cover from [url] beside the Library's artwork, so
+   * the player, the notification and Auto show it as they do a Library
+   * track's, and Now Playing takes its tint.
+   */
+  cacheArtwork(url: string): Promise<NativeArtwork>;
 }
 
 /** YT Music through innertubex (`modules/wave-native`, package `yt`). */

@@ -13,7 +13,8 @@ import type { SongRow } from "@/library/LibraryStore";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { openAlbum, openArtist, openGenre, openPlaylist } from "@/library/routes";
 import { toTrackSummary } from "@/library/TrackList";
-import { playSongs } from "@/playback/actions";
+import { playSongs, playYtSongs } from "@/playback/actions";
+import { openYtSongActions } from "@/playback/YtSongActionsMenu";
 import { useCurrentTrackId } from "@/playback/hooks";
 import {
   openAlbumActions,
@@ -42,11 +43,27 @@ const HEIGHT: Readonly<Record<ResultRow["type"], number>> = {
   note: CELL * 6,
 };
 
-/** Playing a YT Music song comes with streaming (#109); until then its row does nothing. */
-const notYet = (): void => undefined;
+/** While selecting, results other than Library songs do nothing. */
+const ignore = (): void => undefined;
 
-/** A song YT Music found: a Songs-list row with YouTube's cover, its artists and album. */
-function YtSongRow({ song }: { song: NativeYtSong }) {
+/**
+ * A song YT Music found: a Songs-list row with YouTube's cover, its artists
+ * and album. Tapping streams the section's songs from it; its long-press menu
+ * queues it. While Library songs are being selected, it does nothing.
+ */
+function YtSongRow({
+  song,
+  songs,
+  playing,
+  onOpen,
+  selecting,
+}: {
+  song: NativeYtSong;
+  songs: readonly NativeYtSong[];
+  playing: boolean;
+  onOpen: () => void;
+  selecting: boolean;
+}) {
   return (
     <TrackRow
       track={{
@@ -56,8 +73,17 @@ function YtSongRow({ song }: { song: NativeYtSong }) {
         durationMs: song.durationMs,
         artworkUri: song.artworkUrl ?? undefined,
       }}
+      state={playing ? "playing" : undefined}
       leading="artwork"
-      onPress={notYet}
+      onPress={
+        selecting
+          ? ignore
+          : () => {
+              onOpen();
+              void playYtSongs(songs, Math.max(0, songs.indexOf(song)), SEARCH_CONTEXT);
+            }
+      }
+      onLongPress={selecting ? ignore : () => openYtSongActions(song)}
     />
   );
 }
@@ -74,9 +100,6 @@ type Props = {
   /** Song results are selectable; other results ignore taps while selecting. */
   selection: ListSelection<SongRow>;
 };
-
-/** While selecting, non-song results do nothing. */
-const ignore = (): void => undefined;
 
 function Hit({
   hit,
@@ -211,7 +234,15 @@ export function SearchResultsList({ rows, onOpen, onShowAll, selection }: Props)
             </View>
           );
         case "ytSong":
-          return <YtSongRow song={item.song} />;
+          return (
+            <YtSongRow
+              song={item.song}
+              songs={item.songs}
+              playing={ytTrackId(item.song.videoId) === currentId}
+              onOpen={onOpen}
+              selecting={selection.selecting}
+            />
+          );
         case "note":
           return (
             <View className="justify-center" style={{ height: HEIGHT.note }}>
