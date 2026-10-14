@@ -2,6 +2,9 @@ import type {
   YtArtistAlbum,
   YtArtistCandidate,
   YtArtistPage,
+  YtPlaylist,
+  YtPlaylistFirstPage,
+  YtPlaylistPage,
   YtSession,
   YtShelf,
   YtSong,
@@ -23,19 +26,17 @@ export type NativeYtShelf = YtShelf<NativeYtSong>;
 export type NativeYtArtistPage = YtArtistPage<NativeYtSong>;
 
 /**
- * A YT Music playlist and all its songs in YouTube Music's order, read page
- * after page. Songs YouTube Music greys out (removed, blocked in the country)
- * are left out, and a song listed twice is kept once.
+ * A YT Music playlist's first page: its head, that page's songs and the token
+ * for the next page (Core's `YtPlaylistFirstPage`). Songs YouTube Music greys
+ * out (removed, blocked in the country) are left out.
  */
-export interface NativeYtPlaylist {
-  readonly title: string;
-  /** Who made it ("YouTube Music" for its own mixes), when the page says. */
-  readonly author: string | null;
-  readonly artworkUrl: string | null;
-  readonly songs: readonly NativeYtSong[];
-  /** The playlist goes on past [songs]: the read stopped at its cap of 5,000 songs. */
-  readonly truncated: boolean;
-}
+export type NativeYtPlaylistPage = YtPlaylistFirstPage<NativeYtSong>;
+
+/** A later page of a YT Music playlist and the token for the next (Core's `YtPlaylistPage`). */
+export type NativeYtPlaylistMore = YtPlaylistPage<NativeYtSong>;
+
+/** A whole YT Music playlist as Core's `readYtPlaylist` reads it from those pages. */
+export type NativeYtPlaylist = YtPlaylist<NativeYtSong>;
 
 /** One page of song results; [continuation] asks for the next one. */
 export interface NativeYtSearchPage {
@@ -72,11 +73,10 @@ declare class WaveYtMusicModule extends NativeModule<WaveYtMusicEvents> {
   artist(browseId: string): Promise<NativeYtArtistPage>;
   /** The session's account's recommendations: YouTube Music's home shelves (songs, albums, playlists). */
   home(): Promise<readonly NativeYtShelf[]>;
-  /**
-   * The playlist [playlistId] (without `VL`) and all its songs, up to 5,000.
-   * Rejects with an `ERR_YT_*` code when any page fails, never with part of it.
-   */
-  playlist(playlistId: string): Promise<NativeYtPlaylist>;
+  /** The playlist [playlistId] (without `VL`): its head and its first page of songs. */
+  playlist(playlistId: string): Promise<NativeYtPlaylistPage>;
+  /** The playlist page a first page's (or a later page's) [continuation] leads to. */
+  playlistMore(continuation: string): Promise<NativeYtPlaylistMore>;
   /**
    * Caches a YT Music song's cover from [url] beside the Library's artwork, so
    * the player, the notification and Auto show it as they do a Library

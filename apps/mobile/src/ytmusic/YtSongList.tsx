@@ -12,9 +12,11 @@ import {
   ytAlbumDownloadButton,
   ytAlbumSongs,
   ytPlaylistDownloadButton,
+  ytPlaylistRestLine,
   type DiscoverSong,
   type MixedSong,
   type QueueContext,
+  type YtPlaylistRest,
   type YtQuietReason,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
@@ -31,7 +33,7 @@ import { ScreenHeader } from "@/components/ScreenHeader";
 import type { SongRow } from "@/library/LibraryStore";
 import { songCount } from "@/library/TrackList";
 import { useListScrollable } from "@/motion/heldTouch";
-import type { NativeYtSong } from "@/native/waveYtMusic";
+import type { NativeYtPlaylist, NativeYtSong } from "@/native/waveYtMusic";
 import { playDiscoverSongs } from "@/playback/actions";
 
 import { askYtMusic } from "./askYtMusic";
@@ -57,17 +59,35 @@ export interface YtListPage {
   readonly songs: readonly NativeYtSong[];
 }
 
-/** A page being read: loading, then the page or why it couldn't be read. */
+/**
+ * A page being read: loading, then the page or why it couldn't be read. A
+ * playlist shows its songs as its pages come in ([rest]: more coming, all in,
+ * or why the rest didn't load); an album comes whole.
+ */
 export type YtListLoad =
   | { readonly status: "loading" }
-  | { readonly status: "loaded"; readonly page: YtListPage }
+  | { readonly status: "loaded"; readonly page: YtListPage; readonly rest: YtPlaylistRest }
   | { readonly status: "quiet"; readonly reason: YtQuietReason };
 
 const LOADING: YtListLoad = { status: "loading" };
 
-/** Reads the page [id] of [screen]: an album's (its songs on it, with its cover) or a playlist's. */
+const playlistPage = (playlist: NativeYtPlaylist): YtListPage => ({
+  head: { title: playlist.title, line: playlist.author ?? "", artworkUrl: playlist.artworkUrl },
+  kind: "Playlist",
+  songs: playlist.songs,
+});
+
+/**
+ * Reads the page [id] of [screen]: an album's (its songs on it, with its
+ * cover) or a playlist's, whose pages [onPage] hears as they come.
+ */
 const readPage =
-  (screen: YtListScreen, id: string) =>
+  (
+    screen: YtListScreen,
+    id: string,
+    onPage: (page: YtListPage, done: boolean) => void,
+    signal: AbortSignal,
+  ) =>
   (ytMusic: YtMusic["Service"]): Effect.Effect<YtListPage, YtMusicError> =>
     screen === "yt-album"
       ? ytMusic.album(id).pipe(
@@ -81,19 +101,18 @@ const readPage =
             songs: ytAlbumSongs(id, album),
           })),
         )
-      : ytMusic.playlist(id).pipe(
-          Effect.map((playlist) => ({
-            head: {
-              title: playlist.title,
-              line: playlist.author ?? "",
-              artworkUrl: playlist.artworkUrl,
-            },
-            kind: "Playlist",
-            songs: playlist.songs,
-          })),
-        );
+      : ytMusic
+          .playlist(id, {
+            onPage: (playlist, done) => onPage(playlistPage(playlist), done),
+            signal,
+          })
+          .pipe(Effect.map(playlistPage));
 
-/** Reads a YT Music album or playlist page for the screen showing it. */
+/**
+ * Reads a YT Music album or playlist page for the screen showing it. A
+ * playlist shows from its first page on; when a later page fails, the songs
+ * already shown stay and `rest` says why the others didn't come.
+ */
 export const useYtListPage = (screen: YtListScreen, id: string): YtListLoad => {
   const key = `${screen}/${id}`;
   const [answer, setAnswer] = useState<{ readonly key: string; readonly load: YtListLoad } | null>(
@@ -101,17 +120,31 @@ export const useYtListPage = (screen: YtListScreen, id: string): YtListLoad => {
   );
   useEffect(() => {
     let current = true;
-    void askYtMusic(readPage(screen, id)).then((result) => {
-      if (!current) return;
-      setAnswer({
-        key: `${screen}/${id}`,
-        load: Result.isSuccess(result)
-          ? { status: "loaded", page: result.success }
-          : { status: "quiet", reason: result.failure.reason === "offline" ? "offline" : "failed" },
-      });
+    const cancel = new AbortController();
+    const show = (load: YtListLoad) => {
+      if (current) setAnswer({ key: `${screen}/${id}`, load });
+    };
+    let shown: YtListPage | null = null;
+    const onPage = (page: YtListPage, done: boolean) => {
+      shown = page;
+      show({ status: "loaded", page, rest: done ? "read" : "reading" });
+    };
+    void askYtMusic(readPage(screen, id, onPage, cancel.signal)).then((result) => {
+      if (Result.isSuccess(result)) {
+        // A playlist's last page has been shown already.
+        if (shown === null) show({ status: "loaded", page: result.success, rest: "read" });
+        return;
+      }
+      const reason = result.failure.reason === "offline" ? "offline" : "failed";
+      show(
+        shown === null
+          ? { status: "quiet", reason }
+          : { status: "loaded", page: shown, rest: reason },
+      );
     });
     return () => {
       current = false;
+      cancel.abort();
     };
   }, [screen, id]);
   return answer?.key === key ? answer.load : LOADING;
@@ -256,7 +289,9 @@ const keyOf = (song: Song, index: number): string => `${index}-${song.song.video
  * A YT Music album or playlist opened from Discover: its cover, title, maker
  * and furniture, Play / Shuffle, then its songs. Songs the Library has play
  * its files; the rest stream. Offline, or when YouTube fails, a quiet empty
- * state takes the songs' place.
+ * state takes the songs' place. A playlist's songs show page by page, with a
+ * line under them while more come or when the rest didn't load; Play, Shuffle
+ * and taps play the songs shown.
  */
 export function YtSongList({
   known,
@@ -286,6 +321,7 @@ export function YtSongList({
     [songs, context],
   );
   const head = page?.head ?? known;
+  const restLine = load.status === "loaded" ? ytPlaylistRestLine(load.rest) : null;
   const furniture =
     page === null
       ? null
@@ -343,7 +379,18 @@ export function YtSongList({
             )}
           </>
         }
+        ListFooterComponent={<RestLine line={restLine} />}
       />
+    </View>
+  );
+}
+
+/** Under a playlist's songs while the rest is read, or when it couldn't be. */
+function RestLine({ line }: { line: string | null }) {
+  if (line === null) return null;
+  return (
+    <View className="justify-center" style={{ minHeight: CELL * 6, paddingTop: CELL * 2 }}>
+      <Text className="font-sans text-footnote text-secondary">{line}</Text>
     </View>
   );
 }
