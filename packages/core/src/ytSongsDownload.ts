@@ -8,6 +8,7 @@
  * one such list.
  */
 
+import type { MixedSong } from "./ytDiscover.ts";
 import type { YtSong } from "./ytMusic.ts";
 import {
   ytDownloadSharedJob,
@@ -15,6 +16,7 @@ import {
   ytDownloadsFromJournal,
   type YtDownloadJournalJob,
   type YtDownloadStatus,
+  type YtDownloads,
 } from "./ytDownloads.ts";
 
 /** Already on its way: queued, downloading or being saved. */
@@ -94,15 +96,16 @@ interface SongsDownloadInput<S extends YtSong> {
 }
 
 /**
- * Where downloading [songs], any list of YT Music songs, stands: Download
- * queues those the Library doesn't have and that aren't on their way, Cancel
- * the ones still cancellable, Retry Failed the failures once the rest has ended.
+ * Where downloading [songs] stands. [landed] counts the list's songs saved
+ * this session that it no longer holds as YT Music songs (a playlist's entry
+ * becomes the Library's song): the progress line counts them as saved.
  */
-export const ytSongsDownload = <S extends YtSong>(
+const songsDownload = <S extends YtSong>(
   songs: readonly S[],
   { inLibrary, jobs }: SongsDownloadInput<S>,
+  downloads: YtDownloads<S>,
+  landed: number,
 ): YtSongsDownload<S> => {
-  const downloads = ytDownloadsFromJournal(jobs);
   const statuses = songs.map((song) => ytDownloadStatus(downloads, song.videoId));
   const toDownload = requests(
     songs.filter((song, index) => {
@@ -120,7 +123,7 @@ export const ytSongsDownload = <S extends YtSong>(
   );
   // The list's batch: its songs downloaded or asked for this session.
   const batch = statuses.filter((status) => status !== null);
-  const saved = batch.filter((status) => status.kind === "done").length;
+  const saved = batch.filter((status) => status.kind === "done").length + landed;
   const downloading = batch.some(onItsWay);
   const actions: YtSongsDownloadAction[] = [];
   if (toDownload.length > 0) actions.push("download");
@@ -129,12 +132,22 @@ export const ytSongsDownload = <S extends YtSong>(
   if (toCancel.length > 0) actions.push("cancel");
   return {
     actions,
-    line: downloading ? `Downloading · ${saved} of ${batch.length}` : null,
+    line: downloading ? `Downloading · ${saved} of ${batch.length + landed}` : null,
     toDownload,
     toRetry,
     toCancel,
   };
 };
+
+/**
+ * Where downloading [songs], any list of YT Music songs, stands: Download
+ * queues those the Library doesn't have and that aren't on their way, Cancel
+ * the ones still cancellable, Retry Failed the failures once the rest has ended.
+ */
+export const ytSongsDownload = <S extends YtSong>(
+  songs: readonly S[],
+  input: SongsDownloadInput<S>,
+): YtSongsDownload<S> => songsDownload(songs, input, ytDownloadsFromJournal(input.jobs), 0);
 
 /** [view] with its entries named as [names] says. */
 const named = <S extends YtSong, A extends string>(
@@ -154,17 +167,75 @@ export const ytAlbumDownload = <S extends YtSong>(
   input: SongsDownloadInput<S>,
 ): YtAlbumDownload<S> => named(ytSongsDownload(songs, input), ALBUM_ACTIONS);
 
+export type YtPlaylistDownloadAction = "downloadPlaylist" | "retryFailed" | "cancelPlaylistDownload";
+
+/** Where a playlist's download stands, and what acting on it does. */
+export type YtPlaylistDownload<S extends YtSong = YtSong> = YtSongsDownload<
+  S,
+  YtPlaylistDownloadAction
+>;
+
+const PLAYLIST_ACTIONS: { readonly [K in YtSongsDownloadAction]: YtPlaylistDownloadAction } = {
+  download: "downloadPlaylist",
+  retryFailed: "retryFailed",
+  cancel: "cancelPlaylistDownload",
+};
+
+/**
+ * Where downloading a playlist holding [entries] stands: its YT Music
+ * entries are the list, in playlist order; its Library songs have nothing to
+ * download. A Library song whose file a download saved this session is an
+ * entry that has taken its place, and counts as saved.
+ */
+export const ytPlaylistDownload = <S extends YtSong>(
+  entries: readonly MixedSong<S, { readonly path: string }>[],
+  input: SongsDownloadInput<S>,
+): YtPlaylistDownload<S> => {
+  const downloads = ytDownloadsFromJournal(input.jobs);
+  const savedPaths = new Set(
+    downloads.jobs.flatMap(({ status }) => (status.kind === "done" ? [status.path] : [])),
+  );
+  const songs = entries.flatMap((entry) => (entry.source === "stream" ? [entry.song] : []));
+  const landed = entries.filter(
+    (entry) => entry.source === "library" && savedPaths.has(entry.track.path),
+  ).length;
+  return named(songsDownload(songs, input, downloads, landed), PLAYLIST_ACTIONS);
+};
+
+/** What each playlist entry says in the playlist's long-press menu. */
+export const YT_PLAYLIST_DOWNLOAD_ACTION_LABELS: {
+  readonly [A in YtPlaylistDownloadAction]: string;
+} = {
+  downloadPlaylist: "Download Playlist",
+  retryFailed: "Retry Failed",
+  cancelPlaylistDownload: "Cancel Playlist Download",
+};
+
 /** The generic entry each named one stands for. */
-const GENERIC_ACTIONS: { readonly [A in YtAlbumDownloadAction]: YtSongsDownloadAction } = {
+const GENERIC_ACTIONS: {
+  readonly [A in YtAlbumDownloadAction | YtPlaylistDownloadAction]: YtSongsDownloadAction;
+} = {
   downloadAlbum: "download",
+  downloadPlaylist: "download",
   retryFailed: "retryFailed",
   cancelAlbumDownload: "cancel",
+  cancelPlaylistDownload: "cancel",
+};
+
+/** A page's download button: [view]'s first entry, named short, or null when it offers none. */
+const button = <A extends YtAlbumDownloadAction | YtPlaylistDownloadAction>(
+  view: YtSongsDownload<YtSong, A>,
+): { readonly action: A; readonly label: string } | null => {
+  const action = view.actions[0];
+  return action === undefined ? null : { action, label: BUTTON_LABELS[GENERIC_ACTIONS[action]] };
 };
 
 /** The album page's download button: the album's first entry, or null when it offers none. */
 export const ytAlbumDownloadButton = (
   view: YtAlbumDownload,
-): { readonly action: YtAlbumDownloadAction; readonly label: string } | null => {
-  const action = view.actions[0];
-  return action === undefined ? null : { action, label: BUTTON_LABELS[GENERIC_ACTIONS[action]] };
-};
+): { readonly action: YtAlbumDownloadAction; readonly label: string } | null => button(view);
+
+/** The playlist page's download button: the playlist's first entry, or null when it offers none. */
+export const ytPlaylistDownloadButton = (
+  view: YtPlaylistDownload,
+): { readonly action: YtPlaylistDownloadAction; readonly label: string } | null => button(view);
