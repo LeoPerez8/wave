@@ -2,7 +2,7 @@
  * The track rows every song list reads (a `SongRow`). Kept free of Expo so
  * the store tests run them against a real SQLite (`testDatabase.ts`).
  */
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, sql, type SQL } from "drizzle-orm";
 
 import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
@@ -26,10 +26,25 @@ export const albumArtistIds = sql<readonly number[]>`(
     SELECT artist_id FROM album_artists
     WHERE album_artists.album_id = ${schema.albums.id} ORDER BY position))`.mapWith(idList);
 
-/** What every track list shows (a `SongRow`), plus what orders albums. */
+/**
+ * Tracks with a file. A missing song (a Track the Wave account has and this
+ * phone has no file for: `path` null) can't be played from a file, so what
+ * plays or reads files reads only these: the song lists (`songColumns`, each
+ * joining `tracks` with `withFile`), and the scan's, imports' and lookups'
+ * queries (`filePath` where `hasFile`).
+ */
+export const hasFile = isNotNull(schema.tracks.path);
+
+/** A join's [on] condition, for joining `tracks`: only tracks with a file (`hasFile`). */
+export const withFile = (on: SQL): SQL => and(on, hasFile) ?? on;
+
+/** A track's file, for queries that read only tracks with one (`hasFile`, `withFile`). */
+export const filePath = sql<string>`${schema.tracks.path}`;
+
+/** What every track list shows (a `SongRow`), plus what orders albums. Join `tracks` `withFile`. */
 export const songColumns = {
   id: schema.tracks.id,
-  path: schema.tracks.path,
+  path: filePath,
   title: schema.tracks.title,
   artist: schema.tracks.artistCredit,
   album: schema.albums.title,
@@ -48,15 +63,18 @@ export const songColumns = {
   year: schema.tracks.year,
 };
 
-/** Tracks with their `songColumns`. */
+/** Tracks with a file, with their `songColumns`. */
 export const trackQuery = (db: LibraryDatabase) => {
   const { tracks, artists, albums, artwork } = schema;
-  return db
-    .select(songColumns)
-    .from(tracks)
-    .innerJoin(artists, eq(tracks.artistId, artists.id))
-    .innerJoin(albums, eq(tracks.albumId, albums.id))
-    .leftJoin(artwork, eq(tracks.artworkHash, artwork.hash));
+  return (
+    db
+      .select(songColumns)
+      .from(tracks)
+      // In the join, so that callers' own `where` keeps it.
+      .innerJoin(artists, withFile(eq(tracks.artistId, artists.id)))
+      .innerJoin(albums, eq(tracks.albumId, albums.id))
+      .leftJoin(artwork, eq(tracks.artworkHash, artwork.hash))
+  );
 };
 
 /** The order of song lists (Songs, an artist's or a genre's songs): by title, then artist. */
@@ -75,7 +93,7 @@ export const selectLibraryLookupSongs = (db: LibraryDatabase) => {
   const { tracks, artists, albums, genres } = schema;
   return db
     .select({
-      path: tracks.path,
+      path: filePath,
       title: tracks.title,
       artist: tracks.artistCredit,
       album: albums.title,
@@ -89,6 +107,7 @@ export const selectLibraryLookupSongs = (db: LibraryDatabase) => {
     .innerJoin(artists, eq(tracks.artistId, artists.id))
     .innerJoin(albums, eq(tracks.albumId, albums.id))
     .leftJoin(genres, eq(tracks.genreId, genres.id))
+    .where(hasFile)
     .orderBy(...BY_TITLE)
     .all();
 };
@@ -101,9 +120,9 @@ export const selectKnownFiles = (db: LibraryDatabase, roots: readonly string[]) 
     (root) => sql`substr(${tracks.path}, 1, length(${root}) + 1) = ${`${root}/`}`,
   );
   return db
-    .select({ path: tracks.path, sizeBytes: tracks.sizeBytes, modifiedAt: tracks.modifiedAt })
+    .select({ path: filePath, sizeBytes: tracks.sizeBytes, modifiedAt: tracks.modifiedAt })
     .from(tracks)
-    .where(sql.join(under, sql` OR `))
+    .where(and(hasFile, sql.join(under, sql` OR `)))
     .all();
 };
 

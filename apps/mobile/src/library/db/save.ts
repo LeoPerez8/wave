@@ -229,7 +229,8 @@ export const saveBatch = (
         })
         .returning({ id: t.id, path: t.path })
         .all()
-        .map((row) => [row.path, row.id] as const),
+        // Every saved track has its file.
+        .flatMap((row) => (row.path === null ? [] : [[row.path, row.id] as const])),
     );
 
     linkTracks(
@@ -247,7 +248,7 @@ export const saveBatch = (
       })),
     );
     // A song a playlist streamed from YT Music becomes this Library song there.
-    if (linkEntries) linkPlaylistEntries(tx, [...trackIds.values()]);
+    if (linkEntries) linkPlaylistEntries(tx, now, [...trackIds.values()]);
   });
 };
 

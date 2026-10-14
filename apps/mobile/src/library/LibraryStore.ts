@@ -1,11 +1,7 @@
 import {
-  checkPlaylistName,
   compareAlbumTracks,
-  compareStrings,
   filesLeavingWithRoot,
   rememberSearch,
-  moveItem,
-  sortKey,
   type BlackPlayerPlay,
   type BlackPlayerTrack,
   type ImportedPlays,
@@ -19,7 +15,7 @@ import {
   type StatsWindow,
   type YtArtistSaved,
 } from "@wave/core";
-import { asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { drizzle, type ExpoSQLiteDatabase } from "drizzle-orm/expo-sqlite";
 import { migrate } from "drizzle-orm/expo-sqlite/migrator";
 import * as Context from "effect/Context";
@@ -65,13 +61,17 @@ import {
   type RecordedPlay,
 } from "./db/playHistory";
 import {
-  appendPlaylistSongs,
+  addToPlaylist,
+  createPlaylist,
+  deletePlaylist,
   linkPlaylistEntries,
+  movePlaylistItem,
   removePlaylistItems,
+  renamePlaylist,
   replacePlaylistSongs,
-  selectPlaylistCovers,
+  selectPlaylist,
   selectPlaylistEntries,
-  selectPlaylistTotals,
+  selectPlaylists,
   selectTrackPaths,
   type PlaylistEntry,
 } from "./db/playlists";
@@ -80,12 +80,16 @@ import * as schema from "./db/schema";
 import {
   BY_TITLE,
   deleteTracks,
+  filePath,
+  hasFile,
   selectKnownFiles,
   selectLibraryLookupSongs,
   trackArtistIds,
   trackQuery,
+  withFile,
 } from "./db/tracks";
 import { creditedPlayTotals, songListening, songsCrediting, trackPlayTotals } from "./db/stats";
+import { keyRecordings } from "./db/sync";
 import { saveYtArtist, selectYtArtist } from "./db/ytArtists";
 import type { KnownFile } from "./NativeScanner";
 
@@ -145,6 +149,7 @@ export interface LibraryLookupSong {
 /** One row of the Songs list. */
 export interface SongRow {
   readonly id: number;
+  /** The file: song lists list only Tracks with one (a missing song can't be played from a file). */
   readonly path: string;
   readonly title: string;
   /** The credit as written ("Ariana Grande, Doja Cat"). */
@@ -581,10 +586,10 @@ const removeRootSync = (db: Database, splits: CreditSplits, path: string): void 
     if (remaining.length === 0) throw new Error("Wave needs at least one music folder");
 
     const under = tx
-      .select({ path: tracks.path })
+      .select({ path: filePath })
       .from(tracks)
       // SQLite counts characters where JS counts UTF-16 units, so the length is taken in SQL.
-      .where(sql`substr(${tracks.path}, 1, length(${path}) + 1) = ${`${path}/`}`)
+      .where(and(hasFile, sql`substr(${tracks.path}, 1, length(${path}) + 1) = ${`${path}/`}`))
       .all()
       .map((row) => row.path);
     const leaving = filesLeavingWithRoot(under, path, remaining);
@@ -664,133 +669,6 @@ const rememberSearchSync = (db: Database, query: string, now: number): readonly 
     return next;
   });
 
-const NO_COVERS = { thumbPaths: [], artworkPaths: [] } as const;
-
-const NO_SONGS = { trackCount: 0, durationMs: 0 } as const;
-
-const listPlaylistsSync = (db: Database): PlaylistRow[] => {
-  const { playlists } = schema;
-  // Library tracks and YT Music entries alike (`db/playlists.ts`).
-  const covers = selectPlaylistCovers(db);
-  const totals = selectPlaylistTotals(db);
-  return (
-    db
-      .select({ id: playlists.id, name: playlists.name })
-      .from(playlists)
-      .all()
-      .map((row) => ({
-        ...row,
-        sort: sortKey(row.name),
-        ...(totals.get(row.id) ?? NO_SONGS),
-        ...(covers.get(row.id) ?? NO_COVERS),
-      }))
-      // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
-      .sort((a, b) => compareStrings(a.sort, b.sort) || a.id - b.id)
-  );
-};
-
-const getPlaylistSync = (db: Database, id: number): PlaylistDetail | null => {
-  const { playlists } = schema;
-  const playlist = db
-    .select({ id: playlists.id, name: playlists.name })
-    .from(playlists)
-    .where(eq(playlists.id, id))
-    .get();
-  if (playlist === undefined) return null;
-  const items = selectPlaylistEntries(db, id);
-  const covers = selectPlaylistCovers(db, id).get(id) ?? NO_COVERS;
-  // As Library › Playlists counts it.
-  const { trackCount, durationMs } = selectPlaylistTotals(db, id).get(id) ?? NO_SONGS;
-  return {
-    playlist: {
-      ...playlist,
-      sort: sortKey(playlist.name),
-      trackCount,
-      durationMs,
-      thumbPaths: covers.thumbPaths,
-      artworkPaths: covers.artworkPaths,
-    },
-    items,
-  };
-};
-
-/** Fails with the reason when Core rejects the name. */
-const requireName = (name: string, otherNames: readonly string[]): string => {
-  const check = checkPlaylistName(name, otherNames);
-  if (!check.ok) throw new Error(`Playlist name rejected (${check.problem})`);
-  return check.name;
-};
-
-const createPlaylistSync = (
-  db: Database,
-  name: string,
-  songs: readonly PlaylistSong[],
-  now: number,
-): PlaylistAddResult =>
-  db.transaction((tx) => {
-    const { playlists } = schema;
-    const names = tx
-      .select({ name: playlists.name })
-      .from(playlists)
-      .all()
-      .map((row) => row.name);
-    const stored = requireName(name, names);
-    const created = tx
-      .insert(playlists)
-      .values({ name: stored, createdAt: now, updatedAt: now })
-      .returning({ id: playlists.id })
-      .get();
-    return {
-      playlistId: created.id,
-      name: stored,
-      ...appendPlaylistSongs(tx, created.id, songs, now),
-    };
-  });
-
-const addToPlaylistSync = (
-  db: Database,
-  id: number,
-  songs: readonly PlaylistSong[],
-  now: number,
-): PlaylistAddResult =>
-  db.transaction((tx) => {
-    const { playlists } = schema;
-    const playlist = tx
-      .select({ name: playlists.name })
-      .from(playlists)
-      .where(eq(playlists.id, id))
-      .get();
-    if (playlist === undefined) throw new Error("The playlist no longer exists");
-    const result = appendPlaylistSongs(tx, id, songs, now);
-    if (result.added > 0)
-      tx.update(playlists).set({ updatedAt: now }).where(eq(playlists.id, id)).run();
-    return { playlistId: id, name: playlist.name, ...result };
-  });
-
-const movePlaylistItemSync = (
-  db: Database,
-  playlistId: number,
-  itemId: number,
-  toIndex: number,
-  now: number,
-): void =>
-  db.transaction((tx) => {
-    const { playlists, playlistItems } = schema;
-    const rows = tx
-      .select({ id: playlistItems.id, position: playlistItems.position })
-      .from(playlistItems)
-      .where(eq(playlistItems.playlistId, playlistId))
-      .orderBy(asc(playlistItems.position), asc(playlistItems.id))
-      .all();
-    const from = rows.findIndex((row) => row.id === itemId);
-    if (from === -1) return;
-    moveItem(rows, from, toIndex).forEach((row, position) => {
-      if (row.position !== position)
-        tx.update(playlistItems).set({ position }).where(eq(playlistItems.id, row.id)).run();
-    });
-    tx.update(playlists).set({ updatedAt: now }).where(eq(playlists.id, playlistId)).run();
-  });
-
 const make = Effect.gen(function* () {
   const db: Database = yield* Effect.try({
     try: () => {
@@ -811,6 +689,12 @@ const make = Effect.gen(function* () {
   yield* Effect.try({
     try: () => relinkCreditsIfUnlinked(db, splits),
     catch: (cause) => new LibraryStoreError({ operation: "split artist credits", cause }),
+  });
+  // After the upgrade that brought Wave accounts in, every song (and its
+  // plays) gets its recording key from the tags already stored (no rescan).
+  yield* Effect.try({
+    try: () => keyRecordings(db),
+    catch: (cause) => new LibraryStoreError({ operation: "key the Library's songs", cause }),
   });
 
   const attempt = <A>(operation: string, run: () => A): Effect.Effect<A, LibraryStoreError> =>
@@ -870,7 +754,7 @@ const make = Effect.gen(function* () {
 
     linkPlaylistEntries: attempt("link playlist entries", () =>
       db.transaction((tx) => {
-        linkPlaylistEntries(tx);
+        linkPlaylistEntries(tx, Date.now());
       }),
     ),
 
@@ -916,10 +800,10 @@ const make = Effect.gen(function* () {
               albumId: schema.tracks.albumId,
               album: schema.albums.title,
               palette: schema.artwork.palette,
-              path: schema.tracks.path,
+              path: filePath,
             })
             .from(schema.tracks)
-            .innerJoin(schema.artists, eq(schema.tracks.artistId, schema.artists.id))
+            .innerJoin(schema.artists, withFile(eq(schema.tracks.artistId, schema.artists.id)))
             .innerJoin(schema.albums, eq(schema.tracks.albumId, schema.albums.id))
             .leftJoin(schema.artwork, eq(schema.tracks.artworkHash, schema.artwork.hash))
             .where(eq(schema.tracks.id, id))
@@ -971,7 +855,7 @@ const make = Effect.gen(function* () {
         chunks(paths).flatMap((chunk) =>
           db
             .select({
-              path: schema.tracks.path,
+              path: filePath,
               sizeBytes: schema.tracks.sizeBytes,
               durationMs: schema.tracks.durationMs,
               title: schema.tracks.title,
@@ -979,7 +863,7 @@ const make = Effect.gen(function* () {
             })
             .from(schema.tracks)
             .innerJoin(schema.artists, eq(schema.tracks.artistId, schema.artists.id))
-            .where(inArray(schema.tracks.path, chunk))
+            .where(and(hasFile, inArray(schema.tracks.path, chunk)))
             .all(),
         ),
       ),
@@ -1052,42 +936,25 @@ const make = Effect.gen(function* () {
       db.delete(schema.recentSearches).run();
     }),
 
-    listPlaylists: attempt("list playlists", () => listPlaylistsSync(db)),
+    listPlaylists: attempt("list playlists", () => selectPlaylists(db)),
 
-    getPlaylist: (id) => attempt("open the playlist", () => getPlaylistSync(db, id)),
+    getPlaylist: (id) => attempt("open the playlist", () => selectPlaylist(db, id)),
 
     createPlaylist: (name, songs) =>
-      attempt("create the playlist", () => createPlaylistSync(db, name, songs, Date.now())),
+      attempt("create the playlist", () => createPlaylist(db, name, songs, Date.now())),
 
     renamePlaylist: (id, name) =>
-      attempt("rename the playlist", () =>
-        db.transaction((tx) => {
-          const { playlists } = schema;
-          const others = tx
-            .select({ name: playlists.name })
-            .from(playlists)
-            .where(ne(playlists.id, id))
-            .all()
-            .map((row) => row.name);
-          tx.update(playlists)
-            .set({ name: requireName(name, others), updatedAt: Date.now() })
-            .where(eq(playlists.id, id))
-            .run();
-        }),
-      ),
+      attempt("rename the playlist", () => renamePlaylist(db, id, name, Date.now())),
 
     deletePlaylist: (id) =>
-      attempt("delete the playlist", () => {
-        // Its items go with it (ON DELETE CASCADE).
-        db.delete(schema.playlists).where(eq(schema.playlists.id, id)).run();
-      }),
+      attempt("delete the playlist", () => deletePlaylist(db, id, Date.now())),
 
     addToPlaylist: (id, songs) =>
-      attempt("add to the playlist", () => addToPlaylistSync(db, id, songs, Date.now())),
+      attempt("add to the playlist", () => addToPlaylist(db, id, songs, Date.now())),
 
     movePlaylistItem: (playlistId, itemId, toIndex) =>
       attempt("reorder the playlist", () =>
-        movePlaylistItemSync(db, playlistId, itemId, toIndex, Date.now()),
+        movePlaylistItem(db, playlistId, itemId, toIndex, Date.now()),
       ),
 
     removePlaylistItems: (playlistId, itemIds) =>
@@ -1113,6 +980,7 @@ const make = Effect.gen(function* () {
       db
         .select({ trackId: schema.favorites.trackId })
         .from(schema.favorites)
+        .where(eq(schema.favorites.deleted, false))
         .all()
         .map((row) => row.trackId),
     ),

@@ -46,7 +46,11 @@ const library = (title: string): PlaylistSong => ({ source: "library", trackId: 
 const stream = (song: YtAlbumSong): PlaylistSong => ({ source: "stream", song });
 
 const newPlaylist = (name: string): number =>
-  db.insert(schema.playlists).values({ name, createdAt: 0, updatedAt: 0 }).returning().get().id;
+  db
+    .insert(schema.playlists)
+    .values({ name, createdAt: 0, updatedAt: 0, changedAt: 0 })
+    .returning()
+    .get().id;
 
 beforeEach(async () => {
   db = await openTestDatabase();
@@ -54,7 +58,7 @@ beforeEach(async () => {
     ids[title] = addTrack(db, { title, album: "Mix", artist: "Radiohead" });
   }
   playlistId = newPlaylist("Drive");
-  // Out of title order, with a gap in the positions.
+  // Out of title order, with a gap between the order keys.
   const items: [string, number][] = [
     ["Daydreaming", 0],
     ["Airbag", 1],
@@ -63,7 +67,13 @@ beforeEach(async () => {
   ];
   for (const [title, position] of items) {
     db.insert(schema.playlistItems)
-      .values({ playlistId, trackId: ids[title] ?? -1, position, addedAt: 0 })
+      .values({
+        playlistId,
+        trackId: ids[title] ?? -1,
+        orderKey: `a${position}`,
+        addedAt: 0,
+        changedAt: 0,
+      })
       .run();
   }
 });
@@ -211,7 +221,7 @@ describe("linkPlaylistEntries", () => {
     const before = selectPlaylistEntries(db, playlistId).map((entry) => entry.itemId);
 
     const luckyId = addTrack(db, { title: "Lucky", artist: "Radiohead", durationMs: 260_000 });
-    assert.equal(linkPlaylistEntries(db, [luckyId]), 2);
+    assert.equal(linkPlaylistEntries(db, 0, [luckyId]), 2);
 
     assert.deepEqual(titles(), ["Daydreaming", "Airbag", "Creep", "Airbag", "Lucky", "Bloom"]);
     assert.deepEqual(
@@ -224,7 +234,7 @@ describe("linkPlaylistEntries", () => {
   test("a song that isn't the same recording leaves the entry streamed", () => {
     appendPlaylistSongs(db, playlistId, [stream(yt("a", { title: "Lucky" }))], 0);
     const live = addTrack(db, { title: "Lucky", artist: "Radiohead", durationMs: 320_000 });
-    assert.equal(linkPlaylistEntries(db, [live]), 0);
+    assert.equal(linkPlaylistEntries(db, 0, [live]), 0);
     assert.equal(titles().at(-1), "yt:Lucky");
   });
 
@@ -240,7 +250,7 @@ describe("linkPlaylistEntries", () => {
       linkEntries: false,
     });
     assert.equal(titles().at(-1), "yt:Lucky");
-    assert.equal(linkPlaylistEntries(db), 1);
+    assert.equal(linkPlaylistEntries(db, 0), 1);
     assert.equal(titles().at(-1), "Lucky");
   });
 
@@ -248,7 +258,7 @@ describe("linkPlaylistEntries", () => {
     const luckyId = addTrack(db, { title: "Lucky", artist: "Radiohead", durationMs: 180_000 });
     ids.Lucky = luckyId;
     appendPlaylistSongs(db, playlistId, [library("Lucky"), stream(yt("a", { title: "Lucky" }))], 0);
-    linkPlaylistEntries(db, [luckyId]);
+    linkPlaylistEntries(db, 0, [luckyId]);
     assert.deepEqual(titles(), ["Daydreaming", "Airbag", "Creep", "Airbag", "Lucky"]);
   });
 
@@ -263,7 +273,7 @@ describe("linkPlaylistEntries", () => {
     );
     appendPlaylistSongs(db, otherId, [stream(uploads[1]!)], 0);
     const luckyId = addTrack(db, { title: "Lucky", artist: "Radiohead", durationMs: 180_000 });
-    linkPlaylistEntries(db, [luckyId]);
+    linkPlaylistEntries(db, 0, [luckyId]);
     assert.deepEqual(titles(), ["Daydreaming", "Airbag", "Creep", "Airbag", "Lucky", "Bloom"]);
     assert.deepEqual(titlesOf(otherId), ["Lucky"]);
   });
@@ -271,7 +281,7 @@ describe("linkPlaylistEntries", () => {
   test("deleting the Library song then takes its entries out, as for any Library song", () => {
     appendPlaylistSongs(db, playlistId, [stream(yt("a", { title: "Lucky" }))], 0);
     const luckyId = addTrack(db, { title: "Lucky", artist: "Radiohead" });
-    linkPlaylistEntries(db, [luckyId]);
+    linkPlaylistEntries(db, 0, [luckyId]);
     db.delete(schema.tracks).where(eq(schema.tracks.id, luckyId)).run();
     assert.deepEqual(titles(), ["Daydreaming", "Airbag", "Creep", "Airbag"]);
   });
@@ -334,11 +344,11 @@ describe("selectPlaylistCovers", () => {
     }
     appendPlaylistSongs(db, id, [library("One")], 0);
     db.insert(schema.playlistItems)
-      .values({ playlistId: id, ytSong: "not json", position: 1, addedAt: 0 })
+      .values({ playlistId: id, ytSong: "not json", orderKey: "a1", addedAt: 0, changedAt: 0 })
       .run();
     // The same cover again, under other songs: one tile.
     db.insert(schema.playlistItems)
-      .values({ playlistId: id, trackId: ids.One ?? -1, position: 2, addedAt: 0 })
+      .values({ playlistId: id, trackId: ids.One ?? -1, orderKey: "a2", addedAt: 0, changedAt: 0 })
       .run();
     appendPlaylistSongs(
       db,
@@ -379,7 +389,9 @@ describe("selectPlaylistTotals", () => {
       [10, "not json"],
       [11, JSON.stringify({ videoId: "b", durationMs: 90_000 })],
     ] as const) {
-      db.insert(schema.playlistItems).values({ playlistId, ytSong, position, addedAt: 0 }).run();
+      db.insert(schema.playlistItems)
+        .values({ playlistId, ytSong, orderKey: `b${position}`, addedAt: 0, changedAt: 0 })
+        .run();
     }
     const entries = selectPlaylistEntries(db, playlistId);
     assert.deepEqual(selectPlaylistTotals(db).get(playlistId), {

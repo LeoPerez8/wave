@@ -229,7 +229,7 @@ describe("credits", () => {
       db
         .select({ trackId: schema.playlistItems.trackId })
         .from(schema.playlistItems)
-        .orderBy(schema.playlistItems.position)
+        .orderBy(schema.playlistItems.orderKey)
         .all(),
       [{ trackId: boyfriend }, { trackId: rings }],
     );

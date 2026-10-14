@@ -4,12 +4,13 @@
  * SQLite in plain Node (`testDatabase.ts`); `LibraryStore` calls them.
  */
 import type { PlayEvent } from "@wave/core";
-import { desc, eq, inArray, isNull, max, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, max, sql } from "drizzle-orm";
 
 import type { AlbumRow, SongRow } from "../LibraryStore.ts";
 import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
-import { albumArtistIds, BY_TITLE, songColumns } from "./tracks.ts";
+import { playRecordingKey, stamped } from "./sync.ts";
+import { albumArtistIds, BY_TITLE, songColumns, withFile } from "./tracks.ts";
 
 /** A Most Played song with its number of counted plays. */
 export interface MostPlayedRow extends SongRow {
@@ -45,12 +46,16 @@ const progress = (play: PlayEvent) => ({
   counted: play.counted,
 });
 
-/** Records a play as it starts; returns its row id, to update it as it goes on. */
+/**
+ * Records a play as it starts, with its song's recording key; returns its row
+ * id, to update it as it goes on.
+ */
 export const recordPlay = (db: LibraryDatabase, play: PlayEvent): number =>
   db
     .insert(schema.playEvents)
     .values({
       trackId: Number(play.trackId),
+      recordingKey: playRecordingKey(Number(play.trackId)),
       startedAt: play.startedAt,
       contextType: play.context?.kind ?? null,
       contextId: play.context?.id ?? null,
@@ -164,7 +169,7 @@ const mostPlayedSongs = (db: LibraryDatabase): MostPlayedRow[] => {
   return db
     .select({ ...songColumns, playCount })
     .from(playEvents)
-    .innerJoin(tracks, eq(playEvents.trackId, tracks.id))
+    .innerJoin(tracks, withFile(eq(playEvents.trackId, tracks.id)))
     .innerJoin(artists, eq(tracks.artistId, artists.id))
     .innerJoin(albums, eq(tracks.albumId, albums.id))
     .leftJoin(artwork, eq(tracks.artworkHash, artwork.hash))
@@ -180,10 +185,11 @@ const recentFavorites = (db: LibraryDatabase): SongRow[] => {
   return db
     .select(songColumns)
     .from(favorites)
-    .innerJoin(tracks, eq(favorites.trackId, tracks.id))
+    .innerJoin(tracks, withFile(eq(favorites.trackId, tracks.id)))
     .innerJoin(artists, eq(tracks.artistId, artists.id))
     .innerJoin(albums, eq(tracks.albumId, albums.id))
     .leftJoin(artwork, eq(tracks.artworkHash, artwork.hash))
+    .where(eq(favorites.deleted, false))
     .orderBy(desc(favorites.addedAt), desc(favorites.trackId))
     .limit(LIST)
     .all();
@@ -195,10 +201,11 @@ export const listFavorites = (db: LibraryDatabase): FavoriteRow[] => {
   return db
     .select({ ...songColumns, starredAt: favorites.addedAt })
     .from(favorites)
-    .innerJoin(tracks, eq(favorites.trackId, tracks.id))
+    .innerJoin(tracks, withFile(eq(favorites.trackId, tracks.id)))
     .innerJoin(artists, eq(tracks.artistId, artists.id))
     .innerJoin(albums, eq(tracks.albumId, albums.id))
     .leftJoin(artwork, eq(tracks.artworkHash, artwork.hash))
+    .where(eq(favorites.deleted, false))
     .orderBy(desc(favorites.addedAt), ...BY_TITLE)
     .all();
 };
@@ -207,8 +214,10 @@ export const listFavorites = (db: LibraryDatabase): FavoriteRow[] => {
 const BATCH = 500;
 
 /**
- * Stars ([on]) or unstars many tracks in one transaction. Tracks starred
- * already keep when they were starred.
+ * Stars ([on]) or unstars many tracks in one transaction, stamping each star
+ * that changes (`changeStamp`). Tracks starred already keep when they were
+ * starred; unstarring leaves the star as a tombstone, and starring again
+ * brings it back.
  */
 export const setFavorites = (
   db: LibraryDatabase,
@@ -222,10 +231,18 @@ export const setFavorites = (
       const batch = trackIds.slice(start, start + BATCH);
       if (on)
         tx.insert(favorites)
-          .values(batch.map((trackId) => ({ trackId, addedAt: now })))
-          .onConflictDoNothing()
+          .values(batch.map((trackId) => ({ trackId, addedAt: now, changedAt: now })))
+          .onConflictDoUpdate({
+            target: favorites.trackId,
+            set: { addedAt: now, deleted: false, ...stamped(favorites, now) },
+            setWhere: eq(favorites.deleted, true),
+          })
           .run();
-      else tx.delete(favorites).where(inArray(favorites.trackId, batch)).run();
+      else
+        tx.update(favorites)
+          .set({ deleted: true, ...stamped(favorites, now) })
+          .where(and(inArray(favorites.trackId, batch), eq(favorites.deleted, false)))
+          .run();
     }
   });
 };
