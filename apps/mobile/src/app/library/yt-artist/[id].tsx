@@ -25,7 +25,7 @@ import { openAlbum } from "@/library/routes";
 import { useListScrollable } from "@/motion/heldTouch";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { openAlbumActions } from "@/playback/ActionsMenu";
-import { playDiscoverSongs } from "@/playback/actions";
+import { playPage } from "@/playback/actions";
 import { useThemeColor } from "@/theme/useThemeColor";
 import { useYtArtistPage } from "@/ytmusic/artistPage";
 import { DiscoverSongRow } from "@/ytmusic/DiscoverShelves";
@@ -228,7 +228,7 @@ export default function YtArtistScreen() {
   const context = useMemo(() => ({ kind: "ytArtist", id: browseId }) as const, [browseId]);
   const play = useCallback(
     (startIndex: number | undefined, shuffle = false) =>
-      void playDiscoverSongs(songs, startIndex, context, { shuffle }),
+      void playPage(songs, startIndex, context, { shuffle }),
     [songs, context],
   );
   const name = view?.name ?? knownName;
