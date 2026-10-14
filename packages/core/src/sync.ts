@@ -167,3 +167,79 @@ export const mergePlays = <P extends SyncPlay>(
   }
   return { plays: [...current, ...added], added };
 };
+
+/** A song as the first sign-in joins it: a phone's Track or an account song, known by its recording key. */
+export interface KeyedSong {
+  readonly recordingKey: string;
+}
+
+/** One side of the first sign-in: its songs and its playlists. */
+export interface LibrarySide<S extends KeyedSong, L extends SyncRow> {
+  /** The phone's Tracks with a file, or the account's songs (without tombstones). */
+  readonly songs: readonly S[];
+  /** The playlists as synced rows, tombstones included. */
+  readonly playlists: readonly L[];
+}
+
+/** An account song the phone has: every Track of the phone with its recording key. */
+export interface JoinedTrack<P extends KeyedSong, A extends KeyedSong> {
+  readonly account: A;
+  readonly phone: readonly P[];
+}
+
+/** What the first sign-in on a phone with a Library does. Nothing on either side is dropped. */
+export interface LibraryJoin<P extends KeyedSong, A extends KeyedSong, L extends SyncRow> {
+  /** The account's songs the phone has, in the account's order. */
+  readonly tracks: readonly JoinedTrack<P, A>[];
+  /** The account's songs the phone has no file for: they come in as missing songs. */
+  readonly missing: readonly A[];
+  /**
+   * The phone's songs the account lacks, which go up: one per recording key,
+   * the first in the phone's order, since the phone's files with one key are
+   * one song for the account.
+   */
+  readonly up: readonly P[];
+  /** The phone's playlist changes the account doesn't have yet. */
+  readonly playlistsUp: readonly L[];
+  /** The account's playlist changes the phone doesn't have yet. */
+  readonly playlistsDown: readonly L[];
+}
+
+/**
+ * Joins the phone's Library and the account's at the first sign-in (or a
+ * sign-in after signing out): the two are joined, never replaced. Songs meet
+ * by recording key. Playlists meet by id only, so two with the same name stay
+ * two; one both sides have from an earlier sign-in merges as `mergeRows` does.
+ */
+export const joinLibraries = <P extends KeyedSong, A extends KeyedSong, L extends SyncRow>(input: {
+  readonly phone: LibrarySide<P, L>;
+  readonly account: LibrarySide<A, L>;
+}): LibraryJoin<P, A, L> => {
+  const phoneByKey = new Map<string, P[]>();
+  for (const song of input.phone.songs) {
+    const same = phoneByKey.get(song.recordingKey);
+    if (same === undefined) phoneByKey.set(song.recordingKey, [song]);
+    else same.push(song);
+  }
+  const tracks: JoinedTrack<P, A>[] = [];
+  const missing: A[] = [];
+  const accountKeys = new Set<string>();
+  for (const song of input.account.songs) {
+    accountKeys.add(song.recordingKey);
+    const phone = phoneByKey.get(song.recordingKey);
+    if (phone === undefined) missing.push(song);
+    else tracks.push({ account: song, phone });
+  }
+  const up: P[] = [];
+  for (const [key, songs] of phoneByKey) {
+    const first = songs[0];
+    if (!accountKeys.has(key) && first !== undefined) up.push(first);
+  }
+  return {
+    tracks,
+    missing,
+    up,
+    playlistsUp: mergeRows(input.account.playlists, input.phone.playlists).accepted,
+    playlistsDown: mergeRows(input.phone.playlists, input.account.playlists).accepted,
+  };
+};

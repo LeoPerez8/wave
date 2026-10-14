@@ -714,11 +714,16 @@ export type { OrderedEntry } from "./orderKey.ts";
 export {
   RECORDING_LENGTH_TOLERANCE_MS,
   findRecording,
+  joinLibraries,
   mergePlays,
   mergeRows,
   recordingKey,
 } from "./sync.ts";
 export type {
+  JoinedTrack,
+  KeyedSong,
+  LibraryJoin,
+  LibrarySide,
   MergedPlays,
   MergedRows,
   Recording,

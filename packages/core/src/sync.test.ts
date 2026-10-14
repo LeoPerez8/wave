@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { findRecording, mergePlays, mergeRows, normalizeTrack, recordingKey } from "./index.ts";
+import {
+  findRecording,
+  joinLibraries,
+  mergePlays,
+  mergeRows,
+  normalizeTrack,
+  recordingKey,
+} from "./index.ts";
 import type { RawTrack } from "./index.ts";
 
 const MUSIC = "/storage/emulated/0/Music";
@@ -202,6 +209,67 @@ describe("mergePlays", () => {
     );
     assert.deepEqual(merged.plays, [first, second]);
     assert.deepEqual(merged.added, [second]);
+  });
+});
+
+describe("joinLibraries", () => {
+  const track = (id: number, key: string) => ({ id, recordingKey: key });
+  const accountSong = (key: string) => ({ recordingKey: key, title: key });
+  const noPlaylists = { playlists: [] };
+
+  test("the account's songs the phone has become its Tracks, the rest come in missing", () => {
+    const join = joinLibraries({
+      phone: { songs: [track(1, "abbey road/something"), track(2, "revolver/taxman")], playlists: [] },
+      account: {
+        songs: [accountSong("abbey road/something"), accountSong("help/yesterday")],
+        playlists: [],
+      },
+    });
+    assert.deepEqual(join.tracks, [
+      { account: accountSong("abbey road/something"), phone: [track(1, "abbey road/something")] },
+    ]);
+    assert.deepEqual(join.missing, [accountSong("help/yesterday")]);
+    assert.deepEqual(join.up, [track(2, "revolver/taxman")]);
+  });
+
+  test("two files with one recording key are one song: it goes up once, and both are its Tracks", () => {
+    const flac = track(1, "abbey road/something");
+    const mp3 = track(2, "abbey road/something");
+    const alone = joinLibraries({ phone: { songs: [flac, mp3], ...noPlaylists }, account: { songs: [], ...noPlaylists } });
+    assert.deepEqual(alone.up, [flac]);
+    assert.deepEqual(alone.tracks, []);
+
+    const joined = joinLibraries({
+      phone: { songs: [flac, mp3], ...noPlaylists },
+      account: { songs: [accountSong("abbey road/something")], ...noPlaylists },
+    });
+    assert.deepEqual(joined.tracks, [{ account: accountSong("abbey road/something"), phone: [flac, mp3] }]);
+    assert.deepEqual(joined.up, []);
+    assert.deepEqual(joined.missing, []);
+  });
+
+  test("playlists with the same name stay two playlists", () => {
+    const mine = row("pl-phone", 1_000, "pixel", "Favourites");
+    const theirs = row("pl-account", 2_000, "galaxy", "Favourites");
+    const join = joinLibraries({
+      phone: { songs: [], playlists: [mine] },
+      account: { songs: [], playlists: [theirs] },
+    });
+    assert.deepEqual(join.playlistsUp, [mine]);
+    assert.deepEqual(join.playlistsDown, [theirs]);
+  });
+
+  test("a playlist both sides have, from an earlier sign-in, keeps its latest change", () => {
+    const renamedHere = row("pl-1", 5_000, "pixel", "Gym (new)");
+    const onAccount = row("pl-1", 2_000, "galaxy", "Gym");
+    const removedThere = row("pl-2", 6_000, "galaxy", "Old", true);
+    const keptHere = row("pl-2", 1_000, "pixel", "Old");
+    const join = joinLibraries({
+      phone: { songs: [], playlists: [renamedHere, keptHere] },
+      account: { songs: [], playlists: [onAccount, removedThere] },
+    });
+    assert.deepEqual(join.playlistsUp, [renamedHere]);
+    assert.deepEqual(join.playlistsDown, [removedThere]);
   });
 });
 
