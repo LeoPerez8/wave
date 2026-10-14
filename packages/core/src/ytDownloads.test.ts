@@ -31,6 +31,10 @@ const job = (videoId: string, patch: Partial<YtDownloadJournalJob> = {}): YtDown
 const shown = (jobs: readonly YtDownloadJournalJob[], videoId: string) =>
   ytDownloadStatus(ytDownloadsFromJournal(jobs), videoId);
 
+/** What the row says for a YouTube Music job at [patch]'s phase. */
+const youtubeLine = (patch: Partial<YtDownloadJournalJob>) =>
+  ytDownloadLine(shown([job("a", { source: "youtube", ...patch })], "a"));
+
 describe("the native download journal, as rows show it", () => {
   test("a waiting download says so, in the order the journal keeps", () => {
     const state = ytDownloadsFromJournal([job("a", { phase: "transferring" }), job("b")]);
@@ -71,17 +75,15 @@ describe("the native download journal, as rows show it", () => {
   });
 
   test("a download from YouTube Music waits, downloads, is checked, then saved", () => {
-    const line = (patch: Partial<YtDownloadJournalJob>) =>
-      ytDownloadLine(shown([job("a", { source: "youtube", ...patch })], "a"));
-    assert.equal(line({ phase: "queued" }), "Waiting to download");
-    assert.equal(line({ phase: "preparing" }), "Waiting to download");
-    assert.equal(line({ phase: "prepared" }), "Waiting to download");
+    assert.equal(youtubeLine({ phase: "queued" }), "Waiting to download");
+    assert.equal(youtubeLine({ phase: "preparing" }), "Waiting to download");
+    assert.equal(youtubeLine({ phase: "prepared" }), "Waiting to download");
     assert.equal(
-      line({ phase: "transferring", received: 4_200, total: 10_000 }),
+      youtubeLine({ phase: "transferring", received: 4_200, total: 10_000 }),
       "Downloading · 42%",
     );
-    assert.equal(line({ phase: "sourceReady" }), "Checking the download");
-    assert.equal(line({ phase: "tagging" }), "Saving to the Library");
+    assert.equal(youtubeLine({ phase: "sourceReady" }), "Checking the download");
+    assert.equal(youtubeLine({ phase: "tagging" }), "Saving to the Library");
   });
 
   test("tagging, publishing and importing show as saving until the Library has the Track", () => {
