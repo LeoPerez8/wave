@@ -60,6 +60,25 @@ describe("downloading a list of YT Music songs", () => {
     assert.deepEqual(ended.actions, ["retryFailed"]);
     assert.deepEqual(ended.toCancel, []);
   });
+
+  test("songs fall back to YouTube Music one by one; Retry Failed asks only for those both sources failed", () => {
+    const songs = [song("a"), song("b"), song("c"), song("d")];
+    const view = ytSongsDownload(songs, {
+      inLibrary: ({ videoId }) => videoId === "a",
+      jobs: [
+        // Soulseek delivered "a"; "b" carries on from YouTube Music after Soulseek failed.
+        job("a", { source: "soulseek", ...saved("/a.mp3") }),
+        job("b", { source: "youtube", phase: "transferring", received: 10, total: 100 }),
+        job("c", { source: "youtube", phase: "failed", reason: "ytUnavailable" }),
+        job("d", { source: "soulseek", phase: "failed", reason: "offline" }),
+      ],
+    });
+    assert.deepEqual(view.actions, ["cancel"]);
+    assert.deepEqual(
+      view.toRetry.map(({ song: { videoId } }) => videoId),
+      ["c", "d"],
+    );
+  });
 });
 
 type Entry = MixedSong<YtSong, { readonly path: string }>;

@@ -5,6 +5,8 @@
  * is on, with or without a Google sign-in.
  */
 
+import type { YtDownloadFailure } from "./ytDownloads.ts";
+
 /** A download's source: the file it saves comes from one of them. */
 export type DownloadSource = "soulseek" | "youtube";
 
@@ -26,6 +28,45 @@ export const downloadSource = ({
   soulseekAccount,
 }: DownloadSourceSetup): DownloadSource | null =>
   soulseekAccount ? "soulseek" : ytMusicOn ? "youtube" : null;
+
+/** What Soulseek's fallback depends on. */
+export interface DownloadFallbackSetup {
+  /** YT Music is on in Settings. */
+  readonly ytMusicOn: boolean;
+}
+
+/**
+ * Soulseek failures that YouTube Music may still get past: no copy in 320 kbps
+ * (or every peer failed), an account Soulseek rejected or no longer has, a
+ * server that can't be reached while the phone is online, and an attempt that
+ * ran out of time. Offline, full storage and an unwritable folder would fail
+ * YouTube the same way; Cancel is never a failure.
+ */
+const FALLS_BACK: readonly YtDownloadFailure[] = [
+  "unavailable",
+  "accountRejected",
+  "account",
+  "unreachable",
+  "timedOut",
+];
+
+/**
+ * Where a Soulseek download that failed with [failure] carries on: YouTube
+ * Music while YT Music is on and the failure is one YouTube may get past; null
+ * when the download ends with the failure, as it does without a fallback.
+ */
+export const downloadFallback = (
+  failure: YtDownloadFailure,
+  { ytMusicOn }: DownloadFallbackSetup,
+): DownloadSource | null => (ytMusicOn && FALLS_BACK.includes(failure) ? "youtube" : null);
+
+/**
+ * The Soulseek failures that hand a download over to YouTube Music
+ * (`downloadFallback`), for the native journal to keep with the job: it meets
+ * them where no answer from JS can be waited for.
+ */
+export const downloadFallbackFailures = (setup: DownloadFallbackSetup): YtDownloadFailure[] =>
+  FALLS_BACK.filter((failure) => downloadFallback(failure, setup) !== null);
 
 /**
  * Whether the audio YouTube served, [durationMs] long as decoded on the

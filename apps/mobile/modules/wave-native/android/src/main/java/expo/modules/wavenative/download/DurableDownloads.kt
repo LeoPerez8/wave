@@ -85,6 +85,8 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
       if (existing["phase"] == "failed" || existing["phase"] == "cancelled" || existing["importFailure"] != null || deletedCompletion) {
         existing["generation"] = existing.number("generation") + 1
         existing.remove("token"); existing.remove("reason"); existing.remove("importFailure")
+        // Retry starts again from the source decided now, Soulseek first while it has an account.
+        existing.remove("fallback"); existing.remove("fellBackFrom")
         // Asked for again: it waits behind what's already queued.
         val key = existing["id"] as String
         jobs.remove(key); jobs[key] = existing
@@ -122,7 +124,7 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
     if (job["phase"] !in DECISIONS || job["token"] != null || job["acknowledged"] == true || job["importFailure"] != null || job.number("retryAt") > clock()) return null
     if (job.number("deadline") <= clock()) {
       // As in expire(): a published file is never a failed download, only one the Library didn't import.
-      if (job["phase"] == "completed") job["importFailure"] = "failed" else fail(job, "failed")
+      if (job["phase"] == "completed") job["importFailure"] = "failed" else fail(job, "timedOut")
       persist(); return null
     }
     job["decisionAttempts"] = job.number("decisionAttempts") + 1
@@ -137,11 +139,12 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
     if (job.number("generation") != generation || job["token"] != token || job.number("leaseUntil") < clock() || DECISIONS[job["phase"]] != decision) return false
     if (payload["failure"] != null) {
       val reason = payload["failure"] as String
+      if (decision == "prepare") keepFallback(job, payload)
       if (decision == "import" && reason != "noFolder") {
         job.remove("token")
         job["retryAt"] = clock() + 2_000L
         if (job.number("decisionAttempts") >= MAX_DECISIONS) job["importFailure"] = reason
-      } else if (decision == "prepare" && reason == "offline" && job.number("decisionAttempts") < MAX_DECISIONS) {
+      } else if (decision == "prepare" && retriesConnection(job, reason) && job.number("decisionAttempts") < MAX_DECISIONS) {
         // Searching reconnects the saved session; a dropped connection gets a few spaced retries.
         job.remove("token")
         job["retryAt"] = clock() + 5_000L * job.number("decisionAttempts")
@@ -153,10 +156,11 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
         val target = (payload["targetPath"] as? String)?.let(::File)
         val source = payload["source"] as? String ?: job["source"] as? String ?: SOULSEEK
         setSource(job, source)
+        keepFallback(job, payload)
         val candidates = if (source == YOUTUBE) {
           // YouTube's audio is saved as the M4A it serves, never re-encoded.
           if (target == null || !target.extension.equals("m4a", true)) { fail(job, "failed"); persist(); return true }
-          listOf(mapOf("source" to YOUTUBE, "videoId" to job.map("song")["videoId"]))
+          youtubeCandidates(job)
         } else {
           val candidates = payload.maps("candidates").take(3)
           // Only original MP3 320 is eligible; anything else is no recording rather than a lower one.
@@ -271,7 +275,8 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
       if (job["phase"] == "queued") continue
       if (stopAll || job.number("deadline") <= clock()) {
         if (job["phase"] == "completed") { job["importFailure"] = "failed"; job.remove("token") }
-        else fail(job, "failed")
+        // Android stopping the work isn't the source's fault; running out of time is.
+        else fail(job, if (stopAll) "failed" else "timedOut")
         transport.cancel(job["id"] as String)
       } else if (job["phase"] == "transferring" && (job.number("attemptDeadline") <= clock() || (job["queuePosition"] != null && job.number("queueDeadline") <= clock()))) {
         transport.cancel(job["id"] as String)
@@ -378,8 +383,8 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
           val reason = (error as? DurableFailure)?.reason ?: "unavailable"
           // The service stopping isn't the peer's fault: the next start retries the same peer.
           if (stopped) { cleanup(job); transition(job, "prepared"); job["attempts"] = maxOf(0L, job.number("attempts") - 1) }
-          else if (reason == "offline" && job.number("attempts") < MAX_ATTEMPTS) { cleanup(job); transition(job, "prepared"); job["retryAt"] = clock() + 2_000L * job.number("attempts") }
-          else if (reason in listOf("account", "storage", "noFolder", "offline", "noSource", "ytUnavailable")) fail(job, reason)
+          else if (retriesConnection(job, reason) && job.number("attempts") < MAX_ATTEMPTS) { cleanup(job); transition(job, "prepared"); job["retryAt"] = clock() + 2_000L * job.number("attempts") }
+          else if (reason in listOf("account", "accountRejected", "storage", "noFolder", "offline", "unreachable", "noSource", "ytUnavailable")) fail(job, reason)
           else nextCandidate(job)
         } else fail(job, "storage")
         persist()
@@ -402,7 +407,59 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
     if (source == null) return
     job["source"] = source; job["policy"] = if (source == YOUTUBE) YOUTUBE_M4A else MP3_320
   }
-  private fun fail(job: MutableMap<String, Any?>, reason: String) { job["reason"] = reason; job["endedAt"] = clock(); transition(job, "failed"); job["generation"] = job.number("generation") + 1; cleanup(job) }
+  private fun youtubeCandidates(job: Map<String, Any?>) = listOf(mapOf("source" to YOUTUBE, "videoId" to job.map("song")["videoId"]))
+
+  /**
+   * Keeps what a Soulseek job's prepare answer says about YouTube Music (Core's
+   * `downloadFallbackFailures`): the failures that hand the job over, and the M4A's place. The
+   * tags come with a failed answer too, so a job that never found a peer can still fall back.
+   */
+  private fun keepFallback(job: MutableMap<String, Any?>, payload: Map<String, Any?>) {
+    val fallback = payload.map("fallback")
+    if (job["source"] != YOUTUBE && fallback["source"] == YOUTUBE && (fallback["targetPath"] as? String)?.endsWith(".m4a", true) == true) {
+      job["fallback"] = clean(fallback)
+    } else job.remove("fallback")
+    if (payload["tags"] != null) job["tags"] = clean(payload.map("tags"))
+  }
+
+  /**
+   * A lost connection gets a few spaced retries: being offline always, Soulseek's server not
+   * answering only when there's no YouTube Music to carry on from at once.
+   */
+  private fun retriesConnection(job: Map<String, Any?>, reason: String) =
+    reason == "offline" || (reason == "unreachable" && !fallsBack(job, reason))
+
+  /** Whether Soulseek failing [job] with [reason] hands it over to YouTube Music. */
+  private fun fallsBack(job: Map<String, Any?>, reason: String) =
+    job["source"] != YOUTUBE && job["phase"] in ACQUIRING && reason in job.map("fallback").strings("failures")
+
+  /**
+   * Carries [job] on from YouTube Music when Soulseek's [reason] is one Core hands over: the same
+   * job and row, with YouTube's M4A as the target and a time budget of its own. The plan is used
+   * up, so YouTube's own failure ends the job; Retry starts again from Soulseek.
+   */
+  private fun fallBack(job: MutableMap<String, Any?>, reason: String): Boolean {
+    if (!fallsBack(job, reason)) return false
+    val fallback = job.map("fallback")
+    cleanup(job)
+    for (key in listOf("fallback", "peer", "audio", "receiptId", "received", "total", "queuePosition", "queueDeadline", "attemptDeadline", "resumeAttemptDeadline", "resumeQueueDeadline")) job.remove(key)
+    setSource(job, YOUTUBE)
+    job["fellBackFrom"] = reason
+    job["targetPath"] = fallback["targetPath"]
+    job["candidates"] = youtubeCandidates(job); job["candidateIndex"] = 0L; job["attempts"] = 0L
+    job["deadline"] = clock() + JOB_MS
+    job["generation"] = job.number("generation") + 1
+    transition(job, "prepared")
+    return true
+  }
+
+  /** Every way a job fails goes through here, which is where Soulseek's failures fall back. */
+  private fun fail(job: MutableMap<String, Any?>, reason: String) {
+    if (fallBack(job, reason)) return
+    // YT Music was turned off before YouTube could take over: Soulseek's failure stands.
+    job["reason"] = if (reason == "noSource") job["fellBackFrom"] as? String ?: reason else reason
+    job["endedAt"] = clock(); transition(job, "failed"); job["generation"] = job.number("generation") + 1; cleanup(job)
+  }
   private fun cleanup(job: Map<String, Any?>) { for (key in listOf("sourcePath", "outputPath")) (job[key] as? String)?.let { if (it != job["finalPath"]) File(it).delete() } }
   private fun included(file: File): Boolean {
     val path = file.canonicalFile.toPath()
@@ -444,6 +501,8 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
     private const val MP3_320 = "mp3-320"
     private const val YOUTUBE_M4A = "youtube-m4a"
     private val TERMINAL = setOf("failed", "cancelled")
+    /** Until the audio is accepted; afterwards a failure is the save's, which YouTube would share. */
+    private val ACQUIRING = setOf("preparing", "prepared", "transferring", "sourceReady")
     private val DECISIONS = mapOf("preparing" to "prepare", "sourceReady" to "confirm", "awaitingPublication" to "publish", "completed" to "import")
   }
 }

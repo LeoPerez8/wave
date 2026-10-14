@@ -1,9 +1,11 @@
 /**
  * The Download menu and rows of YT Music songs, backed by the native journal: Core picks the
- * source (`downloadSource`), Soulseek's automatic recording selection or YouTube Music's M4A.
+ * source (`downloadSource`), Soulseek's automatic recording selection or YouTube Music's M4A,
+ * and which Soulseek failures the journal hands over to YouTube Music (`downloadFallback`).
  */
 import {
   YT_DOWNLOADS_NONE,
+  downloadFallbackFailures,
   downloadSource,
   isWithin,
   soulseekCandidates,
@@ -22,16 +24,19 @@ import {
   ytSongsDownload,
   type DownloadSource,
   type MixedSong,
+  type SoulseekCandidate,
   type YtAlbumDownload,
   type YtAlbumDownloadAction,
   type YtPlaylistDownload,
   type YtPlaylistDownloadAction,
   type YtDownloadFailure,
   type YtDownloadStatus,
+  type YtDownloadTags,
   type YtDownloads,
 } from "@wave/core";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import { useMemo, useSyncExternalStore } from "react";
 import { PermissionsAndroid, Platform } from "react-native";
 
@@ -68,17 +73,21 @@ const failure = (cause: unknown): DownloadFailed => {
   const code = soulseekErrorCode(cause) ?? ytDownloadErrorCode(cause);
   return new DownloadFailed({
     reason:
-      code === "ERR_SLSK_SIGNED_OUT" || code === "ERR_SLSK_AUTH"
+      code === "ERR_SLSK_SIGNED_OUT"
         ? "account"
-        : code === "ERR_SLSK_OFFLINE" || code === "ERR_YT_OFFLINE"
-          ? "offline"
-          : code === "ERR_SLSK_STORAGE" || code === "ERR_YT_STORAGE"
-            ? "storage"
-            : code === "ERR_SLSK_INVALID_AUDIO" ||
-                code === "ERR_SLSK_PEER" ||
-                code === "ERR_SLSK_QUEUED"
-              ? "unavailable"
-              : "failed",
+        : code === "ERR_SLSK_AUTH"
+          ? "accountRejected"
+          : code === "ERR_SLSK_UNREACHABLE"
+            ? "unreachable"
+            : code === "ERR_SLSK_OFFLINE" || code === "ERR_YT_OFFLINE"
+              ? "offline"
+              : code === "ERR_SLSK_STORAGE" || code === "ERR_YT_STORAGE"
+                ? "storage"
+                : code === "ERR_SLSK_INVALID_AUDIO" ||
+                    code === "ERR_SLSK_PEER" ||
+                    code === "ERR_SLSK_QUEUED"
+                  ? "unavailable"
+                  : "failed",
     cause,
   });
 };
@@ -122,8 +131,36 @@ const metadata = (song: NativeYtSong) =>
   });
 
 /** Core's source for a download now: YT Music's setting and whether Soulseek has an account. */
-const currentSource = (session: SoulseekSession): DownloadSource | null =>
-  downloadSource({ ytMusicOn: ytMusicEnabled(), soulseekAccount: session.status !== "signedOut" });
+const currentSource = (
+  session: SoulseekSession,
+  ytMusicOn = ytMusicEnabled(),
+): DownloadSource | null =>
+  downloadSource({ ytMusicOn, soulseekAccount: session.status !== "signedOut" });
+
+/**
+ * What the journal keeps to carry a Soulseek job on from YouTube Music: the failures Core hands
+ * over (`downloadFallbackFailures`) and where the M4A goes.
+ */
+interface DownloadFallbackPlan {
+  readonly source: "youtube";
+  readonly targetPath: string;
+  readonly failures: readonly YtDownloadFailure[];
+}
+
+/** The journal's answer to "prepare": a plan, or Soulseek's failure with what falls back from it. */
+type PrepareAnswer =
+  | {
+      readonly source: DownloadSource;
+      readonly candidates: readonly SoulseekCandidate[];
+      readonly tags: YtDownloadTags;
+      readonly targetPath: string;
+      readonly fallback?: DownloadFallbackPlan;
+    }
+  | {
+      readonly failure: YtDownloadFailure;
+      readonly tags: YtDownloadTags;
+      readonly fallback?: DownloadFallbackPlan;
+    };
 
 /** The source a download is asked for with; the prepare decision decides again when it starts. */
 const requestedSource = async (): Promise<DownloadSource | null> => {
@@ -136,7 +173,9 @@ const requestedSource = async (): Promise<DownloadSource | null> => {
 
 /**
  * The journal's "prepare" decision: the source, the song's tags and where it goes, and for
- * Soulseek the peers with this recording.
+ * Soulseek the peers with this recording. A Soulseek job also carries Core's fallback while YT
+ * Music is on, with its answer or with Soulseek's failure, so the journal can hand it over to
+ * YouTube Music when Soulseek can't deliver the song.
  */
 export const prepareDownload = (song: NativeYtSong) =>
   Effect.gen(function* () {
@@ -146,25 +185,48 @@ export const prepareDownload = (song: NativeYtSong) =>
       store.excludedFolders,
     ]).pipe(Effect.mapError((cause) => new DownloadFailed({ reason: "storage", cause })));
     if (roots.length === 0) return yield* new DownloadFailed({ reason: "noFolder" });
-    const source = currentSource(yield* native(() => WaveSoulseek.session()));
+    const ytMusicOn = ytMusicEnabled();
+    const source = currentSource(yield* native(() => WaveSoulseek.session()), ytMusicOn);
     if (source === null) return yield* new DownloadFailed({ reason: "noSource" });
     if (source === "youtube") {
       const tags = yield* metadata(song);
       const target = ytDownloadDestination(roots, excludedFolders, tags, source);
       if (target === null) return yield* new DownloadFailed({ reason: "noFolder" });
-      return { source, candidates: [], tags, target };
+      return { source, candidates: [], tags, targetPath: target.path } satisfies PrepareAnswer;
     }
     const query = soulseekQuery(song);
-    if (query === "") return yield* new DownloadFailed({ reason: "unavailable" });
-    const [reports, tags] = yield* Effect.all(
-      [native(() => WaveSoulseek.search(query)), metadata(song)],
+    const [found, tags] = yield* Effect.all(
+      [
+        Effect.result(
+          query === ""
+            ? Effect.fail(new DownloadFailed({ reason: "unavailable" }))
+            : native(() => WaveSoulseek.search(query)),
+        ),
+        metadata(song),
+      ],
       { concurrency: "unbounded" },
     );
-    const candidates = soulseekCandidates(song, reports);
-    if (candidates.length === 0) return yield* new DownloadFailed({ reason: "unavailable" });
+    const failures = downloadFallbackFailures({ ytMusicOn });
+    const youtube =
+      failures.length === 0 ? null : ytDownloadDestination(roots, excludedFolders, tags, "youtube");
+    const fallback: { readonly fallback?: DownloadFallbackPlan } =
+      youtube === null
+        ? {}
+        : { fallback: { source: "youtube", targetPath: youtube.path, failures } };
+    if (Result.isFailure(found))
+      return { failure: found.failure.reason, tags, ...fallback } satisfies PrepareAnswer;
+    const candidates = soulseekCandidates(song, found.success);
+    if (candidates.length === 0)
+      return { failure: "unavailable", tags, ...fallback } satisfies PrepareAnswer;
     const target = ytDownloadDestination(roots, excludedFolders, tags, source);
     if (target === null) return yield* new DownloadFailed({ reason: "noFolder" });
-    return { source, candidates, tags, target };
+    return {
+      source,
+      candidates,
+      tags,
+      targetPath: target.path,
+      ...fallback,
+    } satisfies PrepareAnswer;
   });
 
 /** Recheck current folders both before publication and before recovered completion import. */
@@ -220,15 +282,8 @@ const publicationTarget = (claim: NativeDownloadDecision) =>
 const answer = (claim: NativeDownloadDecision) =>
   Effect.gen(function* () {
     switch (claim.decision) {
-      case "prepare": {
-        const plan = yield* prepareDownload(claim.song);
-        return {
-          source: plan.source,
-          candidates: plan.candidates,
-          tags: plan.tags,
-          targetPath: plan.target.path,
-        };
-      }
+      case "prepare":
+        return yield* prepareDownload(claim.song);
       case "confirm": {
         if (claim.audio === undefined) return yield* new DownloadFailed({ reason: "failed" });
         if (!("receivedTags" in claim.audio)) {

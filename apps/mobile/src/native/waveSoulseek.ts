@@ -3,6 +3,7 @@ import type {
   SoulseekCandidate,
   SoulseekReceivedTags,
   SoulseekRecording,
+  YtDownloadFailure,
   YtDownloadJournalJob,
   YtDownloadTags,
 } from "@wave/core";
@@ -21,6 +22,8 @@ export interface NativeDownloadJob extends YtDownloadJournalJob<NativeYtSong> {
   /** What arrived, once validated natively: Soulseek's MP3 or YouTube's M4A (by the job's source). */
   readonly audio?: NativeSoulseekAudio | NativeYoutubeAudio;
   readonly receiptId?: string;
+  /** The Soulseek failure a job carrying on from YouTube Music fell back from. */
+  readonly fellBackFrom?: YtDownloadFailure;
 }
 
 /** A decision the journal leased to JS; answered with `submitDecision` before [leaseUntil]. */

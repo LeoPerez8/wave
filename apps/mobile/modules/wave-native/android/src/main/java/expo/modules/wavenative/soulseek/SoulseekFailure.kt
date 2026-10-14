@@ -6,6 +6,8 @@ enum class SoulseekFailure(val code: String, val notice: String) {
   SIGNED_OUT("ERR_SLSK_SIGNED_OUT", "Connect a Soulseek account in Settings"),
   AUTH("ERR_SLSK_AUTH", "Soulseek rejected the account. Check your username and password"),
   OFFLINE("ERR_SLSK_OFFLINE", "Couldn't connect to Soulseek. Retry when you're online"),
+  /** The phone is online but Soulseek's server doesn't answer, or dropped the connection. */
+  UNREACHABLE("ERR_SLSK_UNREACHABLE", "Soulseek's server can't be reached. Retry later"),
   PEER("ERR_SLSK_PEER", "The peer is unavailable. Retry the download"),
   QUEUED("ERR_SLSK_QUEUED", "The peer queue took too long. Retry the download"),
   INVALID_AUDIO("ERR_SLSK_INVALID_AUDIO", "The received file isn't a complete MP3 320 recording"),
