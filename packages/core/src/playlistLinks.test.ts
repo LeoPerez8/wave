@@ -8,6 +8,7 @@ import {
   playlistImportSources,
   recognisePlaylistLink,
   sharedTextImport,
+  spotifyShortLinkTarget,
   type YtAlbumSong,
 } from "./index.ts";
 
@@ -264,12 +265,12 @@ describe("recognisePlaylistLink", () => {
     assert.deepEqual(recognisePlaylistLink("my favourite songs"), {
       ok: false,
       problem: "notLink",
-      reason: "Paste a link to a YouTube Music playlist.",
+      reason: "Paste a link to a YouTube Music or Spotify playlist.",
     });
     assert.deepEqual(recognisePlaylistLink("  \n"), {
       ok: false,
       problem: "empty",
-      reason: "Paste a link to a YouTube Music playlist.",
+      reason: "Paste a link to a YouTube Music or Spotify playlist.",
     });
   });
 
@@ -277,7 +278,115 @@ describe("recognisePlaylistLink", () => {
     assert.deepEqual(recognisePlaylistLink(`https://example.com/playlist?list=${ID}`), {
       ok: false,
       problem: "otherSite",
-      reason: "Wave imports playlists from YouTube Music links.",
+      reason: "Wave imports playlists from YouTube Music and Spotify links.",
+    });
+  });
+});
+
+describe("recognisePlaylistLink: Spotify", () => {
+  const SPOTIFY = "1RTENWq73MEx1Pop40ZZ5S";
+  const spotify = { ok: true, link: { service: "spotify", playlistId: SPOTIFY } };
+
+  test("a Spotify playlist link gives its playlist id, extra parameters ignored", () => {
+    for (const text of [
+      `https://open.spotify.com/playlist/${SPOTIFY}`,
+      `https://open.spotify.com/playlist/${SPOTIFY}?si=4f2a9c1b8e7d4c3a&pt=abc`,
+      `https://open.spotify.com/intl-pt/playlist/${SPOTIFY}?si=4f2a9c1b8e7d4c3a`,
+      `https://open.spotify.com/intl-pt-BR/playlist/${SPOTIFY}`,
+      `https://open.spotify.com/user/daanmathijs1999/playlist/${SPOTIFY}`,
+      `https://open.spotify.com/embed/playlist/${SPOTIFY}?utm_source=generator`,
+      `open.spotify.com/playlist/${SPOTIFY}`,
+      `http://OPEN.spotify.com/playlist/${SPOTIFY}/`,
+    ]) {
+      assert.deepEqual(recognisePlaylistLink(text), spotify, text);
+    }
+  });
+
+  test("a Spotify URI names the playlist too", () => {
+    for (const text of [
+      `spotify:playlist:${SPOTIFY}`,
+      `spotify:user:daanmathijs1999:playlist:${SPOTIFY}`,
+    ]) {
+      assert.deepEqual(recognisePlaylistLink(text), spotify, text);
+    }
+  });
+
+  test("a short share link is kept to follow, as only Spotify knows what it names", () => {
+    assert.deepEqual(recognisePlaylistLink("https://spotify.link/uszhQI5hT3b"), {
+      ok: true,
+      link: { service: "spotifyShort", url: "https://spotify.link/uszhQI5hT3b" },
+    });
+    assert.deepEqual(recognisePlaylistLink("spotify.app.link/uszhQI5hT3b?_p=c21436"), {
+      ok: true,
+      link: { service: "spotifyShort", url: "https://spotify.app.link/uszhQI5hT3b" },
+    });
+  });
+
+  test("a link to a Spotify song is rejected as a song, and other Spotify pages as not playlists", () => {
+    for (const text of [
+      "https://open.spotify.com/track/3HDsUtYD9XztWhwQY2smjt?si=1",
+      "https://open.spotify.com/intl-de/track/3HDsUtYD9XztWhwQY2smjt",
+      "spotify:track:3HDsUtYD9XztWhwQY2smjt",
+    ]) {
+      assert.deepEqual(
+        recognisePlaylistLink(text),
+        { ok: false, problem: "song", reason: "This is a link to a song, not a playlist." },
+        text,
+      );
+    }
+    for (const text of [
+      "https://open.spotify.com/album/4yP0hdKOZPNshxUOjY0cZj",
+      "https://open.spotify.com/artist/1Xyo4u8uXC1ZmMpatF05PJ",
+      "https://open.spotify.com/user/daanmathijs1999",
+      "https://open.spotify.com/playlist/abc",
+      "https://open.spotify.com/",
+      "spotify:album:4yP0hdKOZPNshxUOjY0cZj",
+      "https://spotify.link/",
+    ]) {
+      assert.deepEqual(
+        recognisePlaylistLink(text),
+        { ok: false, problem: "notPlaylist", reason: "This link isn't to a playlist." },
+        text,
+      );
+    }
+  });
+});
+
+describe("spotifyShortLinkTarget", () => {
+  const SPOTIFY = "1RTENWq73MEx1Pop40ZZ5S";
+
+  test("a short link that lands on Spotify's page names that page's playlist", () => {
+    assert.deepEqual(
+      spotifyShortLinkTarget(
+        `https://open.spotify.com/playlist/${SPOTIFY}?si=abc&_branch_match_id=123`,
+        "",
+      ),
+      { ok: true, link: { service: "spotify", playlistId: SPOTIFY } },
+    );
+  });
+
+  test("one that lands on Branch's page names the first Spotify page in it", () => {
+    const body = `<html><head><meta property="al:android:url" content="spotify://playlist/${SPOTIFY}">
+<script>window.location = "https://open.spotify.com/playlist/${SPOTIFY}?si=abc&_branch_match_id=1";</script>
+<a href="https://open.spotify.com/playlist/${SPOTIFY}">Open</a></head></html>`;
+    assert.deepEqual(spotifyShortLinkTarget("https://spotify.app.link/uszhQI5hT3b?_p=c214", body), {
+      ok: true,
+      link: { service: "spotify", playlistId: SPOTIFY },
+    });
+  });
+
+  test("a short link to a song, or to nothing Wave knows, says so", () => {
+    assert.deepEqual(
+      spotifyShortLinkTarget(
+        "https://spotify.app.link/wud9sAYDbDb?_p=c214",
+        'location = "https://open.spotify.com/track/3HDsUtYD9XztWhwQY2smjt?si=1"',
+      ),
+      { ok: false, problem: "song", reason: "This is a link to a song, not a playlist." },
+    );
+    assert.deepEqual(spotifyShortLinkTarget("https://spotify.link/nothing", "<html></html>"), {
+      ok: false,
+      problem: "notPlaylist",
+      reason: "This link isn't to a playlist.",
     });
   });
 });
@@ -308,6 +417,23 @@ https://music.youtube.com/playlist?list=${ID}`,
     }
   });
 
+  test("the text Spotify's app shares opens its playlist's import", () => {
+    const SPOTIFY = "37i9dQZF1DXcBWIGoYBM5M";
+    const spotify = { kind: "import", link: { service: "spotify", playlistId: SPOTIFY } };
+    for (const text of [
+      `https://open.spotify.com/playlist/${SPOTIFY}?si=4f2a9c1b8e7d4c3a`,
+      `Today's Top Hits https://open.spotify.com/playlist/${SPOTIFY}?si=4f2a9c1b8e7d4c3a`,
+      `Check out this playlist on Spotify!\nhttps://open.spotify.com/intl-pt/playlist/${SPOTIFY}?si=4f2a`,
+      `spotify:playlist:${SPOTIFY}`,
+    ]) {
+      assert.deepEqual(sharedTextImport(text, on), spotify, text);
+    }
+    assert.deepEqual(sharedTextImport("Today's Top Hits https://spotify.link/uszhQI5hT3b", on), {
+      kind: "import",
+      link: { service: "spotifyShort", url: "https://spotify.link/uszhQI5hT3b" },
+    });
+  });
+
   test("anything else shared says what Wave imports", () => {
     for (const text of [
       "https://music.youtube.com/watch?v=dQw4w9WgXcQ&si=Ab12_cd-EF",
@@ -325,7 +451,7 @@ https://music.youtube.com/playlist?list=${ID}`,
         {
           kind: "notice",
           title: "Can't import this",
-          message: "Wave imports playlists from YouTube Music links.",
+          message: "Wave imports playlists from YouTube Music and Spotify links.",
         },
         text,
       );
@@ -339,7 +465,8 @@ https://music.youtube.com/playlist?list=${ID}`,
         {
           kind: "notice",
           title: "YT Music is off",
-          message: "Turn on YT Music in Settings to import playlists from YouTube Music links.",
+          message:
+            "Turn on YT Music in Settings to import playlists from YouTube Music and Spotify links.",
         },
         text,
       );
