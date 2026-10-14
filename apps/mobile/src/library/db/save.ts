@@ -3,6 +3,7 @@
  * tracks leave empty. Kept free of Expo so the store tests run it against a
  * real SQLite (`testDatabase.ts`).
  */
+import { recordingKey } from "@wave/core";
 import { eq, sql, type SQL } from "drizzle-orm";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 
@@ -50,6 +51,8 @@ const primary = (artistIds: readonly number[]): number => {
  * Upserts one scanner batch (and the artwork it references) in a single
  * transaction. [moves] first re-point indexed tracks to the paths they were
  * found under, so they keep their id (and with it history and favorites).
+ * Each track is keyed by its tags (Core's `recordingKey`), and keeps the
+ * video id a YouTube Music download gave it (`IndexedTrack.videoId`).
  * Tracks and albums are filed under every artist their credit names (see
  * `credits.ts`), split with the store's [splits]. Playlists' YT Music entries
  * that the saved tracks positively are become those tracks
@@ -174,6 +177,8 @@ export const saveBatch = (
         .values(
           tracks.map((track) => ({
             path: track.path,
+            recordingKey: recordingKey(track),
+            videoId: track.videoId ?? null,
             folderId: requireId(folderIds, track.folder, "folder"),
             fileName: track.fileName,
             sizeBytes: track.sizeBytes,
@@ -203,6 +208,9 @@ export const saveBatch = (
           target: t.path,
           // Everything but added_at, which keeps the first time the file was seen.
           set: {
+            recordingKey: excluded(t.recordingKey),
+            // A download's video id stays when the file is saved again without one.
+            videoId: sql`coalesce(${excluded(t.videoId)}, ${t.videoId})`,
             folderId: excluded(t.folderId),
             fileName: excluded(t.fileName),
             sizeBytes: excluded(t.sizeBytes),

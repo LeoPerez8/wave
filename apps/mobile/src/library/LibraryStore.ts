@@ -113,6 +113,11 @@ export interface IndexedTrack extends LibraryTrack {
   readonly artworkHash: string | null;
   /** Lyrics in its tags or a sidecar `.lrc`. */
   readonly hasLyrics: boolean;
+  /**
+   * The YouTube video id of a song just downloaded from YouTube Music. Saving
+   * the file again without one (a rescan) keeps the one it has.
+   */
+  readonly videoId?: string | null;
 }
 
 export interface IndexedArtwork {

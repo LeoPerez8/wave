@@ -267,15 +267,19 @@ export const downloadPathIncluded = (path: string) =>
     );
   });
 
-/** Transactional upsert preserves ids, favorites, playlists and history on repeated delivery. */
-export const importDownload = (saved: NativeSavedDownload) =>
+/**
+ * Transactional upsert preserves ids, favorites, playlists and history on
+ * repeated delivery. A song downloaded from YouTube Music keeps its
+ * [videoId] on its Track; a Soulseek download has none.
+ */
+export const importDownload = (saved: NativeSavedDownload, videoId: string | null) =>
   Effect.gen(function* () {
     if (!(yield* downloadPathIncluded(saved.path)))
       return yield* new DownloadFailed({ reason: "noFolder" });
     const store = yield* LibraryStore;
     yield* store
       .saveBatch(
-        [toIndexedTrack(saved.track)],
+        [{ ...toIndexedTrack(saved.track), videoId }],
         saved.artwork === null ? [] : [toIndexedArtwork(saved.artwork)],
       )
       .pipe(Effect.mapError((cause) => new DownloadFailed({ reason: "storage", cause })));
@@ -330,7 +334,9 @@ const answer = (claim: NativeDownloadDecision) =>
       case "import": {
         if (claim.saved === undefined) return yield* new DownloadFailed({ reason: "failed" });
         yield* refreshDownloadPolicy;
-        return { path: yield* importDownload(claim.saved) };
+        // A job from before YouTube Music downloads is Soulseek's.
+        const videoId = claim.source === "youtube" ? claim.song.videoId : null;
+        return { path: yield* importDownload(claim.saved, videoId) };
       }
     }
   }).pipe(

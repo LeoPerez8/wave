@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  normalizeTrack,
   orderKeyBetween,
   recordingKey,
   writePlaylistYtSong,
@@ -11,10 +12,13 @@ import {
 } from "@wave/core";
 import { sql } from "drizzle-orm";
 
+import type { IndexedTrack } from "../LibraryStore.ts";
 import { importedPlays, saveImportedPlays } from "./blackPlayer.ts";
+import { creditSplits } from "./credits.ts";
 import { libraryCounts } from "./counts.ts";
 import { listFavorites, recordPlay } from "./playHistory.ts";
 import { selectPlaylistEntries } from "./playlists.ts";
+import { saveBatch } from "./save.ts";
 import * as schema from "./schema.ts";
 import { selectChangesSince, selectPhoneId, selectTrackIdentities } from "./sync.ts";
 import {
@@ -313,6 +317,75 @@ describe("plays", () => {
       { trackId: airbag, key },
       { trackId: airbag, key },
     ]);
+  });
+});
+
+/** A file as the scanner reads it, tagged as given. */
+const scanned = (
+  title: string,
+  tags: { album?: string; trackNumber?: string } = {},
+): IndexedTrack => ({
+  ...normalizeTrack({
+    path: `/Music/${title}.m4a`,
+    title,
+    artist: "Radiohead",
+    album: tags.album ?? "OK Computer",
+    trackNumber: tags.trackNumber ?? "1",
+    durationMs: 200_000,
+  }),
+  sizeBytes: 1_000,
+  modifiedAt: 0,
+  sampleRate: null,
+  bitrateKbps: null,
+  artworkHash: null,
+  hasLyrics: false,
+});
+
+const identityOf = (db: TestDatabase, path: string) =>
+  selectTrackIdentities(db).find((track) => track.path === path);
+
+describe("saving files", () => {
+  test("a scanned file gets its recording key and no video id", async () => {
+    const db = await openTestDatabase();
+    saveBatch(db, creditSplits(), [scanned("Airbag")], [], [], 0);
+    assert.deepEqual(identityOf(db, "/Music/Airbag.m4a"), {
+      id: identityOf(db, "/Music/Airbag.m4a")?.id,
+      path: "/Music/Airbag.m4a",
+      recordingKey: recordingKey({
+        title: "Airbag",
+        album: "OK Computer",
+        albumArtist: "Radiohead",
+        discNumber: null,
+        trackNumber: 1,
+      }),
+      videoId: null,
+      durationMs: 200_000,
+    });
+  });
+
+  test("a file saved again with other tags is keyed by them", async () => {
+    const db = await openTestDatabase();
+    saveBatch(db, creditSplits(), [scanned("Airbag")], [], [], 0);
+    saveBatch(db, creditSplits(), [scanned("Airbag", { trackNumber: "2" })], [], [], 1);
+    assert.equal(
+      identityOf(db, "/Music/Airbag.m4a")?.recordingKey,
+      recordingKey({
+        title: "Airbag",
+        album: "OK Computer",
+        albumArtist: "Radiohead",
+        discNumber: null,
+        trackNumber: 2,
+      }),
+    );
+  });
+
+  test("a YouTube Music download keeps its video id, also when its file is saved again", async () => {
+    const db = await openTestDatabase();
+    saveBatch(db, creditSplits(), [{ ...scanned("Lucky"), videoId: "v-lucky" }], [], [], 0);
+    assert.equal(identityOf(db, "/Music/Lucky.m4a")?.videoId, "v-lucky");
+    // A rescan, or Find Lyrics and Genre writing its tags.
+    saveBatch(db, creditSplits(), [scanned("Lucky", { album: "OK Computer OKNOTOK" })], [], [], 1);
+    assert.equal(identityOf(db, "/Music/Lucky.m4a")?.videoId, "v-lucky");
   });
 });
 
