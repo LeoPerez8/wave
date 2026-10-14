@@ -128,6 +128,7 @@ class DurableYoutubeDownloadsTest {
       owner.advance(broken, Untouched)
       assertEquals("prepared", owner.snapshot().single()["phase"])
       assertFalse(File(owner.snapshot().single()["sourcePath"] as String).exists())
+      now += DurableDownloads.RETRY_PAUSE_MS
       owner.advance(Served, Untouched)
       assertEquals("sourceReady", owner.snapshot().single()["phase"])
 
@@ -136,11 +137,39 @@ class DurableYoutubeDownloadsTest {
       owner.cancel("song", NoCancel)
       owner.advance(broken, Untouched)
       answer(owner, "prepare", mapOf("source" to "youtube", "targetPath" to File(folder, "Other.m4a").path, "tags" to emptyMap<String, Any?>(), "failurePlan" to CorePlans.youtube), id = "other")
-      repeat(10) { owner.advance(broken, Untouched); now += 1_000 }
+      repeat(10) { owner.advance(broken, Untouched); now += 15_000 }
       val job = owner.snapshot().single { it["id"] == "other" }
       assertEquals("failed", job["phase"])
       assertEquals("failed", job["reason"])
       assertEquals(1 + DurableDownloads.MAX_ATTEMPTS.toInt(), attempts)
+    }
+  }
+
+  /** Each restart downloads the song again from its first byte: on mobile data, never back to back. */
+  @Test fun aBrokenTransferStartsAgainOnlyAfterAPauseThatGrowsWithEachAttempt() {
+    withFolder { folder ->
+      var now = 1_000L
+      val owner = DurableDownloads(File(folder, "jobs"), clock = { now })
+      var attempts = 0
+      val broken = transfer { _, _, source -> attempts++; source.parentFile.mkdirs(); source.writeText("partial"); throw java.io.IOException("Cut off") }
+      owner.enqueue(song, null, emptyMap(), "youtube")
+      prepareYoutube(owner, File(folder, "Recording.m4a"))
+      owner.advance(broken, Untouched)
+      repeat(3) { owner.advance(broken, Untouched) }
+      assertEquals(1, attempts)
+      now += 1_999
+      owner.advance(broken, Untouched)
+      assertEquals(1, attempts)
+      now += 1
+      owner.advance(broken, Untouched)
+      assertEquals(2, attempts)
+      // The second pause is longer.
+      now += 2_000
+      owner.advance(broken, Untouched)
+      assertEquals(2, attempts)
+      now += 2_000
+      owner.advance(broken, Untouched)
+      assertEquals(3, attempts)
     }
   }
 

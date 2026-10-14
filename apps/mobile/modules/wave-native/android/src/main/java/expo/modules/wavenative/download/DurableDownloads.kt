@@ -393,7 +393,7 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
           val reason = (error as? DurableFailure)?.reason ?: "unavailable"
           // The service stopping isn't the peer's fault: the next start retries the same peer.
           if (stopped) { cleanup(job); transition(job, "prepared"); job["attempts"] = maxOf(0L, job.number("attempts") - 1) }
-          else if (reason in plan(job).strings("retry") && job.number("attempts") < MAX_ATTEMPTS) { cleanup(job); transition(job, "prepared"); job["retryAt"] = clock() + 2_000L * job.number("attempts") }
+          else if (reason in plan(job).strings("retry") && job.number("attempts") < MAX_ATTEMPTS) { cleanup(job); transition(job, "prepared"); job["retryAt"] = clock() + RETRY_PAUSE_MS * job.number("attempts") }
           else if (reason in plan(job).strings("retry") || reason in plan(job).strings("end")) fail(job, reason)
           else nextCandidate(job)
         } else fail(job, "storage")
@@ -409,7 +409,10 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
     job.remove("resumeAttemptDeadline"); job.remove("resumeQueueDeadline")
     cleanup(job)
     if (job["source"] != YOUTUBE) job["candidateIndex"] = job.number("candidateIndex") + 1
-    if (job.number("candidateIndex") >= job.maps("candidates").size || job.number("attempts") >= MAX_ATTEMPTS) fail(job, exhausted(job)) else transition(job, "prepared")
+    if (job.number("candidateIndex") >= job.maps("candidates").size || job.number("attempts") >= MAX_ATTEMPTS) { fail(job, exhausted(job)); return }
+    transition(job, "prepared")
+    // YouTube's stream again means the whole song again: a pause, longer each time, comes first.
+    if (job["source"] == YOUTUBE) job["retryAt"] = clock() + RETRY_PAUSE_MS * job.number("attempts")
   }
   /** The failure plan the prepare answer brought; without one, every failure ends the job. */
   private fun plan(job: Map<String, Any?>) = job.map("failurePlan")
@@ -501,6 +504,8 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
     /** How long a sending peer may go quiet. */
     const val STALL_MS = 60_000L
     const val MAX_ATTEMPTS = 6L
+    /** The pause before a transfer from the same peer, or YouTube's stream, again: times the attempts so far. */
+    const val RETRY_PAUSE_MS = 2_000L
     const val MAX_DECISIONS = 3L
     const val FORGET_FAILED_MS = 24 * 60 * 60_000L
     const val SOULSEEK = "soulseek"
