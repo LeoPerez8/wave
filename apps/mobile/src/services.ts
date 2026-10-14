@@ -3,6 +3,8 @@ import * as Effect from "effect/Effect";
 import { Auto } from "@/auto/Auto";
 import { startAutoLyrics } from "@/auto/autoLyrics";
 import { startAutoResponder } from "@/auto/autoResponder";
+import { onSyncedSettingChange } from "@/lib/persistedSetting";
+import { LibraryStore } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import type { AutoRequest } from "@/native/wavePlayer";
 import { connectPlayer } from "@/playback/actions";
@@ -26,10 +28,23 @@ const answerAuto = (request: AutoRequest): Promise<unknown> =>
     }),
   );
 
+/** Stamps a synced preference the owner changed in the Library store, for the Wave account. */
+const stampPreference = (key: string): void => {
+  appRuntime
+    .runPromise(
+      Effect.gen(function* () {
+        const store = yield* LibraryStore;
+        yield* store.stampPreference(key);
+      }),
+    )
+    .catch((error: unknown) => console.warn("[wave] Couldn't record a preference change", error));
+};
+
 /**
  * Starts the app services that work without UI: the library store, the queue
  * and player sync, playback persistence and play history (one `appRuntime`),
- * the Android Auto responder and Auto's lyrics. The Activity's root
+ * the Android Auto responder, Auto's lyrics and the stamps of synced
+ * preference changes. The Activity's root
  * layout and the headless `WaveService` task (index.ts) both call it;
  * whichever comes first starts them, and later calls change nothing, so one
  * JS runtime never initialises them twice. The library scan stays with the UI.
@@ -43,6 +58,7 @@ export const startServices = (by: ServicesStarter): void => {
   startedBy = by;
   console.log(`[wave] services started by the ${by}`);
   connectPlayer();
+  onSyncedSettingChange(stampPreference);
   startAutoResponder(answerAuto);
   startAutoLyrics();
 };

@@ -4,6 +4,7 @@ import { persistedSetting } from "@/lib/persistedSetting";
 
 const shortcutTab = persistedSetting<LibrarySectionSlug | null>({
   key: "settings.shortcutTab",
+  synced: true,
   read: parseShortcutTab,
   write: (section) => section,
 });

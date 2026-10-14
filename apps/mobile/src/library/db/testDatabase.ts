@@ -12,7 +12,9 @@ import initSqlJs from "sql.js";
 
 import { creditSplits, relinkCreditsIfUnlinked } from "./credits.ts";
 import migrations from "./migrations.ts";
+import { setFavorites } from "./playHistory.ts";
 import * as schema from "./schema.ts";
+import { keyRecordings } from "./sync.ts";
 
 export type TestDatabase = Awaited<ReturnType<typeof openTestDatabase>>;
 
@@ -47,11 +49,13 @@ export const openTestDatabase = async (options: { readonly through?: string } = 
 
 /**
  * Applies the migrations a database opened `through` an older one is missing,
- * then what the store does after migrating (`relinkCreditsIfUnlinked`).
+ * then what the store does after migrating (`relinkCreditsIfUnlinked`,
+ * `keyRecordings`).
  */
 export const migrateTestDatabase = async (db: TestDatabase): Promise<void> => {
   await migrate(db as unknown as Migrator, migrations);
   relinkCreditsIfUnlinked(db, creditSplits());
+  keyRecordings(db);
 };
 
 export interface FixtureTrack {
@@ -72,9 +76,10 @@ export interface FixtureTrack {
   readonly hasLyrics?: boolean;
 }
 
-/** Stars a track at `addedAt`. */
+/** Stars a track at `addedAt` (as the Wave of the database's schema did). */
 export const star = (db: TestDatabase, trackId: number, addedAt: number): void => {
-  db.insert(schema.favorites).values({ trackId, addedAt }).run();
+  if (hasColumn(db, "favorites", "changed_at")) setFavorites(db, [trackId], true, addedAt);
+  else db.run(sql`INSERT INTO favorites (track_id, added_at) VALUES (${trackId}, ${addedAt})`);
 };
 
 const upsertId = <T extends { id: number }>(existing: T | undefined, insert: () => T): number =>
@@ -201,8 +206,16 @@ export const addTrack = (db: TestDatabase, track: FixtureTrack): number => {
       .onConflictDoNothing()
       .run();
   }
+  // As saving a scanned file keys it.
+  if (hasColumn(db, "tracks", "recording_key")) keyRecordings(db);
   return id;
 };
+
+/** Whether [table] has [column] in the database's schema. */
+const hasColumn = (db: TestDatabase, table: string, column: string): boolean =>
+  db.get<{ n: number }>(
+    sql`SELECT count(*) AS n FROM pragma_table_info(${table}) WHERE name = ${column}`,
+  ).n > 0;
 
 /** Whether the database has credit links (migration 0012). */
 const hasCredits = (db: TestDatabase): boolean =>
