@@ -66,6 +66,19 @@ class YtArtistParserTest {
   }
 
   @Test
+  fun readsTheArtistsImageAsASquare() {
+    val page = YtArtistParser.page(body("artist-page.json"))!!
+    assertEquals(
+      "https://lh3.googleusercontent.com/qLhu6Py_4_xoBsoubKQsXlhOQGqU9YU1ZRAbFusF0LlrPkXbbpu7bEh-k_ZtE4JwLgubvucAQqcK1hRk=w544-h544-p-l90-rj",
+      page.artworkUrl,
+    )
+    val bare = """{"header":{"musicImmersiveHeaderRenderer":{"title":{"runs":[{"text":"X"}]}}},""" +
+      """"contents":{"singleColumnBrowseResultsRenderer":{"tabs":[{"tabRenderer":{"content":""" +
+      """{"sectionListRenderer":{"contents":[]}}}}]}}}"""
+    assertNull(YtArtistParser.page(bare)!!.artworkUrl)
+  }
+
+  @Test
   fun readsTheArtistsAlbumsAndSingles() {
     val page = YtArtistParser.page(body("artist-page.json"))!!
     assertEquals(10, page.albums.size)
