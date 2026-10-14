@@ -1,23 +1,25 @@
 import { LegendList } from "@legendapp/list/react-native";
+import { ytTrackId, type MixedSong, type YtArtistAlbum, type YtSong } from "@wave/core";
 import { useLocalSearchParams } from "expo-router";
 import { useCallback, useMemo } from "react";
 import { Text, useWindowDimensions, View } from "react-native";
 
 import { ArtistImage } from "@/catalog/ArtistImage";
+import { AlbumTile } from "@/catalog/AlbumTile";
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { TrackRow } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
-import { playSongs } from "@/playback/actions";
+import { playDiscoverSongs, playSongs } from "@/playback/actions";
 import { useCurrentTrackId } from "@/playback/hooks";
-import { openTrackActions } from "@/playback/ActionsMenu";
+import { openAlbumActions, openTrackActions } from "@/playback/ActionsMenu";
 import { mixedTarget, type MixedItem } from "@/playback/actionTargets";
-import { albumPairs, albumRowHeight, AlbumPair, useAlbumTileSize } from "@/library/AlbumGrid";
+import { albumRowHeight, toAlbumSummary, useAlbumTileSize } from "@/library/AlbumGrid";
 import { DetailFrame } from "@/library/DetailFrame";
 import { useFavoriteIds } from "@/library/favorites";
 import { useArtist } from "@/library/hooks";
 import type { AlbumRow, ArtistDetail, ArtistRow, SongRow } from "@/library/LibraryStore";
-import { parseId, useKnownRow } from "@/library/routes";
+import { openAlbum, parseId, useKnownRow } from "@/library/routes";
 import { SongSortButton } from "@/library/SongSortButton";
 import { useSortedSongs } from "@/library/songSort";
 import { ListIntro, songCount, toTrackSummary } from "@/library/TrackList";
@@ -25,26 +27,62 @@ import { useListScrollable } from "@/motion/heldTouch";
 import { selectableRow } from "@/selection/selectableRow";
 import { useListSelection, type ListSelection } from "@/selection/useListSelection";
 import { ArtistStatsBlock } from "@/stats/ArtistStatsBlock";
-import { YtArtistSection } from "@/ytmusic/YtArtistSection";
+import type { NativeYtSong } from "@/native/waveYtMusic";
+import { useYtArtistSection } from "@/ytmusic/artistSection";
+import { YT_ARTIST_NOTE, YtReleaseTile } from "@/ytmusic/YtArtistSection";
+import { YtLookupFooter } from "@/ytmusic/YtLookupFooter";
+import { YtSongRow } from "@/ytmusic/YtSongRow";
+
+/** A tile of the page's album grid: a Library album, or a release only YouTube Music has. */
+type AlbumCell =
+  | { readonly kind: "library"; readonly album: AlbumRow }
+  | { readonly kind: "yt"; readonly album: YtArtistAlbum; readonly shelf: "albums" | "singles" };
 
 type Item =
   | { readonly type: "section"; readonly label: string }
-  | { readonly type: "albums"; readonly albums: readonly AlbumRow[] }
-  | { readonly type: "track"; readonly song: SongRow; readonly index: number };
+  | { readonly type: "albums"; readonly cells: readonly AlbumCell[] }
+  | { readonly type: "track"; readonly song: SongRow; readonly index: number }
+  | { readonly type: "ytSong"; readonly song: NativeYtSong; readonly index: number };
 
 const SECTION_HEAD = CELL * 6;
 
-const artistItems = (detail: ArtistDetail, songs: readonly SongRow[]): Item[] => {
+/** What YouTube Music adds to the page once asked: releases and top songs the Library lacks. */
+interface YtAdditions {
+  readonly albums: readonly YtArtistAlbum[];
+  readonly singles: readonly YtArtistAlbum[];
+  readonly songs: readonly NativeYtSong[];
+}
+
+const NO_ADDITIONS: YtAdditions = { albums: [], singles: [], songs: [] };
+
+const libraryCell = (album: AlbumRow): AlbumCell => ({ kind: "library", album });
+
+const cellKey = (cell: AlbumCell): string =>
+  cell.kind === "library" ? `album-${cell.album.id}` : `yt-${cell.album.browseId}`;
+
+const artistItems = (detail: ArtistDetail, songs: readonly SongRow[], yt: YtAdditions): Item[] => {
   const items: Item[] = [];
-  const shelf = (label: string, albums: readonly AlbumRow[]) => {
-    if (albums.length === 0) return;
+  const shelf = (label: string, cells: readonly AlbumCell[]) => {
+    if (cells.length === 0) return;
     items.push({ type: "section", label });
-    for (const pair of albumPairs(albums)) items.push({ type: "albums", albums: pair });
+    for (let i = 0; i < cells.length; i += 2)
+      items.push({ type: "albums", cells: cells.slice(i, i + 2) });
   };
-  shelf("Albums", detail.albums);
-  shelf("Appears on", detail.appearsOn);
-  if (songs.length > 0) items.push({ type: "section", label: "Songs" });
+  // YouTube Music's releases the Library lacks follow the Library's own, in one grid.
+  shelf("Albums", [
+    ...detail.albums.map(libraryCell),
+    ...yt.albums.map((album): AlbumCell => ({ kind: "yt", album, shelf: "albums" })),
+  ]);
+  shelf(
+    "Singles & EPs",
+    yt.singles.map((album): AlbumCell => ({ kind: "yt", album, shelf: "singles" })),
+  );
+  shelf("Appears on", detail.appearsOn.map(libraryCell));
+  if (songs.length + yt.songs.length > 0) items.push({ type: "section", label: "Songs" });
   songs.forEach((song, index) => items.push({ type: "track", song, index }));
+  yt.songs.forEach((song, index) =>
+    items.push({ type: "ytSong", song, index: songs.length + index }),
+  );
   return items;
 };
 
@@ -53,9 +91,11 @@ const itemKey = (item: Item): string => {
     case "section":
       return `section-${item.label}`;
     case "albums":
-      return `albums-${item.albums.map((album) => album.id).join("-")}`;
+      return `albums-${item.cells.map(cellKey).join("-")}`;
     case "track":
       return `track-${item.song.id}`;
+    case "ytSong":
+      return ytTrackId(item.song.videoId);
   }
 };
 
@@ -83,6 +123,50 @@ const albumSelectionOf = (page: ListSelection<MixedItem>): ListSelection<AlbumRo
   start: (album) => page.start(albumItem(album)),
   toggle: (album) => page.toggle(albumItem(album)),
 });
+
+/**
+ * A row of the album grid: Library albums (tap opens, long-press the menu,
+ * selectable) and YouTube Music's releases the Library lacks.
+ */
+function AlbumCellPair({
+  cells,
+  size,
+  selection,
+}: {
+  cells: readonly AlbumCell[];
+  size: number;
+  selection: ListSelection<AlbumRow>;
+}) {
+  return (
+    <View className="flex-row" style={{ gap: grid.gutter, height: albumRowHeight(size) }}>
+      {cells.map((cell) =>
+        cell.kind === "library" ? (
+          <AlbumTile
+            key={cellKey(cell)}
+            album={toAlbumSummary(cell.album)}
+            size={size}
+            {...selectableRow(
+              cell.album,
+              selection,
+              () => openAlbum(cell.album.id, cell.album),
+              (options) => openAlbumActions(cell.album, options),
+            )}
+          />
+        ) : (
+          <YtReleaseTile
+            key={cellKey(cell)}
+            album={cell.album}
+            kind={cell.shelf}
+            size={size}
+            selecting={selection.selecting}
+          />
+        ),
+      )}
+    </View>
+  );
+}
+
+const ignore = (): void => undefined;
 
 /** The artist page's head: their image as a large circle, then their name. */
 function ArtistHead({ artist }: { artist: ArtistRow }) {
@@ -131,29 +215,47 @@ function ArtistContent({ shown }: { shown: Shown }) {
   const tile = useAlbumTileSize(grid.margin);
   // In the sort chosen for artists; Play, Shuffle and rows all play this displayed order.
   const { songs } = useSortedSongs("artist", detail.songs);
-  const items = useMemo(() => artistItems(detail, songs), [detail, songs]);
+  // The releases among these the Library has aren't YouTube Music's to add.
+  const libraryAlbums = useMemo(
+    () => [...detail.albums, ...detail.appearsOn],
+    [detail.albums, detail.appearsOn],
+  );
+  // Asked only on Show on YouTube Music; nothing shows until the page is read.
+  const yt = useYtArtistSection(detail.artist.name, detail.artist.id, libraryAlbums);
+  const ytView = loaded ? yt.view : null;
+  const ytShelves = loaded ? yt.shelves : null;
+  const additions = useMemo((): YtAdditions => {
+    if (ytView === null || ytShelves === null) return NO_ADDITIONS;
+    const missing = (kind: "albums" | "singles") =>
+      ytShelves
+        .find((shelf) => shelf.kind === kind)
+        ?.releases.filter((release) => release.library === null)
+        .map((release) => release.album) ?? [];
+    return { albums: missing("albums"), singles: missing("singles"), songs: ytView.songs };
+  }, [ytView, ytShelves]);
+  // Rows play the whole list from the tapped one: the Library's files, then the top songs streamed.
+  const mixed = useMemo(
+    (): MixedSong<YtSong, SongRow>[] => [
+      ...songs.map((track) => ({ source: "library" as const, track })),
+      ...additions.songs.map((song) => ({ source: "stream" as const, song })),
+    ],
+    [songs, additions.songs],
+  );
+  // With YouTube Music's songs among them, the Library's are marked downloaded.
+  const downloaded = additions.songs.length > 0;
+  const items = useMemo(() => artistItems(detail, songs, additions), [detail, songs, additions]);
   // Albums and songs select together; the bar acts on them in page order.
   const selectable = useMemo(() => selectableItems(detail, songs), [detail, songs]);
   const page = useListSelection({ items: selectable, keyOf: selectableKey, target: mixedTarget });
   const albumSelection = useMemo(() => albumSelectionOf(page), [page]);
   const { selection } = page;
   const rowState = useMemo(
-    () => ({ currentId, favorites, tile, selection }),
-    [currentId, favorites, tile, selection],
+    () => ({ currentId, favorites, tile, selection, downloaded }),
+    [currentId, favorites, tile, selection, downloaded],
   );
   const context = useMemo(
     () => ({ kind: "artist", id: String(detail.artist.id) }) as const,
     [detail.artist.id],
-  );
-  // The YT Music section's songs play as their own list, apart from the Library's.
-  const ytContext = useMemo(
-    () => ({ kind: "ytArtist", id: String(detail.artist.id) }) as const,
-    [detail.artist.id],
-  );
-  // The YT Music section marks the releases among these the Library has.
-  const libraryAlbums = useMemo(
-    () => [...detail.albums, ...detail.appearsOn],
-    [detail.albums, detail.appearsOn],
   );
 
   const renderItem = useCallback(
@@ -166,7 +268,7 @@ function ArtistContent({ shown }: { shown: Shown }) {
             </View>
           );
         case "albums":
-          return <AlbumPair albums={item.albums} size={tile} selection={albumSelection} />;
+          return <AlbumCellPair cells={item.cells} size={tile} selection={albumSelection} />;
         case "track":
           return (
             <TrackRow
@@ -174,17 +276,32 @@ function ArtistContent({ shown }: { shown: Shown }) {
               state={String(item.song.id) === currentId ? "playing" : undefined}
               favorite={favorites.has(item.song.id)}
               leading="artwork"
+              downloaded={downloaded}
               {...selectableRow(
                 trackItem(item.song),
                 page,
-                () => playSongs(songs, item.index, context),
+                () =>
+                  downloaded
+                    ? void playDiscoverSongs(mixed, item.index, context)
+                    : playSongs(songs, item.index, context),
                 (options) => openTrackActions(item.song, options),
               )}
             />
           );
+        case "ytSong":
+          return (
+            <YtSongRow
+              song={item.song}
+              playing={ytTrackId(item.song.videoId) === currentId}
+              onPress={
+                page.selecting ? ignore : () => void playDiscoverSongs(mixed, item.index, context)
+              }
+              onLongPress={page.selecting ? ignore : undefined}
+            />
+          );
       }
     },
-    [context, currentId, favorites, songs, tile, albumSelection, page],
+    [context, currentId, favorites, songs, mixed, downloaded, tile, albumSelection, page],
   );
 
   const line = [
@@ -226,16 +343,13 @@ function ArtistContent({ shown }: { shown: Shown }) {
         </>
       }
       ListFooterComponent={
-        loaded ? (
-          <YtArtistSection
-            key={detail.artist.name}
-            name={detail.artist.name}
-            artistId={detail.artist.id}
-            albums={libraryAlbums}
-            context={ytContext}
-            selecting={page.selecting}
+        ytView === null ? null : (
+          <YtLookupFooter
+            note={ytView.note === null ? null : YT_ARTIST_NOTE[ytView.note]}
+            button={ytView.button}
+            onShow={yt.show}
           />
-        ) : null
+        )
       }
     />
   );
@@ -243,7 +357,9 @@ function ArtistContent({ shown }: { shown: Shown }) {
 
 /**
  * An artist: their albums, the albums they appear on, their songs and, while
- * YT Music is on, the YT Music section (asked for only on a tap). Opened
+ * YT Music is on, Show on YouTube Music (asked only on a tap): then the
+ * releases and top songs YouTube Music has that the Library lacks join the
+ * albums and songs, and the Library's songs are marked downloaded. Opened
  * from a list that knows the artist, the head is there on the first frame and
  * the rest follows once read.
  */
