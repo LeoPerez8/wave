@@ -52,13 +52,14 @@ class SoulseekModule : Module() {
     AsyncFunction("cancelJob") Coroutine { id: String -> withContext(Dispatchers.IO) { downloads.jobs.cancel(id, downloads.transport); downloads.changed() } }
 
     AsyncFunction("session") Coroutine { -> coded { withContext(Dispatchers.IO) { owner.client.session() } } }
-    AsyncFunction("connect") Coroutine { username: String, password: String ->
-      val session = coded { withContext(Dispatchers.IO) { owner.client.connect(username, password) } }
+    // Download in best quality. The account it makes or reuses never leaves native code.
+    AsyncFunction("turnOn") Coroutine { ->
+      val session = coded { withContext(Dispatchers.IO) { owner.client.turnOn() } }
       sendEvent("onSessionChanged", session)
       session
     }
-    AsyncFunction("disconnect") Coroutine { ->
-      val session = coded { withContext(Dispatchers.IO) { owner.client.disconnect() } }
+    AsyncFunction("turnOff") Coroutine { ->
+      val session = coded { withContext(Dispatchers.IO) { owner.client.turnOff() } }
       sendEvent("onSessionChanged", session)
       session
     }

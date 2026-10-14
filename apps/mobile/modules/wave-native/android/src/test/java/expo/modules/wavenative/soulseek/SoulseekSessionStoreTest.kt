@@ -8,6 +8,18 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class SoulseekSessionStoreTest {
+  @Test fun `the best quality switch survives a restart and is unset on a phone from before it`() {
+    val folder = Files.createTempDirectory("wave-switch").toFile()
+    val file = folder.resolve("switch")
+    try {
+      assertNull(SoulseekSwitchFile(file).load())
+      SoulseekSwitchFile(file).save(false)
+      assertEquals(false, SoulseekSwitchFile(file).load())
+      SoulseekSwitchFile(file).save(true)
+      assertEquals(true, SoulseekSwitchFile(file).load())
+    } finally { folder.deleteRecursively() }
+  }
+
   @Test fun `a restarted account store restores only authenticated encrypted credentials and sign out removes them`() {
     val folder = Files.createTempDirectory("wave-session").toFile()
     val file = folder.resolve("session")

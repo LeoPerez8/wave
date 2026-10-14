@@ -76,7 +76,7 @@ class AndroidDownloads private constructor(private val context: Context) {
       source.delete()
       val reason = when (YtStreamResolver.failureOf(error)) {
         YtStreamFailure.OFFLINE -> "offline"
-        // YT Music was turned off: with no Soulseek account either, there's no source left.
+        // YT Music was turned off: with Download in best quality off too, there's no source left.
         YtStreamFailure.DISABLED -> "noSource"
         YtStreamFailure.UNAVAILABLE -> "ytUnavailable"
         YtStreamFailure.FAILED -> "failed"

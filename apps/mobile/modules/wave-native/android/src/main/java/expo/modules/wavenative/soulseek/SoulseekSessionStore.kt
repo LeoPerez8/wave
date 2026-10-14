@@ -11,6 +11,20 @@ interface SoulseekCredentialCipher {
   fun decrypt(value: ByteArray): ByteArray
 }
 
+/** Download in best quality, kept as "on" or "off" in [file]; no file on a phone from before the switch. */
+class SoulseekSwitchFile(private val file: File) : SoulseekSwitchStore {
+  @Synchronized override fun load(): Boolean? = when (runCatching { file.readText() }.getOrNull()) {
+    "on" -> true
+    "off" -> false
+    else -> null
+  }
+
+  @Synchronized override fun save(on: Boolean) {
+    file.parentFile?.mkdirs()
+    file.writeText(if (on) "on" else "off")
+  }
+}
+
 /** Put [file] in Android's noBackupFilesDir. It never contains a plaintext username/password. */
 class SoulseekSessionStore(private val file: File, private val cipher: SoulseekCredentialCipher) : SoulseekCredentialsStore {
   @Synchronized override fun load(): SoulseekCredentials? {

@@ -42,7 +42,7 @@ class SoulseekClientTest {
             // Closing the test listeners also unblocks accept after a failed assertion.
           } finally { connections.forEach { it.close() } }
         }
-        val client = SoulseekClient(MemoryCredentials(), "127.0.0.1", server.localPort)
+        val client = SoulseekClient(MemoryCredentials(), "127.0.0.1", server.localPort, switch = MemorySwitch())
         try {
           client.connect("wave-fixture", "fixture-secret")
           assertEquals(34, client.search("Fixture Title", 1500).size)
@@ -73,7 +73,7 @@ class SoulseekClientTest {
             }
           } catch (e: Throwable) { verified.completeExceptionally(e) }
         }
-        val client = SoulseekClient(MemoryCredentials(), "127.0.0.1", server.localPort)
+        val client = SoulseekClient(MemoryCredentials(), "127.0.0.1", server.localPort, switch = MemorySwitch())
         val part = Files.createTempFile("wave-cancelled", ".mp3").toFile()
         try {
           client.connect("wave-fixture", "fixture-secret")
@@ -112,7 +112,7 @@ class SoulseekClientTest {
             // The client closing its sockets ends the fixture.
           }
         }
-        val client = SoulseekClient(MemoryCredentials(), "127.0.0.1", server.localPort)
+        val client = SoulseekClient(MemoryCredentials(), "127.0.0.1", server.localPort, switch = MemorySwitch())
         val part = Files.createTempFile("wave-unwanted", ".mp3").toFile()
         try {
           client.connect("wave-fixture", "fixture-secret")
@@ -164,7 +164,7 @@ class SoulseekClientTest {
           }
         } catch (e: Throwable) { verified.completeExceptionally(e) }
       }
-      val client = SoulseekClient(MemoryCredentials(), "127.0.0.1", server.localPort)
+      val client = SoulseekClient(MemoryCredentials(), "127.0.0.1", server.localPort, switch = MemorySwitch())
       try {
         client.connect("wave-fixture", "fixture-secret")
         verified.get(2, TimeUnit.SECONDS)
@@ -187,7 +187,7 @@ class SoulseekClientTest {
           }
         } catch (e: Throwable) { verified.completeExceptionally(e) }
       }
-      val client = SoulseekClient(MemoryCredentials(), "127.0.0.1", server.localPort)
+      val client = SoulseekClient(MemoryCredentials(), "127.0.0.1", server.localPort, switch = MemorySwitch())
       val part = Files.createTempFile("wave-offline-peer", ".mp3").toFile()
       try {
         client.connect("wave-fixture", "fixture-secret")
@@ -241,7 +241,7 @@ class SoulseekClientTest {
             }
           } catch (e: Throwable) { verified.completeExceptionally(e) }
         }
-        val client = SoulseekClient(MemoryCredentials(), "127.0.0.1", server.localPort)
+        val client = SoulseekClient(MemoryCredentials(), "127.0.0.1", server.localPort, switch = MemorySwitch())
         val part = Files.createTempFile("wave-soulseek", ".mp3").toFile()
         try {
           client.connect("wave-fixture", "fixture-secret")
@@ -296,7 +296,7 @@ class SoulseekClientTest {
         val uncaught = CopyOnWriteArrayList<Throwable>()
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { _, error -> uncaught.add(error) }
-        val client = SoulseekClient(MemoryCredentials(), "127.0.0.1", server.localPort)
+        val client = SoulseekClient(MemoryCredentials(), "127.0.0.1", server.localPort, switch = MemorySwitch())
         val part = Files.createTempFile("wave-soulseek-error", ".mp3").toFile()
         try {
           client.connect("wave-fixture", "fixture-secret")
@@ -348,7 +348,7 @@ class SoulseekClientTest {
             }
           } catch (e: Throwable) { verified.completeExceptionally(e) }
         }
-        val client = SoulseekClient(MemoryCredentials(), "127.0.0.1", server.localPort)
+        val client = SoulseekClient(MemoryCredentials(), "127.0.0.1", server.localPort, switch = MemorySwitch())
         try {
           client.connect("wave-fixture", "fixture-secret")
           val candidates = client.search("Fixture Artist Fixture Title", 300)
@@ -388,9 +388,9 @@ class SoulseekClientTest {
         }
       }
       val store = MemoryCredentials()
-      val client = SoulseekClient(store, "127.0.0.1", server.localPort)
+      val client = SoulseekClient(store, "127.0.0.1", server.localPort, switch = MemorySwitch())
       try {
-        assertEquals("signedOut", client.session()["status"])
+        assertEquals("off", client.session()["status"])
         assertEquals("connected", client.connect("wave-fixture", "fixture-secret")["status"])
         assertEquals("wave-fixture", store.load()!!.username)
         remote.join(2000)
@@ -402,7 +402,7 @@ class SoulseekClientTest {
     // A port nothing listens on: the connection is refused at once.
     val port = ServerSocket(0).use { it.localPort }
     for ((online, failure) in listOf(true to SoulseekFailure.UNREACHABLE, false to SoulseekFailure.OFFLINE)) {
-      val client = SoulseekClient(MemoryCredentials(), "127.0.0.1", port, online = { online })
+      val client = SoulseekClient(MemoryCredentials(), "127.0.0.1", port, online = { online }, switch = MemorySwitch())
       try {
         val error = assertThrows(SoulseekException::class.java) { client.connect("wave-fixture", "fixture-secret") }
         assertEquals(failure, error.failure)
@@ -421,7 +421,7 @@ class SoulseekClientTest {
           }
         } catch (_: Exception) {}
       }
-      val client = SoulseekClient(MemoryCredentials(), "127.0.0.1", server.localPort, online = { true })
+      val client = SoulseekClient(MemoryCredentials(), "127.0.0.1", server.localPort, online = { true }, switch = MemorySwitch())
       try {
         client.connect("wave-fixture", "fixture-secret")
         val error = assertThrows(SoulseekException::class.java) { client.search("Fixture Title", 5_000) }
@@ -430,8 +430,8 @@ class SoulseekClientTest {
     }
   }
 
-  @Test fun `reconnecting or signing out while a download waits never counts as an unreachable server`() {
-    for (end in listOf<(SoulseekClient) -> Unit>({ it.connect("wave-fixture", "fixture-secret") }, { it.disconnect() })) {
+  @Test fun `reconnecting or turning best quality off while a download waits never counts as an unreachable server`() {
+    for (end in listOf<(SoulseekClient) -> Unit>({ it.connect("wave-fixture", "fixture-secret") }, { it.turnOff() })) {
       ServerSocket(0).use { server ->
         ServerSocket(0).use { peer ->
           val ended = CompletableFuture<Unit>()
@@ -452,7 +452,7 @@ class SoulseekClientTest {
               }
             } catch (_: Exception) {}
           }
-          val client = SoulseekClient(MemoryCredentials(), "127.0.0.1", server.localPort, online = { true })
+          val client = SoulseekClient(MemoryCredentials(), "127.0.0.1", server.localPort, online = { true }, switch = MemorySwitch())
           val part = Files.createTempFile("wave-reconnected", ".mp3").toFile()
           try {
             client.connect("wave-fixture", "fixture-secret")
@@ -466,12 +466,6 @@ class SoulseekClientTest {
         }
       }
     }
-  }
-
-  private class MemoryCredentials : SoulseekCredentialsStore {
-    private var credentials: SoulseekCredentials? = null
-    override fun load() = credentials
-    override fun save(value: SoulseekCredentials?) { credentials = value }
   }
 
   /** Keeps a broken fixture from hanging the test run. */
