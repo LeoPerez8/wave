@@ -41,6 +41,8 @@ const allBut =
 
 const queued = (view: ReturnType<typeof ytAlbumDownload>) =>
   view.toDownload.map(({ song: { videoId }, sharedJob }) => [videoId, sharedJob]);
+const retried = (view: ReturnType<typeof ytAlbumDownload>) =>
+  view.toRetry.map(({ song: { videoId }, sharedJob }) => [videoId, sharedJob]);
 
 /** The album page's button for [album], given the journal's [jobs]. */
 const button = (jobs: YtDownloadJournalJob[], inLibrary = nothingInLibrary) =>
@@ -148,10 +150,10 @@ describe("downloading a YT Music album", () => {
       ],
     });
     assert.deepEqual(view.actions, ["retryFailed"]);
-    assert.deepEqual(
-      view.toRetry.map(({ videoId }) => videoId),
-      ["b", "c"],
-    );
+    assert.deepEqual(retried(view), [
+      ["b", null],
+      ["c", null],
+    ]);
     assert.deepEqual(view.toDownload, []);
     assert.equal(view.line, null);
   });
@@ -184,10 +186,38 @@ describe("downloading a YT Music album", () => {
     });
     assert.deepEqual(view.actions, ["downloadAlbum", "retryFailed"]);
     assert.deepEqual(queued(view), [["a", null]]);
-    assert.deepEqual(
-      view.toRetry.map(({ videoId }) => videoId),
-      ["b"],
-    );
+    assert.deepEqual(retried(view), [["b", null]]);
+  });
+
+  test("a failed song retried shares the job of the same recording already on its way", () => {
+    const elsewhere = { ...song("z", "Song b"), album: null };
+    const view = ytAlbumDownload(album, {
+      inLibrary: only("a", "d"),
+      jobs: [
+        job("b", { phase: "failed", reason: "unavailable" }),
+        job("c", { phase: "failed", reason: "offline" }),
+        { id: "z", song: elsewhere, phase: "completed" },
+      ],
+    });
+    assert.deepEqual(retried(view), [
+      ["b", "z"],
+      ["c", null],
+    ]);
+  });
+
+  test("the same recording failing twice on the album is retried as one job", () => {
+    const twice = [song("a"), song("b", "Song a")];
+    const view = ytAlbumDownload(twice, {
+      inLibrary: nothingInLibrary,
+      jobs: [
+        job("a", { phase: "failed", reason: "unavailable" }),
+        job("b", { phase: "failed", reason: "unavailable" }),
+      ],
+    });
+    assert.deepEqual(retried(view), [
+      ["a", null],
+      ["b", "a"],
+    ]);
   });
 
   test("an album the Library has every song of no longer offers Download Album", () => {

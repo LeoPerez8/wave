@@ -363,14 +363,18 @@ export const downloadYtAlbum = (songs: readonly NativeYtSong[], inLibrary: InLib
     .catch(() => undefined);
 };
 
-/** Retry Failed: asks again for each of the album's songs whose download failed, in album order. */
+/**
+ * Retry Failed: asks again for each of the album's songs whose download
+ * failed, in album order, sharing jobs already on their way as Download Album does.
+ */
 export const retryYtAlbum = (songs: readonly NativeYtSong[], inLibrary: InLibrary): void => {
+  askForNotifications();
   startDownloads();
   requests = requests
     .then(async () => {
       const jobs = await WaveSoulseek.jobsSnapshot();
-      for (const song of ytAlbumDownload(songs, { inLibrary, jobs }).toRetry)
-        await WaveSoulseek.enqueueJob(song, soulseekRecording(song), null);
+      for (const { song, sharedJob } of ytAlbumDownload(songs, { inLibrary, jobs }).toRetry)
+        await WaveSoulseek.enqueueJob(song, soulseekRecording(song), sharedJob);
       await refresh();
     })
     .catch(() => undefined);

@@ -155,6 +155,7 @@ export const ytDownloadSharedJob = <S extends YtSong>(
       job.phase !== "failed" &&
       job.phase !== "cancelled" &&
       job.acknowledged !== true &&
+      job.importFailure === undefined &&
       [job.song, ...(job.aliases ?? [])].every((other) => soulseekSameRecording(other, song)),
   )?.id ?? null;
 

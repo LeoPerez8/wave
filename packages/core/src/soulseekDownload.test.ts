@@ -188,6 +188,11 @@ test("simultaneous result ids share one journal job while duration chains cannot
     ytDownloadSharedJob([{ ...shared, phase: "completed", acknowledged: true }], second),
     null,
   );
+  // A job the Library couldn't import has failed: retrying it starts a new one.
+  assert.equal(
+    ytDownloadSharedJob([{ ...shared, phase: "completed", importFailure: "noFolder" }], second),
+    null,
+  );
 });
 
 test("normalized names keep full artist identity, ordinary title words and featured credits", () => {
