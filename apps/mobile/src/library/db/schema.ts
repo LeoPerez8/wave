@@ -1,4 +1,11 @@
-import { type AnySQLiteColumn, index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import {
+  type AnySQLiteColumn,
+  index,
+  integer,
+  primaryKey,
+  sqliteTable,
+  text,
+} from "drizzle-orm/sqlite-core";
 
 /**
  * Library schema. The store is the single owner of these tables; every change
@@ -69,9 +76,17 @@ export const albums = sqliteTable(
     key: text("key").notNull().unique(),
     title: text("title").notNull(),
     titleSort: text("title_sort").notNull(),
+    /** The primary album artist: the first one [albumArtistCredit] names (see `albumArtists`). */
     albumArtistId: integer("album_artist_id")
       .notNull()
       .references(() => artists.id),
+    /** The album artist credit as written ("Ariana Grande, Social House"), which rows show. */
+    albumArtistCredit: text("album_artist_credit").notNull().default(""),
+    /**
+     * The album artist credits a multi-value tag gave, as a JSON array; null for
+     * a single one, [albumArtistCredit] (see `storedCredits`).
+     */
+    albumArtistCredits: text("album_artist_credits"),
     year: integer("year"),
     artworkHash: text("artwork_hash").references(() => artwork.hash),
     compilation: integer("compilation", { mode: "boolean" }).notNull().default(false),
@@ -96,9 +111,18 @@ export const tracks = sqliteTable(
     modifiedAt: integer("modified_at").notNull(),
     title: text("title").notNull(),
     titleSort: text("title_sort").notNull(),
+    /** The primary artist: the first one [artistCredit] names (see `trackArtists`). */
     artistId: integer("artist_id")
       .notNull()
       .references(() => artists.id),
+    /** The artist credit as written ("Ariana Grande, Doja Cat"), which rows show. */
+    artistCredit: text("artist_credit").notNull().default(""),
+    /**
+     * The artist credits a multi-value tag gave ("Ariana Grande", "Social
+     * House"), as a JSON array; null for a single one, [artistCredit] (see
+     * `storedCredits`). Each names its own artists.
+     */
+    artistCredits: text("artist_credits"),
     albumId: integer("album_id")
       .notNull()
       .references(() => albums.id),
@@ -132,6 +156,71 @@ export const tracks = sqliteTable(
 );
 
 /**
+ * Every artist a track's credit names (Core's `creditSplitter`), in credit
+ * order: position 0 is the primary artist (`tracks.artist_id`).
+ */
+export const trackArtists = sqliteTable(
+  "track_artists",
+  {
+    trackId: integer("track_id")
+      .notNull()
+      .references(() => tracks.id, { onDelete: "cascade" }),
+    artistId: integer("artist_id")
+      .notNull()
+      .references(() => artists.id),
+    position: integer("position").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.trackId, t.position] }),
+    index("track_artists_artist_idx").on(t.artistId),
+  ],
+);
+
+/**
+ * Every artist a played track's credit named, in credit order, written from
+ * its `track_artists` when the track leaves the library (`deleteTracks`), so
+ * its plays keep counting for each of them in Stats. `track_id` has no
+ * foreign key, as in `play_events`; a link goes with its artist when the
+ * artist leaves the library.
+ */
+export const deletedTrackArtists = sqliteTable(
+  "deleted_track_artists",
+  {
+    trackId: integer("track_id").notNull(),
+    artistId: integer("artist_id")
+      .notNull()
+      .references(() => artists.id, { onDelete: "cascade" }),
+    position: integer("position").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.trackId, t.position] }),
+    index("deleted_track_artists_artist_idx").on(t.artistId),
+  ],
+);
+
+/**
+ * Every artist an album's album artist credit names, in credit order: the
+ * album is filed under position 0 (`albums.album_artist_id`) and appears on
+ * the others' pages.
+ */
+export const albumArtists = sqliteTable(
+  "album_artists",
+  {
+    albumId: integer("album_id")
+      .notNull()
+      .references(() => albums.id, { onDelete: "cascade" }),
+    artistId: integer("artist_id")
+      .notNull()
+      .references(() => artists.id),
+    position: integer("position").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.albumId, t.position] }),
+    index("album_artists_artist_idx").on(t.artistId),
+  ],
+);
+
+/**
  * Artist photos downloaded from an online service, and lookups that found
  * none: one row per artist key (`artists.key`), kept when the artist leaves
  * the library so the photo isn't fetched again if they come back.
@@ -146,6 +235,25 @@ export const artistPhotos = sqliteTable("artist_photos", {
   path: text("path"),
   /** The thumbnail (lists, menus); set when `found`. */
   thumbPath: text("thumb_path"),
+});
+
+/**
+ * The artist page's YT Music section (docs/spec.md, "YT Music"): the last
+ * answer YouTube Music gave for each artist, by artist key (a Library
+ * artist's `identityKey`, or `yt:<browse id>` for a YouTube Music artist
+ * page). Core's `ytArtistSectionView` and `ytArtistPageView` decide how long
+ * it's shown without asking again.
+ */
+export const ytArtists = sqliteTable("yt_artists", {
+  artistKey: text("artist_key").primaryKey(),
+  /** Core's `YtArtistSaved` outcome. */
+  outcome: text("outcome", { enum: ["found", "unmatched"] }).notNull(),
+  /** When YouTube Music answered (ms since the epoch). */
+  checkedAt: integer("checked_at").notNull(),
+  /** The matched artist's YouTube Music browse id (`UC…`); set when `found`. */
+  browseId: text("browse_id"),
+  /** Their page as JSON (Core's `YtArtistPage`: top songs, albums, singles); set when `found`. */
+  page: text("page"),
 });
 
 /** Folders Wave indexes. */
@@ -249,13 +357,12 @@ export const playEvents = sqliteTable(
       .notNull()
       .default("phone"),
     /**
-     * The track's album and track artist, written when the track leaves the
-     * library (`deleteTracks`) so its plays keep counting for them in Stats.
-     * Null while the track is in the library (read the track instead), and for
-     * tracks that left before Wave kept them.
+     * The track's album, written when the track leaves the library
+     * (`deleteTracks`) so its plays keep counting for it in Stats (its artists
+     * go to `deleted_track_artists`). Null while the track is in the library
+     * (read the track instead), and for tracks that left before Wave kept it.
      */
     albumId: integer("album_id"),
-    artistId: integer("artist_id"),
   },
   (t) => [
     index("play_events_track_idx").on(t.trackId),

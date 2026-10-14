@@ -1,7 +1,8 @@
 import {
   discoverTrackId,
-  type DiscoverSong,
+  type MixedSong,
   nextRepeatMode,
+  pagePlayback,
   type UpNextMove,
   startSleepTimer,
   type QueueCommand,
@@ -119,11 +120,12 @@ export const playYtSongs = (
   );
 
 /**
- * Plays Discover's songs from `startIndex` (or shuffled), queueing the rest:
- * the Library's file for the songs it has, the others streamed.
+ * Plays a list that mixes the Library's songs and YT Music's (Discover,
+ * Search, an artist's or album's page) from `startIndex` (or shuffled),
+ * queueing the rest: the Library's files, the others streamed.
  */
 export const playDiscoverSongs = (
-  songs: readonly DiscoverSong<YtSong, SongRow>[],
+  songs: readonly MixedSong<YtSong, SongRow>[],
   startIndex: number | undefined,
   context: QueueContext,
   options: { readonly shuffle?: boolean } = {},
@@ -144,11 +146,45 @@ export const playDiscoverSongs = (
   );
 };
 
+/**
+ * Plays a page's songs (Search's song results, an artist's or album's page)
+ * from `startIndex` (or shuffled), by Core's `pagePlayback`: in an integrated
+ * view, with YouTube Music's songs among them, the mixed list (the Library's
+ * files, the rest streamed); otherwise the Library's songs alone, so nothing
+ * streams outside one.
+ */
+export const playPage = (
+  songs: readonly MixedSong<YtSong, SongRow>[],
+  startIndex: number | undefined,
+  context: QueueContext,
+  options: { readonly shuffle?: boolean } = {},
+): Promise<void> => {
+  const playback = pagePlayback(songs);
+  return playback.kind === "mixed"
+    ? playDiscoverSongs(playback.songs, startIndex, context, options)
+    : playSongs(playback.tracks, startIndex, context, options);
+};
+
 export const playYtNext = (songs: readonly YtSong[]): Promise<void> =>
   dispatchWithYt({ type: "playNext", trackIds: ytTrackIds(songs) }, songs, undefined);
 
 export const addYtToQueue = (songs: readonly YtSong[]): Promise<void> =>
   dispatchWithYt({ type: "addToQueue", trackIds: ytTrackIds(songs) }, songs, undefined);
+
+/**
+ * Plays Discover's [songs] next, or adds them to the end of the queue: the
+ * Library's file for the songs it has, the others streamed.
+ */
+export const queueDiscoverSongs = (
+  songs: readonly MixedSong<YtSong, SongRow>[],
+  where: "playNext" | "addToQueue",
+): Promise<void> =>
+  dispatchWithYt(
+    { type: where, trackIds: songs.map(discoverTrackId) },
+    songs.flatMap((song) => (song.source === "library" ? [] : [song.song])),
+    undefined,
+    songs.flatMap((song) => (song.source === "library" ? [toQueueTrack(song.track)] : [])),
+  );
 
 export const togglePlayPause = (): Promise<void> =>
   run(

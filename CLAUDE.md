@@ -1,8 +1,8 @@
 # Working on Wave
 
 Read `docs/spec.md` first — it holds the product decisions and the glossary. Work is tracked
-as sub-issues of the "Wave v1" issue (#2) with native blocked-by links; pick tickets whose
-blockers are closed.
+on GitHub; `docs/agents/issue-tracker.md` defines feature parents and native blocking links.
+Pick tickets whose blockers are closed.
 
 ## Conventions
 

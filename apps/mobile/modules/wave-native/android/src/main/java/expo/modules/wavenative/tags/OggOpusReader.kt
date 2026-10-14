@@ -113,6 +113,10 @@ class OggOpusReader : TagReader {
     internal fun Map<String, List<String>>.toRawTags(durationMs: Long, sampleRate: Int?): RawTags {
       fun first(vararg keys: String): String? =
         keys.firstNotNullOfOrNull { key -> this[key]?.firstNotNullOfOrNull { it.cleanTag() } }
+      fun all(vararg keys: String): List<String> =
+        keys.firstNotNullOfOrNull { key ->
+          this[key]?.mapNotNull { it.cleanTag() }?.takeIf { it.isNotEmpty() }
+        } ?: emptyList()
       return RawTags(
         title = first("TITLE"),
         artist = first("ARTIST"),
@@ -127,6 +131,8 @@ class OggOpusReader : TagReader {
         sampleRate = sampleRate,
         artwork = this["METADATA_BLOCK_PICTURE"]?.let(::pickPicture),
         lyrics = first("LYRICS", "UNSYNCEDLYRICS", "UNSYNCED LYRICS"),
+        artists = all("ARTIST"),
+        albumArtists = all("ALBUMARTIST", "ALBUM ARTIST", "ALBUM_ARTIST"),
       )
     }
 

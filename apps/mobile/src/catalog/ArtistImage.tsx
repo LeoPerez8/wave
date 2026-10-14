@@ -11,6 +11,8 @@ export interface ArtistImageSource {
   readonly name: string;
   readonly thumbPath: string | null;
   readonly artworkPath: string | null;
+  /** An image online (a YouTube Music artist's), shown when there's no file. */
+  readonly imageUrl?: string | null | undefined;
 }
 
 type Props = {
@@ -32,13 +34,14 @@ export function ArtistImage({ artist, size, large = false }: Props) {
   const path = large
     ? (photo?.path ?? artist.artworkPath ?? artist.thumbPath)
     : (photo?.thumbPath ?? artist.thumbPath);
+  const uri = path === null ? (artist.imageUrl ?? null) : `file://${path}`;
   const circle = { width: size, height: size, borderRadius: size / 2 };
-  if (path !== null) {
+  if (uri !== null) {
     return (
       <Image
-        source={{ uri: `file://${path}` }}
+        source={{ uri }}
         // List rows are recycled; the key stops the previous artist's image flashing.
-        recyclingKey={path}
+        recyclingKey={uri}
         style={[circle, { backgroundColor: fill }]}
         contentFit="cover"
         accessibilityIgnoresInvertColors

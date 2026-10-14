@@ -93,7 +93,7 @@ const KIND_TRACK: KindInfo<TrackItem> = {
   }),
   facts: ({ song, playlistItem }, favorites) => ({
     albumId: song.albumId,
-    artistId: song.artistId,
+    artistIds: song.artistIds,
     favorite: favorites.has(song.id),
     inPlaylist: playlistItem !== undefined,
   }),
@@ -107,7 +107,7 @@ const KIND_ALBUM: KindInfo<AlbumRow> = {
     subtitle: album.albumArtist,
     covers: cover(album.thumbPath),
   }),
-  facts: (album) => ({ artistId: album.albumArtistId }),
+  facts: (album) => ({ artistIds: album.albumArtistIds }),
   noun: "album",
 };
 
@@ -182,7 +182,7 @@ const KINDS: { readonly [K in ItemKind]: KindInfo<ItemOf[K]> } = {
     facts: (mixed, favorites) =>
       mixed.kind === "track"
         ? KIND_TRACK.facts(mixed.item, favorites)
-        : { albumId: mixed.item.id, artistId: mixed.item.albumArtistId },
+        : { albumId: mixed.item.id, artistIds: mixed.item.albumArtistIds },
     noun: "item",
   },
 };

@@ -22,8 +22,15 @@ export interface RawTrack {
   readonly path: string;
   readonly title?: string | null | undefined;
   readonly artist?: string | null | undefined;
+  /**
+   * Every value of a multi-value artist tag (Vorbis comments, ID3v2.4), when
+   * the reader has them: each is a credit of its own, where [artist] holds the first.
+   */
+  readonly artists?: readonly string[] | null | undefined;
   readonly album?: string | null | undefined;
   readonly albumArtist?: string | null | undefined;
+  /** Every value of a multi-value album artist tag, as [artists]. */
+  readonly albumArtists?: readonly string[] | null | undefined;
   readonly genre?: string | null | undefined;
   /** Year or date as tagged, e.g. `1997` or `1997-05-21`. */
   readonly year?: string | null | undefined;
@@ -45,18 +52,28 @@ export interface LibraryTrack {
   readonly title: string;
   readonly titleSort: string;
 
+  /** The artist credit as rows show it: [artistCredits] joined with commas. */
   readonly artist: string;
   readonly artistSort: string;
   readonly artistKey: string;
+  /**
+   * The artist credits: one per value of the artist tag (usually one). Each
+   * names its own artists (Core's `creditSplitter`), so separate values never
+   * make one artist.
+   */
+  readonly artistCredits: readonly string[];
 
   readonly album: string;
   readonly albumSort: string;
   /** Identity of the album: title + album artist. Tracks with the same key are one album. */
   readonly albumKey: string;
 
+  /** The album artist credit as rows show it: [albumArtistCredits] joined with commas. */
   readonly albumArtist: string;
   readonly albumArtistSort: string;
   readonly albumArtistKey: string;
+  /** The album artist credits, as [artistCredits]. */
+  readonly albumArtistCredits: readonly string[];
 
   readonly genre: string | null;
   readonly genreSort: string | null;
@@ -185,14 +202,42 @@ export const resolveAlbumArtist = (track: {
   readonly compilation?: boolean | null | undefined;
 }): string => clean(track.albumArtist) ?? (track.compilation ? VARIOUS_ARTISTS : track.artist);
 
+/** The credits a tag gives: one per value it has, else its single value; none when empty. */
+const creditsOf = (
+  value: string | null | undefined,
+  values: readonly string[] | null | undefined,
+): string[] => {
+  const each = (values ?? []).flatMap((one) => clean(one) ?? []);
+  if (each.length > 0) return each;
+  const single = clean(value);
+  return single === null ? [] : [single];
+};
+
+/** Several credits as rows show them: joined with commas ("Ariana Grande, Social House"). */
+const shownCredit = (credits: readonly string[]): string | null =>
+  credits.length > 0 ? credits.join(", ") : null;
+
 /** Turns raw scanner output into a library track with fallbacks, parsed numbers and keys. */
 export const normalizeTrack = (raw: RawTrack): LibraryTrack => {
   const { folder, fileName } = splitPath(raw.path);
   const title = clean(raw.title) ?? (clean(stripExtension(fileName)) || fileName);
-  const artist = clean(raw.artist) ?? UNKNOWN_ARTIST;
+  const tagged = creditsOf(raw.artist, raw.artists);
+  const artistCredits = tagged.length > 0 ? tagged : [UNKNOWN_ARTIST];
+  const artist = shownCredit(artistCredits) ?? UNKNOWN_ARTIST;
   const album = clean(raw.album) ?? UNKNOWN_ALBUM;
   const compilation = raw.compilation === true;
-  const albumArtist = resolveAlbumArtist({ artist, albumArtist: raw.albumArtist, compilation });
+  const albumArtistTagged = creditsOf(raw.albumArtist, raw.albumArtists);
+  const albumArtist = resolveAlbumArtist({
+    artist,
+    albumArtist: shownCredit(albumArtistTagged),
+    compilation,
+  });
+  const albumArtistCredits =
+    albumArtistTagged.length > 0
+      ? albumArtistTagged
+      : compilation
+        ? [VARIOUS_ARTISTS]
+        : artistCredits;
   const genre = parseGenre(raw.genre);
   const track = parseNumberOfTotal(raw.trackNumber);
   const disc = parseNumberOfTotal(raw.discNumber);
@@ -210,12 +255,14 @@ export const normalizeTrack = (raw: RawTrack): LibraryTrack => {
     artist,
     artistSort: sortKey(artist),
     artistKey: identityKey(artist),
+    artistCredits,
     album,
     albumSort: sortKey(album),
     albumKey: albumKey(album, albumArtist),
     albumArtist,
     albumArtistSort: sortKey(albumArtist),
     albumArtistKey: identityKey(albumArtist),
+    albumArtistCredits,
     genre,
     genreSort: genre === null ? null : sortKey(genre),
     genreKey: genre === null ? null : identityKey(genre),

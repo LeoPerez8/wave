@@ -1,7 +1,8 @@
 import { IconMusic, IconStar, IconStarFilled } from "@tabler/icons-react-native";
-import { parseTrackId } from "@wave/core";
+import { artistLink, parseTrackId } from "@wave/core";
 import { Image } from "expo-image";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { usePathname } from "expo-router";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { Text, View } from "react-native";
 import Animated, {
   useAnimatedStyle,
@@ -11,14 +12,17 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { CELL } from "@/catalog/grid";
+import { followArtistLink, followStreamedArtistLink } from "@/library/ArtistChoice";
 import { toggleFavorite, useIsFavorite } from "@/library/favorites";
 import { useLinkRows } from "@/library/hooks";
 import type { TrackDetails } from "@/library/LibraryStore";
-import { openAlbum, openArtist } from "@/library/routes";
+import { openAlbum } from "@/library/routes";
 import { Press } from "@/motion/Press";
 import { useCurrentTrackId } from "@/playback/hooks";
 import { playbackState, type PlaybackState } from "@/playback/Player";
+import { queueTracks, type QueueTrack } from "@/playback/queueTracks";
 import { useThemeColor } from "@/theme/useThemeColor";
+import { useStreamedArtistLink } from "@/ytmusic/streamedArtist";
 
 import { closeNowPlaying, useNowPlayingShown } from "./sheet";
 
@@ -143,6 +147,16 @@ function FavoriteStar({ title }: { title: string }) {
   );
 }
 
+/** The queue's details of the current track when it's a YT Music song (streamed), else null. */
+const useStreamedTrack = (): QueueTrack | null => {
+  const trackId = useCurrentTrackId();
+  return useSyncExternalStore(queueTracks.subscribe, () =>
+    trackId !== null && parseTrackId(trackId)?.kind === "yt"
+      ? (queueTracks.get().get(trackId) ?? null)
+      : null,
+  );
+};
+
 type Props = {
   item: NonNullable<PlaybackState["item"]>;
   details: TrackDetails | null;
@@ -152,7 +166,8 @@ type Props = {
 /**
  * The player: the artwork as large as it fits, then the title with the
  * favorite star beside it, the artist and the album. Artist and album open
- * their screens.
+ * their screens; a streamed song's artist opens integrated (their Library
+ * page, else the YouTube Music artist page) while YT Music is on.
  */
 export function PlayerView({ item, details, playing }: Props) {
   const title = item.title ?? "Unknown title";
@@ -162,10 +177,22 @@ export function PlayerView({ item, details, playing }: Props) {
   // Read ahead, so the screens open header-first; only while the sheet is
   // shown, so track changes behind a closed Now Playing don't pay for it.
   const shown = useNowPlayingShown();
+  // One artist opens straight away, several open the choice Go to Artist
+  // offers; on an artist's page, they're left out (Core's `artistLink`).
+  const here = usePathname();
+  const artistTo = details === null ? undefined : artistLink(details.artistIds, here);
   const links = useLinkRows(
     shown ? details?.albumId : undefined,
-    shown ? details?.artistId : undefined,
+    shown && artistTo?.kind === "open" ? artistTo.artistId : undefined,
   );
+  // A streamed song's artists are names (Core's `streamedArtistLink`); saved before they
+  // were kept, its credit stands for them.
+  const streamed = useStreamedTrack();
+  const streamedArtists = useMemo(
+    () => (streamed === null ? null : (streamed.artists ?? [streamed.artist])),
+    [streamed],
+  );
+  const streamedTo = useStreamedArtistLink(streamedArtists, shown);
   return (
     <View className="flex-1" style={{ gap: CELL * 4 }}>
       <NowPlayingArtwork uri={item.artworkUri} playing={playing} />
@@ -180,7 +207,17 @@ export function PlayerView({ item, details, playing }: Props) {
           </Text>
           <MetaLink
             label={artist}
-            open={details === null ? null : () => openArtist(details.artistId, links.artist)}
+            open={
+              details !== null
+                ? () => {
+                    // The only artist is the page under Now Playing: closing shows it.
+                    if (artistTo !== undefined) followArtistLink(artistTo, links.artist);
+                  }
+                : streamedTo !== undefined
+                  ? // Its only artist being the page under Now Playing, closing shows it.
+                    () => followStreamedArtistLink(streamedTo)
+                  : null
+            }
             hint="Opens the artist"
             className="font-sans text-body text-secondary"
           />

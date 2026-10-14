@@ -1,11 +1,19 @@
 import { LegendList } from "@legendapp/list/react-native";
-import { IconCloudOff, IconWifiOff } from "@tabler/icons-react-native";
+import {
+  IconCloudOff,
+  IconDownload,
+  IconRefresh,
+  IconWifiOff,
+  IconX,
+} from "@tabler/icons-react-native";
 import {
   discoverSongs,
   joinArtists,
+  ytAlbumDownloadButton,
   ytAlbumSongs,
   type DiscoverSong,
   type QueueContext,
+  type YtAlbumDownloadAction,
   type YtQuietReason,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
@@ -15,7 +23,7 @@ import { Text, useWindowDimensions, View } from "react-native";
 
 import { Artwork } from "@/catalog/Artwork";
 import { CELL, grid } from "@/catalog/grid";
-import { PlayShuffle } from "@/catalog/PlayShuffle";
+import { ListAction, PlayShuffle } from "@/catalog/PlayShuffle";
 import { useChromeInset } from "@/chrome/chrome";
 import { EmptyState } from "@/components/EmptyState";
 import { ScreenHeader } from "@/components/ScreenHeader";
@@ -27,9 +35,12 @@ import { playDiscoverSongs } from "@/playback/actions";
 
 import { askYtMusic } from "./askYtMusic";
 import { DiscoverSongRow } from "./DiscoverShelves";
-import { useLibraryFinder } from "./libraryFinder";
+import { useLibraryFinder, useLoadedInLibrary } from "./libraryFinder";
 import type { YtListHead, YtListScreen } from "./routes";
+import { runYtAlbumAction, useYtAlbumDownload } from "./YtDownloads";
 import type { YtMusic, YtMusicError } from "./YtMusic";
+
+const NO_SONGS: readonly NativeYtSong[] = [];
 
 /** A YT Music album or playlist page as its screen shows it. */
 export interface YtListPage {
@@ -106,14 +117,63 @@ const totalMinutes = (songs: readonly NativeYtSong[]): string | null => {
   return ms === 0 ? null : `${Math.max(1, Math.round(ms / 60_000))} min`;
 };
 
+const DOWNLOAD_ICONS: { readonly [A in YtAlbumDownloadAction]: typeof IconDownload } = {
+  downloadAlbum: IconDownload,
+  retryFailed: IconRefresh,
+  cancelAlbumDownload: IconX,
+};
+
+/** An album's download button beside Play and Shuffle (Core's `ytAlbumDownloadButton`). */
+export interface YtAlbumDownloadButton {
+  readonly action: YtAlbumDownloadAction;
+  readonly label: string;
+  readonly onPress: () => void;
+}
+
+/** The album's download button, as a list action after Play and Shuffle. */
+export function AlbumDownloadAction({ download }: { download: YtAlbumDownloadButton }) {
+  return (
+    <ListAction
+      icon={DOWNLOAD_ICONS[download.action]}
+      label={download.label}
+      onPress={download.onPress}
+    />
+  );
+}
+
+/**
+ * Downloading the YT Music album whose songs are [songs] (none: no album):
+ * its progress line ("Downloading · 3 of 10") and its button, or null.
+ */
+export const useYtAlbumDownloadButton = (
+  songs: readonly NativeYtSong[],
+): { readonly progress: string | null; readonly button: YtAlbumDownloadButton | null } => {
+  const inLibrary = useLoadedInLibrary();
+  const download = useYtAlbumDownload(songs, inLibrary);
+  const button = ytAlbumDownloadButton(download);
+  return {
+    progress: download.line,
+    button:
+      button === null || songs.length === 0
+        ? null
+        : { ...button, onPress: () => runYtAlbumAction(button.action, songs, inLibrary) },
+  };
+};
+
 function Head({
   head,
   furniture,
+  progress,
   onPlay,
+  download,
 }: {
   head: YtListHead;
   furniture: string | null;
+  /** An album's download progress ("Downloading · 3 of 10"). */
+  progress: string | null;
   onPlay: ((shuffle: boolean) => void) | null;
+  /** The album's download button (Core's `ytAlbumDownloadButton`). */
+  download: YtAlbumDownloadButton | null;
 }) {
   const { width } = useWindowDimensions();
   return (
@@ -138,9 +198,19 @@ function Head({
             {furniture}
           </Text>
         )}
+        {progress !== null && (
+          <Text
+            className="font-sans text-footnote text-accent"
+            style={{ fontVariant: ["tabular-nums"] }}
+          >
+            {progress}
+          </Text>
+        )}
       </View>
       {onPlay !== null && (
-        <PlayShuffle onPlay={() => onPlay(false)} onShuffle={() => onPlay(true)} />
+        <PlayShuffle onPlay={() => onPlay(false)} onShuffle={() => onPlay(true)}>
+          {download !== null && <AlbumDownloadAction download={download} />}
+        </PlayShuffle>
       )}
     </View>
   );
@@ -159,6 +229,7 @@ export function YtSongList({
   load,
   context,
   numbered,
+  albumDownload = false,
 }: {
   /** What the tapped cover knew, shown until the page arrives. */
   known: YtListHead | undefined;
@@ -166,11 +237,14 @@ export function YtSongList({
   context: QueueContext;
   /** An album's songs lead with their number; a playlist's with their cover. */
   numbered: boolean;
+  /** An album downloads as a whole: Download beside Play and Shuffle, and its progress. */
+  albumDownload?: boolean;
 }) {
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
   const find = useLibraryFinder();
   const page = load.status === "loaded" ? load.page : null;
+  const download = useYtAlbumDownloadButton(albumDownload && page !== null ? page.songs : NO_SONGS);
   const songs = useMemo(() => (page === null ? [] : discoverSongs(page.songs, find)), [page, find]);
   const play = useCallback(
     (startIndex: number | undefined, shuffle = false) =>
@@ -215,7 +289,9 @@ export function YtSongList({
               <Head
                 head={head}
                 furniture={furniture}
+                progress={download.progress}
                 onPlay={songs.length === 0 ? null : (shuffle) => play(undefined, shuffle)}
+                download={download.button}
               />
             )}
             {load.status === "quiet" && (

@@ -282,7 +282,16 @@ export const ytAlbumSongs = (
     explicit: track.explicit,
   }));
 
+/**
+ * A song of a list that mixes the Library's files and YT Music songs (Search,
+ * an artist's or an album's page with what YouTube Music has): a Library
+ * song, or a YT Music song streamed. Discover's songs are ones.
+ */
+export type MixedSong<S extends YtSong = YtSong, L = unknown> =
+  | { readonly source: "stream"; readonly song: S }
+  | { readonly source: "library"; readonly track: L };
+
 /** The id [song] goes by in the queue: its Library track's, or its YT Music id. */
 export const discoverTrackId = <S extends YtSong>(
-  song: DiscoverSong<S, { readonly id: number }>,
+  song: MixedSong<S, { readonly id: number }>,
 ): string => (song.source === "library" ? String(song.track.id) : ytTrackId(song.song.videoId));

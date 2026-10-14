@@ -33,6 +33,7 @@ const song = (id: number, thumbPath: string | null = `/covers/${id}.thumb.jpg`):
   addedAt: 0,
   albumId: id,
   artistId: id,
+  artistIds: [id],
   discNumber: null,
   trackNumber: null,
 });
@@ -104,6 +105,7 @@ describe("queue tracks", () => {
       path: "yt:kJQP7kiw5Fk",
       title: "Despacito",
       artist: "Luis Fonsi & Daddy Yankee",
+      artists: ["Luis Fonsi", "Daddy Yankee"],
       album: "VIDA",
       artworkPath: "/files/artwork/abc.jpg",
       thumbPath: "/files/artwork/abc_thumb.jpg",

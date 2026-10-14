@@ -11,7 +11,11 @@
   sortKey,
 } from "./library.ts";
 export type { LibraryTrack, RawTrack } from "./library.ts";
+export { creditSplitter, respreadDeletedSongs, splitCredit } from "./credits.ts";
+export type { PrunedArtist } from "./credits.ts";
 export { formatDuration, formatRemaining } from "./time.ts";
+export { trackRowTrailing } from "./trackRowTrailing.ts";
+export type { TrackRowTrailingInput } from "./trackRowTrailing.ts";
 export { describeFolder, filesLeavingWithRoot, isWithin, planAddRoot } from "./scanRoots.ts";
 export type { AddRootPlan, FolderLabel, ScanRootState } from "./scanRoots.ts";
 export { resolveSkipSwipe } from "./swipe.ts";
@@ -42,6 +46,8 @@ export { applyPlayerSync, planPlayerSync } from "./playerSync.ts";
 export type { PlayerList, QueueList, SyncStep } from "./playerSync.ts";
 export { alphabetIndex, artistAlbums, compareFileNames, indexLetter } from "./browse.ts";
 export type { ArtistAlbum, IndexEntry } from "./browse.ts";
+export { spineEntries, spineLayout, spineSection, spineSlotAt, spineStep } from "./spine.ts";
+export type { SpineLayout, SpineSlot, SpineSpace } from "./spine.ts";
 export { reconcileScan } from "./scanReconcile.ts";
 export type { IndexedFile, ScanChanges, ScanReconcileInput, TrackMove } from "./scanReconcile.ts";
 export { planExclusion } from "./scanRoots.ts";
@@ -274,6 +280,7 @@ export { groupSongs } from "./groupSongs.ts";
 export {
   commonKind,
   actionBarLabel,
+  artistLink,
   confirmsFirst,
   isDestructiveAction,
   ITEM_ACTION_LABELS,
@@ -285,8 +292,10 @@ export type {
   ActionItem,
   ActionSubject,
   ActionSurface,
+  ArtistLink,
   ItemAction,
   ItemActionEntry,
+  YtSongActionEntry,
   ItemKind,
 } from "./itemActions.ts";
 export { concentricRadius } from "./corners.ts";
@@ -299,9 +308,11 @@ export {
   cardShowsHeading,
   highlightedOrigin,
   originOfNewCard,
+  restingRect,
   veilAround,
+  visibleHighlight,
 } from "./overlayOrigin.ts";
-export type { NewCardInput, OriginCard } from "./overlayOrigin.ts";
+export type { HighlightInput, NewCardInput, OriginCard } from "./overlayOrigin.ts";
 export { confirmSongDeletion, songDeletionFailure } from "./songDeletion.ts";
 export type { SongDeleteFailure, SongDeleteFailureReason } from "./songDeletion.ts";
 export { artistArtwork, artistInitial } from "./artistImage.ts";
@@ -359,7 +370,11 @@ export {
   ytSectionView,
 } from "./ytSearch.ts";
 export type {
+  YtAskedBy,
   YtQuietReason,
+  YtSearchAnswer,
+  YtSearchLibrary,
+  YtSearchTop,
   YtSection,
   YtSectionEvent,
   YtSectionNote,
@@ -432,6 +447,16 @@ export type {
   YtDownloadTarget,
 } from "./ytDownload.ts";
 export {
+  YT_ALBUM_DOWNLOAD_ACTION_LABELS,
+  ytAlbumDownload,
+  ytAlbumDownloadButton,
+} from "./ytAlbumDownload.ts";
+export type {
+  YtAlbumDownload,
+  YtAlbumDownloadAction,
+  YtAlbumDownloadRequest,
+} from "./ytAlbumDownload.ts";
+export {
   YT_DOWNLOADS_NONE,
   YT_DOWNLOAD_ACTION_LABELS,
   ytDownloadActions,
@@ -469,6 +494,7 @@ export type {
   DiscoverItem,
   DiscoverShelf,
   DiscoverSong,
+  MixedSong,
   DiscoverTileCaption,
   DiscoverState,
   DiscoverView,
@@ -496,3 +522,58 @@ export {
   writeLibraryLookupSummary,
 } from "./libraryLookup.ts";
 export type { LibraryLookupProgress, LibraryLookupSummary } from "./libraryLookup.ts";
+export {
+  YT_ARTIST_FRESH_MS,
+  YT_ARTIST_SECTION_START,
+  libraryAlbumFinder,
+  libraryArtistFinder,
+  libraryReleaseFinder,
+  pickYtArtist,
+  stepYtArtistSection,
+  ytArtistLookup,
+  ytArtistPageAsks,
+  ytArtistPageView,
+  ytArtistQuery,
+  ytArtistRelease,
+  ytArtistIntegrated,
+  ytArtistSectionAsks,
+  ytArtistSectionView,
+  ytArtistShelves,
+  ytAlbumTracklist,
+  ytLibraryAlbumView,
+} from "./ytArtist.ts";
+export type {
+  LibraryAlbumKey,
+  YtArtistRelease,
+  YtArtistShelf,
+  YtArtistShelvesContext,
+  YtArtistAlbum,
+  YtArtistCandidate,
+  YtArtistLookup,
+  YtArtistPageContext,
+  YtArtistPageNote,
+  YtArtistPageView,
+  YtArtistPageViewContext,
+  YtArtistPage,
+  YtArtistSaved,
+  YtArtistSection,
+  YtArtistSectionAsksContext,
+  YtArtistSectionContext,
+  YtArtistSectionEvent,
+  YtArtistSectionNote,
+  YtArtistSectionView,
+  LibraryAlbumTrack,
+  YtAlbumEntry,
+  YtLibraryAlbumContext,
+  YtLibraryAlbumNote,
+  YtLibraryAlbumView,
+  YtReleaseLoad,
+} from "./ytArtist.ts";
+export { streamedArtistLink } from "./streamedArtist.ts";
+export type {
+  StreamedArtistContext,
+  StreamedArtistLink,
+  StreamedArtistTarget,
+} from "./streamedArtist.ts";
+export { pagePlayback } from "./pagePlayback.ts";
+export type { PagePlayback } from "./pagePlayback.ts";

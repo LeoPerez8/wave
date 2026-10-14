@@ -5,54 +5,78 @@ import {
   ytDownloadActions,
   ytSongActions,
   ytSongCredit,
+  type StreamedArtistLink,
   type YtDownloadAction,
 } from "@wave/core";
+import { useState } from "react";
 import { Text, View } from "react-native";
 
 import { Artwork } from "@/catalog/Artwork";
 import { EntryRow } from "@/catalog/EntryRow";
 import { CELL } from "@/catalog/grid";
+import { followStreamedArtistLink } from "@/library/ArtistChoice";
+import type { ArtistRow } from "@/library/LibraryStore";
 import { pressedRect } from "@/motion/pressedRect";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { CardEntries } from "@/overlay/CardEntries";
 import { CardHeading } from "@/overlay/CardHeading";
 import { useOverlayFlow } from "@/overlay/flow";
-import { openOverlay } from "@/overlay/overlay";
+import { followUp, openOverlay } from "@/overlay/overlay";
 import { useSlideToChoose } from "@/overlay/useSlideToChoose";
 import { addYtToQueue, playYtNext } from "@/playback/actions";
 
-import { useLoadedLibraryFinder } from "./libraryFinder";
+import { useLoadedInLibrary } from "./libraryFinder";
+import { libraryArtistsRead, useStreamedArtistLink } from "./streamedArtist";
 import { cancelYtDownload, downloadYtSong, useYtDownloadStatus } from "./YtDownloads";
 
 /**
- * Opens a YT Music song's long-press menu next to its row: Play Next and Add
- * to Queue (Core's `ytSongActions`), then Download, or Cancel Download /
- * Retry Download while one is on its way or has failed.
+ * Opens a YT Music song's long-press menu next to its row: Play Next, Add to
+ * Queue and Go to Artist (Core's `ytSongActions`), then Download, or Cancel
+ * Download / Retry Download while one is on its way or has failed. It opens
+ * once the Library's artists are read, so Go to Artist is there from its
+ * first frame (or, the read failing or slow, not at all: the menu never grows).
  */
 export const openYtSongActions = (song: NativeYtSong): void => {
-  openOverlay({
-    label: song.title,
-    anchor: pressedRect(),
-    render: (close) => <YtSongActionsMenu song={song} close={close} />,
-  });
+  const anchor = pressedRect();
+  // The row stays highlighted meanwhile: the card opens inside the follow-up.
+  void followUp(() =>
+    libraryArtistsRead().then(() => {
+      openOverlay({
+        label: song.title,
+        anchor,
+        render: (close) => <YtSongActionsMenu song={song} close={close} />,
+      });
+    }),
+  );
 };
 
-/** One entry: joining the queue, or a download entry. */
+/** One entry: joining the queue, going to the artist, or a download entry. */
 type Entry =
   | { readonly kind: "queue"; readonly action: "playNext" | "addToQueue" }
+  | {
+      readonly kind: "artist";
+      readonly action: "goToArtist";
+      readonly artists: StreamedArtistLink<ArtistRow>;
+    }
   | { readonly kind: "download"; readonly action: YtDownloadAction };
 
-const queueEntries = (): Entry[] =>
-  ytSongActions().flatMap(({ action }): Entry[] =>
-    action === "playNext" || action === "addToQueue" ? [{ kind: "queue", action }] : [],
+const songEntries = (artists: StreamedArtistLink<ArtistRow> | undefined): Entry[] =>
+  ytSongActions(artists).map((entry): Entry =>
+    entry.action === "goToArtist"
+      ? { kind: "artist", ...entry }
+      : { kind: "queue", action: entry.action },
   );
 
 const label = (entry: Entry): string =>
-  entry.kind === "queue"
-    ? ITEM_ACTION_LABELS[entry.action]
-    : YT_DOWNLOAD_ACTION_LABELS[entry.action];
+  entry.kind === "download"
+    ? YT_DOWNLOAD_ACTION_LABELS[entry.action]
+    : ITEM_ACTION_LABELS[entry.action];
 
 const run = (entry: Entry, song: NativeYtSong): void => {
+  if (entry.kind === "artist") {
+    followStreamedArtistLink(entry.artists);
+    return;
+  }
   switch (entry.action) {
     case "playNext":
       void playYtNext([song]);
@@ -78,10 +102,13 @@ function YtSongActionsMenu({ song, close }: { song: NativeYtSong; close: () => v
   const status = useYtDownloadStatus(song.videoId);
   // A song downloaded earlier and since deleted from the Library can be downloaded again
   // (taken as still there until the Library has been read).
-  const find = useLoadedLibraryFinder();
-  const inLibrary = find === null || find(song) !== null;
+  const inLibrary = useLoadedInLibrary()(song);
+  // Its artists open integrated: their Library page, else the YouTube Music artist page.
+  // Kept as the menu opened with it, so Go to Artist never appears while it's shown.
+  const link = useStreamedArtistLink(song.artists);
+  const [artists] = useState(link);
   const entries: Entry[] = [
-    ...queueEntries(),
+    ...songEntries(artists),
     ...ytDownloadActions(status, { inLibrary }).map((action): Entry => ({
       kind: "download",
       action,

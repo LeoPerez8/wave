@@ -4,8 +4,8 @@ import com.metrolist.innertubex.models.YouTubeClient
 import io.ktor.client.statement.bodyAsText
 
 /**
- * YT Music pages beyond search: the home's shelves (Discover), an album, a
- * playlist, a song's watch page and its lyrics.
+ * YT Music pages beyond search: the home's shelves (Discover), an album, an
+ * artist, a playlist, a song's watch page and its lyrics.
  * Requests go through [YtClient] (refused while YT Music is off, failures as a
  * [YtException]); the parsers read the answers.
  */
@@ -41,6 +41,12 @@ class YtPages(private val client: YtClient) {
       shelves += page.shelves
     }
     shelves
+  }
+
+  /** The artist page [browseId] (`UC…`): their top songs, albums and singles. */
+  suspend fun artist(browseId: String): YtArtistPage = client.request {
+    val body = client.innerTube.browse(YouTubeClient.WEB_REMIX, browseId).bodyAsText()
+    YtArtistParser.page(body) ?: throw IllegalStateException("Not an artist page: $browseId")
   }
 
   /** The playlist [playlistId] (without `VL`) and its first page of songs. */

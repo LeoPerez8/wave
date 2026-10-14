@@ -1,11 +1,10 @@
 import type { LegendListRef } from "@legendapp/list/react-native";
-import { alphabetIndex } from "@wave/core";
+import { spineEntries, type IndexEntry } from "@wave/core";
 import { useCallback, useMemo, type RefObject } from "react";
 
 import { grid } from "@/catalog/grid";
 
-/** Lists shorter than this fit in a couple of screens and go without a spine. */
-export const SPINE_MIN_ITEMS = 24;
+const sameRow = (index: number): number => index;
 
 /**
  * Wires the A–Z spine to a list ordered by Core sort key. `toRow` maps an item
@@ -14,32 +13,37 @@ export const SPINE_MIN_ITEMS = 24;
 export const useSpine = (
   sortKeys: readonly string[],
   list: RefObject<LegendListRef | null>,
-  toRow: (index: number) => number = (index) => index,
+  toRow: (index: number) => number = sameRow,
 ): {
   readonly show: boolean;
-  readonly letters: readonly string[];
-  readonly onLetter: (letter: string) => void;
-  /** The list's right padding: clear of the spine when it shows, the margin otherwise. */
+  /** The spine's letters, each with the list row it starts on. */
+  readonly entries: readonly IndexEntry[];
+  /** Jumps the list to a letter's first row. */
+  readonly onJump: (entry: IndexEntry) => void;
+  /** The row at the top of the list on screen. */
+  readonly topRow: () => number;
+  /** The list's right padding: clear of the spine's touch target when it shows, the margin otherwise. */
   readonly paddingRight: number;
 } => {
   const entries = useMemo(
-    () => (sortKeys.length >= SPINE_MIN_ITEMS ? alphabetIndex(sortKeys) : []),
-    [sortKeys],
+    () => spineEntries(sortKeys).map((entry) => ({ ...entry, index: toRow(entry.index) })),
+    [sortKeys, toRow],
   );
-  const letters = useMemo(() => entries.map((entry) => entry.letter), [entries]);
-  const onLetter = useCallback(
-    (letter: string) => {
-      const entry = entries.find((candidate) => candidate.letter === letter);
-      if (entry === undefined) return;
-      void list.current?.scrollToIndex({ index: toRow(entry.index), animated: false });
+  const onJump = useCallback(
+    (entry: IndexEntry) => {
+      // A jump, not an animated scroll: scrolling through thousands of rows on
+      // the way would render each of them and trail the finger.
+      void list.current?.scrollToIndex({ index: entry.index, animated: false });
     },
-    [entries, list, toRow],
+    [list],
   );
-  const show = entries.length > 1;
+  const topRow = useCallback(() => list.current?.getState().start ?? 0, [list]);
+  const show = entries.length > 0;
   return {
     show,
-    letters,
-    onLetter,
-    paddingRight: show ? grid.spine + grid.spineInset : grid.margin,
+    entries,
+    onJump,
+    topRow,
+    paddingRight: show ? grid.spineHit + grid.spineInset : grid.margin,
   };
 };

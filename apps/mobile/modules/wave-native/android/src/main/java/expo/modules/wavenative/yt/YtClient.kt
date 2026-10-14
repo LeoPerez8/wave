@@ -94,6 +94,18 @@ class YtClient private constructor(private val context: Context) {
     YtSearchParser.songs(response.bodyAsText())
   }
 
+  /** Artists on YT Music named like [query]: YouTube Music's "Artists" search, the first page. */
+  suspend fun searchArtists(query: String): List<YtArtistCandidate> = request {
+    val response = innerTube.search(YouTubeClient.WEB_REMIX, query, params = FILTER_ARTISTS)
+    YtArtistParser.artists(response.bodyAsText())
+  }
+
+  /** Albums, singles and EPs on YT Music for [query]: YouTube Music's "Albums" search, the first page. */
+  suspend fun searchAlbums(query: String): List<YtShelfItem.Album> = request {
+    val response = innerTube.search(YouTubeClient.WEB_REMIX, query, params = FILTER_ALBUMS)
+    YtSearchParser.albums(response.bodyAsText())
+  }
+
   /**
    * Signs in with [credentials] from the sign-in page, once YouTube Music
    * says whose account they are. A session it doesn't accept fails.
@@ -182,6 +194,12 @@ class YtClient private constructor(private val context: Context) {
 
     /** YouTube Music's "Songs" search filter (as Metrolist's `SearchFilter.FILTER_SONG`). */
     const val FILTER_SONGS = "EgWKAQIIAWoKEAkQBRAKEAMQBA%3D%3D"
+
+    /** YouTube Music's "Artists" search filter (as Metrolist's `SearchFilter.FILTER_ARTIST`). */
+    const val FILTER_ARTISTS = "EgWKAQIgAWoKEAkQChAFEAMQBA%3D%3D"
+
+    /** YouTube Music's "Albums" search filter (as Metrolist's `SearchFilter.FILTER_ALBUM`). */
+    const val FILTER_ALBUMS = "EgWKAQIYAWoKEAkQChAFEAMQBA%3D%3D"
 
     @Volatile private var instance: YtClient? = null
 

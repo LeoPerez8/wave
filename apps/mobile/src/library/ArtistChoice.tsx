@@ -1,0 +1,154 @@
+import {
+  counted,
+  type ArtistLink,
+  type StreamedArtistLink,
+  type StreamedArtistTarget,
+} from "@wave/core";
+import * as Effect from "effect/Effect";
+import { Fragment } from "react";
+import { View } from "react-native";
+
+import type { ArtistImageSource } from "@/catalog/ArtistImage";
+import { CatalogLine } from "@/catalog/CatalogLine";
+import { CELL } from "@/catalog/grid";
+import { Hairline } from "@/catalog/Hairline";
+import { NameRow } from "@/catalog/NameRow";
+import { showError } from "@/overlay/alert";
+import { CardEntries } from "@/overlay/CardEntries";
+import { followUp, openOverlay } from "@/overlay/overlay";
+import { openYtArtistNamed } from "@/ytmusic/routes";
+
+import { LibraryStore, type ArtistRow } from "./LibraryStore";
+import { openArtist } from "./routes";
+import { appRuntime } from "./runtime";
+
+/** An artist the choice card lists: their row, and the page tapping it opens. */
+interface ArtistChoice {
+  readonly key: string;
+  readonly name: string;
+  /** The quiet second line: a Library artist's song count, or that they're YouTube Music's. */
+  readonly detail: string;
+  readonly image: ArtistImageSource;
+  readonly open: () => void;
+}
+
+/**
+ * Where Go to Artist and Now Playing's artist line lead (Core's `artistLink`):
+ * one artist opens their page ([known] is their row, when read ahead), several
+ * open a card to pick one from.
+ */
+export const followArtistLink = (link: ArtistLink, known?: ArtistRow | null): void => {
+  if (link.kind === "open") openArtist(link.artistId, known);
+  else openArtistChoice(link.artistIds);
+};
+
+/** Opens [target]'s page integrated: the Library artist's, or the YouTube Music artist page. */
+const openStreamedArtist = (target: StreamedArtistTarget<ArtistRow>): void => {
+  if (target.kind === "library") openArtist(target.artist.id, target.artist, { integrated: true });
+  else openYtArtistNamed(target.name);
+};
+
+/** A YouTube Music artist has no Library image: the row shows their initial. */
+const noImage = (name: string): ArtistImageSource => ({ name, thumbPath: null, artworkPath: null });
+
+const libraryChoice = (
+  artist: ArtistRow,
+  open = () => openArtist(artist.id, artist),
+): ArtistChoice => ({
+  key: `library-${artist.id}`,
+  name: artist.name,
+  detail: counted(artist.trackCount, "song"),
+  image: artist,
+  open,
+});
+
+const streamedChoice = (target: StreamedArtistTarget<ArtistRow>): ArtistChoice =>
+  target.kind === "library"
+    ? libraryChoice(target.artist, () => openStreamedArtist(target))
+    : {
+        key: `yt-${target.name}`,
+        name: target.name,
+        detail: "YouTube Music",
+        image: noImage(target.name),
+        open: () => openStreamedArtist(target),
+      };
+
+/**
+ * Where a streamed song's Go to Artist and Now Playing's artist line lead
+ * (Core's `streamedArtistLink`): one artist opens integrated, their Library
+ * page or the YouTube Music artist page; several open the card to pick one.
+ * The page you're on opens nothing: Now Playing closing reveals it.
+ */
+export const followStreamedArtistLink = (link: StreamedArtistLink<ArtistRow>): void => {
+  if (link.kind === "open") openStreamedArtist(link.target);
+  else if (link.kind === "choose") openChoiceCard(link.targets.map(streamedChoice));
+};
+
+/** Each artist's row, in [ids]' order; one cheap read per artist, gone ones left out. */
+const artistRows = (ids: readonly number[]): Promise<readonly ArtistRow[]> =>
+  appRuntime.runPromise(
+    LibraryStore.use((store) =>
+      Effect.forEach(ids, (artistId) => store.linkRows({ artistId })).pipe(
+        Effect.map((rows) => rows.flatMap((row) => row.artist ?? [])),
+      ),
+    ),
+  );
+
+const openChoiceCard = (choices: readonly ArtistChoice[]): void => {
+  openOverlay({
+    label: "Go to Artist",
+    render: (close) => <ArtistChoiceCard choices={choices} close={close} />,
+  });
+};
+
+/**
+ * Opens the card that lists [artistIds] to pick one from, once their rows are
+ * read (so it never grows once shown); what it was opened from stays
+ * highlighted meanwhile.
+ */
+const openArtistChoice = (artistIds: readonly number[]): void => {
+  void followUp(() =>
+    artistRows(artistIds).then(
+      (artists) => openChoiceCard(artists.map((artist) => libraryChoice(artist))),
+      (error: unknown) => showError("Couldn't read the artists", error),
+    ),
+  );
+};
+
+/**
+ * The artist choice card: a "Go to Artist" catalog line, then each credited
+ * artist as an artist row (their circle, name and song count, or "YouTube
+ * Music" for an artist the Library doesn't have). Tapping one opens their page.
+ */
+function ArtistChoiceCard({
+  choices,
+  close,
+}: {
+  choices: readonly ArtistChoice[];
+  close: () => void;
+}) {
+  return (
+    <>
+      <View style={{ paddingBottom: CELL * 2 }}>
+        <CatalogLine>Go to Artist</CatalogLine>
+      </View>
+      {/* Each artist follows a divider, so none trails the last. */}
+      <CardEntries>
+        {choices.map((choice) => (
+          <Fragment key={choice.key}>
+            <Hairline />
+            <NameRow
+              name={choice.name}
+              detail={choice.detail}
+              artist={choice.image}
+              onPress={() => {
+                close();
+                choice.open();
+              }}
+            />
+          </Fragment>
+        ))}
+      </CardEntries>
+    </>
+  );
+}

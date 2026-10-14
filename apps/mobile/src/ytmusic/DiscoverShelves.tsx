@@ -24,6 +24,7 @@ import { playDiscoverSongs } from "@/playback/actions";
 import { useCurrentTrackId } from "@/playback/hooks";
 
 import { openYtAlbum, openYtPlaylist } from "./routes";
+import { openYtAlbumActions } from "./YtAlbumActions";
 import { openYtSongActions } from "./YtSongActions";
 import { YtSongRow } from "./YtSongRow";
 
@@ -91,6 +92,7 @@ export function DiscoverSongRow({
       state={playing ? "playing" : undefined}
       favorite={favorites.has(song.track.id)}
       leading={trackNumber === undefined ? "artwork" : "number"}
+      downloaded
       onPress={onPress}
       onLongPress={() => openSongActions(song)}
     />
@@ -184,7 +186,19 @@ function TileShelf({ shelf, context }: { shelf: Shelf; context: QueueContext }) 
                 artworkUrl,
               })
             }
-            onLongPress={item.kind === "song" ? () => openSongActions(item.song) : undefined}
+            onLongPress={
+              item.kind === "song"
+                ? () => openSongActions(item.song)
+                : item.kind === "album"
+                  ? () =>
+                      openYtAlbumActions({
+                        browseId: item.browseId,
+                        title: item.title,
+                        line: caption.line,
+                        artworkUrl,
+                      })
+                  : undefined
+            }
           />
         );
       })}

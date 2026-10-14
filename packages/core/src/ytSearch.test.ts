@@ -1,8 +1,15 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { YT_SECTION_HIDDEN, stepYtSection, ytSearchQuery, ytSectionView } from "./index.ts";
-import type { YtSection, YtSong } from "./index.ts";
+import {
+  YT_SECTION_HIDDEN,
+  libraryArtistFinder,
+  libraryReleaseFinder,
+  stepYtSection,
+  ytSearchQuery,
+  ytSectionView,
+} from "./index.ts";
+import type { YtArtistAlbum, YtArtistCandidate, YtSection, YtSong } from "./index.ts";
 
 const song = (videoId: string): YtSong => ({
   videoId,
@@ -14,40 +21,184 @@ const song = (videoId: string): YtSong => ({
   explicit: false,
 });
 
-const typed = (state: YtSection, query: string, enabled = true): YtSection =>
-  stepYtSection(state, { type: "typed", query, enabled });
+const artist = (name: string): YtArtistCandidate => ({
+  name,
+  browseId: `UC${name}`,
+  audience: null,
+  artworkUrl: null,
+});
 
-const inLibrary = (s: YtSong): boolean => s.videoId === "mine";
-const results = (songs: YtSong[]): YtSection => ({ status: "results", query: "q", songs });
+const album = (title: string, ...artists: string[]): YtArtistAlbum => ({
+  kind: "album",
+  browseId: `MPREb_${title}`,
+  title,
+  artists,
+  year: null,
+  artworkUrl: null,
+});
+
+/** No artists or albums: what YT Music found is only songs. */
+const NONE = { artists: [], albums: [] } as const;
+
+/** Typing [query]; by default the Library has nothing for it, so YT Music is asked on its own. */
+const typed = (
+  state: YtSection,
+  query: string,
+  enabled = true,
+  libraryHasResults = false,
+): YtSection => stepYtSection(state, { type: "typed", query, enabled, libraryHasResults });
+
+/** Typing [query] that the Library has results for. */
+const typedFound = (state: YtSection, query: string): YtSection => typed(state, query, true, true);
+
+/** The Library has the song "mine", the artist "Mine" and the album "Mine". */
+const library = {
+  hasSong: (s: YtSong): boolean => s.videoId === "mine",
+  hasArtist: (a: YtArtistCandidate): boolean => a.name === "Mine",
+  hasAlbum: (a: YtArtistAlbum): boolean => a.title === "Mine",
+};
+
+const results = (
+  songs: YtSong[],
+  artists: YtArtistCandidate[] = [],
+  albums: YtArtistAlbum[] = [],
+  query = "q",
+): YtSection => ({ status: "results", query, songs, artists, albums, by: "user" });
+
+/** Nothing shown: what a section with no results of its own shows. */
+const EMPTY = { songs: [], artists: [], albums: [], top: null };
 
 describe("ytSectionView", () => {
   test("shows the songs that aren't in the Library, in YT Music's order", () => {
-    const view = ytSectionView(results([song("b"), song("mine"), song("a")]), inLibrary);
-    assert.deepEqual(view, { songs: [song("b"), song("a")], note: null });
+    const view = ytSectionView(results([song("b"), song("mine"), song("a")]), library);
+    assert.deepEqual(view?.songs, [song("b"), song("a")]);
+    assert.equal(view?.note, null);
+  });
+
+  test("shows the artists and albums the Library lacks, in YT Music's order", () => {
+    const view = ytSectionView(
+      results(
+        [],
+        [artist("Daft Punk"), artist("Mine"), artist("Justice")],
+        [album("Mine", "Me"), album("Discovery", "Daft Punk"), album("Cross", "Justice")],
+      ),
+      library,
+    );
+    assert.deepEqual(view?.artists, [artist("Daft Punk"), artist("Justice")]);
+    assert.deepEqual(view?.albums, [album("Discovery", "Daft Punk"), album("Cross", "Justice")]);
+    assert.equal(view?.note, null);
   });
 
   test("says when YT Music has nothing, or nothing the Library lacks", () => {
-    assert.deepEqual(ytSectionView(results([]), inLibrary), { songs: [], note: "noMatches" });
-    assert.deepEqual(ytSectionView(results([song("mine")]), inLibrary), {
-      songs: [],
+    assert.deepEqual(ytSectionView(results([]), library), {
+      ...EMPTY,
+      note: "noMatches",
+      offer: false,
+      integrated: true,
+    });
+    const mine = results([song("mine")], [artist("Mine")], [album("Mine", "Me")]);
+    assert.deepEqual(ytSectionView(mine, library), {
+      ...EMPTY,
       note: "allInLibrary",
+      offer: false,
+      integrated: true,
     });
   });
 
-  test("says it's searching until the first songs arrive, then keeps them up", () => {
-    const first: YtSection = { status: "loading", query: "q", songs: [] };
-    assert.deepEqual(ytSectionView(first, inLibrary), { songs: [], note: "searching" });
-    const next: YtSection = { status: "loading", query: "q", songs: [song("a")] };
-    assert.deepEqual(ytSectionView(next, inLibrary), { songs: [song("a")], note: null });
+  test("says it's searching until the first results arrive, then keeps them up", () => {
+    const first: YtSection = {
+      status: "loading",
+      query: "q",
+      songs: [],
+      ...NONE,
+      by: "user",
+      delayMs: 0,
+    };
+    assert.deepEqual(ytSectionView(first, library), {
+      ...EMPTY,
+      note: "searching",
+      offer: false,
+      integrated: true,
+    });
+    const next: YtSection = { ...first, artists: [artist("Daft Punk")] };
+    assert.deepEqual(ytSectionView(next, library)?.artists, [artist("Daft Punk")]);
+    assert.equal(ytSectionView(next, library)?.note, null);
   });
 
-  test("a failure is a quiet note", () => {
-    const quiet: YtSection = { status: "quiet", query: "q", reason: "offline" };
-    assert.deepEqual(ytSectionView(quiet, inLibrary), { songs: [], note: "offline" });
+  test("a failure is a quiet note, and Search isn't integrated", () => {
+    const quiet: YtSection = { status: "quiet", query: "q", reason: "offline", by: "user" };
+    assert.deepEqual(ytSectionView(quiet, library), {
+      ...EMPTY,
+      note: "offline",
+      offer: false,
+      integrated: false,
+    });
+  });
+
+  test("offers Search YouTube Music while nothing is asked, and isn't integrated", () => {
+    assert.deepEqual(ytSectionView({ status: "offered", query: "q" }, library), {
+      ...EMPTY,
+      note: null,
+      offer: true,
+      integrated: false,
+    });
   });
 
   test("a hidden section shows nothing", () => {
-    assert.equal(ytSectionView(YT_SECTION_HIDDEN, inLibrary), null);
+    assert.equal(ytSectionView(YT_SECTION_HIDDEN, library), null);
+  });
+
+  test("YT Music's best is the result shown that matches the query best, artists first", () => {
+    const lucky = { ...song("lucky"), title: "Get Lucky", artists: ["Daft Punk"] };
+    const answer = (query: string) =>
+      results(
+        [lucky],
+        [artist("Daft Punk")],
+        [album("Random Access Memories", "Daft Punk")],
+        query,
+      );
+    assert.deepEqual(ytSectionView(answer("daft punk"), library)?.top, {
+      kind: "artist",
+      artist: artist("Daft Punk"),
+    });
+    assert.deepEqual(ytSectionView(answer("get lucky"), library)?.top, {
+      kind: "song",
+      song: lucky,
+    });
+    assert.deepEqual(ytSectionView(answer("random access"), library)?.top, {
+      kind: "album",
+      album: album("Random Access Memories", "Daft Punk"),
+    });
+  });
+
+  test("with nothing matching the query word for word, YT Music's best is its first song", () => {
+    const halo = { ...song("halo"), title: "Halo", artists: ["Beyoncé"] };
+    const view = ytSectionView(results([halo], [artist("Beyoncé")], [], "beyonse"), library);
+    assert.deepEqual(view?.top, { kind: "song", song: halo });
+    const noSongs = ytSectionView(results([], [artist("Beyoncé")], [], "beyonse"), library);
+    assert.deepEqual(noSongs?.top, { kind: "artist", artist: artist("Beyoncé") });
+  });
+
+  test("YT Music's best is never something the Library has", () => {
+    const view = ytSectionView(
+      results([], [artist("Mine"), artist("Minnie")], [], "mine"),
+      library,
+    );
+    assert.deepEqual(view?.top, { kind: "artist", artist: artist("Minnie") });
+  });
+
+  test("while the next query loads, YT Music has no best: the results kept up answer the last one", () => {
+    const dafto = { ...song("dafto"), title: "Dafto" };
+    const shown = stepYtSection(typed(YT_SECTION_HIDDEN, "dafto"), {
+      type: "found",
+      query: "dafto",
+      songs: [dafto],
+      ...NONE,
+    });
+    assert.deepEqual(ytSectionView(shown, library)?.top, { kind: "song", song: dafto });
+    const view = ytSectionView(typed(shown, "daft punk"), library);
+    assert.deepEqual(view?.songs, [dafto]);
+    assert.equal(view?.top, null);
   });
 });
 
@@ -62,23 +213,130 @@ describe("ytSearchQuery", () => {
 });
 
 describe("stepYtSection", () => {
-  test("typing a query starts loading it", () => {
+  test("typing a query the Library has results for asks nothing and offers to ask", () => {
+    assert.deepEqual(typedFound(YT_SECTION_HIDDEN, "daft"), { status: "offered", query: "daft" });
+  });
+
+  test("Search YouTube Music asks for the offered query at once", () => {
+    const asked = stepYtSection(typedFound(YT_SECTION_HIDDEN, "daft"), { type: "asked" });
+    assert.deepEqual(asked, {
+      status: "loading",
+      query: "daft",
+      songs: [],
+      ...NONE,
+      by: "user",
+      delayMs: 0,
+    });
+  });
+
+  test("once asked, refining the query keeps YT Music's songs up and asks for the new one", () => {
+    const asked = stepYtSection(typedFound(YT_SECTION_HIDDEN, "daft"), { type: "asked" });
+    const shown = stepYtSection(asked, {
+      type: "found",
+      query: "daft",
+      songs: [song("a")],
+      ...NONE,
+    });
+    assert.deepEqual(typedFound(shown, "daft punk"), {
+      status: "loading",
+      query: "daft punk",
+      songs: [song("a")],
+      ...NONE,
+      by: "user",
+      delayMs: 300,
+    });
+  });
+
+  test("asked on its own, YT Music is let go once the Library has results again", () => {
+    const shown = stepYtSection(typed(YT_SECTION_HIDDEN, "dafy"), {
+      type: "found",
+      query: "dafy",
+      songs: [song("a")],
+      ...NONE,
+    });
+    assert.deepEqual(typedFound(shown, "daf"), { status: "offered", query: "daf" });
+  });
+
+  test("clearing the field ends what the user asked for", () => {
+    const asked = stepYtSection(typedFound(YT_SECTION_HIDDEN, "daft"), { type: "asked" });
+    assert.equal(typedFound(asked, ""), YT_SECTION_HIDDEN);
+    assert.deepEqual(typedFound(typedFound(asked, ""), "daft"), {
+      status: "offered",
+      query: "daft",
+    });
+  });
+
+  test("with YT Music off nothing is offered, and asking does nothing", () => {
+    const off = typed(YT_SECTION_HIDDEN, "daft", false, true);
+    assert.equal(off, YT_SECTION_HIDDEN);
+    assert.equal(stepYtSection(off, { type: "asked" }), YT_SECTION_HIDDEN);
+    const asked = stepYtSection(typedFound(YT_SECTION_HIDDEN, "daft"), { type: "asked" });
+    assert.equal(typed(asked, "daft", false, true), YT_SECTION_HIDDEN);
+  });
+
+  test("typing a query the Library has nothing for asks YT Music on its own, once typing pauses", () => {
     assert.deepEqual(typed(YT_SECTION_HIDDEN, "daft"), {
       status: "loading",
       query: "daft",
       songs: [],
+      ...NONE,
+      by: "auto",
+      delayMs: 300,
     });
   });
 
   test("the results for the query being loaded are shown", () => {
     const loading = typed(YT_SECTION_HIDDEN, "daft");
-    const found = stepYtSection(loading, { type: "found", query: "daft", songs: [song("a")] });
-    assert.deepEqual(found, { status: "results", query: "daft", songs: [song("a")] });
+    const found = stepYtSection(loading, {
+      type: "found",
+      query: "daft",
+      songs: [song("a")],
+      ...NONE,
+    });
+    assert.deepEqual(found, {
+      status: "results",
+      query: "daft",
+      songs: [song("a")],
+      ...NONE,
+      by: "auto",
+    });
+  });
+
+  test("the artists and albums found for the query join its songs", () => {
+    const found = stepYtSection(typed(YT_SECTION_HIDDEN, "daft"), {
+      type: "found",
+      query: "daft",
+      songs: [song("a")],
+      artists: [artist("Daft Punk")],
+      albums: [album("Discovery", "Daft Punk")],
+    });
+    assert.deepEqual(found, {
+      status: "results",
+      query: "daft",
+      songs: [song("a")],
+      artists: [artist("Daft Punk")],
+      albums: [album("Discovery", "Daft Punk")],
+      by: "auto",
+    });
+    assert.deepEqual(typed(found, "daft p"), {
+      status: "loading",
+      query: "daft p",
+      songs: [song("a")],
+      artists: [artist("Daft Punk")],
+      albums: [album("Discovery", "Daft Punk")],
+      by: "auto",
+      delayMs: 300,
+    });
   });
 
   test("results that arrive after the query changed are dropped", () => {
     const loading = typed(typed(YT_SECTION_HIDDEN, "daft"), "daft punk");
-    const stale = stepYtSection(loading, { type: "found", query: "daft", songs: [song("a")] });
+    const stale = stepYtSection(loading, {
+      type: "found",
+      query: "daft",
+      songs: [song("a")],
+      ...NONE,
+    });
     assert.equal(stale, loading);
     const staleFailure = stepYtSection(loading, {
       type: "failed",
@@ -93,11 +351,15 @@ describe("stepYtSection", () => {
       type: "found",
       query: "daft",
       songs: [song("a")],
+      ...NONE,
     });
     assert.deepEqual(typed(shown, "daft punk"), {
       status: "loading",
       query: "daft punk",
       songs: [song("a")],
+      ...NONE,
+      by: "auto",
+      delayMs: 300,
     });
   });
 
@@ -106,6 +368,7 @@ describe("stepYtSection", () => {
       type: "found",
       query: "daft",
       songs: [song("a")],
+      ...NONE,
     });
     assert.equal(typed(shown, " daft "), shown);
   });
@@ -116,6 +379,7 @@ describe("stepYtSection", () => {
       status: "quiet",
       query: "daft",
       reason: "offline",
+      by: "auto",
     });
   });
 
@@ -125,7 +389,14 @@ describe("stepYtSection", () => {
       query: "daft",
       reason: "failed",
     });
-    assert.deepEqual(typed(quiet, "daft p"), { status: "loading", query: "daft p", songs: [] });
+    assert.deepEqual(typed(quiet, "daft p"), {
+      status: "loading",
+      query: "daft p",
+      songs: [],
+      ...NONE,
+      by: "auto",
+      delayMs: 300,
+    });
   });
 
   test("the section hides with nothing to search for", () => {
@@ -140,7 +411,55 @@ describe("stepYtSection", () => {
       type: "found",
       query: "daft",
       songs: [song("a")],
+      ...NONE,
     });
     assert.equal(typed(shown, "daft", false), YT_SECTION_HIDDEN);
+  });
+});
+
+/** A release found on YouTube Music, as matching it sees it. */
+const release = (title: string, ...credited: string[]) => ({ title, artists: credited });
+
+describe("libraryReleaseFinder", () => {
+  const artists = [
+    { id: 1, name: "JAY-Z" },
+    { id: 2, name: "Kanye West" },
+    { id: 3, name: "Daft Punk" },
+  ];
+  const albums = [
+    { id: 10, title: "Watch the Throne", albumArtistIds: [1, 2] },
+    { id: 11, title: "Random Access Memories", albumArtistIds: [3] },
+    { id: 12, title: "Discovery", albumArtistIds: [3] },
+  ];
+  const find = libraryReleaseFinder(libraryArtistFinder(artists), albums);
+
+  test("is the Library album with the release's title, filed under an artist it credits", () => {
+    assert.equal(find(release("Random Access Memories", "Daft Punk"))?.id, 11);
+    assert.equal(find(release("Watch The Throne (Deluxe)", "JAŸ-Z", "Kanye West"))?.id, 10);
+    assert.equal(find(release("Watch the Throne", "Kanye West"))?.id, 10);
+  });
+
+  test("is null for a release of an artist the Library lacks, or one of theirs it lacks", () => {
+    assert.equal(find(release("Random Access Memories", "Daft Punk's Karaoke Band")), null);
+    assert.equal(find(release("Homework", "Daft Punk")), null);
+    assert.equal(find(release("Alive 2007 (Live)", "Daft Punk")), null);
+  });
+});
+
+describe("libraryArtistFinder", () => {
+  const find = libraryArtistFinder([
+    { id: 1, name: "Beatles" },
+    { id: 2, name: "Björk" },
+    { id: 3, name: "Unknown Artist" },
+  ]);
+
+  test("is the Library artist a YouTube Music name is, as artist photos compare names", () => {
+    assert.equal(find("The Beatles")?.id, 1);
+    assert.equal(find("bjork")?.id, 2);
+  });
+
+  test("is null for anyone else, and for names that aren't an artist", () => {
+    assert.equal(find("Daft Punk"), null);
+    assert.equal(find("Unknown Artist"), null);
   });
 });

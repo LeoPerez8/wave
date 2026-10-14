@@ -66,15 +66,17 @@ const readTopArtists: ReadRanking<ArtistRow> = (stats, period, limit) =>
   stats.topArtists(period, limit);
 
 /**
- * An artist page's stats block for `artistId`, whose songs are `songIds`, or
- * undefined while it first loads. Also re-read when the artist's songs change.
+ * An artist page's stats block for `artistId`, or undefined while it first
+ * loads. Also re-read when the page's `songs` change (a scan or a deletion).
  */
 export const useArtistStats = (
   artistId: number,
-  songIds: readonly number[],
+  songs: readonly unknown[],
 ): ArtistStats | undefined =>
   useStatsRead(
-    useCallback((stats: Stats["Service"]) => stats.artist(artistId, songIds), [artistId, songIds]),
+    // `songs` isn't read in here: a change re-reads the artist's songs.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/memo-dependencies
+    useCallback((stats: Stats["Service"]) => stats.artist(artistId), [artistId, songs]),
   );
 
 /** Top songs: the `limit` songs played most in `period` (10 on Stats, 100 in See all). */

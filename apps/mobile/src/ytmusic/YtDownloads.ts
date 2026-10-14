@@ -6,19 +6,22 @@ import {
   soulseekQuery,
   soulseekReceivedMatches,
   soulseekRecording,
+  ytAlbumDownload,
   ytDownloadDestination,
   ytDownloadLookup,
   ytDownloadSharedJob,
   ytDownloadStatus,
   ytDownloadTags,
   ytDownloadsFromJournal,
+  type YtAlbumDownload,
+  type YtAlbumDownloadAction,
   type YtDownloadFailure,
   type YtDownloadStatus,
   type YtDownloads,
 } from "@wave/core";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import { useSyncExternalStore } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import { PermissionsAndroid, Platform } from "react-native";
 
 import { libraryEdited, toIndexedArtwork, toIndexedTrack } from "@/library/LibraryScan";
@@ -40,6 +43,8 @@ import {
   type NativeSavedDownload,
   type NativeYtWatchSong,
 } from "@/native/waveYtDownloads";
+
+import { readYtAlbum } from "./albumPages";
 
 export class DownloadFailed extends Data.TaggedError("DownloadFailed")<{
   readonly reason: YtDownloadFailure;
@@ -84,7 +89,7 @@ const metadata = (song: NativeYtSong) =>
     const album = yield* optional(
       Effect.gen(function* () {
         const albumId = song.albumId ?? (yield* watch()).albumId;
-        return albumId === null ? null : yield* native(() => WaveYtDownloads.album(albumId));
+        return albumId === null ? null : yield* native(() => readYtAlbum(albumId));
       }),
     );
     const lookup = ytDownloadLookup(song, album);
@@ -157,6 +162,8 @@ export const importSoulseekDownload = (saved: NativeSavedDownload) =>
   });
 
 const downloads = makeExternalStore<YtDownloads<NativeYtSong>>(YT_DOWNLOADS_NONE);
+/** The journal's last snapshot as it came, for album-level views (Core's `ytAlbumDownload`). */
+const journal = makeExternalStore<readonly NativeDownloadJob[]>([]);
 
 /** Re-reads folder policy so a publication never lands outside the current Library folders. */
 const publicationTarget = (claim: NativeDownloadDecision) =>
@@ -269,6 +276,7 @@ const refresh = async (): Promise<void> => {
       if (snapshot !== shown) {
         shown = snapshot;
         downloads.set(ytDownloadsFromJournal(jobs));
+        journal.set(jobs);
       }
       for (const job of jobs) if (awaitsAnswer(job)) void answerJob(job.id);
       const active = jobs.some(unfinished);
@@ -332,3 +340,85 @@ export const cancelYtDownload = (videoId: string): void => {
 };
 export const useYtDownloadStatus = (videoId: string): YtDownloadStatus | null =>
   useSyncExternalStore(downloads.subscribe, () => ytDownloadStatus(downloads.get(), videoId));
+
+/** Whether the Library already has a song (Core's `libraryFinder`). */
+type InLibrary = (song: NativeYtSong) => boolean;
+
+/**
+ * Download Album: every song of the album the Library doesn't have joins the
+ * queue, in album order, sharing jobs already on their way (Core's
+ * `ytAlbumDownload`, decided on a fresh snapshot of the journal). Each goes
+ * through the single-song pipeline.
+ */
+export const downloadYtAlbum = (songs: readonly NativeYtSong[], inLibrary: InLibrary): void => {
+  askForNotifications();
+  startDownloads();
+  requests = requests
+    .then(async () => {
+      const jobs = await WaveSoulseek.jobsSnapshot();
+      for (const { song, sharedJob } of ytAlbumDownload(songs, { inLibrary, jobs }).toDownload)
+        await WaveSoulseek.enqueueJob(song, soulseekRecording(song), sharedJob);
+      await refresh();
+    })
+    .catch(() => undefined);
+};
+
+/**
+ * Retry Failed: asks again for each of the album's songs whose download
+ * failed, in album order, sharing jobs already on their way as Download Album does.
+ */
+export const retryYtAlbum = (songs: readonly NativeYtSong[], inLibrary: InLibrary): void => {
+  askForNotifications();
+  startDownloads();
+  requests = requests
+    .then(async () => {
+      const jobs = await WaveSoulseek.jobsSnapshot();
+      for (const { song, sharedJob } of ytAlbumDownload(songs, { inLibrary, jobs }).toRetry)
+        await WaveSoulseek.enqueueJob(song, soulseekRecording(song), sharedJob);
+      await refresh();
+    })
+    .catch(() => undefined);
+};
+
+/** Cancel Album Download: the album's songs leave the jobs that aren't saving yet. */
+export const cancelYtAlbum = (songs: readonly NativeYtSong[], inLibrary: InLibrary): void => {
+  requests = requests
+    .then(async () => {
+      const jobs = await WaveSoulseek.jobsSnapshot();
+      for (const videoId of ytAlbumDownload(songs, { inLibrary, jobs }).toCancel)
+        await WaveSoulseek.cancelJob(videoId);
+      await refresh();
+    })
+    .catch(() => undefined);
+};
+
+/** Runs an album entry (Core's `ytAlbumDownload` actions) on [songs]. */
+export const runYtAlbumAction = (
+  action: YtAlbumDownloadAction,
+  songs: readonly NativeYtSong[],
+  inLibrary: InLibrary,
+): void => {
+  switch (action) {
+    case "downloadAlbum":
+      downloadYtAlbum(songs, inLibrary);
+      return;
+    case "retryFailed":
+      retryYtAlbum(songs, inLibrary);
+      return;
+    case "cancelAlbumDownload":
+      cancelYtAlbum(songs, inLibrary);
+      return;
+  }
+};
+
+/**
+ * Where a YT Music album's download stands (Core's `ytAlbumDownload`), from
+ * its [songs], the Library ([inLibrary]) and the journal, following both.
+ */
+export const useYtAlbumDownload = (
+  songs: readonly NativeYtSong[],
+  inLibrary: InLibrary,
+): YtAlbumDownload<NativeYtSong> => {
+  const jobs = useSyncExternalStore(journal.subscribe, journal.get);
+  return useMemo(() => ytAlbumDownload(songs, { inLibrary, jobs }), [songs, inLibrary, jobs]);
+};

@@ -60,4 +60,13 @@ describe("selectKnownFiles", () => {
     assert.notEqual(known?.modifiedAt, 1_234);
     assert.equal(selectLibraryLookupSongs(old)[0]?.hasLyrics, false);
   });
+
+  test("a song indexed before Wave read every value of an artist tag is read again by the next scan", async () => {
+    const old = await openTestDatabase({ through: "0014_yt_artists" });
+    addTrack(old, { title: "boyfriend", artist: "Ariana Grande, Social House", addedAt: 1_234 });
+    await migrateTestDatabase(old);
+    const [known] = selectKnownFiles(old, ["/Music"]);
+    assert.equal(known?.path, "/Music/boyfriend (single)/boyfriend.mp3");
+    assert.notEqual(known?.modifiedAt, 1_234);
+  });
 });

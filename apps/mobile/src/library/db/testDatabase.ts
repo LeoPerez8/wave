@@ -4,11 +4,13 @@
  * migrator, exactly as the app applies them on the phone, and helpers that
  * seed fixture tracks.
  */
+import { identityKey } from "@wave/core";
 import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/sql-js";
 import { migrate } from "drizzle-orm/expo-sqlite/migrator";
 import initSqlJs from "sql.js";
 
+import { creditSplits, relinkCreditsIfUnlinked } from "./credits.ts";
 import migrations from "./migrations.ts";
 import * as schema from "./schema.ts";
 
@@ -43,9 +45,13 @@ export const openTestDatabase = async (options: { readonly through?: string } = 
   return db;
 };
 
-/** Applies the migrations a database opened `through` an older one is missing. */
+/**
+ * Applies the migrations a database opened `through` an older one is missing,
+ * then what the store does after migrating (`relinkCreditsIfUnlinked`).
+ */
 export const migrateTestDatabase = async (db: TestDatabase): Promise<void> => {
   await migrate(db as unknown as Migrator, migrations);
+  relinkCreditsIfUnlinked(db, creditSplits());
 };
 
 export interface FixtureTrack {
@@ -91,7 +97,7 @@ export const addTrack = (db: TestDatabase, track: FixtureTrack): number => {
       () =>
         // Drizzle's insert names every column of today's schema.
         db.get<{ id: number }>(
-          sql`INSERT INTO artists (key, name, sort) VALUES (${name}, ${name}, ${name.toLowerCase()}) RETURNING id`,
+          sql`INSERT INTO artists (key, name, sort) VALUES (${identityKey(name)}, ${name}, ${name.toLowerCase()}) RETURNING id`,
         ),
     );
   if (track.artworkHash !== undefined) {
@@ -108,23 +114,18 @@ export const addTrack = (db: TestDatabase, track: FixtureTrack): number => {
   const albumKey = `${albumTitle}|${albumArtistName}`;
   const albumId = upsertId(
     db
-      .select()
+      .select({ id: albums.id, key: albums.key })
       .from(albums)
       .all()
       .find((row) => row.key === albumKey),
     () =>
-      db
-        .insert(albums)
-        .values({
-          key: albumKey,
-          title: albumTitle,
-          titleSort: albumTitle.toLowerCase(),
-          albumArtistId: artistId(albumArtistName),
-          year: track.year ?? null,
-          artworkHash: track.artworkHash ?? null,
-        })
-        .returning()
-        .get(),
+      // Only the columns albums had from the start, as for tracks below.
+      db.get<{ id: number }>(
+        sql`INSERT INTO albums (key, title, title_sort, album_artist_id, year, artwork_hash)
+          VALUES (${albumKey}, ${albumTitle}, ${albumTitle.toLowerCase()},
+            ${artistId(albumArtistName)}, ${track.year ?? null}, ${track.artworkHash ?? null})
+          RETURNING id`,
+      ),
   );
   const folderId = upsertId(db.select().from(folders).all()[0], () =>
     db.insert(folders).values({ path: "/Music", name: "Music" }).returning().get(),
@@ -177,5 +178,27 @@ export const addTrack = (db: TestDatabase, track: FixtureTrack): number => {
   ).id;
   if (track.hasLyrics !== undefined)
     db.update(tracks).set({ hasLyrics: track.hasLyrics }).where(eq(tracks.id, id)).run();
+  if (hasCredits(db)) {
+    // As an upgrade leaves the track before its credit is split: one artist, the whole credit.
+    db.update(tracks).set({ artistCredit: artistName }).where(eq(tracks.id, id)).run();
+    db.update(albums)
+      .set({ albumArtistCredit: albumArtistName })
+      .where(eq(albums.id, albumId))
+      .run();
+    db.insert(schema.trackArtists)
+      .values({ trackId: id, artistId: artistId(artistName), position: 0 })
+      .onConflictDoNothing()
+      .run();
+    db.insert(schema.albumArtists)
+      .values({ albumId, artistId: artistId(albumArtistName), position: 0 })
+      .onConflictDoNothing()
+      .run();
+  }
   return id;
 };
+
+/** Whether the database has credit links (migration 0012). */
+const hasCredits = (db: TestDatabase): boolean =>
+  db.get<{ n: number }>(
+    sql`SELECT count(*) AS n FROM sqlite_master WHERE type = 'table' AND name = 'track_artists'`,
+  ).n > 0;

@@ -1,4 +1,13 @@
-import { createSearchIndex, type SearchIndex, type YtSong } from "@wave/core";
+import {
+  createSearchIndex,
+  libraryArtistFinder,
+  libraryReleaseFinder,
+  type SearchIndex,
+  type YtArtistAlbum,
+  type YtArtistCandidate,
+  type YtSearchLibrary,
+  type YtSong,
+} from "@wave/core";
 import * as Effect from "effect/Effect";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
@@ -69,11 +78,29 @@ const toEntries = (sources: Sources): SearchHit[] => {
 /** During a scan the library changes every batch; the index catches up at most this often. */
 const REFRESH_MS = 3000;
 
-/** What Search looks things up in: the library's index, and whether a YT Music song is in the library. */
+/**
+ * What Search looks things up in: the library's index, and what the library
+ * already has of YT Music's songs, artists and albums.
+ */
 export interface LibrarySearch {
   readonly index: SearchIndex<SearchHit>;
-  readonly inLibrary: (song: YtSong) => boolean;
+  readonly library: YtSearchLibrary<YtSong>;
 }
+
+/** Whether the library has a YT Music artist or album (Core's `libraryArtistFinder`, `libraryReleaseFinder`). */
+interface LibraryReleases {
+  readonly hasArtist: (artist: YtArtistCandidate) => boolean;
+  readonly hasAlbum: (album: YtArtistAlbum) => boolean;
+}
+
+const releasesOf = (sources: Sources): LibraryReleases => {
+  const artistNamed = libraryArtistFinder(sources.artists);
+  const albumOf = libraryReleaseFinder(artistNamed, sources.albums);
+  return {
+    hasArtist: (artist) => artistNamed(artist.name) !== null,
+    hasAlbum: (album) => albumOf(album) !== null,
+  };
+};
 
 /**
  * The search index over the whole library, or null until it's first built.
@@ -88,6 +115,7 @@ export const useSearchIndex = (active: boolean): LibrarySearch | null => {
   const [built, setBuilt] = useState<{
     readonly version: number;
     readonly index: SearchIndex<SearchHit>;
+    readonly releases: LibraryReleases;
   } | null>(null);
   // Whether a YT Music song is in the Library: the finder Discover shares.
   const find = useLoadedLibraryFinder(active);
@@ -116,7 +144,7 @@ export const useSearchIndex = (active: boolean): LibrarySearch | null => {
         .then((sources) => {
           lastBuild.current = Date.now();
           const index = createSearchIndex(toEntries(sources));
-          if (mounted.current) setBuilt({ version, index });
+          if (mounted.current) setBuilt({ version, index, releases: releasesOf(sources) });
         })
         .catch(() => {
           // Keep the last index; store errors surface elsewhere (scan banner).
@@ -128,9 +156,11 @@ export const useSearchIndex = (active: boolean): LibrarySearch | null => {
     return () => clearTimeout(timer);
   }, [active, built, version]);
 
-  const index = built?.index ?? null;
   return useMemo(
-    () => (index === null || inLibrary === null ? null : { index, inLibrary }),
-    [index, inLibrary],
+    () =>
+      built === null || inLibrary === null
+        ? null
+        : { index: built.index, library: { hasSong: inLibrary, ...built.releases } },
+    [built, inLibrary],
   );
 };

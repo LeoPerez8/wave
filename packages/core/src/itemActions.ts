@@ -7,6 +7,7 @@
  */
 
 import { isDetailPath } from "./navigation.ts";
+import type { StreamedArtistLink } from "./streamedArtist.ts";
 
 /**
  * What kind of library item the actions are about. `mixed` is items of
@@ -36,8 +37,11 @@ export type ActionSurface = "menu" | "selection";
 export interface ActionItem {
   /** The item's album (a track's). */
   readonly albumId?: number | undefined;
-  /** The item's artist (a track's, an album's album artist). */
-  readonly artistId?: number | undefined;
+  /**
+   * The artists the item is credited to, primary first: each artist a track's
+   * credit names, each album artist an album's credit names.
+   */
+  readonly artistIds?: readonly number[] | undefined;
   /** A starred track. */
   readonly favorite?: boolean | undefined;
   /** A track shown in a playlist, which it can be removed from. */
@@ -74,11 +78,19 @@ export type ItemAction =
   | "select"
   | "delete";
 
+/**
+ * Where a link to an item's artists leads (Go to Artist, Now Playing's artist
+ * line): straight to the one artist, or a choice of several.
+ */
+export type ArtistLink =
+  | { readonly kind: "open"; readonly artistId: number }
+  | { readonly kind: "choose"; readonly artistIds: readonly number[] };
+
 /** One entry, in the order shown; Go to entries carry where they lead. */
 export type ItemActionEntry =
   | { readonly action: Exclude<ItemAction, "goToAlbum" | "goToArtist"> }
   | { readonly action: "goToAlbum"; readonly albumId: number }
-  | { readonly action: "goToArtist"; readonly artistId: number };
+  | { readonly action: "goToArtist"; readonly artists: ArtistLink };
 
 /** What each entry says. */
 export const ITEM_ACTION_LABELS: { readonly [A in ItemAction]: string } = {
@@ -114,6 +126,32 @@ const shared = (values: readonly (number | undefined)[]): number | undefined => 
   return first !== undefined && values.every((value) => value === first) ? first : undefined;
 };
 
+/**
+ * Where a link to artists [artistIds] (an item's, primary first) leads from
+ * the page [here]: the page you're on is left out, a single artist opens
+ * straight away, several are a choice. Undefined when none is left.
+ */
+export const artistLink = (artistIds: readonly number[], here: string): ArtistLink | undefined => {
+  const offered = [...new Set(artistIds)].filter((id) => !isDetailPath(here, "artist", id));
+  const [first] = offered;
+  if (first === undefined) return undefined;
+  return offered.length === 1
+    ? { kind: "open", artistId: first }
+    : { kind: "choose", artistIds: offered };
+};
+
+/** The artists every item is credited to, as the first lists them; none when they differ. */
+const sharedArtists = (items: readonly ActionItem[]): readonly number[] => {
+  const first = items[0]?.artistIds ?? [];
+  const set = new Set(first);
+  const same = (ids: readonly number[] | undefined): boolean =>
+    ids !== undefined &&
+    ids.length > 0 &&
+    new Set(ids).size === set.size &&
+    ids.every((id) => set.has(id));
+  return items.every((item) => same(item.artistIds)) ? first : [];
+};
+
 /** The entries to offer on [subject]'s items, in order. */
 export const itemActions = (subject: ActionSubject): ItemActionEntry[] => {
   const { kind, items, here } = subject;
@@ -131,9 +169,8 @@ export const itemActions = (subject: ActionSubject): ItemActionEntry[] => {
   const albumId = shared(items.map((item) => item.albumId));
   if (albumId !== undefined && !isDetailPath(here, "album", albumId))
     entries.push({ action: "goToAlbum", albumId });
-  const artistId = shared(items.map((item) => item.artistId));
-  if (artistId !== undefined && !isDetailPath(here, "artist", artistId))
-    entries.push({ action: "goToArtist", artistId });
+  const artists = artistLink(sharedArtists(items), here);
+  if (artists !== undefined) entries.push({ action: "goToArtist", artists });
   if (kind === "playlist")
     entries.push(
       ...(items.length === 1
@@ -149,14 +186,28 @@ export const itemActions = (subject: ActionSubject): ItemActionEntry[] => {
   return entries;
 };
 
+/** One entry of a YT Music song's menu; Go to Artist carries where it leads. */
+export type YtSongActionEntry<A> =
+  | { readonly action: "playNext" | "addToQueue" }
+  | {
+      readonly action: "goToArtist";
+      readonly artists: Exclude<StreamedArtistLink<A>, { readonly kind: "here" }>;
+    };
+
 /**
  * The entries a YT Music song's long-press menu offers: it can join the
- * queue beside the Library's songs. The Library's other entries (playlists,
- * favorites, Go to, Delete) are about its files, which a streamed song isn't.
+ * queue beside the Library's songs and, given where its [artists] link leads
+ * (Core's `streamedArtistLink`), Go to Artist opens them integrated (none
+ * when its only artist is the page you're on). The
+ * Library's other entries (playlists, favorites, Go to Album, Delete) are
+ * about its files, which a streamed song isn't.
  */
-export const ytSongActions = (): ItemActionEntry[] => [
+export const ytSongActions = <A>(artists?: StreamedArtistLink<A>): YtSongActionEntry<A>[] => [
   { action: "playNext" },
   { action: "addToQueue" },
+  ...(artists === undefined || artists.kind === "here"
+    ? []
+    : [{ action: "goToArtist", artists } as const]),
 ];
 
 /**

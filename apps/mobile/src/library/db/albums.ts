@@ -8,6 +8,7 @@ import { asc, eq, sql, type SQL } from "drizzle-orm";
 import type { AlbumRow } from "../LibraryStore.ts";
 import type { LibraryDatabase, RowPage } from "./database.ts";
 import * as schema from "./schema.ts";
+import { albumArtistIds } from "./tracks.ts";
 
 /** The albums matching [where], by title, then album artist (the Library's order); [page] of them if given. */
 export const selectAlbums = (
@@ -21,8 +22,9 @@ export const selectAlbums = (
       id: albums.id,
       title: albums.title,
       titleSort: albums.titleSort,
-      albumArtist: artists.name,
+      albumArtist: albums.albumArtistCredit,
       albumArtistId: albums.albumArtistId,
+      albumArtistIds,
       year: albums.year,
       compilation: albums.compilation,
       trackCount: sql<number>`count(${tracks.id})`,

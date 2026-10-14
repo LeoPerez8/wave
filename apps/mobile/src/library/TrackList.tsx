@@ -1,6 +1,13 @@
 import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
 import { useScrollToTop } from "expo-router";
-import { counted, songSpineKeys, type QueueContext, type SongSort } from "@wave/core";
+import {
+  counted,
+  songSpineKeys,
+  type MixedSong,
+  type QueueContext,
+  type SongSort,
+  type YtSong,
+} from "@wave/core";
 import { useCallback, useMemo, useRef, type ReactElement, type ReactNode } from "react";
 import { View } from "react-native";
 
@@ -11,7 +18,7 @@ import { PlayShuffle } from "@/catalog/PlayShuffle";
 import { type TrackSummary, TrackRow } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { playSongs } from "@/playback/actions";
-import { useCurrentTrackId, usePlaySongs } from "@/playback/hooks";
+import { useCurrentTrackId, usePlayPage } from "@/playback/hooks";
 import { openTrackActions } from "@/playback/ActionsMenu";
 import type { ActionItems } from "@/playback/actionTargets";
 import { selectableRow } from "@/selection/selectableRow";
@@ -39,6 +46,7 @@ export const songCount = (count: number): string => counted(count, "song");
 export function ListIntro({
   line,
   songs,
+  mixed,
   context,
   sortControl,
 }: {
@@ -48,10 +56,20 @@ export function ListIntro({
    * Undefined while they load: a press then plays them once read.
    */
   songs: readonly SongRow[] | undefined;
+  /**
+   * A page that can be integrated (an artist's): its whole list, the Library's
+   * songs and YouTube Music's in page order, played instead of [songs] (by
+   * `playPage`, so streams only in an integrated view).
+   */
+  mixed?: readonly MixedSong<YtSong, SongRow>[] | undefined;
   context: QueueContext;
   sortControl?: ReactNode;
 }) {
-  const play = usePlaySongs(songs, context);
+  const library = useMemo(
+    () => songs?.map((track) => ({ source: "library" as const, track })),
+    [songs],
+  );
+  const play = usePlayPage(mixed ?? library, context);
   return (
     <View style={{ gap: CELL, paddingBottom: CELL }}>
       <CatalogLine>{line}</CatalogLine>
@@ -152,7 +170,9 @@ export function TrackList({ songs, context, header, sort }: Props) {
         }}
         ListHeaderComponent={header}
       />
-      {spine.show && <AlphabetSpine letters={spine.letters} onLetter={spine.onLetter} />}
+      {spine.show && (
+        <AlphabetSpine entries={spine.entries} onJump={spine.onJump} topRow={spine.topRow} />
+      )}
     </View>
   );
 }

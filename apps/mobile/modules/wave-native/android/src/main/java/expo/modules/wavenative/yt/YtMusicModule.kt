@@ -17,8 +17,10 @@ import kotlinx.coroutines.withContext
 import kotlin.coroutines.resume
 
 /**
- * YT Music for JS (`WaveYtMusic`): the switch in Settings, song search, the
- * home's recommendations and playlists (Discover), the account and caching a
+ * YT Music for JS (`WaveYtMusic`): the switch in Settings, song, artist and
+ * album search (Search; the artist page's section finds artists too), the
+ * artist page, the home's
+ * recommendations and playlists (Discover), the account and caching a
  * played song's cover. (Album pages are `WaveYtDownloads.album`.) (Playing is the playback
  * service's: it streams `yt:` queue items, see [YtDataSource].) Requests go
  * through the process-wide [YtClient]; failures reject with the codes of
@@ -58,6 +60,31 @@ class YtMusicModule : Module() {
     /** `{ songs, continuation }` for [query], or a rejection with an `ERR_YT_*` code. */
     AsyncFunction("searchSongs") Coroutine { query: String ->
       coded { client.searchSongs(query).toMap() }
+    }
+
+    /**
+     * Artists named like [query] (YouTube Music's "Artists" filter):
+     * `[{ name, browseId, audience, artworkUrl }]`, or a rejection with an `ERR_YT_*` code.
+     */
+    AsyncFunction("searchArtists") Coroutine { query: String ->
+      coded { client.searchArtists(query).map(YtArtistCandidate::toMap) }
+    }
+
+    /**
+     * Albums, singles and EPs named like [query] (YouTube Music's "Albums"
+     * filter): `[{ kind: "album", browseId, title, artists, year, artworkUrl }]`,
+     * or a rejection with an `ERR_YT_*` code.
+     */
+    AsyncFunction("searchAlbums") Coroutine { query: String ->
+      coded { client.searchAlbums(query).map(YtShelfItem.Album::toMap) }
+    }
+
+    /**
+     * The artist page [browseId] (`UC…`): `{ name, songs, albums, singles }`,
+     * or an `ERR_YT_*` rejection.
+     */
+    AsyncFunction("artist") Coroutine { browseId: String ->
+      coded { YtPages(client).artist(browseId).toMap() }
     }
 
     /**

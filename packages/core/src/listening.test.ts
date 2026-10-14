@@ -5,10 +5,10 @@ import { counted, listeningOverview, listeningTotals, type SongListening } from 
 
 const MINUTE = 60_000;
 
-/** A song's all-time listening; by default one counted play of three minutes, by artist 1. */
+/** A song's all-time listening; by default one counted play of three minutes, credited to artist 1. */
 const song = (trackId: number, overrides: Partial<SongListening> = {}): SongListening => ({
   trackId,
-  artistId: 1,
+  artistIds: [1],
   inLibrary: true,
   countedPlays: 1,
   listenedMs: 3 * MINUTE,
@@ -37,7 +37,7 @@ describe("listeningTotals", () => {
       // Counted plays of a song since removed from the library.
       song(4, { inLibrary: false, countedPlays: 5, listenedMs: 15 * MINUTE }),
       // One removed before Wave kept the artist of deleted songs.
-      song(5, { artistId: null, inLibrary: false, countedPlays: 1, listenedMs: 3 * MINUTE }),
+      song(5, { artistIds: [], inLibrary: false, countedPlays: 1, listenedMs: 3 * MINUTE }),
     ]);
 
     assert.equal(totals.songsListened, 2);
@@ -48,12 +48,12 @@ describe("listeningTotals", () => {
 
   test("filtered to an artist, the totals cover only that artist's songs", () => {
     const songs = [
-      song(1, { artistId: 7, countedPlays: 2, listenedMs: 8 * MINUTE }),
-      song(2, { artistId: 7, countedPlays: 0, listenedMs: 1 * MINUTE }),
-      song(3, { artistId: 8, countedPlays: 4, listenedMs: 12 * MINUTE }),
-      song(4, { artistId: null, countedPlays: 1, listenedMs: 4 * MINUTE }),
+      song(1, { artistIds: [7], countedPlays: 2, listenedMs: 8 * MINUTE }),
+      song(2, { artistIds: [7], countedPlays: 0, listenedMs: 1 * MINUTE }),
+      song(3, { artistIds: [8], countedPlays: 4, listenedMs: 12 * MINUTE }),
+      song(4, { artistIds: [], countedPlays: 1, listenedMs: 4 * MINUTE }),
       // Their song since deleted: its plays still count for them, but it isn't one of their songs.
-      song(5, { artistId: 7, inLibrary: false, countedPlays: 3, listenedMs: 6 * MINUTE }),
+      song(5, { artistIds: [7], inLibrary: false, countedPlays: 3, listenedMs: 6 * MINUTE }),
     ];
 
     assert.deepEqual(listeningTotals(songs, { artistId: 7 }), {
@@ -64,11 +64,40 @@ describe("listeningTotals", () => {
     });
   });
 
+  test("a collaboration counts for each artist it credits, and once in the whole history", () => {
+    const songs = [
+      // "Ariana Grande, Doja Cat": Ariana is 7, Doja Cat is 8.
+      song(1, { artistIds: [7, 8], countedPlays: 2, listenedMs: 6 * MINUTE, lastPlayedAt: 4_000 }),
+      song(2, { artistIds: [7], countedPlays: 1, listenedMs: 3 * MINUTE }),
+      // A deleted collaboration still counts for both.
+      song(3, { artistIds: [8, 7], inLibrary: false, countedPlays: 1, listenedMs: 2 * MINUTE }),
+    ];
+
+    assert.deepEqual(listeningTotals(songs, { artistId: 7 }), {
+      minutesListened: 11,
+      songsListened: 2,
+      plays: 4,
+      lastPlayedAt: 4_000,
+    });
+    assert.deepEqual(listeningTotals(songs, { artistId: 8 }), {
+      minutesListened: 8,
+      songsListened: 1,
+      plays: 3,
+      lastPlayedAt: 4_000,
+    });
+    assert.deepEqual(listeningTotals(songs), {
+      minutesListened: 11,
+      songsListened: 2,
+      plays: 4,
+      lastPlayedAt: 4_000,
+    });
+  });
+
   test("last played is the latest play of any song covered, counted or not", () => {
     const songs = [
-      song(1, { artistId: 7, lastPlayedAt: 5_000 }),
-      song(2, { artistId: 7, countedPlays: 0, lastPlayedAt: 9_000 }),
-      song(3, { artistId: 8, lastPlayedAt: 20_000 }),
+      song(1, { artistIds: [7], lastPlayedAt: 5_000 }),
+      song(2, { artistIds: [7], countedPlays: 0, lastPlayedAt: 9_000 }),
+      song(3, { artistIds: [8], lastPlayedAt: 20_000 }),
     ];
 
     assert.equal(listeningTotals(songs, { artistId: 7 }).lastPlayedAt, 9_000);

@@ -26,9 +26,22 @@ describe("runPressedAt", () => {
       },
       7,
     );
-    assert.deepEqual(seen, { key: 7, rect: row });
+    assert.deepEqual(seen, { key: 7, rect: row, onChrome: false });
     assert.equal(opened, true);
     assert.equal(pressedElement(), undefined);
+  });
+
+  test("a handler run for a Press on the floating chrome says so", () => {
+    let seen;
+    runPressedAt(
+      row,
+      () => {
+        seen = pressedElement();
+      },
+      3,
+      true,
+    );
+    assert.deepEqual(seen, { key: 3, rect: row, onChrome: true });
   });
 
   test("a handler that doesn't open a menu (a tab's long-press) says it didn't", () => {

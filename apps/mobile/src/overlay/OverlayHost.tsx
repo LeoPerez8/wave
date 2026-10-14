@@ -4,6 +4,7 @@ import {
   cardShowsHeading,
   placeOverlayCard,
   veilAround,
+  visibleHighlight,
   withOpacity,
   type OverlayRect,
 } from "@wave/core";
@@ -77,12 +78,10 @@ const SCRIM_OPACITY = 0.25;
 
 /**
  * What a card was opened from stays clear of the veil, washed with the accent
- * at this strength so it stands out on any theme.
+ * at this strength so it stands out on any theme. The wash fills the clear hole
+ * exactly, square like the veil's edges, so no corner of a row's artwork pokes out.
  */
 const ORIGIN_TINT_OPACITY = 0.16;
-
-/** Rounded corners of the highlight over what a card was opened from. */
-const ORIGIN_RADIUS = CELL;
 
 /**
  * Hosts Wave's glass dialogs. Wrap the app's navigator with it: the navigator
@@ -141,12 +140,23 @@ function OverlayCard({ entry, frontmost }: { entry: OverlayEntry; frontmost: boo
   const progress = useSharedValue(0);
   const measured = cardHeight !== null;
   const anchor = entry.request.anchor;
-  const highlight = entry.origin?.rect;
-  // Settled as the card opens: its heading never comes or goes under a sliding finger.
-  const [showsHeading] = useState(() => cardShowsHeading(window, highlight));
+  const chromeBottom = useFloatingChromeHeight();
+  const origin = {
+    insets,
+    chromeBottom,
+    rect: entry.origin?.rect,
+    onChrome: entry.origin?.onChrome ?? false,
+  };
   // The veil's own size: the window, unless edge-to-edge drawing makes it taller.
   const [veil, setVeil] = useState<{ width: number; height: number } | null>(null);
-  const chromeBottom = useFloatingChromeHeight();
+  // What shows of the origin: never drawn over the floating chrome.
+  const highlight = visibleHighlight({ window: veil ?? window, ...origin });
+  // Settled as the card opens, from the veil's frame like the highlight: its heading never
+  // comes or goes under a sliding finger. Null until the veil is measured.
+  const [settledHeading, setSettledHeading] = useState<boolean | null>(null);
+  const showsHeading = settledHeading ?? highlight === undefined;
+  // The window and origin as the card opens, which settle the heading.
+  const [opening] = useState(() => ({ window, origin }));
 
   const frame = placeOverlayCard({
     window,
@@ -170,14 +180,23 @@ function OverlayCard({ entry, frontmost }: { entry: OverlayEntry; frontmost: boo
   // Fabric lays the card out before this runs and answers measurements synchronously, so
   // the hidden, unbounded first layout is read here and the card re-renders in place
   // before anything is drawn: no wait for `onLayout` to come back through JS.
+  // The veil is read first: the heading it settles changes the card's height, read next.
   useLayoutEffect(() => {
+    const size = layer.current;
+    const measuredVeil =
+      size != null && size.offsetWidth > 0 && size.offsetHeight > 0
+        ? { width: size.offsetWidth, height: size.offsetHeight }
+        : null;
+    if (measuredVeil !== null) setVeil(measuredVeil);
+    setSettledHeading(
+      cardShowsHeading({ window: measuredVeil ?? opening.window, ...opening.origin }),
+    );
+  }, [opening]);
+  useLayoutEffect(() => {
+    if (settledHeading === null) return;
     const height = card.current?.offsetHeight ?? 0;
     if (height > 0) setCardHeight(height);
-    const size = layer.current;
-    if (size != null && size.offsetWidth > 0 && size.offsetHeight > 0) {
-      setVeil({ width: size.offsetWidth, height: size.offsetHeight });
-    }
-  }, []);
+  }, [settledHeading]);
 
   // Fade in once the card knows its size (so it appears where it settles), out when closing.
   // A layout effect, so the entrance starts with the frame the card is first drawn in.
@@ -248,7 +267,6 @@ function OverlayCard({ entry, frontmost }: { entry: OverlayEntry; frontmost: boo
               pointerEvents="none"
               style={{
                 ...frameOf(highlight),
-                borderRadius: ORIGIN_RADIUS,
                 backgroundColor: withOpacity(accent, ORIGIN_TINT_OPACITY),
               }}
             />

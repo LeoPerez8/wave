@@ -70,6 +70,31 @@ describe("libraryMatcher", () => {
     assert.equal(inLibrary(credited), true);
   });
 
+  test("a Library collaboration shares each credited artist, as the Library splits credits", () => {
+    const collaborations = libraryMatcher([
+      { title: "boyfriend", artist: "Ariana Grande · Social House", durationMs: 186_000 },
+      { title: "Get Lucky", artist: "Daft Punk; Pharrell Williams", durationMs: 369_600 },
+    ]);
+    assert.equal(collaborations(by("Social House", "boyfriend", 186_000)), true);
+    assert.equal(collaborations(by("Pharrell Williams", "Get Lucky", 369_600)), true);
+  });
+
+  test('artists joined with "+" are each credited', () => {
+    const matches = libraryMatcher([
+      { title: "Cosmic Love", artist: "Florence + Jamie xx", durationMs: 250_000 },
+    ]);
+    assert.equal(matches(by("Jamie xx", "Cosmic Love", 250_000)), true);
+  });
+
+  test("a credit naming nobody shares no artist with another such credit", () => {
+    const matches = libraryMatcher([
+      { title: "Intro", artist: "Unknown Artist", durationMs: 60_000 },
+      { title: "Outro", artist: " + ", durationMs: 60_000 },
+    ]);
+    assert.equal(matches(by(" ; ", "Intro", 60_000)), false);
+    assert.equal(matches(by("Unknown Artist", "Outro", 60_000)), false);
+  });
+
   test("another artist's song of the same name is not the Library's", () => {
     const cover = ytSong({ title: "Jóga", artists: ["Läura"], durationMs: 305_000 });
     assert.equal(inLibrary(cover), false);

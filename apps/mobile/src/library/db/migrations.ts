@@ -237,6 +237,93 @@ ALTER TABLE \`tracks\` ADD \`has_lyrics\` integer DEFAULT false NOT NULL;
 UPDATE \`tracks\` SET \`modified_at\` = 0;
 `;
 
+// A song credited to several artists belongs to each of them (docs/spec.md,
+// glossary: Artist). Tracks and albums keep their credit as written, read from
+// the whole-credit artist they had; the store then splits every credit into
+// its artists and links them (`relinkCreditsIfUnlinked`), with no rescan.
+const m0012 = `
+ALTER TABLE \`tracks\` ADD \`artist_credit\` text DEFAULT '' NOT NULL;
+--> statement-breakpoint
+ALTER TABLE \`albums\` ADD \`album_artist_credit\` text DEFAULT '' NOT NULL;
+--> statement-breakpoint
+UPDATE \`tracks\` SET \`artist_credit\` = (SELECT \`name\` FROM \`artists\` WHERE \`artists\`.\`id\` = \`tracks\`.\`artist_id\`);
+--> statement-breakpoint
+UPDATE \`albums\` SET \`album_artist_credit\` = (SELECT \`name\` FROM \`artists\` WHERE \`artists\`.\`id\` = \`albums\`.\`album_artist_id\`);
+--> statement-breakpoint
+CREATE TABLE \`track_artists\` (
+	\`track_id\` integer NOT NULL,
+	\`artist_id\` integer NOT NULL,
+	\`position\` integer NOT NULL,
+	PRIMARY KEY(\`track_id\`, \`position\`),
+	FOREIGN KEY (\`track_id\`) REFERENCES \`tracks\`(\`id\`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (\`artist_id\`) REFERENCES \`artists\`(\`id\`) ON UPDATE no action ON DELETE no action
+);
+--> statement-breakpoint
+CREATE INDEX \`track_artists_artist_idx\` ON \`track_artists\` (\`artist_id\`);
+--> statement-breakpoint
+CREATE TABLE \`album_artists\` (
+	\`album_id\` integer NOT NULL,
+	\`artist_id\` integer NOT NULL,
+	\`position\` integer NOT NULL,
+	PRIMARY KEY(\`album_id\`, \`position\`),
+	FOREIGN KEY (\`album_id\`) REFERENCES \`albums\`(\`id\`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (\`artist_id\`) REFERENCES \`artists\`(\`id\`) ON UPDATE no action ON DELETE no action
+);
+--> statement-breakpoint
+CREATE INDEX \`album_artists_artist_idx\` ON \`album_artists\` (\`artist_id\`);
+`;
+
+// A deleted song's plays count for every artist its credit named (docs/spec.md,
+// glossary: Artist), not only one: the store keeps them in
+// \`deleted_track_artists\`. Songs deleted before keep the one artist their plays
+// held (\`relinkCredits\` splits a whole credit among its artists once it's pruned).
+const m0013 = `
+CREATE TABLE \`deleted_track_artists\` (
+	\`track_id\` integer NOT NULL,
+	\`artist_id\` integer NOT NULL,
+	\`position\` integer NOT NULL,
+	PRIMARY KEY(\`track_id\`, \`position\`),
+	FOREIGN KEY (\`artist_id\`) REFERENCES \`artists\`(\`id\`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE INDEX \`deleted_track_artists_artist_idx\` ON \`deleted_track_artists\` (\`artist_id\`);
+--> statement-breakpoint
+INSERT INTO \`deleted_track_artists\` (\`track_id\`, \`artist_id\`, \`position\`)
+	SELECT \`track_id\`, min(\`artist_id\`), 0 FROM \`play_events\`
+	WHERE \`artist_id\` IN (SELECT \`id\` FROM \`artists\`)
+		AND \`track_id\` NOT IN (SELECT \`id\` FROM \`tracks\`)
+	GROUP BY \`track_id\`;
+--> statement-breakpoint
+ALTER TABLE \`play_events\` DROP COLUMN \`artist_id\`;
+`;
+
+// The artist page's YT Music section (docs/spec.md, "YT Music"): the last
+// answer for each artist, by artist key, shown for a week without asking again.
+const m0014 = `
+CREATE TABLE \`yt_artists\` (
+	\`artist_key\` text PRIMARY KEY NOT NULL,
+	\`outcome\` text NOT NULL,
+	\`checked_at\` integer NOT NULL,
+	\`browse_id\` text,
+	\`page\` text
+);
+`;
+
+// A tag's separate values are separate credits (docs/spec.md, glossary:
+// Credit): tracks and albums keep each of them, so "Ariana Grande" and "Social
+// House" never make one artist. Null is a single credit, the one written.
+// The store still files the Library under its artists from the credits
+// already stored (no rescan), but only a scan reads a tag's every value, so
+// every indexed file is marked as changed (modified_at 0) as in 0011: the
+// next scan reads them all again.
+const m0015 = `
+ALTER TABLE \`tracks\` ADD \`artist_credits\` text;
+--> statement-breakpoint
+ALTER TABLE \`albums\` ADD \`album_artist_credits\` text;
+--> statement-breakpoint
+UPDATE \`tracks\` SET \`modified_at\` = 0;
+`;
+
 export default {
   journal: {
     entries: [
@@ -252,6 +339,10 @@ export default {
       { idx: 9, when: 1_792_584_000_000, tag: "0009_artist_photos", breakpoints: true },
       { idx: 10, when: 1_792_670_400_000, tag: "0010_play_credits", breakpoints: true },
       { idx: 11, when: 1_792_756_800_000, tag: "0011_track_lyrics", breakpoints: true },
+      { idx: 12, when: 1_792_843_200_000, tag: "0012_artist_credits", breakpoints: true },
+      { idx: 13, when: 1_792_929_600_000, tag: "0013_deleted_track_artists", breakpoints: true },
+      { idx: 14, when: 1_793_016_000_000, tag: "0014_yt_artists", breakpoints: true },
+      { idx: 15, when: 1_793_102_400_000, tag: "0015_tag_credits", breakpoints: true },
     ],
   },
   migrations: {
@@ -267,5 +358,9 @@ export default {
     m0009,
     m0010,
     m0011,
+    m0012,
+    m0013,
+    m0014,
+    m0015,
   },
 };

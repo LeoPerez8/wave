@@ -114,6 +114,23 @@ test("received tags and actual duration are checked before trusted tags replace 
     ),
     true,
   );
+  // The artist tag splits into artists as the Library splits credits.
+  assert.equal(
+    soulseekReceivedMatches(
+      song,
+      { title: "Get Lucky", artist: "Daft Punk; Pharrell Williams", album: null },
+      370_000,
+    ),
+    true,
+  );
+  assert.equal(
+    soulseekReceivedMatches(
+      song,
+      { title: "Get Lucky", artist: "Daft Punk with Pharrell Williams", album: null },
+      370_000,
+    ),
+    true,
+  );
   // A vinyl rip's title tag may start with its side.
   assert.equal(
     soulseekReceivedMatches(
@@ -169,6 +186,11 @@ test("simultaneous result ids share one journal job while duration chains cannot
   assert.equal(ytDownloadSharedJob([{ ...shared, phase: "cancelled" }], second), null);
   assert.equal(
     ytDownloadSharedJob([{ ...shared, phase: "completed", acknowledged: true }], second),
+    null,
+  );
+  // A job the Library couldn't import has failed: retrying it starts a new one.
+  assert.equal(
+    ytDownloadSharedJob([{ ...shared, phase: "completed", importFailure: "noFolder" }], second),
     null,
   );
 });

@@ -1,4 +1,10 @@
-import type { YtHome, YtQuietReason, YtSession } from "@wave/core";
+import type {
+  YtArtistAlbum,
+  YtArtistCandidate,
+  YtHome,
+  YtQuietReason,
+  YtSession,
+} from "@wave/core";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -6,14 +12,17 @@ import * as Layer from "effect/Layer";
 
 import type { IndexedArtwork } from "@/library/LibraryStore";
 import { toIndexedArtwork } from "@/library/LibraryScan";
-import { WaveYtDownloads, type NativeYtAlbum } from "@/native/waveYtDownloads";
+import type { NativeYtAlbum } from "@/native/waveYtDownloads";
 import {
   WaveYtMusic,
   ytErrorCode,
+  type NativeYtArtistPage,
   type NativeYtPlaylist,
   type NativeYtSearchPage,
   type NativeYtSong,
 } from "@/native/waveYtMusic";
+
+import { readYtAlbum } from "./albumPages";
 
 /**
  * A YT Music request that didn't get an answer: no network, YouTube failed
@@ -41,6 +50,14 @@ export class YtMusic extends Context.Service<
   {
     /** Songs on YT Music for [query]. */
     readonly searchSongs: (query: string) => Effect.Effect<NativeYtSearchPage, YtMusicError>;
+    /** Artists on YT Music named like [query]. */
+    readonly searchArtists: (
+      query: string,
+    ) => Effect.Effect<readonly YtArtistCandidate[], YtMusicError>;
+    /** Albums, singles and EPs on YT Music for [query]. */
+    readonly searchAlbums: (query: string) => Effect.Effect<readonly YtArtistAlbum[], YtMusicError>;
+    /** The artist page [browseId] (`UC…`): their top songs, albums and singles. */
+    readonly artist: (browseId: string) => Effect.Effect<NativeYtArtistPage, YtMusicError>;
     /** The account's recommendations: YouTube Music's home shelves. */
     readonly home: Effect.Effect<YtHome<NativeYtSong>, YtMusicError>;
     /** The album page [browseId] (`MPREb_…`) and its tracklist. */
@@ -68,12 +85,17 @@ export class YtMusic extends Context.Service<
 export const layer = Layer.succeed(YtMusic, {
   searchSongs: (query) =>
     Effect.tryPromise({ try: () => WaveYtMusic.searchSongs(query), catch: fromNative }),
+  searchArtists: (query) =>
+    Effect.tryPromise({ try: () => WaveYtMusic.searchArtists(query), catch: fromNative }),
+  searchAlbums: (query) =>
+    Effect.tryPromise({ try: () => WaveYtMusic.searchAlbums(query), catch: fromNative }),
+  artist: (browseId) =>
+    Effect.tryPromise({ try: () => WaveYtMusic.artist(browseId), catch: fromNative }),
   home: Effect.tryPromise({ try: () => WaveYtMusic.home(), catch: fromNative }).pipe(
     Effect.map((shelves) => ({ shelves })),
   ),
-  // Album pages are read by the downloads module (a download's tags come from them).
-  album: (browseId) =>
-    Effect.tryPromise({ try: () => WaveYtDownloads.album(browseId), catch: fromNative }),
+  // Album pages are read by the downloads module (a download's tags come from them), once a session.
+  album: (browseId) => Effect.tryPromise({ try: () => readYtAlbum(browseId), catch: fromNative }),
   playlist: (playlistId) =>
     Effect.tryPromise({ try: () => WaveYtMusic.playlist(playlistId), catch: fromNative }),
   cacheArtwork: (url) =>

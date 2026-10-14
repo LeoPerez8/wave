@@ -8,8 +8,12 @@ export interface NativeScannedTrack {
   readonly modifiedAt: number;
   readonly title: string | null;
   readonly artist: string | null;
+  /** Every value of a multi-value artist tag, each a credit of its own; [artist] is the first. */
+  readonly artists?: readonly string[] | null;
   readonly album: string | null;
   readonly albumArtist: string | null;
+  /** Every value of a multi-value album artist tag, as [artists]. */
+  readonly albumArtists?: readonly string[] | null;
   readonly genre: string | null;
   readonly year: string | null;
   readonly trackNumber: string | null;

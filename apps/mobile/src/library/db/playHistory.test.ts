@@ -266,7 +266,6 @@ describe("Play source", () => {
     v1Play(often, 1_000);
     v1Play(often, 2_000);
     v1Play(once, 3_000);
-    const before = homeSections(v1);
     const allTime = { from: null, to: 10_000 };
     const totalsBefore = trackPlayTotals(v1, allTime);
 
@@ -276,10 +275,15 @@ describe("Play source", () => {
       v1.select({ source: schema.playEvents.source }).from(schema.playEvents).all(),
       [{ source: "phone" }, { source: "phone" }, { source: "phone" }],
     );
-    assert.deepEqual(homeSections(v1), before);
+    // Home reads today's columns, so it's read after the upgrade only.
+    const home = homeSections(v1);
     assert.deepEqual(trackPlayTotals(v1, allTime), totalsBefore);
     assert.deepEqual(
-      before.mostPlayed.map((row) => [row.title, row.playCount]),
+      home.recentlyPlayed.map((played) => played.title),
+      ["Second", "First"],
+    );
+    assert.deepEqual(
+      home.mostPlayed.map((row) => [row.title, row.playCount]),
       [
         ["Often", 2],
         ["Once", 1],

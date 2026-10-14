@@ -128,7 +128,7 @@ describe("rankPlays", () => {
   });
 });
 
-/** Totals for the tracks of one album by one track artist. */
+/** Totals for the tracks of one album crediting one artist, by default as their primary artist. */
 const credit = (
   album: { id: number; sort: string },
   artist: { id: number; sort: string },
@@ -138,6 +138,7 @@ const credit = (
   albumSort: album.sort,
   artistId: artist.id,
   artistSort: artist.sort,
+  primary: true,
   countedPlays: 1,
   listenedMs: 180_000,
   latestPlayAt: 1_000,
@@ -198,6 +199,39 @@ describe("album and artist rankings", () => {
       },
     ]);
     assert.ok(!ranking.some((entry) => entry.id === 99), "Various Artists is never credited");
+  });
+
+  test("a collaboration's plays count once for its album and for each of its artists", () => {
+    const positions = { id: 3, sort: "positions" };
+    const ariana = { id: 20, sort: "grande, ariana" };
+    const doja = { id: 21, sort: "doja cat" };
+    // "motive" by "Ariana Grande, Doja Cat", played twice, and "34+35" by Ariana alone.
+    const collab = [
+      credit(positions, ariana, { countedPlays: 3, listenedMs: 540_000, latestPlayAt: 7_000 }),
+      credit(positions, doja, {
+        primary: false,
+        countedPlays: 2,
+        listenedMs: 360_000,
+        latestPlayAt: 7_000,
+      }),
+    ];
+
+    assert.deepEqual(albumPlayTotals(collab), [
+      {
+        id: positions.id,
+        sortKey: "positions",
+        countedPlays: 3,
+        listenedMs: 540_000,
+        latestPlayAt: 7_000,
+      },
+    ]);
+    assert.deepEqual(
+      rankPlays(artistPlayTotals(collab), STATS_TOP).map((entry) => [entry.id, entry.countedPlays]),
+      [
+        [ariana.id, 3],
+        [doja.id, 2],
+      ],
+    );
   });
 
   test("albums and artists rank and cut like songs", () => {

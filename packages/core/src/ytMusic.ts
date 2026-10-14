@@ -5,6 +5,8 @@
  * native module; Core decides how the songs sit beside the Library.
  */
 
+import { splitCredit } from "./credits.ts";
+import { UNKNOWN_ARTIST } from "./library.ts";
 import { normalizeSearchText } from "./search.ts";
 
 /** A song found on YouTube Music. */
@@ -48,8 +50,6 @@ const SAME_LENGTH_MS = 3000;
 const FEATURING = String.raw`(?:feat\.?|ft\.?|featuring|with)`;
 const BRACKETED_FEATURE = new RegExp(String.raw`\s*[([]${FEATURING}\s[^)\]]*[)\]]`, "giu");
 const TRAILING_FEATURE = new RegExp(String.raw`\s+(?:feat\.?|ft\.?|featuring)\s.*$`, "iu");
-const ARTIST_SEPARATORS =
-  /\s*(?:,|&|;|\/|\+|\bx\b|\band\b|\bfeat\.?|\bft\.?|\bfeaturing\b|\bwith\b)\s*/giu;
 
 const REMASTER = /\bremaster(?:ed)?\b/iu;
 /** Words that make a note more than a remaster: another take or cut of the song. */
@@ -81,12 +81,22 @@ const matchTitle = (title: string): string =>
     withoutRemasterNotes(title.replace(BRACKETED_FEATURE, "").replace(TRAILING_FEATURE, "")),
   );
 
-/** The names in an artist credit ("A feat. B & C" is A, B and C), as matching compares them. */
+/** "+" joins artists too when matching ("Florence + Jamie xx"), though the Library keeps it in a name. */
+const PLUS = /\s*\+\s*/u;
+
+const UNKNOWN = normalizeSearchText(UNKNOWN_ARTIST);
+
+/**
+ * The names in an artist credit ("A feat. B & C" is A, B and C), split as the
+ * Library splits credits (`splitCredit`) and on "+", compared as matching
+ * compares them. A credit naming nobody gives no names, so it shares no artist.
+ */
 const artistNames = (credit: string): string[] =>
   credit
-    .split(ARTIST_SEPARATORS)
+    .split(PLUS)
+    .flatMap((part) => splitCredit(part))
     .map(normalizeSearchText)
-    .filter((name) => name !== "");
+    .filter((name) => name !== "" && name !== UNKNOWN);
 
 const knownLength = (ms: number | null): number | null => (ms === null || ms <= 0 ? null : ms);
 

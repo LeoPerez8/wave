@@ -109,7 +109,8 @@ object YtHomeParser {
     return if (items.isEmpty()) null else YtShelf(title, items)
   }
 
-  private fun tile(tile: JsonObject): YtShelfItem? {
+  /** A `musicTwoRowItemRenderer` tile: a song, an album or a playlist; null for anything else. */
+  internal fun tile(tile: JsonObject): YtShelfItem? {
     val title = tile.path("title", "runs").arr?.firstOrNull().path("text").string
       ?.trim()?.takeIf(String::isNotEmpty) ?: return null
     val subtitle = tile.path("subtitle", "runs").arr.orEmpty().mapNotNull { it.obj }
