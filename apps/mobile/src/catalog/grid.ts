@@ -21,6 +21,14 @@ export const grid = {
    * Back gesture zone (Android only lets an app exclude 200dp per edge).
    */
   spineInset: CELL * 3,
+  /**
+   * Width of the spine's touch target: the drawn spine plus a margin's worth
+   * towards the list. Lists keep their rows clear of all of it, so a scroll
+   * or a tap near a row's right edge never lands on the spine.
+   */
+  spineHit: CELL * 6,
+  /** Height of one letter's place on the spine when there is room for all of them. */
+  spineSlot: CELL * 2,
 } as const;
 
 /** Letter spacing for catalog lines (small tracked caps), in dp. */

@@ -101,7 +101,9 @@ function NameList<A>({ items, noun, empty, sortKey, keyOf, target, renderRow }: 
         }}
         ListHeaderComponent={<ListHead line={counted(items.length, noun)} />}
       />
-      {spine.show && <AlphabetSpine letters={spine.letters} onLetter={spine.onLetter} />}
+      {spine.show && (
+        <AlphabetSpine entries={spine.entries} onJump={spine.onJump} topRow={spine.topRow} />
+      )}
     </View>
   );
 }
@@ -264,7 +266,9 @@ export function AlbumsList({ empty }: { empty: string }) {
         }}
         ListHeaderComponent={<ListHead line={counted(albums.length, "album")} />}
       />
-      {spine.show && <AlphabetSpine letters={spine.letters} onLetter={spine.onLetter} />}
+      {spine.show && (
+        <AlphabetSpine entries={spine.entries} onJump={spine.onJump} topRow={spine.topRow} />
+      )}
     </View>
   );
 }
