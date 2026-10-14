@@ -45,8 +45,8 @@ class AndroidYtAudioStreams(context: Context) : YtAudioStreams {
     }
   }
 
-  /** Whether the phone has a network: without one, a broken transfer is offline, not YouTube's fault. */
-  fun hasNetwork(): Boolean = client.hasNetwork()
+  /** Whether the phone is online: if not, a broken transfer is offline, not YouTube's fault. */
+  fun online(): Boolean = client.online()
 
   private fun connect(url: String, stream: YtStream): HttpURLConnection =
     (URL(url).openConnection() as HttpURLConnection).apply {

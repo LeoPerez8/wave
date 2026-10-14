@@ -402,7 +402,7 @@ class SoulseekClientTest {
     // A port nothing listens on: the connection is refused at once.
     val port = ServerSocket(0).use { it.localPort }
     for ((online, failure) in listOf(true to SoulseekFailure.UNREACHABLE, false to SoulseekFailure.OFFLINE)) {
-      val client = SoulseekClient(MemoryCredentials(), "127.0.0.1", port, hasNetwork = { online })
+      val client = SoulseekClient(MemoryCredentials(), "127.0.0.1", port, online = { online })
       try {
         val error = assertThrows(SoulseekException::class.java) { client.connect("wave-fixture", "fixture-secret") }
         assertEquals(failure, error.failure)
@@ -421,7 +421,7 @@ class SoulseekClientTest {
           }
         } catch (_: Exception) {}
       }
-      val client = SoulseekClient(MemoryCredentials(), "127.0.0.1", server.localPort, hasNetwork = { true })
+      val client = SoulseekClient(MemoryCredentials(), "127.0.0.1", server.localPort, online = { true })
       try {
         client.connect("wave-fixture", "fixture-secret")
         val error = assertThrows(SoulseekException::class.java) { client.search("Fixture Title", 5_000) }
@@ -452,7 +452,7 @@ class SoulseekClientTest {
               }
             } catch (_: Exception) {}
           }
-          val client = SoulseekClient(MemoryCredentials(), "127.0.0.1", server.localPort, hasNetwork = { true })
+          val client = SoulseekClient(MemoryCredentials(), "127.0.0.1", server.localPort, online = { true })
           val part = Files.createTempFile("wave-reconnected", ".mp3").toFile()
           try {
             client.connect("wave-fixture", "fixture-secret")

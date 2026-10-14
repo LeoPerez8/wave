@@ -34,7 +34,7 @@ class SoulseekClient(
   private val host: String = "server.slsknet.org",
   private val port: Int = 2242,
   /** Whether the phone is online, which tells Soulseek's server being unreachable from being offline. */
-  private val hasNetwork: () -> Boolean = { true },
+  private val online: () -> Boolean = { true },
 ) : Closeable {
   @Volatile private var server: Socket? = null
   private var listener: ServerSocket? = null
@@ -216,7 +216,7 @@ class SoulseekClient(
 
   /** Connecting to the server failed: offline when the phone is, else the server is unreachable. */
   private fun unreachable(cause: Throwable? = null) =
-    SoulseekException(if (hasNetwork()) SoulseekFailure.UNREACHABLE else SoulseekFailure.OFFLINE, cause = cause)
+    SoulseekException(if (online()) SoulseekFailure.UNREACHABLE else SoulseekFailure.OFFLINE, cause = cause)
 
   /**
    * The server connection dropped or was closed (a reconnect, a sign-out): never the server being
