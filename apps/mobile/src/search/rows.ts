@@ -50,7 +50,9 @@ export type ResultRow =
       readonly index: number;
     }
   /** A quiet line in place of results: nothing in the library, YT Music offline… */
-  | { readonly type: "note"; readonly key: string; readonly text: string };
+  | { readonly type: "note"; readonly key: string; readonly text: string }
+  /** Search YouTube Music: asks YT Music for the query and merges its songs in. */
+  | { readonly type: "askYt"; readonly key: string };
 
 /** The most results of one type the search returns (and a song tap queues). */
 export const RESULT_LIMIT = 200;
@@ -172,18 +174,18 @@ export const noLibraryResultsRow = (query: string): ResultRow => ({
   text: `Nothing in your library matches “${query.trim()}”.`,
 });
 
-/** YT Music's quiet lines; with its songs among the Library's, "nothing new" needs no line. */
-const YT_NOTE: Readonly<Record<YtSectionNote, string | null>> = {
+/** YT Music's quiet lines. */
+const YT_NOTE: Readonly<Record<YtSectionNote, string>> = {
   searching: "Searching YT Music…",
-  noMatches: null,
-  allInLibrary: null,
+  noMatches: "Nothing on YT Music matches.",
+  allInLibrary: "What YT Music found is already in your library.",
   offline: "You're offline. Songs from YT Music show here when you're back online.",
   failed: "YT Music didn't answer. Try again in a moment.",
 };
 
-/** YT Music's quiet line under the results, if it has one. */
-export const ytNoteRows = (view: YtSectionView<NativeYtSong> | null): ResultRow[] => {
-  const note = view?.note ?? null;
-  const text = note === null ? null : YT_NOTE[note];
-  return text === null ? [] : [{ type: "note", key: "note:yt", text }];
+/** What follows the results for YT Music: Search YouTube Music, or its quiet line. */
+export const ytFooterRows = (view: YtSectionView<NativeYtSong> | null): ResultRow[] => {
+  if (view === null) return [];
+  if (view.offer) return [{ type: "askYt", key: "ask:yt" }];
+  return view.note === null ? [] : [{ type: "note", key: "note:yt", text: YT_NOTE[view.note] }];
 };
