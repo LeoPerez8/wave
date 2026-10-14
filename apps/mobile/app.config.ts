@@ -1,5 +1,6 @@
 import type { ExpoConfig } from "expo/config";
 
+import { versionCode } from "./plugins/appVersion.ts";
 import { withLauncherIcons } from "./plugins/withLauncherIcons.ts";
 import { withLaunchSplash } from "./plugins/withLaunchSplash.ts";
 
@@ -7,17 +8,22 @@ import { withLaunchSplash } from "./plugins/withLaunchSplash.ts";
 // natively at prebuild time, so text renders in Inter from the first frame.
 const inter = (file: string): string => `./node_modules/@expo-google-fonts/inter/${file}`;
 
+// Wave's version, kept here and nowhere else: Android's versionCode follows from it, and
+// pushing the tag v<version> publishes the release (docs/spec.md, Releases).
+const version = "0.5.0";
+
 const config: ExpoConfig = {
   name: "Wave",
   slug: "wave",
   scheme: "wave",
-  version: "0.1.0",
+  version,
   platforms: ["android"],
   orientation: "portrait",
   userInterfaceStyle: "automatic",
   icon: "./assets/icon.png",
   android: {
     package: "dev.leoperez.wave",
+    versionCode: versionCode(version),
     adaptiveIcon: {
       foregroundImage: "./assets/adaptive-icon-foreground.png",
       monochromeImage: "./assets/adaptive-icon-monochrome.png",
