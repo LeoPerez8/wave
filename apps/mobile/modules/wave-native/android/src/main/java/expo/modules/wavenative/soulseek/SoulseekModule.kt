@@ -27,9 +27,10 @@ class SoulseekModule : Module() {
     OnCreate { detachDownloads = downloads.subscribe { sendEvent("onJobsChanged", emptyMap<String, Any>()) } }
     OnDestroy { detachDownloads?.invoke(); detachDownloads = null }
 
-    AsyncFunction("enqueueJob") Coroutine { song: Map<String, Any?>, recording: Map<String, Any?>, equivalentId: String? ->
+    // [source] is Core's `downloadSource`: "soulseek", "youtube", or null when there's none.
+    AsyncFunction("enqueueJob") Coroutine { song: Map<String, Any?>, recording: Map<String, Any?>, equivalentId: String?, source: String? ->
       withContext(Dispatchers.IO) {
-        val id = downloads.jobs.enqueue(song, equivalentId, recording)
+        val id = downloads.jobs.enqueue(song, equivalentId, recording, source)
         downloads.changed(); downloads.requestService(); id
       }
     }
