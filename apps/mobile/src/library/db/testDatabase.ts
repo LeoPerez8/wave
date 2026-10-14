@@ -10,7 +10,7 @@ import { drizzle } from "drizzle-orm/sql-js";
 import { migrate } from "drizzle-orm/expo-sqlite/migrator";
 import initSqlJs from "sql.js";
 
-import { relinkCreditsIfUnlinked } from "./credits.ts";
+import { creditSplits, relinkCreditsIfUnlinked } from "./credits.ts";
 import migrations from "./migrations.ts";
 import * as schema from "./schema.ts";
 
@@ -51,7 +51,7 @@ export const openTestDatabase = async (options: { readonly through?: string } = 
  */
 export const migrateTestDatabase = async (db: TestDatabase): Promise<void> => {
   await migrate(db as unknown as Migrator, migrations);
-  relinkCreditsIfUnlinked(db);
+  relinkCreditsIfUnlinked(db, creditSplits());
 };
 
 export interface FixtureTrack {

@@ -46,7 +46,7 @@ import {
   type ArtistPhotoRow,
 } from "./db/artistPhotos";
 import { libraryCounts, sectionSongCounts, type LibraryCounts } from "./db/counts";
-import { relinkCreditsIfUnlinked } from "./db/credits";
+import { creditSplits, relinkCreditsIfUnlinked, type CreditSplits } from "./db/credits";
 import { selectGenreSongs } from "./db/genres";
 import type { RowPage } from "./db/database";
 import migrations from "./db/migrations";
@@ -560,7 +560,7 @@ const chunks = <A>(items: readonly A[]): A[][] => {
 
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
-const removeRootSync = (db: Database, path: string): void => {
+const removeRootSync = (db: Database, splits: CreditSplits, path: string): void => {
   const { scanRoots, tracks, excludedFolders } = schema;
   db.transaction((tx) => {
     const remaining = tx
@@ -595,7 +595,7 @@ const removeRootSync = (db: Database, path: string): void => {
         .run();
     }
 
-    pruneOrphans(tx);
+    pruneOrphans(tx, splits);
   });
 };
 
@@ -905,10 +905,12 @@ const make = Effect.gen(function* () {
     try: () => migrate(db, migrations),
     catch: (cause) => new LibraryStoreError({ operation: "migrate", cause }),
   });
+  // The Library's credits and their splitter, kept between saves.
+  const splits = creditSplits();
   // After the upgrade that brought credits in, the Library is re-filed under
   // each credited artist from the tags already stored (no rescan).
   yield* Effect.try({
-    try: () => relinkCreditsIfUnlinked(db),
+    try: () => relinkCreditsIfUnlinked(db, splits),
     catch: (cause) => new LibraryStoreError({ operation: "split artist credits", cause }),
   });
 
@@ -952,7 +954,7 @@ const make = Effect.gen(function* () {
         }),
       ),
 
-    removeRoot: (path) => attempt("remove a music folder", () => removeRootSync(db, path)),
+    removeRoot: (path) => attempt("remove a music folder", () => removeRootSync(db, splits, path)),
 
     excludedFolders: attempt("read excluded folders", () =>
       db
@@ -963,7 +965,9 @@ const make = Effect.gen(function* () {
     ),
 
     saveBatch: (tracks, artworkRows, moves = []) =>
-      attempt("save scanned tracks", () => saveBatch(db, tracks, artworkRows, moves, Date.now())),
+      attempt("save scanned tracks", () =>
+        saveBatch(db, splits, tracks, artworkRows, moves, Date.now()),
+      ),
 
     markScanned: (roots, at) =>
       attempt("record the scan", () => {
@@ -1079,7 +1083,7 @@ const make = Effect.gen(function* () {
         ),
       ),
 
-    removeTracks: (paths) => attempt("remove missing songs", () => removeTracks(db, paths)),
+    removeTracks: (paths) => attempt("remove missing songs", () => removeTracks(db, splits, paths)),
 
     addExcludedFolder: (path, drop) =>
       attempt("exclude a folder", () =>

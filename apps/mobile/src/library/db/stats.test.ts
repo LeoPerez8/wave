@@ -4,7 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { beforeEach, describe, test } from "node:test";
 
-import { relinkCredits } from "./credits.ts";
+import { creditSplits, relinkCredits } from "./credits.ts";
 import { recordPlay } from "./playHistory.ts";
 import { removeTracks } from "./save.ts";
 import * as schema from "./schema.ts";
@@ -60,7 +60,7 @@ const artistNamed = (name: string): number => {
  */
 const addCredited = (...tracks: Parameters<typeof addTrack>[1][]): number[] => {
   const ids = tracks.map((track) => addTrack(db, track));
-  relinkCredits(db);
+  relinkCredits(db, creditSplits());
   return ids;
 };
 
@@ -322,7 +322,7 @@ describe("Per-album, per-track-artist play totals", () => {
     const path = db.select().from(schema.tracks).where(eq(schema.tracks.id, motive)).get()?.path;
 
     // Ariana's only song goes, and she with it.
-    removeTracks(db, [path ?? ""]);
+    removeTracks(db, creditSplits(), [path ?? ""]);
 
     const credits = creditedPlayTotals(db, { from: null, to: 10_000 });
     assert.deepEqual(

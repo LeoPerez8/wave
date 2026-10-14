@@ -69,8 +69,10 @@ describe("multi-value artist tags", () => {
       album: "boyfriend",
     });
     assert.equal(track.artist, "Ariana Grande, Social House");
+    assert.deepEqual(track.artistCredits, ["Ariana Grande", "Social House"]);
     assert.deepEqual(splitCredit(track.artist), ["Ariana Grande", "Social House"]);
     assert.equal(track.albumArtist, "Ariana Grande, Social House");
+    assert.deepEqual(track.albumArtistCredits, ["Ariana Grande", "Social House"]);
   });
 
   test("so does every value of a multi-value album artist tag", () => {
@@ -82,15 +84,36 @@ describe("multi-value artist tags", () => {
       album: "Watch the Throne",
     });
     assert.equal(track.albumArtist, "Jay-Z, Kanye West");
+    assert.deepEqual(track.albumArtistCredits, ["Jay-Z", "Kanye West"]);
+    assert.deepEqual(track.artistCredits, ["Jay-Z"]);
   });
 
   test("a tag with a single value reads as before", () => {
     const track = normalizeTrack({ path: `${MUSIC}/x.mp3`, artist: "Björk", artists: ["Björk"] });
     assert.equal(track.artist, "Björk");
+    assert.deepEqual(track.artistCredits, ["Björk"]);
+    assert.deepEqual(track.albumArtistCredits, ["Björk"]);
     assert.equal(
       normalizeTrack({ path: `${MUSIC}/x.mp3`, artist: "Björk", artists: [] }).artist,
       "Björk",
     );
+  });
+});
+
+describe("credits with no tag", () => {
+  test("an untagged file has one credit, Unknown Artist", () => {
+    const track = normalizeTrack({ path: `${MUSIC}/x.mp3` });
+    assert.deepEqual(track.artistCredits, [UNKNOWN_ARTIST]);
+    assert.deepEqual(track.albumArtistCredits, [UNKNOWN_ARTIST]);
+  });
+
+  test("a compilation with no album artist tag is credited to Various Artists", () => {
+    const track = normalizeTrack({
+      path: `${MUSIC}/x.mp3`,
+      artists: ["A", "B"],
+      compilation: true,
+    });
+    assert.deepEqual(track.albumArtistCredits, [VARIOUS_ARTISTS]);
   });
 });
 

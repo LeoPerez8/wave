@@ -35,12 +35,11 @@ import { playDiscoverSongs } from "@/playback/actions";
 
 import { askYtMusic } from "./askYtMusic";
 import { DiscoverSongRow } from "./DiscoverShelves";
-import { useLoadedLibraryFinder, type FindInLibrary } from "./libraryFinder";
+import { useLibraryFinder, useLoadedInLibrary } from "./libraryFinder";
 import type { YtListHead, YtListScreen } from "./routes";
 import { runYtAlbumAction, useYtAlbumDownload } from "./YtDownloads";
 import type { YtMusic, YtMusicError } from "./YtMusic";
 
-const nothing: FindInLibrary = () => null;
 const NO_SONGS: readonly NativeYtSong[] = [];
 
 /** A YT Music album or playlist page as its screen shows it. */
@@ -216,13 +215,8 @@ export function YtSongList({
 }) {
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
-  const loadedFind = useLoadedLibraryFinder();
-  const find = loadedFind ?? nothing;
-  // Taken as all in the Library until the Library has been read, so Download never flickers.
-  const inLibrary = useCallback(
-    (song: NativeYtSong) => loadedFind === null || loadedFind(song) !== null,
-    [loadedFind],
-  );
+  const find = useLibraryFinder();
+  const inLibrary = useLoadedInLibrary();
   const page = load.status === "loaded" ? load.page : null;
   const download = useYtAlbumDownload(
     albumDownload && page !== null ? page.songs : NO_SONGS,

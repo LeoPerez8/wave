@@ -36,7 +36,7 @@ const BUTTON_LABELS: { readonly [A in YtAlbumDownloadAction]: string } = {
   cancelAlbumDownload: "Cancel",
 };
 
-/** A song Download Album adds to the queue, and the job it shares (null for a job of its own). */
+/** A song Download Album or Retry Failed adds to the queue, and the job it shares (null for a job of its own). */
 export interface YtAlbumDownloadRequest<S extends YtSong = YtSong> {
   readonly song: S;
   readonly sharedJob: string | null;
@@ -51,13 +51,31 @@ export interface YtAlbumDownload<S extends YtSong = YtSong> {
   /** What Download Album adds to the queue, in album order. */
   readonly toDownload: readonly YtAlbumDownloadRequest<S>[];
   /** What Retry Failed asks for again, in album order: songs whose download failed. */
-  readonly toRetry: readonly S[];
+  readonly toRetry: readonly YtAlbumDownloadRequest<S>[];
   /** The video ids Cancel Album Download cancels: songs queued or downloading, not yet saving. */
   readonly toCancel: readonly string[];
 }
 
 const cancellable = (status: YtDownloadStatus | null): boolean =>
   status?.kind === "queued" || status?.kind === "downloading";
+
+/**
+ * [songs] as they join the queue, in order, each sharing the unfinished job of
+ * the same recording (`ytDownloadSharedJob`). Each song queued becomes a job of
+ * its own (the journal names it after its video id), which a later song that is
+ * the same recording shares.
+ */
+const requests = <S extends YtSong>(
+  songs: readonly S[],
+  jobs: readonly YtDownloadJournalJob<S>[],
+): YtAlbumDownloadRequest<S>[] => {
+  const ahead: YtDownloadJournalJob<S>[] = [...jobs];
+  return songs.map((song) => {
+    const sharedJob = ytDownloadSharedJob(ahead, song);
+    if (sharedJob === null) ahead.push({ id: song.videoId, song, phase: "queued" });
+    return { song, sharedJob };
+  });
+};
 
 export const ytAlbumDownload = <S extends YtSong>(
   songs: readonly S[],
@@ -71,22 +89,19 @@ export const ytAlbumDownload = <S extends YtSong>(
 ): YtAlbumDownload<S> => {
   const downloads = ytDownloadsFromJournal(jobs);
   const statuses = songs.map((song) => ytDownloadStatus(downloads, song.videoId));
-  // Each song queued here becomes a job of its own (the journal names it after its video id),
-  // which a later song on the album that is the same recording shares.
-  const ahead: YtDownloadJournalJob<S>[] = [...jobs];
-  const toDownload: YtAlbumDownloadRequest<S>[] = [];
-  for (const [index, song] of songs.entries()) {
-    const status = statuses[index] ?? null;
-    if (inLibrary(song) || onItsWay(status) || status?.kind === "failed") continue;
-    const sharedJob = ytDownloadSharedJob(ahead, song);
-    toDownload.push({ song, sharedJob });
-    if (sharedJob === null) ahead.push({ id: song.videoId, song, phase: "queued" });
-  }
+  const toDownload = requests(
+    songs.filter((song, index) => {
+      const status = statuses[index] ?? null;
+      return !inLibrary(song) && !onItsWay(status) && status?.kind !== "failed";
+    }),
+    jobs,
+  );
   const toCancel = songs
     .filter((_, index) => cancellable(statuses[index] ?? null))
     .map((song) => song.videoId);
-  const toRetry = songs.filter(
-    (song, index) => statuses[index]?.kind === "failed" && !inLibrary(song),
+  const toRetry = requests(
+    songs.filter((song, index) => statuses[index]?.kind === "failed" && !inLibrary(song)),
+    jobs,
   );
   // The album's batch: its songs downloaded or asked for this session.
   const batch = statuses.filter((status) => status !== null);

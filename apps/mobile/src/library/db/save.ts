@@ -8,7 +8,14 @@ import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 
 import type { IndexedArtwork, IndexedTrack, PathMove } from "../LibraryStore.ts";
 import { refreshArtistImages } from "./artists.ts";
-import { creditArtists, linkAlbums, linkTracks, relinkCredits } from "./credits.ts";
+import {
+  creditArtists,
+  linkAlbums,
+  linkTracks,
+  relinkCredits,
+  storedCredits,
+  type CreditSplits,
+} from "./credits.ts";
 import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
 import { deleteTracks } from "./tracks.ts";
@@ -43,10 +50,11 @@ const primary = (artistIds: readonly number[]): number => {
  * transaction. [moves] first re-point indexed tracks to the paths they were
  * found under, so they keep their id (and with it history and favorites).
  * Tracks and albums are filed under every artist their credit names (see
- * `credits.ts`).
+ * `credits.ts`), split with the store's [splits].
  */
 export const saveBatch = (
   db: LibraryDatabase,
+  splits: CreditSplits,
   tracks: readonly IndexedTrack[],
   artworkRows: readonly IndexedArtwork[],
   moves: readonly PathMove[],
@@ -78,7 +86,8 @@ export const saveBatch = (
 
     const credited = creditArtists(
       tx,
-      tracks.flatMap((t) => [t.artist, t.albumArtist]),
+      splits,
+      tracks.flatMap((t) => [t.artistCredits, t.albumArtistCredits]),
     );
 
     const genreRows = uniqueBy(
@@ -123,8 +132,9 @@ export const saveBatch = (
         key: t.albumKey,
         title: t.album,
         titleSort: t.albumSort,
-        albumArtistId: primary(credited(t.albumArtist)),
+        albumArtistId: primary(credited(t.albumArtistCredits)),
         albumArtistCredit: t.albumArtist,
+        albumArtistCredits: storedCredits(t.albumArtistCredits),
         year: t.year,
         artworkHash: t.artworkHash,
         compilation: t.compilation,
@@ -141,6 +151,7 @@ export const saveBatch = (
             title: excluded(albums.title),
             titleSort: excluded(albums.titleSort),
             albumArtistCredit: excluded(albums.albumArtistCredit),
+            albumArtistCredits: excluded(albums.albumArtistCredits),
             // The first track that has a year or a cover gives it to the album.
             year: sql`coalesce(${albums.year}, ${excluded(albums.year)})`,
             artworkHash: sql`coalesce(${albums.artworkHash}, ${excluded(albums.artworkHash)})`,
@@ -164,8 +175,9 @@ export const saveBatch = (
             modifiedAt: track.modifiedAt,
             title: track.title,
             titleSort: track.titleSort,
-            artistId: primary(credited(track.artist)),
+            artistId: primary(credited(track.artistCredits)),
             artistCredit: track.artist,
+            artistCredits: storedCredits(track.artistCredits),
             albumId: requireId(albumIds, track.albumKey, "album"),
             genreId: track.genreKey === null ? null : (genreIds.get(track.genreKey) ?? null),
             year: track.year,
@@ -194,6 +206,7 @@ export const saveBatch = (
             titleSort: excluded(t.titleSort),
             artistId: excluded(t.artistId),
             artistCredit: excluded(t.artistCredit),
+            artistCredits: excluded(t.artistCredits),
             albumId: excluded(t.albumId),
             genreId: excluded(t.genreId),
             year: excluded(t.year),
@@ -218,14 +231,14 @@ export const saveBatch = (
       tx,
       tracks.map((track) => ({
         id: requireId(trackIds, track.path, "track"),
-        artistIds: credited(track.artist),
+        artistIds: credited(track.artistCredits),
       })),
     );
     linkAlbums(
       tx,
-      albumRows.map((album) => ({
-        id: requireId(albumIds, album.key, "album"),
-        artistIds: credited(album.albumArtistCredit),
+      uniqueBy(tracks, (track) => track.albumKey).map((track) => ({
+        id: requireId(albumIds, track.albumKey, "album"),
+        artistIds: credited(track.albumArtistCredits),
       })),
     );
   });
@@ -237,10 +250,10 @@ export const saveBatch = (
  * deletes the artists left without songs, then re-picks the artists' images
  * from the albums left. Run it in the transaction that removed tracks.
  */
-export const pruneOrphans = (tx: LibraryDatabase): void => {
+export const pruneOrphans = (tx: LibraryDatabase, splits: CreditSplits): void => {
   // Albums first: they hold album artists.
   tx.run(sql`DELETE FROM albums WHERE id NOT IN (SELECT album_id FROM tracks)`);
-  relinkCredits(tx);
+  relinkCredits(tx, splits);
   tx.run(sql`DELETE FROM genres
     WHERE id NOT IN (SELECT genre_id FROM tracks WHERE genre_id IS NOT NULL)`);
   tx.run(sql`DELETE FROM folders WHERE id NOT IN (SELECT folder_id FROM tracks)`);
@@ -251,9 +264,13 @@ export const pruneOrphans = (tx: LibraryDatabase): void => {
  * Removes the tracks at [paths] and what they leave empty (`pruneOrphans`);
  * a scan runs it when it completes, with the files it no longer found.
  */
-export const removeTracks = (db: LibraryDatabase, paths: readonly string[]): void => {
+export const removeTracks = (
+  db: LibraryDatabase,
+  splits: CreditSplits,
+  paths: readonly string[],
+): void => {
   db.transaction((tx) => {
     deleteTracks(tx, paths);
-    pruneOrphans(tx);
+    pruneOrphans(tx, splits);
   });
 };
