@@ -3,13 +3,18 @@ import { View } from "react-native";
 import { Artwork } from "./Artwork";
 
 type Props = {
-  /** Cached artwork files from Core's `playlistMosaic`: none, one, or four. */
+  /**
+   * Covers from Core's `playlistMosaic`: none, one, or four. Each a cached
+   * artwork file, or a YT Music entry's cover address.
+   */
   paths: readonly string[];
   size: number;
 };
 
+const ADDRESS = /^[a-z][a-z0-9+.-]*:\/\//i;
+
 const uri = (path: string | undefined): string | undefined =>
-  path === undefined ? undefined : `file://${path}`;
+  path === undefined ? undefined : ADDRESS.test(path) ? path : `file://${path}`;
 
 /**
  * A playlist's artwork: four album covers in a 2×2 square, butted together

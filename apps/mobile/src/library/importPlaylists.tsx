@@ -19,7 +19,12 @@ import { confirmAction, showError } from "@/overlay/alert";
 import { presentOverlay } from "@/overlay/overlay";
 
 import { LibraryStore } from "./LibraryStore";
-import { createPlaylist, currentPlaylists, replacePlaylistSongs } from "./playlists";
+import {
+  createPlaylist,
+  currentPlaylists,
+  libraryPlaylistSongs,
+  replacePlaylistSongs,
+} from "./playlists";
 import { appRuntime } from "./runtime";
 
 /** Imports one picked file: a new playlist, or a playlist of that name replaced, as the owner chooses. */
@@ -41,7 +46,7 @@ const importFile = async (
     missing: plan.missing,
   } as const;
   if (clash !== undefined && (await confirmAction(confirmImportReplace(clash.name)))) {
-    await replacePlaylistSongs(clash.id, plan.trackIds);
+    await replacePlaylistSongs(clash.id, libraryPlaylistSongs(plan.trackIds));
     return { ...imported, name: clash.name, replaced: true };
   }
   const name =
@@ -51,7 +56,7 @@ const importFile = async (
           plan.name,
           playlists.map((playlist) => playlist.name),
         );
-  const created = await createPlaylist(name, plan.trackIds);
+  const created = await createPlaylist(name, libraryPlaylistSongs(plan.trackIds));
   return { ...imported, name: created.name, replaced: false };
 };
 

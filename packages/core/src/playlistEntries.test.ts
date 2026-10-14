@@ -143,8 +143,8 @@ describe("playlistEntryLinks", () => {
       { itemId: 10, song: yt("a", { title: "Genesis" }) },
       { itemId: 11, song: yt("b", { title: "Phantom" }) },
     ];
-    const library = [track(1, "Genesis", "Justice", 201_000), track(2, "Stress", "Justice")];
-    assert.deepEqual(playlistEntryLinks(entries, library), [{ itemId: 10, trackId: 1 }]);
+    const songs = [track(1, "Genesis", "Justice", 201_000), track(2, "Stress", "Justice")];
+    assert.deepEqual(playlistEntryLinks(entries, songs), [{ itemId: 10, trackId: 1 }]);
   });
 
   test("every entry of that song links, whichever playlist holds it", () => {
@@ -160,8 +160,8 @@ describe("playlistEntryLinks", () => {
 
   test("matched as Search and Discover match: featured credits and remaster notes aside", () => {
     const entries = [{ itemId: 10, song: yt("a", { title: "D.A.N.C.E. (feat. Uffie)" }) }];
-    const library = [track(1, "D.A.N.C.E. - 2017 Remaster", "Justice feat. Uffie")];
-    assert.deepEqual(playlistEntryLinks(entries, library), [{ itemId: 10, trackId: 1 }]);
+    const songs = [track(1, "D.A.N.C.E. - 2017 Remaster", "Justice feat. Uffie")];
+    assert.deepEqual(playlistEntryLinks(entries, songs), [{ itemId: 10, trackId: 1 }]);
   });
 
   test("a live take or an edit of the song stays streamed", () => {

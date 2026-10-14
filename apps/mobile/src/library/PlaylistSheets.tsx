@@ -6,6 +6,7 @@ import {
   describePlaylistAdd,
   nextPlaylistName,
   type PlaylistNameCheck,
+  type PlaylistSong,
 } from "@wave/core";
 import { Fragment, useState } from "react";
 import { Text, TextInput, ToastAndroid, View } from "react-native";
@@ -22,7 +23,7 @@ import { followUp, openOverlay, presentOverlay } from "@/overlay/overlay";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { usePlaylists } from "./hooks";
-import type { PlaylistRow, SongRow } from "./LibraryStore";
+import type { PlaylistRow } from "./LibraryStore";
 import {
   addToPlaylist,
   createPlaylist,
@@ -117,10 +118,14 @@ function NameCard({
 // ---------------------------------------------------------------------------
 // Add to Playlist card
 
-/** What is being added: a heading for the card and the songs, fetched on demand. */
+/**
+ * What is being added: a heading for the card and the songs, fetched on
+ * demand: Library tracks, and YT Music songs the Library doesn't have (Core's
+ * `PlaylistSong`).
+ */
 export interface AddSubject {
   readonly title: string;
-  readonly songs: () => Promise<readonly SongRow[]>;
+  readonly songs: () => Promise<readonly PlaylistSong[]>;
 }
 
 /**
@@ -139,11 +144,9 @@ export const openAddToPlaylist = (subject: AddSubject): void => {
   else void followUp(() => currentPlaylists().then(open, failed("list the playlists")));
 };
 
-const trackIds = (songs: readonly SongRow[]): number[] => songs.map((song) => song.id);
-
-const addSongs = (playlistId: number, songs: () => Promise<readonly SongRow[]>): void => {
+const addSongs = (playlistId: number, songs: () => Promise<readonly PlaylistSong[]>): void => {
   void songs()
-    .then((rows) => addToPlaylist(playlistId, trackIds(rows)))
+    .then((rows) => addToPlaylist(playlistId, rows))
     .then((result) => toast(describePlaylistAdd(result.name, result.added, result.alreadyIn)))
     .catch(failed("add to the playlist"));
 };
@@ -209,13 +212,13 @@ function AddCard({ subject, close }: { subject: AddSubject; close: () => void })
  * cancelled or not created.
  */
 export const newPlaylist = (
-  songs?: () => Promise<readonly SongRow[]>,
+  songs?: () => Promise<readonly PlaylistSong[]>,
 ): Promise<NamedPlaylist | null> =>
   // The name prompt highlights what the flow was started from.
   followUp(() => createNamedPlaylist(songs));
 
 const createNamedPlaylist = async (
-  songs?: () => Promise<readonly SongRow[]>,
+  songs?: () => Promise<readonly PlaylistSong[]>,
 ): Promise<NamedPlaylist | null> => {
   // Remembered names open the prompt at once. The songs (every song, from
   // Library › Songs) are read only once a name is chosen, so they never hold it up.
@@ -233,7 +236,7 @@ const createNamedPlaylist = async (
       toast(describePlaylistAdd(name, 0, 0));
       return null;
     }
-    const result = await createPlaylist(name, trackIds(rows));
+    const result = await createPlaylist(name, rows);
     toast(
       songs === undefined
         ? `Created ${result.name}`

@@ -6,10 +6,9 @@ import {
   filesLeavingWithRoot,
   rememberSearch,
   moveItem,
-  planPlaylistAdd,
-  playlistMosaic,
   sortKey,
   type IndexedFile,
+  type PlaylistSong,
   type LibraryTrack,
   type CreditedPlayTotals,
   type PlayEvent,
@@ -63,11 +62,14 @@ import {
   type RecordedPlay,
 } from "./db/playHistory";
 import {
-  insertPlaylistItems,
+  appendPlaylistSongs,
   removePlaylistItems,
   replacePlaylistSongs,
-  selectPlaylistSongs,
+  selectPlaylistCovers,
+  selectPlaylistEntries,
+  selectPlaylistTotals,
   selectTrackPaths,
+  type PlaylistEntry,
 } from "./db/playlists";
 import { pruneOrphans, removeTracks, saveBatch } from "./db/save";
 import * as schema from "./db/schema";
@@ -290,15 +292,17 @@ export interface PlaylistRow {
   readonly artworkPaths: readonly string[];
 }
 
-/** A song in a playlist; the same track may only appear once. */
-export interface PlaylistItemRow extends SongRow {
-  readonly itemId: number;
-}
+/**
+ * One entry of a playlist, in its place (`itemId`; the same song may be in it
+ * more than once): a Library song, or a YT Music song the Library doesn't
+ * have, streamed (Core's `MixedSong`).
+ */
+export type PlaylistEntryRow = PlaylistEntry<SongRow>;
 
 export interface PlaylistDetail {
   readonly playlist: PlaylistRow;
   /** In playlist order. */
-  readonly items: readonly PlaylistItemRow[];
+  readonly items: readonly PlaylistEntryRow[];
 }
 
 /** What adding songs to a playlist did. */
@@ -375,11 +379,11 @@ export class LibraryStore extends Context.Service<
       id: number,
       page: RowPage,
     ) => Effect.Effect<readonly SongRow[], LibraryStoreError>;
-    /** [page] of a playlist's songs, in playlist order, for Auto. */
-    readonly listPlaylistSongsPage: (
+    /** [page] of a playlist's entries, in playlist order, for Auto. */
+    readonly listPlaylistEntriesPage: (
       id: number,
       page: RowPage,
-    ) => Effect.Effect<readonly SongRow[], LibraryStoreError>;
+    ) => Effect.Effect<readonly PlaylistEntryRow[], LibraryStoreError>;
     /** A cover for each of [ids] that has one (an album or song of theirs), for Auto. */
     readonly artistCovers: (
       ids: readonly number[],
@@ -435,19 +439,20 @@ export class LibraryStore extends Context.Service<
     readonly listPlaylists: Effect.Effect<readonly PlaylistRow[], LibraryStoreError>;
     readonly getPlaylist: (id: number) => Effect.Effect<PlaylistDetail | null, LibraryStoreError>;
     /**
-     * Creates a playlist holding [trackIds] (Core's `checkPlaylistName` must
-     * accept the name, or it fails).
+     * Creates a playlist holding [songs], Library tracks and YT Music songs in
+     * the order given (Core's `checkPlaylistName` must accept the name, or it
+     * fails).
      */
     readonly createPlaylist: (
       name: string,
-      trackIds: readonly number[],
+      songs: readonly PlaylistSong[],
     ) => Effect.Effect<PlaylistAddResult, LibraryStoreError>;
     readonly renamePlaylist: (id: number, name: string) => Effect.Effect<void, LibraryStoreError>;
     readonly deletePlaylist: (id: number) => Effect.Effect<void, LibraryStoreError>;
-    /** Appends the tracks the playlist doesn't have yet (Core's `planPlaylistAdd`). */
+    /** Appends the songs the playlist doesn't have yet (Core's `planPlaylistSongs`). */
     readonly addToPlaylist: (
       id: number,
-      trackIds: readonly number[],
+      songs: readonly PlaylistSong[],
     ) => Effect.Effect<PlaylistAddResult, LibraryStoreError>;
     /** Moves an item to [toIndex] (0-based) in its playlist. */
     readonly movePlaylistItem: (
@@ -460,10 +465,10 @@ export class LibraryStore extends Context.Service<
       playlistId: number,
       itemIds: readonly number[],
     ) => Effect.Effect<void, LibraryStoreError>;
-    /** Makes the playlist hold exactly [trackIds], in that order (an import's Replace). */
+    /** Makes the playlist hold exactly [songs], in that order (an import's Replace). */
     readonly replacePlaylistSongs: (
       playlistId: number,
-      trackIds: readonly number[],
+      songs: readonly PlaylistSong[],
     ) => Effect.Effect<void, LibraryStoreError>;
     /** Every track's id and file path, for matching an imported playlist's entries. */
     readonly trackPaths: Effect.Effect<
@@ -557,8 +562,6 @@ const chunks = <A>(items: readonly A[]): A[][] => {
   }
   return result;
 };
-
-type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
 const removeRootSync = (db: Database, splits: CreditSplits, path: string): void => {
   const { scanRoots, tracks, excludedFolders } = schema;
@@ -694,66 +697,24 @@ const rememberSearchSync = (db: Database, query: string, now: number): readonly 
     return next;
   });
 
-interface PlaylistCovers {
-  readonly thumbPaths: readonly string[];
-  readonly artworkPaths: readonly string[];
-}
+const NO_COVERS = { thumbPaths: [], artworkPaths: [] } as const;
 
-const NO_COVERS: PlaylistCovers = { thumbPaths: [], artworkPaths: [] };
-
-/** Each playlist's mosaic, from its songs' album covers in playlist order. */
-const playlistCovers = (db: Database, playlistId?: number): Map<number, PlaylistCovers> => {
-  const { playlistItems, tracks, albums, artwork } = schema;
-  const rows = db
-    .select({
-      playlistId: playlistItems.playlistId,
-      thumbPath: artwork.thumbPath,
-      path: artwork.path,
-    })
-    .from(playlistItems)
-    .innerJoin(tracks, eq(playlistItems.trackId, tracks.id))
-    .innerJoin(albums, eq(tracks.albumId, albums.id))
-    .leftJoin(artwork, eq(albums.artworkHash, artwork.hash))
-    .where(playlistId === undefined ? undefined : eq(playlistItems.playlistId, playlistId))
-    .orderBy(asc(playlistItems.playlistId), asc(playlistItems.position), asc(playlistItems.id))
-    .all();
-  const grouped = new Map<number, { thumbs: (string | null)[]; paths: (string | null)[] }>();
-  for (const row of rows) {
-    let group = grouped.get(row.playlistId);
-    if (group === undefined) {
-      group = { thumbs: [], paths: [] };
-      grouped.set(row.playlistId, group);
-    }
-    group.thumbs.push(row.thumbPath);
-    group.paths.push(row.path);
-  }
-  return new Map(
-    [...grouped].map(([id, group]) => [
-      id,
-      { thumbPaths: playlistMosaic(group.thumbs), artworkPaths: playlistMosaic(group.paths) },
-    ]),
-  );
-};
+const NO_SONGS = { trackCount: 0, durationMs: 0 } as const;
 
 const listPlaylistsSync = (db: Database): PlaylistRow[] => {
-  const { playlists, playlistItems, tracks } = schema;
-  const covers = playlistCovers(db);
+  const { playlists } = schema;
+  // Library tracks and YT Music entries alike (`db/playlists.ts`).
+  const covers = selectPlaylistCovers(db);
+  const totals = selectPlaylistTotals(db);
   return (
     db
-      .select({
-        id: playlists.id,
-        name: playlists.name,
-        trackCount: sql<number>`count(${tracks.id})`,
-        durationMs: sql<number>`coalesce(sum(${tracks.durationMs}), 0)`,
-      })
+      .select({ id: playlists.id, name: playlists.name })
       .from(playlists)
-      .leftJoin(playlistItems, eq(playlistItems.playlistId, playlists.id))
-      .leftJoin(tracks, eq(playlistItems.trackId, tracks.id))
-      .groupBy(playlists.id)
       .all()
       .map((row) => ({
         ...row,
         sort: sortKey(row.name),
+        ...(totals.get(row.id) ?? NO_SONGS),
         ...(covers.get(row.id) ?? NO_COVERS),
       }))
       // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
@@ -769,14 +730,18 @@ const getPlaylistSync = (db: Database, id: number): PlaylistDetail | null => {
     .where(eq(playlists.id, id))
     .get();
   if (playlist === undefined) return null;
-  const items = selectPlaylistSongs(db, id);
-  const covers = playlistCovers(db, id).get(id) ?? NO_COVERS;
+  const items = selectPlaylistEntries(db, id);
+  const covers = selectPlaylistCovers(db, id).get(id) ?? NO_COVERS;
   return {
     playlist: {
       ...playlist,
       sort: sortKey(playlist.name),
       trackCount: items.length,
-      durationMs: items.reduce((total, item) => total + item.durationMs, 0),
+      durationMs: items.reduce(
+        (total, item) =>
+          total + (item.source === "library" ? item.track.durationMs : (item.song.durationMs ?? 0)),
+        0,
+      ),
       thumbPaths: covers.thumbPaths,
       artworkPaths: covers.artworkPaths,
     },
@@ -791,41 +756,10 @@ const requireName = (name: string, otherNames: readonly string[]): string => {
   return check.name;
 };
 
-/** Appends the tracks the playlist doesn't have yet; returns how many went in and were skipped. */
-const appendItems = (
-  tx: Transaction,
-  playlistId: number,
-  trackIds: readonly number[],
-  now: number,
-): { added: number; alreadyIn: number } => {
-  const { playlistItems } = schema;
-  const existing = tx
-    .select({ trackId: playlistItems.trackId })
-    .from(playlistItems)
-    .where(eq(playlistItems.playlistId, playlistId))
-    .all()
-    .map((row) => row.trackId);
-  const plan = planPlaylistAdd(existing, trackIds);
-  const last =
-    tx
-      .select({ position: sql<number | null>`max(${playlistItems.position})` })
-      .from(playlistItems)
-      .where(eq(playlistItems.playlistId, playlistId))
-      .get()?.position ?? -1;
-  const rows = plan.add.map((trackId, i) => ({
-    playlistId,
-    trackId,
-    position: last + 1 + i,
-    addedAt: now,
-  }));
-  insertPlaylistItems(tx, rows);
-  return { added: plan.add.length, alreadyIn: plan.alreadyIn };
-};
-
 const createPlaylistSync = (
   db: Database,
   name: string,
-  trackIds: readonly number[],
+  songs: readonly PlaylistSong[],
   now: number,
 ): PlaylistAddResult =>
   db.transaction((tx) => {
@@ -844,14 +778,14 @@ const createPlaylistSync = (
     return {
       playlistId: created.id,
       name: stored,
-      ...appendItems(tx, created.id, trackIds, now),
+      ...appendPlaylistSongs(tx, created.id, songs, now),
     };
   });
 
 const addToPlaylistSync = (
   db: Database,
   id: number,
-  trackIds: readonly number[],
+  songs: readonly PlaylistSong[],
   now: number,
 ): PlaylistAddResult =>
   db.transaction((tx) => {
@@ -862,7 +796,7 @@ const addToPlaylistSync = (
       .where(eq(playlists.id, id))
       .get();
     if (playlist === undefined) throw new Error("The playlist no longer exists");
-    const result = appendItems(tx, id, trackIds, now);
+    const result = appendPlaylistSongs(tx, id, songs, now);
     if (result.added > 0)
       tx.update(playlists).set({ updatedAt: now }).where(eq(playlists.id, id)).run();
     return { playlistId: id, name: playlist.name, ...result };
@@ -1032,8 +966,8 @@ const make = Effect.gen(function* () {
     listArtistSongsPage: (id, page) =>
       attempt("list the artist's songs", () => selectArtistSongs(db, id, page)),
 
-    listPlaylistSongsPage: (id, page) =>
-      attempt("list the playlist's songs", () => selectPlaylistSongs(db, id, page)),
+    listPlaylistEntriesPage: (id, page) =>
+      attempt("list the playlist's songs", () => selectPlaylistEntries(db, id, page)),
 
     artistCovers: (ids) => attempt("load artist covers", () => selectArtistCovers(db, ids)),
 
@@ -1155,8 +1089,8 @@ const make = Effect.gen(function* () {
 
     getPlaylist: (id) => attempt("open the playlist", () => getPlaylistSync(db, id)),
 
-    createPlaylist: (name, trackIds) =>
-      attempt("create the playlist", () => createPlaylistSync(db, name, trackIds, Date.now())),
+    createPlaylist: (name, songs) =>
+      attempt("create the playlist", () => createPlaylistSync(db, name, songs, Date.now())),
 
     renamePlaylist: (id, name) =>
       attempt("rename the playlist", () =>
@@ -1181,8 +1115,8 @@ const make = Effect.gen(function* () {
         db.delete(schema.playlists).where(eq(schema.playlists.id, id)).run();
       }),
 
-    addToPlaylist: (id, trackIds) =>
-      attempt("add to the playlist", () => addToPlaylistSync(db, id, trackIds, Date.now())),
+    addToPlaylist: (id, songs) =>
+      attempt("add to the playlist", () => addToPlaylistSync(db, id, songs, Date.now())),
 
     movePlaylistItem: (playlistId, itemId, toIndex) =>
       attempt("reorder the playlist", () =>
@@ -1194,9 +1128,9 @@ const make = Effect.gen(function* () {
         removePlaylistItems(db, playlistId, itemIds, Date.now()),
       ),
 
-    replacePlaylistSongs: (playlistId, trackIds) =>
+    replacePlaylistSongs: (playlistId, songs) =>
       attempt("replace the playlist's songs", () =>
-        replacePlaylistSongs(db, playlistId, trackIds, Date.now()),
+        replacePlaylistSongs(db, playlistId, songs, Date.now()),
       ),
 
     trackPaths: attempt("read the library's files", () => selectTrackPaths(db)),

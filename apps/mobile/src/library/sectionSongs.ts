@@ -1,7 +1,12 @@
 import { sectionSongs, type LibrarySectionSlug, type SectionCollection } from "@wave/core";
 import * as Effect from "effect/Effect";
 
-import { LibraryStore, type LibraryStoreError, type SongRow } from "./LibraryStore";
+import {
+  LibraryStore,
+  type LibraryStoreError,
+  type PlaylistEntryRow,
+  type SongRow,
+} from "./LibraryStore";
 import { appRuntime } from "./runtime";
 import { sortedForKind } from "./songSort";
 
@@ -9,6 +14,17 @@ type Store = LibraryStore["Service"];
 type Query<A> = (store: Store) => Effect.Effect<A, LibraryStoreError>;
 
 const run = <A>(query: Query<A>): Promise<A> => appRuntime.runPromise(LibraryStore.use(query));
+
+/** The Library songs among a playlist's entries, in playlist order. */
+const playlistLibrarySongs = (entries: readonly PlaylistEntryRow[]): SongRow[] =>
+  entries.flatMap((entry) => (entry.source === "library" ? [entry.track] : []));
+
+/**
+ * A playlist's entries in playlist order: its Library songs and its YT Music
+ * songs, streamed (none once it's gone).
+ */
+export const playlistEntries = (id: number): Promise<readonly PlaylistEntryRow[]> =>
+  run((store) => store.getPlaylist(id)).then((detail) => detail?.items ?? []);
 
 /** A section's items in its order, each with its songs as its own screen lists them. */
 const collection = <D>(
@@ -51,7 +67,8 @@ const collections = {
   playlists: collection(
     (store) => store.listPlaylists,
     (store, id) => store.getPlaylist(id),
-    (playlist) => playlist.items,
+    // Its Library songs; a playlist's own menu also takes its YT Music entries (`playlistEntries`).
+    (playlist) => playlistLibrarySongs(playlist.items),
   ),
 };
 

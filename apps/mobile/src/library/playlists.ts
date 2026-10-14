@@ -1,4 +1,4 @@
-import { sortKey } from "@wave/core";
+import { sortKey, type PlaylistSong } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { useSyncExternalStore } from "react";
 
@@ -73,10 +73,19 @@ export const currentPlaylists = (): Promise<readonly PlaylistRow[]> => {
 export const playlistNames = (): Promise<readonly string[]> =>
   currentPlaylists().then((playlists) => playlists.map((playlist) => playlist.name));
 
+/** Library tracks [trackIds] as songs a playlist holds (Core's `PlaylistSong`). */
+export const libraryPlaylistSongs = (trackIds: readonly number[]): PlaylistSong[] =>
+  trackIds.map((trackId) => ({ source: "library", trackId }));
+
+/**
+ * Creates a playlist holding [songs] in that order: Library tracks and YT
+ * Music songs the Library doesn't have (streamed until it does), a song given
+ * twice going in once.
+ */
 export const createPlaylist = (
   name: string,
-  trackIds: readonly number[] = [],
-): Promise<PlaylistAddResult> => edit((store) => store.createPlaylist(name, trackIds));
+  songs: readonly PlaylistSong[] = [],
+): Promise<PlaylistAddResult> => edit((store) => store.createPlaylist(name, songs));
 
 /** A playlist just created empty, as Library › Playlists will list it: for its screen's first frame. */
 export const emptyPlaylistRow = (id: number, name: string): PlaylistRow => ({
@@ -95,10 +104,11 @@ export const renamePlaylist = (id: number, name: string): Promise<void> =>
 export const deletePlaylist = (id: number): Promise<void> =>
   edit((store) => store.deletePlaylist(id));
 
+/** Appends [songs] the playlist doesn't hold yet (Core's `planPlaylistSongs`). */
 export const addToPlaylist = (
   id: number,
-  trackIds: readonly number[],
-): Promise<PlaylistAddResult> => edit((store) => store.addToPlaylist(id, trackIds));
+  songs: readonly PlaylistSong[],
+): Promise<PlaylistAddResult> => edit((store) => store.addToPlaylist(id, songs));
 
 export const movePlaylistItem = (
   playlistId: number,
@@ -109,8 +119,8 @@ export const movePlaylistItem = (
 /** Makes the playlist hold exactly these songs, in this order (an import's Replace). */
 export const replacePlaylistSongs = (
   playlistId: number,
-  trackIds: readonly number[],
-): Promise<void> => edit((store) => store.replacePlaylistSongs(playlistId, trackIds));
+  songs: readonly PlaylistSong[],
+): Promise<void> => edit((store) => store.replacePlaylistSongs(playlistId, songs));
 
 /** Removes these entries (not every copy of their songs) from the playlist. */
 export const removePlaylistItems = (
