@@ -528,7 +528,6 @@ export {
   libraryAlbumFinder,
   libraryArtistFinder,
   libraryReleaseFinder,
-  libraryArtistNamed,
   pickYtArtist,
   stepYtArtistSection,
   ytArtistLookup,

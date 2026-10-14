@@ -77,10 +77,11 @@ const streamedChoice = (target: StreamedArtistTarget<ArtistRow>): ArtistChoice =
  * Where a streamed song's Go to Artist and Now Playing's artist line lead
  * (Core's `streamedArtistLink`): one artist opens integrated, their Library
  * page or the YouTube Music artist page; several open the card to pick one.
+ * The page you're on opens nothing: Now Playing closing reveals it.
  */
 export const followStreamedArtistLink = (link: StreamedArtistLink<ArtistRow>): void => {
   if (link.kind === "open") openStreamedArtist(link.target);
-  else openChoiceCard(link.targets.map(streamedChoice));
+  else if (link.kind === "choose") openChoiceCard(link.targets.map(streamedChoice));
 };
 
 /** Each artist's row, in [ids]' order; one cheap read per artist, gone ones left out. */

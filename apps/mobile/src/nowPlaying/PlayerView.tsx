@@ -214,7 +214,8 @@ export function PlayerView({ item, details, playing }: Props) {
                     if (artistTo !== undefined) followArtistLink(artistTo, links.artist);
                   }
                 : streamedTo !== undefined
-                  ? () => followStreamedArtistLink(streamedTo)
+                  ? // Its only artist being the page under Now Playing, closing shows it.
+                    () => followStreamedArtistLink(streamedTo)
                   : null
             }
             hint="Opens the artist"

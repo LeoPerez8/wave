@@ -209,7 +209,7 @@ describe("Discover's shelves", () => {
   });
 
   test("a song queues as the Library track it is, or as a YT Music song", () => {
-    assert.equal(discoverTrackId({ source: "library", song: song("m", "Mine"), track: mine }), "7");
+    assert.equal(discoverTrackId({ source: "library", track: mine }), "7");
     assert.equal(discoverTrackId({ source: "stream", song: song("a") }), "yt:a");
   });
 });

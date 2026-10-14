@@ -3,7 +3,8 @@
  * version and shared by everything that reads it, for `useSyncExternalStore`.
  * It builds only while something subscribes, one build at a time: versions
  * that arrive during a build are caught up with one more build after it. A
- * failed build keeps the last value until the next version.
+ * failed build keeps the last value, tells the subscribers (so a wait on the
+ * value ends), and is tried again by the next subscriber or version.
  */
 export interface VersionedCache<A> {
   readonly get: () => A;
@@ -25,8 +26,14 @@ export const makeVersionedCache = <A>(options: {
   /** The version [value] (or the build under way) is for; null before the first. */
   let builtFor: number | null = null;
   let building = false;
+  /** Whether the last build failed, so the next subscriber tries it again. */
+  let failed = false;
   const listeners = new Set<() => void>();
   let stopFollowing: (() => void) | null = null;
+
+  const tell = (): void => {
+    for (const listener of listeners) listener();
+  };
 
   const refresh = (): void => {
     const wanted = version.get();
@@ -37,10 +44,13 @@ export const makeVersionedCache = <A>(options: {
       .then(
         (next) => {
           value = next;
-          for (const listener of listeners) listener();
+          failed = false;
+          tell();
         },
         () => {
           // Kept as it was; store errors surface elsewhere (the scan banner).
+          failed = true;
+          tell();
         },
       )
       .finally(() => {
@@ -54,6 +64,10 @@ export const makeVersionedCache = <A>(options: {
     subscribe: (listener) => {
       listeners.add(listener);
       stopFollowing ??= version.subscribe(refresh);
+      if (failed && !building) {
+        failed = false;
+        builtFor = null;
+      }
       refresh();
       return () => {
         listeners.delete(listener);

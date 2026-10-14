@@ -8,6 +8,7 @@ import {
   type StreamedArtistLink,
   type YtDownloadAction,
 } from "@wave/core";
+import { useState } from "react";
 import { Text, View } from "react-native";
 
 import { Artwork } from "@/catalog/Artwork";
@@ -33,7 +34,7 @@ import { cancelYtDownload, downloadYtSong, useYtDownloadStatus } from "./YtDownl
  * Queue and Go to Artist (Core's `ytSongActions`), then Download, or Cancel
  * Download / Retry Download while one is on its way or has failed. It opens
  * once the Library's artists are read, so Go to Artist is there from its
- * first frame.
+ * first frame (or, the read failing or slow, not at all: the menu never grows).
  */
 export const openYtSongActions = (song: NativeYtSong): void => {
   const anchor = pressedRect();
@@ -103,7 +104,9 @@ function YtSongActionsMenu({ song, close }: { song: NativeYtSong; close: () => v
   // (taken as still there until the Library has been read).
   const inLibrary = useLoadedInLibrary()(song);
   // Its artists open integrated: their Library page, else the YouTube Music artist page.
-  const artists = useStreamedArtistLink(song.artists);
+  // Kept as the menu opened with it, so Go to Artist never appears while it's shown.
+  const link = useStreamedArtistLink(song.artists);
+  const [artists] = useState(link);
   const entries: Entry[] = [
     ...songEntries(artists),
     ...ytDownloadActions(status, { inLibrary }).map((action): Entry => ({

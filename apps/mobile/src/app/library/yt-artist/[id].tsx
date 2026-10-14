@@ -86,7 +86,10 @@ const itemKey = (item: Item): string => {
   }
 };
 
-/** A row of a shelf: a release the Library has is its album; the others are YouTube Music's. */
+/**
+ * A row of a shelf: a release the Library has is its album, opened integrated
+ * as the page always is; the others are YouTube Music's.
+ */
 function ReleasePair({
   kind,
   releases,
@@ -112,7 +115,7 @@ function ReleasePair({
             key={`album-${library.id}`}
             album={toAlbumSummary(library)}
             size={size}
-            onPress={() => openAlbum(library.id, library)}
+            onPress={() => openAlbum(library.id, library, { integrated: true })}
             onLongPress={() => openAlbumActions(library)}
           />
         ),

@@ -58,5 +58,20 @@ export const YT_ARTIST_BY_NAME = "by-name";
 export const openYtArtistNamed = (name: string): void =>
   router.push(`/library/yt-artist/${YT_ARTIST_BY_NAME}?name=${encodeURIComponent(name)}` as Href);
 
+/**
+ * The name of the YouTube Music artist page at [pathname] (its `name`
+ * parameter, [params]: the name it was opened with), or null when it isn't
+ * one, so a streamed song's artist link leaves it out (Core's
+ * `streamedArtistLink`).
+ */
+export const ytArtistPageHere = (
+  pathname: string,
+  params: { readonly name?: string | string[] },
+): string | null => {
+  if (!pathname.startsWith("/library/yt-artist/")) return null;
+  const name = Array.isArray(params.name) ? params.name[0] : params.name;
+  return name === undefined || name === "" ? null : name;
+};
+
 /** Discover, on the Library stack. */
 export const openDiscover = (): void => router.push("/library/discover" as Href);

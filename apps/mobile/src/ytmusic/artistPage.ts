@@ -1,7 +1,7 @@
 import {
   identityKey,
   libraryAlbumFinder,
-  libraryArtistNamed,
+  libraryArtistFinder,
   ytArtistPageAsks,
   ytArtistPageView,
   type YtArtistAlbum,
@@ -43,13 +43,14 @@ const nowhere = (): null => null;
 
 /**
  * Which of the artist [name]'s releases the Library has: the albums of the
- * Library artist that name is (Core's `libraryArtistNamed`,
+ * Library artist that name is (Core's `libraryArtistFinder`,
  * `libraryAlbumFinder`). Without one, none.
  */
 const useLibraryReleases = (name: string | null): ((album: YtArtistAlbum) => AlbumRow | null) => {
   const artists = useArtists();
   const albums = useAlbums();
-  const artist = name === null ? null : libraryArtistNamed(name, artists);
+  const artistNamed = useMemo(() => libraryArtistFinder(artists), [artists]);
+  const artist = name === null ? null : artistNamed(name);
   const artistId = artist?.id ?? null;
   return useMemo(
     () => (artistId === null ? nowhere : libraryAlbumFinder(artistId, albums)),
