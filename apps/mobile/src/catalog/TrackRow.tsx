@@ -1,4 +1,5 @@
 import { IconFileOff, IconStarFilled } from "@tabler/icons-react-native";
+import { trackRowTrailing } from "@wave/core";
 import { Text, View, type PressableProps as PressProps } from "react-native";
 
 import { Press } from "@/motion/Press";
@@ -32,6 +33,11 @@ type Props = {
   /** Sets the number in ember: the top entry of a ranking, whose number is its rank. */
   topNumber?: boolean;
   /**
+   * On a ranking by plays, the song's counted plays: shown in the trailing
+   * cell ("12 plays") in place of its length. Undefined shows the length.
+   */
+  plays?: number | undefined;
+  /**
    * In selection mode, whether the row is checked: it shows a leading check
    * cell and reads as a checkbox. Undefined outside selection mode.
    */
@@ -48,16 +54,11 @@ type Props = {
   onAccessibilityAction?: PressProps["onAccessibilityAction"];
 };
 
-export const formatDuration = (ms: number): string => {
-  const total = Math.round(ms / 1000);
-  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
-};
-
 const THUMB = CELL * 5;
 
 /**
  * A track: leading thumbnail or track number, title over artist, then the
- * favorite cell and the duration. The playing track's title is in ember with a
+ * favorite cell and the duration (the counted plays on a ranking by plays). The playing track's title is in ember with a
  * wavy underline under its visible text. A missing file shows its icon (in
  * place of the number in numbered lists, trailing in artwork lists). Title and
  * artist share one size; rank is weight and tint. In selection mode a check
@@ -69,6 +70,7 @@ export function TrackRow({
   favorite = false,
   leading,
   topNumber = false,
+  plays,
   checked,
   progress,
   onPress,
@@ -82,11 +84,17 @@ export function TrackRow({
   const playing = state === "playing";
   const selecting = checked !== undefined;
   const missingIcon = <IconFileOff size={18} color={tertiary} strokeWidth={1.5} />;
+  const trailing = trackRowTrailing({ durationMs: track.durationMs, countedPlays: plays });
 
   return (
     <Press
       accessibilityRole={selecting ? "checkbox" : "button"}
-      accessibilityLabel={`${track.title}, ${track.artist}${playing ? ", now playing" : ""}`}
+      accessibilityLabel={[
+        track.title,
+        track.artist,
+        ...(plays === undefined ? [] : [trailing]),
+        ...(playing ? ["now playing"] : []),
+      ].join(", ")}
       accessibilityState={
         selecting ? { disabled: missing, checked } : { disabled: missing, selected: playing }
       }
@@ -141,11 +149,17 @@ export function TrackRow({
         <View className="items-center" style={{ width: CELL * 3 }}>
           {favorite && <IconStarFilled size={14} color={highlight} />}
         </View>
+        {/* A count is wider than a length, so a ranking by plays gets a wider cell. */}
         <Text
+          numberOfLines={1}
           className="font-sans text-footnote text-secondary"
-          style={{ fontVariant: ["tabular-nums"], width: CELL * 5, textAlign: "right" }}
+          style={{
+            fontVariant: ["tabular-nums"],
+            ...(plays === undefined ? { width: CELL * 5 } : { minWidth: CELL * 9 }),
+            textAlign: "right",
+          }}
         >
-          {track.durationMs === null ? "" : formatDuration(track.durationMs)}
+          {trailing}
         </Text>
       </View>
     </Press>

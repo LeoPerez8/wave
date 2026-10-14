@@ -77,7 +77,7 @@ export function PeriodTabs({
   );
 }
 
-/** A ranked song: numbered by rank (the top one in ember), its counted plays beside the artist. */
+/** A ranked song: numbered by rank (the top one in ember), its counted plays in the length's cell. */
 function RankedSongRow({
   entry: { item: song, countedPlays },
   index,
@@ -96,11 +96,8 @@ function RankedSongRow({
 }) {
   return (
     <TrackRow
-      track={{
-        ...toTrackSummary(song),
-        artist: `${song.artist} · ${playCount(countedPlays)}`,
-        trackNumber: index + 1,
-      }}
+      track={{ ...toTrackSummary(song), trackNumber: index + 1 }}
+      plays={countedPlays}
       state={String(song.id) === currentId ? "playing" : undefined}
       favorite={favorites.has(song.id)}
       leading="number"
@@ -113,7 +110,7 @@ function RankedSongRow({
 
 /**
  * A song ranking: each row numbered by rank (the top one in ember), with its
- * counted plays beside the artist. Tapping a song plays the ranking from it;
+ * counted plays where other lists show the length. Tapping a song plays the ranking from it;
  * long-press opens the song's menu.
  */
 export function RankedSongs({
