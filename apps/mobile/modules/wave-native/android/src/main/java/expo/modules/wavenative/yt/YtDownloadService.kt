@@ -12,11 +12,13 @@ import android.net.wifi.WifiManager
 import android.os.PowerManager
 import expo.modules.wavenative.R
 import expo.modules.wavenative.download.AndroidDownloads
+import expo.modules.wavenative.download.DurableDownloads
 import expo.modules.wavenative.launcher.LauncherIconSwitcher
 import kotlin.concurrent.thread
 
 /**
- * Runs the persisted Soulseek download journal ([AndroidDownloads]) as a
+ * Runs the persisted download journal ([AndroidDownloads]), Soulseek's and
+ * YouTube Music's downloads alike, as a
  * `dataSync` foreground service, so downloads continue with the screen off,
  * beside playback and after Android recreates the process (sticky restart).
  * Its notification shows the current job and offers Cancel; it stops once the
@@ -32,7 +34,7 @@ class YtDownloadService : Service() {
     super.onCreate()
     getSystemService(NotificationManager::class.java).createNotificationChannel(
       NotificationChannel(CHANNEL, "Downloads", NotificationManager.IMPORTANCE_LOW).apply {
-        description = "Soulseek recordings being saved to the Library"; setShowBadge(false)
+        description = "Songs being saved to the Library"; setShowBadge(false)
       },
     )
     // With the screen off the CPU and Wi-Fi radio may sleep; both locks are renewed while work remains.
@@ -101,9 +103,11 @@ class YtDownloadService : Service() {
     @Suppress("UNCHECKED_CAST")
     val song = current?.get("song") as? Map<String, Any?>
     val saving = current?.get("phase") in listOf("tagging", "awaitingPublication", "publishing", "completed")
-    val queued = current?.get("queuePosition") != null || current?.get("phase") in listOf("queued", "preparing")
+    // As the rows say: YouTube has no peer to connect to, so its job waits until the audio flows.
+    val waiting = if (current?.get("source") == DurableDownloads.YOUTUBE) listOf("queued", "preparing", "prepared") else listOf("queued", "preparing")
+    val queued = current?.get("queuePosition") != null || current?.get("phase") in waiting
     builder.setContentTitle(if (saving) "Saving to the Library" else if (queued) "Waiting to download" else "Downloading")
-      .setContentText(song?.get("title") as? String ?: "Soulseek")
+      .setContentText(song?.get("title") as? String ?: "A YT Music song")
     // An album's download (or several songs asked for) counts down the songs left.
     val left = downloads.jobs.pendingCount()
     if (left > 1) builder.setSubText("$left songs left")

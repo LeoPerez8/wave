@@ -1,9 +1,11 @@
-import type {
-  YtArtistAlbum,
-  YtArtistCandidate,
-  YtHome,
-  YtQuietReason,
-  YtSession,
+import {
+  readYtPlaylist,
+  type YtArtistAlbum,
+  type YtArtistCandidate,
+  type YtHome,
+  type YtPlaylistReadOptions,
+  type YtQuietReason,
+  type YtSession,
 } from "@wave/core";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
@@ -62,8 +64,15 @@ export class YtMusic extends Context.Service<
     readonly home: Effect.Effect<YtHome<NativeYtSong>, YtMusicError>;
     /** The album page [browseId] (`MPREb_…`) and its tracklist. */
     readonly album: (browseId: string) => Effect.Effect<NativeYtAlbum, YtMusicError>;
-    /** The playlist [playlistId] and its first page of songs. */
-    readonly playlist: (playlistId: string) => Effect.Effect<NativeYtPlaylist, YtMusicError>;
+    /**
+     * The playlist [playlistId] and all its songs, page after page, up to
+     * 5,000 (Core's `readYtPlaylist`); fails if any page fails. `onPage`
+     * hears it grow, for a screen that shows each page as it comes.
+     */
+    readonly playlist: (
+      playlistId: string,
+      options?: YtPlaylistReadOptions<NativeYtSong>,
+    ) => Effect.Effect<NativeYtPlaylist, YtMusicError>;
     /** Caches a song's cover from [url] beside the Library's artwork, with its palette. */
     readonly cacheArtwork: (url: string) => Effect.Effect<IndexedArtwork, YtMusicError>;
     /** The saved YouTube session (whose account, never its cookie), without asking YouTube. */
@@ -96,8 +105,16 @@ export const layer = Layer.succeed(YtMusic, {
   ),
   // Album pages are read by the downloads module (a download's tags come from them), once a session.
   album: (browseId) => Effect.tryPromise({ try: () => readYtAlbum(browseId), catch: fromNative }),
-  playlist: (playlistId) =>
-    Effect.tryPromise({ try: () => WaveYtMusic.playlist(playlistId), catch: fromNative }),
+  playlist: (playlistId, options = {}) =>
+    Effect.tryPromise({
+      try: (signal) =>
+        readYtPlaylist(
+          () => WaveYtMusic.playlist(playlistId),
+          (continuation) => WaveYtMusic.playlistMore(continuation),
+          { ...options, signal: options.signal ?? signal },
+        ),
+      catch: fromNative,
+    }),
   cacheArtwork: (url) =>
     Effect.tryPromise({ try: () => WaveYtMusic.cacheArtwork(url), catch: fromNative }).pipe(
       Effect.map(toIndexedArtwork),

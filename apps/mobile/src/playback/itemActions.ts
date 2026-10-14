@@ -4,6 +4,7 @@ import {
   isDetailPath,
   ITEM_ACTION_LABELS,
   itemActions,
+  playlistPlayback,
   playlistRemovals,
   type ActionSurface,
   type ItemAction,
@@ -16,7 +17,6 @@ import { confirmDeleteSongs } from "@/library/deleteSongs";
 import { setFavorites, useFavoriteIds } from "@/library/favorites";
 import { findLyricsAndGenreFor } from "@/library/findLyricsAndGenre";
 import { useLinkRows } from "@/library/hooks";
-import type { SongRow } from "@/library/LibraryStore";
 import {
   confirmDeletePlaylists,
   openAddToPlaylist,
@@ -26,15 +26,17 @@ import { removePlaylistItems } from "@/library/playlists";
 import { openAlbum } from "@/library/routes";
 import { showError } from "@/overlay/alert";
 import { useLyricsAndGenreLookupsEnabled } from "@/settings/lyricsAndGenre";
+import { ytMusicEnabled } from "@/settings/ytMusic";
 
 import {
   targetCount,
+  targetEntries,
   targetFacts,
   targetHeading,
-  targetSongs,
+  toPlaylistSongs,
   type ActionItems,
 } from "./actionTargets";
-import { addToQueue, playNext } from "./actions";
+import { addToQueue, playNext, queueDiscoverSongs } from "./actions";
 
 /**
  * Wave's actions on library items, defined once for the long-press menu (one
@@ -92,10 +94,17 @@ export function useItemActions(
       ? () => ask(finish)
       : run(() => ask(undefined));
 
-  const queue = (add: (songs: readonly SongRow[]) => void) =>
+  // A playlist's YT Music entries join the queue streamed, while YT Music is on
+  // (Core's `playlistPlayback`); other items are the Library's songs.
+  const queue = (where: "playNext" | "addToQueue") =>
     run(() => {
-      targetSongs(target)
-        .then(add)
+      targetEntries(target)
+        .then((entries) => {
+          const play = playlistPlayback(entries, { ytMusic: ytMusicEnabled() });
+          if (play === null) return;
+          if (play.playback.kind === "mixed") void queueDiscoverSongs(play.playback.songs, where);
+          else void (where === "playNext" ? playNext : addToQueue)(play.playback.tracks);
+        })
         .catch((error: unknown) => showError("Couldn't load the songs", error));
     });
 
@@ -143,12 +152,17 @@ export function useItemActions(
     });
     switch (entry.action) {
       case "playNext":
-        return make(queue(playNext));
+        return make(queue("playNext"));
       case "addToQueue":
-        return make(queue(addToQueue));
+        return make(queue("addToQueue"));
       case "addToPlaylist":
         return make(
-          run(() => openAddToPlaylist({ title: addTitle, songs: () => targetSongs(target) })),
+          run(() =>
+            openAddToPlaylist({
+              title: addTitle,
+              songs: () => targetEntries(target).then(toPlaylistSongs),
+            }),
+          ),
         );
       case "favorite":
         return make(star(true));

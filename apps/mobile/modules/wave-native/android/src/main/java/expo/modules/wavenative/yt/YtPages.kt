@@ -49,10 +49,19 @@ class YtPages(private val client: YtClient) {
     YtArtistParser.page(body) ?: throw IllegalStateException("Not an artist page: $browseId")
   }
 
-  /** The playlist [playlistId] (without `VL`) and its first page of songs. */
+  /**
+   * The playlist [playlistId] (without `VL`): its head, its first page of
+   * songs and the token for the next page ([playlistMore]).
+   */
   suspend fun playlist(playlistId: String): YtPlaylist = client.request {
     val body = client.innerTube.browse(YouTubeClient.WEB_REMIX, "VL$playlistId").bodyAsText()
     YtPlaylistParser.playlist(body) ?: throw IllegalStateException("Not a playlist page: $playlistId")
+  }
+
+  /** The playlist page [continuation] leads to: its songs and the token for the next. */
+  suspend fun playlistMore(continuation: String): YtPlaylistMore = client.request {
+    val body = client.innerTube.browse(YouTubeClient.WEB_REMIX, continuation = continuation).bodyAsText()
+    YtPlaylistParser.more(body) ?: throw IllegalStateException("Not a playlist continuation")
   }
 
   private companion object {

@@ -6,7 +6,7 @@ import { selectKnownFiles, selectLibraryLookupSongs } from "./tracks.ts";
 import { addTrack, migrateTestDatabase, openTestDatabase } from "./testDatabase.ts";
 
 describe("selectLibraryLookupSongs", () => {
-  test("lists every song with what a lookup sends, its genre and whether it has lyrics", async () => {
+  test("lists every song with what a lookup sends and the tags it may lack", async () => {
     const db = await openTestDatabase();
     addTrack(db, {
       title: "Teardrop",
@@ -15,6 +15,8 @@ describe("selectLibraryLookupSongs", () => {
       durationMs: 330_000,
       genre: "Trip-Hop",
       hasLyrics: true,
+      trackNumber: 3,
+      year: 1998,
     });
     addTrack(db, { title: "Airbag", artist: "Radiohead", album: "OK Computer" });
     assert.deepEqual(selectLibraryLookupSongs(db), [
@@ -26,6 +28,8 @@ describe("selectLibraryLookupSongs", () => {
         durationMs: 180_000,
         genre: null,
         hasLyrics: false,
+        trackNumber: null,
+        year: null,
       },
       {
         path: "/Music/Mezzanine/Teardrop.mp3",
@@ -35,6 +39,8 @@ describe("selectLibraryLookupSongs", () => {
         durationMs: 330_000,
         genre: "Trip-Hop",
         hasLyrics: true,
+        trackNumber: 3,
+        year: 1998,
       },
     ]);
   });

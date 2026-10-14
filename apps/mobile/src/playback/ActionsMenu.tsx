@@ -1,4 +1,4 @@
-import { entryDivider } from "@wave/core";
+import { YT_PLAYLIST_DOWNLOAD_ACTION_LABELS, entryDivider } from "@wave/core";
 import { Text, View } from "react-native";
 
 import { ArtistImage } from "@/catalog/ArtistImage";
@@ -11,20 +11,25 @@ import { useSectionSongCounts } from "@/library/hooks";
 import type {
   AlbumRow,
   ArtistRow,
-  FolderRow,
   GenreRow,
+  PlaylistEntryRow,
   PlaylistRow,
   SongRow,
 } from "@/library/LibraryStore";
+import { playlistEntries } from "@/library/sectionSongs";
 import { pressedRect } from "@/motion/pressedRect";
 import { CardEntries } from "@/overlay/CardEntries";
 import { CardHeading } from "@/overlay/CardHeading";
 import { useOverlayFlow } from "@/overlay/flow";
-import { openOverlay } from "@/overlay/overlay";
+import { followUp, openOverlay } from "@/overlay/overlay";
 import { useSlideToChoose } from "@/overlay/useSlideToChoose";
+import { useLoadedInLibrary } from "@/ytmusic/libraryFinder";
+import { playlistYtSongs, runYtDownloadAction, useYtPlaylistDownload } from "@/ytmusic/YtDownloads";
 
 import { targetHeading, type ActionItems, type PlaylistPlace } from "./actionTargets";
 import { useItemActions } from "./itemActions";
+
+const NO_ENTRIES: readonly PlaylistEntryRow[] = [];
 
 /** How a menu was opened. */
 export interface MenuOptions {
@@ -33,18 +38,29 @@ export interface MenuOptions {
 }
 
 /**
- * Floats the menu next to the row (or button) whose press opened it, centred
- * when opened some other way.
+ * Floats the menu next to the row (or button) whose press opened it ([anchor],
+ * taken at the press), centred when opened some other way. A playlist's menu
+ * is given its [entries], for its download entries.
  */
-const openActions = (target: ActionItems, options: MenuOptions = {}): void => {
+const openActions = (
+  target: ActionItems,
+  options: MenuOptions = {},
+  anchor = pressedRect(),
+  entries: readonly PlaylistEntryRow[] = NO_ENTRIES,
+): void => {
   openOverlay({
     label: targetHeading(target, undefined)?.title ?? "Actions",
-    anchor: pressedRect(),
+    anchor,
     render: (close) =>
       target.kind === "section" ? (
         <SectionActionsMenu target={target} close={close} />
       ) : (
-        <ActionsMenu target={target} close={close} onSelect={options.onSelect} />
+        <ActionsMenu
+          target={target}
+          close={close}
+          onSelect={options.onSelect}
+          playlistEntries={entries}
+        />
       ),
   });
 };
@@ -56,9 +72,18 @@ export const openTrackActions = (
 ): void =>
   openActions({ kind: "track", items: [{ song, playlistItem: options.playlistItem }] }, options);
 
-/** Opens the menu for a playlist: queue it, add it to another, rename or delete it. */
-export const openPlaylistActions = (playlist: PlaylistRow, options?: MenuOptions): void =>
-  openActions({ kind: "playlist", items: [playlist] }, options);
+/**
+ * Opens the menu for a playlist: queue it, add it to another, download its YT
+ * Music entries (Core's `ytPlaylistDownload`), rename or delete it. Its
+ * entries are read first, so the card opens with every entry it will have.
+ */
+export const openPlaylistActions = (playlist: PlaylistRow, options?: MenuOptions): void => {
+  const anchor = pressedRect();
+  void followUp(async () => {
+    const entries = await playlistEntries(playlist.id).catch(() => NO_ENTRIES);
+    openActions({ kind: "playlist", items: [playlist] }, options, anchor, entries);
+  });
+};
 
 /** Opens the long-press menu for an album (Play Next and Add to Queue take the whole album). */
 export const openAlbumActions = (album: AlbumRow, options?: MenuOptions): void =>
@@ -72,10 +97,6 @@ export const openArtistActions = (artist: ArtistRow, options?: MenuOptions): voi
 export const openGenreActions = (genre: GenreRow, options?: MenuOptions): void =>
   openActions({ kind: "genre", items: [genre] }, options);
 
-/** Opens the long-press menu for a folder (its songs, in the folder screen's order). */
-export const openFolderActions = (folder: FolderRow, options?: MenuOptions): void =>
-  openActions({ kind: "folder", items: [folder] }, options);
-
 /** Opens the menu for a Library entry (Songs, Albums…): every song it holds, in its order. */
 export const openLibrarySectionActions = (section: LibrarySection): void =>
   openActions({ kind: "section", items: [section] });
@@ -84,13 +105,49 @@ export const openLibrarySectionActions = (section: LibrarySection): void =>
 function SectionActionsMenu({ target, close }: { target: ActionItems; close: () => void }) {
   const sectionSongs = useSectionSongCounts();
   return (
-    <ActionsMenu target={target} close={close} onSelect={undefined} sectionSongs={sectionSongs} />
+    <ActionsMenu
+      target={target}
+      close={close}
+      onSelect={undefined}
+      sectionSongs={sectionSongs}
+      playlistEntries={NO_ENTRIES}
+    />
   );
 }
 
+/** One row of the menu card. */
+interface MenuEntry {
+  readonly key: string;
+  readonly label: string;
+  readonly onPress: () => void;
+  readonly destructive: boolean;
+}
+
 /**
- * The long-press menu for a track, an album, an artist, a playlist, a genre, a
- * folder or a Library entry: what it is (unless the row it was opened from is
+ * A playlist's download entries (Core's `ytPlaylistDownload`): Download
+ * Playlist, or Cancel Playlist Download while its songs are on their way,
+ * then Retry Failed; none without YT Music entries.
+ */
+function usePlaylistDownloadEntries(
+  entries: readonly PlaylistEntryRow[],
+  close: () => void,
+): MenuEntry[] {
+  const inLibrary = useLoadedInLibrary();
+  const download = useYtPlaylistDownload(entries, inLibrary);
+  return download.actions.map((action) => ({
+    key: action,
+    label: YT_PLAYLIST_DOWNLOAD_ACTION_LABELS[action],
+    onPress: () => {
+      close();
+      runYtDownloadAction(action, playlistYtSongs(entries), inLibrary);
+    },
+    destructive: false,
+  }));
+}
+
+/**
+ * The long-press menu for a track, an album, an artist, a playlist, a genre or
+ * a Library entry: what it is (unless the row it was opened from is
  * highlighted, which says so already), then one quiet line per action (the
  * shared list in `itemActions`, which the selection bar offers too). A glass
  * card on the overlay, floating next to the row it was opened from.
@@ -100,15 +157,24 @@ function ActionsMenu({
   close,
   onSelect,
   sectionSongs,
+  playlistEntries: listed,
 }: {
   target: ActionItems;
   close: () => void;
   onSelect: (() => void) | undefined;
   /** Each Library entry's song count, for a Library entry's heading (`SectionActionsMenu`). */
   sectionSongs?: LibraryCounts | undefined;
+  /** A playlist's entries, for its download entries; none for other targets. */
+  playlistEntries: readonly PlaylistEntryRow[];
 }) {
   const head = targetHeading(target, sectionSongs);
-  const entries = useItemActions(target, { surface: "menu", finish: close, onSelect });
+  const actions = useItemActions(target, { surface: "menu", finish: close, onSelect });
+  const downloads = usePlaylistDownloadEntries(listed, close);
+  // A playlist's download entries follow Add to Playlist, before Rename and Delete.
+  const entries: MenuEntry[] = actions.flatMap((entry): MenuEntry[] => [
+    { key: entry.action, ...entry },
+    ...(entry.action === "addToPlaylist" ? downloads : []),
+  ]);
 
   // The finger that long-pressed the row can slide onto an entry and lift to run it;
   // the entry under it shows pressed meanwhile.
@@ -137,7 +203,7 @@ function ActionsMenu({
       {/* Play Next sits nearest the finger, whichever side of the row the card opened on. */}
       <CardEntries listRef={trackList}>
         {entries.map((entry, index) => (
-          <View key={entry.action} ref={trackEntry(index)} collapsable={false}>
+          <View key={entry.key} ref={trackEntry(index)} collapsable={false}>
             <EntryRow
               label={entry.label}
               onPress={entry.onPress}

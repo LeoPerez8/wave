@@ -59,7 +59,9 @@ export interface FixtureTrack {
   readonly artist?: string;
   readonly album?: string;
   readonly albumArtist?: string;
+  /** The track's year, which its album takes too. */
   readonly year?: number;
+  readonly trackNumber?: number;
   readonly durationMs?: number;
   /** When the file entered the library. */
   readonly addedAt?: number;
@@ -178,6 +180,11 @@ export const addTrack = (db: TestDatabase, track: FixtureTrack): number => {
   ).id;
   if (track.hasLyrics !== undefined)
     db.update(tracks).set({ hasLyrics: track.hasLyrics }).where(eq(tracks.id, id)).run();
+  if (track.year !== undefined || track.trackNumber !== undefined)
+    db.update(tracks)
+      .set({ year: track.year ?? null, trackNumber: track.trackNumber ?? null })
+      .where(eq(tracks.id, id))
+      .run();
   if (hasCredits(db)) {
     // As an upgrade leaves the track before its credit is split: one artist, the whole credit.
     db.update(tracks).set({ artistCredit: artistName }).where(eq(tracks.id, id)).run();

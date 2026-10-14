@@ -44,10 +44,16 @@ browse results, and refuses upload requests and unsolicited incoming files.
 
 ## Background execution
 
-Soulseek is Wave's only acquisition source. The owner connects a free account
-once in Settings; after that each Download tap queues a job with no further
-choices. `DurableDownloads` (package `download`) is the queue's owner, not
-JavaScript: it persists every job (request, chosen recording, candidates,
+Soulseek is the source a download uses once the owner connects a free account
+in Settings; without one, downloads come from YouTube Music while YT Music is
+on (Core's `downloadSource`, docs/spec.md "Downloads"). With YT Music on, a
+Soulseek job that Soulseek can't deliver (no 320 copy or the peers ran out, a
+rejected account, an unreachable server, or its 20 minutes used up) carries on
+from YouTube Music in the same job, with time of its own (Core's
+`downloadFallback`); offline, storage and folder failures don't. Either way each
+Download tap queues a job with no further choices. This document covers the
+Soulseek side. `DurableDownloads` (package `download`) is the queue's owner, not
+JavaScript: it persists every job (request, source, chosen recording, candidates,
 current peer, attempt counts, absolute deadlines and the `mp3-320` policy) in
 `noBackupFilesDir/soulseek-download-jobs-v1`, rewritten atomically after each
 step. `YtDownloadService`, a `dataSync` foreground service, runs it one job at
@@ -70,7 +76,8 @@ its queue for 2 minutes, has 3 minutes to start sending and may go quiet for
 1 minute; a job has 20 minutes after leaving the queue. The client has no time
 limit of its own: it asks the journal whether the transfer is still wanted.
 Exhausted peers end in
-a short failure with Retry, never a different recording. Every failure,
+a short failure with Retry (or, with YT Music on, the fallback to YouTube
+Music), never a different recording. Every failure,
 cancellation or recovery deletes the hidden part files and never replaces an
 existing Library file; publication renames a verified, tagged file into a free
 name, and import is an idempotent upsert by path, so repeated completion

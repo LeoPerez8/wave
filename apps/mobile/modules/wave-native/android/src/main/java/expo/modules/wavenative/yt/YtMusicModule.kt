@@ -96,9 +96,20 @@ class YtMusicModule : Module() {
       coded { YtPages(client).home().map(YtShelf::toMap) }
     }
 
-    /** The playlist [playlistId]: `{ title, author, artworkUrl, songs }`, or an `ERR_YT_*` rejection. */
+    /**
+     * The playlist [playlistId]'s first page: `{ title, author, artworkUrl,
+     * songs, continuation }`, or an `ERR_YT_*` rejection.
+     */
     AsyncFunction("playlist") Coroutine { playlistId: String ->
       coded { YtPages(client).playlist(playlistId).toMap() }
+    }
+
+    /**
+     * The playlist page a `continuation` leads to: `{ songs, continuation }`,
+     * or an `ERR_YT_*` rejection.
+     */
+    AsyncFunction("playlistMore") Coroutine { continuation: String ->
+      coded { YtPages(client).playlistMore(continuation).toMap() }
     }
 
     /** The saved session, without asking YouTube. */

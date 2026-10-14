@@ -26,7 +26,7 @@ export const albumArtistIds = sql<readonly number[]>`(
     SELECT artist_id FROM album_artists
     WHERE album_artists.album_id = ${schema.albums.id} ORDER BY position))`.mapWith(idList);
 
-/** What every track list shows (a `SongRow`), plus what orders albums and folders. */
+/** What every track list shows (a `SongRow`), plus what orders albums. */
 export const songColumns = {
   id: schema.tracks.id,
   path: schema.tracks.path,
@@ -45,7 +45,7 @@ export const songColumns = {
   artistIds: trackArtistIds,
   discNumber: schema.tracks.discNumber,
   trackNumber: schema.tracks.trackNumber,
-  fileName: schema.tracks.fileName,
+  year: schema.tracks.year,
 };
 
 /** Tracks with their `songColumns`. */
@@ -67,9 +67,9 @@ export const BY_TITLE = [
 ] as const;
 
 /**
- * Every song with what a lyrics and genre lookup sends, its genre and whether
- * it has lyrics, by title: the whole-Library run picks from these (Core's
- * `libraryLookupSongs`).
+ * Every song with what a lyrics and genre lookup sends, its genre, whether it
+ * has lyrics, its track number and year, by title: the whole-Library run
+ * picks from these (Core's `libraryLookupSongs`).
  */
 export const selectLibraryLookupSongs = (db: LibraryDatabase) => {
   const { tracks, artists, albums, genres } = schema;
@@ -82,6 +82,8 @@ export const selectLibraryLookupSongs = (db: LibraryDatabase) => {
       durationMs: tracks.durationMs,
       genre: genres.name,
       hasLyrics: tracks.hasLyrics,
+      trackNumber: tracks.trackNumber,
+      year: tracks.year,
     })
     .from(tracks)
     .innerJoin(artists, eq(tracks.artistId, artists.id))

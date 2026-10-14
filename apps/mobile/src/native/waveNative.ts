@@ -1,4 +1,4 @@
-import type { LaunchTheme } from "@wave/core";
+import type { LaunchTheme, TagDestination } from "@wave/core";
 import { NativeModule, requireNativeModule } from "expo";
 
 /** One audio file as read by the native scanner (`modules/wave-native`). Tag values are raw. */
@@ -109,6 +109,8 @@ type WaveNativeEvents = {
   onScanBatch: (event: ScanBatchEvent) => void;
   onScanComplete: (event: ScanCompleteEvent) => void;
   onScanError: (event: ScanErrorEvent) => void;
+  /** Text was shared to Wave; `takeSharedText` has it. */
+  onShareReceived: () => void;
 };
 
 declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
@@ -122,6 +124,15 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
   pickFolder(): Promise<FolderPick>;
   /** Opens the system file picker for M3U playlists; one result per picked file, none when cancelled. */
   pickPlaylistFiles(): Promise<readonly PickedPlaylistFile[]>;
+  /** Opens the system file picker for files of any type (BlackPlayer's stats), read as `pickPlaylistFiles` reads them. */
+  pickStatFiles(): Promise<readonly PickedPlaylistFile[]>;
+  /** The clipboard's text, or null when it holds none. Only readable while Wave is in front. */
+  readClipboardText(): Promise<string | null>;
+  /**
+   * The latest text shared to Wave from another app's share sheet, once: the
+   * share that started Wave or one since. Null when nothing new was shared.
+   */
+  takeSharedText(): string | null;
   /**
    * Starts a scan, cancelling any running one, and returns its id. The known
    * files (parallel lists) make it incremental: files with the same size and
@@ -162,14 +173,18 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
   setLaunchTheme(theme: LaunchTheme): Promise<void>;
   /**
    * Writes found lyrics (LRC or plain text) and genre into a song's file,
-   * replacing what's there; null leaves a field alone. A format Wave can't
-   * write tags to gets the lyrics in a sidecar `.lrc` and no genre. Rejects
-   * when the file can't be written.
+   * replacing what's there, and fills in its track number (with `discNumber`)
+   * and year, keeping any the file has; null leaves a field alone. A format
+   * Wave can't write tags to gets the lyrics in a sidecar `.lrc` and nothing
+   * else. Rejects when the file can't be written.
    */
   writeLyricsAndGenre(
     path: string,
     lyrics: string | null,
     genre: string | null,
+    trackNumber: number | null,
+    discNumber: number | null,
+    year: number | null,
   ): Promise<NativeTagWrite>;
 }
 
@@ -180,7 +195,9 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
  */
 export interface NativeTagWrite {
   readonly lyrics: "tags" | "sidecar" | "none";
-  readonly genre: "tags" | "notWritten" | "none";
+  readonly genre: TagDestination;
+  readonly trackNumber: TagDestination;
+  readonly year: TagDestination;
   readonly track: NativeScannedTrack | null;
   readonly artwork: NativeArtwork | null;
 }

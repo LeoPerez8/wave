@@ -6,8 +6,7 @@ import { useYtListPage, YtSongList } from "@/ytmusic/YtSongList";
 
 /**
  * A YT Music playlist opened from Discover: cover, title, who made it,
- * Play / Shuffle and its songs (the first page YouTube Music lists, up to a
- * hundred).
+ * Play / Shuffle and its songs (up to 5,000), shown page by page as they load.
  */
 export default function YtPlaylistScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();

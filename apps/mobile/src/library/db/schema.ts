@@ -1,5 +1,7 @@
+import { sql } from "drizzle-orm";
 import {
   type AnySQLiteColumn,
+  check,
   index,
   integer,
   primaryKey,
@@ -298,8 +300,10 @@ export const playlists = sqliteTable("playlists", {
 });
 
 /**
- * A playlist's songs, ordered by `position` (gaps allowed). Items go with their
- * playlist, and with their track when its file leaves the library.
+ * A playlist's songs, ordered by `position` (gaps allowed): each a Library
+ * track (`track_id`) or a YT Music song the Library doesn't have (`yt_song`,
+ * Core's `writePlaylistYtSong`), never both. Items go with their playlist,
+ * and a track's with it when its file leaves the library.
  */
 export const playlistItems = sqliteTable(
   "playlist_items",
@@ -308,15 +312,15 @@ export const playlistItems = sqliteTable(
     playlistId: integer("playlist_id")
       .notNull()
       .references(() => playlists.id, { onDelete: "cascade" }),
-    trackId: integer("track_id")
-      .notNull()
-      .references(() => tracks.id, { onDelete: "cascade" }),
+    trackId: integer("track_id").references(() => tracks.id, { onDelete: "cascade" }),
+    ytSong: text("yt_song"),
     position: integer("position").notNull(),
     addedAt: integer("added_at").notNull(),
   },
   (t) => [
     index("playlist_items_playlist_position_idx").on(t.playlistId, t.position),
     index("playlist_items_track_idx").on(t.trackId),
+    check("playlist_items_one_song", sql`(${t.trackId} IS NULL) <> (${t.ytSong} IS NULL)`),
   ],
 );
 
@@ -363,6 +367,11 @@ export const playEvents = sqliteTable(
      * (read the track instead), and for tracks that left before Wave kept it.
      */
     albumId: integer("album_id"),
+    /**
+     * Where an imported play came from (`blackplayer`: BlackPlayer's track
+     * stats, `db/blackPlayer.ts`); null for Wave's own plays.
+     */
+    importedFrom: text("imported_from", { enum: ["blackplayer"] }),
   },
   (t) => [
     index("play_events_track_idx").on(t.trackId),

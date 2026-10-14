@@ -4,7 +4,7 @@
  * SQLite in plain Node (`testDatabase.ts`); `LibraryStore` calls them.
  */
 import type { PlayEvent } from "@wave/core";
-import { desc, eq, inArray, max, sql } from "drizzle-orm";
+import { desc, eq, inArray, isNull, max, sql } from "drizzle-orm";
 
 import type { AlbumRow, SongRow } from "../LibraryStore.ts";
 import type { LibraryDatabase } from "./database.ts";
@@ -79,6 +79,8 @@ export const latestPlay = (db: LibraryDatabase): RecordedPlay | null => {
   const row = db
     .select()
     .from(schema.playEvents)
+    // Imported plays (BlackPlayer's) never went on in this player.
+    .where(isNull(schema.playEvents.importedFrom))
     .orderBy(desc(schema.playEvents.id))
     .limit(1)
     .get();

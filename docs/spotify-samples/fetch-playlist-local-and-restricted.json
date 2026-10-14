@@ -1,0 +1,828 @@
+{
+  "data": {
+    "playlistV2": {
+      "__typename": "Playlist",
+      "content": {
+        "__typename": "PlaylistItemsPage",
+        "items": [
+          {
+            "addedAt": {
+              "isoString": "2017-02-27T01:38:09Z"
+            },
+            "addedBy": {
+              "data": {
+                "__typename": "User",
+                "name": "Oscar Lallier",
+                "uri": "spotify:user:12160726861",
+                "username": "12160726861"
+              }
+            },
+            "attributes": [],
+            "itemV2": {
+              "__typename": "TrackResponseWrapper",
+              "data": {
+                "__typename": "Track",
+                "albumOfTrack": {
+                  "artists": {
+                    "items": [
+                      {
+                        "profile": {
+                          "name": "Mac DeMarco"
+                        },
+                        "uri": "spotify:artist:3Sz7ZnJQBIHsXLUSo0OQtM"
+                      }
+                    ]
+                  },
+                  "coverArt": {
+                    "sources": [
+                      {
+                        "height": 300,
+                        "url": "https://i.scdn.co/image/ab67616d00001e02e9f3700dc3d895b659d88192",
+                        "width": 300
+                      },
+                      {
+                        "height": 64,
+                        "url": "https://i.scdn.co/image/ab67616d00004851e9f3700dc3d895b659d88192",
+                        "width": 64
+                      },
+                      {
+                        "height": 640,
+                        "url": "https://i.scdn.co/image/ab67616d0000b273e9f3700dc3d895b659d88192",
+                        "width": 640
+                      }
+                    ]
+                  },
+                  "date": {
+                    "isoString": "2012-03-13T00:00:00Z",
+                    "precision": "DAY"
+                  },
+                  "name": "Rock and Roll Night Club",
+                  "uri": "spotify:album:7e2wdDXfEISrUKbVDGV8L7"
+                },
+                "artists": {
+                  "items": [
+                    {
+                      "profile": {
+                        "name": "Mac DeMarco"
+                      },
+                      "uri": "spotify:artist:3Sz7ZnJQBIHsXLUSo0OQtM"
+                    }
+                  ]
+                },
+                "contentRating": {
+                  "label": "NONE"
+                },
+                "discNumber": 1,
+                "trackDuration": {
+                  "totalMilliseconds": 34014
+                },
+                "mediaType": "AUDIO",
+                "name": "96.7 The Pipe",
+                "playability": {
+                  "playable": true,
+                  "reason": "PLAYABLE"
+                },
+                "playcount": "2887046",
+                "trackNumber": 2,
+                "uri": "spotify:track:3oQ52Mqz2ih8KjligVoQrG"
+              }
+            },
+            "uid": "71e741050757f6f7"
+          },
+          {
+            "addedAt": {
+              "isoString": "2017-02-27T01:38:09Z"
+            },
+            "addedBy": {
+              "data": {
+                "__typename": "User",
+                "name": "Oscar Lallier",
+                "uri": "spotify:user:12160726861",
+                "username": "12160726861"
+              }
+            },
+            "attributes": [],
+            "itemV2": {
+              "__typename": "LocalTrackResponseWrapper",
+              "data": {
+                "__typename": "LocalTrack",
+                "albumName": "",
+                "artistName": "",
+                "localTrackDuration": {
+                  "totalMilliseconds": 785000
+                },
+                "name": "100 Amazing Bass Lines",
+                "uri": "spotify:local:::100+Amazing+Bass+Lines:785"
+              }
+            },
+            "uid": "84e5cc6e02b73e0c"
+          },
+          {
+            "addedAt": {
+              "isoString": "2017-02-27T01:38:09Z"
+            },
+            "addedBy": {
+              "data": {
+                "__typename": "User",
+                "name": "Oscar Lallier",
+                "uri": "spotify:user:12160726861",
+                "username": "12160726861"
+              }
+            },
+            "attributes": [],
+            "itemV2": {
+              "__typename": "TrackResponseWrapper",
+              "data": {
+                "__typename": "Track",
+                "albumOfTrack": {
+                  "artists": {
+                    "items": [
+                      {
+                        "profile": {
+                          "name": "Mac DeMarco"
+                        },
+                        "uri": "spotify:artist:3Sz7ZnJQBIHsXLUSo0OQtM"
+                      }
+                    ]
+                  },
+                  "coverArt": {
+                    "sources": [
+                      {
+                        "height": 300,
+                        "url": "https://i.scdn.co/image/ab67616d00001e02e9f3700dc3d895b659d88192",
+                        "width": 300
+                      },
+                      {
+                        "height": 64,
+                        "url": "https://i.scdn.co/image/ab67616d00004851e9f3700dc3d895b659d88192",
+                        "width": 64
+                      },
+                      {
+                        "height": 640,
+                        "url": "https://i.scdn.co/image/ab67616d0000b273e9f3700dc3d895b659d88192",
+                        "width": 640
+                      }
+                    ]
+                  },
+                  "date": {
+                    "isoString": "2012-03-13T00:00:00Z",
+                    "precision": "DAY"
+                  },
+                  "name": "Rock and Roll Night Club",
+                  "uri": "spotify:album:7e2wdDXfEISrUKbVDGV8L7"
+                },
+                "artists": {
+                  "items": [
+                    {
+                      "profile": {
+                        "name": "Mac DeMarco"
+                      },
+                      "uri": "spotify:artist:3Sz7ZnJQBIHsXLUSo0OQtM"
+                    }
+                  ]
+                },
+                "contentRating": {
+                  "label": "NONE"
+                },
+                "discNumber": 1,
+                "trackDuration": {
+                  "totalMilliseconds": 60641
+                },
+                "mediaType": "AUDIO",
+                "name": "106.2 Breeze FM",
+                "playability": {
+                  "playable": true,
+                  "reason": "PLAYABLE"
+                },
+                "playcount": "2420702",
+                "trackNumber": 6,
+                "uri": "spotify:track:5h8G81Ls00kyf1UEen0gBB"
+              }
+            },
+            "uid": "3cf9b9d8b2d6dc13"
+          },
+          {
+            "addedAt": {
+              "isoString": "2017-02-27T01:38:09Z"
+            },
+            "addedBy": {
+              "data": {
+                "__typename": "User",
+                "name": "Oscar Lallier",
+                "uri": "spotify:user:12160726861",
+                "username": "12160726861"
+              }
+            },
+            "attributes": [],
+            "itemV2": {
+              "__typename": "TrackResponseWrapper",
+              "data": {
+                "__typename": "Track",
+                "albumOfTrack": {
+                  "artists": {
+                    "items": [
+                      {
+                        "profile": {
+                          "name": "Jake Shimabukuro"
+                        },
+                        "uri": "spotify:artist:69NjH5MsRLr0CX0zSlGmN3"
+                      }
+                    ]
+                  },
+                  "coverArt": {
+                    "sources": [
+                      {
+                        "height": 300,
+                        "url": "https://i.scdn.co/image/ab67616d00001e02f03d5a6a2aeed6717a92f17c",
+                        "width": 300
+                      },
+                      {
+                        "height": 64,
+                        "url": "https://i.scdn.co/image/ab67616d00004851f03d5a6a2aeed6717a92f17c",
+                        "width": 64
+                      },
+                      {
+                        "height": 640,
+                        "url": "https://i.scdn.co/image/ab67616d0000b273f03d5a6a2aeed6717a92f17c",
+                        "width": 640
+                      }
+                    ]
+                  },
+                  "date": {
+                    "isoString": "2011-01-04T00:00:00Z",
+                    "precision": "DAY"
+                  },
+                  "name": "Peace Love Ukulele",
+                  "uri": "spotify:album:7xD2O4utEnfAY4j8MOygqH"
+                },
+                "artists": {
+                  "items": [
+                    {
+                      "profile": {
+                        "name": "Jake Shimabukuro"
+                      },
+                      "uri": "spotify:artist:69NjH5MsRLr0CX0zSlGmN3"
+                    }
+                  ]
+                },
+                "contentRating": {
+                  "label": "NONE"
+                },
+                "discNumber": 1,
+                "trackDuration": {
+                  "totalMilliseconds": 266066
+                },
+                "mediaType": "AUDIO",
+                "name": "143 (Kelly's song) 2011",
+                "playability": {
+                  "playable": true,
+                  "reason": "PLAYABLE"
+                },
+                "playcount": "404961",
+                "trackNumber": 1,
+                "uri": "spotify:track:6Tq4LginUMBOgZrUs8M40h"
+              }
+            },
+            "uid": "1ab0022df96aef72"
+          },
+          {
+            "addedAt": {
+              "isoString": "2017-02-27T01:38:09Z"
+            },
+            "addedBy": {
+              "data": {
+                "__typename": "User",
+                "name": "Oscar Lallier",
+                "uri": "spotify:user:12160726861",
+                "username": "12160726861"
+              }
+            },
+            "attributes": [],
+            "itemV2": {
+              "__typename": "TrackResponseWrapper",
+              "data": {
+                "__typename": "Track",
+                "albumOfTrack": {
+                  "artists": {
+                    "items": [
+                      {
+                        "profile": {
+                          "name": "Lorde"
+                        },
+                        "uri": "spotify:artist:163tK9Wjr9P9DmM0AVK7lm"
+                      }
+                    ]
+                  },
+                  "coverArt": {
+                    "sources": [
+                      {
+                        "height": 300,
+                        "url": "https://i.scdn.co/image/ab67616d00001e0233a859e36fdc9a27ed86516e",
+                        "width": 300
+                      },
+                      {
+                        "height": 64,
+                        "url": "https://i.scdn.co/image/ab67616d0000485133a859e36fdc9a27ed86516e",
+                        "width": 64
+                      },
+                      {
+                        "height": 640,
+                        "url": "https://i.scdn.co/image/ab67616d0000b27333a859e36fdc9a27ed86516e",
+                        "width": 640
+                      }
+                    ]
+                  },
+                  "date": {
+                    "isoString": "2013-01-01T00:00:00Z",
+                    "precision": "DAY"
+                  },
+                  "name": "Pure Heroine (Extended)",
+                  "uri": "spotify:album:6rnzvZhe3PA57xKcKLRtJ6"
+                },
+                "artists": {
+                  "items": [
+                    {
+                      "profile": {
+                        "name": "Lorde"
+                      },
+                      "uri": "spotify:artist:163tK9Wjr9P9DmM0AVK7lm"
+                    }
+                  ]
+                },
+                "contentRating": {
+                  "label": "NONE"
+                },
+                "discNumber": 1,
+                "trackDuration": {
+                  "totalMilliseconds": 234286
+                },
+                "mediaType": "AUDIO",
+                "name": "400 Lux",
+                "playability": {
+                  "playable": true,
+                  "reason": "PLAYABLE"
+                },
+                "playcount": "198966673",
+                "trackNumber": 2,
+                "uri": "spotify:track:7ynvnjTj1XI8ByUq3F8MUw"
+              }
+            },
+            "uid": "9df4b9c8cfa51163"
+          },
+          {
+            "addedAt": {
+              "isoString": "2017-02-27T01:38:09Z"
+            },
+            "addedBy": {
+              "data": {
+                "__typename": "User",
+                "name": "Oscar Lallier",
+                "uri": "spotify:user:12160726861",
+                "username": "12160726861"
+              }
+            },
+            "attributes": [],
+            "itemV2": {
+              "__typename": "TrackResponseWrapper",
+              "data": {
+                "__typename": "Track",
+                "albumOfTrack": {
+                  "artists": {
+                    "items": [
+                      {
+                        "profile": {
+                          "name": "The Whitest Boy Alive"
+                        },
+                        "uri": "spotify:artist:1qcU8NabUQ5efQf8UGW6CV"
+                      }
+                    ]
+                  },
+                  "coverArt": {
+                    "sources": [
+                      {
+                        "height": 300,
+                        "url": "https://i.scdn.co/image/ab67616d00001e02db0041fb4db6a75269c692ad",
+                        "width": 300
+                      },
+                      {
+                        "height": 64,
+                        "url": "https://i.scdn.co/image/ab67616d00004851db0041fb4db6a75269c692ad",
+                        "width": 64
+                      },
+                      {
+                        "height": 640,
+                        "url": "https://i.scdn.co/image/ab67616d0000b273db0041fb4db6a75269c692ad",
+                        "width": 640
+                      }
+                    ]
+                  },
+                  "date": {
+                    "isoString": "2009-02-27T00:00:00Z",
+                    "precision": "DAY"
+                  },
+                  "name": "Rules",
+                  "uri": "spotify:album:422pW8gJCF3flJ32Uimywj"
+                },
+                "artists": {
+                  "items": [
+                    {
+                      "profile": {
+                        "name": "The Whitest Boy Alive"
+                      },
+                      "uri": "spotify:artist:1qcU8NabUQ5efQf8UGW6CV"
+                    }
+                  ]
+                },
+                "contentRating": {
+                  "label": "NONE"
+                },
+                "discNumber": 1,
+                "trackDuration": {
+                  "totalMilliseconds": 221226
+                },
+                "mediaType": "AUDIO",
+                "name": "1517",
+                "playability": {
+                  "playable": true,
+                  "reason": "PLAYABLE"
+                },
+                "playcount": "51036856",
+                "trackNumber": 7,
+                "uri": "spotify:track:4wHh4AljzbSGMJvynLgK1q"
+              }
+            },
+            "uid": "82963a7cb8612c87"
+          },
+          {
+            "addedAt": {
+              "isoString": "2017-02-27T01:38:09Z"
+            },
+            "addedBy": {
+              "data": {
+                "__typename": "User",
+                "name": "Oscar Lallier",
+                "uri": "spotify:user:12160726861",
+                "username": "12160726861"
+              }
+            },
+            "attributes": [],
+            "itemV2": {
+              "__typename": "TrackResponseWrapper",
+              "data": {
+                "__typename": "Track",
+                "albumOfTrack": {
+                  "artists": {
+                    "items": [
+                      {
+                        "profile": {
+                          "name": "Jean Leloup"
+                        },
+                        "uri": "spotify:artist:4wxSKb9ur3AbGRCv81xFAd"
+                      }
+                    ]
+                  },
+                  "coverArt": {
+                    "sources": [
+                      {
+                        "height": 300,
+                        "url": "https://i.scdn.co/image/ab67616d00001e02c8794c03207134d8d28a44c7",
+                        "width": 300
+                      },
+                      {
+                        "height": 64,
+                        "url": "https://i.scdn.co/image/ab67616d00004851c8794c03207134d8d28a44c7",
+                        "width": 64
+                      },
+                      {
+                        "height": 640,
+                        "url": "https://i.scdn.co/image/ab67616d0000b273c8794c03207134d8d28a44c7",
+                        "width": 640
+                      }
+                    ]
+                  },
+                  "date": {
+                    "isoString": "2005-11-22T00:00:00Z",
+                    "precision": "DAY"
+                  },
+                  "name": "1985-2003 Je joue de la guitare",
+                  "uri": "spotify:album:13dpLxuec4cGilEfXHNeOR"
+                },
+                "artists": {
+                  "items": [
+                    {
+                      "profile": {
+                        "name": "Jean Leloup"
+                      },
+                      "uri": "spotify:artist:4wxSKb9ur3AbGRCv81xFAd"
+                    }
+                  ]
+                },
+                "contentRating": {
+                  "label": "NONE"
+                },
+                "discNumber": 1,
+                "trackDuration": {
+                  "totalMilliseconds": 308426
+                },
+                "mediaType": "AUDIO",
+                "name": "1990 - Danse Mix",
+                "playability": {
+                  "playable": true,
+                  "reason": "PLAYABLE"
+                },
+                "playcount": "588232",
+                "trackNumber": 7,
+                "uri": "spotify:track:2UFEbNhbk9GsxCigXPq3XI"
+              }
+            },
+            "uid": "d022708c0c462515"
+          },
+          {
+            "addedAt": {
+              "isoString": "2017-02-27T01:38:09Z"
+            },
+            "addedBy": {
+              "data": {
+                "__typename": "User",
+                "name": "Oscar Lallier",
+                "uri": "spotify:user:12160726861",
+                "username": "12160726861"
+              }
+            },
+            "attributes": [],
+            "itemV2": {
+              "__typename": "TrackResponseWrapper",
+              "data": {
+                "__typename": "Track",
+                "albumOfTrack": {
+                  "artists": {
+                    "items": [
+                      {
+                        "profile": {
+                          "name": "Cage The Elephant"
+                        },
+                        "uri": "spotify:artist:26T3LtbuGT1Fu9m0eRq5X3"
+                      }
+                    ]
+                  },
+                  "coverArt": {
+                    "sources": [
+                      {
+                        "height": 300,
+                        "url": "https://i.scdn.co/image/ab67616d00001e0211ef2676331cfe842ac4576b",
+                        "width": 300
+                      },
+                      {
+                        "height": 64,
+                        "url": "https://i.scdn.co/image/ab67616d0000485111ef2676331cfe842ac4576b",
+                        "width": 64
+                      },
+                      {
+                        "height": 640,
+                        "url": "https://i.scdn.co/image/ab67616d0000b27311ef2676331cfe842ac4576b",
+                        "width": 640
+                      }
+                    ]
+                  },
+                  "date": {
+                    "isoString": "2011-01-01T00:00:00Z",
+                    "precision": "YEAR"
+                  },
+                  "name": "Thank You Happy Birthday",
+                  "uri": "spotify:album:3eGL4oa233BAecE9cGZI4k"
+                },
+                "artists": {
+                  "items": [
+                    {
+                      "profile": {
+                        "name": "Cage The Elephant"
+                      },
+                      "uri": "spotify:artist:26T3LtbuGT1Fu9m0eRq5X3"
+                    }
+                  ]
+                },
+                "contentRating": {
+                  "label": "NONE"
+                },
+                "discNumber": 1,
+                "trackDuration": {
+                  "totalMilliseconds": 190333
+                },
+                "mediaType": "AUDIO",
+                "name": "2024",
+                "playability": {
+                  "playable": true,
+                  "reason": "PLAYABLE"
+                },
+                "playcount": "10757330",
+                "trackNumber": 5,
+                "uri": "spotify:track:7IcXkPWjwqUCCkI2mUf02h"
+              }
+            },
+            "uid": "1253a30db79b18a4"
+          },
+          {
+            "addedAt": {
+              "isoString": "2017-02-27T01:38:09Z"
+            },
+            "addedBy": {
+              "data": {
+                "__typename": "User",
+                "name": "Oscar Lallier",
+                "uri": "spotify:user:12160726861",
+                "username": "12160726861"
+              }
+            },
+            "attributes": [],
+            "itemV2": {
+              "__typename": "TrackResponseWrapper",
+              "data": {
+                "__typename": "Track",
+                "albumOfTrack": {
+                  "artists": {
+                    "items": [
+                      {
+                        "profile": {
+                          "name": "Vampire Weekend"
+                        },
+                        "uri": "spotify:artist:5BvJzeQpmsdsFp4HGUYUEx"
+                      }
+                    ]
+                  },
+                  "coverArt": {
+                    "sources": [
+                      {
+                        "height": 300,
+                        "url": "https://i.scdn.co/image/ab67616d00001e029cca0d695187fbeed4ee301b",
+                        "width": 300
+                      },
+                      {
+                        "height": 64,
+                        "url": "https://i.scdn.co/image/ab67616d000048519cca0d695187fbeed4ee301b",
+                        "width": 64
+                      },
+                      {
+                        "height": 640,
+                        "url": "https://i.scdn.co/image/ab67616d0000b2739cca0d695187fbeed4ee301b",
+                        "width": 640
+                      }
+                    ]
+                  },
+                  "date": {
+                    "isoString": "2008-01-29T00:00:00Z",
+                    "precision": "DAY"
+                  },
+                  "name": "Vampire Weekend",
+                  "uri": "spotify:album:7JcfNKXoHSaog85a1hd4lx"
+                },
+                "artists": {
+                  "items": [
+                    {
+                      "profile": {
+                        "name": "Vampire Weekend"
+                      },
+                      "uri": "spotify:artist:5BvJzeQpmsdsFp4HGUYUEx"
+                    }
+                  ]
+                },
+                "contentRating": {
+                  "label": "NONE"
+                },
+                "discNumber": 1,
+                "trackDuration": {
+                  "totalMilliseconds": 137760
+                },
+                "mediaType": "AUDIO",
+                "name": "A-Punk",
+                "playability": {
+                  "playable": true,
+                  "reason": "PLAYABLE"
+                },
+                "playcount": "586111732",
+                "trackNumber": 3,
+                "uri": "spotify:track:1595LW73XBxkRk2ciQOHfr"
+              }
+            },
+            "uid": "e79169935e44ee02"
+          },
+          {
+            "addedAt": {
+              "isoString": "2017-02-27T01:38:09Z"
+            },
+            "addedBy": {
+              "data": {
+                "__typename": "User",
+                "name": "Oscar Lallier",
+                "uri": "spotify:user:12160726861",
+                "username": "12160726861"
+              }
+            },
+            "attributes": [],
+            "itemV2": {
+              "__typename": "TrackResponseWrapper",
+              "data": {
+                "__typename": "Track",
+                "albumOfTrack": {
+                  "artists": {
+                    "items": [
+                      {
+                        "profile": {
+                          "name": "John Williams"
+                        },
+                        "uri": "spotify:artist:3dRfiJ2650SZu6GbydcHNb"
+                      }
+                    ]
+                  },
+                  "coverArt": {
+                    "sources": [
+                      {
+                        "height": 300,
+                        "url": "https://i.scdn.co/image/ab67616d00001e02e2add5f2d1440a02e4e10a75",
+                        "width": 300
+                      },
+                      {
+                        "height": 64,
+                        "url": "https://i.scdn.co/image/ab67616d00004851e2add5f2d1440a02e4e10a75",
+                        "width": 64
+                      },
+                      {
+                        "height": 640,
+                        "url": "https://i.scdn.co/image/ab67616d0000b273e2add5f2d1440a02e4e10a75",
+                        "width": 640
+                      }
+                    ]
+                  },
+                  "date": {
+                    "isoString": "2015-12-18T00:00:00Z",
+                    "precision": "DAY"
+                  },
+                  "name": "Star Wars: The Force Awakens (Original Motion Picture Soundtrack)",
+                  "uri": "spotify:album:3fUKGTsiYL1kSroBWBLmmR"
+                },
+                "artists": {
+                  "items": [
+                    {
+                      "profile": {
+                        "name": "John Williams"
+                      },
+                      "uri": "spotify:artist:3dRfiJ2650SZu6GbydcHNb"
+                    }
+                  ]
+                },
+                "contentRating": {
+                  "label": "NONE"
+                },
+                "discNumber": 1,
+                "trackDuration": {
+                  "totalMilliseconds": 145293
+                },
+                "mediaType": "AUDIO",
+                "name": "The Abduction",
+                "playability": {
+                  "playable": false,
+                  "reason": "COUNTRY_RESTRICTED"
+                },
+                "playcount": "3577527",
+                "trackNumber": 14,
+                "uri": "spotify:track:2vEkF5UazjaBL6CpG2BZgq"
+              }
+            },
+            "uid": "e2fb191c9362d41a"
+          }
+        ],
+        "pagingInfo": {
+          "limit": 10,
+          "offset": 21
+        },
+        "totalCount": 10000
+      },
+      "description": "",
+      "followers": 2597,
+      "format": "",
+      "images": {
+        "items": [
+          {
+            "sources": [
+              {
+                "height": null,
+                "url": "https://image-cdn-ak.spotifycdn.com/image/ab67706c0000da84b1fff1e175723c3ea3678008",
+                "width": null
+              }
+            ]
+          }
+        ]
+      },
+      "name": "The Longest Playlist Ever",
+      "ownerV2": {
+        "data": {
+          "__typename": "User",
+          "name": "Oscar Lallier",
+          "uri": "spotify:user:12160726861",
+          "username": "12160726861"
+        }
+      },
+      "revisionId": "AAAAxogRQUI6DchO2C9FuHc4rgLPIH8q",
+      "uri": "spotify:playlist:6yPiKpy7evrwvZodByKvM9"
+    }
+  }
+}

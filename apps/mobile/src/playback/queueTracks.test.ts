@@ -36,6 +36,7 @@ const song = (id: number, thumbPath: string | null = `/covers/${id}.thumb.jpg`):
   artistIds: [id],
   discNumber: null,
   trackNumber: null,
+  year: null,
 });
 
 const ytSong = (videoId: string): YtSong => ({

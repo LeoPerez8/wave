@@ -2,6 +2,9 @@ import type {
   YtArtistAlbum,
   YtArtistCandidate,
   YtArtistPage,
+  YtPlaylist,
+  YtPlaylistFirstPage,
+  YtPlaylistPage,
   YtSession,
   YtShelf,
   YtSong,
@@ -22,14 +25,18 @@ export type NativeYtShelf = YtShelf<NativeYtSong>;
 /** An artist page as the native parser reads it: top songs, albums and singles (Core's `YtArtistPage`). */
 export type NativeYtArtistPage = YtArtistPage<NativeYtSong>;
 
-/** A YT Music playlist page and its first page of songs. */
-export interface NativeYtPlaylist {
-  readonly title: string;
-  /** Who made it ("YouTube Music" for its own mixes), when the page says. */
-  readonly author: string | null;
-  readonly artworkUrl: string | null;
-  readonly songs: readonly NativeYtSong[];
-}
+/**
+ * A YT Music playlist's first page: its head, that page's songs and the token
+ * for the next page (Core's `YtPlaylistFirstPage`). Songs YouTube Music greys
+ * out (removed, blocked in the country) are left out.
+ */
+export type NativeYtPlaylistPage = YtPlaylistFirstPage<NativeYtSong>;
+
+/** A later page of a YT Music playlist and the token for the next (Core's `YtPlaylistPage`). */
+export type NativeYtPlaylistMore = YtPlaylistPage<NativeYtSong>;
+
+/** A whole YT Music playlist as Core's `readYtPlaylist` reads it from those pages. */
+export type NativeYtPlaylist = YtPlaylist<NativeYtSong>;
 
 /** One page of song results; [continuation] asks for the next one. */
 export interface NativeYtSearchPage {
@@ -66,8 +73,10 @@ declare class WaveYtMusicModule extends NativeModule<WaveYtMusicEvents> {
   artist(browseId: string): Promise<NativeYtArtistPage>;
   /** The session's account's recommendations: YouTube Music's home shelves (songs, albums, playlists). */
   home(): Promise<readonly NativeYtShelf[]>;
-  /** The playlist [playlistId] (without `VL`) and its first page of songs. */
-  playlist(playlistId: string): Promise<NativeYtPlaylist>;
+  /** The playlist [playlistId] (without `VL`): its head and its first page of songs. */
+  playlist(playlistId: string): Promise<NativeYtPlaylistPage>;
+  /** The playlist page a first page's (or a later page's) [continuation] leads to. */
+  playlistMore(continuation: string): Promise<NativeYtPlaylistMore>;
   /**
    * Caches a YT Music song's cover from [url] beside the Library's artwork, so
    * the player, the notification and Auto show it as they do a Library

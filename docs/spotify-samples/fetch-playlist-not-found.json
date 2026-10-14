@@ -1,0 +1,8 @@
+{
+  "data": {
+    "playlistV2": {
+      "__typename": "NotFound",
+      "message": "Object with uri 'spotify:playlist:0000000000000000000000' not found"
+    }
+  }
+}

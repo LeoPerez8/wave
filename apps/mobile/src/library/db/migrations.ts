@@ -324,6 +324,44 @@ ALTER TABLE \`albums\` ADD \`album_artist_credits\` text;
 UPDATE \`tracks\` SET \`modified_at\` = 0;
 `;
 
+// A playlist keeps songs the Library doesn't have (docs/spec.md, "Playlists"):
+// an item is a Library track or a YT Music song (`yt_song`, Core's
+// `writePlaylistYtSong`), never both. SQLite can't drop NOT NULL from a
+// column, so the table is rebuilt; existing items keep their ids and places.
+// Self-contained (no other migration's tables or columns), so it can take any
+// number when merged.
+const mPlaylistYtEntries = `
+CREATE TABLE \`__new_playlist_items\` (
+	\`id\` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	\`playlist_id\` integer NOT NULL,
+	\`track_id\` integer,
+	\`yt_song\` text,
+	\`position\` integer NOT NULL,
+	\`added_at\` integer NOT NULL,
+	FOREIGN KEY (\`playlist_id\`) REFERENCES \`playlists\`(\`id\`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (\`track_id\`) REFERENCES \`tracks\`(\`id\`) ON UPDATE no action ON DELETE cascade,
+	CONSTRAINT "playlist_items_one_song" CHECK((\`track_id\` IS NULL) <> (\`yt_song\` IS NULL))
+);
+--> statement-breakpoint
+INSERT INTO \`__new_playlist_items\` (\`id\`, \`playlist_id\`, \`track_id\`, \`position\`, \`added_at\`)
+	SELECT \`id\`, \`playlist_id\`, \`track_id\`, \`position\`, \`added_at\` FROM \`playlist_items\`;
+--> statement-breakpoint
+DROP TABLE \`playlist_items\`;
+--> statement-breakpoint
+ALTER TABLE \`__new_playlist_items\` RENAME TO \`playlist_items\`;
+--> statement-breakpoint
+CREATE INDEX \`playlist_items_playlist_position_idx\` ON \`playlist_items\` (\`playlist_id\`,\`position\`);
+--> statement-breakpoint
+CREATE INDEX \`playlist_items_track_idx\` ON \`playlist_items\` (\`track_id\`);
+`;
+
+// Plays imported from BlackPlayer's track stats (docs/spec.md, "Importing
+// BlackPlayer stats"): marked, so an import never adds the same plays twice.
+// Wave's own plays are null.
+const mImportedPlays = `
+ALTER TABLE \`play_events\` ADD \`imported_from\` text;
+`;
+
 export default {
   journal: {
     entries: [
@@ -343,6 +381,8 @@ export default {
       { idx: 13, when: 1_792_929_600_000, tag: "0013_deleted_track_artists", breakpoints: true },
       { idx: 14, when: 1_793_016_000_000, tag: "0014_yt_artists", breakpoints: true },
       { idx: 15, when: 1_793_102_400_000, tag: "0015_tag_credits", breakpoints: true },
+      { idx: 16, when: 1_793_188_800_000, tag: "0016_playlist_yt_entries", breakpoints: true },
+      { idx: 17, when: 1_793_275_200_000, tag: "0017_imported_plays", breakpoints: true },
     ],
   },
   migrations: {
@@ -362,5 +402,7 @@ export default {
     m0013,
     m0014,
     m0015,
+    m0016: mPlaylistYtEntries,
+    m0017: mImportedPlays,
   },
 };

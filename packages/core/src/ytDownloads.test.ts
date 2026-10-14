@@ -8,7 +8,7 @@ import {
   ytDownloadStatus,
   ytDownloadsFromJournal,
 } from "./index.ts";
-import type { YtDownloadJournalJob, YtDownloadStatus, YtSong } from "./index.ts";
+import type { YtDownloadFailure, YtDownloadJournalJob, YtDownloadStatus, YtSong } from "./index.ts";
 
 const song = (videoId: string): YtSong => ({
   videoId,
@@ -30,6 +30,10 @@ const job = (videoId: string, patch: Partial<YtDownloadJournalJob> = {}): YtDown
 /** The status the rows show for [videoId], from the native journal's [jobs]. */
 const shown = (jobs: readonly YtDownloadJournalJob[], videoId: string) =>
   ytDownloadStatus(ytDownloadsFromJournal(jobs), videoId);
+
+/** What the row says for a YouTube Music job at [patch]'s phase. */
+const youtubeLine = (patch: Partial<YtDownloadJournalJob>) =>
+  ytDownloadLine(shown([job("a", { source: "youtube", ...patch })], "a"));
 
 describe("the native download journal, as rows show it", () => {
   test("a waiting download says so, in the order the journal keeps", () => {
@@ -70,6 +74,18 @@ describe("the native download journal, as rows show it", () => {
     });
   });
 
+  test("a download from YouTube Music waits, downloads, is checked, then saved", () => {
+    assert.equal(youtubeLine({ phase: "queued" }), "Waiting to download");
+    assert.equal(youtubeLine({ phase: "preparing" }), "Waiting to download");
+    assert.equal(youtubeLine({ phase: "prepared" }), "Waiting to download");
+    assert.equal(
+      youtubeLine({ phase: "transferring", received: 4_200, total: 10_000 }),
+      "Downloading · 42%",
+    );
+    assert.equal(youtubeLine({ phase: "sourceReady" }), "Checking the download");
+    assert.equal(youtubeLine({ phase: "tagging" }), "Saving to the Library");
+  });
+
   test("tagging, publishing and importing show as saving until the Library has the Track", () => {
     for (const phase of ["tagging", "awaitingPublication", "publishing", "completed"] as const) {
       assert.deepEqual(shown([job("a", { phase })], "a"), { kind: "saving" });
@@ -107,6 +123,9 @@ describe("the native download journal, as rows show it", () => {
     assert.deepEqual(ytDownloadStatus(state, "b"), ytDownloadStatus(state, "a"));
   });
 });
+
+/** What a row that failed with [reason] says. */
+const line = (reason: YtDownloadFailure) => ytDownloadLine({ kind: "failed", reason });
 
 /** The download entries for a song that isn't in the Library. */
 const actions = (status: YtDownloadStatus | null) =>
@@ -150,6 +169,30 @@ describe("a YT Music song's download, as its row and menu show it", () => {
       ytDownloadLine({ kind: "failed", reason: "storage" }),
       "Download failed: couldn't save the file",
     );
+  });
+
+  test("without YT Music or a Soulseek account, the row says to connect one, and keeps Retry", () => {
+    const status = { kind: "failed", reason: "noSource" } as const;
+    assert.equal(ytDownloadLine(status), "Connect YT Music or Soulseek in Settings");
+    assert.deepEqual(actions(status), ["retryDownload", "cancelDownload"]);
+  });
+
+  test("Soulseek's own failures read as before; an unreachable server isn't called offline", () => {
+    assert.equal(line("unavailable"), "This recording is unavailable in 320 kbps");
+    assert.equal(line("account"), "Connect a free Soulseek account in Settings");
+    assert.equal(line("accountRejected"), "Connect a free Soulseek account in Settings");
+    assert.equal(line("timedOut"), "Download failed");
+    assert.equal(line("unreachable"), "Download failed: Soulseek can't be reached");
+    assert.deepEqual(actions({ kind: "failed", reason: "unreachable" }), [
+      "retryDownload",
+      "cancelDownload",
+    ]);
+  });
+
+  test("a song YouTube Music won't serve says so, and keeps Retry", () => {
+    const status = { kind: "failed", reason: "ytUnavailable" } as const;
+    assert.equal(ytDownloadLine(status), "This song is unavailable on YouTube Music");
+    assert.deepEqual(actions(status), ["retryDownload", "cancelDownload"]);
   });
 
   test("the row's progress rule shows how much has arrived, once the size is known", () => {

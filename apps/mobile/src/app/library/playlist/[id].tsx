@@ -6,21 +6,23 @@ import { CELL, grid } from "@/catalog/grid";
 import { Mosaic } from "@/catalog/Mosaic";
 import { PlayShuffle } from "@/catalog/PlayShuffle";
 import { IconButton } from "@/components/IconButton";
-import { playSongs } from "@/playback/actions";
 import { openPlaylistActions } from "@/playback/ActionsMenu";
 import { DetailFrame } from "@/library/DetailFrame";
 import { usePlaylist } from "@/library/hooks";
-import { LibraryStore, type PlaylistItemRow, type PlaylistRow } from "@/library/LibraryStore";
-import { PlaylistItems } from "@/library/PlaylistItems";
+import { LibraryStore, type PlaylistEntryRow, type PlaylistRow } from "@/library/LibraryStore";
+import { PlaylistItems, playPlaylistEntries } from "@/library/PlaylistItems";
 import { parseId, useKnownRow } from "@/library/routes";
 import { appRuntime } from "@/library/runtime";
 import { songCount } from "@/library/TrackList";
+import { ListDownloadAction, useYtPlaylistDownloadButton } from "@/ytmusic/YtSongList";
+
+const NO_ENTRIES: readonly PlaylistEntryRow[] = [];
 
 /** What the screen shows: the playlist, and its songs once they are read. */
 interface Shown {
   readonly playlist: PlaylistRow;
   /** Undefined until the songs are read; the header doesn't wait for them. */
-  readonly items: readonly PlaylistItemRow[] | undefined;
+  readonly items: readonly PlaylistEntryRow[] | undefined;
 }
 
 const readPlaylist = (id: number) => LibraryStore.use((store) => store.getPlaylist(id));
@@ -29,17 +31,20 @@ function PlaylistHead({ shown }: { shown: Shown }) {
   const { width } = useWindowDimensions();
   const { playlist, items } = shown;
   const context = { kind: "playlist", id: String(playlist.id) } as const;
+  // The whole list, its YT Music entries streamed, while YT Music is on (`playPlaylistEntries`).
   const play = (shuffle: boolean) => {
     if (items !== undefined) {
-      playSongs(items, undefined, context, { shuffle });
+      playPlaylistEntries(items, undefined, context, { shuffle });
       return;
     }
     // Tapped before the songs were read: read them now.
     void appRuntime.runPromise(readPlaylist(playlist.id)).then((detail) => {
       if (detail !== null && detail.items.length > 0)
-        playSongs(detail.items, undefined, context, { shuffle });
+        playPlaylistEntries(detail.items, undefined, context, { shuffle });
     });
   };
+  // Its YT Music entries download into the Library (Core's `ytPlaylistDownload`).
+  const download = useYtPlaylistDownloadButton(items ?? NO_ENTRIES);
   const count = items?.length ?? playlist.trackCount;
   const furniture =
     count === 0
@@ -62,10 +67,20 @@ function PlaylistHead({ shown }: { shown: Shown }) {
         >
           {furniture}
         </Text>
+        {download.progress !== null && (
+          <Text
+            className="font-sans text-footnote text-accent"
+            style={{ fontVariant: ["tabular-nums"] }}
+          >
+            {download.progress}
+          </Text>
+        )}
       </View>
       <View className="flex-row items-center justify-between">
         {count > 0 ? (
-          <PlayShuffle onPlay={() => play(false)} onShuffle={() => play(true)} />
+          <PlayShuffle onPlay={() => play(false)} onShuffle={() => play(true)}>
+            {download.button !== null && <ListDownloadAction download={download.button} />}
+          </PlayShuffle>
         ) : (
           <View />
         )}

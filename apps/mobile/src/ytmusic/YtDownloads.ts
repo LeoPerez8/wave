@@ -1,26 +1,42 @@
-/** The existing Download menu/row backed by automatic Soulseek acquisition. */
+/**
+ * The Download menu and rows of YT Music songs, backed by the native journal: Core picks the
+ * source (`downloadSource`), Soulseek's automatic recording selection or YouTube Music's M4A,
+ * and which Soulseek failures the journal hands over to YouTube Music (`downloadFallback`).
+ */
 import {
   YT_DOWNLOADS_NONE,
+  downloadFallbackFailures,
+  downloadSource,
   isWithin,
   soulseekCandidates,
   soulseekQuery,
   soulseekReceivedMatches,
   soulseekRecording,
   ytAlbumDownload,
+  ytAudioMatches,
   ytDownloadDestination,
   ytDownloadLookup,
   ytDownloadSharedJob,
   ytDownloadStatus,
   ytDownloadTags,
   ytDownloadsFromJournal,
+  ytPlaylistDownload,
+  ytSongsDownload,
+  type DownloadSource,
+  type MixedSong,
+  type SoulseekCandidate,
   type YtAlbumDownload,
   type YtAlbumDownloadAction,
+  type YtPlaylistDownload,
+  type YtPlaylistDownloadAction,
   type YtDownloadFailure,
   type YtDownloadStatus,
+  type YtDownloadTags,
   type YtDownloads,
 } from "@wave/core";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import { useMemo, useSyncExternalStore } from "react";
 import { PermissionsAndroid, Platform } from "react-native";
 
@@ -35,6 +51,7 @@ import {
   soulseekErrorCode,
   type NativeDownloadDecision,
   type NativeDownloadJob,
+  type SoulseekSession,
 } from "@/native/waveSoulseek";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import {
@@ -43,6 +60,7 @@ import {
   type NativeSavedDownload,
   type NativeYtWatchSong,
 } from "@/native/waveYtDownloads";
+import { ytMusicEnabled } from "@/settings/ytMusic";
 
 import { readYtAlbum } from "./albumPages";
 
@@ -55,17 +73,21 @@ const failure = (cause: unknown): DownloadFailed => {
   const code = soulseekErrorCode(cause) ?? ytDownloadErrorCode(cause);
   return new DownloadFailed({
     reason:
-      code === "ERR_SLSK_SIGNED_OUT" || code === "ERR_SLSK_AUTH"
+      code === "ERR_SLSK_SIGNED_OUT"
         ? "account"
-        : code === "ERR_SLSK_OFFLINE" || code === "ERR_YT_OFFLINE"
-          ? "offline"
-          : code === "ERR_SLSK_STORAGE" || code === "ERR_YT_STORAGE"
-            ? "storage"
-            : code === "ERR_SLSK_INVALID_AUDIO" ||
-                code === "ERR_SLSK_PEER" ||
-                code === "ERR_SLSK_QUEUED"
-              ? "unavailable"
-              : "failed",
+        : code === "ERR_SLSK_AUTH"
+          ? "accountRejected"
+          : code === "ERR_SLSK_UNREACHABLE"
+            ? "unreachable"
+            : code === "ERR_SLSK_OFFLINE" || code === "ERR_YT_OFFLINE"
+              ? "offline"
+              : code === "ERR_SLSK_STORAGE" || code === "ERR_YT_STORAGE"
+                ? "storage"
+                : code === "ERR_SLSK_INVALID_AUDIO" ||
+                    code === "ERR_SLSK_PEER" ||
+                    code === "ERR_SLSK_QUEUED"
+                  ? "unavailable"
+                  : "failed",
     cause,
   });
 };
@@ -108,8 +130,54 @@ const metadata = (song: NativeYtSong) =>
     return ytDownloadTags(song, album, found, lyrics);
   });
 
-/** The journal's "prepare" decision: the peers with this recording, its tags and where it goes. */
-export const prepareSoulseekDownload = (song: NativeYtSong) =>
+/** Core's source for a download now: YT Music's setting and whether Soulseek has an account. */
+const currentSource = (
+  session: SoulseekSession,
+  ytMusicOn = ytMusicEnabled(),
+): DownloadSource | null =>
+  downloadSource({ ytMusicOn, soulseekAccount: session.status !== "signedOut" });
+
+/**
+ * What the journal keeps to carry a Soulseek job on from YouTube Music: the failures Core hands
+ * over (`downloadFallbackFailures`) and where the M4A goes.
+ */
+interface DownloadFallbackPlan {
+  readonly source: "youtube";
+  readonly targetPath: string;
+  readonly failures: readonly YtDownloadFailure[];
+}
+
+/** The journal's answer to "prepare": a plan, or Soulseek's failure with what falls back from it. */
+type PrepareAnswer =
+  | {
+      readonly source: DownloadSource;
+      readonly candidates: readonly SoulseekCandidate[];
+      readonly tags: YtDownloadTags;
+      readonly targetPath: string;
+      readonly fallback?: DownloadFallbackPlan;
+    }
+  | {
+      readonly failure: YtDownloadFailure;
+      readonly tags: YtDownloadTags;
+      readonly fallback?: DownloadFallbackPlan;
+    };
+
+/** The source a download is asked for with; the prepare decision decides again when it starts. */
+const requestedSource = async (): Promise<DownloadSource | null> => {
+  try {
+    return currentSource(await WaveSoulseek.session());
+  } catch {
+    return currentSource({ status: "signedOut", username: null });
+  }
+};
+
+/**
+ * The journal's "prepare" decision: the source, the song's tags and where it goes, and for
+ * Soulseek the peers with this recording. A Soulseek job also carries Core's fallback while YT
+ * Music is on, with its answer or with Soulseek's failure, so the journal can hand it over to
+ * YouTube Music when Soulseek can't deliver the song.
+ */
+export const prepareDownload = (song: NativeYtSong) =>
   Effect.gen(function* () {
     const store = yield* LibraryStore;
     const [roots, excludedFolders] = yield* Effect.all([
@@ -117,19 +185,48 @@ export const prepareSoulseekDownload = (song: NativeYtSong) =>
       store.excludedFolders,
     ]).pipe(Effect.mapError((cause) => new DownloadFailed({ reason: "storage", cause })));
     if (roots.length === 0) return yield* new DownloadFailed({ reason: "noFolder" });
-    const session = yield* native(() => WaveSoulseek.session());
-    if (session.status === "signedOut") return yield* new DownloadFailed({ reason: "account" });
+    const ytMusicOn = ytMusicEnabled();
+    const source = currentSource(yield* native(() => WaveSoulseek.session()), ytMusicOn);
+    if (source === null) return yield* new DownloadFailed({ reason: "noSource" });
+    if (source === "youtube") {
+      const tags = yield* metadata(song);
+      const target = ytDownloadDestination(roots, excludedFolders, tags, source);
+      if (target === null) return yield* new DownloadFailed({ reason: "noFolder" });
+      return { source, candidates: [], tags, targetPath: target.path } satisfies PrepareAnswer;
+    }
     const query = soulseekQuery(song);
-    if (query === "") return yield* new DownloadFailed({ reason: "unavailable" });
-    const [reports, tags] = yield* Effect.all(
-      [native(() => WaveSoulseek.search(query)), metadata(song)],
+    const [found, tags] = yield* Effect.all(
+      [
+        Effect.result(
+          query === ""
+            ? Effect.fail(new DownloadFailed({ reason: "unavailable" }))
+            : native(() => WaveSoulseek.search(query)),
+        ),
+        metadata(song),
+      ],
       { concurrency: "unbounded" },
     );
-    const candidates = soulseekCandidates(song, reports);
-    if (candidates.length === 0) return yield* new DownloadFailed({ reason: "unavailable" });
-    const target = ytDownloadDestination(roots, excludedFolders, tags);
+    const failures = downloadFallbackFailures({ ytMusicOn });
+    const youtube =
+      failures.length === 0 ? null : ytDownloadDestination(roots, excludedFolders, tags, "youtube");
+    const fallback: { readonly fallback?: DownloadFallbackPlan } =
+      youtube === null
+        ? {}
+        : { fallback: { source: "youtube", targetPath: youtube.path, failures } };
+    if (Result.isFailure(found))
+      return { failure: found.failure.reason, tags, ...fallback } satisfies PrepareAnswer;
+    const candidates = soulseekCandidates(song, found.success);
+    if (candidates.length === 0)
+      return { failure: "unavailable", tags, ...fallback } satisfies PrepareAnswer;
+    const target = ytDownloadDestination(roots, excludedFolders, tags, source);
     if (target === null) return yield* new DownloadFailed({ reason: "noFolder" });
-    return { candidates, tags, target };
+    return {
+      source,
+      candidates,
+      tags,
+      targetPath: target.path,
+      ...fallback,
+    } satisfies PrepareAnswer;
   });
 
 /** Recheck current folders both before publication and before recovered completion import. */
@@ -146,7 +243,7 @@ export const downloadPathIncluded = (path: string) =>
   });
 
 /** Transactional upsert preserves ids, favorites, playlists and history on repeated delivery. */
-export const importSoulseekDownload = (saved: NativeSavedDownload) =>
+export const importDownload = (saved: NativeSavedDownload) =>
   Effect.gen(function* () {
     if (!(yield* downloadPathIncluded(saved.path)))
       return yield* new DownloadFailed({ reason: "noFolder" });
@@ -162,7 +259,7 @@ export const importSoulseekDownload = (saved: NativeSavedDownload) =>
   });
 
 const downloads = makeExternalStore<YtDownloads<NativeYtSong>>(YT_DOWNLOADS_NONE);
-/** The journal's last snapshot as it came, for album-level views (Core's `ytAlbumDownload`). */
+/** The journal's last snapshot as it came, for album and playlist views (Core's `ytSongsDownload`). */
 const journal = makeExternalStore<readonly NativeDownloadJob[]>([]);
 
 /** Re-reads folder policy so a publication never lands outside the current Library folders. */
@@ -170,7 +267,13 @@ const publicationTarget = (claim: NativeDownloadDecision) =>
   Effect.gen(function* () {
     const { roots, excludedFolders, revision } = yield* refreshDownloadPolicy;
     if (claim.tags === undefined) return yield* new DownloadFailed({ reason: "failed" });
-    const target = ytDownloadDestination(roots, excludedFolders, claim.tags);
+    // The same kind of file the job is downloading: a job from before sources is Soulseek's.
+    const target = ytDownloadDestination(
+      roots,
+      excludedFolders,
+      claim.tags,
+      claim.source ?? "soulseek",
+    );
     if (target === null) return yield* new DownloadFailed({ reason: "noFolder" });
     return { targetPath: target.path, revision };
   });
@@ -179,12 +282,18 @@ const publicationTarget = (claim: NativeDownloadDecision) =>
 const answer = (claim: NativeDownloadDecision) =>
   Effect.gen(function* () {
     switch (claim.decision) {
-      case "prepare": {
-        const plan = yield* prepareSoulseekDownload(claim.song);
-        return { candidates: plan.candidates, tags: plan.tags, targetPath: plan.target.path };
-      }
+      case "prepare":
+        return yield* prepareDownload(claim.song);
       case "confirm": {
         if (claim.audio === undefined) return yield* new DownloadFailed({ reason: "failed" });
+        if (!("receivedTags" in claim.audio)) {
+          // YouTube's M4A arrived complete; it's the song when it plays as long.
+          const { durationMs } = claim.audio;
+          const acceptable = ytAudioMatches(claim.song, durationMs);
+          if (!acceptable)
+            console.warn("[wave] YouTube's audio isn't the song's length", { durationMs });
+          return { receiptId: claim.receiptId, acceptable };
+        }
         const { receivedTags, durationMs } = claim.audio;
         const acceptable = soulseekReceivedMatches(claim.song, receivedTags, durationMs);
         if (!acceptable)
@@ -196,7 +305,7 @@ const answer = (claim: NativeDownloadDecision) =>
       case "import": {
         if (claim.saved === undefined) return yield* new DownloadFailed({ reason: "failed" });
         yield* refreshDownloadPolicy;
-        return { path: yield* importSoulseekDownload(claim.saved) };
+        return { path: yield* importDownload(claim.saved) };
       }
     }
   }).pipe(
@@ -206,15 +315,21 @@ const answer = (claim: NativeDownloadDecision) =>
   );
 
 /** A download as Find Lyrics and Genre sees it: what its file says once tagged and saved. */
-const downloadedSong = ({ path, track }: NativeSavedDownload) => ({
-  path,
-  title: track.title ?? "",
-  artist: track.artist ?? "",
-  album: track.album ?? "",
-  durationMs: track.durationMs,
-  hasLyrics: track.hasLyrics,
-  genre: track.genre,
-});
+const downloadedSong = ({ path, track }: NativeSavedDownload) => {
+  // The track number and year as the index reads them ("3/12" is 3).
+  const { trackNumber, year } = toIndexedTrack(track);
+  return {
+    path,
+    title: track.title ?? "",
+    artist: track.artist ?? "",
+    album: track.album ?? "",
+    durationMs: track.durationMs,
+    hasLyrics: track.hasLyrics,
+    genre: track.genre,
+    trackNumber,
+    year,
+  };
+};
 
 const answering = new Set<string>();
 /** Claims and answers [id]'s pending decision; an unanswered lease expires natively and is offered again. */
@@ -327,7 +442,7 @@ export const downloadYtSong = (song: NativeYtSong): void => {
   requests = requests
     .then(async () => {
       const shared = ytDownloadSharedJob(await WaveSoulseek.jobsSnapshot(), song);
-      await WaveSoulseek.enqueueJob(song, soulseekRecording(song), shared);
+      await WaveSoulseek.enqueueJob(song, soulseekRecording(song), shared, await requestedSource());
       await refresh();
     })
     .catch(() => undefined);
@@ -345,68 +460,75 @@ export const useYtDownloadStatus = (videoId: string): YtDownloadStatus | null =>
 type InLibrary = (song: NativeYtSong) => boolean;
 
 /**
- * Download Album: every song of the album the Library doesn't have joins the
- * queue, in album order, sharing jobs already on their way (Core's
- * `ytAlbumDownload`, decided on a fresh snapshot of the journal). Each goes
- * through the single-song pipeline.
+ * Download Album / Download Playlist: every song of the list the Library
+ * doesn't have joins the queue, in list order, sharing jobs already on their
+ * way (Core's `ytSongsDownload`, decided on a fresh snapshot of the journal).
+ * Each goes through the single-song pipeline.
  */
-export const downloadYtAlbum = (songs: readonly NativeYtSong[], inLibrary: InLibrary): void => {
+const downloadYtSongs = (songs: readonly NativeYtSong[], inLibrary: InLibrary): void => {
   askForNotifications();
   startDownloads();
   requests = requests
     .then(async () => {
       const jobs = await WaveSoulseek.jobsSnapshot();
-      for (const { song, sharedJob } of ytAlbumDownload(songs, { inLibrary, jobs }).toDownload)
-        await WaveSoulseek.enqueueJob(song, soulseekRecording(song), sharedJob);
+      const source = await requestedSource();
+      for (const { song, sharedJob } of ytSongsDownload(songs, { inLibrary, jobs }).toDownload)
+        await WaveSoulseek.enqueueJob(song, soulseekRecording(song), sharedJob, source);
       await refresh();
     })
     .catch(() => undefined);
 };
 
 /**
- * Retry Failed: asks again for each of the album's songs whose download
- * failed, in album order, sharing jobs already on their way as Download Album does.
+ * Retry Failed: asks again for each of the list's songs whose download
+ * failed, in list order, sharing jobs already on their way as Download does.
  */
-export const retryYtAlbum = (songs: readonly NativeYtSong[], inLibrary: InLibrary): void => {
+const retryYtSongs = (songs: readonly NativeYtSong[], inLibrary: InLibrary): void => {
   askForNotifications();
   startDownloads();
   requests = requests
     .then(async () => {
       const jobs = await WaveSoulseek.jobsSnapshot();
-      for (const { song, sharedJob } of ytAlbumDownload(songs, { inLibrary, jobs }).toRetry)
-        await WaveSoulseek.enqueueJob(song, soulseekRecording(song), sharedJob);
+      const source = await requestedSource();
+      for (const { song, sharedJob } of ytSongsDownload(songs, { inLibrary, jobs }).toRetry)
+        await WaveSoulseek.enqueueJob(song, soulseekRecording(song), sharedJob, source);
       await refresh();
     })
     .catch(() => undefined);
 };
 
-/** Cancel Album Download: the album's songs leave the jobs that aren't saving yet. */
-export const cancelYtAlbum = (songs: readonly NativeYtSong[], inLibrary: InLibrary): void => {
+/** Cancel Album / Playlist Download: the list's songs leave the jobs that aren't saving yet. */
+const cancelYtSongs = (songs: readonly NativeYtSong[], inLibrary: InLibrary): void => {
   requests = requests
     .then(async () => {
       const jobs = await WaveSoulseek.jobsSnapshot();
-      for (const videoId of ytAlbumDownload(songs, { inLibrary, jobs }).toCancel)
+      for (const videoId of ytSongsDownload(songs, { inLibrary, jobs }).toCancel)
         await WaveSoulseek.cancelJob(videoId);
       await refresh();
     })
     .catch(() => undefined);
 };
 
-/** Runs an album entry (Core's `ytAlbumDownload` actions) on [songs]. */
-export const runYtAlbumAction = (
-  action: YtAlbumDownloadAction,
+/** An album's or a playlist's download entry (Core's `ytAlbumDownload`, `ytPlaylistDownload`). */
+export type YtListDownloadAction = YtAlbumDownloadAction | YtPlaylistDownloadAction;
+
+/** Runs an album's or a playlist's download entry on its YT Music [songs]. */
+export const runYtDownloadAction = (
+  action: YtListDownloadAction,
   songs: readonly NativeYtSong[],
   inLibrary: InLibrary,
 ): void => {
   switch (action) {
     case "downloadAlbum":
-      downloadYtAlbum(songs, inLibrary);
+    case "downloadPlaylist":
+      downloadYtSongs(songs, inLibrary);
       return;
     case "retryFailed":
-      retryYtAlbum(songs, inLibrary);
+      retryYtSongs(songs, inLibrary);
       return;
     case "cancelAlbumDownload":
-      cancelYtAlbum(songs, inLibrary);
+    case "cancelPlaylistDownload":
+      cancelYtSongs(songs, inLibrary);
       return;
   }
 };
@@ -421,4 +543,26 @@ export const useYtAlbumDownload = (
 ): YtAlbumDownload<NativeYtSong> => {
   const jobs = useSyncExternalStore(journal.subscribe, journal.get);
   return useMemo(() => ytAlbumDownload(songs, { inLibrary, jobs }), [songs, inLibrary, jobs]);
+};
+
+/** A playlist's entry: a Library song (its file) or a YT Music song. */
+type PlaylistEntry = MixedSong<NativeYtSong, { readonly path: string }>;
+
+/** What a playlist's download entries act on: its YT Music entries' songs, in playlist order. */
+export const playlistYtSongs = (entries: readonly PlaylistEntry[]): NativeYtSong[] =>
+  entries.flatMap((entry) => (entry.source === "stream" ? [entry.song] : []));
+
+/**
+ * Where a playlist's download stands (Core's `ytPlaylistDownload`), from its
+ * [entries], the Library ([inLibrary]) and the journal, following both.
+ */
+export const useYtPlaylistDownload = (
+  entries: readonly PlaylistEntry[],
+  inLibrary: InLibrary,
+): YtPlaylistDownload<NativeYtSong> => {
+  const jobs = useSyncExternalStore(journal.subscribe, journal.get);
+  return useMemo(
+    () => ytPlaylistDownload(entries, { inLibrary, jobs }),
+    [entries, inLibrary, jobs],
+  );
 };

@@ -23,7 +23,7 @@ const NONE: Lyrics = { kind: "none" };
 
 /**
  * The lyrics to show for the file at `path`, for the Lyrics view and Auto's
- * lyric line: its embedded lyrics or a sidecar `.lrc`, picked by Core. A file
+ * artwork: its embedded lyrics or a sidecar `.lrc`, picked by Core. A file
  * that can't be read has none.
  */
 export const readTrackLyrics = (path: string): Promise<Lyrics> =>

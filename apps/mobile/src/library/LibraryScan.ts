@@ -149,6 +149,8 @@ const scanFolders = (roots: readonly string[]) =>
               [...changes.added, ...changes.updated, ...changes.moved.map((move) => move.to)],
               event.artwork.map(toIndexedArtwork),
               changes.moved.map((move) => ({ from: move.from, to: move.to.path })),
+              // Linked once, against the whole Library, when the scan ends.
+              { linkEntries: false },
             );
             for (const track of changes.added) indexed.add(track.path);
             for (const move of changes.moved) {
@@ -172,6 +174,8 @@ const scanFolders = (roots: readonly string[]) =>
       }),
     );
 
+    // Playlists' YT Music entries become the songs this scan (or one cut short) brought in.
+    yield* store.linkPlaylistEntries;
     if (completed === undefined || completed.cancelled) {
       scanState.set({ status: "idle" });
       return;

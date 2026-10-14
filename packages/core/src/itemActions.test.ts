@@ -223,8 +223,8 @@ describe("itemActions", () => {
     );
   });
 
-  test("selected artists, genres or folders: the bar offers their menu's entries, but Select", () => {
-    for (const kind of ["artist", "genre", "folder"] as const) {
+  test("selected artists or genres: the bar offers their menu's entries, but Select", () => {
+    for (const kind of ["artist", "genre"] as const) {
       const menu = names(itemActions({ kind, items: [{}], selectable: true, here: "/library" }));
       const bar = names(
         itemActions({ kind, items: [{}, {}, {}], surface: "selection", here: "/library" }),
@@ -264,8 +264,8 @@ describe("itemActions", () => {
     assert.equal(ITEM_ACTION_LABELS.deletePlaylists, "Delete Playlists");
   });
 
-  test("a genre, folder, artist or Library entry: queue it and add it to a playlist", () => {
-    for (const kind of ["genre", "folder", "artist", "section"] as const) {
+  test("a genre, artist or Library entry: queue it and add it to a playlist", () => {
+    for (const kind of ["genre", "artist", "section"] as const) {
       assert.deepEqual(names(itemActions({ kind, items: [{}], here: "/" })), [
         "playNext",
         "addToQueue",
@@ -498,10 +498,10 @@ describe("actionBarLabel", () => {
 });
 
 describe("ytSongActions", () => {
-  test("a YT Music song can join the queue, mixed with the Library's songs", () => {
+  test("a YT Music song can join the queue and playlists, mixed with the Library's songs", () => {
     assert.deepEqual(
       ytSongActions().map((entry) => entry.action),
-      ["playNext", "addToQueue"],
+      ["playNext", "addToQueue", "addToPlaylist"],
     );
   });
 
@@ -510,6 +510,7 @@ describe("ytSongActions", () => {
     assert.deepEqual(ytSongActions(artists), [
       { action: "playNext" },
       { action: "addToQueue" },
+      { action: "addToPlaylist" },
       { action: "goToArtist", artists },
     ]);
   });
@@ -517,7 +518,15 @@ describe("ytSongActions", () => {
   test("its only artist being the page you're on, there's no Go to Artist", () => {
     assert.deepEqual(
       ytSongActions({ kind: "here" }).map((entry) => entry.action),
-      ["playNext", "addToQueue"],
+      ["playNext", "addToQueue", "addToPlaylist"],
+    );
+  });
+
+  test("shown in a playlist, it can be removed from it, as a Library song can", () => {
+    const artists = { kind: "open", target: { kind: "yt", name: "Justice" } } as const;
+    assert.deepEqual(
+      ytSongActions(artists, { inPlaylist: true }).map((entry) => entry.action),
+      ["playNext", "addToQueue", "addToPlaylist", "removeFromPlaylist", "goToArtist"],
     );
   });
 });

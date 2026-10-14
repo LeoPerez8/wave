@@ -3,6 +3,7 @@ import {
   type MixedSong,
   nextRepeatMode,
   pagePlayback,
+  playlistPlayback,
   type UpNextMove,
   startSleepTimer,
   type QueueCommand,
@@ -16,6 +17,7 @@ import * as Effect from "effect/Effect";
 
 import type { SongRow } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
+import { ytMusicEnabled } from "@/settings/ytMusic";
 import type { YtMusic } from "@/ytmusic/YtMusic";
 
 import { Player, playbackState } from "./Player";
@@ -163,6 +165,27 @@ export const playPage = (
   return playback.kind === "mixed"
     ? playDiscoverSongs(playback.songs, startIndex, context, options)
     : playSongs(playback.tracks, startIndex, context, options);
+};
+
+/**
+ * Plays a playlist's [entries] from `startIndex` (or shuffled), by Core's
+ * `playlistPlayback`: with YT Music on and YT Music entries among them, the
+ * whole list (the Library's files, the rest streamed); with it off, the
+ * Library's songs alone. Resolves false when there's nothing to play (a YT
+ * Music entry tapped with YT Music off).
+ */
+export const playPlaylist = async (
+  entries: readonly MixedSong<YtSong, SongRow>[],
+  startIndex: number | undefined,
+  context: QueueContext,
+  options: { readonly shuffle?: boolean } = {},
+): Promise<boolean> => {
+  const play = playlistPlayback(entries, { ytMusic: ytMusicEnabled(), startIndex });
+  if (play === null) return false;
+  await (play.playback.kind === "mixed"
+    ? playDiscoverSongs(play.playback.songs, play.startIndex, context, options)
+    : playSongs(play.playback.tracks, play.startIndex, context, options));
+  return true;
 };
 
 export const playYtNext = (songs: readonly YtSong[]): Promise<void> =>

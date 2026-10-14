@@ -44,7 +44,7 @@ export type {
 } from "./queue.ts";
 export { applyPlayerSync, planPlayerSync } from "./playerSync.ts";
 export type { PlayerList, QueueList, SyncStep } from "./playerSync.ts";
-export { alphabetIndex, artistAlbums, compareFileNames, indexLetter } from "./browse.ts";
+export { alphabetIndex, artistAlbums, indexLetter } from "./browse.ts";
 export type { ArtistAlbum, IndexEntry } from "./browse.ts";
 export { spineEntries, spineLayout, spineSection, spineSlotAt, spineStep } from "./spine.ts";
 export type { SpineLayout, SpineSlot, SpineSpace } from "./spine.ts";
@@ -98,8 +98,8 @@ export type {
 export { resolveRemoveSwipe } from "./rowGestures.ts";
 export { currentLyricIndex, parseLyrics, pickLyrics } from "./lyrics.ts";
 export type { LyricLine, Lyrics, LyricsSources } from "./lyrics.ts";
-export { autoLyricLine } from "./autoLyricLine.ts";
-export type { AutoLyricLine, AutoLyricLineInput } from "./autoLyricLine.ts";
+export { autoLyricLines } from "./autoLyricLines.ts";
+export type { AutoLyricLines, AutoLyricLinesInput, AutoLyricsFrame } from "./autoLyricLines.ts";
 export {
   CUSTOM_SLEEP_MINUTES,
   SLEEP_TIMER_PRESETS,
@@ -153,6 +153,7 @@ export {
   autoPlaylistItem,
   autoQueueAdd,
   autoQueueStart,
+  autoListPlay,
   autoTrackItems,
   decodeAutoMediaId,
   encodeAutoMediaId,
@@ -167,6 +168,7 @@ export type {
   AutoItem,
   AutoNode,
   AutoPlaylist,
+  AutoListPlay,
   AutoQueueStart,
   AutoSource,
   AutoTab,
@@ -342,6 +344,8 @@ export { stepNowPlayingSheet } from "./sheetLifecycle.ts";
 export { MORE_FROM_ARTIST } from "./queue.ts";
 export { artistRanking } from "./moreFromArtist.ts";
 export type { ArtistRankingInput, ArtistRankingSong } from "./moreFromArtist.ts";
+export { artistPageItems } from "./artistPage.ts";
+export type { ArtistPageItem, ArtistPageShelf } from "./artistPage.ts";
 export type { SheetEvent, SheetPhase, SheetStep } from "./sheetLifecycle.ts";
 export {
   joinArtists,
@@ -382,32 +386,45 @@ export type {
 } from "./ytSearch.ts";
 export {
   LRCLIB_HEADERS,
-  deezerAlbumGenre,
+  deezerAlbum,
+  deezerAlbumTracks,
+  deezerAlbumTracksUrl,
+  deezerTags,
   deezerAlbumUrl,
   deezerTrackCandidates,
   deezerTrackSearchUrl,
   describeTagLookups,
+  lacksTrackNumber,
   libraryLookupSongs,
+  libraryTagsToWrite,
   lookupsUnreachable,
   lrclibCandidates,
   lrclibSearchUrl,
   missingTags,
   pickFoundLyrics,
-  pickGenreAlbum,
+  pickDeezerTrack,
   settledTags,
   songLookup,
   songTagOutcome,
+  tagsToWrite,
 } from "./lyricsAndGenre.ts";
 export type {
+  DeezerAlbum,
+  DeezerAlbumTrack,
+  DeezerMatch,
+  DeezerTags,
   FoundLyrics,
   FoundTags,
   GenreCandidate,
   IndexedLyricsAndGenre,
+  IndexedPlace,
+  IndexedTags,
   LyricsCandidate,
   SongLookup,
   SongTagOutcome,
   TagLookup,
   TagLookupStop,
+  TagDestination,
   TagWriteReport,
 } from "./lyricsAndGenre.ts";
 export {
@@ -429,10 +446,30 @@ export type {
   M3uImportOutcome,
   M3uImportSummary,
 } from "./m3u.ts";
+export { parseBpstat, planBlackPlayerImport, summarizeBlackPlayerImport } from "./blackPlayer.ts";
+export type {
+  BlackPlayerFile,
+  BlackPlayerImport,
+  BlackPlayerPlay,
+  BlackPlayerTrack,
+  BlackPlayerUnmatched,
+  BpstatRow,
+  ImportedPlays,
+} from "./blackPlayer.ts";
 export { libraryTrackIds, playerErrorNotice, queuedYtTracks, restorableTrack } from "./ytQueue.ts";
 export type { PlayerErrorCode, RestorableTracks } from "./ytQueue.ts";
 export {
-  YT_MUSIC_FOLDER,
+  downloadFallback,
+  downloadFallbackFailures,
+  downloadSource,
+  ytAudioMatches,
+} from "./downloadSource.ts";
+export type {
+  DownloadFallbackSetup,
+  DownloadSource,
+  DownloadSourceSetup,
+} from "./downloadSource.ts";
+export {
   ytDownloadDestination,
   ytDownloadLookup,
   ytDownloadRoot,
@@ -448,14 +485,23 @@ export type {
 } from "./ytDownload.ts";
 export {
   YT_ALBUM_DOWNLOAD_ACTION_LABELS,
+  YT_PLAYLIST_DOWNLOAD_ACTION_LABELS,
   ytAlbumDownload,
   ytAlbumDownloadButton,
-} from "./ytAlbumDownload.ts";
+  ytPlaylistDownload,
+  ytPlaylistDownloadButton,
+  ytSongsDownload,
+} from "./ytSongsDownload.ts";
 export type {
   YtAlbumDownload,
   YtAlbumDownloadAction,
   YtAlbumDownloadRequest,
-} from "./ytAlbumDownload.ts";
+  YtPlaylistDownload,
+  YtPlaylistDownloadAction,
+  YtSongsDownload,
+  YtSongsDownloadAction,
+  YtSongsDownloadRequest,
+} from "./ytSongsDownload.ts";
 export {
   YT_DOWNLOADS_NONE,
   YT_DOWNLOAD_ACTION_LABELS,
@@ -504,6 +550,19 @@ export type {
   YtShelf,
   YtShelfItem,
 } from "./ytDiscover.ts";
+export {
+  readYtPlaylist,
+  ytPlaylistRestLine,
+  YT_PLAYLIST_PAGE_CAP,
+  YT_PLAYLIST_SONG_CAP,
+} from "./ytPlaylist.ts";
+export type {
+  YtPlaylist,
+  YtPlaylistFirstPage,
+  YtPlaylistPage,
+  YtPlaylistReadOptions,
+  YtPlaylistRest,
+} from "./ytPlaylist.ts";
 export {
   soulseekCandidates,
   soulseekQuery,
@@ -577,3 +636,75 @@ export type {
 } from "./streamedArtist.ts";
 export { pagePlayback } from "./pagePlayback.ts";
 export type { PagePlayback } from "./pagePlayback.ts";
+export {
+  planPlaylistSongs,
+  playlistEntryLinks,
+  playlistPlayback,
+  playlistSongKey,
+  readPlaylistYtSong,
+  writePlaylistYtSong,
+} from "./playlistEntries.ts";
+export type {
+  HeldPlaylistTrack,
+  PlaylistEntryLink,
+  PlaylistEntryLinks,
+  PlaylistPlay,
+  PlaylistSong,
+  StreamedPlaylistEntry,
+} from "./playlistEntries.ts";
+export {
+  linkImportSummary,
+  linkImportView,
+  planLinkImport,
+  playlistImportSources,
+  recognisePlaylistLink,
+  sharedTextImport,
+  spotifyShortLinkTarget,
+  YT_MUSIC_OFF_NOTICE,
+} from "./playlistLinks.ts";
+export type {
+  ImportNotice,
+  LinkImportPlan,
+  LinkImportRead,
+  LinkImportView,
+  LinkReadFailure,
+  LinkedPlaylist,
+  NotFoundSong,
+  ReadPlaylist,
+  PlaylistImportSource,
+  PlaylistLink,
+  PlaylistLinkCheck,
+  PlaylistLinkProblem,
+  SharedTextImport,
+} from "./playlistLinks.ts";
+export {
+  SPOTIFY_SEARCHES_AT_ONCE,
+  findSpotifySongs,
+  planSpotifyImport,
+  spotifySearchQuery,
+  spotifyYtMatch,
+} from "./spotifyImport.ts";
+export type {
+  SpotifyFind,
+  SpotifyFindFailure,
+  SpotifyFinding,
+  YtSongSearch,
+} from "./spotifyImport.ts";
+export {
+  SPOTIFY_SONG_CAP,
+  readSpotifyPlaylist,
+  spotifyEmbed,
+  spotifyPlaylistPage,
+} from "./spotifyPlaylist.ts";
+export type {
+  SpotifyAnswer,
+  SpotifyEmbed,
+  SpotifyEmbedPlaylist,
+  SpotifyPlaylist,
+  SpotifyPlaylistPage,
+  SpotifyRead,
+  SpotifyReadFailure,
+  SpotifyRequest,
+  SpotifySong,
+  SpotifyTransport,
+} from "./spotifyPlaylist.ts";

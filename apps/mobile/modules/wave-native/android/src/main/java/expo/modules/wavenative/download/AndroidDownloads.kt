@@ -22,10 +22,17 @@ import expo.modules.wavenative.tags.DownloadTagWriter
 import expo.modules.wavenative.tags.DownloadTags
 import expo.modules.wavenative.tags.JAudioTaggerReader
 import expo.modules.wavenative.tags.MediaRetrieverTagReader
+import expo.modules.wavenative.yt.AndroidM4aDuration
+import expo.modules.wavenative.yt.AndroidYtAudioStreams
+import expo.modules.wavenative.yt.YtAudioDownload
 import expo.modules.wavenative.yt.YtDownloadService
+import expo.modules.wavenative.yt.YtException
+import expo.modules.wavenative.yt.YtStreamFailure
+import expo.modules.wavenative.yt.YtStreamResolver
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.concurrent.CancellationException
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
@@ -39,9 +46,60 @@ class AndroidDownloads private constructor(private val context: Context) {
   private var worker: ScheduledExecutorService? = null
   private var deadlines: ScheduledExecutorService? = null
   private val listeners = CopyOnWriteArrayList<() -> Unit>()
+  private val ytStreams by lazy { AndroidYtAudioStreams(context) }
+  private val ytAudio by lazy { YtAudioDownload(ytStreams) }
+  /** Each transfer goes to the source of the job's current candidate: a Soulseek peer or YouTube. */
   val transport = object : DurableTransfer {
+    // A YouTube transfer stops as soon as the journal no longer wants it (`transferWanted`).
     override fun cancel(id: String) = soulseek.client.cancel(id)
-    override fun receive(id: String, candidate: Map<String, Any?>, source: File, durationMs: Long, progress: (Long, Long, Long?) -> Unit): Map<String, Any?> = try {
+    override fun receive(id: String, candidate: Map<String, Any?>, source: File, durationMs: Long, progress: (Long, Long, Long?) -> Unit): Map<String, Any?> =
+      if (candidate["source"] == DurableDownloads.YOUTUBE) fromYoutube(id, candidate, source, progress)
+      else fromSoulseek(id, candidate, source, durationMs, progress)
+  }
+
+  /**
+   * The M4A YouTube serves, saved as it is, then read through to its last sample for its length,
+   * which the journal's confirm decision checks against the song's (Core's `ytAudioMatches`).
+   */
+  private fun fromYoutube(id: String, candidate: Map<String, Any?>, source: File, progress: (Long, Long, Long?) -> Unit): Map<String, Any?> {
+    val videoId = candidate["videoId"] as? String ?: throw DurableFailure("failed")
+    val cancelled = { Thread.currentThread().isInterrupted || !jobs.transferWanted(id) }
+    return try {
+      source.parentFile?.mkdirs()
+      val file = ytAudio.download(videoId, source,
+        onProgress = { received, total -> progress(received, total, null); changedSoon() },
+        isCancelled = cancelled,
+      )
+      val durationMs = AndroidM4aDuration.of(source, cancelled)
+      mapOf("partPath" to source.path, "bytes" to file.bytes, "mimeType" to file.mimeType, "itag" to file.itag.toLong(), "bitrate" to file.bitrate.toLong(), "durationMs" to durationMs)
+    } catch (error: YtException) {
+      source.delete()
+      val reason = when (YtStreamResolver.failureOf(error)) {
+        YtStreamFailure.OFFLINE -> "offline"
+        // YT Music was turned off: with no Soulseek account either, there's no source left.
+        YtStreamFailure.DISABLED -> "noSource"
+        YtStreamFailure.UNAVAILABLE -> "ytUnavailable"
+        YtStreamFailure.FAILED -> "failed"
+      }
+      Log.w(TAG, "A YouTube transfer failed ($reason)")
+      throw DurableFailure(reason, error)
+    } catch (error: CancellationException) {
+      source.delete(); throw DurableFailure("cancelled", error)
+    } catch (error: java.io.IOException) {
+      source.delete()
+      // The part file couldn't be written, the network went, or YouTube broke off: the journal starts it again.
+      val folder = source.parentFile
+      val reason = when {
+        error is java.io.FileNotFoundException || folder == null || !folder.isDirectory || folder.usableSpace < MIN_FREE_BYTES -> "storage"
+        !ytStreams.hasNetwork() -> "offline"
+        else -> "failed"
+      }
+      Log.w(TAG, "A YouTube transfer failed ($reason): ${error.message}")
+      throw DurableFailure(reason, error)
+    }
+  }
+
+  private fun fromSoulseek(id: String, candidate: Map<String, Any?>, source: File, durationMs: Long, progress: (Long, Long, Long?) -> Unit): Map<String, Any?> = try {
       soulseek.download(id, SoulseekCandidate.fromJs(candidate), source, durationMs,
         onProgress = { received, total -> progress(received, total, null); changedSoon() },
         onQueued = { place -> progress(0, 0, place); changed() },
@@ -54,8 +112,10 @@ class AndroidDownloads private constructor(private val context: Context) {
         Log.w(TAG, "A Soulseek transfer failed (${error.failure}): ${error.message}; ${error.cause?.message ?: ""}")
       }
       val reason = when (error.failure) {
-        SoulseekFailure.AUTH, SoulseekFailure.SIGNED_OUT -> "account"
+        SoulseekFailure.SIGNED_OUT -> "account"
+        SoulseekFailure.AUTH -> "accountRejected"
         SoulseekFailure.OFFLINE -> "offline"
+        SoulseekFailure.UNREACHABLE -> "unreachable"
         SoulseekFailure.STORAGE -> "storage"
         SoulseekFailure.CANCELLED -> "cancelled"
         else -> "unavailable"
@@ -63,7 +123,6 @@ class AndroidDownloads private constructor(private val context: Context) {
       throw DurableFailure(reason, error)
     } catch (error: java.io.IOException) { throw DurableFailure("storage", error) }
     catch (error: Exception) { Log.w(TAG, "A Soulseek transfer failed", error); throw error }
-  }
   private val publication = object : DurablePublication {
     override fun tag(source: File, tags: Map<String, Any?>) {
       val fields = DownloadTags.fromJs(tags) ?: throw java.io.IOException("Invalid download tags")
@@ -142,6 +201,8 @@ class AndroidDownloads private constructor(private val context: Context) {
   companion object {
     private const val OWNER = "downloads"
     private const val TAG = "WaveDownloads"
+    /** Less free space than this beside the part file means the write failed for want of room. */
+    private const val MIN_FREE_BYTES = 8L shl 20
     @Volatile private var instance: AndroidDownloads? = null
     fun get(context: Context): AndroidDownloads = instance ?: synchronized(this) { instance ?: AndroidDownloads(context.applicationContext).also { instance = it } }
   }

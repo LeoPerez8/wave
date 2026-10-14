@@ -4,10 +4,10 @@ import {
   autoArtistItem,
   autoChildren,
   autoItem,
+  autoListPlay,
   autoPageItems,
   autoPlayList,
   autoPlaylistItem,
-  autoQueueAdd,
   autoQueueStart,
   autoTrackItems,
   currentEntry,
@@ -15,6 +15,8 @@ import {
   libraryTrackIds,
   nextRepeatMode,
   statsWindow,
+  ytSongArtist,
+  ytTrackId,
   type AutoHomeList,
   type AutoItem,
   type AutoNode,
@@ -22,6 +24,8 @@ import {
   type AutoTrack,
   type AutoTrackList,
   type AutoTrackListKind,
+  type MixedSong,
+  type YtSong,
 } from "@wave/core";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
@@ -30,10 +34,17 @@ import * as Layer from "effect/Layer";
 
 import type { RowPage } from "@/library/db/database";
 import type { HomeSections } from "@/library/db/playHistory";
-import { LibraryStore, type LibraryStoreError, type SongRow } from "@/library/LibraryStore";
+import {
+  LibraryStore,
+  type LibraryStoreError,
+  type PlaylistEntryRow,
+  type SongRow,
+} from "@/library/LibraryStore";
 import type { AutoPlayback, AutoRequest } from "@/native/wavePlayer";
 import type { PlayerError } from "@/playback/Player";
 import { Queue, queueState, toQueueTrack, type QueueTrack } from "@/playback/Queue";
+import { toYtQueueTrack } from "@/playback/queueTracks";
+import { ytMusicEnabled } from "@/settings/ytMusic";
 
 /** Why Wave can't answer an Auto request; `message` is what Auto shows. */
 export class AutoError extends Data.TaggedError("AutoError")<{ readonly message: string }> {}
@@ -62,13 +73,44 @@ const decode = (mediaId: string): Effect.Effect<AutoNode, AutoError> => {
   return node === null ? notFound : Effect.succeed(node);
 };
 
-/** A library song as Core's track lists need it. */
-const toAutoTrack = (song: SongRow): AutoTrack => ({
-  id: String(song.id),
-  title: song.title,
-  artist: song.artist,
-  artworkPath: song.artworkPath,
-});
+/**
+ * A song of a track list: a Library song, or a playlist's YT Music entry,
+ * streamed as a streamed song is anywhere else.
+ */
+type AutoSong = MixedSong<YtSong, SongRow>;
+
+const fromLibrary = (songs: readonly SongRow[]): readonly AutoSong[] =>
+  songs.map((track) => ({ source: "library", track }));
+
+/** A playlist's entries as a track list's songs. */
+const playlistSongs = (entries: readonly PlaylistEntryRow[]): readonly AutoSong[] =>
+  entries.map((entry) =>
+    entry.source === "library"
+      ? { source: "library", track: entry.track }
+      : { source: "stream", song: entry.song },
+  );
+
+/** A song as Core's track lists need it. A YT Music entry has no cached cover to show. */
+const toAutoTrack = (song: AutoSong): AutoTrack =>
+  song.source === "library"
+    ? {
+        id: String(song.track.id),
+        title: song.track.title,
+        artist: song.track.artist,
+        artworkPath: song.track.artworkPath,
+      }
+    : {
+        id: ytTrackId(song.song.videoId),
+        title: song.song.title,
+        artist: ytSongArtist(song.song),
+        artworkPath: null,
+      };
+
+/** A song as the queue needs it; a YT Music entry goes with YouTube's cover address. */
+const toAutoQueueTrack = (song: AutoSong): QueueTrack =>
+  song.source === "library" ? toQueueTrack(song.track) : toYtQueueTrack(song.song, null);
+
+const ytMusicOff = Effect.fail(new AutoError({ message: "YT Music is off in Settings." }));
 
 const pageOf = <A>(rows: readonly A[], page: RowPage): readonly A[] =>
   rows.slice(page.offset, page.offset + page.limit);
@@ -90,17 +132,26 @@ export const layer = Layer.effect(
     /** Every song of a track list, in the order the app lists them, or null once it's gone. */
     const listSongs: Record<
       AutoTrackListKind,
-      (id: string) => Effect.Effect<readonly SongRow[] | null, LibraryStoreError>
+      (id: string) => Effect.Effect<readonly AutoSong[] | null, LibraryStoreError>
     > = {
       album: (id) =>
-        store.getAlbum(Number(id)).pipe(Effect.map((detail) => detail?.tracks ?? null)),
+        store
+          .getAlbum(Number(id))
+          .pipe(Effect.map((detail) => (detail === null ? null : fromLibrary(detail.tracks)))),
+      // Its YT Music entries too, in their places.
       playlist: (id) =>
-        store.getPlaylist(Number(id)).pipe(Effect.map((detail) => detail?.items ?? null)),
+        store
+          .getPlaylist(Number(id))
+          .pipe(Effect.map((detail) => (detail === null ? null : playlistSongs(detail.items)))),
       // The app's Home tab lists.
       home: (id) =>
-        store.home.pipe(Effect.map((home) => (isHomeList(id) ? HOME_SONGS[id](home) : null))),
+        store.home.pipe(
+          Effect.map((home) => (isHomeList(id) ? fromLibrary(HOME_SONGS[id](home)) : null)),
+        ),
       artistSongs: (id) =>
-        store.getArtist(Number(id)).pipe(Effect.map((detail) => detail?.songs ?? null)),
+        store
+          .getArtist(Number(id))
+          .pipe(Effect.map((detail) => (detail === null ? null : fromLibrary(detail.songs)))),
     };
 
     const songsOf = (list: AutoTrackList) =>
@@ -114,14 +165,16 @@ export const layer = Layer.effect(
      */
     const pageSongs: Record<
       AutoTrackListKind,
-      (id: string, page: RowPage) => Effect.Effect<readonly SongRow[], Failure>
+      (id: string, page: RowPage) => Effect.Effect<readonly AutoSong[], Failure>
     > = {
       album: (id, page) =>
         songsOf({ kind: "album", id }).pipe(Effect.map((songs) => pageOf(songs, page))),
-      playlist: (id, page) => store.listPlaylistSongsPage(Number(id), page),
+      playlist: (id, page) =>
+        store.listPlaylistEntriesPage(Number(id), page).pipe(Effect.map(playlistSongs)),
       home: (id, page) =>
         songsOf({ kind: "home", id }).pipe(Effect.map((songs) => pageOf(songs, page))),
-      artistSongs: (id, page) => store.listArtistSongsPage(Number(id), page),
+      artistSongs: (id, page) =>
+        store.listArtistSongsPage(Number(id), page).pipe(Effect.map(fromLibrary)),
     };
 
     /** [artists] with a cover of theirs, where they have one. */
@@ -222,14 +275,24 @@ export const layer = Layer.effect(
         return yield* notFound;
       });
 
-    const play = (mediaId: string) =>
+    /**
+     * What playing or adding [node] does, by Core's `autoListPlay` (the
+     * phone's `playlistPlayback`: with YT Music off a playlist's YT Music
+     * entries show but don't play).
+     */
+    const playOf = (node: AutoNode) =>
       Effect.gen(function* () {
-        const node = yield* decode(mediaId);
         const list = autoPlayList(node);
         if (list === null) return yield* notFound;
-        const songs = yield* songsOf(list);
-        const start = autoQueueStart(node, songs.map(toAutoTrack));
-        if (start === null) return yield* notFound;
+        const play = autoListPlay(node, yield* songsOf(list), ytMusicEnabled());
+        if (play.kind === "notFound") return yield* notFound;
+        if (play.kind === "ytMusicOff") return yield* ytMusicOff;
+        return play;
+      });
+
+    const play = (mediaId: string) =>
+      Effect.gen(function* () {
+        const { start, songs } = yield* playOf(yield* decode(mediaId));
         const playback: AutoPlayback = yield* queue.handOver(
           {
             type: "play",
@@ -238,7 +301,7 @@ export const layer = Layer.effect(
             context: start.context,
             shuffle: start.shuffle,
           },
-          songs.map(toQueueTrack),
+          songs.map(toAutoQueueTrack),
         );
         return playback;
       });
@@ -249,14 +312,9 @@ export const layer = Layer.effect(
         const trackIds: string[] = [];
         const tracks: QueueTrack[] = [];
         for (const mediaId of mediaIds) {
-          const node = yield* decode(mediaId);
-          const list = autoPlayList(node);
-          if (list === null) return yield* notFound;
-          const songs = yield* songsOf(list);
-          const added = autoQueueAdd(node, songs.map(toAutoTrack));
-          if (added === null) return yield* notFound;
+          const { added, songs } = yield* playOf(yield* decode(mediaId));
           trackIds.push(...added);
-          tracks.push(...songs.map(toQueueTrack));
+          tracks.push(...songs.map(toAutoQueueTrack));
         }
         if (trackIds.length > 0) yield* queue.dispatch({ type: "addToQueue", trackIds }, tracks);
         return null;

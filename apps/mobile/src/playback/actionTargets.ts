@@ -1,24 +1,21 @@
 import {
   commonKind,
   counted,
+  discoverTrackId,
   groupSongs,
   type ActionItem,
   type ItemKind,
+  type MixedSong,
   type PlaylistPlace,
+  type PlaylistSong,
+  type YtAlbumSong,
 } from "@wave/core";
 
 import type { ArtistImageSource } from "@/catalog/ArtistImage";
 import type { LibrarySection } from "@/catalog/sections";
 import type { LibraryCounts } from "@/library/db/counts";
-import type {
-  AlbumRow,
-  ArtistRow,
-  FolderRow,
-  GenreRow,
-  PlaylistRow,
-  SongRow,
-} from "@/library/LibraryStore";
-import { itemSongs, librarySectionSongs } from "@/library/sectionSongs";
+import type { AlbumRow, ArtistRow, GenreRow, PlaylistRow, SongRow } from "@/library/LibraryStore";
+import { itemSongs, librarySectionSongs, playlistEntries } from "@/library/sectionSongs";
 
 /**
  * What Wave's item actions (`itemActions.ts`) act on: library items of one
@@ -48,7 +45,6 @@ export interface ItemOf {
   readonly artist: ArtistRow;
   readonly playlist: PlaylistRow;
   readonly genre: GenreRow;
-  readonly folder: FolderRow;
   readonly section: LibrarySection;
   readonly mixed: MixedItem;
 }
@@ -129,7 +125,7 @@ const KINDS: { readonly [K in ItemKind]: KindInfo<ItemOf[K]> } = {
     facts: () => NO_FACTS,
     noun: "artist",
   },
-  // Genres and folders have no picture; their headings are text only.
+  // Genres have no picture; their headings are text only.
   playlist: {
     songs: (playlist) => itemSongs("playlists", playlist.id),
     heading: (playlist) => ({
@@ -149,16 +145,6 @@ const KINDS: { readonly [K in ItemKind]: KindInfo<ItemOf[K]> } = {
     }),
     facts: () => NO_FACTS,
     noun: "genre",
-  },
-  folder: {
-    songs: (folder) => itemSongs("folders", folder.id),
-    heading: (folder) => ({
-      title: folder.name,
-      subtitle: counted(folder.trackCount, "song"),
-      covers: undefined,
-    }),
-    facts: () => NO_FACTS,
-    noun: "folder",
   },
   section: {
     songs: (section) => librarySectionSongs(section.slug),
@@ -212,6 +198,39 @@ export const targetSongs = async (target: ActionItems): Promise<readonly SongRow
   const lists = await Promise.all(itemsOf(target).map((item) => kind.songs(item)));
   return target.kind === "track" ? lists.flat() : groupSongs(lists, songId);
 };
+
+/** A song an action acts on: a Library song, or a playlist's YT Music entry, streamed. */
+export type TargetEntry = MixedSong<YtAlbumSong, SongRow>;
+
+/**
+ * What the queue and playlist actions act on, with playlists' YT Music
+ * entries in their places: each playlist's entries in playlist order (an
+ * entry two of them hold comes once), any other target's songs as
+ * `targetSongs` gives them.
+ */
+export const targetEntries = async (target: ActionItems): Promise<readonly TargetEntry[]> => {
+  if (target.kind !== "playlist")
+    return (await targetSongs(target)).map((track) => ({ source: "library", track }));
+  const lists = await Promise.all(target.items.map((playlist) => playlistEntries(playlist.id)));
+  return groupSongs(
+    lists.map((entries) =>
+      entries.map((entry): TargetEntry =>
+        entry.source === "library"
+          ? { source: "library", track: entry.track }
+          : { source: "stream", song: entry.song },
+      ),
+    ),
+    discoverTrackId,
+  );
+};
+
+/** [entries] as songs a playlist takes (Core's `PlaylistSong`). */
+export const toPlaylistSongs = (entries: readonly TargetEntry[]): PlaylistSong[] =>
+  entries.map((entry) =>
+    entry.source === "library"
+      ? { source: "library", trackId: entry.track.id }
+      : { source: "stream", song: entry.song },
+  );
 
 /** What Core's `itemActions` needs to know about each of [target]'s items. */
 export const targetFacts = (

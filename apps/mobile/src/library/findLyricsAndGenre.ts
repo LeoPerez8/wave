@@ -11,6 +11,7 @@ import {
   writeLibraryLookupSummary,
   type LibraryLookupSummary,
   libraryLookupSongs,
+  libraryTagsToWrite,
   type SongTagOutcome,
   type TagLookupStop,
 } from "@wave/core";
@@ -25,24 +26,37 @@ import { persistedSetting } from "@/lib/persistedSetting";
 import { WaveLibraryLookup } from "@/native/waveLibraryLookup";
 import { showMessage } from "@/overlay/alert";
 
-import { LibraryStore } from "./LibraryStore";
-import { findLyricsAndGenreForSongs, LookupsOff, type TaggableSong } from "./lyricsAndGenre";
+import { LibraryStore, type LibraryLookupSong } from "./LibraryStore";
+import {
+  type ChooseTags,
+  findLyricsAndGenreForSongs,
+  LookupsOff,
+  type TaggableSong,
+} from "./lyricsAndGenre";
 import { appRuntime } from "./runtime";
 
 type Result = { readonly title: string; readonly outcome: SongTagOutcome };
 
-/** Runs [songs] through the lookup, collecting results; resolves how the run ended. */
-const run = async (
-  songs: readonly TaggableSong[],
+/**
+ * Runs [songs] through the lookup, writing what [choose] keeps of each one's
+ * finds and collecting results; resolves how the run ended.
+ */
+const run = async <S extends TaggableSong>(
+  songs: readonly S[],
   results: Result[],
   onResult: () => void,
   signal?: AbortSignal,
+  choose?: ChooseTags<S>,
 ): Promise<{ readonly stop: TagLookupStop | undefined; readonly error: unknown }> => {
   const exit = await appRuntime.runPromiseExit(
-    findLyricsAndGenreForSongs(songs, (song, outcome) => {
-      results.push({ title: song.title, outcome });
-      onResult();
-    }),
+    findLyricsAndGenreForSongs(
+      songs,
+      (song, outcome) => {
+        results.push({ title: song.title, outcome });
+        onResult();
+      },
+      choose,
+    ),
     signal === undefined ? undefined : { signal },
   );
   const left = songs.length - results.length;
@@ -65,7 +79,7 @@ const failedSummary = (error: unknown): LibraryLookupSummary => ({
 
 /**
  * How a run ended: why it stopped early, what failed it, and (the whole-Library
- * run) how many songs it skipped as already having lyrics and a genre.
+ * run) how many songs it skipped as already having everything a lookup finds.
  */
 interface RunOutcome {
   readonly stop: TagLookupStop | undefined;
@@ -138,11 +152,13 @@ const askForNotifications = (): void => {
 
 /**
  * Finds lyrics and genre for [songs] (the caller picks them from the Library),
- * showing progress over them as it goes; [signal] cancels. Resolves the end
- * summary, which counts [skipped] songs the caller left out as already done.
+ * showing progress over them as it goes; [signal] cancels. A song picked only
+ * for lacking a track number or year is just filled in (Core's
+ * `libraryTagsToWrite`). Resolves the end summary, which counts [skipped]
+ * songs the caller left out as already done.
  */
 const lookUpLibrary = async (
-  songs: readonly TaggableSong[],
+  songs: readonly LibraryLookupSong[],
   skipped: number,
   signal: AbortSignal,
 ): Promise<LibraryLookupSummary> => {
@@ -150,17 +166,23 @@ const lookUpLibrary = async (
   showProgress(0, songs.length);
   const outcome = signal.aborted
     ? { stop: { stopped: "cancelled", left: songs.length } as const, error: undefined }
-    : await run(songs, results, () => showProgress(results.length, songs.length), signal);
+    : await run(
+        songs,
+        results,
+        () => showProgress(results.length, songs.length),
+        signal,
+        libraryTagsToWrite,
+      );
   return summarize(results, { ...outcome, skipped });
 };
 
 /**
- * Finds lyrics and genre for the songs in the Library missing either (Core's
- * `libraryLookupSongs`) in the background: a foreground service with a
- * progress notification and Cancel keeps it going with Wave in the background
- * and the screen off. Settings follows it with `useLibraryLookup`;
- * `cancelLibraryLookup` stops it. Ends with the updated / not found / failed
- * summary and the songs skipped as already having both, in a notification and
+ * Finds lyrics and genre for the songs in the Library missing lyrics, a genre,
+ * a track number or a year (Core's `libraryLookupSongs`) in the background: a
+ * foreground service with a progress notification and Cancel keeps it going
+ * with Wave in the background and the screen off. Settings follows it with
+ * `useLibraryLookup`; `cancelLibraryLookup` stops it. Ends with the updated /
+ * not found / failed summary and the songs skipped as having all four, in a notification and
  * in Wave (now, or when Wave is next on screen: `followLibraryLookupSummary`).
  * Does nothing while one runs.
  */

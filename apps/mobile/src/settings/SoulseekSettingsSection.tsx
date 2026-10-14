@@ -12,7 +12,11 @@ import { useThemeColor } from "@/theme/useThemeColor";
 const sessionCall = <A,>(call: () => Promise<A>) =>
   Effect.runPromise(Effect.tryPromise({ try: call, catch: (cause) => cause }));
 
-/** The sole account setup for downloads. Credentials remain in native no-backup storage after connection. */
+/**
+ * The Soulseek account downloads use first; without one, or when Soulseek can't deliver a song,
+ * they come from YouTube Music while YT Music is on. Credentials remain in native no-backup
+ * storage after connection.
+ */
 export function SoulseekSettingsSection() {
   const [session, setSession] = useState<SoulseekSession>({ status: "signedOut", username: null });
   const [username, setUsername] = useState("");
@@ -57,7 +61,9 @@ export function SoulseekSettingsSection() {
         setMessage(
           code === "ERR_SLSK_AUTH"
             ? "This username is already in use, or the password is incorrect."
-            : "Couldn't connect to Soulseek. Try again when you're online.",
+            : code === "ERR_SLSK_UNREACHABLE"
+              ? "Soulseek's server isn't answering. Try again later."
+              : "Couldn't connect to Soulseek. Try again when you're online.",
         );
       })
       .finally(() => setBusy(false));
@@ -77,9 +83,10 @@ export function SoulseekSettingsSection() {
       <CatalogLine className="mb-2 mt-12">Downloads</CatalogLine>
       <Hairline />
       <Text className="mt-2 font-sans text-footnote text-secondary">
-        Wave finds the same recording on Soulseek and saves MP3 320 kbps to your Library. Connect
-        with your Soulseek account, or choose an unused username and a password to create a free
-        account.
+        With a Soulseek account, Wave finds the same recording on Soulseek and saves MP3 320 kbps to
+        your Library. When Soulseek can't deliver a song, and without an account, downloads come
+        from YouTube Music while YT Music is on. Connect with your Soulseek account, or choose an
+        unused username and a password to create a free account.
       </Text>
       {session.status === "signedOut" ? (
         <View className="mt-4">

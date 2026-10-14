@@ -1,5 +1,12 @@
 import { LegendList } from "@legendapp/list/react-native";
-import { ytTrackId, type MixedSong, type YtArtistAlbum, type YtSong } from "@wave/core";
+import {
+  artistPageItems,
+  ytTrackId,
+  type ArtistPageItem,
+  type MixedSong,
+  type YtArtistAlbum,
+  type YtSong,
+} from "@wave/core";
 import { useLocalSearchParams } from "expo-router";
 import { useCallback, useMemo } from "react";
 import { Text, useWindowDimensions, View } from "react-native";
@@ -7,6 +14,7 @@ import { Text, useWindowDimensions, View } from "react-native";
 import { ArtistImage } from "@/catalog/ArtistImage";
 import { AlbumTile } from "@/catalog/AlbumTile";
 import { CatalogLine } from "@/catalog/CatalogLine";
+import { COVER_ROW_TILE, CoverRow } from "@/catalog/CoverRow";
 import { CELL, grid } from "@/catalog/grid";
 import { TrackRow } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
@@ -14,7 +22,7 @@ import { playPage } from "@/playback/actions";
 import { useCurrentTrackId } from "@/playback/hooks";
 import { openAlbumActions, openTrackActions } from "@/playback/ActionsMenu";
 import { mixedTarget, type MixedItem } from "@/playback/actionTargets";
-import { albumRowHeight, toAlbumSummary, useAlbumTileSize } from "@/library/AlbumGrid";
+import { albumRowHeight, toAlbumSummary } from "@/library/AlbumGrid";
 import { DetailFrame } from "@/library/DetailFrame";
 import { useFavoriteIds } from "@/library/favorites";
 import { useArtist } from "@/library/hooks";
@@ -33,18 +41,22 @@ import { YT_ARTIST_NOTE, YtReleaseTile } from "@/ytmusic/YtArtistSection";
 import { YtLookupFooter } from "@/ytmusic/YtLookupFooter";
 import { YtSongRow } from "@/ytmusic/YtSongRow";
 
-/** A tile of the page's album grid: a Library album, or a release only YouTube Music has. */
+/** A cover on one of the page's album shelves: a Library album, or a release only YouTube Music has. */
 type AlbumCell =
   | { readonly kind: "library"; readonly album: AlbumRow }
   | { readonly kind: "yt"; readonly album: YtArtistAlbum; readonly shelf: "albums" | "singles" };
 
-type Item =
-  | { readonly type: "section"; readonly label: string }
-  | { readonly type: "albums"; readonly cells: readonly AlbumCell[] }
-  | { readonly type: "track"; readonly song: SongRow; readonly index: number }
-  | { readonly type: "ytSong"; readonly song: NativeYtSong; readonly index: number };
+/** A row of the Songs section: the Library's song, or a top song YouTube Music adds. */
+type PageSong =
+  | { readonly kind: "library"; readonly song: SongRow }
+  | { readonly kind: "yt"; readonly song: NativeYtSong };
+
+type Item = ArtistPageItem<AlbumCell, PageSong>;
 
 const SECTION_HEAD = CELL * 6;
+
+/** Height of an album shelf's row, the gap under it included. */
+const SHELF_ROW = albumRowHeight(COVER_ROW_TILE);
 
 /** What YouTube Music adds to the page once asked: releases and top songs the Library lacks. */
 interface YtAdditions {
@@ -60,42 +72,39 @@ const libraryCell = (album: AlbumRow): AlbumCell => ({ kind: "library", album })
 const cellKey = (cell: AlbumCell): string =>
   cell.kind === "library" ? `album-${cell.album.id}` : `yt-${cell.album.browseId}`;
 
-const artistItems = (detail: ArtistDetail, songs: readonly SongRow[], yt: YtAdditions): Item[] => {
-  const items: Item[] = [];
-  const shelf = (label: string, cells: readonly AlbumCell[]) => {
-    if (cells.length === 0) return;
-    items.push({ type: "section", label });
-    for (let i = 0; i < cells.length; i += 2)
-      items.push({ type: "albums", cells: cells.slice(i, i + 2) });
-  };
-  // YouTube Music's releases the Library lacks follow the Library's own, in one grid.
-  shelf("Albums", [
-    ...detail.albums.map(libraryCell),
-    ...yt.albums.map((album): AlbumCell => ({ kind: "yt", album, shelf: "albums" })),
-  ]);
-  shelf(
-    "Singles & EPs",
-    yt.singles.map((album): AlbumCell => ({ kind: "yt", album, shelf: "singles" })),
+const artistItems = (detail: ArtistDetail, songs: readonly SongRow[], yt: YtAdditions): Item[] =>
+  artistPageItems(
+    [
+      // YouTube Music's releases the Library lacks follow the Library's own, on one shelf.
+      {
+        label: "Albums",
+        covers: [
+          ...detail.albums.map(libraryCell),
+          ...yt.albums.map((album): AlbumCell => ({ kind: "yt", album, shelf: "albums" })),
+        ],
+      },
+      {
+        label: "Singles & EPs",
+        covers: yt.singles.map((album): AlbumCell => ({ kind: "yt", album, shelf: "singles" })),
+      },
+      { label: "Appears on", covers: detail.appearsOn.map(libraryCell) },
+    ],
+    [
+      ...songs.map((song): PageSong => ({ kind: "library", song })),
+      ...yt.songs.map((song): PageSong => ({ kind: "yt", song })),
+    ],
   );
-  shelf("Appears on", detail.appearsOn.map(libraryCell));
-  if (songs.length + yt.songs.length > 0) items.push({ type: "section", label: "Songs" });
-  songs.forEach((song, index) => items.push({ type: "track", song, index }));
-  yt.songs.forEach((song, index) =>
-    items.push({ type: "ytSong", song, index: songs.length + index }),
-  );
-  return items;
-};
 
 const itemKey = (item: Item): string => {
   switch (item.type) {
     case "section":
       return `section-${item.label}`;
-    case "albums":
-      return `albums-${item.cells.map(cellKey).join("-")}`;
-    case "track":
-      return `track-${item.song.id}`;
-    case "ytSong":
-      return ytTrackId(item.song.videoId);
+    case "shelf":
+      return `shelf-${item.label}`;
+    case "song":
+      return item.song.kind === "library"
+        ? `track-${item.song.song.id}`
+        : ytTrackId(item.song.song.videoId);
   }
 };
 
@@ -125,46 +134,47 @@ const albumSelectionOf = (page: ListSelection<MixedItem>): ListSelection<AlbumRo
 });
 
 /**
- * A row of the album grid: Library albums (tap opens, long-press the menu,
- * selectable) and YouTube Music's releases the Library lacks.
+ * An album shelf as one row of covers that scrolls sideways: Library albums
+ * (tap opens, long-press the menu, selectable) and YouTube Music's releases
+ * the Library lacks.
  */
-function AlbumCellPair({
+function AlbumShelfRow({
   cells,
-  size,
   selection,
   integrated,
 }: {
   cells: readonly AlbumCell[];
-  size: number;
   selection: ListSelection<AlbumRow>;
   /** Whether the page is an integrated view: the albums open integrated. */
   integrated: boolean;
 }) {
   return (
-    <View className="flex-row" style={{ gap: grid.gutter, height: albumRowHeight(size) }}>
-      {cells.map((cell) =>
-        cell.kind === "library" ? (
-          <AlbumTile
-            key={cellKey(cell)}
-            album={toAlbumSummary(cell.album)}
-            size={size}
-            {...selectableRow(
-              cell.album,
-              selection,
-              () => openAlbum(cell.album.id, cell.album, { integrated }),
-              (options) => openAlbumActions(cell.album, options),
-            )}
-          />
-        ) : (
-          <YtReleaseTile
-            key={cellKey(cell)}
-            album={cell.album}
-            kind={cell.shelf}
-            size={size}
-            selecting={selection.selecting}
-          />
-        ),
-      )}
+    <View style={{ height: SHELF_ROW }}>
+      <CoverRow>
+        {cells.map((cell) =>
+          cell.kind === "library" ? (
+            <AlbumTile
+              key={cellKey(cell)}
+              album={toAlbumSummary(cell.album)}
+              size={COVER_ROW_TILE}
+              {...selectableRow(
+                cell.album,
+                selection,
+                () => openAlbum(cell.album.id, cell.album, { integrated }),
+                (options) => openAlbumActions(cell.album, options),
+              )}
+            />
+          ) : (
+            <YtReleaseTile
+              key={cellKey(cell)}
+              album={cell.album}
+              kind={cell.shelf}
+              size={COVER_ROW_TILE}
+              selecting={selection.selecting}
+            />
+          ),
+        )}
+      </CoverRow>
     </View>
   );
 }
@@ -215,7 +225,6 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
   const bottomInset = useChromeInset();
   const currentId = useCurrentTrackId();
   const favorites = useFavoriteIds();
-  const tile = useAlbumTileSize(grid.margin);
   // In the sort chosen for artists; Play, Shuffle and rows all play this displayed order.
   const { songs } = useSortedSongs("artist", detail.songs);
   // The releases among these the Library has aren't YouTube Music's to add.
@@ -262,8 +271,8 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
   const albumSelection = useMemo(() => albumSelectionOf(page), [page]);
   const { selection } = page;
   const rowState = useMemo(
-    () => ({ currentId, favorites, tile, selection, downloaded, integrated }),
-    [currentId, favorites, tile, selection, downloaded, integrated],
+    () => ({ currentId, favorites, selection, downloaded, integrated }),
+    [currentId, favorites, selection, downloaded, integrated],
   );
   const context = useMemo(
     () => ({ kind: "artist", id: String(detail.artist.id) }) as const,
@@ -279,43 +288,48 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
               <CatalogLine>{item.label}</CatalogLine>
             </View>
           );
-        case "albums":
+        case "shelf":
+          // Keyed by shelf, so a recycled row doesn't keep another shelf's scroll position.
           return (
-            <AlbumCellPair
-              cells={item.cells}
-              size={tile}
+            <AlbumShelfRow
+              key={item.label}
+              cells={item.covers}
               selection={albumSelection}
               integrated={integrated}
             />
           );
-        case "track":
+        case "song": {
+          if (item.song.kind === "yt") {
+            const song = item.song.song;
+            return (
+              <YtSongRow
+                song={song}
+                playing={ytTrackId(song.videoId) === currentId}
+                onPress={page.selecting ? ignore : () => void playPage(mixed, item.index, context)}
+                onLongPress={page.selecting ? ignore : undefined}
+              />
+            );
+          }
+          const song = item.song.song;
           return (
             <TrackRow
-              track={toTrackSummary(item.song)}
-              state={String(item.song.id) === currentId ? "playing" : undefined}
-              favorite={favorites.has(item.song.id)}
+              track={toTrackSummary(song)}
+              state={String(song.id) === currentId ? "playing" : undefined}
+              favorite={favorites.has(song.id)}
               leading="artwork"
               downloaded={downloaded}
               {...selectableRow(
-                trackItem(item.song),
+                trackItem(song),
                 page,
                 () => void playPage(mixed, item.index, context),
-                (options) => openTrackActions(item.song, options),
+                (options) => openTrackActions(song, options),
               )}
             />
           );
-        case "ytSong":
-          return (
-            <YtSongRow
-              song={item.song}
-              playing={ytTrackId(item.song.videoId) === currentId}
-              onPress={page.selecting ? ignore : () => void playPage(mixed, item.index, context)}
-              onLongPress={page.selecting ? ignore : undefined}
-            />
-          );
+        }
       }
     },
-    [context, currentId, favorites, mixed, downloaded, tile, albumSelection, page, integrated],
+    [context, currentId, favorites, mixed, downloaded, albumSelection, page, integrated],
   );
 
   const line = [
@@ -333,13 +347,9 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
       keyExtractor={itemKey}
       renderItem={renderItem}
       extraData={rowState}
-      getItemType={(item) => item.type}
+      getItemType={(item) => (item.type === "song" ? `${item.song.kind}-song` : item.type)}
       getFixedItemSize={(item) =>
-        item.type === "section"
-          ? SECTION_HEAD
-          : item.type === "albums"
-            ? albumRowHeight(tile)
-            : grid.row
+        item.type === "section" ? SECTION_HEAD : item.type === "shelf" ? SHELF_ROW : grid.row
       }
       estimatedItemSize={grid.row}
       recycleItems
@@ -371,14 +381,15 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
 }
 
 /**
- * An artist: their albums, the albums they appear on, their songs and, while
- * YT Music is on, Show on YouTube Music (asked only on a tap): then the
- * releases and top songs YouTube Music has that the Library lacks join the
- * albums and songs, the Library's songs are marked downloaded, and Play,
- * Shuffle and taps play the mixed list. Opened integrated (`openArtist`'s
- * `integrated`, from a streamed song's artist), it asks on its own, with no
- * tap. Opened from a list that knows the artist, the head is there on the
- * first frame and the rest follows once read.
+ * An artist: their albums, the albums they appear on (each shelf one row of
+ * covers that scrolls sideways), their songs and, while YT Music is on, Show
+ * on YouTube Music (asked only on a tap): then the releases and top songs
+ * YouTube Music has that the Library lacks join the albums and songs, the
+ * Library's songs are marked downloaded, and Play, Shuffle and taps play the
+ * mixed list. Opened integrated (`openArtist`'s `integrated`, from a streamed
+ * song's artist), it asks on its own, with no tap. Opened from a list that
+ * knows the artist, the head is there on the first frame and the rest
+ * follows once read.
  */
 export default function ArtistScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();

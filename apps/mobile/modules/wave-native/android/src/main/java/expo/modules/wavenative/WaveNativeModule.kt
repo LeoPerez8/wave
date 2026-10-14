@@ -3,6 +3,7 @@ package expo.modules.wavenative
 import android.app.Activity
 import android.app.Application
 import android.content.ActivityNotFoundException
+import android.content.ClipboardManager
 import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
@@ -39,12 +40,14 @@ import expo.modules.wavenative.scan.ScanProgress
 import expo.modules.wavenative.scan.ScannedTrack
 import expo.modules.wavenative.scan.artworkToMap
 import expo.modules.wavenative.scan.trackToMap
+import expo.modules.wavenative.share.SharedTextInbox
+import expo.modules.wavenative.tags.AlbumPlace
 import expo.modules.wavenative.tags.AudioTagReader
-import expo.modules.wavenative.tags.GenreDestination
 import expo.modules.wavenative.tags.JAudioTaggerReader
 import expo.modules.wavenative.tags.LyricsDestination
 import expo.modules.wavenative.tags.MediaRetrieverTagReader
 import expo.modules.wavenative.tags.SongTagWriter
+import expo.modules.wavenative.tags.TagDestination
 import java.io.File
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -54,7 +57,7 @@ import java.util.concurrent.atomic.AtomicInteger
 /**
  * Wave's native side: all-files access, the folder and playlist file pickers, the library scanner,
  * lyrics, writing found lyrics and genre into files, deleting songs' files, saving artist photos,
- * the launch theme and the launcher icon. Scans run one at a time on a background thread and
+ * the launch theme, the launcher icon, reading the clipboard and text shared to Wave. Scans run one at a time on a background thread and
  * stream results to JS as events:
  * `onScanProgress`, `onScanMissing`, `onScanBatch`, `onScanComplete` and
  * `onScanError`, each carrying the `scanId` returned by `startScan`.
@@ -78,7 +81,17 @@ class WaveNativeModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("WaveNative")
 
-    Events("onScanProgress", "onScanMissing", "onScanBatch", "onScanComplete", "onScanError")
+    Events(
+      "onScanProgress",
+      "onScanMissing",
+      "onScanBatch",
+      "onScanComplete",
+      "onScanError",
+      "onShareReceived",
+    )
+
+    // A share can arrive before JS listens: it stays in the inbox until `takeSharedText`.
+    OnCreate { SharedTextInbox.onReceived = { sendEvent("onShareReceived") } }
 
     Function("hasAllFilesAccess") { Environment.isExternalStorageManager() }
 
@@ -134,6 +147,35 @@ class WaveNativeModule : Module() {
       }
       activity.startActivityForResult(intent, PICK_PLAYLISTS_REQUEST)
     }.runOnQueue(Queues.MAIN)
+
+    /**
+     * Opens the system file picker for one or more files of any type (BlackPlayer's
+     * `.bpstat` track stats have no MIME type of their own) and resolves them as
+     * `pickPlaylistFiles` does.
+     */
+    AsyncFunction("pickStatFiles") { promise: Promise ->
+      val activity = appContext.currentActivity ?: throw Exceptions.MissingActivity()
+      pendingPlaylistPick?.resolve(emptyList<Map<String, Any?>>())
+      pendingPlaylistPick = promise
+      val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+        addCategory(Intent.CATEGORY_OPENABLE)
+        type = "*/*"
+        putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+      }
+      activity.startActivityForResult(intent, PICK_PLAYLISTS_REQUEST)
+    }.runOnQueue(Queues.MAIN)
+
+    /**
+     * The text on the clipboard, or null when it holds none (Import from a Link offers a
+     * playlist link from it). Android only lets the app in front read it.
+     */
+    AsyncFunction("readClipboardText") {
+      val clipboard = context.getSystemService(ClipboardManager::class.java)
+      clipboard?.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString()
+    }.runOnQueue(Queues.MAIN)
+
+    /** The latest text shared to Wave from another app, once; null when nothing new was shared. */
+    Function("takeSharedText") { SharedTextInbox.take() }
 
     OnActivityResult { _, payload ->
       when (payload.requestCode) {
@@ -224,17 +266,27 @@ class WaveNativeModule : Module() {
 
     /**
      * Writes found lyrics (LRC or plain text) and genre into a song's file,
-     * replacing what is there; null leaves that field alone (see
-     * [SongTagWriter]). Resolves `{ lyrics, genre }`, where each went
-     * (`tags`, `sidecar`, `notWritten` or `none`), and, when the tags changed,
-     * the file read again as a scan reads it (`track`, `artwork`) so the index
-     * can be updated. Rejects when the file can't be written. Off the main thread.
+     * replacing what is there, and fills in its track number (with the disc)
+     * and year, keeping any the file has; null leaves that field alone (see
+     * [SongTagWriter]). Resolves `{ lyrics, genre, trackNumber, year }`, where
+     * each went (`tags`, `sidecar`, `notWritten` or `none`), and, when the tags
+     * changed, the file read again as a scan reads it (`track`, `artwork`) so
+     * the index can be updated. Rejects when the file can't be written. Off the
+     * main thread.
      */
-    AsyncFunction("writeLyricsAndGenre") { path: String, lyrics: String?, genre: String? ->
+    AsyncFunction("writeLyricsAndGenre") {
+        path: String,
+        lyrics: String?,
+        genre: String?,
+        trackNumber: Int?,
+        discNumber: Int?,
+        year: Int?,
+      ->
       val file = File(path)
-      val report = SongTagWriter().write(file, lyrics, genre)
+      val report = SongTagWriter().write(file, lyrics, genre, AlbumPlace(trackNumber, discNumber, year))
       val tagsChanged =
-        report.lyrics == LyricsDestination.TAGS || report.genre == GenreDestination.TAGS
+        report.lyrics == LyricsDestination.TAGS ||
+          listOf(report.genre, report.trackNumber, report.year).any { it == TagDestination.TAGS }
       // A sidecar alone leaves the tags as they were, but the index learns the song has lyrics.
       val reindex = tagsChanged || report.lyrics == LyricsDestination.SIDECAR
       val (track, artwork) = if (reindex) singleFileScanner().index(file) else null to null
@@ -256,6 +308,7 @@ class WaveNativeModule : Module() {
     }
 
     OnDestroy {
+      SharedTextInbox.onReceived = null
       currentScan?.second?.set(true)
       scanExecutor.shutdownNow()
       launcherIconSwitcher?.let { switcher ->
