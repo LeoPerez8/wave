@@ -18,6 +18,40 @@ env:
   IS_SAME_REPO_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
 
 jobs:
+  # What the change touches, by the rule in scripts/ci/changes.ts. Jobs that only
+  # matter for some parts of the repo read these outputs to skip themselves.
+  changes:
+    name: Changes
+    runs-on: ubuntu-latest
+    outputs:
+      app: ${{ steps.rule.outputs.app }}
+      core: ${{ steps.rule.outputs.core }}
+      workspace: ${{ steps.rule.outputs.workspace }}
+      ci: ${{ steps.rule.outputs.ci }}
+      apk: ${{ steps.rule.outputs.apk }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          sparse-checkout: scripts/ci
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Apply the change rule
+        id: rule
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/ci/changes.sh
+
+      - name: Report the skipped APK build
+        if: steps.rule.outputs.apk == 'false' && env.IS_SAME_REPO_PR == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: scripts/ci/report-apk-skipped.sh
+
   checks:
     name: Checks
     runs-on: ubuntu-latest
@@ -59,6 +93,9 @@ jobs:
       - name: Test
         run: scripts/ci/step.sh "Test" pnpm test
 
+      - name: Test CI scripts
+        run: scripts/ci/step.sh "Test CI scripts" node --test "scripts/ci/*.test.ts"
+
       - name: Report
         if: always() && env.IS_SAME_REPO_PR == 'true' && job.status != 'cancelled'
         env:
@@ -68,7 +105,8 @@ jobs:
 
   android:
     name: Android APK
-    needs: checks
+    needs: [changes, checks]
+    if: needs.changes.outputs.apk == 'true'
     runs-on: ubuntu-latest
     env:
       HEAD_SHA: ${{ needs.checks.outputs.sha }}

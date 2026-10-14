@@ -2,7 +2,7 @@
 # Posts (or updates) one sticky comment per job on the PR with the job's outcome.
 # On failure it includes the tail of the failing step's output, so the result is
 # readable without access to the Actions logs.
-#   scripts/ci/report.sh <success|failure> "<job name>" [extra markdown]
+#   scripts/ci/report.sh <success|failure|skipped> "<job name>" [extra markdown]
 # Env: GH_TOKEN, PR_NUMBER, HEAD_SHA, GITHUB_* (provided by Actions).
 set -euo pipefail
 
@@ -21,6 +21,8 @@ body="$dir/ci-comment.md"
   echo "$marker"
   if [ "$status" = "success" ]; then
     echo "### ✅ ${job} passed"
+  elif [ "$status" = "skipped" ]; then
+    echo "### ⏭️ ${job} skipped"
   else
     echo "### ❌ ${job} failed"
   fi
@@ -30,7 +32,7 @@ body="$dir/ci-comment.md"
     echo
     echo "$extra"
   fi
-  if [ "$status" != "success" ] && [ -f "$dir/ci-step.log" ]; then
+  if [ "$status" = "failure" ] && [ -f "$dir/ci-step.log" ]; then
     echo
     echo "**Failing step:** $(cat "$dir/ci-step-name" 2>/dev/null || echo unknown)"
     echo
