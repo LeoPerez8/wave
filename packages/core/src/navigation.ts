@@ -27,8 +27,8 @@ export const tabOfPath = (pathname: string): TabBarTab | null => {
 /** Whether `pathname` was pushed from the Library, over the tabs. */
 export const inLibraryStack = (pathname: string): boolean => under(pathname, TAB_PATH.library);
 
-/** The screens a list opens: one album, artist, genre, folder or playlist. */
-export type DetailScreen = "album" | "artist" | "genre" | "folder" | "playlist";
+/** The screens a list opens: one album, artist, genre or playlist. */
+export type DetailScreen = "album" | "artist" | "genre" | "playlist";
 
 /**
  * The path of detail screen `id`, opened from `from`: inside the shortcut tab

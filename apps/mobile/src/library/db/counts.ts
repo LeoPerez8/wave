@@ -14,7 +14,7 @@ export type LibraryCounts = Readonly<Record<LibrarySectionSlug, number>>;
 
 /**
  * Counts what each Library list shows: every playlist (empty ones too); artists,
- * albums, genres and folders with songs (an artist counts through every song
+ * albums and genres with songs (an artist counts through every song
  * credited to them, as Library › Artists lists them); songs; and starred songs.
  */
 export const libraryCounts = (db: LibraryDatabase): LibraryCounts =>
@@ -25,13 +25,12 @@ export const libraryCounts = (db: LibraryDatabase): LibraryCounts =>
       (SELECT count(DISTINCT album_id) FROM tracks) AS "albums",
       (SELECT count(*) FROM tracks) AS "songs",
       (SELECT count(DISTINCT genre_id) FROM tracks) AS "genres",
-      (SELECT count(DISTINCT folder_id) FROM tracks) AS "folders",
       (SELECT count(*) FROM favorites JOIN tracks ON tracks.id = favorites.track_id) AS "favorites"`);
 
 /**
  * Counts the songs each Library entry's menu queues (Core `sectionSongs`)
- * without loading them: every track for Songs, Albums, Artists (a song under
- * two artists plays once) and Folders; tracks with a genre; every playlist
+ * without loading them: every track for Songs, Albums and Artists (a song
+ * under two artists plays once); tracks with a genre; every playlist
  * item (a song in two playlists, or twice in one, plays each time); starred songs.
  */
 export const sectionSongCounts = (db: LibraryDatabase): LibraryCounts =>
@@ -42,5 +41,4 @@ export const sectionSongCounts = (db: LibraryDatabase): LibraryCounts =>
       (SELECT count(*) FROM tracks) AS "albums",
       (SELECT count(*) FROM tracks) AS "songs",
       (SELECT count(*) FROM tracks WHERE genre_id IS NOT NULL) AS "genres",
-      (SELECT count(*) FROM tracks) AS "folders",
       (SELECT count(*) FROM favorites JOIN tracks ON tracks.id = favorites.track_id) AS "favorites"`);

@@ -5,7 +5,7 @@ import { grid } from "@/catalog/grid";
 import type { LibrarySection } from "@/catalog/sections";
 import { EmptyState } from "@/components/EmptyState";
 
-import { AlbumsList, ArtistsList, FoldersList, GenresList } from "./BrowseLists";
+import { AlbumsList, ArtistsList, GenresList } from "./BrowseLists";
 import { FavoritesList } from "./FavoritesList";
 import { PlaylistsList } from "./PlaylistsList";
 import { SongsList } from "./SongsList";
@@ -21,8 +21,6 @@ export function SectionList({ section }: { section: LibrarySection | undefined }
       return <ArtistsList empty={section.empty} />;
     case "genres":
       return <GenresList empty={section.empty} />;
-    case "folders":
-      return <FoldersList empty={section.empty} />;
     case "playlists":
       return <PlaylistsList empty={section.empty} />;
     case "favorites":
