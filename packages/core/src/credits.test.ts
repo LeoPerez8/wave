@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { UNKNOWN_ARTIST, splitCredit } from "./index.ts";
+import { UNKNOWN_ARTIST, creditSplitter, respreadDeletedSongs, splitCredit } from "./index.ts";
 
 describe("splitCredit", () => {
   test("a comma separates artists, the first one being the primary artist", () => {
@@ -164,5 +164,84 @@ describe("splitCredit", () => {
     assert.deepEqual(splitCredit(""), [UNKNOWN_ARTIST]);
     assert.deepEqual(splitCredit(" ; , "), [UNKNOWN_ARTIST]);
     assert.deepEqual(splitCredit(UNKNOWN_ARTIST), [UNKNOWN_ARTIST]);
+  });
+});
+
+describe("respreadDeletedSongs", () => {
+  // Artists staying in the Library, by identity key.
+  const staying = new Map([
+    ["ariana grande", 1],
+    ["doja cat", 2],
+    ["social house", 3],
+  ]);
+  const split = creditSplitter(["Ariana Grande", "Doja Cat"]);
+
+  test("a whole credit leaving hands its deleted songs to each artist it names, in credit order", () => {
+    const changed = respreadDeletedSongs({
+      pruned: [{ id: 10, name: "Ariana Grande, Doja Cat" }],
+      staying,
+      deletedSongs: new Map([
+        [100, [10]],
+        [101, [7, 10]],
+      ]),
+      split,
+    });
+    assert.deepEqual(
+      changed,
+      new Map([
+        [100, [1, 2]],
+        [101, [7, 1, 2]],
+      ]),
+    );
+  });
+
+  test("a name the song credits already counts once", () => {
+    const changed = respreadDeletedSongs({
+      pruned: [{ id: 10, name: "Ariana Grande, Doja Cat" }],
+      staying,
+      deletedSongs: new Map([[100, [2, 10]]]),
+      split,
+    });
+    assert.deepEqual(changed, new Map([[100, [2, 1]]]));
+  });
+
+  test("only the named artists staying in the Library inherit", () => {
+    const changed = respreadDeletedSongs({
+      pruned: [{ id: 10, name: "Ariana Grande & Nobody Here" }],
+      staying,
+      deletedSongs: new Map([[100, [10]]]),
+      split,
+    });
+    assert.deepEqual(changed, new Map([[100, [1]]]));
+  });
+
+  test("songs of an artist leaving with no heir, or of no artist leaving, are left alone", () => {
+    const changed = respreadDeletedSongs({
+      pruned: [
+        { id: 10, name: "Nobody Here, Nor There" },
+        { id: 11, name: "Social House" },
+      ],
+      staying,
+      deletedSongs: new Map([
+        [100, [10]],
+        [101, [11]],
+        [102, [1]],
+      ]),
+      split,
+    });
+    assert.deepEqual(changed, new Map());
+  });
+
+  test("several whole credits leaving at once each hand on their songs", () => {
+    const changed = respreadDeletedSongs({
+      pruned: [
+        { id: 10, name: "Ariana Grande, Doja Cat" },
+        { id: 11, name: "Ariana Grande · Social House" },
+      ],
+      staying,
+      deletedSongs: new Map([[100, [11, 10]]]),
+      split,
+    });
+    assert.deepEqual(changed, new Map([[100, [1, 3, 2]]]));
   });
 });

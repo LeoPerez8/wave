@@ -6,7 +6,7 @@
  * credit order, and `artist_id` / `album_artist_id` hold the primary (first)
  * one. Kept free of Expo so the store tests run it against a real SQLite.
  */
-import { creditSplitter, identityKey, sortKey } from "@wave/core";
+import { creditSplitter, identityKey, respreadDeletedSongs, sortKey } from "@wave/core";
 import { sql } from "drizzle-orm";
 
 import { refreshArtistImages } from "./artists.ts";
@@ -211,59 +211,49 @@ const LINKED = sql`(id IN (SELECT artist_id FROM track_artists)
   OR id IN (SELECT album_artist_id FROM albums))`;
 
 /**
- * Gives the deleted songs credited to [whole] (`deleted_track_artists`) the
- * artists [split] in its place, in credit order, a name credited twice once.
+ * Deletes the artists nothing is credited to any more. Plays of deleted songs
+ * that counted for such an artist count for the artists Core's
+ * `respreadDeletedSongs` hands them to instead.
  */
-const respreadDeletedSongs = (db: LibraryDatabase, whole: number, split: readonly number[]) => {
+const pruneArtists = (db: LibraryDatabase): void => {
+  const pruned = db.all<{ id: number; name: string }>(
+    sql`SELECT id AS "id", name AS "name" FROM artists WHERE NOT ${LINKED}`,
+  );
+  if (pruned.length === 0) return;
+  const staying = new Map(
+    db
+      .all<{ id: number; key: string }>(
+        sql`SELECT id AS "id", key AS "key" FROM artists WHERE ${LINKED}`,
+      )
+      .map((row) => [row.key, row.id] as const),
+  );
+  // The deleted songs crediting a pruned artist, with every artist each credits.
+  const deletedSongs = new Map<number, number[]>();
   const rows = db.all<{ track: number; artist: number }>(
     sql`SELECT track_id AS "track", artist_id AS "artist" FROM deleted_track_artists
-      WHERE track_id IN (SELECT track_id FROM deleted_track_artists WHERE artist_id = ${whole})
+      WHERE track_id IN (SELECT track_id FROM deleted_track_artists
+        WHERE artist_id IN (SELECT id FROM artists WHERE NOT ${LINKED}))
       ORDER BY track_id, position`,
   );
-  const byTrack = new Map<number, number[]>();
   for (const row of rows) {
-    const artists = byTrack.get(row.track) ?? [];
-    artists.push(...(row.artist === whole ? split : [row.artist]));
-    byTrack.set(row.track, artists);
+    const artists = deletedSongs.get(row.track) ?? [];
+    artists.push(row.artist);
+    deletedSongs.set(row.track, artists);
   }
-  for (const [track, artists] of byTrack) {
+  const changed = respreadDeletedSongs({
+    pruned,
+    staying,
+    deletedSongs,
+    split: creditSplitter(libraryCredits(db)),
+  });
+  for (const [track, artists] of changed) {
     db.run(sql`DELETE FROM deleted_track_artists WHERE track_id = ${track}`);
     db.run(
       sql`INSERT INTO deleted_track_artists (track_id, artist_id, position) VALUES ${sql.join(
-        [...new Set(artists)].map((artist, position) => sql`(${track}, ${artist}, ${position})`),
+        artists.map((artist, position) => sql`(${track}, ${artist}, ${position})`),
         sql`, `,
       )}`,
     );
-  }
-};
-
-/**
- * Deletes the artists nothing is credited to any more. Plays of deleted songs
- * that counted for such an artist (a whole credit from before credits were
- * split, "Ariana Grande, Doja Cat") count for each artist it names that is in
- * the Library instead.
- */
-const pruneArtists = (db: LibraryDatabase): void => {
-  const orphans = db.all<{ id: number; name: string }>(
-    sql`SELECT id AS "id", name AS "name" FROM artists WHERE NOT ${LINKED}`,
-  );
-  if (orphans.length === 0) return;
-  const split = creditSplitter(libraryCredits(db));
-  for (const orphan of orphans) {
-    const keys = split(orphan.name).map(identityKey);
-    if (keys.length === 0 || (keys.length === 1 && keys[0] === identityKey(orphan.name))) continue;
-    const linked = new Map(
-      db
-        .all<{ id: number; key: string }>(
-          sql`SELECT id AS "id", key AS "key" FROM artists WHERE ${LINKED} AND key IN (${sql.join(
-            keys.map((key) => sql`${key}`),
-            sql`, `,
-          )})`,
-        )
-        .map((row) => [row.key, row.id] as const),
-    );
-    const artists = keys.flatMap((key) => linked.get(key) ?? []);
-    if (artists.length > 0) respreadDeletedSongs(db, orphan.id, artists);
   }
   // Their deleted songs' links go with them.
   db.run(sql`DELETE FROM artists WHERE NOT ${LINKED}`);
