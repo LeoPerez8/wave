@@ -1,6 +1,8 @@
 package expo.modules.wavenative.soulseek
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import expo.modules.wavenative.tags.JAudioTaggerReader
@@ -15,7 +17,16 @@ import org.jaudiotagger.tag.FieldKey
 
 /** Owns the session for the whole app process; Expo screen/module destruction doesn't disconnect it. */
 class AndroidSoulseek private constructor(context: Context) {
-  val client = SoulseekClient(SoulseekSessionStore(File(context.noBackupFilesDir, "soulseek-session"), KeystoreCipher()))
+  private val connectivity = context.getSystemService(ConnectivityManager::class.java)
+  val client = SoulseekClient(
+    SoulseekSessionStore(File(context.noBackupFilesDir, "soulseek-session"), KeystoreCipher()),
+    hasNetwork = ::hasNetwork,
+  )
+
+  private fun hasNetwork(): Boolean {
+    val network = connectivity?.activeNetwork ?: return false
+    return connectivity.getNetworkCapabilities(network)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+  }
 
   fun download(
     id: String,

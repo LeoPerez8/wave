@@ -398,6 +398,18 @@ class SoulseekClientTest {
     }
   }
 
+  @Test fun `a server that doesn't answer while the phone is online is unreachable, not offline`() {
+    // A port nothing listens on: the connection is refused at once.
+    val port = ServerSocket(0).use { it.localPort }
+    for ((online, failure) in listOf(true to SoulseekFailure.UNREACHABLE, false to SoulseekFailure.OFFLINE)) {
+      val client = SoulseekClient(MemoryCredentials(), "127.0.0.1", port, hasNetwork = { online })
+      try {
+        val error = assertThrows(SoulseekException::class.java) { client.connect("wave-fixture", "fixture-secret") }
+        assertEquals(failure, error.failure)
+      } finally { client.close() }
+    }
+  }
+
   private class MemoryCredentials : SoulseekCredentialsStore {
     private var credentials: SoulseekCredentials? = null
     override fun load() = credentials

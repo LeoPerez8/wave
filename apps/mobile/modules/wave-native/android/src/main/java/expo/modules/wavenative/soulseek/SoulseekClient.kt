@@ -33,6 +33,8 @@ class SoulseekClient(
   private val credentialsStore: SoulseekCredentialsStore,
   private val host: String = "server.slsknet.org",
   private val port: Int = 2242,
+  /** Whether the phone is online, which tells Soulseek's server being unreachable from being offline. */
+  private val hasNetwork: () -> Boolean = { true },
 ) : Closeable {
   @Volatile private var server: Socket? = null
   private var listener: ServerSocket? = null
@@ -103,7 +105,7 @@ class SoulseekClient(
       listener?.close()
       listener = null
       if (e is SoulseekException) throw e
-      throw SoulseekException(SoulseekFailure.OFFLINE, cause = e)
+      throw serverLost(e)
     }
   }
 
@@ -118,7 +120,7 @@ class SoulseekClient(
       sendServer(26) { uint(id); string(query) }
       val end = System.nanoTime() + timeoutMs.coerceIn(100, 15_000) * 1_000_000
       while (System.nanoTime() < end) {
-        if (server == null) throw SoulseekException(SoulseekFailure.OFFLINE)
+        if (server == null) throw serverLost()
         Thread.sleep(25)
       }
       return results.distinctBy { it.username to it.filename }
@@ -212,8 +214,12 @@ class SoulseekClient(
     }
   }
 
+  /** The server connection failed or dropped: offline when the phone is, else the server is unreachable. */
+  private fun serverLost(cause: Throwable? = null) =
+    SoulseekException(if (hasNetwork()) SoulseekFailure.UNREACHABLE else SoulseekFailure.OFFLINE, cause = cause)
+
   private fun sendServer(code: Int, body: SoulseekWire.Writer.() -> Unit = {}) {
-    val socket = server ?: throw SoulseekException(SoulseekFailure.OFFLINE)
+    val socket = server ?: throw serverLost()
     SoulseekWire.write(socket.getOutputStream(), code, body = body)
   }
 
@@ -257,7 +263,7 @@ class SoulseekClient(
         if (server === socket) {
           server = null
           socket.close()
-          addressRequests.values.forEach { it.completeExceptionally(SoulseekException(SoulseekFailure.OFFLINE)) }
+          addressRequests.values.forEach { it.completeExceptionally(serverLost()) }
           addressRequests.clear()
         }
       }
@@ -453,10 +459,10 @@ class SoulseekClient(
     peers.clear()
     searches.clear()
     indirect.clear()
-    downloads.values.forEach { it.finished.completeExceptionally(SoulseekException(SoulseekFailure.OFFLINE)); it.socket?.close() }
+    downloads.values.forEach { it.finished.completeExceptionally(serverLost()); it.socket?.close() }
     downloads.clear()
     transfers.clear()
-    addressRequests.values.forEach { it.completeExceptionally(SoulseekException(SoulseekFailure.OFFLINE)) }
+    addressRequests.values.forEach { it.completeExceptionally(serverLost()) }
     addressRequests.clear()
   }
 }
