@@ -72,8 +72,9 @@ const tidyLyrics = (text: string | null): string | null => {
  * The tags for a downloaded [song]: its title and artists, its [album]
  * page's title, artists, year and the song's number there (the song's own
  * album and artists without the page), and the genre and lyrics [found] the
- * way Find Lyrics and Genre finds them. YouTube Music's own lyrics
- * ([ytLyrics], plain text) are the fallback.
+ * way Find Lyrics and Genre finds them, whose track number and year stand in
+ * for what the page doesn't give. YouTube Music's own lyrics ([ytLyrics],
+ * plain text) are the fallback.
  */
 export const ytDownloadTags = (
   song: YtSong,
@@ -83,14 +84,19 @@ export const ytDownloadTags = (
 ): YtDownloadTags => {
   const artist = joinArtists(song.artists);
   const cover = album?.artworkUrl ?? song.artworkUrl;
+  const onPage = album === null ? undefined : albumTrack(song, album);
+  // The number and its disc come from one source: the album page, else Deezer.
+  const place =
+    onPage?.trackNumber != null
+      ? { trackNumber: onPage.trackNumber, discNumber: onPage.discNumber ?? null }
+      : { trackNumber: found?.trackNumber ?? null, discNumber: found?.discNumber ?? null };
   return {
     title: song.title,
     artist,
     album: album?.title ?? song.album,
     albumArtist: album !== null && album.artists.length > 0 ? joinArtists(album.artists) : artist,
-    year: album?.year ?? null,
-    trackNumber: (album === null ? undefined : albumTrack(song, album))?.trackNumber ?? null,
-    discNumber: (album === null ? undefined : albumTrack(song, album))?.discNumber ?? null,
+    year: album?.year ?? found?.year ?? null,
+    ...place,
     genre: found?.genre ?? null,
     lyrics: found?.lyrics?.text ?? tidyLyrics(ytLyrics),
     artworkUrl: cover === null ? null : largeCover(cover),

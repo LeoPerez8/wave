@@ -54,7 +54,13 @@ describe("ytDownloadTags", () => {
     const tags = ytDownloadTags(
       getLucky,
       ram,
-      { lyrics: { synced: true, text: "[00:01.00]Like the legend" }, genre: "Dance" },
+      {
+        lyrics: { synced: true, text: "[00:01.00]Like the legend" },
+        genre: "Dance",
+        trackNumber: null,
+        discNumber: null,
+        year: null,
+      },
       null,
     );
     assert.deepEqual(tags, {
@@ -97,15 +103,44 @@ describe("ytDownloadTags", () => {
     assert.equal(tags.artworkUrl, "https://lh3.googleusercontent.com/song=w1200-h1200-l90-rj");
   });
 
+  test("Deezer's track number, disc and year stand in for what the album page doesn't give", () => {
+    const found = {
+      lyrics: null,
+      genre: "Dance",
+      trackNumber: 8,
+      discNumber: 2,
+      year: 2013,
+    };
+    const withoutPage = ytDownloadTags(getLucky, null, found, null);
+    assert.deepEqual(
+      [withoutPage.trackNumber, withoutPage.discNumber, withoutPage.year],
+      [8, 2, 2013],
+    );
+    const unlisted = { ...ram, year: null, tracks: [] };
+    const fromDeezer = ytDownloadTags(getLucky, unlisted, found, null);
+    assert.deepEqual(
+      [fromDeezer.trackNumber, fromDeezer.discNumber, fromDeezer.year],
+      [8, 2, 2013],
+    );
+  });
+
+  test("the album page's track number, disc and year win over Deezer's", () => {
+    const found = { lyrics: null, genre: null, trackNumber: 3, discNumber: 2, year: 2023 };
+    const tags = ytDownloadTags(getLucky, ram, found, null);
+    // The page numbers the song without a disc: Deezer's disc doesn't go with its number.
+    assert.deepEqual([tags.trackNumber, tags.discNumber, tags.year], [8, null, 2013]);
+  });
+
   test("an album page that credits nobody leaves the album artist to the song's artists", () => {
     const tags = ytDownloadTags(getLucky, { ...ram, artists: [] }, null, null);
     assert.equal(tags.albumArtist, "Daft Punk, Pharrell Williams & Nile Rodgers");
   });
 
   test("YouTube Music's own lyrics are only the fallback", () => {
-    const found = { lyrics: { synced: false, text: "Plain from LRCLIB" }, genre: null };
+    const place = { trackNumber: null, discNumber: null, year: null };
+    const found = { lyrics: { synced: false, text: "Plain from LRCLIB" }, genre: null, ...place };
     assert.equal(ytDownloadTags(getLucky, ram, found, "From YouTube").lyrics, "Plain from LRCLIB");
-    const none = { lyrics: null, genre: "Disco" };
+    const none = { lyrics: null, genre: "Disco", ...place };
     assert.equal(
       ytDownloadTags(getLucky, ram, none, "Line one\r\nLine two\r\n").lyrics,
       "Line one\nLine two",

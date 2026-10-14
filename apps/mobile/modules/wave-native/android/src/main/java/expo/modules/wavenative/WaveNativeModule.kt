@@ -39,12 +39,13 @@ import expo.modules.wavenative.scan.ScanProgress
 import expo.modules.wavenative.scan.ScannedTrack
 import expo.modules.wavenative.scan.artworkToMap
 import expo.modules.wavenative.scan.trackToMap
+import expo.modules.wavenative.tags.AlbumPlace
 import expo.modules.wavenative.tags.AudioTagReader
-import expo.modules.wavenative.tags.GenreDestination
 import expo.modules.wavenative.tags.JAudioTaggerReader
 import expo.modules.wavenative.tags.LyricsDestination
 import expo.modules.wavenative.tags.MediaRetrieverTagReader
 import expo.modules.wavenative.tags.SongTagWriter
+import expo.modules.wavenative.tags.TagDestination
 import java.io.File
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -224,17 +225,27 @@ class WaveNativeModule : Module() {
 
     /**
      * Writes found lyrics (LRC or plain text) and genre into a song's file,
-     * replacing what is there; null leaves that field alone (see
-     * [SongTagWriter]). Resolves `{ lyrics, genre }`, where each went
-     * (`tags`, `sidecar`, `notWritten` or `none`), and, when the tags changed,
-     * the file read again as a scan reads it (`track`, `artwork`) so the index
-     * can be updated. Rejects when the file can't be written. Off the main thread.
+     * replacing what is there, and fills in its track number (with the disc)
+     * and year, keeping any the file has; null leaves that field alone (see
+     * [SongTagWriter]). Resolves `{ lyrics, genre, trackNumber, year }`, where
+     * each went (`tags`, `sidecar`, `notWritten` or `none`), and, when the tags
+     * changed, the file read again as a scan reads it (`track`, `artwork`) so
+     * the index can be updated. Rejects when the file can't be written. Off the
+     * main thread.
      */
-    AsyncFunction("writeLyricsAndGenre") { path: String, lyrics: String?, genre: String? ->
+    AsyncFunction("writeLyricsAndGenre") {
+        path: String,
+        lyrics: String?,
+        genre: String?,
+        trackNumber: Int?,
+        discNumber: Int?,
+        year: Int?,
+      ->
       val file = File(path)
-      val report = SongTagWriter().write(file, lyrics, genre)
+      val report = SongTagWriter().write(file, lyrics, genre, AlbumPlace(trackNumber, discNumber, year))
       val tagsChanged =
-        report.lyrics == LyricsDestination.TAGS || report.genre == GenreDestination.TAGS
+        report.lyrics == LyricsDestination.TAGS ||
+          listOf(report.genre, report.trackNumber, report.year).any { it == TagDestination.TAGS }
       // A sidecar alone leaves the tags as they were, but the index learns the song has lyrics.
       val reindex = tagsChanged || report.lyrics == LyricsDestination.SIDECAR
       val (track, artwork) = if (reindex) singleFileScanner().index(file) else null to null

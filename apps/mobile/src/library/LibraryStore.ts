@@ -131,6 +131,8 @@ export interface LibraryLookupSong {
   readonly durationMs: number;
   readonly genre: string | null;
   readonly hasLyrics: boolean;
+  readonly trackNumber: number | null;
+  readonly year: number | null;
 }
 
 /** One row of the Songs list. */
@@ -159,6 +161,8 @@ export interface SongRow {
   /** Orders the album's tracks, and so sorts by artist and by album. */
   readonly discNumber: number | null;
   readonly trackNumber: number | null;
+  /** Find Lyrics and Genre fills it in when it's missing. */
+  readonly year: number | null;
 }
 
 /** A track on an album screen, with what orders it there. */

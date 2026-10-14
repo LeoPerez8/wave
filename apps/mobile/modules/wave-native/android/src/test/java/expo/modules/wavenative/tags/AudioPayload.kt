@@ -110,10 +110,22 @@ object AudioPayload {
 }
 
 /**
- * Every tag field of a file except lyrics and genre, as id → raw bytes (hex),
- * so a test can tell the other tags weren't touched.
+ * Every tag field of a file except lyrics and genre (and those in [except]), as
+ * id → raw bytes (hex), so a test can tell the other tags weren't touched.
  */
 object OtherTagFields {
+  /** The fields holding the track number, disc and year. */
+  val PLACE = setOf(
+    // ID3
+    "TRCK", "TPOS", "TDRC", "TYER", "TDAT",
+    // Vorbis comments (FLAC, Ogg)
+    "TRACKNUMBER", "TRACKTOTAL", "TOTALTRACKS", "DISCNUMBER", "DISCTOTAL", "TOTALDISCS", "DATE", "YEAR",
+    // MP4
+    "trkn", "disk", "©day",
+    // RIFF INFO (WAV): jaudiotagger names its fields after their keys.
+    "TRACK", "YEAR",
+  )
+
   private val LYRICS_OR_GENRE = setOf(
     // ID3
     "USLT", "TCON",
@@ -125,7 +137,7 @@ object OtherTagFields {
     "IGNR",
   )
 
-  fun of(file: File): Map<String, List<String>> {
+  fun of(file: File, except: Set<String> = emptySet()): Map<String, List<String>> {
     val audio = AudioFileIO.read(file)
     val tags: List<Tag> =
       when (val tag = audio.tag) {
@@ -137,7 +149,7 @@ object OtherTagFields {
     for (tag in tags) {
       for (field in tag.fields.asSequence()) {
         val id = field.id
-        if (id in LYRICS_OR_GENRE) continue
+        if (id in LYRICS_OR_GENRE || id in except) continue
         val content = runCatching { field.rawContent.toHex() }.getOrElse { field.toString() }
         val frameKey = (field as? AbstractID3v2Frame)?.let { "ID3:$id" } ?: id
         fields.getOrPut(frameKey) { mutableListOf() }.add(content)

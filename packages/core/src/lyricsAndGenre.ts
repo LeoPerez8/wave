@@ -170,6 +170,7 @@ export const pickFoundLyrics = (
 
 /** A track a Deezer search found, with the album it is on. */
 export interface GenreCandidate {
+  readonly trackId: number;
   readonly title: string;
   readonly artist: string;
   readonly album: string;
@@ -190,13 +191,15 @@ export const deezerTrackSearchUrl = (song: SongLookup): string =>
 export const deezerTrackCandidates = (response: unknown): GenreCandidate[] | null => {
   if (!isRecord(response) || !Array.isArray(response.data)) return null;
   return response.data.flatMap((track: unknown) => {
-    if (!isRecord(track) || typeof track.title !== "string") return [];
+    if (!isRecord(track) || typeof track.id !== "number" || typeof track.title !== "string")
+      return [];
     const { artist, album } = track;
     if (!isRecord(artist) || typeof artist.name !== "string") return [];
     if (!isRecord(album) || typeof album.id !== "number" || typeof album.title !== "string")
       return [];
     return [
       {
+        trackId: track.id,
         title: track.title,
         artist: artist.name,
         album: album.title,
@@ -207,56 +210,170 @@ export const deezerTrackCandidates = (response: unknown): GenreCandidate[] | nul
   });
 };
 
+/** The Deezer track that is a song, and whether it's on the song's own album. */
+export interface DeezerMatch {
+  readonly trackId: number;
+  readonly albumId: number;
+  /**
+   * Whether Deezer's album is the song's (titles compared as matching does):
+   * only then do its year and the track's place on it describe the song's file.
+   */
+  readonly onSongsAlbum: boolean;
+}
+
 /**
- * The Deezer album whose genre is [song]'s, or null without a confident match:
- * the album of a track with the song's title and artist, preferring the song's
- * own album, then the closest length.
+ * The Deezer track that is [song], or null without a confident match: a track
+ * with the song's title and artist, preferring one on the song's own album,
+ * then the closest length. Its album's genre is the song's.
  */
-export const pickGenreAlbum = (
+export const pickDeezerTrack = (
   song: SongLookup,
   candidates: readonly GenreCandidate[],
-): number | null => {
-  let best: { albumId: number; rank: readonly number[] } | null = null;
+): DeezerMatch | null => {
+  let best: { match: DeezerMatch; rank: readonly number[] } | null = null;
   for (const candidate of candidates) {
     if (!isSameSong(song, candidate.title, candidate.artist)) continue;
-    const rank = [
-      isSameAlbum(song, candidate.album) ? 0 : 1,
-      lengthGap(song, candidate.durationMs),
-    ];
-    if (best === null || isBetter(rank, best.rank)) best = { albumId: candidate.albumId, rank };
+    const onSongsAlbum = isSameAlbum(song, candidate.album);
+    const rank = [onSongsAlbum ? 0 : 1, lengthGap(song, candidate.durationMs)];
+    if (best === null || isBetter(rank, best.rank)) {
+      const { trackId, albumId } = candidate;
+      best = { match: { trackId, albumId, onSongsAlbum }, rank };
+    }
   }
-  return best?.albumId ?? null;
+  return best?.match ?? null;
 };
 
 /** A Deezer album, which lists its genres. */
 export const deezerAlbumUrl = (albumId: number): string =>
   `https://api.deezer.com/album/${albumId}`;
 
+/** What Wave takes from a Deezer album: its genre and the year it came out. */
+export interface DeezerAlbum {
+  readonly genre: string | null;
+  readonly year: number | null;
+}
+
+/** The year of a Deezer `release_date` ("1997-05-21"); null when missing or malformed ("0000-00-00"). */
+const releaseYear = (value: unknown): number | null => {
+  const match = typeof value === "string" ? /^(\d{4})(?:-\d{2}-\d{2})?$/.exec(value.trim()) : null;
+  const year = match === null ? 0 : Number(match[1]);
+  return year > 0 ? year : null;
+};
+
 /**
- * The genre of a Deezer album response: its first genre, or null when it has
- * none. The whole result is null when the response isn't an album (a failed lookup).
+ * The genre (its first one) and year of a Deezer album response; each is null
+ * when the album doesn't give it. The whole result is null when the response
+ * isn't an album (a failed lookup).
  */
-export const deezerAlbumGenre = (response: unknown): { readonly genre: string | null } | null => {
+export const deezerAlbum = (response: unknown): DeezerAlbum | null => {
   if (!isRecord(response) || typeof response.id !== "number") return null;
   const genres = isRecord(response.genres) ? response.genres.data : undefined;
   const first: unknown = Array.isArray(genres) ? genres[0] : undefined;
-  return { genre: isRecord(first) ? (text(first.name)?.trim() ?? null) : null };
+  return {
+    genre: isRecord(first) ? (text(first.name)?.trim() ?? null) : null,
+    year: releaseYear(response.release_date),
+  };
 };
 
-/** What a lookup found for a song: either or both may be missing. */
-export interface FoundTags {
-  readonly lyrics: FoundLyrics | null;
+/**
+ * A Deezer album's tracklist, which says where each track sits on it. One
+ * page holds any real album (Deezer's default page is 25 tracks).
+ */
+export const deezerAlbumTracksUrl = (albumId: number): string =>
+  `https://api.deezer.com/album/${albumId}/tracks?limit=500`;
+
+/** Where a track sits on a Deezer album. */
+export interface DeezerAlbumTrack {
+  readonly trackId: number;
+  readonly trackNumber: number;
+  /** Null when Deezer doesn't give one. */
+  readonly discNumber: number | null;
+}
+
+const positive = (value: unknown): number | null =>
+  typeof value === "number" && Number.isInteger(value) && value > 0 ? value : null;
+
+/**
+ * The tracks of a Deezer album tracklist response with their place on it
+ * (tracks without a number are left out); null when the response isn't a
+ * tracklist (a failed lookup).
+ */
+export const deezerAlbumTracks = (response: unknown): DeezerAlbumTrack[] | null => {
+  if (!isRecord(response) || !Array.isArray(response.data)) return null;
+  return response.data.flatMap((track: unknown) => {
+    if (!isRecord(track) || typeof track.id !== "number") return [];
+    const trackNumber = positive(track.track_position);
+    if (trackNumber === null) return [];
+    return [{ trackId: track.id, trackNumber, discNumber: positive(track.disk_number) }];
+  });
+};
+
+/**
+ * What Deezer says about a song: its album's genre and year, and where it
+ * sits on that album (the disc only for an album on more than one disc). Each
+ * is null when unknown.
+ */
+export interface DeezerTags {
   readonly genre: string | null;
+  readonly trackNumber: number | null;
+  readonly discNumber: number | null;
+  readonly year: number | null;
 }
 
 /**
+ * What Deezer says about the song [match] is, from its [album] and that
+ * album's [tracklist] (null when not fetched: the song has a number). The
+ * genre is always the album's; the year and the track's place only when the
+ * album is the song's own (`DeezerMatch.onSongsAlbum`), since another album
+ * (a compilation, a live record) numbers and dates it differently.
+ */
+export const deezerTags = (
+  match: DeezerMatch,
+  album: DeezerAlbum,
+  tracklist: readonly DeezerAlbumTrack[] | null,
+): DeezerTags => {
+  if (!match.onSongsAlbum)
+    return { genre: album.genre, trackNumber: null, discNumber: null, year: null };
+  const place = tracklist?.find((track) => track.trackId === match.trackId);
+  const discs = tracklist?.some((track) => (track.discNumber ?? 1) > 1) ?? false;
+  return {
+    genre: album.genre,
+    trackNumber: place?.trackNumber ?? null,
+    discNumber: discs ? (place?.discNumber ?? null) : null,
+    year: album.year,
+  };
+};
+
+/**
+ * What a lookup found for a song: its lyrics (LRCLIB) and what Deezer says
+ * (`DeezerTags`). Any of them may be missing.
+ */
+export interface FoundTags extends DeezerTags {
+  readonly lyrics: FoundLyrics | null;
+}
+
+const NOTHING_FROM_DEEZER: DeezerTags = {
+  genre: null,
+  trackNumber: null,
+  discNumber: null,
+  year: null,
+};
+
+/** Where a found tag went: the file's tags, nowhere for a format without tag writing, or none to write. */
+export type TagDestination = "tags" | "notWritten" | "none";
+
+/**
  * Where the native writer put what was found: lyrics in the file's tags or,
- * for a format it can't write tags to, a sidecar `.lrc`; the genre in the
- * tags or, for such a format, nowhere (`notWritten`). `none`: nothing to write.
+ * for a format it can't write tags to, a sidecar `.lrc`; the genre, track
+ * number (with the disc) and year in the tags or, for such a format, nowhere
+ * (`notWritten`). `none`: nothing to write, or (track number, year) the file
+ * already has one and keeps it.
  */
 export interface TagWriteReport {
   readonly lyrics: "tags" | "sidecar" | "none";
-  readonly genre: "tags" | "notWritten" | "none";
+  readonly genre: TagDestination;
+  readonly trackNumber: TagDestination;
+  readonly year: TagDestination;
 }
 
 /** How finding a song's lyrics and genre went. */
@@ -266,8 +383,8 @@ export type SongTagOutcome =
   | { readonly kind: "notFound" }
   /**
    * LRCLIB or Deezer couldn't be reached (`lookup`), the file couldn't be
-   * written (`write`), or only a genre was found for a format that can't take
-   * it (`format`). The file is left as it was.
+   * written (`write`), or no lyrics were found and the format can't take the
+   * genre found (`format`). The file is left as it was.
    */
   | { readonly kind: "failed"; readonly reason: "lookup" | "write" | "format" };
 
@@ -282,22 +399,40 @@ export type TagLookup<A> = { readonly ok: true; readonly value: A } | { readonly
  */
 export const settledTags = (
   lyrics: TagLookup<FoundLyrics | null>,
-  genre: TagLookup<string | null>,
+  deezer: TagLookup<DeezerTags | null>,
 ): FoundTags | null => {
-  if (!lyrics.ok && !genre.ok) return null;
-  return { lyrics: lyrics.ok ? lyrics.value : null, genre: genre.ok ? genre.value : null };
+  if (!lyrics.ok && !deezer.ok) return null;
+  return {
+    lyrics: lyrics.ok ? lyrics.value : null,
+    ...((deezer.ok ? deezer.value : null) ?? NOTHING_FROM_DEEZER),
+  };
 };
 
-/** The outcome of a lookup that found [found] and, when anything was, wrote it as [written]. */
+/**
+ * The outcome of a lookup that found [found] (what was to be written) and,
+ * when anything was, wrote it as [written]. Writing anything is an update,
+ * the track number and year alone included. A format that can't take the
+ * track number or year isn't a failure on its own: only a genre it can't take,
+ * with no lyrics for a sidecar, fails.
+ */
 export const songTagOutcome = (
   found: FoundTags,
   written: TagWriteReport | null,
 ): SongTagOutcome => {
-  if ((found.lyrics === null && found.genre === null) || written === null)
-    return { kind: "notFound" };
-  if (written.lyrics === "none" && written.genre !== "tags")
-    return { kind: "failed", reason: "format" };
-  return { kind: "updated", written };
+  const foundAny =
+    found.lyrics !== null ||
+    found.genre !== null ||
+    found.trackNumber !== null ||
+    found.year !== null;
+  if (!foundAny || written === null) return { kind: "notFound" };
+  const wroteAny =
+    written.lyrics !== "none" ||
+    written.genre === "tags" ||
+    written.trackNumber === "tags" ||
+    written.year === "tags";
+  if (wroteAny) return { kind: "updated", written };
+  if (written.genre === "notWritten") return { kind: "failed", reason: "format" };
+  return { kind: "notFound" };
 };
 
 const FAILURES: Record<
@@ -315,7 +450,7 @@ const FAILURES: Record<
   format: (title) => ({
     title: `Couldn't update “${title}”`,
     message:
-      "Only a genre was found, and Wave can't write tags to this file's format. It wasn't changed.",
+      "No lyrics were found, and Wave can't write tags to this file's format. It wasn't changed.",
   }),
 };
 
@@ -343,25 +478,66 @@ export interface IndexedLyricsAndGenre {
   readonly genre: string | null;
 }
 
+/** What the Library index knows about a song's place on its album and its year. */
+export interface IndexedPlace {
+  /** Null for a song without a track number tag. */
+  readonly trackNumber: number | null;
+  /** Null for a song without a year tag. */
+  readonly year: number | null;
+}
+
+/** What the Library index knows about the tags a lookup finds. */
+export interface IndexedTags extends IndexedLyricsAndGenre, IndexedPlace {}
+
+/** Whether a track number or year is missing (0 counts as missing). */
+const lacks = (value: number | null): boolean => value === null || value <= 0;
+
 /**
- * Which songs the whole-Library run looks up: those missing lyrics or a genre,
- * in the order given. Songs that already have both are skipped (and counted
- * for the summary), so running it again only does new or incomplete songs.
- * Songs the owner picks (a menu, the selection bar) are looked up regardless.
+ * Whether [song] has no track number, so a lookup should find it (Deezer's
+ * album tracklist, one more request): one it has is never replaced.
  */
-export const libraryLookupSongs = <S extends IndexedLyricsAndGenre>(
+export const lacksTrackNumber = (song: IndexedPlace): boolean => lacks(song.trackNumber);
+
+/**
+ * Which songs the whole-Library run looks up: those missing lyrics, a genre,
+ * a track number or a year, in the order given. Songs that have all four are
+ * skipped (and counted for the summary), so running it again only does new or
+ * incomplete songs. Songs the owner picks (a menu, the selection bar) are
+ * looked up regardless.
+ */
+export const libraryLookupSongs = <S extends IndexedTags>(
   songs: readonly S[],
 ): { readonly lookUp: S[]; readonly skipped: number } => {
-  const lookUp = songs.filter((song) => !song.hasLyrics || (song.genre ?? "").trim() === "");
+  const lookUp = songs.filter(
+    (song) =>
+      !song.hasLyrics ||
+      (song.genre ?? "").trim() === "" ||
+      lacks(song.trackNumber) ||
+      lacks(song.year),
+  );
   return { lookUp, skipped: songs.length - lookUp.length };
 };
 
 /**
- * What of [found] a song still lacks: its lyrics when it has none, its genre
- * when it has none. Filling in a song (a download just saved) never replaces
- * what it already has; nothing left means there's nothing to write.
+ * What of [found] to write into a song the owner picked (a menu, the selection
+ * bar): its lyrics and genre, replacing the file's, and its track number (with
+ * the disc) and year only when the song has none. A file tagged by hand keeps
+ * its numbers even when Deezer matched the wrong release.
  */
-export const missingTags = (found: FoundTags, song: IndexedLyricsAndGenre): FoundTags => ({
+export const tagsToWrite = (found: FoundTags, song: IndexedPlace): FoundTags => ({
+  ...found,
+  trackNumber: lacks(song.trackNumber) ? found.trackNumber : null,
+  discNumber: lacks(song.trackNumber) ? found.discNumber : null,
+  year: lacks(song.year) ? found.year : null,
+});
+
+/**
+ * What of [found] a song still lacks: its lyrics when it has none, its genre,
+ * track number and year likewise. Filling in a song (a download just saved)
+ * never replaces what it already has; nothing left means there's nothing to write.
+ */
+export const missingTags = (found: FoundTags, song: IndexedTags): FoundTags => ({
+  ...tagsToWrite(found, song),
   lyrics: song.hasLyrics ? null : found.lyrics,
   genre: (song.genre ?? "").trim() === "" ? found.genre : null,
 });
@@ -378,31 +554,66 @@ const NAMED_SONGS = 5;
 const count = (n: number): string => n.toLocaleString("en");
 const songs = (n: number): string => (n === 1 ? "1 song" : `${count(n)} songs`);
 
+/** "a", "a and b", "a, b and c". */
+const listed = (items: readonly string[]): string =>
+  items.length <= 1 ? (items[0] ?? "") : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
+
+/** The tags of [written] that went to [where], by name: "genre", "track number", "year". */
+const tagsWent = (written: TagWriteReport, where: TagDestination): string[] => [
+  ...(written.genre === where ? ["genre"] : []),
+  ...(written.trackNumber === where ? ["track number"] : []),
+  ...(written.year === where ? ["year"] : []),
+];
+
 /** What one song got, as a sentence about it. */
 const describeUpdate = (title: string, written: TagWriteReport) => {
-  const lyrics = written.lyrics !== "none";
-  const genre = written.genre === "tags";
-  if (written.lyrics === "sidecar")
+  if (written.lyrics === "sidecar") {
+    const skipped = tagsWent(written, "notWritten");
+    const notWritten =
+      skipped.length === 0
+        ? ""
+        : ` and the ${listed(skipped)} ${skipped.length === 1 ? "wasn't" : "weren't"} written`;
     return {
       title: "Lyrics updated",
-      message: `Wave can't write tags to this file's format, so the lyrics were saved beside it as an .lrc file${written.genre === "notWritten" ? " and the genre wasn't written" : ""}.`,
+      message: `Wave can't write tags to this file's format, so the lyrics were saved beside it as an .lrc file${notWritten}.`,
     };
+  }
+  const lyrics = written.lyrics !== "none";
+  const genre = written.genre === "tags";
+  const placed = tagsWent({ ...written, genre: "none" }, "tags");
+  const place = listed(placed);
+  const was = placed.length === 1 ? "was" : "were";
+  const filledIn = place === "" ? "" : ` Its ${place} ${was} filled in.`;
   if (lyrics && genre)
     return {
       title: "Lyrics and genre updated",
-      message: `“${title}” has new lyrics and a new genre.`,
+      message: `“${title}” has new lyrics and a new genre.${filledIn}`,
     };
   if (genre)
-    return { title: "Genre updated", message: `“${title}” has a new genre. No lyrics were found.` };
-  return { title: "Lyrics updated", message: `“${title}” has new lyrics. No genre was found.` };
+    return {
+      title: "Genre updated",
+      message: `“${title}” has a new genre. No lyrics were found.${filledIn}`,
+    };
+  if (lyrics)
+    return {
+      title: "Lyrics updated",
+      message: `“${title}” has new lyrics. No genre was found.${filledIn}`,
+    };
+  return {
+    title: `${place.charAt(0).toUpperCase()}${place.slice(1)} filled in`,
+    message: `No lyrics or genre were found for “${title}”, but its ${place} ${was}.`,
+  };
 };
+
+/** What a song the whole-Library run skips already has (`libraryLookupSongs`). */
+const EVERYTHING = "lyrics, a genre, a track number and a year";
 
 /**
  * The message after finding lyrics and genre for [results] (in order): what
  * one song got, or for several the updated / not found / failed counts and the
  * songs whose lyrics went into a sidecar `.lrc`. [stop] says why a run ended early;
  * [skipped] counts the songs the whole-Library run left out as already having
- * lyrics and a genre (`libraryLookupSongs`).
+ * lyrics, a genre, a track number and a year (`libraryLookupSongs`).
  */
 export const describeTagLookups = (
   results: readonly { readonly title: string; readonly outcome: SongTagOutcome }[],
@@ -414,8 +625,8 @@ export const describeTagLookups = (
       title: "Nothing to look up",
       message:
         skipped === 1
-          ? "The only song already has lyrics and a genre."
-          : `All ${count(skipped)} songs already have lyrics and a genre.`,
+          ? `The only song already has ${EVERYTHING}.`
+          : `All ${count(skipped)} songs already have ${EVERYTHING}.`,
     };
   const only = results.length === 1 && stop === undefined && skipped === 0 ? results[0] : undefined;
   if (only !== undefined) {
@@ -443,7 +654,7 @@ export const describeTagLookups = (
   ];
   if (skipped > 0)
     paragraphs.push(
-      `${songs(skipped)} already had lyrics and a genre, so ${skipped === 1 ? "it was" : "they were"} skipped.`,
+      `${songs(skipped)} already had ${EVERYTHING}, so ${skipped === 1 ? "it was" : "they were"} skipped.`,
     );
   if (sidecars.length > 0) {
     const named = sidecars.slice(0, NAMED_SONGS).join(", ");
