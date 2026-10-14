@@ -499,6 +499,18 @@ describe("actionBarLabel", () => {
 
 describe("ytSongActions", () => {
   test("a YT Music song can join the queue, mixed with the Library's songs", () => {
-    assert.deepEqual(names(ytSongActions()), ["playNext", "addToQueue"]);
+    assert.deepEqual(
+      ytSongActions().map((entry) => entry.action),
+      ["playNext", "addToQueue"],
+    );
+  });
+
+  test("it offers Go to Artist, leading where the streamed song's artist link does", () => {
+    const artists = { kind: "open", target: { kind: "yt", name: "Justice" } } as const;
+    assert.deepEqual(ytSongActions(artists), [
+      { action: "playNext" },
+      { action: "addToQueue" },
+      { action: "goToArtist", artists },
+    ]);
   });
 });

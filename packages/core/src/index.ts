@@ -295,6 +295,7 @@ export type {
   ArtistLink,
   ItemAction,
   ItemActionEntry,
+  YtSongActionEntry,
   ItemKind,
 } from "./itemActions.ts";
 export { concentricRadius } from "./corners.ts";
@@ -531,6 +532,7 @@ export {
   ytArtistQuery,
   ytArtistRelease,
   ytArtistIntegrated,
+  ytArtistSectionAsks,
   ytArtistSectionView,
   ytArtistShelves,
   ytAlbumTracklist,
@@ -551,6 +553,7 @@ export type {
   YtArtistPage,
   YtArtistSaved,
   YtArtistSection,
+  YtArtistSectionAsksContext,
   YtArtistSectionContext,
   YtArtistSectionEvent,
   YtArtistSectionNote,
@@ -562,5 +565,11 @@ export type {
   YtLibraryAlbumView,
   YtReleaseLoad,
 } from "./ytArtist.ts";
+export { streamedArtistLink } from "./streamedArtist.ts";
+export type {
+  StreamedArtistContext,
+  StreamedArtistLink,
+  StreamedArtistTarget,
+} from "./streamedArtist.ts";
 export { pagePlayback } from "./pagePlayback.ts";
 export type { PagePlayback } from "./pagePlayback.ts";
