@@ -111,7 +111,8 @@ export type YtSearchTop<S extends YtSong> =
 export interface YtSectionView<S extends YtSong> extends YtSearchAnswer<S> {
   /**
    * YT Music's best match, from what's shown: the top result when the Library
-   * has nothing for the query.
+   * has nothing for the query. Null while the query loads, since what's shown
+   * then answers the last one.
    */
   readonly top: YtSearchTop<S> | null;
   readonly note: YtSectionNote | null;
@@ -188,7 +189,9 @@ export const ytSectionView = <S extends YtSong>(
         artists: section.artists.filter((artist) => !library.hasArtist(artist)),
         albums: section.albums.filter((album) => !library.hasAlbum(album)),
       };
-      const view = { ...shown, top: ytTop(section.query, shown), offer: false, integrated: true };
+      // Loading, what's shown answers the last query, not this one: it has no best yet.
+      const top = section.status === "results" ? ytTop(section.query, shown) : null;
+      const view = { ...shown, top, offer: false, integrated: true };
       if (isEmpty(shown)) {
         const note =
           section.status === "loading"
