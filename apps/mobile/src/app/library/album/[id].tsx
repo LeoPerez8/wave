@@ -36,7 +36,7 @@ import { selectableRow } from "@/selection/selectableRow";
 import { useListSelection, type ListSelection } from "@/selection/useListSelection";
 import { useYtAlbumSection } from "@/ytmusic/albumSection";
 import { YtLookupFooter } from "@/ytmusic/YtLookupFooter";
-import { AlbumDownloadAction, useYtAlbumDownloadButton } from "@/ytmusic/YtSongList";
+import { ListDownloadAction, useYtAlbumDownloadButton } from "@/ytmusic/YtSongList";
 import { YtSongRow } from "@/ytmusic/YtSongRow";
 
 type Entry = YtAlbumEntry<NativeYtSong, SongRow>;
@@ -189,7 +189,7 @@ function AlbumHead({
         )}
       </View>
       <PlayShuffle onPlay={() => play(false)} onShuffle={() => play(true)}>
-        {download.button !== null && <AlbumDownloadAction download={download.button} />}
+        {download.button !== null && <ListDownloadAction download={download.button} />}
       </PlayShuffle>
     </View>
   );

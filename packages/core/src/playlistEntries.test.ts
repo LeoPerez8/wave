@@ -7,6 +7,7 @@ import {
   playlistPlayback,
   readPlaylistYtSong,
   writePlaylistYtSong,
+  ytDownloadTags,
   type MixedSong,
   type PlaylistSong,
   type YtAlbumSong,
@@ -172,6 +173,17 @@ describe("playlistEntryLinks", () => {
   test("a namesake by another artist stays streamed", () => {
     const entries = [{ itemId: 10, song: yt("a", { title: "Genesis" }) }];
     assert.deepEqual(playlistEntryLinks(entries, [track(1, "Genesis", "Grimes")]), []);
+  });
+
+  test("an entry downloaded becomes the song its download's tags describe", () => {
+    // A playlist download: the file is tagged from the entry's own song (`ytDownloadTags`),
+    // and its length is within the 3 s a Soulseek file is accepted at.
+    const song = yt("a", { title: "Sunflower", artists: ["Post Malone", "Swae Lee"] });
+    const tags = ytDownloadTags(song, null, null, null);
+    const downloaded = track(7, tags.title, tags.artist, 202_900);
+    assert.deepEqual(playlistEntryLinks([{ itemId: 10, song }], [downloaded]), [
+      { itemId: 10, trackId: 7 },
+    ]);
   });
 
   test("nothing to link when there are no entries or no new songs", () => {
