@@ -117,6 +117,48 @@ describe("credits", () => {
     );
   });
 
+  test("each value of a multi-value artist tag is an artist of its own, even with no song alone", () => {
+    scan({
+      title: "boyfriend",
+      artist: "Ariana Grande",
+      artists: ["Ariana Grande", "Social House"],
+      album: "boyfriend",
+      albumArtists: ["Ariana Grande", "Social House"],
+    });
+    assert.deepEqual(
+      selectArtists(db, {}).map((row) => [row.name, row.trackCount]),
+      [
+        ["Ariana Grande", 1],
+        ["Social House", 1],
+      ],
+    );
+    assert.deepEqual(
+      selectArtistDetail(db, artist("Social House")?.id ?? -1)?.appearsOn.map((a) => a.title),
+      ["boyfriend"],
+    );
+    // Rows show the values joined with commas.
+    assert.equal(
+      selectArtistDetail(db, artist("Social House")?.id ?? -1)?.songs[0]?.artist,
+      "Ariana Grande, Social House",
+    );
+  });
+
+  test("a value holding a comma stays one artist when the Library has it", () => {
+    scan(
+      {
+        title: "Boogie Wonderland",
+        artist: "Earth, Wind & Fire",
+        artists: ["Earth, Wind & Fire", "The Emotions"],
+        album: "I Am",
+      },
+      { title: "September", artist: "Earth, Wind & Fire", album: "The Best of" },
+    );
+    assert.deepEqual(
+      selectArtists(db, {}).map((row) => row.name),
+      ["Earth, Wind & Fire", "The Emotions"],
+    );
+  });
+
   test("upgrading files the Library under each credited artist without a rescan, keeping stars, playlists and plays", async () => {
     const v7 = await openTestDatabase({ through: "0011_track_lyrics" });
     const rings = addTrack(v7, {

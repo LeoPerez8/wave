@@ -2,9 +2,11 @@
  * Artist credits (docs/spec.md, glossary: Artist): a track or album belongs to
  * every artist its credit names, as Core's `creditSplitter` splits it with the
  * Library's whole credits in mind. Tracks and albums keep their credit as
- * written; `track_artists` / `album_artists` link each credited artist in
- * credit order, and `artist_id` / `album_artist_id` hold the primary (first)
- * one. Kept free of Expo so the store tests run it against a real SQLite.
+ * written, and the separate credits a multi-value tag gave (`artist_credits` /
+ * `album_artist_credits`, null for a single one); `track_artists` /
+ * `album_artists` link each credited artist in credit order, and `artist_id` /
+ * `album_artist_id` hold the primary (first) one. Kept free of Expo so the
+ * store tests run it against a real SQLite.
  */
 import { creditSplitter, identityKey, respreadDeletedSongs, sortKey } from "@wave/core";
 import { sql } from "drizzle-orm";
@@ -21,14 +23,38 @@ const chunked = <A>(items: readonly A[]): A[][] => {
   return result;
 };
 
-/** Every whole credit in the Library: the tracks' artist credits and the albums' album artist ones. */
-const libraryCredits = (db: LibraryDatabase): string[] =>
+/** A track's or album's credits: one per value of its tag, usually one. */
+export type Credits = readonly string[];
+
+/** How a row's credits are stored: null for the single one it shows, else each of them. */
+export const storedCredits = (credits: Credits): string | null =>
+  credits.length === 1 ? null : JSON.stringify(credits);
+
+/** A row's credits from the credit it shows and the stored ones (`storedCredits`). */
+const readCredits = (credit: string, stored: string | null): Credits =>
+  stored === null ? [credit] : (JSON.parse(stored) as string[]);
+
+/** The credits of every track (artist) and album (album artist) in the Library. */
+const SELECT_CREDITS = sql`SELECT 'track' AS "kind", id AS "id", artist_credit AS "credit",
+    artist_credits AS "stored" FROM tracks
+  UNION ALL SELECT 'album', id, album_artist_credit, album_artist_credits FROM albums`;
+
+interface CreditRow {
+  readonly kind: "track" | "album";
+  readonly id: number;
+  readonly credits: Credits;
+}
+
+const creditRows = (db: LibraryDatabase): CreditRow[] =>
   db
-    .all<{ credit: string }>(
-      sql`SELECT artist_credit AS "credit" FROM tracks
-        UNION SELECT album_artist_credit FROM albums`,
+    .all<{ kind: "track" | "album"; id: number; credit: string; stored: string | null }>(
+      SELECT_CREDITS,
     )
-    .map((row) => row.credit);
+    .map((row) => ({ kind: row.kind, id: row.id, credits: readCredits(row.credit, row.stored) }));
+
+/** Every whole credit in the Library: the tracks' artist credits and the albums' album artist ones. */
+const libraryCredits = (db: LibraryDatabase): Set<string> =>
+  new Set(creditRows(db).flatMap((row) => row.credits));
 
 /** The ids of the artists [names] (by identity key) holds, making the missing ones. */
 const artistIds = (
@@ -64,23 +90,25 @@ const artistIds = (
  */
 export const creditArtists = (
   db: LibraryDatabase,
-  credits: readonly string[],
-): ((credit: string) => number[]) => {
-  const split = creditSplitter([...libraryCredits(db), ...credits]);
+  credits: readonly Credits[],
+): ((credits: Credits) => number[]) => {
+  const split = creditSplitter([...libraryCredits(db), ...credits.flat()]);
   const names = new Map<string, string>();
-  const keysByCredit = new Map<string, string[]>();
-  for (const credit of new Set(credits)) {
-    const keys = split(credit).map((name) => {
+  const keysByCredits = new Map<string, string[]>();
+  for (const each of credits) {
+    const id = JSON.stringify(each);
+    if (keysByCredits.has(id)) continue;
+    const keys = split(each).map((name) => {
       const key = identityKey(name);
       if (!names.has(key)) names.set(key, name);
       return key;
     });
-    keysByCredit.set(credit, keys);
+    keysByCredits.set(id, keys);
   }
   const ids = artistIds(db, names);
-  return (credit) => {
-    const keys = keysByCredit.get(credit);
-    if (keys === undefined) throw new Error(`Credit not split: ${credit}`);
+  return (credits) => {
+    const keys = keysByCredits.get(JSON.stringify(credits));
+    if (keys === undefined) throw new Error(`Credit not split: ${credits.join(", ")}`);
     return keys.map((key) => {
       const id = ids.get(key);
       if (id === undefined) throw new Error(`Missing artist id for ${key}`);
@@ -266,20 +294,17 @@ const pruneArtists = (db: LibraryDatabase): void => {
  * or gone whole credit can change how others split.
  */
 export const relinkCredits = (db: LibraryDatabase): void => {
-  const tracks = db.all<{ id: number; credit: string }>(
-    sql`SELECT id AS "id", artist_credit AS "credit" FROM tracks`,
-  );
-  const albums = db.all<{ id: number; credit: string }>(
-    sql`SELECT id AS "id", album_artist_credit AS "credit" FROM albums`,
-  );
-  const credit = creditArtists(
+  const rows = creditRows(db);
+  const credited = creditArtists(
     db,
-    [...tracks, ...albums].map((row) => row.credit),
+    rows.map((row) => row.credits),
   );
-  const links = (rows: readonly { id: number; credit: string }[]): CreditLink[] =>
-    rows.map((row) => ({ id: row.id, artistIds: credit(row.credit) }));
-  writeLinks(db, TRACKS, links(tracks), currentLinks(db, TRACKS, undefined));
-  writeLinks(db, ALBUMS, links(albums), currentLinks(db, ALBUMS, undefined));
+  const links = (kind: CreditRow["kind"]): CreditLink[] =>
+    rows
+      .filter((row) => row.kind === kind)
+      .map((row) => ({ id: row.id, artistIds: credited(row.credits) }));
+  writeLinks(db, TRACKS, links("track"), currentLinks(db, TRACKS, undefined));
+  writeLinks(db, ALBUMS, links("album"), currentLinks(db, ALBUMS, undefined));
   pruneArtists(db);
 };
 

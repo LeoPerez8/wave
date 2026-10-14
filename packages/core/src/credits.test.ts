@@ -156,6 +156,15 @@ describe("splitCredit", () => {
     assert.deepEqual(splitCredit("Rihanna & RIHANNA"), ["Rihanna"]);
   });
 
+  test("separate credits (a tag's values) always name separate artists", () => {
+    const values = ["Ariana Grande", "Social House"];
+    assert.deepEqual(creditSplitter(values)(values), ["Ariana Grande", "Social House"]);
+    const ewf = ["Earth, Wind & Fire", "The Emotions"];
+    assert.deepEqual(creditSplitter(ewf)(ewf), ["Earth, Wind & Fire", "The Emotions"]);
+    assert.deepEqual(creditSplitter([])(["Drake", "drake feat. Future"]), ["Drake", "Future"]);
+    assert.deepEqual(creditSplitter([])([]), [UNKNOWN_ARTIST]);
+  });
+
   test("empty parts are dropped", () => {
     assert.deepEqual(splitCredit(" , Drake,, ; Future / "), ["Drake", "Future"]);
   });

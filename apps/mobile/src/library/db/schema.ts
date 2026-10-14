@@ -82,6 +82,11 @@ export const albums = sqliteTable(
       .references(() => artists.id),
     /** The album artist credit as written ("Ariana Grande, Social House"), which rows show. */
     albumArtistCredit: text("album_artist_credit").notNull().default(""),
+    /**
+     * The album artist credits a multi-value tag gave, as a JSON array; null for
+     * a single one, [albumArtistCredit] (see `storedCredits`).
+     */
+    albumArtistCredits: text("album_artist_credits"),
     year: integer("year"),
     artworkHash: text("artwork_hash").references(() => artwork.hash),
     compilation: integer("compilation", { mode: "boolean" }).notNull().default(false),
@@ -112,6 +117,12 @@ export const tracks = sqliteTable(
       .references(() => artists.id),
     /** The artist credit as written ("Ariana Grande, Doja Cat"), which rows show. */
     artistCredit: text("artist_credit").notNull().default(""),
+    /**
+     * The artist credits a multi-value tag gave ("Ariana Grande", "Social
+     * House"), as a JSON array; null for a single one, [artistCredit] (see
+     * `storedCredits`). Each names its own artists.
+     */
+    artistCredits: text("artist_credits"),
     albumId: integer("album_id")
       .notNull()
       .references(() => albums.id),

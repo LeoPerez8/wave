@@ -309,6 +309,15 @@ CREATE TABLE \`yt_artists\` (
 );
 `;
 
+// A tag's separate values are separate credits (docs/spec.md, glossary:
+// Credit): tracks and albums keep each of them, so "Ariana Grande" and "Social
+// House" never make one artist. Null is a single credit, the one written.
+const m0015 = `
+ALTER TABLE \`tracks\` ADD \`artist_credits\` text;
+--> statement-breakpoint
+ALTER TABLE \`albums\` ADD \`album_artist_credits\` text;
+`;
+
 export default {
   journal: {
     entries: [
@@ -327,6 +336,7 @@ export default {
       { idx: 12, when: 1_792_843_200_000, tag: "0012_artist_credits", breakpoints: true },
       { idx: 13, when: 1_792_929_600_000, tag: "0013_deleted_track_artists", breakpoints: true },
       { idx: 14, when: 1_793_016_000_000, tag: "0014_yt_artists", breakpoints: true },
+      { idx: 15, when: 1_793_102_400_000, tag: "0015_tag_credits", breakpoints: true },
     ],
   },
   migrations: {
@@ -345,5 +355,6 @@ export default {
     m0012,
     m0013,
     m0014,
+    m0015,
   },
 };

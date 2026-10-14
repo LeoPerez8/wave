@@ -36,9 +36,12 @@ const pieces = (segment: string): string[] => segment.split(SEPARATOR);
 
 /**
  * Splits credits with the Library's whole credits ([knownCredits]) in mind;
- * build one per Library and reuse it.
+ * build one per Library and reuse it. Given several credits (a tag's values),
+ * it names the artists of each, in order: separate credits never make one artist.
  */
-export const creditSplitter = (knownCredits: Iterable<string>): ((credit: string) => string[]) => {
+export const creditSplitter = (
+  knownCredits: Iterable<string>,
+): ((credit: string | readonly string[]) => string[]) => {
   const known = new Set<string>();
   // Names credited on their own somewhere: a part between featured credits with no other mark.
   const standing = new Set<string>();
@@ -79,7 +82,8 @@ export const creditSplitter = (knownCredits: Iterable<string>): ((credit: string
 
   return (credit) => {
     const names = new Map<string, string>();
-    for (const segment of segments(credit)) {
+    const credits: readonly string[] = typeof credit === "string" ? [credit] : credit;
+    for (const segment of credits.flatMap(segments)) {
       for (const name of namesOf(segment)) {
         const key = identityKey(name);
         if (name !== "" && !names.has(key)) names.set(key, name);

@@ -8,7 +8,7 @@ import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 
 import type { IndexedArtwork, IndexedTrack, PathMove } from "../LibraryStore.ts";
 import { refreshArtistImages } from "./artists.ts";
-import { creditArtists, linkAlbums, linkTracks, relinkCredits } from "./credits.ts";
+import { creditArtists, linkAlbums, linkTracks, relinkCredits, storedCredits } from "./credits.ts";
 import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
 import { deleteTracks } from "./tracks.ts";
@@ -78,7 +78,7 @@ export const saveBatch = (
 
     const credited = creditArtists(
       tx,
-      tracks.flatMap((t) => [t.artist, t.albumArtist]),
+      tracks.flatMap((t) => [t.artistCredits, t.albumArtistCredits]),
     );
 
     const genreRows = uniqueBy(
@@ -123,8 +123,9 @@ export const saveBatch = (
         key: t.albumKey,
         title: t.album,
         titleSort: t.albumSort,
-        albumArtistId: primary(credited(t.albumArtist)),
+        albumArtistId: primary(credited(t.albumArtistCredits)),
         albumArtistCredit: t.albumArtist,
+        albumArtistCredits: storedCredits(t.albumArtistCredits),
         year: t.year,
         artworkHash: t.artworkHash,
         compilation: t.compilation,
@@ -141,6 +142,7 @@ export const saveBatch = (
             title: excluded(albums.title),
             titleSort: excluded(albums.titleSort),
             albumArtistCredit: excluded(albums.albumArtistCredit),
+            albumArtistCredits: excluded(albums.albumArtistCredits),
             // The first track that has a year or a cover gives it to the album.
             year: sql`coalesce(${albums.year}, ${excluded(albums.year)})`,
             artworkHash: sql`coalesce(${albums.artworkHash}, ${excluded(albums.artworkHash)})`,
@@ -164,8 +166,9 @@ export const saveBatch = (
             modifiedAt: track.modifiedAt,
             title: track.title,
             titleSort: track.titleSort,
-            artistId: primary(credited(track.artist)),
+            artistId: primary(credited(track.artistCredits)),
             artistCredit: track.artist,
+            artistCredits: storedCredits(track.artistCredits),
             albumId: requireId(albumIds, track.albumKey, "album"),
             genreId: track.genreKey === null ? null : (genreIds.get(track.genreKey) ?? null),
             year: track.year,
@@ -194,6 +197,7 @@ export const saveBatch = (
             titleSort: excluded(t.titleSort),
             artistId: excluded(t.artistId),
             artistCredit: excluded(t.artistCredit),
+            artistCredits: excluded(t.artistCredits),
             albumId: excluded(t.albumId),
             genreId: excluded(t.genreId),
             year: excluded(t.year),
@@ -218,14 +222,14 @@ export const saveBatch = (
       tx,
       tracks.map((track) => ({
         id: requireId(trackIds, track.path, "track"),
-        artistIds: credited(track.artist),
+        artistIds: credited(track.artistCredits),
       })),
     );
     linkAlbums(
       tx,
-      albumRows.map((album) => ({
-        id: requireId(albumIds, album.key, "album"),
-        artistIds: credited(album.albumArtistCredit),
+      uniqueBy(tracks, (t) => t.albumKey).map((t) => ({
+        id: requireId(albumIds, t.albumKey, "album"),
+        artistIds: credited(t.albumArtistCredits),
       })),
     );
   });

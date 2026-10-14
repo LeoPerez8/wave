@@ -25,7 +25,7 @@ One playable piece of music in the Library, usually one audio file.
 _Avoid_: song, file
 
 **Credit**:
-The artist tag of a Track as written, such as "Ariana Grande, Doja Cat". A credit names one or more Artists. Rows show the credit as written.
+The artist tag of a Track as written, such as "Ariana Grande, Doja Cat". A credit names one or more Artists. Rows show the credit as written. A tag with several values gives a credit per value, each naming its own Artists, and rows show them joined with commas.
 _Avoid_: artist string
 
 **Artist**:
