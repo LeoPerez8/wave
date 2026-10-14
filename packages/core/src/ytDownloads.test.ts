@@ -8,12 +8,7 @@ import {
   ytDownloadStatus,
   ytDownloadsFromJournal,
 } from "./index.ts";
-import type {
-  YtDownloadFailure,
-  YtDownloadJournalJob,
-  YtDownloadStatus,
-  YtSong,
-} from "./index.ts";
+import type { YtDownloadFailure, YtDownloadJournalJob, YtDownloadStatus, YtSong } from "./index.ts";
 
 const song = (videoId: string): YtSong => ({
   videoId,
