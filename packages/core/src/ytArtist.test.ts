@@ -24,6 +24,7 @@ import type {
   YtArtistSection,
   YtArtistSectionEvent,
   YtArtistShelf,
+  YtAlbumEntry,
   YtReleaseLoad,
   YtSong,
 } from "./index.ts";
@@ -552,11 +553,11 @@ const track = (id: number, title: string, trackNumber: number | null): Track => 
 
 const titledSong = (title: string): YtSong => ({ ...song(title), title });
 
-const shape = (entries: readonly { source: string; number: number | null }[]) =>
+const shape = (entries: readonly YtAlbumEntry<YtSong, Track>[]) =>
   entries.map((entry) =>
     entry.source === "library"
-      ? `${entry.number}:#${(entry as { track: Track }).track.id}`
-      : `${entry.number}:${(entry as { song: YtSong }).song.title}`,
+      ? `${entry.number}:#${entry.track.id}`
+      : `${entry.number}:${entry.song.title}`,
   );
 
 describe("ytAlbumTracklist", () => {
