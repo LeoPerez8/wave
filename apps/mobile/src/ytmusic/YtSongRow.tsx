@@ -9,6 +9,7 @@ import type { ComponentProps } from "react";
 
 import { TrackRow } from "@/catalog/TrackRow";
 import type { NativeYtSong } from "@/native/waveYtMusic";
+import { useYtMusicEnabled } from "@/settings/ytMusic";
 
 import { useYtDownloadStatus } from "./YtDownloads";
 import { openYtSongActions } from "./YtSongActions";
@@ -42,6 +43,8 @@ export function YtSongRow({
   onAccessibilityAction?: ComponentProps<typeof TrackRow>["onAccessibilityAction"];
 }) {
   const download = useYtDownloadStatus(song.videoId);
+  // With YT Music off (a playlist's entries still show) Wave asks YouTube for nothing, covers included.
+  const ytMusic = useYtMusicEnabled();
   return (
     <TrackRow
       track={{
@@ -52,7 +55,7 @@ export function YtSongRow({
           kind + (trackNumber === undefined ? ytSongCredit(song) : ytSongArtist(song)),
         durationMs: song.durationMs,
         trackNumber,
-        artworkUri: song.artworkUrl ?? undefined,
+        artworkUri: ytMusic ? (song.artworkUrl ?? undefined) : undefined,
       }}
       state={playing ? "playing" : undefined}
       leading={trackNumber === undefined ? "artwork" : "number"}
