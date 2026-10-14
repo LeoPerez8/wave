@@ -113,6 +113,29 @@ describe("splitCredit", () => {
     assert.deepEqual(splitCredit("AC/DC x Kanye West", known), ["AC/DC", "Kanye West"]);
   });
 
+  test("an artist the Library only has featuring someone stays whole", () => {
+    const tyler = ["Tyler, The Creator feat. Kali Uchis"];
+    assert.deepEqual(splitCredit("Tyler, The Creator feat. Kali Uchis", tyler), [
+      "Tyler, The Creator",
+      "Kali Uchis",
+    ]);
+    const ewf = ["Earth, Wind & Fire ft. The Emotions"];
+    assert.deepEqual(splitCredit("Earth, Wind & Fire ft. The Emotions", ewf), [
+      "Earth, Wind & Fire",
+      "The Emotions",
+    ]);
+    assert.deepEqual(splitCredit("Earth, Wind & Fire", ewf), ["Earth, Wind & Fire"]);
+  });
+
+  test("a featured part of a credit doesn't make a collaboration one artist", () => {
+    const known = ["Calvin Harris feat. Doja Cat, Nicki Minaj"];
+    assert.deepEqual(splitCredit("Calvin Harris feat. Doja Cat, Nicki Minaj", known), [
+      "Calvin Harris",
+      "Doja Cat",
+      "Nicki Minaj",
+    ]);
+  });
+
   test("a collaboration's own credit splits once one of its artists is credited alone", () => {
     const known = ["Ariana Grande, Doja Cat", "Ariana Grande"];
     assert.deepEqual(splitCredit("Ariana Grande, Doja Cat", known), ["Ariana Grande", "Doja Cat"]);

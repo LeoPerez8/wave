@@ -4,9 +4,10 @@
  *
  * - "feat." / "ft." / "featuring" (bracketed or not) always separate artists.
  * - `,` `·` `;` `/` "with" " x " "&" and "and" separate them too, unless that
- *   part of the credit is an artist in the Library: a known whole credit
- *   ("Earth, Wind & Fire", "AC/DC") none of whose names is credited on its own
- *   anywhere. So a collaboration's own credit ("Ariana Grande, Doja Cat")
+ *   part of the credit is an artist in the Library: a known whole credit, or
+ *   the part of one before a featured credit ("Earth, Wind & Fire", "AC/DC",
+ *   "Tyler, The Creator" from "Tyler, The Creator feat. Kali Uchis"), none of
+ *   whose names is credited on its own anywhere. So a collaboration's own credit ("Ariana Grande, Doja Cat")
  *   keeps it whole until one of its artists has a song credited to them alone
  *   (or featuring someone).
  */
@@ -43,7 +44,10 @@ export const creditSplitter = (knownCredits: Iterable<string>): ((credit: string
   const standing = new Set<string>();
   for (const credit of knownCredits) {
     known.add(identityKey(credit));
-    for (const segment of segments(credit)) {
+    const parts = segments(credit);
+    // The part before a featured credit is the main artist's credit as written.
+    if (parts.length > 1) known.add(identityKey(tidy(parts[0] ?? "")));
+    for (const segment of parts) {
       const name = tidy(segment);
       if (name !== "" && pieces(segment).length === 1) standing.add(identityKey(name));
     }
