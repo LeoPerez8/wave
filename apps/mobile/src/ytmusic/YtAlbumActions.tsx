@@ -25,7 +25,7 @@ import { queueDiscoverSongs } from "@/playback/actions";
 import { askYtMusic } from "./askYtMusic";
 import { useLibraryFinder, useLoadedInLibrary } from "./libraryFinder";
 import type { YtListHead } from "./routes";
-import { runYtAlbumAction, useYtAlbumDownload } from "./YtDownloads";
+import { runYtDownloadAction, useYtAlbumDownload } from "./YtDownloads";
 
 /** A YT Music album as its tile knows it: its page (`MPREb_…`) and what the tile shows. */
 export interface YtAlbumTarget extends YtListHead {
@@ -97,7 +97,7 @@ function YtAlbumActionsMenu({
     if (entry === undefined) return;
     close();
     if (entry.kind === "queue") void queueDiscoverSongs(discoverSongs(songs, find), entry.action);
-    else runYtAlbumAction(entry.action, songs, inLibrary);
+    else runYtDownloadAction(entry.action, songs, inLibrary);
   };
   const { underFinger, trackEntry, trackList } = useSlideToChoose(choose);
   const flow = useOverlayFlow();

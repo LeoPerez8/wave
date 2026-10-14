@@ -16,13 +16,14 @@ import { selectableRow } from "@/selection/selectableRow";
 import { useListSelection, type ListSelection } from "@/selection/useListSelection";
 
 import { usePlaylists } from "./hooks";
-import { importPlaylists } from "./importPlaylists";
+import { openPlaylistImport } from "./importPlaylistLink";
 import type { PlaylistRow } from "./LibraryStore";
 import { emptyPlaylistRow } from "./playlists";
 import { newPlaylist } from "./PlaylistSheets";
 import { openPlaylist } from "./routes";
 import { songCount } from "./TrackList";
 import { useListScrollable } from "@/motion/heldTouch";
+import { useYtMusicEnabled } from "@/settings/ytMusic";
 
 /** Makes an empty playlist and opens it. */
 const createAndOpen = (): void => {
@@ -118,11 +119,15 @@ export function PlaylistsList({ empty }: { empty: string }) {
   );
 }
 
-/** Import Playlists (M3U files) and New Playlist, side by side. */
+/**
+ * Import Playlists (From a Link or From Files; with YT Music off, M3U files
+ * at once) and New Playlist, side by side.
+ */
 function PlaylistsActions() {
+  const ytMusic = useYtMusicEnabled();
   return (
     <View className="flex-row items-center" style={{ gap: CELL * 3 }}>
-      <TextButton label="Import Playlists" onPress={() => void importPlaylists()} />
+      <TextButton label="Import Playlists" opensMenu={ytMusic} onPress={openPlaylistImport} />
       <TextButton label="New Playlist" opensMenu onPress={createAndOpen} />
     </View>
   );

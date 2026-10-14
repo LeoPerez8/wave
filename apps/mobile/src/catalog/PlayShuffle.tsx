@@ -38,14 +38,18 @@ export function ListAction({
 type Props = {
   onPlay: () => void;
   onShuffle: () => void;
-  /** More actions after Shuffle (a YT Music album's Download). */
+  /** More actions after Shuffle (a YT Music album's or a playlist's Download). */
   children?: ReactNode;
 };
 
-/** Play and Shuffle for a list: two teal line-icon actions, no containers. */
+/**
+ * Play and Shuffle for a list: two teal line-icon actions, no containers.
+ * Too narrow for every action (Retry Failed beside a playlist's menu
+ * button), the last ones wrap onto a second line.
+ */
 export function PlayShuffle({ onPlay, onShuffle, children }: Props) {
   return (
-    <View className="flex-row" style={{ gap: CELL * 4 }}>
+    <View className="flex-row flex-wrap" style={{ columnGap: CELL * 4, flexShrink: 1 }}>
       <ListAction icon={IconPlayerPlay} label="Play" onPress={onPlay} />
       <ListAction icon={IconArrowsShuffle} label="Shuffle" onPress={onShuffle} />
       {children}

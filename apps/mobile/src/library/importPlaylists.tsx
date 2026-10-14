@@ -9,6 +9,7 @@ import {
   type LibraryPathIndex,
   type M3uImportOutcome,
   type M3uImportSummary,
+  type PlaylistSong,
 } from "@wave/core";
 import { ScrollView, Text, View } from "react-native";
 
@@ -38,30 +39,54 @@ const importFile = async (
   if (plan.trackIds.length === 0)
     return { kind: "nothingFound", file: file.name, missing: plan.missing };
 
-  const playlists = await currentPlaylists();
-  const clash = importNameClash(plan.name, playlists);
-  const imported = {
+  const saved = await saveImportedPlaylist(plan.name, libraryPlaylistSongs(plan.trackIds));
+  return {
     kind: "imported",
     songs: plan.trackIds.length,
     missing: plan.missing,
-  } as const;
+    name: saved.name,
+    replaced: saved.replaced,
+  };
+};
+
+/** The playlist an import made or replaced. */
+export interface ImportedPlaylist {
+  readonly playlistId: number;
+  readonly name: string;
+  /** It replaced the songs of a playlist that had its name. */
+  readonly replaced: boolean;
+}
+
+/**
+ * Saves an imported playlist named [name] holding [songs]. When a playlist
+ * already has the name, asks Replace (that playlist gets these songs) or Keep
+ * Both (a new playlist with the name numbered, Core's `keepBothName`).
+ */
+export const saveImportedPlaylist = async (
+  name: string,
+  songs: readonly PlaylistSong[],
+): Promise<ImportedPlaylist> => {
+  const playlists = await currentPlaylists();
+  const clash = importNameClash(name, playlists);
   if (clash !== undefined && (await confirmAction(confirmImportReplace(clash.name)))) {
-    await replacePlaylistSongs(clash.id, libraryPlaylistSongs(plan.trackIds));
-    return { ...imported, name: clash.name, replaced: true };
+    await replacePlaylistSongs(clash.id, songs);
+    return { playlistId: clash.id, name: clash.name, replaced: true };
   }
-  const name =
+  const created = await createPlaylist(
     clash === undefined
-      ? plan.name
+      ? name
       : keepBothName(
-          plan.name,
+          name,
           playlists.map((playlist) => playlist.name),
-        );
-  const created = await createPlaylist(name, libraryPlaylistSongs(plan.trackIds));
-  return { ...imported, name: created.name, replaced: false };
+        ),
+    songs,
+  );
+  return { playlistId: created.playlistId, name: created.name, replaced: false };
 };
 
 /**
- * Library › Playlists › Import Playlists: opens the system file picker for
+ * Library › Playlists › Import › From Files (Import itself with YT Music
+ * off, `openPlaylistImport`): opens the system file picker for
  * M3U files, makes a playlist of each (Core's `planM3uImport`), asking before
  * replacing one with the same name, then shows what was imported and skipped.
  */

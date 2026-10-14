@@ -124,6 +124,8 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
   pickPlaylistFiles(): Promise<readonly PickedPlaylistFile[]>;
   /** Opens the system file picker for files of any type (BlackPlayer's stats), read as `pickPlaylistFiles` reads them. */
   pickStatFiles(): Promise<readonly PickedPlaylistFile[]>;
+  /** The clipboard's text, or null when it holds none. Only readable while Wave is in front. */
+  readClipboardText(): Promise<string | null>;
   /**
    * Starts a scan, cancelling any running one, and returns its id. The known
    * files (parallel lists) make it incremental: files with the same size and

@@ -14,6 +14,9 @@ import { PlaylistItems, playPlaylistEntries } from "@/library/PlaylistItems";
 import { parseId, useKnownRow } from "@/library/routes";
 import { appRuntime } from "@/library/runtime";
 import { songCount } from "@/library/TrackList";
+import { ListDownloadAction, useYtPlaylistDownloadButton } from "@/ytmusic/YtSongList";
+
+const NO_ENTRIES: readonly PlaylistEntryRow[] = [];
 
 /** What the screen shows: the playlist, and its songs once they are read. */
 interface Shown {
@@ -40,6 +43,8 @@ function PlaylistHead({ shown }: { shown: Shown }) {
         playPlaylistEntries(detail.items, undefined, context, { shuffle });
     });
   };
+  // Its YT Music entries download into the Library (Core's `ytPlaylistDownload`).
+  const download = useYtPlaylistDownloadButton(items ?? NO_ENTRIES);
   const count = items?.length ?? playlist.trackCount;
   const furniture =
     count === 0
@@ -62,10 +67,20 @@ function PlaylistHead({ shown }: { shown: Shown }) {
         >
           {furniture}
         </Text>
+        {download.progress !== null && (
+          <Text
+            className="font-sans text-footnote text-accent"
+            style={{ fontVariant: ["tabular-nums"] }}
+          >
+            {download.progress}
+          </Text>
+        )}
       </View>
       <View className="flex-row items-center justify-between">
         {count > 0 ? (
-          <PlayShuffle onPlay={() => play(false)} onShuffle={() => play(true)} />
+          <PlayShuffle onPlay={() => play(false)} onShuffle={() => play(true)}>
+            {download.button !== null && <ListDownloadAction download={download.button} />}
+          </PlayShuffle>
         ) : (
           <View />
         )}
