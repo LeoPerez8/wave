@@ -709,3 +709,35 @@ export type {
   SpotifySong,
   SpotifyTransport,
 } from "./spotifyPlaylist.ts";
+export { compareOrderKeys, orderKeyBetween } from "./orderKey.ts";
+export type { OrderedEntry } from "./orderKey.ts";
+export {
+  RECORDING_LENGTH_TOLERANCE_MS,
+  fillMissingSongs,
+  findRecording,
+  joinLibraries,
+  mergePlays,
+  mergeRows,
+  recordingKey,
+  signOutPlan,
+  vanishedFile,
+} from "./sync.ts";
+export type {
+  FilledSong,
+  JoinedTrack,
+  KeyedSong,
+  LibraryJoin,
+  LibrarySide,
+  MergedPlays,
+  MergedRows,
+  MissingSong,
+  MissingSongsFill,
+  Recording,
+  RecordingTags,
+  SignOutPlan,
+  StreamedEntry,
+  SyncPlay,
+  SyncRow,
+  TrackEntry,
+  VanishedFileFate,
+} from "./sync.ts";
