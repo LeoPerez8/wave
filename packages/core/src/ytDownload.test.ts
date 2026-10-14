@@ -162,7 +162,7 @@ describe("ytDownloadTags", () => {
   });
 });
 
-test("download destination chooses an included final folder and always saves MP3", () => {
+test("download destination chooses an included final folder and saves Soulseek's MP3", () => {
   const tags = ytDownloadTags(getLucky, null, null, null);
   const roots = [
     { path: ROOT, isDefault: true },
@@ -173,10 +173,28 @@ test("download destination chooses an included final folder and always saves MP3
       roots,
       [`${ROOT}/Daft Punk, Pharrell Williams & Nile Rodgers/Random Access Memories`],
       tags,
+      "soulseek",
     )?.path,
     "/sdcard/Other/Daft Punk, Pharrell Williams & Nile Rodgers/Random Access Memories/Get Lucky (feat. Pharrell Williams and Nile Rodgers).mp3",
   );
-  assert.equal(ytDownloadDestination(roots, [ROOT, "/sdcard/Other"], tags), null);
+  assert.equal(ytDownloadDestination(roots, [ROOT, "/sdcard/Other"], tags, "soulseek"), null);
+});
+
+test("a download from YouTube Music lands in the same place as an M4A, under the same exclusions", () => {
+  const tags = { ...ytDownloadTags(getLucky, null, null, null), trackNumber: 8 };
+  const roots = [
+    { path: ROOT, isDefault: true },
+    { path: "/sdcard/Other", isDefault: false },
+  ];
+  assert.equal(
+    ytDownloadDestination(roots, [], tags, "youtube")?.path,
+    `${ROOT}/Daft Punk, Pharrell Williams & Nile Rodgers/Random Access Memories/08 Get Lucky (feat. Pharrell Williams and Nile Rodgers).m4a`,
+  );
+  assert.equal(
+    ytDownloadDestination(roots, [ROOT], tags, "youtube")?.path,
+    "/sdcard/Other/Daft Punk, Pharrell Williams & Nile Rodgers/Random Access Memories/08 Get Lucky (feat. Pharrell Williams and Nile Rodgers).m4a",
+  );
+  assert.equal(ytDownloadDestination(roots, [ROOT, "/sdcard/Other"], tags, "youtube"), null);
 });
 
 describe("ytDownloadLookup", () => {
@@ -253,6 +271,16 @@ describe("ytDownloadTarget", () => {
       trackNumber: null,
     });
     assert.equal(target.path, `${ROOT}/Daft Punk/Random Access Memories/Instant Crush.mp3`);
+  });
+
+  test("YouTube Music's audio is named the same way, as the M4A it's served in", () => {
+    assert.equal(
+      ytDownloadTarget(ROOT, { ...place, trackNumber: 3 }, "youtube").fileName,
+      "03 Song.m4a",
+    );
+    assert.equal(ytDownloadTarget(ROOT, place, "youtube").path, `${ROOT}/Artist/Album/Song.m4a`);
+    const long = ytDownloadTarget(ROOT, { ...place, title: "a".repeat(300) }, "youtube");
+    assert.equal(long.fileName, `${"a".repeat(MAX_NAME_BYTES - 4)}.m4a`);
   });
 
   test("swaps characters Android's storage can't take in names for an underscore", () => {

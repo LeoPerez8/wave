@@ -96,6 +96,22 @@ describe("downloading a playlist's YT Music entries", () => {
     assert.deepEqual(view.toCancel, ["b", "c"]);
   });
 
+  test("with no source to download from, every entry fails and the playlist offers Retry Failed", () => {
+    const playlist = [stream("a"), file("/Music/x.mp3"), stream("b")];
+    const view = ytPlaylistDownload(playlist, {
+      inLibrary: nothingInLibrary,
+      jobs: [
+        job("a", { phase: "failed", reason: "noSource" }),
+        job("b", { phase: "failed", reason: "noSource" }),
+      ],
+    });
+    assert.deepEqual(view.actions, ["retryFailed"]);
+    assert.deepEqual(
+      view.toRetry.map(({ song: { videoId } }) => videoId),
+      ["a", "b"],
+    );
+  });
+
   test("the playlist menu names each entry", () => {
     assert.deepEqual(YT_PLAYLIST_DOWNLOAD_ACTION_LABELS, {
       downloadPlaylist: "Download Playlist",

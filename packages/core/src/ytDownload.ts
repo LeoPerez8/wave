@@ -1,11 +1,13 @@
 /**
  * Downloading a YT Music song into the Library (docs/spec.md, "YT Music"):
- * where the file goes, the tags it gets and the queue of downloads. The
- * native Soulseek client acquires verified MP3 320, and the existing writer
+ * where the file goes and the tags it gets. The native journal acquires the
+ * audio from the download's source (`downloadSource`): Soulseek's verified
+ * MP3 320, or the M4A YouTube Music serves, as served. The existing writer
  * and scanner publish it. Optional catalog metadata never establishes quality.
  */
 
 import { songLookup, type FoundTags, type SongLookup } from "./lyricsAndGenre.ts";
+import type { DownloadSource } from "./downloadSource.ts";
 import { normalizeSearchText } from "./search.ts";
 import { joinArtists, type YtSong } from "./ytMusic.ts";
 import { isWithin } from "./scanRoots.ts";
@@ -124,8 +126,11 @@ export const ytDownloadRoot = (
   roots: readonly { readonly path: string; readonly isDefault: boolean }[],
 ): string | null => (roots.find((root) => root.isDefault) ?? roots[0])?.path ?? null;
 
-/** The native Soulseek route preserves verified original MP3 320. */
-const EXTENSION = "mp3";
+/**
+ * The file each source saves, never re-encoded: Soulseek's original MP3 320,
+ * YouTube Music's AAC in the M4A it serves.
+ */
+const EXTENSIONS: { readonly [S in DownloadSource]: string } = { soulseek: "mp3", youtube: "m4a" };
 
 /** What the file's place depends on. */
 export interface YtDownloadPlace {
@@ -195,16 +200,22 @@ const byteLength = (text: string): number => {
 /**
  * Where a downloaded song goes: the Library's own tree,
  * `<root>/<album artist>/<album>/`, named after its title, after its track
- * number when known ("08 Title.mp3"). Names are made safe for the storage:
- * see `safeName`. The PC job that organizes the music folder names files with
- * this too, so a download lands next to the album's other songs.
+ * number when known ("08 Title.mp3"), with the extension of the file its
+ * [source] saves ("08 Title.m4a" from YouTube Music). Names are made safe for
+ * the storage: see `safeName`. The PC job that organizes the music folder
+ * names files with this too, so a download lands next to the album's other
+ * songs.
  */
-export const ytDownloadTarget = (root: string, song: YtDownloadPlace): YtDownloadTarget => {
+export const ytDownloadTarget = (
+  root: string,
+  song: YtDownloadPlace,
+  source: DownloadSource = "soulseek",
+): YtDownloadTarget => {
   const folders = [safeName(song.albumArtist ?? song.artist)];
   if (song.album !== null) folders.push(safeName(song.album));
   const folder = [root.replace(/\/+$/, ""), ...folders].join("/");
   const number = song.trackNumber === null ? "" : `${String(song.trackNumber).padStart(2, "0")} `;
-  const suffix = `.${EXTENSION}`;
+  const suffix = `.${EXTENSIONS[source]}`;
   const title = safeName(song.title, MAX_NAME_BYTES - byteLength(number) - byteLength(suffix));
   const fileName = `${number}${title}${suffix}`;
   return { folder, fileName, path: `${folder}/${fileName}` };
@@ -215,13 +226,14 @@ export const ytDownloadDestination = (
   roots: readonly { readonly path: string; readonly isDefault: boolean }[],
   excluded: readonly string[],
   song: YtDownloadPlace,
+  source: DownloadSource,
 ): YtDownloadTarget | null => {
   const ordered = [
     ...roots.filter((root) => root.isDefault),
     ...roots.filter((root) => !root.isDefault),
   ];
   for (const root of ordered) {
-    const target = ytDownloadTarget(root.path, song);
+    const target = ytDownloadTarget(root.path, song, source);
     if (!excluded.some((folder) => isWithin(target.path, folder))) return target;
   }
   return null;
