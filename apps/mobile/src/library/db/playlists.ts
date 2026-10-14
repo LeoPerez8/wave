@@ -66,13 +66,16 @@ export const selectPlaylistEntries = (
     .from(playlistItems)
     .where(eq(playlistItems.playlistId, playlistId))
     .orderBy(asc(playlistItems.position), asc(playlistItems.id));
-  const items = page === undefined ? query.all() : query.limit(page.limit).offset(page.offset).all();
+  const items =
+    page === undefined ? query.all() : query.limit(page.limit).offset(page.offset).all();
   if (items.length === 0) return [];
   // A page reads only its own tracks; the whole list, the playlist's.
   const tracks = new Map(
-    playlistTracks(db, playlistId, page === undefined ? undefined : items.map((item) => item.id)).map(
-      ({ itemId, ...track }) => [itemId, track],
-    ),
+    playlistTracks(
+      db,
+      playlistId,
+      page === undefined ? undefined : items.map((item) => item.id),
+    ).map(({ itemId, ...track }) => [itemId, track]),
   );
   return items.flatMap((item): PlaylistEntry[] => {
     if (item.ytSong !== null) {
@@ -278,8 +281,7 @@ export const selectPlaylistCovers = (
       group = { thumbs: [], paths: [] };
       grouped.set(row.playlistId, group);
     }
-    const cover =
-      row.ytSong === null ? null : (readPlaylistYtSong(row.ytSong)?.artworkUrl ?? null);
+    const cover = row.ytSong === null ? null : (readPlaylistYtSong(row.ytSong)?.artworkUrl ?? null);
     group.thumbs.push(row.ytSong === null ? row.thumbPath : cover);
     group.paths.push(row.ytSong === null ? row.path : cover);
   }

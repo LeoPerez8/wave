@@ -122,8 +122,8 @@ const run = (
       return;
     case "removeFromPlaylist":
       if (playlistItem === undefined) return;
-      removePlaylistItems(playlistItem.playlistId, [playlistItem.itemId]).catch(
-        (error: unknown) => showError("Couldn't remove the song", error),
+      removePlaylistItems(playlistItem.playlistId, [playlistItem.itemId]).catch((error: unknown) =>
+        showError("Couldn't remove the song", error),
       );
       return;
     case "download":

@@ -2,14 +2,14 @@
 
 Tried on 2026-10-14 from a Brazilian IP, with curl and small Node scripts, against:
 
-| Playlist | Id | Kind | Songs |
-| --- | --- | --- | --- |
-| Top 500 Most Streamed Songs on Spotify | `1RTENWq73MEx1Pop40ZZ5S` | user | 495 |
-| The Longest Playlist Ever | `6yPiKpy7evrwvZodByKvM9` | user | 10,000 (82 local files, 307 not playable in BR) |
-| Today's Top Hits | `37i9dQZF1DXcBWIGoYBM5M` | Spotify editorial | 50 |
-| This Is Taylor Swift | `37i9dQZF1DX5KpP2LN299J` | Spotify editorial | 85 |
-| (none) | `0000000000000000000000`, `4bU1kM5X1Sd6p8XGwLsH9m` | doesn't exist | |
-| (malformed) | `abc` | bad id | |
+| Playlist                               | Id                                                 | Kind              | Songs                                           |
+| -------------------------------------- | -------------------------------------------------- | ----------------- | ----------------------------------------------- |
+| Top 500 Most Streamed Songs on Spotify | `1RTENWq73MEx1Pop40ZZ5S`                           | user              | 495                                             |
+| The Longest Playlist Ever              | `6yPiKpy7evrwvZodByKvM9`                           | user              | 10,000 (82 local files, 307 not playable in BR) |
+| Today's Top Hits                       | `37i9dQZF1DXcBWIGoYBM5M`                           | Spotify editorial | 50                                              |
+| This Is Taylor Swift                   | `37i9dQZF1DX5KpP2LN299J`                           | Spotify editorial | 85                                              |
+| (none)                                 | `0000000000000000000000`, `4bU1kM5X1Sd6p8XGwLsH9m` | doesn't exist     |                                                 |
+| (malformed)                            | `abc`                                              | bad id            |                                                 |
 
 ## Answer
 
@@ -62,9 +62,19 @@ The web player's own API. Body:
 
 ```json
 {
-  "variables": { "uri": "spotify:playlist:<id>", "offset": 0, "limit": 500, "enableWatchFeedEntrypoint": false },
+  "variables": {
+    "uri": "spotify:playlist:<id>",
+    "offset": 0,
+    "limit": 500,
+    "enableWatchFeedEntrypoint": false
+  },
   "operationName": "fetchPlaylist",
-  "extensions": { "persistedQuery": { "version": 1, "sha256Hash": "8964e8eafb21aa992a7d951d256d83285c04be2105d209262901de70cb97584a" } }
+  "extensions": {
+    "persistedQuery": {
+      "version": 1,
+      "sha256Hash": "8964e8eafb21aa992a7d951d256d83285c04be2105d209262901de70cb97584a"
+    }
+  }
 }
 ```
 
@@ -143,14 +153,14 @@ which can match the wrong song. Neither is worth it for import.
 
 All playlist ids are 22 base-62 characters (`[0-9A-Za-z]{22}`).
 
-| Form | Where it comes from | To the id |
-| --- | --- | --- |
-| `https://open.spotify.com/playlist/<id>?si=…` | Share › Copy link, the share sheet | path |
-| `https://open.spotify.com/intl-<lang>/playlist/<id>?si=…` | localized web links | path (the server 302s to the plain form) |
-| `https://open.spotify.com/user/<user>/playlist/<id>` | old links | path (301 to the plain form) |
-| `https://open.spotify.com/embed/playlist/<id>` | embed codes | path |
-| `spotify:playlist:<id>`, `spotify:user:<user>:playlist:<id>` | desktop Copy Spotify URI | last segment |
-| `https://spotify.link/<code>`, `https://spotify.app.link/<code>` | the mobile app's share (Branch.io short links) | resolve over the network, below |
+| Form                                                             | Where it comes from                            | To the id                                |
+| ---------------------------------------------------------------- | ---------------------------------------------- | ---------------------------------------- |
+| `https://open.spotify.com/playlist/<id>?si=…`                    | Share › Copy link, the share sheet             | path                                     |
+| `https://open.spotify.com/intl-<lang>/playlist/<id>?si=…`        | localized web links                            | path (the server 302s to the plain form) |
+| `https://open.spotify.com/user/<user>/playlist/<id>`             | old links                                      | path (301 to the plain form)             |
+| `https://open.spotify.com/embed/playlist/<id>`                   | embed codes                                    | path                                     |
+| `spotify:playlist:<id>`, `spotify:user:<user>:playlist:<id>`     | desktop Copy Spotify URI                       | last segment                             |
+| `https://spotify.link/<code>`, `https://spotify.app.link/<code>` | the mobile app's share (Branch.io short links) | resolve over the network, below          |
 
 Strip the query string. A URL without `/playlist/` (a track, album, artist or user) isn't a
 playlist: say so instead of importing.

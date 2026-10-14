@@ -11,14 +11,7 @@ import {
   type RowWindow,
 } from "@wave/core";
 import * as Haptics from "expo-haptics";
-import {
-  useCallback,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactElement,
-} from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import {
   Text,
   ToastAndroid,

@@ -115,7 +115,11 @@ describe("appendPlaylistSongs", () => {
     const result = appendPlaylistSongs(
       db,
       playlistId,
-      [stream(yt("a", { title: "Lucky" })), library("Bloom"), stream(yt("b", { title: "Reckoner" }))],
+      [
+        stream(yt("a", { title: "Lucky" })),
+        library("Bloom"),
+        stream(yt("b", { title: "Reckoner" })),
+      ],
       0,
     );
     assert.deepEqual(result, { added: 3, alreadyIn: 0 });
@@ -259,7 +263,13 @@ describe("selectPlaylistCovers", () => {
     appendPlaylistSongs(
       db,
       id,
-      [library("One"), stream(yt("a")), library("Two"), stream(yt("b", { artworkUrl: null })), stream(yt("c"))],
+      [
+        library("One"),
+        stream(yt("a")),
+        library("Two"),
+        stream(yt("b", { artworkUrl: null })),
+        stream(yt("c")),
+      ],
       0,
     );
     assert.deepEqual(selectPlaylistCovers(db, id).get(id), {

@@ -37,10 +37,7 @@ export const planPlaylistSongs = <S extends YtSong>(
     const key = playlistSongKey(song);
     if (!byKey.has(key)) byKey.set(key, song);
   }
-  const plan = planPlaylistAdd(
-    existing.map(playlistSongKey),
-    incoming.map(playlistSongKey),
-  );
+  const plan = planPlaylistAdd(existing.map(playlistSongKey), incoming.map(playlistSongKey));
   return {
     add: plan.add.flatMap((key) => {
       const song = byKey.get(key);
