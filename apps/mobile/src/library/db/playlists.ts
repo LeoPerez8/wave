@@ -283,40 +283,70 @@ export interface PlaylistCovers {
   readonly artworkPaths: readonly string[];
 }
 
+/** The most tiles a mosaic has (Core's `playlistMosaic`). */
+const MOSAIC_TILES = 4;
+
 /**
  * Each playlist's mosaic (Core's `playlistMosaic`), from what it holds in
  * playlist order: a Library track's album cover (a file), a YT Music entry's
- * cover (YouTube's address). Only [playlistId]'s when given.
+ * cover (YouTube's address). Only [playlistId]'s when given. SQLite picks each
+ * playlist's first four different covers, so only those are read.
  */
 export const selectPlaylistCovers = (
   db: LibraryDatabase,
   playlistId?: number,
 ): Map<number, PlaylistCovers> => {
-  const { playlistItems, tracks, albums, artwork } = schema;
-  const rows = db
-    .select({
-      playlistId: playlistItems.playlistId,
-      thumbPath: artwork.thumbPath,
-      path: artwork.path,
-      ytSong: playlistItems.ytSong,
-    })
-    .from(playlistItems)
-    .leftJoin(tracks, eq(playlistItems.trackId, tracks.id))
-    .leftJoin(albums, eq(tracks.albumId, albums.id))
-    .leftJoin(artwork, eq(albums.artworkHash, artwork.hash))
-    .where(playlistId === undefined ? undefined : eq(playlistItems.playlistId, playlistId))
-    .orderBy(asc(playlistItems.playlistId), asc(playlistItems.position), asc(playlistItems.id))
-    .all();
-  const grouped = new Map<number, { thumbs: (string | null)[]; paths: (string | null)[] }>();
+  const inPlaylist = playlistId === undefined ? sql`1` : sql`pi.playlist_id = ${playlistId}`;
+  // A cover is an artwork row (its file and thumbnail) or an entry's address
+  // (both at once); unreadable stored songs give none.
+  const rows = db.all<{ playlistId: number; thumbPath: string; path: string }>(sql`
+    WITH items AS (
+      SELECT pi.playlist_id, pi.position, pi.id, al.artwork_hash,
+        CASE WHEN json_valid(pi.yt_song) THEN
+          CASE json_type(pi.yt_song, '$.artworkUrl')
+            WHEN 'text' THEN json_extract(pi.yt_song, '$.artworkUrl')
+          END
+        END AS url
+      FROM playlist_items pi
+      LEFT JOIN tracks t ON t.id = pi.track_id
+      LEFT JOIN albums al ON al.id = t.album_id
+      WHERE ${inPlaylist}
+    ),
+    covers AS (
+      SELECT items.playlist_id, items.position, items.id,
+        coalesce(aw.hash, items.url) AS cover,
+        coalesce(aw.thumb_path, items.url) AS thumb_path,
+        coalesce(aw.path, items.url) AS path
+      FROM items
+      LEFT JOIN artwork aw ON aw.hash = items.artwork_hash
+    ),
+    firsts AS (
+      SELECT *, row_number() OVER (
+        PARTITION BY playlist_id, cover ORDER BY position, id
+      ) AS seen
+      FROM covers
+      WHERE cover IS NOT NULL
+    ),
+    tiles AS (
+      SELECT *, row_number() OVER (
+        PARTITION BY playlist_id ORDER BY position, id
+      ) AS tile
+      FROM firsts
+      WHERE seen = 1
+    )
+    SELECT playlist_id AS playlistId, thumb_path AS thumbPath, path
+    FROM tiles
+    WHERE tile <= ${MOSAIC_TILES}
+    ORDER BY playlist_id, tile`);
+  const grouped = new Map<number, { thumbs: string[]; paths: string[] }>();
   for (const row of rows) {
     let group = grouped.get(row.playlistId);
     if (group === undefined) {
       group = { thumbs: [], paths: [] };
       grouped.set(row.playlistId, group);
     }
-    const cover = row.ytSong === null ? null : (readPlaylistYtSong(row.ytSong)?.artworkUrl ?? null);
-    group.thumbs.push(row.ytSong === null ? row.thumbPath : cover);
-    group.paths.push(row.ytSong === null ? row.path : cover);
+    group.thumbs.push(row.thumbPath);
+    group.paths.push(row.path);
   }
   return new Map(
     [...grouped].map(([id, group]) => [

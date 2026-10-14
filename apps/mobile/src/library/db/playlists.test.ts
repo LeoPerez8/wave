@@ -316,6 +316,41 @@ describe("selectPlaylistCovers", () => {
       ],
     });
   });
+
+  test("a cover repeated, or an unreadable entry, takes no tile; each playlist gets its own", () => {
+    const id = newPlaylist("Repeats");
+    const other = newPlaylist("Other");
+    for (const [title, hash] of [
+      ["One", "h1"],
+      ["Two", "h2"],
+      ["Three", "h3"],
+    ] as const) {
+      ids[title] = addTrack(db, { title, album: title, artist: "Radiohead", artworkHash: hash });
+    }
+    appendPlaylistSongs(db, id, [library("One")], 0);
+    db.insert(schema.playlistItems)
+      .values({ playlistId: id, ytSong: "not json", position: 1, addedAt: 0 })
+      .run();
+    // The same cover again, under other songs: one tile.
+    db.insert(schema.playlistItems)
+      .values({ playlistId: id, trackId: ids.One ?? -1, position: 2, addedAt: 0 })
+      .run();
+    appendPlaylistSongs(db, id, [stream(yt("a")), stream(yt("a2", { artworkUrl: yt("a").artworkUrl }))], 0);
+    appendPlaylistSongs(db, id, [library("Two"), library("Three")], 0);
+    appendPlaylistSongs(db, other, [library("Three")], 0);
+
+    const covers = selectPlaylistCovers(db);
+    assert.deepEqual(covers.get(id)?.thumbPaths, [
+      "/covers/h1.thumb.jpg",
+      "https://lh3.googleusercontent.com/a",
+      "/covers/h2.thumb.jpg",
+      "/covers/h3.thumb.jpg",
+    ]);
+    assert.deepEqual(covers.get(other), {
+      thumbPaths: ["/covers/h3.thumb.jpg"],
+      artworkPaths: ["/covers/h3.jpg"],
+    });
+  });
 });
 
 describe("selectPlaylistTotals", () => {
