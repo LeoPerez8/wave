@@ -4,7 +4,7 @@ import { queueState } from "@/playback/Queue";
 import { queueTracks } from "@/playback/queueTracks";
 import { readTrackLyrics } from "@/playback/trackLyrics";
 
-import { startAutoLyricLine } from "./autoLyricLine";
+import { startAutoLyricLines } from "./autoLyricLines";
 
 /** The audio file of queue entry `itemId`, once the queue knows it. */
 const pathOf = (itemId: string): string | null => {
@@ -13,18 +13,18 @@ const pathOf = (itemId: string): string | null => {
 };
 
 /**
- * Shows the lyric line being sung under the title on Android Auto's player
- * screen while its Lyrics toggle is on (see `startAutoLyricLine`). The toggle
+ * Draws the lyrics being sung into the artwork on Android Auto's player
+ * screen while its Lyrics toggle is on (see `startAutoLyricLines`). The toggle
  * lives in the playback service, which reports it with Auto's connection.
  * Call it once per JS runtime (`startServices` does).
  */
 export const startAutoLyrics = (): void => {
-  const sync = startAutoLyricLine({
+  const sync = startAutoLyricLines({
     playback: playbackState,
     pathOf,
     readLyrics: readTrackLyrics,
-    show: (itemId, line) => {
-      WavePlayer.setAutoLyricLine(itemId, line).catch(() => undefined);
+    show: (itemId, lines) => {
+      WavePlayer.setAutoLyricLines(itemId, lines).catch(() => undefined);
     },
   });
   let reported = false;

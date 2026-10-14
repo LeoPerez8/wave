@@ -1,6 +1,7 @@
 package expo.modules.wavenative.player
 
 import android.content.Context
+import android.net.Uri
 import android.os.Bundle
 import androidx.annotation.OptIn
 import androidx.media3.common.ForwardingSimpleBasePlayer
@@ -49,24 +50,31 @@ class PreferencesLyricsToggleStore(context: Context) : LyricsToggleStore {
 
 /**
  * The player the media session shows: [player] as it is, except that the
- * line under the title (the artist) shows the lyric line [lineFor] gives for
- * the current item, when it gives one. Only the session's metadata changes:
- * the items, and so what Wave's own controller and the resume snapshot read,
- * keep their artist. Call [refresh] when [lineFor] would answer differently.
+ * artwork is the lyrics image [artworkFor] gives for the current item (its
+ * entry key and cover file), when it gives one. Only the session's metadata
+ * changes: the items, and so what Wave's own controller and the resume
+ * snapshot read, keep their cover. Call [refresh] when [artworkFor] would
+ * answer differently.
  */
 @OptIn(UnstableApi::class)
-class LyricLinePlayer(
+class LyricArtworkPlayer(
   player: Player,
-  private val lineFor: (itemId: String?) -> String?,
+  private val artworkFor: (itemId: String?, coverPath: String?) -> String?,
 ) : ForwardingSimpleBasePlayer(player) {
   override fun getState(): State {
     val state = super.getState()
-    val line = lineFor(player.currentMediaItem?.mediaId) ?: return state
     if (state.timeline.isEmpty) return state
-    val metadata = state.currentMetadata.buildUpon().setArtist(line).build()
+    val item = player.currentMediaItem
+    val cover = item?.mediaMetadata?.extras?.getString(PlayerMediaItems.ARTWORK_PATH)
+    val artwork = artworkFor(item?.mediaId, cover) ?: return state
+    val metadata = state.currentMetadata.buildUpon()
+      // A picture embedded in the file would win over the URI in Media3's bitmap loader.
+      .setArtworkData(null, null)
+      .setArtworkUri(Uri.parse(artwork))
+      .build()
     return state.buildUpon().setPlaylist(state.timeline, state.currentTracks, metadata).build()
   }
 
-  /** Shows the line [lineFor] gives now. */
+  /** Shows the artwork [artworkFor] gives now. */
   fun refresh() = invalidateState()
 }

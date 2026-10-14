@@ -1,4 +1,4 @@
-import type { PlaySource, RepeatMode, SleepTimer } from "@wave/core";
+import type { AutoLyricsFrame, PlaySource, RepeatMode, SleepTimer } from "@wave/core";
 import { NativeModule, requireNativeModule } from "expo";
 
 /** One track handed to the native player (`modules/wave-native`, `WavePlayerModule`). */
@@ -201,11 +201,11 @@ declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
   /** The Lyrics toggle and Auto's connection; `onAutoLyrics` reports changes. */
   getAutoLyrics(): Promise<AutoLyricsEvent>;
   /**
-   * Shows `line` under the title of item `itemId` (its queue entry key) on
-   * Auto's player screen in place of the artist; null shows the artist. The
-   * service ignores it while the toggle is off or Auto isn't connected.
+   * Draws `lines` into the artwork of item `itemId` (its queue entry key) on
+   * Auto's player screen; null shows its own artwork. The service ignores it
+   * while the toggle is off or Auto isn't connected.
    */
-  setAutoLyricLine(itemId: string | null, line: string | null): Promise<void>;
+  setAutoLyricLines(itemId: string | null, lines: AutoLyricsFrame | null): Promise<void>;
 }
 
 export const WavePlayer = requireNativeModule<WavePlayerModule>("WavePlayer");
