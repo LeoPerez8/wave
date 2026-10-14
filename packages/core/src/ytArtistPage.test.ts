@@ -4,7 +4,6 @@ import { describe, test } from "node:test";
 import {
   YT_ARTIST_SECTION_START,
   stepYtArtistSection,
-  libraryArtistNamed,
   ytArtistPageAsks,
   ytArtistPageView,
 } from "./index.ts";
@@ -208,23 +207,5 @@ describe("what a YouTube Music artist page shows", () => {
     const old = restored({ outcome: "unmatched", checkedAt: NOW - 8 * DAY });
     assert.equal(view(old).note, "loading");
     assert.equal(asks(old), true);
-  });
-});
-
-describe("libraryArtistNamed", () => {
-  const artists = [
-    { id: 1, name: "Beatles" },
-    { id: 2, name: "Björk" },
-    { id: 3, name: "Unknown Artist" },
-  ];
-
-  test("is the Library artist whose name matches as artist photos compare names", () => {
-    assert.equal(libraryArtistNamed("The Beatles", artists)?.id, 1);
-    assert.equal(libraryArtistNamed("bjork", artists)?.id, 2);
-  });
-
-  test("is null for anyone else, and for names that aren't an artist", () => {
-    assert.equal(libraryArtistNamed("Daft Punk", artists), null);
-    assert.equal(libraryArtistNamed("Unknown Artist", artists), null);
   });
 });

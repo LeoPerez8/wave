@@ -95,7 +95,7 @@ interface LibraryReleases {
 
 const releasesOf = (sources: Sources): LibraryReleases => {
   const artistNamed = libraryArtistFinder(sources.artists);
-  const albumOf = libraryReleaseFinder(sources.artists, sources.albums);
+  const albumOf = libraryReleaseFinder(artistNamed, sources.albums);
   return {
     hasArtist: (artist) => artistNamed(artist.name) !== null,
     hasAlbum: (album) => albumOf(album) !== null,

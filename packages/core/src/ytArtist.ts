@@ -52,17 +52,21 @@ export const pickYtArtist = (
 };
 
 /**
- * The Library artist a YouTube Music artist named [name] is, or null: names
- * compare as `pickYtArtist` compares them (as artist photos do). Names that
- * aren't an artist's ("Unknown Artist") are nobody's.
+ * Finds the Library artist (among [artists]) a YouTube Music artist's name
+ * is, or null: names compare as `pickYtArtist` compares them (as artist
+ * photos do). Names that aren't an artist's ("Unknown Artist") are nobody's.
+ * Build it once per Library and ask it for many names.
  */
-export const libraryArtistNamed = <A extends { readonly name: string }>(
-  name: string,
+export const libraryArtistFinder = <A extends { readonly name: string }>(
   artists: readonly A[],
-): A | null => {
-  if (ytArtistQuery(name) === null) return null;
-  const wanted = artistPhotoName(name);
-  return artists.find((artist) => artistPhotoName(artist.name) === wanted) ?? null;
+): ((name: string) => A | null) => {
+  const byName = new Map<string, A>();
+  for (const artist of artists) {
+    const name = artistPhotoName(artist.name);
+    if (!byName.has(name)) byName.set(name, artist);
+  }
+  return (name) =>
+    ytArtistQuery(name) === null ? null : (byName.get(artistPhotoName(name)) ?? null);
 };
 
 /** An album or single on a YouTube Music artist page, as a shelf tile shows it. */
@@ -182,35 +186,16 @@ export const libraryAlbumFinder = <A extends LibraryAlbumKey>(
 };
 
 /**
- * Finds the Library artist a YouTube Music name is, as `libraryArtistNamed`
- * does, for many names at once.
- */
-export const libraryArtistFinder = <A extends { readonly name: string }>(
-  artists: readonly A[],
-): ((name: string) => A | null) => {
-  const byName = new Map<string, A>();
-  for (const artist of artists) {
-    const name = artistPhotoName(artist.name);
-    if (!byName.has(name)) byName.set(name, artist);
-  }
-  return (name) =>
-    ytArtistQuery(name) === null ? null : (byName.get(artistPhotoName(name)) ?? null);
-};
-
-/**
  * Finds the Library album a YouTube Music release is, wherever it was found
  * (Search, say): for each artist the release credits that the Library has
- * (`libraryArtistNamed`), their album with the release's title, as
- * `libraryAlbumFinder` matches it. Null when none of them has it.
+ * ([artistNamed], Core's `libraryArtistFinder`), their album with the
+ * release's title, as `libraryAlbumFinder` matches it. Null when none of
+ * them has it.
  */
-export const libraryReleaseFinder = <
-  R extends { readonly id: number; readonly name: string },
-  A extends LibraryAlbumKey,
->(
-  artists: readonly R[],
+export const libraryReleaseFinder = <A extends LibraryAlbumKey>(
+  artistNamed: (name: string) => { readonly id: number } | null,
   albums: readonly A[],
 ): ((release: { readonly title: string; readonly artists: readonly string[] }) => A | null) => {
-  const artistNamed = libraryArtistFinder(artists);
   const finders = new Map<number, (release: { readonly title: string }) => A | null>();
   const finderOf = (artistId: number) => {
     let find = finders.get(artistId);

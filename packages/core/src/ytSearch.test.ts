@@ -417,7 +417,7 @@ describe("libraryReleaseFinder", () => {
     { id: 11, title: "Random Access Memories", albumArtistIds: [3] },
     { id: 12, title: "Discovery", albumArtistIds: [3] },
   ];
-  const find = libraryReleaseFinder(artists, albums);
+  const find = libraryReleaseFinder(libraryArtistFinder(artists), albums);
 
   test("is the Library album with the release's title, filed under an artist it credits", () => {
     assert.equal(find(release("Random Access Memories", "Daft Punk"))?.id, 11);

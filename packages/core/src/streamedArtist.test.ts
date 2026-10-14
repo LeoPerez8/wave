@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { streamedArtistLink, type StreamedArtistContext } from "./index.ts";
+import { libraryArtistFinder, streamedArtistLink, type StreamedArtistContext } from "./index.ts";
 
 const LIBRARY = [
   { id: 1, name: "Beatles" },
@@ -12,7 +12,7 @@ const LIBRARY = [
 type Artist = (typeof LIBRARY)[number];
 
 const context = (rest: Partial<StreamedArtistContext<Artist>> = {}) => ({
-  libraryArtists: LIBRARY,
+  libraryArtist: libraryArtistFinder(LIBRARY),
   enabled: true,
   here: "/library/songs",
   ...rest,

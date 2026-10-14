@@ -1,4 +1,4 @@
-import { streamedArtistLink, type StreamedArtistLink } from "@wave/core";
+import { libraryArtistFinder, streamedArtistLink, type StreamedArtistLink } from "@wave/core";
 import { usePathname } from "expo-router";
 import { useMemo, useSyncExternalStore } from "react";
 
@@ -11,13 +11,14 @@ import { useYtMusicEnabled } from "@/settings/ytMusic";
 const listArtists = LibraryStore.use((store) => store.listArtists);
 
 /**
- * The Library's artists, read once per `libraryVersion` and only while a
- * streamed song's artist link is shown. Null until first read.
+ * Which Library artist a name is (Core's `libraryArtistFinder`), built from
+ * the Library's artists once per `libraryVersion` and only while a streamed
+ * song's artist link is shown. Null until first read.
  */
-const sharedArtists = makeVersionedCache<readonly ArtistRow[] | null>({
+const sharedArtists = makeVersionedCache<((name: string) => ArtistRow | null) | null>({
   version: libraryVersion,
   initial: null,
-  build: () => appRuntime.runPromise(listArtists),
+  build: () => appRuntime.runPromise(listArtists).then(libraryArtistFinder),
 });
 
 const idle = () => () => {};
@@ -55,7 +56,7 @@ export const useStreamedArtistLink = (
   artists: readonly string[] | null,
   active = true,
 ): StreamedArtistLink<ArtistRow> | undefined => {
-  const libraryArtists = useSyncExternalStore(
+  const libraryArtist = useSyncExternalStore(
     active ? sharedArtists.subscribe : idle,
     sharedArtists.get,
   );
@@ -63,9 +64,9 @@ export const useStreamedArtistLink = (
   const here = usePathname();
   return useMemo(
     () =>
-      artists === null || libraryArtists === null
+      artists === null || libraryArtist === null
         ? undefined
-        : streamedArtistLink(artists, { libraryArtists, enabled, here }),
-    [artists, libraryArtists, enabled, here],
+        : streamedArtistLink(artists, { libraryArtist, enabled, here }),
+    [artists, libraryArtist, enabled, here],
   );
 };
