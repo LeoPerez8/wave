@@ -19,7 +19,11 @@ export const CLIENT_ID = "wave-web-client.apps.googleusercontent.com";
 const encoder = new TextEncoder();
 
 const base64url = (bytes: Uint8Array): string =>
-  Buffer.from(bytes).toString("base64").replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+  Buffer.from(bytes)
+    .toString("base64")
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replace(/=+$/, "");
 
 const base64urlJson = (value: unknown): string => base64url(encoder.encode(JSON.stringify(value)));
 
@@ -75,7 +79,11 @@ export const fakeGoogle = async (now: () => number): Promise<FakeGoogle> => {
       }).filter(([, value]) => value !== undefined),
     );
     const head = `${base64urlJson({ alg: "RS256", kid: KID, typ: "JWT" })}.${base64urlJson(payload)}`;
-    const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", privateKey, encoder.encode(head));
+    const signature = await crypto.subtle.sign(
+      "RSASSA-PKCS1-v1_5",
+      privateKey,
+      encoder.encode(head),
+    );
     return `${head}.${base64url(new Uint8Array(signature))}`;
   };
 

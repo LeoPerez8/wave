@@ -188,7 +188,13 @@ export const parseRow = (table: SyncTable, row: unknown, where: string): Incomin
   if (!isRecord(row)) throw new InvalidRow(`${where} isn't an object`);
   if (!isText(row.id) || row.id === "") throw new InvalidRow(`${where}.id isn't valid`);
   if (table.kind === "plays") {
-    return { id: row.id, changedAt: 0, phoneId: "", deleted: false, values: rowValues(table, row, where) };
+    return {
+      id: row.id,
+      changedAt: 0,
+      phoneId: "",
+      deleted: false,
+      values: rowValues(table, row, where),
+    };
   }
   if (!Number.isSafeInteger(row.changedAt)) throw new InvalidRow(`${where}.changedAt isn't valid`);
   if (!isText(row.phoneId) || row.phoneId === "") {

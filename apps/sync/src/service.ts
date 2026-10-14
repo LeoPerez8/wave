@@ -205,12 +205,20 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
       route(context, await authenticate(context.request));
 
   const endSession = withSession(async (_context, session) => {
-    await db.execute({ sql: "DELETE FROM sessions WHERE token_hash = ?", args: [session.tokenHash] });
+    await db.execute({
+      sql: "DELETE FROM sessions WHERE token_hash = ?",
+      args: [session.tokenHash],
+    });
     return new Response(null, { status: 204 });
   });
 
   const pushChanges = withSession(async ({ request }, session) => {
-    const result = await pushRows(db, session.accountId, parsePush(await readJson(request)), limits);
+    const result = await pushRows(
+      db,
+      session.accountId,
+      parsePush(await readJson(request)),
+      limits,
+    );
     if ("overLimit" in result) throw overLimit(result.overLimit);
     return json({ accepted: result.accepted });
   });

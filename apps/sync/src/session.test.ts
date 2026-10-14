@@ -118,9 +118,11 @@ describe("DELETE /v1/session", () => {
   test("without a session token answers 401", async () => {
     const service = await harness();
     for (const session of [undefined, "", "made-up"]) {
-      const response = await service.request("DELETE", "/v1/session", {
-        ...(session === undefined ? {} : { session }),
-      });
+      const response = await service.request(
+        "DELETE",
+        "/v1/session",
+        session === undefined ? {} : { session },
+      );
       assert.equal(response.status, 401);
       assert.deepEqual(await response.json(), { error: "unauthorized" });
     }
@@ -140,7 +142,10 @@ describe("session tokens", () => {
     const service = await harness();
     const session = await service.signIn();
     const answers = [
-      await service.request("POST", "/v1/push", { session, json: { favorites: [favorite("k", 1)] } }),
+      await service.request("POST", "/v1/push", {
+        session,
+        json: { favorites: [favorite("k", 1)] },
+      }),
       await service.request("GET", "/v1/pull", { session }),
       await service.request("DELETE", "/v1/session", { session }),
     ];

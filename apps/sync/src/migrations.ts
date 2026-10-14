@@ -142,7 +142,10 @@ export const migrate = async (db: Client): Promise<string[]> => {
     await db.batch(
       [
         ...migration.statements,
-        { sql: "INSERT INTO migrations (id, applied_at) VALUES (?, ?)", args: [migration.id, Date.now()] },
+        {
+          sql: "INSERT INTO migrations (id, applied_at) VALUES (?, ?)",
+          args: [migration.id, Date.now()],
+        },
       ],
       "write",
     );

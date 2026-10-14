@@ -93,10 +93,16 @@ const liveRowCount = async (tx: Transaction, table: SyncTable, accountId: string
 
 /** Whether [error] is SQLite saying another writer holds the database. */
 const isBusy = (error: unknown): boolean =>
-  error instanceof Error && /SQLITE_BUSY|database is locked/i.test(`${error.message} ${String((error as { code?: unknown }).code)}`);
+  error instanceof Error &&
+  /SQLITE_BUSY|database is locked/i.test(
+    `${error.message} ${String((error as { code?: unknown }).code)}`,
+  );
 
 /** Runs [work] in a write transaction, again when another writer held the database. */
-const inWriteTransaction = async <T>(db: Client, work: (tx: Transaction) => Promise<T>): Promise<T> => {
+const inWriteTransaction = async <T>(
+  db: Client,
+  work: (tx: Transaction) => Promise<T>,
+): Promise<T> => {
   for (let attempt = 1; ; attempt++) {
     let tx: Transaction;
     try {
@@ -133,15 +139,21 @@ export const pushRows = (
     const accepted = new Map<SyncTable, readonly IncomingRow[]>();
     for (const [table, incoming] of batch) {
       if (incoming.length === 0) continue;
-      const held = await heldRows(tx, table, accountId, [...new Set(incoming.map((row) => row.id))]);
+      const held = await heldRows(tx, table, accountId, [
+        ...new Set(incoming.map((row) => row.id)),
+      ]);
       accepted.set(
         table,
-        table.kind === "rows" ? mergeRows(held, incoming).accepted : mergePlays(held, incoming).added,
+        table.kind === "rows"
+          ? mergeRows(held, incoming).accepted
+          : mergePlays(held, incoming).added,
       );
     }
 
     const total = [...accepted.values()].reduce((sum, rows) => sum + rows.length, 0);
-    const counts = Object.fromEntries(SYNC_TABLES.map((table) => [table.name, accepted.get(table)?.length ?? 0]));
+    const counts = Object.fromEntries(
+      SYNC_TABLES.map((table) => [table.name, accepted.get(table)?.length ?? 0]),
+    );
     if (total === 0) return { accepted: counts };
 
     const numbered = await tx.execute({
