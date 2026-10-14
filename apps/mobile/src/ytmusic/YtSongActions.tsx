@@ -21,7 +21,7 @@ import { openOverlay } from "@/overlay/overlay";
 import { useSlideToChoose } from "@/overlay/useSlideToChoose";
 import { addYtToQueue, playYtNext } from "@/playback/actions";
 
-import { useLoadedLibraryFinder } from "./libraryFinder";
+import { useLoadedInLibrary } from "./libraryFinder";
 import { cancelYtDownload, downloadYtSong, useYtDownloadStatus } from "./YtDownloads";
 
 /**
@@ -78,8 +78,7 @@ function YtSongActionsMenu({ song, close }: { song: NativeYtSong; close: () => v
   const status = useYtDownloadStatus(song.videoId);
   // A song downloaded earlier and since deleted from the Library can be downloaded again
   // (taken as still there until the Library has been read).
-  const find = useLoadedLibraryFinder();
-  const inLibrary = find === null || find(song) !== null;
+  const inLibrary = useLoadedInLibrary()(song);
   const entries: Entry[] = [
     ...queueEntries(),
     ...ytDownloadActions(status, { inLibrary }).map((action): Entry => ({

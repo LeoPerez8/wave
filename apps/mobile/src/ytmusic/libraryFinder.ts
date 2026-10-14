@@ -1,6 +1,6 @@
 import { libraryFinder, type YtSong } from "@wave/core";
 import * as Effect from "effect/Effect";
-import { useSyncExternalStore } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 
 import { libraryVersion } from "@/library/LibraryScan";
 import { LibraryStore, type SongRow } from "@/library/LibraryStore";
@@ -43,3 +43,18 @@ export const useLoadedLibraryFinder = (active = true): FindInLibrary | null =>
  * the Library. Finds nothing until the Library is first read.
  */
 export const useLibraryFinder = (): FindInLibrary => useLoadedLibraryFinder() ?? nothing;
+
+/** Whether the Library already has a YT Music song. */
+export type InLibrary = (song: YtSong) => boolean;
+
+const everything: InLibrary = () => true;
+
+/**
+ * Whether the Library already has a YT Music song (the shared finder), every
+ * song taken as in the Library until the Library has been read, so Download
+ * never shows only to go away.
+ */
+export const useLoadedInLibrary = (): InLibrary => {
+  const find = useLoadedLibraryFinder();
+  return useMemo(() => (find === null ? everything : (song) => find(song) !== null), [find]);
+};

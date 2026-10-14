@@ -7,7 +7,6 @@ import {
   type YtAlbumDownloadAction,
 } from "@wave/core";
 import * as Result from "effect/Result";
-import { useCallback } from "react";
 import { Text, View } from "react-native";
 
 import { Artwork } from "@/catalog/Artwork";
@@ -24,7 +23,7 @@ import { useSlideToChoose } from "@/overlay/useSlideToChoose";
 import { queueDiscoverSongs } from "@/playback/actions";
 
 import { askYtMusic } from "./askYtMusic";
-import { useLoadedLibraryFinder, type FindInLibrary } from "./libraryFinder";
+import { useLibraryFinder, useLoadedInLibrary } from "./libraryFinder";
 import type { YtListHead } from "./routes";
 import { runYtAlbumAction, useYtAlbumDownload } from "./YtDownloads";
 
@@ -76,8 +75,6 @@ const label = (entry: Entry): string =>
     ? ITEM_ACTION_LABELS[entry.action]
     : YT_ALBUM_DOWNLOAD_ACTION_LABELS[entry.action];
 
-const nothing: FindInLibrary = () => null;
-
 /** The menu card: the album (unless its tile is highlighted), then its entries. */
 function YtAlbumActionsMenu({
   album,
@@ -88,12 +85,8 @@ function YtAlbumActionsMenu({
   songs: readonly NativeYtSong[];
   close: () => void;
 }) {
-  // Taken as all in the Library until the Library has been read, so Download never flickers.
-  const find = useLoadedLibraryFinder();
-  const inLibrary = useCallback(
-    (song: NativeYtSong) => find === null || find(song) !== null,
-    [find],
-  );
+  const find = useLibraryFinder();
+  const inLibrary = useLoadedInLibrary();
   const download = useYtAlbumDownload(songs, inLibrary);
   const entries: Entry[] = [
     ...QUEUE_ENTRIES,
@@ -103,8 +96,7 @@ function YtAlbumActionsMenu({
     const entry = entries[index];
     if (entry === undefined) return;
     close();
-    if (entry.kind === "queue")
-      void queueDiscoverSongs(discoverSongs(songs, find ?? nothing), entry.action);
+    if (entry.kind === "queue") void queueDiscoverSongs(discoverSongs(songs, find), entry.action);
     else runYtAlbumAction(entry.action, songs, inLibrary);
   };
   const { underFinger, trackEntry, trackList } = useSlideToChoose(choose);
