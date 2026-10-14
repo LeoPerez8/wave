@@ -33,7 +33,10 @@ One person or group in the Library. A Track belongs to every Artist its credit n
 _Avoid_: performer
 
 **Primary artist**:
-The first Artist a credit names. Links that open a single Artist (Go to Artist, Now Playing's artist) open the primary artist.
+The first Artist a credit names. Stats credits a Track's plays to it. Links to a Track's or album's Artists (Go to Artist, Now Playing's artist) don't pick it for you: credited to several, they open the artist choice.
+
+**Artist choice**:
+The card Go to Artist opens on a Track or album credited to several Artists: each credited Artist in credit order, the page you're on left out. Picking one opens their page.
 
 **Album artist**:
 The Artist an album is filed under: the first Artist its album artist credit names. The album also shows under the other credited Artists' Appears on.

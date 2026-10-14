@@ -73,6 +73,7 @@ import {
   deleteTracks,
   selectKnownFiles,
   selectLibraryLookupSongs,
+  trackArtistIds,
   trackQuery,
 } from "./db/tracks";
 import { creditedPlayTotals, songListening, songsCrediting, trackPlayTotals } from "./db/stats";
@@ -148,8 +149,10 @@ export interface SongRow {
   /** When the file entered the library (epoch ms). */
   readonly addedAt: number;
   readonly albumId: number;
-  /** The primary artist: the first one [artist] credits (Go to Artist opens it). */
+  /** The primary artist: the first one [artist] credits. */
   readonly artistId: number;
+  /** Every artist [artist] credits, primary first: Go to Artist offers them. */
+  readonly artistIds: readonly number[];
   /** Orders the album's tracks, and so sorts by artist and by album. */
   readonly discNumber: number | null;
   readonly trackNumber: number | null;
@@ -168,6 +171,8 @@ export interface AlbumRow {
   /** The album artist credit as written; [albumArtistId] is the artist it is filed under. */
   readonly albumArtist: string;
   readonly albumArtistId: number;
+  /** Every artist [albumArtist] credits, primary first: Go to Artist offers them. */
+  readonly albumArtistIds: readonly number[];
   readonly year: number | null;
   readonly compilation: boolean;
   readonly trackCount: number;
@@ -257,6 +262,8 @@ export interface SavedPlayback {
 export interface TrackDetails {
   readonly id: number;
   readonly artistId: number;
+  /** Every artist the credit names, primary first: the artist line offers them. */
+  readonly artistIds: readonly number[];
   readonly artist: string;
   readonly albumId: number;
   readonly album: string;
@@ -982,6 +989,7 @@ const make = Effect.gen(function* () {
             .select({
               id: schema.tracks.id,
               artistId: schema.tracks.artistId,
+              artistIds: trackArtistIds,
               artist: schema.tracks.artistCredit,
               albumId: schema.tracks.albumId,
               album: schema.albums.title,
