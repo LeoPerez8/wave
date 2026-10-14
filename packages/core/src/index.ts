@@ -527,6 +527,7 @@ export {
   ytArtistLookup,
   ytArtistQuery,
   ytArtistRelease,
+  ytArtistIntegrated,
   ytArtistSectionView,
   ytArtistShelves,
   ytAlbumTracklist,

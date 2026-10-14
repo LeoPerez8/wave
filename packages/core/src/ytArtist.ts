@@ -265,6 +265,22 @@ export const ytArtistSectionView = <S extends YtSong>(
   return { songs: [], note: state.failure, button: true };
 };
 
+/**
+ * Whether the artist page is an integrated view: YT Music on and the
+ * artist's answer, a match, standing (`ytArtistSectionView` shows it). A
+ * Library album opened from it reads its release on its own
+ * (`ytLibraryAlbumView`).
+ */
+export const ytArtistIntegrated = (
+  state: YtArtistSection,
+  context: { readonly name: string; readonly enabled: boolean; readonly now: number },
+): boolean =>
+  context.enabled &&
+  ytArtistQuery(context.name) !== null &&
+  state.status === "ready" &&
+  state.saved?.outcome === "found" &&
+  isFresh(state.saved, context.now);
+
 /** A release on one of the section's shelves, with the Library album it already is. */
 export interface YtArtistRelease<A> {
   readonly album: YtArtistAlbum;
@@ -412,6 +428,12 @@ export interface YtLibraryAlbumView<S extends YtSong, L> {
   readonly button: boolean;
   /** The YouTube Music release the album is, once known; its page gives the songs. */
   readonly release: YtArtistAlbum | null;
+  /**
+   * Whether the album asks YouTube Music for its artist now, on its own: it's
+   * integrated and nothing stands for the artist yet. Asked once; a failure
+   * leaves the button.
+   */
+  readonly askArtist: boolean;
 }
 
 export interface YtLibraryAlbumContext<S extends YtSong, L> {
@@ -427,6 +449,12 @@ export interface YtLibraryAlbumContext<S extends YtSong, L> {
   /** Whether YT Music is on in Settings. */
   readonly enabled: boolean;
   readonly now: number;
+  /**
+   * Whether the album is an integrated view: opened from one (an integrated
+   * artist page, Search showing YouTube Music's results), or Show on YouTube
+   * Music was tapped. Otherwise it shows the Library's tracks and the button.
+   */
+  readonly integrated: boolean;
   /** How far [release]'s page has been read; undefined when it hasn't been asked for. */
   readonly releasePage: (release: YtArtistAlbum) => YtReleaseLoad<S> | undefined;
 }
@@ -435,16 +463,25 @@ const albumNote = <S extends YtSong, L>(
   note: YtLibraryAlbumNote | null,
   button: boolean,
   release: YtArtistAlbum | null = null,
-): YtLibraryAlbumView<S, L> => ({ tracks: null, songs: null, note, button, release });
+): YtLibraryAlbumView<S, L> => ({
+  tracks: null,
+  songs: null,
+  note,
+  button,
+  release,
+  askArtist: false,
+});
 
 /**
  * What a Library album's page shows from YouTube Music, or null when it shows
  * nothing: YT Music off, an album artist that isn't an artist's name, or
- * what was saved for the artist not read yet. It goes by the artist page's
- * saved answer (`stepYtArtistSection`): while that stands, the album is
- * looked up among the artist's releases and, when it's there, the release's
- * page is read without a tap and its songs join the album's tracks. With
- * nothing saved, or once it's a week old, it's the button.
+ * what was saved for the artist not read yet. Not integrated, it's the
+ * button, whatever is saved. Integrated, it goes by the artist page's saved
+ * answer (`stepYtArtistSection`): while that stands, the album is looked up
+ * among the artist's releases and, when it's there, the release's page is
+ * read and its songs join the album's tracks. With nothing saved, or once
+ * it's a week old, it asks for the artist on its own (`askArtist`); a failed
+ * ask is a quiet line with the button.
  */
 export const ytLibraryAlbumView = <S extends YtSong, L extends LibraryAlbumTrack>(
   state: YtArtistSection<S>,
@@ -452,9 +489,13 @@ export const ytLibraryAlbumView = <S extends YtSong, L extends LibraryAlbumTrack
 ): YtLibraryAlbumView<S, L> | null => {
   if (!context.enabled || ytArtistQuery(context.name) === null) return null;
   if (state.status === "reading") return null;
+  if (!context.integrated) return albumNote(null, true);
   if (state.status === "loading") return albumNote("loading", false);
   const { saved } = state;
-  if (saved === null || !isFresh(saved, context.now)) return albumNote(state.failure, true);
+  if (saved === null || !isFresh(saved, context.now))
+    return state.failure === null
+      ? { ...albumNote<S, L>("loading", false), askArtist: true }
+      : albumNote(state.failure, true);
   if (saved.outcome === "unmatched") return albumNote("notFound", false);
   const release = ytArtistRelease(saved.page, context.artistId, context.album);
   if (release === null) return albumNote("notFound", false);
@@ -463,5 +504,12 @@ export const ytLibraryAlbumView = <S extends YtSong, L extends LibraryAlbumTrack
   if (page.status === "quiet") return albumNote(page.reason, true, release);
   const tracks = ytAlbumTracklist(page.songs, context.tracks, context.elsewhere);
   const streams = tracks.some((entry) => entry.source === "stream");
-  return { tracks: streams ? tracks : null, songs: page.songs, note: null, button: false, release };
+  return {
+    tracks: streams ? tracks : null,
+    songs: page.songs,
+    note: null,
+    button: false,
+    release,
+    askArtist: false,
+  };
 };

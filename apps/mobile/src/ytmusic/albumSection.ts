@@ -8,7 +8,7 @@ import {
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { SongRow } from "@/library/LibraryStore";
 import type { NativeYtSong } from "@/native/waveYtMusic";
@@ -30,25 +30,32 @@ const pageKey = (browseId: string, attempt: number): string => `${browseId}#${at
 export interface YtAlbumSection {
   /** What the album's page shows from YouTube Music, or null: nothing (Core's `ytLibraryAlbumView`). */
   readonly view: YtLibraryAlbumView<NativeYtSong, SongRow> | null;
-  /** Show on YouTube Music: asks for the artist or, once the release is known, reads it again. */
+  /**
+   * Show on YouTube Music: integrates the album or, once it is, asks for the
+   * artist again or reads the release again.
+   */
   readonly show: () => void;
 }
 
 /**
  * What a Library [album]'s page shows from YouTube Music, through its album
- * artist [name] ([artistId]): with that artist's YouTube Music answer saved
- * (their page's), the album's release is found among their releases and its
- * page read at once, its songs joining the album's [tracks]; otherwise
- * nothing is asked until `show` is called.
+ * artist [name] ([artistId]). Opened from an integrated view
+ * ([openedIntegrated]), or once Show on YouTube Music is tapped, the album is
+ * integrated: it asks for the artist if nothing stands for them (saving the
+ * answer for their page too), finds its release among their releases and
+ * reads it, its songs joining the album's [tracks]. Otherwise nothing is
+ * asked.
  */
 export const useYtAlbumSection = (
   name: string,
   artistId: number,
   album: LibraryAlbumKey,
   tracks: readonly SongRow[],
+  openedIntegrated: boolean,
 ): YtAlbumSection => {
   const { state, enabled, openedAt, show: askArtist } = useYtArtistAnswer(name);
   const find = useLoadedLibraryFinder();
+  const [integrated, setIntegrated] = useState(openedIntegrated);
   // Bumped to read the release's page again after it got no answer.
   const [attempt, setAttempt] = useState(0);
   // The last answer, for the release and attempt it was read for; another is still loading.
@@ -71,8 +78,18 @@ export const useYtAlbumSection = (
           elsewhere: find,
           enabled,
           now: openedAt,
+          integrated,
           releasePage,
         });
+
+  // The artist is asked for on its own once; after a failure it waits for the button.
+  const askedOnItsOwn = useRef(false);
+  const askNow = view?.askArtist === true;
+  useEffect(() => {
+    if (!askNow || askedOnItsOwn.current) return;
+    askedOnItsOwn.current = true;
+    askArtist();
+  }, [askNow, askArtist]);
 
   const browseId = view?.release?.browseId;
   useEffect(() => {
@@ -93,9 +110,10 @@ export const useYtAlbumSection = (
   }, [browseId, attempt]);
 
   const hasRelease = browseId !== undefined;
-  const show = useCallback(
-    () => (hasRelease ? setAttempt((count) => count + 1) : askArtist()),
-    [hasRelease, askArtist],
-  );
+  const show = useCallback(() => {
+    if (!integrated) setIntegrated(true);
+    else if (hasRelease) setAttempt((count) => count + 1);
+    else askArtist();
+  }, [integrated, hasRelease, askArtist]);
   return { view, show };
 };

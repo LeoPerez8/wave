@@ -9,6 +9,7 @@ import {
   ytArtistLookup,
   ytArtistQuery,
   ytArtistRelease,
+  ytArtistIntegrated,
   ytArtistSectionView,
   ytAlbumTracklist,
   ytArtistShelves,
@@ -253,6 +254,34 @@ describe("the artist page's YT Music section", () => {
       { type: "answered", saved: found(NOW) },
     );
     assert.deepEqual(step(answered, { type: "restored", saved: null }), answered);
+  });
+});
+
+const integrated = (state: Section, context: { enabled?: boolean; now?: number } = {}) =>
+  ytArtistIntegrated(state, {
+    name: "Daft Punk",
+    enabled: context.enabled ?? true,
+    now: context.now ?? NOW,
+  });
+
+describe("ytArtistIntegrated", () => {
+  test("the artist page is integrated while its YouTube Music answer shows", () => {
+    assert.equal(integrated(restored(found(NOW - 6 * DAY))), true);
+    const answered = step(
+      restored(null),
+      { type: "requested" },
+      { type: "answered", saved: found(NOW) },
+    );
+    assert.equal(integrated(answered), true);
+  });
+
+  test("not with the button, while asking, after 'no match', a week on or with YT Music off", () => {
+    assert.equal(integrated(YT_ARTIST_SECTION_START), false);
+    assert.equal(integrated(restored(null)), false);
+    assert.equal(integrated(step(restored(found(NOW - 8 * DAY)), { type: "requested" })), false);
+    assert.equal(integrated(restored(unmatched(NOW))), false);
+    assert.equal(integrated(restored(found(NOW - 8 * DAY))), false);
+    assert.equal(integrated(restored(found(NOW)), { enabled: false }), false);
   });
 });
 
@@ -524,6 +553,7 @@ describe("a Library album's YT Music songs", () => {
       now?: number;
       name?: string;
       artistId?: number;
+      integrated?: boolean;
       releasePage?: YtReleaseLoad | undefined;
     } = {},
   ) => {
@@ -536,6 +566,7 @@ describe("a Library album's YT Music songs", () => {
       elsewhere: () => null,
       enabled: context.enabled ?? true,
       now: context.now ?? NOW,
+      integrated: context.integrated ?? true,
       releasePage: (release) => {
         asked.push(release.browseId);
         return "releasePage" in context ? context.releasePage : { status: "loaded", songs };
@@ -543,6 +574,21 @@ describe("a Library album's YT Music songs", () => {
     });
     return { shown, asked };
   };
+
+  test("opened from a view that isn't integrated, it's the button, even with the artist's answer saved", () => {
+    for (const state of [restored(found(NOW - DAY)), restored(null), restored(unmatched(NOW))]) {
+      const { shown, asked } = albumView(state, { integrated: false });
+      assert.deepEqual(shown, {
+        tracks: null,
+        songs: null,
+        note: null,
+        button: true,
+        release: null,
+        askArtist: false,
+      });
+      assert.deepEqual(asked, []);
+    }
+  });
 
   test("with the artist's answer saved, it reads the release's page and joins its songs to the tracks", () => {
     const { shown, asked } = albumView(restored(found(NOW - DAY)));
@@ -591,15 +637,16 @@ describe("a Library album's YT Music songs", () => {
     assert.deepEqual(nobody.asked, []);
   });
 
-  test("with nothing saved, or a week on, it's the button, and nothing is read", () => {
+  test("integrated with nothing saved, or a week on, it asks for the artist on its own", () => {
     for (const state of [restored(null), restored(found(NOW - 8 * DAY))]) {
       const { shown, asked } = albumView(state);
       assert.deepEqual(shown, {
         tracks: null,
         songs: null,
-        note: null,
-        button: true,
+        note: "loading",
+        button: false,
         release: null,
+        askArtist: true,
       });
       assert.deepEqual(asked, []);
     }
@@ -609,9 +656,24 @@ describe("a Library album's YT Music songs", () => {
     const asking = step(restored(null), { type: "requested" });
     assert.equal(albumView(asking).shown?.note, "loading");
     assert.equal(albumView(asking).shown?.button, false);
+    assert.equal(albumView(asking).shown?.askArtist, false);
     const failed = step(asking, { type: "failed", reason: "failed" });
     assert.equal(albumView(failed).shown?.note, "failed");
     assert.equal(albumView(failed).shown?.button, true);
+    // Asked once: a failure waits for the button.
+    assert.equal(albumView(failed).shown?.askArtist, false);
+  });
+
+  test("the artist's answer, once it comes, reads the release's page", () => {
+    const answered = step(
+      restored(null),
+      { type: "requested" },
+      { type: "answered", saved: found(NOW) },
+    );
+    const { shown, asked } = albumView(answered);
+    assert.deepEqual(asked, ["MPREb_ram"]);
+    assert.equal(shown?.askArtist, false);
+    assert.deepEqual(shape(shown?.tracks ?? []), ["1:#1", "2:give-life-back", "3:#3", "4:touch"]);
   });
 
   test("nothing with YT Music off, for names that aren't an artist, and until what was saved is read", () => {

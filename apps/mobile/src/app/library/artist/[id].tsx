@@ -138,10 +138,13 @@ function AlbumCellPair({
   cells,
   size,
   selection,
+  integrated,
 }: {
   cells: readonly AlbumCell[];
   size: number;
   selection: ListSelection<AlbumRow>;
+  /** Whether the page is an integrated view: the albums open integrated. */
+  integrated: boolean;
 }) {
   return (
     <View className="flex-row" style={{ gap: grid.gutter, height: albumRowHeight(size) }}>
@@ -154,7 +157,7 @@ function AlbumCellPair({
             {...selectableRow(
               cell.album,
               selection,
-              () => openAlbum(cell.album.id, cell.album),
+              () => openAlbum(cell.album.id, cell.album, { integrated }),
               (options) => openAlbumActions(cell.album, options),
             )}
           />
@@ -230,6 +233,7 @@ function ArtistContent({ shown }: { shown: Shown }) {
   const yt = useYtArtistSection(detail.artist.name, detail.artist.id, libraryAlbums);
   const ytView = loaded ? yt.view : null;
   const ytShelves = loaded ? yt.shelves : null;
+  const integrated = loaded && yt.integrated;
   const additions = useMemo((): YtAdditions => {
     if (ytView === null || ytShelves === null) return NO_ADDITIONS;
     const missing = (kind: "albums" | "singles") =>
@@ -258,8 +262,8 @@ function ArtistContent({ shown }: { shown: Shown }) {
   const albumSelection = useMemo(() => albumSelectionOf(page), [page]);
   const { selection } = page;
   const rowState = useMemo(
-    () => ({ currentId, favorites, tile, selection, downloaded }),
-    [currentId, favorites, tile, selection, downloaded],
+    () => ({ currentId, favorites, tile, selection, downloaded, integrated }),
+    [currentId, favorites, tile, selection, downloaded, integrated],
   );
   const context = useMemo(
     () => ({ kind: "artist", id: String(detail.artist.id) }) as const,
@@ -276,7 +280,14 @@ function ArtistContent({ shown }: { shown: Shown }) {
             </View>
           );
         case "albums":
-          return <AlbumCellPair cells={item.cells} size={tile} selection={albumSelection} />;
+          return (
+            <AlbumCellPair
+              cells={item.cells}
+              size={tile}
+              selection={albumSelection}
+              integrated={integrated}
+            />
+          );
         case "track":
           return (
             <TrackRow
@@ -304,7 +315,7 @@ function ArtistContent({ shown }: { shown: Shown }) {
           );
       }
     },
-    [context, currentId, favorites, mixed, downloaded, tile, albumSelection, page],
+    [context, currentId, favorites, mixed, downloaded, tile, albumSelection, page, integrated],
   );
 
   const line = [
