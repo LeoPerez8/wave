@@ -1,5 +1,11 @@
 import { LegendList } from "@legendapp/list/react-native";
-import { ytTrackId, type MixedSong, type YtArtistAlbum, type YtSong } from "@wave/core";
+import {
+  pagePlayback,
+  ytTrackId,
+  type MixedSong,
+  type YtArtistAlbum,
+  type YtSong,
+} from "@wave/core";
 import { useLocalSearchParams } from "expo-router";
 import { useCallback, useMemo } from "react";
 import { Text, useWindowDimensions, View } from "react-native";
@@ -10,7 +16,7 @@ import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { TrackRow } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
-import { playDiscoverSongs, playSongs } from "@/playback/actions";
+import { playPage } from "@/playback/actions";
 import { useCurrentTrackId } from "@/playback/hooks";
 import { openAlbumActions, openTrackActions } from "@/playback/ActionsMenu";
 import { mixedTarget, type MixedItem } from "@/playback/actionTargets";
@@ -233,7 +239,7 @@ function ArtistContent({ shown }: { shown: Shown }) {
         .map((release) => release.album) ?? [];
     return { albums: missing("albums"), singles: missing("singles"), songs: ytView.songs };
   }, [ytView, ytShelves]);
-  // Rows play the whole list from the tapped one: the Library's files, then the top songs streamed.
+  // The page's songs in page order: the Library's, then the top songs YouTube Music adds.
   const mixed = useMemo(
     (): MixedSong<YtSong, SongRow>[] => [
       ...songs.map((track) => ({ source: "library" as const, track })),
@@ -241,8 +247,10 @@ function ArtistContent({ shown }: { shown: Shown }) {
     ],
     [songs, additions.songs],
   );
-  // With YouTube Music's songs among them, the Library's are marked downloaded.
-  const downloaded = additions.songs.length > 0;
+  // Play, Shuffle and rows play this list by one rule (`playPage`): with YouTube Music's songs
+  // on the page (an integrated view) the mixed list, the Library's files and the top songs
+  // streamed, and the Library's rows are marked downloaded; otherwise the Library's songs alone.
+  const downloaded = useMemo(() => pagePlayback(mixed).kind === "mixed", [mixed]);
   const items = useMemo(() => artistItems(detail, songs, additions), [detail, songs, additions]);
   // Albums and songs select together; the bar acts on them in page order.
   const selectable = useMemo(() => selectableItems(detail, songs), [detail, songs]);
@@ -280,10 +288,7 @@ function ArtistContent({ shown }: { shown: Shown }) {
               {...selectableRow(
                 trackItem(item.song),
                 page,
-                () =>
-                  downloaded
-                    ? void playDiscoverSongs(mixed, item.index, context)
-                    : playSongs(songs, item.index, context),
+                () => void playPage(mixed, item.index, context),
                 (options) => openTrackActions(item.song, options),
               )}
             />
@@ -293,15 +298,13 @@ function ArtistContent({ shown }: { shown: Shown }) {
             <YtSongRow
               song={item.song}
               playing={ytTrackId(item.song.videoId) === currentId}
-              onPress={
-                page.selecting ? ignore : () => void playDiscoverSongs(mixed, item.index, context)
-              }
+              onPress={page.selecting ? ignore : () => void playPage(mixed, item.index, context)}
               onLongPress={page.selecting ? ignore : undefined}
             />
           );
       }
     },
-    [context, currentId, favorites, songs, mixed, downloaded, tile, albumSelection, page],
+    [context, currentId, favorites, mixed, downloaded, tile, albumSelection, page],
   );
 
   const line = [
@@ -336,6 +339,7 @@ function ArtistContent({ shown }: { shown: Shown }) {
           <ListIntro
             line={line}
             songs={loaded ? songs : undefined}
+            mixed={loaded ? mixed : undefined}
             context={context}
             sortControl={<SongSortButton kind="artist" />}
           />
@@ -359,9 +363,9 @@ function ArtistContent({ shown }: { shown: Shown }) {
  * An artist: their albums, the albums they appear on, their songs and, while
  * YT Music is on, Show on YouTube Music (asked only on a tap): then the
  * releases and top songs YouTube Music has that the Library lacks join the
- * albums and songs, and the Library's songs are marked downloaded. Opened
- * from a list that knows the artist, the head is there on the first frame and
- * the rest follows once read.
+ * albums and songs, the Library's songs are marked downloaded, and Play,
+ * Shuffle and taps play the mixed list. Opened from a list that knows the
+ * artist, the head is there on the first frame and the rest follows once read.
  */
 export default function ArtistScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
