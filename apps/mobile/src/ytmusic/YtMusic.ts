@@ -62,7 +62,7 @@ export class YtMusic extends Context.Service<
     readonly home: Effect.Effect<YtHome<NativeYtSong>, YtMusicError>;
     /** The album page [browseId] (`MPREb_…`) and its tracklist. */
     readonly album: (browseId: string) => Effect.Effect<NativeYtAlbum, YtMusicError>;
-    /** The playlist [playlistId] and its first page of songs. */
+    /** The playlist [playlistId] and all its songs, up to 5,000; fails if any page fails. */
     readonly playlist: (playlistId: string) => Effect.Effect<NativeYtPlaylist, YtMusicError>;
     /** Caches a song's cover from [url] beside the Library's artwork, with its palette. */
     readonly cacheArtwork: (url: string) => Effect.Effect<IndexedArtwork, YtMusicError>;

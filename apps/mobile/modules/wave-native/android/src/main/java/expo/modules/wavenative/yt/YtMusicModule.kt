@@ -96,7 +96,11 @@ class YtMusicModule : Module() {
       coded { YtPages(client).home().map(YtShelf::toMap) }
     }
 
-    /** The playlist [playlistId]: `{ title, author, artworkUrl, songs }`, or an `ERR_YT_*` rejection. */
+    /**
+     * The playlist [playlistId] with all its songs (up to
+     * [YtPlaylistParser.MAX_SONGS]): `{ title, author, artworkUrl, songs, truncated }`,
+     * or an `ERR_YT_*` rejection when any of its pages fails.
+     */
     AsyncFunction("playlist") Coroutine { playlistId: String ->
       coded { YtPages(client).playlist(playlistId).toMap() }
     }
