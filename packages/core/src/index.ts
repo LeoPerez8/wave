@@ -357,6 +357,25 @@ export {
   ytTrackId,
 } from "./ytMusic.ts";
 export type { LibrarySongKey, TrackRef, YtSong } from "./ytMusic.ts";
+export {
+  CONFIRM_WAVE_ACCOUNT_DELETION,
+  WAVE_ACCOUNT_CARD,
+  WAVE_ACCOUNT_SIGNED_OUT,
+  stepWaveAccount,
+  waveAccountConfig,
+  waveAccountView,
+} from "./waveAccount.ts";
+export type {
+  WaveAccount,
+  WaveAccountConfig,
+  WaveDeleteFailure,
+  WaveSignInFailure,
+  WaveAccountEvent,
+  WaveAccountNote,
+  WaveAccountState,
+  WaveAccountView,
+  WaveSession,
+} from "./waveAccount.ts";
 export { YT_ACCOUNT_SIGNED_OUT, stepYtAccount, ytAccountView } from "./ytAccount.ts";
 export type {
   YtAccount,
