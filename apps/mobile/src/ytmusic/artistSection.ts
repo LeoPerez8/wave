@@ -93,7 +93,11 @@ export const useYtArtistSection = (
   useEffect(() => {
     void appRuntime
       .runPromise(readSaved(artistKey))
-      .then((saved) => dispatch({ type: "restored", saved }));
+      // A defect reads as nothing saved, so the section can still ask.
+      .then(
+        (saved) => dispatch({ type: "restored", saved }),
+        () => dispatch({ type: "restored", saved: null }),
+      );
   }, [artistKey]);
 
   // What's saved, while a tap can ask (undefined while reading or asking).
@@ -103,12 +107,15 @@ export const useYtArtistSection = (
     dispatch({ type: "requested" });
     void appRuntime
       .runPromise(Effect.result(fetchArtist(name, artistKey, saved)))
-      .then((result) =>
-        dispatch(
-          Result.isSuccess(result)
-            ? { type: "answered", saved: result.success }
-            : { type: "failed", reason: result.failure.reason },
-        ),
+      .then(
+        (result) =>
+          dispatch(
+            Result.isSuccess(result)
+              ? { type: "answered", saved: result.success }
+              : { type: "failed", reason: result.failure.reason },
+          ),
+        // A defect fails like any other request, so the section doesn't stay loading.
+        () => dispatch({ type: "failed", reason: "failed" }),
       );
   }, [name, artistKey, saved]);
 
