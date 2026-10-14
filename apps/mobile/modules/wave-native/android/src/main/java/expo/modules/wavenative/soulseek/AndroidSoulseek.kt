@@ -1,16 +1,10 @@
 package expo.modules.wavenative.soulseek
 
 import android.content.Context
-import android.security.keystore.KeyGenParameterSpec
-import android.security.keystore.KeyProperties
 import expo.modules.wavenative.net.Connectivity
+import expo.modules.wavenative.secrets.KeystoreCipher
 import expo.modules.wavenative.tags.JAudioTaggerReader
 import java.io.File
-import java.security.KeyStore
-import javax.crypto.Cipher
-import javax.crypto.KeyGenerator
-import javax.crypto.SecretKey
-import javax.crypto.spec.GCMParameterSpec
 import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
 
@@ -19,7 +13,7 @@ class AndroidSoulseek private constructor(context: Context) {
   // Offline the way YouTube Music tells it, so Soulseek's server isn't unreachable behind a captive portal.
   private val connectivity = Connectivity(context)
   val client = SoulseekClient(
-    SoulseekSessionStore(File(context.noBackupFilesDir, "soulseek-session"), KeystoreCipher()),
+    SoulseekSessionStore(File(context.noBackupFilesDir, "soulseek-session"), KeystoreCipher("wave-soulseek-session-v1")),
     online = connectivity::online,
     switch = SoulseekSwitchFile(File(context.noBackupFilesDir, "soulseek-best-quality")),
   )
@@ -53,32 +47,4 @@ class AndroidSoulseek private constructor(context: Context) {
       instance ?: AndroidSoulseek(context.applicationContext).also { instance = it }
     }
   }
-}
-
-private class KeystoreCipher : SoulseekCredentialCipher {
-  private fun key(): SecretKey {
-    val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-    (store.getKey(ALIAS, null) as? SecretKey)?.let { return it }
-    return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore").apply {
-      init(KeyGenParameterSpec.Builder(ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
-        .setKeySize(256)
-        .setBlockModes(KeyProperties.BLOCK_MODE_GCM).setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-        .setRandomizedEncryptionRequired(true).build())
-    }.generateKey()
-  }
-
-  override fun encrypt(value: ByteArray): ByteArray {
-    val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-    cipher.init(Cipher.ENCRYPT_MODE, key())
-    return byteArrayOf(1) + cipher.iv + cipher.doFinal(value)
-  }
-
-  override fun decrypt(value: ByteArray): ByteArray {
-    check(value.size > 29 && value[0] == 1.toByte()) { "Invalid encrypted session" }
-    val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-    cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, value.copyOfRange(1, 13)))
-    return cipher.doFinal(value.copyOfRange(13, value.size))
-  }
-
-  private companion object { const val ALIAS = "wave-soulseek-session-v1" }
 }

@@ -1,15 +1,13 @@
 package expo.modules.wavenative.soulseek
 
+import expo.modules.wavenative.secrets.SecretCipher
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.nio.file.AtomicMoveNotSupportedException
 
 /** The platform protects bytes with an authenticated, non-exportable Android Keystore key. */
-interface SoulseekCredentialCipher {
-  fun encrypt(value: ByteArray): ByteArray
-  fun decrypt(value: ByteArray): ByteArray
-}
+typealias SoulseekCredentialCipher = SecretCipher
 
 /** Download in best quality, kept as "on" or "off" in [file]; no file on a phone from before the switch. */
 class SoulseekSwitchFile(private val file: File) : SoulseekSwitchStore {

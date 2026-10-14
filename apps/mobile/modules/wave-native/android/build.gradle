@@ -44,6 +44,12 @@ dependencies {
   implementation 'io.ktor:ktor-serialization-kotlinx-json:3.6.0'
   implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0'
 
+  // Wave account: Google sign-in through Android's account picker (Credential Manager), for an
+  // ID token for Wave's web client id.
+  implementation 'androidx.credentials:credentials:1.6.0'
+  implementation 'androidx.credentials:credentials-play-services-auth:1.6.0'
+  implementation 'com.google.android.libraries.identity.googleid:googleid:1.2.1'
+
   testImplementation 'junit:junit:4.13.2'
   // React Native's networking (its OkHttp cookie jar), resolved next to ktor's OkHttp as in the app.
   testImplementation 'com.facebook.react:react-android'
