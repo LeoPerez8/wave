@@ -311,7 +311,7 @@ export {
   highlightedOrigin,
   originOfNewCard,
   restingRect,
-  veilAround,
+  veilPath,
   visibleHighlight,
 } from "./overlayOrigin.ts";
 export type { HighlightInput, NewCardInput, OriginCard } from "./overlayOrigin.ts";
