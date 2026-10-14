@@ -518,13 +518,19 @@ export type { LibraryLookupProgress, LibraryLookupSummary } from "./libraryLooku
 export {
   YT_ARTIST_FRESH_MS,
   YT_ARTIST_SECTION_START,
+  libraryAlbumFinder,
   pickYtArtist,
   stepYtArtistSection,
   ytArtistLookup,
   ytArtistQuery,
   ytArtistSectionView,
+  ytArtistShelves,
 } from "./ytArtist.ts";
 export type {
+  LibraryAlbumKey,
+  YtArtistRelease,
+  YtArtistShelf,
+  YtArtistShelvesContext,
   YtArtistAlbum,
   YtArtistCandidate,
   YtArtistLookup,

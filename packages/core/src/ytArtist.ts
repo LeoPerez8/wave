@@ -2,11 +2,13 @@
  * The YT Music section of an artist page (docs/spec.md, "YT Music"): support
  * for the Library, asked for only when Show on YouTube Music is tapped. Core
  * decides who gets the button, which YouTube Music artist the Library's artist
- * is, what tapping asks, how long a saved answer stands and what the section
- * shows. The native module asks and reads; the app saves and lays out.
+ * is, what tapping asks, how long a saved answer stands, what the section
+ * shows and which of the artist's releases the Library already has. The
+ * native module asks and reads; the app saves and lays out.
  */
 
 import { artistPhotoName, artistPhotoQuery } from "./artistPhoto.ts";
+import { normalizeSearchText } from "./search.ts";
 import type { YtShelfItem } from "./ytDiscover.ts";
 import type { YtSong } from "./ytMusic.ts";
 import type { YtQuietReason } from "./ytSearch.ts";
@@ -105,6 +107,61 @@ export const YT_ARTIST_FRESH_MS = 7 * DAY_MS;
 /** Whether [saved] still stands at [now]: fetched less than a week ago. */
 const isFresh = (saved: YtArtistSaved, now: number): boolean =>
   now - saved.checkedAt < YT_ARTIST_FRESH_MS;
+
+/** A Library album as matching a release to it sees it. */
+export interface LibraryAlbumKey {
+  readonly title: string;
+  /** Every artist its album artist credit names (the Library's artist identity). */
+  readonly albumArtistIds: readonly number[];
+}
+
+/** Words that make a note about the release's edition ("Deluxe", "Remastered 2011", "- Single"). */
+const EDITION =
+  /\b(?:remaster(?:ed)?|deluxe|edition|expanded|version|anniversary|bonus|special|explicit|clean|extended|reissue|single|ep)\b/iu;
+/** Words that make a note another release: a live, remixed or acoustic one. */
+const ANOTHER_RELEASE =
+  /\b(?:live|remix(?:es)?|mix(?:es)?|acoustic|demo|instrumental|karaoke|covers?|sessions?|unplugged)\b/iu;
+const BRACKETED_NOTE = /\s*(?:\([^)]*\)|\[[^\]]*\])/gu;
+const DASHED_NOTE = /\s+[-–—]\s+([^-–—]*)$/u;
+
+/** A bracketed featured credit: "(feat. X)", "[with X & Y]". */
+const FEATURED = /^\s*[([]\s*(?:feat\b|ft\b|featuring\b|with\b)/iu;
+
+const isVersionNote = (note: string): boolean =>
+  FEATURED.test(note) || (EDITION.test(note) && !ANOTHER_RELEASE.test(note));
+
+/**
+ * A title as release matching compares it: without its version notes, then
+ * case, accents and punctuation folded. A title that is only notes stays.
+ */
+const releaseTitle = (title: string): string => {
+  const bare = title
+    .replace(BRACKETED_NOTE, (note) => (isVersionNote(note) ? "" : note))
+    .replace(DASHED_NOTE, (whole, note: string) => (isVersionNote(note) ? "" : whole))
+    .trim();
+  return normalizeSearchText(bare === "" ? title : bare);
+};
+
+/**
+ * The Library album a YouTube Music release of the artist [artistId] already
+ * is, or null: an album whose album artist credit names the artist (so a
+ * collaboration is each credited artist's), with the release's title. Case,
+ * accents, punctuation and version notes don't count: "(Deluxe Edition)",
+ * "[Remastered 2011]", "- Single", "(feat. X)". A live or remix album is
+ * another release.
+ */
+export const libraryAlbumFinder = <A extends LibraryAlbumKey>(
+  artistId: number,
+  albums: readonly A[],
+): ((release: { readonly title: string }) => A | null) => {
+  const byTitle = new Map<string, A>();
+  for (const album of albums) {
+    if (!album.albumArtistIds.includes(artistId)) continue;
+    const title = releaseTitle(album.title);
+    if (title !== "" && !byTitle.has(title)) byTitle.set(title, album);
+  }
+  return (release) => byTitle.get(releaseTitle(release.title)) ?? null;
+};
 
 /** The section's state; [S] is the song as the caller has it (the native result, say). */
 export type YtArtistSection<S extends YtSong = YtSong> =
@@ -206,4 +263,60 @@ export const ytArtistSectionView = <S extends YtSong>(
     return { songs, note, button: false };
   }
   return { songs: [], note: state.failure, button: true };
+};
+
+/** A release on one of the section's shelves, with the Library album it already is. */
+export interface YtArtistRelease<A> {
+  readonly album: YtArtistAlbum;
+  /** The Library's album for it (Core's `libraryAlbumFinder`): In your Library, opening it. */
+  readonly library: A | null;
+}
+
+/** One of the section's shelves of covers: the artist's albums, or their singles and EPs. */
+export interface YtArtistShelf<A> {
+  readonly kind: "albums" | "singles";
+  readonly releases: readonly YtArtistRelease<A>[];
+}
+
+export interface YtArtistShelvesContext<A> {
+  /** The Library artist's name. */
+  readonly name: string;
+  /** Whether YT Music is on in Settings. */
+  readonly enabled: boolean;
+  readonly now: number;
+  /** The Library album a release already is, or null (Core's `libraryAlbumFinder`). */
+  readonly libraryAlbum: (album: YtArtistAlbum) => A | null;
+}
+
+/** Newest first; a release without a year goes last, and ties keep the page's order. */
+const newestFirst = (albums: readonly YtArtistAlbum[]): YtArtistAlbum[] =>
+  albums
+    .map((album, index) => ({ album, index }))
+    .sort(
+      (a, b) =>
+        (b.album.year ?? Number.NEGATIVE_INFINITY) - (a.album.year ?? Number.NEGATIVE_INFINITY) ||
+        a.index - b.index,
+    )
+    .map(({ album }) => album);
+
+/**
+ * The shelves under the section's top songs: Albums, then Singles & EPs, from
+ * the saved artist page, each newest first. They show while the saved page
+ * does (`ytArtistSectionView`); a shelf with nothing on it is left out.
+ */
+export const ytArtistShelves = <A>(
+  state: YtArtistSection,
+  context: YtArtistShelvesContext<A>,
+): YtArtistShelf<A>[] => {
+  if (!context.enabled || ytArtistQuery(context.name) === null) return [];
+  if (state.status !== "ready" || state.saved?.outcome !== "found") return [];
+  if (!isFresh(state.saved, context.now)) return [];
+  const { page } = state.saved;
+  const shelf = (kind: YtArtistShelf<A>["kind"], albums: readonly YtArtistAlbum[]) => ({
+    kind,
+    releases: newestFirst(albums).map((album) => ({ album, library: context.libraryAlbum(album) })),
+  });
+  return [shelf("albums", page.albums), shelf("singles", page.singles)].filter(
+    ({ releases }) => releases.length > 0,
+  );
 };

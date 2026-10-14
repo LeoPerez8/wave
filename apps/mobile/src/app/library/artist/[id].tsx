@@ -150,6 +150,11 @@ function ArtistContent({ shown }: { shown: Shown }) {
     () => ({ kind: "ytArtist", id: String(detail.artist.id) }) as const,
     [detail.artist.id],
   );
+  // The YT Music section marks the releases among these the Library has.
+  const libraryAlbums = useMemo(
+    () => [...detail.albums, ...detail.appearsOn],
+    [detail.albums, detail.appearsOn],
+  );
 
   const renderItem = useCallback(
     ({ item }: { item: Item }) => {
@@ -225,6 +230,8 @@ function ArtistContent({ shown }: { shown: Shown }) {
           <YtArtistSection
             key={detail.artist.name}
             name={detail.artist.name}
+            artistId={detail.artist.id}
+            albums={libraryAlbums}
             context={ytContext}
             selecting={page.selecting}
           />
