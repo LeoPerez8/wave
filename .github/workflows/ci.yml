@@ -127,11 +127,11 @@ jobs:
         run: ../../../scripts/ci/step.sh "Bundle JavaScript" ./gradlew :app:createBundleReleaseJsAndAssets --no-daemon --console=plain
 
       - name: Move Metro's cache into place
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
         run: rm -rf "$RUNNER_TEMP/metro-cache" && mv "$RUNNER_TEMP/metro-cache-out" "$RUNNER_TEMP/metro-cache"
 
       - name: Save Metro's cache
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
         uses: actions/cache/save@v4
         with:
           path: ${{ runner.temp }}/metro-cache
