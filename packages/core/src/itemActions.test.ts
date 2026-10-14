@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 
 import {
   actionBarLabel,
+  artistLink,
   confirmsFirst,
   isDestructiveAction,
   ITEM_ACTION_LABELS,
@@ -20,7 +21,7 @@ const names = (entries: readonly ItemActionEntry[]): string[] =>
 
 const song = (fields: { albumId?: number; artistId?: number; favorite?: boolean } = {}) => ({
   albumId: fields.albumId ?? 1,
-  artistId: fields.artistId ?? 10,
+  artistIds: [fields.artistId ?? 10],
   favorite: fields.favorite ?? false,
 });
 
@@ -32,7 +33,7 @@ const tracks = (
 /** Albums checked in the Albums grid, by their album artists. */
 const albums = (artistIds: readonly number[]): ActionSubject => ({
   kind: "album",
-  items: artistIds.map((artistId) => ({ artistId })),
+  items: artistIds.map((artistId) => ({ artistIds: [artistId] })),
   surface: "selection",
   here: "/library/albums",
 });
@@ -111,7 +112,7 @@ describe("itemActions", () => {
       entries.filter((entry) => entry.action === "goToAlbum" || entry.action === "goToArtist"),
       [
         { action: "goToAlbum", albumId: 4 },
-        { action: "goToArtist", artistId: 9 },
+        { action: "goToArtist", artists: { kind: "open", artistId: 9 } },
       ],
     );
   });
@@ -196,12 +197,10 @@ describe("itemActions", () => {
   });
 
   test("an album: queue it, add it to a playlist, go to its artist", () => {
-    assert.deepEqual(names(itemActions({ kind: "album", items: [{ artistId: 3 }], here: "/" })), [
-      "playNext",
-      "addToQueue",
-      "addToPlaylist",
-      "goToArtist",
-    ]);
+    assert.deepEqual(
+      names(itemActions({ kind: "album", items: [{ artistIds: [3] }], here: "/" })),
+      ["playNext", "addToQueue", "addToPlaylist", "goToArtist"],
+    );
   });
 
   test("selected albums: the menu's entries, Go to Artist only when they share an album artist, no Favorite", () => {
@@ -217,7 +216,9 @@ describe("itemActions", () => {
       "addToPlaylist",
     ]);
     assert.deepEqual(
-      names(itemActions({ kind: "album", items: [{ artistId: 3 }], selectable: true, here: "/" })),
+      names(
+        itemActions({ kind: "album", items: [{ artistIds: [3] }], selectable: true, here: "/" }),
+      ),
       ["playNext", "addToQueue", "addToPlaylist", "goToArtist", "select"],
     );
   });
@@ -286,14 +287,95 @@ const mixed = (items: ActionSubject["items"], here = "/library/artist/10"): Acti
   here,
 });
 
+describe("Go to Artist on a collaboration", () => {
+  const goTo = (subject: ActionSubject) =>
+    itemActions(subject).find((entry) => entry.action === "goToArtist");
+
+  test("a song by Ariana Grande and Doja Cat offers both to pick from, in credit order", () => {
+    assert.deepEqual(goTo(tracks([{ albumId: 1, artistIds: [7, 8] }])), {
+      action: "goToArtist",
+      artists: { kind: "choose", artistIds: [7, 8] },
+    });
+  });
+
+  test("on one of their pages the other is left, so Go to Artist opens them straight away", () => {
+    for (const here of ["/library/artist/7", "/shortcut/artist/7"]) {
+      assert.deepEqual(goTo(tracks([{ albumId: 1, artistIds: [7, 8] }], { here })), {
+        action: "goToArtist",
+        artists: { kind: "open", artistId: 8 },
+      });
+    }
+  });
+
+  test("a choice leaves out the page you're on", () => {
+    const entry = goTo(
+      tracks([{ albumId: 1, artistIds: [7, 8, 9] }], { here: "/library/artist/8" }),
+    );
+    assert.deepEqual(entry, {
+      action: "goToArtist",
+      artists: { kind: "choose", artistIds: [7, 9] },
+    });
+  });
+
+  test("an album with several album artists offers them the same way", () => {
+    const album = (here: string): ActionSubject => ({
+      kind: "album",
+      items: [{ artistIds: [3, 4] }],
+      here,
+    });
+    assert.deepEqual(goTo(album("/library/albums")), {
+      action: "goToArtist",
+      artists: { kind: "choose", artistIds: [3, 4] },
+    });
+    assert.deepEqual(goTo(album("/library/artist/3")), {
+      action: "goToArtist",
+      artists: { kind: "open", artistId: 4 },
+    });
+  });
+
+  test("selected songs offer it only when they share the same artists, in any order", () => {
+    const selection = (...artistIds: (readonly number[])[]) =>
+      goTo(
+        tracks(
+          artistIds.map((ids) => ({ albumId: 1, artistIds: ids })),
+          { surface: "selection" },
+        ),
+      );
+    assert.deepEqual(selection([7, 8], [8, 7]), {
+      action: "goToArtist",
+      artists: { kind: "choose", artistIds: [7, 8] },
+    });
+    assert.equal(selection([7, 8], [7]), undefined);
+    assert.equal(selection([7], [7, 8]), undefined);
+    assert.equal(selection([7, 8], [7, 9]), undefined);
+    assert.equal(selection([7, 8], []), undefined);
+  });
+});
+
+describe("artistLink", () => {
+  test("Now Playing's artist line: one artist opens straight away, several are a choice", () => {
+    assert.deepEqual(artistLink([5], "/library/songs"), { kind: "open", artistId: 5 });
+    assert.deepEqual(artistLink([5, 6], "/library/songs"), {
+      kind: "choose",
+      artistIds: [5, 6],
+    });
+  });
+
+  test("leaves out the artist page you're on, and leads nowhere when that was the only one", () => {
+    assert.deepEqual(artistLink([5, 6], "/library/artist/5"), { kind: "open", artistId: 6 });
+    assert.equal(artistLink([5], "/shortcut/artist/5"), undefined);
+    assert.equal(artistLink([], "/library/songs"), undefined);
+  });
+});
+
 describe("itemActions on albums and songs checked together", () => {
   test("offers the entries an album's and a song's menus share, not Favorite or Delete", () => {
-    const entries = itemActions(mixed([{ albumId: 2, artistId: 10 }, song({ favorite: true })]));
+    const entries = itemActions(mixed([{ albumId: 2, artistIds: [10] }, song({ favorite: true })]));
     assert.deepEqual(names(entries), ["playNext", "addToQueue", "addToPlaylist"]);
   });
 
   test("Go to Artist when they share an artist, unless it's the page you're on", () => {
-    const items = [{ albumId: 2, artistId: 10 }, song({ albumId: 1, artistId: 10 })];
+    const items = [{ albumId: 2, artistIds: [10] }, song({ albumId: 1, artistId: 10 })];
     assert.deepEqual(names(itemActions(mixed(items, "/library/albums"))), [
       "playNext",
       "addToQueue",
@@ -304,7 +386,7 @@ describe("itemActions on albums and songs checked together", () => {
   });
 
   test("Go to Album when the songs are from the album checked with them", () => {
-    const entries = itemActions(mixed([{ albumId: 2, artistId: 30 }, song({ albumId: 2 })]));
+    const entries = itemActions(mixed([{ albumId: 2, artistIds: [30] }, song({ albumId: 2 })]));
     assert.deepEqual(entries.at(-1), { action: "goToAlbum", albumId: 2 });
   });
 });

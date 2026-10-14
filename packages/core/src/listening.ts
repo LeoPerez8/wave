@@ -1,18 +1,20 @@
 /**
  * Listening totals over all time: minutes listened, songs listened and plays,
- * for the whole history (Home's listening overview) or one artist's songs,
- * credited by track artist as in Stats (the artist page). Which plays count is
- * the play event's `counted` flag, set by `isCountedPlay`.
+ * for the whole history (Home's listening overview) or one artist's songs
+ * (the artist page): a song counts for every artist its credit names, as in
+ * Stats, so a collaboration counts for each of them. Which plays count is the
+ * play event's `counted` flag, set by `isCountedPlay`.
  */
 
 /** What the library sums up for one song over all its plays. */
 export interface SongListening {
   readonly trackId: number;
   /**
-   * The song's track artist, kept once the song leaves the library; null for
-   * songs that left before Wave kept it.
+   * Every artist the song's credit names that is in the library, kept once
+   * the song leaves the library; empty for songs that left before Wave kept
+   * their artists.
    */
-  readonly artistId: number | null;
+  readonly artistIds: readonly number[];
   /** Whether the song is still in the library. */
   readonly inLibrary: boolean;
   /** Its counted plays. */
@@ -35,7 +37,7 @@ export interface ListeningTotals {
   readonly lastPlayedAt: number | null;
 }
 
-/** Narrows the totals to one artist's songs (by track artist). */
+/** Narrows the totals to the songs whose credit names one artist. */
 export interface ListeningFilter {
   readonly artistId?: number;
 }
@@ -46,8 +48,9 @@ const MINUTE_MS = 60_000;
  * Sums each song's listening into all-time totals. Unfiltered, the totals
  * cover the whole history: plays and minutes of songs since removed from the
  * library still count (they were listened to), but such songs aren't among
- * the songs listened. Filtered to an artist, only that artist's songs count,
- * the same way.
+ * the songs listened. Filtered to an artist, only the songs crediting that
+ * artist count, the same way; a collaboration counts in full for each of its
+ * artists, and once unfiltered.
  */
 export const listeningTotals = (
   songs: readonly SongListening[],
@@ -58,7 +61,7 @@ export const listeningTotals = (
   let plays = 0;
   let lastPlayedAt: number | null = null;
   for (const song of songs) {
-    if (filter.artistId !== undefined && song.artistId !== filter.artistId) continue;
+    if (filter.artistId !== undefined && !song.artistIds.includes(filter.artistId)) continue;
     listenedMs += song.listenedMs;
     plays += song.countedPlays;
     if (song.inLibrary && song.countedPlays > 0) songsListened += 1;

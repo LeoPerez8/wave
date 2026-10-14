@@ -1,7 +1,8 @@
 /**
  * An artist page's stats block: the artist's all-time listening totals, as
- * `listeningTotals` sums them (credited by track artist, as in Stats), and
- * their most played songs, ranked by Stats' rule (`rankPlays`).
+ * `listeningTotals` sums them (over the songs whose credit names the artist,
+ * as in Stats, so a collaboration counts for each of its artists), and their
+ * most played songs, ranked by Stats' rule (`rankPlays`).
  */
 import { counted, listeningTotals, type SongListening } from "./listening.ts";
 import { rankPlays, type PlayTotals } from "./stats.ts";
@@ -9,7 +10,10 @@ import { rankPlays, type PlayTotals } from "./stats.ts";
 /** What the artist page knows and reads for its stats block. */
 export interface ArtistStatsInput {
   readonly artistId: number;
-  /** The artist's songs in the library (by track artist). */
+  /**
+   * The songs in the library whose credit names the artist: the same songs
+   * the listening counts for them, so "X of N songs" counts both over one set.
+   */
   readonly songIds: readonly number[];
   /** Every played song's all-time listening (the store's `songListening`). */
   readonly listening: readonly SongListening[];
@@ -27,7 +31,7 @@ export type ArtistStats =
       readonly plays: string;
       /** "48 minutes listened": every play, skipped and uncounted ones included. */
       readonly minutesListened: string;
-      /** "34 of 120 songs": their songs with a counted play, out of all their songs. */
+      /** "34 of 120 songs": the songs crediting them with a counted play, out of all those songs. */
       readonly songsListened: string;
       /** "Last played 3 days ago": their latest play, counted or not. */
       readonly lastPlayed: string;

@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, test } from "node:test";
 
-import { joinArtists, normalizeTrack, type RawTrack } from "@wave/core";
+import { artistPlayTotals, joinArtists, normalizeTrack, type RawTrack } from "@wave/core";
 import { sql } from "drizzle-orm";
 
 import type { IndexedTrack } from "../LibraryStore.ts";
@@ -11,6 +11,7 @@ import { libraryCounts } from "./counts.ts";
 import { selectLinkRows } from "./links.ts";
 import { removeTracks, saveBatch } from "./save.ts";
 import * as schema from "./schema.ts";
+import { creditedPlayTotals, songListening } from "./stats.ts";
 import {
   addTrack,
   migrateTestDatabase,
@@ -143,8 +144,8 @@ describe("credits", () => {
       sql`SELECT id FROM artists WHERE name = 'Ariana Grande, Social House'`,
     ).id;
     // A play of a song since deleted, which kept its whole-credit artist.
-    v7.run(sql`INSERT INTO play_events (track_id, started_at, listened_ms, duration_ms, end_reason, counted, artist_id)
-      VALUES (${boyfriend}, 1, 180000, 180000, 'completed', 1, NULL), (999, 2, 180000, 180000, 'completed', 1, ${collab})`);
+    v7.run(sql`INSERT INTO play_events (track_id, started_at, listened_ms, duration_ms, end_reason, counted, album_id, artist_id)
+      VALUES (${boyfriend}, 1, 180000, 180000, 'completed', 1, NULL, NULL), (999, 2, 180000, 180000, 'completed', 1, (SELECT album_id FROM tracks WHERE id = ${boyfriend}), ${collab})`);
 
     await migrateTestDatabase(v7);
     db = v7;
@@ -178,14 +179,23 @@ describe("credits", () => {
         .all(),
       [{ trackId: boyfriend }, { trackId: rings }],
     );
+    // The deleted collaboration's play counts for each of its artists.
     assert.deepEqual(
-      db
-        .select({ trackId: schema.playEvents.trackId, artistId: schema.playEvents.artistId })
-        .from(schema.playEvents)
-        .all(),
+      songListening(db)
+        .map((song) => [song.trackId, song.artistIds])
+        .toSorted(),
       [
-        { trackId: boyfriend, artistId: null },
-        { trackId: 999, artistId: artist("Ariana Grande")?.id },
+        [boyfriend, [artist("Ariana Grande")?.id, artist("Social House")?.id]],
+        [999, [artist("Ariana Grande")?.id, artist("Social House")?.id]],
+      ],
+    );
+    assert.deepEqual(
+      artistPlayTotals(creditedPlayTotals(db, { from: null, to: 10 }))
+        .map((row) => [row.sortKey, row.countedPlays])
+        .toSorted(),
+      [
+        ["ariana grande", 2],
+        ["social house", 2],
       ],
     );
   });
@@ -205,7 +215,10 @@ describe("credits", () => {
   test("an artist only credited on collaborations shows a cover of theirs", () => {
     saveBatch(
       db,
-      [{ ...indexed(ariana[2] ?? { title: "" }), artworkHash: "boyfriend" }],
+      [
+        indexed(ariana[0] ?? { title: "" }),
+        { ...indexed(ariana[2] ?? { title: "" }), artworkHash: "boyfriend" },
+      ],
       [
         {
           hash: "boyfriend",
@@ -219,24 +232,31 @@ describe("credits", () => {
     );
     removeTracks(db, []);
     assert.equal(artist("Social House")?.artworkPath, "/covers/boyfriend.jpg");
-    assert.equal(artist("Ariana Grande")?.artworkPath, "/covers/boyfriend.jpg");
   });
 
-  test("a downloaded YT Music collaboration files under each of its artists", () => {
-    const artists = ["Metro Boomin", "The Weeknd", "21 Savage"];
-    scan({
-      title: "Creepin'",
-      artist: joinArtists(artists),
-      album: "Heroes & Villains",
-      albumArtist: "Metro Boomin",
-    });
+  const creepin = {
+    title: "Creepin'",
+    artist: joinArtists(["Metro Boomin", "The Weeknd", "21 Savage"]),
+    album: "Heroes & Villains",
+  };
+
+  test("a downloaded YT Music collaboration files under each of its artists once one has a song of their own", () => {
+    scan(creepin, { title: "Blinding Lights", artist: "The Weeknd", album: "After Hours" });
     assert.deepEqual(
       selectArtists(db, {}).map((row) => [row.name, row.trackCount]),
       [
         ["Metro Boomin", 1],
-        ["The Weeknd", 1],
+        ["The Weeknd", 2],
         ["21 Savage", 1],
       ],
+    );
+  });
+
+  test("a downloaded YT Music collaboration whose artists have no other song stays one artist", () => {
+    scan(creepin);
+    assert.deepEqual(
+      selectArtists(db, {}).map((row) => row.name),
+      ["Metro Boomin, The Weeknd & 21 Savage"],
     );
   });
 
@@ -247,5 +267,32 @@ describe("credits", () => {
     assert.equal(detail?.songs[0]?.artistId, artist("Ariana Grande")?.id);
     assert.equal(detail?.appearsOn[0]?.albumArtist, "Ariana Grande · Social House");
     assert.equal(detail?.appearsOn[0]?.albumArtistId, artist("Ariana Grande")?.id);
+  });
+
+  test("song and album rows list every credited artist, primary first (Go to Artist offers them)", () => {
+    scan(...ariana, {
+      title: "Say So (Remix)",
+      artist: "Doja Cat feat. Nicki Minaj",
+      album: "Say So",
+      albumArtist: "Doja Cat, Nicki Minaj",
+    });
+    const id = (name: string) => artist(name)?.id ?? -1;
+    const songs = selectArtistDetail(db, id("Doja Cat"))?.songs ?? [];
+    assert.deepEqual(
+      songs.map((song) => [song.title, song.artistIds]),
+      [
+        ["motive", [id("Ariana Grande"), id("Doja Cat")]],
+        ["Say So (Remix)", [id("Doja Cat"), id("Nicki Minaj")]],
+      ],
+    );
+    const albums = selectArtistDetail(db, id("Nicki Minaj"))?.appearsOn ?? [];
+    assert.deepEqual(
+      albums.map((album) => [album.title, album.albumArtistIds]),
+      [["Say So", [id("Doja Cat"), id("Nicki Minaj")]]],
+    );
+    const single = selectArtistDetail(db, id("Ariana Grande"))?.albums ?? [];
+    assert.deepEqual(single.find((album) => album.title === "thank u, next")?.albumArtistIds, [
+      id("Ariana Grande"),
+    ]);
   });
 });

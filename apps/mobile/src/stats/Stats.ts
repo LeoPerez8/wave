@@ -52,13 +52,10 @@ export class Stats extends Context.Service<
       limit: number,
     ) => Effect.Effect<readonly Ranked<ArtistRow>[], LibraryStoreError>;
     /**
-     * The artist page's stats block over all time, credited by track artist:
-     * `songIds` are the artist's songs on the page.
+     * The artist page's stats block over all time, over the songs whose credit
+     * names the artist (a collaboration counts for each of its artists).
      */
-    readonly artist: (
-      artistId: number,
-      songIds: readonly number[],
-    ) => Effect.Effect<ArtistStats, LibraryStoreError>;
+    readonly artist: (artistId: number) => Effect.Effect<ArtistStats, LibraryStoreError>;
   }
 >()("@wave/mobile/stats/Stats") {}
 
@@ -105,11 +102,15 @@ export const layer = Layer.effect(
         Effect.flatMap(store.creditedPlayTotals(statsWindow(period, Date.now())), (credits) =>
           rank(artistPlayTotals(credits), limit, store.artistsByIds),
         ),
-      artist: (artistId, songIds) => {
+      artist: (artistId) => {
         const now = Date.now();
         return Effect.flatMap(
-          Effect.all([store.songListening, store.trackPlayTotals(statsWindow("all", now))]),
-          ([listening, songPlays]): Effect.Effect<ArtistStats, LibraryStoreError> => {
+          Effect.all([
+            store.songListening,
+            store.trackPlayTotals(statsWindow("all", now)),
+            store.songsCrediting(artistId),
+          ]),
+          ([listening, songPlays, songIds]): Effect.Effect<ArtistStats, LibraryStoreError> => {
             const stats = artistStats({ artistId, songIds, listening, songPlays, now });
             if (!stats.played) return Effect.succeed(stats);
             return Effect.map(withRows(stats.mostPlayed, store.songsByIds), (mostPlayed) => ({

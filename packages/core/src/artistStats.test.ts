@@ -8,10 +8,10 @@ const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 const now = Date.UTC(2026, 9, 12, 12);
 
-/** A song's all-time listening; by default one counted play of three minutes, by artist 7. */
+/** A song's all-time listening; by default one counted play of three minutes, credited to artist 7. */
 const listened = (trackId: number, overrides: Partial<SongListening> = {}): SongListening => ({
   trackId,
-  artistId: 7,
+  artistIds: [7],
   inLibrary: true,
   countedPlays: 1,
   listenedMs: 3 * MINUTE,
@@ -27,7 +27,7 @@ describe("artistStats", () => {
       // Only a too-short play of theirs, and another artist's counted play.
       listening: [
         listened(1, { countedPlays: 0, listenedMs: 10_000 }),
-        listened(3, { artistId: 8 }),
+        listened(3, { artistIds: [8] }),
       ],
       songPlays: [],
       now,
@@ -45,7 +45,7 @@ describe("artistStats", () => {
         // Skipped plays: their time counts, they don't.
         listened(2, { countedPlays: 0, listenedMs: 90_000 }),
         listened(3, { countedPlays: 1, listenedMs: 4 * MINUTE }),
-        listened(9, { artistId: 8, countedPlays: 6, listenedMs: 30 * MINUTE }),
+        listened(9, { artistIds: [8], countedPlays: 6, listenedMs: 30 * MINUTE }),
       ],
       songPlays: [],
       now,
@@ -56,6 +56,22 @@ describe("artistStats", () => {
     assert.equal(stats.plays, "4 plays");
     assert.equal(stats.minutesListened, "15 minutes listened");
     assert.equal(stats.songsListened, "2 of 4 songs");
+  });
+
+  test("a collaboration's plays count for each of its artists, among the songs crediting them", () => {
+    // "Ariana Grande, Doja Cat" (song 1) and a deleted "Doja Cat, Ariana Grande" (song 9).
+    const listening = [
+      listened(1, { artistIds: [7, 8], countedPlays: 2, listenedMs: 6 * MINUTE }),
+      listened(2, { artistIds: [7], countedPlays: 1 }),
+      listened(9, { artistIds: [8, 7], inLibrary: false, countedPlays: 1 }),
+    ];
+    const stats = (artistId: number, songIds: readonly number[]) => {
+      const block = artistStats({ artistId, songIds, listening, songPlays: [], now });
+      return block.played ? [block.plays, block.minutesListened, block.songsListened] : [];
+    };
+
+    assert.deepEqual(stats(7, [1, 2, 3]), ["4 plays", "12 minutes listened", "2 of 3 songs"]);
+    assert.deepEqual(stats(8, [1]), ["3 plays", "9 minutes listened", "1 of 1 song"]);
   });
 
   test("one of each reads in the singular, and large totals with separators", () => {
@@ -94,7 +110,7 @@ describe("artistStats", () => {
           listened(1, { lastPlayedAt: now - 400 * DAY }),
           listened(2, { countedPlays: 0, lastPlayedAt: now - ago }),
           // Another artist's later play doesn't count.
-          listened(3, { artistId: 8, lastPlayedAt: now }),
+          listened(3, { artistIds: [8], lastPlayedAt: now }),
         ],
         songPlays: [],
         now,

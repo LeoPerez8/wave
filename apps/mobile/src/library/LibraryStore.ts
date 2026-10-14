@@ -76,9 +76,10 @@ import {
   deleteTracks,
   selectKnownFiles,
   selectLibraryLookupSongs,
+  trackArtistIds,
   trackQuery,
 } from "./db/tracks";
-import { creditedPlayTotals, songListening, trackPlayTotals } from "./db/stats";
+import { creditedPlayTotals, songListening, songsCrediting, trackPlayTotals } from "./db/stats";
 import { saveYtArtist, selectYtArtist } from "./db/ytArtists";
 import type { KnownFile } from "./NativeScanner";
 
@@ -152,8 +153,10 @@ export interface SongRow {
   /** When the file entered the library (epoch ms). */
   readonly addedAt: number;
   readonly albumId: number;
-  /** The primary artist: the first one [artist] credits (Go to Artist opens it). */
+  /** The primary artist: the first one [artist] credits. */
   readonly artistId: number;
+  /** Every artist [artist] credits, primary first: Go to Artist offers them. */
+  readonly artistIds: readonly number[];
   /** Orders the album's tracks, and so sorts by artist and by album. */
   readonly discNumber: number | null;
   readonly trackNumber: number | null;
@@ -172,6 +175,8 @@ export interface AlbumRow {
   /** The album artist credit as written; [albumArtistId] is the artist it is filed under. */
   readonly albumArtist: string;
   readonly albumArtistId: number;
+  /** Every artist [albumArtist] credits, primary first: Go to Artist offers them. */
+  readonly albumArtistIds: readonly number[];
   readonly year: number | null;
   readonly compilation: boolean;
   readonly trackCount: number;
@@ -261,6 +266,8 @@ export interface SavedPlayback {
 export interface TrackDetails {
   readonly id: number;
   readonly artistId: number;
+  /** Every artist the credit names, primary first: the artist line offers them. */
+  readonly artistIds: readonly number[];
   readonly artist: string;
   readonly albumId: number;
   readonly album: string;
@@ -485,8 +492,9 @@ export class LibraryStore extends Context.Service<
       window: StatsWindow,
     ) => Effect.Effect<readonly PlayTotals[], LibraryStoreError>;
     /**
-     * Counted plays within [window] per album and track artist (deleted songs
-     * included), in no order; Core's `albumPlayTotals` / `artistPlayTotals` group them.
+     * Counted plays within [window] per album and credited artist (deleted
+     * songs included; a collaboration in a row for each artist it credits), in
+     * no order; Core's `albumPlayTotals` / `artistPlayTotals` group them.
      */
     readonly creditedPlayTotals: (
       window: StatsWindow,
@@ -503,9 +511,17 @@ export class LibraryStore extends Context.Service<
     readonly linkRows: (ids: LinkIds) => Effect.Effect<LinkRows, LibraryStoreError>;
     /**
      * Each played song's all-time listening (every play's time, counted plays,
-     * latest play, track artist), in no order; Core's `listeningTotals` sums it.
+     * latest play, the artists its credit names), in no order; Core's
+     * `listeningTotals` sums it.
      */
     readonly songListening: Effect.Effect<readonly SongListening[], LibraryStoreError>;
+    /**
+     * The songs whose credit names [artistId], in no order: those the artist
+     * page's stats count its songs listened among.
+     */
+    readonly songsCrediting: (
+      artistId: number,
+    ) => Effect.Effect<readonly number[], LibraryStoreError>;
     /** The artists whose photo is due for a lookup now (Core's `artistPhotoLookups`). */
     readonly artistPhotoLookups: Effect.Effect<readonly ArtistPhotoLookup[], LibraryStoreError>;
     /** Records how an artist's photo lookup went, by artist key. */
@@ -986,6 +1002,7 @@ const make = Effect.gen(function* () {
             .select({
               id: schema.tracks.id,
               artistId: schema.tracks.artistId,
+              artistIds: trackArtistIds,
               artist: schema.tracks.artistCredit,
               albumId: schema.tracks.albumId,
               album: schema.albums.title,
@@ -1219,6 +1236,9 @@ const make = Effect.gen(function* () {
     linkRows: (ids) => attempt("read linked rows", () => selectLinkRows(db, ids)),
 
     songListening: attempt("sum up listening", () => songListening(db)),
+
+    songsCrediting: (artistId) =>
+      attempt("list the artist's songs", () => songsCrediting(db, artistId)),
 
     artistPhotoLookups: attempt("list artist photo lookups", () =>
       selectArtistPhotoLookups(db, Date.now()),
