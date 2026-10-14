@@ -498,10 +498,10 @@ describe("actionBarLabel", () => {
 });
 
 describe("ytSongActions", () => {
-  test("a YT Music song can join the queue, mixed with the Library's songs", () => {
+  test("a YT Music song can join the queue and playlists, mixed with the Library's songs", () => {
     assert.deepEqual(
       ytSongActions().map((entry) => entry.action),
-      ["playNext", "addToQueue"],
+      ["playNext", "addToQueue", "addToPlaylist"],
     );
   });
 
@@ -510,6 +510,7 @@ describe("ytSongActions", () => {
     assert.deepEqual(ytSongActions(artists), [
       { action: "playNext" },
       { action: "addToQueue" },
+      { action: "addToPlaylist" },
       { action: "goToArtist", artists },
     ]);
   });
@@ -517,7 +518,15 @@ describe("ytSongActions", () => {
   test("its only artist being the page you're on, there's no Go to Artist", () => {
     assert.deepEqual(
       ytSongActions({ kind: "here" }).map((entry) => entry.action),
-      ["playNext", "addToQueue"],
+      ["playNext", "addToQueue", "addToPlaylist"],
+    );
+  });
+
+  test("shown in a playlist, it can be removed from it, as a Library song can", () => {
+    const artists = { kind: "open", target: { kind: "yt", name: "Justice" } } as const;
+    assert.deepEqual(
+      ytSongActions(artists, { inPlaylist: true }).map((entry) => entry.action),
+      ["playNext", "addToQueue", "addToPlaylist", "removeFromPlaylist", "goToArtist"],
     );
   });
 });

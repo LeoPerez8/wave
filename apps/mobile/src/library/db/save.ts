@@ -17,6 +17,7 @@ import {
   type CreditSplits,
 } from "./credits.ts";
 import type { LibraryDatabase } from "./database.ts";
+import { linkPlaylistEntries } from "./playlists.ts";
 import * as schema from "./schema.ts";
 import { deleteTracks } from "./tracks.ts";
 
@@ -50,7 +51,9 @@ const primary = (artistIds: readonly number[]): number => {
  * transaction. [moves] first re-point indexed tracks to the paths they were
  * found under, so they keep their id (and with it history and favorites).
  * Tracks and albums are filed under every artist their credit names (see
- * `credits.ts`), split with the store's [splits].
+ * `credits.ts`), split with the store's [splits]. Playlists' YT Music entries
+ * that the saved tracks positively are become those tracks
+ * (`linkPlaylistEntries`), so a download or a scan both bring them in.
  */
 export const saveBatch = (
   db: LibraryDatabase,
@@ -241,6 +244,8 @@ export const saveBatch = (
         artistIds: credited(track.albumArtistCredits),
       })),
     );
+    // A song a playlist streamed from YT Music becomes this Library song there.
+    linkPlaylistEntries(tx, [...trackIds.values()]);
   });
 };
 

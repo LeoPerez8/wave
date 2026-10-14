@@ -5,6 +5,7 @@ import {
   ytSongCredit,
   ytTrackId,
 } from "@wave/core";
+import type { ComponentProps } from "react";
 
 import { TrackRow } from "@/catalog/TrackRow";
 import type { NativeYtSong } from "@/native/waveYtMusic";
@@ -25,6 +26,8 @@ export function YtSongRow({
   onLongPress = () => openYtSongActions(song),
   trackNumber,
   kind = "",
+  accessibilityActions,
+  onAccessibilityAction,
 }: {
   song: NativeYtSong;
   playing: boolean;
@@ -34,6 +37,9 @@ export function YtSongRow({
   trackNumber?: number | undefined;
   /** Says what the row is before its artists ("Song · ", Search's top result). */
   kind?: string | undefined;
+  /** Screen-reader actions standing in for gestures (move, remove in a playlist). */
+  accessibilityActions?: ComponentProps<typeof TrackRow>["accessibilityActions"];
+  onAccessibilityAction?: ComponentProps<typeof TrackRow>["onAccessibilityAction"];
 }) {
   const download = useYtDownloadStatus(song.videoId);
   return (
@@ -53,6 +59,8 @@ export function YtSongRow({
       progress={ytDownloadProgress(download)}
       onPress={onPress}
       onLongPress={onLongPress}
+      accessibilityActions={accessibilityActions}
+      onAccessibilityAction={onAccessibilityAction}
     />
   );
 }

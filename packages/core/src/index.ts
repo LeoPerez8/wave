@@ -590,3 +590,17 @@ export type {
 } from "./streamedArtist.ts";
 export { pagePlayback } from "./pagePlayback.ts";
 export type { PagePlayback } from "./pagePlayback.ts";
+export {
+  planPlaylistSongs,
+  playlistEntryLinks,
+  playlistPlayback,
+  playlistSongKey,
+  readPlaylistYtSong,
+  writePlaylistYtSong,
+} from "./playlistEntries.ts";
+export type {
+  PlaylistEntryLink,
+  PlaylistPlay,
+  PlaylistSong,
+  StreamedPlaylistEntry,
+} from "./playlistEntries.ts";

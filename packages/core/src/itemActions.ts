@@ -180,7 +180,7 @@ export const itemActions = (subject: ActionSubject): ItemActionEntry[] => {
 
 /** One entry of a YT Music song's menu; Go to Artist carries where it leads. */
 export type YtSongActionEntry<A> =
-  | { readonly action: "playNext" | "addToQueue" }
+  | { readonly action: "playNext" | "addToQueue" | "addToPlaylist" | "removeFromPlaylist" }
   | {
       readonly action: "goToArtist";
       readonly artists: Exclude<StreamedArtistLink<A>, { readonly kind: "here" }>;
@@ -188,15 +188,21 @@ export type YtSongActionEntry<A> =
 
 /**
  * The entries a YT Music song's long-press menu offers: it can join the
- * queue beside the Library's songs and, given where its [artists] link leads
- * (Core's `streamedArtistLink`), Go to Artist opens them integrated (none
- * when its only artist is the page you're on). The
- * Library's other entries (playlists, favorites, Go to Album, Delete) are
- * about its files, which a streamed song isn't.
+ * queue and playlists beside the Library's songs (shown in a playlist
+ * ([inPlaylist]), it can leave it too) and, given where its [artists] link
+ * leads (Core's `streamedArtistLink`), Go to Artist opens them integrated
+ * (none when its only artist is the page you're on). The Library's other
+ * entries (favorites, Go to Album, Delete) are about its files, which a
+ * streamed song isn't.
  */
-export const ytSongActions = <A>(artists?: StreamedArtistLink<A>): YtSongActionEntry<A>[] => [
+export const ytSongActions = <A>(
+  artists?: StreamedArtistLink<A>,
+  { inPlaylist = false }: { readonly inPlaylist?: boolean } = {},
+): YtSongActionEntry<A>[] => [
   { action: "playNext" },
   { action: "addToQueue" },
+  { action: "addToPlaylist" },
+  ...(inPlaylist ? [{ action: "removeFromPlaylist" } as const] : []),
   ...(artists === undefined || artists.kind === "here"
     ? []
     : [{ action: "goToArtist", artists } as const]),
