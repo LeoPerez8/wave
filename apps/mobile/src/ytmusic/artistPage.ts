@@ -1,4 +1,5 @@
 import {
+  identityKey,
   libraryAlbumFinder,
   libraryArtistNamed,
   ytArtistPageAsks,
@@ -14,7 +15,7 @@ import { useAlbums, useArtists } from "@/library/hooks";
 import { LibraryStore, type AlbumRow, type SongRow } from "@/library/LibraryStore";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 
-import { useSavedYtArtist } from "./artistSection";
+import { fetchArtist, useSavedYtArtist } from "./artistSection";
 import { useLoadedLibraryFinder } from "./libraryFinder";
 import { YtMusic } from "./YtMusic";
 
@@ -70,11 +71,23 @@ export interface YtArtistPageShown {
  * The YouTube Music artist page [browseId]: what was saved for it shows for a
  * week; otherwise it's read as the page opens, the user having asked for it
  * by opening it (Core's `ytArtistPageAsks`). [knownName] is the name the
- * opener knew, until the page says.
+ * opener knew, until the page says. Opened by name (no [browseId]), the
+ * artist is found as a Library artist's section finds them, an Artists search
+ * for [knownName], and the answer, "no match" included, is saved under that
+ * name, as a Library artist's is (`fetchArtist`).
  */
-export const useYtArtistPage = (browseId: string, knownName: string | null): YtArtistPageShown => {
-  const ask = useCallback(() => fetchPage(browseId), [browseId]);
-  const { state, enabled, openedAt, show } = useSavedYtArtist(savedKey(browseId), ask);
+export const useYtArtistPage = (
+  browseId: string | null,
+  knownName: string | null,
+): YtArtistPageShown => {
+  const byName = browseId === null ? (knownName ?? "") : null;
+  const key = byName === null ? savedKey(browseId ?? "") : identityKey(byName);
+  const ask = useCallback(
+    (saved: Saved | null) =>
+      byName === null ? fetchPage(browseId ?? "") : fetchArtist(byName, key, saved),
+    [browseId, byName, key],
+  );
+  const { state, enabled, openedAt, show } = useSavedYtArtist(key, ask);
 
   const asks = ytArtistPageAsks(state, { enabled, now: openedAt });
   // Once per state: a remounted effect doesn't send the request twice.

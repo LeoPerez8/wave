@@ -25,6 +25,12 @@ export interface QueueTrack {
   readonly path: string;
   readonly title: string;
   readonly artist: string;
+  /**
+   * A YT Music song's artists as YouTube Music credits them, for Now Playing's
+   * artist link (Core's `streamedArtistLink`). Missing from a Library track's,
+   * and from a YT Music song's saved before they were kept.
+   */
+  readonly artists?: readonly string[];
   readonly album: string | null;
   readonly artworkPath: string | null;
   /** Small artwork for the queue rows. */
@@ -66,6 +72,7 @@ export const toYtQueueTrack = (song: YtSong, artwork: CachedArtwork | null): Que
     path: id,
     title: song.title,
     artist: ytSongArtist(song),
+    artists: song.artists,
     album: song.album,
     artworkPath: artwork?.path ?? song.artworkUrl,
     thumbPath: artwork?.thumbPath ?? null,

@@ -46,5 +46,17 @@ export const openYtArtist = (browseId: string, name?: string): void => {
   router.push(`/library/yt-artist/${encodeURIComponent(browseId)}${query}` as Href);
 };
 
+/** The YouTube Music artist page's id segment when it's opened by name, not by browse id. */
+export const YT_ARTIST_BY_NAME = "by-name";
+
+/**
+ * Opens the YouTube Music artist page of the artist named [name], for an
+ * artist the Library doesn't have whose browse id isn't known (a streamed
+ * song's): the page finds them with an Artists search, as the Library artist
+ * page does (Core's `pickYtArtist`).
+ */
+export const openYtArtistNamed = (name: string): void =>
+  router.push(`/library/yt-artist/${YT_ARTIST_BY_NAME}?name=${encodeURIComponent(name)}` as Href);
+
 /** Discover, on the Library stack. */
 export const openDiscover = (): void => router.push("/library/discover" as Href);

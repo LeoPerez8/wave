@@ -25,7 +25,7 @@ import { DetailFrame } from "@/library/DetailFrame";
 import { useFavoriteIds } from "@/library/favorites";
 import { useArtist } from "@/library/hooks";
 import type { AlbumRow, ArtistDetail, ArtistRow, SongRow } from "@/library/LibraryStore";
-import { openAlbum, parseId, useKnownRow } from "@/library/routes";
+import { openAlbum, parseId, useKnownRow, useOpenedIntegrated } from "@/library/routes";
 import { SongSortButton } from "@/library/SongSortButton";
 import { useSortedSongs } from "@/library/songSort";
 import { ListIntro, songCount, toTrackSummary } from "@/library/TrackList";
@@ -214,7 +214,7 @@ const unread = (artist: ArtistRow): ArtistDetail => ({
   songs: [],
 });
 
-function ArtistContent({ shown }: { shown: Shown }) {
+function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegrated: boolean }) {
   const loaded = shown.detail !== undefined;
   const detail = useMemo(() => shown.detail ?? unread(shown.artist), [shown.detail, shown.artist]);
   const scrollable = useListScrollable();
@@ -229,8 +229,14 @@ function ArtistContent({ shown }: { shown: Shown }) {
     () => [...detail.albums, ...detail.appearsOn],
     [detail.albums, detail.appearsOn],
   );
-  // Asked only on Show on YouTube Music; nothing shows until the page is read.
-  const yt = useYtArtistSection(detail.artist.name, detail.artist.id, libraryAlbums);
+  // Asked on Show on YouTube Music, or on its own when opened integrated (from a streamed
+  // song's artist); nothing shows until the page is read.
+  const yt = useYtArtistSection(
+    detail.artist.name,
+    detail.artist.id,
+    libraryAlbums,
+    openedIntegrated,
+  );
   const ytView = loaded ? yt.view : null;
   const ytShelves = loaded ? yt.shelves : null;
   const integrated = loaded && yt.integrated;
@@ -375,14 +381,17 @@ function ArtistContent({ shown }: { shown: Shown }) {
  * YT Music is on, Show on YouTube Music (asked only on a tap): then the
  * releases and top songs YouTube Music has that the Library lacks join the
  * albums and songs, the Library's songs are marked downloaded, and Play,
- * Shuffle and taps play the mixed list. Opened from a list that knows the
- * artist, the head is there on the first frame and the rest follows once read.
+ * Shuffle and taps play the mixed list. Opened integrated (`openArtist`'s
+ * `integrated`, from a streamed song's artist), it asks on its own, with no
+ * tap. Opened from a list that knows the artist, the head is there on the
+ * first frame and the rest follows once read.
  */
 export default function ArtistScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const artistId = parseId(id);
   const detail = useArtist(artistId);
   const known = useKnownRow("artist", artistId);
+  const openedIntegrated = useOpenedIntegrated();
   const shown: Shown | null | undefined =
     detail === undefined
       ? known === undefined
@@ -393,7 +402,7 @@ export default function ArtistScreen() {
         : { artist: detail.artist, detail };
   return (
     <DetailFrame detail={shown} noun="artist">
-      {(artist) => <ArtistContent shown={artist} />}
+      {(artist) => <ArtistContent shown={artist} openedIntegrated={openedIntegrated} />}
     </DetailFrame>
   );
 }

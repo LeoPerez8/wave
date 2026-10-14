@@ -43,26 +43,41 @@ const open = <S extends DetailScreen>(
   router.push(`${detailPath(here, screen, id)}${query}` as Href);
 };
 
-/** How an album was opened: from an integrated view (Search showing YT Music, an integrated artist page). */
-export interface AlbumOpening {
+/**
+ * How an album or artist was opened: integrated, for an album from an
+ * integrated view (Search showing YT Music, an integrated artist page), for
+ * an artist from a streamed song.
+ */
+export interface DetailOpening {
   readonly integrated: boolean;
 }
+
+/** The route param an integrated opening adds (read back by `useOpenedIntegrated`). */
+const integratedQuery = (from: DetailOpening | undefined): string =>
+  from?.integrated === true ? "?integrated=1" : "";
 
 /**
  * Opens a Library album. Opened from an integrated view ([from]), it reads
  * its release on YouTube Music on its own (Core's `ytLibraryAlbumView`);
  * otherwise it waits for Show on YouTube Music.
  */
-export const openAlbum = (id: number, known?: AlbumRow | null, from?: AlbumOpening): void =>
-  open("album", id, known, from?.integrated === true ? "?integrated=1" : "");
+export const openAlbum = (id: number, known?: AlbumRow | null, from?: DetailOpening): void =>
+  open("album", id, known, integratedQuery(from));
 
-export const openArtist = (id: number, known?: ArtistRow | null): void => open("artist", id, known);
+/**
+ * Opens a Library artist. Opened integrated ([from], from a streamed song's
+ * artist), their page asks YouTube Music on its own when nothing stands for
+ * them (Core's `ytArtistSectionAsks`); otherwise it waits for Show on YouTube
+ * Music.
+ */
+export const openArtist = (id: number, known?: ArtistRow | null, from?: DetailOpening): void =>
+  open("artist", id, known, integratedQuery(from));
 export const openGenre = (id: number, known?: GenreRow | null): void => open("genre", id, known);
 export const openFolder = (id: number, known?: FolderRow | null): void => open("folder", id, known);
 export const openPlaylist = (id: number, known?: PlaylistRow | null): void =>
   open("playlist", id, known);
 
-/** Whether the album screen was opened from an integrated view (`openAlbum`'s [from]). */
+/** Whether the album or artist screen was opened integrated (`openAlbum`'s, `openArtist`'s [from]). */
 export const useOpenedIntegrated = (): boolean =>
   useLocalSearchParams<{ integrated?: string }>().integrated === "1";
 
