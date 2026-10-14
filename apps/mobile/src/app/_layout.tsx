@@ -14,6 +14,7 @@ import { useAllFilesAccess } from "@/library/hooks";
 import { primePlaylists } from "@/library/playlists";
 import { OverlayHost } from "@/overlay/OverlayHost";
 import { useTrackCurrentPath } from "@/library/routes";
+import { useOpenSharedText } from "@/library/sharedText";
 import { startInitialScan } from "@/library/runtime";
 import { NowPlayingSheet, UnderNowPlaying } from "@/nowPlaying/NowPlayingSheet";
 import { startServices } from "@/services";
@@ -24,6 +25,9 @@ export default function RootLayout() {
   const { granted } = useAllFilesAccess();
   // Lets library screens open inside the tab they were opened from.
   useTrackCurrentPath();
+  // A playlist link shared from YT Music or a browser opens its import card, once Wave can
+  // read the Library (the import matches against it).
+  useOpenSharedText(granted);
 
   // A no-op when Android Auto already started them headless (src/services.ts).
   useEffect(() => startServices("app"), []);

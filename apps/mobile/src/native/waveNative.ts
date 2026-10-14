@@ -109,6 +109,8 @@ type WaveNativeEvents = {
   onScanBatch: (event: ScanBatchEvent) => void;
   onScanComplete: (event: ScanCompleteEvent) => void;
   onScanError: (event: ScanErrorEvent) => void;
+  /** Text was shared to Wave; `takeSharedText` has it. */
+  onShareReceived: () => void;
 };
 
 declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
@@ -126,6 +128,11 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
   pickStatFiles(): Promise<readonly PickedPlaylistFile[]>;
   /** The clipboard's text, or null when it holds none. Only readable while Wave is in front. */
   readClipboardText(): Promise<string | null>;
+  /**
+   * The latest text shared to Wave from another app's share sheet, once: the
+   * share that started Wave or one since. Null when nothing new was shared.
+   */
+  takeSharedText(): string | null;
   /**
    * Starts a scan, cancelling any running one, and returns its id. The known
    * files (parallel lists) make it incremental: files with the same size and

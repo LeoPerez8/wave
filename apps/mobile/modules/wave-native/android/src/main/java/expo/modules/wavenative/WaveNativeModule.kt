@@ -40,6 +40,7 @@ import expo.modules.wavenative.scan.ScanProgress
 import expo.modules.wavenative.scan.ScannedTrack
 import expo.modules.wavenative.scan.artworkToMap
 import expo.modules.wavenative.scan.trackToMap
+import expo.modules.wavenative.share.SharedTextInbox
 import expo.modules.wavenative.tags.AlbumPlace
 import expo.modules.wavenative.tags.AudioTagReader
 import expo.modules.wavenative.tags.JAudioTaggerReader
@@ -56,7 +57,7 @@ import java.util.concurrent.atomic.AtomicInteger
 /**
  * Wave's native side: all-files access, the folder and playlist file pickers, the library scanner,
  * lyrics, writing found lyrics and genre into files, deleting songs' files, saving artist photos,
- * the launch theme, the launcher icon and reading the clipboard. Scans run one at a time on a background thread and
+ * the launch theme, the launcher icon, reading the clipboard and text shared to Wave. Scans run one at a time on a background thread and
  * stream results to JS as events:
  * `onScanProgress`, `onScanMissing`, `onScanBatch`, `onScanComplete` and
  * `onScanError`, each carrying the `scanId` returned by `startScan`.
@@ -80,7 +81,17 @@ class WaveNativeModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("WaveNative")
 
-    Events("onScanProgress", "onScanMissing", "onScanBatch", "onScanComplete", "onScanError")
+    Events(
+      "onScanProgress",
+      "onScanMissing",
+      "onScanBatch",
+      "onScanComplete",
+      "onScanError",
+      "onShareReceived",
+    )
+
+    // A share can arrive before JS listens: it stays in the inbox until `takeSharedText`.
+    OnCreate { SharedTextInbox.onReceived = { sendEvent("onShareReceived") } }
 
     Function("hasAllFilesAccess") { Environment.isExternalStorageManager() }
 
@@ -162,6 +173,9 @@ class WaveNativeModule : Module() {
       val clipboard = context.getSystemService(ClipboardManager::class.java)
       clipboard?.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString()
     }.runOnQueue(Queues.MAIN)
+
+    /** The latest text shared to Wave from another app, once; null when nothing new was shared. */
+    Function("takeSharedText") { SharedTextInbox.take() }
 
     OnActivityResult { _, payload ->
       when (payload.requestCode) {
@@ -294,6 +308,7 @@ class WaveNativeModule : Module() {
     }
 
     OnDestroy {
+      SharedTextInbox.onReceived = null
       currentScan?.second?.set(true)
       scanExecutor.shutdownNow()
       launcherIconSwitcher?.let { switcher ->

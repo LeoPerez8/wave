@@ -27,6 +27,9 @@ const config: ExpoConfig = {
     // All-files access lets the scanner read every audio file in the scan roots.
     // Acceptable because Wave is sideloaded, not distributed on the Play Store.
     permissions: ["android.permission.MANAGE_EXTERNAL_STORAGE"],
+    // Lists Wave in the share sheet for shared text and links, and only those: a playlist
+    // link shared from YT Music or a browser opens its import card (docs/spec.md).
+    intentFilters: [{ action: "SEND", category: ["DEFAULT"], data: [{ mimeType: "text/plain" }] }],
   },
   experiments: {
     typedRoutes: true,
