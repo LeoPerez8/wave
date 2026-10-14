@@ -1,0 +1,25 @@
+{
+  "gid": "1e6028dab84d4a17a1b3fb28ad51df5d",
+  "name": "Blinding Lights",
+  "album": {
+    "gid": "95e1b4a3e0a142d1979ed214246ba7e9",
+    "name": "After Hours"
+  },
+  "artist": [
+    {
+      "gid": "406af4e8976a43fe849bca0e227fc88b",
+      "name": "The Weeknd"
+    }
+  ],
+  "number": 9,
+  "disc_number": 1,
+  "duration": 200040,
+  "popularity": 91,
+  "external_id": [
+    {
+      "type": "isrc",
+      "id": "USUG11904206"
+    }
+  ],
+  "canonical_uri": "spotify:track:0VjIjW4GlUZAMYd2vXMi3b"
+}

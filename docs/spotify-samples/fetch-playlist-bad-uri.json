@@ -1,0 +1,8 @@
+{
+  "data": {
+    "playlistV2": {
+      "__typename": "GenericError",
+      "message": "Failed to fetch playlist for uri spotify:playlist:abc, status code: 400 BAD_REQUEST"
+    }
+  }
+}

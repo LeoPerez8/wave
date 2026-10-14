@@ -1,0 +1,296 @@
+{
+  "data": {
+    "playlistV2": {
+      "__typename": "Playlist",
+      "content": {
+        "__typename": "PlaylistItemsPage",
+        "items": [
+          {
+            "addedAt": {
+              "isoString": "2025-09-10T08:55:28.050Z"
+            },
+            "addedBy": {
+              "data": {
+                "__typename": "User",
+                "name": "IndieMassive Hits",
+                "uri": "spotify:user:daanmathijs1999",
+                "username": "daanmathijs1999"
+              }
+            },
+            "attributes": [],
+            "itemV2": {
+              "__typename": "TrackResponseWrapper",
+              "data": {
+                "__typename": "Track",
+                "albumOfTrack": {
+                  "artists": {
+                    "items": [
+                      {
+                        "profile": {
+                          "name": "The Weeknd"
+                        },
+                        "uri": "spotify:artist:1Xyo4u8uXC1ZmMpatF05PJ"
+                      }
+                    ]
+                  },
+                  "coverArt": {
+                    "sources": [
+                      {
+                        "height": 300,
+                        "url": "https://i.scdn.co/image/ab67616d00001e028863bc11d2aa12b54f5aeb36",
+                        "width": 300
+                      },
+                      {
+                        "height": 64,
+                        "url": "https://i.scdn.co/image/ab67616d000048518863bc11d2aa12b54f5aeb36",
+                        "width": 64
+                      },
+                      {
+                        "height": 640,
+                        "url": "https://i.scdn.co/image/ab67616d0000b2738863bc11d2aa12b54f5aeb36",
+                        "width": 640
+                      }
+                    ]
+                  },
+                  "date": {
+                    "isoString": "2020-03-20T00:00:00Z",
+                    "precision": "DAY"
+                  },
+                  "name": "After Hours",
+                  "uri": "spotify:album:4yP0hdKOZPNshxUOjY0cZj"
+                },
+                "artists": {
+                  "items": [
+                    {
+                      "profile": {
+                        "name": "The Weeknd"
+                      },
+                      "uri": "spotify:artist:1Xyo4u8uXC1ZmMpatF05PJ"
+                    }
+                  ]
+                },
+                "contentRating": {
+                  "label": "NONE"
+                },
+                "discNumber": 1,
+                "trackDuration": {
+                  "totalMilliseconds": 200040
+                },
+                "mediaType": "AUDIO",
+                "name": "Blinding Lights",
+                "playability": {
+                  "playable": true,
+                  "reason": "PLAYABLE"
+                },
+                "playcount": "5632731972",
+                "trackNumber": 9,
+                "uri": "spotify:track:0VjIjW4GlUZAMYd2vXMi3b"
+              }
+            },
+            "uid": "8ddff843a27ea6de"
+          },
+          {
+            "addedAt": {
+              "isoString": "2025-09-10T08:55:28.050Z"
+            },
+            "addedBy": {
+              "data": {
+                "__typename": "User",
+                "name": "IndieMassive Hits",
+                "uri": "spotify:user:daanmathijs1999",
+                "username": "daanmathijs1999"
+              }
+            },
+            "attributes": [],
+            "itemV2": {
+              "__typename": "TrackResponseWrapper",
+              "data": {
+                "__typename": "Track",
+                "albumOfTrack": {
+                  "artists": {
+                    "items": [
+                      {
+                        "profile": {
+                          "name": "Imagine Dragons"
+                        },
+                        "uri": "spotify:artist:53XhwfbYqKCa1cC15pYq2q"
+                      }
+                    ]
+                  },
+                  "coverArt": {
+                    "sources": [
+                      {
+                        "height": 300,
+                        "url": "https://i.scdn.co/image/ab67616d00001e025675e83f707f1d7271e5cf8a",
+                        "width": 300
+                      },
+                      {
+                        "height": 64,
+                        "url": "https://i.scdn.co/image/ab67616d000048515675e83f707f1d7271e5cf8a",
+                        "width": 64
+                      },
+                      {
+                        "height": 640,
+                        "url": "https://i.scdn.co/image/ab67616d0000b2735675e83f707f1d7271e5cf8a",
+                        "width": 640
+                      }
+                    ]
+                  },
+                  "date": {
+                    "isoString": "2017-06-23T00:00:00Z",
+                    "precision": "DAY"
+                  },
+                  "name": "Evolve",
+                  "uri": "spotify:album:33pt9HBdGlAbRGBHQgsZsU"
+                },
+                "artists": {
+                  "items": [
+                    {
+                      "profile": {
+                        "name": "Imagine Dragons"
+                      },
+                      "uri": "spotify:artist:53XhwfbYqKCa1cC15pYq2q"
+                    }
+                  ]
+                },
+                "contentRating": {
+                  "label": "NONE"
+                },
+                "discNumber": 1,
+                "trackDuration": {
+                  "totalMilliseconds": 204346
+                },
+                "mediaType": "AUDIO",
+                "name": "Believer",
+                "playability": {
+                  "playable": true,
+                  "reason": "PLAYABLE"
+                },
+                "playcount": "3986996563",
+                "trackNumber": 4,
+                "uri": "spotify:track:0pqnGHJpmpxLKifKRmU6WP"
+              }
+            },
+            "uid": "658521d565b9ac86"
+          },
+          {
+            "addedAt": {
+              "isoString": "2026-10-08T13:36:16.459Z"
+            },
+            "addedBy": {
+              "data": {
+                "__typename": "User",
+                "name": "IndieMassive Hits",
+                "uri": "spotify:user:daanmathijs1999",
+                "username": "daanmathijs1999"
+              }
+            },
+            "attributes": [],
+            "itemV2": {
+              "__typename": "TrackResponseWrapper",
+              "data": {
+                "__typename": "Track",
+                "albumOfTrack": {
+                  "artists": {
+                    "items": [
+                      {
+                        "profile": {
+                          "name": "MELINDA LINDNER"
+                        },
+                        "uri": "spotify:artist:0N0lbSVgiewWYgrkej6IL3"
+                      }
+                    ]
+                  },
+                  "coverArt": {
+                    "sources": [
+                      {
+                        "height": 300,
+                        "url": "https://i.scdn.co/image/ab67616d00001e023696aa3d9c16220c966009bc",
+                        "width": 300
+                      },
+                      {
+                        "height": 64,
+                        "url": "https://i.scdn.co/image/ab67616d000048513696aa3d9c16220c966009bc",
+                        "width": 64
+                      },
+                      {
+                        "height": 640,
+                        "url": "https://i.scdn.co/image/ab67616d0000b2733696aa3d9c16220c966009bc",
+                        "width": 640
+                      }
+                    ]
+                  },
+                  "date": {
+                    "isoString": "2026-09-22T00:00:00Z",
+                    "precision": "DAY"
+                  },
+                  "name": "BEST OF BREAD",
+                  "uri": "spotify:album:0ARtXhWT5QelZK4PyftJj2"
+                },
+                "artists": {
+                  "items": [
+                    {
+                      "profile": {
+                        "name": "MELINDA LINDNER"
+                      },
+                      "uri": "spotify:artist:0N0lbSVgiewWYgrkej6IL3"
+                    }
+                  ]
+                },
+                "contentRating": {
+                  "label": "NONE"
+                },
+                "discNumber": 1,
+                "trackDuration": {
+                  "totalMilliseconds": 207530
+                },
+                "mediaType": "AUDIO",
+                "name": "EVERYTHING I OWN",
+                "playability": {
+                  "playable": true,
+                  "reason": "PLAYABLE"
+                },
+                "playcount": "4885",
+                "trackNumber": 5,
+                "uri": "spotify:track:1zDHHA8VJxrT08zrgfmHDw"
+              }
+            },
+            "uid": "463f3c15a6627024"
+          }
+        ],
+        "pagingInfo": {
+          "limit": 3,
+          "offset": 0
+        },
+        "totalCount": 495
+      },
+      "description": "A playlist with the 500 most streamed songs on Spotify. This playlist is updated every month. Ed Sheeran's Shape of You is the most listened song on Spotify. Picture: Ed Sheeran. (Updated May 2023). Distribute your music with us via <a href=\"https://indiemassive.com/?aff=3\">IndieMassive</a>",
+      "followers": 34679,
+      "format": "",
+      "images": {
+        "items": [
+          {
+            "sources": [
+              {
+                "height": null,
+                "url": "https://image-cdn-ak.spotifycdn.com/image/ab67706c0000d72c382aa90240a57bb77c6ddd0d",
+                "width": null
+              }
+            ]
+          }
+        ]
+      },
+      "name": "Top 500 Most Streamed Songs on Spotify",
+      "ownerV2": {
+        "data": {
+          "__typename": "User",
+          "name": "IndieMassive Hits",
+          "uri": "spotify:user:daanmathijs1999",
+          "username": "daanmathijs1999"
+        }
+      },
+      "revisionId": "AAAGbRkQKAqX9o1Dp4iQp+d3BRHSt+6q",
+      "uri": "spotify:playlist:1RTENWq73MEx1Pop40ZZ5S"
+    }
+  }
+}
