@@ -65,14 +65,17 @@ class YtAudioDownload(private val streams: YtAudioStreams, private val ranges: R
           streams.reject(videoId)
           val fresh = m4a(streams.resolve(videoId))
           val freshLength = lengthOf(fresh)
-          val resumes = YtStreams.resumesDownload(stream.itag, length, fresh.itag, freshLength)
-          stream = fresh
-          if (!resumes) {
-            length = freshLength ?: throw IOException("YouTube didn't say how long the file is")
-            // Another file: the bytes so far don't belong to it.
-            throw RangeSourceChanged(length)
+          if (YtStreams.resumesDownload(stream.itag, length, fresh.itag, freshLength)) {
+            stream = fresh
+            throw IOException("HTTP ${range.status} for the audio; asking a fresh address")
           }
-          throw IOException("HTTP ${range.status} for the audio; asking a fresh address")
+          // Another file of a length nobody says: it can't continue this one, nor start over.
+          // The refused address stays, so the next range asks for a fresh one again.
+          if (freshLength == null) throw IOException("YouTube didn't say how long the file is")
+          stream = fresh
+          length = freshLength
+          // Another file: the bytes so far don't belong to it.
+          throw RangeSourceChanged(length)
         }
         else -> throw IOException("HTTP ${range.status} for the audio")
       }
