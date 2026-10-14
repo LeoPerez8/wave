@@ -4,6 +4,7 @@ import {
   libraryAlbumFinder,
   pickYtArtist,
   stepYtArtistSection,
+  ytArtistIntegrated,
   ytArtistLookup,
   ytArtistSectionView,
   ytArtistShelves,
@@ -153,6 +154,11 @@ export interface YtArtistSectionShown {
    * album it already is (Core's `ytArtistShelves`, `libraryAlbumFinder`).
    */
   readonly shelves: readonly YtArtistShelf<AlbumRow>[];
+  /**
+   * Whether the page is an integrated view (Core's `ytArtistIntegrated`): its
+   * Library albums open integrated too.
+   */
+  readonly integrated: boolean;
   /** Show on YouTube Music: asks YouTube Music, once. */
   readonly show: () => void;
 }
@@ -186,5 +192,6 @@ export const useYtArtistSection = (
     () => ytArtistShelves(state, { name, enabled, now: openedAt, libraryAlbum: findAlbum }),
     [state, name, enabled, openedAt, findAlbum],
   );
-  return { view, shelves, show };
+  const integrated = ytArtistIntegrated(state, { name, enabled, now: openedAt });
+  return { view, shelves, integrated, show };
 };
