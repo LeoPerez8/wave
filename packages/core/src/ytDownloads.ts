@@ -5,11 +5,16 @@
  * through `ytDownloadsFromJournal`.
  */
 
+import type { DownloadSource } from "./downloadSource.ts";
 import type { YtSong } from "./ytMusic.ts";
 import { soulseekSameRecording } from "./soulseekDownload.ts";
 
 /**
- * Why acquisition failed, including account setup and an unavailable recording.
+ * Why acquisition failed, including account setup and an unavailable recording:
+ * `account` is Soulseek's account (signed out or rejected), `unavailable` no
+ * Soulseek copy in 320 kbps, `noSource` neither YT Music nor a Soulseek
+ * account, and `ytUnavailable` a song YouTube Music won't serve (or serves
+ * audio of another length).
  */
 export type YtDownloadFailure =
   | "offline"
@@ -17,7 +22,9 @@ export type YtDownloadFailure =
   | "noFolder"
   | "storage"
   | "account"
-  | "unavailable";
+  | "unavailable"
+  | "noSource"
+  | "ytUnavailable";
 
 export type YtDownloadPhase = "connecting" | "searching" | "queued" | "transferring" | "validating";
 
@@ -73,6 +80,8 @@ export interface YtDownloadJournalJob<S extends YtSong = YtSong> {
   /** Other result ids positively matched to the same recording. */
   readonly aliases?: readonly S[];
   readonly phase: YtDownloadJournalPhase;
+  /** Where the audio comes from; a job from before YouTube Music downloads is Soulseek's. */
+  readonly source?: DownloadSource;
   readonly received?: number;
   readonly total?: number;
   /** The peer's queue position while it keeps us waiting. */
@@ -94,13 +103,15 @@ const downloading = (phase: YtDownloadPhase): YtDownloadStatus => ({
 
 const journalStatus = (job: YtDownloadJournalJob): YtDownloadStatus => {
   if (job.importFailure !== undefined) return { kind: "failed", reason: job.importFailure };
+  // YouTube Music has no recording to find or peer to reach: the job waits until the audio flows.
+  const youtube = job.source === "youtube";
   switch (job.phase) {
     case "queued":
       return { kind: "queued" };
     case "preparing":
-      return downloading("searching");
+      return downloading(youtube ? "queued" : "searching");
     case "prepared":
-      return downloading("connecting");
+      return downloading(youtube ? "queued" : "connecting");
     case "transferring":
       return job.queuePosition !== undefined && job.queuePosition !== null
         ? downloading("queued")
@@ -205,6 +216,8 @@ const FAILURE_LINES: { readonly [F in YtDownloadFailure]: string } = {
   storage: "Download failed: couldn't save the file",
   account: "Connect a free Soulseek account in Settings",
   unavailable: "This recording is unavailable in 320 kbps",
+  noSource: "Connect YT Music or Soulseek in Settings",
+  ytUnavailable: "This song is unavailable on YouTube Music",
 };
 
 /** The fraction of the file that has arrived, or null when there's no size to measure against. */

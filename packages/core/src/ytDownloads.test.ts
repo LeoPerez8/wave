@@ -31,6 +31,10 @@ const job = (videoId: string, patch: Partial<YtDownloadJournalJob> = {}): YtDown
 const shown = (jobs: readonly YtDownloadJournalJob[], videoId: string) =>
   ytDownloadStatus(ytDownloadsFromJournal(jobs), videoId);
 
+/** What the row says for a YouTube Music job at [patch]'s phase. */
+const youtubeLine = (patch: Partial<YtDownloadJournalJob>) =>
+  ytDownloadLine(shown([job("a", { source: "youtube", ...patch })], "a"));
+
 describe("the native download journal, as rows show it", () => {
   test("a waiting download says so, in the order the journal keeps", () => {
     const state = ytDownloadsFromJournal([job("a", { phase: "transferring" }), job("b")]);
@@ -68,6 +72,18 @@ describe("the native download journal, as rows show it", () => {
       total: null,
       phase: "validating",
     });
+  });
+
+  test("a download from YouTube Music waits, downloads, is checked, then saved", () => {
+    assert.equal(youtubeLine({ phase: "queued" }), "Waiting to download");
+    assert.equal(youtubeLine({ phase: "preparing" }), "Waiting to download");
+    assert.equal(youtubeLine({ phase: "prepared" }), "Waiting to download");
+    assert.equal(
+      youtubeLine({ phase: "transferring", received: 4_200, total: 10_000 }),
+      "Downloading · 42%",
+    );
+    assert.equal(youtubeLine({ phase: "sourceReady" }), "Checking the download");
+    assert.equal(youtubeLine({ phase: "tagging" }), "Saving to the Library");
   });
 
   test("tagging, publishing and importing show as saving until the Library has the Track", () => {
@@ -150,6 +166,18 @@ describe("a YT Music song's download, as its row and menu show it", () => {
       ytDownloadLine({ kind: "failed", reason: "storage" }),
       "Download failed: couldn't save the file",
     );
+  });
+
+  test("without YT Music or a Soulseek account, the row says to connect one, and keeps Retry", () => {
+    const status = { kind: "failed", reason: "noSource" } as const;
+    assert.equal(ytDownloadLine(status), "Connect YT Music or Soulseek in Settings");
+    assert.deepEqual(actions(status), ["retryDownload", "cancelDownload"]);
+  });
+
+  test("a song YouTube Music won't serve says so, and keeps Retry", () => {
+    const status = { kind: "failed", reason: "ytUnavailable" } as const;
+    assert.equal(ytDownloadLine(status), "This song is unavailable on YouTube Music");
+    assert.deepEqual(actions(status), ["retryDownload", "cancelDownload"]);
   });
 
   test("the row's progress rule shows how much has arrived, once the size is known", () => {

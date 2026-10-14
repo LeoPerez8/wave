@@ -1,4 +1,5 @@
 import type {
+  DownloadSource,
   SoulseekCandidate,
   SoulseekReceivedTags,
   SoulseekRecording,
@@ -13,10 +14,12 @@ import type { NativeYtSong } from "./waveYtMusic";
 /** A job in the native download journal (`DurableDownloads`), as its snapshot reports it. */
 export interface NativeDownloadJob extends YtDownloadJournalJob<NativeYtSong> {
   readonly generation: number;
-  readonly policy: "mp3-320";
+  /** What the job saves: Soulseek's original MP3 320, or YouTube's M4A as served. */
+  readonly policy: "mp3-320" | "youtube-m4a";
   readonly saved?: NativeSavedDownload;
   readonly tags?: YtDownloadTags;
-  readonly audio?: NativeSoulseekAudio;
+  /** What arrived, once validated natively: Soulseek's MP3 or YouTube's M4A (by the job's source). */
+  readonly audio?: NativeSoulseekAudio | NativeYoutubeAudio;
   readonly receiptId?: string;
 }
 
@@ -45,6 +48,16 @@ export interface NativeSoulseekAudio {
   readonly receivedTags: SoulseekReceivedTags;
 }
 
+/** YouTube's M4A as it was served, complete (the announced length), with its length as played. */
+export interface NativeYoutubeAudio {
+  readonly partPath: string;
+  readonly bytes: number;
+  readonly mimeType: string;
+  readonly itag: number;
+  readonly bitrate: number;
+  readonly durationMs: number;
+}
+
 declare class WaveSoulseekModule extends NativeModule<{
   onSessionChanged: (event: SoulseekSession) => void;
   onJobsChanged: () => void;
@@ -53,6 +66,8 @@ declare class WaveSoulseekModule extends NativeModule<{
     song: NativeYtSong,
     recording: SoulseekRecording,
     equivalentId: string | null,
+    /** Core's `downloadSource`; null fails the job as `noSource` when it's prepared. */
+    source: DownloadSource | null,
   ): Promise<string>;
   jobsSnapshot(): Promise<NativeDownloadJob[]>;
   resumeJobs(): Promise<void>;
