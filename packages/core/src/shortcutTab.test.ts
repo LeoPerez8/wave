@@ -12,7 +12,6 @@ describe("shortcut tab", () => {
       "albums",
       "songs",
       "genres",
-      "folders",
       "favorites",
     ]);
   });
@@ -30,6 +29,10 @@ describe("shortcut tab", () => {
     assert.equal(parseShortcutTab(""), null);
     assert.equal(parseShortcutTab("none"), null);
     assert.equal(parseShortcutTab("podcasts"), null);
+  });
+
+  test("a shortcut stored as Folders, from before Folders left the Library, reads as None", () => {
+    assert.equal(parseShortcutTab("folders"), null);
   });
 
   test("without a shortcut the bar is exactly Home, Library, Search", () => {

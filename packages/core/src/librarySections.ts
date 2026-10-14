@@ -11,7 +11,6 @@ export const LIBRARY_SECTION_SLUGS = [
   "albums",
   "songs",
   "genres",
-  "folders",
   "favorites",
 ] as const;
 
@@ -33,7 +32,6 @@ export interface LibrarySectionSource<Song> {
   readonly albums: SectionCollection<Song>;
   readonly artists: SectionCollection<Song>;
   readonly genres: SectionCollection<Song>;
-  readonly folders: SectionCollection<Song>;
   readonly playlists: SectionCollection<Song>;
 }
 

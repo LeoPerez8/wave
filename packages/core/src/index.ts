@@ -44,7 +44,7 @@ export type {
 } from "./queue.ts";
 export { applyPlayerSync, planPlayerSync } from "./playerSync.ts";
 export type { PlayerList, QueueList, SyncStep } from "./playerSync.ts";
-export { alphabetIndex, artistAlbums, compareFileNames, indexLetter } from "./browse.ts";
+export { alphabetIndex, artistAlbums, indexLetter } from "./browse.ts";
 export type { ArtistAlbum, IndexEntry } from "./browse.ts";
 export { spineEntries, spineLayout, spineSection, spineSlotAt, spineStep } from "./spine.ts";
 export type { SpineLayout, SpineSlot, SpineSpace } from "./spine.ts";

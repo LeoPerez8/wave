@@ -1,10 +1,9 @@
 /**
  * Browsing rules for the Library's lists and detail screens: the letter a row
- * is filed under on the A–Z spine, which of an artist's albums are their own,
- * and the order of a folder's files.
+ * is filed under on the A–Z spine, and which of an artist's albums are their own.
  */
 
-import { compareStrings, foldAccentsAndCase } from "./library.ts";
+import { compareStrings } from "./library.ts";
 
 /**
  * The spine letter for a Core sort key: `A`–`Z`, or `#` for names that start
@@ -61,31 +60,4 @@ export const artistAlbums = <A extends ArtistAlbum>(
     albums: sorted.filter((album) => album.albumArtistId === artistId),
     appearsOn: sorted.filter((album) => album.albumArtistId !== artistId),
   };
-};
-
-const chunks = (name: string): string[] => foldAccentsAndCase(name).match(/\d+|\D+/g) ?? [];
-
-const isDigits = (chunk: string): boolean => chunk.charCodeAt(0) >= 48 && chunk.charCodeAt(0) <= 57;
-
-/** Compares digit runs by value, however long: fewer significant digits is smaller. */
-const compareNumbers = (a: string, b: string): number => {
-  const x = a.replace(/^0+(?=\d)/, "");
-  const y = b.replace(/^0+(?=\d)/, "");
-  return x.length - y.length || compareStrings(x, y);
-};
-
-/**
- * Orders the files of a folder the way a file manager lists them: digit runs
- * by value (`2` before `10`), letters ignoring case and accents.
- */
-export const compareFileNames = (a: string, b: string): number => {
-  const left = chunks(a);
-  const right = chunks(b);
-  for (let i = 0; i < Math.min(left.length, right.length); i++) {
-    const x = left[i]!;
-    const y = right[i]!;
-    const order = isDigits(x) && isDigits(y) ? compareNumbers(x, y) : compareStrings(x, y);
-    if (order !== 0) return order;
-  }
-  return left.length - right.length || compareStrings(a, b);
 };
