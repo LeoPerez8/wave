@@ -54,6 +54,7 @@ import {
   latestPlay,
   listFavorites,
   recordPlay,
+  selectFavoriteTrackIds,
   setFavorites,
   updatePlay,
   type FavoriteRow,
@@ -981,14 +982,7 @@ const make = Effect.gen(function* () {
     saveImportedPlays: (plays) =>
       attempt("save the imported plays", () => saveImportedPlays(db, plays)),
 
-    favoriteTrackIds: attempt("read favorites", () =>
-      db
-        .select({ trackId: schema.favorites.trackId })
-        .from(schema.favorites)
-        .where(eq(schema.favorites.deleted, false))
-        .all()
-        .map((row) => row.trackId),
-    ),
+    favoriteTrackIds: attempt("read favorites", () => selectFavoriteTrackIds(db)),
 
     setFavorites: (trackIds, on) =>
       attempt(on ? "add favorites" : "remove favorites", () =>

@@ -210,6 +210,15 @@ export const listFavorites = (db: LibraryDatabase): FavoriteRow[] => {
     .all();
 };
 
+/** The ids of every starred track (unstarred ones, tombstones, aren't). */
+export const selectFavoriteTrackIds = (db: LibraryDatabase): number[] =>
+  db
+    .select({ trackId: schema.favorites.trackId })
+    .from(schema.favorites)
+    .where(eq(schema.favorites.deleted, false))
+    .all()
+    .map((row) => row.trackId);
+
 /** SQLite caps the variables in one statement; batches stay well under it. */
 const BATCH = 500;
 
