@@ -213,7 +213,25 @@ Google's live keys.
 
 ## Deploying
 
-Deploying is done by hand.
+Deploying is done by hand. The first time, run the setup wizard from the repo root, in Git
+Bash on Windows or any shell on Linux:
+
+```sh
+bash apps/sync/setup.sh
+```
+
+[`setup.sh`](setup.sh) walks through the steps below and checks each one before going on:
+the Turso database and a token for it, Google's consent screen and OAuth clients (the web
+client the service checks ID tokens against, and an Android client for `dev.leoperez.wave`
+with the SHA-1 of Expo's template debug keystore, which signs both the release and the debug
+builds), signing in to Cloudflare, the migrations, `wrangler deploy`, the Worker's secrets,
+and a check that the live service answers `401` to requests without a valid sign-in. Last,
+it writes `syncUrl` and `googleWebClientId` into `extra` in `apps/mobile/app.config.ts`, for
+you to commit. It never prints a secret or writes one to disk; it keeps the web client id
+and the Worker's URL in `apps/sync/.env.setup` (ignored by git) for the next run. Running it
+again is safe.
+
+By hand, the steps are:
 
 1. Create the database and a token for it:
    `turso db create wave-sync`, `turso db show --url wave-sync`,
@@ -229,11 +247,12 @@ Deploying is done by hand.
    pnpm exec wrangler secret put GOOGLE_CLIENT_ID
    ```
 
-4. Migrate and deploy. `deploy` runs the pending migrations against the database in your
-   shell's environment, then `wrangler deploy`:
+4. Migrate and deploy. The `deploy` script runs the pending migrations against the database
+   in your shell's environment, then `wrangler deploy` (it needs `run`: `pnpm deploy` is a
+   pnpm command of its own):
 
    ```sh
-   TURSO_DATABASE_URL=libsql://… TURSO_AUTH_TOKEN=… pnpm --filter @wave/sync deploy
+   TURSO_DATABASE_URL=libsql://… TURSO_AUTH_TOKEN=… pnpm --filter @wave/sync run deploy
    ```
 
 ## Extending it
