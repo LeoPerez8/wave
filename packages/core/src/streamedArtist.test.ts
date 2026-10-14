@@ -64,6 +64,13 @@ describe("streamedArtistLink", () => {
     assert.equal(streamedArtistLink([], context()), undefined);
   });
 
+  test("only the page you're on left is the page you're on; nobody left is no link", () => {
+    const onBeatles = context({ here: "/library/artist/1" });
+    assert.deepEqual(streamedArtistLink(["Beatles", "The Beatles"], onBeatles), { kind: "here" });
+    assert.equal(streamedArtistLink(["Unknown Artist"], onBeatles), undefined);
+    assert.equal(streamedArtistLink(["Beatles"], { ...onBeatles, enabled: false }), undefined);
+  });
+
   test("with YT Music off there is no link", () => {
     assert.equal(streamedArtistLink(["The Beatles"], context({ enabled: false })), undefined);
     assert.equal(streamedArtistLink(["Justice"], context({ enabled: false })), undefined);
@@ -71,7 +78,7 @@ describe("streamedArtistLink", () => {
 
   test("the Library artist page you're on is left out", () => {
     const onBeatles = context({ here: "/library/artist/1" });
-    assert.equal(streamedArtistLink(["Beatles"], onBeatles), undefined);
+    assert.deepEqual(streamedArtistLink(["Beatles"], onBeatles), { kind: "here" });
     assert.deepEqual(streamedArtistLink(["Beatles", "Justice"], onBeatles), {
       kind: "open",
       target: { kind: "yt", name: "Justice" },
@@ -84,7 +91,7 @@ describe("streamedArtistLink", () => {
 
   test("the YouTube Music artist page you're on is left out", () => {
     const onJustice = context({ here: "/library/yt-artist/by-name", ytArtistHere: "Justice" });
-    assert.equal(streamedArtistLink(["justice"], onJustice), undefined);
+    assert.deepEqual(streamedArtistLink(["justice"], onJustice), { kind: "here" });
     assert.deepEqual(streamedArtistLink(["Justice", "Daft Punk"], onJustice), {
       kind: "open",
       target: { kind: "library", artist: LIBRARY[2] },

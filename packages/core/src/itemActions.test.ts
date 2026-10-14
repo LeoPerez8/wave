@@ -513,4 +513,11 @@ describe("ytSongActions", () => {
       { action: "goToArtist", artists },
     ]);
   });
+
+  test("its only artist being the page you're on, there's no Go to Artist", () => {
+    assert.deepEqual(
+      ytSongActions({ kind: "here" }).map((entry) => entry.action),
+      ["playNext", "addToQueue"],
+    );
+  });
 });

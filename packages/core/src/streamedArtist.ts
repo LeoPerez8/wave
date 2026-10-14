@@ -16,10 +16,16 @@ export type StreamedArtistTarget<A> =
   /** Anyone else: the YouTube Music artist page, found by [name]. */
   | { readonly kind: "yt"; readonly name: string };
 
-/** Where a streamed song's artist link leads: straight to the one artist, or a choice of several. */
+/**
+ * Where a streamed song's artist link leads: straight to the one artist, a
+ * choice of several, or nowhere new because its only artist is the page
+ * you're on (Now Playing's line still closes to reveal it; menus offer no
+ * Go to Artist).
+ */
 export type StreamedArtistLink<A> =
   | { readonly kind: "open"; readonly target: StreamedArtistTarget<A> }
-  | { readonly kind: "choose"; readonly targets: readonly StreamedArtistTarget<A>[] };
+  | { readonly kind: "choose"; readonly targets: readonly StreamedArtistTarget<A>[] }
+  | { readonly kind: "here" };
 
 export interface StreamedArtistContext<A> {
   /**
@@ -46,8 +52,9 @@ export interface StreamedArtistContext<A> {
  * Library page, any other the YouTube Music artist page. One artist opens
  * straight away, several are a choice in credit order. Names that aren't an
  * artist's ("Unknown Artist", `ytArtistQuery`), a name credited twice and the
- * artist page you're on, the Library's or YouTube Music's, are left out. Undefined when nobody is left,
- * or with YT Music off.
+ * artist page you're on, the Library's or YouTube Music's, are left out: when
+ * that page is all that's left, the link is `here`. Undefined when nobody is
+ * left, or with YT Music off.
  */
 export const streamedArtistLink = <A extends { readonly id: number; readonly name: string }>(
   artists: readonly string[],
@@ -58,16 +65,20 @@ export const streamedArtistLink = <A extends { readonly id: number; readonly nam
   const seen = new Set<string>();
   const ytPage = context.ytArtistHere ?? null;
   const ytHere = ytPage === null ? null : `yt:${artistPhotoName(ytPage)}`;
+  let here = false;
   for (const name of artists) {
     if (ytArtistQuery(name) === null) continue;
     const artist = context.libraryArtist(name);
-    if (artist !== null && isDetailPath(context.here, "artist", artist.id)) continue;
     const key = artist === null ? `yt:${artistPhotoName(name)}` : `library:${artist.id}`;
-    if (seen.has(key) || key === ytHere) continue;
+    if (key === ytHere || (artist !== null && isDetailPath(context.here, "artist", artist.id))) {
+      here = true;
+      continue;
+    }
+    if (seen.has(key)) continue;
     seen.add(key);
     targets.push(artist === null ? { kind: "yt", name } : { kind: "library", artist });
   }
   const [first] = targets;
-  if (first === undefined) return undefined;
+  if (first === undefined) return here ? { kind: "here" } : undefined;
   return targets.length === 1 ? { kind: "open", target: first } : { kind: "choose", targets };
 };
