@@ -624,11 +624,13 @@ export type {
   StreamedPlaylistEntry,
 } from "./playlistEntries.ts";
 export {
+  linkImportSummary,
   linkImportView,
   planLinkImport,
   playlistImportSources,
   recognisePlaylistLink,
   sharedTextImport,
+  spotifyShortLinkTarget,
   YT_MUSIC_OFF_NOTICE,
 } from "./playlistLinks.ts";
 export type {
@@ -638,9 +640,42 @@ export type {
   LinkImportView,
   LinkReadFailure,
   LinkedPlaylist,
+  NotFoundSong,
+  ReadPlaylist,
   PlaylistImportSource,
   PlaylistLink,
   PlaylistLinkCheck,
   PlaylistLinkProblem,
   SharedTextImport,
 } from "./playlistLinks.ts";
+export {
+  SPOTIFY_SEARCHES_AT_ONCE,
+  findSpotifySongs,
+  planSpotifyImport,
+  spotifySearchQuery,
+  spotifyYtMatch,
+} from "./spotifyImport.ts";
+export type {
+  SpotifyFind,
+  SpotifyFindFailure,
+  SpotifyFinding,
+  YtSongSearch,
+} from "./spotifyImport.ts";
+export {
+  SPOTIFY_SONG_CAP,
+  readSpotifyPlaylist,
+  spotifyEmbed,
+  spotifyPlaylistPage,
+} from "./spotifyPlaylist.ts";
+export type {
+  SpotifyAnswer,
+  SpotifyEmbed,
+  SpotifyEmbedPlaylist,
+  SpotifyPlaylist,
+  SpotifyPlaylistPage,
+  SpotifyRead,
+  SpotifyReadFailure,
+  SpotifyRequest,
+  SpotifySong,
+  SpotifyTransport,
+} from "./spotifyPlaylist.ts";
