@@ -551,6 +551,19 @@ export type {
   YtShelfItem,
 } from "./ytDiscover.ts";
 export {
+  readYtPlaylist,
+  ytPlaylistRestLine,
+  YT_PLAYLIST_PAGE_CAP,
+  YT_PLAYLIST_SONG_CAP,
+} from "./ytPlaylist.ts";
+export type {
+  YtPlaylist,
+  YtPlaylistFirstPage,
+  YtPlaylistPage,
+  YtPlaylistReadOptions,
+  YtPlaylistRest,
+} from "./ytPlaylist.ts";
+export {
   soulseekCandidates,
   soulseekQuery,
   soulseekRecording,
