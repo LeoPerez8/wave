@@ -2,23 +2,32 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, test } from "node:test";
 
-import { normalizeTrack, type PlaylistSong, type YtAlbumSong } from "@wave/core";
+import { normalizeTrack, orderKeyBetween, type PlaylistSong, type YtAlbumSong } from "@wave/core";
 import { eq, sql } from "drizzle-orm";
 
 import type { IndexedTrack } from "../LibraryStore.ts";
+import { libraryCounts, sectionSongCounts } from "./counts.ts";
 import { creditSplits } from "./credits.ts";
 import {
+  addToPlaylist,
   appendPlaylistSongs,
+  createPlaylist,
+  deletePlaylist,
   linkPlaylistEntries,
+  movePlaylistItem,
   removePlaylistItems,
+  renamePlaylist,
   replacePlaylistSongs,
+  selectPlaylist,
   selectPlaylistCovers,
   selectPlaylistEntries,
+  selectPlaylists,
   selectPlaylistTotals,
   selectTrackPaths,
 } from "./playlists.ts";
 import { saveBatch } from "./save.ts";
 import * as schema from "./schema.ts";
+import { selectChangesSince, selectPhoneId } from "./sync.ts";
 import {
   addTrack,
   migrateTestDatabase,
@@ -409,6 +418,182 @@ describe("selectTrackPaths", () => {
         id: ids[title],
         path: `/Music/Mix/${title}.mp3`,
       })),
+    );
+  });
+});
+
+/** The entries changed after [since], as [title, deleted] (the fixture's songs). */
+const changedEntries = (since: number) => {
+  const titleOf = new Map(
+    ["Airbag", "Bloom", "Creep", "Daydreaming"].map((title) => [ids[title], title] as const),
+  );
+  return selectChangesSince(db, since).entries.map((row) => [
+    row.trackId === null ? "yt" : titleOf.get(row.trackId),
+    row.deleted,
+  ]);
+};
+
+describe("movePlaylistItem", () => {
+  const itemOf = (index: number) => selectPlaylistEntries(db, playlistId)[index]?.itemId ?? -1;
+
+  test("moves an entry down, up, to the top and to the end", () => {
+    movePlaylistItem(db, playlistId, itemOf(0), 2, 1_000);
+    assert.deepEqual(titles(), ["Airbag", "Creep", "Daydreaming", "Airbag"]);
+    movePlaylistItem(db, playlistId, itemOf(3), 1, 1_001);
+    assert.deepEqual(titles(), ["Airbag", "Airbag", "Creep", "Daydreaming"]);
+    movePlaylistItem(db, playlistId, itemOf(2), 0, 1_002);
+    assert.deepEqual(titles(), ["Creep", "Airbag", "Airbag", "Daydreaming"]);
+    movePlaylistItem(db, playlistId, itemOf(0), 9, 1_003);
+    assert.deepEqual(titles(), ["Airbag", "Airbag", "Daydreaming", "Creep"]);
+  });
+
+  test("changes the moved entry only, stamped by this phone", () => {
+    const creep = itemOf(2);
+    movePlaylistItem(db, playlistId, creep, 0, 1_000);
+    const changes = selectChangesSince(db, 999).entries;
+    assert.deepEqual(
+      changes.map((row) => [row.itemId, row.changedAt, row.phoneId]),
+      [[creep, 1_000, selectPhoneId(db)]],
+    );
+  });
+
+  test("an entry dropped between two that two phones gave one key lands there", () => {
+    // As merging two phones' additions at one place can leave it: Creep and the second Airbag share a key.
+    const [daydreaming, airbag, creep, lastAirbag] = selectPlaylistEntries(db, playlistId);
+    db.update(schema.playlistItems)
+      .set({ orderKey: "a5" })
+      .where(eq(schema.playlistItems.id, lastAirbag?.itemId ?? -1))
+      .run();
+    // The entry ids order the two, whichever comes first.
+    const [first, second] = selectPlaylistEntries(db, playlistId).slice(2);
+    movePlaylistItem(db, playlistId, daydreaming?.itemId ?? -1, 2, 1_000);
+    assert.deepEqual(
+      selectPlaylistEntries(db, playlistId).map((entry) => entry.itemId),
+      [airbag?.itemId, first?.itemId, daydreaming?.itemId, second?.itemId],
+    );
+    assert.deepEqual(
+      [first?.itemId, second?.itemId].toSorted(),
+      [creep?.itemId, lastAirbag?.itemId].toSorted(),
+    );
+  });
+});
+
+describe("tombstones", () => {
+  test("removed entries stay as tombstones, stamped by this phone, that nothing lists or counts", () => {
+    const [daydreaming, airbag] = selectPlaylistEntries(db, playlistId);
+    removePlaylistItems(db, playlistId, [daydreaming?.itemId ?? -1, airbag?.itemId ?? -1], 1_000);
+    assert.deepEqual(changedEntries(999), [
+      ["Daydreaming", true],
+      ["Airbag", true],
+    ]);
+    assert.ok(
+      selectChangesSince(db, 999).entries.every((row) => row.phoneId === selectPhoneId(db)),
+    );
+    assert.deepEqual(titles(), ["Creep", "Airbag"]);
+    assert.equal(selectPlaylistTotals(db, playlistId).get(playlistId)?.trackCount, 2);
+    assert.equal(sectionSongCounts(db).playlists, 2);
+  });
+
+  test("a song removed from a playlist can be added again", () => {
+    removePlaylistItems(
+      db,
+      playlistId,
+      [selectPlaylistEntries(db, playlistId)[2]?.itemId ?? -1],
+      1_000,
+    );
+    assert.deepEqual(appendPlaylistSongs(db, playlistId, [library("Creep")], 1_001), {
+      added: 1,
+      alreadyIn: 0,
+    });
+    assert.deepEqual(titles(), ["Daydreaming", "Airbag", "Airbag", "Creep"]);
+  });
+
+  test("replacing a playlist's songs leaves the songs it held as tombstones", () => {
+    replacePlaylistSongs(db, playlistId, [library("Bloom")], 1_000);
+    assert.deepEqual(changedEntries(999).toSorted(), [
+      ["Airbag", true],
+      ["Airbag", true],
+      ["Bloom", false],
+      ["Creep", true],
+      ["Daydreaming", true],
+    ]);
+  });
+
+  test("a deleted playlist and its entries stay as tombstones; it isn't listed or opened, and its name is free", () => {
+    deletePlaylist(db, playlistId, 1_000);
+    assert.deepEqual(
+      selectPlaylists(db).map((row) => row.name),
+      [],
+    );
+    assert.equal(selectPlaylist(db, playlistId), null);
+    assert.equal(libraryCounts(db).playlists, 0);
+    assert.equal(sectionSongCounts(db).playlists, 0);
+    assert.throws(() => addToPlaylist(db, playlistId, [library("Bloom")], 1_001));
+    const changes = selectChangesSince(db, 999);
+    assert.deepEqual(
+      changes.playlists.map((row) => [row.name, row.deleted, row.changedAt]),
+      [["Drive", true, 1_000]],
+    );
+    assert.ok(changes.entries.length === 4 && changes.entries.every((row) => row.deleted));
+    createPlaylist(db, "Drive", [], 1_002);
+    assert.deepEqual(
+      selectPlaylists(db).map((row) => row.name),
+      ["Drive"],
+    );
+  });
+
+  test("a YT Music entry the Library gains is stamped, and one dropped as a double is a tombstone", () => {
+    appendPlaylistSongs(
+      db,
+      playlistId,
+      [stream(yt("a", { title: "Lucky" })), stream(yt("b", { title: "Creep" }))],
+      0,
+    );
+    const [lucky, creep] = selectPlaylistEntries(db, playlistId).slice(-2);
+    saveBatch(db, creditSplits(), [indexedTrack("Lucky", "Radiohead", 180_000)], [], [], 999, {
+      linkEntries: false,
+    });
+    // The whole Library: Lucky is new, and the playlist holds Creep already.
+    linkPlaylistEntries(db, 1_000);
+    assert.deepEqual(
+      selectChangesSince(db, 999).entries.map((row) => [
+        row.itemId,
+        row.trackId !== null,
+        row.deleted,
+      ]),
+      [
+        // Linked: now the Library's song.
+        [lucky?.itemId, true, false],
+        // Dropped: the YT Music entry as it was, removed.
+        [creep?.itemId, false, true],
+      ],
+    );
+    assert.deepEqual(titles(), ["Daydreaming", "Airbag", "Creep", "Airbag", "Lucky"]);
+  });
+});
+
+describe("playlists made and renamed here", () => {
+  test("a new playlist has an id of its own, and its songs order keys in the order given", () => {
+    const made = createPlaylist(db, "Mix", [library("Creep"), library("Airbag")], 1_000);
+    const changes = selectChangesSince(db, 999);
+    assert.deepEqual(
+      changes.playlists.map((row) => [row.id, row.name, row.deleted]),
+      [[made.playlistId, "Mix", false]],
+    );
+    assert.match(changes.playlists[0]?.syncId ?? "", /^[0-9a-f]{32}$/);
+    assert.deepEqual(
+      changes.entries.map((row) => row.orderKey),
+      [orderKeyBetween(null, null), orderKeyBetween(orderKeyBetween(null, null), null)],
+    );
+    assert.deepEqual(titlesOf(made.playlistId), ["Creep", "Airbag"]);
+  });
+
+  test("renaming stamps the playlist; two changes in one millisecond still get two times", () => {
+    renamePlaylist(db, playlistId, "Night Drive", 1_000);
+    renamePlaylist(db, playlistId, "Late Drive", 1_000);
+    assert.deepEqual(
+      selectChangesSince(db, 999).playlists.map((row) => [row.name, row.changedAt]),
+      [["Late Drive", 1_001]],
     );
   });
 });
