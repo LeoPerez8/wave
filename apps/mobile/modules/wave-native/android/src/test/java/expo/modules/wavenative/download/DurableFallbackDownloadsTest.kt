@@ -40,6 +40,139 @@ class DurableFallbackDownloadsTest {
     }
   }
 
+  @Test fun aRejectedAccountOrAnUnreachableServerFallsBackAtOnce() {
+    for (reason in listOf("accountRejected", "account", "unreachable")) withFolder { folder ->
+      val owner = DurableDownloads(File(folder, "jobs"))
+      owner.enqueue(song, null, emptyMap(), "soulseek")
+      prepareSoulseek(owner, File(folder, "Recording.mp3"), File(folder, "Recording.m4a"))
+      owner.advance(transfer { _, _, _ -> throw DurableFailure(reason) }, Untouched)
+      val job = owner.snapshot().single()
+      assertEquals(reason, "youtube", job["source"])
+      assertEquals(reason, "prepared", job["phase"])
+      assertEquals(reason, 0L, job["attempts"])
+      assertEquals(reason, job["fellBackFrom"])
+    }
+  }
+
+  @Test fun withYtMusicOffSoulseekFailuresEndTheJobAsBefore() {
+    withFolder { folder ->
+      val owner = DurableDownloads(File(folder, "jobs"))
+      owner.enqueue(song, null, emptyMap(), "soulseek")
+      prepareSoulseek(owner, File(folder, "Recording.mp3"), m4a = null)
+      owner.advance(transfer { _, _, _ -> throw DurableFailure("unavailable") }, Untouched)
+      assertEquals("unavailable", owner.snapshot().single()["reason"])
+      assertEquals("soulseek", owner.snapshot().single()["source"])
+    }
+    // A rejected account ends the job without trying the next peer.
+    withFolder { folder ->
+      val owner = DurableDownloads(File(folder, "jobs"))
+      owner.enqueue(song, null, emptyMap(), "soulseek")
+      prepareSoulseek(owner, File(folder, "Recording.mp3"), m4a = null, peers = listOf(peer, peer + ("username" to "other")))
+      owner.advance(transfer { _, _, _ -> throw DurableFailure("accountRejected") }, Untouched)
+      assertEquals("accountRejected", owner.snapshot().single()["reason"])
+    }
+    // An unreachable server is retried as a dropped connection is, then the job fails saying so.
+    withFolder { folder ->
+      var now = 1_000L
+      val owner = DurableDownloads(File(folder, "jobs"), clock = { now })
+      var attempts = 0
+      owner.enqueue(song, null, emptyMap(), "soulseek")
+      prepareSoulseek(owner, File(folder, "Recording.mp3"), m4a = null)
+      repeat(8) { owner.advance(transfer { _, _, _ -> attempts++; throw DurableFailure("unreachable") }, Untouched); now += 15_000 }
+      assertEquals(DurableDownloads.MAX_ATTEMPTS.toInt(), attempts)
+      assertEquals("unreachable", owner.snapshot().single()["reason"])
+    }
+    withFolder { folder ->
+      var now = 1_000L
+      val owner = DurableDownloads(File(folder, "jobs"), clock = { now })
+      owner.enqueue(song, null, emptyMap(), "soulseek")
+      owner.advance(NoTransfer, Untouched)
+      answer(owner, "prepare", mapOf("failure" to "unreachable"))
+      assertEquals("preparing", owner.snapshot().single()["phase"])
+      repeat(2) { now += 20_000; answer(owner, "prepare", mapOf("failure" to "unreachable")) }
+      assertEquals("unreachable", owner.snapshot().single()["reason"])
+    }
+  }
+
+  @Test fun aSoulseekFailureWhilePreparingFallsBackWithTheTagsItFound() {
+    for (reason in listOf("unavailable", "accountRejected", "unreachable")) withFolder { folder ->
+      val owner = DurableDownloads(File(folder, "jobs"))
+      val m4a = File(folder, "Recording.m4a")
+      owner.enqueue(song, null, emptyMap(), "soulseek")
+      owner.advance(NoTransfer, Untouched)
+      answer(owner, "prepare", mapOf("failure" to reason, "tags" to mapOf("title" to "Recording"), "fallback" to fallback(m4a)))
+      val job = owner.snapshot().single()
+      assertEquals(reason, "youtube", job["source"])
+      assertEquals(reason, "prepared", job["phase"])
+      assertEquals(reason, m4a.path, job["targetPath"])
+      assertEquals(reason, mapOf("title" to "Recording"), job["tags"])
+    }
+  }
+
+  @Test fun offlineFullStorageAndAnUnwritableFolderNeverFallBack() {
+    withFolder { folder ->
+      var now = 1_000L
+      val owner = DurableDownloads(File(folder, "jobs"), clock = { now })
+      owner.enqueue(song, null, emptyMap(), "soulseek")
+      prepareSoulseek(owner, File(folder, "Recording.mp3"), File(folder, "Recording.m4a"))
+      repeat(8) { owner.advance(transfer { _, _, _ -> throw DurableFailure("offline") }, Untouched); now += 15_000 }
+      assertEquals("soulseek", owner.snapshot().single()["source"])
+      assertEquals("offline", owner.snapshot().single()["reason"])
+    }
+    for (reason in listOf("storage", "noFolder")) withFolder { folder ->
+      val owner = DurableDownloads(File(folder, "jobs"))
+      owner.enqueue(song, null, emptyMap(), "soulseek")
+      prepareSoulseek(owner, File(folder, "Recording.mp3"), File(folder, "Recording.m4a"))
+      owner.advance(transfer { _, _, _ -> throw DurableFailure(reason) }, Untouched)
+      assertEquals(reason, "failed", owner.snapshot().single()["phase"])
+      assertEquals(reason, reason, owner.snapshot().single()["reason"])
+      assertEquals(reason, "soulseek", owner.snapshot().single()["source"])
+    }
+    for (reason in listOf("offline", "noFolder", "storage")) withFolder { folder ->
+      var now = 1_000L
+      val owner = DurableDownloads(File(folder, "jobs"), clock = { now })
+      owner.enqueue(song, null, emptyMap(), "soulseek")
+      owner.advance(NoTransfer, Untouched)
+      repeat(3) {
+        owner.claim("song")?.let { lease -> owner.submit("song", lease["generation"] as Long, lease["token"] as String, "prepare", mapOf("failure" to reason, "fallback" to fallback(File(folder, "Recording.m4a")))) }
+        now += 20_000
+      }
+      assertEquals(reason, "failed", owner.snapshot().single()["phase"])
+      assertEquals(reason, reason, owner.snapshot().single()["reason"])
+    }
+  }
+
+  @Test fun cancellingASoulseekDownloadNeverFallsBack() {
+    withFolder { folder ->
+      val owner = DurableDownloads(File(folder, "jobs"))
+      owner.enqueue(song, null, emptyMap(), "soulseek")
+      prepareSoulseek(owner, File(folder, "Recording.mp3"), File(folder, "Recording.m4a"))
+      owner.advance(transfer { _, _, _ -> owner.cancel("song", NoTransfer); throw DurableFailure("cancelled") }, Untouched)
+      assertEquals("cancelled", owner.snapshot().single()["phase"])
+      assertEquals("soulseek", owner.snapshot().single()["source"])
+    }
+  }
+
+  @Test fun aFailureSavingSoulseeksAudioNeverFallsBack() {
+    withFolder { folder ->
+      val owner = DurableDownloads(File(folder, "jobs"))
+      owner.enqueue(song, null, emptyMap(), "soulseek")
+      prepareSoulseek(owner, File(folder, "Recording.mp3"), File(folder, "Recording.m4a"))
+      owner.advance(GoodSoulseek, Untouched)
+      answer(owner, "confirm", mapOf("acceptable" to true))
+      owner.advance(GoodSoulseek, object : DurablePublication {
+        override fun tag(source: File, tags: Map<String, Any?>) = throw java.io.IOException("Disk full")
+        override fun index(file: File): Map<String, Any?> = error("No publication expected")
+      })
+      assertEquals("storage", owner.snapshot().single()["reason"])
+      assertEquals("soulseek", owner.snapshot().single()["source"])
+    }
+  }
+
+  private val GoodSoulseek = transfer { _, _, source ->
+    source.parentFile.mkdirs(); source.writeText("complete validated audio")
+    mapOf("durationMs" to 12_000L, "receivedTags" to emptyMap<String, Any?>())
+  }
   private val song = mapOf("videoId" to "song", "title" to "Recording", "durationMs" to 12_000L)
   private val peer = mapOf("username" to "peer", "filename" to "Recording.mp3", "bitrateKbps" to 320)
   private val SERVED = ByteArray(70_000) { (it * 31 % 251).toByte() }

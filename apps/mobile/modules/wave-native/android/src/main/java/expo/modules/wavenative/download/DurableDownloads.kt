@@ -137,11 +137,12 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
     if (job.number("generation") != generation || job["token"] != token || job.number("leaseUntil") < clock() || DECISIONS[job["phase"]] != decision) return false
     if (payload["failure"] != null) {
       val reason = payload["failure"] as String
+      if (decision == "prepare") keepFallback(job, payload)
       if (decision == "import" && reason != "noFolder") {
         job.remove("token")
         job["retryAt"] = clock() + 2_000L
         if (job.number("decisionAttempts") >= MAX_DECISIONS) job["importFailure"] = reason
-      } else if (decision == "prepare" && reason == "offline" && job.number("decisionAttempts") < MAX_DECISIONS) {
+      } else if (decision == "prepare" && retriesConnection(job, reason) && job.number("decisionAttempts") < MAX_DECISIONS) {
         // Searching reconnects the saved session; a dropped connection gets a few spaced retries.
         job.remove("token")
         job["retryAt"] = clock() + 5_000L * job.number("decisionAttempts")
@@ -379,8 +380,8 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
           val reason = (error as? DurableFailure)?.reason ?: "unavailable"
           // The service stopping isn't the peer's fault: the next start retries the same peer.
           if (stopped) { cleanup(job); transition(job, "prepared"); job["attempts"] = maxOf(0L, job.number("attempts") - 1) }
-          else if (reason == "offline" && job.number("attempts") < MAX_ATTEMPTS) { cleanup(job); transition(job, "prepared"); job["retryAt"] = clock() + 2_000L * job.number("attempts") }
-          else if (reason in listOf("account", "storage", "noFolder", "offline", "noSource", "ytUnavailable")) fail(job, reason)
+          else if (retriesConnection(job, reason) && job.number("attempts") < MAX_ATTEMPTS) { cleanup(job); transition(job, "prepared"); job["retryAt"] = clock() + 2_000L * job.number("attempts") }
+          else if (reason in listOf("account", "accountRejected", "storage", "noFolder", "offline", "unreachable", "noSource", "ytUnavailable")) fail(job, reason)
           else nextCandidate(job)
         } else fail(job, "storage")
         persist()
@@ -417,6 +418,13 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
     } else job.remove("fallback")
     if (payload["tags"] != null) job["tags"] = clean(payload.map("tags"))
   }
+
+  /**
+   * A lost connection gets a few spaced retries: being offline always, Soulseek's server not
+   * answering only when there's no YouTube Music to carry on from at once.
+   */
+  private fun retriesConnection(job: Map<String, Any?>, reason: String) =
+    reason == "offline" || (reason == "unreachable" && !fallsBack(job, reason))
 
   /** Whether Soulseek failing [job] with [reason] hands it over to YouTube Music. */
   private fun fallsBack(job: Map<String, Any?>, reason: String) =
