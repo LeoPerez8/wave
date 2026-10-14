@@ -1,16 +1,16 @@
 /**
- * Keeps the lyric line on Android Auto's player screen in time with the song.
- * Core's `autoLyricLine` decides what shows; this reads the playing track's
- * lyrics, asks it at each position report, seek and toggle change, and wakes
- * up again when the next line is due. Kept free of Expo so it runs under
- * plain Node tests.
+ * Keeps the lyrics Wave draws into Android Auto's artwork in time with the
+ * song. Core's `autoLyricLines` decides what shows; this reads the playing
+ * track's lyrics, asks it at each position report, seek and toggle change,
+ * and wakes up again when the next line is due. Kept free of Expo so it runs
+ * under plain Node tests.
  */
-import { autoLyricLine, extrapolatePosition, type Lyrics } from "@wave/core";
+import { autoLyricLines, extrapolatePosition, type AutoLyricsFrame, type Lyrics } from "@wave/core";
 
 import type { ExternalStore } from "../lib/externalStore.ts";
 
-/** What the line needs to know of the player (the app's `PlaybackState` fits). */
-export interface AutoLyricLinePlayback {
+/** What the lyrics need to know of the player (the app's `PlaybackState` fits). */
+export interface AutoLyricLinesPlayback {
   /** The playing item; `id` is its queue entry key. */
   readonly item: { readonly id: string } | null;
   readonly positionMs: number;
@@ -26,18 +26,18 @@ export interface AutoLyricsToggle {
   readonly carConnected: boolean;
 }
 
-export interface AutoLyricLinePorts {
+export interface AutoLyricLinesPorts {
   /** The player as the app mirrors it; only read and followed. */
-  readonly playback: Pick<ExternalStore<AutoLyricLinePlayback>, "get" | "subscribe">;
+  readonly playback: Pick<ExternalStore<AutoLyricLinesPlayback>, "get" | "subscribe">;
   /** The audio file of a queue entry, if the queue knows it. */
   readonly pathOf: (itemId: string) => string | null;
   /** The lyrics to show for a file (the Lyrics view's). */
   readonly readLyrics: (path: string) => Promise<Lyrics>;
-  /** Shows `line` under the title of `itemId` in place of the artist; null shows the artist. */
-  readonly show: (itemId: string | null, line: string | null) => void;
+  /** Draws `lines` into the artwork of `itemId`; null shows its own artwork. */
+  readonly show: (itemId: string | null, lines: AutoLyricsFrame | null) => void;
 }
 
-export interface AutoLyricLineSync {
+export interface AutoLyricLinesSync {
   /** The toggle or Auto's connection changed (the native side reports both). */
   readonly setToggle: (toggle: AutoLyricsToggle) => void;
   readonly stop: () => void;
@@ -45,13 +45,23 @@ export interface AutoLyricLineSync {
 
 const NONE: Lyrics = { kind: "none" };
 
-/** Follows the player and shows the line until `stop`; the toggle starts off. */
-export const startAutoLyricLine = (ports: AutoLyricLinePorts): AutoLyricLineSync => {
+/** Whether two frames draw the same artwork (each change is a new image for Auto). */
+const sameFrame = (a: AutoLyricsFrame | null, b: AutoLyricsFrame | null): boolean =>
+  a === b ||
+  (a !== null &&
+    b !== null &&
+    a.previous === b.previous &&
+    a.current === b.current &&
+    a.next === b.next);
+
+/** Follows the player and shows the lyrics until `stop`; the toggle starts off. */
+export const startAutoLyricLines = (ports: AutoLyricLinesPorts): AutoLyricLinesSync => {
   let toggle: AutoLyricsToggle = { on: false, carConnected: false };
   /** The lyrics of one item; null while they are read. */
   let loaded: { readonly itemId: string; readonly lyrics: Lyrics | null } | null = null;
   /** What was last sent, so position reports don't resend it. */
-  let sent: { readonly itemId: string | null; readonly line: string | null } | null = null;
+  let sent: { readonly itemId: string | null; readonly lines: AutoLyricsFrame | null } | null =
+    null;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let stopped = false;
 
@@ -62,7 +72,7 @@ export const startAutoLyricLine = (ports: AutoLyricLinePorts): AutoLyricLineSync
     loaded = { itemId, lyrics: null };
     ports
       .readLyrics(path)
-      // A file that can't be read has no lyrics to show.
+      // A file that can't be read (or a streamed song, which has no file) has no lyrics to show.
       .catch(() => NONE)
       .then((lyrics) => {
         if (loaded?.itemId !== itemId) return;
@@ -81,10 +91,10 @@ export const startAutoLyricLine = (ports: AutoLyricLinePorts): AutoLyricLineSync
     if (showing && itemId !== null && loaded?.itemId !== itemId) load(itemId);
     const lyrics = loaded !== null && loaded.itemId === itemId ? loaded.lyrics : null;
     const positionMs = extrapolatePosition(state, Date.now());
-    const { line, nextChangeMs } = autoLyricLine({ ...toggle, lyrics, positionMs });
-    if (sent?.itemId !== itemId || sent.line !== line) {
-      sent = { itemId, line };
-      ports.show(itemId, line);
+    const { lines, nextChangeMs } = autoLyricLines({ ...toggle, lyrics, positionMs });
+    if (sent?.itemId !== itemId || !sameFrame(sent.lines, lines)) {
+      sent = { itemId, lines };
+      ports.show(itemId, lines);
     }
     if (state.isPlaying && nextChangeMs !== null) {
       timer = setTimeout(update, Math.max(0, nextChangeMs - positionMs));
@@ -96,7 +106,7 @@ export const startAutoLyricLine = (ports: AutoLyricLinePorts): AutoLyricLineSync
   return {
     setToggle: (next) => {
       toggle = next;
-      // The native side drops its line when either turns off; send the line afresh.
+      // The native side drops its lyrics when either turns off; send them afresh.
       sent = null;
       update();
     },

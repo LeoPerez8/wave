@@ -35,6 +35,7 @@ import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.FutureCallback
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import expo.modules.wavenative.artwork.ArtworkProvider
 import expo.modules.wavenative.launcher.LauncherIconSwitcher
 import expo.modules.wavenative.yt.YtClient
 import expo.modules.wavenative.yt.YtDataSource
@@ -63,8 +64,9 @@ import expo.modules.wavenative.yt.YtStreamFailure
  * died, Auto and the system media controls can resume the last queue before
  * JS is up ([SessionCallback.onPlaybackResumption]).
  *
- * While Auto is connected and its Lyrics toggle is on, the session shows the
- * lyric line JS sends in place of the artist ([AutoLyrics], [LyricLinePlayer]).
+ * While Auto is connected and its Lyrics toggle is on, the session's artwork
+ * shows the lyrics JS sends, drawn over the cover ([AutoLyrics],
+ * [LyricArtworkPlayer]).
  */
 class PlaybackService : MediaLibraryService() {
   private var session: MediaLibrarySession? = null
@@ -208,7 +210,9 @@ class PlaybackService : MediaLibraryService() {
     setMediaNotificationProvider(WaveNotificationProvider(this))
     stopAccent = NotificationAccent.state.listen { triggerNotificationUpdate() }
     AutoLyrics.state.init(PreferencesLyricsToggleStore(this))
-    val shown = LyricLinePlayer(player, AutoLyrics.state::lineFor)
+    val shown = LyricArtworkPlayer(player) { itemId, cover ->
+      ArtworkProvider.authority?.let { AutoLyrics.artworks.uriFor(it, AutoLyrics.state.linesFor(itemId), cover) }
+    }
     session = MediaLibrarySession.Builder(this, shown, SessionCallback())
       .apply { openAppIntent()?.let(::setSessionActivity) }
       .build()
@@ -228,7 +232,7 @@ class PlaybackService : MediaLibraryService() {
   /** Stops following JS's shuffle and repeat ([AutoModes.state]). */
   private var stopModes: (() -> Unit)? = null
 
-  /** Stops following the Lyrics toggle and line ([AutoLyrics.state]). */
+  /** Stops following the Lyrics toggle and lines ([AutoLyrics.state]). */
   private var stopLyrics: (() -> Unit)? = null
 
   /** Whether Android Auto is connected (projected on a car's screen, or Android Automotive). */
