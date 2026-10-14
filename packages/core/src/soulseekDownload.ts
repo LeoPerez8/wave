@@ -191,8 +191,9 @@ export const soulseekCandidates = (
     const file = (path.at(-1) ?? "").replace(/\.mp3$/i, "");
     const album = path.at(-2) ?? "";
     // "Coldplay (UK)": a note telling artists apart, not an edition.
-    const folderArtist = (path.at(-3) ?? "").replace(/\s*[([]([^\])]+)[\])]\s*$/, (whole, note: string) =>
-      editionMarker.test(note) ? whole : "",
+    const folderArtist = (path.at(-3) ?? "").replace(
+      /\s*[([]([^\])]+)[\])]\s*$/,
+      (whole, note: string) => (editionMarker.test(note) ? whole : ""),
     );
     // "Coldplay - Ghost Stories (2014)": the album folder names its artist.
     const albumArtist = album.includes(" - ") ? album.slice(0, album.indexOf(" - ")) : "";

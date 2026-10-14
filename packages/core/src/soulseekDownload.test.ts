@@ -116,11 +116,19 @@ test("received tags and actual duration are checked before trusted tags replace 
   );
   // A vinyl rip's title tag may start with its side.
   assert.equal(
-    soulseekReceivedMatches(song, { title: "A2 Get Lucky", artist: "Daft Punk", album: null }, 370_000),
+    soulseekReceivedMatches(
+      song,
+      { title: "A2 Get Lucky", artist: "Daft Punk", album: null },
+      370_000,
+    ),
     true,
   );
   assert.equal(
-    soulseekReceivedMatches(song, { title: "A2 Lose Yourself", artist: "Daft Punk", album: null }, 370_000),
+    soulseekReceivedMatches(
+      song,
+      { title: "A2 Lose Yourself", artist: "Daft Punk", album: null },
+      370_000,
+    ),
     false,
   );
 });
@@ -320,7 +328,11 @@ test("common folder and file layouts still name the recording", () => {
       216_000,
     ],
   ] as const) {
-    assert.equal(soulseekCandidates(recording, [peer(filename, { durationMs })]).length, 1, filename);
+    assert.equal(
+      soulseekCandidates(recording, [peer(filename, { durationMs })]).length,
+      1,
+      filename,
+    );
   }
 });
 
@@ -344,10 +356,7 @@ test("those layouts don't let another artist, side or edition through", () => {
   );
   // A title that starts like a vinyl side keeps it.
   const bomber: YtSong = { ...cemeteries, title: "B2 Bomber", album: null };
-  assert.equal(
-    soulseekCandidates(bomber, [file("Coldplay/Singles/05 B2 Bomber.mp3")]).length,
-    1,
-  );
+  assert.equal(soulseekCandidates(bomber, [file("Coldplay/Singles/05 B2 Bomber.mp3")]).length, 1);
 });
 
 test("the search asks for the artist and title words every matching file name has", () => {
