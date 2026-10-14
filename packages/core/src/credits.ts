@@ -2,40 +2,36 @@
  * Artist credits: the artists a credit as tagged ("Ariana Grande, Doja Cat")
  * names, so a collaboration belongs to each of them.
  *
- * - `,` `·` `;` `/`, "feat." / "ft." / "featuring" / "with" (bracketed or not)
- *   and " x " always separate artists.
- * - "&" and "and" separate them too, unless that part of the credit is an
- *   artist in the Library: a known whole credit ("Simon & Garfunkel") none of
- *   whose parts is credited on its own anywhere. So a collaboration's own
- *   credit ("Ariana Grande & Social House") doesn't keep it whole once
- *   "Ariana Grande" is credited alone.
+ * - "feat." / "ft." / "featuring" (bracketed or not) always separate artists.
+ * - `,` `·` `;` `/` "with" " x " "&" and "and" separate them too, unless that
+ *   part of the credit is an artist in the Library: a known whole credit
+ *   ("Earth, Wind & Fire", "AC/DC") none of whose names is credited on its own
+ *   anywhere. So a collaboration's own credit ("Ariana Grande, Doja Cat")
+ *   keeps it whole until one of its artists has a song credited to them alone
+ *   (or featuring someone).
  */
 import { UNKNOWN_ARTIST, identityKey } from "./library.ts";
 
-/** Words that introduce another artist: "feat." / "ft." (dot optional), "featuring", "with". */
-const JOINING_WORD = String.raw`(?:feat|ft)\b\.?|featuring\b|with\b`;
+/** A bracketed credit, "(feat. X)" or "[with X]": the brackets go, the credit stays. */
+const BRACKETED_CREDIT = /[([]\s*\b((?:feat|ft)\b\.?|featuring\b|with\b)([^)\]]*)[)\]]/giu;
 
-/** A bracketed featured credit, "(feat. X)" or "[with X]": the brackets go, the credit stays. */
-const BRACKETED_CREDIT = new RegExp(String.raw`[([]\s*\b(${JOINING_WORD})([^)\]]*)[)\]]`, "giu");
+/** Words that always introduce another artist: "feat." / "ft." (dot optional), "featuring". */
+const FEATURING = /\s*\b(?:(?:feat|ft)\b\.?|featuring\b)\s*/giu;
 
-/** Marks that always separate artists ("Lil Nas X x Billy Ray Cyrus" splits on the last x). */
-const SEPARATOR = new RegExp(
-  String.raw`\s*(?:[,;·/]|\b(?:${JOINING_WORD}))\s*|\s+x\s+(?!x\s)`,
-  "giu",
-);
-
-/** "&" and "and", which separate artists unless the Library knows the whole name. */
-const AMPERSAND = /\s*&\s*|\s+and\s+/giu;
+/**
+ * Marks that separate artists unless the Library knows the whole name, kept
+ * by `split` ("Lil Nas X x Billy Ray Cyrus" splits on the last x).
+ */
+const SEPARATOR = /(\s*[,;·/&]\s*|\s*\bwith\b\s*|\s+and\s+|\s+x\s+(?!x\s))/iu;
 
 const tidy = (name: string): string => name.replace(/\s+/g, " ").trim();
 
-/** The parts of [credit] between marks that always separate artists. */
+/** The parts of [credit] between featured credits, which always split. */
 const segments = (credit: string): string[] =>
-  credit.replace(BRACKETED_CREDIT, " $1$2").split(SEPARATOR).map(tidy);
+  credit.replace(BRACKETED_CREDIT, " $1$2").split(FEATURING);
 
-const ampersandParts = (segment: string): string[] => segment.split(AMPERSAND).map(tidy);
-
-const hasAmpersand = (segment: string): boolean => ampersandParts(segment).length > 1;
+/** A segment's names and the marks between them: `[name, mark, name, …]`. */
+const pieces = (segment: string): string[] => segment.split(SEPARATOR);
 
 /**
  * Splits credits with the Library's whole credits ([knownCredits]) in mind;
@@ -43,22 +39,44 @@ const hasAmpersand = (segment: string): boolean => ampersandParts(segment).lengt
  */
 export const creditSplitter = (knownCredits: Iterable<string>): ((credit: string) => string[]) => {
   const known = new Set<string>();
-  // Names credited on their own somewhere: a part between separators with no "&".
+  // Names credited on their own somewhere: a part between featured credits with no other mark.
   const standing = new Set<string>();
   for (const credit of knownCredits) {
     known.add(identityKey(credit));
     for (const segment of segments(credit)) {
-      if (segment !== "" && !hasAmpersand(segment)) standing.add(identityKey(segment));
+      const name = tidy(segment);
+      if (name !== "" && pieces(segment).length === 1) standing.add(identityKey(name));
     }
   }
-  const isAnArtist = (segment: string): boolean =>
-    known.has(identityKey(segment)) &&
-    !ampersandParts(segment).some((part) => standing.has(identityKey(part)));
+
+  /** The names of [segment], where a run of them the Library knows as one artist stays whole. */
+  const namesOf = (segment: string): string[] => {
+    const parts = pieces(segment);
+    const names = parts.filter((_, i) => i % 2 === 0).map(tidy);
+    const result: string[] = [];
+    let first = 0;
+    while (first < names.length) {
+      let last = names.length - 1;
+      for (; last > first; last--) {
+        const whole = tidy(parts.slice(2 * first, 2 * last + 1).join(""));
+        const isAnArtist =
+          known.has(identityKey(whole)) &&
+          !names.slice(first, last + 1).some((name) => standing.has(identityKey(name)));
+        if (isAnArtist) {
+          result.push(whole);
+          break;
+        }
+      }
+      if (last === first) result.push(names[first] ?? "");
+      first = last + 1;
+    }
+    return result;
+  };
 
   return (credit) => {
     const names = new Map<string, string>();
     for (const segment of segments(credit)) {
-      for (const name of isAnArtist(segment) ? [segment] : ampersandParts(segment)) {
+      for (const name of namesOf(segment)) {
         const key = identityKey(name);
         if (name !== "" && !names.has(key)) names.set(key, name);
       }
