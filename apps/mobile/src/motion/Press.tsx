@@ -1,5 +1,6 @@
+import { restingRect } from "@wave/core";
 import * as Haptics from "expo-haptics";
-import { useEffect, useRef, useState, type ComponentRef, type ReactNode } from "react";
+import { useContext, useEffect, useRef, useState, type ComponentRef, type ReactNode } from "react";
 import {
   Pressable,
   type GestureResponderEvent,
@@ -18,6 +19,7 @@ import {
 } from "react-native-reanimated";
 import { withUniwind } from "uniwind";
 
+import { OnFloatingChrome } from "@/chrome/onFloatingChrome";
 import { useIsOverlayOrigin } from "@/overlay/overlay";
 import { useLongPressDelayMs } from "@/settings/longPressDelay";
 import { useTapAnimationMs } from "@/settings/tapAnimation";
@@ -92,6 +94,7 @@ export function Press({
   const [key] = useState(() => ++lastKey);
   // Opened the card on screen: screen readers call it selected until the card closes.
   const origin = useIsOverlayOrigin(key);
+  const onChrome = useContext(OnFloatingChrome);
 
   // A row that unmounts mid-hold can't report the finger lifting.
   useEffect(
@@ -102,9 +105,13 @@ export function Press({
   );
 
   // Runs a handler that may open a menu, measuring where this sits first so the
-  // menu can float next to it. Resolves with whether it opened one.
+  // menu can float next to it. It measures sunk by its press feedback, so the rect
+  // is grown back to its resting size. Resolves with whether it opened one.
   const runAnchored = (handler: () => void): Promise<boolean> =>
-    measureRect(view.current).then((rect) => runPressedAt(rect, handler, key));
+    measureRect(view.current).then((rect) => {
+      const scale = reduceMotion ? 1 : 1 - Math.max(pressed.get(), lit.get()) * depth;
+      return runPressedAt(rect && restingRect(rect, scale), handler, key, onChrome);
+    });
 
   // The finger stays down as a long-press menu opens and can slide onto an entry
   // (slide to choose). A long-press that opens no menu (a tab's) lets it go again.

@@ -4,6 +4,7 @@ import { createContext, useContext, useSyncExternalStore, type ReactNode } from 
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CELL } from "@/catalog/grid";
+import { useNowPlayingShown } from "@/nowPlaying/sheet";
 import { playbackState } from "@/playback/Player";
 import { useIsSelecting } from "@/selection/selection";
 
@@ -52,11 +53,14 @@ export const useTabBarTop = (): number => {
 /**
  * How far the floating chrome on the current screen reaches above the system
  * inset, for things drawn at the root (outside `ChromeProvider`), like menus.
+ * Nothing while Now Playing covers it.
  */
 export const useFloatingChromeHeight = (): number => {
   const pathname = usePathname();
   const playing = useHasNowPlaying();
   const selecting = useIsSelecting();
+  const nowPlaying = useNowPlayingShown();
+  if (nowPlaying) return 0;
   if (selecting) return chrome.gap + chrome.selectionBar;
   // Tab screens, and screens opened inside the shortcut tab, are drawn under the floating tab bar.
   const tabBar = tabOfPath(pathname) !== null;
