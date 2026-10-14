@@ -16,13 +16,17 @@ class YtArtistParserTest {
     val artists = YtArtistParser.artists(body("search-artists.json"))
     assertEquals(7, artists.size)
     assertEquals(
-      YtArtistCandidate(name = "Daft Punk", browseId = "UCRr1xG_2WIDs18a6cIiCxeA", audience = 75_100_000L),
+      YtArtistCandidate(
+        name = "Daft Punk",
+        browseId = "UCRr1xG_2WIDs18a6cIiCxeA",
+        audience = 75_100_000L,
+        artworkUrl = "https://lh3.googleusercontent.com/qLhu6Py_4_xoBsoubKQsXlhOQGqU9YU1ZRAbFusF0LlrPkXbbpu7bEh-k_ZtE4JwLgubvucAQqcK1hRk=w120-h120-p-l90-rj",
+      ),
       artists.first(),
     )
-    assertEquals(
-      YtArtistCandidate(name = "Daft Punk's Karaoke Band", browseId = "UCeMvmMQswZlx62mKYeJJ4oA", audience = 3L),
-      artists[4],
-    )
+    assertEquals("Daft Punk's Karaoke Band", artists[4].name)
+    assertEquals("UCeMvmMQswZlx62mKYeJJ4oA", artists[4].browseId)
+    assertEquals(3L, artists[4].audience)
   }
 
   @Test

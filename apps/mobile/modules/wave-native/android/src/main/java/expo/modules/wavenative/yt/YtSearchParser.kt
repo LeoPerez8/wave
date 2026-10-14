@@ -41,13 +41,16 @@ data class YtSearchPage(val songs: List<YtSong>, val continuation: String?) {
 }
 
 /**
- * Reads YouTube Music's (WEB_REMIX) search answers into songs. innertubex only
- * sends the request; the walk over the renderer tree follows Metrolist's
- * `SearchPage`/`PageHelper` (GPL-3.0), simplified to the "Songs" filter.
+ * Reads YouTube Music's (WEB_REMIX) search answers into songs and albums.
+ * innertubex only sends the request; the walk over the renderer tree follows
+ * Metrolist's `SearchPage`/`PageHelper` (GPL-3.0), simplified to the "Songs"
+ * and "Albums" filters.
  *
  * A song row is a `musicResponsiveListItemRenderer`: the first flex column is
  * the title, the second is "Artist, Artist & Artist • Album • 3:45", with the
- * artists and the album linked to their pages.
+ * artists and the album linked to their pages. An album row links to the
+ * album's page, and its second column is "Album • Artist & Artist • 2011"
+ * ("Single", "EP" for those).
  */
 object YtSearchParser {
   private val json = Json { ignoreUnknownKeys = true }
@@ -59,6 +62,7 @@ object YtSearchParser {
   )
   private const val ALBUM_PAGE = "MUSIC_PAGE_TYPE_ALBUM"
   private const val SEPARATOR = " • "
+  private val YEAR = Regex("""^\d{4}$""")
 
   /** The songs of a search answer, first page or continuation. Unreadable rows are skipped. */
   fun songs(body: String): YtSearchPage {
@@ -75,6 +79,47 @@ object YtSearchParser {
       shelf["continuations"].arr?.firstOrNull()?.path("nextContinuationData", "continuation").string
     }
     return YtSearchPage(songs, continuation)
+  }
+
+  /** The albums (singles and EPs among them) of an Albums search answer, in its order. Unreadable rows are skipped. */
+  fun albums(body: String): List<YtShelfItem.Album> {
+    val root = json.parseToJsonElement(body).obj ?: return emptyList()
+    return root.path("contents", "tabbedSearchResultsRenderer", "tabs").arr
+      ?.firstOrNull()?.path("tabRenderer", "content", "sectionListRenderer", "contents").arr.orEmpty()
+      .mapNotNull { it.path("musicShelfRenderer").obj }
+      .flatMap { it["contents"].arr.orEmpty() }
+      .mapNotNull { it.path("musicResponsiveListItemRenderer").obj?.let(::albumRow) }
+      .distinctBy { it.browseId }
+  }
+
+  /** An Albums search row (`musicResponsiveListItemRenderer` linking to an album page), or null. */
+  private fun albumRow(row: JsonObject): YtShelfItem.Album? {
+    if (pageType(row) != ALBUM_PAGE) return null
+    val browseId = row.path("navigationEndpoint", "browseEndpoint", "browseId").string
+      ?.takeIf(String::isNotEmpty) ?: return null
+    val columns = row["flexColumns"].arr.orEmpty().map {
+      it.path("musicResponsiveListItemFlexColumnRenderer", "text", "runs").arr.orEmpty()
+        .mapNotNull { run -> run.obj }
+    }
+    val title = columns.firstOrNull()?.joinToString("") { it["text"].string.orEmpty() }?.trim()
+      ?.takeIf(String::isNotEmpty) ?: return null
+    val details = columns.getOrNull(1).orEmpty()
+    val texts = details.mapNotNull { it["text"].string?.trim() }
+    // Unlinked, the credit is the line's second part, after the release's type.
+    val artists = details.filter { pageType(it) in ARTIST_PAGES || isChannelLink(it) }
+      .mapNotNull { it["text"].string?.trim()?.takeIf(String::isNotEmpty) }
+      .ifEmpty {
+        details.joinToString("") { it["text"].string.orEmpty() }.split(SEPARATOR).getOrNull(1)?.trim()
+          ?.takeIf { it.isNotEmpty() && !YEAR.matches(it) }?.let(::listOf).orEmpty()
+      }
+    return YtShelfItem.Album(
+      browseId = browseId,
+      title = title,
+      artists = artists,
+      year = texts.lastOrNull { YEAR.matches(it) }?.toInt(),
+      artworkUrl = row.path("thumbnail", "musicThumbnailRenderer", "thumbnail", "thumbnails").arr
+        ?.lastOrNull()?.path("url").string,
+    )
   }
 
   /** "3:45", "1:02:03" or with "." / "," (some locales) in milliseconds; null for anything else. */

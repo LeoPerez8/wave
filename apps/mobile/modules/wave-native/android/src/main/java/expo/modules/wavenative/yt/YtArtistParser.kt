@@ -14,9 +14,16 @@ data class YtArtistCandidate(
   val browseId: String,
   /** Subscribers or monthly audience, whichever the row shows; null when it shows neither. */
   val audience: Long?,
+  /** The row's picture, the largest it lists; null when it has none. */
+  val artworkUrl: String? = null,
 ) {
   fun toMap(): Map<String, Any?> =
-    mapOf("name" to name, "browseId" to browseId, "audience" to audience?.toDouble())
+    mapOf(
+      "name" to name,
+      "browseId" to browseId,
+      "audience" to audience?.toDouble(),
+      "artworkUrl" to artworkUrl,
+    )
 }
 
 /** A YT Music artist page as far as Wave reads it (Core's `YtArtistPage`). */
@@ -69,6 +76,7 @@ object YtArtistParser {
       .mapNotNull { it.path("musicShelfRenderer").obj }
       .flatMap { it["contents"].arr.orEmpty() }
       .mapNotNull { it.path("musicResponsiveListItemRenderer").obj?.let(::artistRow) }
+      .distinctBy { it.browseId }
   }
 
   /** "75.1M monthly audience", "2.4K subscribers", "3 subscribers" as a number; null for anything else. */
@@ -144,7 +152,9 @@ object YtArtistParser {
     }
     val name = columns.firstOrNull()?.trim()?.takeIf(String::isNotEmpty) ?: return null
     val audience = columns.getOrNull(1)?.split(SEPARATOR)?.firstNotNullOfOrNull(::audience)
-    return YtArtistCandidate(name = name, browseId = browseId, audience = audience)
+    val artworkUrl = row.path("thumbnail", "musicThumbnailRenderer", "thumbnail", "thumbnails").arr
+      ?.lastOrNull().path("url").string?.takeIf(String::isNotEmpty)
+    return YtArtistCandidate(name = name, browseId = browseId, audience = audience, artworkUrl = artworkUrl)
   }
 
   private fun shelfTitle(shelf: JsonObject): String? =

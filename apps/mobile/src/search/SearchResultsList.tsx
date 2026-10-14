@@ -1,5 +1,12 @@
 import { LegendList } from "@legendapp/list/react-native";
-import { counted, type QueueContext, type SearchKind, ytTrackId } from "@wave/core";
+import {
+  counted,
+  joinArtists,
+  type QueueContext,
+  type SearchKind,
+  type YtArtistAlbum,
+  ytTrackId,
+} from "@wave/core";
 import { useCallback, useMemo } from "react";
 import { Text, View } from "react-native";
 
@@ -29,6 +36,8 @@ import type { SearchHit } from "./searchIndex";
 import { useListScrollable } from "@/motion/heldTouch";
 import { selectableRow } from "@/selection/selectableRow";
 import type { ListSelection } from "@/selection/useListSelection";
+import { openYtAlbum, openYtArtist } from "@/ytmusic/routes";
+import { openYtAlbumActions } from "@/ytmusic/YtAlbumActions";
 import { YtSongRow } from "@/ytmusic/YtSongRow";
 
 /** Tapping a song plays the song results from it. */
@@ -40,6 +49,8 @@ const HEIGHT: Readonly<Record<ResultRow["type"], number>> = {
   more: CELL * 6,
   capped: CELL * 6,
   ytSong: grid.row,
+  ytArtist: grid.row,
+  ytAlbum: grid.row,
   note: CELL * 6,
   askYt: CELL * 6,
 };
@@ -62,6 +73,7 @@ function SearchYtSongRow({
   song,
   songs,
   index,
+  top,
   playing,
   onOpen,
   selecting,
@@ -69,6 +81,7 @@ function SearchYtSongRow({
   song: NativeYtSong;
   songs: readonly ResultSong[];
   index: number;
+  top: boolean;
   playing: boolean;
   onOpen: () => void;
   selecting: boolean;
@@ -76,6 +89,7 @@ function SearchYtSongRow({
   return (
     <YtSongRow
       song={song}
+      kind={top ? "Song · " : ""}
       playing={playing}
       onPress={
         selecting
@@ -90,6 +104,14 @@ function SearchYtSongRow({
   );
 }
 
+/** What a YT Music album's page and menu know of it from its row. */
+const ytAlbumHead = (album: YtArtistAlbum) => ({
+  browseId: album.browseId,
+  title: album.title,
+  line: joinArtists(album.artists),
+  artworkUrl: album.artworkUrl,
+});
+
 const keyExtractor = (row: ResultRow): string => row.key;
 const itemType = (row: ResultRow): ResultRow["type"] => row.type;
 const itemSize = (row: ResultRow): number => HEIGHT[row.type];
@@ -101,6 +123,8 @@ type Props = {
   onShowAll: (kind: SearchKind) => void;
   /** Search YouTube Music was tapped. */
   onAskYt: () => void;
+  /** Search shows YouTube Music's results (an integrated view): Library albums open integrated. */
+  integrated: boolean;
   /** Song results are selectable; other results ignore taps while selecting. */
   selection: ListSelection<SongRow>;
 };
@@ -110,6 +134,7 @@ function Hit({
   top,
   songs,
   downloaded,
+  integrated,
   playing,
   onOpen,
   selection,
@@ -119,6 +144,8 @@ function Hit({
   songs: readonly ResultSong[];
   /** A song among YT Music's: marked downloaded. */
   downloaded: boolean;
+  /** An album opens integrated. */
+  integrated: boolean;
   playing: boolean;
   onOpen: () => void;
   selection: ListSelection<SongRow>;
@@ -149,7 +176,7 @@ function Hit({
           title={hit.name}
           detail={top ? `Album · ${hit.album.albumArtist}` : hit.album.albumArtist}
           artworkUri={hit.album.thumbPath === null ? undefined : `file://${hit.album.thumbPath}`}
-          onPress={open(() => openAlbum(hit.album.id, hit.album))}
+          onPress={open(() => openAlbum(hit.album.id, hit.album, { integrated }))}
           onLongPress={menu(() => openAlbumActions(hit.album))}
         />
       );
@@ -203,13 +230,20 @@ function Hit({
  * Search results in one virtualised list of fixed-height rows: section heads,
  * results and "Show all". Scrolling or tapping a row lets the keyboard go.
  */
-export function SearchResultsList({ rows, onOpen, onShowAll, onAskYt, selection }: Props) {
+export function SearchResultsList({
+  rows,
+  onOpen,
+  onShowAll,
+  onAskYt,
+  integrated,
+  selection,
+}: Props) {
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
   const currentId = useCurrentTrackId();
   const rowState = useMemo(
-    () => ({ currentId, selection: selection.selection }),
-    [currentId, selection.selection],
+    () => ({ currentId, selection: selection.selection, integrated }),
+    [currentId, selection.selection, integrated],
   );
 
   const renderItem = useCallback(
@@ -228,6 +262,7 @@ export function SearchResultsList({ rows, onOpen, onShowAll, onAskYt, selection 
               top={item.top}
               songs={item.songs}
               downloaded={item.downloaded}
+              integrated={integrated}
               playing={item.hit.kind === "song" && String(item.hit.song.id) === currentId}
               onOpen={onOpen}
               selection={selection}
@@ -256,11 +291,55 @@ export function SearchResultsList({ rows, onOpen, onShowAll, onAskYt, selection 
               song={item.song}
               songs={item.songs}
               index={item.index}
+              top={item.top}
               playing={ytTrackId(item.song.videoId) === currentId}
               onOpen={onOpen}
               selecting={selection.selecting}
             />
           );
+        case "ytArtist": {
+          const { artist } = item;
+          return (
+            <NameRow
+              name={artist.name}
+              artist={{
+                name: artist.name,
+                thumbPath: null,
+                artworkPath: null,
+                imageUrl: artist.artworkUrl,
+              }}
+              detail={item.top ? "Artist · YouTube Music" : "YouTube Music"}
+              onPress={
+                selection.selecting
+                  ? ignore
+                  : () => {
+                      onOpen();
+                      openYtArtist(artist.browseId, artist.name);
+                    }
+              }
+              onLongPress={selection.selecting ? ignore : undefined}
+            />
+          );
+        }
+        case "ytAlbum": {
+          const head = ytAlbumHead(item.album);
+          return (
+            <ArtworkRow
+              title={head.title}
+              detail={item.top ? `Album · ${head.line}` : head.line}
+              artworkUri={head.artworkUrl ?? undefined}
+              onPress={
+                selection.selecting
+                  ? ignore
+                  : () => {
+                      onOpen();
+                      openYtAlbum(head.browseId, head);
+                    }
+              }
+              onLongPress={selection.selecting ? ignore : () => openYtAlbumActions(head)}
+            />
+          );
+        }
         case "askYt":
           return (
             <View style={{ height: HEIGHT.askYt }}>
@@ -281,7 +360,7 @@ export function SearchResultsList({ rows, onOpen, onShowAll, onAskYt, selection 
           );
       }
     },
-    [currentId, onOpen, onShowAll, onAskYt, selection],
+    [currentId, onOpen, onShowAll, onAskYt, integrated, selection],
   );
 
   return (
