@@ -242,7 +242,7 @@ class DurableDownloadsTest {
       while (searches < 10) {
         val lease = owner.claim("song") ?: break
         searches++
-        assertTrue(owner.submit("song", lease["generation"] as Long, lease["token"] as String, "prepare", mapOf("failure" to "offline")))
+        assertTrue(owner.submit("song", lease["generation"] as Long, lease["token"] as String, "prepare", mapOf("failure" to "offline", "failurePlan" to CorePlans.soulseek(ytMusicOn = false))))
         assertNull(owner.claim("song"))
         now += 30_000
       }
@@ -403,7 +403,7 @@ class DurableDownloadsTest {
       val lease = owner.claim("song")!!
       val lowerRate = candidate + ("bitrateKbps" to 256.0)
       assertTrue(owner.submit("song", lease["generation"] as Long, lease["token"] as String, "prepare",
-        mapOf("candidates" to listOf(lowerRate), "targetPath" to File(folder, "Recording.mp3").path, "tags" to emptyMap<String, Any?>())))
+        mapOf("candidates" to listOf(lowerRate), "targetPath" to File(folder, "Recording.mp3").path, "tags" to emptyMap<String, Any?>(), "failurePlan" to CorePlans.soulseek(ytMusicOn = false))))
       owner.advance(NoTransfer, NoPublication)
       assertEquals("failed", owner.snapshot().single()["phase"])
       assertEquals("unavailable", owner.snapshot().single()["reason"])
@@ -644,7 +644,7 @@ class DurableDownloadsTest {
   }
   private fun prepare(owner: DurableDownloads, target: File, candidates: List<Map<String, Any?>> = listOf(candidate)) {
     owner.advance(GoodTransfer, GoodPublication)
-    answer(owner, "prepare", mapOf("candidates" to candidates, "targetPath" to target.path, "tags" to emptyMap<String, Any?>()))
+    answer(owner, "prepare", mapOf("candidates" to candidates, "targetPath" to target.path, "tags" to emptyMap<String, Any?>(), "failurePlan" to CorePlans.soulseek(ytMusicOn = false)))
   }
   /** Up to a published file the Library hasn't imported yet. */
   private fun publish(owner: DurableDownloads, target: File) {
@@ -688,7 +688,7 @@ class DurableDownloadsTest {
         }
       }
       owner.advance(transport, publisher)
-      answer(owner, "prepare", mapOf("candidates" to listOf(mapOf("username" to "peer", "filename" to "Recording.mp3", "bitrateKbps" to 320)), "targetPath" to target.path, "tags" to emptyMap<String, Any?>()))
+      answer(owner, "prepare", mapOf("candidates" to listOf(mapOf("username" to "peer", "filename" to "Recording.mp3", "bitrateKbps" to 320)), "targetPath" to target.path, "tags" to emptyMap<String, Any?>(), "failurePlan" to CorePlans.soulseek(ytMusicOn = false)))
       owner.advance(transport, publisher)
       answer(owner, "confirm", mapOf("acceptable" to true))
       owner.advance(transport, publisher)

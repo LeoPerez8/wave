@@ -61,12 +61,71 @@ export const downloadFallback = (
 ): DownloadSource | null => (ytMusicOn && FALLS_BACK.includes(failure) ? "youtube" : null);
 
 /**
- * The Soulseek failures that hand a download over to YouTube Music
- * (`downloadFallback`), for the native journal to keep with the job: it meets
- * them where no answer from JS can be waited for.
+ * What the native download journal does when a download's source fails it.
+ * The journal meets these failures where no answer from JS can be waited for,
+ * so the prepare answer gives it the plan for the job's source, and for
+ * YouTube Music's fallback.
  */
-export const downloadFallbackFailures = (setup: DownloadFallbackSetup): YtDownloadFailure[] =>
-  FALLS_BACK.filter((failure) => downloadFallback(failure, setup) !== null);
+export interface DownloadFailurePlan {
+  /**
+   * Failures tried again after a pause, on the same peer or YouTube's
+   * stream, while the job has attempts left; then they end the download.
+   */
+  readonly retry: readonly YtDownloadFailure[];
+  /**
+   * Failures that end the download at once. Any other failure moves on to
+   * the next peer, or starts YouTube's stream again.
+   */
+  readonly end: readonly YtDownloadFailure[];
+  /** The failure once no peer, or no attempt at YouTube's stream, is left. */
+  readonly exhausted: YtDownloadFailure;
+  /** What audio that isn't the song fails the download with; null moves on to the next peer. */
+  readonly rejected: YtDownloadFailure | null;
+  /** Failures that hand the download over to YouTube Music instead of ending it (`downloadFallback`). */
+  readonly fallsBack: readonly YtDownloadFailure[];
+}
+
+/**
+ * Failures no other peer, nor YouTube's stream started again, would get
+ * past: the account, the phone's storage or folders, YT Music turned off,
+ * a song YouTube won't serve and Soulseek's server not answering.
+ */
+const ENDS: readonly YtDownloadFailure[] = [
+  "account",
+  "accountRejected",
+  "unreachable",
+  "storage",
+  "noFolder",
+  "noSource",
+  "ytUnavailable",
+];
+
+/**
+ * The journal's plan for a download from [source]. Offline is always tried
+ * again; Soulseek's unreachable server too, unless YouTube Music can carry
+ * the download on at once.
+ */
+export const downloadFailurePlan = (
+  source: DownloadSource,
+  setup: DownloadFallbackSetup,
+): DownloadFailurePlan => {
+  if (source === "youtube")
+    return {
+      retry: ["offline"],
+      end: ENDS,
+      exhausted: "failed",
+      rejected: "ytUnavailable",
+      fallsBack: [],
+    };
+  const fallsBack = FALLS_BACK.filter((failure) => downloadFallback(failure, setup) !== null);
+  return {
+    retry: fallsBack.includes("unreachable") ? ["offline"] : ["offline", "unreachable"],
+    end: ENDS,
+    exhausted: "unavailable",
+    rejected: null,
+    fallsBack,
+  };
+};
 
 /**
  * Whether the audio YouTube served, [durationMs] long as decoded on the

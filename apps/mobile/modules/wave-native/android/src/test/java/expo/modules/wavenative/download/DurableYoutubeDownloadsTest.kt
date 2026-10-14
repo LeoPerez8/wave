@@ -135,7 +135,7 @@ class DurableYoutubeDownloadsTest {
       owner.enqueue(song + ("videoId" to "other"), null, emptyMap(), "youtube")
       owner.cancel("song", NoCancel)
       owner.advance(broken, Untouched)
-      answer(owner, "prepare", mapOf("source" to "youtube", "targetPath" to File(folder, "Other.m4a").path, "tags" to emptyMap<String, Any?>()), id = "other")
+      answer(owner, "prepare", mapOf("source" to "youtube", "targetPath" to File(folder, "Other.m4a").path, "tags" to emptyMap<String, Any?>(), "failurePlan" to CorePlans.youtube), id = "other")
       repeat(10) { owner.advance(broken, Untouched); now += 1_000 }
       val job = owner.snapshot().single { it["id"] == "other" }
       assertEquals("failed", job["phase"])
@@ -210,7 +210,7 @@ class DurableYoutubeDownloadsTest {
       val owner = DurableDownloads(File(folder, "jobs"))
       owner.enqueue(song, null, emptyMap(), "soulseek")
       owner.advance(NoCancel, Untouched)
-      answer(owner, "prepare", mapOf("source" to "soulseek", "candidates" to listOf(mapOf("username" to "peer", "filename" to "Recording.m4a", "bitrateKbps" to 320)), "targetPath" to File(folder, "Recording.m4a").path, "tags" to emptyMap<String, Any?>()))
+      answer(owner, "prepare", mapOf("source" to "soulseek", "candidates" to listOf(mapOf("username" to "peer", "filename" to "Recording.m4a", "bitrateKbps" to 320)), "targetPath" to File(folder, "Recording.m4a").path, "tags" to emptyMap<String, Any?>(), "failurePlan" to CorePlans.soulseek(ytMusicOn = false)))
       assertEquals("unavailable", owner.snapshot().single()["reason"])
       assertEquals("mp3-320", owner.snapshot().single()["policy"])
     }
@@ -241,7 +241,7 @@ class DurableYoutubeDownloadsTest {
   }
   private fun prepareYoutube(owner: DurableDownloads, target: File) {
     owner.advance(NoCancel, Untouched)
-    answer(owner, "prepare", mapOf("source" to "youtube", "targetPath" to target.path, "tags" to emptyMap<String, Any?>()))
+    answer(owner, "prepare", mapOf("source" to "youtube", "targetPath" to target.path, "tags" to emptyMap<String, Any?>(), "failurePlan" to CorePlans.youtube))
   }
   private fun answer(owner: DurableDownloads, decision: String, payload: Map<String, Any?>, id: String = "song") {
     val lease = owner.claim(id)!!
