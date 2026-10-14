@@ -124,6 +124,9 @@ describe("the native download journal, as rows show it", () => {
   });
 });
 
+/** What a row that failed with [reason] says. */
+const line = (reason: YtDownloadFailure) => ytDownloadLine({ kind: "failed", reason });
+
 /** The download entries for a song that isn't in the Library. */
 const actions = (status: YtDownloadStatus | null) =>
   ytDownloadActions(status, { inLibrary: false });
@@ -175,7 +178,6 @@ describe("a YT Music song's download, as its row and menu show it", () => {
   });
 
   test("Soulseek's own failures read as before; an unreachable server isn't called offline", () => {
-    const line = (reason: YtDownloadFailure) => ytDownloadLine({ kind: "failed", reason });
     assert.equal(line("unavailable"), "This recording is unavailable in 320 kbps");
     assert.equal(line("account"), "Connect a free Soulseek account in Settings");
     assert.equal(line("accountRejected"), "Connect a free Soulseek account in Settings");

@@ -62,7 +62,7 @@ describe("downloadFallback", () => {
 
 describe("downloadFallbackFailures", () => {
   test("lists the Soulseek failures the journal hands over to YouTube Music", () => {
-    assert.deepEqual([...downloadFallbackFailures({ ytMusicOn: true })].sort(), [
+    assert.deepEqual(downloadFallbackFailures({ ytMusicOn: true }).toSorted(), [
       "account",
       "accountRejected",
       "timedOut",
