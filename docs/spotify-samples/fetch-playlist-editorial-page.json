@@ -1,0 +1,208 @@
+{
+  "data": {
+    "playlistV2": {
+      "__typename": "Playlist",
+      "content": {
+        "__typename": "PlaylistItemsPage",
+        "items": [
+          {
+            "addedAt": {
+              "isoString": "2026-02-20T05:00:30.966Z"
+            },
+            "addedBy": null,
+            "attributes": [
+              {
+                "key": "decision_id",
+                "value": "ssp~065dd1bb0b565fc1aba6d9dd710f38543948"
+              }
+            ],
+            "itemV2": {
+              "__typename": "TrackResponseWrapper",
+              "data": {
+                "__typename": "Track",
+                "albumOfTrack": {
+                  "artists": {
+                    "items": [
+                      {
+                        "profile": {
+                          "name": "Bella Kay"
+                        },
+                        "uri": "spotify:artist:4Z8MrrKMBHMPa8d04Ivur8"
+                      }
+                    ]
+                  },
+                  "coverArt": {
+                    "sources": [
+                      {
+                        "height": 300,
+                        "url": "https://i.scdn.co/image/ab67616d00001e02e74e15fe75e80ea69f38a680",
+                        "width": 300
+                      },
+                      {
+                        "height": 64,
+                        "url": "https://i.scdn.co/image/ab67616d00004851e74e15fe75e80ea69f38a680",
+                        "width": 64
+                      },
+                      {
+                        "height": 640,
+                        "url": "https://i.scdn.co/image/ab67616d0000b273e74e15fe75e80ea69f38a680",
+                        "width": 640
+                      }
+                    ]
+                  },
+                  "date": {
+                    "isoString": "2026-01-11T00:00:00Z",
+                    "precision": "DAY"
+                  },
+                  "name": "iloveitiloveitiloveit",
+                  "uri": "spotify:album:6XxrC3tz3EuqoW5RMbYzaF"
+                },
+                "artists": {
+                  "items": [
+                    {
+                      "profile": {
+                        "name": "Bella Kay"
+                      },
+                      "uri": "spotify:artist:4Z8MrrKMBHMPa8d04Ivur8"
+                    }
+                  ]
+                },
+                "contentRating": {
+                  "label": "EXPLICIT"
+                },
+                "discNumber": 1,
+                "trackDuration": {
+                  "totalMilliseconds": 183237
+                },
+                "mediaType": "AUDIO",
+                "name": "iloveitiloveitiloveit",
+                "playability": {
+                  "playable": true,
+                  "reason": "PLAYABLE"
+                },
+                "playcount": "463029145",
+                "trackNumber": 1,
+                "uri": "spotify:track:5IMpnpD0tQVcqWlVIgtAtV"
+              }
+            },
+            "uid": "4e563730754f4f4d665830"
+          },
+          {
+            "addedAt": {
+              "isoString": "2026-03-20T04:01:00.887Z"
+            },
+            "addedBy": null,
+            "attributes": [
+              {
+                "key": "decision_id",
+                "value": "ssp~065dd1bb0b565fc1aba6d9dd710f38543948"
+              }
+            ],
+            "itemV2": {
+              "__typename": "TrackResponseWrapper",
+              "data": {
+                "__typename": "Track",
+                "albumOfTrack": {
+                  "artists": {
+                    "items": [
+                      {
+                        "profile": {
+                          "name": "BTS"
+                        },
+                        "uri": "spotify:artist:3Nrfpe0tUJi4K4DXYWgMUX"
+                      }
+                    ]
+                  },
+                  "coverArt": {
+                    "sources": [
+                      {
+                        "height": 300,
+                        "url": "https://i.scdn.co/image/ab67616d00001e02dfa17fad7f190c901603270e",
+                        "width": 300
+                      },
+                      {
+                        "height": 64,
+                        "url": "https://i.scdn.co/image/ab67616d00004851dfa17fad7f190c901603270e",
+                        "width": 64
+                      },
+                      {
+                        "height": 640,
+                        "url": "https://i.scdn.co/image/ab67616d0000b273dfa17fad7f190c901603270e",
+                        "width": 640
+                      }
+                    ]
+                  },
+                  "date": {
+                    "isoString": "2026-03-20T00:00:00Z",
+                    "precision": "DAY"
+                  },
+                  "name": "ARIRANG",
+                  "uri": "spotify:album:3ukkRHDHbN8tNRPKsGZR1h"
+                },
+                "artists": {
+                  "items": [
+                    {
+                      "profile": {
+                        "name": "BTS"
+                      },
+                      "uri": "spotify:artist:3Nrfpe0tUJi4K4DXYWgMUX"
+                    }
+                  ]
+                },
+                "contentRating": {
+                  "label": "NONE"
+                },
+                "discNumber": 1,
+                "trackDuration": {
+                  "totalMilliseconds": 159007
+                },
+                "mediaType": "AUDIO",
+                "name": "SWIM",
+                "playability": {
+                  "playable": true,
+                  "reason": "PLAYABLE"
+                },
+                "playcount": "975789666",
+                "trackNumber": 7,
+                "uri": "spotify:track:68lbSrXDORS51pmyjZv712"
+              }
+            },
+            "uid": "58687561714a7232426363"
+          }
+        ],
+        "pagingInfo": {
+          "limit": 2,
+          "offset": 48
+        },
+        "totalCount": 50
+      },
+      "description": "The hottest 50. Cover: ASHE",
+      "followers": 33723901,
+      "format": "format-shows-shuffle",
+      "images": {
+        "items": [
+          {
+            "sources": [
+              {
+                "height": null,
+                "url": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+                "width": null
+              }
+            ]
+          }
+        ]
+      },
+      "name": "Today’s Top Hits",
+      "ownerV2": {
+        "data": {
+          "__typename": "User",
+          "name": "Spotify",
+          "uri": "spotify:user:spotify",
+          "username": "spotify"
+        }
+      },
+      "revisionId": "AAAAAFxo0WOfWuJwxTpveCHU9OQ8AkKI",
+      "uri": "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M"
+    }
+  }
+}
