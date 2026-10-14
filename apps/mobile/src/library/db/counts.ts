@@ -6,6 +6,7 @@
 import type { LibrarySectionSlug } from "@wave/core";
 import { sql } from "drizzle-orm";
 
+import { CREDITED_SONGS } from "./artists.ts";
 import type { LibraryDatabase } from "./database.ts";
 
 /** One count per Library entry, keyed by its section slug. */
@@ -13,18 +14,14 @@ export type LibraryCounts = Readonly<Record<LibrarySectionSlug, number>>;
 
 /**
  * Counts what each Library list shows: every playlist (empty ones too); artists,
- * albums, genres and folders with songs (an artist counts through its songs or
- * its albums', as Library › Artists lists them); songs; and starred songs.
+ * albums, genres and folders with songs (an artist counts through every song
+ * credited to them, as Library › Artists lists them); songs; and starred songs.
  */
 export const libraryCounts = (db: LibraryDatabase): LibraryCounts =>
   db.get<LibraryCounts>(sql`
     SELECT
       (SELECT count(*) FROM playlists) AS "playlists",
-      (SELECT count(*) FROM (
-        SELECT artist_id FROM tracks
-        UNION
-        SELECT albums.album_artist_id FROM tracks JOIN albums ON albums.id = tracks.album_id
-      )) AS "artists",
+      (SELECT count(DISTINCT artist_id) FROM (${CREDITED_SONGS})) AS "artists",
       (SELECT count(DISTINCT album_id) FROM tracks) AS "albums",
       (SELECT count(*) FROM tracks) AS "songs",
       (SELECT count(DISTINCT genre_id) FROM tracks) AS "genres",

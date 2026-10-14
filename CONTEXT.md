@@ -23,3 +23,17 @@ _Avoid_: collection, catalog
 **Track**:
 One playable piece of music in the Library, usually one audio file.
 _Avoid_: song, file
+
+**Credit**:
+The artist tag of a Track as written, such as "Ariana Grande, Doja Cat". A credit names one or more Artists. Rows show the credit as written.
+_Avoid_: artist string
+
+**Artist**:
+One person or group in the Library. A Track belongs to every Artist its credit names, so a collaboration counts for each of them and shows on each of their pages.
+_Avoid_: performer
+
+**Primary artist**:
+The first Artist a credit names. Links that open a single Artist (Go to Artist, Now Playing's artist) open the primary artist.
+
+**Album artist**:
+The Artist an album is filed under: the first Artist its album artist credit names. The album also shows under the other credited Artists' Appears on.

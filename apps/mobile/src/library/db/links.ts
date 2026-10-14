@@ -24,17 +24,18 @@ export interface LinkRows {
 
 /**
  * One artist's row as `selectArtists` lists it, but counted from that
- * artist's own tracks and albums (by index) rather than from every song's
- * links: a menu opening or a track change reads it, so it must stay cheap.
- * Null for an artist with no songs, as the list leaves them out.
+ * artist's own credits (by index) rather than from every song's links: a
+ * menu opening or a track change reads it, so it must stay cheap. Null for an
+ * artist with no songs, as the list leaves them out.
  */
 const selectArtistRow = (db: LibraryDatabase, artistId: number): ArtistRow | null =>
   db.all<ArtistRow>(sql`
     SELECT * FROM (
       SELECT artists.id AS "id", artists.name AS "name", artists.sort AS "sort",
         (SELECT count(*) FROM albums WHERE albums.album_artist_id = artists.id) AS "albumCount",
-        (SELECT count(*) FROM tracks WHERE tracks.artist_id = artists.id
-          OR tracks.album_id IN (SELECT id FROM albums WHERE albums.album_artist_id = artists.id)
+        (SELECT count(*) FROM tracks
+          WHERE tracks.id IN (SELECT track_id FROM track_artists WHERE artist_id = artists.id)
+          OR tracks.album_id IN (SELECT album_id FROM album_artists WHERE artist_id = artists.id)
         ) AS "trackCount",
         artwork.thumb_path AS "thumbPath", artwork.path AS "artworkPath"
       FROM artists LEFT JOIN artwork ON artwork.hash = artists.artwork_hash

@@ -11,6 +11,7 @@
   sortKey,
 } from "./library.ts";
 export type { LibraryTrack, RawTrack } from "./library.ts";
+export { creditSplitter, splitCredit } from "./credits.ts";
 export { formatDuration, formatRemaining } from "./time.ts";
 export { describeFolder, filesLeavingWithRoot, isWithin, planAddRoot } from "./scanRoots.ts";
 export type { AddRootPlan, FolderLabel, ScanRootState } from "./scanRoots.ts";

@@ -1,5 +1,4 @@
 import {
-  artistAlbums,
   checkPlaylistName,
   compareAlbumTracks,
   compareFileNames,
@@ -18,10 +17,9 @@ import {
   type SongListening,
   type StatsWindow,
 } from "@wave/core";
-import { asc, desc, eq, inArray, ne, or, sql, type SQL } from "drizzle-orm";
+import { asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { drizzle, type ExpoSQLiteDatabase } from "drizzle-orm/expo-sqlite";
 import { migrate } from "drizzle-orm/expo-sqlite/migrator";
-import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -30,8 +28,8 @@ import { openDatabaseSync } from "expo-sqlite";
 
 import { selectAlbums } from "./db/albums";
 import {
-  refreshArtistImages,
   selectArtistCovers,
+  selectArtistDetail,
   selectArtistSongs,
   selectArtists,
 } from "./db/artists";
@@ -45,6 +43,7 @@ import {
   type ArtistPhotoRow,
 } from "./db/artistPhotos";
 import { libraryCounts, sectionSongCounts, type LibraryCounts } from "./db/counts";
+import { relinkCreditsIfUnlinked } from "./db/credits";
 import { selectGenreSongs } from "./db/genres";
 import type { RowPage } from "./db/database";
 import migrations from "./db/migrations";
@@ -67,6 +66,7 @@ import {
   selectPlaylistSongs,
   selectTrackPaths,
 } from "./db/playlists";
+import { pruneOrphans, removeTracks, saveBatch } from "./db/save";
 import * as schema from "./db/schema";
 import {
   BY_TITLE,
@@ -134,6 +134,7 @@ export interface SongRow {
   readonly id: number;
   readonly path: string;
   readonly title: string;
+  /** The credit as written ("Ariana Grande, Doja Cat"). */
   readonly artist: string;
   readonly album: string;
   readonly durationMs: number;
@@ -147,7 +148,7 @@ export interface SongRow {
   /** When the file entered the library (epoch ms). */
   readonly addedAt: number;
   readonly albumId: number;
-  /** The track artist. */
+  /** The primary artist: the first one [artist] credits (Go to Artist opens it). */
   readonly artistId: number;
   /** Orders the album's tracks, and so sorts by artist and by album. */
   readonly discNumber: number | null;
@@ -164,6 +165,7 @@ export interface AlbumRow {
   readonly id: number;
   readonly title: string;
   readonly titleSort: string;
+  /** The album artist credit as written; [albumArtistId] is the artist it is filed under. */
   readonly albumArtist: string;
   readonly albumArtistId: number;
   readonly year: number | null;
@@ -174,14 +176,14 @@ export interface AlbumRow {
   readonly artworkPath: string | null;
 }
 
-/** One row of the Artists list: track artists and album artists alike. */
+/** One row of the Artists list: an individual artist, credited on songs or albums. */
 export interface ArtistRow {
   readonly id: number;
   readonly name: string;
   readonly sort: string;
   /** Albums filed under the artist. */
   readonly albumCount: number;
-  /** Songs by the artist or on their albums. */
+  /** Songs credited to the artist, or on albums credited to them. */
   readonly trackCount: number;
   /**
    * The artist's image (an album cover, Core's `artistArtwork`): thumbnail for
@@ -516,202 +518,6 @@ export class LibraryStore extends Context.Service<
 
 type Database = ExpoSQLiteDatabase<typeof schema>;
 
-/** `excluded.<column>` in an upsert's DO UPDATE clause. */
-const excluded = (column: SQLiteColumn): SQL => sql.raw(`excluded."${column.name}"`);
-
-const basename = (path: string): string => path.slice(path.lastIndexOf("/") + 1) || path;
-
-const uniqueBy = <A>(items: Iterable<A>, key: (item: A) => string): A[] => {
-  const seen = new Map<string, A>();
-  for (const item of items) if (!seen.has(key(item))) seen.set(key(item), item);
-  return [...seen.values()];
-};
-
-const idMap = (rows: readonly { id: number; key: string }[]): Map<string, number> =>
-  new Map(rows.map((row) => [row.key, row.id]));
-
-const requireId = (ids: Map<string, number>, key: string, kind: string): number => {
-  const id = ids.get(key);
-  if (id === undefined) throw new Error(`Missing ${kind} id for ${key}`);
-  return id;
-};
-
-const saveBatchSync = (
-  db: Database,
-  tracks: readonly IndexedTrack[],
-  artworkRows: readonly IndexedArtwork[],
-  moves: readonly PathMove[],
-  now: number,
-): void => {
-  const { artists, genres, folders, albums, artwork } = schema;
-  db.transaction((tx) => {
-    // The upsert below then updates the moved rows by their new path.
-    for (const move of moves) {
-      tx.update(schema.tracks)
-        .set({ path: move.to })
-        .where(eq(schema.tracks.path, move.from))
-        .run();
-    }
-    if (artworkRows.length > 0) {
-      tx.insert(artwork)
-        .values(artworkRows.map((row) => ({ ...row })))
-        .onConflictDoUpdate({
-          target: artwork.hash,
-          set: {
-            path: excluded(artwork.path),
-            thumbPath: excluded(artwork.thumbPath),
-            palette: excluded(artwork.palette),
-          },
-        })
-        .run();
-    }
-    if (tracks.length === 0) return;
-
-    const artistRows = uniqueBy(
-      tracks.flatMap((t) => [
-        { key: t.artistKey, name: t.artist, sort: t.artistSort },
-        { key: t.albumArtistKey, name: t.albumArtist, sort: t.albumArtistSort },
-      ]),
-      (row) => row.key,
-    );
-    const artistIds = idMap(
-      tx
-        .insert(artists)
-        .values(artistRows)
-        .onConflictDoUpdate({
-          target: artists.key,
-          set: { name: excluded(artists.name), sort: excluded(artists.sort) },
-        })
-        .returning({ id: artists.id, key: artists.key })
-        .all(),
-    );
-
-    const genreRows = uniqueBy(
-      tracks.flatMap((t) =>
-        t.genre !== null && t.genreKey !== null && t.genreSort !== null
-          ? [{ key: t.genreKey, name: t.genre, sort: t.genreSort }]
-          : [],
-      ),
-      (row) => row.key,
-    );
-    const genreIds =
-      genreRows.length === 0
-        ? new Map<string, number>()
-        : idMap(
-            tx
-              .insert(genres)
-              .values(genreRows)
-              .onConflictDoUpdate({
-                target: genres.key,
-                set: { name: excluded(genres.name), sort: excluded(genres.sort) },
-              })
-              .returning({ id: genres.id, key: genres.key })
-              .all(),
-          );
-
-    const folderRows = uniqueBy(
-      tracks.map((t) => ({ path: t.folder, name: basename(t.folder) })),
-      (row) => row.path,
-    );
-    const folderIds = new Map(
-      tx
-        .insert(folders)
-        .values(folderRows)
-        .onConflictDoUpdate({ target: folders.path, set: { name: excluded(folders.name) } })
-        .returning({ id: folders.id, path: folders.path })
-        .all()
-        .map((row) => [row.path, row.id] as const),
-    );
-
-    const albumRows = uniqueBy(
-      tracks.map((t) => ({
-        key: t.albumKey,
-        title: t.album,
-        titleSort: t.albumSort,
-        albumArtistId: requireId(artistIds, t.albumArtistKey, "artist"),
-        year: t.year,
-        artworkHash: t.artworkHash,
-        compilation: t.compilation,
-      })),
-      (row) => row.key,
-    );
-    const albumIds = idMap(
-      tx
-        .insert(albums)
-        .values(albumRows)
-        .onConflictDoUpdate({
-          target: albums.key,
-          set: {
-            title: excluded(albums.title),
-            titleSort: excluded(albums.titleSort),
-            // The first track that has a year or a cover gives it to the album.
-            year: sql`coalesce(${albums.year}, ${excluded(albums.year)})`,
-            artworkHash: sql`coalesce(${albums.artworkHash}, ${excluded(albums.artworkHash)})`,
-            compilation: sql`${albums.compilation} or ${excluded(albums.compilation)}`,
-          },
-        })
-        .returning({ id: albums.id, key: albums.key })
-        .all(),
-    );
-
-    const t = schema.tracks;
-    tx.insert(t)
-      .values(
-        tracks.map((track) => ({
-          path: track.path,
-          folderId: requireId(folderIds, track.folder, "folder"),
-          fileName: track.fileName,
-          sizeBytes: track.sizeBytes,
-          modifiedAt: track.modifiedAt,
-          title: track.title,
-          titleSort: track.titleSort,
-          artistId: requireId(artistIds, track.artistKey, "artist"),
-          albumId: requireId(albumIds, track.albumKey, "album"),
-          genreId: track.genreKey === null ? null : (genreIds.get(track.genreKey) ?? null),
-          year: track.year,
-          trackNumber: track.trackNumber,
-          trackTotal: track.trackTotal,
-          discNumber: track.discNumber,
-          discTotal: track.discTotal,
-          durationMs: track.durationMs,
-          sampleRate: track.sampleRate,
-          bitrateKbps: track.bitrateKbps,
-          artworkHash: track.artworkHash,
-          hasLyrics: track.hasLyrics,
-          addedAt: now,
-          scannedAt: now,
-        })),
-      )
-      .onConflictDoUpdate({
-        target: t.path,
-        // Everything but added_at, which keeps the first time the file was seen.
-        set: {
-          folderId: excluded(t.folderId),
-          fileName: excluded(t.fileName),
-          sizeBytes: excluded(t.sizeBytes),
-          modifiedAt: excluded(t.modifiedAt),
-          title: excluded(t.title),
-          titleSort: excluded(t.titleSort),
-          artistId: excluded(t.artistId),
-          albumId: excluded(t.albumId),
-          genreId: excluded(t.genreId),
-          year: excluded(t.year),
-          trackNumber: excluded(t.trackNumber),
-          trackTotal: excluded(t.trackTotal),
-          discNumber: excluded(t.discNumber),
-          discTotal: excluded(t.discTotal),
-          durationMs: excluded(t.durationMs),
-          sampleRate: excluded(t.sampleRate),
-          bitrateKbps: excluded(t.bitrateKbps),
-          artworkHash: excluded(t.artworkHash),
-          hasLyrics: excluded(t.hasLyrics),
-          scannedAt: excluded(t.scannedAt),
-        },
-      })
-      .run();
-  });
-};
-
 /** SQLite's default limit on bound parameters is far above this; it keeps statements small. */
 const DELETE_CHUNK = 500;
 
@@ -724,28 +530,6 @@ const chunks = <A>(items: readonly A[]): A[][] => {
 };
 
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
-
-/**
- * Deletes the albums, artists, genres and folders no track uses any more, then
- * re-picks the artists' images from the albums left.
- */
-const pruneOrphans = (tx: Transaction): void => {
-  // Albums first: they hold the album artist.
-  tx.run(sql`DELETE FROM albums WHERE id NOT IN (SELECT album_id FROM tracks)`);
-  tx.run(sql`DELETE FROM artists WHERE id NOT IN (SELECT artist_id FROM tracks)
-    AND id NOT IN (SELECT album_artist_id FROM albums)`);
-  tx.run(sql`DELETE FROM genres
-    WHERE id NOT IN (SELECT genre_id FROM tracks WHERE genre_id IS NOT NULL)`);
-  tx.run(sql`DELETE FROM folders WHERE id NOT IN (SELECT folder_id FROM tracks)`);
-  refreshArtistImages(tx);
-};
-
-const removeTracksSync = (db: Database, paths: readonly string[]): void => {
-  db.transaction((tx) => {
-    deleteTracks(tx, paths);
-    pruneOrphans(tx);
-  });
-};
 
 const removeRootSync = (db: Database, path: string): void => {
   const { scanRoots, tracks, excludedFolders } = schema;
@@ -805,43 +589,6 @@ const getAlbumSync = (db: Database, id: number): AlbumDetail | null => {
   const rows = trackQuery(db).where(eq(tracks.albumId, id)).all();
   // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
   return { album, genre: genre?.name ?? null, tracks: rows.sort(compareAlbumTracks) };
-};
-
-const getArtistSync = (db: Database, id: number): ArtistDetail | null => {
-  const { artists, albums, tracks } = schema;
-  const artist = db
-    .select({
-      id: artists.id,
-      name: artists.name,
-      sort: artists.sort,
-      thumbPath: schema.artwork.thumbPath,
-      artworkPath: schema.artwork.path,
-    })
-    .from(artists)
-    .leftJoin(schema.artwork, eq(artists.artworkHash, schema.artwork.hash))
-    .where(eq(artists.id, id))
-    .get();
-  if (artist === undefined) return null;
-  const songs = selectArtistSongs(db, id);
-  const split = artistAlbums(
-    id,
-    selectAlbums(
-      db,
-      or(
-        eq(albums.albumArtistId, id),
-        inArray(
-          albums.id,
-          db.select({ id: tracks.albumId }).from(tracks).where(eq(tracks.artistId, id)),
-        ),
-      ),
-    ),
-  );
-  return {
-    artist: { ...artist, albumCount: split.albums.length, trackCount: songs.length },
-    albums: split.albums,
-    appearsOn: split.appearsOn,
-    songs,
-  };
 };
 
 const getGenreSync = (db: Database, id: number): GenreDetail | null => {
@@ -1129,6 +876,12 @@ const make = Effect.gen(function* () {
     try: () => migrate(db, migrations),
     catch: (cause) => new LibraryStoreError({ operation: "migrate", cause }),
   });
+  // After the upgrade that brought credits in, the Library is re-filed under
+  // each credited artist from the tags already stored (no rescan).
+  yield* Effect.try({
+    try: () => relinkCreditsIfUnlinked(db),
+    catch: (cause) => new LibraryStoreError({ operation: "split artist credits", cause }),
+  });
 
   const attempt = <A>(operation: string, run: () => A): Effect.Effect<A, LibraryStoreError> =>
     Effect.try({ try: run, catch: (cause) => new LibraryStoreError({ operation, cause }) });
@@ -1181,9 +934,7 @@ const make = Effect.gen(function* () {
     ),
 
     saveBatch: (tracks, artworkRows, moves = []) =>
-      attempt("save scanned tracks", () =>
-        saveBatchSync(db, tracks, artworkRows, moves, Date.now()),
-      ),
+      attempt("save scanned tracks", () => saveBatch(db, tracks, artworkRows, moves, Date.now())),
 
     markScanned: (roots, at) =>
       attempt("record the scan", () => {
@@ -1222,7 +973,7 @@ const make = Effect.gen(function* () {
             .select({
               id: schema.tracks.id,
               artistId: schema.tracks.artistId,
-              artist: schema.artists.name,
+              artist: schema.tracks.artistCredit,
               albumId: schema.tracks.albumId,
               album: schema.albums.title,
               palette: schema.artwork.palette,
@@ -1272,7 +1023,7 @@ const make = Effect.gen(function* () {
 
     getAlbum: (id) => attempt("open the album", () => getAlbumSync(db, id)),
 
-    getArtist: (id) => attempt("open the artist", () => getArtistSync(db, id)),
+    getArtist: (id) => attempt("open the artist", () => selectArtistDetail(db, id)),
 
     getGenre: (id) => attempt("open the genre", () => getGenreSync(db, id)),
 
@@ -1289,7 +1040,7 @@ const make = Effect.gen(function* () {
               sizeBytes: schema.tracks.sizeBytes,
               durationMs: schema.tracks.durationMs,
               title: schema.tracks.title,
-              artist: schema.artists.name,
+              artist: schema.tracks.artistCredit,
             })
             .from(schema.tracks)
             .innerJoin(schema.artists, eq(schema.tracks.artistId, schema.artists.id))
@@ -1298,7 +1049,7 @@ const make = Effect.gen(function* () {
         ),
       ),
 
-    removeTracks: (paths) => attempt("remove missing songs", () => removeTracksSync(db, paths)),
+    removeTracks: (paths) => attempt("remove missing songs", () => removeTracks(db, paths)),
 
     addExcludedFolder: (path, drop) =>
       attempt("exclude a folder", () =>

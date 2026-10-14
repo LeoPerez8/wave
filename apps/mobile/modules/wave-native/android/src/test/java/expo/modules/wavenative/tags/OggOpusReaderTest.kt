@@ -50,6 +50,20 @@ class OggOpusReaderTest {
     assertTrue(tags.compilation)
   }
 
+  @Test
+  fun everyArtistValueIsKeptAsACreditOfItsOwn() {
+    val block = vorbisComments(
+      "ARTIST=Ariana Grande",
+      "ARTIST=Social House",
+      "ARTIST= ",
+      "ALBUMARTIST=Ariana Grande",
+    )
+    val tags = with(OggOpusReader) { parseComments(block, 0).toRawTags(durationMs = 0, sampleRate = null) }
+    assertEquals("Ariana Grande", tags.artist)
+    assertEquals(listOf("Ariana Grande", "Social House"), tags.artists)
+    assertEquals(listOf("Ariana Grande"), tags.albumArtists)
+  }
+
   private fun vorbisComments(vararg entries: String): ByteArray {
     val out = java.io.ByteArrayOutputStream()
     fun writeInt(value: Int) {
