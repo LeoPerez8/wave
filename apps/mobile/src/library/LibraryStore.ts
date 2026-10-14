@@ -66,6 +66,7 @@ import {
 } from "./db/playHistory";
 import {
   appendPlaylistSongs,
+  linkPlaylistEntries,
   removePlaylistItems,
   replacePlaylistSongs,
   selectPlaylistCovers,
@@ -331,12 +332,21 @@ export class LibraryStore extends Context.Service<
      * Upserts one scanner batch (and the artwork it references) in a single
      * transaction. [moves] first re-point indexed tracks to the paths they were
      * found under, so they keep their id (and with it history and favorites).
+     * Playlists' YT Music entries the saved tracks are become them, unless
+     * [linkEntries] is false (a scan's batches: `linkPlaylistEntries` once it ends).
      */
     readonly saveBatch: (
       tracks: readonly IndexedTrack[],
       artwork: readonly IndexedArtwork[],
       moves?: readonly PathMove[],
+      options?: { readonly linkEntries?: boolean },
     ) => Effect.Effect<void, LibraryStoreError>;
+    /**
+     * Turns playlists' YT Music entries the Library now has into its songs, in
+     * the same place, matched against the whole Library; a scan runs it once
+     * when it ends.
+     */
+    readonly linkPlaylistEntries: Effect.Effect<void, LibraryStoreError>;
     readonly markScanned: (
       roots: readonly string[],
       at: number,
@@ -855,10 +865,16 @@ const make = Effect.gen(function* () {
         .map((row) => row.path),
     ),
 
-    saveBatch: (tracks, artworkRows, moves = []) =>
+    saveBatch: (tracks, artworkRows, moves = [], options) =>
       attempt("save scanned tracks", () =>
-        saveBatch(db, splits, tracks, artworkRows, moves, Date.now()),
+        saveBatch(db, splits, tracks, artworkRows, moves, Date.now(), options),
       ),
+
+    linkPlaylistEntries: attempt("link playlist entries", () =>
+      db.transaction((tx) => {
+        linkPlaylistEntries(tx);
+      }),
+    ),
 
     markScanned: (roots, at) =>
       attempt("record the scan", () => {

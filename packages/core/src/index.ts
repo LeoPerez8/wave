@@ -619,7 +619,9 @@ export {
   writePlaylistYtSong,
 } from "./playlistEntries.ts";
 export type {
+  HeldPlaylistTrack,
   PlaylistEntryLink,
+  PlaylistEntryLinks,
   PlaylistPlay,
   PlaylistSong,
   StreamedPlaylistEntry,

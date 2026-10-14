@@ -228,6 +228,9 @@ export const writeLyricsAndGenre = (
         .saveBatch(
           [toIndexedTrack(written.track)],
           written.artwork === null ? [] : [toIndexedArtwork(written.artwork)],
+          [],
+          // Its title, artists and length are as they were: no entry links to it now.
+          { linkEntries: false },
         )
         // Drops a genre no song has any more.
         .pipe(

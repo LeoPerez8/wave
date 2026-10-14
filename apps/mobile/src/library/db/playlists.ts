@@ -202,46 +202,79 @@ const LINK_CHUNK = 500;
 
 /**
  * Turns the YT Music entries of every playlist that the Library tracks
- * [trackIds] (just scanned or downloaded) positively are (Core's
- * `playlistEntryLinks`) into those tracks, in the same place. Returns how
- * many entries it turned. Run it inside the caller's transaction.
+ * [trackIds] (just downloaded; the whole Library when not given, as a scan
+ * does once it ends) positively are (Core's `playlistEntryLinks`) into those
+ * tracks, in the same place; an entry whose track its playlist already holds
+ * is removed instead. Returns how many entries it changed. Does nothing (one
+ * small query) while no playlist holds a YT Music entry. Run it inside the
+ * caller's transaction.
  */
-export const linkPlaylistEntries = (db: LibraryDatabase, trackIds: readonly number[]): number => {
+export const linkPlaylistEntries = (db: LibraryDatabase, trackIds?: readonly number[]): number => {
   const { playlistItems, tracks } = schema;
-  if (trackIds.length === 0) return 0;
-  const entries = db
-    .select({ itemId: playlistItems.id, ytSong: playlistItems.ytSong })
+  if (trackIds?.length === 0) return 0;
+  const anyEntry = db
+    .select({ id: playlistItems.id })
     .from(playlistItems)
     .where(isNotNull(playlistItems.ytSong))
+    .limit(1)
+    .get();
+  if (anyEntry === undefined) return 0;
+  const entries = db
+    .select({
+      itemId: playlistItems.id,
+      playlistId: playlistItems.playlistId,
+      ytSong: playlistItems.ytSong,
+    })
+    .from(playlistItems)
+    .where(isNotNull(playlistItems.ytSong))
+    .orderBy(asc(playlistItems.playlistId), asc(playlistItems.position), asc(playlistItems.id))
     .all()
-    .flatMap(({ itemId, ytSong }) => {
+    .flatMap(({ itemId, playlistId, ytSong }) => {
       const song = ytSong === null ? null : readPlaylistYtSong(ytSong);
-      return song === null ? [] : [{ itemId, song }];
+      return song === null ? [] : [{ itemId, playlistId, song }];
     });
   if (entries.length === 0) return 0;
-  const library = [];
-  for (let i = 0; i < trackIds.length; i += LINK_CHUNK) {
+  const columns = {
+    id: tracks.id,
+    title: tracks.title,
+    artist: tracks.artistCredit,
+    durationMs: tracks.durationMs,
+  };
+  const library: { id: number; title: string; artist: string; durationMs: number }[] =
+    trackIds === undefined ? db.select(columns).from(tracks).all() : [];
+  for (let i = 0; trackIds !== undefined && i < trackIds.length; i += LINK_CHUNK) {
     library.push(
       ...db
-        .select({
-          id: tracks.id,
-          title: tracks.title,
-          artist: tracks.artistCredit,
-          durationMs: tracks.durationMs,
-        })
+        .select(columns)
         .from(tracks)
         .where(inArray(tracks.id, trackIds.slice(i, i + LINK_CHUNK)))
         .all(),
     );
   }
-  const links = playlistEntryLinks(entries, library);
+  const held = db
+    .select({ playlistId: playlistItems.playlistId, trackId: playlistItems.trackId })
+    .from(playlistItems)
+    .where(
+      and(
+        isNotNull(playlistItems.trackId),
+        inArray(playlistItems.playlistId, [...new Set(entries.map((entry) => entry.playlistId))]),
+      ),
+    )
+    .all()
+    .flatMap(({ playlistId, trackId }) => (trackId === null ? [] : [{ playlistId, trackId }]));
+  const { links, drops } = playlistEntryLinks(entries, library, held);
   for (const { itemId, trackId } of links) {
     db.update(playlistItems)
       .set({ trackId, ytSong: null })
       .where(and(eq(playlistItems.id, itemId), isNull(playlistItems.trackId)))
       .run();
   }
-  return links.length;
+  for (let i = 0; i < drops.length; i += LINK_CHUNK) {
+    db.delete(playlistItems)
+      .where(inArray(playlistItems.id, drops.slice(i, i + LINK_CHUNK)))
+      .run();
+  }
+  return links.length + drops.length;
 };
 
 /** A playlist's mosaic: thumbnails for lists and menus, full-size covers for its screen's header. */

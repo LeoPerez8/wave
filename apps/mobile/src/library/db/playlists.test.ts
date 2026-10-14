@@ -234,6 +234,35 @@ describe("linkPlaylistEntries", () => {
     assert.equal(titles().at(-1), "Lucky");
   });
 
+  test("a scan's batches can leave linking to its end, which links against the whole Library", () => {
+    appendPlaylistSongs(db, playlistId, [stream(yt("a", { title: "Lucky" }))], 0);
+    saveBatch(db, creditSplits(), [indexedTrack("Lucky", "Radiohead", 180_000)], [], [], 0, {
+      linkEntries: false,
+    });
+    assert.equal(titles().at(-1), "yt:Lucky");
+    assert.equal(linkPlaylistEntries(db), 1);
+    assert.equal(titles().at(-1), "Lucky");
+  });
+
+  test("an entry whose song its playlist already holds from the Library is dropped, not doubled", () => {
+    const luckyId = addTrack(db, { title: "Lucky", artist: "Radiohead", durationMs: 180_000 });
+    ids.Lucky = luckyId;
+    appendPlaylistSongs(db, playlistId, [library("Lucky"), stream(yt("a", { title: "Lucky" }))], 0);
+    linkPlaylistEntries(db, [luckyId]);
+    assert.deepEqual(titles(), ["Daydreaming", "Airbag", "Creep", "Airbag", "Lucky"]);
+  });
+
+  test("of two entries of a playlist that become one Library song, the later is dropped", () => {
+    const otherId = newPlaylist("Other");
+    const uploads = [yt("a", { title: "Lucky" }), yt("b", { title: "Lucky", durationMs: 181_000 })];
+    appendPlaylistSongs(db, playlistId, [stream(uploads[0]!), library("Bloom"), stream(uploads[1]!)], 0);
+    appendPlaylistSongs(db, otherId, [stream(uploads[1]!)], 0);
+    const luckyId = addTrack(db, { title: "Lucky", artist: "Radiohead", durationMs: 180_000 });
+    linkPlaylistEntries(db, [luckyId]);
+    assert.deepEqual(titles(), ["Daydreaming", "Airbag", "Creep", "Airbag", "Lucky", "Bloom"]);
+    assert.deepEqual(titlesOf(otherId), ["Lucky"]);
+  });
+
   test("deleting the Library song then takes its entries out, as for any Library song", () => {
     appendPlaylistSongs(db, playlistId, [stream(yt("a", { title: "Lucky" }))], 0);
     const luckyId = addTrack(db, { title: "Lucky", artist: "Radiohead" });
