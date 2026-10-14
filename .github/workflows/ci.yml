@@ -113,7 +113,11 @@ jobs:
 
       - name: Build release APK
         working-directory: apps/mobile/android
-        run: ../../../scripts/ci/step.sh "Gradle assembleRelease" ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon --console=plain
+        run: ../../../scripts/ci/step.sh "Gradle assembleRelease" ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon --console=plain --profile
+
+      - name: CMake task times
+        if: always()
+        run: scripts/ci/cmake-times.sh apps/mobile/android
 
       - name: Collect APK
         id: apk
