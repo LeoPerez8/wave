@@ -38,7 +38,8 @@ const library = [
 /** Each track's planned play times. */
 const datesByTrack = (plays: readonly { trackId: number; startedAt: number }[]) => {
   const dates = new Map<number, number[]>();
-  for (const play of plays) dates.set(play.trackId, [...(dates.get(play.trackId) ?? []), play.startedAt]);
+  for (const play of plays)
+    dates.set(play.trackId, [...(dates.get(play.trackId) ?? []), play.startedAt]);
   return Object.fromEntries([...dates].map(([id, times]) => [id, times.toSorted((a, b) => a - b)]));
 };
 
@@ -82,7 +83,9 @@ describe("planBlackPlayerImport: dating", () => {
   });
 
   test("the same snapshot picked twice counts once", () => {
-    const rows = [{ title: "Airbag", artist: "Radiohead", plays: 2, addedAt: 0, lastPlayedAt: 2_000 }];
+    const rows = [
+      { title: "Airbag", artist: "Radiohead", plays: 2, addedAt: 0, lastPlayedAt: 2_000 },
+    ];
     const plan = planBlackPlayerImport(
       [snapshot("a.bpstat", rows), snapshot("a.bpstat (1)", rows)],
       library,
@@ -142,7 +145,11 @@ describe("summarizeBlackPlayerImport", () => {
   ];
 
   test("says how many plays and songs were imported, and lists the songs not in the Library", () => {
-    const files = [snapshot("a.bpstat", rows), { name: "notes.txt", text: "hello" }, { name: "b.bpstat", text: null }];
+    const files = [
+      snapshot("a.bpstat", rows),
+      { name: "notes.txt", text: "hello" },
+      { name: "b.bpstat", text: null },
+    ];
     assert.deepEqual(summarizeBlackPlayerImport(planBlackPlayerImport(files, library, [])), {
       title: "Imported BlackPlayer stats",
       sections: [
@@ -177,21 +184,29 @@ describe("summarizeBlackPlayerImport", () => {
   });
 });
 
-describe("planBlackPlayerImport: matching", () => {
-  const row = (overrides: Partial<Row> & Pick<Row, "title" | "artist">): Row => ({
-    plays: 1,
-    addedAt: 0,
-    lastPlayedAt: 1_000,
-    ...overrides,
-  });
+/** A row with one play, unless [overrides] say otherwise. */
+const row = (overrides: Partial<Row> & Pick<Row, "title" | "artist">): Row => ({
+  plays: 1,
+  addedAt: 0,
+  lastPlayedAt: 1_000,
+  ...overrides,
+});
 
+describe("planBlackPlayerImport: matching", () => {
   test("a row matches the Library song at its path, in any case", () => {
     const plan = planBlackPlayerImport(
-      [snapshot("a.bpstat", [row({ title: "x", artist: "y", path: pathOf(library[0]!).toUpperCase() })])],
+      [
+        snapshot("a.bpstat", [
+          row({ title: "x", artist: "y", path: pathOf(library[0]!).toUpperCase() }),
+        ]),
+      ],
       library,
       [],
     );
-    assert.deepEqual(plan.plays.map((play) => play.trackId), [1]);
+    assert.deepEqual(
+      plan.plays.map((play) => play.trackId),
+      [1],
+    );
     assert.deepEqual(plan.unmatched, []);
   });
 
@@ -199,13 +214,20 @@ describe("planBlackPlayerImport: matching", () => {
     const plan = planBlackPlayerImport(
       [
         snapshot("a.bpstat", [
-          row({ title: "BLOOM (Remastered 2011)", artist: "radiohead", path: `${MUSIC}/Rock/Bloom.mp3` }),
+          row({
+            title: "BLOOM (Remastered 2011)",
+            artist: "radiohead",
+            path: `${MUSIC}/Rock/Bloom.mp3`,
+          }),
         ]),
       ],
       library,
       [],
     );
-    assert.deepEqual(plan.plays.map((play) => play.trackId), [2]);
+    assert.deepEqual(
+      plan.plays.map((play) => play.trackId),
+      [2],
+    );
   });
 
   test("rows that match no Library song are listed by artist and title, with their plays", () => {

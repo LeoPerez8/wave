@@ -135,6 +135,23 @@ class WaveNativeModule : Module() {
       activity.startActivityForResult(intent, PICK_PLAYLISTS_REQUEST)
     }.runOnQueue(Queues.MAIN)
 
+    /**
+     * Opens the system file picker for one or more files of any type (BlackPlayer's
+     * `.bpstat` track stats have no MIME type of their own) and resolves them as
+     * `pickPlaylistFiles` does.
+     */
+    AsyncFunction("pickStatFiles") { promise: Promise ->
+      val activity = appContext.currentActivity ?: throw Exceptions.MissingActivity()
+      pendingPlaylistPick?.resolve(emptyList<Map<String, Any?>>())
+      pendingPlaylistPick = promise
+      val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+        addCategory(Intent.CATEGORY_OPENABLE)
+        type = "*/*"
+        putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+      }
+      activity.startActivityForResult(intent, PICK_PLAYLISTS_REQUEST)
+    }.runOnQueue(Queues.MAIN)
+
     OnActivityResult { _, payload ->
       when (payload.requestCode) {
         PICK_FOLDER_REQUEST -> onFolderPicked(payload)

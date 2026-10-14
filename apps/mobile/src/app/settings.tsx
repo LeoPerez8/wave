@@ -1,6 +1,7 @@
 import { IconCheck } from "@tabler/icons-react-native";
 import { SHORTCUT_TAB_CHOICES } from "@wave/core";
 import { router } from "expo-router";
+import { useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
@@ -12,6 +13,7 @@ import { ScreenHeader } from "@/components/ScreenHeader";
 import { SettingsSlider } from "@/components/SettingsSlider";
 import { TextButton } from "@/components/TextButton";
 import { useScanRoots, useScanState } from "@/library/hooks";
+import { importBlackPlayerStats } from "@/library/importBlackPlayerStats";
 import { startRescan } from "@/library/runtime";
 import { Press } from "@/motion/Press";
 import { ArtistPhotosSettingsSection } from "@/settings/ArtistPhotosSettingsSection";
@@ -57,6 +59,30 @@ function ShortcutChoice({
   );
 }
 
+/** Import BlackPlayer Stats, with what it does. */
+function BlackPlayerImport() {
+  const [importing, setImporting] = useState(false);
+  const start = () => {
+    setImporting(true);
+    void importBlackPlayerStats().finally(() => setImporting(false));
+  };
+  return (
+    <>
+      <View className="mt-4 items-start">
+        <TextButton
+          label={importing ? "Importing…" : "Import BlackPlayer Stats"}
+          disabled={importing}
+          onPress={start}
+        />
+      </View>
+      <Text className="font-sans text-footnote text-secondary">
+        Adds the plays in BlackPlayer's track stats files to your listening history. Pick every
+        snapshot you have: comparing them dates the plays. Importing again only adds new plays.
+      </Text>
+    </>
+  );
+}
+
 export default function SettingsScreen() {
   const ms = useTapAnimationMs();
   const longPressMs = useLongPressDelayMs();
@@ -89,6 +115,7 @@ export default function SettingsScreen() {
           Wave picks up new, changed and removed files each time you open it, and when you pull down
           in the Library.
         </Text>
+        <BlackPlayerImport />
 
         <CatalogLine className="mb-2 mt-12">Motion</CatalogLine>
         <Hairline />

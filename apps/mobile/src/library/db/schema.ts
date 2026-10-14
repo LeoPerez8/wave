@@ -363,6 +363,11 @@ export const playEvents = sqliteTable(
      * (read the track instead), and for tracks that left before Wave kept it.
      */
     albumId: integer("album_id"),
+    /**
+     * Where an imported play came from (`blackplayer`: BlackPlayer's track
+     * stats, `db/blackPlayer.ts`); null for Wave's own plays.
+     */
+    importedFrom: text("imported_from", { enum: ["blackplayer"] }),
   },
   (t) => [
     index("play_events_track_idx").on(t.trackId),

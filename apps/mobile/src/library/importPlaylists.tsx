@@ -75,8 +75,11 @@ export const importPlaylists = async (): Promise<void> => {
   }
 };
 
-/** The summary card: what each file became, and the entries left out, scrolling when long. */
-const showImportSummary = (summary: M3uImportSummary): Promise<void> =>
+/**
+ * The summary card: what each file became, and the entries left out,
+ * scrolling when long. The BlackPlayer stats import shows its summary in it too.
+ */
+export const showImportSummary = (summary: M3uImportSummary): Promise<void> =>
   presentOverlay<void>({
     label: summary.title,
     dismissed: undefined,

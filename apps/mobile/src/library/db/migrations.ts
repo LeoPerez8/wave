@@ -324,6 +324,13 @@ ALTER TABLE \`albums\` ADD \`album_artist_credits\` text;
 UPDATE \`tracks\` SET \`modified_at\` = 0;
 `;
 
+// Plays imported from BlackPlayer's track stats (docs/spec.md, "Importing
+// BlackPlayer stats"): marked, so an import never adds the same plays twice.
+// Wave's own plays are null.
+const mImportedPlays = `
+ALTER TABLE \`play_events\` ADD \`imported_from\` text;
+`;
+
 export default {
   journal: {
     entries: [
@@ -343,6 +350,7 @@ export default {
       { idx: 13, when: 1_792_929_600_000, tag: "0013_deleted_track_artists", breakpoints: true },
       { idx: 14, when: 1_793_016_000_000, tag: "0014_yt_artists", breakpoints: true },
       { idx: 15, when: 1_793_102_400_000, tag: "0015_tag_credits", breakpoints: true },
+      { idx: 16, when: 1_793_188_800_000, tag: "0016_imported_plays", breakpoints: true },
     ],
   },
   migrations: {
@@ -362,5 +370,6 @@ export default {
     m0013,
     m0014,
     m0015,
+    m0016: mImportedPlays,
   },
 };
