@@ -63,6 +63,25 @@ class YtSearchParserTest {
   }
 
   @Test
+  fun readsEveryAlbumOfAnAlbumsSearch() {
+    val albums = YtSearchParser.albums(Fixtures.file("yt/search-albums.json").readText())
+    assertEquals(8, albums.size)
+    val album = albums.first()
+    assertEquals("MPREb_GIfNGta2miN", album.browseId)
+    assertEquals("Watch The Throne (Deluxe)", album.title)
+    assertEquals(listOf("JAŸ-Z", "Kanye West"), album.artists)
+    assertEquals(2011, album.year)
+    assertTrue("the largest cover", album.artworkUrl!!.contains("w544-h544"))
+    assertEquals(listOf("Kanye West"), albums[1].artists)
+  }
+
+  @Test
+  fun aSearchWithoutAlbumsHasNone() {
+    assertTrue(YtSearchParser.albums(Fixtures.file("yt/search-artists-none.json").readText()).isEmpty())
+    assertTrue(YtSearchParser.albums("""{"contents":{}}""").isEmpty())
+  }
+
+  @Test
   fun readsDurationsInEveryNotation() {
     assertEquals(370_000L, YtSearchParser.durationMs("6:10"))
     assertEquals(3_723_000L, YtSearchParser.durationMs("1:02:03"))
