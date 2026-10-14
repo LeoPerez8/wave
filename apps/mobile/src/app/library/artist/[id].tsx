@@ -1,11 +1,5 @@
 import { LegendList } from "@legendapp/list/react-native";
-import {
-  pagePlayback,
-  ytTrackId,
-  type MixedSong,
-  type YtArtistAlbum,
-  type YtSong,
-} from "@wave/core";
+import { ytTrackId, type MixedSong, type YtArtistAlbum, type YtSong } from "@wave/core";
 import { useLocalSearchParams } from "expo-router";
 import { useCallback, useMemo } from "react";
 import { Text, useWindowDimensions, View } from "react-native";
@@ -260,7 +254,7 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
   // Play, Shuffle and rows play this list by one rule (`playPage`): with YouTube Music's songs
   // on the page (an integrated view) the mixed list, the Library's files and the top songs
   // streamed, and the Library's rows are marked downloaded; otherwise the Library's songs alone.
-  const downloaded = useMemo(() => pagePlayback(mixed).kind === "mixed", [mixed]);
+  const downloaded = additions.songs.length > 0;
   const items = useMemo(() => artistItems(detail, songs, additions), [detail, songs, additions]);
   // Albums and songs select together; the bar acts on them in page order.
   const selectable = useMemo(() => selectableItems(detail, songs), [detail, songs]);
