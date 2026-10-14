@@ -188,7 +188,12 @@ export type { OverlayAnchor, OverlayRect } from "./overlay.ts";
 export type { CardKeyboard, OverlayAlign, OverlayFlow } from "./overlay.ts";
 export { moveSlide, slideEntry, slideTicks, startSlide } from "./slideToChoose.ts";
 export type { MenuSlide, SlidePoint } from "./slideToChoose.ts";
-export { SHORTCUT_TAB_CHOICES, parseShortcutTab, tabBarTabs } from "./shortcutTab.ts";
+export {
+  SHORTCUT_TAB_CHOICES,
+  parseShortcutTab,
+  storedShortcutTab,
+  tabBarTabs,
+} from "./shortcutTab.ts";
 export type { TabBarTab } from "./shortcutTab.ts";
 export { TAB_PATH, detailPath, inLibraryStack, isDetailPath, tabOfPath } from "./navigation.ts";
 export type { DetailScreen } from "./navigation.ts";
