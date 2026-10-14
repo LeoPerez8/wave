@@ -153,6 +153,7 @@ export {
   autoPlaylistItem,
   autoQueueAdd,
   autoQueueStart,
+  autoListPlay,
   autoTrackItems,
   decodeAutoMediaId,
   encodeAutoMediaId,
@@ -167,6 +168,7 @@ export type {
   AutoItem,
   AutoNode,
   AutoPlaylist,
+  AutoListPlay,
   AutoQueueStart,
   AutoSource,
   AutoTab,
@@ -394,6 +396,7 @@ export {
   describeTagLookups,
   lacksTrackNumber,
   libraryLookupSongs,
+  libraryTagsToWrite,
   lookupsUnreachable,
   lrclibCandidates,
   lrclibSearchUrl,
@@ -620,7 +623,9 @@ export {
   writePlaylistYtSong,
 } from "./playlistEntries.ts";
 export type {
+  HeldPlaylistTrack,
   PlaylistEntryLink,
+  PlaylistEntryLinks,
   PlaylistPlay,
   PlaylistSong,
   StreamedPlaylistEntry,

@@ -83,6 +83,15 @@ describe("sectionSongCounts", () => {
         .values({ playlistId: drive, trackId, position, addedAt: 0 })
         .run();
     }
+    // The section queues a playlist's Library songs only, so a YT Music entry isn't counted.
+    db.insert(schema.playlistItems)
+      .values({
+        playlistId: drive,
+        ytSong: JSON.stringify({ videoId: "a", title: "Lucky", artists: ["Radiohead"] }),
+        position: 3,
+        addedAt: 0,
+      })
+      .run();
 
     assert.deepEqual(sectionSongCounts(db), {
       playlists: 3,
