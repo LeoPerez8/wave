@@ -122,6 +122,8 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
   pickFolder(): Promise<FolderPick>;
   /** Opens the system file picker for M3U playlists; one result per picked file, none when cancelled. */
   pickPlaylistFiles(): Promise<readonly PickedPlaylistFile[]>;
+  /** Opens the system file picker for files of any type (BlackPlayer's stats), read as `pickPlaylistFiles` reads them. */
+  pickStatFiles(): Promise<readonly PickedPlaylistFile[]>;
   /**
    * Starts a scan, cancelling any running one, and returns its id. The known
    * files (parallel lists) make it incremental: files with the same size and

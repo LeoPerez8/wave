@@ -6,6 +6,9 @@ import {
   rememberSearch,
   moveItem,
   sortKey,
+  type BlackPlayerPlay,
+  type BlackPlayerTrack,
+  type ImportedPlays,
   type IndexedFile,
   type PlaylistSong,
   type LibraryTrack,
@@ -28,6 +31,7 @@ import { openDatabaseSync } from "expo-sqlite";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 
 import { selectAlbums } from "./db/albums";
+import { importedPlays, saveImportedPlays, selectImportTracks } from "./db/blackPlayer";
 import {
   selectArtistCovers,
   selectArtistDetail,
@@ -459,6 +463,14 @@ export class LibraryStore extends Context.Service<
       readonly { readonly id: number; readonly path: string }[],
       LibraryStoreError
     >;
+    /** Every track with what a BlackPlayer stats import matches its rows by. */
+    readonly importTracks: Effect.Effect<readonly BlackPlayerTrack<number>[], LibraryStoreError>;
+    /** Each track's BlackPlayer plays already in the history, in no order. */
+    readonly importedPlays: Effect.Effect<readonly ImportedPlays<number>[], LibraryStoreError>;
+    /** Adds plays imported from BlackPlayer to the history: counted, and marked as imported. */
+    readonly saveImportedPlays: (
+      plays: readonly BlackPlayerPlay<number>[],
+    ) => Effect.Effect<void, LibraryStoreError>;
     /** The ids of every starred track. */
     readonly favoriteTrackIds: Effect.Effect<readonly number[], LibraryStoreError>;
     /** Stars (or unstars) the tracks; those starred already keep when they were starred. */
@@ -1075,6 +1087,13 @@ const make = Effect.gen(function* () {
       ),
 
     trackPaths: attempt("read the library's files", () => selectTrackPaths(db)),
+
+    importTracks: attempt("read the library's songs", () => selectImportTracks(db)),
+
+    importedPlays: attempt("read the imported plays", () => importedPlays(db)),
+
+    saveImportedPlays: (plays) =>
+      attempt("save the imported plays", () => saveImportedPlays(db, plays)),
 
     favoriteTrackIds: attempt("read favorites", () =>
       db

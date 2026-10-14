@@ -83,7 +83,7 @@ export interface LibraryPathIndex<Id> {
 }
 
 /** Android's shared storage ignores case, so a path may be written in any. */
-const pathKey = (path: string): string => path.normalize("NFC").toLowerCase();
+export const pathKey = (path: string): string => path.normalize("NFC").toLowerCase();
 
 /** An index of the Library's tracks by path, built once for any number of imports. */
 export const libraryPathIndex = <Id>(

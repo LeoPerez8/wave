@@ -443,6 +443,16 @@ export type {
   M3uImportOutcome,
   M3uImportSummary,
 } from "./m3u.ts";
+export { parseBpstat, planBlackPlayerImport, summarizeBlackPlayerImport } from "./blackPlayer.ts";
+export type {
+  BlackPlayerFile,
+  BlackPlayerImport,
+  BlackPlayerPlay,
+  BlackPlayerTrack,
+  BlackPlayerUnmatched,
+  BpstatRow,
+  ImportedPlays,
+} from "./blackPlayer.ts";
 export { libraryTrackIds, playerErrorNotice, queuedYtTracks, restorableTrack } from "./ytQueue.ts";
 export type { PlayerErrorCode, RestorableTracks } from "./ytQueue.ts";
 export {

@@ -114,7 +114,7 @@ interface Candidate<L> {
  */
 export const libraryFinder = <L extends LibrarySongKey>(
   library: readonly L[],
-): ((song: YtSong) => L | null) => {
+): ((song: Pick<YtSong, "title" | "artists" | "durationMs">) => L | null) => {
   const byTitle = new Map<string, Candidate<L>[]>();
   for (const song of library) {
     const title = matchTitle(song.title);
