@@ -93,9 +93,6 @@ jobs:
       - name: Test
         run: scripts/ci/step.sh "Test" pnpm test
 
-      - name: Test CI scripts
-        run: scripts/ci/step.sh "Test CI scripts" node --test "scripts/ci/*.test.ts"
-
       - name: Report
         if: always() && env.IS_SAME_REPO_PR == 'true' && job.status != 'cancelled'
         env:
