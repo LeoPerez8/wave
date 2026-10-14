@@ -2,6 +2,8 @@ import { LegendList } from "@legendapp/list/react-native";
 import { IconUser } from "@tabler/icons-react-native";
 import {
   artistInitial,
+  artistPageItems,
+  type ArtistPageItem,
   type DiscoverSong,
   type YtArtistPageNote,
   type YtArtistRelease,
@@ -14,12 +16,13 @@ import { Text, useWindowDimensions, View } from "react-native";
 
 import { AlbumTile } from "@/catalog/AlbumTile";
 import { CatalogLine } from "@/catalog/CatalogLine";
+import { COVER_ROW_TILE, CoverRow } from "@/catalog/CoverRow";
 import { CELL, grid } from "@/catalog/grid";
 import { PlayShuffle } from "@/catalog/PlayShuffle";
 import { useChromeInset } from "@/chrome/chrome";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { TextButton } from "@/components/TextButton";
-import { albumRowHeight, toAlbumSummary, useAlbumTileSize } from "@/library/AlbumGrid";
+import { albumRowHeight, toAlbumSummary } from "@/library/AlbumGrid";
 import type { AlbumRow, SongRow } from "@/library/LibraryStore";
 import { openAlbum } from "@/library/routes";
 import { useListScrollable } from "@/motion/heldTouch";
@@ -35,16 +38,18 @@ import { YT_ARTIST_BY_NAME } from "@/ytmusic/routes";
 type Song = DiscoverSong<NativeYtSong, SongRow>;
 type Release = YtArtistRelease<AlbumRow>;
 
-type Item =
-  | { readonly type: "section"; readonly label: string }
-  | {
-      readonly type: "releases";
-      readonly kind: YtArtistShelf<AlbumRow>["kind"];
-      readonly releases: readonly Release[];
-    }
-  | { readonly type: "song"; readonly song: Song; readonly index: number };
+/** A cover on a shelf: the release, and the shelf it's on (its furniture line falls back to it). */
+interface Cover {
+  readonly kind: YtArtistShelf<AlbumRow>["kind"];
+  readonly release: Release;
+}
+
+type Item = ArtistPageItem<Cover, Song>;
 
 const SECTION_HEAD = CELL * 6;
+
+/** Height of a shelf's row, the gap under it included. */
+const SHELF_ROW = albumRowHeight(COVER_ROW_TILE);
 
 const NO_SONGS: readonly Song[] = [];
 
@@ -60,66 +65,55 @@ const NOTE: Readonly<Record<YtArtistPageNote, string>> = {
 };
 
 /** As the integrated Library artist page lays it out: the releases, then the songs. */
-const pageItems = (shelves: readonly YtArtistShelf<AlbumRow>[], songs: readonly Song[]): Item[] => {
-  const items: Item[] = [];
-  for (const shelf of shelves) {
-    items.push({ type: "section", label: SHELF_LABEL[shelf.kind] });
-    for (let i = 0; i < shelf.releases.length; i += 2)
-      items.push({ type: "releases", kind: shelf.kind, releases: shelf.releases.slice(i, i + 2) });
-  }
-  if (songs.length > 0) items.push({ type: "section", label: "Songs" });
-  songs.forEach((song, index) => items.push({ type: "song", song, index }));
-  return items;
-};
-
-const releaseKey = (release: Release): string =>
-  release.library === null ? release.album.browseId : `album-${release.library.id}`;
+const pageItems = (shelves: readonly YtArtistShelf<AlbumRow>[], songs: readonly Song[]): Item[] =>
+  artistPageItems(
+    shelves.map((shelf) => ({
+      label: SHELF_LABEL[shelf.kind],
+      covers: shelf.releases.map((release): Cover => ({ kind: shelf.kind, release })),
+    })),
+    songs,
+  );
 
 const itemKey = (item: Item): string => {
   switch (item.type) {
     case "section":
       return `section-${item.label}`;
-    case "releases":
-      return `${item.kind}-${item.releases.map(releaseKey).join("-")}`;
+    case "shelf":
+      return `shelf-${item.label}`;
     case "song":
       return `song-${item.index}-${item.song.song.videoId}`;
   }
 };
 
 /**
- * A row of a shelf: a release the Library has is its album, opened integrated
- * as the page always is; the others are YouTube Music's.
+ * A shelf as one row of covers that scrolls sideways: a release the Library
+ * has is its album, opened integrated as the page always is; the others are
+ * YouTube Music's.
  */
-function ReleasePair({
-  kind,
-  releases,
-  size,
-}: {
-  kind: YtArtistShelf<AlbumRow>["kind"];
-  releases: readonly Release[];
-  size: number;
-}) {
+function ReleaseRow({ covers }: { covers: readonly Cover[] }) {
   return (
-    <View className="flex-row" style={{ gap: grid.gutter, height: albumRowHeight(size) }}>
-      {releases.map(({ album, library }) =>
-        library === null ? (
-          <YtReleaseTile
-            key={album.browseId}
-            album={album}
-            kind={kind}
-            size={size}
-            selecting={false}
-          />
-        ) : (
-          <AlbumTile
-            key={`album-${library.id}`}
-            album={toAlbumSummary(library)}
-            size={size}
-            onPress={() => openAlbum(library.id, library, { integrated: true })}
-            onLongPress={() => openAlbumActions(library)}
-          />
-        ),
-      )}
+    <View style={{ height: SHELF_ROW }}>
+      <CoverRow>
+        {covers.map(({ kind, release: { album, library } }) =>
+          library === null ? (
+            <YtReleaseTile
+              key={album.browseId}
+              album={album}
+              kind={kind}
+              size={COVER_ROW_TILE}
+              selecting={false}
+            />
+          ) : (
+            <AlbumTile
+              key={`album-${library.id}`}
+              album={toAlbumSummary(library)}
+              size={COVER_ROW_TILE}
+              onPress={() => openAlbum(library.id, library, { integrated: true })}
+              onLongPress={() => openAlbumActions(library)}
+            />
+          ),
+        )}
+      </CoverRow>
     </View>
   );
 }
@@ -228,7 +222,6 @@ export default function YtArtistScreen() {
   const knownName = params.name === undefined || params.name === "" ? null : params.name;
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
-  const tile = useAlbumTileSize(grid.margin);
   const { view, retry } = useYtArtistPage(browseId, knownName);
   const songs = view?.songs ?? NO_SONGS;
   const items = useMemo(() => (view === null ? [] : pageItems(view.shelves, view.songs)), [view]);
@@ -250,13 +243,14 @@ export default function YtArtistScreen() {
               <CatalogLine>{item.label}</CatalogLine>
             </View>
           );
-        case "releases":
-          return <ReleasePair kind={item.kind} releases={item.releases} size={tile} />;
+        case "shelf":
+          // Keyed by shelf, so a recycled row doesn't keep another shelf's scroll position.
+          return <ReleaseRow key={item.label} covers={item.covers} />;
         case "song":
           return <DiscoverSongRow song={item.song} onPress={() => play(item.index)} />;
       }
     },
-    [play, tile],
+    [play],
   );
 
   return (
@@ -268,14 +262,9 @@ export default function YtArtistScreen() {
         data={items}
         keyExtractor={itemKey}
         renderItem={renderItem}
-        extraData={tile}
         getItemType={(item) => item.type}
         getFixedItemSize={(item) =>
-          item.type === "section"
-            ? SECTION_HEAD
-            : item.type === "releases"
-              ? albumRowHeight(tile)
-              : grid.row
+          item.type === "section" ? SECTION_HEAD : item.type === "shelf" ? SHELF_ROW : grid.row
         }
         estimatedItemSize={grid.row}
         recycleItems

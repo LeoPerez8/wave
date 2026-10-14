@@ -342,6 +342,8 @@ export { stepNowPlayingSheet } from "./sheetLifecycle.ts";
 export { MORE_FROM_ARTIST } from "./queue.ts";
 export { artistRanking } from "./moreFromArtist.ts";
 export type { ArtistRankingInput, ArtistRankingSong } from "./moreFromArtist.ts";
+export { artistPageItems } from "./artistPage.ts";
+export type { ArtistPageItem, ArtistPageShelf } from "./artistPage.ts";
 export type { SheetEvent, SheetPhase, SheetStep } from "./sheetLifecycle.ts";
 export {
   joinArtists,

@@ -11,6 +11,7 @@ import {
 import { ScrollView, useWindowDimensions, View } from "react-native";
 
 import { AlbumTile } from "@/catalog/AlbumTile";
+import { COVER_ROW_TILE, CoverRow } from "@/catalog/CoverRow";
 import { CELL, grid } from "@/catalog/grid";
 import { TitledSection } from "@/catalog/TitledSection";
 import { TrackRow } from "@/catalog/TrackRow";
@@ -145,9 +146,6 @@ function SongColumns({ shelf, context }: { shelf: Shelf; context: QueueContext }
   );
 }
 
-/** Covers on a shelf leave the next one peeking in at the right edge, like Home's. */
-const SHELF_TILE = CELL * 19;
-
 const artworkOf = (item: Item): string | null =>
   item.kind === "song" ? item.song.song.artworkUrl : item.artworkUrl;
 
@@ -155,15 +153,8 @@ const titleOf = (item: Item): string => (item.kind === "song" ? item.song.song.t
 
 /** A shelf of covers (mixes, albums, playlists): a row that scrolls sideways, edge to edge. */
 function TileShelf({ shelf, context }: { shelf: Shelf; context: QueueContext }) {
-  const scrollable = useListScrollable();
   return (
-    <ScrollView
-      scrollEnabled={scrollable}
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      style={{ marginHorizontal: -grid.margin }}
-      contentContainerStyle={{ paddingHorizontal: grid.margin, gap: grid.gutter }}
-    >
+    <CoverRow>
       {shelf.items.map((item, index) => {
         const caption = discoverTileCaption(item);
         const artworkUrl = artworkOf(item);
@@ -178,7 +169,7 @@ function TileShelf({ shelf, context }: { shelf: Shelf; context: QueueContext }) 
               durationMs: 0,
               artworkUri: artworkUrl ?? undefined,
             }}
-            size={SHELF_TILE}
+            size={COVER_ROW_TILE}
             detail={caption.detail}
             onPress={() =>
               runDiscoverAction(discoverItemAction(shelf, index), context, {
@@ -202,7 +193,7 @@ function TileShelf({ shelf, context }: { shelf: Shelf; context: QueueContext }) 
           />
         );
       })}
-    </ScrollView>
+    </CoverRow>
   );
 }
 
