@@ -14,14 +14,7 @@ import type { StreamedArtistLink } from "./streamedArtist.ts";
  * several kinds checked together (an artist page's albums and songs): they
  * get only the entries every kind offers.
  */
-export type ItemKind =
-  | "track"
-  | "album"
-  | "artist"
-  | "playlist"
-  | "genre"
-  | "section"
-  | "mixed";
+export type ItemKind = "track" | "album" | "artist" | "playlist" | "genre" | "section" | "mixed";
 
 /** The kind of items checked together: theirs when they're all one kind, otherwise `mixed`. */
 export const commonKind = (kinds: readonly Exclude<ItemKind, "mixed">[]): ItemKind => {

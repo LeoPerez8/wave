@@ -10,13 +10,7 @@ import {
 import type { ArtistImageSource } from "@/catalog/ArtistImage";
 import type { LibrarySection } from "@/catalog/sections";
 import type { LibraryCounts } from "@/library/db/counts";
-import type {
-  AlbumRow,
-  ArtistRow,
-  GenreRow,
-  PlaylistRow,
-  SongRow,
-} from "@/library/LibraryStore";
+import type { AlbumRow, ArtistRow, GenreRow, PlaylistRow, SongRow } from "@/library/LibraryStore";
 import { itemSongs, librarySectionSongs } from "@/library/sectionSongs";
 
 /**

@@ -8,13 +8,7 @@ import { Mosaic } from "@/catalog/Mosaic";
 import type { LibrarySection } from "@/catalog/sections";
 import type { LibraryCounts } from "@/library/db/counts";
 import { useSectionSongCounts } from "@/library/hooks";
-import type {
-  AlbumRow,
-  ArtistRow,
-  GenreRow,
-  PlaylistRow,
-  SongRow,
-} from "@/library/LibraryStore";
+import type { AlbumRow, ArtistRow, GenreRow, PlaylistRow, SongRow } from "@/library/LibraryStore";
 import { pressedRect } from "@/motion/pressedRect";
 import { CardEntries } from "@/overlay/CardEntries";
 import { CardHeading } from "@/overlay/CardHeading";
