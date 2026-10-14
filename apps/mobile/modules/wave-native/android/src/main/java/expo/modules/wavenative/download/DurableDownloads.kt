@@ -179,6 +179,9 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
 
   fun hasWork(): Boolean = published.any(::pending)
 
+  /** How many songs are still to download, the current one included; the notification counts them. */
+  fun pendingCount(): Int = published.count(::pending)
+
   /** The job the serial worker is on, else the next one waiting; what the notification shows. */
   fun current(): Map<String, Any?>? = next(published)
 

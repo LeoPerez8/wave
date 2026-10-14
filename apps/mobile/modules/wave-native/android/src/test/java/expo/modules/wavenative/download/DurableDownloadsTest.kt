@@ -761,6 +761,17 @@ class DurableDownloadsTest {
     } finally { folder.deleteRecursively() }
   }
 
+  @Test fun theNotificationCountsTheSongsLeftOfAnAlbum() {
+    val folder = Files.createTempDirectory("wave-album").toFile()
+    try {
+      val owner = DurableDownloads(File(folder, "jobs"))
+      for (id in listOf("one", "two", "three")) owner.enqueue(mapOf("videoId" to id, "title" to id), null)
+      assertEquals(3, owner.pendingCount())
+      owner.cancel("two", NoTransfer)
+      assertEquals(2, owner.pendingCount())
+    } finally { folder.deleteRecursively() }
+  }
+
   private object NoTransfer : DurableTransfer {
     override fun receive(id: String, candidate: Map<String, Any?>, source: File, durationMs: Long, progress: (Long, Long, Long?) -> Unit): Map<String, Any?> = error("No transfer expected")
     override fun cancel(id: String) {}
