@@ -1,4 +1,11 @@
-import { type AnySQLiteColumn, index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import {
+  type AnySQLiteColumn,
+  index,
+  integer,
+  primaryKey,
+  sqliteTable,
+  text,
+} from "drizzle-orm/sqlite-core";
 
 /**
  * Library schema. The store is the single owner of these tables; every change
@@ -69,9 +76,12 @@ export const albums = sqliteTable(
     key: text("key").notNull().unique(),
     title: text("title").notNull(),
     titleSort: text("title_sort").notNull(),
+    /** The primary album artist: the first one [albumArtistCredit] names (see `albumArtists`). */
     albumArtistId: integer("album_artist_id")
       .notNull()
       .references(() => artists.id),
+    /** The album artist credit as written ("Ariana Grande, Social House"), which rows show. */
+    albumArtistCredit: text("album_artist_credit").notNull().default(""),
     year: integer("year"),
     artworkHash: text("artwork_hash").references(() => artwork.hash),
     compilation: integer("compilation", { mode: "boolean" }).notNull().default(false),
@@ -96,9 +106,12 @@ export const tracks = sqliteTable(
     modifiedAt: integer("modified_at").notNull(),
     title: text("title").notNull(),
     titleSort: text("title_sort").notNull(),
+    /** The primary artist: the first one [artistCredit] names (see `trackArtists`). */
     artistId: integer("artist_id")
       .notNull()
       .references(() => artists.id),
+    /** The artist credit as written ("Ariana Grande, Doja Cat"), which rows show. */
+    artistCredit: text("artist_credit").notNull().default(""),
     albumId: integer("album_id")
       .notNull()
       .references(() => albums.id),
@@ -128,6 +141,49 @@ export const tracks = sqliteTable(
     index("tracks_album_idx").on(t.albumId),
     index("tracks_genre_idx").on(t.genreId),
     index("tracks_folder_idx").on(t.folderId),
+  ],
+);
+
+/**
+ * Every artist a track's credit names (Core's `creditSplitter`), in credit
+ * order: position 0 is the primary artist (`tracks.artist_id`).
+ */
+export const trackArtists = sqliteTable(
+  "track_artists",
+  {
+    trackId: integer("track_id")
+      .notNull()
+      .references(() => tracks.id, { onDelete: "cascade" }),
+    artistId: integer("artist_id")
+      .notNull()
+      .references(() => artists.id),
+    position: integer("position").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.trackId, t.position] }),
+    index("track_artists_artist_idx").on(t.artistId),
+  ],
+);
+
+/**
+ * Every artist an album's album artist credit names, in credit order: the
+ * album is filed under position 0 (`albums.album_artist_id`) and appears on
+ * the others' pages.
+ */
+export const albumArtists = sqliteTable(
+  "album_artists",
+  {
+    albumId: integer("album_id")
+      .notNull()
+      .references(() => albums.id, { onDelete: "cascade" }),
+    artistId: integer("artist_id")
+      .notNull()
+      .references(() => artists.id),
+    position: integer("position").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.albumId, t.position] }),
+    index("album_artists_artist_idx").on(t.artistId),
   ],
 );
 

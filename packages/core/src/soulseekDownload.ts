@@ -1,3 +1,4 @@
+import { splitCredit } from "./credits.ts";
 import { normalizeSearchText } from "./search.ts";
 import type { YtSong } from "./ytMusic.ts";
 
@@ -107,9 +108,7 @@ export const soulseekRecording = (song: YtSong): SoulseekRecording => ({
 const artistMatches = (text: string, recording: SoulseekRecording): boolean => {
   if (!featuredNames(text).every((name) => recording.artistCredits.includes(name))) return false;
   if (fold(credit(text)) === recording.artist) return true;
-  const names = credit(text)
-    .split(/,\s*|\s+(?:&|and|x)\s+/i)
-    .map(fold);
+  const names = splitCredit(credit(text)).map(fold);
   return (
     names[0] === recording.artist &&
     names.slice(1).every((name) => recording.artistCredits.includes(name))

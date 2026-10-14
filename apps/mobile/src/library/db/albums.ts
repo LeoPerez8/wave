@@ -21,7 +21,7 @@ export const selectAlbums = (
       id: albums.id,
       title: albums.title,
       titleSort: albums.titleSort,
-      albumArtist: artists.name,
+      albumArtist: albums.albumArtistCredit,
       albumArtistId: albums.albumArtistId,
       year: albums.year,
       compilation: albums.compilation,

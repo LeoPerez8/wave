@@ -27,6 +27,13 @@ data class RawTags(
   val artwork: ByteArray? = null,
   /** Embedded lyrics as tagged: plain text, or LRC for synced lyrics (Core tells them apart). */
   val lyrics: String? = null,
+  /**
+   * Every value of a multi-value artist tag (Vorbis comments, ID3v2.4), where [artist]
+   * holds the first: each is a credit of its own (Core's `normalizeTrack`).
+   */
+  val artists: List<String> = listOfNotNull(artist),
+  /** Every value of a multi-value album artist tag, as [artists]. */
+  val albumArtists: List<String> = listOfNotNull(albumArtist),
 )
 
 /** Reads tags from an audio file. Implementations throw when the file can't be parsed. */

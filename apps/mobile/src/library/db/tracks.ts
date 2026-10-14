@@ -12,7 +12,7 @@ export const songColumns = {
   id: schema.tracks.id,
   path: schema.tracks.path,
   title: schema.tracks.title,
-  artist: schema.artists.name,
+  artist: schema.tracks.artistCredit,
   album: schema.albums.title,
   durationMs: schema.tracks.durationMs,
   thumbPath: schema.artwork.thumbPath,
@@ -57,7 +57,7 @@ export const selectLibraryLookupSongs = (db: LibraryDatabase) => {
     .select({
       path: tracks.path,
       title: tracks.title,
-      artist: artists.name,
+      artist: tracks.artistCredit,
       album: albums.title,
       durationMs: tracks.durationMs,
       genre: genres.name,

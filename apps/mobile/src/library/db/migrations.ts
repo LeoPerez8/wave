@@ -237,6 +237,42 @@ ALTER TABLE \`tracks\` ADD \`has_lyrics\` integer DEFAULT false NOT NULL;
 UPDATE \`tracks\` SET \`modified_at\` = 0;
 `;
 
+// A song credited to several artists belongs to each of them (docs/spec.md,
+// glossary: Artist). Tracks and albums keep their credit as written, read from
+// the whole-credit artist they had; the store then splits every credit into
+// its artists and links them (`relinkCreditsIfUnlinked`), with no rescan.
+const m0012 = `
+ALTER TABLE \`tracks\` ADD \`artist_credit\` text DEFAULT '' NOT NULL;
+--> statement-breakpoint
+ALTER TABLE \`albums\` ADD \`album_artist_credit\` text DEFAULT '' NOT NULL;
+--> statement-breakpoint
+UPDATE \`tracks\` SET \`artist_credit\` = (SELECT \`name\` FROM \`artists\` WHERE \`artists\`.\`id\` = \`tracks\`.\`artist_id\`);
+--> statement-breakpoint
+UPDATE \`albums\` SET \`album_artist_credit\` = (SELECT \`name\` FROM \`artists\` WHERE \`artists\`.\`id\` = \`albums\`.\`album_artist_id\`);
+--> statement-breakpoint
+CREATE TABLE \`track_artists\` (
+	\`track_id\` integer NOT NULL,
+	\`artist_id\` integer NOT NULL,
+	\`position\` integer NOT NULL,
+	PRIMARY KEY(\`track_id\`, \`position\`),
+	FOREIGN KEY (\`track_id\`) REFERENCES \`tracks\`(\`id\`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (\`artist_id\`) REFERENCES \`artists\`(\`id\`) ON UPDATE no action ON DELETE no action
+);
+--> statement-breakpoint
+CREATE INDEX \`track_artists_artist_idx\` ON \`track_artists\` (\`artist_id\`);
+--> statement-breakpoint
+CREATE TABLE \`album_artists\` (
+	\`album_id\` integer NOT NULL,
+	\`artist_id\` integer NOT NULL,
+	\`position\` integer NOT NULL,
+	PRIMARY KEY(\`album_id\`, \`position\`),
+	FOREIGN KEY (\`album_id\`) REFERENCES \`albums\`(\`id\`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (\`artist_id\`) REFERENCES \`artists\`(\`id\`) ON UPDATE no action ON DELETE no action
+);
+--> statement-breakpoint
+CREATE INDEX \`album_artists_artist_idx\` ON \`album_artists\` (\`artist_id\`);
+`;
+
 export default {
   journal: {
     entries: [
@@ -252,6 +288,7 @@ export default {
       { idx: 9, when: 1_792_584_000_000, tag: "0009_artist_photos", breakpoints: true },
       { idx: 10, when: 1_792_670_400_000, tag: "0010_play_credits", breakpoints: true },
       { idx: 11, when: 1_792_756_800_000, tag: "0011_track_lyrics", breakpoints: true },
+      { idx: 12, when: 1_792_843_200_000, tag: "0012_artist_credits", breakpoints: true },
     ],
   },
   migrations: {
@@ -267,5 +304,6 @@ export default {
     m0009,
     m0010,
     m0011,
+    m0012,
   },
 };

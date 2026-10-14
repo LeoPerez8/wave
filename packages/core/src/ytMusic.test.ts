@@ -70,6 +70,15 @@ describe("libraryMatcher", () => {
     assert.equal(inLibrary(credited), true);
   });
 
+  test("a Library collaboration shares each credited artist, as the Library splits credits", () => {
+    const collaborations = libraryMatcher([
+      { title: "boyfriend", artist: "Ariana Grande · Social House", durationMs: 186_000 },
+      { title: "Get Lucky", artist: "Daft Punk; Pharrell Williams", durationMs: 369_600 },
+    ]);
+    assert.equal(collaborations(by("Social House", "boyfriend", 186_000)), true);
+    assert.equal(collaborations(by("Pharrell Williams", "Get Lucky", 369_600)), true);
+  });
+
   test("another artist's song of the same name is not the Library's", () => {
     const cover = ytSong({ title: "Jóga", artists: ["Läura"], durationMs: 305_000 });
     assert.equal(inLibrary(cover), false);

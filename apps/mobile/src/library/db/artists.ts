@@ -3,10 +3,11 @@
  * Auto's Artists tab). Kept free of Expo so the store tests run it against a
  * real SQLite (`testDatabase.ts`).
  */
-import { artistArtwork, type ArtistAlbumLink } from "@wave/core";
+import { artistAlbums, artistArtwork, type ArtistAlbumLink } from "@wave/core";
 import { eq, inArray, or, sql } from "drizzle-orm";
 
-import type { ArtistRow } from "../LibraryStore.ts";
+import type { ArtistDetail, ArtistRow } from "../LibraryStore.ts";
+import { selectAlbums } from "./albums.ts";
 import type { LibraryDatabase, RowPage } from "./database.ts";
 import * as schema from "./schema.ts";
 import { BY_TITLE, trackQuery } from "./tracks.ts";
@@ -19,17 +20,24 @@ export interface ArtistsQuery {
 }
 
 /**
+ * Every song an artist is credited on: each artist its credit names, and
+ * each album artist its album's credit names (so Watch the Throne counts for
+ * Kanye West as well). A song shows once per artist.
+ */
+export const CREDITED_SONGS = sql`
+  SELECT track_id, artist_id FROM track_artists
+  UNION
+  SELECT tracks.id, album_artists.artist_id
+  FROM tracks JOIN album_artists ON album_artists.album_id = tracks.album_id`;
+
+/**
  * Artists with songs, by sort name (leading articles and accents ignored,
- * the Library's order): a song belongs to its track artist and to the album
- * artist of its album (so Watch the Throne counts for Kanye West as well).
+ * the Library's order): a song belongs to every artist credited on it
+ * (`CREDITED_SONGS`), so a collaboration counts for each of its artists.
  */
 export const selectArtists = (db: LibraryDatabase, { ids, page }: ArtistsQuery): ArtistRow[] =>
   db.all<ArtistRow>(sql`
-    WITH links AS (
-      SELECT id AS track_id, artist_id FROM tracks
-      UNION
-      SELECT tracks.id, albums.album_artist_id FROM tracks JOIN albums ON albums.id = tracks.album_id
-    )
+    WITH links AS (${CREDITED_SONGS})
     SELECT artists.id AS "id", artists.name AS "name", artists.sort AS "sort",
       (SELECT count(*) FROM albums WHERE albums.album_artist_id = artists.id) AS "albumCount",
       count(links.track_id) AS "trackCount",
@@ -61,11 +69,13 @@ export const refreshArtistImages = (db: LibraryDatabase): void => {
     FROM albums JOIN tracks ON tracks.album_id = albums.id
     GROUP BY albums.id
     UNION ALL
-    SELECT tracks.artist_id, albums.id, 0, count(tracks.id), albums.year, albums.title_sort,
+    SELECT links.artist_id, albums.id, 0, count(tracks.id), albums.year, albums.title_sort,
       albums.artwork_hash
-    FROM tracks JOIN albums ON albums.id = tracks.album_id
-    WHERE tracks.artist_id <> albums.album_artist_id
-    GROUP BY tracks.artist_id, albums.id`);
+    FROM (${CREDITED_SONGS}) AS links
+    JOIN tracks ON tracks.id = links.track_id
+    JOIN albums ON albums.id = tracks.album_id
+    WHERE links.artist_id <> albums.album_artist_id
+    GROUP BY links.artist_id, albums.id`);
   const images = artistArtwork(links.map((link) => ({ ...link, own: link.own === 1 })));
   const { artists } = schema;
   const current = db
@@ -100,21 +110,63 @@ export const selectArtistCovers = (
 };
 
 /**
- * An artist's songs, as their screen lists them: theirs as track artist and
- * every song on their albums, by title (`BY_TITLE`); [page] of them if given.
+ * An artist's songs, as their screen lists them: every song they're credited
+ * on (`CREDITED_SONGS`), by title (`BY_TITLE`); [page] of them if given.
  */
 export const selectArtistSongs = (db: LibraryDatabase, artistId: number, page?: RowPage) => {
-  const { albums, tracks } = schema;
+  const { tracks } = schema;
   const query = trackQuery(db)
     .where(
-      or(
-        eq(tracks.artistId, artistId),
-        inArray(
-          tracks.albumId,
-          db.select({ id: albums.id }).from(albums).where(eq(albums.albumArtistId, artistId)),
-        ),
+      inArray(
+        tracks.id,
+        sql`(SELECT track_id FROM (${CREDITED_SONGS}) WHERE artist_id = ${artistId})`,
       ),
     )
     .orderBy(...BY_TITLE);
   return page === undefined ? query.all() : query.limit(page.limit).offset(page.offset).all();
+};
+
+/**
+ * An artist's page: their row, their songs (`selectArtistSongs`) and the
+ * albums they're credited on, split into Albums (filed under them: its first
+ * credited album artist) and Appears on (Core's `artistAlbums`). Null when the
+ * artist is no longer in the library.
+ */
+export const selectArtistDetail = (db: LibraryDatabase, id: number): ArtistDetail | null => {
+  const { artists, albums, artwork } = schema;
+  const artist = db
+    .select({
+      id: artists.id,
+      name: artists.name,
+      sort: artists.sort,
+      thumbPath: artwork.thumbPath,
+      artworkPath: artwork.path,
+    })
+    .from(artists)
+    .leftJoin(artwork, eq(artists.artworkHash, artwork.hash))
+    .where(eq(artists.id, id))
+    .get();
+  if (artist === undefined) return null;
+  const songs = selectArtistSongs(db, id);
+  const split = artistAlbums(
+    id,
+    selectAlbums(
+      db,
+      or(
+        inArray(albums.id, sql`(SELECT album_id FROM album_artists WHERE artist_id = ${id})`),
+        inArray(
+          albums.id,
+          sql`(SELECT tracks.album_id FROM track_artists
+            JOIN tracks ON tracks.id = track_artists.track_id
+            WHERE track_artists.artist_id = ${id})`,
+        ),
+      ),
+    ),
+  );
+  return {
+    artist: { ...artist, albumCount: split.albums.length, trackCount: songs.length },
+    albums: split.albums,
+    appearsOn: split.appearsOn,
+    songs,
+  };
 };

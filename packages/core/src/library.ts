@@ -22,8 +22,15 @@ export interface RawTrack {
   readonly path: string;
   readonly title?: string | null | undefined;
   readonly artist?: string | null | undefined;
+  /**
+   * Every value of a multi-value artist tag (Vorbis comments, ID3v2.4), when
+   * the reader has them: each is a credit of its own, where [artist] holds the first.
+   */
+  readonly artists?: readonly string[] | null | undefined;
   readonly album?: string | null | undefined;
   readonly albumArtist?: string | null | undefined;
+  /** Every value of a multi-value album artist tag, as [artists]. */
+  readonly albumArtists?: readonly string[] | null | undefined;
   readonly genre?: string | null | undefined;
   /** Year or date as tagged, e.g. `1997` or `1997-05-21`. */
   readonly year?: string | null | undefined;
@@ -185,14 +192,30 @@ export const resolveAlbumArtist = (track: {
   readonly compilation?: boolean | null | undefined;
 }): string => clean(track.albumArtist) ?? (track.compilation ? VARIOUS_ARTISTS : track.artist);
 
+/**
+ * The credit a tag gives: its values as one credit ("Ariana Grande, Social
+ * House"), whose artists Core's `splitCredit` tells apart; else the single value.
+ */
+const creditOf = (
+  value: string | null | undefined,
+  values: readonly string[] | null | undefined,
+): string | null => {
+  const each = (values ?? []).flatMap((one) => clean(one) ?? []);
+  return each.length > 0 ? each.join(", ") : clean(value);
+};
+
 /** Turns raw scanner output into a library track with fallbacks, parsed numbers and keys. */
 export const normalizeTrack = (raw: RawTrack): LibraryTrack => {
   const { folder, fileName } = splitPath(raw.path);
   const title = clean(raw.title) ?? (clean(stripExtension(fileName)) || fileName);
-  const artist = clean(raw.artist) ?? UNKNOWN_ARTIST;
+  const artist = creditOf(raw.artist, raw.artists) ?? UNKNOWN_ARTIST;
   const album = clean(raw.album) ?? UNKNOWN_ALBUM;
   const compilation = raw.compilation === true;
-  const albumArtist = resolveAlbumArtist({ artist, albumArtist: raw.albumArtist, compilation });
+  const albumArtist = resolveAlbumArtist({
+    artist,
+    albumArtist: creditOf(raw.albumArtist, raw.albumArtists),
+    compilation,
+  });
   const genre = parseGenre(raw.genre);
   const track = parseNumberOfTotal(raw.trackNumber);
   const disc = parseNumberOfTotal(raw.discNumber);

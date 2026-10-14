@@ -11,6 +11,7 @@
   sortKey,
 } from "./library.ts";
 export type { LibraryTrack, RawTrack } from "./library.ts";
+export { creditSplitter, splitCredit } from "./credits.ts";
 export { formatDuration, formatRemaining } from "./time.ts";
 export { trackRowTrailing } from "./trackRowTrailing.ts";
 export type { TrackRowTrailingInput } from "./trackRowTrailing.ts";

@@ -148,12 +148,10 @@ describe("artist images", () => {
     assert.deepEqual(imageOf("Björk"), { thumbPath: null, artworkPath: null });
   });
 
-  test("after the update, artists show the placeholder until the next scan picks their image", async () => {
+  test("after the update, artists show their image straight away (splitting credits picks them)", async () => {
     db = await openTestDatabase({ through: "0007_recount_plays" });
     addTrack(db, { title: "Everything", album: "Kid A", artist: "Radiohead", artworkHash: "kida" });
     await migrateTestDatabase(db);
-    assert.deepEqual(imageOf("Radiohead"), { thumbPath: null, artworkPath: null });
-    refreshArtistImages(db);
     assert.deepEqual(imageOf("Radiohead"), cover("kida"));
   });
 

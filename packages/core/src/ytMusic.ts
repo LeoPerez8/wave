@@ -5,6 +5,7 @@
  * native module; Core decides how the songs sit beside the Library.
  */
 
+import { splitCredit } from "./credits.ts";
 import { normalizeSearchText } from "./search.ts";
 
 /** A song found on YouTube Music. */
@@ -48,8 +49,6 @@ const SAME_LENGTH_MS = 3000;
 const FEATURING = String.raw`(?:feat\.?|ft\.?|featuring|with)`;
 const BRACKETED_FEATURE = new RegExp(String.raw`\s*[([]${FEATURING}\s[^)\]]*[)\]]`, "giu");
 const TRAILING_FEATURE = new RegExp(String.raw`\s+(?:feat\.?|ft\.?|featuring)\s.*$`, "iu");
-const ARTIST_SEPARATORS =
-  /\s*(?:,|&|;|\/|\+|\bx\b|\band\b|\bfeat\.?|\bft\.?|\bfeaturing\b|\bwith\b)\s*/giu;
 
 const REMASTER = /\bremaster(?:ed)?\b/iu;
 /** Words that make a note more than a remaster: another take or cut of the song. */
@@ -81,12 +80,16 @@ const matchTitle = (title: string): string =>
     withoutRemasterNotes(title.replace(BRACKETED_FEATURE, "").replace(TRAILING_FEATURE, "")),
   );
 
-/** The names in an artist credit ("A feat. B & C" is A, B and C), as matching compares them. */
+/**
+ * The names in an artist credit ("A feat. B & C" is A, B and C), split as the
+ * Library splits credits (`splitCredit`) and compared as matching compares them.
+ */
 const artistNames = (credit: string): string[] =>
-  credit
-    .split(ARTIST_SEPARATORS)
-    .map(normalizeSearchText)
-    .filter((name) => name !== "");
+  credit.trim() === ""
+    ? []
+    : splitCredit(credit)
+        .map(normalizeSearchText)
+        .filter((name) => name !== "");
 
 const knownLength = (ms: number | null): number | null => (ms === null || ms <= 0 ? null : ms);
 

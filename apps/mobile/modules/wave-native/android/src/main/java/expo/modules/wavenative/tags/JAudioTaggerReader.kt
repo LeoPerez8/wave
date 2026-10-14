@@ -35,6 +35,8 @@ class JAudioTaggerReader : TagReader {
     val tags = (tag as? WavTag)?.let { listOfNotNull(it.iD3Tag, it.infoTag) } ?: listOfNotNull(tag)
     val id3 = (tag as? AbstractID3v2Tag) ?: (audio as? MP3File)?.iD3v2Tag ?: (tag as? WavTag)?.iD3Tag
     fun field(key: FieldKey): String? = tags.firstNotNullOfOrNull { it.field(key) }
+    fun fields(key: FieldKey): List<String> =
+      tags.firstNotNullOfOrNull { source -> source.fields(key).takeIf { it.isNotEmpty() } } ?: emptyList()
     val durationMs =
       header?.let {
         val precise = runCatching { it.preciseTrackLength }.getOrNull()
@@ -58,11 +60,26 @@ class JAudioTaggerReader : TagReader {
         runCatching { source.firstArtwork?.binaryData }.getOrNull()?.takeIf { it.isNotEmpty() }
       },
       lyrics = field(FieldKey.LYRICS) ?: id3.userText(USER_LYRICS_KEYS) ?: tag.vorbisField(USER_LYRICS_KEYS),
+      artists = fields(FieldKey.ARTIST),
+      albumArtists = fields(FieldKey.ALBUM_ARTIST),
     )
   }
 
   private fun Tag?.field(key: FieldKey): String? =
     if (this == null) null else runCatching { getFirst(key) }.getOrNull().cleanTag()
+
+  /**
+   * Every value of [key]: repeated Vorbis comment fields, or the NUL-separated values
+   * of an ID3v2.4 text frame (split here too, in case they come back as one string).
+   */
+  private fun Tag?.fields(key: FieldKey): List<String> =
+    if (this == null) {
+      emptyList()
+    } else {
+      runCatching { getAll(key) }.getOrNull().orEmpty()
+        .flatMap { it.split('\u0000') }
+        .mapNotNull { it.cleanTag() }
+    }
 
   /** The first of the Vorbis comment fields [names] that has a value (FLAC and Ogg Vorbis). */
   private fun Tag?.vorbisField(names: List<String>): String? {
