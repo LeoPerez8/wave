@@ -44,10 +44,12 @@ browse results, and refuses upload requests and unsolicited incoming files.
 
 ## Background execution
 
-Soulseek is Wave's only acquisition source. The owner connects a free account
-once in Settings; after that each Download tap queues a job with no further
-choices. `DurableDownloads` (package `download`) is the queue's owner, not
-JavaScript: it persists every job (request, chosen recording, candidates,
+Soulseek is the source a download uses once the owner connects a free account
+in Settings; without one, downloads come from YouTube Music while YT Music is
+on (Core's `downloadSource`, docs/spec.md "Downloads"). Either way each
+Download tap queues a job with no further choices. This document covers the
+Soulseek side. `DurableDownloads` (package `download`) is the queue's owner, not
+JavaScript: it persists every job (request, source, chosen recording, candidates,
 current peer, attempt counts, absolute deadlines and the `mp3-320` policy) in
 `noBackupFilesDir/soulseek-download-jobs-v1`, rewritten atomically after each
 step. `YtDownloadService`, a `dataSync` foreground service, runs it one job at
