@@ -19,7 +19,7 @@ function CheckMark({ checked, ring }: { checked: boolean; ring: string }) {
 
 /**
  * A row's leading check cell in selection mode (tracks, artists, genres,
- * folders, playlists): one state cell wide, so rows line up whatever they lead
+ * playlists): one state cell wide, so rows line up whatever they lead
  * with next.
  */
 export function CheckCell({ checked }: { checked: boolean }) {
