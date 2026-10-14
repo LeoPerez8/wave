@@ -7,6 +7,7 @@
  */
 
 import { isDetailPath } from "./navigation.ts";
+import type { StreamedArtistLink } from "./streamedArtist.ts";
 
 /**
  * What kind of library item the actions are about. `mixed` is items of
@@ -185,14 +186,22 @@ export const itemActions = (subject: ActionSubject): ItemActionEntry[] => {
   return entries;
 };
 
+/** One entry of a YT Music song's menu; Go to Artist carries where it leads. */
+export type YtSongActionEntry<A> =
+  | { readonly action: "playNext" | "addToQueue" }
+  | { readonly action: "goToArtist"; readonly artists: StreamedArtistLink<A> };
+
 /**
  * The entries a YT Music song's long-press menu offers: it can join the
- * queue beside the Library's songs. The Library's other entries (playlists,
- * favorites, Go to, Delete) are about its files, which a streamed song isn't.
+ * queue beside the Library's songs and, given where its [artists] link leads
+ * (Core's `streamedArtistLink`), Go to Artist opens them integrated. The
+ * Library's other entries (playlists, favorites, Go to Album, Delete) are
+ * about its files, which a streamed song isn't.
  */
-export const ytSongActions = (): ItemActionEntry[] => [
+export const ytSongActions = <A>(artists?: StreamedArtistLink<A>): YtSongActionEntry<A>[] => [
   { action: "playNext" },
   { action: "addToQueue" },
+  ...(artists === undefined ? [] : [{ action: "goToArtist", artists } as const]),
 ];
 
 /**

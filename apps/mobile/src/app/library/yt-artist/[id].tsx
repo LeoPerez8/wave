@@ -30,6 +30,7 @@ import { useThemeColor } from "@/theme/useThemeColor";
 import { useYtArtistPage } from "@/ytmusic/artistPage";
 import { DiscoverSongRow } from "@/ytmusic/DiscoverShelves";
 import { YT_ARTIST_NOTE, YtReleaseTile } from "@/ytmusic/YtArtistSection";
+import { YT_ARTIST_BY_NAME } from "@/ytmusic/routes";
 
 type Song = DiscoverSong<NativeYtSong, SongRow>;
 type Release = YtArtistRelease<AlbumRow>;
@@ -55,6 +56,7 @@ const NOTE: Readonly<Record<YtArtistPageNote, string>> = {
   offline: YT_ARTIST_NOTE.offline,
   failed: YT_ARTIST_NOTE.failed,
   off: "YT Music is off. Turn it on in Settings to see this artist.",
+  notFound: YT_ARTIST_NOTE.notFound,
 };
 
 /** As the integrated Library artist page lays it out: the releases, then the songs. */
@@ -209,15 +211,17 @@ function QuietLine({
 
 /**
  * A YouTube Music artist the Library doesn't have, opened by their browse id
- * (`/library/yt-artist/<UC…>?name=<name>`): their image and name, Play and
- * Shuffle, their Albums and Singles & EPs (a release the Library has opens
+ * (`/library/yt-artist/<UC…>?name=<name>`) or, from a streamed song, by their
+ * name (`/library/yt-artist/by-name?name=<name>`, found with an Artists
+ * search; "Not found on YouTube Music" when nobody matches): their image and
+ * name, Play and Shuffle, their Albums and Singles & EPs (a release the Library has opens
  * the Library album) and their top songs (the Library's play its files, the
  * rest stream). It's read as it opens and saved for a week; offline or
  * failing, a quiet line with Try Again; with YT Music off, it says so.
  */
 export default function YtArtistScreen() {
   const params = useLocalSearchParams<{ id: string; name?: string }>();
-  const browseId = params.id ?? "";
+  const browseId = params.id === YT_ARTIST_BY_NAME ? null : (params.id ?? "");
   const knownName = params.name === undefined || params.name === "" ? null : params.name;
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
@@ -225,7 +229,8 @@ export default function YtArtistScreen() {
   const { view, retry } = useYtArtistPage(browseId, knownName);
   const songs = view?.songs ?? NO_SONGS;
   const items = useMemo(() => (view === null ? [] : pageItems(view.shelves, view.songs)), [view]);
-  const context = useMemo(() => ({ kind: "ytArtist", id: browseId }) as const, [browseId]);
+  const contextId = browseId ?? `name:${knownName ?? ""}`;
+  const context = useMemo(() => ({ kind: "ytArtist", id: contextId }) as const, [contextId]);
   const play = useCallback(
     (startIndex: number | undefined, shuffle = false) =>
       void playPage(songs, startIndex, context, { shuffle }),

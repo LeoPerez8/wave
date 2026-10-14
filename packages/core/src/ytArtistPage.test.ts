@@ -197,6 +197,18 @@ describe("what a YouTube Music artist page shows", () => {
     assert.deepEqual(shown.songs, []);
     assert.equal(shown.name, "Daft Punk");
   });
+
+  test("opened by name, a 'no match' answer is a quiet Not found line for a week, then it asks again", () => {
+    const saved = restored({ outcome: "unmatched", checkedAt: NOW - DAY });
+    const shown = view(saved);
+    assert.equal(shown.note, "notFound");
+    assert.equal(shown.retry, false);
+    assert.deepEqual(shown.songs, []);
+    assert.equal(asks(saved), false);
+    const old = restored({ outcome: "unmatched", checkedAt: NOW - 8 * DAY });
+    assert.equal(view(old).note, "loading");
+    assert.equal(asks(old), true);
+  });
 });
 
 describe("libraryArtistNamed", () => {

@@ -253,6 +253,12 @@ export interface YtArtistSectionContext<S extends YtSong> {
   /** Whether YT Music is on in Settings. */
   readonly enabled: boolean;
   readonly now: number;
+  /**
+   * Whether the page was opened integrated (from a streamed song's artist):
+   * with nothing standing it asks on its own (`ytArtistSectionAsks`) instead
+   * of offering the button. Undefined: opened as the Library's.
+   */
+  readonly integrated?: boolean;
   /** Whether the Library already has a song (Core's `libraryMatcher`). */
   readonly inLibrary: (song: S) => boolean;
 }
@@ -261,7 +267,9 @@ export interface YtArtistSectionContext<S extends YtSong> {
  * What the section shows at the end of the artist page, or null when it's
  * hidden: YT Music off, a name that isn't an artist's, or what was saved not
  * read yet. A saved answer shows for a week without the button; after that,
- * or with nothing saved, the button is back.
+ * or with nothing saved, the button is back, unless the page was opened
+ * integrated: then it's looking (it asks on its own, `ytArtistSectionAsks`)
+ * until an ask fails.
  */
 export const ytArtistSectionView = <S extends YtSong>(
   state: YtArtistSection<S>,
@@ -278,8 +286,37 @@ export const ytArtistSectionView = <S extends YtSong>(
       songs.length > 0 ? null : saved.page.songs.length === 0 ? "noSongs" : "allInLibrary";
     return { songs, note, button: false };
   }
+  if (context.integrated === true && state.failure === null)
+    return { songs: [], note: "loading", button: false };
   return { songs: [], note: state.failure, button: true };
 };
+
+export interface YtArtistSectionAsksContext {
+  /** The Library artist's name. */
+  readonly name: string;
+  /** Whether YT Music is on in Settings. */
+  readonly enabled: boolean;
+  readonly now: number;
+  /** Whether the page was opened integrated (from a streamed song's artist). */
+  readonly integrated: boolean;
+}
+
+/**
+ * Whether a Library artist page asks YouTube Music now, on its own: only
+ * when it was opened integrated, once what was saved is read, with nothing
+ * standing for the artist (`YT_ARTIST_FRESH_MS`) and YT Music on. After a
+ * failure it waits for the button (`requested`).
+ */
+export const ytArtistSectionAsks = (
+  state: YtArtistSection,
+  context: YtArtistSectionAsksContext,
+): boolean =>
+  context.integrated &&
+  context.enabled &&
+  ytArtistQuery(context.name) !== null &&
+  state.status === "ready" &&
+  state.failure === null &&
+  (state.saved === null || !isFresh(state.saved, context.now));
 
 /**
  * Whether the artist page is an integrated view: YT Music on and the
@@ -564,6 +601,8 @@ export type YtArtistPageNote =
   | "loading"
   /** YT Music is off in Settings: the page says so instead of asking. */
   | "off"
+  /** Opened by name, no YouTube Music artist matched it. */
+  | "notFound"
   | YtQuietReason;
 
 export interface YtArtistPageView<S extends YtSong, L, A> {
@@ -589,9 +628,10 @@ export interface YtArtistPageViewContext<S extends YtSong, L, A> extends YtArtis
 /**
  * What a YouTube Music artist page shows: the artist page's integrated view
  * with nothing from the Library but the songs and releases it already has.
- * A saved answer shows for a week (`YT_ARTIST_FRESH_MS`); without one the
- * page is looking (it asks on its own, `ytArtistPageAsks`) or, after a
- * failure, a quiet line with Try Again. With YT Music off it says so.
+ * A saved answer shows for a week (`YT_ARTIST_FRESH_MS`), "no match" (a page
+ * opened by name) as a quiet Not found line; without one the page is looking
+ * (it asks on its own, `ytArtistPageAsks`) or, after a failure, a quiet line
+ * with Try Again. With YT Music off it says so.
  */
 export const ytArtistPageView = <S extends YtSong, L, A>(
   state: YtArtistSection<S>,
@@ -610,6 +650,7 @@ export const ytArtistPageView = <S extends YtSong, L, A>(
   if (!context.enabled) return quiet("off");
   if (state.status === "reading") return quiet(null);
   if (state.status === "loading") return quiet("loading");
+  if (saved?.outcome === "unmatched" && isFresh(saved, context.now)) return quiet("notFound");
   if (page === null || saved === null || !isFresh(saved, context.now))
     // Nothing standing: it asks on its own (`ytArtistPageAsks`) unless the last ask failed.
     return state.failure === null ? quiet("loading") : quiet(state.failure, true);

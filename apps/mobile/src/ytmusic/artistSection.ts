@@ -6,6 +6,7 @@ import {
   stepYtArtistSection,
   ytArtistIntegrated,
   ytArtistLookup,
+  ytArtistSectionAsks,
   ytArtistSectionView,
   ytArtistShelves,
   type YtArtistSaved,
@@ -16,7 +17,7 @@ import {
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 
 import { LibraryStore, type AlbumRow } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
@@ -41,7 +42,7 @@ const readSaved = (artistKey: string) =>
  * the page or "no match", is saved before it's shown; a request that gets no
  * answer saves nothing. Only the name and the artist's browse id are sent.
  */
-const fetchArtist = (name: string, artistKey: string, saved: Saved | null) =>
+export const fetchArtist = (name: string, artistKey: string, saved: Saved | null) =>
   Effect.gen(function* () {
     const ytMusic = yield* YtMusic;
     const store = yield* LibraryStore;
@@ -183,16 +184,33 @@ export interface YtArtistSectionShown {
 
 /**
  * The YT Music section at the end of [name]'s artist page. It reads what was
- * saved, never asks YouTube Music until `show` is called, and hides with YT
- * Music off (Core's `stepYtArtistSection`). [artistId] and the page's Library
- * [albums] tell which of the artist's releases the Library already has.
+ * saved and hides with YT Music off (Core's `stepYtArtistSection`). It never
+ * asks YouTube Music until `show` is called unless the page was opened
+ * integrated ([openedIntegrated], from a streamed song's artist): then, with
+ * nothing standing for the artist, it asks once on its own (Core's
+ * `ytArtistSectionAsks`). [artistId] and the page's Library [albums] tell
+ * which of the artist's releases the Library already has.
  */
 export const useYtArtistSection = (
   name: string,
   artistId: number,
   albums: readonly AlbumRow[],
+  openedIntegrated: boolean,
 ): YtArtistSectionShown => {
   const { state, enabled, openedAt, show } = useYtArtistAnswer(name);
+  const asks = ytArtistSectionAsks(state, {
+    name,
+    enabled,
+    now: openedAt,
+    integrated: openedIntegrated,
+  });
+  // Once per state: a remounted effect doesn't send the request twice.
+  const askedFor = useRef<unknown>(null);
+  useEffect(() => {
+    if (!asks || askedFor.current === state) return;
+    askedFor.current = state;
+    show();
+  }, [asks, state, show]);
   const find = useLoadedLibraryFinder();
   const findAlbum = useMemo(() => libraryAlbumFinder(artistId, albums), [artistId, albums]);
 
@@ -204,6 +222,7 @@ export const useYtArtistSection = (
           name,
           enabled,
           now: openedAt,
+          integrated: openedIntegrated,
           inLibrary: (song) => find(song) !== null,
         });
   const shelves = useMemo(

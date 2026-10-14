@@ -10,6 +10,7 @@ import {
   ytArtistQuery,
   ytArtistRelease,
   ytArtistIntegrated,
+  ytArtistSectionAsks,
   ytArtistSectionView,
   ytAlbumTracklist,
   ytArtistShelves,
@@ -154,11 +155,15 @@ const restored = (saved: YtArtistSaved | null): Section =>
 
 const inLibrary = (s: YtSong): boolean => s.videoId.startsWith("mine");
 
-const view = (state: Section, context: { name?: string; enabled?: boolean; now?: number } = {}) =>
+const view = (
+  state: Section,
+  context: { name?: string; enabled?: boolean; now?: number; integrated?: boolean } = {},
+) =>
   ytArtistSectionView(state, {
     name: context.name ?? "Daft Punk",
     enabled: context.enabled ?? true,
     now: context.now ?? NOW,
+    integrated: context.integrated ?? false,
     inLibrary,
   });
 
@@ -254,6 +259,68 @@ describe("the artist page's YT Music section", () => {
       { type: "answered", saved: found(NOW) },
     );
     assert.deepEqual(step(answered, { type: "restored", saved: null }), answered);
+  });
+});
+
+const asks = (
+  state: Section,
+  context: { name?: string; enabled?: boolean; now?: number; integrated?: boolean } = {},
+) =>
+  ytArtistSectionAsks(state, {
+    name: context.name ?? "Daft Punk",
+    enabled: context.enabled ?? true,
+    now: context.now ?? NOW,
+    integrated: context.integrated ?? true,
+  });
+
+describe("an artist page opened integrated", () => {
+  test("asks YouTube Music on its own once what was saved is read, with nothing standing", () => {
+    assert.equal(asks(YT_ARTIST_SECTION_START), false);
+    assert.equal(asks(restored(null)), true);
+    assert.equal(asks(restored(found(NOW - 8 * DAY))), true);
+    assert.equal(asks(restored(unmatched(NOW - 8 * DAY))), true);
+  });
+
+  test("is looking meanwhile, without the button", () => {
+    const loading = { songs: [], note: "loading", button: false };
+    assert.deepEqual(view(restored(null), { integrated: true }), loading);
+    assert.deepEqual(view(restored(found(NOW - 8 * DAY)), { integrated: true }), loading);
+    assert.deepEqual(
+      view(step(restored(null), { type: "requested" }), { integrated: true }),
+      loading,
+    );
+    assert.equal(asks(step(restored(null), { type: "requested" })), false);
+  });
+
+  test("a standing answer shows as it would, with nothing asked", () => {
+    const saved = restored(found(NOW - DAY, [song("a")]));
+    assert.equal(asks(saved), false);
+    assert.deepEqual(view(saved, { integrated: true }), {
+      songs: [song("a")],
+      note: null,
+      button: false,
+    });
+    assert.equal(asks(restored(unmatched(NOW - DAY))), false);
+  });
+
+  test("after a failure it waits for the button", () => {
+    const failed = step(
+      restored(null),
+      { type: "requested" },
+      { type: "failed", reason: "offline" },
+    );
+    assert.equal(asks(failed), false);
+    assert.deepEqual(view(failed, { integrated: true }), {
+      songs: [],
+      note: "offline",
+      button: true,
+    });
+  });
+
+  test("opened any other way, or with YT Music off, or for no artist's name, it asks nothing", () => {
+    assert.equal(asks(restored(null), { integrated: false }), false);
+    assert.equal(asks(restored(null), { enabled: false }), false);
+    assert.equal(asks(restored(null), { name: "Various Artists" }), false);
   });
 });
 
