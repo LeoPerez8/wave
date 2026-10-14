@@ -473,12 +473,16 @@ export {
   YT_ALBUM_DOWNLOAD_ACTION_LABELS,
   ytAlbumDownload,
   ytAlbumDownloadButton,
-} from "./ytAlbumDownload.ts";
+  ytSongsDownload,
+} from "./ytSongsDownload.ts";
 export type {
   YtAlbumDownload,
   YtAlbumDownloadAction,
   YtAlbumDownloadRequest,
-} from "./ytAlbumDownload.ts";
+  YtSongsDownload,
+  YtSongsDownloadAction,
+  YtSongsDownloadRequest,
+} from "./ytSongsDownload.ts";
 export {
   YT_DOWNLOADS_NONE,
   YT_DOWNLOAD_ACTION_LABELS,
