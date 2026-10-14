@@ -1,9 +1,10 @@
 import type { QueueContext } from "@wave/core";
-import { ScrollView, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
 import { AlbumTile } from "@/catalog/AlbumTile";
 import { ArtistImage } from "@/catalog/ArtistImage";
-import { CELL, grid } from "@/catalog/grid";
+import { COVER_ROW_TILE, CoverRow } from "@/catalog/CoverRow";
+import { CELL } from "@/catalog/grid";
 import { TrackRow } from "@/catalog/TrackRow";
 import { toAlbumSummary } from "@/library/AlbumGrid";
 import { useFavoriteIds } from "@/library/favorites";
@@ -13,11 +14,7 @@ import { toTrackSummary } from "@/library/TrackList";
 import { playSongs } from "@/playback/actions";
 import { useCurrentTrackId } from "@/playback/hooks";
 import { openAlbumActions, openArtistActions, openTrackActions } from "@/playback/ActionsMenu";
-import { useListScrollable } from "@/motion/heldTouch";
 import { Press } from "@/motion/Press";
-
-/** Shelf covers leave the next one peeking in at the right edge, so the row reads as scrollable. */
-const SHELF_TILE = CELL * 19;
 
 /**
  * A row of album covers that scrolls sideways, edge to edge. `detail`
@@ -30,26 +27,19 @@ export function AlbumShelf<A extends AlbumRow>({
   albums: readonly A[];
   detail?: (album: A) => string;
 }) {
-  const scrollable = useListScrollable();
   return (
-    <ScrollView
-      scrollEnabled={scrollable}
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      style={{ marginHorizontal: -grid.margin }}
-      contentContainerStyle={{ paddingHorizontal: grid.margin, gap: grid.gutter }}
-    >
+    <CoverRow>
       {albums.map((album) => (
         <AlbumTile
           key={album.id}
           album={toAlbumSummary(album)}
-          size={SHELF_TILE}
+          size={COVER_ROW_TILE}
           detail={detail?.(album)}
           onPress={() => openAlbum(album.id, album)}
           onLongPress={() => openAlbumActions(album)}
         />
       ))}
-    </ScrollView>
+    </CoverRow>
   );
 }
 
@@ -102,15 +92,8 @@ export function ArtistShelf<A extends ArtistRow>({
   artists: readonly A[];
   detail: (artist: A) => string;
 }) {
-  const scrollable = useListScrollable();
   return (
-    <ScrollView
-      scrollEnabled={scrollable}
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      style={{ marginHorizontal: -grid.margin }}
-      contentContainerStyle={{ paddingHorizontal: grid.margin, gap: grid.gutter }}
-    >
+    <CoverRow>
       {artists.map((artist) => (
         <Press
           key={artist.id}
@@ -142,6 +125,6 @@ export function ArtistShelf<A extends ArtistRow>({
           </Text>
         </Press>
       ))}
-    </ScrollView>
+    </CoverRow>
   );
 }
