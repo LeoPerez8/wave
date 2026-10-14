@@ -118,9 +118,12 @@ object YtArtistParser {
         }
         .map { if (it.artists.isEmpty()) it.copy(artists = listOf(name)) else it }
         .distinctBy { it.browseId }
-    val artworkUrl = (header.path("thumbnail") ?: header.path("foregroundThumbnail"))
-      .path("musicThumbnailRenderer", "thumbnail", "thumbnails").arr
-      ?.lastOrNull().path("url").string?.takeIf(String::isNotEmpty)?.let(::square)
+    // A visual header's `thumbnail` is the wide banner and its `foregroundThumbnail`
+    // the portrait; an immersive header only has `thumbnail`.
+    val artworkUrl = listOf("foregroundThumbnail", "thumbnail").firstNotNullOfOrNull { key ->
+      header.path(key, "musicThumbnailRenderer", "thumbnail", "thumbnails").arr
+        ?.lastOrNull().path("url").string?.takeIf(String::isNotEmpty)
+    }?.let(::square)
     return YtArtistPage(
       name = name,
       artworkUrl = artworkUrl,

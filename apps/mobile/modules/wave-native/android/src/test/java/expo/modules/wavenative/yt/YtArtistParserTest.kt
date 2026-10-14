@@ -82,6 +82,44 @@ class YtArtistParserTest {
     assertNull(YtArtistParser.page(bare)!!.artworkUrl)
   }
 
+  /** A page whose header is [header] (keys and values written as JSON) and has no sections. */
+  private fun pageWithHeader(header: String) =
+    """{"header":{"musicVisualHeaderRenderer":{"title":{"runs":[{"text":"X"}]},$header}},""" +
+      """"contents":{"singleColumnBrowseResultsRenderer":{"tabs":[{"tabRenderer":{"content":""" +
+      """{"sectionListRenderer":{"contents":[]}}}}]}}}"""
+
+  private fun picture(url: String) =
+    """{"musicThumbnailRenderer":{"thumbnail":{"thumbnails":[{"url":"$url"}]}}}"""
+
+  @Test
+  fun aVisualHeadersPortraitWinsOverItsBanner() {
+    val page = YtArtistParser.page(
+      pageWithHeader(
+        """"thumbnail":${picture("https://lh3.googleusercontent.com/banner=w1080-h450-p-l90-rj")},""" +
+          """"foregroundThumbnail":${picture("https://lh3.googleusercontent.com/avatar=w226-h226-p-l90-rj")}""",
+      ),
+    )!!
+    assertEquals("https://lh3.googleusercontent.com/avatar=w544-h544-p-l90-rj", page.artworkUrl)
+  }
+
+  @Test
+  fun aPictureWithoutAThumbnailRendererFallsThroughToTheOther() {
+    val portraitOnly = YtArtistParser.page(
+      pageWithHeader(
+        """"thumbnail":{"croppedSquareThumbnailRenderer":{}},""" +
+          """"foregroundThumbnail":${picture("https://lh3.googleusercontent.com/avatar=w226-h226-p-l90-rj")}""",
+      ),
+    )!!
+    assertEquals("https://lh3.googleusercontent.com/avatar=w544-h544-p-l90-rj", portraitOnly.artworkUrl)
+    val bannerOnly = YtArtistParser.page(
+      pageWithHeader(
+        """"thumbnail":${picture("https://lh3.googleusercontent.com/banner=w1080-h450-p-l90-rj")},""" +
+          """"foregroundThumbnail":{}""",
+      ),
+    )!!
+    assertEquals("https://lh3.googleusercontent.com/banner=w544-h544-p-l90-rj", bannerOnly.artworkUrl)
+  }
+
   @Test
   fun readsTheArtistsAlbumsAndSingles() {
     val page = YtArtistParser.page(body("artist-page.json"))!!
