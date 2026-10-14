@@ -623,3 +623,20 @@ export type {
   PlaylistSong,
   StreamedPlaylistEntry,
 } from "./playlistEntries.ts";
+export {
+  linkImportView,
+  planLinkImport,
+  playlistImportSources,
+  recognisePlaylistLink,
+} from "./playlistLinks.ts";
+export type {
+  LinkImportPlan,
+  LinkImportRead,
+  LinkImportView,
+  LinkReadFailure,
+  LinkedPlaylist,
+  PlaylistImportSource,
+  PlaylistLink,
+  PlaylistLinkCheck,
+  PlaylistLinkProblem,
+} from "./playlistLinks.ts";

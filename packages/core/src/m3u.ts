@@ -145,11 +145,18 @@ export const isM3uFileName = (fileName: string): boolean => PLAYLIST_EXTENSION.t
 
 const UNNAMED = "Imported Playlist";
 
-/** A name `checkPlaylistName` accepts (unless another playlist has it), from the file's. */
-const playlistNameOf = (fileName: string): string => {
-  const name = fileName.replace(PLAYLIST_EXTENSION, "").trim().replace(/\s+/g, " ");
+/**
+ * An imported playlist's name, from its source's (a file's, a linked
+ * playlist's title): one `checkPlaylistName` accepts unless another playlist has it.
+ */
+export const importedPlaylistName = (source: string): string => {
+  const name = source.trim().replace(/\s+/g, " ");
   return [...name].slice(0, PLAYLIST_NAME_MAX).join("").trim() || UNNAMED;
 };
+
+/** An imported file's playlist name: the file's, without its extension. */
+const playlistNameOf = (fileName: string): string =>
+  importedPlaylistName(fileName.replace(PLAYLIST_EXTENSION, ""));
 
 /** The playlist that already has [name] (as `checkPlaylistName` compares names), if any. */
 export const importNameClash = <P extends { readonly name: string }>(
