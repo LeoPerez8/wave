@@ -298,7 +298,7 @@
     "typographyMeta": {
       "display": {
         "displayName": "Display",
-        "purpose": "Spine scrub letter, set huge in the field."
+        "purpose": "The letter on the spine's plate beside the finger while the spine is dragged."
       },
       "headline": {
         "displayName": "Headline",
@@ -347,12 +347,12 @@
       {
         "name": "duration-tap",
         "value": "140ms (owner-set, 0–600ms in 20ms steps)",
-        "purpose": "Press dim-and-sink and the spine veil fade-in; 0 makes the press an instant dim."
+        "purpose": "Press dim-and-sink and the spine plate's fade-and-grow in; 0 makes the press an instant dim."
       },
       {
         "name": "duration-spine-out",
-        "value": "2 × duration-tap",
-        "purpose": "The spine's letter veil fading out."
+        "value": "0.5 × duration-tap",
+        "purpose": "The spine's letter plate fading out, so the rows it landed on are clear at once."
       },
       {
         "name": "press-dim",
@@ -428,9 +428,9 @@
       "name": "Alphabet Spine",
       "kind": "custom",
       "refersTo": "alphabet-spine",
-      "description": "Signature: thin tracked A–Z column 24dp from the right edge; active letter teal, huge letter in the field.",
-      "html": "<div class=\"ds-spinewrap\"><div class=\"ds-veil\">K</div><div class=\"ds-spine\"><span class=\"\">#</span><span class=\"\">A</span><span class=\"\">B</span><span class=\"\">C</span><span class=\"\">D</span><span class=\"\">E</span><span class=\"\">F</span><span class=\"\">G</span><span class=\"\">H</span><span class=\"\">I</span><span class=\"\">J</span><span class=\"ds-on\">K</span><span class=\"\">L</span><span class=\"\">M</span><span class=\"\">N</span><span class=\"\">O</span><span class=\"\">P</span><span class=\"\">Q</span><span class=\"\">R</span><span class=\"\">S</span><span class=\"\">T</span><span class=\"\">U</span><span class=\"\">V</span><span class=\"\">W</span><span class=\"\">X</span><span class=\"\">Y</span><span class=\"\">Z</span></div></div>",
-      "css": ".ds-spinewrap{font-family:Inter,system-ui,sans-serif;position:relative;height:420px;background:#e0ecef;} .ds-veil{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(224,236,239,.9);font-size:168px;line-height:176px;font-weight:300;color:#121b1d;} .ds-spine{position:absolute;top:0;bottom:0;right:24px;width:24px;display:flex;flex-direction:column;justify-content:center;padding:8px 0;} .ds-spine span{text-align:center;font-size:10px;line-height:14px;font-weight:600;letter-spacing:.7px;color:#454f52;} .ds-spine span.ds-on{color:#006a5f;}"
+      "description": "Signature: thin tracked A–Z column 24dp from the right edge, every letter in a fixed place (A–Z then #, missing letters as dots); the active letter teal and a Display letter on an 80dp fill-tone plate beside the finger, the list still in view.",
+      "html": "<div class=\"ds-spinewrap\"><div class=\"ds-rows\"></div><div class=\"ds-plate\">K</div><div class=\"ds-spine\"><span class=\"\">A</span><span class=\"\">B</span><span class=\"\">C</span><span class=\"\">D</span><span class=\"\">E</span><span class=\"\">F</span><span class=\"\">G</span><span class=\"\">H</span><i class=\"ds-dot\"></i><span class=\"\">J</span><span class=\"ds-on\">K</span><span class=\"\">L</span><span class=\"\">M</span><span class=\"\">N</span><span class=\"\">O</span><span class=\"\">P</span><i class=\"ds-dot\"></i><span class=\"\">R</span><span class=\"\">S</span><span class=\"\">T</span><i class=\"ds-dot\"></i><span class=\"\">V</span><span class=\"\">W</span><i class=\"ds-dot\"></i><i class=\"ds-dot\"></i><i class=\"ds-dot\"></i><span class=\"\">#</span></div></div>",
+      "css": ".ds-spinewrap{font-family:Inter,system-ui,sans-serif;position:relative;height:464px;background:#e0ecef;} .ds-rows{position:absolute;top:0;bottom:0;left:24px;right:72px;background:repeating-linear-gradient(#e0ecef 0 55px,#c1cdd0 55px 56px);} .ds-plate{position:absolute;top:152px;right:88px;width:80px;height:80px;display:flex;align-items:center;justify-content:center;background:#d3dfe2;font-size:56px;line-height:64px;font-weight:300;color:#121b1d;} .ds-spine{position:absolute;top:8px;right:24px;width:24px;display:flex;flex-direction:column;padding:8px 0;} .ds-spine span,.ds-spine i{height:16px;display:flex;align-items:center;justify-content:center;} .ds-spine span{font-size:10px;line-height:14px;font-weight:600;letter-spacing:.7px;color:#454f52;font-style:normal;} .ds-spine span.ds-on{color:#006a5f;} .ds-spine i.ds-dot::before{content:'';width:2px;height:2px;background:#454f52;}"
     }
   ],
   "narrative": {

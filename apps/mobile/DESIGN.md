@@ -25,9 +25,9 @@ colors:
 typography:
   display:
     fontFamily: "Inter"
-    fontSize: "168px"
+    fontSize: "56px"
     fontWeight: 300
-    lineHeight: "176px"
+    lineHeight: "64px"
   headline:
     fontFamily: "Inter"
     fontSize: "36px"
@@ -89,6 +89,9 @@ spacing:
   row: "56px"
   spine: "24px"
   spine-inset: "24px"
+  spine-hit: "48px"
+  spine-slot: "16px"
+  spine-plate: "80px"
 components:
   entry-row:
     textColor: "{colors.foreground}"
@@ -122,6 +125,12 @@ components:
     width: "{spacing.spine}"
   alphabet-spine-active:
     textColor: "{colors.accent}"
+  alphabet-spine-plate:
+    backgroundColor: "{colors.fill}"
+    textColor: "{colors.foreground}"
+    typography: "{typography.display}"
+    size: "{spacing.spine-plate}"
+    rounded: "{rounded.none}"
 ---
 
 # Design System: Wave
@@ -197,7 +206,7 @@ These are the shipped colours. In Settings › Theme the owner picks a backgroun
 
 ### Hierarchy
 
-- **Display** (300, 168/176): the single huge letter set in the field while the A–Z spine is dragged. Nowhere else.
+- **Display** (300, 56/64): the letter on the A–Z spine's plate while the spine is dragged. Nowhere else.
 - **Headline** (300, 36/44, -0.6 tracking): the large title of a tab screen ("Library"), top-left, scrolling with the content.
 - **Title** (300, 28/34, -0.4 tracking): the title of a pushed screen, under the Back button.
 - **Entry** (400, 20/26): Library entries and settings row labels; one quiet line each.
@@ -221,11 +230,11 @@ Sizes are in dp and scale with the system font size; at font scale 1.3 album fur
 
 Everything is a whole (or half/quarter) multiple of the 8dp cell (`CELL` in `src/catalog/grid.ts`): side margin 24dp, tile gutter 16dp, row height 56dp, a 32dp state cell, 40dp track thumbnails, and a 24dp-wide spine. Vertical rhythm uses the same steps: 12dp between artwork and its caption, 40dp above "Recently added", 24dp between album rows. Scrolling screens pad their bottom so the last row clears the floating chrome plus 24dp (`useChromeInset()` in `src/chrome/chrome.tsx`).
 
-Album grids are two columns. Tile width is computed from the window: screen width minus the left margin, the spine and its inset, and one gutter, halved. Each tile reserves a fixed 96dp caption block (catalog line, two lines of title, furniture line), so every furniture line lands in the same place.
+Album grids are two columns. Tile width is computed from the window: screen width minus the left margin, the spine's touch target and its inset, and one gutter, halved. Each tile reserves a fixed 96dp caption block (catalog line, two lines of title, furniture line), so every furniture line lands in the same place.
 
 Rows are fixed-height (56dp), so long lists can be laid out by index and scroll at 120 Hz. Every track row reserves the same cells whether or not they are filled: leading thumbnail or track-number cell (in selection mode, a check cell before it), title and artist, a favorite cell, and a right-aligned 40dp duration. The playing track needs no cell of its own: it is marked on the title itself (ember, with a wavy underline). A missing file's glyph takes the track-number cell in album lists and, in Songs lists, sits after the text, taking its room from the title. State never moves the favorite or duration cells.
 
-The A–Z spine sits 24dp in from the right edge, not on it, to stay clear of Android's system Back gesture zone (Android only lets an app exclude 200dp per edge). Lists that carry a spine pad their right side by spine plus inset (48dp). The spine's touch target is 48dp wide even though only 24dp is drawn.
+The A–Z spine sits 24dp in from the right edge, not on it, to stay clear of Android's system Back gesture zone (Android only lets an app exclude 200dp per edge). The spine's touch target is 48dp wide even though only 24dp is drawn, and lists that carry a spine keep their rows clear of all of it: they pad their right side by the touch target plus the inset (72dp), so rows end a margin short of the letters and a scroll or tap near a row's right edge never lands on the spine.
 
 ### Named Rules
 
@@ -237,7 +246,7 @@ The A–Z spine sits 24dp in from the right edge, not on it, to stay clear of An
 
 ## Elevation & Depth
 
-The world is flat. There are no shadows, no elevation and no gradients (save the Now Playing ground, below); depth comes from the tone ramp (field squares and hairlines a step off the ground) and from artwork itself. Three things float: the spine's letter field (the ground at 90% opacity laid over the list, with the huge letter centred in it) the floating chrome at the bottom, and dialogs and menus; the last two are glass.
+The world is flat. There are no shadows, no elevation and no gradients (save the Now Playing ground, below); depth comes from the tone ramp (field squares and hairlines a step off the ground) and from artwork itself. Three things float: the spine's letter plate (a field square in the `fill` tone beside the finger, with no shadow), the floating chrome at the bottom, and dialogs and menus; the last two are glass.
 
 **Glass** (the floating chrome, dialogs and menus): a live blur of the content underneath, a slight lens-like refraction at the rounded edge with a specular rim lit from the top left, and the `surface` tone laid over it so text stays legible. It is native (`modules/wave-glass`, RenderEffect + AGSL on the RenderThread) and sized for 120 Hz; blur, refraction, tint and rim are tuned in Settings › Glass (defaults in Core `GLASS_SETTINGS`), and refraction 0 is the blur + tint + rim fallback. See `docs/glass-spike.md`. Below Android 12 (no RenderEffect) glass is an opaque `surface`.
 
@@ -354,7 +363,13 @@ An album or playlist from Discover opens a pushed screen laid out like a Library
 
 ### Alphabet Spine (signature)
 
-Wave's signature move: a thin column of tracked letters (Spine type, graphite) on the right, 24dp from the edge. Dragging it jumps the list, ticks a haptic per letter, turns the active letter teal, and sets that letter huge (Display, ink) in the field over a 90% ground veil. The veil fades in over the tap duration and out over twice that. For accessibility it is a single adjustable control with increment / decrement actions.
+Wave's signature move: a thin column of tracked letters (Spine type, graphite) on the right, 24dp from the edge (`src/catalog/AlphabetSpine.tsx`, wired to a list by `src/library/useSpine.ts`).
+
+- **Fixed places.** Every letter has its place, A to Z then `#` (where Core files names that start with a digit, a symbol or a non-Latin letter), so "M" sits at the same height in Artists, Albums and Songs and stays there after a scan. A list sorted Z to A gets the spine the same way up: `#`, then Z to A. A letter the list has is drawn; a missing one is a 2dp graphite dot that jumps to the next letter the list has (Core's `spineLayout`). Long lists only (24 rows and at least two letters, Core's `spineEntries`).
+- **Fit.** Each place is 16dp tall when there is room. The spine is centred in the list's height above the floating chrome, and when 27 places don't fit they shrink and only every other (or every third…) present letter is drawn, the rest dots. Spine letters follow the system font size up to 1.3×, then thin out instead of overflowing.
+- **Scrub.** The touch target is 48dp wide and the rows stay clear of it (see Layout). A touch on the spine jumps the list to the letter under the finger (Core's `spineSlotAt`) and moves on with it, once per letter change: a selection haptic, the letter on the spine turns teal, and the list jumps (no animated scroll: scrolling through thousands of rows on the way would trail the finger). The gesture runs on the UI thread; the JS thread only hears where the finger is and acts when the letter changes.
+- **The plate.** Beside the finger, 16dp left of the touch target, an 80dp field square in the `fill` tone holds the letter (Display, ink), square like artwork and with no shadow. It follows the finger on the UI thread, centred on it and kept within the spine's height, and leaves the list in view so you see the rows you are landing on. It fades and grows in (from 92%) over the tap duration and fades out in half that; with reduce motion it only fades, and at 0 ms it appears and goes at once.
+- **Accessibility.** A single adjustable control ("Alphabet index", hint "Swipe up or down to jump to a letter"). Increment and decrement step to the letter after or before the one at the top of the list on screen (Core's `spineStep`), and the new letter becomes the control's value and is announced. The plate is hidden from screen readers.
 
 ### Empty State
 
