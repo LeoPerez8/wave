@@ -13,7 +13,7 @@ import type { SongRow } from "@/library/LibraryStore";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { openAlbum, openArtist, openGenre, openPlaylist } from "@/library/routes";
 import { toTrackSummary } from "@/library/TrackList";
-import { playDiscoverSongs, playSongs } from "@/playback/actions";
+import { playPage } from "@/playback/actions";
 import { useCurrentTrackId } from "@/playback/hooks";
 import {
   openAlbumActions,
@@ -47,14 +47,11 @@ const HEIGHT: Readonly<Record<ResultRow["type"], number>> = {
 const ignore = (): void => undefined;
 
 /**
- * Plays the song results from [index]: the Library's files and, when YT Music
- * found songs the Library lacks, those streamed after them.
+ * Plays the song results from [index] (`playPage`): the Library's files and,
+ * when YT Music found songs the Library lacks, those streamed after them.
  */
-const playResults = (songs: readonly ResultSong[], index: number): void => {
-  const library = songs.flatMap((song) => (song.source === "library" ? [song.track] : []));
-  if (library.length === songs.length) playSongs(library, index, SEARCH_CONTEXT);
-  else void playDiscoverSongs(songs, index, SEARCH_CONTEXT);
-};
+const playResults = (songs: readonly ResultSong[], index: number): void =>
+  void playPage(songs, index, SEARCH_CONTEXT);
 
 /**
  * A song YT Music found, among the song results. Tapping plays the results

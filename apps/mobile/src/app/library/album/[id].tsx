@@ -19,8 +19,8 @@ import { PlayShuffle } from "@/catalog/PlayShuffle";
 import { TrackRow } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { Press } from "@/motion/Press";
-import { playDiscoverSongs, playSongs } from "@/playback/actions";
-import { useCurrentTrackId, usePlaySongs } from "@/playback/hooks";
+import { playPage, playSongs } from "@/playback/actions";
+import { useCurrentTrackId, usePlayPage } from "@/playback/hooks";
 import { openTrackActions } from "@/playback/ActionsMenu";
 import { followArtistLink } from "@/library/ArtistChoice";
 import { DetailFrame } from "@/library/DetailFrame";
@@ -126,11 +126,12 @@ function AlbumHead({
   const { width } = useWindowDimensions();
   const { album, genre, tracks } = shown;
   const context = useMemo(() => ({ kind: "album", id: String(album.id) }) as const, [album.id]);
-  const playLibrary = usePlaySongs(tracks, context);
-  const play = (shuffle: boolean) =>
-    mixed === null
-      ? playLibrary(shuffle)
-      : void playDiscoverSongs(mixed, undefined, context, { shuffle });
+  // Its tracks, or with YouTube Music's songs joined in the whole list, by `playPage`'s rule.
+  const songs = useMemo(
+    () => mixed ?? tracks?.map((track) => ({ source: "library" as const, track })),
+    [mixed, tracks],
+  );
+  const play = usePlayPage(songs, context);
   const download = useYtAlbumDownloadButton(ytSongs);
   // Several album artists: the line opens Go to Artist's choice (Core's `artistLink`).
   const artistTo = artistLink(album.albumArtistIds, usePathname());
@@ -291,7 +292,7 @@ function AlbumTracks({ shown }: { shown: Shown }) {
               playing={song !== undefined && discoverTrackId(song) === currentId}
               favorite={item.entry.source === "library" && favorites.has(item.entry.track.id)}
               listSelection={listSelection}
-              onPress={() => mixed !== null && void playDiscoverSongs(mixed, item.index, context)}
+              onPress={() => mixed !== null && void playPage(mixed, item.index, context)}
             />
           );
         }

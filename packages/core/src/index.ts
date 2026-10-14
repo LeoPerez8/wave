@@ -553,3 +553,5 @@ export type {
   YtLibraryAlbumView,
   YtReleaseLoad,
 } from "./ytArtist.ts";
+export { pagePlayback } from "./pagePlayback.ts";
+export type { PagePlayback } from "./pagePlayback.ts";
