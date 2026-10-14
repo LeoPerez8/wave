@@ -542,6 +542,17 @@ export const missingTags = (found: FoundTags, song: IndexedTags): FoundTags => (
   genre: (song.genre ?? "").trim() === "" ? found.genre : null,
 });
 
+/**
+ * What of [found] the whole-Library run writes into [song]: a song it picked
+ * for lacking lyrics or a genre gets them replaced, as a song the owner picks
+ * does (`tagsToWrite`); one picked only for lacking a track number or year is
+ * just filled in (`missingTags`), keeping the lyrics and genre it has.
+ */
+export const libraryTagsToWrite = (found: FoundTags, song: IndexedTags): FoundTags =>
+  !song.hasLyrics || (song.genre ?? "").trim() === ""
+    ? tagsToWrite(found, song)
+    : missingTags(found, song);
+
 /** How a run over many songs ended early, and how many songs it didn't get to. */
 export interface TagLookupStop {
   readonly stopped: "cancelled" | "unreachable";

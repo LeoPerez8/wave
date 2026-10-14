@@ -245,19 +245,23 @@ export const writeLyricsAndGenre = (
     };
   });
 
+/** What of a lookup's finds to write into a song (Core's `tagsToWrite`, `libraryTagsToWrite`). */
+export type ChooseTags<S> = (found: FoundTags, song: S) => FoundTags;
+
 /**
- * Find Lyrics and Genre for one song: looks it up and writes what is found
- * (Core's `tagsToWrite`: lyrics and genre replaced, the track number and year
- * only filled in). A failure is an outcome (the file is left as it was); only
- * `LookupsOff` fails.
+ * Find Lyrics and Genre for one song: looks it up and writes what [choose]
+ * keeps of what is found (by default Core's `tagsToWrite`: lyrics and genre
+ * replaced, the track number and year only filled in). A failure is an outcome
+ * (the file is left as it was); only `LookupsOff` fails.
  */
-export const findLyricsAndGenre = (
-  song: TaggableSong,
+export const findLyricsAndGenre = <S extends TaggableSong>(
+  song: S,
+  choose: ChooseTags<S> = tagsToWrite,
 ): Effect.Effect<SongTagOutcome, LookupsOff, LibraryStore> =>
   Effect.gen(function* () {
     const lookup = songLookup(song);
     if (lookup === null) return { kind: "notFound" } as const;
-    const found = tagsToWrite(yield* lookUpLyricsAndGenre(lookup, lacksTrackNumber(song)), song);
+    const found = choose(yield* lookUpLyricsAndGenre(lookup, lacksTrackNumber(song)), song);
     const written = yield* writeLyricsAndGenre(song.path, found);
     return songTagOutcome(found, written);
   }).pipe(
@@ -298,19 +302,21 @@ export const fillInLyricsAndGenre = (
 const SONG_MIN_MS = 400;
 
 /**
- * Finds lyrics and genre for [songs], one after another, calling [onResult]
- * as each is done. Stops early (`unreachable`) when LRCLIB and Deezer can't be
- * reached (Core's `lookupsUnreachable`); interrupt it to cancel.
+ * Finds lyrics and genre for [songs], one after another, writing what [choose]
+ * keeps of each one's finds and calling [onResult] as each is done. Stops early
+ * (`unreachable`) when LRCLIB and Deezer can't be reached (Core's
+ * `lookupsUnreachable`); interrupt it to cancel.
  */
 export const findLyricsAndGenreForSongs = <S extends TaggableSong>(
   songs: readonly S[],
   onResult: (song: S, outcome: SongTagOutcome) => void,
+  choose: ChooseTags<S> = tagsToWrite,
 ): Effect.Effect<"done" | "unreachable", LookupsOff, LibraryStore> =>
   Effect.gen(function* () {
     const outcomes: SongTagOutcome[] = [];
     for (const song of songs) {
       const startedAt = Date.now();
-      const outcome = yield* findLyricsAndGenre(song);
+      const outcome = yield* findLyricsAndGenre(song, choose);
       outcomes.push(outcome);
       onResult(song, outcome);
       if (lookupsUnreachable(outcomes)) return "unreachable" as const;

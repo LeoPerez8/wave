@@ -13,6 +13,7 @@ import {
   describeTagLookups,
   lacksTrackNumber,
   libraryLookupSongs,
+  libraryTagsToWrite,
   lookupsUnreachable,
   missingTags,
   lrclibCandidates,
@@ -811,6 +812,48 @@ describe("describeTagLookups", () => {
       title: "Lyrics and genre stopped",
       message:
         "1 updated · 1 not found · 0 failed\n\nLRCLIB and Deezer couldn't be reached, so 1 song wasn't looked up.",
+    });
+  });
+});
+
+describe("libraryTagsToWrite", () => {
+  const found = {
+    lyrics: { synced: true, text: "[00:01.00] Hey" },
+    genre: "Rock",
+    trackNumber: 3,
+    discNumber: 2,
+    year: 1997,
+  };
+  const complete = { hasLyrics: true, genre: "Indie", trackNumber: 7, year: 2001 };
+
+  test("only fills in a song picked for lacking a track number or year: its lyrics and genre stay", () => {
+    assert.deepEqual(libraryTagsToWrite(found, { ...complete, trackNumber: null }), {
+      lyrics: null,
+      genre: null,
+      trackNumber: 3,
+      discNumber: 2,
+      year: null,
+    });
+    assert.deepEqual(libraryTagsToWrite(found, { ...complete, year: 0 }), {
+      lyrics: null,
+      genre: null,
+      trackNumber: null,
+      discNumber: null,
+      year: 1997,
+    });
+  });
+
+  test("replaces lyrics and genre in a song picked for lacking either", () => {
+    assert.deepEqual(libraryTagsToWrite(found, { ...complete, hasLyrics: false }), {
+      ...found,
+      trackNumber: null,
+      discNumber: null,
+      year: null,
+    });
+    assert.deepEqual(libraryTagsToWrite(found, { ...complete, genre: " ", year: null }), {
+      ...found,
+      trackNumber: null,
+      discNumber: null,
     });
   });
 });

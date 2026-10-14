@@ -394,6 +394,7 @@ export {
   describeTagLookups,
   lacksTrackNumber,
   libraryLookupSongs,
+  libraryTagsToWrite,
   lookupsUnreachable,
   lrclibCandidates,
   lrclibSearchUrl,
