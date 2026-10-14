@@ -153,10 +153,11 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
         val target = (payload["targetPath"] as? String)?.let(::File)
         val source = payload["source"] as? String ?: job["source"] as? String ?: SOULSEEK
         setSource(job, source)
+        keepFallback(job, payload)
         val candidates = if (source == YOUTUBE) {
           // YouTube's audio is saved as the M4A it serves, never re-encoded.
           if (target == null || !target.extension.equals("m4a", true)) { fail(job, "failed"); persist(); return true }
-          listOf(mapOf("source" to YOUTUBE, "videoId" to job.map("song")["videoId"]))
+          youtubeCandidates(job)
         } else {
           val candidates = payload.maps("candidates").take(3)
           // Only original MP3 320 is eligible; anything else is no recording rather than a lower one.
@@ -402,7 +403,52 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
     if (source == null) return
     job["source"] = source; job["policy"] = if (source == YOUTUBE) YOUTUBE_M4A else MP3_320
   }
-  private fun fail(job: MutableMap<String, Any?>, reason: String) { job["reason"] = reason; job["endedAt"] = clock(); transition(job, "failed"); job["generation"] = job.number("generation") + 1; cleanup(job) }
+  private fun youtubeCandidates(job: Map<String, Any?>) = listOf(mapOf("source" to YOUTUBE, "videoId" to job.map("song")["videoId"]))
+
+  /**
+   * Keeps what a Soulseek job's prepare answer says about YouTube Music (Core's
+   * `downloadFallbackFailures`): the failures that hand the job over, and the M4A's place. The
+   * tags come with a failed answer too, so a job that never found a peer can still fall back.
+   */
+  private fun keepFallback(job: MutableMap<String, Any?>, payload: Map<String, Any?>) {
+    val fallback = payload.map("fallback")
+    if (job["source"] != YOUTUBE && fallback["source"] == YOUTUBE && (fallback["targetPath"] as? String)?.endsWith(".m4a", true) == true) {
+      job["fallback"] = clean(fallback)
+    } else job.remove("fallback")
+    if (payload["tags"] != null) job["tags"] = clean(payload.map("tags"))
+  }
+
+  /** Whether Soulseek failing [job] with [reason] hands it over to YouTube Music. */
+  private fun fallsBack(job: Map<String, Any?>, reason: String) =
+    job["source"] != YOUTUBE && job["phase"] in ACQUIRING && reason in job.map("fallback").strings("failures")
+
+  /**
+   * Carries [job] on from YouTube Music when Soulseek's [reason] is one Core hands over: the same
+   * job and row, with YouTube's M4A as the target and a time budget of its own. The plan is used
+   * up, so YouTube's own failure ends the job; Retry starts again from Soulseek.
+   */
+  private fun fallBack(job: MutableMap<String, Any?>, reason: String): Boolean {
+    if (!fallsBack(job, reason)) return false
+    val fallback = job.map("fallback")
+    cleanup(job)
+    for (key in listOf("fallback", "peer", "audio", "receiptId", "received", "total", "queuePosition", "queueDeadline", "attemptDeadline", "resumeAttemptDeadline", "resumeQueueDeadline")) job.remove(key)
+    setSource(job, YOUTUBE)
+    job["fellBackFrom"] = reason
+    job["targetPath"] = fallback["targetPath"]
+    job["candidates"] = youtubeCandidates(job); job["candidateIndex"] = 0L; job["attempts"] = 0L
+    job["deadline"] = clock() + JOB_MS
+    job["generation"] = job.number("generation") + 1
+    transition(job, "prepared")
+    return true
+  }
+
+  /** Every way a job fails goes through here, which is where Soulseek's failures fall back. */
+  private fun fail(job: MutableMap<String, Any?>, reason: String) {
+    if (fallBack(job, reason)) return
+    // YT Music was turned off before YouTube could take over: Soulseek's failure stands.
+    job["reason"] = if (reason == "noSource") job["fellBackFrom"] as? String ?: reason else reason
+    job["endedAt"] = clock(); transition(job, "failed"); job["generation"] = job.number("generation") + 1; cleanup(job)
+  }
   private fun cleanup(job: Map<String, Any?>) { for (key in listOf("sourcePath", "outputPath")) (job[key] as? String)?.let { if (it != job["finalPath"]) File(it).delete() } }
   private fun included(file: File): Boolean {
     val path = file.canonicalFile.toPath()
@@ -444,6 +490,8 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
     private const val MP3_320 = "mp3-320"
     private const val YOUTUBE_M4A = "youtube-m4a"
     private val TERMINAL = setOf("failed", "cancelled")
+    /** Until the audio is accepted; afterwards a failure is the save's, which YouTube would share. */
+    private val ACQUIRING = setOf("preparing", "prepared", "transferring", "sourceReady")
     private val DECISIONS = mapOf("preparing" to "prepare", "sourceReady" to "confirm", "awaitingPublication" to "publish", "completed" to "import")
   }
 }
