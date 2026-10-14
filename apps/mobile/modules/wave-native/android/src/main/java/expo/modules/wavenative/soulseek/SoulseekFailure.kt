@@ -3,8 +3,12 @@ package expo.modules.wavenative.soulseek
 import java.io.IOException
 
 enum class SoulseekFailure(val code: String, val notice: String) {
-  SIGNED_OUT("ERR_SLSK_SIGNED_OUT", "Connect a Soulseek account in Settings"),
-  AUTH("ERR_SLSK_AUTH", "Soulseek rejected the account. Check your username and password"),
+  /** Download in best quality is off, or the phone has no Soulseek account. */
+  SIGNED_OUT("ERR_SLSK_SIGNED_OUT", "Turn on Download in best quality in Settings"),
+  /** Soulseek turned the account down: a wrong password, or a name someone else has. */
+  AUTH("ERR_SLSK_AUTH", "Soulseek rejected the account"),
+  /** Every username drawn for a new account was taken. */
+  NO_ACCOUNT("ERR_SLSK_NO_ACCOUNT", "Couldn't make a Soulseek account. Try again"),
   /** The phone is offline, or the connection to Soulseek's server dropped: connecting again tells which. */
   OFFLINE("ERR_SLSK_OFFLINE", "Couldn't connect to Soulseek. Retry when you're online"),
   /** The phone is online but Soulseek's server doesn't answer when connecting. */
