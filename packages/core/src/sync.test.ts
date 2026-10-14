@@ -9,6 +9,7 @@ import {
   mergeRows,
   normalizeTrack,
   recordingKey,
+  signOutPlan,
   vanishedFile,
 } from "./index.ts";
 import type { RawTrack } from "./index.ts";
@@ -92,9 +93,10 @@ describe("recordingKey", () => {
   });
 });
 
+const take = (durationMs: number, key = "k") => ({ recordingKey: key, durationMs });
+
 describe("findRecording", () => {
   const song = { recordingKey: "k", durationMs: 200_000 };
-  const take = (durationMs: number, key = "k") => ({ recordingKey: key, durationMs });
 
   test("the one candidate with the song's key is the song, whatever its length", () => {
     const only = take(260_000);
@@ -199,29 +201,30 @@ describe("mergeRows", () => {
   });
 });
 
-describe("mergePlays", () => {
-  const play = (id: string, listenedMs: number) => ({ id, recordingKey: "k", listenedMs });
+const play = (id: string, listenedMs: number) => ({ id, recordingKey: "k", listenedMs });
 
+describe("mergePlays", () => {
   test("a play is added once, and a play already held is never changed", () => {
     const first = play("pixel-1", 120_000);
     const second = play("galaxy-1", 30_000);
-    const merged = mergePlays(
-      [first],
-      [play("pixel-1", 999), second, play("galaxy-1", 1)],
-    );
+    const merged = mergePlays([first], [play("pixel-1", 999), second, play("galaxy-1", 1)]);
     assert.deepEqual(merged.plays, [first, second]);
     assert.deepEqual(merged.added, [second]);
   });
 });
 
+const track = (id: number, key: string) => ({ id, recordingKey: key });
+const accountSong = (key: string) => ({ recordingKey: key, title: key });
+
 describe("joinLibraries", () => {
-  const track = (id: number, key: string) => ({ id, recordingKey: key });
-  const accountSong = (key: string) => ({ recordingKey: key, title: key });
   const noPlaylists = { playlists: [] };
 
   test("the account's songs the phone has become its Tracks, the rest come in missing", () => {
     const join = joinLibraries({
-      phone: { songs: [track(1, "abbey road/something"), track(2, "revolver/taxman")], playlists: [] },
+      phone: {
+        songs: [track(1, "abbey road/something"), track(2, "revolver/taxman")],
+        playlists: [],
+      },
       account: {
         songs: [accountSong("abbey road/something"), accountSong("help/yesterday")],
         playlists: [],
@@ -237,7 +240,10 @@ describe("joinLibraries", () => {
   test("two files with one recording key are one song: it goes up once, and both are its Tracks", () => {
     const flac = track(1, "abbey road/something");
     const mp3 = track(2, "abbey road/something");
-    const alone = joinLibraries({ phone: { songs: [flac, mp3], ...noPlaylists }, account: { songs: [], ...noPlaylists } });
+    const alone = joinLibraries({
+      phone: { songs: [flac, mp3], ...noPlaylists },
+      account: { songs: [], ...noPlaylists },
+    });
     assert.deepEqual(alone.up, [flac]);
     assert.deepEqual(alone.tracks, []);
 
@@ -245,7 +251,9 @@ describe("joinLibraries", () => {
       phone: { songs: [flac, mp3], ...noPlaylists },
       account: { songs: [accountSong("abbey road/something")], ...noPlaylists },
     });
-    assert.deepEqual(joined.tracks, [{ account: accountSong("abbey road/something"), phone: [flac, mp3] }]);
+    assert.deepEqual(joined.tracks, [
+      { account: accountSong("abbey road/something"), phone: [flac, mp3] },
+    ]);
     assert.deepEqual(joined.up, []);
     assert.deepEqual(joined.missing, []);
   });
@@ -285,18 +293,18 @@ describe("vanishedFile", () => {
   });
 });
 
-describe("fillMissingSongs", () => {
-  const file = (path: string, key: string, durationMs = 200_000) => ({
-    path,
-    recordingKey: key,
-    durationMs,
-  });
-  const missingSong = (id: number, key: string, durationMs = 200_000) => ({
-    id,
-    recordingKey: key,
-    durationMs,
-  });
+const file = (path: string, key: string, durationMs = 200_000) => ({
+  path,
+  recordingKey: key,
+  durationMs,
+});
+const missingSong = (id: number, key: string, durationMs = 200_000) => ({
+  id,
+  recordingKey: key,
+  durationMs,
+});
 
+describe("fillMissingSongs", () => {
   test("a new file with a missing song's recording key fills that song in", () => {
     const synced = file("/Music/Syncthing/Something.flac", "something");
     const fresh = file("/Music/New.mp3", "new");
@@ -317,12 +325,39 @@ describe("fillMissingSongs", () => {
     const short = missingSong(1, "intro", 60_000);
     const long = missingSong(2, "intro", 240_000);
     const found = file("/Music/intro.flac", "intro", 241_500);
-    assert.deepEqual(fillMissingSongs([found], [short, long]).filled, [{ file: found, song: long }]);
+    assert.deepEqual(fillMissingSongs([found], [short, long]).filled, [
+      { file: found, song: long },
+    ]);
 
     const unclear = file("/Music/intro2.flac", "intro", 150_000);
     const fill = fillMissingSongs([unclear], [short, long]);
     assert.deepEqual(fill.filled, []);
     assert.deepEqual(fill.added, [unclear]);
+  });
+});
+
+describe("signOutPlan", () => {
+  test("missing songs go; their entries with a video id become YT Music entries, the others leave", () => {
+    const downloaded = { id: 1, videoId: "4D7u5KF7SP8" };
+    const fromSoulseek = { id: 2, videoId: null };
+    const entries = [
+      { id: "e1", playlistId: "gym", trackId: 1 },
+      { id: "e2", playlistId: "gym", trackId: 2 },
+      { id: "e3", playlistId: "gym", trackId: 3 },
+      { id: "e4", playlistId: "chill", trackId: 1 },
+    ];
+    const plan = signOutPlan({ missing: [downloaded, fromSoulseek], entries });
+    assert.deepEqual(plan.remove, [downloaded, fromSoulseek]);
+    assert.deepEqual(plan.toYtMusic, [
+      { entry: entries[0], videoId: "4D7u5KF7SP8" },
+      { entry: entries[3], videoId: "4D7u5KF7SP8" },
+    ]);
+    assert.deepEqual(plan.leave, [entries[1]]);
+  });
+
+  test("with no missing songs, signing out leaves everything as it is", () => {
+    const plan = signOutPlan({ missing: [], entries: [{ id: "e1", trackId: 3 }] });
+    assert.deepEqual(plan, { remove: [], toYtMusic: [], leave: [] });
   });
 });
 
@@ -333,7 +368,7 @@ const permutationsOf = <T>(items: readonly T[], count: number): T[][] => {
     seed = (seed * 48_271) % 2_147_483_647;
     return seed / 2_147_483_647;
   };
-  const orders = [[...items], [...items].reverse()];
+  const orders = [[...items], items.toReversed()];
   while (orders.length < count) {
     const order = [...items];
     for (let i = order.length - 1; i > 0; i--) {

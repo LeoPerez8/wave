@@ -105,7 +105,9 @@ export interface MergedRows<R extends SyncRow> {
   readonly accepted: readonly R[];
 }
 
-const byId = (a: SyncRow, b: SyncRow): number => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+const sortedById = <R extends SyncRow>(rows: Iterable<R>): R[] =>
+  // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
+  [...rows].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 
 /**
  * Merges [incoming] changes into the [current] rows, row by row: the later
@@ -131,10 +133,7 @@ export const mergeRows = <R extends SyncRow>(
       accepted.set(row.id, row);
     }
   }
-  return {
-    rows: [...winners.values()].sort(byId),
-    accepted: [...accepted.values()].sort(byId),
-  };
+  return { rows: sortedById(winners.values()), accepted: sortedById(accepted.values()) };
 };
 
 /** A synced play event: its id is made on the phone that recorded it, and is the same everywhere. */
@@ -293,4 +292,55 @@ export const fillMissingSongs = <F extends Recording, M extends Recording>(
     }
   }
   return { filled, added };
+};
+
+/** A missing song as signing out sees it. */
+export interface MissingSong<K> {
+  /** The Track's id on this phone. */
+  readonly id: K;
+  /** The YouTube video id of a song downloaded from YouTube Music, else `null`. */
+  readonly videoId: string | null;
+}
+
+/** A playlist entry that holds a Library Track. */
+export interface TrackEntry<K> {
+  readonly trackId: K;
+}
+
+/** A playlist entry that becomes a YT Music entry of the video it was downloaded from. */
+export interface StreamedEntry<E> {
+  readonly entry: E;
+  readonly videoId: string;
+}
+
+/** What signing out does. Everything not listed stays on the phone as it is. */
+export interface SignOutPlan<M, E> {
+  /** The missing songs, which go, since the phone has nothing of them. */
+  readonly remove: readonly M[];
+  /** The entries of missing songs with a video id: they become YT Music entries. */
+  readonly toYtMusic: readonly StreamedEntry<E>[];
+  /** The entries of missing songs without one: they leave their playlists, as a deleted file's do. */
+  readonly leave: readonly E[];
+}
+
+/**
+ * What signing out of the Wave account does to the Library: the [missing]
+ * songs go, and of the playlist [entries], those of a missing song become YT
+ * Music entries when the song has a video id and leave otherwise. The
+ * Library's other songs, playlists, favorites, plays and preferences stay.
+ */
+export const signOutPlan = <K, M extends MissingSong<K>, E extends TrackEntry<K>>(input: {
+  readonly missing: readonly M[];
+  readonly entries: readonly E[];
+}): SignOutPlan<M, E> => {
+  const missingById = new Map<K, M>(input.missing.map((song) => [song.id, song]));
+  const toYtMusic: StreamedEntry<E>[] = [];
+  const leave: E[] = [];
+  for (const entry of input.entries) {
+    const song = missingById.get(entry.trackId);
+    if (song === undefined) continue;
+    if (song.videoId === null) leave.push(entry);
+    else toYtMusic.push({ entry, videoId: song.videoId });
+  }
+  return { remove: input.missing, toYtMusic, leave };
 };

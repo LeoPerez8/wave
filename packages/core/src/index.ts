@@ -719,6 +719,7 @@ export {
   mergePlays,
   mergeRows,
   recordingKey,
+  signOutPlan,
   vanishedFile,
 } from "./sync.ts";
 export type {
@@ -729,10 +730,14 @@ export type {
   LibrarySide,
   MergedPlays,
   MergedRows,
+  MissingSong,
   MissingSongsFill,
   Recording,
   RecordingTags,
+  SignOutPlan,
+  StreamedEntry,
   SyncPlay,
   SyncRow,
+  TrackEntry,
   VanishedFileFate,
 } from "./sync.ts";

@@ -5,6 +5,19 @@ import { compareOrderKeys, mergeRows, orderKeyBetween } from "./index.ts";
 
 const longest = (keys: readonly string[]): number => Math.max(...keys.map((key) => key.length));
 
+/** A playlist entry row as two phones sync it. */
+const entry = (id: string, orderKey: string, phoneId: string) => ({
+  id,
+  orderKey,
+  phoneId,
+  changedAt: 1_000,
+  deleted: false,
+});
+
+/** The entry ids in the order the playlist lists them. */
+const order = (rows: readonly { id: string; orderKey: string }[]): string[] =>
+  rows.toSorted(compareOrderKeys).map((row) => row.id);
+
 describe("orderKeyBetween", () => {
   test("a key goes between its neighbours, before the first or after the last", () => {
     const first = orderKeyBetween(null, null);
@@ -19,14 +32,14 @@ describe("orderKeyBetween", () => {
   test("keys added at the end of a playlist stay short", () => {
     const keys = [orderKeyBetween(null, null)];
     for (let i = 0; i < 2_000; i++) keys.push(orderKeyBetween(keys.at(-1) ?? null, null));
-    assert.deepEqual([...keys].sort(), keys);
+    assert.deepEqual(keys.toSorted(), keys);
     assert.ok(longest(keys) <= 4, `longest key: ${longest(keys)}`);
   });
 
   test("keys added at the top of a playlist stay short", () => {
     const keys = [orderKeyBetween(null, null)];
     for (let i = 0; i < 2_000; i++) keys.unshift(orderKeyBetween(null, keys[0] ?? null));
-    assert.deepEqual([...keys].sort(), keys);
+    assert.deepEqual(keys.toSorted(), keys);
     assert.ok(longest(keys) <= 4, `longest key: ${longest(keys)}`);
   });
 
@@ -34,7 +47,7 @@ describe("orderKeyBetween", () => {
     const top = orderKeyBetween(null, null);
     const keys = [top, orderKeyBetween(top, null)];
     for (let i = 0; i < 100; i++) keys.splice(1, 0, orderKeyBetween(top, keys[1] ?? null));
-    assert.deepEqual([...keys].sort(), keys);
+    assert.deepEqual(keys.toSorted(), keys);
     assert.ok(longest(keys) <= 22, `longest key: ${longest(keys)}`);
   });
 
@@ -49,18 +62,11 @@ describe("orderKeyBetween", () => {
       const at = Math.floor(random() * (keys.length + 1));
       keys.splice(at, 0, orderKeyBetween(keys[at - 1] ?? null, keys[at] ?? null));
     }
-    assert.deepEqual([...keys].sort(), keys);
+    assert.deepEqual(keys.toSorted(), keys);
     assert.equal(new Set(keys).size, keys.length);
   });
 
   test("two phones adding at the same place offline both keep their entries, one after the other", () => {
-    const entry = (id: string, orderKey: string, phoneId: string) => ({
-      id,
-      orderKey,
-      phoneId,
-      changedAt: 1_000,
-      deleted: false,
-    });
     const first = orderKeyBetween(null, null);
     const last = orderKeyBetween(first, null);
     const shared = [entry("e-first", first, "pixel"), entry("e-last", last, "pixel")];
@@ -69,8 +75,6 @@ describe("orderKeyBetween", () => {
 
     const pixelThenGalaxy = mergeRows(mergeRows(shared, [onPixel]).rows, [onGalaxy]).rows;
     const galaxyThenPixel = mergeRows(mergeRows(shared, [onGalaxy]).rows, [onPixel]).rows;
-    const order = (rows: readonly { id: string; orderKey: string }[]): string[] =>
-      [...rows].sort(compareOrderKeys).map((row) => row.id);
     assert.deepEqual(order(pixelThenGalaxy), ["e-first", "e-galaxy", "e-pixel", "e-last"]);
     assert.deepEqual(order(galaxyThenPixel), order(pixelThenGalaxy));
   });
