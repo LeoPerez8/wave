@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { formatStepDurations } from "./step-durations.ts";
+import { formatStepDurations, reachedStep } from "./step-durations.ts";
 
 const now = new Date("2026-10-14T12:20:00Z");
 
@@ -106,4 +106,54 @@ test("leaves out steps that haven't finished, like the report step itself", () =
   assert.match(table, /\| Test \| 20s \|/);
   assert.doesNotMatch(table, /Report \|/);
   assert.doesNotMatch(table, /Post Run/);
+});
+
+test("hasn't reached the report step while the API still shows an earlier step running", () => {
+  // The jobs API lags behind the runner: the report can start before the API
+  // records the failed step and the skipped ones after it.
+  const job = {
+    started_at: "2026-10-14T12:00:00Z",
+    steps: [
+      {
+        name: "Typecheck",
+        status: "in_progress",
+        conclusion: null,
+        started_at: "2026-10-14T12:00:00Z",
+        completed_at: null,
+      },
+      {
+        name: "Report",
+        status: "pending",
+        conclusion: null,
+        started_at: null,
+        completed_at: null,
+      },
+    ],
+  };
+
+  assert.equal(reachedStep(job, "Report"), false);
+});
+
+test("has reached the report step once the API shows it running", () => {
+  const job = {
+    started_at: "2026-10-14T12:00:00Z",
+    steps: [
+      {
+        name: "Typecheck",
+        status: "completed",
+        conclusion: "failure",
+        started_at: "2026-10-14T12:00:00Z",
+        completed_at: "2026-10-14T12:00:05Z",
+      },
+      {
+        name: "Report",
+        status: "in_progress",
+        conclusion: null,
+        started_at: "2026-10-14T12:00:05Z",
+        completed_at: null,
+      },
+    ],
+  };
+
+  assert.equal(reachedStep(job, "Report"), true);
 });

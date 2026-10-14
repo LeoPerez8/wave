@@ -12,6 +12,14 @@ export interface Job {
   steps?: Step[];
 }
 
+// The jobs API lags behind the runner. Steps run in order, so once it shows the named
+// step (the one reporting) as started, every step before it has its final state.
+export function reachedStep(job: Job, name: string): boolean {
+  return (job.steps ?? []).some(
+    (step) => step.name === name && step.status !== "pending" && step.status !== "queued",
+  );
+}
+
 export function formatStepDurations(job: Job, now: Date): string {
   const total = formatDuration(now.getTime() - Date.parse(job.started_at));
   const rows = (job.steps ?? [])
