@@ -31,8 +31,8 @@ const countedPlays = (entry: { readonly countedPlays: number }): string =>
 const withPlays = <A,>(ranking: readonly Ranked<A>[] | undefined) =>
   (ranking ?? []).map((entry) => ({ ...entry.item, countedPlays: entry.countedPlays }));
 
-const plays = (song: MostPlayedRow): string =>
-  `${song.artist} · ${song.playCount} ${song.playCount === 1 ? "play" : "plays"}`;
+/** The counted plays Most Played is ranked by, shown in each row's trailing cell. */
+const plays = (song: MostPlayedRow): number => song.playCount;
 
 export default function HomeScreen() {
   const home = useHome();
@@ -72,7 +72,7 @@ export default function HomeScreen() {
           )}
           {home.mostPlayed.length > 0 && (
             <TitledSection title="Most played">
-              <SongRows songs={home.mostPlayed} context={MOST_PLAYED_CONTEXT} artistLine={plays} />
+              <SongRows songs={home.mostPlayed} context={MOST_PLAYED_CONTEXT} plays={plays} />
             </TitledSection>
           )}
           {mostPlayedAlbums.length > 0 && (
