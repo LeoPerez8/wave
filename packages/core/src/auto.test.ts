@@ -10,6 +10,7 @@ import {
   autoPageItems,
   autoPlayList,
   autoPlaylistItem,
+  autoListPlay,
   autoQueueAdd,
   autoQueueStart,
   autoTrackItems,
@@ -17,6 +18,8 @@ import {
   encodeAutoMediaId,
   type AutoNode,
   type AutoTrack,
+  type MixedSong,
+  type YtSong,
 } from "./index.ts";
 
 const album = { kind: "album", id: "12" } as const;
@@ -564,5 +567,67 @@ describe("Auto artist", () => {
   test("an artist doesn't play by itself", () => {
     assert.equal(autoPlayList(artist), null);
     assert.equal(autoQueueStart(artist, albumTracks), null);
+  });
+});
+
+describe("Auto playlist playback", () => {
+  const playlist = { kind: "playlist", id: "4" } as const;
+  const context = { kind: "playlist", id: "4" };
+  type Track = { readonly id: number };
+  const own = (id: number): MixedSong<YtSong, Track> => ({ source: "library", track: { id } });
+  const streamed = (videoId: string): MixedSong<YtSong, Track> => ({
+    source: "stream",
+    song: {
+      videoId,
+      title: videoId,
+      artists: ["Justice"],
+      album: null,
+      durationMs: null,
+      artworkUrl: null,
+      explicit: false,
+    },
+  });
+  const entries = [own(1), streamed("a"), own(2)];
+  const shuffle = { type: "shuffle", list: playlist } as const;
+
+  test("with YT Music on, Shuffle plays the whole list, the YT Music entries streamed", () => {
+    assert.deepEqual(autoListPlay(shuffle, entries, true), {
+      kind: "play",
+      start: { context, trackIds: ["1", "yt:a", "2"], startIndex: undefined, shuffle: true },
+      added: ["1", "yt:a", "2"],
+      songs: entries,
+    });
+  });
+
+  test("with YT Music off, Shuffle plays the Library's songs", () => {
+    const play = autoListPlay(shuffle, entries, false);
+    assert.equal(play.kind, "play");
+    assert.deepEqual(play.kind === "play" && play.start.trackIds, ["1", "2"]);
+  });
+
+  test("with YT Music off, a tapped Library song plays the Library's songs from it, and adds itself", () => {
+    const tapped = { type: "track", list: playlist, index: 2, trackId: "2" } as const;
+    const play = autoListPlay(tapped, entries, false);
+    assert.deepEqual(play.kind === "play" && play.start, {
+      context,
+      trackIds: ["1", "2"],
+      startIndex: 1,
+      shuffle: undefined,
+    });
+    assert.deepEqual(play.kind === "play" && play.added, ["2"]);
+  });
+
+  test("with YT Music off, a tapped YT Music entry, or Shuffle on a playlist of them alone, says YT Music is off", () => {
+    const tapped = { type: "track", list: playlist, index: 1, trackId: "yt:a" } as const;
+    assert.deepEqual(autoListPlay(tapped, entries, false), { kind: "ytMusicOff" });
+    assert.deepEqual(autoListPlay(shuffle, [streamed("a"), streamed("b")], false), {
+      kind: "ytMusicOff",
+    });
+  });
+
+  test("a song no longer in the list, or an empty list, isn't found", () => {
+    const gone = { type: "track", list: playlist, index: 0, trackId: "9" } as const;
+    assert.deepEqual(autoListPlay(gone, entries, true), { kind: "notFound" });
+    assert.deepEqual(autoListPlay(shuffle, [], false), { kind: "notFound" });
   });
 });

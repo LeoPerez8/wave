@@ -7,7 +7,8 @@
 import { foldAccentsAndCase } from "./library.ts";
 import { counted } from "./listening.ts";
 import { libraryPathIndex, pathKey, type M3uImportSummary } from "./m3u.ts";
-import { libraryFinder } from "./ytMusic.ts";
+import { normalizeSearchText } from "./search.ts";
+import { libraryMatches } from "./ytMusic.ts";
 
 /** One line of a `.bpstat` file: a song and its play count when the file was saved. */
 export interface BpstatRow {
@@ -35,6 +36,7 @@ export interface BlackPlayerTrack<Id> {
   readonly path: string;
   readonly title: string;
   readonly artist: string;
+  readonly album: string;
   /** 0 when the file's length couldn't be read. */
   readonly durationMs: number;
 }
@@ -93,7 +95,9 @@ interface Timeline {
  *
  * A row is the Library song at its path (in any case, as Android's storage
  * is), else the one with its title and artist (compared as YT Music songs are,
- * `libraryFinder`), so moved files still match.
+ * `libraryFinder`), so moved files still match. A row has no length to tell
+ * recordings apart, so when several Library songs have its title and artist
+ * it takes the only one on its album, and is unmatched rather than guess.
  */
 export const planBlackPlayerImport = <Id>(
   files: readonly BlackPlayerFile[],
@@ -101,7 +105,7 @@ export const planBlackPlayerImport = <Id>(
   imported: readonly ImportedPlays<Id>[],
 ): BlackPlayerImport<Id> => {
   const byPath = libraryPathIndex(library.map(({ id, path }) => ({ id, path })));
-  const byTags = libraryFinder(library);
+  const byTags = tagMatcher(library);
   const snapshots: BpstatRow[][] = [];
   const skipped: BlackPlayerImport<Id>["skipped"][number][] = [];
   for (const file of files) {
@@ -114,9 +118,7 @@ export const planBlackPlayerImport = <Id>(
   const unmatched: BlackPlayerUnmatched[] = [];
   for (const { latest, plays: count, dates } of timelines(snapshots)) {
     if (count === 0) continue;
-    const trackId =
-      byPath.find(latest.path) ??
-      byTags({ title: latest.title, artists: [latest.artist], durationMs: null })?.id;
+    const trackId = byPath.find(latest.path) ?? byTags(latest)?.id;
     if (trackId === undefined) {
       unmatched.push({ title: latest.title, artist: latest.artist, plays: count });
       continue;
@@ -141,6 +143,25 @@ export const planBlackPlayerImport = <Id>(
     ),
     snapshots: snapshots.length,
     skipped,
+  };
+};
+
+/**
+ * The Library song a row with no song at its path is: the only one with its
+ * title and artist, or else the only one of those on its album. Null when none
+ * is, or the row can't tell which.
+ */
+const tagMatcher = <Id>(
+  library: readonly BlackPlayerTrack<Id>[],
+): ((row: BpstatRow) => BlackPlayerTrack<Id> | null) => {
+  const matches = libraryMatches(library);
+  return (row) => {
+    const found = matches({ title: row.title, artists: [row.artist], durationMs: null });
+    if (found.length === 1) return found[0] ?? null;
+    const album = normalizeSearchText(row.album);
+    if (album === "") return null;
+    const onAlbum = found.filter((track) => normalizeSearchText(track.album) === album);
+    return onAlbum.length === 1 ? (onAlbum[0] ?? null) : null;
   };
 };
 

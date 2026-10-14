@@ -202,46 +202,79 @@ const LINK_CHUNK = 500;
 
 /**
  * Turns the YT Music entries of every playlist that the Library tracks
- * [trackIds] (just scanned or downloaded) positively are (Core's
- * `playlistEntryLinks`) into those tracks, in the same place. Returns how
- * many entries it turned. Run it inside the caller's transaction.
+ * [trackIds] (just downloaded; the whole Library when not given, as a scan
+ * does once it ends) positively are (Core's `playlistEntryLinks`) into those
+ * tracks, in the same place; an entry whose track its playlist already holds
+ * is removed instead. Returns how many entries it changed. Does nothing (one
+ * small query) while no playlist holds a YT Music entry. Run it inside the
+ * caller's transaction.
  */
-export const linkPlaylistEntries = (db: LibraryDatabase, trackIds: readonly number[]): number => {
+export const linkPlaylistEntries = (db: LibraryDatabase, trackIds?: readonly number[]): number => {
   const { playlistItems, tracks } = schema;
-  if (trackIds.length === 0) return 0;
-  const entries = db
-    .select({ itemId: playlistItems.id, ytSong: playlistItems.ytSong })
+  if (trackIds?.length === 0) return 0;
+  const anyEntry = db
+    .select({ id: playlistItems.id })
     .from(playlistItems)
     .where(isNotNull(playlistItems.ytSong))
+    .limit(1)
+    .get();
+  if (anyEntry === undefined) return 0;
+  const entries = db
+    .select({
+      itemId: playlistItems.id,
+      playlistId: playlistItems.playlistId,
+      ytSong: playlistItems.ytSong,
+    })
+    .from(playlistItems)
+    .where(isNotNull(playlistItems.ytSong))
+    .orderBy(asc(playlistItems.playlistId), asc(playlistItems.position), asc(playlistItems.id))
     .all()
-    .flatMap(({ itemId, ytSong }) => {
+    .flatMap(({ itemId, playlistId, ytSong }) => {
       const song = ytSong === null ? null : readPlaylistYtSong(ytSong);
-      return song === null ? [] : [{ itemId, song }];
+      return song === null ? [] : [{ itemId, playlistId, song }];
     });
   if (entries.length === 0) return 0;
-  const library = [];
-  for (let i = 0; i < trackIds.length; i += LINK_CHUNK) {
+  const columns = {
+    id: tracks.id,
+    title: tracks.title,
+    artist: tracks.artistCredit,
+    durationMs: tracks.durationMs,
+  };
+  const library: { id: number; title: string; artist: string; durationMs: number }[] =
+    trackIds === undefined ? db.select(columns).from(tracks).all() : [];
+  for (let i = 0; trackIds !== undefined && i < trackIds.length; i += LINK_CHUNK) {
     library.push(
       ...db
-        .select({
-          id: tracks.id,
-          title: tracks.title,
-          artist: tracks.artistCredit,
-          durationMs: tracks.durationMs,
-        })
+        .select(columns)
         .from(tracks)
         .where(inArray(tracks.id, trackIds.slice(i, i + LINK_CHUNK)))
         .all(),
     );
   }
-  const links = playlistEntryLinks(entries, library);
+  const held = db
+    .select({ playlistId: playlistItems.playlistId, trackId: playlistItems.trackId })
+    .from(playlistItems)
+    .where(
+      and(
+        isNotNull(playlistItems.trackId),
+        inArray(playlistItems.playlistId, [...new Set(entries.map((entry) => entry.playlistId))]),
+      ),
+    )
+    .all()
+    .flatMap(({ playlistId, trackId }) => (trackId === null ? [] : [{ playlistId, trackId }]));
+  const { links, drops } = playlistEntryLinks(entries, library, held);
   for (const { itemId, trackId } of links) {
     db.update(playlistItems)
       .set({ trackId, ytSong: null })
       .where(and(eq(playlistItems.id, itemId), isNull(playlistItems.trackId)))
       .run();
   }
-  return links.length;
+  for (let i = 0; i < drops.length; i += LINK_CHUNK) {
+    db.delete(playlistItems)
+      .where(inArray(playlistItems.id, drops.slice(i, i + LINK_CHUNK)))
+      .run();
+  }
+  return links.length + drops.length;
 };
 
 /** A playlist's mosaic: thumbnails for lists and menus, full-size covers for its screen's header. */
@@ -250,40 +283,70 @@ export interface PlaylistCovers {
   readonly artworkPaths: readonly string[];
 }
 
+/** The most tiles a mosaic has (Core's `playlistMosaic`). */
+const MOSAIC_TILES = 4;
+
 /**
  * Each playlist's mosaic (Core's `playlistMosaic`), from what it holds in
  * playlist order: a Library track's album cover (a file), a YT Music entry's
- * cover (YouTube's address). Only [playlistId]'s when given.
+ * cover (YouTube's address). Only [playlistId]'s when given. SQLite picks each
+ * playlist's first four different covers, so only those are read.
  */
 export const selectPlaylistCovers = (
   db: LibraryDatabase,
   playlistId?: number,
 ): Map<number, PlaylistCovers> => {
-  const { playlistItems, tracks, albums, artwork } = schema;
-  const rows = db
-    .select({
-      playlistId: playlistItems.playlistId,
-      thumbPath: artwork.thumbPath,
-      path: artwork.path,
-      ytSong: playlistItems.ytSong,
-    })
-    .from(playlistItems)
-    .leftJoin(tracks, eq(playlistItems.trackId, tracks.id))
-    .leftJoin(albums, eq(tracks.albumId, albums.id))
-    .leftJoin(artwork, eq(albums.artworkHash, artwork.hash))
-    .where(playlistId === undefined ? undefined : eq(playlistItems.playlistId, playlistId))
-    .orderBy(asc(playlistItems.playlistId), asc(playlistItems.position), asc(playlistItems.id))
-    .all();
-  const grouped = new Map<number, { thumbs: (string | null)[]; paths: (string | null)[] }>();
+  const inPlaylist = playlistId === undefined ? sql`1` : sql`pi.playlist_id = ${playlistId}`;
+  // A cover is an artwork row (its file and thumbnail) or an entry's address
+  // (both at once); unreadable stored songs give none.
+  const rows = db.all<{ playlistId: number; thumbPath: string; path: string }>(sql`
+    WITH items AS (
+      SELECT pi.playlist_id, pi.position, pi.id, al.artwork_hash,
+        CASE WHEN json_valid(pi.yt_song) THEN
+          CASE json_type(pi.yt_song, '$.artworkUrl')
+            WHEN 'text' THEN json_extract(pi.yt_song, '$.artworkUrl')
+          END
+        END AS url
+      FROM playlist_items pi
+      LEFT JOIN tracks t ON t.id = pi.track_id
+      LEFT JOIN albums al ON al.id = t.album_id
+      WHERE ${inPlaylist}
+    ),
+    covers AS (
+      SELECT items.playlist_id, items.position, items.id,
+        coalesce(aw.hash, items.url) AS cover,
+        coalesce(aw.thumb_path, items.url) AS thumb_path,
+        coalesce(aw.path, items.url) AS path
+      FROM items
+      LEFT JOIN artwork aw ON aw.hash = items.artwork_hash
+    ),
+    firsts AS (
+      SELECT *, row_number() OVER (
+        PARTITION BY playlist_id, cover ORDER BY position, id
+      ) AS seen
+      FROM covers
+      WHERE cover IS NOT NULL
+    ),
+    tiles AS (
+      SELECT *, row_number() OVER (
+        PARTITION BY playlist_id ORDER BY position, id
+      ) AS tile
+      FROM firsts
+      WHERE seen = 1
+    )
+    SELECT playlist_id AS playlistId, thumb_path AS thumbPath, path
+    FROM tiles
+    WHERE tile <= ${MOSAIC_TILES}
+    ORDER BY playlist_id, tile`);
+  const grouped = new Map<number, { thumbs: string[]; paths: string[] }>();
   for (const row of rows) {
     let group = grouped.get(row.playlistId);
     if (group === undefined) {
       group = { thumbs: [], paths: [] };
       grouped.set(row.playlistId, group);
     }
-    const cover = row.ytSong === null ? null : (readPlaylistYtSong(row.ytSong)?.artworkUrl ?? null);
-    group.thumbs.push(row.ytSong === null ? row.thumbPath : cover);
-    group.paths.push(row.ytSong === null ? row.path : cover);
+    group.thumbs.push(row.thumbPath);
+    group.paths.push(row.path);
   }
   return new Map(
     [...grouped].map(([id, group]) => [
@@ -300,24 +363,46 @@ export interface PlaylistTotals {
 }
 
 /**
- * Each playlist's song count and length, YT Music entries included (one of
- * unknown length adds nothing to it). Playlists holding nothing are left out.
+ * Each playlist's song count and length (only [playlistId]'s when given), YT
+ * Music entries included (one of unknown length adds nothing to it). An entry
+ * whose stored song can't be read is left out, as the playlist's list leaves
+ * it out (`selectPlaylistEntries`: both read it with Core's
+ * `readPlaylistYtSong`). Playlists holding nothing are left out.
  */
-export const selectPlaylistTotals = (db: LibraryDatabase): Map<number, PlaylistTotals> => {
+export const selectPlaylistTotals = (
+  db: LibraryDatabase,
+  playlistId?: number,
+): Map<number, PlaylistTotals> => {
   const { playlistItems, tracks } = schema;
-  const rows = db
-    .select({
-      playlistId: playlistItems.playlistId,
-      trackCount: sql<number>`count(*)`,
-      durationMs: sql<number>`coalesce(sum(coalesce(${tracks.durationMs}, json_extract(${playlistItems.ytSong}, '$.durationMs'))), 0)`,
-    })
-    .from(playlistItems)
-    .leftJoin(tracks, eq(playlistItems.trackId, tracks.id))
-    // A Library entry whose track is gone is on its way out (the cascade), never counted.
-    .where(sql`${playlistItems.ytSong} IS NOT NULL OR ${tracks.id} IS NOT NULL`)
-    .groupBy(playlistItems.playlistId)
-    .all();
-  return new Map(
-    rows.map(({ playlistId, trackCount, durationMs }) => [playlistId, { trackCount, durationMs }]),
+  const inPlaylist =
+    playlistId === undefined ? undefined : eq(playlistItems.playlistId, playlistId);
+  const totals = new Map<number, { trackCount: number; durationMs: number }>(
+    db
+      .select({
+        playlistId: playlistItems.playlistId,
+        trackCount: sql<number>`count(*)`,
+        durationMs: sql<number>`coalesce(sum(${tracks.durationMs}), 0)`,
+      })
+      .from(playlistItems)
+      // A Library entry whose track is gone is on its way out (the cascade), never counted.
+      .innerJoin(tracks, eq(playlistItems.trackId, tracks.id))
+      .where(inPlaylist)
+      .groupBy(playlistItems.playlistId)
+      .all()
+      .map(({ playlistId: id, ...total }) => [id, total]),
   );
+  const streamed = db
+    .select({ playlistId: playlistItems.playlistId, ytSong: playlistItems.ytSong })
+    .from(playlistItems)
+    .where(and(isNotNull(playlistItems.ytSong), inPlaylist))
+    .all();
+  for (const row of streamed) {
+    const song = row.ytSong === null ? null : readPlaylistYtSong(row.ytSong);
+    if (song === null) continue;
+    const total = totals.get(row.playlistId) ?? { trackCount: 0, durationMs: 0 };
+    total.trackCount += 1;
+    total.durationMs += song.durationMs ?? 0;
+    totals.set(row.playlistId, total);
+  }
+  return totals;
 };

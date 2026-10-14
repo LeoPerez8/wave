@@ -80,10 +80,17 @@ export const playlistPlayback = <S extends YtSong, L>(
   };
 };
 
-/** A playlist's YT Music entry: its place, and the song it streams. */
+/** A playlist's YT Music entry: its place, its playlist, and the song it streams. */
 export interface StreamedPlaylistEntry {
   readonly itemId: number;
+  readonly playlistId: number;
   readonly song: YtSong;
+}
+
+/** A Library track a playlist holds. */
+export interface HeldPlaylistTrack {
+  readonly playlistId: number;
+  readonly trackId: number;
 }
 
 /** A YT Music entry that becomes Library track [trackId] in its place. */
@@ -92,22 +99,45 @@ export interface PlaylistEntryLink {
   readonly trackId: number;
 }
 
+/** What linking a playlist's YT Music entries does: entries that become Library songs, and entries removed. */
+export interface PlaylistEntryLinks {
+  readonly links: readonly PlaylistEntryLink[];
+  /** Entries whose Library song their playlist holds already: removed rather than doubled. */
+  readonly drops: readonly number[];
+}
+
 /**
- * The YT Music [entries] (of any playlists) that the Library songs in
- * [library] (just downloaded or scanned) positively are, as Search and
- * Discover decide (Core's `libraryFinder`): each becomes that Library song in
- * its place. Entries without a match stay streamed.
+ * The YT Music [entries] (of any playlists, each in playlist order) that the
+ * Library songs in [library] (just downloaded or scanned) positively are, as
+ * Search and Discover decide (Core's `libraryFinder`): each becomes that
+ * Library song in its place. A playlist never holds a song twice
+ * (`planPlaylistSongs`), so an entry whose song its playlist already holds
+ * ([held], or an earlier entry just linked) is dropped instead. Entries
+ * without a match stay streamed.
  */
 export const playlistEntryLinks = (
   entries: readonly StreamedPlaylistEntry[],
   library: readonly (LibrarySongKey & { readonly id: number })[],
-): PlaylistEntryLink[] => {
-  if (entries.length === 0 || library.length === 0) return [];
+  held: readonly HeldPlaylistTrack[],
+): PlaylistEntryLinks => {
+  if (entries.length === 0 || library.length === 0) return { links: [], drops: [] };
   const find = libraryFinder(library);
-  return entries.flatMap(({ itemId, song }) => {
+  const key = (playlistId: number, trackId: number) => `${playlistId}:${trackId}`;
+  const holds = new Set(held.map(({ playlistId, trackId }) => key(playlistId, trackId)));
+  const links: PlaylistEntryLink[] = [];
+  const drops: number[] = [];
+  for (const { itemId, playlistId, song } of entries) {
     const track = find(song);
-    return track === null ? [] : [{ itemId, trackId: track.id }];
-  });
+    if (track === null) continue;
+    const holding = key(playlistId, track.id);
+    if (holds.has(holding)) {
+      drops.push(itemId);
+      continue;
+    }
+    holds.add(holding);
+    links.push({ itemId, trackId: track.id });
+  }
+  return { links, drops };
 };
 
 /**

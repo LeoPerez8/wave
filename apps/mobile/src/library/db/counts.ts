@@ -31,12 +31,13 @@ export const libraryCounts = (db: LibraryDatabase): LibraryCounts =>
  * Counts the songs each Library entry's menu queues (Core `sectionSongs`)
  * without loading them: every track for Songs, Albums and Artists (a song
  * under two artists plays once); tracks with a genre; every playlist
- * item (a song in two playlists, or twice in one, plays each time); starred songs.
+ * item that is a Library song (a song in two playlists, or twice in one, plays
+ * each time; YT Music entries aren't queued from here); starred songs.
  */
 export const sectionSongCounts = (db: LibraryDatabase): LibraryCounts =>
   db.get<LibraryCounts>(sql`
     SELECT
-      (SELECT count(*) FROM playlist_items) AS "playlists",
+      (SELECT count(*) FROM playlist_items JOIN tracks ON tracks.id = playlist_items.track_id) AS "playlists",
       (SELECT count(*) FROM tracks) AS "artists",
       (SELECT count(*) FROM tracks) AS "albums",
       (SELECT count(*) FROM tracks) AS "songs",
