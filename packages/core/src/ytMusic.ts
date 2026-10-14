@@ -115,6 +115,18 @@ interface Candidate<L> {
 export const libraryFinder = <L extends LibrarySongKey>(
   library: readonly L[],
 ): ((song: Pick<YtSong, "title" | "artists" | "durationMs">) => L | null) => {
+  const matches = libraryMatches(library);
+  return (song) => matches(song)[0] ?? null;
+};
+
+/**
+ * Every Library song a YT Music song could be, as [libraryFinder] matches
+ * them, in Library order: a caller that can't tell them apart by length can
+ * refuse to guess.
+ */
+export const libraryMatches = <L extends LibrarySongKey>(
+  library: readonly L[],
+): ((song: Pick<YtSong, "title" | "artists" | "durationMs">) => L[]) => {
   const byTitle = new Map<string, Candidate<L>[]>();
   for (const song of library) {
     const title = matchTitle(song.title);
@@ -129,17 +141,18 @@ export const libraryFinder = <L extends LibrarySongKey>(
   }
   return (song) => {
     const candidates = byTitle.get(matchTitle(song.title));
-    if (candidates === undefined) return null;
+    if (candidates === undefined) return [];
     const artists = song.artists.flatMap(artistNames);
     const length = knownLength(song.durationMs);
-    const match = candidates.find(
-      (candidate) =>
-        artists.some((artist) => candidate.artists.has(artist)) &&
-        (length === null ||
-          candidate.durationMs === null ||
-          Math.abs(candidate.durationMs - length) <= SAME_LENGTH_MS),
-    );
-    return match?.song ?? null;
+    return candidates
+      .filter(
+        (candidate) =>
+          artists.some((artist) => candidate.artists.has(artist)) &&
+          (length === null ||
+            candidate.durationMs === null ||
+            Math.abs(candidate.durationMs - length) <= SAME_LENGTH_MS),
+      )
+      .map((candidate) => candidate.song);
   };
 };
 

@@ -13,6 +13,7 @@ interface Row {
   readonly addedAt: number;
   readonly lastPlayedAt: number;
   readonly path?: string;
+  readonly album?: string;
 }
 
 const pathOf = ({ title, artist }: { title: string; artist: string }): string =>
@@ -24,15 +25,15 @@ const snapshot = (name: string, rows: readonly Row[]) => ({
   text: rows
     .map(
       (row) =>
-        `${row.plays};0;${row.title};${row.artist};Album;${row.path ?? pathOf(row)};${row.addedAt};${row.lastPlayedAt}`,
+        `${row.plays};0;${row.title};${row.artist};${row.album ?? "Album"};${row.path ?? pathOf(row)};${row.addedAt};${row.lastPlayedAt}`,
     )
     .join("\n"),
 });
 
 const library = [
-  { id: 1, title: "Airbag", artist: "Radiohead", durationMs: 284_000 },
-  { id: 2, title: "Bloom", artist: "Radiohead", durationMs: 315_000 },
-  { id: 3, title: "Creep", artist: "Radiohead", durationMs: 238_000 },
+  { id: 1, title: "Airbag", artist: "Radiohead", album: "Album", durationMs: 284_000 },
+  { id: 2, title: "Bloom", artist: "Radiohead", album: "Album", durationMs: 315_000 },
+  { id: 3, title: "Creep", artist: "Radiohead", album: "Album", durationMs: 238_000 },
 ].map((track) => ({ ...track, path: pathOf(track) }));
 
 /** Each track's planned play times. */
@@ -228,6 +229,50 @@ describe("planBlackPlayerImport: matching", () => {
       plan.plays.map((play) => play.trackId),
       [2],
     );
+  });
+
+  describe("a moved row with several Library songs of its title and artist", () => {
+    const versions = [
+      { id: 7, title: "Creep", artist: "Radiohead", album: "Pablo Honey", durationMs: 238_000 },
+      { id: 8, title: "Creep", artist: "Radiohead", album: "Live at the Astoria", durationMs: 262_000 },
+    ].map((track) => ({ ...track, path: `${MUSIC}/${track.album}/Creep.mp3` }));
+    const moved = (album: string) =>
+      planBlackPlayerImport(
+        [
+          snapshot("a.bpstat", [
+            row({ title: "Creep", artist: "Radiohead", album, path: `${MUSIC}/Old/Creep.mp3` }),
+          ]),
+        ],
+        versions,
+        [],
+      );
+
+    test("matches the one on the row's album", () => {
+      assert.deepEqual(
+        moved("pablo honey").plays.map((play) => play.trackId),
+        [7],
+      );
+    });
+
+    test("is unmatched when none is on its album, rather than guess a recording", () => {
+      const plan = moved("The Bends");
+      assert.deepEqual(plan.plays, []);
+      assert.deepEqual(plan.unmatched, [{ title: "Creep", artist: "Radiohead", plays: 1 }]);
+    });
+
+    test("is unmatched when several are on its album", () => {
+      const plan = planBlackPlayerImport(
+        [
+          snapshot("a.bpstat", [
+            row({ title: "Creep", artist: "Radiohead", album: "Pablo Honey", path: `${MUSIC}/Old/Creep.mp3` }),
+          ]),
+        ],
+        versions.map((track) => ({ ...track, album: "Pablo Honey" })),
+        [],
+      );
+      assert.deepEqual(plan.plays, []);
+      assert.equal(plan.unmatched.length, 1);
+    });
   });
 
   test("rows that match no Library song are listed by artist and title, with their plays", () => {
