@@ -26,7 +26,7 @@ class SoulseekClientTest {
               login(socket)
               val token = SoulseekWire.reader(SoulseekWire.read(socket.getInputStream()).payload).uint()
               repeat(34) { index ->
-                SoulseekWire.write(socket.getOutputStream(), 18) { string("fixture-peer-$index"); string("P"); uint(0x0100007f); uint(peer.localPort.toLong()); uint(index.toLong() + 1); byte(0) }
+                SoulseekWire.write(socket.getOutputStream(), 18) { string("fixture-peer-$index"); string("P"); uint(LOCALHOST); uint(peer.localPort.toLong()); uint(index.toLong() + 1); byte(0) }
                 val connection = peer.accept()
                 connections.add(connection)
                 SoulseekWire.read(connection.getInputStream(), true)
@@ -61,7 +61,7 @@ class SoulseekClientTest {
             server.accept().use { socket ->
               login(socket)
               assertEquals(3, SoulseekWire.read(socket.getInputStream()).code)
-              SoulseekWire.write(socket.getOutputStream(), 3) { string("fixture-peer"); uint(0x0100007f); uint(peer.localPort.toLong()) }
+              SoulseekWire.write(socket.getOutputStream(), 3) { string("fixture-peer"); uint(LOCALHOST); uint(peer.localPort.toLong()) }
               peer.accept().use { connection ->
                 SoulseekWire.read(connection.getInputStream(), true)
                 val filename = SoulseekWire.reader(SoulseekWire.read(connection.getInputStream()).payload).string()
@@ -99,7 +99,7 @@ class SoulseekClientTest {
             server.accept().use { socket ->
               login(socket)
               SoulseekWire.read(socket.getInputStream())
-              SoulseekWire.write(socket.getOutputStream(), 3) { string("fixture-peer"); uint(0x0100007f); uint(peer.localPort.toLong()) }
+              SoulseekWire.write(socket.getOutputStream(), 3) { string("fixture-peer"); uint(LOCALHOST); uint(peer.localPort.toLong()) }
               peer.accept().use { connection ->
                 SoulseekWire.read(connection.getInputStream(), true)
                 val filename = SoulseekWire.reader(SoulseekWire.read(connection.getInputStream()).payload).string()
@@ -213,7 +213,7 @@ class SoulseekClientTest {
               // Download asks the server where the peer is when a search connection has gone away.
               val lookup = SoulseekWire.read(socket.getInputStream())
               assertEquals(3, lookup.code)
-              SoulseekWire.write(socket.getOutputStream(), 3) { string("fixture-peer"); uint(0x0100007f); uint(peer.localPort.toLong()) }
+              SoulseekWire.write(socket.getOutputStream(), 3) { string("fixture-peer"); uint(LOCALHOST); uint(peer.localPort.toLong()) }
               peer.accept().use { connection ->
                 assertEquals(1, SoulseekWire.read(connection.getInputStream(), true).code)
                 val queue = SoulseekWire.read(connection.getInputStream())
@@ -226,7 +226,7 @@ class SoulseekClientTest {
                 val allowed = SoulseekWire.reader(SoulseekWire.read(connection.getInputStream()).payload)
                 assertEquals(1234L, allowed.uint())
                 assertEquals(1, allowed.byte())
-                SoulseekWire.write(socket.getOutputStream(), 18) { string("fixture-peer"); string("F"); uint(0x0100007f); uint(peer.localPort.toLong()); uint(56); byte(0) }
+                SoulseekWire.write(socket.getOutputStream(), 18) { string("fixture-peer"); string("F"); uint(LOCALHOST); uint(peer.localPort.toLong()); uint(56); byte(0) }
                 peer.accept().use { transfer ->
                   assertEquals(0, SoulseekWire.read(transfer.getInputStream(), true).code)
                   transfer.getOutputStream().write(SoulseekWire.Writer().apply { uint(1234) }.result())
@@ -270,14 +270,14 @@ class SoulseekClientTest {
             server.accept().use { socket ->
               login(socket)
               SoulseekWire.read(socket.getInputStream())
-              SoulseekWire.write(socket.getOutputStream(), 3) { string("fixture-peer"); uint(0x0100007f); uint(peer.localPort.toLong()) }
+              SoulseekWire.write(socket.getOutputStream(), 3) { string("fixture-peer"); uint(LOCALHOST); uint(peer.localPort.toLong()) }
               peer.accept().use { connection ->
                 SoulseekWire.read(connection.getInputStream(), true)
                 val filename = SoulseekWire.reader(SoulseekWire.read(connection.getInputStream()).payload).string()
                 SoulseekWire.read(connection.getInputStream())
                 SoulseekWire.write(connection.getOutputStream(), 40) { uint(1); uint(1234); string(filename); ulong(fixture.size.toLong()) }
                 SoulseekWire.read(connection.getInputStream())
-                SoulseekWire.write(socket.getOutputStream(), 18) { string("fixture-peer"); string("F"); uint(0x0100007f); uint(peer.localPort.toLong()); uint(56); byte(0) }
+                SoulseekWire.write(socket.getOutputStream(), 18) { string("fixture-peer"); string("F"); uint(LOCALHOST); uint(peer.localPort.toLong()); uint(56); byte(0) }
                 peer.accept().use { transfer ->
                   SoulseekWire.read(transfer.getInputStream(), true)
                   transfer.getOutputStream().write(SoulseekWire.Writer().apply { uint(1234) }.result())
@@ -331,7 +331,7 @@ class SoulseekClientTest {
               val token = fields.uint()
               assertEquals("Fixture Artist Fixture Title", fields.string())
               SoulseekWire.write(socket.getOutputStream(), 18) {
-                string("fixture-peer"); string("P"); uint(0x0100007f); uint(peer.localPort.toLong()); uint(55); byte(0)
+                string("fixture-peer"); string("P"); uint(LOCALHOST); uint(peer.localPort.toLong()); uint(55); byte(0)
               }
               peer.accept().use { connection ->
                 assertEquals(0, SoulseekWire.read(connection.getInputStream(), true).code)
@@ -410,3 +410,6 @@ class SoulseekClientTest {
     return { System.nanoTime() > end }
   }
 }
+
+/** 127.0.0.1 as the Soulseek server sends an IP: reversed, so the first octet is the high byte. */
+private const val LOCALHOST = 0x7f000001L

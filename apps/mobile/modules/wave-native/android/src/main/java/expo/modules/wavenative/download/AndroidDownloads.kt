@@ -6,6 +6,7 @@ import android.media.MediaScannerConnection
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.util.Log
 import expo.modules.wavenative.artwork.AndroidArtworkProcessor
 import expo.modules.wavenative.artwork.ArtworkStore
 import expo.modules.wavenative.player.JsRuntime
@@ -48,6 +49,10 @@ class AndroidDownloads private constructor(private val context: Context) {
         isCancelled = { Thread.currentThread().isInterrupted || !jobs.transferWanted(id) },
       )
     } catch (error: SoulseekException) {
+      // Which check a peer's file failed is what tells a strict check from a bad file.
+      if (error.failure != SoulseekFailure.CANCELLED) {
+        Log.w(TAG, "A Soulseek transfer failed (${error.failure}): ${error.message}; ${error.cause?.message ?: ""}")
+      }
       val reason = when (error.failure) {
         SoulseekFailure.AUTH, SoulseekFailure.SIGNED_OUT -> "account"
         SoulseekFailure.OFFLINE -> "offline"
@@ -57,6 +62,7 @@ class AndroidDownloads private constructor(private val context: Context) {
       }
       throw DurableFailure(reason, error)
     } catch (error: java.io.IOException) { throw DurableFailure("storage", error) }
+    catch (error: Exception) { Log.w(TAG, "A Soulseek transfer failed", error); throw error }
   }
   private val publication = object : DurablePublication {
     override fun tag(source: File, tags: Map<String, Any?>) {
@@ -135,6 +141,7 @@ class AndroidDownloads private constructor(private val context: Context) {
 
   companion object {
     private const val OWNER = "downloads"
+    private const val TAG = "WaveDownloads"
     @Volatile private var instance: AndroidDownloads? = null
     fun get(context: Context): AndroidDownloads = instance ?: synchronized(this) { instance ?: AndroidDownloads(context.applicationContext).also { instance = it } }
   }

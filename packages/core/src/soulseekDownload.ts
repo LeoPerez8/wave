@@ -48,6 +48,8 @@ const bareTitle = (text: string): string =>
       editionMarker.test(note) ? "" : whole,
     );
 const title = (text: string): string => fold(bareTitle(text));
+/** A vinyl rip's side and track ("A2 "), which some put before the title. */
+const vinylSide = /^[A-H]\d{1,2}\s*[._ -]\s*/;
 
 /**
  * What to search Soulseek for. Peers only return files whose path has every
@@ -134,7 +136,8 @@ export const soulseekReceivedMatches = (
     return false;
   if (
     tags.title !== null &&
-    (title(tags.title) !== recording.title ||
+    ((title(tags.title) !== recording.title &&
+      title(tags.title.replace(vinylSide, "")) !== recording.title) ||
       !featuredNames(tags.title).every((name) => recording.artistCredits.includes(name)) ||
       !editions(tags.title).every((edition) => recording.editions.includes(edition)))
   )
@@ -187,7 +190,13 @@ export const soulseekCandidates = (
     const path = candidate.filename.split(/[\\/]/);
     const file = (path.at(-1) ?? "").replace(/\.mp3$/i, "");
     const album = path.at(-2) ?? "";
-    const folderArtist = path.at(-3) ?? "";
+    // "Coldplay (UK)": a note telling artists apart, not an edition.
+    const folderArtist = (path.at(-3) ?? "").replace(
+      /\s*[([]([^\])]+)[\])]\s*$/,
+      (whole, note: string) => (editionMarker.test(note) ? whole : ""),
+    );
+    // "Coldplay - Ghost Stories (2014)": the album folder names its artist.
+    const albumArtist = album.includes(" - ") ? album.slice(0, album.indexOf(" - ")) : "";
     const names = (named: string): boolean => {
       const split = named.indexOf(" - ");
       const fileArtist = split < 0 ? "" : named.slice(0, split);
@@ -195,7 +204,9 @@ export const soulseekCandidates = (
       return (
         (fileArtist !== ""
           ? artistMatches(fileArtist, recording)
-          : artistMatches(folderArtist, recording) || artistMatches(album, recording)) &&
+          : artistMatches(folderArtist, recording) ||
+            artistMatches(album, recording) ||
+            (albumArtist !== "" && artistMatches(albumArtist, recording))) &&
         title(name) === wantedTitle &&
         featuredNames(name).every((guest) => recording.artistCredits.includes(guest)) &&
         sameEditions(
@@ -205,10 +216,12 @@ export const soulseekCandidates = (
         )
       );
     };
-    // A leading number is a track number ("08 - Get Lucky") or part of a name ("50 Cent - …",
-    // "7 rings"): the file qualifies if either reading names the recording.
-    const untracked = file.replace(/^\s*(?:\d{1,2}[-.]\d{1,3}|\d{1,3})\s*[. -]\s*/, "");
-    if (!names(untracked) && (untracked === file || !names(file))) return false;
+    // A leading number is a track number ("08 - Get Lucky", "03_White Shadows") or part of a
+    // name ("50 Cent - …", "7 rings"), and a vinyl rip may add its side ("02 A2 …"): the file
+    // qualifies if any reading names the recording.
+    const untracked = file.replace(/^\s*(?:\d{1,2}[-.]\d{1,3}|\d{1,3})\s*[._ -]\s*/, "");
+    const sideless = untracked === file ? file : untracked.replace(vinylSide, "");
+    if (![file, untracked, sideless].some(names)) return false;
     if (!positiveDuration(song.durationMs) && !positiveDuration(candidate.durationMs)) return false;
     if (
       positiveDuration(song.durationMs) &&

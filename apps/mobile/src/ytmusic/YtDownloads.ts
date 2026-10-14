@@ -24,7 +24,7 @@ import { PermissionsAndroid, Platform } from "react-native";
 import { libraryEdited, toIndexedArtwork, toIndexedTrack } from "@/library/LibraryScan";
 import { LibraryStore } from "@/library/LibraryStore";
 import { refreshDownloadPolicy } from "@/library/downloadPolicy";
-import { lookUpLyricsAndGenre } from "@/library/lyricsAndGenre";
+import { fillInLyricsAndGenre, lookUpLyricsAndGenre } from "@/library/lyricsAndGenre";
 import { appRuntime } from "@/library/runtime";
 import { makeExternalStore } from "@/lib/externalStore";
 import {
@@ -176,16 +176,14 @@ const answer = (claim: NativeDownloadDecision) =>
         const plan = yield* prepareSoulseekDownload(claim.song);
         return { candidates: plan.candidates, tags: plan.tags, targetPath: plan.target.path };
       }
-      case "confirm":
+      case "confirm": {
         if (claim.audio === undefined) return yield* new DownloadFailed({ reason: "failed" });
-        return {
-          receiptId: claim.receiptId,
-          acceptable: soulseekReceivedMatches(
-            claim.song,
-            claim.audio.receivedTags,
-            claim.audio.durationMs,
-          ),
-        };
+        const { receivedTags, durationMs } = claim.audio;
+        const acceptable = soulseekReceivedMatches(claim.song, receivedTags, durationMs);
+        if (!acceptable)
+          console.warn("[wave] a received file isn't the recording", { receivedTags, durationMs });
+        return { receiptId: claim.receiptId, acceptable };
+      }
       case "publish":
         return yield* publicationTarget(claim);
       case "import": {
@@ -200,6 +198,17 @@ const answer = (claim: NativeDownloadDecision) =>
     ),
   );
 
+/** A download as Find Lyrics and Genre sees it: what its file says once tagged and saved. */
+const downloadedSong = ({ path, track }: NativeSavedDownload) => ({
+  path,
+  title: track.title ?? "",
+  artist: track.artist ?? "",
+  album: track.album ?? "",
+  durationMs: track.durationMs,
+  hasLyrics: track.hasLyrics,
+  genre: track.genre,
+});
+
 const answering = new Set<string>();
 /** Claims and answers [id]'s pending decision; an unanswered lease expires natively and is offered again. */
 const answerJob = async (id: string): Promise<void> => {
@@ -209,13 +218,15 @@ const answerJob = async (id: string): Promise<void> => {
     const claim = await WaveSoulseek.claimDecision(id);
     if (claim === null) return;
     const payload = await appRuntime.runPromise(answer(claim));
-    await WaveSoulseek.submitDecision(
+    const accepted = await WaveSoulseek.submitDecision(
       claim.id,
       claim.generation,
       claim.token,
       claim.decision,
-      payload,
+      JSON.stringify(payload),
     );
+    if (accepted && claim.decision === "import" && claim.saved !== undefined && "path" in payload)
+      void appRuntime.runPromise(fillInLyricsAndGenre(downloadedSong(claim.saved)));
   } catch {
     // JS or the bridge went away mid-answer: the native lease expires and replays the decision.
   } finally {

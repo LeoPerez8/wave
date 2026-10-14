@@ -10,6 +10,7 @@ import {
   describeTagLookups,
   libraryLookupSongs,
   lookupsUnreachable,
+  missingTags,
   lrclibCandidates,
   lrclibSearchUrl,
   pickFoundLyrics,
@@ -412,6 +413,33 @@ describe("libraryLookupSongs", () => {
 
   test("an empty Library looks up and skips nothing", () => {
     assert.deepEqual(libraryLookupSongs([]), { lookUp: [], skipped: 0 });
+  });
+});
+
+describe("missingTags", () => {
+  const found = { lyrics: { synced: true, text: "[00:01.00] Hey" }, genre: "Rock" };
+
+  test("keeps what a song without lyrics or a genre lacks", () => {
+    assert.deepEqual(missingTags(found, { hasLyrics: false, genre: null }), found);
+  });
+
+  test("never replaces lyrics or a genre the song already has", () => {
+    assert.deepEqual(missingTags(found, { hasLyrics: true, genre: "Indie" }), {
+      lyrics: null,
+      genre: null,
+    });
+    assert.deepEqual(missingTags(found, { hasLyrics: true, genre: null }), {
+      lyrics: null,
+      genre: "Rock",
+    });
+    assert.deepEqual(missingTags(found, { hasLyrics: false, genre: "Indie" }), {
+      lyrics: found.lyrics,
+      genre: null,
+    });
+  });
+
+  test("counts a blank genre as none", () => {
+    assert.equal(missingTags(found, { hasLyrics: true, genre: " " }).genre, "Rock");
   });
 });
 

@@ -16,7 +16,11 @@ journal. `AndroidSoulseek.get(context)` owns the process-wide client for
 native background callers. Search yields bounded peer reports; Core selects
 the recording. The transport supports direct and indirect peer connections,
 QueueUpload, queue position reports, TransferRequest acceptance, direct and
-indirect file connections, and explicit cancellation. A peer that disconnects,
+indirect file connections, and explicit cancellation. The server sends peer
+IPs with their bytes reversed, as Nicotine+ and Soulseek.NET read them. A
+popular search brings thousands of connection requests in seconds, so search
+connections and a download's peer and file connections run on separate thread
+slots. A peer that disconnects,
 refuses the file or exceeds the queue deadline fails that attempt; the download
 owner can try another selected candidate. Retries start from zero because the
 protocol cannot prove that previously received chunks belong to the same file.
@@ -32,7 +36,9 @@ codec and bitrate; it cannot prove whether a peer previously transcoded the
 recording. Its provenance is reported as unknown.
 
 The existing download tag writer, hidden part file, atomic publication and
-single-file scanner remain the Library import path. Downloading never calls a
+single-file scanner remain the Library import path. Once a download is
+imported, Find Lyrics and Genre runs on it and writes the lyrics or genre the
+file still lacks (Core's `missingTags`); it never replaces ones it has. Downloading never calls a
 Library upload resolver: Wave advertises zero shared files, returns empty
 browse results, and refuses upload requests and unsolicited incoming files.
 

@@ -62,7 +62,8 @@ declare class WaveSoulseekModule extends NativeModule<{
     generation: number,
     token: string,
     decision: NativeDownloadDecision["decision"],
-    payload: Readonly<Record<string, unknown>>,
+    /** The answer as JSON: the bridge can't pass a null nested in an object. */
+    payload: string,
   ): Promise<boolean>;
   refreshDownloadPolicy(roots: readonly string[], excluded: readonly string[]): Promise<number>;
   cancelJob(id: string): Promise<void>;

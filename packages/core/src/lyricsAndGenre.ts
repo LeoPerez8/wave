@@ -356,6 +356,16 @@ export const libraryLookupSongs = <S extends IndexedLyricsAndGenre>(
   return { lookUp, skipped: songs.length - lookUp.length };
 };
 
+/**
+ * What of [found] a song still lacks: its lyrics when it has none, its genre
+ * when it has none. Filling in a song (a download just saved) never replaces
+ * what it already has; nothing left means there's nothing to write.
+ */
+export const missingTags = (found: FoundTags, song: IndexedLyricsAndGenre): FoundTags => ({
+  lyrics: song.hasLyrics ? null : found.lyrics,
+  genre: (song.genre ?? "").trim() === "" ? found.genre : null,
+});
+
 /** How a run over many songs ended early, and how many songs it didn't get to. */
 export interface TagLookupStop {
   readonly stopped: "cancelled" | "unreachable";
