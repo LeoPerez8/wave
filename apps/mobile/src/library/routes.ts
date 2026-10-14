@@ -1,5 +1,5 @@
 import { detailPath, type DetailScreen, type StatsPeriod, type StatsRanking } from "@wave/core";
-import { router, usePathname, type Href } from "expo-router";
+import { router, useLocalSearchParams, usePathname, type Href } from "expo-router";
 import { useEffect, useState } from "react";
 
 import type { AlbumRow, ArtistRow, FolderRow, GenreRow, PlaylistRow } from "./LibraryStore";
@@ -37,17 +37,34 @@ const open = <S extends DetailScreen>(
   screen: S,
   id: number,
   known?: DetailRows[S] | null,
+  query = "",
 ): void => {
   opening = known === undefined || known === null ? undefined : { screen, row: known };
-  router.push(detailPath(here, screen, id) as Href);
+  router.push(`${detailPath(here, screen, id)}${query}` as Href);
 };
 
-export const openAlbum = (id: number, known?: AlbumRow | null): void => open("album", id, known);
+/** How an album was opened: from an integrated view (Search showing YT Music, an integrated artist page). */
+export interface AlbumOpening {
+  readonly integrated: boolean;
+}
+
+/**
+ * Opens a Library album. Opened from an integrated view ([from]), it reads
+ * its release on YouTube Music on its own (Core's `ytLibraryAlbumView`);
+ * otherwise it waits for Show on YouTube Music.
+ */
+export const openAlbum = (id: number, known?: AlbumRow | null, from?: AlbumOpening): void =>
+  open("album", id, known, from?.integrated === true ? "?integrated=1" : "");
+
 export const openArtist = (id: number, known?: ArtistRow | null): void => open("artist", id, known);
 export const openGenre = (id: number, known?: GenreRow | null): void => open("genre", id, known);
 export const openFolder = (id: number, known?: FolderRow | null): void => open("folder", id, known);
 export const openPlaylist = (id: number, known?: PlaylistRow | null): void =>
   open("playlist", id, known);
+
+/** Whether the album screen was opened from an integrated view (`openAlbum`'s [from]). */
+export const useOpenedIntegrated = (): boolean =>
+  useLocalSearchParams<{ integrated?: string }>().integrated === "1";
 
 /**
  * What the list or link knew about the item a detail screen shows when it was

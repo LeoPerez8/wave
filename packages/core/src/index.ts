@@ -369,6 +369,7 @@ export {
   ytSectionView,
 } from "./ytSearch.ts";
 export type {
+  YtAskedBy,
   YtQuietReason,
   YtSection,
   YtSectionEvent,
@@ -529,6 +530,7 @@ export {
   ytArtistPageView,
   ytArtistQuery,
   ytArtistRelease,
+  ytArtistIntegrated,
   ytArtistSectionView,
   ytArtistShelves,
   ytAlbumTracklist,
@@ -560,3 +562,5 @@ export type {
   YtLibraryAlbumView,
   YtReleaseLoad,
 } from "./ytArtist.ts";
+export { pagePlayback } from "./pagePlayback.ts";
+export type { PagePlayback } from "./pagePlayback.ts";

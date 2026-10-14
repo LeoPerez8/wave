@@ -13,7 +13,7 @@ import type { SongRow } from "@/library/LibraryStore";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { openAlbum, openArtist, openGenre, openPlaylist } from "@/library/routes";
 import { toTrackSummary } from "@/library/TrackList";
-import { playDiscoverSongs, playSongs } from "@/playback/actions";
+import { playPage } from "@/playback/actions";
 import { useCurrentTrackId } from "@/playback/hooks";
 import {
   openAlbumActions,
@@ -41,20 +41,18 @@ const HEIGHT: Readonly<Record<ResultRow["type"], number>> = {
   capped: CELL * 6,
   ytSong: grid.row,
   note: CELL * 6,
+  askYt: CELL * 6,
 };
 
 /** While selecting, results other than Library songs do nothing. */
 const ignore = (): void => undefined;
 
 /**
- * Plays the song results from [index]: the Library's files and, when YT Music
- * found songs the Library lacks, those streamed after them.
+ * Plays the song results from [index] (`playPage`): the Library's files and,
+ * when YT Music found songs the Library lacks, those streamed after them.
  */
-const playResults = (songs: readonly ResultSong[], index: number): void => {
-  const library = songs.flatMap((song) => (song.source === "library" ? [song.track] : []));
-  if (library.length === songs.length) playSongs(library, index, SEARCH_CONTEXT);
-  else void playDiscoverSongs(songs, index, SEARCH_CONTEXT);
-};
+const playResults = (songs: readonly ResultSong[], index: number): void =>
+  void playPage(songs, index, SEARCH_CONTEXT);
 
 /**
  * A song YT Music found, among the song results. Tapping plays the results
@@ -101,6 +99,8 @@ type Props = {
   /** Called when a result opens, so the search is kept among the recent ones. */
   onOpen: () => void;
   onShowAll: (kind: SearchKind) => void;
+  /** Search YouTube Music was tapped. */
+  onAskYt: () => void;
   /** Song results are selectable; other results ignore taps while selecting. */
   selection: ListSelection<SongRow>;
 };
@@ -203,7 +203,7 @@ function Hit({
  * Search results in one virtualised list of fixed-height rows: section heads,
  * results and "Show all". Scrolling or tapping a row lets the keyboard go.
  */
-export function SearchResultsList({ rows, onOpen, onShowAll, selection }: Props) {
+export function SearchResultsList({ rows, onOpen, onShowAll, onAskYt, selection }: Props) {
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
   const currentId = useCurrentTrackId();
@@ -261,6 +261,16 @@ export function SearchResultsList({ rows, onOpen, onShowAll, selection }: Props)
               selecting={selection.selecting}
             />
           );
+        case "askYt":
+          return (
+            <View style={{ height: HEIGHT.askYt }}>
+              <TextButton
+                label="Search YouTube Music"
+                disabled={selection.selecting}
+                onPress={onAskYt}
+              />
+            </View>
+          );
         case "note":
           return (
             <View className="justify-center" style={{ height: HEIGHT.note }}>
@@ -271,7 +281,7 @@ export function SearchResultsList({ rows, onOpen, onShowAll, selection }: Props)
           );
       }
     },
-    [currentId, onOpen, onShowAll, selection],
+    [currentId, onOpen, onShowAll, onAskYt, selection],
   );
 
   return (

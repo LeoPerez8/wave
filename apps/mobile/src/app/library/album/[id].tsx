@@ -19,15 +19,15 @@ import { PlayShuffle } from "@/catalog/PlayShuffle";
 import { TrackRow } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { Press } from "@/motion/Press";
-import { playDiscoverSongs, playSongs } from "@/playback/actions";
-import { useCurrentTrackId, usePlaySongs } from "@/playback/hooks";
+import { playPage, playSongs } from "@/playback/actions";
+import { useCurrentTrackId, usePlayPage } from "@/playback/hooks";
 import { openTrackActions } from "@/playback/ActionsMenu";
 import { followArtistLink } from "@/library/ArtistChoice";
 import { DetailFrame } from "@/library/DetailFrame";
 import { useFavoriteIds } from "@/library/favorites";
 import { useAlbum, useLinkRows } from "@/library/hooks";
 import type { AlbumRow, AlbumTrackRow, SongRow } from "@/library/LibraryStore";
-import { parseId, useKnownRow } from "@/library/routes";
+import { parseId, useKnownRow, useOpenedIntegrated } from "@/library/routes";
 import { songCount, toTrackSummary } from "@/library/TrackList";
 import { useListScrollable } from "@/motion/heldTouch";
 import type { NativeYtSong } from "@/native/waveYtMusic";
@@ -126,11 +126,12 @@ function AlbumHead({
   const { width } = useWindowDimensions();
   const { album, genre, tracks } = shown;
   const context = useMemo(() => ({ kind: "album", id: String(album.id) }) as const, [album.id]);
-  const playLibrary = usePlaySongs(tracks, context);
-  const play = (shuffle: boolean) =>
-    mixed === null
-      ? playLibrary(shuffle)
-      : void playDiscoverSongs(mixed, undefined, context, { shuffle });
+  // Its tracks, or with YouTube Music's songs joined in the whole list, by `playPage`'s rule.
+  const songs = useMemo(
+    () => mixed ?? tracks?.map((track) => ({ source: "library" as const, track })),
+    [mixed, tracks],
+  );
+  const play = usePlayPage(songs, context);
   const download = useYtAlbumDownloadButton(ytSongs);
   // Several album artists: the line opens Go to Artist's choice (Core's `artistLink`).
   const artistTo = artistLink(album.albumArtistIds, usePathname());
@@ -236,14 +237,20 @@ function EntryRow({
   );
 }
 
-function AlbumTracks({ shown }: { shown: Shown }) {
+function AlbumTracks({ shown, openedIntegrated }: { shown: Shown; openedIntegrated: boolean }) {
   const tracks = shown.tracks ?? NO_TRACKS;
   // The album goes by its first album artist's YouTube Music answer.
   const { artist } = useLinkRows(
     undefined,
     shown.album.albumArtistIds[0] ?? shown.album.albumArtistId,
   );
-  const yt = useYtAlbumSection(artist?.name ?? "", artist?.id ?? 0, shown.album, tracks);
+  const yt = useYtAlbumSection(
+    artist?.name ?? "",
+    artist?.id ?? 0,
+    shown.album,
+    tracks,
+    openedIntegrated,
+  );
   // Nothing is joined until the tracks and the artist are read.
   const ytView = shown.tracks === undefined || artist === null ? null : yt.view;
   const entries = ytView?.tracks ?? null;
@@ -291,7 +298,7 @@ function AlbumTracks({ shown }: { shown: Shown }) {
               playing={song !== undefined && discoverTrackId(song) === currentId}
               favorite={item.entry.source === "library" && favorites.has(item.entry.track.id)}
               listSelection={listSelection}
-              onPress={() => mixed !== null && void playDiscoverSongs(mixed, item.index, context)}
+              onPress={() => mixed !== null && void playPage(mixed, item.index, context)}
             />
           );
         }
@@ -351,22 +358,24 @@ function AlbumTracks({ shown }: { shown: Shown }) {
  * An album: large cover, title, album artist, furniture, Play / Shuffle,
  * tracks by disc and number. Opened from a list that knows the album, the
  * header is there on the first frame and the tracks follow once read. While
- * YT Music is on and the album artist's answer is saved, the album's songs
- * on YouTube Music that the Library lacks join the tracks, streamed, and the
- * Library's are marked downloaded.
+ * YT Music is on it ends with Show on YouTube Music; opened from an
+ * integrated view (`openAlbum`'s `integrated`), or once that's tapped, the
+ * album's songs on YouTube Music that the Library lacks join the tracks,
+ * streamed, and the Library's are marked downloaded.
  */
 export default function AlbumScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const albumId = parseId(id);
   const detail = useAlbum(albumId);
   const known = useKnownRow("album", albumId);
+  const openedIntegrated = useOpenedIntegrated();
   const shown: Shown | null | undefined =
     detail === undefined && known !== undefined
       ? { album: known, genre: null, tracks: undefined }
       : detail;
   return (
     <DetailFrame detail={shown} noun="album">
-      {(album) => <AlbumTracks shown={album} />}
+      {(album) => <AlbumTracks shown={album} openedIntegrated={openedIntegrated} />}
     </DetailFrame>
   );
 }
