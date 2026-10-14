@@ -471,14 +471,23 @@ export type {
 } from "./ytDownload.ts";
 export {
   YT_ALBUM_DOWNLOAD_ACTION_LABELS,
+  YT_PLAYLIST_DOWNLOAD_ACTION_LABELS,
   ytAlbumDownload,
   ytAlbumDownloadButton,
-} from "./ytAlbumDownload.ts";
+  ytPlaylistDownload,
+  ytPlaylistDownloadButton,
+  ytSongsDownload,
+} from "./ytSongsDownload.ts";
 export type {
   YtAlbumDownload,
   YtAlbumDownloadAction,
   YtAlbumDownloadRequest,
-} from "./ytAlbumDownload.ts";
+  YtPlaylistDownload,
+  YtPlaylistDownloadAction,
+  YtSongsDownload,
+  YtSongsDownloadAction,
+  YtSongsDownloadRequest,
+} from "./ytSongsDownload.ts";
 export {
   YT_DOWNLOADS_NONE,
   YT_DOWNLOAD_ACTION_LABELS,
