@@ -85,6 +85,8 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
       if (existing["phase"] == "failed" || existing["phase"] == "cancelled" || existing["importFailure"] != null || deletedCompletion) {
         existing["generation"] = existing.number("generation") + 1
         existing.remove("token"); existing.remove("reason"); existing.remove("importFailure")
+        // Retry starts again from the source decided now, Soulseek first while it has an account.
+        existing.remove("fallback"); existing.remove("fellBackFrom")
         // Asked for again: it waits behind what's already queued.
         val key = existing["id"] as String
         jobs.remove(key); jobs[key] = existing
@@ -122,7 +124,7 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
     if (job["phase"] !in DECISIONS || job["token"] != null || job["acknowledged"] == true || job["importFailure"] != null || job.number("retryAt") > clock()) return null
     if (job.number("deadline") <= clock()) {
       // As in expire(): a published file is never a failed download, only one the Library didn't import.
-      if (job["phase"] == "completed") job["importFailure"] = "failed" else fail(job, "failed")
+      if (job["phase"] == "completed") job["importFailure"] = "failed" else fail(job, "timedOut")
       persist(); return null
     }
     job["decisionAttempts"] = job.number("decisionAttempts") + 1
@@ -273,7 +275,8 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
       if (job["phase"] == "queued") continue
       if (stopAll || job.number("deadline") <= clock()) {
         if (job["phase"] == "completed") { job["importFailure"] = "failed"; job.remove("token") }
-        else fail(job, "failed")
+        // Android stopping the work isn't the source's fault; running out of time is.
+        else fail(job, if (stopAll) "failed" else "timedOut")
         transport.cancel(job["id"] as String)
       } else if (job["phase"] == "transferring" && (job.number("attemptDeadline") <= clock() || (job["queuePosition"] != null && job.number("queueDeadline") <= clock()))) {
         transport.cancel(job["id"] as String)

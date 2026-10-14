@@ -169,6 +169,97 @@ class DurableFallbackDownloadsTest {
     }
   }
 
+  @Test fun soulseekUsingUpItsTwentyMinutesLeavesYoutubeMusicItsOwnBudget() {
+    withFolder { folder ->
+      var now = 1_000L
+      val owner = DurableDownloads(File(folder, "jobs"), clock = { now })
+      owner.enqueue(song, null, emptyMap(), "soulseek")
+      prepareSoulseek(owner, File(folder, "Recording.mp3"), File(folder, "Recording.m4a"))
+      // A peer that trickles bytes keeps its turn until the job's time is up.
+      val trickle = transfer { _, candidate, source ->
+        if (candidate["source"] == "youtube") { source.parentFile.mkdirs(); source.writeBytes(SERVED); return@transfer youtubeAudio(source) }
+        now += DurableDownloads.JOB_MS
+        owner.expire(NoTransfer)
+        throw DurableFailure("cancelled")
+      }
+      owner.advance(trickle, Untouched)
+      val job = owner.snapshot().single()
+      assertEquals("youtube", job["source"])
+      assertEquals("timedOut", job["fellBackFrom"])
+      assertEquals(now + DurableDownloads.JOB_MS, job["deadline"])
+      now += 60_000
+      owner.advance(trickle, Untouched)
+      assertEquals("sourceReady", owner.snapshot().single()["phase"])
+    }
+  }
+
+  @Test fun aJobCutOffByProcessDeathAfterFallingBackResumesFromYoutubeMusic() {
+    withFolder { folder ->
+      var now = 1_000L
+      val journal = File(folder, "jobs")
+      var owner = DurableDownloads(journal, clock = { now })
+      class ProcessDeath : Error()
+      owner.enqueue(song, null, emptyMap(), "soulseek")
+      prepareSoulseek(owner, File(folder, "Recording.mp3"), File(folder, "Recording.m4a"))
+      owner.advance(transfer { _, _, _ -> throw DurableFailure("unavailable") }, Untouched)
+      assertThrows(ProcessDeath::class.java) {
+        owner.advance(transfer { _, _, source -> source.parentFile.mkdirs(); source.writeText("half"); throw ProcessDeath() }, Untouched)
+      }
+      now += 10_000
+      owner = DurableDownloads(journal, clock = { now })
+      val asked = mutableListOf<Any?>()
+      val transport = transfer { _, candidate, source ->
+        asked += candidate["source"]
+        if (candidate["source"] != "youtube") throw DurableFailure("unavailable")
+        source.parentFile.mkdirs(); source.writeBytes(SERVED); youtubeAudio(source)
+      }
+      repeat(3) { owner.advance(transport, Untouched) }
+      assertEquals(listOf<Any?>("youtube"), asked)
+      assertEquals("sourceReady", owner.snapshot().single()["phase"])
+    }
+  }
+
+  @Test fun whenYoutubeMusicFailsTooTheRowShowsItsFailureAndRetryStartsFromSoulseek() {
+    withFolder { folder ->
+      val owner = DurableDownloads(File(folder, "jobs"))
+      owner.enqueue(song, null, emptyMap(), "soulseek")
+      prepareSoulseek(owner, File(folder, "Recording.mp3"), File(folder, "Recording.m4a"))
+      val asked = mutableListOf<Any?>()
+      val neither = transfer { _, candidate, _ ->
+        asked += candidate["source"] ?: "soulseek"
+        throw DurableFailure(if (candidate["source"] == "youtube") "ytUnavailable" else "unavailable")
+      }
+      repeat(2) { owner.advance(neither, Untouched) }
+      assertEquals(listOf<Any?>("soulseek", "youtube"), asked)
+      val failed = owner.snapshot().single()
+      assertEquals("failed", failed["phase"])
+      assertEquals("ytUnavailable", failed["reason"])
+
+      owner.enqueue(song, null, emptyMap(), "soulseek")
+      val retried = owner.snapshot().single()
+      assertEquals("queued", retried["phase"])
+      assertEquals("soulseek", retried["source"])
+      assertEquals("mp3-320", retried["policy"])
+      assertNull(retried["fellBackFrom"])
+      assertNull(retried["fallback"])
+      // Soulseek goes first again, and its failure falls back again.
+      prepareSoulseek(owner, File(folder, "Recording.mp3"), File(folder, "Recording.m4a"))
+      repeat(2) { owner.advance(neither, Untouched) }
+      assertEquals(listOf<Any?>("soulseek", "youtube", "soulseek", "youtube"), asked)
+    }
+  }
+
+  @Test fun ytMusicTurnedOffBeforeYoutubeTakesOverLeavesSoulseeksFailure() {
+    withFolder { folder ->
+      val owner = DurableDownloads(File(folder, "jobs"))
+      owner.enqueue(song, null, emptyMap(), "soulseek")
+      prepareSoulseek(owner, File(folder, "Recording.mp3"), File(folder, "Recording.m4a"))
+      val off = transfer { _, candidate, _ -> throw DurableFailure(if (candidate["source"] == "youtube") "noSource" else "unavailable") }
+      repeat(2) { owner.advance(off, Untouched) }
+      assertEquals("unavailable", owner.snapshot().single()["reason"])
+    }
+  }
+
   private val GoodSoulseek = transfer { _, _, source ->
     source.parentFile.mkdirs(); source.writeText("complete validated audio")
     mapOf("durationMs" to 12_000L, "receivedTags" to emptyMap<String, Any?>())
