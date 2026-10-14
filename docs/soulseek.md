@@ -1,9 +1,19 @@
 # Soulseek acquisition on Android
 
 Wave uses its own Kotlin TCP client inside `wave-native`. It needs no daemon,
-PC or downloader app. A free account connects in Wave; subsequent searches
-reuse it. Android Keystore protects the credentials with AES-GCM in the app's
-no-backup directory. Credentials never appear in session responses or logs.
+PC or downloader app. Nobody types a Soulseek account: turning on Download in
+best quality in Settings connects the phone's account, or makes one with a
+random username (syllables and a number, never naming Wave, within Soulseek's
+30 characters) and a random password from `SecureRandom`. Logging in with an
+unused name is how Soulseek makes an account; a taken name (`ERR_SLSK_AUTH`)
+is drawn again, five names at most, then `ERR_SLSK_NO_ACCOUNT`. Turning the
+switch off keeps the account for the next time, and a phone connected to an
+account of its own before the switch keeps it, with the switch on. An account
+Soulseek later rejects is forgotten and the switch goes off. `SoulseekClient`
+picks the account in one place (`connectAccount`). Subsequent searches reuse
+it. Android Keystore protects the credentials with AES-GCM in the app's
+no-backup directory. The password never reaches JS (the session reports only
+the status and username), and neither credential is logged.
 Soulseek's login protocol itself uses plain TCP, as existing clients do.
 
 The protocol reference is [Nicotine+'s documentation](https://nicotine-plus.org/doc/SLSKPROTOCOL.html),
@@ -11,7 +21,7 @@ reviewed on 2026-10-13. [Seeker's Android client and embedded Soulseek.NET](http
 were used as interoperability references, not as dependencies or copied client
 code. Wave identifies its experimental client with protocol major version 177.
 
-`WaveSoulseek` provides session, connect, disconnect, search and the download
+`WaveSoulseek` provides session, `turnOn`, `turnOff`, search and the download
 journal. `AndroidSoulseek.get(context)` owns the process-wide client for
 native background callers. Search yields bounded peer reports; Core selects
 the recording. The transport supports direct and indirect peer connections,
@@ -44,8 +54,8 @@ browse results, and refuses upload requests and unsolicited incoming files.
 
 ## Background execution
 
-Soulseek is the source a download uses once the owner connects a free account
-in Settings; without one, downloads come from YouTube Music while YT Music is
+Soulseek is the source a download uses while Download in best quality is on in
+Settings; with it off, downloads come from YouTube Music while YT Music is
 on (Core's `downloadSource`, docs/spec.md "Downloads"). With YT Music on, a
 Soulseek job that Soulseek can't deliver (no 320 copy or the peers ran out, a
 rejected account, a server that can't be connected to while the network
@@ -104,6 +114,11 @@ a disconnected peer, empty sharing and refused upload/push requests. The audio
 fixture is a generated 1.5-second 440 Hz tone encoded with libmp3lame at 320 kbps;
 lower bitrate, truncated and wrong-duration files must fail. The credentials
 store is tested with authenticated AES-GCM encryption and tamper rejection.
+`SoulseekBestQualityTest` covers the switch against a fake login server: a
+fresh account made and connected, a taken name drawn again, giving up after
+five, the same account after turning it off and on, an owner's account kept,
+the switch staying off offline or with the server down, and a rejected
+account forgotten.
 
 `DurableDownloadsTest` covers the journal through its public API: recreation
 mid-transfer and mid-decision, persisted queue position and deadlines,

@@ -28,6 +28,12 @@ interface SoulseekCredentialsStore {
   fun save(value: SoulseekCredentials?)
 }
 
+/** Whether Download in best quality is on: null on a phone from before the switch. */
+interface SoulseekSwitchStore {
+  fun load(): Boolean?
+  fun save(on: Boolean)
+}
+
 /** Process-owned client. All network and file work runs on the caller's IO thread, outside JS. */
 class SoulseekClient(
   private val credentialsStore: SoulseekCredentialsStore,
@@ -35,10 +41,13 @@ class SoulseekClient(
   private val port: Int = 2242,
   /** Whether the phone is online, which tells Soulseek's server being unreachable from being offline. */
   private val online: () -> Boolean = { true },
+  private val switch: SoulseekSwitchStore,
 ) : Closeable {
   @Volatile private var server: Socket? = null
   private var listener: ServerSocket? = null
   private var credentials = credentialsStore.load()
+  /** Download in best quality. A phone connected to an account of its own before the switch keeps it, on. */
+  @Volatile private var on = switch.load() ?: (credentials != null)
   private val token = AtomicInteger(java.security.SecureRandom().nextInt(Int.MAX_VALUE / 2 - 1) + 1)
   private val peers = ConcurrentHashMap<String, Socket>()
   /**
@@ -68,11 +77,59 @@ class SoulseekClient(
   private val transfers = ConcurrentHashMap<Pair<String, Long>, Pending>()
 
   fun session(): Map<String, Any?> = mapOf(
-    "status" to if (credentials == null) "signedOut" else if (server?.isClosed == false) "connected" else "disconnected",
+    "status" to if (!on || credentials == null) "off" else if (server?.isClosed == false) "connected" else "disconnected",
     "username" to credentials?.username,
   )
 
+  /** Turns Download in best quality on: connects the phone's Soulseek account, making one when it has none. */
+  @Synchronized fun turnOn(): Map<String, Any?> {
+    connectAccount()
+    turn(true)
+    return session()
+  }
+
+  /**
+   * Connects the account downloads use. The one place that picks it: the phone's own, else a new
+   * one with random credentials, drawn again while Soulseek says a name is taken (a taken name
+   * and a wrong password look the same to it). An account of its own that Soulseek rejects is
+   * forgotten, and a new one made.
+   */
+  private fun connectAccount() {
+    credentials?.let { saved ->
+      try { return login(saved) }
+      catch (e: SoulseekException) { if (e.failure == SoulseekFailure.AUTH) forget() else throw e }
+    }
+    repeat(ACCOUNT_DRAWS) {
+      try { return login(SoulseekAccounts.draw()) }
+      catch (e: SoulseekException) { if (e.failure != SoulseekFailure.AUTH) throw e }
+    }
+    throw SoulseekException(SoulseekFailure.NO_ACCOUNT)
+  }
+
+  /** Connects [username]'s account and downloads use it, with Download in best quality on. */
   @Synchronized fun connect(username: String, password: String): Map<String, Any?> {
+    login(SoulseekCredentials(username, password))
+    turn(true)
+    return session()
+  }
+
+  /** Turns Download in best quality off. The account stays on the phone for the next time. */
+  @Synchronized fun turnOff(): Map<String, Any?> {
+    turn(false)
+    close()
+    return session()
+  }
+
+  private fun turn(on: Boolean) {
+    try { switch.save(on) }
+    catch (e: Exception) { throw SoulseekException(SoulseekFailure.STORAGE, cause = e) }
+    this.on = on
+  }
+
+  /** Logs in to Soulseek's server as [account] and keeps it as the phone's account. */
+  private fun login(account: SoulseekCredentials) {
+    val username = account.username
+    val password = account.password
     if (username.isBlank() || username.length > 30 || username.trim() != username || username.any { it.code !in 32..126 } || password.isEmpty() || password.length > 1024) {
       throw SoulseekException(SoulseekFailure.AUTH)
     }
@@ -99,7 +156,6 @@ class SoulseekClient(
       socket.soTimeout = 0
       server = socket
       startReaders(socket, incoming)
-      return session()
     } catch (e: Exception) {
       socket.close()
       listener?.close()
@@ -205,11 +261,14 @@ class SoulseekClient(
   }
 
   @Synchronized private fun ensureConnected() {
+    // Off, downloads don't use Soulseek, though the phone keeps its account.
+    if (!on) throw SoulseekException(SoulseekFailure.SIGNED_OUT)
     if (server?.isClosed == false) return
     val saved = credentials ?: throw SoulseekException(SoulseekFailure.SIGNED_OUT)
-    try { connect(saved.username, saved.password) }
+    try { login(saved) }
     catch (e: SoulseekException) {
-      if (e.failure == SoulseekFailure.AUTH) { credentials = null; credentialsStore.save(null) }
+      // Turning the switch on again makes a new account.
+      if (e.failure == SoulseekFailure.AUTH) { forget(); turn(false) }
       throw e
     }
   }
@@ -448,14 +507,16 @@ class SoulseekClient(
     InetAddress.getByAddress(ByteArray(4) { (ip ushr ((3 - it) * 8)).toByte() }), port.toInt(),
   )
 
-  @Synchronized fun disconnect(): Map<String, Any?> {
-    close()
+  /** Forgets an account Soulseek rejected. */
+  private fun forget() {
     credentials = null
     credentialsStore.save(null)
-    return session()
   }
 
   @Synchronized override fun close() {
+    // Waiting downloads lose the connection before their peer sockets close: a peer thread that
+    // sees its socket go must not fail them as the peer's fault.
+    downloads.values.forEach { it.finished.completeExceptionally(connectionLost()) }
     server?.close()
     server = null
     listener?.close()
@@ -472,6 +533,9 @@ class SoulseekClient(
     addressRequests.clear()
   }
 }
+
+/** How many usernames turning Download in best quality on draws before it gives up. */
+private const val ACCOUNT_DRAWS = 5
 
 /** How often a waiting download asks whether it is still wanted. */
 private const val CANCEL_POLL_MS = 250L

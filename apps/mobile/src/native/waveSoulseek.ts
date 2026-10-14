@@ -35,7 +35,8 @@ export interface NativeDownloadDecision extends NativeDownloadJob {
 }
 
 export interface SoulseekSession {
-  readonly status: "signedOut" | "disconnected" | "connected";
+  /** "off" while Download in best quality is off; the phone keeps its account then. */
+  readonly status: "off" | "disconnected" | "connected";
   readonly username: string | null;
 }
 
@@ -86,8 +87,10 @@ declare class WaveSoulseekModule extends NativeModule<{
   refreshDownloadPolicy(roots: readonly string[], excluded: readonly string[]): Promise<number>;
   cancelJob(id: string): Promise<void>;
   session(): Promise<SoulseekSession>;
-  connect(username: string, password: string): Promise<SoulseekSession>;
-  disconnect(): Promise<SoulseekSession>;
+  /** Download in best quality: connects the phone's Soulseek account, making one when it has none. */
+  turnOn(): Promise<SoulseekSession>;
+  /** Download in best quality off: downloads stop using Soulseek and the account stays. */
+  turnOff(): Promise<SoulseekSession>;
   search(query: string): Promise<SoulseekCandidate[]>;
 }
 

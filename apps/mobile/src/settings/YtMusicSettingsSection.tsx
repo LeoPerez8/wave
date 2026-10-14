@@ -18,7 +18,7 @@ const PHOTO = CELL * 5;
 const NOTES: Record<YtAccountNote, string> = {
   optional:
     "Signing in is optional. Signed in, Search, playback and Discover use your " +
-    "account. The session stays on this phone. Without a Soulseek account, or when Soulseek " +
+    "account. The session stays on this phone. With Download in best quality off, or when Soulseek " +
     "can't deliver a song, downloads come from YouTube Music: AAC at 256 kbps with Premium, " +
     "about 128 kbps without.",
   expired:

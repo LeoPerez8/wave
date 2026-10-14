@@ -132,12 +132,11 @@ const metadata = (song: NativeYtSong) =>
     return ytDownloadTags(song, album, found, lyrics);
   });
 
-/** Core's source for a download now: YT Music's setting and whether Soulseek has an account. */
+/** Core's source for a download now: YT Music's setting and Download in best quality. */
 const currentSource = (
   session: SoulseekSession,
   ytMusicOn = ytMusicEnabled(),
-): DownloadSource | null =>
-  downloadSource({ ytMusicOn, soulseekAccount: session.status !== "signedOut" });
+): DownloadSource | null => downloadSource({ ytMusicOn, bestQuality: session.status !== "off" });
 
 /**
  * What the journal keeps to carry a Soulseek job on from YouTube Music: where the M4A goes and
@@ -172,7 +171,7 @@ const requestedSource = async (): Promise<DownloadSource | null> => {
   try {
     return currentSource(await WaveSoulseek.session());
   } catch {
-    return currentSource({ status: "signedOut", username: null });
+    return currentSource({ status: "off", username: null });
   }
 };
 
