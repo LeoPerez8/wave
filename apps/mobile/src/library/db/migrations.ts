@@ -362,6 +362,214 @@ const mImportedPlays = `
 ALTER TABLE \`play_events\` ADD \`imported_from\` text;
 `;
 
+// What the Wave account needs to know songs across phones and merge rows
+// (docs/spec.md, "Wave account and sync"):
+// - this install's phone id (\`phone\`), random;
+// - tracks: a recording key and a YouTube video id, and a path that can be
+//   null (a missing song). SQLite can't drop NOT NULL, so \`tracks\` is rebuilt
+//   with its ids and the AUTOINCREMENT counter (a deleted song's plays keep
+//   an id no new song takes). Dropping it with foreign keys on (the migrator
+//   runs in one transaction, where the pragma can't change) deletes the rows
+//   that reference it, so its credit links, stars and playlist entries are
+//   copied aside first and put back;
+// - playlists and entries: an id made on the phone (\`sync_id\`); entries an
+//   order key instead of a position, given in their current order: the
+//   keys adding them one by one at the end makes (Core's \`orderKeyBetween\`:
+//   \`a0\`…\`az\`, \`b00\`…\`bzz\`, \`c000\`…);
+// - playlists, entries and stars: when they last changed and on which phone
+//   (\`changed_at\`, \`phone_id\`), and \`deleted\` for tombstones. Existing rows
+//   are stamped by this phone, when they were last changed or made;
+// - plays: the recording key, filled in by the store once it has keyed the
+//   tracks (\`keyRecordings\`); plays of songs deleted before keep none;
+// - when each synced preference last changed (\`preference_changes\`).
+const mSyncIdentity = `
+CREATE TABLE \`phone\` (
+	\`id\` integer PRIMARY KEY NOT NULL,
+	\`phone_id\` text NOT NULL
+);
+--> statement-breakpoint
+INSERT INTO \`phone\` (\`id\`, \`phone_id\`) VALUES (1, lower(hex(randomblob(16))));
+--> statement-breakpoint
+CREATE TABLE \`__keep_sequence\` AS SELECT \`name\`, \`seq\` FROM \`sqlite_sequence\`
+	WHERE \`name\` IN ('tracks', 'playlists', 'playlist_items');
+--> statement-breakpoint
+CREATE TABLE \`__keep_track_artists\` AS SELECT * FROM \`track_artists\`;
+--> statement-breakpoint
+CREATE TABLE \`__keep_favorites\` AS SELECT * FROM \`favorites\`;
+--> statement-breakpoint
+CREATE TABLE \`__keep_playlists\` AS SELECT * FROM \`playlists\`;
+--> statement-breakpoint
+CREATE TABLE \`__keep_playlist_items\` AS SELECT * FROM \`playlist_items\`;
+--> statement-breakpoint
+DROP TABLE \`favorites\`;
+--> statement-breakpoint
+DROP TABLE \`playlist_items\`;
+--> statement-breakpoint
+DROP TABLE \`playlists\`;
+--> statement-breakpoint
+CREATE TABLE \`__new_tracks\` (
+	\`id\` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	\`path\` text,
+	\`recording_key\` text,
+	\`video_id\` text,
+	\`folder_id\` integer NOT NULL,
+	\`file_name\` text NOT NULL,
+	\`size_bytes\` integer NOT NULL,
+	\`modified_at\` integer NOT NULL,
+	\`title\` text NOT NULL,
+	\`title_sort\` text NOT NULL,
+	\`artist_id\` integer NOT NULL,
+	\`artist_credit\` text DEFAULT '' NOT NULL,
+	\`artist_credits\` text,
+	\`album_id\` integer NOT NULL,
+	\`genre_id\` integer,
+	\`year\` integer,
+	\`track_number\` integer,
+	\`track_total\` integer,
+	\`disc_number\` integer,
+	\`disc_total\` integer,
+	\`duration_ms\` integer NOT NULL,
+	\`sample_rate\` integer,
+	\`bitrate_kbps\` integer,
+	\`artwork_hash\` text,
+	\`has_lyrics\` integer DEFAULT false NOT NULL,
+	\`added_at\` integer NOT NULL,
+	\`scanned_at\` integer NOT NULL,
+	FOREIGN KEY (\`folder_id\`) REFERENCES \`folders\`(\`id\`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (\`artist_id\`) REFERENCES \`artists\`(\`id\`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (\`album_id\`) REFERENCES \`albums\`(\`id\`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (\`genre_id\`) REFERENCES \`genres\`(\`id\`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (\`artwork_hash\`) REFERENCES \`artwork\`(\`hash\`) ON UPDATE no action ON DELETE no action
+);
+--> statement-breakpoint
+INSERT INTO \`__new_tracks\` (\`id\`, \`path\`, \`folder_id\`, \`file_name\`, \`size_bytes\`, \`modified_at\`, \`title\`, \`title_sort\`, \`artist_id\`, \`artist_credit\`, \`artist_credits\`, \`album_id\`, \`genre_id\`, \`year\`, \`track_number\`, \`track_total\`, \`disc_number\`, \`disc_total\`, \`duration_ms\`, \`sample_rate\`, \`bitrate_kbps\`, \`artwork_hash\`, \`has_lyrics\`, \`added_at\`, \`scanned_at\`)
+	SELECT \`id\`, \`path\`, \`folder_id\`, \`file_name\`, \`size_bytes\`, \`modified_at\`, \`title\`, \`title_sort\`, \`artist_id\`, \`artist_credit\`, \`artist_credits\`, \`album_id\`, \`genre_id\`, \`year\`, \`track_number\`, \`track_total\`, \`disc_number\`, \`disc_total\`, \`duration_ms\`, \`sample_rate\`, \`bitrate_kbps\`, \`artwork_hash\`, \`has_lyrics\`, \`added_at\`, \`scanned_at\` FROM \`tracks\`;
+--> statement-breakpoint
+DROP TABLE \`tracks\`;
+--> statement-breakpoint
+ALTER TABLE \`__new_tracks\` RENAME TO \`tracks\`;
+--> statement-breakpoint
+CREATE UNIQUE INDEX \`tracks_path_unique\` ON \`tracks\` (\`path\`);
+--> statement-breakpoint
+CREATE INDEX \`tracks_title_sort_idx\` ON \`tracks\` (\`title_sort\`);
+--> statement-breakpoint
+CREATE INDEX \`tracks_artist_idx\` ON \`tracks\` (\`artist_id\`);
+--> statement-breakpoint
+CREATE INDEX \`tracks_album_idx\` ON \`tracks\` (\`album_id\`);
+--> statement-breakpoint
+CREATE INDEX \`tracks_genre_idx\` ON \`tracks\` (\`genre_id\`);
+--> statement-breakpoint
+CREATE INDEX \`tracks_folder_idx\` ON \`tracks\` (\`folder_id\`);
+--> statement-breakpoint
+CREATE INDEX \`tracks_recording_key_idx\` ON \`tracks\` (\`recording_key\`);
+--> statement-breakpoint
+INSERT INTO \`track_artists\` (\`track_id\`, \`artist_id\`, \`position\`)
+	SELECT \`track_id\`, \`artist_id\`, \`position\` FROM \`__keep_track_artists\`;
+--> statement-breakpoint
+CREATE TABLE \`playlists\` (
+	\`id\` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	\`sync_id\` text NOT NULL,
+	\`name\` text NOT NULL,
+	\`created_at\` integer NOT NULL,
+	\`updated_at\` integer NOT NULL,
+	\`changed_at\` integer NOT NULL,
+	\`phone_id\` text NOT NULL,
+	\`deleted\` integer DEFAULT false NOT NULL
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX \`playlists_sync_id_unique\` ON \`playlists\` (\`sync_id\`);
+--> statement-breakpoint
+CREATE INDEX \`playlists_changed_at_idx\` ON \`playlists\` (\`changed_at\`);
+--> statement-breakpoint
+INSERT INTO \`playlists\` (\`id\`, \`sync_id\`, \`name\`, \`created_at\`, \`updated_at\`, \`changed_at\`, \`phone_id\`)
+	SELECT \`id\`, lower(hex(randomblob(16))), \`name\`, \`created_at\`, \`updated_at\`, \`updated_at\`,
+		(SELECT \`phone_id\` FROM \`phone\`)
+	FROM \`__keep_playlists\`;
+--> statement-breakpoint
+CREATE TABLE \`playlist_items\` (
+	\`id\` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	\`sync_id\` text NOT NULL,
+	\`playlist_id\` integer NOT NULL,
+	\`track_id\` integer,
+	\`yt_song\` text,
+	\`order_key\` text NOT NULL,
+	\`added_at\` integer NOT NULL,
+	\`changed_at\` integer NOT NULL,
+	\`phone_id\` text NOT NULL,
+	\`deleted\` integer DEFAULT false NOT NULL,
+	FOREIGN KEY (\`playlist_id\`) REFERENCES \`playlists\`(\`id\`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (\`track_id\`) REFERENCES \`tracks\`(\`id\`) ON UPDATE no action ON DELETE cascade,
+	CONSTRAINT "playlist_items_one_song" CHECK((\`track_id\` IS NULL) <> (\`yt_song\` IS NULL))
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX \`playlist_items_sync_id_unique\` ON \`playlist_items\` (\`sync_id\`);
+--> statement-breakpoint
+CREATE INDEX \`playlist_items_playlist_order_idx\` ON \`playlist_items\` (\`playlist_id\`,\`order_key\`,\`sync_id\`);
+--> statement-breakpoint
+CREATE INDEX \`playlist_items_track_idx\` ON \`playlist_items\` (\`track_id\`);
+--> statement-breakpoint
+CREATE INDEX \`playlist_items_changed_at_idx\` ON \`playlist_items\` (\`changed_at\`);
+--> statement-breakpoint
+INSERT INTO \`playlist_items\` (\`id\`, \`sync_id\`, \`playlist_id\`, \`track_id\`, \`yt_song\`, \`order_key\`, \`added_at\`, \`changed_at\`, \`phone_id\`)
+	SELECT \`id\`, lower(hex(randomblob(16))), \`playlist_id\`, \`track_id\`, \`yt_song\`,
+		CASE
+			WHEN \`rank\` < 62 THEN 'a' || substr(\`digits\`, \`rank\` + 1, 1)
+			WHEN \`rank\` < 3906 THEN 'b'
+				|| substr(\`digits\`, (\`rank\` - 62) / 62 + 1, 1)
+				|| substr(\`digits\`, (\`rank\` - 62) % 62 + 1, 1)
+			ELSE 'c'
+				|| substr(\`digits\`, (\`rank\` - 3906) / 3844 + 1, 1)
+				|| substr(\`digits\`, (\`rank\` - 3906) / 62 % 62 + 1, 1)
+				|| substr(\`digits\`, (\`rank\` - 3906) % 62 + 1, 1)
+		END,
+		\`added_at\`, \`added_at\`, (SELECT \`phone_id\` FROM \`phone\`)
+	FROM (
+		SELECT *,
+			row_number() OVER (PARTITION BY \`playlist_id\` ORDER BY \`position\`, \`id\`) - 1 AS \`rank\`,
+			'0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz' AS \`digits\`
+		FROM \`__keep_playlist_items\`
+	);
+--> statement-breakpoint
+CREATE TABLE \`favorites\` (
+	\`track_id\` integer PRIMARY KEY NOT NULL,
+	\`added_at\` integer NOT NULL,
+	\`changed_at\` integer NOT NULL,
+	\`phone_id\` text NOT NULL,
+	\`deleted\` integer DEFAULT false NOT NULL,
+	FOREIGN KEY (\`track_id\`) REFERENCES \`tracks\`(\`id\`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE INDEX \`favorites_changed_at_idx\` ON \`favorites\` (\`changed_at\`);
+--> statement-breakpoint
+INSERT INTO \`favorites\` (\`track_id\`, \`added_at\`, \`changed_at\`, \`phone_id\`)
+	SELECT \`track_id\`, \`added_at\`, \`added_at\`, (SELECT \`phone_id\` FROM \`phone\`) FROM \`__keep_favorites\`;
+--> statement-breakpoint
+UPDATE \`sqlite_sequence\` SET \`seq\` = max(\`seq\`, (SELECT \`k\`.\`seq\` FROM \`__keep_sequence\` \`k\` WHERE \`k\`.\`name\` = \`sqlite_sequence\`.\`name\`))
+	WHERE \`name\` IN (SELECT \`name\` FROM \`__keep_sequence\`);
+--> statement-breakpoint
+INSERT INTO \`sqlite_sequence\` (\`name\`, \`seq\`)
+	SELECT \`name\`, \`seq\` FROM \`__keep_sequence\`
+	WHERE \`name\` NOT IN (SELECT \`name\` FROM \`sqlite_sequence\`);
+--> statement-breakpoint
+DROP TABLE \`__keep_sequence\`;
+--> statement-breakpoint
+DROP TABLE \`__keep_track_artists\`;
+--> statement-breakpoint
+DROP TABLE \`__keep_favorites\`;
+--> statement-breakpoint
+DROP TABLE \`__keep_playlists\`;
+--> statement-breakpoint
+DROP TABLE \`__keep_playlist_items\`;
+--> statement-breakpoint
+ALTER TABLE \`play_events\` ADD \`recording_key\` text;
+--> statement-breakpoint
+CREATE TABLE \`preference_changes\` (
+	\`key\` text PRIMARY KEY NOT NULL,
+	\`changed_at\` integer NOT NULL,
+	\`phone_id\` text NOT NULL
+);
+`;
+
 export default {
   journal: {
     entries: [
@@ -383,6 +591,7 @@ export default {
       { idx: 15, when: 1_793_102_400_000, tag: "0015_tag_credits", breakpoints: true },
       { idx: 16, when: 1_793_188_800_000, tag: "0016_playlist_yt_entries", breakpoints: true },
       { idx: 17, when: 1_793_275_200_000, tag: "0017_imported_plays", breakpoints: true },
+      { idx: 18, when: 1_793_361_600_000, tag: "0018_sync_identity", breakpoints: true },
     ],
   },
   migrations: {
@@ -404,5 +613,6 @@ export default {
     m0015,
     m0016: mPlaylistYtEntries,
     m0017: mImportedPlays,
+    m0018: mSyncIdentity,
   },
 };

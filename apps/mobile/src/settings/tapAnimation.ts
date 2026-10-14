@@ -9,6 +9,7 @@ const clamp = (ms: number): number => snapSliderValue(ms, TAP_ANIMATION);
 
 const tapAnimation = persistedSetting<number>({
   key: "settings.tapAnimationMs",
+  synced: true,
   read: (stored) => {
     const ms = stored === null ? Number.NaN : Number(stored);
     return Number.isFinite(ms) ? clamp(ms) : TAP_ANIMATION.default;

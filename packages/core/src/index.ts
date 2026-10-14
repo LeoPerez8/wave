@@ -709,8 +709,8 @@ export type {
   SpotifySong,
   SpotifyTransport,
 } from "./spotifyPlaylist.ts";
-export { compareOrderKeys, orderKeyBetween } from "./orderKey.ts";
-export type { OrderedEntry } from "./orderKey.ts";
+export { compareOrderKeys, orderKeyBetween, placeEntries } from "./orderKey.ts";
+export type { EntryPlacement, OrderedEntry } from "./orderKey.ts";
 export {
   RECORDING_LENGTH_TOLERANCE_MS,
   fillMissingSongs,

@@ -149,3 +149,57 @@ export const compareOrderKeys = (a: OrderedEntry, b: OrderedEntry): number => {
   if (a.id !== b.id) return a.id < b.id ? -1 : 1;
   return 0;
 };
+
+/** Where `placeEntries` puts new entries. */
+export interface EntryPlacement {
+  /** The new entries' keys, in the order they go in. */
+  readonly keys: readonly string[];
+  /**
+   * Entries already in the playlist that take a new key too, with it: those
+   * two phones gave one key, when the new entries go between them. Usually none.
+   */
+  readonly rekeyed: readonly OrderedEntry[];
+}
+
+/** [count] keys one after the other between [before] and [after] (`null`: that end). */
+const keysBetween = (before: string | null, after: string | null, count: number): string[] => {
+  const keys: string[] = [];
+  for (let i = 0; i < count; i++) keys.push(orderKeyBetween(keys.at(-1) ?? before, after));
+  return keys;
+};
+
+/**
+ * Keys for [count] new entries placed together at [index] of a playlist's
+ * [entries] (in playlist order, `compareOrderKeys`): 0 is the top, the
+ * entries' length the end, and an index past either end places at that end.
+ * Adding or moving an entry changes that entry's row only, unless it goes
+ * between entries two phones gave one key: those are keyed again around it.
+ */
+export const placeEntries = (
+  entries: readonly OrderedEntry[],
+  index: number,
+  count: number,
+): EntryPlacement => {
+  const at = Math.min(Math.max(index, 0), entries.length);
+  const before = entries[at - 1]?.orderKey ?? null;
+  const after = entries[at]?.orderKey ?? null;
+  if (before === null || before !== after) {
+    return { keys: keysBetween(before, after, count), rekeyed: [] };
+  }
+  // Between two entries with one key: that run of entries is keyed again, the new ones in their place.
+  let start = at - 1;
+  while (start > 0 && entries[start - 1]?.orderKey === before) start--;
+  let end = at;
+  while (end < entries.length && entries[end]?.orderKey === before) end++;
+  const keys = keysBetween(
+    entries[start - 1]?.orderKey ?? null,
+    entries[end]?.orderKey ?? null,
+    end - start + count,
+  );
+  const placed = at - start;
+  const rekeyed = entries.slice(start, end).map((entry, i) => ({
+    id: entry.id,
+    orderKey: keys[i < placed ? i : i + count] ?? entry.orderKey,
+  }));
+  return { keys: keys.slice(placed, placed + count), rekeyed };
+};

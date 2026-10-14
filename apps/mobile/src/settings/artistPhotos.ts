@@ -3,6 +3,7 @@ import { persistedSetting } from "@/lib/persistedSetting";
 /** Whether Wave downloads artist photos (on unless the owner turned it off). */
 const downloadArtistPhotos = persistedSetting<boolean>({
   key: "settings.downloadArtistPhotos",
+  synced: true,
   read: (stored) => stored !== "off",
   write: (on) => (on ? null : "off"),
 });
