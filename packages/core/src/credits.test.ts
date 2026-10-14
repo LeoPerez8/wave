@@ -76,10 +76,55 @@ describe("splitCredit", () => {
       "Ariana Grande",
       "Social House",
     ]);
-    const alsoCollaborating = ["Ariana Grande & Social House", "Ariana Grande, Doja Cat"];
-    assert.deepEqual(splitCredit("Ariana Grande & Social House", alsoCollaborating), [
+    const featuring = ["Ariana Grande & Social House", "Ariana Grande feat. Doja Cat"];
+    assert.deepEqual(splitCredit("Ariana Grande & Social House", featuring), [
       "Ariana Grande",
       "Social House",
+    ]);
+  });
+
+  test("a collaboration whose artists have no song on their own stays one artist", () => {
+    const known = ["Ariana Grande & Social House", "Ariana Grande, Doja Cat"];
+    assert.deepEqual(splitCredit("Ariana Grande & Social House", known), [
+      "Ariana Grande & Social House",
+    ]);
+  });
+
+  test("a comma, a slash or another separator inside an artist the Library has keeps it whole", () => {
+    assert.deepEqual(splitCredit("Earth, Wind & Fire", ["Earth, Wind & Fire"]), [
+      "Earth, Wind & Fire",
+    ]);
+    assert.deepEqual(splitCredit("AC/DC", ["AC/DC"]), ["AC/DC"]);
+    assert.deepEqual(splitCredit("Tyler, The Creator", ["Tyler, The Creator"]), [
+      "Tyler, The Creator",
+    ]);
+  });
+
+  test("a known artist inside a longer credit stays whole while the rest splits", () => {
+    const known = ["Earth, Wind & Fire", "AC/DC", "Tyler, The Creator"];
+    assert.deepEqual(splitCredit("Earth, Wind & Fire, The Emotions", known), [
+      "Earth, Wind & Fire",
+      "The Emotions",
+    ]);
+    assert.deepEqual(splitCredit("Tyler, The Creator feat. Kali Uchis", known), [
+      "Tyler, The Creator",
+      "Kali Uchis",
+    ]);
+    assert.deepEqual(splitCredit("AC/DC x Kanye West", known), ["AC/DC", "Kanye West"]);
+  });
+
+  test("a collaboration's own credit splits once one of its artists is credited alone", () => {
+    const known = ["Ariana Grande, Doja Cat", "Ariana Grande"];
+    assert.deepEqual(splitCredit("Ariana Grande, Doja Cat", known), ["Ariana Grande", "Doja Cat"]);
+    assert.deepEqual(splitCredit("Ariana Grande, Doja Cat", ["Ariana Grande, Doja Cat"]), [
+      "Ariana Grande, Doja Cat",
+    ]);
+  });
+
+  test("a featured credit always splits, even inside a known whole credit", () => {
+    assert.deepEqual(splitCredit("Calvin Harris feat. Rihanna", ["Calvin Harris feat. Rihanna"]), [
+      "Calvin Harris",
+      "Rihanna",
     ]);
   });
 

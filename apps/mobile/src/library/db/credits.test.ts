@@ -205,7 +205,10 @@ describe("credits", () => {
   test("an artist only credited on collaborations shows a cover of theirs", () => {
     saveBatch(
       db,
-      [{ ...indexed(ariana[2] ?? { title: "" }), artworkHash: "boyfriend" }],
+      [
+        indexed(ariana[0] ?? { title: "" }),
+        { ...indexed(ariana[2] ?? { title: "" }), artworkHash: "boyfriend" },
+      ],
       [
         {
           hash: "boyfriend",
@@ -219,24 +222,31 @@ describe("credits", () => {
     );
     removeTracks(db, []);
     assert.equal(artist("Social House")?.artworkPath, "/covers/boyfriend.jpg");
-    assert.equal(artist("Ariana Grande")?.artworkPath, "/covers/boyfriend.jpg");
   });
 
-  test("a downloaded YT Music collaboration files under each of its artists", () => {
-    const artists = ["Metro Boomin", "The Weeknd", "21 Savage"];
-    scan({
-      title: "Creepin'",
-      artist: joinArtists(artists),
-      album: "Heroes & Villains",
-      albumArtist: "Metro Boomin",
-    });
+  const creepin = {
+    title: "Creepin'",
+    artist: joinArtists(["Metro Boomin", "The Weeknd", "21 Savage"]),
+    album: "Heroes & Villains",
+  };
+
+  test("a downloaded YT Music collaboration files under each of its artists once one has a song of their own", () => {
+    scan(creepin, { title: "Blinding Lights", artist: "The Weeknd", album: "After Hours" });
     assert.deepEqual(
       selectArtists(db, {}).map((row) => [row.name, row.trackCount]),
       [
         ["Metro Boomin", 1],
-        ["The Weeknd", 1],
+        ["The Weeknd", 2],
         ["21 Savage", 1],
       ],
+    );
+  });
+
+  test("a downloaded YT Music collaboration whose artists have no other song stays one artist", () => {
+    scan(creepin);
+    assert.deepEqual(
+      selectArtists(db, {}).map((row) => row.name),
+      ["Metro Boomin, The Weeknd & 21 Savage"],
     );
   });
 
