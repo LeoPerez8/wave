@@ -13,8 +13,13 @@ import {
   ytDownloadStatus,
   ytDownloadTags,
   ytDownloadsFromJournal,
+  ytPlaylistDownload,
+  ytSongsDownload,
+  type MixedSong,
   type YtAlbumDownload,
   type YtAlbumDownloadAction,
+  type YtPlaylistDownload,
+  type YtPlaylistDownloadAction,
   type YtDownloadFailure,
   type YtDownloadStatus,
   type YtDownloads,
@@ -162,7 +167,7 @@ export const importSoulseekDownload = (saved: NativeSavedDownload) =>
   });
 
 const downloads = makeExternalStore<YtDownloads<NativeYtSong>>(YT_DOWNLOADS_NONE);
-/** The journal's last snapshot as it came, for album-level views (Core's `ytAlbumDownload`). */
+/** The journal's last snapshot as it came, for album and playlist views (Core's `ytSongsDownload`). */
 const journal = makeExternalStore<readonly NativeDownloadJob[]>([]);
 
 /** Re-reads folder policy so a publication never lands outside the current Library folders. */
@@ -351,18 +356,18 @@ export const useYtDownloadStatus = (videoId: string): YtDownloadStatus | null =>
 type InLibrary = (song: NativeYtSong) => boolean;
 
 /**
- * Download Album: every song of the album the Library doesn't have joins the
- * queue, in album order, sharing jobs already on their way (Core's
- * `ytAlbumDownload`, decided on a fresh snapshot of the journal). Each goes
- * through the single-song pipeline.
+ * Download Album / Download Playlist: every song of the list the Library
+ * doesn't have joins the queue, in list order, sharing jobs already on their
+ * way (Core's `ytSongsDownload`, decided on a fresh snapshot of the journal).
+ * Each goes through the single-song pipeline.
  */
-export const downloadYtAlbum = (songs: readonly NativeYtSong[], inLibrary: InLibrary): void => {
+const downloadYtSongs = (songs: readonly NativeYtSong[], inLibrary: InLibrary): void => {
   askForNotifications();
   startDownloads();
   requests = requests
     .then(async () => {
       const jobs = await WaveSoulseek.jobsSnapshot();
-      for (const { song, sharedJob } of ytAlbumDownload(songs, { inLibrary, jobs }).toDownload)
+      for (const { song, sharedJob } of ytSongsDownload(songs, { inLibrary, jobs }).toDownload)
         await WaveSoulseek.enqueueJob(song, soulseekRecording(song), sharedJob);
       await refresh();
     })
@@ -370,49 +375,54 @@ export const downloadYtAlbum = (songs: readonly NativeYtSong[], inLibrary: InLib
 };
 
 /**
- * Retry Failed: asks again for each of the album's songs whose download
- * failed, in album order, sharing jobs already on their way as Download Album does.
+ * Retry Failed: asks again for each of the list's songs whose download
+ * failed, in list order, sharing jobs already on their way as Download does.
  */
-export const retryYtAlbum = (songs: readonly NativeYtSong[], inLibrary: InLibrary): void => {
+const retryYtSongs = (songs: readonly NativeYtSong[], inLibrary: InLibrary): void => {
   askForNotifications();
   startDownloads();
   requests = requests
     .then(async () => {
       const jobs = await WaveSoulseek.jobsSnapshot();
-      for (const { song, sharedJob } of ytAlbumDownload(songs, { inLibrary, jobs }).toRetry)
+      for (const { song, sharedJob } of ytSongsDownload(songs, { inLibrary, jobs }).toRetry)
         await WaveSoulseek.enqueueJob(song, soulseekRecording(song), sharedJob);
       await refresh();
     })
     .catch(() => undefined);
 };
 
-/** Cancel Album Download: the album's songs leave the jobs that aren't saving yet. */
-export const cancelYtAlbum = (songs: readonly NativeYtSong[], inLibrary: InLibrary): void => {
+/** Cancel Album / Playlist Download: the list's songs leave the jobs that aren't saving yet. */
+const cancelYtSongs = (songs: readonly NativeYtSong[], inLibrary: InLibrary): void => {
   requests = requests
     .then(async () => {
       const jobs = await WaveSoulseek.jobsSnapshot();
-      for (const videoId of ytAlbumDownload(songs, { inLibrary, jobs }).toCancel)
+      for (const videoId of ytSongsDownload(songs, { inLibrary, jobs }).toCancel)
         await WaveSoulseek.cancelJob(videoId);
       await refresh();
     })
     .catch(() => undefined);
 };
 
-/** Runs an album entry (Core's `ytAlbumDownload` actions) on [songs]. */
-export const runYtAlbumAction = (
-  action: YtAlbumDownloadAction,
+/** An album's or a playlist's download entry (Core's `ytAlbumDownload`, `ytPlaylistDownload`). */
+export type YtListDownloadAction = YtAlbumDownloadAction | YtPlaylistDownloadAction;
+
+/** Runs an album's or a playlist's download entry on its YT Music [songs]. */
+export const runYtDownloadAction = (
+  action: YtListDownloadAction,
   songs: readonly NativeYtSong[],
   inLibrary: InLibrary,
 ): void => {
   switch (action) {
     case "downloadAlbum":
-      downloadYtAlbum(songs, inLibrary);
+    case "downloadPlaylist":
+      downloadYtSongs(songs, inLibrary);
       return;
     case "retryFailed":
-      retryYtAlbum(songs, inLibrary);
+      retryYtSongs(songs, inLibrary);
       return;
     case "cancelAlbumDownload":
-      cancelYtAlbum(songs, inLibrary);
+    case "cancelPlaylistDownload":
+      cancelYtSongs(songs, inLibrary);
       return;
   }
 };
@@ -427,4 +437,26 @@ export const useYtAlbumDownload = (
 ): YtAlbumDownload<NativeYtSong> => {
   const jobs = useSyncExternalStore(journal.subscribe, journal.get);
   return useMemo(() => ytAlbumDownload(songs, { inLibrary, jobs }), [songs, inLibrary, jobs]);
+};
+
+/** A playlist's entry: a Library song (its file) or a YT Music song. */
+type PlaylistEntry = MixedSong<NativeYtSong, { readonly path: string }>;
+
+/** What a playlist's download entries act on: its YT Music entries' songs, in playlist order. */
+export const playlistYtSongs = (entries: readonly PlaylistEntry[]): NativeYtSong[] =>
+  entries.flatMap((entry) => (entry.source === "stream" ? [entry.song] : []));
+
+/**
+ * Where a playlist's download stands (Core's `ytPlaylistDownload`), from its
+ * [entries], the Library ([inLibrary]) and the journal, following both.
+ */
+export const useYtPlaylistDownload = (
+  entries: readonly PlaylistEntry[],
+  inLibrary: InLibrary,
+): YtPlaylistDownload<NativeYtSong> => {
+  const jobs = useSyncExternalStore(journal.subscribe, journal.get);
+  return useMemo(
+    () => ytPlaylistDownload(entries, { inLibrary, jobs }),
+    [entries, inLibrary, jobs],
+  );
 };

@@ -51,7 +51,10 @@ export interface YtSongsDownloadRequest<S extends YtSong = YtSong> {
 export type YtAlbumDownloadRequest<S extends YtSong = YtSong> = YtSongsDownloadRequest<S>;
 
 /** Where a list's download stands, and what acting on it does; [A] names its entries. */
-export interface YtSongsDownload<S extends YtSong = YtSong, A extends string = YtSongsDownloadAction> {
+export interface YtSongsDownload<
+  S extends YtSong = YtSong,
+  A extends string = YtSongsDownloadAction,
+> {
   /** The list-level entries its menu offers, in order; its page offers the first. */
   readonly actions: readonly A[];
   /** The page head's progress line ("Downloading · 3 of 10"); null with nothing on its way. */
@@ -167,7 +170,10 @@ export const ytAlbumDownload = <S extends YtSong>(
   input: SongsDownloadInput<S>,
 ): YtAlbumDownload<S> => named(ytSongsDownload(songs, input), ALBUM_ACTIONS);
 
-export type YtPlaylistDownloadAction = "downloadPlaylist" | "retryFailed" | "cancelPlaylistDownload";
+export type YtPlaylistDownloadAction =
+  | "downloadPlaylist"
+  | "retryFailed"
+  | "cancelPlaylistDownload";
 
 /** Where a playlist's download stands, and what acting on it does. */
 export type YtPlaylistDownload<S extends YtSong = YtSong> = YtSongsDownload<

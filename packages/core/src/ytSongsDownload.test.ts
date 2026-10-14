@@ -28,6 +28,10 @@ const job = (videoId: string, patch: Partial<YtDownloadJournalJob> = {}): YtDown
 
 const nothingInLibrary = (_song: YtSong): boolean => false;
 
+/** A job whose file the Library imported, at [path]. */
+const saved = (path: string) =>
+  ({ phase: "completed", acknowledged: true, saved: { path } }) as const;
+
 describe("downloading a list of YT Music songs", () => {
   test("songs from different albums are decided as one list: Download, Cancel, then Retry Failed", () => {
     const songs = [{ ...song("a"), album: "One" }, { ...song("b"), album: "Two" }, song("c")];
@@ -77,8 +81,6 @@ describe("downloading a playlist's YT Music entries", () => {
   });
 
   test("a song saved this session has taken its entry's place, and still counts in the progress line", () => {
-    const saved = (path: string) =>
-      ({ phase: "completed", acknowledged: true, saved: { path } }) as const;
     // "a" landed and its entry became the Library's song; "x" was always the Library's.
     const playlist = [file("/Music/A/a.mp3"), file("/Music/x.mp3"), stream("b"), stream("c")];
     const view = ytPlaylistDownload(playlist, {
