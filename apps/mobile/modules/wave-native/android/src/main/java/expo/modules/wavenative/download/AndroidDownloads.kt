@@ -112,8 +112,10 @@ class AndroidDownloads private constructor(private val context: Context) {
         Log.w(TAG, "A Soulseek transfer failed (${error.failure}): ${error.message}; ${error.cause?.message ?: ""}")
       }
       val reason = when (error.failure) {
-        SoulseekFailure.AUTH, SoulseekFailure.SIGNED_OUT -> "account"
+        SoulseekFailure.SIGNED_OUT -> "account"
+        SoulseekFailure.AUTH -> "accountRejected"
         SoulseekFailure.OFFLINE -> "offline"
+        SoulseekFailure.UNREACHABLE -> "unreachable"
         SoulseekFailure.STORAGE -> "storage"
         SoulseekFailure.CANCELLED -> "cancelled"
         else -> "unavailable"
