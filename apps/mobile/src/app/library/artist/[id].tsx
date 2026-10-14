@@ -25,6 +25,7 @@ import { useListScrollable } from "@/motion/heldTouch";
 import { selectableRow } from "@/selection/selectableRow";
 import { useListSelection, type ListSelection } from "@/selection/useListSelection";
 import { ArtistStatsBlock } from "@/stats/ArtistStatsBlock";
+import { YtArtistSection } from "@/ytmusic/YtArtistSection";
 
 type Item =
   | { readonly type: "section"; readonly label: string }
@@ -144,6 +145,11 @@ function ArtistContent({ shown }: { shown: Shown }) {
     () => ({ kind: "artist", id: String(detail.artist.id) }) as const,
     [detail.artist.id],
   );
+  // The YT Music section's songs play as their own list, apart from the Library's.
+  const ytContext = useMemo(
+    () => ({ kind: "ytArtist", id: String(detail.artist.id) }) as const,
+    [detail.artist.id],
+  );
 
   const renderItem = useCallback(
     ({ item }: { item: Item }) => {
@@ -214,12 +220,23 @@ function ArtistContent({ shown }: { shown: Shown }) {
           {loaded && <ArtistStatsBlock artistId={detail.artist.id} songs={detail.songs} />}
         </>
       }
+      ListFooterComponent={
+        loaded ? (
+          <YtArtistSection
+            key={detail.artist.name}
+            name={detail.artist.name}
+            context={ytContext}
+            selecting={page.selecting}
+          />
+        ) : null
+      }
     />
   );
 }
 
 /**
- * An artist: their albums, the albums they appear on, and their songs. Opened
+ * An artist: their albums, the albums they appear on, their songs and, while
+ * YT Music is on, the YT Music section (asked for only on a tap). Opened
  * from a list that knows the artist, the head is there on the first frame and
  * the rest follows once read.
  */

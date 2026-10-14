@@ -16,6 +16,7 @@ import {
   type PlayTotals,
   type SongListening,
   type StatsWindow,
+  type YtArtistSaved,
 } from "@wave/core";
 import { asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { drizzle, type ExpoSQLiteDatabase } from "drizzle-orm/expo-sqlite";
@@ -25,6 +26,8 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { openDatabaseSync } from "expo-sqlite";
+
+import type { NativeYtSong } from "@/native/waveYtMusic";
 
 import { selectAlbums } from "./db/albums";
 import {
@@ -77,6 +80,7 @@ import {
   trackQuery,
 } from "./db/tracks";
 import { creditedPlayTotals, songListening, songsCrediting, trackPlayTotals } from "./db/stats";
+import { saveYtArtist, selectYtArtist } from "./db/ytArtists";
 import type { KnownFile } from "./NativeScanner";
 
 const DATABASE_NAME = "wave.db";
@@ -529,6 +533,15 @@ export class LibraryStore extends Context.Service<
     readonly listArtistPhotos: Effect.Effect<readonly ArtistPhotoRow[], LibraryStoreError>;
     /** Forgets every artist photo and miss (the files are deleted by the caller). */
     readonly clearArtistPhotos: Effect.Effect<void, LibraryStoreError>;
+    /** What YouTube Music last answered for an artist's page section, by artist key; null for nothing. */
+    readonly ytArtist: (
+      artistKey: string,
+    ) => Effect.Effect<YtArtistSaved<NativeYtSong> | null, LibraryStoreError>;
+    /** Saves YouTube Music's answer for an artist's page section, replacing the last one. */
+    readonly saveYtArtist: (
+      artistKey: string,
+      saved: YtArtistSaved<NativeYtSong>,
+    ) => Effect.Effect<void, LibraryStoreError>;
   }
 >()("@wave/mobile/library/LibraryStore") {}
 
@@ -1237,6 +1250,14 @@ const make = Effect.gen(function* () {
     listArtistPhotos: attempt("list artist photos", () => selectArtistPhotos(db)),
 
     clearArtistPhotos: attempt("clear artist photos", () => clearArtistPhotos(db)),
+
+    ytArtist: (artistKey) =>
+      attempt("read an artist's YT Music section", () =>
+        selectYtArtist<NativeYtSong>(db, artistKey),
+      ),
+
+    saveYtArtist: (artistKey, saved) =>
+      attempt("save an artist's YT Music section", () => saveYtArtist(db, artistKey, saved)),
   });
 });
 

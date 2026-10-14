@@ -297,6 +297,18 @@ INSERT INTO \`deleted_track_artists\` (\`track_id\`, \`artist_id\`, \`position\`
 ALTER TABLE \`play_events\` DROP COLUMN \`artist_id\`;
 `;
 
+// The artist page's YT Music section (docs/spec.md, "YT Music"): the last
+// answer for each artist, by artist key, shown for a week without asking again.
+const m0014 = `
+CREATE TABLE \`yt_artists\` (
+	\`artist_key\` text PRIMARY KEY NOT NULL,
+	\`outcome\` text NOT NULL,
+	\`checked_at\` integer NOT NULL,
+	\`browse_id\` text,
+	\`page\` text
+);
+`;
+
 export default {
   journal: {
     entries: [
@@ -314,6 +326,7 @@ export default {
       { idx: 11, when: 1_792_756_800_000, tag: "0011_track_lyrics", breakpoints: true },
       { idx: 12, when: 1_792_843_200_000, tag: "0012_artist_credits", breakpoints: true },
       { idx: 13, when: 1_792_929_600_000, tag: "0013_deleted_track_artists", breakpoints: true },
+      { idx: 14, when: 1_793_016_000_000, tag: "0014_yt_artists", breakpoints: true },
     ],
   },
   migrations: {
@@ -331,5 +344,6 @@ export default {
     m0011,
     m0012,
     m0013,
+    m0014,
   },
 };

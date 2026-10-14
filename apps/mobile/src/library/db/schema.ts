@@ -226,6 +226,23 @@ export const artistPhotos = sqliteTable("artist_photos", {
   thumbPath: text("thumb_path"),
 });
 
+/**
+ * The artist page's YT Music section (docs/spec.md, "YT Music"): the last
+ * answer YouTube Music gave for each artist, by artist key. Core's
+ * `ytArtistSectionView` decides how long it's shown without asking again.
+ */
+export const ytArtists = sqliteTable("yt_artists", {
+  artistKey: text("artist_key").primaryKey(),
+  /** Core's `YtArtistSaved` outcome. */
+  outcome: text("outcome", { enum: ["found", "unmatched"] }).notNull(),
+  /** When YouTube Music answered (ms since the epoch). */
+  checkedAt: integer("checked_at").notNull(),
+  /** The matched artist's YouTube Music browse id (`UC…`); set when `found`. */
+  browseId: text("browse_id"),
+  /** Their page as JSON (Core's `YtArtistPage`: top songs, albums, singles); set when `found`. */
+  page: text("page"),
+});
+
 /** Folders Wave indexes. */
 export const scanRoots = sqliteTable("scan_roots", {
   path: text("path").primaryKey(),
