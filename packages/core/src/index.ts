@@ -432,7 +432,6 @@ export type {
 export { libraryTrackIds, playerErrorNotice, queuedYtTracks, restorableTrack } from "./ytQueue.ts";
 export type { PlayerErrorCode, RestorableTracks } from "./ytQueue.ts";
 export {
-  YT_MUSIC_FOLDER,
   ytDownloadDestination,
   ytDownloadLookup,
   ytDownloadRoot,
