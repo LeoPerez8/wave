@@ -92,6 +92,7 @@ export function DiscoverSongRow({
       state={playing ? "playing" : undefined}
       favorite={favorites.has(song.track.id)}
       leading={trackNumber === undefined ? "artwork" : "number"}
+      downloaded
       onPress={onPress}
       onLongPress={() => openSongActions(song)}
     />

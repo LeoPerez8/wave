@@ -489,6 +489,7 @@ export type {
   DiscoverItem,
   DiscoverShelf,
   DiscoverSong,
+  MixedSong,
   DiscoverTileCaption,
   DiscoverState,
   DiscoverView,

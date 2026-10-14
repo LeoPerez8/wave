@@ -22,7 +22,7 @@ import {
   RESULT_LIMIT,
   resultRows,
   songResults,
-  ytMusicRows,
+  ytNoteRows,
 } from "@/search/rows";
 import { useYtMusicSection } from "@/search/ytMusicSearch";
 import { onSearchFocusRequest, takeSearchFocusRequest } from "@/search/focusRequest";
@@ -116,7 +116,7 @@ export default function SearchScreen() {
     () => index?.search(deferredQuery, { limit: RESULT_LIMIT }) ?? null,
     [index, deferredQuery],
   );
-  // YT Music answers on its own time, below the library's results; songs the library has are left out.
+  // YT Music answers on its own time; its songs the library doesn't have join the library's.
   const ytSection = useYtMusicSection(query);
   const inLibrary = library?.inLibrary;
   const ytView = useMemo(
@@ -126,10 +126,12 @@ export default function SearchScreen() {
   const libraryEmpty = results !== null && results.groups.length === 0;
   const rows = useMemo(() => {
     if (results === null) return [];
-    const ours = libraryEmpty
-      ? [noLibraryResultsRow(deferredQuery)]
-      : resultRows(results, expanded);
-    return [...ours, ...ytMusicRows(ytView)];
+    const ytSongs = ytView?.songs.length ?? 0;
+    const ours =
+      libraryEmpty && ytSongs === 0
+        ? [noLibraryResultsRow(deferredQuery)]
+        : resultRows(results, expanded, ytView);
+    return [...ours, ...ytNoteRows(ytView)];
   }, [results, libraryEmpty, deferredQuery, expanded, ytView]);
 
   // Song results can be selected. The selection lives here, not in the list,
@@ -158,7 +160,7 @@ export default function SearchScreen() {
   // What's shown; a change of it rises in. Results and no results count as
   // one, so refining a query never animates or remounts the list.
   const content = query.trim() === "" ? "recents" : index === null ? "preparing" : "results";
-  // With YT Music on, its section shows even when the library has nothing.
+  // With YT Music on, its songs (or its quiet line) show even when the library has nothing.
   const noResults = libraryEmpty && ytView === null && deferredQuery === query;
   return (
     <View className="flex-1 bg-background">

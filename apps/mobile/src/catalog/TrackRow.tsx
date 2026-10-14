@@ -1,4 +1,4 @@
-import { IconFileOff, IconStarFilled } from "@tabler/icons-react-native";
+import { IconCircleArrowDownFilled, IconFileOff, IconStarFilled } from "@tabler/icons-react-native";
 import { trackRowTrailing } from "@wave/core";
 import { Text, View, type PressableProps as PressProps } from "react-native";
 
@@ -47,6 +47,11 @@ type Props = {
    * title and second line, filling up. Undefined (or null) shows none.
    */
   progress?: number | null | undefined;
+  /**
+   * In a list that mixes the Library's songs with YT Music's, marks a Library
+   * song: a small downloaded icon leads its second line.
+   */
+  downloaded?: boolean;
   onPress: () => void;
   onLongPress?: () => void;
   /** Screen-reader actions standing in for gestures (move, remove in a playlist). */
@@ -73,12 +78,14 @@ export function TrackRow({
   plays,
   checked,
   progress,
+  downloaded = false,
   onPress,
   onLongPress,
   accessibilityActions,
   onAccessibilityAction,
 }: Props) {
   const highlight = useThemeColor("highlight");
+  const accent = useThemeColor("accent");
   const tertiary = useThemeColor("tertiary");
   const missing = state === "missing";
   const playing = state === "playing";
@@ -93,6 +100,7 @@ export function TrackRow({
         track.title,
         track.artist,
         ...(plays === undefined ? [] : [trailing]),
+        ...(downloaded ? ["downloaded"] : []),
         ...(playing ? ["now playing"] : []),
       ].join(", ")}
       accessibilityState={
@@ -129,9 +137,12 @@ export function TrackRow({
             </Text>
             {playing && <WavyUnderline />}
           </View>
-          <Text numberOfLines={1} className="font-sans text-body text-secondary">
-            {missing ? "File not found" : track.artist}
-          </Text>
+          <View className="flex-row items-center" style={{ gap: CELL / 2 }}>
+            {downloaded && !missing && <IconCircleArrowDownFilled size={14} color={accent} />}
+            <Text numberOfLines={1} className="flex-1 font-sans text-body text-secondary">
+              {missing ? "File not found" : track.artist}
+            </Text>
+          </View>
           {progress !== undefined && progress !== null && (
             <View className="bg-separator" style={{ height: 2, marginTop: CELL / 2 }}>
               <View
