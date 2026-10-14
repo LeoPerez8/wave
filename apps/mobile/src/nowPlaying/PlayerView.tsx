@@ -1,6 +1,7 @@
 import { IconMusic, IconStar, IconStarFilled } from "@tabler/icons-react-native";
-import { parseTrackId } from "@wave/core";
+import { artistLink, parseTrackId } from "@wave/core";
 import { Image } from "expo-image";
+import { usePathname } from "expo-router";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { Text, View } from "react-native";
 import Animated, {
@@ -11,10 +12,11 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { CELL } from "@/catalog/grid";
+import { followArtistLink } from "@/library/ArtistChoice";
 import { toggleFavorite, useIsFavorite } from "@/library/favorites";
 import { useLinkRows } from "@/library/hooks";
 import type { TrackDetails } from "@/library/LibraryStore";
-import { openAlbum, openArtist } from "@/library/routes";
+import { openAlbum } from "@/library/routes";
 import { Press } from "@/motion/Press";
 import { useCurrentTrackId } from "@/playback/hooks";
 import { playbackState, type PlaybackState } from "@/playback/Player";
@@ -162,9 +164,13 @@ export function PlayerView({ item, details, playing }: Props) {
   // Read ahead, so the screens open header-first; only while the sheet is
   // shown, so track changes behind a closed Now Playing don't pay for it.
   const shown = useNowPlayingShown();
+  // One artist opens straight away, several open the choice Go to Artist
+  // offers; on an artist's page, they're left out (Core's `artistLink`).
+  const here = usePathname();
+  const artistTo = details === null ? undefined : artistLink(details.artistIds, here);
   const links = useLinkRows(
     shown ? details?.albumId : undefined,
-    shown ? details?.artistId : undefined,
+    shown && artistTo?.kind === "open" ? artistTo.artistId : undefined,
   );
   return (
     <View className="flex-1" style={{ gap: CELL * 4 }}>
@@ -180,7 +186,14 @@ export function PlayerView({ item, details, playing }: Props) {
           </Text>
           <MetaLink
             label={artist}
-            open={details === null ? null : () => openArtist(details.artistId, links.artist)}
+            open={
+              details === null
+                ? null
+                : () => {
+                    // The only artist is the page under Now Playing: closing shows it.
+                    if (artistTo !== undefined) followArtistLink(artistTo, links.artist);
+                  }
+            }
             hint="Opens the artist"
             className="font-sans text-body text-secondary"
           />

@@ -258,4 +258,31 @@ describe("credits", () => {
     assert.equal(detail?.appearsOn[0]?.albumArtist, "Ariana Grande · Social House");
     assert.equal(detail?.appearsOn[0]?.albumArtistId, artist("Ariana Grande")?.id);
   });
+
+  test("song and album rows list every credited artist, primary first (Go to Artist offers them)", () => {
+    scan(...ariana, {
+      title: "Say So (Remix)",
+      artist: "Doja Cat feat. Nicki Minaj",
+      album: "Say So",
+      albumArtist: "Doja Cat, Nicki Minaj",
+    });
+    const id = (name: string) => artist(name)?.id ?? -1;
+    const songs = selectArtistDetail(db, id("Doja Cat"))?.songs ?? [];
+    assert.deepEqual(
+      songs.map((song) => [song.title, song.artistIds]),
+      [
+        ["motive", [id("Ariana Grande"), id("Doja Cat")]],
+        ["Say So (Remix)", [id("Doja Cat"), id("Nicki Minaj")]],
+      ],
+    );
+    const albums = selectArtistDetail(db, id("Nicki Minaj"))?.appearsOn ?? [];
+    assert.deepEqual(
+      albums.map((album) => [album.title, album.albumArtistIds]),
+      [["Say So", [id("Doja Cat"), id("Nicki Minaj")]]],
+    );
+    const single = selectArtistDetail(db, id("Ariana Grande"))?.albums ?? [];
+    assert.deepEqual(single.find((album) => album.title === "thank u, next")?.albumArtistIds, [
+      id("Ariana Grande"),
+    ]);
+  });
 });

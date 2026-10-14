@@ -279,6 +279,7 @@ export { groupSongs } from "./groupSongs.ts";
 export {
   commonKind,
   actionBarLabel,
+  artistLink,
   confirmsFirst,
   isDestructiveAction,
   ITEM_ACTION_LABELS,
@@ -290,6 +291,7 @@ export type {
   ActionItem,
   ActionSubject,
   ActionSurface,
+  ArtistLink,
   ItemAction,
   ItemActionEntry,
   ItemKind,
