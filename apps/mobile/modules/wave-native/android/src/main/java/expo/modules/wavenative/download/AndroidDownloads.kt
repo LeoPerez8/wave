@@ -91,7 +91,7 @@ class AndroidDownloads private constructor(private val context: Context) {
       val folder = source.parentFile
       val reason = when {
         error is java.io.FileNotFoundException || folder == null || !folder.isDirectory || folder.usableSpace < MIN_FREE_BYTES -> "storage"
-        !ytStreams.hasNetwork() -> "offline"
+        !ytStreams.online() -> "offline"
         else -> "failed"
       }
       Log.w(TAG, "A YouTube transfer failed ($reason): ${error.message}")

@@ -1,9 +1,8 @@
 package expo.modules.wavenative.yt
 
 import android.content.Context
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
 import com.metrolist.innertubex.InnerTube
+import expo.modules.wavenative.net.Connectivity
 import com.metrolist.innertubex.InnerTubeHttpException
 import com.metrolist.innertubex.models.YouTubeClient
 import com.metrolist.innertubex.models.YouTubeLocale
@@ -32,7 +31,7 @@ import kotlinx.serialization.json.Json
  */
 class YtClient private constructor(private val context: Context) {
   private val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-  private val connectivity = context.getSystemService(ConnectivityManager::class.java)
+  private val connectivity = Connectivity(context)
 
   /** innertubex brings no HTTP engine and sends `@Serializable` bodies, hence content negotiation. */
   internal val http: HttpClient by lazy {
@@ -166,7 +165,7 @@ class YtClient private constructor(private val context: Context) {
    */
   suspend fun <T> request(block: suspend () -> T): T {
     if (!enabled) throw YtException(YtFailure.DISABLED)
-    if (!hasNetwork()) throw YtException(YtFailure.OFFLINE)
+    if (!connectivity.hasNetwork()) throw YtException(YtFailure.OFFLINE)
     return try {
       withContext(Dispatchers.IO) { block() }
     } catch (e: CancellationException) {
@@ -175,15 +174,12 @@ class YtClient private constructor(private val context: Context) {
       throw e
     } catch (e: Throwable) {
       if (session.expireIfRejected(e)) return request(block)
-      throw YtException(YtFailure.of(e, hasNetwork()), e)
+      throw YtException(YtFailure.of(e, online()), e)
     }
   }
 
-  internal fun hasNetwork(): Boolean {
-    val network = connectivity?.activeNetwork ?: return false
-    return connectivity.getNetworkCapabilities(network)
-      ?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
-  }
+  /** Whether a failure happened online: else it's the phone being offline (see [Connectivity.online]). */
+  internal fun online(): Boolean = connectivity.online()
 
   companion object {
     private const val PREFS = "wave_yt_music"

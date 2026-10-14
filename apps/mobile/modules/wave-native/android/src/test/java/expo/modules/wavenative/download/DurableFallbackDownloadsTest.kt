@@ -7,7 +7,7 @@ import org.junit.Test
 
 /**
  * A Soulseek download that Soulseek can't deliver carries on from YouTube Music in the same job,
- * for the failures Core's `downloadFallbackFailures` lists in the prepare answer.
+ * for the failures Core's `downloadFailurePlan` says fall back, in the prepare answer.
  */
 class DurableFallbackDownloadsTest {
   @Test fun aRecordingWhosePeersRunOutLandsFromYoutubeMusicInTheSameJob() {
@@ -87,9 +87,9 @@ class DurableFallbackDownloadsTest {
       val owner = DurableDownloads(File(folder, "jobs"), clock = { now })
       owner.enqueue(song, null, emptyMap(), "soulseek")
       owner.advance(NoTransfer, Untouched)
-      answer(owner, "prepare", mapOf("failure" to "unreachable"))
+      answer(owner, "prepare", mapOf("failure" to "unreachable", "failurePlan" to CorePlans.soulseek(ytMusicOn = false)))
       assertEquals("preparing", owner.snapshot().single()["phase"])
-      repeat(2) { now += 20_000; answer(owner, "prepare", mapOf("failure" to "unreachable")) }
+      repeat(2) { now += 20_000; answer(owner, "prepare", mapOf("failure" to "unreachable", "failurePlan" to CorePlans.soulseek(ytMusicOn = false))) }
       assertEquals("unreachable", owner.snapshot().single()["reason"])
     }
   }
@@ -100,7 +100,7 @@ class DurableFallbackDownloadsTest {
       val m4a = File(folder, "Recording.m4a")
       owner.enqueue(song, null, emptyMap(), "soulseek")
       owner.advance(NoTransfer, Untouched)
-      answer(owner, "prepare", mapOf("failure" to reason, "tags" to mapOf("title" to "Recording"), "fallback" to fallback(m4a)))
+      answer(owner, "prepare", mapOf("failure" to reason, "tags" to mapOf("title" to "Recording"), "failurePlan" to CorePlans.soulseek(ytMusicOn = true), "fallback" to fallback(m4a)))
       val job = owner.snapshot().single()
       assertEquals(reason, "youtube", job["source"])
       assertEquals(reason, "prepared", job["phase"])
@@ -134,7 +134,7 @@ class DurableFallbackDownloadsTest {
       owner.enqueue(song, null, emptyMap(), "soulseek")
       owner.advance(NoTransfer, Untouched)
       repeat(3) {
-        owner.claim("song")?.let { lease -> owner.submit("song", lease["generation"] as Long, lease["token"] as String, "prepare", mapOf("failure" to reason, "fallback" to fallback(File(folder, "Recording.m4a")))) }
+        owner.claim("song")?.let { lease -> owner.submit("song", lease["generation"] as Long, lease["token"] as String, "prepare", mapOf("failure" to reason, "failurePlan" to CorePlans.soulseek(ytMusicOn = true), "fallback" to fallback(File(folder, "Recording.m4a")))) }
         now += 20_000
       }
       assertEquals(reason, "failed", owner.snapshot().single()["phase"])
@@ -267,7 +267,6 @@ class DurableFallbackDownloadsTest {
   private val song = mapOf("videoId" to "song", "title" to "Recording", "durationMs" to 12_000L)
   private val peer = mapOf("username" to "peer", "filename" to "Recording.mp3", "bitrateKbps" to 320)
   private val SERVED = ByteArray(70_000) { (it * 31 % 251).toByte() }
-  private val FALLS_BACK = listOf("unavailable", "accountRejected", "account", "unreachable", "timedOut")
 
   private fun withFolder(block: (File) -> Unit) {
     val folder = Files.createTempDirectory("wave-fallback").toFile()
@@ -287,11 +286,11 @@ class DurableFallbackDownloadsTest {
     override fun tag(source: File, tags: Map<String, Any?>) {}
     override fun index(file: File): Map<String, Any?> = mapOf("path" to file.path, "track" to mapOf("path" to file.path), "artwork" to null)
   }
-  /** What JS's prepare answer carries with YT Music on: the M4A's place and the failures that fall back. */
-  private fun fallback(m4a: File, failures: List<String> = FALLS_BACK) = mapOf("source" to "youtube", "targetPath" to m4a.path, "failures" to failures)
+  /** What JS's prepare answer carries with YT Music on: the M4A's place and YouTube's failure plan. */
+  private fun fallback(m4a: File) = mapOf("source" to "youtube", "targetPath" to m4a.path, "failurePlan" to CorePlans.youtube)
   private fun prepareSoulseek(owner: DurableDownloads, mp3: File, m4a: File?, peers: List<Map<String, Any?>> = listOf(peer)) {
     owner.advance(NoTransfer, Untouched)
-    answer(owner, "prepare", mapOf("source" to "soulseek", "candidates" to peers, "targetPath" to mp3.path, "tags" to emptyMap<String, Any?>()) +
+    answer(owner, "prepare", mapOf("source" to "soulseek", "candidates" to peers, "targetPath" to mp3.path, "tags" to emptyMap<String, Any?>(), "failurePlan" to CorePlans.soulseek(ytMusicOn = m4a != null)) +
       (m4a?.let { mapOf("fallback" to fallback(it)) } ?: emptyMap()))
   }
   private fun answer(owner: DurableDownloads, decision: String, payload: Map<String, Any?>) {

@@ -16,9 +16,9 @@ enum class YtFailure(val code: String) {
   DISABLED("ERR_YT_DISABLED");
 
   companion object {
-    /** What [error] means for the owner, given whether the phone had a network at all. */
-    fun of(error: Throwable, hasNetwork: Boolean): YtFailure =
-      if (!hasNetwork || generateSequence(error) { it.cause }.any(::isUnreachable)) OFFLINE else FAILED
+    /** What [error] means for the owner, given whether the phone was online ([expo.modules.wavenative.net.Connectivity.online]). */
+    fun of(error: Throwable, online: Boolean): YtFailure =
+      if (!online || generateSequence(error) { it.cause }.any(::isUnreachable)) OFFLINE else FAILED
 
     private fun isUnreachable(error: Throwable): Boolean =
       error is UnknownHostException ||

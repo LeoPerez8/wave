@@ -38,7 +38,8 @@ interface YtAudioStreams {
  * goes on from the last byte that arrived. An address YouTube stops accepting (403/410) is
  * resolved again and the download goes on from where it was, or starts over when the fresh
  * address serves another stream ([YtStreams.resumesDownload]). The file is complete, the length
- * YouTube announced, or the part file is deleted.
+ * YouTube announced (clen, or a HEAD request; the fresh stream's once it starts over), or the part
+ * file is deleted: [RangeDownload] asks for ranges until exactly that many bytes are written.
  */
 class YtAudioDownload(private val streams: YtAudioStreams, private val ranges: RangeDownload = RangeDownload()) {
   /**
@@ -65,23 +66,23 @@ class YtAudioDownload(private val streams: YtAudioStreams, private val ranges: R
           streams.reject(videoId)
           val fresh = m4a(streams.resolve(videoId))
           val freshLength = lengthOf(fresh)
-          val resumes = YtStreams.resumesDownload(stream.itag, length, fresh.itag, freshLength)
-          stream = fresh
-          if (!resumes) {
-            length = freshLength ?: throw IOException("YouTube didn't say how long the file is")
-            // Another file: the bytes so far don't belong to it.
-            throw RangeSourceChanged(length)
+          if (YtStreams.resumesDownload(stream.itag, length, fresh.itag, freshLength)) {
+            stream = fresh
+            throw IOException("HTTP ${range.status} for the audio; asking a fresh address")
           }
-          throw IOException("HTTP ${range.status} for the audio; asking a fresh address")
+          // Another file of a length nobody says: it can't continue this one, nor start over.
+          // The refused address stays, so the next range asks for a fresh one again.
+          if (freshLength == null) throw IOException("YouTube didn't say how long the file is")
+          stream = fresh
+          length = freshLength
+          // Another file: the bytes so far don't belong to it.
+          throw RangeSourceChanged(length)
         }
         else -> throw IOException("HTTP ${range.status} for the audio")
       }
     }
+    // Returns only once the part file holds the announced length, the fresh stream's after a start over.
     val bytes = ranges.download(source, length, part, onProgress = { onProgress(it, length) }, isCancelled = isCancelled)
-    if (part.length() != bytes) {
-      part.delete()
-      throw IOException("The audio arrived incomplete")
-    }
     // The stream the file came from: the last one resolved, whichever that was.
     return YtAudioFile(stream.itag, stream.bitrate, stream.mimeType, bytes)
   }

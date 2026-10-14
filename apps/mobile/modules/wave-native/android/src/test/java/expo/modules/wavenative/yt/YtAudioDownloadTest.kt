@@ -67,6 +67,26 @@ class YtAudioDownloadTest {
     }
   }
 
+  @Test fun aFreshAddressServingAnotherStreamOfUnknownLengthIsNeverAppendedToTheFirst() {
+    withPart { part ->
+      val other = ByteArray(AUDIO.size) { (it % 5).toByte() }
+      val youtube = FakeYoutube(
+        stream("a", AUDIO.size.toLong(), itag = 141, bitrate = 256_000) to AUDIO,
+        stream("b", null) to other,
+      ).apply { headAnswers = false }
+      youtube.expiresFrom["a"] = CHUNK
+      val saved = runCatching { download(youtube).download("song", part) }
+      if (saved.isSuccess) {
+        // Whatever was saved is one stream's file, whole.
+        assertTrue(part.readBytes().contentEquals(AUDIO) || part.readBytes().contentEquals(other))
+      } else {
+        assertTrue(saved.exceptionOrNull() is IOException)
+        assertFalse(part.exists())
+      }
+      assertFalse(youtube.asked.any { it.first == "b" && it.second > 0 })
+    }
+  }
+
   @Test fun anAddressRefusedAgainAndAgainFailsWithoutLeavingPartialAudio() {
     withPart { part ->
       val youtube = FakeYoutube(stream("a", AUDIO.size.toLong()) to AUDIO)

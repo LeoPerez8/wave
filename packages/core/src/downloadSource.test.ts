@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import {
-  downloadFallback,
-  downloadFallbackFailures,
-  downloadSource,
-  ytAudioMatches,
-} from "./index.ts";
+import { downloadFailurePlan, downloadFallback, downloadSource, ytAudioMatches } from "./index.ts";
+import type { DownloadFailurePlan, YtDownloadFailure } from "./index.ts";
+
+/** What the journal does with a transfer that fails with [failure]. */
+const step = (plan: DownloadFailurePlan, failure: YtDownloadFailure) =>
+  plan.retry.includes(failure) ? "retry" : plan.end.includes(failure) ? "end" : "next";
 
 describe("downloadSource", () => {
   test("with YT Music on and no Soulseek account, a download comes from YouTube Music", () => {
@@ -60,9 +60,38 @@ describe("downloadFallback", () => {
   });
 });
 
-describe("downloadFallbackFailures", () => {
-  test("lists the Soulseek failures the journal hands over to YouTube Music", () => {
-    assert.deepEqual(downloadFallbackFailures({ ytMusicOn: true }).toSorted(), [
+describe("downloadFailurePlan", () => {
+  const on = { ytMusicOn: true };
+  const off = { ytMusicOn: false };
+
+  test("a Soulseek peer that fails, or sends another recording, gives way to the next peer", () => {
+    for (const setup of [on, off]) {
+      const plan = downloadFailurePlan("soulseek", setup);
+      assert.equal(step(plan, "unavailable"), "next");
+      assert.equal(step(plan, "failed"), "next");
+      assert.equal(plan.rejected, null);
+    }
+  });
+
+  test("once Soulseek's peers run out, the recording is unavailable in 320 kbps", () => {
+    assert.equal(downloadFailurePlan("soulseek", on).exhausted, "unavailable");
+    assert.equal(downloadFailurePlan("soulseek", off).exhausted, "unavailable");
+  });
+
+  test("an account problem, full storage or an unwritable folder ends a Soulseek download at once", () => {
+    for (const setup of [on, off])
+      for (const failure of ["account", "accountRejected", "storage", "noFolder"] as const)
+        assert.equal(step(downloadFailurePlan("soulseek", setup), failure), "end", failure);
+  });
+
+  test("offline, a Soulseek download is tried again after a pause", () => {
+    assert.equal(step(downloadFailurePlan("soulseek", on), "offline"), "retry");
+    assert.equal(step(downloadFailurePlan("soulseek", off), "offline"), "retry");
+  });
+
+  test("with YT Music on, an unreachable Soulseek server ends the attempt at once, to fall back", () => {
+    assert.equal(step(downloadFailurePlan("soulseek", on), "unreachable"), "end");
+    assert.deepEqual(downloadFailurePlan("soulseek", on).fallsBack.toSorted(), [
       "account",
       "accountRejected",
       "timedOut",
@@ -71,10 +100,57 @@ describe("downloadFallbackFailures", () => {
     ]);
   });
 
-  test("is empty with YT Music off", () => {
-    assert.deepEqual(downloadFallbackFailures({ ytMusicOn: false }), []);
+  test("with YT Music off, an unreachable server is retried like a dropped connection, and nothing falls back", () => {
+    assert.equal(step(downloadFailurePlan("soulseek", off), "unreachable"), "retry");
+    assert.deepEqual(downloadFailurePlan("soulseek", off).fallsBack, []);
+  });
+
+  test("the failures that fall back are the ones downloadFallback hands over", () => {
+    for (const failure of FAILURES)
+      assert.equal(
+        downloadFailurePlan("soulseek", on).fallsBack.includes(failure),
+        downloadFallback(failure, on) === "youtube",
+        failure,
+      );
+  });
+
+  test("a YouTube transfer that breaks off starts again; offline it's tried again after a pause", () => {
+    const plan = downloadFailurePlan("youtube", on);
+    assert.equal(step(plan, "failed"), "next");
+    assert.equal(step(plan, "unavailable"), "next");
+    assert.equal(step(plan, "offline"), "retry");
+  });
+
+  test("a song YouTube won't serve, YT Music turned off, full storage or an unwritable folder end a YouTube download", () => {
+    for (const failure of ["ytUnavailable", "noSource", "storage", "noFolder"] as const)
+      assert.equal(step(downloadFailurePlan("youtube", on), failure), "end", failure);
+  });
+
+  test("YouTube audio that isn't the song is unavailable on YouTube Music; restarts that run out fail the download", () => {
+    const plan = downloadFailurePlan("youtube", on);
+    assert.equal(plan.rejected, "ytUnavailable");
+    assert.equal(plan.exhausted, "failed");
+  });
+
+  test("a YouTube download has nothing to fall back to", () => {
+    assert.deepEqual(downloadFailurePlan("youtube", on).fallsBack, []);
+    assert.deepEqual(downloadFailurePlan("youtube", off).fallsBack, []);
   });
 });
+
+const FAILURES: readonly YtDownloadFailure[] = [
+  "offline",
+  "failed",
+  "timedOut",
+  "noFolder",
+  "storage",
+  "account",
+  "accountRejected",
+  "unreachable",
+  "unavailable",
+  "noSource",
+  "ytUnavailable",
+];
 
 describe("ytAudioMatches", () => {
   const song = { durationMs: 60_000 };

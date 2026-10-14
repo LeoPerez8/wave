@@ -128,6 +128,7 @@ class DurableYoutubeDownloadsTest {
       owner.advance(broken, Untouched)
       assertEquals("prepared", owner.snapshot().single()["phase"])
       assertFalse(File(owner.snapshot().single()["sourcePath"] as String).exists())
+      now += DurableDownloads.RETRY_PAUSE_MS
       owner.advance(Served, Untouched)
       assertEquals("sourceReady", owner.snapshot().single()["phase"])
 
@@ -135,12 +136,65 @@ class DurableYoutubeDownloadsTest {
       owner.enqueue(song + ("videoId" to "other"), null, emptyMap(), "youtube")
       owner.cancel("song", NoCancel)
       owner.advance(broken, Untouched)
-      answer(owner, "prepare", mapOf("source" to "youtube", "targetPath" to File(folder, "Other.m4a").path, "tags" to emptyMap<String, Any?>()), id = "other")
-      repeat(10) { owner.advance(broken, Untouched); now += 1_000 }
+      answer(owner, "prepare", mapOf("source" to "youtube", "targetPath" to File(folder, "Other.m4a").path, "tags" to emptyMap<String, Any?>(), "failurePlan" to CorePlans.youtube), id = "other")
+      repeat(10) { owner.advance(broken, Untouched); now += 15_000 }
       val job = owner.snapshot().single { it["id"] == "other" }
       assertEquals("failed", job["phase"])
       assertEquals("failed", job["reason"])
       assertEquals(1 + DurableDownloads.MAX_ATTEMPTS.toInt(), attempts)
+    }
+  }
+
+  /** Each restart downloads the song again from its first byte: on mobile data, never back to back. */
+  @Test fun aBrokenTransferStartsAgainOnlyAfterAPauseThatGrowsWithEachAttempt() {
+    withFolder { folder ->
+      var now = 1_000L
+      val owner = DurableDownloads(File(folder, "jobs"), clock = { now })
+      var attempts = 0
+      val broken = transfer { _, _, source -> attempts++; source.parentFile.mkdirs(); source.writeText("partial"); throw java.io.IOException("Cut off") }
+      owner.enqueue(song, null, emptyMap(), "youtube")
+      prepareYoutube(owner, File(folder, "Recording.m4a"))
+      owner.advance(broken, Untouched)
+      repeat(3) { owner.advance(broken, Untouched) }
+      assertEquals(1, attempts)
+      now += 1_999
+      owner.advance(broken, Untouched)
+      assertEquals(1, attempts)
+      now += 1
+      owner.advance(broken, Untouched)
+      assertEquals(2, attempts)
+      // The second pause is longer.
+      now += 2_000
+      owner.advance(broken, Untouched)
+      assertEquals(2, attempts)
+      now += 2_000
+      owner.advance(broken, Untouched)
+      assertEquals(3, attempts)
+    }
+  }
+
+  /** It starts over from byte 0 with an address resolved afresh: what was left of the old stall window isn't its time. */
+  @Test fun aTransferCutOffByProcessDeathGetsAFreshWindowToStartIn() {
+    withFolder { folder ->
+      var now = 1_000L
+      val journal = File(folder, "jobs")
+      var owner = DurableDownloads(journal, clock = { now })
+      class ProcessDeath : Error()
+      owner.enqueue(song, null, emptyMap(), "youtube")
+      prepareYoutube(owner, File(folder, "Recording.m4a"))
+      assertThrows(ProcessDeath::class.java) { owner.advance(transfer { _, _, _ -> throw ProcessDeath() }, Untouched) }
+      now += DurableDownloads.ATTEMPT_MS - 10_000
+      owner = DurableDownloads(journal, clock = { now })
+      val restored = owner
+      var wanted: Boolean? = null
+      owner.advance(transfer { _, _, source ->
+        // Resolving the address and the first bytes take a while.
+        now += 20_000
+        wanted = restored.transferWanted("song")
+        source.parentFile.mkdirs(); source.writeBytes(SERVED); audio(source)
+      }, Untouched)
+      assertEquals(true, wanted)
+      assertEquals("sourceReady", owner.snapshot().single()["phase"])
     }
   }
 
@@ -210,7 +264,7 @@ class DurableYoutubeDownloadsTest {
       val owner = DurableDownloads(File(folder, "jobs"))
       owner.enqueue(song, null, emptyMap(), "soulseek")
       owner.advance(NoCancel, Untouched)
-      answer(owner, "prepare", mapOf("source" to "soulseek", "candidates" to listOf(mapOf("username" to "peer", "filename" to "Recording.m4a", "bitrateKbps" to 320)), "targetPath" to File(folder, "Recording.m4a").path, "tags" to emptyMap<String, Any?>()))
+      answer(owner, "prepare", mapOf("source" to "soulseek", "candidates" to listOf(mapOf("username" to "peer", "filename" to "Recording.m4a", "bitrateKbps" to 320)), "targetPath" to File(folder, "Recording.m4a").path, "tags" to emptyMap<String, Any?>(), "failurePlan" to CorePlans.soulseek(ytMusicOn = false)))
       assertEquals("unavailable", owner.snapshot().single()["reason"])
       assertEquals("mp3-320", owner.snapshot().single()["policy"])
     }
@@ -241,7 +295,7 @@ class DurableYoutubeDownloadsTest {
   }
   private fun prepareYoutube(owner: DurableDownloads, target: File) {
     owner.advance(NoCancel, Untouched)
-    answer(owner, "prepare", mapOf("source" to "youtube", "targetPath" to target.path, "tags" to emptyMap<String, Any?>()))
+    answer(owner, "prepare", mapOf("source" to "youtube", "targetPath" to target.path, "tags" to emptyMap<String, Any?>(), "failurePlan" to CorePlans.youtube))
   }
   private fun answer(owner: DurableDownloads, decision: String, payload: Map<String, Any?>, id: String = "song") {
     val lease = owner.claim(id)!!

@@ -1,10 +1,9 @@
 package expo.modules.wavenative.soulseek
 
 import android.content.Context
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
+import expo.modules.wavenative.net.Connectivity
 import expo.modules.wavenative.tags.JAudioTaggerReader
 import java.io.File
 import java.security.KeyStore
@@ -17,16 +16,12 @@ import org.jaudiotagger.tag.FieldKey
 
 /** Owns the session for the whole app process; Expo screen/module destruction doesn't disconnect it. */
 class AndroidSoulseek private constructor(context: Context) {
-  private val connectivity = context.getSystemService(ConnectivityManager::class.java)
+  // Offline the way YouTube Music tells it, so Soulseek's server isn't unreachable behind a captive portal.
+  private val connectivity = Connectivity(context)
   val client = SoulseekClient(
     SoulseekSessionStore(File(context.noBackupFilesDir, "soulseek-session"), KeystoreCipher()),
-    hasNetwork = ::hasNetwork,
+    online = connectivity::online,
   )
-
-  private fun hasNetwork(): Boolean {
-    val network = connectivity?.activeNetwork ?: return false
-    return connectivity.getNetworkCapabilities(network)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
-  }
 
   fun download(
     id: String,
