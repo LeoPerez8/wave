@@ -410,6 +410,64 @@ class SoulseekClientTest {
     }
   }
 
+  /** A Wi-Fi to mobile data handover drops the connection while the phone is online: it's reconnected, not unreachable. */
+  @Test fun `a server connection that drops during a search is a lost connection, not an unreachable server`() {
+    ServerSocket(0).use { server ->
+      thread(isDaemon = true) {
+        try {
+          server.accept().use { socket ->
+            login(socket)
+            assertEquals(26, SoulseekWire.read(socket.getInputStream()).code)
+          }
+        } catch (_: Exception) {}
+      }
+      val client = SoulseekClient(MemoryCredentials(), "127.0.0.1", server.localPort, hasNetwork = { true })
+      try {
+        client.connect("wave-fixture", "fixture-secret")
+        val error = assertThrows(SoulseekException::class.java) { client.search("Fixture Title", 5_000) }
+        assertEquals(SoulseekFailure.OFFLINE, error.failure)
+      } finally { client.close() }
+    }
+  }
+
+  @Test fun `reconnecting or signing out while a download waits never counts as an unreachable server`() {
+    for (end in listOf<(SoulseekClient) -> Unit>({ it.connect("wave-fixture", "fixture-secret") }, { it.disconnect() })) {
+      ServerSocket(0).use { server ->
+        ServerSocket(0).use { peer ->
+          val ended = CompletableFuture<Unit>()
+          thread(isDaemon = true) {
+            try {
+              server.accept().use { socket ->
+                login(socket)
+                SoulseekWire.read(socket.getInputStream())
+                SoulseekWire.write(socket.getOutputStream(), 3) { string("fixture-peer"); uint(LOCALHOST); uint(peer.localPort.toLong()) }
+                peer.accept().use { connection ->
+                  SoulseekWire.read(connection.getInputStream(), true)
+                  val filename = SoulseekWire.reader(SoulseekWire.read(connection.getInputStream()).payload).string()
+                  SoulseekWire.read(connection.getInputStream())
+                  SoulseekWire.write(connection.getOutputStream(), 44) { string(filename); uint(8) }
+                  // The reconnection logs in again.
+                  server.accept().use { again -> login(again); ended.get(5, TimeUnit.SECONDS) }
+                }
+              }
+            } catch (_: Exception) {}
+          }
+          val client = SoulseekClient(MemoryCredentials(), "127.0.0.1", server.localPort, hasNetwork = { true })
+          val part = Files.createTempFile("wave-reconnected", ".mp3").toFile()
+          try {
+            client.connect("wave-fixture", "fixture-secret")
+            val candidate = SoulseekCandidate("fixture-peer", "Fixture.mp3", 1000, 320, 1500, false, 0, 8)
+            val failure = assertThrows(SoulseekException::class.java) {
+              client.download("waiting", candidate, part, 1500, onQueued = { thread { end(client) } }, isCancelled = giveUpAfterSeconds(5))
+            }
+            assertEquals(SoulseekFailure.OFFLINE, failure.failure)
+            assertFalse(part.exists())
+          } finally { ended.complete(Unit); client.close(); part.delete() }
+        }
+      }
+    }
+  }
+
   private class MemoryCredentials : SoulseekCredentialsStore {
     private var credentials: SoulseekCredentials? = null
     override fun load() = credentials

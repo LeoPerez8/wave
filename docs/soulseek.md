@@ -48,9 +48,11 @@ Soulseek is the source a download uses once the owner connects a free account
 in Settings; without one, downloads come from YouTube Music while YT Music is
 on (Core's `downloadSource`, docs/spec.md "Downloads"). With YT Music on, a
 Soulseek job that Soulseek can't deliver (no 320 copy or the peers ran out, a
-rejected account, an unreachable server, or its 20 minutes used up) carries on
-from YouTube Music in the same job, with time of its own (Core's
-`downloadFallback`); offline, storage and folder failures don't. Either way each
+rejected account, a server that can't be connected to while the network
+works, or its 20 minutes used up) carries on from YouTube Music in the same
+job, with time of its own (Core's `downloadFallback`); offline, storage and
+folder failures don't. A server connection that drops (a network handover, a
+reconnect from Settings) counts as offline and is connected again. Either way each
 Download tap queues a job with no further choices. This document covers the
 Soulseek side. `DurableDownloads` (package `download`) is the queue's owner, not
 JavaScript: it persists every job (request, source, chosen recording, candidates,
