@@ -3,6 +3,7 @@ package expo.modules.wavenative
 import android.app.Activity
 import android.app.Application
 import android.content.ActivityNotFoundException
+import android.content.ClipboardManager
 import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
@@ -55,7 +56,7 @@ import java.util.concurrent.atomic.AtomicInteger
 /**
  * Wave's native side: all-files access, the folder and playlist file pickers, the library scanner,
  * lyrics, writing found lyrics and genre into files, deleting songs' files, saving artist photos,
- * the launch theme and the launcher icon. Scans run one at a time on a background thread and
+ * the launch theme, the launcher icon and reading the clipboard. Scans run one at a time on a background thread and
  * stream results to JS as events:
  * `onScanProgress`, `onScanMissing`, `onScanBatch`, `onScanComplete` and
  * `onScanError`, each carrying the `scanId` returned by `startScan`.
@@ -151,6 +152,15 @@ class WaveNativeModule : Module() {
         putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
       }
       activity.startActivityForResult(intent, PICK_PLAYLISTS_REQUEST)
+    }.runOnQueue(Queues.MAIN)
+
+    /**
+     * The text on the clipboard, or null when it holds none (Import from a Link offers a
+     * playlist link from it). Android only lets the app in front read it.
+     */
+    AsyncFunction("readClipboardText") {
+      val clipboard = context.getSystemService(ClipboardManager::class.java)
+      clipboard?.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString()
     }.runOnQueue(Queues.MAIN)
 
     OnActivityResult { _, payload ->
