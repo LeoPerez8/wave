@@ -150,6 +150,21 @@ export const playYtNext = (songs: readonly YtSong[]): Promise<void> =>
 export const addYtToQueue = (songs: readonly YtSong[]): Promise<void> =>
   dispatchWithYt({ type: "addToQueue", trackIds: ytTrackIds(songs) }, songs, undefined);
 
+/**
+ * Plays Discover's [songs] next, or adds them to the end of the queue: the
+ * Library's file for the songs it has, the others streamed.
+ */
+export const queueDiscoverSongs = (
+  songs: readonly DiscoverSong<YtSong, SongRow>[],
+  where: "playNext" | "addToQueue",
+): Promise<void> =>
+  dispatchWithYt(
+    { type: where, trackIds: songs.map(discoverTrackId) },
+    songs.flatMap((song) => (song.source === "library" ? [] : [song.song])),
+    undefined,
+    songs.flatMap((song) => (song.source === "library" ? [toQueueTrack(song.track)] : [])),
+  );
+
 export const togglePlayPause = (): Promise<void> =>
   run(
     Effect.gen(function* () {

@@ -39,6 +39,57 @@ export const highlightedOrigin = <O>(cards: readonly OriginCard<O>[]): O | undef
   cards.findLast((card) => !card.closing)?.origin;
 
 /**
+ * Where a pressed element sits at rest, from where it measured while its press
+ * feedback shrank it to `scale` about its centre, so its highlight covers the
+ * whole row or tile rather than a slightly smaller one.
+ */
+export const restingRect = (measured: OverlayRect, scale: number): OverlayRect => {
+  if (scale <= 0 || scale === 1) return measured;
+  const x = (measured.left + measured.right) / 2;
+  const y = (measured.top + measured.bottom) / 2;
+  const halfWidth = (measured.right - measured.left) / 2 / scale;
+  const halfHeight = (measured.bottom - measured.top) / 2 / scale;
+  return { left: x - halfWidth, top: y - halfHeight, right: x + halfWidth, bottom: y + halfHeight };
+};
+
+export interface HighlightInput {
+  /** The overlay's size: the window, or taller when drawing edge to edge. */
+  readonly window: { readonly width: number; readonly height: number };
+  readonly insets: { readonly bottom: number };
+  /**
+   * Floating chrome along the bottom (tab bar, mini player): its height above
+   * the system inset, in dp; 0 when the screen has none.
+   */
+  readonly chromeBottom: number;
+  /** Where the highlighted element sits at rest (`restingRect`); undefined when nothing is. */
+  readonly rect: OverlayRect | undefined;
+  /** It sits on the floating chrome (the selection bar's More), so the chrome doesn't hide it. */
+  readonly onChrome?: boolean;
+}
+
+/**
+ * The part of the highlighted element that shows: its rect cut to the window
+ * and, unless it is part of the chrome, to the top of the floating chrome,
+ * which floats above it. Undefined when none of it shows.
+ */
+export const visibleHighlight = ({
+  window,
+  insets,
+  chromeBottom,
+  rect,
+  onChrome = false,
+}: HighlightInput): OverlayRect | undefined => {
+  if (rect === undefined) return undefined;
+  const covered = chromeBottom > 0 && !onChrome;
+  const floor = covered ? window.height - insets.bottom - chromeBottom : window.height;
+  const left = Math.max(rect.left, 0);
+  const top = Math.max(rect.top, 0);
+  const right = Math.min(rect.right, window.width);
+  const bottom = Math.min(rect.bottom, floor);
+  return left < right && top < bottom ? { left, top, right, bottom } : undefined;
+};
+
+/**
  * The dimmed veil behind a card, as rects covering the window except where the
  * highlighted element sits, so it stays clear of the dimming: full-width bands
  * above and below it, and bands either side of it. Edges are cut to the window.
@@ -67,12 +118,8 @@ export const veilAround = (
  * Whether a card names the item it acts on in a heading (artwork, title,
  * subtitle). Not when the item it was opened from is highlighted above the
  * veil, which already says what the card is about; yes when nothing is (no
- * press opened it, or what was pressed sits off screen).
+ * press opened it, or what was pressed sits off screen or under the floating
+ * chrome).
  */
-export const cardShowsHeading = (
-  window: { readonly width: number; readonly height: number },
-  highlight: OverlayRect | undefined,
-): boolean =>
-  highlight === undefined ||
-  Math.max(highlight.left, 0) >= Math.min(highlight.right, window.width) ||
-  Math.max(highlight.top, 0) >= Math.min(highlight.bottom, window.height);
+export const cardShowsHeading = (input: HighlightInput): boolean =>
+  visibleHighlight(input) === undefined;

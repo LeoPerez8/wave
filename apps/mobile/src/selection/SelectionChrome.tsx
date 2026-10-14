@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { EntryRow } from "@/catalog/EntryRow";
 import { grid } from "@/catalog/grid";
 import { chrome } from "@/chrome/chrome";
+import { OnFloatingChrome } from "@/chrome/onFloatingChrome";
 import { TextButton } from "@/components/TextButton";
 import { Glass } from "@/glass/Glass";
 import { Press } from "@/motion/Press";
@@ -134,44 +135,46 @@ function ActionBar({ target, backdropId }: { target: ActionItems; backdropId: st
   const entries = useItemActions(target, { surface: "selection", finish: endSelection });
   const { bar, more } = splitActionBar(entries, BAR_SLOTS);
   return (
-    <View
-      accessibilityRole="toolbar"
-      accessibilityLabel="Selection actions"
-      pointerEvents="box-none"
-      className="absolute flex-row"
-      style={{
-        left: grid.margin,
-        right: grid.margin,
-        bottom: insets.bottom + chrome.gap,
-        height: chrome.selectionBar,
-      }}
-    >
-      <Glass backdropId={backdropId} cornerRadius={RADIUS} />
-      {bar.map((entry) => (
-        <BarButton
-          key={entry.action}
-          icon={ICONS[entry.action]}
-          label={entry.label}
-          caption={actionBarLabel(entry.action)}
-          onPress={entry.onPress}
-          destructive={entry.destructive}
-        />
-      ))}
-      {more.length > 0 && (
-        <BarButton
-          icon={IconDots}
-          label="More"
-          opensMenu
-          onPress={() =>
-            openOverlay({
-              label: "More actions",
-              anchor: pressedRect(),
-              render: (close) => <MoreCard entries={more} close={close} />,
-            })
-          }
-        />
-      )}
-    </View>
+    <OnFloatingChrome value>
+      <View
+        accessibilityRole="toolbar"
+        accessibilityLabel="Selection actions"
+        pointerEvents="box-none"
+        className="absolute flex-row"
+        style={{
+          left: grid.margin,
+          right: grid.margin,
+          bottom: insets.bottom + chrome.gap,
+          height: chrome.selectionBar,
+        }}
+      >
+        <Glass backdropId={backdropId} cornerRadius={RADIUS} />
+        {bar.map((entry) => (
+          <BarButton
+            key={entry.action}
+            icon={ICONS[entry.action]}
+            label={entry.label}
+            caption={actionBarLabel(entry.action)}
+            onPress={entry.onPress}
+            destructive={entry.destructive}
+          />
+        ))}
+        {more.length > 0 && (
+          <BarButton
+            icon={IconDots}
+            label="More"
+            opensMenu
+            onPress={() =>
+              openOverlay({
+                label: "More actions",
+                anchor: pressedRect(),
+                render: (close) => <MoreCard entries={more} close={close} />,
+              })
+            }
+          />
+        )}
+      </View>
+    </OnFloatingChrome>
   );
 }
 
