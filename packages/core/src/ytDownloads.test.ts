@@ -8,7 +8,12 @@ import {
   ytDownloadStatus,
   ytDownloadsFromJournal,
 } from "./index.ts";
-import type { YtDownloadJournalJob, YtDownloadStatus, YtSong } from "./index.ts";
+import type {
+  YtDownloadFailure,
+  YtDownloadJournalJob,
+  YtDownloadStatus,
+  YtSong,
+} from "./index.ts";
 
 const song = (videoId: string): YtSong => ({
   videoId,
@@ -172,6 +177,19 @@ describe("a YT Music song's download, as its row and menu show it", () => {
     const status = { kind: "failed", reason: "noSource" } as const;
     assert.equal(ytDownloadLine(status), "Connect YT Music or Soulseek in Settings");
     assert.deepEqual(actions(status), ["retryDownload", "cancelDownload"]);
+  });
+
+  test("Soulseek's own failures read as before; an unreachable server isn't called offline", () => {
+    const line = (reason: YtDownloadFailure) => ytDownloadLine({ kind: "failed", reason });
+    assert.equal(line("unavailable"), "This recording is unavailable in 320 kbps");
+    assert.equal(line("account"), "Connect a free Soulseek account in Settings");
+    assert.equal(line("accountRejected"), "Connect a free Soulseek account in Settings");
+    assert.equal(line("timedOut"), "Download failed");
+    assert.equal(line("unreachable"), "Download failed: Soulseek can't be reached");
+    assert.deepEqual(actions({ kind: "failed", reason: "unreachable" }), [
+      "retryDownload",
+      "cancelDownload",
+    ]);
   });
 
   test("a song YouTube Music won't serve says so, and keeps Retry", () => {

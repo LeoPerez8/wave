@@ -458,8 +458,17 @@ export type {
 } from "./blackPlayer.ts";
 export { libraryTrackIds, playerErrorNotice, queuedYtTracks, restorableTrack } from "./ytQueue.ts";
 export type { PlayerErrorCode, RestorableTracks } from "./ytQueue.ts";
-export { downloadSource, ytAudioMatches } from "./downloadSource.ts";
-export type { DownloadSource, DownloadSourceSetup } from "./downloadSource.ts";
+export {
+  downloadFallback,
+  downloadFallbackFailures,
+  downloadSource,
+  ytAudioMatches,
+} from "./downloadSource.ts";
+export type {
+  DownloadFallbackSetup,
+  DownloadSource,
+  DownloadSourceSetup,
+} from "./downloadSource.ts";
 export {
   ytDownloadDestination,
   ytDownloadLookup,

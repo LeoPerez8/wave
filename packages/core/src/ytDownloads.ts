@@ -11,17 +11,22 @@ import { soulseekSameRecording } from "./soulseekDownload.ts";
 
 /**
  * Why acquisition failed, including account setup and an unavailable recording:
- * `account` is Soulseek's account (signed out or rejected), `unavailable` no
- * Soulseek copy in 320 kbps, `noSource` neither YT Music nor a Soulseek
- * account, and `ytUnavailable` a song YouTube Music won't serve (or serves
- * audio of another length).
+ * `account` is no Soulseek account (signed out), `accountRejected` one Soulseek
+ * turned down, `unreachable` Soulseek's server not answering while the phone
+ * is online (`offline` is the phone), `unavailable` no Soulseek copy in 320
+ * kbps, `timedOut` a download that used up its time, `noSource` neither YT
+ * Music nor a Soulseek account, and `ytUnavailable` a song YouTube Music won't
+ * serve (or serves audio of another length).
  */
 export type YtDownloadFailure =
   | "offline"
   | "failed"
+  | "timedOut"
   | "noFolder"
   | "storage"
   | "account"
+  | "accountRejected"
+  | "unreachable"
   | "unavailable"
   | "noSource"
   | "ytUnavailable";
@@ -212,9 +217,13 @@ export const ytDownloadActions = (
 const FAILURE_LINES: { readonly [F in YtDownloadFailure]: string } = {
   offline: "Download failed: offline",
   failed: "Download failed",
+  timedOut: "Download failed",
   noFolder: "Download failed: no music folder",
   storage: "Download failed: couldn't save the file",
   account: "Connect a free Soulseek account in Settings",
+  // Soulseek forgets an account it rejects, so the way back is the same.
+  accountRejected: "Connect a free Soulseek account in Settings",
+  unreachable: "Download failed: Soulseek can't be reached",
   unavailable: "This recording is unavailable in 320 kbps",
   noSource: "Connect YT Music or Soulseek in Settings",
   ytUnavailable: "This song is unavailable on YouTube Music",
