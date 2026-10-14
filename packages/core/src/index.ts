@@ -709,5 +709,18 @@ export type {
   SpotifySong,
   SpotifyTransport,
 } from "./spotifyPlaylist.ts";
-export { RECORDING_LENGTH_TOLERANCE_MS, findRecording, recordingKey } from "./sync.ts";
-export type { Recording, RecordingTags } from "./sync.ts";
+export {
+  RECORDING_LENGTH_TOLERANCE_MS,
+  findRecording,
+  mergePlays,
+  mergeRows,
+  recordingKey,
+} from "./sync.ts";
+export type {
+  MergedPlays,
+  MergedRows,
+  Recording,
+  RecordingTags,
+  SyncPlay,
+  SyncRow,
+} from "./sync.ts";

@@ -63,3 +63,107 @@ export const findRecording = <C extends Recording>(
   );
   return close.length === 1 ? (close[0] ?? null) : null;
 };
+
+/**
+ * What every synced row carries besides its own fields (songs, playlists,
+ * playlist entries, favorites, preferences). Removing a row doesn't drop it:
+ * it becomes a tombstone (`deleted: true`), which merges like any other change.
+ */
+export interface SyncRow {
+  /** The row's id, the same on every phone (a song's is its recording key). */
+  readonly id: string;
+  /**
+   * When the row last changed, in ms since the epoch, by the clock of the phone
+   * that changed it. A phone never stamps two changes of one row with the same time.
+   */
+  readonly changedAt: number;
+  /** The id of the phone that made the change. */
+  readonly phoneId: string;
+  /** Whether the change removed the row. */
+  readonly deleted: boolean;
+}
+
+/**
+ * Whether change [a] wins over change [b] of the same row: the later one wins,
+ * the greater phone id (compared as text) when they were made at the same
+ * time, and the removal when they are the same change.
+ */
+const wins = (a: SyncRow, b: SyncRow): boolean => {
+  if (a.changedAt !== b.changedAt) return a.changedAt > b.changedAt;
+  if (a.phoneId !== b.phoneId) return a.phoneId > b.phoneId;
+  return a.deleted && !b.deleted;
+};
+
+/** What `mergeRows` gives. */
+export interface MergedRows<R extends SyncRow> {
+  /** One row per id, the winning change of each, in id order (compared as text). */
+  readonly rows: readonly R[];
+  /**
+   * The incoming rows that won, one per id in id order: what the side merging
+   * has to write (the service stores them, the app applies them).
+   */
+  readonly accepted: readonly R[];
+}
+
+const byId = (a: SyncRow, b: SyncRow): number => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+
+/**
+ * Merges [incoming] changes into the [current] rows, row by row: the later
+ * change wins and the phone id breaks a tie (`SyncRow`). A tombstone is a
+ * change like any other, so an older edit arriving late can't undo a removal,
+ * while an edit made after it brings the row back. The result doesn't depend
+ * on the order the changes arrive in, nor on which side holds which.
+ */
+export const mergeRows = <R extends SyncRow>(
+  current: readonly R[],
+  incoming: readonly R[],
+): MergedRows<R> => {
+  const winners = new Map<string, R>();
+  for (const row of current) {
+    const held = winners.get(row.id);
+    if (held === undefined || wins(row, held)) winners.set(row.id, row);
+  }
+  const accepted = new Map<string, R>();
+  for (const row of incoming) {
+    const held = winners.get(row.id);
+    if (held === undefined || wins(row, held)) {
+      winners.set(row.id, row);
+      accepted.set(row.id, row);
+    }
+  }
+  return {
+    rows: [...winners.values()].sort(byId),
+    accepted: [...accepted.values()].sort(byId),
+  };
+};
+
+/** A synced play event: its id is made on the phone that recorded it, and is the same everywhere. */
+export interface SyncPlay {
+  readonly id: string;
+}
+
+/** What `mergePlays` gives. */
+export interface MergedPlays<P extends SyncPlay> {
+  /** The plays held, then those added, in the order they came. */
+  readonly plays: readonly P[];
+  /** The incoming plays not held before: what the side merging has to write. */
+  readonly added: readonly P[];
+}
+
+/**
+ * Merges play events by id only: a play is only ever added, never changed,
+ * and never held twice. An incoming play whose id is already held is ignored.
+ */
+export const mergePlays = <P extends SyncPlay>(
+  current: readonly P[],
+  incoming: readonly P[],
+): MergedPlays<P> => {
+  const held = new Set(current.map((play) => play.id));
+  const added: P[] = [];
+  for (const play of incoming) {
+    if (held.has(play.id)) continue;
+    held.add(play.id);
+    added.push(play);
+  }
+  return { plays: [...current, ...added], added };
+};

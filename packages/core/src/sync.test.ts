@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { findRecording, normalizeTrack, recordingKey } from "./index.ts";
+import { findRecording, mergePlays, mergeRows, normalizeTrack, recordingKey } from "./index.ts";
 import type { RawTrack } from "./index.ts";
 
 const MUSIC = "/storage/emulated/0/Music";
@@ -109,3 +109,117 @@ describe("findRecording", () => {
     assert.equal(findRecording(song, [take(230_000), take(170_000)]), null);
   });
 });
+
+interface PlaylistRow {
+  readonly id: string;
+  readonly changedAt: number;
+  readonly phoneId: string;
+  readonly deleted: boolean;
+  readonly name: string;
+}
+
+const row = (
+  id: string,
+  changedAt: number,
+  phoneId: string,
+  name: string,
+  deleted = false,
+): PlaylistRow => ({ id, changedAt, phoneId, deleted, name });
+
+describe("mergeRows", () => {
+  test("the later change wins, whichever side it's on", () => {
+    const older = row("p1", 1_000, "pixel", "Road trip");
+    const newer = row("p1", 2_000, "galaxy", "Road Trip 2026");
+    assert.deepEqual(mergeRows([older], [newer]).rows, [newer]);
+    assert.deepEqual(mergeRows([newer], [older]).rows, [newer]);
+  });
+
+  test("changes made at the same time are told apart by the phone id", () => {
+    const fromA = row("p1", 1_000, "a-phone", "Gym");
+    const fromB = row("p1", 1_000, "b-phone", "Running");
+    assert.deepEqual(mergeRows([fromA], [fromB]).rows, [fromB]);
+    assert.deepEqual(mergeRows([fromB], [fromA]).rows, [fromB]);
+  });
+
+  test("a removal beats an older edit that arrives late", () => {
+    const removed = row("p1", 3_000, "pixel", "Gym", true);
+    const lateEdit = row("p1", 2_000, "galaxy", "Gym (old)");
+    const merged = mergeRows([removed], [lateEdit]);
+    assert.deepEqual(merged.rows, [removed]);
+    assert.deepEqual(merged.accepted, []);
+  });
+
+  test("an edit made after a removal brings the row back", () => {
+    const removed = row("p1", 3_000, "pixel", "Gym", true);
+    const edit = row("p1", 4_000, "galaxy", "Gym again");
+    const merged = mergeRows([removed], [edit]);
+    assert.deepEqual(merged.rows, [edit]);
+    assert.deepEqual(merged.accepted, [edit]);
+  });
+
+  test("accepted holds the incoming rows that won, and rows keeps every id", () => {
+    const kept = row("p1", 5_000, "pixel", "Mine");
+    const stale = row("p1", 1_000, "galaxy", "Stale");
+    const fresh = row("p2", 1_000, "galaxy", "New one");
+    const merged = mergeRows([kept], [stale, fresh]);
+    assert.deepEqual(merged.rows, [kept, fresh]);
+    assert.deepEqual(merged.accepted, [fresh]);
+  });
+
+  test("the same changes merged in any order give the same rows", () => {
+    const changes = [
+      row("p1", 1_000, "pixel", "Gym"),
+      row("p1", 2_000, "galaxy", "Gym 2"),
+      row("p1", 2_000, "pixel", "Gym 2 (pixel)"),
+      row("p1", 3_000, "galaxy", "Gym", true),
+      row("p2", 1_000, "pixel", "Chill"),
+      row("p2", 5_000, "galaxy", "Chill out"),
+      row("p3", 4_000, "pixel", "Old", true),
+      row("p3", 1_000, "galaxy", "Older edit"),
+    ];
+    const expected = [changes[3], changes[5], changes[6]];
+    assert.deepEqual(mergeRows([], changes).rows, expected);
+    for (const order of permutationsOf(changes, 40)) {
+      let rows: readonly PlaylistRow[] = [];
+      for (const change of order) rows = mergeRows(rows, [change]).rows;
+      assert.deepEqual(rows, expected);
+      const half = Math.floor(order.length / 2);
+      const split = mergeRows(order.slice(0, half), order.slice(half)).rows;
+      assert.deepEqual(split, expected);
+    }
+  });
+});
+
+describe("mergePlays", () => {
+  const play = (id: string, listenedMs: number) => ({ id, recordingKey: "k", listenedMs });
+
+  test("a play is added once, and a play already held is never changed", () => {
+    const first = play("pixel-1", 120_000);
+    const second = play("galaxy-1", 30_000);
+    const merged = mergePlays(
+      [first],
+      [play("pixel-1", 999), second, play("galaxy-1", 1)],
+    );
+    assert.deepEqual(merged.plays, [first, second]);
+    assert.deepEqual(merged.added, [second]);
+  });
+});
+
+/** [count] orders of [items], made by a fixed shuffle so a failure repeats. */
+const permutationsOf = <T>(items: readonly T[], count: number): T[][] => {
+  let seed = 7;
+  const random = (): number => {
+    seed = (seed * 48_271) % 2_147_483_647;
+    return seed / 2_147_483_647;
+  };
+  const orders = [[...items], [...items].reverse()];
+  while (orders.length < count) {
+    const order = [...items];
+    for (let i = order.length - 1; i > 0; i--) {
+      const j = Math.floor(random() * (i + 1));
+      [order[i], order[j]] = [order[j] as T, order[i] as T];
+    }
+    orders.push(order);
+  }
+  return orders;
+};
