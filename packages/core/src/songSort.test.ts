@@ -262,48 +262,6 @@ describe("sortSongs by date added", () => {
   });
 });
 
-const file = (name: string): SortableSong & { readonly name: string } => ({
-  ...song(name, { title: "Same" }),
-  path: `/music/Album/${name}`,
-});
-
-describe("sortSongs by file name", () => {
-  const songs = [file("10 Ten.mp3"), file("b.mp3"), file("2 Two.mp3"), file("A.flac")];
-
-  test("orders like a file manager: 2 before 10, letters ignoring case", () => {
-    assert.deepEqual(names(sortSongs(songs, { key: "file", descending: false })), [
-      "2 Two.mp3",
-      "10 Ten.mp3",
-      "A.flac",
-      "b.mp3",
-    ]);
-  });
-
-  test("descending runs the other way", () => {
-    assert.deepEqual(names(sortSongs(songs, { key: "file", descending: true })), [
-      "b.mp3",
-      "A.flac",
-      "10 Ten.mp3",
-      "2 Two.mp3",
-    ]);
-  });
-
-  test("goes by the file's name, not the folders above it", () => {
-    const apart = [
-      { ...song("z in a"), path: "/a/z.mp3" },
-      { ...song("a in z"), path: "/z/a.mp3" },
-    ];
-    assert.deepEqual(names(sortSongs(apart, { key: "file", descending: false })), [
-      "a in z",
-      "z in a",
-    ]);
-  });
-
-  test("has no spine", () => {
-    assert.equal(songSpineKeys(songs, { key: "file", descending: false }), undefined);
-  });
-});
-
 const starred = (name: string, starredAt: number) => ({ ...song(name), starredAt });
 
 describe("sortSongs by date starred", () => {
@@ -339,7 +297,7 @@ describe("sortSongs by date starred", () => {
 
 const labels = (kind: SongListKind) => songSortsFor(kind).map(songSortLabel);
 
-const KINDS: readonly SongListKind[] = ["songs", "artist", "genre", "folder", "favorites"];
+const KINDS: readonly SongListKind[] = ["songs", "artist", "genre", "favorites"];
 
 describe("sorts per kind of song list", () => {
   const shared = SONG_SORTS.map(songSortLabel);
@@ -349,11 +307,6 @@ describe("sorts per kind of song list", () => {
       assert.deepEqual(labels(kind), shared);
       assert.deepEqual(defaultSongSort(kind), { key: "title", descending: false });
     }
-  });
-
-  test("a folder leads with its file-name order, and defaults to it", () => {
-    assert.deepEqual(labels("folder"), ["File name, A to Z", "File name, Z to A", ...shared]);
-    assert.deepEqual(defaultSongSort("folder"), { key: "file", descending: false });
   });
 
   test("Favorites leads with date starred, and defaults to most recently starred", () => {
@@ -377,13 +330,11 @@ describe("sorts per kind of song list", () => {
 
   test("a sort the kind doesn't offer reads as its default", () => {
     assert.deepEqual(
-      readSongSort(writeSongSort({ key: "file", descending: false }), "artist"),
+      readSongSort(writeSongSort({ key: "starred", descending: false }), "artist"),
       DEFAULT_SONG_SORT,
     );
-    assert.deepEqual(
-      readSongSort(writeSongSort({ key: "starred", descending: false }), "folder"),
-      defaultSongSort("folder"),
-    );
+    // The file-name order Library › Folders had, saved before Folders went.
+    assert.deepEqual(readSongSort('{"key":"file","descending":false}', "songs"), DEFAULT_SONG_SORT);
   });
 });
 

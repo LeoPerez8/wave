@@ -26,7 +26,7 @@ export const albumArtistIds = sql<readonly number[]>`(
     SELECT artist_id FROM album_artists
     WHERE album_artists.album_id = ${schema.albums.id} ORDER BY position))`.mapWith(idList);
 
-/** What every track list shows (a `SongRow`), plus what orders albums and folders. */
+/** What every track list shows (a `SongRow`), plus what orders albums. */
 export const songColumns = {
   id: schema.tracks.id,
   path: schema.tracks.path,
@@ -45,7 +45,6 @@ export const songColumns = {
   artistIds: trackArtistIds,
   discNumber: schema.tracks.discNumber,
   trackNumber: schema.tracks.trackNumber,
-  fileName: schema.tracks.fileName,
 };
 
 /** Tracks with their `songColumns`. */

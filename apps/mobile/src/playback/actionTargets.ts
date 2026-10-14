@@ -14,14 +14,7 @@ import {
 import type { ArtistImageSource } from "@/catalog/ArtistImage";
 import type { LibrarySection } from "@/catalog/sections";
 import type { LibraryCounts } from "@/library/db/counts";
-import type {
-  AlbumRow,
-  ArtistRow,
-  FolderRow,
-  GenreRow,
-  PlaylistRow,
-  SongRow,
-} from "@/library/LibraryStore";
+import type { AlbumRow, ArtistRow, GenreRow, PlaylistRow, SongRow } from "@/library/LibraryStore";
 import { itemSongs, librarySectionSongs, playlistEntries } from "@/library/sectionSongs";
 
 /**
@@ -52,7 +45,6 @@ export interface ItemOf {
   readonly artist: ArtistRow;
   readonly playlist: PlaylistRow;
   readonly genre: GenreRow;
-  readonly folder: FolderRow;
   readonly section: LibrarySection;
   readonly mixed: MixedItem;
 }
@@ -133,7 +125,7 @@ const KINDS: { readonly [K in ItemKind]: KindInfo<ItemOf[K]> } = {
     facts: () => NO_FACTS,
     noun: "artist",
   },
-  // Genres and folders have no picture; their headings are text only.
+  // Genres have no picture; their headings are text only.
   playlist: {
     songs: (playlist) => itemSongs("playlists", playlist.id),
     heading: (playlist) => ({
@@ -153,16 +145,6 @@ const KINDS: { readonly [K in ItemKind]: KindInfo<ItemOf[K]> } = {
     }),
     facts: () => NO_FACTS,
     noun: "genre",
-  },
-  folder: {
-    songs: (folder) => itemSongs("folders", folder.id),
-    heading: (folder) => ({
-      title: folder.name,
-      subtitle: counted(folder.trackCount, "song"),
-      covers: undefined,
-    }),
-    facts: () => NO_FACTS,
-    noun: "folder",
   },
   section: {
     songs: (section) => librarySectionSongs(section.slug),
