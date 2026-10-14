@@ -105,18 +105,16 @@ export const useYtArtistSection = (
   const show = useCallback(() => {
     if (saved === undefined) return;
     dispatch({ type: "requested" });
-    void appRuntime
-      .runPromise(Effect.result(fetchArtist(name, artistKey, saved)))
-      .then(
-        (result) =>
-          dispatch(
-            Result.isSuccess(result)
-              ? { type: "answered", saved: result.success }
-              : { type: "failed", reason: result.failure.reason },
-          ),
-        // A defect fails like any other request, so the section doesn't stay loading.
-        () => dispatch({ type: "failed", reason: "failed" }),
-      );
+    void appRuntime.runPromise(Effect.result(fetchArtist(name, artistKey, saved))).then(
+      (result) =>
+        dispatch(
+          Result.isSuccess(result)
+            ? { type: "answered", saved: result.success }
+            : { type: "failed", reason: result.failure.reason },
+        ),
+      // A defect fails like any other request, so the section doesn't stay loading.
+      () => dispatch({ type: "failed", reason: "failed" }),
+    );
   }, [name, artistKey, saved]);
 
   // Until the Library has been read, which top songs it lacks isn't known: nothing shows.
