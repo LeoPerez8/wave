@@ -6,7 +6,7 @@ import * as Layer from "effect/Layer";
 
 import type { IndexedArtwork } from "@/library/LibraryStore";
 import { toIndexedArtwork } from "@/library/LibraryScan";
-import { WaveYtDownloads, type NativeYtAlbum } from "@/native/waveYtDownloads";
+import type { NativeYtAlbum } from "@/native/waveYtDownloads";
 import {
   WaveYtMusic,
   ytErrorCode,
@@ -14,6 +14,8 @@ import {
   type NativeYtSearchPage,
   type NativeYtSong,
 } from "@/native/waveYtMusic";
+
+import { readYtAlbum } from "./albumPages";
 
 /**
  * A YT Music request that didn't get an answer: no network, YouTube failed
@@ -71,9 +73,8 @@ export const layer = Layer.succeed(YtMusic, {
   home: Effect.tryPromise({ try: () => WaveYtMusic.home(), catch: fromNative }).pipe(
     Effect.map((shelves) => ({ shelves })),
   ),
-  // Album pages are read by the downloads module (a download's tags come from them).
-  album: (browseId) =>
-    Effect.tryPromise({ try: () => WaveYtDownloads.album(browseId), catch: fromNative }),
+  // Album pages are read by the downloads module (a download's tags come from them), once a session.
+  album: (browseId) => Effect.tryPromise({ try: () => readYtAlbum(browseId), catch: fromNative }),
   playlist: (playlistId) =>
     Effect.tryPromise({ try: () => WaveYtMusic.playlist(playlistId), catch: fromNative }),
   cacheArtwork: (url) =>
