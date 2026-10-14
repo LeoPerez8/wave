@@ -22,7 +22,7 @@ class DownloadFilesTest {
   @Test
   fun aPartFileSitsBesideItsTargetHiddenFromScansButKeepsItsFormat() {
     val root = Fixtures.tempDir()
-    val target = File(root, "YT Music/Daft Punk/RAM/08 Get Lucky.m4a")
+    val target = File(root, "Daft Punk/RAM/08 Get Lucky.m4a")
     val part = DownloadFiles.partFileFor(target)
     assertEquals(target.parentFile, part.parentFile)
     assertEquals("m4a", part.extension)
@@ -38,7 +38,7 @@ class DownloadFilesTest {
   fun movesTheFinishedFileIntoPlaceCreatingItsFolders() {
     val root = Fixtures.tempDir()
     val part = File(root, ".08 Get Lucky.part.m4a").apply { writeText("audio") }
-    val target = File(root, "YT Music/Daft Punk/RAM/08 Get Lucky.m4a")
+    val target = File(root, "Daft Punk/RAM/08 Get Lucky.m4a")
 
     val saved = DownloadFiles.moveIntoPlace(part, target)
 
