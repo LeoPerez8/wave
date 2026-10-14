@@ -37,6 +37,11 @@ coverage/
 .turbo/
 .next/
 
+# Wrangler (sync service): local state and local secrets
+.wrangler/
+.dev.vars
+.dev.vars.*
+
 # Claude Code local overrides
 .claude/settings.local.json
 
