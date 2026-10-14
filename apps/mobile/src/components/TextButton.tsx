@@ -1,5 +1,6 @@
 import { Text } from "react-native";
 
+import { CELL } from "@/catalog/grid";
 import { Press } from "@/motion/Press";
 
 type Props = {
@@ -13,6 +14,13 @@ type Props = {
 };
 
 const TONE = { accent: "text-accent", destructive: "text-destructive" } as const;
+
+/**
+ * Room either side of the label of a button that opens a card, so its highlight
+ * doesn't end at the first and last letter. A negative margin as wide keeps the
+ * label where it was.
+ */
+const MENU_INSET = { paddingHorizontal: CELL * 1.5, marginHorizontal: -CELL * 1.5 } as const;
 
 /** A text-only action in the accent tone: no container, a 48dp target. */
 export function TextButton({
@@ -31,7 +39,7 @@ export function TextButton({
       opensMenu={opensMenu}
       haptic="selection"
       className="justify-center"
-      style={{ minHeight: 48 }}
+      style={[{ minHeight: 48 }, opensMenu && MENU_INSET]}
     >
       <Text
         className={`font-sans text-body font-medium ${disabled ? "text-secondary" : TONE[tone]}`}
