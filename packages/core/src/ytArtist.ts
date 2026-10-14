@@ -27,6 +27,8 @@ export interface YtArtistCandidate {
   readonly browseId: string;
   /** How followed they are (subscribers or monthly audience, as the row says), when it says. */
   readonly audience: number | null;
+  /** Their picture as the row shows it, when it has one (Search's rows show it). */
+  readonly artworkUrl?: string | null;
 }
 
 /**
@@ -177,6 +179,55 @@ export const libraryAlbumFinder = <A extends LibraryAlbumKey>(
     if (title !== "" && !byTitle.has(title)) byTitle.set(title, album);
   }
   return (release) => byTitle.get(releaseTitle(release.title)) ?? null;
+};
+
+/**
+ * Finds the Library artist a YouTube Music name is, as `libraryArtistNamed`
+ * does, for many names at once.
+ */
+export const libraryArtistFinder = <A extends { readonly name: string }>(
+  artists: readonly A[],
+): ((name: string) => A | null) => {
+  const byName = new Map<string, A>();
+  for (const artist of artists) {
+    const name = artistPhotoName(artist.name);
+    if (!byName.has(name)) byName.set(name, artist);
+  }
+  return (name) =>
+    ytArtistQuery(name) === null ? null : (byName.get(artistPhotoName(name)) ?? null);
+};
+
+/**
+ * Finds the Library album a YouTube Music release is, wherever it was found
+ * (Search, say): for each artist the release credits that the Library has
+ * (`libraryArtistNamed`), their album with the release's title, as
+ * `libraryAlbumFinder` matches it. Null when none of them has it.
+ */
+export const libraryReleaseFinder = <
+  R extends { readonly id: number; readonly name: string },
+  A extends LibraryAlbumKey,
+>(
+  artists: readonly R[],
+  albums: readonly A[],
+): ((release: { readonly title: string; readonly artists: readonly string[] }) => A | null) => {
+  const artistNamed = libraryArtistFinder(artists);
+  const finders = new Map<number, (release: { readonly title: string }) => A | null>();
+  const finderOf = (artistId: number) => {
+    let find = finders.get(artistId);
+    if (find === undefined) {
+      find = libraryAlbumFinder(artistId, albums);
+      finders.set(artistId, find);
+    }
+    return find;
+  };
+  return (release) => {
+    for (const name of release.artists) {
+      const artist = artistNamed(name);
+      const album = artist === null ? null : finderOf(artist.id)(release);
+      if (album !== null) return album;
+    }
+    return null;
+  };
 };
 
 /** The section's state; [S] is the song as the caller has it (the native result, say). */

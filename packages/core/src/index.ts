@@ -371,6 +371,9 @@ export {
 export type {
   YtAskedBy,
   YtQuietReason,
+  YtSearchAnswer,
+  YtSearchLibrary,
+  YtSearchTop,
   YtSection,
   YtSectionEvent,
   YtSectionNote,
@@ -522,6 +525,8 @@ export {
   YT_ARTIST_FRESH_MS,
   YT_ARTIST_SECTION_START,
   libraryAlbumFinder,
+  libraryArtistFinder,
+  libraryReleaseFinder,
   libraryArtistNamed,
   pickYtArtist,
   stepYtArtistSection,
