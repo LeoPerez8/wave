@@ -6,6 +6,7 @@
  */
 
 import { splitCredit } from "./credits.ts";
+import { UNKNOWN_ARTIST } from "./library.ts";
 import { normalizeSearchText } from "./search.ts";
 
 /** A song found on YouTube Music. */
@@ -80,16 +81,22 @@ const matchTitle = (title: string): string =>
     withoutRemasterNotes(title.replace(BRACKETED_FEATURE, "").replace(TRAILING_FEATURE, "")),
   );
 
+/** "+" joins artists too when matching ("Florence + Jamie xx"), though the Library keeps it in a name. */
+const PLUS = /\s*\+\s*/u;
+
+const UNKNOWN = normalizeSearchText(UNKNOWN_ARTIST);
+
 /**
  * The names in an artist credit ("A feat. B & C" is A, B and C), split as the
- * Library splits credits (`splitCredit`) and compared as matching compares them.
+ * Library splits credits (`splitCredit`) and on "+", compared as matching
+ * compares them. A credit naming nobody gives no names, so it shares no artist.
  */
 const artistNames = (credit: string): string[] =>
-  credit.trim() === ""
-    ? []
-    : splitCredit(credit)
-        .map(normalizeSearchText)
-        .filter((name) => name !== "");
+  credit
+    .split(PLUS)
+    .flatMap((part) => splitCredit(part))
+    .map(normalizeSearchText)
+    .filter((name) => name !== "" && name !== UNKNOWN);
 
 const knownLength = (ms: number | null): number | null => (ms === null || ms <= 0 ? null : ms);
 
