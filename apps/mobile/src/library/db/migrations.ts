@@ -273,6 +273,30 @@ CREATE TABLE \`album_artists\` (
 CREATE INDEX \`album_artists_artist_idx\` ON \`album_artists\` (\`artist_id\`);
 `;
 
+// A deleted song's plays count for every artist its credit named (docs/spec.md,
+// glossary: Artist), not only one: the store keeps them in
+// \`deleted_track_artists\`. Songs deleted before keep the one artist their plays
+// held (\`relinkCredits\` splits a whole credit among its artists once it's pruned).
+const m0013 = `
+CREATE TABLE \`deleted_track_artists\` (
+	\`track_id\` integer NOT NULL,
+	\`artist_id\` integer NOT NULL,
+	\`position\` integer NOT NULL,
+	PRIMARY KEY(\`track_id\`, \`position\`),
+	FOREIGN KEY (\`artist_id\`) REFERENCES \`artists\`(\`id\`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE INDEX \`deleted_track_artists_artist_idx\` ON \`deleted_track_artists\` (\`artist_id\`);
+--> statement-breakpoint
+INSERT INTO \`deleted_track_artists\` (\`track_id\`, \`artist_id\`, \`position\`)
+	SELECT \`track_id\`, min(\`artist_id\`), 0 FROM \`play_events\`
+	WHERE \`artist_id\` IN (SELECT \`id\` FROM \`artists\`)
+		AND \`track_id\` NOT IN (SELECT \`id\` FROM \`tracks\`)
+	GROUP BY \`track_id\`;
+--> statement-breakpoint
+ALTER TABLE \`play_events\` DROP COLUMN \`artist_id\`;
+`;
+
 export default {
   journal: {
     entries: [
@@ -289,6 +313,7 @@ export default {
       { idx: 10, when: 1_792_670_400_000, tag: "0010_play_credits", breakpoints: true },
       { idx: 11, when: 1_792_756_800_000, tag: "0011_track_lyrics", breakpoints: true },
       { idx: 12, when: 1_792_843_200_000, tag: "0012_artist_credits", breakpoints: true },
+      { idx: 13, when: 1_792_929_600_000, tag: "0013_deleted_track_artists", breakpoints: true },
     ],
   },
   migrations: {
@@ -305,5 +330,6 @@ export default {
     m0010,
     m0011,
     m0012,
+    m0013,
   },
 };

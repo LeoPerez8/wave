@@ -10,9 +10,10 @@ import { useArtistStats } from "./hooks";
 import { RankedSongs } from "./StatsViews";
 
 /**
- * An artist page's stats over all time, credited by track artist as in
- * Stats: plays, minutes listened, songs listened out of theirs and when they
- * were last played, then their most played songs (tapping one plays that list
+ * An artist page's stats over all time, over the songs whose credit names
+ * the artist, as in Stats (a collaboration counts for each of its artists):
+ * plays, minutes listened, songs listened out of theirs and when they were
+ * last played, then their most played songs (tapping one plays that list
  * from it). An artist never played reads so in one line, without the list.
  */
 export function ArtistStatsBlock({
@@ -20,11 +21,10 @@ export function ArtistStatsBlock({
   songs,
 }: {
   artistId: number;
-  /** The artist's songs on the page. */
+  /** The artist's songs on the page; the block is read again when they change. */
   songs: readonly SongRow[];
 }) {
-  const songIds = useMemo(() => songs.map((song) => song.id), [songs]);
-  const stats = useArtistStats(artistId, songIds);
+  const stats = useArtistStats(artistId, songs);
   const context = useMemo(() => ({ kind: "stats", id: `artist-${artistId}` }), [artistId]);
   if (stats === undefined) return null;
   return (
