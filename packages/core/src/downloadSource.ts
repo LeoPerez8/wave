@@ -1,6 +1,6 @@
 /**
  * Where a YT Music song's download comes from. Soulseek gives the original
- * MP3 320 once the owner connected an account; YouTube Music gives the M4A it
+ * MP3 320 while Download in best quality is on; YouTube Music gives the M4A it
  * serves (AAC 256 kbps with Premium, about 128 kbps without) while YT Music
  * is on, with or without a Google sign-in.
  */
@@ -14,20 +14,20 @@ export type DownloadSource = "soulseek" | "youtube";
 export interface DownloadSourceSetup {
   /** YT Music is on in Settings. */
   readonly ytMusicOn: boolean;
-  /** Soulseek has an account saved, connected or not. */
-  readonly soulseekAccount: boolean;
+  /** Download in best quality is on in Settings, connected to Soulseek or not. */
+  readonly bestQuality: boolean;
 }
 
 /**
- * The source a download uses: Soulseek while it has an account, else YouTube
- * Music while YT Music is on; null when neither is set up, which fails the
- * download with "Connect YT Music or Soulseek in Settings".
+ * The source a download uses: Soulseek while Download in best quality is on,
+ * else YouTube Music while YT Music is on; null when both are off, which fails
+ * the download with "Turn on YT Music or Download in best quality in Settings".
  */
 export const downloadSource = ({
   ytMusicOn,
-  soulseekAccount,
+  bestQuality,
 }: DownloadSourceSetup): DownloadSource | null =>
-  soulseekAccount ? "soulseek" : ytMusicOn ? "youtube" : null;
+  bestQuality ? "soulseek" : ytMusicOn ? "youtube" : null;
 
 /** What Soulseek's fallback depends on. */
 export interface DownloadFallbackSetup {
