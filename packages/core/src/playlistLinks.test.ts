@@ -7,6 +7,7 @@ import {
   planLinkImport,
   playlistImportSources,
   recognisePlaylistLink,
+  sharedTextImport,
   type YtAlbumSong,
 } from "./index.ts";
 
@@ -278,5 +279,70 @@ describe("recognisePlaylistLink", () => {
       problem: "otherSite",
       reason: "Wave imports playlists from YouTube Music links.",
     });
+  });
+});
+
+describe("sharedTextImport", () => {
+  const on = { ytMusic: true };
+
+  test("the bare link YouTube Music's app shares opens its playlist's import", () => {
+    assert.deepEqual(
+      sharedTextImport(`https://music.youtube.com/playlist?list=${ID}&si=Ab12_cd-EF`, on),
+      { kind: "import", link: { service: "ytMusic", playlistId: ID } },
+    );
+  });
+
+  test("a link other apps share among words, even with punctuation after it, is found", () => {
+    for (const text of [
+      `Drive - YouTube Music
+https://music.youtube.com/playlist?list=${ID}`,
+      `Listen to Drive: https://music.youtube.com/playlist?list=${ID}.`,
+      `Drive (https://www.youtube.com/playlist?list=${ID}), via my browser`,
+      `"https://music.youtube.com/playlist?list=${ID}&si=Ab12_cd-EF"`,
+    ]) {
+      assert.deepEqual(
+        sharedTextImport(text, on),
+        { kind: "import", link: { service: "ytMusic", playlistId: ID } },
+        text,
+      );
+    }
+  });
+
+  test("anything else shared says what Wave imports", () => {
+    for (const text of [
+      "https://music.youtube.com/watch?v=dQw4w9WgXcQ&si=Ab12_cd-EF",
+      "https://music.youtube.com/browse/MPREb_ABC123def45",
+      "https://music.youtube.com/channel/UCiMhD4jzUqG-IgPzUmmytRQ",
+      `https://example.com/playlist?list=${ID}`,
+      "Look at this: https://en.wikipedia.org/wiki/Justice_(band)",
+      "a note with no link",
+      // An id on its own is something to paste, not a link to share.
+      ID,
+      "",
+    ]) {
+      assert.deepEqual(
+        sharedTextImport(text, on),
+        {
+          kind: "notice",
+          title: "Can't import this",
+          message: "Wave imports playlists from YouTube Music links.",
+        },
+        text,
+      );
+    }
+  });
+
+  test("with YT Music off, whatever is shared says to turn it on, and nothing is read", () => {
+    for (const text of [`https://music.youtube.com/playlist?list=${ID}`, "a note with no link"]) {
+      assert.deepEqual(
+        sharedTextImport(text, { ytMusic: false }),
+        {
+          kind: "notice",
+          title: "YT Music is off",
+          message: "Turn on YT Music in Settings to import playlists from YouTube Music links.",
+        },
+        text,
+      );
+    }
   });
 });

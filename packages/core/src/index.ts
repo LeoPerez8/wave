@@ -628,8 +628,11 @@ export {
   planLinkImport,
   playlistImportSources,
   recognisePlaylistLink,
+  sharedTextImport,
+  YT_MUSIC_OFF_NOTICE,
 } from "./playlistLinks.ts";
 export type {
+  ImportNotice,
   LinkImportPlan,
   LinkImportRead,
   LinkImportView,
@@ -639,4 +642,5 @@ export type {
   PlaylistLink,
   PlaylistLinkCheck,
   PlaylistLinkProblem,
+  SharedTextImport,
 } from "./playlistLinks.ts";
