@@ -75,14 +75,12 @@ object AndroidM4aDuration {
         extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
       } ?: throw IOException("No audio track")
       extractor.selectTrack(track)
-      var lastUs = -1L
-      while (extractor.sampleTime >= 0) {
-        if (isCancelled()) throw java.util.concurrent.CancellationException("Download cancelled")
-        lastUs = maxOf(lastUs, extractor.sampleTime)
-        if (!extractor.advance()) break
+      val samples = object : AudioSamples {
+        override val trackIndex get() = extractor.sampleTrackIndex
+        override val sampleTimeUs get() = extractor.sampleTime
+        override fun advance() = extractor.advance()
       }
-      if (lastUs <= 0) throw IOException("No audio samples")
-      return lastUs / 1000
+      return AudioSampleTime.lastUs(samples, isCancelled) / 1000
     } catch (e: IOException) {
       throw e
     } catch (e: java.util.concurrent.CancellationException) {
