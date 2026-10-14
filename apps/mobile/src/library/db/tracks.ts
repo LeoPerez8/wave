@@ -2,7 +2,7 @@
  * The track rows every song list reads (a `SongRow`). Kept free of Expo so
  * the store tests run them against a real SQLite (`testDatabase.ts`).
  */
-import { asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
 import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
@@ -110,20 +110,39 @@ const CHUNK = 500;
 
 /**
  * Deletes the tracks at `paths` (their playlist items and stars go with them).
- * Their play history stays, and keeps each track's album and track artist, so
- * Stats still credits them (see `play_events.album_id`). Run it in the
- * transaction that prunes what the tracks leave empty.
+ * Their play history stays, and keeps each track's album and every artist its
+ * credit names, so Stats still credits them (see `play_events.album_id` and
+ * `deleted_track_artists`). Run it in the transaction that prunes what the
+ * tracks leave empty.
  */
 export const deleteTracks = (db: LibraryDatabase, paths: readonly string[]): void => {
-  const { tracks, playEvents } = schema;
+  const { tracks, playEvents, trackArtists, deletedTrackArtists } = schema;
   for (let i = 0; i < paths.length; i += CHUNK) {
     const chunk = paths.slice(i, i + CHUNK);
     const leaving = db.select({ id: tracks.id }).from(tracks).where(inArray(tracks.path, chunk));
-    const ofTrack = (column: typeof tracks.albumId | typeof tracks.artistId) =>
-      sql`(SELECT ${column} FROM ${tracks} WHERE ${tracks.id} = ${playEvents.trackId})`;
     db.update(playEvents)
-      .set({ albumId: ofTrack(tracks.albumId), artistId: ofTrack(tracks.artistId) })
+      .set({
+        albumId: sql`(SELECT ${tracks.albumId} FROM ${tracks} WHERE ${tracks.id} = ${playEvents.trackId})`,
+      })
       .where(inArray(playEvents.trackId, leaving))
+      .run();
+    db.insert(deletedTrackArtists)
+      .select(
+        db
+          .select({
+            trackId: trackArtists.trackId,
+            artistId: trackArtists.artistId,
+            position: trackArtists.position,
+          })
+          .from(trackArtists)
+          .where(
+            and(
+              inArray(trackArtists.trackId, leaving),
+              inArray(trackArtists.trackId, db.select({ id: playEvents.trackId }).from(playEvents)),
+            ),
+          ),
+      )
+      .onConflictDoNothing()
       .run();
     db.delete(tracks).where(inArray(tracks.path, chunk)).run();
   }

@@ -78,17 +78,26 @@ export const rankPlays = <A extends PlayTotals>(totals: readonly A[], limit: num
     .slice(0, limit);
 
 /**
- * What the library sums up for the tracks of one album by one track artist
+ * What the library sums up for the tracks of one album crediting one artist
  * over a stats window, counting only counted plays. Albums and artists are
- * both ranked from these.
+ * both ranked from these. A collaboration's plays are in a row for each
+ * artist it credits, only one of which is `primary`.
  */
 export interface CreditedPlayTotals {
   /** The album (title + album artist, as in the Library). */
   readonly albumId: number;
   readonly albumSort: string;
-  /** The track artist: on a compilation, the real artist, not "Various Artists". */
+  /**
+   * An artist the tracks' credit names: on a compilation, the real artist,
+   * not "Various Artists".
+   */
   readonly artistId: number;
   readonly artistSort: string;
+  /**
+   * Whether the artist is the tracks' primary artist (the first their credit
+   * names that is in the library): each play is in exactly one primary row.
+   */
+  readonly primary: boolean;
   readonly countedPlays: number;
   readonly listenedMs: number;
   readonly latestPlayAt: number;
@@ -114,13 +123,20 @@ const sumBy = (
   return [...byId.values()];
 };
 
-/** Each album's totals: the plays of all its tracks, whoever the track artists. Ranked by `rankPlays`. */
+/**
+ * Each album's totals: the plays of all its tracks, whoever the track artists,
+ * a collaboration's plays counted once. Ranked by `rankPlays`.
+ */
 export const albumPlayTotals = (credits: readonly CreditedPlayTotals[]): PlayTotals[] =>
-  sumBy(credits, (credit) => ({ id: credit.albumId, sortKey: credit.albumSort }));
+  sumBy(
+    credits.filter((credit) => credit.primary),
+    (credit) => ({ id: credit.albumId, sortKey: credit.albumSort }),
+  );
 
 /**
- * Each artist's totals, credited by track artist: a compilation's plays go to
- * the artists on its tracks, never to its album artist. Ranked by `rankPlays`.
+ * Each artist's totals, credited by track artist: a collaboration's plays
+ * count in full for each artist it credits, and a compilation's go to the
+ * artists on its tracks, never to its album artist. Ranked by `rankPlays`.
  */
 export const artistPlayTotals = (credits: readonly CreditedPlayTotals[]): PlayTotals[] =>
   sumBy(credits, (credit) => ({ id: credit.artistId, sortKey: credit.artistSort }));

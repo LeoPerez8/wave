@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, test } from "node:test";
 
-import { joinArtists, normalizeTrack, type RawTrack } from "@wave/core";
+import { artistPlayTotals, joinArtists, normalizeTrack, type RawTrack } from "@wave/core";
 import { sql } from "drizzle-orm";
 
 import type { IndexedTrack } from "../LibraryStore.ts";
@@ -11,6 +11,7 @@ import { libraryCounts } from "./counts.ts";
 import { selectLinkRows } from "./links.ts";
 import { removeTracks, saveBatch } from "./save.ts";
 import * as schema from "./schema.ts";
+import { creditedPlayTotals, songListening } from "./stats.ts";
 import {
   addTrack,
   migrateTestDatabase,
@@ -143,8 +144,8 @@ describe("credits", () => {
       sql`SELECT id FROM artists WHERE name = 'Ariana Grande, Social House'`,
     ).id;
     // A play of a song since deleted, which kept its whole-credit artist.
-    v7.run(sql`INSERT INTO play_events (track_id, started_at, listened_ms, duration_ms, end_reason, counted, artist_id)
-      VALUES (${boyfriend}, 1, 180000, 180000, 'completed', 1, NULL), (999, 2, 180000, 180000, 'completed', 1, ${collab})`);
+    v7.run(sql`INSERT INTO play_events (track_id, started_at, listened_ms, duration_ms, end_reason, counted, album_id, artist_id)
+      VALUES (${boyfriend}, 1, 180000, 180000, 'completed', 1, NULL, NULL), (999, 2, 180000, 180000, 'completed', 1, (SELECT album_id FROM tracks WHERE id = ${boyfriend}), ${collab})`);
 
     await migrateTestDatabase(v7);
     db = v7;
@@ -178,14 +179,23 @@ describe("credits", () => {
         .all(),
       [{ trackId: boyfriend }, { trackId: rings }],
     );
+    // The deleted collaboration's play counts for each of its artists.
     assert.deepEqual(
-      db
-        .select({ trackId: schema.playEvents.trackId, artistId: schema.playEvents.artistId })
-        .from(schema.playEvents)
-        .all(),
+      songListening(db)
+        .map((song) => [song.trackId, song.artistIds])
+        .toSorted(),
       [
-        { trackId: boyfriend, artistId: null },
-        { trackId: 999, artistId: artist("Ariana Grande")?.id },
+        [boyfriend, [artist("Ariana Grande")?.id, artist("Social House")?.id]],
+        [999, [artist("Ariana Grande")?.id, artist("Social House")?.id]],
+      ],
+    );
+    assert.deepEqual(
+      artistPlayTotals(creditedPlayTotals(db, { from: null, to: 10 }))
+        .map((row) => [row.sortKey, row.countedPlays])
+        .toSorted(),
+      [
+        ["ariana grande", 2],
+        ["social house", 2],
       ],
     );
   });

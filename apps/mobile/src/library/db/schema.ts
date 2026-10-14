@@ -166,6 +166,28 @@ export const trackArtists = sqliteTable(
 );
 
 /**
+ * Every artist a played track's credit named, in credit order, written from
+ * its `track_artists` when the track leaves the library (`deleteTracks`), so
+ * its plays keep counting for each of them in Stats. `track_id` has no
+ * foreign key, as in `play_events`; a link goes with its artist when the
+ * artist leaves the library.
+ */
+export const deletedTrackArtists = sqliteTable(
+  "deleted_track_artists",
+  {
+    trackId: integer("track_id").notNull(),
+    artistId: integer("artist_id")
+      .notNull()
+      .references(() => artists.id, { onDelete: "cascade" }),
+    position: integer("position").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.trackId, t.position] }),
+    index("deleted_track_artists_artist_idx").on(t.artistId),
+  ],
+);
+
+/**
  * Every artist an album's album artist credit names, in credit order: the
  * album is filed under position 0 (`albums.album_artist_id`) and appears on
  * the others' pages.
@@ -305,13 +327,12 @@ export const playEvents = sqliteTable(
       .notNull()
       .default("phone"),
     /**
-     * The track's album and track artist, written when the track leaves the
-     * library (`deleteTracks`) so its plays keep counting for them in Stats.
-     * Null while the track is in the library (read the track instead), and for
-     * tracks that left before Wave kept them.
+     * The track's album, written when the track leaves the library
+     * (`deleteTracks`) so its plays keep counting for it in Stats (its artists
+     * go to `deleted_track_artists`). Null while the track is in the library
+     * (read the track instead), and for tracks that left before Wave kept it.
      */
     albumId: integer("album_id"),
-    artistId: integer("artist_id"),
   },
   (t) => [
     index("play_events_track_idx").on(t.trackId),

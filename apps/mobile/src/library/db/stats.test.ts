@@ -1,12 +1,14 @@
 /// <reference types="node" />
-import { artistPlayTotals, artistStats, type PlayEvent } from "@wave/core";
+import { albumPlayTotals, artistPlayTotals, artistStats, type PlayEvent } from "@wave/core";
 import { eq, sql } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { beforeEach, describe, test } from "node:test";
 
+import { relinkCredits } from "./credits.ts";
 import { recordPlay } from "./playHistory.ts";
+import { removeTracks } from "./save.ts";
 import * as schema from "./schema.ts";
-import { creditedPlayTotals, songListening, trackPlayTotals } from "./stats.ts";
+import { creditedPlayTotals, songListening, songsCrediting, trackPlayTotals } from "./stats.ts";
 import { addTrack, openTestDatabase, type TestDatabase } from "./testDatabase.ts";
 import { deleteTracks } from "./tracks.ts";
 
@@ -44,6 +46,23 @@ const deleteSongs = (...ids: number[]): void => {
 beforeEach(async () => {
   db = await openTestDatabase();
 });
+
+/** The id of the artist named `name`. */
+const artistNamed = (name: string): number => {
+  const artist = db.select().from(schema.artists).where(eq(schema.artists.name, name)).get();
+  if (artist === undefined) throw new Error(`no artist ${name}`);
+  return artist.id;
+};
+
+/**
+ * Adds the tracks, then files every track under the artists its credit names,
+ * as a scan's end does; returns the tracks' ids.
+ */
+const addCredited = (...tracks: Parameters<typeof addTrack>[1][]): number[] => {
+  const ids = tracks.map((track) => addTrack(db, track));
+  relinkCredits(db);
+  return ids;
+};
 
 const byId = (rows: ReturnType<typeof trackPlayTotals>) => rows.toSorted((a, b) => a.id - b.id);
 
@@ -160,6 +179,7 @@ describe("Per-album, per-track-artist play totals", () => {
           ...kindOfBlue,
           albumSort: "kind of blue",
           artistSort: "miles davis",
+          primary: true,
           countedPlays: 2,
           listenedMs: 300_000,
           latestPlayAt: 4_000,
@@ -168,6 +188,7 @@ describe("Per-album, per-track-artist play totals", () => {
           ...hitsMiles,
           albumSort: "jazz hits",
           artistSort: "miles davis",
+          primary: true,
           countedPlays: 1,
           listenedMs: 150_000,
           latestPlayAt: 2_000,
@@ -176,6 +197,7 @@ describe("Per-album, per-track-artist play totals", () => {
           ...hitsTrane,
           albumSort: "jazz hits",
           artistSort: "john coltrane",
+          primary: true,
           countedPlays: 2,
           listenedMs: 250_000,
           latestPlayAt: 5_000,
@@ -223,6 +245,96 @@ describe("Per-album, per-track-artist play totals", () => {
     );
   });
 
+  test("a collaboration's plays count for each artist it credits, and once for its album", () => {
+    const [motive, rings] = addCredited(
+      {
+        title: "motive",
+        artist: "Ariana Grande, Doja Cat",
+        album: "Positions",
+        albumArtist: "Ariana Grande",
+      },
+      { title: "34+35", artist: "Ariana Grande", album: "Positions" },
+    ) as [number, number];
+    recordPlay(db, play(motive, 1_000, { listenedMs: 100_000 }));
+    recordPlay(db, play(motive, 2_000, { listenedMs: 100_000 }));
+    recordPlay(db, play(rings, 3_000, { listenedMs: 50_000 }));
+    const credits = creditedPlayTotals(db, { from: null, to: 10_000 });
+
+    assert.deepEqual(
+      artistPlayTotals(credits)
+        .map((artist) => [artist.sortKey, artist.countedPlays, artist.listenedMs])
+        .toSorted(),
+      [
+        ["ariana grande", 3, 250_000],
+        ["doja cat", 2, 200_000],
+      ],
+    );
+    assert.deepEqual(
+      albumPlayTotals(credits).map((album) => [
+        album.sortKey,
+        album.countedPlays,
+        album.listenedMs,
+      ]),
+      [["positions", 3, 250_000]],
+    );
+  });
+
+  test("a deleted collaboration's plays still count for each of its artists, and once for its album", () => {
+    const [motive] = addCredited(
+      { title: "motive", artist: "Ariana Grande, Doja Cat", album: "Positions" },
+      { title: "34+35", artist: "Ariana Grande", album: "Positions" },
+      { title: "Say So", artist: "Doja Cat", album: "Hot Pink" },
+    ) as [number];
+    recordPlay(db, play(motive, 1_000));
+    recordPlay(db, play(motive, 2_000));
+    const all = { from: null, to: 10_000 };
+    const before = creditedPlayTotals(db, all);
+
+    deleteSongs(motive);
+
+    assert.deepEqual(byCredit(creditedPlayTotals(db, all)), byCredit(before));
+    assert.deepEqual(
+      artistPlayTotals(creditedPlayTotals(db, all))
+        .map((artist) => [artist.sortKey, artist.countedPlays])
+        .toSorted(),
+      [
+        ["ariana grande", 2],
+        ["doja cat", 2],
+      ],
+    );
+    assert.deepEqual(
+      albumPlayTotals(creditedPlayTotals(db, all)).map((album) => album.countedPlays),
+      [2],
+    );
+  });
+
+  test("a deleted collaboration whose primary artist left the library still counts for the others and its album", () => {
+    const [motive] = addCredited(
+      {
+        title: "motive",
+        artist: "Ariana Grande, Doja Cat",
+        album: "Hot Pink",
+        albumArtist: "Doja Cat",
+      },
+      { title: "Say So", artist: "Doja Cat", album: "Hot Pink" },
+    ) as [number];
+    recordPlay(db, play(motive, 1_000));
+    const path = db.select().from(schema.tracks).where(eq(schema.tracks.id, motive)).get()?.path;
+
+    // Ariana's only song goes, and she with it.
+    removeTracks(db, [path ?? ""]);
+
+    const credits = creditedPlayTotals(db, { from: null, to: 10_000 });
+    assert.deepEqual(
+      artistPlayTotals(credits).map((artist) => [artist.sortKey, artist.countedPlays]),
+      [["doja cat", 1]],
+    );
+    assert.deepEqual(
+      albumPlayTotals(credits).map((album) => [album.sortKey, album.countedPlays]),
+      [["hot pink", 1]],
+    );
+  });
+
   test("an album or artist that left the library drops out", () => {
     const gone = addTrack(db, { title: "Deleted", artist: "Ghost", album: "Gone" });
     const kept = addTrack(db, { title: "Kept", artist: "Keeper", album: "Here" });
@@ -242,7 +354,7 @@ const byTrack = (rows: ReturnType<typeof songListening>) =>
   rows.toSorted((a, b) => a.trackId - b.trackId);
 
 describe("Per-song listening over all time", () => {
-  test("sum every play's time, the counted plays and the latest play, with the track artist", () => {
+  test("sum every play's time, the counted plays and the latest play, with the song's artists", () => {
     const so = addTrack(db, { title: "So What", artist: "Miles Davis" });
     const naima = addTrack(db, { title: "Naima", artist: "John Coltrane" });
     addTrack(db, { title: "Never played" });
@@ -253,7 +365,7 @@ describe("Per-song listening over all time", () => {
     assert.deepEqual(byTrack(songListening(db)), [
       {
         trackId: so,
-        artistId: creditOf(so).artistId,
+        artistIds: [creditOf(so).artistId],
         inLibrary: true,
         countedPlays: 1,
         listenedMs: 110_000,
@@ -261,7 +373,7 @@ describe("Per-song listening over all time", () => {
       },
       {
         trackId: naima,
-        artistId: creditOf(naima).artistId,
+        artistIds: [creditOf(naima).artistId],
         inLibrary: true,
         countedPlays: 0,
         listenedMs: 10_000,
@@ -270,7 +382,7 @@ describe("Per-song listening over all time", () => {
     ]);
   });
 
-  test("a deleted song keeps its history and its track artist", () => {
+  test("a deleted song keeps its history and its artists", () => {
     const gone = addTrack(db, { title: "Deleted", artist: "Ghost" });
     recordPlay(db, play(gone, 1_000));
     recordPlay(db, play(gone, 2_000));
@@ -280,13 +392,33 @@ describe("Per-song listening over all time", () => {
     assert.deepEqual(songListening(db), [
       {
         trackId: gone,
-        artistId,
+        artistIds: [artistId],
         inLibrary: false,
         countedPlays: 2,
         listenedMs: 360_000,
         lastPlayedAt: 2_000,
       },
     ]);
+  });
+
+  test("a collaboration keeps every artist its credit names, in the library and once deleted", () => {
+    const [motive, gone] = addCredited(
+      { title: "motive", artist: "Ariana Grande, Doja Cat", album: "Positions" },
+      { title: "boyfriend", artist: "Ariana Grande · Social House", album: "boyfriend" },
+      // A song of her own, so her collaborations split.
+      { title: "34+35", artist: "Ariana Grande", album: "Positions" },
+    ) as [number, number];
+    recordPlay(db, play(motive, 1_000));
+    recordPlay(db, play(gone, 2_000));
+    deleteSongs(gone);
+
+    assert.deepEqual(
+      byTrack(songListening(db)).map((song) => [song.trackId, song.artistIds, song.inLibrary]),
+      [
+        [motive, [artistNamed("Ariana Grande"), artistNamed("Doja Cat")], true],
+        [gone, [artistNamed("Ariana Grande"), artistNamed("Social House")], false],
+      ],
+    );
   });
 
   test("a song that left the library before Wave kept credits has no artist", () => {
@@ -297,7 +429,7 @@ describe("Per-song listening over all time", () => {
     assert.deepEqual(songListening(db), [
       {
         trackId: gone,
-        artistId: null,
+        artistIds: [],
         inLibrary: false,
         countedPlays: 1,
         listenedMs: 180_000,
@@ -310,7 +442,7 @@ describe("Per-song listening over all time", () => {
 describe("Artist page stats", () => {
   test("agree with the artist's plays in Stats (all time), crediting compilations by track artist", () => {
     const so = addTrack(db, { title: "So What", artist: "Miles Davis", album: "Kind of Blue" });
-    const blue = addTrack(db, {
+    addTrack(db, {
       title: "Blue in Green",
       artist: "Miles Davis",
       album: "Kind of Blue",
@@ -340,7 +472,7 @@ describe("Artist page stats", () => {
     const all = { from: null, to: 10_000 };
     const stats = artistStats({
       artistId: miles,
-      songIds: [so, blue, milesOnHits],
+      songIds: songsCrediting(db, miles),
       listening: songListening(db),
       songPlays: trackPlayTotals(db, all),
       now: 10_000,
@@ -356,5 +488,55 @@ describe("Artist page stats", () => {
       stats.mostPlayed.map((song) => song.id),
       [so, milesOnHits],
     );
+  });
+
+  test("credit a collaboration to each of its artists, counting songs listened out of the songs crediting them", () => {
+    const [motive, rings, gone] = addCredited(
+      {
+        title: "motive",
+        artist: "Ariana Grande, Doja Cat",
+        album: "Positions",
+        albumArtist: "Ariana Grande",
+      },
+      { title: "34+35", artist: "Ariana Grande", album: "Positions" },
+      { title: "Kiss Me More", artist: "Doja Cat feat. SZA", album: "Planet Her" },
+      // On Ariana's album, so on her page, but not credited to her.
+      {
+        title: "Off the Table (Doja's mix)",
+        artist: "Doja Cat",
+        album: "Positions",
+        albumArtist: "Ariana Grande",
+      },
+    ) as [number, number, number];
+    recordPlay(db, play(motive, 1_000));
+    recordPlay(db, play(motive, 2_000));
+    recordPlay(db, play(rings, 3_000, skip));
+    recordPlay(db, play(gone, 4_000));
+    deleteSongs(gone);
+    const all = { from: null, to: 10_000 };
+    const page = (name: string) => {
+      const stats = artistStats({
+        artistId: artistNamed(name),
+        songIds: songsCrediting(db, artistNamed(name)),
+        listening: songListening(db),
+        songPlays: trackPlayTotals(db, all),
+        now: 10_000,
+      });
+      return stats.played
+        ? [stats.plays, stats.songsListened, stats.mostPlayed.map((song) => song.id)]
+        : [];
+    };
+    const inStats = artistPlayTotals(creditedPlayTotals(db, all)).map(
+      (artist) => [artist.sortKey, artist.countedPlays] as const,
+    );
+
+    assert.deepEqual(page("Ariana Grande"), ["2 plays", "1 of 2 songs", [motive]]);
+    assert.deepEqual(page("Doja Cat"), ["3 plays", "1 of 2 songs", [motive]]);
+    assert.deepEqual(page("SZA"), ["1 play", "0 of 0 songs", []]);
+    assert.deepEqual(inStats.toSorted(), [
+      ["ariana grande", 2],
+      ["doja cat", 3],
+      ["sza", 1],
+    ]);
   });
 });

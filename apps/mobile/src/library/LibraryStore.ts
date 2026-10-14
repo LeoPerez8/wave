@@ -76,7 +76,7 @@ import {
   trackArtistIds,
   trackQuery,
 } from "./db/tracks";
-import { creditedPlayTotals, songListening, trackPlayTotals } from "./db/stats";
+import { creditedPlayTotals, songListening, songsCrediting, trackPlayTotals } from "./db/stats";
 import type { KnownFile } from "./NativeScanner";
 
 const DATABASE_NAME = "wave.db";
@@ -488,8 +488,9 @@ export class LibraryStore extends Context.Service<
       window: StatsWindow,
     ) => Effect.Effect<readonly PlayTotals[], LibraryStoreError>;
     /**
-     * Counted plays within [window] per album and track artist (deleted songs
-     * included), in no order; Core's `albumPlayTotals` / `artistPlayTotals` group them.
+     * Counted plays within [window] per album and credited artist (deleted
+     * songs included; a collaboration in a row for each artist it credits), in
+     * no order; Core's `albumPlayTotals` / `artistPlayTotals` group them.
      */
     readonly creditedPlayTotals: (
       window: StatsWindow,
@@ -506,9 +507,17 @@ export class LibraryStore extends Context.Service<
     readonly linkRows: (ids: LinkIds) => Effect.Effect<LinkRows, LibraryStoreError>;
     /**
      * Each played song's all-time listening (every play's time, counted plays,
-     * latest play, track artist), in no order; Core's `listeningTotals` sums it.
+     * latest play, the artists its credit names), in no order; Core's
+     * `listeningTotals` sums it.
      */
     readonly songListening: Effect.Effect<readonly SongListening[], LibraryStoreError>;
+    /**
+     * The songs whose credit names [artistId], in no order: those the artist
+     * page's stats count its songs listened among.
+     */
+    readonly songsCrediting: (
+      artistId: number,
+    ) => Effect.Effect<readonly number[], LibraryStoreError>;
     /** The artists whose photo is due for a lookup now (Core's `artistPhotoLookups`). */
     readonly artistPhotoLookups: Effect.Effect<readonly ArtistPhotoLookup[], LibraryStoreError>;
     /** Records how an artist's photo lookup went, by artist key. */
@@ -1214,6 +1223,9 @@ const make = Effect.gen(function* () {
     linkRows: (ids) => attempt("read linked rows", () => selectLinkRows(db, ids)),
 
     songListening: attempt("sum up listening", () => songListening(db)),
+
+    songsCrediting: (artistId) =>
+      attempt("list the artist's songs", () => songsCrediting(db, artistId)),
 
     artistPhotoLookups: attempt("list artist photo lookups", () =>
       selectArtistPhotoLookups(db, Date.now()),
