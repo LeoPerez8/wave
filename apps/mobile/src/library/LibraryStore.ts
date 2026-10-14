@@ -1,7 +1,6 @@
 import {
   checkPlaylistName,
   compareAlbumTracks,
-  compareFileNames,
   compareStrings,
   filesLeavingWithRoot,
   rememberSearch,
@@ -213,16 +212,6 @@ export interface GenreRow {
   readonly trackCount: number;
 }
 
-/** A folder that holds tracks, for Library › Folders. */
-export interface FolderRow {
-  readonly id: number;
-  readonly name: string;
-  readonly path: string;
-  /** Core sort key of the name. */
-  readonly sort: string;
-  readonly trackCount: number;
-}
-
 export interface AlbumDetail {
   readonly album: AlbumRow;
   /** The genre most of the album's tracks carry. */
@@ -244,12 +233,6 @@ export interface ArtistDetail {
 export interface GenreDetail {
   readonly genre: GenreRow;
   /** By title. */
-  readonly songs: readonly SongRow[];
-}
-
-export interface FolderDetail {
-  readonly folder: FolderRow;
-  /** By file name, the way a file manager lists them. */
   readonly songs: readonly SongRow[];
 }
 
@@ -390,13 +373,10 @@ export class LibraryStore extends Context.Service<
     ) => Effect.Effect<ReadonlyMap<number, string>, LibraryStoreError>;
     /** Every genre with songs, by name, for Library › Genres. */
     readonly listGenres: Effect.Effect<readonly GenreRow[], LibraryStoreError>;
-    /** Every folder holding songs, by name, for Library › Folders. */
-    readonly listFolders: Effect.Effect<readonly FolderRow[], LibraryStoreError>;
     /** An album and its tracks, or null when it's no longer in the library. */
     readonly getAlbum: (id: number) => Effect.Effect<AlbumDetail | null, LibraryStoreError>;
     readonly getArtist: (id: number) => Effect.Effect<ArtistDetail | null, LibraryStoreError>;
     readonly getGenre: (id: number) => Effect.Effect<GenreDetail | null, LibraryStoreError>;
-    readonly getFolder: (id: number) => Effect.Effect<FolderDetail | null, LibraryStoreError>;
 
     /** The indexed files under [roots], for an incremental scan to skip the unchanged ones. */
     readonly knownFiles: (
@@ -642,45 +622,6 @@ const getGenreSync = (db: Database, id: number): GenreDetail | null => {
   if (genre === undefined) return null;
   const songs = selectGenreSongs(db, id);
   return { genre: { ...genre, trackCount: songs.length }, songs };
-};
-
-const getFolderSync = (db: Database, id: number): FolderDetail | null => {
-  const { folders, tracks } = schema;
-  const folder = db
-    .select({ id: folders.id, name: folders.name, path: folders.path })
-    .from(folders)
-    .where(eq(folders.id, id))
-    .get();
-  if (folder === undefined) return null;
-  const songs = trackQuery(db)
-    .where(eq(tracks.folderId, id))
-    .all()
-    // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
-    .sort((a, b) => compareFileNames(a.fileName, b.fileName));
-  return {
-    folder: { ...folder, sort: sortKey(folder.name), trackCount: songs.length },
-    songs,
-  };
-};
-
-const listFoldersSync = (db: Database): FolderRow[] => {
-  const { folders, tracks } = schema;
-  return (
-    db
-      .select({
-        id: folders.id,
-        name: folders.name,
-        path: folders.path,
-        trackCount: sql<number>`count(${tracks.id})`,
-      })
-      .from(folders)
-      .innerJoin(tracks, eq(tracks.folderId, folders.id))
-      .groupBy(folders.id)
-      .all()
-      .map((folder) => ({ ...folder, sort: sortKey(folder.name) }))
-      // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
-      .sort((a, b) => compareStrings(a.sort, b.sort) || compareStrings(a.path, b.path))
-  );
 };
 
 const SAVED_PLAYBACK_ID = 1;
@@ -1065,15 +1006,11 @@ const make = Effect.gen(function* () {
         .all();
     }),
 
-    listFolders: attempt("list folders", () => listFoldersSync(db)),
-
     getAlbum: (id) => attempt("open the album", () => getAlbumSync(db, id)),
 
     getArtist: (id) => attempt("open the artist", () => selectArtistDetail(db, id)),
 
     getGenre: (id) => attempt("open the genre", () => getGenreSync(db, id)),
-
-    getFolder: (id) => attempt("open the folder", () => getFolderSync(db, id)),
 
     knownFiles: (roots) => attempt("read the library index", () => selectKnownFiles(db, roots)),
 

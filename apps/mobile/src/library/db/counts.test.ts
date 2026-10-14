@@ -22,7 +22,6 @@ describe("libraryCounts", () => {
       albums: 0,
       songs: 0,
       genres: 0,
-      folders: 0,
       favorites: 0,
     });
   });
@@ -58,7 +57,6 @@ describe("libraryCounts", () => {
       albums: 3,
       songs: 4,
       genres: 1,
-      folders: 1,
       favorites: 2,
     });
   });
@@ -93,7 +91,6 @@ describe("sectionSongCounts", () => {
       songs: 4,
       // Only Jóga has a genre.
       genres: 1,
-      folders: 4,
       favorites: 1,
     });
   });

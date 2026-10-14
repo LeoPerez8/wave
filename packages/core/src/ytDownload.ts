@@ -110,9 +110,6 @@ export const ytDownloadLookup = (song: YtSong, album: YtAlbum | null): SongLooku
     durationMs: song.durationMs ?? 0,
   });
 
-/** The folder of the default scan root that downloads go into. */
-export const YT_MUSIC_FOLDER = "YT Music";
-
 /**
  * The music folder downloads go into: the default scan root (`Music`) while
  * it's there, else the first folder the owner picked; null without any.
@@ -190,12 +187,14 @@ const byteLength = (text: string): number => {
 };
 
 /**
- * Where a downloaded song goes: `<root>/YT Music/<album artist>/<album>/`,
- * named after its title, after its track number when known ("08 Title.mp3").
- * Names are made safe for the storage: see `safeName`.
+ * Where a downloaded song goes: the Library's own tree,
+ * `<root>/<album artist>/<album>/`, named after its title, after its track
+ * number when known ("08 Title.mp3"). Names are made safe for the storage:
+ * see `safeName`. The PC job that organizes the music folder names files with
+ * this too, so a download lands next to the album's other songs.
  */
 export const ytDownloadTarget = (root: string, song: YtDownloadPlace): YtDownloadTarget => {
-  const folders = [YT_MUSIC_FOLDER, safeName(song.albumArtist ?? song.artist)];
+  const folders = [safeName(song.albumArtist ?? song.artist)];
   if (song.album !== null) folders.push(safeName(song.album));
   const folder = [root.replace(/\/+$/, ""), ...folders].join("/");
   const number = song.trackNumber === null ? "" : `${String(song.trackNumber).padStart(2, "0")} `;
