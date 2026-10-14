@@ -1,0 +1,2 @@
+# The setup wizard runs in bash, which a CRLF checkout breaks.
+*.sh text eol=lf
