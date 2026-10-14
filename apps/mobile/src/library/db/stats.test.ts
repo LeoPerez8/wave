@@ -405,6 +405,8 @@ describe("Per-song listening over all time", () => {
     const [motive, gone] = addCredited(
       { title: "motive", artist: "Ariana Grande, Doja Cat", album: "Positions" },
       { title: "boyfriend", artist: "Ariana Grande · Social House", album: "boyfriend" },
+      // A song of her own, so her collaborations split.
+      { title: "34+35", artist: "Ariana Grande", album: "Positions" },
     ) as [number, number];
     recordPlay(db, play(motive, 1_000));
     recordPlay(db, play(gone, 2_000));
