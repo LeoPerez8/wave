@@ -22,6 +22,7 @@ import { scheduleOnRN } from "react-native-worklets";
 import { Artwork } from "@/catalog/Artwork";
 import { CELL, grid } from "@/catalog/grid";
 import { chrome, useTabBarTop } from "@/chrome/chrome";
+import { OnFloatingChrome } from "@/chrome/onFloatingChrome";
 import { IconButton } from "@/components/IconButton";
 import { Glass } from "@/glass/Glass";
 import { Press } from "@/motion/Press";
@@ -153,67 +154,69 @@ export function MiniPlayer({ backdropId, onOpen }: Props) {
     error === null ? (item.artist ?? "Unknown Artist") : (notice ?? "Couldn't play this file");
 
   return (
-    <GestureDetector gesture={openPan}>
-      <View
-        pointerEvents="box-none"
-        className="absolute"
-        style={{ left: grid.margin, right: grid.margin, bottom, height: chrome.miniPlayer }}
-        onLayout={(event) => {
-          const measured = Math.max(1, event.nativeEvent.layout.width);
-          widthRef.current = measured;
-          width.set(measured);
-        }}
-      >
-        <Glass backdropId={backdropId} cornerRadius={RADIUS} />
-        <View className="flex-1 overflow-hidden" style={{ borderRadius: RADIUS }}>
-          <GestureDetector gesture={pan}>
-            <Animated.View className="flex-1 flex-row items-center" style={contentStyle}>
-              <Press
-                accessibilityRole="button"
-                accessibilityLabel={`Now playing: ${title}, ${subtitle}`}
-                accessibilityHint="Opens Now Playing"
-                accessibilityActions={[
-                  { name: "next", label: "Next track" },
-                  { name: "previous", label: "Previous track" },
-                ]}
-                onAccessibilityAction={(event) =>
-                  skip(event.nativeEvent.actionName === "next" ? "next" : "previous")
-                }
-                onPress={onOpen}
-                haptic="selection"
-                depth={0.015}
-                className="flex-1 flex-row items-center self-stretch"
-                style={{ gap: CELL * 1.5, paddingLeft: ART_INSET }}
-              >
-                <Artwork uri={item.artworkUri ?? undefined} size={ART} radius={ART_RADIUS} />
-                <View className="flex-1">
-                  <Text
-                    numberOfLines={1}
-                    className="font-sans text-body font-medium text-foreground"
-                  >
-                    {title}
-                  </Text>
-                  <Text numberOfLines={1} className="font-sans text-body text-secondary">
-                    {subtitle}
-                  </Text>
+    <OnFloatingChrome value>
+      <GestureDetector gesture={openPan}>
+        <View
+          pointerEvents="box-none"
+          className="absolute"
+          style={{ left: grid.margin, right: grid.margin, bottom, height: chrome.miniPlayer }}
+          onLayout={(event) => {
+            const measured = Math.max(1, event.nativeEvent.layout.width);
+            widthRef.current = measured;
+            width.set(measured);
+          }}
+        >
+          <Glass backdropId={backdropId} cornerRadius={RADIUS} />
+          <View className="flex-1 overflow-hidden" style={{ borderRadius: RADIUS }}>
+            <GestureDetector gesture={pan}>
+              <Animated.View className="flex-1 flex-row items-center" style={contentStyle}>
+                <Press
+                  accessibilityRole="button"
+                  accessibilityLabel={`Now playing: ${title}, ${subtitle}`}
+                  accessibilityHint="Opens Now Playing"
+                  accessibilityActions={[
+                    { name: "next", label: "Next track" },
+                    { name: "previous", label: "Previous track" },
+                  ]}
+                  onAccessibilityAction={(event) =>
+                    skip(event.nativeEvent.actionName === "next" ? "next" : "previous")
+                  }
+                  onPress={onOpen}
+                  haptic="selection"
+                  depth={0.015}
+                  className="flex-1 flex-row items-center self-stretch"
+                  style={{ gap: CELL * 1.5, paddingLeft: ART_INSET }}
+                >
+                  <Artwork uri={item.artworkUri ?? undefined} size={ART} radius={ART_RADIUS} />
+                  <View className="flex-1">
+                    <Text
+                      numberOfLines={1}
+                      className="font-sans text-body font-medium text-foreground"
+                    >
+                      {title}
+                    </Text>
+                    <Text numberOfLines={1} className="font-sans text-body text-secondary">
+                      {subtitle}
+                    </Text>
+                  </View>
+                </Press>
+                <View className="flex-row" style={{ paddingRight: CELL / 2 }}>
+                  <IconButton
+                    icon={playing ? IconPlayerPauseFilled : IconPlayerPlayFilled}
+                    label={playing ? `Pause ${title}` : `Play ${title}`}
+                    onPress={togglePlayPause}
+                  />
+                  <IconButton
+                    icon={IconPlayerTrackNextFilled}
+                    label="Next track"
+                    onPress={skipToNext}
+                  />
                 </View>
-              </Press>
-              <View className="flex-row" style={{ paddingRight: CELL / 2 }}>
-                <IconButton
-                  icon={playing ? IconPlayerPauseFilled : IconPlayerPlayFilled}
-                  label={playing ? `Pause ${title}` : `Play ${title}`}
-                  onPress={togglePlayPause}
-                />
-                <IconButton
-                  icon={IconPlayerTrackNextFilled}
-                  label="Next track"
-                  onPress={skipToNext}
-                />
-              </View>
-            </Animated.View>
-          </GestureDetector>
+              </Animated.View>
+            </GestureDetector>
+          </View>
         </View>
-      </View>
-    </GestureDetector>
+      </GestureDetector>
+    </OnFloatingChrome>
   );
 }
