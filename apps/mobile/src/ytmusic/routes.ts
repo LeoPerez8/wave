@@ -36,5 +36,15 @@ export const useYtListHead = (screen: YtListScreen, id: string): YtListHead | un
   return head;
 };
 
+/**
+ * Opens the YouTube Music artist page [browseId] (`UC…`), for an artist the
+ * Library doesn't have, on the Library stack. [name], when the opener knows
+ * it, heads the page until the artist's page has been read.
+ */
+export const openYtArtist = (browseId: string, name?: string): void => {
+  const query = name === undefined || name === "" ? "" : `?name=${encodeURIComponent(name)}`;
+  router.push(`/library/yt-artist/${encodeURIComponent(browseId)}${query}` as Href);
+};
+
 /** Discover, on the Library stack. */
 export const openDiscover = (): void => router.push("/library/discover" as Href);

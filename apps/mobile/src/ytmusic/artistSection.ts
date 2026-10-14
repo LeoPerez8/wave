@@ -81,6 +81,11 @@ const stepKeyed = (
   return { key, state: stepYtArtistSection(YT_ARTIST_SECTION_START, event) };
 };
 
+/** Asks YouTube Music for an artist given what was saved, and saves the answer. */
+export type AskArtist = (
+  saved: Saved | null,
+) => Effect.Effect<Saved, YtMusicError, YtMusic | LibraryStore>;
+
 /** What was saved for an artist, and asking YouTube Music again. */
 export interface YtArtistAnswer {
   /** Core's `stepYtArtistSection` state: what's saved, and whether a tap is being answered. */
@@ -94,12 +99,11 @@ export interface YtArtistAnswer {
 }
 
 /**
- * The YouTube Music answer for the Library artist [name], as the artist page
- * and their albums' pages share it: it reads what was saved and never asks
- * YouTube Music until `show` is called (Core's `stepYtArtistSection`).
+ * The YouTube Music answer saved under [artistKey]: it reads what was saved
+ * and never asks YouTube Music until `show` is called, which runs [ask]
+ * (Core's `stepYtArtistSection`).
  */
-export const useYtArtistAnswer = (name: string): YtArtistAnswer => {
-  const artistKey = identityKey(name);
+export const useSavedYtArtist = (artistKey: string, ask: AskArtist): YtArtistAnswer => {
   const enabled = useYtMusicEnabled();
   const [keyed, dispatch] = useReducer(stepKeyed, {
     key: artistKey,
@@ -131,7 +135,7 @@ export const useYtArtistAnswer = (name: string): YtArtistAnswer => {
     if (saved === undefined) return;
     const step = (event: YtArtistSectionEvent<NativeYtSong>) => dispatch({ key: artistKey, event });
     step({ type: "requested" });
-    void appRuntime.runPromise(Effect.result(fetchArtist(name, artistKey, saved))).then(
+    void appRuntime.runPromise(Effect.result(ask(saved))).then(
       (result) =>
         step(
           Result.isSuccess(result)
@@ -141,9 +145,23 @@ export const useYtArtistAnswer = (name: string): YtArtistAnswer => {
       // A defect fails like any other request, so the section doesn't stay loading.
       () => step({ type: "failed", reason: "failed" }),
     );
-  }, [name, artistKey, saved]);
+  }, [artistKey, ask, saved]);
 
   return { state, enabled, openedAt, show };
+};
+
+/**
+ * The YouTube Music answer for the Library artist [name], as the artist page
+ * and their albums' pages share it: it reads what was saved and never asks
+ * YouTube Music until `show` is called (Core's `stepYtArtistSection`).
+ */
+export const useYtArtistAnswer = (name: string): YtArtistAnswer => {
+  const artistKey = identityKey(name);
+  const ask = useCallback(
+    (saved: Saved | null) => fetchArtist(name, artistKey, saved),
+    [name, artistKey],
+  );
+  return useSavedYtArtist(artistKey, ask);
 };
 
 export interface YtArtistSectionShown {

@@ -22,6 +22,8 @@ data class YtArtistCandidate(
 /** A YT Music artist page as far as Wave reads it (Core's `YtArtistPage`). */
 data class YtArtistPage(
   val name: String,
+  /** The artist's image, asked for as a square ([YtArtistParser.square]); null when the page has none. */
+  val artworkUrl: String?,
   /** The page's top songs, in its order. */
   val songs: List<YtSong>,
   val albums: List<YtShelfItem.Album>,
@@ -31,6 +33,7 @@ data class YtArtistPage(
   fun toMap(): Map<String, Any?> =
     mapOf(
       "name" to name,
+      "artworkUrl" to artworkUrl,
       "songs" to songs.map(YtSong::toMap),
       "albums" to albums.map(YtShelfItem.Album::toMap),
       "singles" to singles.map(YtShelfItem.Album::toMap),
@@ -54,6 +57,9 @@ object YtArtistParser {
   private const val ALBUMS = "Albums"
   private const val SINGLES = "Singles"
   private const val SEPARATOR = " • "
+  private val SIZE = Regex("""=w\d+-h\d+""")
+  /** The size the artist's image is asked for: the artist page's large circle. */
+  private const val IMAGE_SIZE = 544
 
   /** The artists of an Artists search answer, in its order. Unreadable rows are skipped. */
   fun artists(body: String): List<YtArtistCandidate> {
@@ -104,13 +110,25 @@ object YtArtistParser {
         }
         .map { if (it.artists.isEmpty()) it.copy(artists = listOf(name)) else it }
         .distinctBy { it.browseId }
+    val artworkUrl = (header.path("thumbnail") ?: header.path("foregroundThumbnail"))
+      .path("musicThumbnailRenderer", "thumbnail", "thumbnails").arr
+      ?.lastOrNull().path("url").string?.takeIf(String::isNotEmpty)?.let(::square)
     return YtArtistPage(
       name = name,
+      artworkUrl = artworkUrl,
       songs = songs,
       albums = albums { it == ALBUMS },
       singles = albums { it.startsWith(SINGLES) },
     )
   }
+
+  /**
+   * The image at [url] asked for as a square: the header's is a wide banner
+   * ("=w1080-h450-p-…"), and Google's image server crops to the size asked
+   * for. An address without a size is kept as it is.
+   */
+  fun square(url: String): String =
+    if (SIZE.containsMatchIn(url)) url.replaceFirst(SIZE, "=w$IMAGE_SIZE-h$IMAGE_SIZE") else url
 
   /** An Artists search row: the name, then "Artist • 75.1M monthly audience". */
   private fun artistRow(row: JsonObject): YtArtistCandidate? {
