@@ -12,6 +12,8 @@
 } from "./library.ts";
 export type { LibraryTrack, RawTrack } from "./library.ts";
 export { formatDuration, formatRemaining } from "./time.ts";
+export { trackRowTrailing } from "./trackRowTrailing.ts";
+export type { TrackRowTrailingInput } from "./trackRowTrailing.ts";
 export { describeFolder, filesLeavingWithRoot, isWithin, planAddRoot } from "./scanRoots.ts";
 export type { AddRootPlan, FolderLabel, ScanRootState } from "./scanRoots.ts";
 export { resolveSkipSwipe } from "./swipe.ts";
@@ -299,9 +301,11 @@ export {
   cardShowsHeading,
   highlightedOrigin,
   originOfNewCard,
+  restingRect,
   veilAround,
+  visibleHighlight,
 } from "./overlayOrigin.ts";
-export type { NewCardInput, OriginCard } from "./overlayOrigin.ts";
+export type { HighlightInput, NewCardInput, OriginCard } from "./overlayOrigin.ts";
 export { confirmSongDeletion, songDeletionFailure } from "./songDeletion.ts";
 export type { SongDeleteFailure, SongDeleteFailureReason } from "./songDeletion.ts";
 export { artistArtwork, artistInitial } from "./artistImage.ts";

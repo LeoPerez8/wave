@@ -4,6 +4,7 @@ import {
   cardShowsHeading,
   placeOverlayCard,
   veilAround,
+  visibleHighlight,
   withOpacity,
   type OverlayRect,
 } from "@wave/core";
@@ -77,12 +78,10 @@ const SCRIM_OPACITY = 0.25;
 
 /**
  * What a card was opened from stays clear of the veil, washed with the accent
- * at this strength so it stands out on any theme.
+ * at this strength so it stands out on any theme. The wash fills the clear hole
+ * exactly, square like the veil's edges, so no corner of a row's artwork pokes out.
  */
 const ORIGIN_TINT_OPACITY = 0.16;
-
-/** Rounded corners of the highlight over what a card was opened from. */
-const ORIGIN_RADIUS = CELL;
 
 /**
  * Hosts Wave's glass dialogs. Wrap the app's navigator with it: the navigator
@@ -141,12 +140,19 @@ function OverlayCard({ entry, frontmost }: { entry: OverlayEntry; frontmost: boo
   const progress = useSharedValue(0);
   const measured = cardHeight !== null;
   const anchor = entry.request.anchor;
-  const highlight = entry.origin?.rect;
+  const chromeBottom = useFloatingChromeHeight();
+  const origin = {
+    insets,
+    chromeBottom,
+    rect: entry.origin?.rect,
+    onChrome: entry.origin?.onChrome ?? false,
+  };
   // Settled as the card opens: its heading never comes or goes under a sliding finger.
-  const [showsHeading] = useState(() => cardShowsHeading(window, highlight));
+  const [showsHeading] = useState(() => cardShowsHeading({ window, ...origin }));
   // The veil's own size: the window, unless edge-to-edge drawing makes it taller.
   const [veil, setVeil] = useState<{ width: number; height: number } | null>(null);
-  const chromeBottom = useFloatingChromeHeight();
+  // What shows of the origin: never drawn over the floating chrome.
+  const highlight = visibleHighlight({ window: veil ?? window, ...origin });
 
   const frame = placeOverlayCard({
     window,
@@ -248,7 +254,6 @@ function OverlayCard({ entry, frontmost }: { entry: OverlayEntry; frontmost: boo
               pointerEvents="none"
               style={{
                 ...frameOf(highlight),
-                borderRadius: ORIGIN_RADIUS,
                 backgroundColor: withOpacity(accent, ORIGIN_TINT_OPACITY),
               }}
             />
