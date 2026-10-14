@@ -20,7 +20,6 @@ export type ItemKind =
   | "artist"
   | "playlist"
   | "genre"
-  | "folder"
   | "section"
   | "mixed";
 

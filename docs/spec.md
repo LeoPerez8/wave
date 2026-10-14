@@ -21,11 +21,12 @@ v1 delivers the core player and library. v2 adds the advanced audio and library-
 - **Primary artist** — the first artist a credit names.
 - **Go to Artist** — on a song or album credited to one artist, Go to Artist (the long-press menu, the selection bar) and the artist lines of Now Playing and an album's page open that artist. Credited to several, they open the artist choice card, listing each credited artist in credit order; picking one opens their page. The artist page you're on is left out, and a choice of one opens straight away. In selection, Go to Artist shows only when every checked item has the same set of artists. Core's `itemActions` and `artistLink` decide. A streamed song (a YT Music song, not downloaded) links to its artists too while YT Music is on, Now Playing's artist line and Go to Artist in the YT Music song's menu, and opens them integrated, with no Show on YouTube Music tap: a name the Library has (compared as artist photos compare names) opens their Library page, any other the YouTube Music artist page. Credited to several, the artist choice card lists them in credit order, the YouTube Music ones with "YouTube Music" under the name. The artist page you're on is left out here too, a YouTube Music artist page included (by the name it was opened with); when it's the song's only artist, the menu has no Go to Artist and Now Playing's artist line just closes Now Playing to reveal it, as for a Library song. With YT Music off the link is gone. Core's `streamedArtistLink` decides.
 - **Album artist** — the artist an album is filed under: the first artist its album artist credit names (the credit falls back to the track's; "Various Artists" for compilations). The album shows under that artist's Albums and under the other credited artists' Appears on.
-- **Genre**, **Folder** — alternative groupings of tracks.
+- **Genre** — an alternative grouping of tracks.
+- **Folder** — a directory on the phone. The index records the folder each track is in, and scan roots and excluded folders are folders, but the Library doesn't browse by folder.
 - **Playlist** — a user-made, ordered list of tracks.
 - **Scan root** — a folder Wave indexes; **Excluded folder** — a folder under a root that Wave ignores.
 - **Library scan** — walking the scan roots and reconciling files with the index (full on first run, incremental afterwards).
-- **Play context** — what a playback was started from (album, artist, playlist, genre, folder, search, all songs, favorites, home section).
+- **Play context** — what a playback was started from (album, artist, playlist, genre, search, all songs, favorites, home section). Plays recorded before the Library lost its Folders entry may say folder; they load and count like any other.
 - **Queue** — the ordered list of tracks to be played, including the current one and **Up Next**.
 - **Play event** — one record per time a track starts playing, with how long it was listened to and how it ended.
 - **Counted play** — a play event that counts towards play counts: listened to for more than 15 seconds, or, for a song of 15 seconds or less, played to the end. Each play event counts at most once, however long it goes on.
@@ -53,12 +54,12 @@ v1 delivers the core player and library. v2 adds the advanced audio and library-
 
 ### Browsing (Library tab)
 
-12. As a user, I want the Library tab to list Playlists, Artists, Albums, Songs, Genres, Folders and Favorites as entry rows like Apple Music, so that I can browse the way I think.
+12. As a user, I want the Library tab to list Playlists, Artists, Albums, Songs, Genres and Favorites as entry rows like Apple Music, so that I can browse the way I think.
 13. As a user, I want albums shown as an artwork grid with title and album artist, so that I can browse visually.
 14. As a user, I want artists sorted alphabetically ignoring leading "The"/"A"/"An" and accents, so that sorting matches my expectations.
 15. As a user, I want an album screen with large artwork, title, album artist, year, genre, track list ordered by disc and track number, and Play / Shuffle buttons, so that I can play an album properly.
 16. As a user, I want an artist screen listing their albums and songs, so that I can explore an artist.
-17. As a user, I want genre and folder screens listing their tracks, so that I can browse by genre or by my folder structure.
+17. As a user, I want genre screens listing their tracks, so that I can browse by genre.
 18. As a user, I want long lists (tens of thousands of songs) to scroll smoothly at 120 Hz, so that the app feels native on my phone.
 19. As a user, I want a fast-scroll alphabet index on long lists, so that I can jump to a letter.
 20. As a user, I want long-press context menus on tracks, albums, artists and playlists (Play Next, Add to Queue, Add to Playlist, Favorite, Go to Album/Artist), so that I can act without opening screens. The finger that long-pressed can stay down and slide onto an entry: lifting it there runs that entry, so one gesture does it (lifting anywhere else, or without sliding, leaves the menu open to tap; the list underneath holds still meanwhile).
@@ -216,7 +217,7 @@ Wave uses the network for three features, each behind its own Settings switch (o
 3. **Native scanner** (same Kotlin module). Walks the scan roots minus exclusions, reads tags with a JVM tag library that also supports writing (needed by the v2 tag editor), extracts embedded artwork once per unique image (hashed, cached as files) together with a small colour palette (Android Palette) for the Now Playing tint, and finds sidecar `.lrc` files. It streams results to JS in batches of ~500 and supports an incremental mode driven by known path + modification time + size. The same module holds the YT Music client (`yt` package, see YT Music).
 4. **Library store** (app, Drizzle on expo-sqlite). The single owner of the schema and migrations. Tables for tracks, albums, artists (with each track's and album's credited artists in credit order), genres, folders, artwork (path + palette), playlists and playlist items, favorites, play events, scan roots/exclusions, recent searches, and persisted playback state. Home sections and play counts are queries over play events.
 5. **App services** (app, Effect). Wrap the native modules as typed services and event streams; orchestrate scans (core reconciliation → store); drive the queue engine and sync it to the native player; record play events through the classifier; persist and restore playback state.
-6. **UI** (app, Expo Router). Three tabs — Home, Library, Search (Search rendered as a separate glass pill). A custom glass tab bar, a floating glass mini player and a full-screen Now Playing presented over the tabs with an interactive drag-to-dismiss gesture. Detail screens for album, artist, playlist, genre and folder. Settings for scan roots, exclusions and rescan.
+6. **UI** (app, Expo Router). Three tabs — Home, Library, Search (Search rendered as a separate glass pill). A custom glass tab bar, a floating glass mini player and a full-screen Now Playing presented over the tabs with an interactive drag-to-dismiss gesture. Detail screens for album, artist, playlist and genre. Settings for scan roots, exclusions and rescan.
 
 ### Play event shape
 

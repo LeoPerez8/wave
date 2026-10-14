@@ -1,7 +1,7 @@
 import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
 import { useScrollToTop } from "expo-router";
 import { IconStack2 } from "@tabler/icons-react-native";
-import { counted, describeFolder } from "@wave/core";
+import { counted } from "@wave/core";
 import { useCallback, useMemo, useRef, type ReactElement } from "react";
 import { View } from "react-native";
 
@@ -12,7 +12,7 @@ import { NameRow } from "@/catalog/NameRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { EmptyState } from "@/components/EmptyState";
 import { ScanProgressBanner } from "@/components/ScanProgressBanner";
-import { openArtistActions, openFolderActions, openGenreActions } from "@/playback/ActionsMenu";
+import { openArtistActions, openGenreActions } from "@/playback/ActionsMenu";
 import type { ActionItems } from "@/playback/actionTargets";
 import { selectableRow } from "@/selection/selectableRow";
 import { useListSelection, type ListSelection } from "@/selection/useListSelection";
@@ -24,9 +24,9 @@ import {
   useAlbumSelection,
   useAlbumTileSize,
 } from "./AlbumGrid";
-import { useAlbums, useArtists, useFolders, useGenres, useScanState } from "./hooks";
-import type { AlbumRow, ArtistRow, FolderRow, GenreRow } from "./LibraryStore";
-import { openArtist, openFolder, openGenre } from "./routes";
+import { useAlbums, useArtists, useGenres, useScanState } from "./hooks";
+import type { AlbumRow, ArtistRow, GenreRow } from "./LibraryStore";
+import { openArtist, openGenre } from "./routes";
 import { useSpine } from "./useSpine";
 import { useListScrollable } from "@/motion/heldTouch";
 
@@ -66,7 +66,7 @@ type NameListProps<A> = {
   renderRow: (item: A, selection: ListSelection<A>) => ReactElement;
 };
 
-/** A virtualised, selectable list of names (artists, genres, folders) with the A–Z spine. */
+/** A virtualised, selectable list of names (artists, genres) with the A–Z spine. */
 function NameList<A>({ items, noun, empty, sortKey, keyOf, target, renderRow }: NameListProps<A>) {
   const scrollable = useListScrollable();
   const list = useRef<LegendListRef>(null);
@@ -173,51 +173,6 @@ export function GenresList({ empty }: { empty: string }) {
       keyOf={genreKey}
       target={genresOf}
       renderRow={renderGenre}
-    />
-  );
-}
-
-/** Where a folder sits, from the storage root: `Music/Rock` for `…/0/Music/Rock/Album`. */
-export const folderParent = (path: string): string => {
-  const { relativePath, storage } = describeFolder(path);
-  const slash = relativePath.lastIndexOf("/");
-  return slash > 0 ? relativePath.slice(0, slash) : (storage ?? "");
-};
-
-const folderSort = (folder: FolderRow) => folder.sort;
-const folderKey = (folder: FolderRow) => String(folder.id);
-const foldersOf = (folders: readonly FolderRow[]): ActionItems => ({
-  kind: "folder",
-  items: folders,
-});
-const renderFolder = (folder: FolderRow, selection: ListSelection<FolderRow>) => {
-  const parent = folderParent(folder.path);
-  const count = counted(folder.trackCount, "song");
-  return (
-    <NameRow
-      name={folder.name}
-      detail={parent === "" ? count : `${count} · ${parent}`}
-      {...selectableRow(
-        folder,
-        selection,
-        () => openFolder(folder.id, folder),
-        (options) => openFolderActions(folder, options),
-      )}
-    />
-  );
-};
-
-/** Library › Folders: every folder that holds songs, by name. */
-export function FoldersList({ empty }: { empty: string }) {
-  return (
-    <NameList
-      items={useFolders()}
-      noun="folder"
-      empty={empty}
-      sortKey={folderSort}
-      keyOf={folderKey}
-      target={foldersOf}
-      renderRow={renderFolder}
     />
   );
 }

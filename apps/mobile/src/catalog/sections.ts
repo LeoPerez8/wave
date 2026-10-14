@@ -1,7 +1,6 @@
 import {
   IconCategory,
   IconDisc,
-  IconFolder,
   IconMicrophone2,
   IconMusic,
   IconPlaylist,
@@ -43,11 +42,6 @@ const COPY: Readonly<Record<LibrarySectionSlug, Omit<LibrarySection, "slug">>> =
     icon: IconCategory,
     label: "Genres",
     empty: "Genres appear once Wave has scanned your music.",
-  },
-  folders: {
-    icon: IconFolder,
-    label: "Folders",
-    empty: "Your music folders appear once Wave has scanned them.",
   },
   favorites: {
     icon: IconStar,
