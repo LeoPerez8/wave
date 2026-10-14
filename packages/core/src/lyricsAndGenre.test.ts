@@ -3,21 +3,26 @@ import { describe, test } from "node:test";
 
 import {
   LRCLIB_HEADERS,
-  deezerAlbumGenre,
+  deezerAlbum,
+  deezerAlbumTracks,
+  deezerAlbumTracksUrl,
+  deezerTags,
   deezerAlbumUrl,
   deezerTrackCandidates,
   deezerTrackSearchUrl,
   describeTagLookups,
+  lacksTrackNumber,
   libraryLookupSongs,
   lookupsUnreachable,
   missingTags,
   lrclibCandidates,
   lrclibSearchUrl,
   pickFoundLyrics,
-  pickGenreAlbum,
+  pickDeezerTrack,
   settledTags,
   songLookup,
   songTagOutcome,
+  tagsToWrite,
 } from "./index.ts";
 import type { GenreCandidate, LyricsCandidate, SongTagOutcome, TagWriteReport } from "./index.ts";
 
@@ -227,6 +232,7 @@ describe("deezerTrackCandidates", () => {
       }),
       [
         {
+          trackId: 138539981,
           title: "Karma Police",
           artist: "Radiohead",
           album: "OK Computer",
@@ -243,6 +249,7 @@ describe("deezerTrackCandidates", () => {
 });
 
 const track = (overrides: Partial<GenreCandidate> = {}): GenreCandidate => ({
+  trackId: 100,
   title: "Karma Police",
   artist: "Radiohead",
   album: "OK Computer",
@@ -251,30 +258,39 @@ const track = (overrides: Partial<GenreCandidate> = {}): GenreCandidate => ({
   ...overrides,
 });
 
-describe("pickGenreAlbum", () => {
-  test("is the album of the track that is the song", () => {
-    assert.equal(pickGenreAlbum(song, [track({ title: "Airbag", albumId: 9 }), track()]), 1);
+describe("pickDeezerTrack", () => {
+  test("is the track that is the song, with its album", () => {
+    assert.deepEqual(
+      pickDeezerTrack(song, [track({ title: "Airbag", trackId: 7, albumId: 9 }), track()]),
+      { trackId: 100, albumId: 1, onSongsAlbum: true },
+    );
   });
 
   test("prefers the song's own album, then the closest length", () => {
     const live = track({ album: "Live at Glastonbury", albumId: 2, durationMs: 264_000 });
     const studio = track({ album: "OK Computer (Remastered)", albumId: 3, durationMs: 270_000 });
-    assert.equal(pickGenreAlbum(song, [live, studio]), 3);
+    assert.equal(pickDeezerTrack(song, [live, studio])?.albumId, 3);
     const far = track({ album: "Best Of", albumId: 4, durationMs: 300_000 });
     const near = track({ album: "Hits", albumId: 5, durationMs: 265_000 });
-    assert.equal(pickGenreAlbum(song, [far, near]), 5);
+    assert.equal(pickDeezerTrack(song, [far, near])?.albumId, 5);
+  });
+
+  test("says when the track is only found on another album", () => {
+    const hits = track({ album: "Hits", albumId: 5 });
+    assert.equal(pickDeezerTrack(song, [hits])?.onSongsAlbum, false);
+    assert.equal(pickDeezerTrack({ ...song, album: null }, [track()])?.onSongsAlbum, false);
   });
 
   test("is null without a track whose title and artist match", () => {
-    assert.equal(pickGenreAlbum(song, [track({ artist: "Someone Else" })]), null);
-    assert.equal(pickGenreAlbum(song, []), null);
+    assert.equal(pickDeezerTrack(song, [track({ artist: "Someone Else" })]), null);
+    assert.equal(pickDeezerTrack(song, []), null);
   });
 });
 
-describe("deezerAlbumGenre", () => {
-  test("is the album's first genre", () => {
+describe("deezerAlbum", () => {
+  test("is the album's first genre and the year it came out", () => {
     assert.deepEqual(
-      deezerAlbumGenre({
+      deezerAlbum({
         id: 1,
         genre_id: 152,
         genres: {
@@ -283,87 +299,210 @@ describe("deezerAlbumGenre", () => {
             { id: 85, name: "Alternative" },
           ],
         },
+        release_date: "1997-05-21",
       }),
-      { genre: "Rock" },
+      { genre: "Rock", year: 1997 },
     );
     assert.equal(deezerAlbumUrl(14879699), "https://api.deezer.com/album/14879699");
   });
 
   test("finds no genre for an album without one", () => {
-    assert.deepEqual(deezerAlbumGenre({ id: 1, genre_id: -1, genres: { data: [] } }), {
-      genre: null,
-    });
+    assert.deepEqual(
+      deezerAlbum({ id: 1, genre_id: -1, genres: { data: [] }, release_date: "2001-03-07" }),
+      { genre: null, year: 2001 },
+    );
+  });
+
+  test("finds no year without a release date, or with a malformed one", () => {
+    const album = { id: 1, genres: { data: [{ id: 152, name: "Rock" }] } };
+    for (const release_date of [undefined, null, "", "0000-00-00", "soon", 1997, "97-05-21"])
+      assert.deepEqual(deezerAlbum({ ...album, release_date }), { genre: "Rock", year: null });
   });
 
   test("is null for a response that isn't an album (a failed lookup)", () => {
-    assert.equal(deezerAlbumGenre({ error: { type: "DataException", code: 800 } }), null);
+    assert.equal(deezerAlbum({ error: { type: "DataException", code: 800 } }), null);
   });
 });
 
+describe("deezerAlbumTracks", () => {
+  test("reads each track's number and disc on the album", () => {
+    assert.equal(
+      deezerAlbumTracksUrl(14879699),
+      "https://api.deezer.com/album/14879699/tracks?limit=500",
+    );
+    assert.deepEqual(
+      deezerAlbumTracks({
+        data: [
+          { id: 11, title: "Airbag", track_position: 1, disk_number: 1 },
+          { id: 16, title: "Karma Police", track_position: 6, disk_number: 1 },
+          { id: 99, title: "No place" },
+          { id: 98, title: "Bad place", track_position: 0, disk_number: 1 },
+        ],
+        total: 4,
+      }),
+      [
+        { trackId: 11, trackNumber: 1, discNumber: 1 },
+        { trackId: 16, trackNumber: 6, discNumber: 1 },
+      ],
+    );
+  });
+
+  test("leaves the disc out when Deezer doesn't give one", () => {
+    assert.deepEqual(deezerAlbumTracks({ data: [{ id: 11, track_position: 3 }] }), [
+      { trackId: 11, trackNumber: 3, discNumber: null },
+    ]);
+  });
+
+  test("is null for a response that isn't a tracklist (a failed lookup)", () => {
+    assert.equal(deezerAlbumTracks({ error: { type: "DataException", code: 800 } }), null);
+  });
+});
+
+describe("deezerTags", () => {
+  const match = { trackId: 16, albumId: 1, onSongsAlbum: true };
+  const album = { genre: "Alternative", year: 1997 };
+  const tracklist = [
+    { trackId: 11, trackNumber: 1, discNumber: 1 },
+    { trackId: 16, trackNumber: 6, discNumber: 1 },
+  ];
+
+  test("is the album's genre and year and the track's number on it", () => {
+    assert.deepEqual(deezerTags(match, album, tracklist), {
+      genre: "Alternative",
+      trackNumber: 6,
+      discNumber: null,
+      year: 1997,
+    });
+  });
+
+  test("gives the disc only for an album on more than one disc", () => {
+    const twoDiscs = [...tracklist, { trackId: 21, trackNumber: 1, discNumber: 2 }];
+    assert.equal(deezerTags(match, album, twoDiscs).discNumber, 1);
+    assert.equal(deezerTags({ ...match, trackId: 21 }, album, twoDiscs).discNumber, 2);
+    assert.equal(deezerTags({ ...match, trackId: 21 }, album, twoDiscs).trackNumber, 1);
+  });
+
+  test("has no track number without the tracklist, or when the track isn't on it", () => {
+    assert.deepEqual(deezerTags(match, album, null), {
+      genre: "Alternative",
+      trackNumber: null,
+      discNumber: null,
+      year: 1997,
+    });
+    assert.equal(deezerTags({ ...match, trackId: 404 }, album, tracklist).trackNumber, null);
+  });
+
+  test("takes only the genre from another album than the song's", () => {
+    assert.deepEqual(deezerTags({ ...match, onSongsAlbum: false }, album, tracklist), {
+      genre: "Alternative",
+      trackNumber: null,
+      discNumber: null,
+      year: null,
+    });
+  });
+});
+
+/** A lookup that found nothing at all. */
+const nothingFound = { lyrics: null, genre: null, trackNumber: null, discNumber: null, year: null };
+
+const report = (written: Partial<TagWriteReport> = {}): TagWriteReport => ({
+  lyrics: "none",
+  genre: "none",
+  trackNumber: "none",
+  year: "none",
+  ...written,
+});
 const updated = (
   lyrics: TagWriteReport["lyrics"] = "tags",
   genre: TagWriteReport["genre"] = "tags",
-): SongTagOutcome => ({ kind: "updated", written: { lyrics, genre } });
+  place: Partial<TagWriteReport> = {},
+): SongTagOutcome => ({ kind: "updated", written: report({ lyrics, genre, ...place }) });
 const notFound: SongTagOutcome = { kind: "notFound" };
 const offline: SongTagOutcome = { kind: "failed", reason: "lookup" };
 const unwritable: SongTagOutcome = { kind: "failed", reason: "write" };
 
 describe("songTagOutcome", () => {
+  const lyrics = { synced: true, text: "[00:01.00]A" };
+  const place = { trackNumber: 3, discNumber: null, year: 1997 };
+
   test("is not found when nothing was found, so the file is left alone", () => {
-    assert.deepEqual(songTagOutcome({ lyrics: null, genre: null }, null), notFound);
+    assert.deepEqual(songTagOutcome(nothingFound, null), notFound);
+    assert.deepEqual(songTagOutcome(nothingFound, report()), notFound);
   });
 
   test("is updated with what was written", () => {
     assert.deepEqual(
-      songTagOutcome(
-        { lyrics: { synced: true, text: "[00:01.00]A" }, genre: null },
-        { lyrics: "sidecar", genre: "none" },
-      ),
+      songTagOutcome({ ...nothingFound, lyrics }, report({ lyrics: "sidecar" })),
       updated("sidecar", "none"),
     );
   });
 
-  test("fails when only a genre was found and the format can't take it", () => {
+  test("is updated when the track number and year were the only things written", () => {
+    const written = report({ trackNumber: "tags", year: "tags" });
+    assert.deepEqual(songTagOutcome({ ...nothingFound, ...place }, written), {
+      kind: "updated",
+      written,
+    });
     assert.deepEqual(
-      songTagOutcome({ lyrics: null, genre: "Rock" }, { lyrics: "none", genre: "notWritten" }),
+      songTagOutcome({ ...nothingFound, year: 1997 }, report({ year: "tags" })).kind,
+      "updated",
+    );
+  });
+
+  test("a track number and year the format can't take aren't a failure on their own", () => {
+    const opus = { trackNumber: "notWritten", year: "notWritten" } as const;
+    assert.deepEqual(
+      songTagOutcome({ ...nothingFound, lyrics, ...place }, report({ lyrics: "sidecar", ...opus })),
+      updated("sidecar", "none", opus),
+    );
+    assert.deepEqual(songTagOutcome({ ...nothingFound, ...place }, report(opus)), notFound);
+  });
+
+  test("fails when no lyrics were found and the format can't take the genre", () => {
+    assert.deepEqual(
+      songTagOutcome(
+        { ...nothingFound, genre: "Rock", year: 1997 },
+        report({ genre: "notWritten", year: "notWritten" }),
+      ),
       { kind: "failed", reason: "format" },
     );
     assert.deepEqual(describeTagLookups([result("Airbag", { kind: "failed", reason: "format" })]), {
       title: "Couldn't update “Airbag”",
       message:
-        "Only a genre was found, and Wave can't write tags to this file's format. It wasn't changed.",
+        "No lyrics were found, and Wave can't write tags to this file's format. It wasn't changed.",
     });
   });
 });
 
 describe("settledTags", () => {
   const lyrics = { synced: false, text: "Karma police, arrest this man" };
+  const deezer = { genre: "Alternative", trackNumber: 6, discNumber: null, year: 1997 };
   const failedLookup = { ok: false } as const;
+
+  test("is what LRCLIB and Deezer found together", () => {
+    assert.deepEqual(settledTags({ ok: true, value: lyrics }, { ok: true, value: deezer }), {
+      lyrics,
+      ...deezer,
+    });
+  });
 
   test("keeps what one service found when the other couldn't be reached", () => {
     assert.deepEqual(settledTags({ ok: true, value: lyrics }, failedLookup), {
+      ...nothingFound,
       lyrics,
-      genre: null,
     });
-    assert.deepEqual(settledTags(failedLookup, { ok: true, value: "Alternative" }), {
+    assert.deepEqual(settledTags(failedLookup, { ok: true, value: deezer }), {
       lyrics: null,
-      genre: "Alternative",
+      ...deezer,
     });
   });
 
   test("one service answering is not a failed lookup, even with nothing found", () => {
-    assert.deepEqual(settledTags(failedLookup, { ok: true, value: null }), {
-      lyrics: null,
-      genre: null,
-    });
+    assert.deepEqual(settledTags(failedLookup, { ok: true, value: null }), nothingFound);
   });
 
   test("is a failed lookup (null) only when neither service could be reached", () => {
     assert.equal(settledTags(failedLookup, failedLookup), null);
-    assert.deepEqual(settledTags({ ok: true, value: lyrics }, { ok: true, value: "Rock" }), {
-      lyrics,
-      genre: "Rock",
-    });
   });
 });
 
@@ -380,11 +519,12 @@ describe("lookupsUnreachable", () => {
 });
 
 describe("libraryLookupSongs", () => {
-  const indexed = (title: string, hasLyrics: boolean, genre: string | null) => ({
-    title,
-    hasLyrics,
-    genre,
-  });
+  const indexed = (
+    title: string,
+    hasLyrics: boolean,
+    genre: string | null,
+    place: { trackNumber: number | null; year: number | null } = { trackNumber: 1, year: 1997 },
+  ) => ({ title, hasLyrics, genre, ...place });
 
   test("looks up the songs missing lyrics or a genre, in order, and skips those with both", () => {
     const songs = [
@@ -402,6 +542,21 @@ describe("libraryLookupSongs", () => {
     assert.equal(run.skipped, 2);
   });
 
+  test("also looks up the songs missing a track number or a year", () => {
+    const songs = [
+      indexed("Everything", true, "Rock"),
+      indexed("No number", true, "Rock", { trackNumber: null, year: 1997 }),
+      indexed("No year", true, "Rock", { trackNumber: 4, year: null }),
+      indexed("Zero year", true, "Rock", { trackNumber: 4, year: 0 }),
+    ];
+    const run = libraryLookupSongs(songs);
+    assert.deepEqual(
+      run.lookUp.map((song) => song.title),
+      ["No number", "No year", "Zero year"],
+    );
+    assert.equal(run.skipped, 1);
+  });
+
   test("hands back the songs as given, for the run to look them up", () => {
     const song = indexed("Neither", false, null);
     assert.equal(libraryLookupSongs([song]).lookUp[0], song);
@@ -416,30 +571,91 @@ describe("libraryLookupSongs", () => {
   });
 });
 
-describe("missingTags", () => {
-  const found = { lyrics: { synced: true, text: "[00:01.00] Hey" }, genre: "Rock" };
+describe("lacksTrackNumber", () => {
+  test("is whether a lookup should find the song's track number: it has none", () => {
+    assert.equal(lacksTrackNumber({ trackNumber: null, year: 1997 }), true);
+    assert.equal(lacksTrackNumber({ trackNumber: 0, year: 1997 }), true);
+    assert.equal(lacksTrackNumber({ trackNumber: 4, year: null }), false);
+  });
+});
 
-  test("keeps what a song without lyrics or a genre lacks", () => {
-    assert.deepEqual(missingTags(found, { hasLyrics: false, genre: null }), found);
+describe("tagsToWrite", () => {
+  const found = {
+    lyrics: { synced: true, text: "[00:01.00] Hey" },
+    genre: "Rock",
+    trackNumber: 3,
+    discNumber: 2,
+    year: 1997,
+  };
+  const unnumbered = { trackNumber: null, year: null };
+
+  test("writes everything found into a song without a track number or year", () => {
+    assert.deepEqual(tagsToWrite(found, unnumbered), found);
+  });
+
+  test("replaces lyrics and genre, but never a track number or year the song has", () => {
+    assert.deepEqual(tagsToWrite(found, { trackNumber: 7, year: 2001 }), {
+      ...found,
+      trackNumber: null,
+      discNumber: null,
+      year: null,
+    });
+  });
+
+  test("fills in the track number (with its disc) and the year each on its own", () => {
+    assert.deepEqual(tagsToWrite(found, { trackNumber: 7, year: null }), {
+      ...found,
+      trackNumber: null,
+      discNumber: null,
+    });
+    assert.deepEqual(tagsToWrite(found, { trackNumber: null, year: 2001 }), {
+      ...found,
+      year: null,
+    });
+  });
+
+  test("counts a track number or year of 0 as none", () => {
+    assert.deepEqual(tagsToWrite(found, { trackNumber: 0, year: 0 }), found);
+  });
+});
+
+describe("missingTags", () => {
+  const found = {
+    lyrics: { synced: true, text: "[00:01.00] Hey" },
+    genre: "Rock",
+    trackNumber: 3,
+    discNumber: null,
+    year: 1997,
+  };
+  const bare = { hasLyrics: false, genre: null, trackNumber: null, year: null };
+
+  test("keeps everything a song lacks", () => {
+    assert.deepEqual(missingTags(found, bare), found);
   });
 
   test("never replaces lyrics or a genre the song already has", () => {
-    assert.deepEqual(missingTags(found, { hasLyrics: true, genre: "Indie" }), {
+    assert.deepEqual(missingTags(found, { ...bare, hasLyrics: true, genre: "Indie" }), {
+      ...found,
       lyrics: null,
       genre: null,
     });
-    assert.deepEqual(missingTags(found, { hasLyrics: true, genre: null }), {
+    assert.deepEqual(missingTags(found, { ...bare, hasLyrics: true }), {
+      ...found,
       lyrics: null,
-      genre: "Rock",
     });
-    assert.deepEqual(missingTags(found, { hasLyrics: false, genre: "Indie" }), {
-      lyrics: found.lyrics,
-      genre: null,
+    assert.deepEqual(missingTags(found, { ...bare, genre: "Indie" }), { ...found, genre: null });
+  });
+
+  test("never replaces a track number or year the song already has", () => {
+    assert.deepEqual(missingTags(found, { ...bare, trackNumber: 1, year: 2020 }), {
+      ...found,
+      trackNumber: null,
+      year: null,
     });
   });
 
   test("counts a blank genre as none", () => {
-    assert.equal(missingTags(found, { hasLyrics: true, genre: " " }).genre, "Rock");
+    assert.equal(missingTags(found, { ...bare, hasLyrics: true, genre: " " }).genre, "Rock");
   });
 });
 
@@ -461,12 +677,52 @@ describe("describeTagLookups", () => {
     });
   });
 
+  test("says when one song's track number or year was filled in", () => {
+    const both = { trackNumber: "tags", year: "tags" } as const;
+    assert.deepEqual(describeTagLookups([result("Airbag", updated("tags", "tags", both))]), {
+      title: "Lyrics and genre updated",
+      message: "“Airbag” has new lyrics and a new genre. Its track number and year were filled in.",
+    });
+    assert.deepEqual(
+      describeTagLookups([result("Airbag", updated("none", "tags", { year: "tags" }))]),
+      {
+        title: "Genre updated",
+        message: "“Airbag” has a new genre. No lyrics were found. Its year was filled in.",
+      },
+    );
+    assert.deepEqual(describeTagLookups([result("Airbag", updated("none", "none", both))]), {
+      title: "Track number and year filled in",
+      message: "No lyrics or genre were found for “Airbag”, but its track number and year were.",
+    });
+    assert.deepEqual(
+      describeTagLookups([result("Airbag", updated("none", "none", { trackNumber: "tags" }))]),
+      {
+        title: "Track number filled in",
+        message: "No lyrics or genre were found for “Airbag”, but its track number was.",
+      },
+    );
+  });
+
   test("says when one song's lyrics went into a sidecar file", () => {
     assert.deepEqual(describeTagLookups([result("Airbag", updated("sidecar", "notWritten"))]), {
       title: "Lyrics updated",
       message:
         "Wave can't write tags to this file's format, so the lyrics were saved beside it as an .lrc file and the genre wasn't written.",
     });
+    const opus = { trackNumber: "notWritten", year: "notWritten" } as const;
+    assert.deepEqual(
+      describeTagLookups([result("Airbag", updated("sidecar", "notWritten", opus))]),
+      {
+        title: "Lyrics updated",
+        message:
+          "Wave can't write tags to this file's format, so the lyrics were saved beside it as an .lrc file and the genre, track number and year weren't written.",
+      },
+    );
+    assert.deepEqual(
+      describeTagLookups([result("Airbag", updated("sidecar", "none", { year: "notWritten" }))])
+        .message,
+      "Wave can't write tags to this file's format, so the lyrics were saved beside it as an .lrc file and the year wasn't written.",
+    );
   });
 
   test("says when nothing was found or a lookup failed", () => {
@@ -506,17 +762,23 @@ describe("describeTagLookups", () => {
     assert.match(describeTagLookups(results).message, /: A, B, C, D, E and 2 more\.$/);
   });
 
-  test("says how many songs the whole-Library run skipped as already having both", () => {
+  test("counts a song whose track number and year were all that was written as updated", () => {
+    const placeOnly = updated("none", "none", { trackNumber: "tags", year: "tags" });
+    const results = [result("A", placeOnly), result("B", notFound)];
+    assert.match(describeTagLookups(results).message, /^1 updated · 1 not found · 0 failed$/);
+  });
+
+  test("says how many songs the whole-Library run skipped as already having everything", () => {
     const results = [result("A", updated()), result("B", notFound)];
     assert.deepEqual(describeTagLookups(results, undefined, 1_204), {
       title: "Lyrics and genre found",
       message:
-        "1 updated · 1 not found · 0 failed\n\n1,204 songs already had lyrics and a genre, so they were skipped.",
+        "1 updated · 1 not found · 0 failed\n\n1,204 songs already had lyrics, a genre, a track number and a year, so they were skipped.",
     });
     assert.deepEqual(describeTagLookups(results, { left: 3, stopped: "cancelled" }, 1), {
       title: "Lyrics and genre stopped",
       message:
-        "1 updated · 1 not found · 0 failed\n\n1 song already had lyrics and a genre, so it was skipped.\n\n3 songs weren't looked up.",
+        "1 updated · 1 not found · 0 failed\n\n1 song already had lyrics, a genre, a track number and a year, so it was skipped.\n\n3 songs weren't looked up.",
     });
   });
 
@@ -524,15 +786,19 @@ describe("describeTagLookups", () => {
     assert.deepEqual(describeTagLookups([result("A", updated())], undefined, 2), {
       title: "Lyrics and genre found",
       message:
-        "1 updated · 0 not found · 0 failed\n\n2 songs already had lyrics and a genre, so they were skipped.",
+        "1 updated · 0 not found · 0 failed\n\n2 songs already had lyrics, a genre, a track number and a year, so they were skipped.",
     });
   });
 
-  test("says when every song already had lyrics and a genre", () => {
+  test("says when every song already had everything", () => {
     assert.deepEqual(describeTagLookups([], undefined, 40), {
       title: "Nothing to look up",
-      message: "All 40 songs already have lyrics and a genre.",
+      message: "All 40 songs already have lyrics, a genre, a track number and a year.",
     });
+    assert.equal(
+      describeTagLookups([], undefined, 1).message,
+      "The only song already has lyrics, a genre, a track number and a year.",
+    );
   });
 
   test("says how a run that stopped early ended", () => {
