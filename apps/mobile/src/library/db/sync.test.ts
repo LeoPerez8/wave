@@ -20,7 +20,12 @@ import { listFavorites, recordPlay } from "./playHistory.ts";
 import { selectPlaylistEntries } from "./playlists.ts";
 import { saveBatch } from "./save.ts";
 import * as schema from "./schema.ts";
-import { selectChangesSince, selectPhoneId, selectTrackIdentities } from "./sync.ts";
+import {
+  selectChangesSince,
+  selectPhoneId,
+  selectTrackIdentities,
+  stampPreference,
+} from "./sync.ts";
 import {
   addTrack,
   migrateTestDatabase,
@@ -386,6 +391,31 @@ describe("saving files", () => {
     // A rescan, or Find Lyrics and Genre writing its tags.
     saveBatch(db, creditSplits(), [scanned("Lucky", { album: "OK Computer OKNOTOK" })], [], [], 1);
     assert.equal(identityOf(db, "/Music/Lucky.m4a")?.videoId, "v-lucky");
+  });
+});
+
+describe("stampPreference", () => {
+  test("records when each synced preference last changed here, one row per preference", async () => {
+    const db = await openTestDatabase();
+    stampPreference(db, "settings.theme", 1_000);
+    stampPreference(db, "settings.glass", 2_000);
+    stampPreference(db, "settings.theme", 3_000);
+    const phoneId = selectPhoneId(db);
+    assert.deepEqual(selectChangesSince(db, 0).preferences, [
+      { key: "settings.glass", changedAt: 2_000, phoneId },
+      { key: "settings.theme", changedAt: 3_000, phoneId },
+    ]);
+    assert.deepEqual(
+      selectChangesSince(db, 2_000).preferences.map((row) => row.key),
+      ["settings.theme"],
+    );
+  });
+
+  test("two changes of a preference in one millisecond get two times", async () => {
+    const db = await openTestDatabase();
+    stampPreference(db, "settings.theme", 1_000);
+    stampPreference(db, "settings.theme", 1_000);
+    assert.equal(selectChangesSince(db, 0).preferences[0]?.changedAt, 1_001);
   });
 });
 

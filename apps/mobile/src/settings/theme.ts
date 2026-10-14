@@ -43,6 +43,7 @@ const apply = (choice: ThemeChoice): void => {
 
 const theme = persistedSetting<ThemeChoice>({
   key: "settings.theme",
+  synced: true,
   read: readThemeChoice,
   write: (choice) => JSON.stringify(choice),
   equals: sameFields,

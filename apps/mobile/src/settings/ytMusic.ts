@@ -8,6 +8,7 @@ import { WaveYtMusic } from "@/native/waveYtMusic";
  */
 const ytMusic = persistedSetting<boolean>({
   key: "settings.ytMusic",
+  synced: true,
   read: (stored) => stored !== "off",
   write: (on) => (on ? null : "off"),
   onValue: (on) => WaveYtMusic.setEnabled(on),

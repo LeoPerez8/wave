@@ -23,13 +23,25 @@ export const selectPhoneId = (db: LibraryDatabase): string => {
 
 /**
  * The stamp of a change this phone makes at [now] to rows of [table] (a
- * playlist, an entry, a star): this phone, and [now], or just after the
+ * playlist, an entry, a star, a preference): this phone, and [now], or just after the
  * row's last change if that's later, so no two changes of a row share a time.
  */
 export const stamped = (table: { readonly changedAt: SQLiteColumn }, now: number) => ({
   changedAt: sql<number>`max(${now}, ${table.changedAt} + 1)`,
   phoneId: thisPhoneId(),
 });
+
+/**
+ * Records that this phone changed the synced preference [key] (its
+ * key-value store key) at [now]. The value stays in the key-value store.
+ */
+export const stampPreference = (db: LibraryDatabase, key: string, now: number): void => {
+  const { preferenceChanges } = schema;
+  db.insert(preferenceChanges)
+    .values({ key, changedAt: now })
+    .onConflictDoUpdate({ target: preferenceChanges.key, set: stamped(preferenceChanges, now) })
+    .run();
+};
 
 /** Track ids per statement, well under SQLite's limit on bound values. */
 const CHUNK = 500;

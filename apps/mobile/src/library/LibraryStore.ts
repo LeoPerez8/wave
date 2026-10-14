@@ -90,7 +90,7 @@ import {
   withFile,
 } from "./db/tracks";
 import { creditedPlayTotals, songListening, songsCrediting, trackPlayTotals } from "./db/stats";
-import { keyRecordings } from "./db/sync";
+import { keyRecordings, stampPreference } from "./db/sync";
 import { saveYtArtist, selectYtArtist } from "./db/ytArtists";
 import type { KnownFile } from "./NativeScanner";
 
@@ -564,6 +564,8 @@ export class LibraryStore extends Context.Service<
       artistKey: string,
       saved: YtArtistSaved<NativeYtSong>,
     ) => Effect.Effect<void, LibraryStoreError>;
+    /** Records that the owner changed the synced preference [key] on this phone, now. */
+    readonly stampPreference: (key: string) => Effect.Effect<void, LibraryStoreError>;
   }
 >()("@wave/mobile/library/LibraryStore") {}
 
@@ -1037,6 +1039,9 @@ const make = Effect.gen(function* () {
 
     saveYtArtist: (artistKey, saved) =>
       attempt("save an artist's YT Music section", () => saveYtArtist(db, artistKey, saved)),
+
+    stampPreference: (key) =>
+      attempt("record a preference change", () => stampPreference(db, key, Date.now())),
   });
 });
 

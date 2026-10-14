@@ -22,7 +22,22 @@ export interface PersistedSettingOptions<A> {
   readonly persistDelayMs?: number;
   /** Runs with the first value read and with every change (e.g. to apply it). */
   readonly onValue?: (value: A) => void;
+  /**
+   * A preference the Wave account keeps (docs/spec.md, "Wave account and
+   * sync"): every change is told to `onSyncedSettingChange`'s listener.
+   */
+  readonly synced?: boolean;
 }
+
+let syncedChange: ((key: string) => void) | null = null;
+
+/**
+ * Tells [listener] the key of every synced setting (`synced`) the owner
+ * changes, as it changes: the Library store stamps it for the Wave account.
+ */
+export const onSyncedSettingChange = (listener: (key: string) => void): void => {
+  syncedChange = listener;
+};
 
 /** Equality for settings stored as flat records: every field the same. */
 export const sameFields = <A extends object>(a: A, b: A): boolean =>
@@ -35,6 +50,7 @@ export function persistedSetting<A>({
   equals = Object.is,
   persistDelayMs,
   onValue,
+  synced = false,
 }: PersistedSettingOptions<A>): PersistedSetting<A> {
   let loaded = false;
   let current: A;
@@ -66,6 +82,7 @@ export function persistedSetting<A>({
       pending = setTimeout(persist, persistDelayMs);
     }
     onValue?.(value);
+    if (synced) syncedChange?.(key);
     for (const listener of listeners) listener();
   };
 
