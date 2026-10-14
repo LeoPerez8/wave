@@ -9,7 +9,7 @@
 
 import { artistPhotoName, artistPhotoQuery } from "./artistPhoto.ts";
 import { normalizeSearchText } from "./search.ts";
-import type { YtShelfItem } from "./ytDiscover.ts";
+import { discoverSongs, type DiscoverSong, type YtShelfItem } from "./ytDiscover.ts";
 import { libraryFinder, type LibrarySongKey, type YtSong } from "./ytMusic.ts";
 import type { YtQuietReason } from "./ytSearch.ts";
 
@@ -49,6 +49,20 @@ export const pickYtArtist = (
   return best?.browseId ?? null;
 };
 
+/**
+ * The Library artist a YouTube Music artist named [name] is, or null: names
+ * compare as `pickYtArtist` compares them (as artist photos do). Names that
+ * aren't an artist's ("Unknown Artist") are nobody's.
+ */
+export const libraryArtistNamed = <A extends { readonly name: string }>(
+  name: string,
+  artists: readonly A[],
+): A | null => {
+  if (ytArtistQuery(name) === null) return null;
+  const wanted = artistPhotoName(name);
+  return artists.find((artist) => artistPhotoName(artist.name) === wanted) ?? null;
+};
+
 /** An album or single on a YouTube Music artist page, as a shelf tile shows it. */
 export type YtArtistAlbum = Extract<YtShelfItem, { readonly kind: "album" }>;
 
@@ -59,6 +73,8 @@ export type YtArtistAlbum = Extract<YtShelfItem, { readonly kind: "album" }>;
 export interface YtArtistPage<S extends YtSong = YtSong> {
   /** The artist's name as YouTube Music writes it. */
   readonly name: string;
+  /** Their image, when the page has one (pages saved before it was read have none). */
+  readonly artworkUrl?: string | null;
   readonly songs: readonly S[];
   readonly albums: readonly YtArtistAlbum[];
   readonly singles: readonly YtArtistAlbum[];
@@ -300,6 +316,23 @@ const newestFirst = (albums: readonly YtArtistAlbum[]): YtArtistAlbum[] =>
     .map(({ album }) => album);
 
 /**
+ * An artist [page]'s Albums, then Singles & EPs, each newest first, with the
+ * Library album each release already is; a shelf with nothing on it is left out.
+ */
+const pageShelves = <A>(
+  page: YtArtistPage,
+  libraryAlbum: (album: YtArtistAlbum) => A | null,
+): YtArtistShelf<A>[] => {
+  const shelf = (kind: YtArtistShelf<A>["kind"], albums: readonly YtArtistAlbum[]) => ({
+    kind,
+    releases: newestFirst(albums).map((album) => ({ album, library: libraryAlbum(album) })),
+  });
+  return [shelf("albums", page.albums), shelf("singles", page.singles)].filter(
+    ({ releases }) => releases.length > 0,
+  );
+};
+
+/**
  * The shelves under the section's top songs: Albums, then Singles & EPs, from
  * the saved artist page, each newest first. They show while the saved page
  * does (`ytArtistSectionView`); a shelf with nothing on it is left out.
@@ -311,14 +344,7 @@ export const ytArtistShelves = <A>(
   if (!context.enabled || ytArtistQuery(context.name) === null) return [];
   if (state.status !== "ready" || state.saved?.outcome !== "found") return [];
   if (!isFresh(state.saved, context.now)) return [];
-  const { page } = state.saved;
-  const shelf = (kind: YtArtistShelf<A>["kind"], albums: readonly YtArtistAlbum[]) => ({
-    kind,
-    releases: newestFirst(albums).map((album) => ({ album, library: context.libraryAlbum(album) })),
-  });
-  return [shelf("albums", page.albums), shelf("singles", page.singles)].filter(
-    ({ releases }) => releases.length > 0,
-  );
+  return pageShelves(state.saved.page, context.libraryAlbum);
 };
 
 /**
@@ -464,4 +490,86 @@ export const ytLibraryAlbumView = <S extends YtSong, L extends LibraryAlbumTrack
   const tracks = ytAlbumTracklist(page.songs, context.tracks, context.elsewhere);
   const streams = tracks.some((entry) => entry.source === "stream");
   return { tracks: streams ? tracks : null, songs: page.songs, note: null, button: false, release };
+};
+
+export interface YtArtistPageContext {
+  /** Whether YT Music is on in Settings. */
+  readonly enabled: boolean;
+  readonly now: number;
+}
+
+/**
+ * Whether a YouTube Music artist page (an artist opened by their browse id)
+ * asks YouTube Music now, on its own: the user asked for the artist by
+ * opening the page. It asks once what was saved is read, when nothing saved
+ * stands (`YT_ARTIST_FRESH_MS`) and YT Music is on; after a failure it waits
+ * for Try Again (`requested`).
+ */
+export const ytArtistPageAsks = (state: YtArtistSection, context: YtArtistPageContext): boolean =>
+  context.enabled &&
+  state.status === "ready" &&
+  state.failure === null &&
+  (state.saved === null || !isFresh(state.saved, context.now));
+
+/** A quiet line a YouTube Music artist page shows in place of what it can't show. */
+export type YtArtistPageNote =
+  | "loading"
+  /** YT Music is off in Settings: the page says so instead of asking. */
+  | "off"
+  | YtQuietReason;
+
+export interface YtArtistPageView<S extends YtSong, L, A> {
+  /** The artist's name and image from their page, once it's been read (and saved). */
+  readonly name: string | null;
+  readonly artworkUrl: string | null;
+  /** Their top songs in YouTube Music's order: the Library's play its files, the rest stream. */
+  readonly songs: readonly DiscoverSong<S, L>[];
+  /** Their Albums, then Singles & EPs, newest first, each with the Library's album for it. */
+  readonly shelves: readonly YtArtistShelf<A>[];
+  readonly note: YtArtistPageNote | null;
+  /** Whether Try Again is offered. */
+  readonly retry: boolean;
+}
+
+export interface YtArtistPageViewContext<S extends YtSong, L, A> extends YtArtistPageContext {
+  /** The Library's song a top song already is, or null (Core's `libraryFinder`). */
+  readonly librarySong: (song: S) => L | null;
+  /** The Library's album a release already is, or null (Core's `libraryAlbumFinder`). */
+  readonly libraryAlbum: (album: YtArtistAlbum) => A | null;
+}
+
+/**
+ * What a YouTube Music artist page shows: the artist page's integrated view
+ * with nothing from the Library but the songs and releases it already has.
+ * A saved answer shows for a week (`YT_ARTIST_FRESH_MS`); without one the
+ * page is looking (it asks on its own, `ytArtistPageAsks`) or, after a
+ * failure, a quiet line with Try Again. With YT Music off it says so.
+ */
+export const ytArtistPageView = <S extends YtSong, L, A>(
+  state: YtArtistSection<S>,
+  context: YtArtistPageViewContext<S, L, A>,
+): YtArtistPageView<S, L, A> => {
+  const saved = state.status === "reading" ? null : state.saved;
+  const page = saved?.outcome === "found" ? saved.page : null;
+  const head = { name: page?.name ?? null, artworkUrl: page?.artworkUrl ?? null };
+  const quiet = (note: YtArtistPageNote | null, retry = false): YtArtistPageView<S, L, A> => ({
+    ...head,
+    songs: [],
+    shelves: [],
+    note,
+    retry,
+  });
+  if (!context.enabled) return quiet("off");
+  if (state.status === "reading") return quiet(null);
+  if (state.status === "loading") return quiet("loading");
+  if (page === null || saved === null || !isFresh(saved, context.now))
+    // Nothing standing: it asks on its own (`ytArtistPageAsks`) unless the last ask failed.
+    return state.failure === null ? quiet("loading") : quiet(state.failure, true);
+  return {
+    ...head,
+    songs: discoverSongs(page.songs, context.librarySong),
+    shelves: pageShelves(page, context.libraryAlbum),
+    note: null,
+    retry: false,
+  };
 };
