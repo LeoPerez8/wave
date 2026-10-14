@@ -713,21 +713,26 @@ export { compareOrderKeys, orderKeyBetween } from "./orderKey.ts";
 export type { OrderedEntry } from "./orderKey.ts";
 export {
   RECORDING_LENGTH_TOLERANCE_MS,
+  fillMissingSongs,
   findRecording,
   joinLibraries,
   mergePlays,
   mergeRows,
   recordingKey,
+  vanishedFile,
 } from "./sync.ts";
 export type {
+  FilledSong,
   JoinedTrack,
   KeyedSong,
   LibraryJoin,
   LibrarySide,
   MergedPlays,
   MergedRows,
+  MissingSongsFill,
   Recording,
   RecordingTags,
   SyncPlay,
   SyncRow,
+  VanishedFileFate,
 } from "./sync.ts";

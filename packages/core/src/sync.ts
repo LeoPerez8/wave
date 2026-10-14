@@ -243,3 +243,54 @@ export const joinLibraries = <P extends KeyedSong, A extends KeyedSong, L extend
     playlistsDown: mergeRows(input.phone.playlists, input.account.playlists).accepted,
   };
 };
+
+/** What becomes of a song whose file a scan no longer finds. */
+export type VanishedFileFate =
+  /** It stays as a missing song, with its favorites, playlist entries and plays. */
+  | "missing"
+  /** It leaves the Library, as before Wave accounts. */
+  | "remove";
+
+/** What a scan does with a file it no longer finds: keeps its song missing while signed in, removes it while signed out. */
+export const vanishedFile = (state: { readonly signedIn: boolean }): VanishedFileFate =>
+  state.signedIn ? "missing" : "remove";
+
+/** A file a scan found that fills a missing song in. */
+export interface FilledSong<F extends Recording, M extends Recording> {
+  readonly file: F;
+  readonly song: M;
+}
+
+/** What `fillMissingSongs` gives. */
+export interface MissingSongsFill<F extends Recording, M extends Recording> {
+  /** The files that fill a missing song in: the song gets the file, and stays the same Track. */
+  readonly filled: readonly FilledSong<F, M>[];
+  /** The files that fill nothing: they're added as new Tracks. */
+  readonly added: readonly F[];
+}
+
+/**
+ * Which missing songs the new files a scan [found] fill in, so files Syncthing
+ * brings never show twice. A file fills the missing song `findRecording`
+ * picks for it among those not filled yet (length breaks a tie between
+ * missing songs with one key), in the order the files came; each missing
+ * song is filled once.
+ */
+export const fillMissingSongs = <F extends Recording, M extends Recording>(
+  found: readonly F[],
+  missing: readonly M[],
+): MissingSongsFill<F, M> => {
+  let open = [...missing];
+  const filled: FilledSong<F, M>[] = [];
+  const added: F[] = [];
+  for (const file of found) {
+    const song = findRecording(file, open);
+    if (song === null) {
+      added.push(file);
+    } else {
+      filled.push({ file, song });
+      open = open.filter((candidate) => candidate !== song);
+    }
+  }
+  return { filled, added };
+};

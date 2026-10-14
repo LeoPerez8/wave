@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  fillMissingSongs,
   findRecording,
   joinLibraries,
   mergePlays,
   mergeRows,
   normalizeTrack,
   recordingKey,
+  vanishedFile,
 } from "./index.ts";
 import type { RawTrack } from "./index.ts";
 
@@ -270,6 +272,57 @@ describe("joinLibraries", () => {
     });
     assert.deepEqual(join.playlistsUp, [renamedHere]);
     assert.deepEqual(join.playlistsDown, [removedThere]);
+  });
+});
+
+describe("vanishedFile", () => {
+  test("a file the scan no longer finds makes its song missing while signed in", () => {
+    assert.equal(vanishedFile({ signedIn: true }), "missing");
+  });
+
+  test("a file the scan no longer finds removes its song while signed out", () => {
+    assert.equal(vanishedFile({ signedIn: false }), "remove");
+  });
+});
+
+describe("fillMissingSongs", () => {
+  const file = (path: string, key: string, durationMs = 200_000) => ({
+    path,
+    recordingKey: key,
+    durationMs,
+  });
+  const missingSong = (id: number, key: string, durationMs = 200_000) => ({
+    id,
+    recordingKey: key,
+    durationMs,
+  });
+
+  test("a new file with a missing song's recording key fills that song in", () => {
+    const synced = file("/Music/Syncthing/Something.flac", "something");
+    const fresh = file("/Music/New.mp3", "new");
+    const fill = fillMissingSongs([synced, fresh], [missingSong(7, "something", 230_000)]);
+    assert.deepEqual(fill.filled, [{ file: synced, song: missingSong(7, "something", 230_000) }]);
+    assert.deepEqual(fill.added, [fresh]);
+  });
+
+  test("each missing song is filled once; another file with its key is a Track of its own", () => {
+    const first = file("/Music/a.flac", "something");
+    const second = file("/Music/b.mp3", "something");
+    const fill = fillMissingSongs([first, second], [missingSong(7, "something")]);
+    assert.deepEqual(fill.filled, [{ file: first, song: missingSong(7, "something") }]);
+    assert.deepEqual(fill.added, [second]);
+  });
+
+  test("among missing songs with one key, length picks the one a file fills", () => {
+    const short = missingSong(1, "intro", 60_000);
+    const long = missingSong(2, "intro", 240_000);
+    const found = file("/Music/intro.flac", "intro", 241_500);
+    assert.deepEqual(fillMissingSongs([found], [short, long]).filled, [{ file: found, song: long }]);
+
+    const unclear = file("/Music/intro2.flac", "intro", 150_000);
+    const fill = fillMissingSongs([unclear], [short, long]);
+    assert.deepEqual(fill.filled, []);
+    assert.deepEqual(fill.added, [unclear]);
   });
 });
 
