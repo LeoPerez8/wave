@@ -513,3 +513,24 @@ export {
   writeLibraryLookupSummary,
 } from "./libraryLookup.ts";
 export type { LibraryLookupProgress, LibraryLookupSummary } from "./libraryLookup.ts";
+export {
+  YT_ARTIST_FRESH_MS,
+  YT_ARTIST_SECTION_START,
+  pickYtArtist,
+  stepYtArtistSection,
+  ytArtistLookup,
+  ytArtistQuery,
+  ytArtistSectionView,
+} from "./ytArtist.ts";
+export type {
+  YtArtistAlbum,
+  YtArtistCandidate,
+  YtArtistLookup,
+  YtArtistPage,
+  YtArtistSaved,
+  YtArtistSection,
+  YtArtistSectionContext,
+  YtArtistSectionEvent,
+  YtArtistSectionNote,
+  YtArtistSectionView,
+} from "./ytArtist.ts";
