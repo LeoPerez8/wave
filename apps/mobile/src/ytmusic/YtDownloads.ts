@@ -1,11 +1,12 @@
 /**
  * The Download menu and rows of YT Music songs, backed by the native journal: Core picks the
  * source (`downloadSource`), Soulseek's automatic recording selection or YouTube Music's M4A,
- * and which Soulseek failures the journal hands over to YouTube Music (`downloadFallback`).
+ * and what the journal does when a source fails, YouTube Music's fallback included
+ * (`downloadFailurePlan`).
  */
 import {
   YT_DOWNLOADS_NONE,
-  downloadFallbackFailures,
+  downloadFailurePlan,
   downloadSource,
   isWithin,
   soulseekCandidates,
@@ -22,6 +23,7 @@ import {
   ytDownloadsFromJournal,
   ytPlaylistDownload,
   ytSongsDownload,
+  type DownloadFailurePlan,
   type DownloadSource,
   type MixedSong,
   type SoulseekCandidate,
@@ -138,13 +140,14 @@ const currentSource = (
   downloadSource({ ytMusicOn, soulseekAccount: session.status !== "signedOut" });
 
 /**
- * What the journal keeps to carry a Soulseek job on from YouTube Music: the failures Core hands
- * over (`downloadFallbackFailures`) and where the M4A goes.
+ * What the journal keeps to carry a Soulseek job on from YouTube Music: where the M4A goes and
+ * what it does when YouTube fails too. The failures that hand the job over are in the Soulseek
+ * plan (`fallsBack`).
  */
 interface DownloadFallbackPlan {
   readonly source: "youtube";
   readonly targetPath: string;
-  readonly failures: readonly YtDownloadFailure[];
+  readonly failurePlan: DownloadFailurePlan;
 }
 
 /** The journal's answer to "prepare": a plan, or Soulseek's failure with what falls back from it. */
@@ -154,11 +157,13 @@ type PrepareAnswer =
       readonly candidates: readonly SoulseekCandidate[];
       readonly tags: YtDownloadTags;
       readonly targetPath: string;
+      readonly failurePlan: DownloadFailurePlan;
       readonly fallback?: DownloadFallbackPlan;
     }
   | {
       readonly failure: YtDownloadFailure;
       readonly tags: YtDownloadTags;
+      readonly failurePlan: DownloadFailurePlan;
       readonly fallback?: DownloadFallbackPlan;
     };
 
@@ -173,9 +178,9 @@ const requestedSource = async (): Promise<DownloadSource | null> => {
 
 /**
  * The journal's "prepare" decision: the source, the song's tags and where it goes, and for
- * Soulseek the peers with this recording. A Soulseek job also carries Core's fallback while YT
- * Music is on, with its answer or with Soulseek's failure, so the journal can hand it over to
- * YouTube Music when Soulseek can't deliver the song.
+ * Soulseek the peers with this recording. It carries Core's plan for the source's failures, and
+ * a Soulseek job also YouTube Music's fallback while YT Music is on, with its answer or with
+ * Soulseek's failure, so the journal can hand it over when Soulseek can't deliver the song.
  */
 export const prepareDownload = (song: NativeYtSong) =>
   Effect.gen(function* () {
@@ -192,7 +197,13 @@ export const prepareDownload = (song: NativeYtSong) =>
       const tags = yield* metadata(song);
       const target = ytDownloadDestination(roots, excludedFolders, tags, source);
       if (target === null) return yield* new DownloadFailed({ reason: "noFolder" });
-      return { source, candidates: [], tags, targetPath: target.path } satisfies PrepareAnswer;
+      return {
+        source,
+        candidates: [],
+        tags,
+        targetPath: target.path,
+        failurePlan: downloadFailurePlan(source, { ytMusicOn }),
+      } satisfies PrepareAnswer;
     }
     const query = soulseekQuery(song);
     const [found, tags] = yield* Effect.all(
@@ -206,18 +217,31 @@ export const prepareDownload = (song: NativeYtSong) =>
       ],
       { concurrency: "unbounded" },
     );
-    const failures = downloadFallbackFailures({ ytMusicOn });
-    const youtube =
-      failures.length === 0 ? null : ytDownloadDestination(roots, excludedFolders, tags, "youtube");
+    const youtube = ytMusicOn
+      ? ytDownloadDestination(roots, excludedFolders, tags, "youtube")
+      : null;
+    // YouTube Music carries the job on only where its M4A has a place.
+    const failurePlan = downloadFailurePlan(source, { ytMusicOn: youtube !== null });
     const fallback: { readonly fallback?: DownloadFallbackPlan } =
       youtube === null
         ? {}
-        : { fallback: { source: "youtube", targetPath: youtube.path, failures } };
+        : {
+            fallback: {
+              source: "youtube",
+              targetPath: youtube.path,
+              failurePlan: downloadFailurePlan("youtube", { ytMusicOn }),
+            },
+          };
     if (Result.isFailure(found))
-      return { failure: found.failure.reason, tags, ...fallback } satisfies PrepareAnswer;
+      return {
+        failure: found.failure.reason,
+        tags,
+        failurePlan,
+        ...fallback,
+      } satisfies PrepareAnswer;
     const candidates = soulseekCandidates(song, found.success);
     if (candidates.length === 0)
-      return { failure: "unavailable", tags, ...fallback } satisfies PrepareAnswer;
+      return { failure: "unavailable", tags, failurePlan, ...fallback } satisfies PrepareAnswer;
     const target = ytDownloadDestination(roots, excludedFolders, tags, source);
     if (target === null) return yield* new DownloadFailed({ reason: "noFolder" });
     return {
@@ -225,6 +249,7 @@ export const prepareDownload = (song: NativeYtSong) =>
       candidates,
       tags,
       targetPath: target.path,
+      failurePlan,
       ...fallback,
     } satisfies PrepareAnswer;
   });

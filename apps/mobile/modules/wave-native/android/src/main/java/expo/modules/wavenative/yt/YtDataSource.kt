@@ -115,7 +115,7 @@ class YtDataSource(
    * from where it got to, before the song stops.
    */
   private fun streamFailure(error: IOException): IOException =
-    if (YtFailure.of(error, client().hasNetwork()) == YtFailure.OFFLINE) {
+    if (YtFailure.of(error, client().online()) == YtFailure.OFFLINE) {
       YtOfflineException(error)
     } else {
       IOException(YtStreamFailure.FAILED.message, error)

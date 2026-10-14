@@ -10,22 +10,22 @@ import org.junit.Test
 class YtFailureTest {
   @Test
   fun withoutANetworkEveryFailureIsOffline() {
-    assertEquals(YtFailure.OFFLINE, YtFailure.of(IllegalStateException("HTTP 500"), hasNetwork = false))
+    assertEquals(YtFailure.OFFLINE, YtFailure.of(IllegalStateException("HTTP 500"), online = false))
   }
 
   @Test
   fun notReachingYouTubeIsOffline() {
     for (error in listOf(UnknownHostException("music.youtube.com"), ConnectException(), SocketTimeoutException())) {
-      assertEquals(error.toString(), YtFailure.OFFLINE, YtFailure.of(error, hasNetwork = true))
+      assertEquals(error.toString(), YtFailure.OFFLINE, YtFailure.of(error, online = true))
     }
     val wrapped = IOException("request failed", UnknownHostException("music.youtube.com"))
-    assertEquals(YtFailure.OFFLINE, YtFailure.of(wrapped, hasNetwork = true))
+    assertEquals(YtFailure.OFFLINE, YtFailure.of(wrapped, online = true))
   }
 
   @Test
   fun anErrorAnswerOrAnUnreadableOneFailed() {
-    assertEquals(YtFailure.FAILED, YtFailure.of(IllegalStateException("search failed with HTTP 403"), hasNetwork = true))
-    assertEquals(YtFailure.FAILED, YtFailure.of(IllegalArgumentException("not JSON"), hasNetwork = true))
+    assertEquals(YtFailure.FAILED, YtFailure.of(IllegalStateException("search failed with HTTP 403"), online = true))
+    assertEquals(YtFailure.FAILED, YtFailure.of(IllegalArgumentException("not JSON"), online = true))
   }
 
   @Test

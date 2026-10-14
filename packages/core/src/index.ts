@@ -459,12 +459,13 @@ export type {
 export { libraryTrackIds, playerErrorNotice, queuedYtTracks, restorableTrack } from "./ytQueue.ts";
 export type { PlayerErrorCode, RestorableTracks } from "./ytQueue.ts";
 export {
+  downloadFailurePlan,
   downloadFallback,
-  downloadFallbackFailures,
   downloadSource,
   ytAudioMatches,
 } from "./downloadSource.ts";
 export type {
+  DownloadFailurePlan,
   DownloadFallbackSetup,
   DownloadSource,
   DownloadSourceSetup,
