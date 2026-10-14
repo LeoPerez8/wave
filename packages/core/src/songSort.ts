@@ -1,16 +1,15 @@
 /**
- * The orders a song list can be sorted in (Library › Songs, an artist's,
- * genre's or folder's songs, Favorites): by song name, artist, album or date
- * added, each ascending or descending, plus a list's own order where it has one
- * (a folder's file names, when Favorites were starred).
+ * The orders a song list can be sorted in (Library › Songs, an artist's or
+ * genre's songs, Favorites): by song name, artist, album or date added, each
+ * ascending or descending, plus a list's own order where it has one (when
+ * Favorites were starred).
  */
 
 import { readStoredRecord } from "./storedJson.ts";
-import { compareFileNames } from "./browse.ts";
 import { compareAlbumTracks, compareByTitle, compareStrings } from "./library.ts";
 
 /** What a song list can be sorted by. */
-export type SongSortKey = "title" | "artist" | "album" | "added" | "file" | "starred";
+export type SongSortKey = "title" | "artist" | "album" | "added" | "starred";
 
 /** A song list's sort: what it's sorted by, and which way. */
 export interface SongSort {
@@ -60,8 +59,6 @@ interface Order {
 
 const ALPHABETICAL = ["A to Z", "Z to A"] as const;
 
-const fileName = (path: string): string => path.slice(path.lastIndexOf("/") + 1);
-
 const ORDERS: Record<SongSortKey, Order> = {
   title: {
     name: "Song name",
@@ -91,12 +88,6 @@ const ORDERS: Record<SongSortKey, Order> = {
     primary: (a, b) => a.addedAt - b.addedAt,
     ties: compareByTitle,
   },
-  file: {
-    name: "File name",
-    directions: ALPHABETICAL,
-    primary: (a, b) => compareFileNames(fileName(a.path), fileName(b.path)),
-    ties: (a, b) => compareStrings(a.path, b.path),
-  },
   starred: {
     name: "Date starred",
     directions: ["oldest first", "newest first"],
@@ -124,7 +115,7 @@ export const SONG_SORTS: readonly SongSort[] = [
  * The kinds of song list with a sort control. Every list of a kind shares one
  * sort: sorting one artist's songs by album sorts every artist's.
  */
-export type SongListKind = "songs" | "artist" | "genre" | "folder" | "favorites";
+export type SongListKind = "songs" | "artist" | "genre" | "favorites";
 
 /** Whether two sorts are the same: one key, one direction. */
 export const sameSongSort = (a: SongSort, b: SongSort): boolean =>
@@ -132,11 +123,6 @@ export const sameSongSort = (a: SongSort, b: SongSort): boolean =>
 
 /** A list's own order, offered first (and its default) where it isn't song name A to Z. */
 const OWN_ORDER: Partial<Record<SongListKind, readonly [SongSort, SongSort]>> = {
-  // The file-manager order a folder has always had.
-  folder: [
-    { key: "file", descending: false },
-    { key: "file", descending: true },
-  ],
   // Most recently starred first, as Favorites has always been.
   favorites: [
     { key: "starred", descending: true },

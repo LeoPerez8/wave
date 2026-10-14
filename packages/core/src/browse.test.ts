@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { alphabetIndex, artistAlbums, compareFileNames, indexLetter, sortKey } from "./index.ts";
+import { alphabetIndex, artistAlbums, indexLetter, sortKey } from "./index.ts";
 
 describe("indexLetter", () => {
   test("files a name under the first letter of its sort key, ignoring articles and accents", () => {
@@ -82,33 +82,6 @@ describe("artistAlbums", () => {
       "Vespertine",
       "Anthology",
       "The Remixes",
-    ]);
-  });
-});
-
-describe("compareFileNames", () => {
-  const sorted = (names: string[]) => [...names].sort(compareFileNames);
-
-  test("numbers in file names are ordered by value, the way a file manager lists them", () => {
-    assert.deepEqual(sorted(["10 - Ten.mp3", "2 - Two.mp3", "1 - One.mp3", "01 - Zero One.mp3"]), [
-      "1 - One.mp3",
-      "01 - Zero One.mp3",
-      "2 - Two.mp3",
-      "10 - Ten.mp3",
-    ]);
-    assert.deepEqual(sorted(["Track 12.flac", "Track 9.flac", "Track 100.flac"]), [
-      "Track 9.flac",
-      "Track 12.flac",
-      "Track 100.flac",
-    ]);
-  });
-
-  test("letters are compared ignoring case and accents", () => {
-    assert.deepEqual(sorted(["c.mp3", "B.mp3", "Ábaco.mp3", "ad.mp3"]), [
-      "Ábaco.mp3",
-      "ad.mp3",
-      "B.mp3",
-      "c.mp3",
     ]);
   });
 });

@@ -223,8 +223,8 @@ describe("itemActions", () => {
     );
   });
 
-  test("selected artists, genres or folders: the bar offers their menu's entries, but Select", () => {
-    for (const kind of ["artist", "genre", "folder"] as const) {
+  test("selected artists or genres: the bar offers their menu's entries, but Select", () => {
+    for (const kind of ["artist", "genre"] as const) {
       const menu = names(itemActions({ kind, items: [{}], selectable: true, here: "/library" }));
       const bar = names(
         itemActions({ kind, items: [{}, {}, {}], surface: "selection", here: "/library" }),
@@ -264,8 +264,8 @@ describe("itemActions", () => {
     assert.equal(ITEM_ACTION_LABELS.deletePlaylists, "Delete Playlists");
   });
 
-  test("a genre, folder, artist or Library entry: queue it and add it to a playlist", () => {
-    for (const kind of ["genre", "folder", "artist", "section"] as const) {
+  test("a genre, artist or Library entry: queue it and add it to a playlist", () => {
+    for (const kind of ["genre", "artist", "section"] as const) {
       assert.deepEqual(names(itemActions({ kind, items: [{}], here: "/" })), [
         "playNext",
         "addToQueue",

@@ -104,7 +104,7 @@ type Props = {
 };
 
 /**
- * Tracks with thumbnails (Songs, a genre, a folder, an artist's songs),
+ * Tracks with thumbnails (Songs, a genre, an artist's songs),
  * virtualised for tens of thousands of rows. Tap plays the list from the row;
  * long-press opens the track's menu, whose Select starts selection mode: then
  * every row shows a check cell and taps check and uncheck.

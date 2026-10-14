@@ -8,14 +8,7 @@ import { Mosaic } from "@/catalog/Mosaic";
 import type { LibrarySection } from "@/catalog/sections";
 import type { LibraryCounts } from "@/library/db/counts";
 import { useSectionSongCounts } from "@/library/hooks";
-import type {
-  AlbumRow,
-  ArtistRow,
-  FolderRow,
-  GenreRow,
-  PlaylistRow,
-  SongRow,
-} from "@/library/LibraryStore";
+import type { AlbumRow, ArtistRow, GenreRow, PlaylistRow, SongRow } from "@/library/LibraryStore";
 import { pressedRect } from "@/motion/pressedRect";
 import { CardEntries } from "@/overlay/CardEntries";
 import { CardHeading } from "@/overlay/CardHeading";
@@ -72,10 +65,6 @@ export const openArtistActions = (artist: ArtistRow, options?: MenuOptions): voi
 export const openGenreActions = (genre: GenreRow, options?: MenuOptions): void =>
   openActions({ kind: "genre", items: [genre] }, options);
 
-/** Opens the long-press menu for a folder (its songs, in the folder screen's order). */
-export const openFolderActions = (folder: FolderRow, options?: MenuOptions): void =>
-  openActions({ kind: "folder", items: [folder] }, options);
-
 /** Opens the menu for a Library entry (Songs, Albums…): every song it holds, in its order. */
 export const openLibrarySectionActions = (section: LibrarySection): void =>
   openActions({ kind: "section", items: [section] });
@@ -89,8 +78,8 @@ function SectionActionsMenu({ target, close }: { target: ActionItems; close: () 
 }
 
 /**
- * The long-press menu for a track, an album, an artist, a playlist, a genre, a
- * folder or a Library entry: what it is (unless the row it was opened from is
+ * The long-press menu for a track, an album, an artist, a playlist, a genre or
+ * a Library entry: what it is (unless the row it was opened from is
  * highlighted, which says so already), then one quiet line per action (the
  * shared list in `itemActions`, which the selection bar offers too). A glass
  * card on the overlay, floating next to the row it was opened from.
