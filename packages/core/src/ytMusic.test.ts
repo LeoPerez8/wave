@@ -80,19 +80,19 @@ describe("libraryMatcher", () => {
   });
 
   test('artists joined with "+" are each credited', () => {
-    const library = libraryMatcher([
+    const matches = libraryMatcher([
       { title: "Cosmic Love", artist: "Florence + Jamie xx", durationMs: 250_000 },
     ]);
-    assert.equal(library(by("Jamie xx", "Cosmic Love", 250_000)), true);
+    assert.equal(matches(by("Jamie xx", "Cosmic Love", 250_000)), true);
   });
 
   test("a credit naming nobody shares no artist with another such credit", () => {
-    const library = libraryMatcher([
+    const matches = libraryMatcher([
       { title: "Intro", artist: "Unknown Artist", durationMs: 60_000 },
       { title: "Outro", artist: " + ", durationMs: 60_000 },
     ]);
-    assert.equal(library(by(" ; ", "Intro", 60_000)), false);
-    assert.equal(library(by("Unknown Artist", "Outro", 60_000)), false);
+    assert.equal(matches(by(" ; ", "Intro", 60_000)), false);
+    assert.equal(matches(by("Unknown Artist", "Outro", 60_000)), false);
   });
 
   test("another artist's song of the same name is not the Library's", () => {
