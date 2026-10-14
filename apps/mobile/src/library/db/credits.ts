@@ -54,7 +54,60 @@ const creditRows = (db: LibraryDatabase): CreditRow[] =>
 
 /** Every whole credit in the Library: the tracks' artist credits and the albums' album artist ones. */
 const libraryCredits = (db: LibraryDatabase): Set<string> =>
-  new Set(creditRows(db).flatMap((row) => row.credits));
+  new Set(
+    db
+      .all<{ credit: string; stored: string | null }>(
+        sql`SELECT DISTINCT artist_credit AS "credit", artist_credits AS "stored" FROM tracks
+          UNION SELECT album_artist_credit, album_artist_credits FROM albums`,
+      )
+      .flatMap((row) => readCredits(row.credit, row.stored)),
+  );
+
+type Splitter = (credits: string | Credits) => readonly string[];
+
+/**
+ * The Library's whole credits and the splitter built from them (Core's
+ * `creditSplitter`), kept by the store between saves: a scan reads the
+ * Library's credits once, builds again only when a batch brings a credit the
+ * Library didn't have, and re-files the Library at its end only when its
+ * credits changed. Make one per database with `creditSplits`.
+ */
+export interface CreditSplits {
+  /** The whole credits [split] was built from; null until the Library is first read. */
+  known: Set<string> | null;
+  split: Splitter;
+  /**
+   * Whether some links may not follow [split]: a save brought a credit others
+   * split by, or this session hasn't re-filed the Library yet (a scan cut short
+   * may have left it so).
+   */
+  stale: boolean;
+  readonly build: (knownCredits: Iterable<string>) => Splitter;
+}
+
+const unread: Splitter = () => {
+  throw new Error("The Library's credits weren't read");
+};
+
+/** Credit splits for one database; [build] makes a splitter (Core's `creditSplitter`). */
+export const creditSplits = (
+  build: (knownCredits: Iterable<string>) => Splitter = creditSplitter,
+): CreditSplits => ({ known: null, split: unread, stale: true, build });
+
+/** The splitter for [credits]: the Library's whole credits and theirs. */
+const splitterFor = (db: LibraryDatabase, splits: CreditSplits, credits: Credits): Splitter => {
+  const known = splits.known ?? libraryCredits(db);
+  const fresh = credits.filter((credit) => !known.has(credit));
+  if (splits.known !== null && fresh.length === 0) return splits.split;
+  for (const credit of fresh) known.add(credit);
+  splits.known = known;
+  splits.split = splits.build(known);
+  if (fresh.length > 0) splits.stale = true;
+  return splits.split;
+};
+
+const sameCredits = (a: ReadonlySet<string>, b: ReadonlySet<string>): boolean =>
+  a.size === b.size && [...a].every((credit) => b.has(credit));
 
 /** The ids of the artists [names] (by identity key) holds, making the missing ones. */
 const artistIds = (
@@ -90,9 +143,10 @@ const artistIds = (
  */
 export const creditArtists = (
   db: LibraryDatabase,
+  splits: CreditSplits,
   credits: readonly Credits[],
 ): ((credits: Credits) => number[]) => {
-  const split = creditSplitter([...libraryCredits(db), ...credits.flat()]);
+  const split = splitterFor(db, splits, credits.flat());
   const names = new Map<string, string>();
   const keysByCredits = new Map<string, string[]>();
   for (const each of credits) {
@@ -106,9 +160,9 @@ export const creditArtists = (
     keysByCredits.set(id, keys);
   }
   const ids = artistIds(db, names);
-  return (credits) => {
-    const keys = keysByCredits.get(JSON.stringify(credits));
-    if (keys === undefined) throw new Error(`Credit not split: ${credits.join(", ")}`);
+  return (row) => {
+    const keys = keysByCredits.get(JSON.stringify(row));
+    if (keys === undefined) throw new Error(`Credit not split: ${row.join(", ")}`);
     return keys.map((key) => {
       const id = ids.get(key);
       if (id === undefined) throw new Error(`Missing artist id for ${key}`);
@@ -243,7 +297,7 @@ const LINKED = sql`(id IN (SELECT artist_id FROM track_artists)
  * that counted for such an artist count for the artists Core's
  * `respreadDeletedSongs` hands them to instead.
  */
-const pruneArtists = (db: LibraryDatabase): void => {
+const pruneArtists = (db: LibraryDatabase, split: Splitter): void => {
   const pruned = db.all<{ id: number; name: string }>(
     sql`SELECT id AS "id", name AS "name" FROM artists WHERE NOT ${LINKED}`,
   );
@@ -272,7 +326,7 @@ const pruneArtists = (db: LibraryDatabase): void => {
     pruned,
     staying,
     deletedSongs,
-    split: creditSplitter(libraryCredits(db)),
+    split,
   });
   for (const [track, artists] of changed) {
     db.run(sql`DELETE FROM deleted_track_artists WHERE track_id = ${track}`);
@@ -288,15 +342,29 @@ const pruneArtists = (db: LibraryDatabase): void => {
 };
 
 /**
- * Splits every credit in the Library again and re-files what changed, then
+ * Splits every credit in the Library again and re-files what changed, when
+ * the Library's whole credits changed since it last did (a new or gone whole
+ * credit can change how others split) or a save left links behind; then
  * deletes the artists left with no songs. Run it in the transaction that
- * changed the Library's credits (a scan's end, deleting songs), since a new
- * or gone whole credit can change how others split.
+ * changed the Library's credits (a scan's end, deleting songs).
  */
-export const relinkCredits = (db: LibraryDatabase): void => {
+export const relinkCredits = (db: LibraryDatabase, splits: CreditSplits): void => {
+  const current = libraryCredits(db);
+  if (splits.known === null || !sameCredits(splits.known, current)) {
+    splits.known = current;
+    splits.split = splits.build(current);
+    splits.stale = true;
+  }
+  if (splits.stale) relinkAll(db, splits);
+  pruneArtists(db, splits.split);
+};
+
+/** Splits every credit in the Library and re-files what changed. */
+const relinkAll = (db: LibraryDatabase, splits: CreditSplits): void => {
   const rows = creditRows(db);
   const credited = creditArtists(
     db,
+    splits,
     rows.map((row) => row.credits),
   );
   const links = (kind: CreditRow["kind"]): CreditLink[] =>
@@ -305,7 +373,7 @@ export const relinkCredits = (db: LibraryDatabase): void => {
       .map((row) => ({ id: row.id, artistIds: credited(row.credits) }));
   writeLinks(db, TRACKS, links("track"), currentLinks(db, TRACKS, undefined));
   writeLinks(db, ALBUMS, links("album"), currentLinks(db, ALBUMS, undefined));
-  pruneArtists(db);
+  splits.stale = false;
 };
 
 /**
@@ -314,14 +382,15 @@ export const relinkCredits = (db: LibraryDatabase): void => {
  * 0012), so the Library is re-filed without a rescan. The artists it brings
  * in get their image at once.
  */
-export const relinkCreditsIfUnlinked = (db: LibraryDatabase): void => {
+export const relinkCreditsIfUnlinked = (db: LibraryDatabase, splits: CreditSplits): void => {
   const unlinked = db.get<{ unlinked: number }>(sql`SELECT
     EXISTS (SELECT 1 FROM tracks WHERE id NOT IN (SELECT track_id FROM track_artists))
     OR EXISTS (SELECT 1 FROM albums WHERE id NOT IN (SELECT album_id FROM album_artists))
     AS "unlinked"`);
   if (!unlinked.unlinked) return;
   db.transaction((tx) => {
-    relinkCredits(tx);
+    splits.stale = true;
+    relinkCredits(tx, splits);
     refreshArtistImages(tx);
   });
 };

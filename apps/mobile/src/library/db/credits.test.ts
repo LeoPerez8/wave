@@ -2,12 +2,19 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, test } from "node:test";
 
-import { artistPlayTotals, joinArtists, normalizeTrack, type RawTrack } from "@wave/core";
+import {
+  artistPlayTotals,
+  creditSplitter,
+  joinArtists,
+  normalizeTrack,
+  type RawTrack,
+} from "@wave/core";
 import { sql } from "drizzle-orm";
 
 import type { IndexedTrack } from "../LibraryStore.ts";
 import { selectArtistDetail, selectArtists } from "./artists.ts";
 import { libraryCounts } from "./counts.ts";
+import { creditSplits, type CreditSplits } from "./credits.ts";
 import { selectLinkRows } from "./links.ts";
 import { removeTracks, saveBatch } from "./save.ts";
 import * as schema from "./schema.ts";
@@ -21,9 +28,11 @@ import {
 } from "./testDatabase.ts";
 
 let db: TestDatabase;
+let splits: CreditSplits;
 
 beforeEach(async () => {
   db = await openTestDatabase();
+  splits = creditSplits();
 });
 
 const indexed = (raw: Omit<RawTrack, "path">): IndexedTrack => ({
@@ -36,11 +45,14 @@ const indexed = (raw: Omit<RawTrack, "path">): IndexedTrack => ({
   hasLyrics: false,
 });
 
-/** Saves [tracks] as a scan does: in a batch, then completing the scan. */
-const scan = (...tracks: Omit<RawTrack, "path">[]): void => {
-  saveBatch(db, tracks.map(indexed), [], [], 0);
-  removeTracks(db, []);
+/** Saves [tracks] as a scan does: in a batch each ([batches]), then completing the scan. */
+const scanBatches = (...batches: Omit<RawTrack, "path">[][]): void => {
+  for (const tracks of batches) saveBatch(db, splits, tracks.map(indexed), [], [], 0);
+  removeTracks(db, splits, []);
 };
+
+/** Saves [tracks] as a scan does: in a batch, then completing the scan. */
+const scan = (...tracks: Omit<RawTrack, "path">[]): void => scanBatches(tracks);
 
 const ariana = [
   { title: "7 rings", artist: "Ariana Grande", album: "thank u, next" },
@@ -242,6 +254,53 @@ describe("credits", () => {
     );
   });
 
+  test("a credit a later batch brings re-files what an earlier batch of the scan saved", () => {
+    scanBatches(
+      [{ title: "boyfriend", artist: "Ariana Grande & Social House", album: "boyfriend" }],
+      [{ title: "7 rings", artist: "Ariana Grande", album: "thank u, next" }],
+    );
+    assert.deepEqual(
+      selectArtists(db, {}).map((row) => row.name),
+      ["Ariana Grande", "Social House"],
+    );
+  });
+
+  test("deleting the song an artist had alone makes their collaboration one artist again", () => {
+    scan(
+      { title: "boyfriend", artist: "Ariana Grande & Social House", album: "boyfriend" },
+      { title: "7 rings", artist: "Ariana Grande", album: "thank u, next" },
+    );
+    removeTracks(db, splits, ["/Music/thank u, next/7 rings.mp3"]);
+    assert.deepEqual(
+      selectArtists(db, {}).map((row) => row.name),
+      ["Ariana Grande & Social House"],
+    );
+  });
+
+  test("a scan that brings no new credit builds no splitter and splits only its own credits", () => {
+    const count = { builds: 0, splits: 0 };
+    splits = creditSplits((known) => {
+      count.builds += 1;
+      const split = creditSplitter(known);
+      return (credit) => {
+        count.splits += 1;
+        return split(credit);
+      };
+    });
+    scanBatches(ariana.slice(0, 1), ariana.slice(1), [
+      { title: "Say So", artist: "Doja Cat", album: "Hot Pink" },
+    ]);
+    count.builds = 0;
+    count.splits = 0;
+    // A scan finding "7 rings" again, unchanged: its batch's credits, and no others.
+    scanBatches(ariana.slice(0, 1));
+    assert.equal(count.builds, 0);
+    assert.equal(count.splits, 1);
+    // Nothing deleted: the Library's credits are as they were.
+    removeTracks(db, splits, []);
+    assert.equal(count.splits, 1);
+  });
+
   test("the Library's artist count and an artist's link row count collaborations", () => {
     scan(...ariana);
     assert.equal(libraryCounts(db).artists, 3);
@@ -257,6 +316,7 @@ describe("credits", () => {
   test("an artist only credited on collaborations shows a cover of theirs", () => {
     saveBatch(
       db,
+      splits,
       [
         indexed(ariana[0] ?? { title: "" }),
         { ...indexed(ariana[2] ?? { title: "" }), artworkHash: "boyfriend" },
@@ -272,7 +332,7 @@ describe("credits", () => {
       [],
       0,
     );
-    removeTracks(db, []);
+    removeTracks(db, splits, []);
     assert.equal(artist("Social House")?.artworkPath, "/covers/boyfriend.jpg");
   });
 

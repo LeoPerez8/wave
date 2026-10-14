@@ -8,7 +8,14 @@ import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 
 import type { IndexedArtwork, IndexedTrack, PathMove } from "../LibraryStore.ts";
 import { refreshArtistImages } from "./artists.ts";
-import { creditArtists, linkAlbums, linkTracks, relinkCredits, storedCredits } from "./credits.ts";
+import {
+  creditArtists,
+  linkAlbums,
+  linkTracks,
+  relinkCredits,
+  storedCredits,
+  type CreditSplits,
+} from "./credits.ts";
 import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
 import { deleteTracks } from "./tracks.ts";
@@ -43,10 +50,11 @@ const primary = (artistIds: readonly number[]): number => {
  * transaction. [moves] first re-point indexed tracks to the paths they were
  * found under, so they keep their id (and with it history and favorites).
  * Tracks and albums are filed under every artist their credit names (see
- * `credits.ts`).
+ * `credits.ts`), split with the store's [splits].
  */
 export const saveBatch = (
   db: LibraryDatabase,
+  splits: CreditSplits,
   tracks: readonly IndexedTrack[],
   artworkRows: readonly IndexedArtwork[],
   moves: readonly PathMove[],
@@ -78,6 +86,7 @@ export const saveBatch = (
 
     const credited = creditArtists(
       tx,
+      splits,
       tracks.flatMap((t) => [t.artistCredits, t.albumArtistCredits]),
     );
 
@@ -227,9 +236,9 @@ export const saveBatch = (
     );
     linkAlbums(
       tx,
-      uniqueBy(tracks, (t) => t.albumKey).map((t) => ({
-        id: requireId(albumIds, t.albumKey, "album"),
-        artistIds: credited(t.albumArtistCredits),
+      uniqueBy(tracks, (track) => track.albumKey).map((track) => ({
+        id: requireId(albumIds, track.albumKey, "album"),
+        artistIds: credited(track.albumArtistCredits),
       })),
     );
   });
@@ -241,10 +250,10 @@ export const saveBatch = (
  * deletes the artists left without songs, then re-picks the artists' images
  * from the albums left. Run it in the transaction that removed tracks.
  */
-export const pruneOrphans = (tx: LibraryDatabase): void => {
+export const pruneOrphans = (tx: LibraryDatabase, splits: CreditSplits): void => {
   // Albums first: they hold album artists.
   tx.run(sql`DELETE FROM albums WHERE id NOT IN (SELECT album_id FROM tracks)`);
-  relinkCredits(tx);
+  relinkCredits(tx, splits);
   tx.run(sql`DELETE FROM genres
     WHERE id NOT IN (SELECT genre_id FROM tracks WHERE genre_id IS NOT NULL)`);
   tx.run(sql`DELETE FROM folders WHERE id NOT IN (SELECT folder_id FROM tracks)`);
@@ -255,9 +264,13 @@ export const pruneOrphans = (tx: LibraryDatabase): void => {
  * Removes the tracks at [paths] and what they leave empty (`pruneOrphans`);
  * a scan runs it when it completes, with the files it no longer found.
  */
-export const removeTracks = (db: LibraryDatabase, paths: readonly string[]): void => {
+export const removeTracks = (
+  db: LibraryDatabase,
+  splits: CreditSplits,
+  paths: readonly string[],
+): void => {
   db.transaction((tx) => {
     deleteTracks(tx, paths);
-    pruneOrphans(tx);
+    pruneOrphans(tx, splits);
   });
 };
