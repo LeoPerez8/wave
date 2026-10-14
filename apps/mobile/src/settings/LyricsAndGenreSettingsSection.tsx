@@ -51,9 +51,9 @@ export function LyricsAndGenreSettingsSection() {
       <Hairline />
       <Text className="mt-2 font-sans text-footnote text-secondary">
         Find Lyrics and Genre, in a song&apos;s menu, looks up its lyrics on LRCLIB and its
-        album&apos;s genre on Deezer, which means sending them its title, artist, album and length,
-        and writes what it finds into the file, replacing the lyrics and genre there. Off, Wave
-        makes no lookups.
+        album&apos;s genre, year and track number on Deezer, which means sending them its title,
+        artist, album and length, and writes what it finds into the file, replacing the lyrics and
+        genre there and filling in a missing track number or year. Off, Wave makes no lookups.
       </Text>
       {run.status === "running" ? (
         <View className="mt-4 flex-row items-center">

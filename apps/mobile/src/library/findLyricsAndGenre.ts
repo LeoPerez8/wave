@@ -65,7 +65,7 @@ const failedSummary = (error: unknown): LibraryLookupSummary => ({
 
 /**
  * How a run ended: why it stopped early, what failed it, and (the whole-Library
- * run) how many songs it skipped as already having lyrics and a genre.
+ * run) how many songs it skipped as already having everything a lookup finds.
  */
 interface RunOutcome {
   readonly stop: TagLookupStop | undefined;
@@ -155,12 +155,12 @@ const lookUpLibrary = async (
 };
 
 /**
- * Finds lyrics and genre for the songs in the Library missing either (Core's
- * `libraryLookupSongs`) in the background: a foreground service with a
- * progress notification and Cancel keeps it going with Wave in the background
- * and the screen off. Settings follows it with `useLibraryLookup`;
- * `cancelLibraryLookup` stops it. Ends with the updated / not found / failed
- * summary and the songs skipped as already having both, in a notification and
+ * Finds lyrics and genre for the songs in the Library missing lyrics, a genre,
+ * a track number or a year (Core's `libraryLookupSongs`) in the background: a
+ * foreground service with a progress notification and Cancel keeps it going
+ * with Wave in the background and the screen off. Settings follows it with
+ * `useLibraryLookup`; `cancelLibraryLookup` stops it. Ends with the updated /
+ * not found / failed summary and the songs skipped as having all four, in a notification and
  * in Wave (now, or when Wave is next on screen: `followLibraryLookupSummary`).
  * Does nothing while one runs.
  */

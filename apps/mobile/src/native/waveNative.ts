@@ -1,4 +1,4 @@
-import type { LaunchTheme } from "@wave/core";
+import type { LaunchTheme, TagDestination } from "@wave/core";
 import { NativeModule, requireNativeModule } from "expo";
 
 /** One audio file as read by the native scanner (`modules/wave-native`). Tag values are raw. */
@@ -162,14 +162,18 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
   setLaunchTheme(theme: LaunchTheme): Promise<void>;
   /**
    * Writes found lyrics (LRC or plain text) and genre into a song's file,
-   * replacing what's there; null leaves a field alone. A format Wave can't
-   * write tags to gets the lyrics in a sidecar `.lrc` and no genre. Rejects
-   * when the file can't be written.
+   * replacing what's there, and fills in its track number (with `discNumber`)
+   * and year, keeping any the file has; null leaves a field alone. A format
+   * Wave can't write tags to gets the lyrics in a sidecar `.lrc` and nothing
+   * else. Rejects when the file can't be written.
    */
   writeLyricsAndGenre(
     path: string,
     lyrics: string | null,
     genre: string | null,
+    trackNumber: number | null,
+    discNumber: number | null,
+    year: number | null,
   ): Promise<NativeTagWrite>;
 }
 
@@ -180,7 +184,9 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
  */
 export interface NativeTagWrite {
   readonly lyrics: "tags" | "sidecar" | "none";
-  readonly genre: "tags" | "notWritten" | "none";
+  readonly genre: TagDestination;
+  readonly trackNumber: TagDestination;
+  readonly year: TagDestination;
   readonly track: NativeScannedTrack | null;
   readonly artwork: NativeArtwork | null;
 }
