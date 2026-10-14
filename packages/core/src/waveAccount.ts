@@ -69,11 +69,11 @@ export type WaveSession =
   | { readonly status: "ended"; readonly account: WaveAccount | null };
 
 /**
- * Why signing in didn't work: no network, the service turned this Google
- * account away (its allowlist), or Google or the service didn't answer or
- * accept it.
+ * Why signing in didn't work: no network, the phone has no Google account to
+ * pick, the service turned this Google account away (its allowlist), or
+ * Google or the service didn't answer or accept it.
  */
-export type WaveSignInFailure = "offline" | "notAllowed" | "failed";
+export type WaveSignInFailure = "offline" | "noGoogleAccount" | "notAllowed" | "failed";
 
 /** Why deleting the account didn't work: no network, or the service didn't answer. */
 export type WaveDeleteFailure = "offline" | "failed";

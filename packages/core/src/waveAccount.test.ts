@@ -173,6 +173,18 @@ describe("stepWaveAccount", () => {
     });
   });
 
+  test("a phone without a Google account is told to add one", () => {
+    const none = stepWaveAccount(WAVE_ACCOUNT_SIGNED_OUT, {
+      type: "signInFailed",
+      reason: "noGoogleAccount",
+    });
+    assert.deepEqual(waveAccountView(none, true), {
+      kind: "signedOut",
+      action: "signIn",
+      note: "noGoogleAccount",
+    });
+  });
+
   test("the next sign-in clears why the last one didn't work", () => {
     const refused = stepWaveAccount(WAVE_ACCOUNT_SIGNED_OUT, {
       type: "signInFailed",
