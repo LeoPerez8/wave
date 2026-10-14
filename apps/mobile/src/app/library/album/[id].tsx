@@ -1,5 +1,13 @@
 import { LegendList } from "@legendapp/list/react-native";
-import { artistLink } from "@wave/core";
+import {
+  artistLink,
+  discoverTrackId,
+  ytTrackId,
+  type MixedSong,
+  type YtAlbumEntry,
+  type YtLibraryAlbumNote,
+  type YtSong,
+} from "@wave/core";
 import { useLocalSearchParams, usePathname } from "expo-router";
 import { useCallback, useMemo } from "react";
 import { Text, useWindowDimensions, View } from "react-native";
@@ -11,24 +19,33 @@ import { PlayShuffle } from "@/catalog/PlayShuffle";
 import { TrackRow } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { Press } from "@/motion/Press";
-import { playSongs } from "@/playback/actions";
+import { playDiscoverSongs, playSongs } from "@/playback/actions";
 import { useCurrentTrackId, usePlaySongs } from "@/playback/hooks";
 import { openTrackActions } from "@/playback/ActionsMenu";
 import { followArtistLink } from "@/library/ArtistChoice";
 import { DetailFrame } from "@/library/DetailFrame";
 import { useFavoriteIds } from "@/library/favorites";
 import { useAlbum, useLinkRows } from "@/library/hooks";
-import type { AlbumRow, AlbumTrackRow } from "@/library/LibraryStore";
+import type { AlbumRow, AlbumTrackRow, SongRow } from "@/library/LibraryStore";
 import { parseId, useKnownRow } from "@/library/routes";
 import { songCount, toTrackSummary } from "@/library/TrackList";
 import { useListScrollable } from "@/motion/heldTouch";
+import type { NativeYtSong } from "@/native/waveYtMusic";
 import type { ActionItems } from "@/playback/actionTargets";
 import { selectableRow } from "@/selection/selectableRow";
-import { useListSelection } from "@/selection/useListSelection";
+import { useListSelection, type ListSelection } from "@/selection/useListSelection";
+import { useYtAlbumSection } from "@/ytmusic/albumSection";
+import { YtLookupFooter } from "@/ytmusic/YtLookupFooter";
+import { AlbumDownloadAction, useYtAlbumDownloadButton } from "@/ytmusic/YtSongList";
+import { YtSongRow } from "@/ytmusic/YtSongRow";
+
+type Entry = YtAlbumEntry<NativeYtSong, SongRow>;
 
 type Item =
   | { readonly type: "disc"; readonly disc: number }
-  | { readonly type: "track"; readonly track: AlbumTrackRow; readonly index: number };
+  | { readonly type: "track"; readonly track: AlbumTrackRow; readonly index: number }
+  /** With YouTube Music's songs joined in: a Library song or a streamed one, in the release's order. */
+  | { readonly type: "entry"; readonly entry: Entry; readonly index: number };
 
 const DISC_HEAD = CELL * 6;
 
@@ -63,15 +80,58 @@ interface Shown {
 }
 
 const NO_TRACKS: readonly AlbumTrackRow[] = [];
+const NO_SONGS: readonly NativeYtSong[] = [];
 
-const itemKey = (item: Item): string =>
-  item.type === "disc" ? `disc-${item.disc}` : String(item.track.id);
+const itemKey = (item: Item): string => {
+  switch (item.type) {
+    case "disc":
+      return `disc-${item.disc}`;
+    case "track":
+      return String(item.track.id);
+    case "entry":
+      return item.entry.source === "library"
+        ? String(item.entry.track.id)
+        : ytTrackId(item.entry.song.videoId);
+  }
+};
 
-function AlbumHead({ shown }: { shown: Shown }) {
+const YT_NOTE: Readonly<Record<YtLibraryAlbumNote, string>> = {
+  loading: "Looking on YouTube Music…",
+  notFound: "Not found on YouTube Music.",
+  offline: "You're offline. Try again when you're back online.",
+  failed: "YouTube Music didn't answer. Try again in a moment.",
+};
+
+/** The entries as playback takes them: the Library's files, the rest streamed. */
+const mixedSongs = (entries: readonly Entry[]): MixedSong<YtSong, SongRow>[] =>
+  entries.map((entry) =>
+    entry.source === "library"
+      ? { source: "library", track: entry.track }
+      : { source: "stream", song: entry.song },
+  );
+
+const ignore = (): void => undefined;
+
+function AlbumHead({
+  shown,
+  mixed,
+  ytSongs,
+}: {
+  shown: Shown;
+  /** With YouTube Music's songs joined in, Play and Shuffle play them too. */
+  mixed: readonly MixedSong<YtSong, SongRow>[] | null;
+  /** The album's release on YouTube Music, once read: Download beside Play and Shuffle. */
+  ytSongs: readonly NativeYtSong[];
+}) {
   const { width } = useWindowDimensions();
   const { album, genre, tracks } = shown;
   const context = useMemo(() => ({ kind: "album", id: String(album.id) }) as const, [album.id]);
-  const play = usePlaySongs(tracks, context);
+  const playLibrary = usePlaySongs(tracks, context);
+  const play = (shuffle: boolean) =>
+    mixed === null
+      ? playLibrary(shuffle)
+      : void playDiscoverSongs(mixed, undefined, context, { shuffle });
+  const download = useYtAlbumDownloadButton(ytSongs);
   // Several album artists: the line opens Go to Artist's choice (Core's `artistLink`).
   const artistTo = artistLink(album.albumArtistIds, usePathname());
   // Read ahead, so the artist's screen opens header-first.
@@ -118,14 +178,76 @@ function AlbumHead({ shown }: { shown: Shown }) {
         >
           {furniture}
         </Text>
+        {download.progress !== null && (
+          <Text
+            className="font-sans text-footnote text-accent"
+            style={{ fontVariant: ["tabular-nums"] }}
+          >
+            {download.progress}
+          </Text>
+        )}
       </View>
-      <PlayShuffle onPlay={() => play(false)} onShuffle={() => play(true)} />
+      <PlayShuffle onPlay={() => play(false)} onShuffle={() => play(true)}>
+        {download.button !== null && <AlbumDownloadAction download={download.button} />}
+      </PlayShuffle>
     </View>
+  );
+}
+
+/**
+ * A row of the album with YouTube Music's songs joined in: a Library song,
+ * marked downloaded, or a streamed one with the YT Music song's menu. Only
+ * Library songs can be selected.
+ */
+function EntryRow({
+  entry,
+  playing,
+  favorite,
+  listSelection,
+  onPress,
+}: {
+  entry: Entry;
+  playing: boolean;
+  favorite: boolean;
+  listSelection: ListSelection<AlbumTrackRow>;
+  onPress: () => void;
+}) {
+  if (entry.source === "stream")
+    return (
+      <YtSongRow
+        song={entry.song}
+        trackNumber={entry.number}
+        playing={playing}
+        onPress={listSelection.selecting ? ignore : onPress}
+        onLongPress={listSelection.selecting ? ignore : undefined}
+      />
+    );
+  return (
+    <TrackRow
+      track={{ ...toTrackSummary(entry.track), trackNumber: entry.number ?? undefined }}
+      state={playing ? "playing" : undefined}
+      favorite={favorite}
+      leading="number"
+      downloaded
+      {...selectableRow(entry.track, listSelection, onPress, (options) =>
+        openTrackActions(entry.track, options),
+      )}
+    />
   );
 }
 
 function AlbumTracks({ shown }: { shown: Shown }) {
   const tracks = shown.tracks ?? NO_TRACKS;
+  // The album goes by its first album artist's YouTube Music answer.
+  const { artist } = useLinkRows(
+    undefined,
+    shown.album.albumArtistIds[0] ?? shown.album.albumArtistId,
+  );
+  const yt = useYtAlbumSection(artist?.name ?? "", artist?.id ?? 0, shown.album, tracks);
+  // Nothing is joined until the tracks and the artist are read.
+  const ytView = shown.tracks === undefined || artist === null ? null : yt.view;
+  const entries = ytView?.tracks ?? null;
+  const mixed = useMemo(() => (entries === null ? null : mixedSongs(entries)), [entries]);
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
   const currentId = useCurrentTrackId();
@@ -140,36 +262,60 @@ function AlbumTracks({ shown }: { shown: Shown }) {
     () => ({ currentId, favorites, selection: listSelection.selection }),
     [currentId, favorites, listSelection.selection],
   );
-  const items = useMemo(() => albumItems(tracks), [tracks]);
+  const items = useMemo(
+    () =>
+      entries === null
+        ? albumItems(tracks)
+        : entries.map((entry, index): Item => ({ type: "entry", entry, index })),
+    [entries, tracks],
+  );
   const context = useMemo(
     () => ({ kind: "album", id: String(shown.album.id) }) as const,
     [shown.album.id],
   );
 
   const renderItem = useCallback(
-    ({ item }: { item: Item }) =>
-      item.type === "disc" ? (
-        <View className="justify-end" style={{ height: DISC_HEAD, paddingBottom: CELL }}>
-          <CatalogLine>{`Disc ${item.disc}`}</CatalogLine>
-        </View>
-      ) : (
-        <TrackRow
-          track={{
-            ...toTrackSummary(item.track),
-            trackNumber: item.track.trackNumber ?? undefined,
-          }}
-          state={String(item.track.id) === currentId ? "playing" : undefined}
-          favorite={favorites.has(item.track.id)}
-          leading="number"
-          {...selectableRow(
-            item.track,
-            listSelection,
-            () => playSongs(tracks, item.index, context),
-            (options) => openTrackActions(item.track, options),
-          )}
-        />
-      ),
-    [context, currentId, tracks, favorites, listSelection],
+    ({ item }: { item: Item }) => {
+      switch (item.type) {
+        case "disc":
+          return (
+            <View className="justify-end" style={{ height: DISC_HEAD, paddingBottom: CELL }}>
+              <CatalogLine>{`Disc ${item.disc}`}</CatalogLine>
+            </View>
+          );
+        case "entry": {
+          const song = mixed?.[item.index];
+          return (
+            <EntryRow
+              entry={item.entry}
+              playing={song !== undefined && discoverTrackId(song) === currentId}
+              favorite={item.entry.source === "library" && favorites.has(item.entry.track.id)}
+              listSelection={listSelection}
+              onPress={() => mixed !== null && void playDiscoverSongs(mixed, item.index, context)}
+            />
+          );
+        }
+        case "track":
+          return (
+            <TrackRow
+              track={{
+                ...toTrackSummary(item.track),
+                trackNumber: item.track.trackNumber ?? undefined,
+              }}
+              state={String(item.track.id) === currentId ? "playing" : undefined}
+              favorite={favorites.has(item.track.id)}
+              leading="number"
+              {...selectableRow(
+                item.track,
+                listSelection,
+                () => playSongs(tracks, item.index, context),
+                (options) => openTrackActions(item.track, options),
+              )}
+            />
+          );
+      }
+    },
+    [context, currentId, tracks, favorites, listSelection, mixed],
   );
 
   return (
@@ -185,7 +331,18 @@ function AlbumTracks({ shown }: { shown: Shown }) {
       estimatedItemSize={grid.row}
       recycleItems
       contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottomInset }}
-      ListHeaderComponent={<AlbumHead shown={shown} />}
+      ListHeaderComponent={
+        <AlbumHead shown={shown} mixed={mixed} ytSongs={ytView?.songs ?? NO_SONGS} />
+      }
+      ListFooterComponent={
+        ytView === null ? null : (
+          <YtLookupFooter
+            note={ytView.note === null ? null : YT_NOTE[ytView.note]}
+            button={ytView.button}
+            onShow={yt.show}
+          />
+        )
+      }
     />
   );
 }
@@ -193,7 +350,10 @@ function AlbumTracks({ shown }: { shown: Shown }) {
 /**
  * An album: large cover, title, album artist, furniture, Play / Shuffle,
  * tracks by disc and number. Opened from a list that knows the album, the
- * header is there on the first frame and the tracks follow once read.
+ * header is there on the first frame and the tracks follow once read. While
+ * YT Music is on and the album artist's answer is saved, the album's songs
+ * on YouTube Music that the Library lacks join the tracks, streamed, and the
+ * Library's are marked downloaded.
  */
 export default function AlbumScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();

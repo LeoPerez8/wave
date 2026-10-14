@@ -8,8 +8,11 @@ import {
   stepYtArtistSection,
   ytArtistLookup,
   ytArtistQuery,
+  ytArtistRelease,
   ytArtistSectionView,
+  ytAlbumTracklist,
   ytArtistShelves,
+  ytLibraryAlbumView,
 } from "./index.ts";
 import type {
   YtArtistAlbum,
@@ -19,6 +22,7 @@ import type {
   YtArtistSection,
   YtArtistSectionEvent,
   YtArtistShelf,
+  YtReleaseLoad,
   YtSong,
 } from "./index.ts";
 
@@ -398,5 +402,221 @@ describe("the YT Music section's albums and singles", () => {
     assert.deepEqual(shelves(saved, { enabled: false }), []);
     assert.deepEqual(shelves(step(restored(null), { type: "requested" })), []);
     assert.deepEqual(shelves(restored(unmatched(NOW))), []);
+  });
+});
+
+const titled = (title: string, browseId = title): YtArtistAlbum => ({
+  ...release(browseId, 2013),
+  title,
+});
+
+describe("ytArtistRelease", () => {
+  const sempiternal = { title: "Sempiternal", albumArtistIds: [3] };
+  const saved = (albums: YtArtistAlbum[], singles: YtArtistAlbum[] = []) =>
+    ({ name: "Bring Me The Horizon", songs: [], albums, singles }) satisfies YtArtistPage;
+
+  test("is the artist's release with the Library album's title, version notes aside", () => {
+    const page = saved([
+      titled("That's the Spirit"),
+      titled("Sempiternal (Deluxe Edition)", "MPREb_semp"),
+    ]);
+    assert.equal(ytArtistRelease(page, 3, sempiternal)?.browseId, "MPREb_semp");
+  });
+
+  test("looks among the singles and EPs too, albums first", () => {
+    const page = saved([titled("Sempiternal", "album")], [titled("Sempiternal", "single")]);
+    assert.equal(ytArtistRelease(page, 3, sempiternal)?.browseId, "album");
+    assert.equal(
+      ytArtistRelease(saved([], [titled("Sempiternal", "ep")]), 3, sempiternal)?.browseId,
+      "ep",
+    );
+  });
+
+  test("is null when the page has no such release, or the album isn't the artist's", () => {
+    assert.equal(ytArtistRelease(saved([titled("Sempiternal (Live)")]), 3, sempiternal), null);
+    assert.equal(ytArtistRelease(saved([titled("Sempiternal")]), 4, sempiternal), null);
+  });
+});
+
+interface Track {
+  readonly id: number;
+  readonly title: string;
+  readonly artist: string;
+  readonly durationMs: number;
+  readonly trackNumber: number | null;
+}
+
+const track = (id: number, title: string, trackNumber: number | null): Track => ({
+  id,
+  title,
+  artist: "Daft Punk",
+  durationMs: 0,
+  trackNumber,
+});
+
+const titledSong = (title: string): YtSong => ({ ...song(title), title });
+
+const shape = (entries: readonly { source: string; number: number | null }[]) =>
+  entries.map((entry) =>
+    entry.source === "library"
+      ? `${entry.number}:#${(entry as { track: Track }).track.id}`
+      : `${entry.number}:${(entry as { song: YtSong }).song.title}`,
+  );
+
+describe("ytAlbumTracklist", () => {
+  const release = ["Give Life Back", "The Game of Love", "Giorgio", "Within"].map(titledSong);
+  const nowhere = () => null;
+
+  test("the release's order: the album's own tracks where it has them, the rest streamed", () => {
+    const tracks = [track(1, "Give Life Back", 1), track(3, "Giorgio", 3)];
+    assert.deepEqual(shape(ytAlbumTracklist(release, tracks, nowhere)), [
+      "1:#1",
+      "2:The Game of Love",
+      "3:#3",
+      "4:Within",
+    ]);
+  });
+
+  test("a song the album lacks but the Library has elsewhere is the Library's file", () => {
+    const elsewhere = (s: YtSong) => (s.title === "Within" ? track(40, "Within", 9) : null);
+    assert.deepEqual(shape(ytAlbumTracklist(release, [track(1, "Give Life Back", 1)], elsewhere)), [
+      "1:#1",
+      "2:The Game of Love",
+      "3:Giorgio",
+      "4:#40",
+    ]);
+  });
+
+  test("the album's tracks the release doesn't list keep their place by number, or go last", () => {
+    const tracks = [
+      track(1, "Give Life Back", 1),
+      track(7, "Hidden Track", 2),
+      track(8, "Bonus", null),
+    ];
+    assert.deepEqual(shape(ytAlbumTracklist(release, tracks, nowhere)), [
+      "1:#1",
+      "2:The Game of Love",
+      "2:#7",
+      "3:Giorgio",
+      "4:Within",
+      "null:#8",
+    ]);
+  });
+
+  test("a Library track stands for one song of the release only", () => {
+    const twice = [titledSong("Giorgio"), titledSong("Giorgio")];
+    assert.deepEqual(shape(ytAlbumTracklist(twice, [track(3, "Giorgio", 1)], nowhere)), [
+      "1:#3",
+      "2:Giorgio",
+    ]);
+  });
+});
+
+describe("a Library album's YT Music songs", () => {
+  const RAM = { title: "Random Access Memories", albumArtistIds: [1] };
+  const tracks = [track(1, "mine-1", 1), track(3, "mine-3", 3)];
+  const songs = [song("mine-1"), song("give-life-back"), song("mine-3"), song("touch")];
+
+  const albumView = (
+    state: Section,
+    context: {
+      enabled?: boolean;
+      now?: number;
+      name?: string;
+      artistId?: number;
+      releasePage?: YtReleaseLoad | undefined;
+    } = {},
+  ) => {
+    const asked: string[] = [];
+    const shown = ytLibraryAlbumView(state, {
+      name: context.name ?? "Daft Punk",
+      artistId: context.artistId ?? 1,
+      album: RAM,
+      tracks,
+      elsewhere: () => null,
+      enabled: context.enabled ?? true,
+      now: context.now ?? NOW,
+      releasePage: (release) => {
+        asked.push(release.browseId);
+        return "releasePage" in context ? context.releasePage : { status: "loaded", songs };
+      },
+    });
+    return { shown, asked };
+  };
+
+  test("with the artist's answer saved, it reads the release's page and joins its songs to the tracks", () => {
+    const { shown, asked } = albumView(restored(found(NOW - DAY)));
+    assert.deepEqual(asked, ["MPREb_ram"]);
+    assert.deepEqual(shape(shown?.tracks ?? []), ["1:#1", "2:give-life-back", "3:#3", "4:touch"]);
+    assert.deepEqual(shown?.songs, songs);
+    assert.equal(shown?.note, null);
+    assert.equal(shown?.button, false);
+    assert.equal(shown?.release?.browseId, "MPREb_ram");
+  });
+
+  test("loads quietly while the release's page is read, the album shown as it is", () => {
+    for (const releasePage of [undefined, { status: "loading" } as const]) {
+      const { shown } = albumView(restored(found(NOW)), { releasePage });
+      assert.equal(shown?.tracks, null);
+      assert.equal(shown?.note, "loading");
+      assert.equal(shown?.button, false);
+    }
+  });
+
+  test("with every song of the release in the Library, the album shows as it is", () => {
+    const { shown } = albumView(restored(found(NOW)), {
+      releasePage: { status: "loaded", songs: [song("mine-1"), song("mine-3")] },
+    });
+    assert.equal(shown?.tracks, null);
+    assert.equal(shown?.note, null);
+    assert.equal(shown?.button, false);
+  });
+
+  test("a release page that can't be read is a quiet line with the button to read it again", () => {
+    const { shown } = albumView(restored(found(NOW)), {
+      releasePage: { status: "quiet", reason: "offline" },
+    });
+    assert.equal(shown?.note, "offline");
+    assert.equal(shown?.button, true);
+    assert.equal(shown?.release?.browseId, "MPREb_ram");
+  });
+
+  test("not on the artist's page, or no artist matched: not found, and nothing is read", () => {
+    const elsewhere = albumView(restored(withReleases([release("tron", 2010)], [])));
+    assert.equal(elsewhere.shown?.note, "notFound");
+    assert.equal(elsewhere.shown?.button, false);
+    assert.deepEqual(elsewhere.asked, []);
+    const nobody = albumView(restored(unmatched(NOW)));
+    assert.equal(nobody.shown?.note, "notFound");
+    assert.deepEqual(nobody.asked, []);
+  });
+
+  test("with nothing saved, or a week on, it's the button, and nothing is read", () => {
+    for (const state of [restored(null), restored(found(NOW - 8 * DAY))]) {
+      const { shown, asked } = albumView(state);
+      assert.deepEqual(shown, {
+        tracks: null,
+        songs: null,
+        note: null,
+        button: true,
+        release: null,
+      });
+      assert.deepEqual(asked, []);
+    }
+  });
+
+  test("asking for the artist loads, and a failure is a quiet line with the button", () => {
+    const asking = step(restored(null), { type: "requested" });
+    assert.equal(albumView(asking).shown?.note, "loading");
+    assert.equal(albumView(asking).shown?.button, false);
+    const failed = step(asking, { type: "failed", reason: "failed" });
+    assert.equal(albumView(failed).shown?.note, "failed");
+    assert.equal(albumView(failed).shown?.button, true);
+  });
+
+  test("nothing with YT Music off, for names that aren't an artist, and until what was saved is read", () => {
+    assert.equal(albumView(restored(found(NOW)), { enabled: false }).shown, null);
+    assert.equal(albumView(restored(found(NOW)), { name: "Various Artists" }).shown, null);
+    assert.equal(albumView(YT_ARTIST_SECTION_START).shown, null);
   });
 });
