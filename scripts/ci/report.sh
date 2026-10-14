@@ -54,6 +54,15 @@ body="$dir/ci-comment.md"
     tail -n 120 "$clean" | cut -c1-400
     echo '```'
   fi
+  # How long the job and each step took, so agents without the Actions API can see
+  # where the time goes. Needs `actions: read`; a failure here only drops the table.
+  durations="$(gh api "repos/${repo}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT:-1}/jobs" \
+    --jq ".jobs[] | select(.name == \"${job}\")" \
+    | node "$(dirname "$0")/step-durations-cli.ts" || true)"
+  if [ -n "$durations" ]; then
+    echo
+    echo "$durations"
+  fi
 } > "$body"
 
 existing="$(gh api "repos/${repo}/issues/${pr}/comments" --paginate \
