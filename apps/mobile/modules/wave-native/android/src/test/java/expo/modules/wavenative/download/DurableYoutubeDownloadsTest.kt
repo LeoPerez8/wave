@@ -173,6 +173,31 @@ class DurableYoutubeDownloadsTest {
     }
   }
 
+  /** It starts over from byte 0 with an address resolved afresh: what was left of the old stall window isn't its time. */
+  @Test fun aTransferCutOffByProcessDeathGetsAFreshWindowToStartIn() {
+    withFolder { folder ->
+      var now = 1_000L
+      val journal = File(folder, "jobs")
+      var owner = DurableDownloads(journal, clock = { now })
+      class ProcessDeath : Error()
+      owner.enqueue(song, null, emptyMap(), "youtube")
+      prepareYoutube(owner, File(folder, "Recording.m4a"))
+      assertThrows(ProcessDeath::class.java) { owner.advance(transfer { _, _, _ -> throw ProcessDeath() }, Untouched) }
+      now += DurableDownloads.ATTEMPT_MS - 10_000
+      owner = DurableDownloads(journal, clock = { now })
+      val restored = owner
+      var wanted: Boolean? = null
+      owner.advance(transfer { _, _, source ->
+        // Resolving the address and the first bytes take a while.
+        now += 20_000
+        wanted = restored.transferWanted("song")
+        source.parentFile.mkdirs(); source.writeBytes(SERVED); audio(source)
+      }, Untouched)
+      assertEquals(true, wanted)
+      assertEquals("sourceReady", owner.snapshot().single()["phase"])
+    }
+  }
+
   @Test fun aTransferCutOffByProcessDeathStartsOverWithAFreshPartFile() {
     withFolder { folder ->
       var now = 1_000L

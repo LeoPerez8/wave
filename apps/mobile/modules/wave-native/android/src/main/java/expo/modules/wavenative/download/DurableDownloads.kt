@@ -60,13 +60,17 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
       jobs.values.removeAll {
         it["phase"] == "cancelled" || it["acknowledged"] == true || (it["phase"] == "failed" && it.number("endedAt") + FORGET_FAILED_MS <= clock())
       }
-      // A socket cannot survive process recreation. Counts and absolute deadlines do.
+      // A socket cannot survive process recreation. Counts and absolute deadlines do: a peer keeps
+      // what was left of its turn. YouTube's stream starts over from byte 0 at an address resolved
+      // afresh, so its transfer gets a whole window again, within the job's own deadline.
       for (job in jobs.values) if (job["phase"] == "transferring") {
         cleanup(job)
         job["generation"] = job.number("generation") + 1
         job["phase"] = "prepared"
-        job["resumeAttemptDeadline"] = job["attemptDeadline"]
-        job["resumeQueueDeadline"] = job["queueDeadline"]
+        if (job["source"] != YOUTUBE) {
+          job["resumeAttemptDeadline"] = job["attemptDeadline"]
+          job["resumeQueueDeadline"] = job["queueDeadline"]
+        }
       }
       // Prepared before the prepare answer brought a failure plan: it asks for one again.
       for (job in jobs.values) if (job["phase"] == "prepared" && job["failurePlan"] == null && job["fellBackFrom"] == null) {
