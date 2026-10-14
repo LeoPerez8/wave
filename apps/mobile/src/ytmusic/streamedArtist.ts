@@ -30,8 +30,9 @@ const ARTISTS_WAIT_MS = 500;
 
 /**
  * Resolves once the Library's artists have been read (at once when they
- * have), so a menu offering Go to Artist opens whole and never grows; after
- * a short wait it resolves anyway.
+ * have), so a menu offering Go to Artist opens with it. A failed read (tried
+ * again by this wait) resolves as soon as it fails; a slow one after a short
+ * wait.
  */
 export const libraryArtistsRead = (): Promise<void> => {
   if (sharedArtists.get() !== null) return Promise.resolve();
@@ -42,9 +43,8 @@ export const libraryArtistsRead = (): Promise<void> => {
       resolve();
     };
     const timer = setTimeout(done, ARTISTS_WAIT_MS);
-    const stop = sharedArtists.subscribe(() => {
-      if (sharedArtists.get() !== null) done();
-    });
+    // Told once the read settles, read or failed.
+    const stop = sharedArtists.subscribe(done);
   });
 };
 

@@ -107,4 +107,27 @@ describe("a value built once per version and shared", () => {
     await tick();
     assert.equal(cache.get(), "v2");
   });
+
+  test("a failed build tells the subscribers and is tried again by the next one, not before", async () => {
+    const version = makeExternalStore(1);
+    const { pending, build } = manualBuilds();
+    const cache = makeVersionedCache({ version, initial: "nothing", build });
+    let told = 0;
+    cache.subscribe(() => told++);
+    pending[0]?.settle(new Error("store busy"));
+    await tick();
+
+    assert.equal(told, 1);
+    assert.equal(pending.length, 1);
+    cache.subscribe(() => {});
+    assert.deepEqual(
+      pending.map((b) => b.version),
+      [1, 1],
+    );
+    pending[1]?.settle("v1");
+    await tick();
+    assert.equal(cache.get(), "v1");
+    cache.subscribe(() => {});
+    assert.equal(pending.length, 2);
+  });
 });
