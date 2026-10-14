@@ -11,6 +11,7 @@ import {
 import * as Haptics from "expo-haptics";
 import { router, usePathname } from "expo-router";
 
+import { followArtistLink } from "@/library/ArtistChoice";
 import { confirmDeleteSongs } from "@/library/deleteSongs";
 import { setFavorites, useFavoriteIds } from "@/library/favorites";
 import { findLyricsAndGenreFor } from "@/library/findLyricsAndGenre";
@@ -22,7 +23,7 @@ import {
   renamePlaylistFlow,
 } from "@/library/PlaylistSheets";
 import { removePlaylistItems } from "@/library/playlists";
-import { openAlbum, openArtist } from "@/library/routes";
+import { openAlbum } from "@/library/routes";
 import { showError } from "@/overlay/alert";
 import { useLyricsAndGenreLookupsEnabled } from "@/settings/lyricsAndGenre";
 
@@ -127,7 +128,8 @@ export function useItemActions(
   let goArtistId: number | undefined;
   for (const entry of planned) {
     if (entry.action === "goToAlbum") goAlbumId = entry.albumId;
-    if (entry.action === "goToArtist") goArtistId = entry.artistId;
+    if (entry.action === "goToArtist" && entry.artists.kind === "open")
+      goArtistId = entry.artists.artistId;
   }
   const links = useLinkRows(goAlbumId, goArtistId);
 
@@ -168,8 +170,9 @@ export function useItemActions(
         return make(run(() => openAlbum(albumId, links.album)));
       }
       case "goToArtist": {
-        const { artistId } = entry;
-        return make(run(() => openArtist(artistId, links.artist)));
+        // Several credited artists: a card to pick one from (`ArtistChoice`).
+        const { artists } = entry;
+        return make(run(() => followArtistLink(artists, links.artist)));
       }
       case "renamePlaylist":
         return make(run(() => playlist !== undefined && void renamePlaylistFlow(playlist)));

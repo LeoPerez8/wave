@@ -33,6 +33,7 @@ const song = (id: number, thumbPath: string | null = `/covers/${id}.thumb.jpg`):
   addedAt: 0,
   albumId: id,
   artistId: id,
+  artistIds: [id],
   discNumber: null,
   trackNumber: null,
 });

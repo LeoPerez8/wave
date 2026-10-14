@@ -7,6 +7,25 @@ import { asc, eq, inArray, sql } from "drizzle-orm";
 import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
 
+/** The ids in a `group_concat` of them ("3,7"), in order; none for null. */
+const idList = (value: unknown): number[] =>
+  typeof value === "string" && value !== "" ? value.split(",").map(Number) : [];
+
+/**
+ * Every artist a track's credit names, primary first: the ids Go to Artist
+ * can open (`SongRow.artistIds`).
+ */
+export const trackArtistIds = sql<readonly number[]>`(
+  SELECT group_concat(artist_id) FROM (
+    SELECT artist_id FROM track_artists
+    WHERE track_artists.track_id = ${schema.tracks.id} ORDER BY position))`.mapWith(idList);
+
+/** Every artist an album's album artist credit names, primary first (`AlbumRow.albumArtistIds`). */
+export const albumArtistIds = sql<readonly number[]>`(
+  SELECT group_concat(artist_id) FROM (
+    SELECT artist_id FROM album_artists
+    WHERE album_artists.album_id = ${schema.albums.id} ORDER BY position))`.mapWith(idList);
+
 /** What every track list shows (a `SongRow`), plus what orders albums and folders. */
 export const songColumns = {
   id: schema.tracks.id,
@@ -23,6 +42,7 @@ export const songColumns = {
   addedAt: schema.tracks.addedAt,
   albumId: schema.tracks.albumId,
   artistId: schema.tracks.artistId,
+  artistIds: trackArtistIds,
   discNumber: schema.tracks.discNumber,
   trackNumber: schema.tracks.trackNumber,
   fileName: schema.tracks.fileName,
