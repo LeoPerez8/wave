@@ -239,8 +239,10 @@ export const artistPhotos = sqliteTable("artist_photos", {
 
 /**
  * The artist page's YT Music section (docs/spec.md, "YT Music"): the last
- * answer YouTube Music gave for each artist, by artist key. Core's
- * `ytArtistSectionView` decides how long it's shown without asking again.
+ * answer YouTube Music gave for each artist, by artist key (a Library
+ * artist's `identityKey`, or `yt:<browse id>` for a YouTube Music artist
+ * page). Core's `ytArtistSectionView` and `ytArtistPageView` decide how long
+ * it's shown without asking again.
  */
 export const ytArtists = sqliteTable("yt_artists", {
   artistKey: text("artist_key").primaryKey(),
