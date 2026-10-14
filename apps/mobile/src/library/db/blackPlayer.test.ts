@@ -84,7 +84,7 @@ describe("Imported BlackPlayer plays", () => {
 });
 
 describe("selectImportTracks", () => {
-  test("lists every track's path, title, credit and length, for matching BlackPlayer's rows", () => {
+  test("lists every track's path, title, credit, album and length, for matching BlackPlayer's rows", () => {
     const airbag = addTrack(db, {
       title: "Airbag",
       artist: "Radiohead",
@@ -97,6 +97,7 @@ describe("selectImportTracks", () => {
         path: "/Music/OK Computer/Airbag.mp3",
         title: "Airbag",
         artist: "Radiohead",
+        album: "OK Computer",
         durationMs: 284_000,
       },
     ]);

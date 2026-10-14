@@ -138,41 +138,78 @@ describe("playlistEntryLinks", () => {
     artist,
     durationMs,
   });
+  /** Entry [itemId] of playlist [playlistId]. */
+  const entry = (itemId: number, song: YtAlbumSong, playlistId = 1) => ({
+    itemId,
+    playlistId,
+    song,
+  });
+  const linked = (...links: { itemId: number; trackId: number }[]) => ({ links, drops: [] });
 
   test("an entry the Library now has, the same recording, becomes that Library song", () => {
     const entries = [
-      { itemId: 10, song: yt("a", { title: "Genesis" }) },
-      { itemId: 11, song: yt("b", { title: "Phantom" }) },
+      entry(10, yt("a", { title: "Genesis" })),
+      entry(11, yt("b", { title: "Phantom" })),
     ];
     const songs = [track(1, "Genesis", "Justice", 201_000), track(2, "Stress", "Justice")];
-    assert.deepEqual(playlistEntryLinks(entries, songs), [{ itemId: 10, trackId: 1 }]);
+    assert.deepEqual(playlistEntryLinks(entries, songs, []), linked({ itemId: 10, trackId: 1 }));
   });
 
   test("every entry of that song links, whichever playlist holds it", () => {
     const entries = [
-      { itemId: 10, song: yt("a", { title: "Genesis" }) },
-      { itemId: 42, song: yt("a", { title: "Genesis" }) },
+      entry(10, yt("a", { title: "Genesis" }), 1),
+      entry(42, yt("a", { title: "Genesis" }), 2),
     ];
-    assert.deepEqual(playlistEntryLinks(entries, [track(1, "Genesis", "Justice")]), [
-      { itemId: 10, trackId: 1 },
-      { itemId: 42, trackId: 1 },
-    ]);
+    assert.deepEqual(
+      playlistEntryLinks(entries, [track(1, "Genesis", "Justice")], []),
+      linked({ itemId: 10, trackId: 1 }, { itemId: 42, trackId: 1 }),
+    );
+  });
+
+  test("an entry for a song its playlist already holds from the Library is dropped, not doubled", () => {
+    const entries = [
+      entry(10, yt("a", { title: "Genesis" }), 1),
+      entry(42, yt("a", { title: "Genesis" }), 2),
+    ];
+    assert.deepEqual(
+      playlistEntryLinks(
+        entries,
+        [track(1, "Genesis", "Justice")],
+        [{ playlistId: 1, trackId: 1 }],
+      ),
+      { links: [{ itemId: 42, trackId: 1 }], drops: [10] },
+    );
+  });
+
+  test("of two entries of one playlist that become the same Library song, the later is dropped", () => {
+    // Two uploads of one recording: different video ids, one Library song.
+    const entries = [
+      entry(10, yt("a", { title: "Genesis" })),
+      entry(11, yt("b", { title: "Genesis", durationMs: 201_000 })),
+    ];
+    assert.deepEqual(playlistEntryLinks(entries, [track(1, "Genesis", "Justice")], []), {
+      links: [{ itemId: 10, trackId: 1 }],
+      drops: [11],
+    });
   });
 
   test("matched as Search and Discover match: featured credits and remaster notes aside", () => {
-    const entries = [{ itemId: 10, song: yt("a", { title: "D.A.N.C.E. (feat. Uffie)" }) }];
+    const entries = [entry(10, yt("a", { title: "D.A.N.C.E. (feat. Uffie)" }))];
     const songs = [track(1, "D.A.N.C.E. - 2017 Remaster", "Justice feat. Uffie")];
-    assert.deepEqual(playlistEntryLinks(entries, songs), [{ itemId: 10, trackId: 1 }]);
+    assert.deepEqual(playlistEntryLinks(entries, songs, []), linked({ itemId: 10, trackId: 1 }));
   });
 
   test("a live take or an edit of the song stays streamed", () => {
-    const entries = [{ itemId: 10, song: yt("a", { title: "Genesis" }) }];
-    assert.deepEqual(playlistEntryLinks(entries, [track(1, "Genesis", "Justice", 260_000)]), []);
+    const entries = [entry(10, yt("a", { title: "Genesis" }))];
+    assert.deepEqual(
+      playlistEntryLinks(entries, [track(1, "Genesis", "Justice", 260_000)], []),
+      linked(),
+    );
   });
 
   test("a namesake by another artist stays streamed", () => {
-    const entries = [{ itemId: 10, song: yt("a", { title: "Genesis" }) }];
-    assert.deepEqual(playlistEntryLinks(entries, [track(1, "Genesis", "Grimes")]), []);
+    const entries = [entry(10, yt("a", { title: "Genesis" }))];
+    assert.deepEqual(playlistEntryLinks(entries, [track(1, "Genesis", "Grimes")], []), linked());
   });
 
   test("an entry downloaded becomes the song its download's tags describe", () => {
@@ -181,13 +218,14 @@ describe("playlistEntryLinks", () => {
     const song = yt("a", { title: "Sunflower", artists: ["Post Malone", "Swae Lee"] });
     const tags = ytDownloadTags(song, null, null, null);
     const downloaded = track(7, tags.title, tags.artist, 202_900);
-    assert.deepEqual(playlistEntryLinks([{ itemId: 10, song }], [downloaded]), [
-      { itemId: 10, trackId: 7 },
-    ]);
+    assert.deepEqual(
+      playlistEntryLinks([entry(10, song)], [downloaded], []),
+      linked({ itemId: 10, trackId: 7 }),
+    );
   });
 
   test("nothing to link when there are no entries or no new songs", () => {
-    assert.deepEqual(playlistEntryLinks([], [track(1, "Genesis", "Justice")]), []);
-    assert.deepEqual(playlistEntryLinks([{ itemId: 10, song: yt("a") }], []), []);
+    assert.deepEqual(playlistEntryLinks([], [track(1, "Genesis", "Justice")], []), linked());
+    assert.deepEqual(playlistEntryLinks([entry(10, yt("a"))], [], []), linked());
   });
 });

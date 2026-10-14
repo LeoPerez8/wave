@@ -53,7 +53,8 @@ const primary = (artistIds: readonly number[]): number => {
  * Tracks and albums are filed under every artist their credit names (see
  * `credits.ts`), split with the store's [splits]. Playlists' YT Music entries
  * that the saved tracks positively are become those tracks
- * (`linkPlaylistEntries`), so a download or a scan both bring them in.
+ * (`linkPlaylistEntries`), so a download brings them in; a scan passes
+ * [linkEntries] false and links once against the whole Library when it ends.
  */
 export const saveBatch = (
   db: LibraryDatabase,
@@ -62,6 +63,7 @@ export const saveBatch = (
   artworkRows: readonly IndexedArtwork[],
   moves: readonly PathMove[],
   now: number,
+  { linkEntries = true }: { readonly linkEntries?: boolean } = {},
 ): void => {
   const { genres, folders, albums, artwork } = schema;
   db.transaction((tx) => {
@@ -245,7 +247,7 @@ export const saveBatch = (
       })),
     );
     // A song a playlist streamed from YT Music becomes this Library song there.
-    linkPlaylistEntries(tx, [...trackIds.values()]);
+    if (linkEntries) linkPlaylistEntries(tx, [...trackIds.values()]);
   });
 };
 

@@ -21,7 +21,10 @@
  * `fetch` and a track list's songs in `listSongs`.
  */
 
+import { playlistPlayback } from "./playlistEntries.ts";
 import type { QueueContext } from "./queue.ts";
+import type { MixedSong } from "./ytDiscover.ts";
+import { ytTrackId, type YtSong } from "./ytMusic.ts";
 
 /** Auto's tabs: the root's children, in order. */
 export type AutoTab = "home" | "playlists" | "albums" | "artists";
@@ -499,7 +502,7 @@ export const autoPlayList = (node: AutoNode): AutoTrackList | null =>
  */
 export const autoQueueStart = (
   node: AutoNode,
-  tracks: readonly AutoTrack[],
+  tracks: readonly Pick<AutoTrack, "id">[],
 ): AutoQueueStart | null => {
   const list = autoPlayList(node);
   if (list === null) return null;
@@ -531,6 +534,58 @@ export const autoQueueAdd = (
   return node.type === "track" && startIndex !== undefined
     ? trackIds.slice(startIndex, startIndex + 1)
     : trackIds;
+};
+
+/**
+ * What playing or adding a node of a track list does once the app has the
+ * list's songs: the queue start, the track ids an add adds, and the songs
+ * that play (for the queue's track data); or why nothing plays.
+ */
+export type AutoListPlay<S extends YtSong, L> =
+  | {
+      readonly kind: "play";
+      readonly start: AutoQueueStart;
+      readonly added: readonly string[];
+      readonly songs: readonly MixedSong<S, L>[];
+    }
+  /** A browsable node, an empty list, or a song that has left the list. */
+  | { readonly kind: "notFound" }
+  /** YT Music is off, and the node is one of its entries or the list has nothing else. */
+  | { readonly kind: "ytMusicOff" };
+
+const songTrackId = <L extends { readonly id: number }>(song: MixedSong<YtSong, L>): string =>
+  song.source === "library" ? String(song.track.id) : ytTrackId(song.song.videoId);
+
+/**
+ * What playing or adding [node] does, given every song of its list
+ * (`autoPlayList`) in list order: the phone's rule for a playlist with YT
+ * Music entries (`playlistPlayback`; with YT Music off they show but don't
+ * play), then Auto's (`autoQueueStart`, `autoQueueAdd`).
+ */
+export const autoListPlay = <S extends YtSong, L extends { readonly id: number }>(
+  node: AutoNode,
+  songs: readonly MixedSong<S, L>[],
+  ytMusic: boolean,
+): AutoListPlay<S, L> => {
+  const listed = autoQueueStart(node, songs.map((song) => ({ id: songTrackId(song) })));
+  if (listed === null) return { kind: "notFound" };
+  const play = playlistPlayback(songs, { ytMusic, startIndex: listed.startIndex });
+  if (play === null) return { kind: "ytMusicOff" };
+  const played: readonly MixedSong<S, L>[] =
+    play.playback.kind === "mixed"
+      ? play.playback.songs
+      : play.playback.tracks.map((track) => ({ source: "library", track }));
+  const trackIds = played.map(songTrackId);
+  const { startIndex } = play;
+  return {
+    kind: "play",
+    start: { ...listed, trackIds, startIndex },
+    added:
+      node.type === "track" && startIndex !== undefined
+        ? trackIds.slice(startIndex, startIndex + 1)
+        : trackIds,
+    songs: played,
+  };
 };
 
 /**

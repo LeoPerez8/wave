@@ -29,6 +29,7 @@ import { followUp, openOverlay } from "@/overlay/overlay";
 import { useSlideToChoose } from "@/overlay/useSlideToChoose";
 import { addYtToQueue, playYtNext } from "@/playback/actions";
 import { showError } from "@/overlay/alert";
+import { useYtMusicEnabled } from "@/settings/ytMusic";
 
 import { useLibraryFinder, useLoadedInLibrary, type FindInLibrary } from "./libraryFinder";
 import { libraryArtistsRead, useStreamedArtistLink } from "./streamedArtist";
@@ -173,11 +174,13 @@ function YtSongActionsMenu({
   };
   const { underFinger, trackEntry, trackList } = useSlideToChoose(choose);
   const flow = useOverlayFlow();
+  // A playlist's entry opens this menu with YT Music off too: then nothing is asked of YouTube.
+  const ytMusic = useYtMusicEnabled();
 
   return (
     <>
       <CardHeading>
-        <Artwork uri={song.artworkUrl ?? undefined} size={CELL * 5} />
+        <Artwork uri={ytMusic ? (song.artworkUrl ?? undefined) : undefined} size={CELL * 5} />
         <View className="flex-1">
           <Text numberOfLines={1} className="font-sans text-body font-medium text-foreground">
             {song.title}

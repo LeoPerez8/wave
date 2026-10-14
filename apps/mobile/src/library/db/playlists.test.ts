@@ -234,6 +234,35 @@ describe("linkPlaylistEntries", () => {
     assert.equal(titles().at(-1), "Lucky");
   });
 
+  test("a scan's batches can leave linking to its end, which links against the whole Library", () => {
+    appendPlaylistSongs(db, playlistId, [stream(yt("a", { title: "Lucky" }))], 0);
+    saveBatch(db, creditSplits(), [indexedTrack("Lucky", "Radiohead", 180_000)], [], [], 0, {
+      linkEntries: false,
+    });
+    assert.equal(titles().at(-1), "yt:Lucky");
+    assert.equal(linkPlaylistEntries(db), 1);
+    assert.equal(titles().at(-1), "Lucky");
+  });
+
+  test("an entry whose song its playlist already holds from the Library is dropped, not doubled", () => {
+    const luckyId = addTrack(db, { title: "Lucky", artist: "Radiohead", durationMs: 180_000 });
+    ids.Lucky = luckyId;
+    appendPlaylistSongs(db, playlistId, [library("Lucky"), stream(yt("a", { title: "Lucky" }))], 0);
+    linkPlaylistEntries(db, [luckyId]);
+    assert.deepEqual(titles(), ["Daydreaming", "Airbag", "Creep", "Airbag", "Lucky"]);
+  });
+
+  test("of two entries of a playlist that become one Library song, the later is dropped", () => {
+    const otherId = newPlaylist("Other");
+    const uploads = [yt("a", { title: "Lucky" }), yt("b", { title: "Lucky", durationMs: 181_000 })];
+    appendPlaylistSongs(db, playlistId, [stream(uploads[0]!), library("Bloom"), stream(uploads[1]!)], 0);
+    appendPlaylistSongs(db, otherId, [stream(uploads[1]!)], 0);
+    const luckyId = addTrack(db, { title: "Lucky", artist: "Radiohead", durationMs: 180_000 });
+    linkPlaylistEntries(db, [luckyId]);
+    assert.deepEqual(titles(), ["Daydreaming", "Airbag", "Creep", "Airbag", "Lucky", "Bloom"]);
+    assert.deepEqual(titlesOf(otherId), ["Lucky"]);
+  });
+
   test("deleting the Library song then takes its entries out, as for any Library song", () => {
     appendPlaylistSongs(db, playlistId, [stream(yt("a", { title: "Lucky" }))], 0);
     const luckyId = addTrack(db, { title: "Lucky", artist: "Radiohead" });
@@ -287,6 +316,41 @@ describe("selectPlaylistCovers", () => {
       ],
     });
   });
+
+  test("a cover repeated, or an unreadable entry, takes no tile; each playlist gets its own", () => {
+    const id = newPlaylist("Repeats");
+    const other = newPlaylist("Other");
+    for (const [title, hash] of [
+      ["One", "h1"],
+      ["Two", "h2"],
+      ["Three", "h3"],
+    ] as const) {
+      ids[title] = addTrack(db, { title, album: title, artist: "Radiohead", artworkHash: hash });
+    }
+    appendPlaylistSongs(db, id, [library("One")], 0);
+    db.insert(schema.playlistItems)
+      .values({ playlistId: id, ytSong: "not json", position: 1, addedAt: 0 })
+      .run();
+    // The same cover again, under other songs: one tile.
+    db.insert(schema.playlistItems)
+      .values({ playlistId: id, trackId: ids.One ?? -1, position: 2, addedAt: 0 })
+      .run();
+    appendPlaylistSongs(db, id, [stream(yt("a")), stream(yt("a2", { artworkUrl: yt("a").artworkUrl }))], 0);
+    appendPlaylistSongs(db, id, [library("Two"), library("Three")], 0);
+    appendPlaylistSongs(db, other, [library("Three")], 0);
+
+    const covers = selectPlaylistCovers(db);
+    assert.deepEqual(covers.get(id)?.thumbPaths, [
+      "/covers/h1.thumb.jpg",
+      "https://lh3.googleusercontent.com/a",
+      "/covers/h2.thumb.jpg",
+      "/covers/h3.thumb.jpg",
+    ]);
+    assert.deepEqual(covers.get(other), {
+      thumbPaths: ["/covers/h3.thumb.jpg"],
+      artworkPaths: ["/covers/h3.jpg"],
+    });
+  });
 });
 
 describe("selectPlaylistTotals", () => {
@@ -297,6 +361,21 @@ describe("selectPlaylistTotals", () => {
     const totals = selectPlaylistTotals(db);
     assert.deepEqual(totals.get(playlistId), { trackCount: 6, durationMs: 4 * 180_000 + 60_000 });
     assert.equal(totals.get(empty), undefined);
+  });
+
+  test("leaves out an unreadable YT Music entry, as the playlist's list does", () => {
+    appendPlaylistSongs(db, playlistId, [stream(yt("a", { durationMs: 60_000 }))], 0);
+    for (const [position, ytSong] of [
+      [10, "not json"],
+      [11, JSON.stringify({ videoId: "b", durationMs: 90_000 })],
+    ] as const) {
+      db.insert(schema.playlistItems).values({ playlistId, ytSong, position, addedAt: 0 }).run();
+    }
+    const entries = selectPlaylistEntries(db, playlistId);
+    assert.deepEqual(selectPlaylistTotals(db).get(playlistId), {
+      trackCount: entries.length,
+      durationMs: 4 * 180_000 + 60_000,
+    });
   });
 });
 

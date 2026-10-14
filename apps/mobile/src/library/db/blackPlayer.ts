@@ -12,16 +12,18 @@ import * as schema from "./schema.ts";
 
 /** Every track with what an import matches BlackPlayer's rows by. */
 export const selectImportTracks = (db: LibraryDatabase): BlackPlayerTrack<number>[] => {
-  const { tracks } = schema;
+  const { albums, tracks } = schema;
   return db
     .select({
       id: tracks.id,
       path: tracks.path,
       title: tracks.title,
       artist: tracks.artistCredit,
+      album: albums.title,
       durationMs: tracks.durationMs,
     })
     .from(tracks)
+    .innerJoin(albums, eq(albums.id, tracks.albumId))
     .all();
 };
 

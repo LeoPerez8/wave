@@ -4,17 +4,16 @@ import {
   autoArtistItem,
   autoChildren,
   autoItem,
+  autoListPlay,
   autoPageItems,
   autoPlayList,
   autoPlaylistItem,
-  autoQueueAdd,
   autoQueueStart,
   autoTrackItems,
   currentEntry,
   decodeAutoMediaId,
   libraryTrackIds,
   nextRepeatMode,
-  parseTrackId,
   statsWindow,
   ytSongArtist,
   ytTrackId,
@@ -111,18 +110,7 @@ const toAutoTrack = (song: AutoSong): AutoTrack =>
 const toAutoQueueTrack = (song: AutoSong): QueueTrack =>
   song.source === "library" ? toQueueTrack(song.track) : toYtQueueTrack(song.song, null);
 
-/**
- * What a list plays: all of it or, with YT Music off, its Library songs (a
- * playlist's YT Music entries show but don't play, as on the phone).
- */
-const playable = (songs: readonly AutoSong[]): readonly AutoSong[] =>
-  ytMusicEnabled() ? songs : songs.filter((song) => song.source === "library");
-
 const ytMusicOff = Effect.fail(new AutoError({ message: "YT Music is off in Settings." }));
-
-/** A list's YT Music entry, picked while YT Music is off. */
-const isStreamWhileOff = (node: AutoNode): boolean =>
-  node.type === "track" && !ytMusicEnabled() && parseTrackId(node.trackId)?.kind === "yt";
 
 const pageOf = <A>(rows: readonly A[], page: RowPage): readonly A[] =>
   rows.slice(page.offset, page.offset + page.limit);
@@ -287,15 +275,24 @@ export const layer = Layer.effect(
         return yield* notFound;
       });
 
-    const play = (mediaId: string) =>
+    /**
+     * What playing or adding [node] does, by Core's `autoListPlay` (the
+     * phone's `playlistPlayback`: with YT Music off a playlist's YT Music
+     * entries show but don't play).
+     */
+    const playOf = (node: AutoNode) =>
       Effect.gen(function* () {
-        const node = yield* decode(mediaId);
         const list = autoPlayList(node);
         if (list === null) return yield* notFound;
-        if (isStreamWhileOff(node)) return yield* ytMusicOff;
-        const songs = playable(yield* songsOf(list));
-        const start = autoQueueStart(node, songs.map(toAutoTrack));
-        if (start === null) return yield* notFound;
+        const play = autoListPlay(node, yield* songsOf(list), ytMusicEnabled());
+        if (play.kind === "notFound") return yield* notFound;
+        if (play.kind === "ytMusicOff") return yield* ytMusicOff;
+        return play;
+      });
+
+    const play = (mediaId: string) =>
+      Effect.gen(function* () {
+        const { start, songs } = yield* playOf(yield* decode(mediaId));
         const playback: AutoPlayback = yield* queue.handOver(
           {
             type: "play",
@@ -315,13 +312,7 @@ export const layer = Layer.effect(
         const trackIds: string[] = [];
         const tracks: QueueTrack[] = [];
         for (const mediaId of mediaIds) {
-          const node = yield* decode(mediaId);
-          const list = autoPlayList(node);
-          if (list === null) return yield* notFound;
-          if (isStreamWhileOff(node)) return yield* ytMusicOff;
-          const songs = playable(yield* songsOf(list));
-          const added = autoQueueAdd(node, songs.map(toAutoTrack));
-          if (added === null) return yield* notFound;
+          const { added, songs } = yield* playOf(yield* decode(mediaId));
           trackIds.push(...added);
           tracks.push(...songs.map(toAutoQueueTrack));
         }
