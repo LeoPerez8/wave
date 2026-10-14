@@ -81,4 +81,17 @@ describe("streamedArtistLink", () => {
       target: { kind: "library", artist: LIBRARY[0] },
     });
   });
+
+  test("the YouTube Music artist page you're on is left out", () => {
+    const onJustice = context({ here: "/library/yt-artist/by-name", ytArtistHere: "Justice" });
+    assert.equal(streamedArtistLink(["justice"], onJustice), undefined);
+    assert.deepEqual(streamedArtistLink(["Justice", "Daft Punk"], onJustice), {
+      kind: "open",
+      target: { kind: "library", artist: LIBRARY[2] },
+    });
+    assert.deepEqual(streamedArtistLink(["Justice"], context({ ytArtistHere: "Busy P" })), {
+      kind: "open",
+      target: { kind: "yt", name: "Justice" },
+    });
+  });
 });

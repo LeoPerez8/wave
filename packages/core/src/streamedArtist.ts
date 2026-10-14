@@ -29,8 +29,14 @@ export interface StreamedArtistContext<A> {
   readonly libraryArtist: (name: string) => A | null;
   /** Whether YT Music is on in Settings. */
   readonly enabled: boolean;
-  /** The current route, so the link doesn't lead to the page you're on. */
+  /** The current route, so the link doesn't lead to the Library artist page you're on. */
   readonly here: string;
+  /**
+   * The name of the YouTube Music artist page you're on (opened by browse id
+   * or by name, the name it was opened with), so the link doesn't stack it
+   * again. Undefined or null elsewhere.
+   */
+  readonly ytArtistHere?: string | null;
 }
 
 /**
@@ -40,7 +46,7 @@ export interface StreamedArtistContext<A> {
  * Library page, any other the YouTube Music artist page. One artist opens
  * straight away, several are a choice in credit order. Names that aren't an
  * artist's ("Unknown Artist", `ytArtistQuery`), a name credited twice and the
- * Library artist page you're on are left out. Undefined when nobody is left,
+ * artist page you're on, the Library's or YouTube Music's, are left out. Undefined when nobody is left,
  * or with YT Music off.
  */
 export const streamedArtistLink = <A extends { readonly id: number; readonly name: string }>(
@@ -50,12 +56,14 @@ export const streamedArtistLink = <A extends { readonly id: number; readonly nam
   if (!context.enabled) return undefined;
   const targets: StreamedArtistTarget<A>[] = [];
   const seen = new Set<string>();
+  const ytPage = context.ytArtistHere ?? null;
+  const ytHere = ytPage === null ? null : `yt:${artistPhotoName(ytPage)}`;
   for (const name of artists) {
     if (ytArtistQuery(name) === null) continue;
     const artist = context.libraryArtist(name);
     if (artist !== null && isDetailPath(context.here, "artist", artist.id)) continue;
     const key = artist === null ? `yt:${artistPhotoName(name)}` : `library:${artist.id}`;
-    if (seen.has(key)) continue;
+    if (seen.has(key) || key === ytHere) continue;
     seen.add(key);
     targets.push(artist === null ? { kind: "yt", name } : { kind: "library", artist });
   }

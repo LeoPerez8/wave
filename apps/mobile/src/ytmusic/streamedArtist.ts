@@ -1,5 +1,5 @@
 import { libraryArtistFinder, streamedArtistLink, type StreamedArtistLink } from "@wave/core";
-import { usePathname } from "expo-router";
+import { useGlobalSearchParams, usePathname } from "expo-router";
 import { useMemo, useSyncExternalStore } from "react";
 
 import { libraryVersion } from "@/library/LibraryScan";
@@ -7,6 +7,8 @@ import { LibraryStore, type ArtistRow } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { makeVersionedCache } from "@/lib/versionedCache";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
+
+import { ytArtistPageHere } from "./routes";
 
 const listArtists = LibraryStore.use((store) => store.listArtists);
 
@@ -62,11 +64,14 @@ export const useStreamedArtistLink = (
   );
   const enabled = useYtMusicEnabled();
   const here = usePathname();
+  const params = useGlobalSearchParams<{ name?: string }>();
+  // On a YouTube Music artist page, the link leaves that artist out.
+  const ytArtistHere = ytArtistPageHere(here, params);
   return useMemo(
     () =>
       artists === null || libraryArtist === null
         ? undefined
-        : streamedArtistLink(artists, { libraryArtist, enabled, here }),
-    [artists, libraryArtist, enabled, here],
+        : streamedArtistLink(artists, { libraryArtist, enabled, here, ytArtistHere }),
+    [artists, libraryArtist, enabled, here, ytArtistHere],
   );
 };
