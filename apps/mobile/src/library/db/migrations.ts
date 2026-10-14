@@ -312,10 +312,16 @@ CREATE TABLE \`yt_artists\` (
 // A tag's separate values are separate credits (docs/spec.md, glossary:
 // Credit): tracks and albums keep each of them, so "Ariana Grande" and "Social
 // House" never make one artist. Null is a single credit, the one written.
+// The store still files the Library under its artists from the credits
+// already stored (no rescan), but only a scan reads a tag's every value, so
+// every indexed file is marked as changed (modified_at 0) as in 0011: the
+// next scan reads them all again.
 const m0015 = `
 ALTER TABLE \`tracks\` ADD \`artist_credits\` text;
 --> statement-breakpoint
 ALTER TABLE \`albums\` ADD \`album_artist_credits\` text;
+--> statement-breakpoint
+UPDATE \`tracks\` SET \`modified_at\` = 0;
 `;
 
 export default {
