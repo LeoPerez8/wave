@@ -14,15 +14,18 @@ import {
   deezerAlbumUrl,
   deezerTrackCandidates,
   deezerTrackSearchUrl,
+  libraryLookupSongs,
   lookupsUnreachable,
   lrclibCandidates,
   lrclibSearchUrl,
+  missingTags,
   pickFoundLyrics,
   pickGenreAlbum,
   settledTags,
   songLookup,
   songTagOutcome,
   type FoundTags,
+  type IndexedLyricsAndGenre,
   type SongLookup,
   type SongTagOutcome,
   type TagLookup,
@@ -187,6 +190,29 @@ export const findLyricsAndGenre = (
       LookupFailed: () => Effect.succeed<SongTagOutcome>({ kind: "failed", reason: "lookup" }),
       TagWriteFailed: () => Effect.succeed<SongTagOutcome>({ kind: "failed", reason: "write" }),
     }),
+  );
+
+/**
+ * Find Lyrics and Genre for a song just added to the Library (a download):
+ * looks it up and writes only what its file still lacks, never replacing
+ * lyrics or a genre it has. Never fails: a song left without them can still
+ * be looked up from its menu.
+ */
+export const fillInLyricsAndGenre = (
+  song: TaggableSong & IndexedLyricsAndGenre,
+): Effect.Effect<void, never, LibraryStore> =>
+  Effect.gen(function* () {
+    if (libraryLookupSongs([song]).lookUp.length === 0) return;
+    const lookup = songLookup(song);
+    if (lookup === null) return;
+    const found = yield* lookUpLyricsAndGenre(lookup);
+    yield* writeLyricsAndGenre(song.path, missingTags(found, song));
+  }).pipe(
+    Effect.catch((error) =>
+      Effect.sync(() =>
+        console.warn(`[wave] couldn't fill in lyrics and genre for ${song.path}`, error),
+      ),
+    ),
   );
 
 /** The least time one song takes in a run: keeps Deezer's requests under its rate limit. */

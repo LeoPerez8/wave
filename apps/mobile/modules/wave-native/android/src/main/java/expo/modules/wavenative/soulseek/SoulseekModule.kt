@@ -10,6 +10,9 @@ import expo.modules.wavenative.download.AndroidDownloads
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
+import org.json.JSONTokener
 
 /** The Soulseek session and search, and the bridge to the native download journal (`AndroidDownloads`). */
 class SoulseekModule : Module() {
@@ -33,8 +36,14 @@ class SoulseekModule : Module() {
     AsyncFunction("jobsSnapshot") Coroutine { -> withContext(Dispatchers.IO) { downloads.jobs.snapshot() } }
     AsyncFunction("resumeJobs") Coroutine { -> withContext(Dispatchers.IO) { downloads.requestService() } }
     AsyncFunction("claimDecision") Coroutine { id: String -> withContext(Dispatchers.IO) { downloads.jobs.claim(id) } }
-    AsyncFunction("submitDecision") Coroutine { id: String, generation: Double, token: String, decision: String, payload: Map<String, Any?> ->
-      withContext(Dispatchers.IO) { downloads.jobs.submit(id, generation.toLong(), token, decision, payload).also { downloads.changed() } }
+    // The payload comes as JSON: Expo can't convert a null inside a nested object (a tag or a
+    // candidate's duration), and the answer would never reach the journal.
+    AsyncFunction("submitDecision") Coroutine { id: String, generation: Double, token: String, decision: String, payload: String ->
+      withContext(Dispatchers.IO) {
+        @Suppress("UNCHECKED_CAST")
+        val answer = fromJson(JSONTokener(payload).nextValue()) as? Map<String, Any?> ?: return@withContext false
+        downloads.jobs.submit(id, generation.toLong(), token, decision, answer).also { downloads.changed() }
+      }
     }
     AsyncFunction("refreshDownloadPolicy") Coroutine { roots: List<String>, excluded: List<String> ->
       withContext(Dispatchers.IO) { downloads.jobs.refreshPolicy(roots, excluded) }
@@ -56,6 +65,15 @@ class SoulseekModule : Module() {
       coded { withContext(Dispatchers.IO) { owner.client.search(query).map { it.toMap() } } }
     }
     // The process-owned client and durable downloads can outlive an Expo module.
+  }
+
+  /** JSON as Expo hands JS values over: maps, lists, strings, booleans, numbers as Double and nulls. */
+  private fun fromJson(value: Any?): Any? = when (value) {
+    is JSONObject -> LinkedHashMap<String, Any?>().apply { for (key in value.keys()) put(key, fromJson(value.get(key))) }
+    is JSONArray -> List(value.length()) { fromJson(value.get(it)) }
+    is Number -> value.toDouble()
+    JSONObject.NULL -> null
+    else -> value
   }
 
   private suspend fun <T> coded(block: suspend () -> T): T = try { block() }

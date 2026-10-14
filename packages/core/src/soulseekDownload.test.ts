@@ -114,6 +114,15 @@ test("received tags and actual duration are checked before trusted tags replace 
     ),
     true,
   );
+  // A vinyl rip's title tag may start with its side.
+  assert.equal(
+    soulseekReceivedMatches(song, { title: "A2 Get Lucky", artist: "Daft Punk", album: null }, 370_000),
+    true,
+  );
+  assert.equal(
+    soulseekReceivedMatches(song, { title: "A2 Lose Yourself", artist: "Daft Punk", album: null }, 370_000),
+    false,
+  );
 });
 
 test("different result ids join only a known same recording without collapsing editions or guests", () => {
@@ -285,6 +294,59 @@ test("an artist or title that starts with a number isn't taken for a track numbe
   assert.deepEqual(
     soulseekCandidates(by("50 Cent", "In Da Club"), [file("Cent - In Da Club.mp3")]),
     [],
+  );
+});
+
+test("common folder and file layouts still name the recording", () => {
+  const coldplay = (title: string, album: string, durationMs: number): YtSong => ({
+    ...song,
+    title,
+    artists: ["Coldplay"],
+    album,
+    durationMs,
+  });
+  const cemeteries = coldplay("Cemeteries of London", "Viva La Vida", 202_000);
+  for (const [recording, filename, durationMs] of [
+    // An artist folder telling two artists apart.
+    [cemeteries, "Coldplay (UK)/2008 - Viva La Vida/02 - Cemeteries Of London.mp3", 201_000],
+    // A vinyl rip's side after the track number.
+    [cemeteries, "Coldplay/Viva La Vida/02 A2 Cemeteries Of London.mp3", 201_000],
+    // An underscore after the track number.
+    [coldplay("White Shadows", "X&Y", 329_000), "Coldplay/X&Y/03_White Shadows.mp3", 330_000],
+    // An album folder that names the artist.
+    [
+      coldplay("Always in My Head", "Ghost Stories", 217_000),
+      "!!unsorted/Coldplay - Ghost Stories - 2014/01. Always In My Head.mp3",
+      216_000,
+    ],
+  ] as const) {
+    assert.equal(soulseekCandidates(recording, [peer(filename, { durationMs })]).length, 1, filename);
+  }
+});
+
+test("those layouts don't let another artist, side or edition through", () => {
+  const cemeteries: YtSong = {
+    ...song,
+    title: "Cemeteries of London",
+    artists: ["Coldplay"],
+    album: "Viva La Vida or Death and All His Friends",
+    durationMs: 202_000,
+  };
+  const file = (filename: string) => peer(filename, { durationMs: 201_000 });
+  assert.deepEqual(
+    soulseekCandidates(cemeteries, [
+      file("Coldplay Tribute (UK)/Viva La Vida/02 - Cemeteries Of London.mp3"),
+      file("Coldplay (Live)/Viva La Vida/02 - Cemeteries Of London (Live).mp3"),
+      file("Vitamin String Quartet - Viva La Vida/02 Cemeteries of London.mp3"),
+      file("Coldplay/Viva La Vida/02 A2 Lost.mp3"),
+    ]),
+    [],
+  );
+  // A title that starts like a vinyl side keeps it.
+  const bomber: YtSong = { ...cemeteries, title: "B2 Bomber", album: null };
+  assert.equal(
+    soulseekCandidates(bomber, [file("Coldplay/Singles/05 B2 Bomber.mp3")]).length,
+    1,
   );
 });
 

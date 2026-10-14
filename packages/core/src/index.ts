@@ -376,6 +376,7 @@ export {
   lookupsUnreachable,
   lrclibCandidates,
   lrclibSearchUrl,
+  missingTags,
   pickFoundLyrics,
   pickGenreAlbum,
   settledTags,

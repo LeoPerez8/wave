@@ -39,7 +39,13 @@ class SoulseekClient(
   private var credentials = credentialsStore.load()
   private val token = AtomicInteger(java.security.SecureRandom().nextInt(Int.MAX_VALUE / 2 - 1) + 1)
   private val peers = ConcurrentHashMap<String, Socket>()
-  private val peerSlots = Semaphore(32)
+  /**
+   * Peer connections run on bounded threads. A popular search brings thousands of connection
+   * requests in seconds; they get their own slots, so they can never take the ones a download
+   * needs for its peer and file connections.
+   */
+  private val searchSlots = Semaphore(32)
+  private val downloadSlots = Semaphore(16)
   private val sockets = ConcurrentHashMap.newKeySet<Socket>()
   private val searches = ConcurrentHashMap<Long, CopyOnWriteArrayList<SoulseekCandidate>>()
   private val addressRequests = ConcurrentHashMap<String, java.util.concurrent.CompletableFuture<InetSocketAddress>>()
@@ -170,7 +176,7 @@ class SoulseekClient(
   }
 
   private fun peer(user: String): Socket {
-    peers[user]?.takeUnless { it.isClosed }?.let { return it }
+    peers[user]?.takeUnless { it.isClosed }?.let { it.soTimeout = 180_000; return it }
     val future = CompletableFuture<InetSocketAddress>()
     addressRequests.put(user, future)?.completeExceptionally(SoulseekException(SoulseekFailure.PEER))
     sendServer(3) { string(user) }
@@ -179,7 +185,7 @@ class SoulseekClient(
       val remote = open(remoteAddress)
       SoulseekWire.write(remote.getOutputStream(), 1, true) { string(credentials!!.username); string("P"); uint(0) }
       peers[user] = remote
-      launchPeer(remote) { handlePeer(user, "P", remote) }
+      launchPeer(remote, forDownload = true) { handlePeer(user, "P", remote) }
       return remote
     } catch (_: IOException) {
       val id = token.incrementAndGet().toLong()
@@ -235,7 +241,7 @@ class SoulseekClient(
               if (type == "P" && searches.isEmpty() && !peers.containsKey(user) && downloads.values.none { it.candidate.username == user }) continue
               if (type == "F" && transfers.keys.none { it.first == user }) continue
               if (type !in setOf("P", "F") || ip == 0L || port !in 1..65535) continue
-              launchPeer {
+              launchPeer(forDownload = type == "F" || downloads.values.any { it.candidate.username == user }) {
                 val remote = open(address(ip, port))
                 try {
                   SoulseekWire.write(remote.getOutputStream(), 0, true) { uint(connectToken) }
@@ -259,7 +265,8 @@ class SoulseekClient(
     thread(isDaemon = true, name = "Wave Soulseek listener") {
       while (!incoming.isClosed) {
         val remote = try { incoming.accept() } catch (_: Exception) { break }
-        launchPeer(remote) {
+        // Who connected is only known once it says; while a download runs, it may be its peer.
+        launchPeer(remote, forDownload = downloads.isNotEmpty()) {
           remote.soTimeout = 15_000
           val init = SoulseekWire.read(remote.getInputStream(), true)
           val fields = SoulseekWire.reader(init.payload)
@@ -275,10 +282,11 @@ class SoulseekClient(
   }
 
   /** Anything uncaught on these threads would close Wave, Errors included: one peer only loses its connection. */
-  private fun launchPeer(remote: Socket? = null, work: () -> Unit) {
-    if (!peerSlots.tryAcquire()) { remote?.close(); return }
+  private fun launchPeer(remote: Socket? = null, forDownload: Boolean, work: () -> Unit) {
+    val slots = if (forDownload) downloadSlots else searchSlots
+    if (!slots.tryAcquire()) { remote?.close(); return }
     thread(isDaemon = true, name = "Wave Soulseek peer") {
-      try { work() } catch (_: Throwable) { remote?.close() } finally { peerSlots.release() }
+      try { work() } catch (_: Throwable) { remote?.close() } finally { slots.release() }
     }
   }
 
@@ -297,7 +305,8 @@ class SoulseekClient(
     if (type != "P") { remote.close(); return }
     peers.put(user, remote)?.takeUnless { it === remote }?.close()
     sockets.add(remote)
-    remote.soTimeout = 180_000
+    // A peer only sending search results does so at once; a download's peer may wait to answer.
+    remote.soTimeout = if (downloads.values.any { it.candidate.username == user }) 180_000 else 20_000
     try {
       while (!remote.isClosed) {
         val message = SoulseekWire.read(remote.getInputStream())
@@ -422,8 +431,9 @@ class SoulseekClient(
     }
   }
 
+  /** The server sends a peer's IP reversed: its last wire byte is the first octet, as Nicotine+ and Soulseek.NET read it. */
   private fun address(ip: Long, port: Long) = InetSocketAddress(
-    InetAddress.getByAddress(ByteArray(4) { (ip ushr (it * 8)).toByte() }), port.toInt(),
+    InetAddress.getByAddress(ByteArray(4) { (ip ushr ((3 - it) * 8)).toByte() }), port.toInt(),
   )
 
   @Synchronized fun disconnect(): Map<String, Any?> {
