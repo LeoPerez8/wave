@@ -333,24 +333,46 @@ export interface PlaylistTotals {
 }
 
 /**
- * Each playlist's song count and length, YT Music entries included (one of
- * unknown length adds nothing to it). Playlists holding nothing are left out.
+ * Each playlist's song count and length (only [playlistId]'s when given), YT
+ * Music entries included (one of unknown length adds nothing to it). An entry
+ * whose stored song can't be read is left out, as the playlist's list leaves
+ * it out (`selectPlaylistEntries`: both read it with Core's
+ * `readPlaylistYtSong`). Playlists holding nothing are left out.
  */
-export const selectPlaylistTotals = (db: LibraryDatabase): Map<number, PlaylistTotals> => {
+export const selectPlaylistTotals = (
+  db: LibraryDatabase,
+  playlistId?: number,
+): Map<number, PlaylistTotals> => {
   const { playlistItems, tracks } = schema;
-  const rows = db
-    .select({
-      playlistId: playlistItems.playlistId,
-      trackCount: sql<number>`count(*)`,
-      durationMs: sql<number>`coalesce(sum(coalesce(${tracks.durationMs}, json_extract(${playlistItems.ytSong}, '$.durationMs'))), 0)`,
-    })
-    .from(playlistItems)
-    .leftJoin(tracks, eq(playlistItems.trackId, tracks.id))
-    // A Library entry whose track is gone is on its way out (the cascade), never counted.
-    .where(sql`${playlistItems.ytSong} IS NOT NULL OR ${tracks.id} IS NOT NULL`)
-    .groupBy(playlistItems.playlistId)
-    .all();
-  return new Map(
-    rows.map(({ playlistId, trackCount, durationMs }) => [playlistId, { trackCount, durationMs }]),
+  const inPlaylist =
+    playlistId === undefined ? undefined : eq(playlistItems.playlistId, playlistId);
+  const totals = new Map<number, { trackCount: number; durationMs: number }>(
+    db
+      .select({
+        playlistId: playlistItems.playlistId,
+        trackCount: sql<number>`count(*)`,
+        durationMs: sql<number>`coalesce(sum(${tracks.durationMs}), 0)`,
+      })
+      .from(playlistItems)
+      // A Library entry whose track is gone is on its way out (the cascade), never counted.
+      .innerJoin(tracks, eq(playlistItems.trackId, tracks.id))
+      .where(inPlaylist)
+      .groupBy(playlistItems.playlistId)
+      .all()
+      .map(({ playlistId: id, ...total }) => [id, total]),
   );
+  const streamed = db
+    .select({ playlistId: playlistItems.playlistId, ytSong: playlistItems.ytSong })
+    .from(playlistItems)
+    .where(and(isNotNull(playlistItems.ytSong), inPlaylist))
+    .all();
+  for (const row of streamed) {
+    const song = row.ytSong === null ? null : readPlaylistYtSong(row.ytSong);
+    if (song === null) continue;
+    const total = totals.get(row.playlistId) ?? { trackCount: 0, durationMs: 0 };
+    total.trackCount += 1;
+    total.durationMs += song.durationMs ?? 0;
+    totals.set(row.playlistId, total);
+  }
+  return totals;
 };

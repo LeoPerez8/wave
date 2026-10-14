@@ -699,16 +699,14 @@ const getPlaylistSync = (db: Database, id: number): PlaylistDetail | null => {
   if (playlist === undefined) return null;
   const items = selectPlaylistEntries(db, id);
   const covers = selectPlaylistCovers(db, id).get(id) ?? NO_COVERS;
+  // As Library › Playlists counts it.
+  const { trackCount, durationMs } = selectPlaylistTotals(db, id).get(id) ?? NO_SONGS;
   return {
     playlist: {
       ...playlist,
       sort: sortKey(playlist.name),
-      trackCount: items.length,
-      durationMs: items.reduce(
-        (total, item) =>
-          total + (item.source === "library" ? item.track.durationMs : (item.song.durationMs ?? 0)),
-        0,
-      ),
+      trackCount,
+      durationMs,
       thumbPaths: covers.thumbPaths,
       artworkPaths: covers.artworkPaths,
     },

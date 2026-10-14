@@ -327,6 +327,21 @@ describe("selectPlaylistTotals", () => {
     assert.deepEqual(totals.get(playlistId), { trackCount: 6, durationMs: 4 * 180_000 + 60_000 });
     assert.equal(totals.get(empty), undefined);
   });
+
+  test("leaves out an unreadable YT Music entry, as the playlist's list does", () => {
+    appendPlaylistSongs(db, playlistId, [stream(yt("a", { durationMs: 60_000 }))], 0);
+    for (const [position, ytSong] of [
+      [10, "not json"],
+      [11, JSON.stringify({ videoId: "b", durationMs: 90_000 })],
+    ] as const) {
+      db.insert(schema.playlistItems).values({ playlistId, ytSong, position, addedAt: 0 }).run();
+    }
+    const entries = selectPlaylistEntries(db, playlistId);
+    assert.deepEqual(selectPlaylistTotals(db).get(playlistId), {
+      trackCount: entries.length,
+      durationMs: 4 * 180_000 + 60_000,
+    });
+  });
 });
 
 describe("selectTrackPaths", () => {
