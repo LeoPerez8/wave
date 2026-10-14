@@ -21,6 +21,7 @@ class AndroidSoulseek private constructor(context: Context) {
   val client = SoulseekClient(
     SoulseekSessionStore(File(context.noBackupFilesDir, "soulseek-session"), KeystoreCipher()),
     online = connectivity::online,
+    switch = SoulseekSwitchFile(File(context.noBackupFilesDir, "soulseek-best-quality")),
   )
 
   fun download(
