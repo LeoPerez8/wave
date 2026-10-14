@@ -169,8 +169,12 @@ test("download destination chooses an included final folder and always saves MP3
     { path: "/sdcard/Other", isDefault: false },
   ];
   assert.equal(
-    ytDownloadDestination(roots, [`${ROOT}/YT Music`], tags)?.path,
-    "/sdcard/Other/YT Music/Daft Punk, Pharrell Williams & Nile Rodgers/Random Access Memories/Get Lucky (feat. Pharrell Williams and Nile Rodgers).mp3",
+    ytDownloadDestination(
+      roots,
+      [`${ROOT}/Daft Punk, Pharrell Williams & Nile Rodgers/Random Access Memories`],
+      tags,
+    )?.path,
+    "/sdcard/Other/Daft Punk, Pharrell Williams & Nile Rodgers/Random Access Memories/Get Lucky (feat. Pharrell Williams and Nile Rodgers).mp3",
   );
   assert.equal(ytDownloadDestination(roots, [ROOT, "/sdcard/Other"], tags), null);
 });
@@ -216,7 +220,7 @@ describe("ytDownloadRoot", () => {
 });
 
 describe("ytDownloadTarget", () => {
-  test("files a song under YT Music, its album artist and its album, numbered", () => {
+  test("files a song in the Library's tree: its album artist, its album, numbered", () => {
     const target = ytDownloadTarget(ROOT, {
       title: "Get Lucky (feat. Pharrell Williams and Nile Rodgers)",
       artist: "Daft Punk, Pharrell Williams & Nile Rodgers",
@@ -226,9 +230,9 @@ describe("ytDownloadTarget", () => {
       discNumber: null,
     });
     assert.deepEqual(target, {
-      folder: "/storage/emulated/0/Music/YT Music/Daft Punk/Random Access Memories",
+      folder: "/storage/emulated/0/Music/Daft Punk/Random Access Memories",
       fileName: "08 Get Lucky (feat. Pharrell Williams and Nile Rodgers).mp3",
-      path: "/storage/emulated/0/Music/YT Music/Daft Punk/Random Access Memories/08 Get Lucky (feat. Pharrell Williams and Nile Rodgers).mp3",
+      path: "/storage/emulated/0/Music/Daft Punk/Random Access Memories/08 Get Lucky (feat. Pharrell Williams and Nile Rodgers).mp3",
     });
   });
 
@@ -240,6 +244,17 @@ describe("ytDownloadTarget", () => {
     trackNumber: null,
   };
 
+  test("without a track number, the file is named after the title alone", () => {
+    const target = ytDownloadTarget(ROOT, {
+      title: "Instant Crush",
+      artist: "Daft Punk, Julian Casablancas",
+      album: "Random Access Memories",
+      albumArtist: "Daft Punk",
+      trackNumber: null,
+    });
+    assert.equal(target.path, `${ROOT}/Daft Punk/Random Access Memories/Instant Crush.mp3`);
+  });
+
   test("swaps characters Android's storage can't take in names for an underscore", () => {
     const target = ytDownloadTarget(ROOT, {
       ...place,
@@ -247,7 +262,7 @@ describe("ytDownloadTarget", () => {
       albumArtist: "AC/DC",
       album: "Back\tin Black",
     });
-    assert.equal(target.folder, `${ROOT}/YT Music/AC_DC/Back_in Black`);
+    assert.equal(target.folder, `${ROOT}/AC_DC/Back_in Black`);
     assert.equal(target.fileName, "Who_ _Me__ _a_b_ _now__.mp3");
   });
 
@@ -258,19 +273,19 @@ describe("ytDownloadTarget", () => {
       albumArtist: ".hack ",
       album: "Vol. 2. ",
     });
-    assert.equal(target.folder, `${ROOT}/YT Music/hack/Vol. 2`);
+    assert.equal(target.folder, `${ROOT}/hack/Vol. 2`);
     assert.equal(target.fileName, "Baby One More Time.mp3");
   });
 
   test("names a folder or file that would be empty Unknown", () => {
     const target = ytDownloadTarget(ROOT, { ...place, title: "...", albumArtist: " / " });
-    assert.equal(target.folder, `${ROOT}/YT Music/_/Album`);
+    assert.equal(target.folder, `${ROOT}/_/Album`);
     assert.equal(target.fileName, "Unknown.mp3");
   });
 
   test("without an album, the song sits in its artist's folder", () => {
     const target = ytDownloadTarget(ROOT, { ...place, album: null, albumArtist: null });
-    assert.equal(target.path, `${ROOT}/YT Music/Artist/Song.mp3`);
+    assert.equal(target.path, `${ROOT}/Artist/Song.mp3`);
   });
 
   test("shortens long names to what the storage allows, counting bytes", () => {

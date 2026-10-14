@@ -5,7 +5,7 @@ import { findSection } from "@/catalog/sections";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { SectionList } from "@/library/SectionList";
 
-/** A Library list: Playlists, Artists, Albums, Songs, Genres, Folders or Favorites. */
+/** A Library list: Playlists, Artists, Albums, Songs, Genres or Favorites. */
 export default function LibrarySectionScreen() {
   const { section: slug } = useLocalSearchParams<{ section: string }>();
   const section = findSection(slug);

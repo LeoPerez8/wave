@@ -27,7 +27,6 @@ const library = (overrides: Partial<LibrarySectionSource<Song>>): LibrarySection
   albums: none,
   artists: none,
   genres: none,
-  folders: none,
   playlists: none,
   ...overrides,
 });
@@ -76,23 +75,14 @@ describe("library section songs", () => {
     ]);
   });
 
-  test("Genres and Folders go genre by genre and folder by folder", async () => {
+  test("Genres goes genre by genre", async () => {
     const source = library({
       genres: collection([
         [9, [song("Ambient")]],
         [5, [song("Jazz")]],
       ]),
-      folders: collection([
-        [2, [song("01 Downloads.mp3")]],
-        [1, [song("01 Music.mp3"), song("02 Music.mp3")]],
-      ]),
     });
     assert.deepEqual(titles(await sectionSongs("genres", source)), ["Ambient", "Jazz"]);
-    assert.deepEqual(titles(await sectionSongs("folders", source)), [
-      "01 Downloads.mp3",
-      "01 Music.mp3",
-      "02 Music.mp3",
-    ]);
   });
 
   test("an empty section holds no songs", async () => {

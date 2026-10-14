@@ -239,6 +239,19 @@ describe("The latest play", () => {
     assert.deepEqual(latestPlay(db), { id, play: play(track, 1_000, { context: null }) });
   });
 
+  test("plays started from a folder, before Folders left the Library, still load and count", () => {
+    const track = addTrack(db, { title: "From a folder", album: "Rock" });
+    const folder = { kind: "folder", id: "3" } as const;
+    recordPlay(db, play(track, 1_000, { context: folder }));
+    const id = recordPlay(db, play(track, 2_000, { context: folder }));
+
+    assert.deepEqual(latestPlay(db), { id, play: play(track, 2_000, { context: folder }) });
+    assert.deepEqual(
+      homeSections(db).mostPlayed.map((row) => [row.title, row.playCount]),
+      [["From a folder", 2]],
+    );
+  });
+
   test("there is none before anything was played", () => {
     assert.equal(latestPlay(db), null);
   });
