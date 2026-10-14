@@ -186,6 +186,20 @@ describe("ytSectionView", () => {
     );
     assert.deepEqual(view?.top, { kind: "artist", artist: artist("Minnie") });
   });
+
+  test("while the next query loads, YT Music has no best: the results kept up answer the last one", () => {
+    const dafto = { ...song("dafto"), title: "Dafto" };
+    const shown = stepYtSection(typed(YT_SECTION_HIDDEN, "dafto"), {
+      type: "found",
+      query: "dafto",
+      songs: [dafto],
+      ...NONE,
+    });
+    assert.deepEqual(ytSectionView(shown, library)?.top, { kind: "song", song: dafto });
+    const view = ytSectionView(typed(shown, "daft punk"), library);
+    assert.deepEqual(view?.songs, [dafto]);
+    assert.equal(view?.top, null);
+  });
 });
 
 describe("ytSearchQuery", () => {
