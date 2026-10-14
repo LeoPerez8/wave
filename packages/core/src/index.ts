@@ -369,6 +369,7 @@ export {
   ytSectionView,
 } from "./ytSearch.ts";
 export type {
+  YtAskedBy,
   YtQuietReason,
   YtSection,
   YtSectionEvent,
