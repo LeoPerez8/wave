@@ -234,7 +234,13 @@ describe("planBlackPlayerImport: matching", () => {
   describe("a moved row with several Library songs of its title and artist", () => {
     const versions = [
       { id: 7, title: "Creep", artist: "Radiohead", album: "Pablo Honey", durationMs: 238_000 },
-      { id: 8, title: "Creep", artist: "Radiohead", album: "Live at the Astoria", durationMs: 262_000 },
+      {
+        id: 8,
+        title: "Creep",
+        artist: "Radiohead",
+        album: "Live at the Astoria",
+        durationMs: 262_000,
+      },
     ].map((track) => ({ ...track, path: `${MUSIC}/${track.album}/Creep.mp3` }));
     const moved = (album: string) =>
       planBlackPlayerImport(
@@ -264,7 +270,12 @@ describe("planBlackPlayerImport: matching", () => {
       const plan = planBlackPlayerImport(
         [
           snapshot("a.bpstat", [
-            row({ title: "Creep", artist: "Radiohead", album: "Pablo Honey", path: `${MUSIC}/Old/Creep.mp3` }),
+            row({
+              title: "Creep",
+              artist: "Radiohead",
+              album: "Pablo Honey",
+              path: `${MUSIC}/Old/Creep.mp3`,
+            }),
           ]),
         ],
         versions.map((track) => ({ ...track, album: "Pablo Honey" })),

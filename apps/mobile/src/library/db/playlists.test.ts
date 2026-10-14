@@ -255,7 +255,12 @@ describe("linkPlaylistEntries", () => {
   test("of two entries of a playlist that become one Library song, the later is dropped", () => {
     const otherId = newPlaylist("Other");
     const uploads = [yt("a", { title: "Lucky" }), yt("b", { title: "Lucky", durationMs: 181_000 })];
-    appendPlaylistSongs(db, playlistId, [stream(uploads[0]!), library("Bloom"), stream(uploads[1]!)], 0);
+    appendPlaylistSongs(
+      db,
+      playlistId,
+      [stream(uploads[0]!), library("Bloom"), stream(uploads[1]!)],
+      0,
+    );
     appendPlaylistSongs(db, otherId, [stream(uploads[1]!)], 0);
     const luckyId = addTrack(db, { title: "Lucky", artist: "Radiohead", durationMs: 180_000 });
     linkPlaylistEntries(db, [luckyId]);
@@ -335,7 +340,12 @@ describe("selectPlaylistCovers", () => {
     db.insert(schema.playlistItems)
       .values({ playlistId: id, trackId: ids.One ?? -1, position: 2, addedAt: 0 })
       .run();
-    appendPlaylistSongs(db, id, [stream(yt("a")), stream(yt("a2", { artworkUrl: yt("a").artworkUrl }))], 0);
+    appendPlaylistSongs(
+      db,
+      id,
+      [stream(yt("a")), stream(yt("a2", { artworkUrl: yt("a").artworkUrl }))],
+      0,
+    );
     appendPlaylistSongs(db, id, [library("Two"), library("Three")], 0);
     appendPlaylistSongs(db, other, [library("Three")], 0);
 

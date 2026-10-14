@@ -567,7 +567,10 @@ export const autoListPlay = <S extends YtSong, L extends { readonly id: number }
   songs: readonly MixedSong<S, L>[],
   ytMusic: boolean,
 ): AutoListPlay<S, L> => {
-  const listed = autoQueueStart(node, songs.map((song) => ({ id: songTrackId(song) })));
+  const listed = autoQueueStart(
+    node,
+    songs.map((song) => ({ id: songTrackId(song) })),
+  );
   if (listed === null) return { kind: "notFound" };
   const play = playlistPlayback(songs, { ytMusic, startIndex: listed.startIndex });
   if (play === null) return { kind: "ytMusicOff" };
