@@ -10,7 +10,7 @@
 import { artistPhotoName, artistPhotoQuery } from "./artistPhoto.ts";
 import { normalizeSearchText } from "./search.ts";
 import type { YtShelfItem } from "./ytDiscover.ts";
-import type { YtSong } from "./ytMusic.ts";
+import { libraryFinder, type LibrarySongKey, type YtSong } from "./ytMusic.ts";
 import type { YtQuietReason } from "./ytSearch.ts";
 
 /**
@@ -319,4 +319,149 @@ export const ytArtistShelves = <A>(
   return [shelf("albums", page.albums), shelf("singles", page.singles)].filter(
     ({ releases }) => releases.length > 0,
   );
+};
+
+/**
+ * The release on the artist's YouTube Music [page] that the Library [album]
+ * is, or null: the albums first, then the singles, matched as
+ * `libraryAlbumFinder` matches them for the artist [artistId].
+ */
+export const ytArtistRelease = (
+  page: YtArtistPage,
+  artistId: number,
+  album: LibraryAlbumKey,
+): YtArtistAlbum | null => {
+  const find = libraryAlbumFinder(artistId, [album]);
+  return [...page.albums, ...page.singles].find((release) => find(release) !== null) ?? null;
+};
+
+/** A release's page being read for a Library album: its songs, in album order. */
+export type YtReleaseLoad<S extends YtSong = YtSong> =
+  | { readonly status: "loading" }
+  | { readonly status: "loaded"; readonly songs: readonly S[] }
+  | { readonly status: "quiet"; readonly reason: YtQuietReason };
+
+/** A quiet line a Library album's page shows under its tracks while it looks on YouTube Music. */
+export type YtLibraryAlbumNote =
+  | "loading"
+  /** No YouTube Music artist matched, or their page has no such release. */
+  | "notFound"
+  | YtQuietReason;
+
+/** A Library song as an album's tracklist orders it. */
+export interface LibraryAlbumTrack extends LibrarySongKey {
+  readonly trackNumber: number | null;
+}
+
+/**
+ * A row of a Library album's tracklist once its release is known: a Library
+ * song (the album's own track, or the Library's file of it from another
+ * album), or a song of the release streamed. [number] is its place on the
+ * release, or the Library track's number.
+ */
+export type YtAlbumEntry<S extends YtSong, L> =
+  | { readonly source: "library"; readonly track: L; readonly number: number | null }
+  | { readonly source: "stream"; readonly song: S; readonly number: number };
+
+/**
+ * A Library album's [tracks] with its release's [songs], in the release's
+ * order: each song is the album's own track when it has it, else the
+ * Library's file of it ([elsewhere], Core's `libraryFinder`), else streamed.
+ * The album's tracks the release doesn't list keep their place by their
+ * number (after the release's song with that number), or go last.
+ */
+export const ytAlbumTracklist = <S extends YtSong, L extends LibraryAlbumTrack>(
+  songs: readonly S[],
+  tracks: readonly L[],
+  elsewhere: (song: S) => L | null,
+): YtAlbumEntry<S, L>[] => {
+  const own = libraryFinder(tracks);
+  const used = new Set<L>();
+  const entries: YtAlbumEntry<S, L>[] = songs.map((song, index) => {
+    const number = index + 1;
+    const track = own(song) ?? elsewhere(song);
+    if (track === null || used.has(track)) return { source: "stream", song, number };
+    used.add(track);
+    return { source: "library", track, number };
+  });
+  const place = (entry: YtAlbumEntry<S, L>): number => entry.number ?? Number.POSITIVE_INFINITY;
+  const rest = tracks
+    .filter((track) => !used.has(track))
+    .map((track): YtAlbumEntry<S, L> => ({ source: "library", track, number: track.trackNumber }));
+  for (const entry of rest) {
+    const at = entries.findIndex((other) => place(other) > place(entry));
+    entries.splice(at === -1 ? entries.length : at, 0, entry);
+  }
+  return entries;
+};
+
+export interface YtLibraryAlbumView<S extends YtSong, L> {
+  /**
+   * The album's tracklist with the release's songs the Library doesn't have
+   * (`ytAlbumTracklist`), or null to show the album as it is: the release
+   * not known or read yet, or nothing on it the Library lacks.
+   */
+  readonly tracks: readonly YtAlbumEntry<S, L>[] | null;
+  /** The release's songs, once its page is read: what Download acts on. */
+  readonly songs: readonly S[] | null;
+  readonly note: YtLibraryAlbumNote | null;
+  /**
+   * Whether Show on YouTube Music is offered: it asks for the artist or, once
+   * the release is known, reads the release's page again.
+   */
+  readonly button: boolean;
+  /** The YouTube Music release the album is, once known; its page gives the songs. */
+  readonly release: YtArtistAlbum | null;
+}
+
+export interface YtLibraryAlbumContext<S extends YtSong, L> {
+  /** The name of the album's (first) album artist in the Library. */
+  readonly name: string;
+  /** That artist's Library id. */
+  readonly artistId: number;
+  readonly album: LibraryAlbumKey;
+  /** The album's tracks, in album order. */
+  readonly tracks: readonly L[];
+  /** The Library's file of a song the album's tracks don't have, or null (Core's `libraryFinder`). */
+  readonly elsewhere: (song: S) => L | null;
+  /** Whether YT Music is on in Settings. */
+  readonly enabled: boolean;
+  readonly now: number;
+  /** How far [release]'s page has been read; undefined when it hasn't been asked for. */
+  readonly releasePage: (release: YtArtistAlbum) => YtReleaseLoad<S> | undefined;
+}
+
+const albumNote = <S extends YtSong, L>(
+  note: YtLibraryAlbumNote | null,
+  button: boolean,
+  release: YtArtistAlbum | null = null,
+): YtLibraryAlbumView<S, L> => ({ tracks: null, songs: null, note, button, release });
+
+/**
+ * What a Library album's page shows from YouTube Music, or null when it shows
+ * nothing: YT Music off, an album artist that isn't an artist's name, or
+ * what was saved for the artist not read yet. It goes by the artist page's
+ * saved answer (`stepYtArtistSection`): while that stands, the album is
+ * looked up among the artist's releases and, when it's there, the release's
+ * page is read without a tap and its songs join the album's tracks. With
+ * nothing saved, or once it's a week old, it's the button.
+ */
+export const ytLibraryAlbumView = <S extends YtSong, L extends LibraryAlbumTrack>(
+  state: YtArtistSection<S>,
+  context: YtLibraryAlbumContext<S, L>,
+): YtLibraryAlbumView<S, L> | null => {
+  if (!context.enabled || ytArtistQuery(context.name) === null) return null;
+  if (state.status === "reading") return null;
+  if (state.status === "loading") return albumNote("loading", false);
+  const { saved } = state;
+  if (saved === null || !isFresh(saved, context.now)) return albumNote(state.failure, true);
+  if (saved.outcome === "unmatched") return albumNote("notFound", false);
+  const release = ytArtistRelease(saved.page, context.artistId, context.album);
+  if (release === null) return albumNote("notFound", false);
+  const page = context.releasePage(release);
+  if (page === undefined || page.status === "loading") return albumNote("loading", false, release);
+  if (page.status === "quiet") return albumNote(page.reason, true, release);
+  const tracks = ytAlbumTracklist(page.songs, context.tracks, context.elsewhere);
+  const streams = tracks.some((entry) => entry.source === "stream");
+  return { tracks: streams ? tracks : null, songs: page.songs, note: null, button: false, release };
 };

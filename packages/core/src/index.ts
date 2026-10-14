@@ -489,6 +489,7 @@ export type {
   DiscoverItem,
   DiscoverShelf,
   DiscoverSong,
+  MixedSong,
   DiscoverTileCaption,
   DiscoverState,
   DiscoverView,
@@ -524,8 +525,11 @@ export {
   stepYtArtistSection,
   ytArtistLookup,
   ytArtistQuery,
+  ytArtistRelease,
   ytArtistSectionView,
   ytArtistShelves,
+  ytAlbumTracklist,
+  ytLibraryAlbumView,
 } from "./ytArtist.ts";
 export type {
   LibraryAlbumKey,
@@ -542,4 +546,10 @@ export type {
   YtArtistSectionEvent,
   YtArtistSectionNote,
   YtArtistSectionView,
+  LibraryAlbumTrack,
+  YtAlbumEntry,
+  YtLibraryAlbumContext,
+  YtLibraryAlbumNote,
+  YtLibraryAlbumView,
+  YtReleaseLoad,
 } from "./ytArtist.ts";

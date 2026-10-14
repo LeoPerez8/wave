@@ -8,6 +8,8 @@ import {
   ytArtistSectionView,
   ytArtistShelves,
   type YtArtistSaved,
+  type YtArtistSection,
+  type YtArtistSectionEvent,
   type YtArtistSectionView,
   type YtArtistShelf,
 } from "@wave/core";
@@ -58,7 +60,92 @@ const fetchArtist = (name: string, artistKey: string, saved: Saved | null) =>
     return answer;
   });
 
-export interface YtArtistSection {
+/** The section's state for the artist [key]: what was read and asked for them. */
+interface Keyed {
+  readonly key: string;
+  readonly state: YtArtistSection<NativeYtSong>;
+}
+
+/**
+ * Core's `stepYtArtistSection` for one artist at a time: what's read for
+ * another artist starts over from it, and other answers about an artist the
+ * page no longer shows are dropped.
+ */
+const stepKeyed = (
+  keyed: Keyed,
+  { key, event }: { readonly key: string; readonly event: YtArtistSectionEvent<NativeYtSong> },
+): Keyed => {
+  if (key === keyed.key) return { key, state: stepYtArtistSection(keyed.state, event) };
+  if (event.type !== "restored") return keyed;
+  return { key, state: stepYtArtistSection(YT_ARTIST_SECTION_START, event) };
+};
+
+/** What was saved for an artist, and asking YouTube Music again. */
+export interface YtArtistAnswer {
+  /** Core's `stepYtArtistSection` state: what's saved, and whether a tap is being answered. */
+  readonly state: YtArtistSection<NativeYtSong>;
+  /** Whether YT Music is on in Settings. */
+  readonly enabled: boolean;
+  /** When the screen opened: whether a saved answer still stands is decided then. */
+  readonly openedAt: number;
+  /** Show on YouTube Music: asks YouTube Music, once. */
+  readonly show: () => void;
+}
+
+/**
+ * The YouTube Music answer for the Library artist [name], as the artist page
+ * and their albums' pages share it: it reads what was saved and never asks
+ * YouTube Music until `show` is called (Core's `stepYtArtistSection`).
+ */
+export const useYtArtistAnswer = (name: string): YtArtistAnswer => {
+  const artistKey = identityKey(name);
+  const enabled = useYtMusicEnabled();
+  const [keyed, dispatch] = useReducer(stepKeyed, {
+    key: artistKey,
+    state: YT_ARTIST_SECTION_START,
+  });
+  // A page whose artist is read later (an album's) starts over once it is.
+  const state = keyed.key === artistKey ? keyed.state : YT_ARTIST_SECTION_START;
+  // Whether a saved answer still stands is decided as the page opens (an answer
+  // that comes later is newer, so it stands).
+  const [openedAt] = useState(() => Date.now());
+
+  useEffect(() => {
+    let current = true;
+    const restored = (saved: Saved | null) => {
+      if (current) dispatch({ key: artistKey, event: { type: "restored", saved } });
+    };
+    void appRuntime
+      .runPromise(readSaved(artistKey))
+      // A defect reads as nothing saved, so the section can still ask.
+      .then(restored, () => restored(null));
+    return () => {
+      current = false;
+    };
+  }, [artistKey]);
+
+  // What's saved, while a tap can ask (undefined while reading or asking).
+  const saved = state.status === "ready" ? state.saved : undefined;
+  const show = useCallback(() => {
+    if (saved === undefined) return;
+    const step = (event: YtArtistSectionEvent<NativeYtSong>) => dispatch({ key: artistKey, event });
+    step({ type: "requested" });
+    void appRuntime.runPromise(Effect.result(fetchArtist(name, artistKey, saved))).then(
+      (result) =>
+        step(
+          Result.isSuccess(result)
+            ? { type: "answered", saved: result.success }
+            : { type: "failed", reason: result.failure.reason },
+        ),
+      // A defect fails like any other request, so the section doesn't stay loading.
+      () => step({ type: "failed", reason: "failed" }),
+    );
+  }, [name, artistKey, saved]);
+
+  return { state, enabled, openedAt, show };
+};
+
+export interface YtArtistSectionShown {
   /** What the section shows, or null when it's hidden (Core's `ytArtistSectionView`). */
   readonly view: YtArtistSectionView<NativeYtSong> | null;
   /**
@@ -80,42 +167,10 @@ export const useYtArtistSection = (
   name: string,
   artistId: number,
   albums: readonly AlbumRow[],
-): YtArtistSection => {
-  const artistKey = identityKey(name);
-  const enabled = useYtMusicEnabled();
+): YtArtistSectionShown => {
+  const { state, enabled, openedAt, show } = useYtArtistAnswer(name);
   const find = useLoadedLibraryFinder();
-  const [state, dispatch] = useReducer(stepYtArtistSection<NativeYtSong>, YT_ARTIST_SECTION_START);
-  // Whether a saved answer still stands is decided as the page opens (an answer
-  // that comes later is newer, so it stands).
-  const [openedAt] = useState(() => Date.now());
   const findAlbum = useMemo(() => libraryAlbumFinder(artistId, albums), [artistId, albums]);
-
-  useEffect(() => {
-    void appRuntime
-      .runPromise(readSaved(artistKey))
-      // A defect reads as nothing saved, so the section can still ask.
-      .then(
-        (saved) => dispatch({ type: "restored", saved }),
-        () => dispatch({ type: "restored", saved: null }),
-      );
-  }, [artistKey]);
-
-  // What's saved, while a tap can ask (undefined while reading or asking).
-  const saved = state.status === "ready" ? state.saved : undefined;
-  const show = useCallback(() => {
-    if (saved === undefined) return;
-    dispatch({ type: "requested" });
-    void appRuntime.runPromise(Effect.result(fetchArtist(name, artistKey, saved))).then(
-      (result) =>
-        dispatch(
-          Result.isSuccess(result)
-            ? { type: "answered", saved: result.success }
-            : { type: "failed", reason: result.failure.reason },
-        ),
-      // A defect fails like any other request, so the section doesn't stay loading.
-      () => dispatch({ type: "failed", reason: "failed" }),
-    );
-  }, [name, artistKey, saved]);
 
   // Until the Library has been read, which top songs it lacks isn't known: nothing shows.
   const view =

@@ -1,6 +1,6 @@
 import {
   discoverTrackId,
-  type DiscoverSong,
+  type MixedSong,
   nextRepeatMode,
   type UpNextMove,
   startSleepTimer,
@@ -119,11 +119,12 @@ export const playYtSongs = (
   );
 
 /**
- * Plays Discover's songs from `startIndex` (or shuffled), queueing the rest:
- * the Library's file for the songs it has, the others streamed.
+ * Plays a list that mixes the Library's songs and YT Music's (Discover,
+ * Search, an artist's or album's page) from `startIndex` (or shuffled),
+ * queueing the rest: the Library's files, the others streamed.
  */
 export const playDiscoverSongs = (
-  songs: readonly DiscoverSong<YtSong, SongRow>[],
+  songs: readonly MixedSong<YtSong, SongRow>[],
   startIndex: number | undefined,
   context: QueueContext,
   options: { readonly shuffle?: boolean } = {},
@@ -155,7 +156,7 @@ export const addYtToQueue = (songs: readonly YtSong[]): Promise<void> =>
  * Library's file for the songs it has, the others streamed.
  */
 export const queueDiscoverSongs = (
-  songs: readonly DiscoverSong<YtSong, SongRow>[],
+  songs: readonly MixedSong<YtSong, SongRow>[],
   where: "playNext" | "addToQueue",
 ): Promise<void> =>
   dispatchWithYt(

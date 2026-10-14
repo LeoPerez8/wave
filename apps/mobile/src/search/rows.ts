@@ -1,9 +1,19 @@
-import type { SearchKind, SearchResults, YtSectionNote, YtSectionView } from "@wave/core";
+import type {
+  MixedSong,
+  SearchGroup,
+  SearchKind,
+  SearchResults,
+  YtSectionNote,
+  YtSectionView,
+} from "@wave/core";
 
 import type { SongRow } from "@/library/LibraryStore";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 
 import type { SearchHit } from "./searchIndex";
+
+/** A song result: the Library's, or one YT Music found that the Library lacks. */
+export type ResultSong = MixedSong<NativeYtSong, SongRow>;
 
 /** One row of the results list: a section head, a result, or a group's "Show all". */
 export type ResultRow =
@@ -15,7 +25,9 @@ export type ResultRow =
       /** The top result says what type it is. */
       readonly top: boolean;
       /** For songs: the song results, which tapping plays from this one. */
-      readonly songs: readonly SongRow[];
+      readonly songs: readonly ResultSong[];
+      /** For songs: YT Music's songs are among the results, so the Library's show as downloaded. */
+      readonly downloaded: boolean;
     }
   | {
       readonly type: "more";
@@ -33,8 +45,9 @@ export type ResultRow =
       readonly type: "ytSong";
       readonly key: string;
       readonly song: NativeYtSong;
-      /** The section's songs, which tapping plays from this one. */
-      readonly songs: readonly NativeYtSong[];
+      /** The song results, which tapping plays from this one ([index]). */
+      readonly songs: readonly ResultSong[];
+      readonly index: number;
     }
   /** A quiet line in place of results: nothing in the library, YT Music offline… */
   | { readonly type: "note"; readonly key: string; readonly text: string };
@@ -83,41 +96,71 @@ const songsOf = (hits: readonly SearchHit[]): SongRow[] =>
 export const songResults = (results: SearchResults<SearchHit>): SongRow[] =>
   songsOf(results.groups.find((group) => group.kind === "song")?.items ?? []);
 
+const NO_YT_SONGS: readonly NativeYtSong[] = [];
+
 /**
  * Lays out results: the top result, then each group (in Core's order) with a
  * preview of its best matches and "Show all". A group the owner expanded, or
- * the only group, shows everything search returned.
+ * the only group, shows everything search returned. The songs YT Music found
+ * that the Library lacks ([yt], Core's `ytSectionView`) follow the Library's
+ * in the Songs group, which they make when the Library has no song matching.
  */
 export const resultRows = (
   results: SearchResults<SearchHit>,
   expanded: ReadonlySet<SearchKind>,
+  yt: YtSectionView<NativeYtSong> | null = null,
 ): ResultRow[] => {
   const rows: ResultRow[] = [];
-  const songs = songResults(results);
+  const ytSongs = yt?.songs ?? NO_YT_SONGS;
+  const library = songResults(results);
+  const songs: ResultSong[] = [
+    ...library.map((track) => ({ source: "library" as const, track })),
+    ...ytSongs.map((song) => ({ source: "stream" as const, song })),
+  ];
+  const downloaded = ytSongs.length > 0;
+  const hitRow = (hit: SearchHit, top: boolean): ResultRow => ({
+    type: "hit",
+    key: `${top ? "top:" : ""}${hitKey(hit)}`,
+    hit,
+    top,
+    songs,
+    downloaded,
+  });
   if (results.top !== null) {
     rows.push(
       { type: "heading", key: "heading:top", label: "Top result" },
-      { type: "hit", key: `top:${hitKey(results.top)}`, hit: results.top, top: true, songs },
+      hitRow(results.top, true),
     );
   }
-  for (const group of results.groups) {
+  const groups: readonly SearchGroup<SearchHit>[] =
+    results.groups.some((group) => group.kind === "song") || !downloaded
+      ? results.groups
+      : [...results.groups, { kind: "song", items: [], total: 0 }];
+  for (const group of groups) {
+    const extra = group.kind === "song" ? ytSongs : NO_YT_SONGS;
+    const total = group.total + extra.length;
     rows.push({
       type: "heading",
       key: `heading:${group.kind}`,
-      label: `${LABEL[group.kind]} · ${group.total.toLocaleString("en")}`,
+      label: `${LABEL[group.kind]} · ${total.toLocaleString("en")}`,
     });
-    const open = expanded.has(group.kind) || results.groups.length === 1;
-    const shown = open ? group.items : group.items.slice(0, PREVIEW[group.kind]);
-    for (const hit of shown) rows.push({ type: "hit", key: hitKey(hit), hit, top: false, songs });
-    if (shown.length < group.total && !open)
-      rows.push({ type: "more", key: `more:${group.kind}`, kind: group.kind, total: group.total });
-    else if (shown.length < group.total)
-      rows.push({
-        type: "capped",
-        key: `capped:${group.kind}`,
-        shown: shown.length,
-        total: group.total,
-      });
+    const groupRows: ResultRow[] = [
+      ...group.items.map((hit) => hitRow(hit, false)),
+      ...extra.map((song, index): ResultRow => ({
+        type: "ytSong",
+        key: `yt:${song.videoId}`,
+        song,
+        songs,
+        index: library.length + index,
+      })),
+    ];
+    const open = expanded.has(group.kind) || groups.length === 1;
+    const shown = open ? groupRows : groupRows.slice(0, PREVIEW[group.kind]);
+    rows.push(...shown);
+    if (shown.length < total && !open)
+      rows.push({ type: "more", key: `more:${group.kind}`, kind: group.kind, total });
+    else if (shown.length < total)
+      rows.push({ type: "capped", key: `capped:${group.kind}`, shown: shown.length, total });
   }
   return rows;
 };
@@ -129,20 +172,18 @@ export const noLibraryResultsRow = (query: string): ResultRow => ({
   text: `Nothing in your library matches “${query.trim()}”.`,
 });
 
-const YT_NOTE: Readonly<Record<YtSectionNote, string>> = {
+/** YT Music's quiet lines; with its songs among the Library's, "nothing new" needs no line. */
+const YT_NOTE: Readonly<Record<YtSectionNote, string | null>> = {
   searching: "Searching YT Music…",
-  noMatches: "Nothing on YT Music matches.",
-  allInLibrary: "What YT Music found is already in your library.",
+  noMatches: null,
+  allInLibrary: null,
   offline: "You're offline. Songs from YT Music show here when you're back online.",
   failed: "YT Music didn't answer. Try again in a moment.",
 };
 
-/** The YT Music section below the library's results: its head, then its songs or a quiet line. */
-export const ytMusicRows = (view: YtSectionView<NativeYtSong> | null): ResultRow[] => {
-  if (view === null) return [];
-  const rows: ResultRow[] = [{ type: "heading", key: "heading:yt", label: "YT Music" }];
-  for (const song of view.songs)
-    rows.push({ type: "ytSong", key: `yt:${song.videoId}`, song, songs: view.songs });
-  if (view.note !== null) rows.push({ type: "note", key: "note:yt", text: YT_NOTE[view.note] });
-  return rows;
+/** YT Music's quiet line under the results, if it has one. */
+export const ytNoteRows = (view: YtSectionView<NativeYtSong> | null): ResultRow[] => {
+  const note = view?.note ?? null;
+  const text = note === null ? null : YT_NOTE[note];
+  return text === null ? [] : [{ type: "note", key: "note:yt", text }];
 };

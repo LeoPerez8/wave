@@ -13,7 +13,7 @@ import type { SongRow } from "@/library/LibraryStore";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { openAlbum, openArtist, openGenre, openPlaylist } from "@/library/routes";
 import { toTrackSummary } from "@/library/TrackList";
-import { playSongs, playYtSongs } from "@/playback/actions";
+import { playDiscoverSongs, playSongs } from "@/playback/actions";
 import { useCurrentTrackId } from "@/playback/hooks";
 import {
   openAlbumActions,
@@ -24,7 +24,7 @@ import {
 } from "@/playback/ActionsMenu";
 
 import { ArtworkRow } from "./ArtworkRow";
-import type { ResultRow } from "./rows";
+import type { ResultRow, ResultSong } from "./rows";
 import type { SearchHit } from "./searchIndex";
 import { useListScrollable } from "@/motion/heldTouch";
 import { selectableRow } from "@/selection/selectableRow";
@@ -47,18 +47,30 @@ const HEIGHT: Readonly<Record<ResultRow["type"], number>> = {
 const ignore = (): void => undefined;
 
 /**
- * A song YT Music found. Tapping streams the section's songs from it. While
- * Library songs are being selected, it does nothing.
+ * Plays the song results from [index]: the Library's files and, when YT Music
+ * found songs the Library lacks, those streamed after them.
+ */
+const playResults = (songs: readonly ResultSong[], index: number): void => {
+  const library = songs.flatMap((song) => (song.source === "library" ? [song.track] : []));
+  if (library.length === songs.length) playSongs(library, index, SEARCH_CONTEXT);
+  else void playDiscoverSongs(songs, index, SEARCH_CONTEXT);
+};
+
+/**
+ * A song YT Music found, among the song results. Tapping plays the results
+ * from it. While Library songs are being selected, it does nothing.
  */
 function SearchYtSongRow({
   song,
   songs,
+  index,
   playing,
   onOpen,
   selecting,
 }: {
   song: NativeYtSong;
-  songs: readonly NativeYtSong[];
+  songs: readonly ResultSong[];
+  index: number;
   playing: boolean;
   onOpen: () => void;
   selecting: boolean;
@@ -72,7 +84,7 @@ function SearchYtSongRow({
           ? ignore
           : () => {
               onOpen();
-              void playYtSongs(songs, Math.max(0, songs.indexOf(song)), SEARCH_CONTEXT);
+              playResults(songs, index);
             }
       }
       onLongPress={selecting ? ignore : undefined}
@@ -97,13 +109,16 @@ function Hit({
   hit,
   top,
   songs,
+  downloaded,
   playing,
   onOpen,
   selection,
 }: {
   hit: SearchHit;
   top: boolean;
-  songs: readonly SongRow[];
+  songs: readonly ResultSong[];
+  /** A song among YT Music's: marked downloaded. */
+  downloaded: boolean;
   playing: boolean;
   onOpen: () => void;
   selection: ListSelection<SongRow>;
@@ -145,10 +160,19 @@ function Hit({
           track={top ? { ...track, artist: `Song · ${track.artist}` } : track}
           state={playing ? "playing" : undefined}
           leading="artwork"
+          downloaded={downloaded}
           {...selectableRow(
             hit.song,
             selection,
-            open(() => playSongs(songs, Math.max(0, songs.indexOf(hit.song)), SEARCH_CONTEXT)),
+            open(() =>
+              playResults(
+                songs,
+                Math.max(
+                  0,
+                  songs.findIndex((song) => song.source === "library" && song.track === hit.song),
+                ),
+              ),
+            ),
             (options) => openTrackActions(hit.song, options),
           )}
         />
@@ -203,6 +227,7 @@ export function SearchResultsList({ rows, onOpen, onShowAll, selection }: Props)
               hit={item.hit}
               top={item.top}
               songs={item.songs}
+              downloaded={item.downloaded}
               playing={item.hit.kind === "song" && String(item.hit.song.id) === currentId}
               onOpen={onOpen}
               selection={selection}
@@ -230,6 +255,7 @@ export function SearchResultsList({ rows, onOpen, onShowAll, selection }: Props)
             <SearchYtSongRow
               song={item.song}
               songs={item.songs}
+              index={item.index}
               playing={ytTrackId(item.song.videoId) === currentId}
               onOpen={onOpen}
               selecting={selection.selecting}
