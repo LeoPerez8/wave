@@ -4,6 +4,8 @@ import {
   planLinkImport,
   playlistImportSources,
   recognisePlaylistLink,
+  sharedTextImport,
+  YT_MUSIC_OFF_NOTICE,
   type LinkImportPlan,
   type LinkImportRead,
   type PlaylistImportSource,
@@ -86,15 +88,24 @@ export const saveLinkImport = async (
  */
 export const openLinkImport = (text: string): void => {
   if (!ytMusicEnabled()) {
-    void showMessage(
-      "YT Music is off",
-      "Turn on YT Music in Settings to import playlists from YouTube Music links.",
-    );
+    void showMessage(YT_MUSIC_OFF_NOTICE.title, YT_MUSIC_OFF_NOTICE.message);
     return;
   }
   const check = recognisePlaylistLink(text);
   if (check.ok) openImportCard(check.link);
   else void askForLink(text);
+};
+
+/**
+ * Opens what [text] shared to Wave from another app names (Core's
+ * `sharedTextImport`): the import card for its playlist, as From a Link opens
+ * it, or a short message saying what Wave imports (or that YT Music is off).
+ * Nothing is read for a message.
+ */
+export const openSharedText = (text: string): void => {
+  const shared = sharedTextImport(text, { ytMusic: ytMusicEnabled() });
+  if (shared.kind === "import") openImportCard(shared.link);
+  else void showMessage(shared.title, shared.message);
 };
 
 /**

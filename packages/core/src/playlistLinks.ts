@@ -91,6 +91,14 @@ const ytPlaylist = (playlistId: string): PlaylistLinkCheck => ({
 
 /** A web address among words, as an app shares a link with its title. */
 const ADDRESS = /\bhttps?:\/\/\S+/iu;
+/** Punctuation that ends a sentence or closes a bracket or quote, not the address before it. */
+const AFTER_ADDRESS = /[.,!?;:'")\]}>»”’]+$/u;
+
+/** The first web address in [text], without the punctuation after it; null when it has none. */
+const addressIn = (text: string): string | null => {
+  const address = ADDRESS.exec(text)?.[0];
+  return address === undefined ? null : address.replace(AFTER_ADDRESS, "");
+};
 
 /**
  * The playlist a pasted or shared link names: a YouTube Music or YouTube
@@ -101,7 +109,7 @@ const ADDRESS = /\bhttps?:\/\/\S+/iu;
 export const recognisePlaylistLink = (text: string): PlaylistLinkCheck => {
   const whole = text.trim();
   if (whole === "") return rejected("empty");
-  const trimmed = /\s/u.test(whole) ? (ADDRESS.exec(whole)?.[0] ?? whole) : whole;
+  const trimmed = /\s/u.test(whole) ? (addressIn(whole) ?? whole) : whole;
   const bare = BARE_ID.exec(trimmed)?.[1];
   if (bare !== undefined) return ytPlaylist(bare);
   const parts = LINK.exec(trimmed);
@@ -114,6 +122,47 @@ export const recognisePlaylistLink = (text: string): PlaylistLinkCheck => {
   const list = queryValue(parts[3] ?? "", "list");
   if (path !== "/playlist" || list === null || !ID.test(list)) return rejected("notPlaylist");
   return ytPlaylist(list);
+};
+
+/** What sharing text to Wave does: open the import card for its playlist, or say why not. */
+export type SharedTextImport =
+  | { readonly kind: "import"; readonly link: PlaylistLink }
+  | ({ readonly kind: "notice" } & ImportNotice);
+
+/** A short message shown instead of the import card. */
+export interface ImportNotice {
+  readonly title: string;
+  readonly message: string;
+}
+
+/** Why a link isn't read with YT Music off, wherever it came from. */
+export const YT_MUSIC_OFF_NOTICE: ImportNotice = {
+  title: "YT Music is off",
+  message: "Turn on YT Music in Settings to import playlists from YouTube Music links.",
+};
+
+const CANT_IMPORT_NOTICE: ImportNotice = {
+  title: "Can't import this",
+  message: REASONS.otherSite,
+};
+
+/**
+ * What text shared to Wave from another app (Android's share sheet) opens:
+ * the import card for the playlist named by the first web address in it (the
+ * bare link YouTube Music's app shares, or a link among words, punctuation
+ * after it dropped), as `recognisePlaylistLink` reads it. Anything else, a
+ * bare playlist id included, gets a notice saying what Wave imports, and with
+ * YT Music off everything gets one saying to turn it on.
+ */
+export const sharedTextImport = (
+  text: string,
+  { ytMusic }: { readonly ytMusic: boolean },
+): SharedTextImport => {
+  if (!ytMusic) return { kind: "notice", ...YT_MUSIC_OFF_NOTICE };
+  const address = addressIn(text);
+  const check = address === null ? null : recognisePlaylistLink(address);
+  if (check?.ok === true) return { kind: "import", link: check.link };
+  return { kind: "notice", ...CANT_IMPORT_NOTICE };
 };
 
 /** A playlist as read from its service: its name, cover and songs in its order. */
