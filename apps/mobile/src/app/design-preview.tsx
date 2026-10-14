@@ -1,5 +1,13 @@
 import { useMemo, useRef, useState } from "react";
-import { FlatList, Text, useWindowDimensions, View } from "react-native";
+import type { IndexEntry } from "@wave/core";
+import {
+  FlatList,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+  Text,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { type AlbumSummary, AlbumTile } from "@/catalog/AlbumTile";
@@ -27,25 +35,36 @@ export default function DesignPreviewScreen() {
   const [view, setView] = useState<Shelf>("albums");
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const reserved = grid.spine + grid.spineInset;
+  const reserved = grid.spineHit + grid.spineInset;
   const tile = Math.floor((width - grid.margin - reserved - grid.gutter) / 2);
   const tileRow = tile + CAPTION + ROW_GAP;
 
   const albums = useRef<FlatList<AlbumSummary>>(null);
   const songs = useRef<FlatList<SyntheticTrack>>(null);
+  const scrolled = useRef(0);
 
   const albumLetters = useMemo(() => letterIndex(SYNTHETIC_ALBUMS.map((a) => a.title)), []);
   const songLetters = useMemo(() => letterIndex(SYNTHETIC_TRACKS.map((t) => t.track.title)), []);
   const letters = view === "albums" ? albumLetters : songLetters;
+  const entries = useMemo(
+    () => [...letters].map(([letter, index]) => ({ letter, index })),
+    [letters],
+  );
 
-  const jump = (letter: string) => {
-    const index = letters.get(letter);
-    if (index === undefined) return;
+  const jump = ({ index }: IndexEntry) => {
     if (view === "albums") {
       albums.current?.scrollToOffset({ offset: Math.floor(index / 2) * tileRow, animated: false });
     } else {
       songs.current?.scrollToIndex({ index, animated: false });
     }
+  };
+  // The first item on screen: two albums to a row, one song.
+  const topRow = () =>
+    view === "albums"
+      ? Math.floor(scrolled.current / tileRow) * 2
+      : Math.floor(scrolled.current / grid.row);
+  const onScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    scrolled.current = event.nativeEvent.contentOffset.y;
   };
 
   return (
@@ -84,6 +103,7 @@ export default function DesignPreviewScreen() {
           <FlatList
             key="albums"
             ref={albums}
+            onScroll={onScroll}
             data={SYNTHETIC_ALBUMS}
             keyExtractor={(album) => album.id}
             numColumns={2}
@@ -104,6 +124,7 @@ export default function DesignPreviewScreen() {
           <FlatList
             key="songs"
             ref={songs}
+            onScroll={onScroll}
             data={SYNTHETIC_TRACKS}
             keyExtractor={(item) => item.track.id}
             getItemLayout={(_, index) => ({ length: grid.row, offset: grid.row * index, index })}
@@ -123,7 +144,7 @@ export default function DesignPreviewScreen() {
             )}
           />
         )}
-        <AlphabetSpine letters={[...letters.keys()]} onLetter={jump} />
+        <AlphabetSpine entries={entries} onJump={jump} topRow={topRow} />
       </View>
     </View>
   );

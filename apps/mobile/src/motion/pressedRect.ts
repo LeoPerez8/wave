@@ -4,8 +4,10 @@ import type { OverlayRect } from "@wave/core";
 export interface PressedElement {
   /** Tells this `Press` apart from every other, for as long as it is mounted. */
   readonly key: number;
-  /** Undefined when it couldn't be measured. */
+  /** Where it sits at rest; undefined when it couldn't be measured. */
   readonly rect: OverlayRect | undefined;
+  /** It sits on the floating chrome (the selection bar), so the chrome never hides it. */
+  readonly onChrome: boolean;
 }
 
 /**
@@ -29,14 +31,16 @@ export const pressedRect = (): OverlayRect | undefined => pressedElement()?.rect
 
 /**
  * Runs a press handler with `rect` as the pressed rect (of the `Press` known as
- * `key`). Returns whether the handler opened a menu next to it (asked for it).
+ * `key`, on the floating chrome or not). Returns whether the handler opened a
+ * menu next to it (asked for it).
  */
 export const runPressedAt = (
   rect: OverlayRect | undefined,
   handler: () => void,
   key = 0,
+  onChrome = false,
 ): boolean => {
-  current = { key, rect };
+  current = { key, rect, onChrome };
   read = false;
   try {
     handler();

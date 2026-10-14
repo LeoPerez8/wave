@@ -60,12 +60,12 @@ export function AlbumShelf<A extends AlbumRow>({
 export function SongRows<A extends SongRow>({
   songs,
   context,
-  artistLine,
+  plays,
 }: {
   songs: readonly A[];
   context: QueueContext;
-  /** The second line; the artist by default. */
-  artistLine?: (song: A) => string;
+  /** On a ranking by plays (Most Played), each song's counted plays, shown in place of its length. */
+  plays?: (song: A) => number;
 }) {
   const currentId = useCurrentTrackId();
   const favorites = useFavoriteIds();
@@ -74,10 +74,8 @@ export function SongRows<A extends SongRow>({
       {songs.map((song, index) => (
         <TrackRow
           key={song.id}
-          track={{
-            ...toTrackSummary(song),
-            artist: artistLine === undefined ? song.artist : artistLine(song),
-          }}
+          track={toTrackSummary(song)}
+          plays={plays?.(song)}
           state={String(song.id) === currentId ? "playing" : undefined}
           favorite={favorites.has(song.id)}
           leading="artwork"

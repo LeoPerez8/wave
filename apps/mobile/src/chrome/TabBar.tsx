@@ -14,6 +14,7 @@ import { useShortcutTab } from "@/settings/shortcutTab";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { BACKDROP, chrome } from "./chrome";
+import { OnFloatingChrome } from "./onFloatingChrome";
 
 type IconProps = { size?: number; color?: string; strokeWidth?: number };
 
@@ -74,36 +75,38 @@ export function TabBar({ onTabTap }: { onTabTap: (to: TabBarTab) => void }) {
   const slug = useShortcutTab();
   const shortcut = slug === null ? undefined : findSection(slug);
   return (
-    <View
-      accessibilityRole="tablist"
-      pointerEvents="box-none"
-      className="absolute left-0 right-0 flex-row"
-      style={{
-        bottom: insets.bottom + chrome.gap,
-        height: chrome.tabBar,
-        gap: chrome.gap,
-        paddingHorizontal: grid.margin,
-      }}
-    >
-      <View className="flex-1 flex-row">
-        <Glass backdropId={BACKDROP.tabs} cornerRadius={RADIUS} />
-        <Tab name="index" label="Home" icon={IconHome} onSwitch={onTabTap} />
-        <Tab name="library" label="Library" icon={IconStack2} onSwitch={onTabTap} />
-        {shortcut !== undefined && (
-          <Tab name="shortcut" label={shortcut.label} icon={shortcut.icon} onSwitch={onTabTap} />
-        )}
+    <OnFloatingChrome value>
+      <View
+        accessibilityRole="tablist"
+        pointerEvents="box-none"
+        className="absolute left-0 right-0 flex-row"
+        style={{
+          bottom: insets.bottom + chrome.gap,
+          height: chrome.tabBar,
+          gap: chrome.gap,
+          paddingHorizontal: grid.margin,
+        }}
+      >
+        <View className="flex-1 flex-row">
+          <Glass backdropId={BACKDROP.tabs} cornerRadius={RADIUS} />
+          <Tab name="index" label="Home" icon={IconHome} onSwitch={onTabTap} />
+          <Tab name="library" label="Library" icon={IconStack2} onSwitch={onTabTap} />
+          {shortcut !== undefined && (
+            <Tab name="shortcut" label={shortcut.label} icon={shortcut.icon} onSwitch={onTabTap} />
+          )}
+        </View>
+        <View className="flex-row" style={{ width: chrome.tabBar }}>
+          <Glass backdropId={BACKDROP.tabs} cornerRadius={RADIUS} />
+          <Tab
+            name="search"
+            label="Search"
+            icon={IconSearch}
+            showLabel={false}
+            onSwitch={onTabTap}
+            onTap={requestSearchFocus}
+          />
+        </View>
       </View>
-      <View className="flex-row" style={{ width: chrome.tabBar }}>
-        <Glass backdropId={BACKDROP.tabs} cornerRadius={RADIUS} />
-        <Tab
-          name="search"
-          label="Search"
-          icon={IconSearch}
-          showLabel={false}
-          onSwitch={onTabTap}
-          onTap={requestSearchFocus}
-        />
-      </View>
-    </View>
+    </OnFloatingChrome>
   );
 }

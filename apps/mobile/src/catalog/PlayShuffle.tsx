@@ -1,5 +1,5 @@
 import { IconArrowsShuffle, IconPlayerPlay } from "@tabler/icons-react-native";
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
 import { Text, View } from "react-native";
 
 import { Press } from "@/motion/Press";
@@ -9,7 +9,8 @@ import { CELL } from "./grid";
 
 type IconProps = { size?: number; color?: string; strokeWidth?: number };
 
-function Action({
+/** One of a list's actions under its head: a teal line icon and its label, no container. */
+export function ListAction({
   icon: Icon,
   label,
   onPress,
@@ -34,14 +35,20 @@ function Action({
   );
 }
 
-type Props = { onPlay: () => void; onShuffle: () => void };
+type Props = {
+  onPlay: () => void;
+  onShuffle: () => void;
+  /** More actions after Shuffle (a YT Music album's Download). */
+  children?: ReactNode;
+};
 
 /** Play and Shuffle for a list: two teal line-icon actions, no containers. */
-export function PlayShuffle({ onPlay, onShuffle }: Props) {
+export function PlayShuffle({ onPlay, onShuffle, children }: Props) {
   return (
     <View className="flex-row" style={{ gap: CELL * 4 }}>
-      <Action icon={IconPlayerPlay} label="Play" onPress={onPlay} />
-      <Action icon={IconArrowsShuffle} label="Shuffle" onPress={onShuffle} />
+      <ListAction icon={IconPlayerPlay} label="Play" onPress={onPlay} />
+      <ListAction icon={IconArrowsShuffle} label="Shuffle" onPress={onShuffle} />
+      {children}
     </View>
   );
 }

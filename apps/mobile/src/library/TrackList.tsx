@@ -152,7 +152,9 @@ export function TrackList({ songs, context, header, sort }: Props) {
         }}
         ListHeaderComponent={header}
       />
-      {spine.show && <AlphabetSpine letters={spine.letters} onLetter={spine.onLetter} />}
+      {spine.show && (
+        <AlphabetSpine entries={spine.entries} onJump={spine.onJump} topRow={spine.topRow} />
+      )}
     </View>
   );
 }
