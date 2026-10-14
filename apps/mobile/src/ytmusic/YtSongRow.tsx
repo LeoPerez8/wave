@@ -24,6 +24,7 @@ export function YtSongRow({
   onPress,
   onLongPress = () => openYtSongActions(song),
   trackNumber,
+  kind = "",
 }: {
   song: NativeYtSong;
   playing: boolean;
@@ -31,6 +32,8 @@ export function YtSongRow({
   onLongPress?: (() => void) | undefined;
   /** Leads with this number instead of the cover (an album's tracklist). */
   trackNumber?: number | undefined;
+  /** Says what the row is before its artists ("Song · ", Search's top result). */
+  kind?: string | undefined;
 }) {
   const download = useYtDownloadStatus(song.videoId);
   return (
@@ -40,7 +43,7 @@ export function YtSongRow({
         title: song.title,
         artist:
           ytDownloadLine(download) ??
-          (trackNumber === undefined ? ytSongCredit(song) : ytSongArtist(song)),
+          kind + (trackNumber === undefined ? ytSongCredit(song) : ytSongArtist(song)),
         durationMs: song.durationMs,
         trackNumber,
         artworkUri: song.artworkUrl ?? undefined,

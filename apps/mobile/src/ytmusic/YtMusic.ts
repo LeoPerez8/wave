@@ -1,4 +1,10 @@
-import type { YtArtistCandidate, YtHome, YtQuietReason, YtSession } from "@wave/core";
+import type {
+  YtArtistAlbum,
+  YtArtistCandidate,
+  YtHome,
+  YtQuietReason,
+  YtSession,
+} from "@wave/core";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -48,6 +54,8 @@ export class YtMusic extends Context.Service<
     readonly searchArtists: (
       query: string,
     ) => Effect.Effect<readonly YtArtistCandidate[], YtMusicError>;
+    /** Albums, singles and EPs on YT Music for [query]. */
+    readonly searchAlbums: (query: string) => Effect.Effect<readonly YtArtistAlbum[], YtMusicError>;
     /** The artist page [browseId] (`UC…`): their top songs, albums and singles. */
     readonly artist: (browseId: string) => Effect.Effect<NativeYtArtistPage, YtMusicError>;
     /** The account's recommendations: YouTube Music's home shelves. */
@@ -79,6 +87,8 @@ export const layer = Layer.succeed(YtMusic, {
     Effect.tryPromise({ try: () => WaveYtMusic.searchSongs(query), catch: fromNative }),
   searchArtists: (query) =>
     Effect.tryPromise({ try: () => WaveYtMusic.searchArtists(query), catch: fromNative }),
+  searchAlbums: (query) =>
+    Effect.tryPromise({ try: () => WaveYtMusic.searchAlbums(query), catch: fromNative }),
   artist: (browseId) =>
     Effect.tryPromise({ try: () => WaveYtMusic.artist(browseId), catch: fromNative }),
   home: Effect.tryPromise({ try: () => WaveYtMusic.home(), catch: fromNative }).pipe(

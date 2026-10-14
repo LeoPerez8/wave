@@ -76,10 +76,10 @@ function RecentSearches({ onPick }: { onPick: (query: string) => void }) {
 /**
  * The Search tab: results update as you type, grouped by type under a top
  * result. Typing searches the library only; Search YouTube Music below the
- * results (or a query the library has nothing for) merges YT Music's songs
- * in. With nothing typed it shows the recent searches. Tapping the tab
- * raises the keyboard; leaving it puts the keyboard away. Switching between
- * recents and results rises the new content in.
+ * results (or a query the library has nothing for) merges YT Music's songs,
+ * artists and albums in. With nothing typed it shows the recent searches.
+ * Tapping the tab raises the keyboard; leaving it puts the keyboard away.
+ * Switching between recents and results rises the new content in.
  */
 export default function SearchScreen() {
   const insets = useSafeAreaInsets();
@@ -120,19 +120,21 @@ export default function SearchScreen() {
   );
   const libraryEmpty = results !== null && results.groups.length === 0;
   // YT Music is asked on Search YouTube Music, or on its own when the library
-  // has nothing; it answers on its own time, and its songs the library doesn't
-  // have join the library's. Until the library is ready, nothing is asked.
+  // has nothing; it answers on its own time, and its songs, artists and albums
+  // the library doesn't have join the library's. Until the library is ready,
+  // nothing is asked.
   const [ytSection, askYt] = useYtMusicSection(deferredQuery, !libraryEmpty);
-  const inLibrary = library?.inLibrary;
+  const inLibrary = library?.library;
   const ytView = useMemo(
     () => (inLibrary === undefined ? null : ytSectionView(ytSection, inLibrary)),
     [ytSection, inLibrary],
   );
   const rows = useMemo(() => {
     if (results === null) return [];
-    const ytSongs = ytView?.songs.length ?? 0;
+    const ytFound =
+      ytView === null ? 0 : ytView.songs.length + ytView.artists.length + ytView.albums.length;
     const ours =
-      libraryEmpty && ytSongs === 0
+      libraryEmpty && ytFound === 0
         ? [noLibraryResultsRow(deferredQuery)]
         : resultRows(results, expanded, ytView);
     return [...ours, ...ytFooterRows(ytView)];
@@ -164,7 +166,7 @@ export default function SearchScreen() {
   // What's shown; a change of it rises in. Results and no results count as
   // one, so refining a query never animates or remounts the list.
   const content = query.trim() === "" ? "recents" : index === null ? "preparing" : "results";
-  // With YT Music on, its songs (or its quiet line) show when the library has nothing.
+  // With YT Music on, its results (or its quiet line) show when the library has nothing.
   const noResults = libraryEmpty && ytView === null && deferredQuery === query;
   return (
     <View className="flex-1 bg-background">
@@ -206,6 +208,7 @@ export default function SearchScreen() {
               onOpen={remember}
               onShowAll={showAll}
               onAskYt={askYt}
+              integrated={ytView?.integrated ?? false}
               selection={selection}
             />
           )}

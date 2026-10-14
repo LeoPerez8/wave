@@ -1,4 +1,5 @@
 import { YT_SECTION_HIDDEN, stepYtSection, type YtSection } from "@wave/core";
+import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { useCallback, useEffect, useReducer } from "react";
 
@@ -7,8 +8,8 @@ import { useYtMusicEnabled } from "@/settings/ytMusic";
 import { askYtMusic } from "@/ytmusic/askYtMusic";
 
 /**
- * What Search has asked YT Music for [query], and Search YouTube Music's
- * action. Typing alone asks only when the Library has nothing for the query
+ * What Search has asked YT Music for [query] (its songs, artists and albums,
+ * asked together), and Search YouTube Music's action. Typing alone asks only when the Library has nothing for the query
  * ([libraryHasResults] false), once typing pauses; a tap asks at once, and the
  * view then follows the query until the field is cleared. Answers to older
  * queries are dropped (Core's `stepYtSection`). Off in Settings, it stays
@@ -31,9 +32,22 @@ export const useYtMusicSection = (
   useEffect(() => {
     if (loading === null) return undefined;
     const timer = setTimeout(() => {
-      void askYtMusic((ytMusic) => ytMusic.searchSongs(loading)).then((result) => {
-        if (Result.isSuccess(result))
-          dispatch({ type: "found", query: loading, songs: result.success.songs });
+      // Only the query is sent. One that fails fails them all: one quiet line.
+      const search = askYtMusic((ytMusic) =>
+        Effect.all(
+          {
+            songs: ytMusic.searchSongs(loading),
+            artists: ytMusic.searchArtists(loading),
+            albums: ytMusic.searchAlbums(loading),
+          },
+          { concurrency: "unbounded" },
+        ),
+      );
+      void search.then((result) => {
+        if (Result.isSuccess(result)) {
+          const { songs, artists, albums } = result.success;
+          dispatch({ type: "found", query: loading, songs: songs.songs, artists, albums });
+        }
         // Turned off meanwhile: the section is already hidden.
         else if (result.failure.reason !== "disabled")
           dispatch({ type: "failed", query: loading, reason: result.failure.reason });
