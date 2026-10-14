@@ -17,9 +17,7 @@ import {
   type AlbumRow,
   type ArtistDetail,
   type ArtistRow,
-  type FolderDetail,
   type FavoriteRow,
-  type FolderRow,
   type GenreDetail,
   type GenreRow,
   type LibraryStoreError,
@@ -178,17 +176,14 @@ export const useScanRoots = (): readonly ScanRootSummary[] => useLibraryQuery(li
 const listAlbums = LibraryStore.use((store) => store.listAlbums);
 const listArtists = LibraryStore.use((store) => store.listArtists);
 const listGenres = LibraryStore.use((store) => store.listGenres);
-const listFolders = LibraryStore.use((store) => store.listFolders);
 
 const NO_ALBUMS: readonly AlbumRow[] = [];
 const NO_ARTISTS: readonly ArtistRow[] = [];
 const NO_GENRES: readonly GenreRow[] = [];
-const NO_FOLDERS: readonly FolderRow[] = [];
 
 export const useAlbums = (): readonly AlbumRow[] => useLibraryQuery(listAlbums, NO_ALBUMS);
 export const useArtists = (): readonly ArtistRow[] => useLibraryQuery(listArtists, NO_ARTISTS);
 export const useGenres = (): readonly GenreRow[] => useLibraryQuery(listGenres, NO_GENRES);
-export const useFolders = (): readonly FolderRow[] => useLibraryQuery(listFolders, NO_FOLDERS);
 
 /**
  * A detail screen's data: `undefined` while loading, `null` once the item is
@@ -205,7 +200,6 @@ const useDetail = <A>(
 const getAlbum = (store: LibraryStore["Service"], id: number) => store.getAlbum(id);
 const getArtist = (store: LibraryStore["Service"], id: number) => store.getArtist(id);
 const getGenre = (store: LibraryStore["Service"], id: number) => store.getGenre(id);
-const getFolder = (store: LibraryStore["Service"], id: number) => store.getFolder(id);
 
 const NO_LINKS: LinkRows = { album: null, artist: null };
 
@@ -235,7 +229,6 @@ export const useLinkRows = (
 export const useAlbum = (id: number): AlbumDetail | null | undefined => useDetail(id, getAlbum);
 export const useArtist = (id: number): ArtistDetail | null | undefined => useDetail(id, getArtist);
 export const useGenre = (id: number): GenreDetail | null | undefined => useDetail(id, getGenre);
-export const useFolder = (id: number): FolderDetail | null | undefined => useDetail(id, getFolder);
 
 const listExcludedFolders = LibraryStore.use((store) => store.excludedFolders);
 

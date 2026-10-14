@@ -25,7 +25,7 @@ const collection = <D>(
 
 /**
  * The sections made of items (albums, artists…), each item's songs as its screen
- * lists them: artists', genres' and folders' in the sort chosen for their kind.
+ * lists them: artists' and genres' in the sort chosen for their kind.
  */
 const collections = {
   albums: collection(
@@ -43,11 +43,6 @@ const collections = {
     (store, id) => store.getGenre(id),
     (genre) => sortedForKind("genre", genre.songs),
   ),
-  folders: collection(
-    (store) => store.listFolders,
-    (store, id) => store.getFolder(id),
-    (folder) => sortedForKind("folder", folder.songs),
-  ),
   playlists: collection(
     (store) => store.listPlaylists,
     (store, id) => store.getPlaylist(id),
@@ -55,7 +50,7 @@ const collections = {
   ),
 };
 
-/** One album's, artist's, genre's, folder's or playlist's songs, as its own screen lists them. */
+/** One album's, artist's, genre's or playlist's songs, as its own screen lists them. */
 export const itemSongs = (
   section: keyof typeof collections,
   id: number,

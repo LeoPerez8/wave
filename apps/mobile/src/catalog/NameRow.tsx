@@ -28,7 +28,7 @@ type Props = {
 const ARTIST_THUMB = CELL * 5;
 
 /**
- * An artist, genre or folder in a list: the name over a graphite detail line,
+ * An artist or genre in a list: the name over a graphite detail line,
  * at one size like a track row, 56dp so long lists lay out by index. Artists
  * lead with their image.
  */

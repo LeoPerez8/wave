@@ -2,7 +2,7 @@ import { detailPath, type DetailScreen, type StatsPeriod, type StatsRanking } fr
 import { router, useLocalSearchParams, usePathname, type Href } from "expo-router";
 import { useEffect, useState } from "react";
 
-import type { AlbumRow, ArtistRow, FolderRow, GenreRow, PlaylistRow } from "./LibraryStore";
+import type { AlbumRow, ArtistRow, GenreRow, PlaylistRow } from "./LibraryStore";
 
 /** The current screen's path, for opening screens from outside React. */
 let here = "/";
@@ -20,7 +20,6 @@ interface DetailRows {
   readonly album: AlbumRow;
   readonly artist: ArtistRow;
   readonly genre: GenreRow;
-  readonly folder: FolderRow;
   readonly playlist: PlaylistRow;
 }
 
@@ -73,7 +72,6 @@ export const openAlbum = (id: number, known?: AlbumRow | null, from?: DetailOpen
 export const openArtist = (id: number, known?: ArtistRow | null, from?: DetailOpening): void =>
   open("artist", id, known, integratedQuery(from));
 export const openGenre = (id: number, known?: GenreRow | null): void => open("genre", id, known);
-export const openFolder = (id: number, known?: FolderRow | null): void => open("folder", id, known);
 export const openPlaylist = (id: number, known?: PlaylistRow | null): void =>
   open("playlist", id, known);
 

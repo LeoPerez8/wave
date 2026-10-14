@@ -1,5 +1,5 @@
 /**
- * The songs of selected groups (albums, artists, genres, folders, playlists)
+ * The songs of selected groups (albums, artists, genres, playlists)
  * as one list for the queue and playlist actions: the groups in the order the
  * list shows them, each group's songs in the order its own screen plays them.
  * A song an earlier group already brought is skipped (a duet shared by two
