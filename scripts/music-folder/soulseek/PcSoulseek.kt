@@ -5,6 +5,7 @@ import expo.modules.wavenative.soulseek.SoulseekClient
 import expo.modules.wavenative.soulseek.SoulseekCredentials
 import expo.modules.wavenative.soulseek.SoulseekCredentialsStore
 import expo.modules.wavenative.soulseek.SoulseekException
+import expo.modules.wavenative.soulseek.SoulseekSwitchStore
 import java.io.File
 import java.util.Base64
 import java.util.concurrent.ConcurrentHashMap
@@ -63,7 +64,12 @@ fun main() {
     override fun load() = value
     override fun save(value: SoulseekCredentials?) { this.value = value }
   }
-  val client = SoulseekClient(memory, host, port)
+  val switch = object : SoulseekSwitchStore {
+    private var on: Boolean? = null
+    override fun load() = on
+    override fun save(on: Boolean) { this.on = on }
+  }
+  val client = SoulseekClient(memory, host, port, switch = switch)
   try {
     client.connect(username, password)
     emit("{\"event\":\"connected\"}")

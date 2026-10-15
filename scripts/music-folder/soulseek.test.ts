@@ -223,64 +223,59 @@ describe("connectSoulseek", { skip: typeof toolchain === "string" && toolchain }
   it(
     "logs in, shares nothing, searches and downloads a checked 320 kbps file",
     { timeout: 120_000 },
-    async () => {
+    async (t) => {
       const fake = await fakeSoulseek({ acceptLogin: true });
+      t.after(fake.close);
       const session = await connectSoulseek({
         username: "wave-fixture",
         password: "fixture-secret",
         host: "127.0.0.1",
         port: fake.port,
       });
-      try {
-        assert.deepEqual(fake.seen.login, ["wave-fixture", "fixture-secret"]);
-        assert.deepEqual(fake.seen.shared, new Fields().uint(0).uint(0).result());
-        const found = await session.search("Fixture Artist Fixture Title");
-        assert.deepEqual(fake.seen.queries, ["Fixture Artist Fixture Title"]);
-        assert.deepEqual(found, [
-          {
-            username: "fixture-peer",
-            filename: fake.filename,
-            bytes: fixture.length,
-            bitrateKbps: 320,
-            durationMs: 2000,
-            freeSlot: true,
-            uploadSpeed: 100_000,
-            queueLength: 0,
-          },
-        ]);
-        const part = join(work, "part.mp3");
-        assert.deepEqual(await session.download(found[0]!, part, 1541), { ok: true });
-        assert.deepEqual(readFileSync(part), fixture);
-      } finally {
-        session.close();
-        fake.close();
-      }
+      t.after(session.close);
+      assert.deepEqual(fake.seen.login, ["wave-fixture", "fixture-secret"]);
+      assert.deepEqual(fake.seen.shared, new Fields().uint(0).uint(0).result());
+      const found = await session.search("Fixture Artist Fixture Title");
+      assert.deepEqual(fake.seen.queries, ["Fixture Artist Fixture Title"]);
+      assert.deepEqual(found, [
+        {
+          username: "fixture-peer",
+          filename: fake.filename,
+          bytes: fixture.length,
+          bitrateKbps: 320,
+          durationMs: 2000,
+          freeSlot: true,
+          uploadSpeed: 100_000,
+          queueLength: 0,
+        },
+      ]);
+      const part = join(work, "part.mp3");
+      assert.deepEqual(await session.download(found[0]!, part, 1541), { ok: true });
+      assert.deepEqual(readFileSync(part), fixture);
     },
   );
 
-  it("refuses a file whose duration isn't the recording's", { timeout: 120_000 }, async () => {
+  it("refuses a file whose duration isn't the recording's", { timeout: 120_000 }, async (t) => {
     const fake = await fakeSoulseek({ acceptLogin: true });
+    t.after(fake.close);
     const session = await connectSoulseek({
       username: "wave-fixture",
       password: "fixture-secret",
       host: "127.0.0.1",
       port: fake.port,
     });
-    try {
-      const [found] = await session.search("Fixture Title");
-      const got = await session.download(found!, join(work, "other.mp3"), 9000);
-      assert.deepEqual(got, {
-        ok: false,
-        reason: "The received recording has a different duration",
-      });
-    } finally {
-      session.close();
-      fake.close();
-    }
+    t.after(session.close);
+    const [found] = await session.search("Fixture Title");
+    const got = await session.download(found!, join(work, "other.mp3"), 9000);
+    assert.deepEqual(got, {
+      ok: false,
+      reason: "The received recording has a different duration",
+    });
   });
 
-  it("fails when Soulseek rejects the login", { timeout: 120_000 }, async () => {
+  it("fails when Soulseek rejects the login", { timeout: 120_000 }, async (t) => {
     const fake = await fakeSoulseek({ acceptLogin: false });
+    t.after(fake.close);
     await assert.rejects(
       connectSoulseek({
         username: "wave-fixture",
@@ -290,6 +285,5 @@ describe("connectSoulseek", { skip: typeof toolchain === "string" && toolchain }
       }),
       /Soulseek login failed: Soulseek rejected the account/,
     );
-    fake.close();
   });
 });
