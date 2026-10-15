@@ -260,9 +260,7 @@ export const writeLyricsAndGenre = (
  * has. A song with nothing missing (Core's `canFixSong`) makes no request. A
  * failure is an outcome (the file is left as it was); only `LookupsOff` fails.
  */
-const fixSong = (
-  song: TaggableSong,
-): Effect.Effect<SongTagOutcome, LookupsOff, LibraryStore> =>
+const fixSong = (song: TaggableSong): Effect.Effect<SongTagOutcome, LookupsOff, LibraryStore> =>
   Effect.gen(function* () {
     const lookup = canFixSong(song) ? songLookup(song) : null;
     if (lookup === null) return { kind: "notFound" } as const;
