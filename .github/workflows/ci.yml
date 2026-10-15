@@ -131,10 +131,10 @@ jobs:
       # Expo doesn't reset Metro's cache when CI is set, despite the --reset-cache Gradle passes.
       - name: Bundle JavaScript
         working-directory: apps/mobile/android
-        run: ../../../scripts/ci/step.sh "Bundle JavaScript" ./gradlew :app:createBundleReleaseJsAndAssets --no-daemon --console=plain --info
+        run: ../../../scripts/ci/step.sh "Bundle JavaScript" ./gradlew :app:createBundleReleaseJsAndAssets --no-daemon --console=plain
 
       - name: Save Metro's cache
-        if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
+        if: github.ref == 'refs/heads/main'
         uses: actions/cache/save@v4
         with:
           path: /tmp/metro-cache
