@@ -57,7 +57,6 @@ export interface SyncCycleInput {
   readonly wait: (ms: number) => Promise<void>;
 }
 
-/** What a sync did. */
 /** What a sync changed on the phone. */
 export interface SyncedChanges extends PulledChanges {
   /** Missing songs came in, changed or left: the Library's lists read again. */
