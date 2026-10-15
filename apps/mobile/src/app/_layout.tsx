@@ -3,9 +3,6 @@ import "../../global.css";
 // oxlint-disable-next-line import/no-unassigned-import
 import "@/settings/theme";
 
-// TEMP (#187): a syntax error, to check Metro's message reaches the APK comment.
-const broken = ;
-
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";

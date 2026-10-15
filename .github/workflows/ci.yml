@@ -128,8 +128,7 @@ jobs:
     name: Android APK
     needs: [changes, checks]
     # Only PRs can skip: on main and release tags every area counts as changed.
-    # TEMP (#187): !cancelled() runs it despite Checks failing on the syntax error.
-    if: ${{ !cancelled() && needs.changes.outputs.apk == 'true' }}
+    if: needs.changes.outputs.apk == 'true'
     runs-on: ubuntu-latest
     env:
       HEAD_SHA: ${{ needs.checks.outputs.sha }}
