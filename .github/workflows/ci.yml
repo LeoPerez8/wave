@@ -106,36 +106,29 @@ jobs:
         working-directory: apps/mobile/android
         run: ../../../scripts/ci/step.sh "Native unit tests" ./gradlew :wave-native:testDebugUnitTest --no-daemon --console=plain
 
-      # Main saves Metro's cache, PRs only read it.
+      # Main saves Metro's cache, PRs only read it. Metro only adds entries, so the key starts
+      # over when dependencies change. The path is uniwind's cache store (os.tmpdir()), which
+      # replaces Expo's in metro.config.js.
       - name: Restore Metro's cache
         uses: actions/cache/restore@v4
         with:
-          path: ${{ runner.temp }}/metro-cache
-          key: metro-${{ runner.os }}-${{ github.sha }}
-          restore-keys: metro-${{ runner.os }}-
+          path: /tmp/metro-cache
+          key: metro-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: metro-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
 
       # The JS bundle is built once, by the task assembleRelease would run. Running it as its own
       # step keeps Metro's errors at the top of the log; assembleRelease then finds it up to date.
       # Expo doesn't reset Metro's cache when CI is set, despite the --reset-cache Gradle passes.
       - name: Bundle JavaScript
         working-directory: apps/mobile/android
-        env:
-          # Expo's Metro config reads cached transforms from the restore dir and writes the ones
-          # this run used to the output dir, so a saved cache only holds what the code still needs.
-          EXPO_METRO_CACHE_RESTORE_DIR: ${{ runner.temp }}/metro-cache
-          EXPO_METRO_CACHE_OUTPUT_DIR: ${{ runner.temp }}/metro-cache-out
-        run: ../../../scripts/ci/step.sh "Bundle JavaScript" ./gradlew :app:createBundleReleaseJsAndAssets --no-daemon --console=plain
-
-      - name: Move Metro's cache into place
-        if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
-        run: rm -rf "$RUNNER_TEMP/metro-cache" && mv "$RUNNER_TEMP/metro-cache-out" "$RUNNER_TEMP/metro-cache"
+        run: ../../../scripts/ci/step.sh "Bundle JavaScript" ./gradlew :app:createBundleReleaseJsAndAssets --no-daemon --console=plain --info
 
       - name: Save Metro's cache
         if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
         uses: actions/cache/save@v4
         with:
-          path: ${{ runner.temp }}/metro-cache
-          key: metro-${{ runner.os }}-${{ github.sha }}
+          path: /tmp/metro-cache
+          key: metro-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
 
       - name: Build release APK
         working-directory: apps/mobile/android
