@@ -570,6 +570,79 @@ CREATE TABLE \`preference_changes\` (
 );
 `;
 
+// What syncing with the Wave account keeps (docs/spec.md, "Wave account and sync"):
+// - plays: an id that is the same on every phone (\`sync_id\`; Wave's own plays get
+//   a random one here, imported ones get theirs from the store once their songs
+//   are keyed), and which play is going on now (\`ongoing\`: the latest of Wave's
+//   own, which the player may still be on);
+// - whether each synced row's last change is on the account (\`pushed\`): none yet;
+// - the account's songs as this phone knows them (\`account_songs\`), the rows it
+//   sent that wait for a song or a playlist (\`sync_pending\`), and where syncing
+//   stands (\`sync_state\`: no account joined yet).
+const mSyncState = `
+ALTER TABLE \`play_events\` ADD \`sync_id\` text;
+--> statement-breakpoint
+ALTER TABLE \`play_events\` ADD \`ongoing\` integer DEFAULT false NOT NULL;
+--> statement-breakpoint
+ALTER TABLE \`play_events\` ADD \`pushed\` integer DEFAULT false NOT NULL;
+--> statement-breakpoint
+UPDATE \`play_events\` SET \`sync_id\` = lower(hex(randomblob(16))) WHERE \`imported_from\` IS NULL;
+--> statement-breakpoint
+UPDATE \`play_events\` SET \`ongoing\` = true
+	WHERE \`id\` = (SELECT max(\`id\`) FROM \`play_events\` WHERE \`imported_from\` IS NULL);
+--> statement-breakpoint
+CREATE UNIQUE INDEX \`play_events_sync_id_unique\` ON \`play_events\` (\`sync_id\`);
+--> statement-breakpoint
+CREATE INDEX \`play_events_pushed_idx\` ON \`play_events\` (\`pushed\`);
+--> statement-breakpoint
+ALTER TABLE \`playlists\` ADD \`pushed\` integer DEFAULT false NOT NULL;
+--> statement-breakpoint
+CREATE INDEX \`playlists_pushed_idx\` ON \`playlists\` (\`pushed\`);
+--> statement-breakpoint
+ALTER TABLE \`playlist_items\` ADD \`pushed\` integer DEFAULT false NOT NULL;
+--> statement-breakpoint
+CREATE INDEX \`playlist_items_pushed_idx\` ON \`playlist_items\` (\`pushed\`);
+--> statement-breakpoint
+ALTER TABLE \`favorites\` ADD \`pushed\` integer DEFAULT false NOT NULL;
+--> statement-breakpoint
+CREATE INDEX \`favorites_pushed_idx\` ON \`favorites\` (\`pushed\`);
+--> statement-breakpoint
+ALTER TABLE \`preference_changes\` ADD \`pushed\` integer DEFAULT false NOT NULL;
+--> statement-breakpoint
+CREATE TABLE \`account_songs\` (
+	\`recording_key\` text PRIMARY KEY NOT NULL,
+	\`song\` text,
+	\`changed_at\` integer NOT NULL,
+	\`phone_id\` text NOT NULL,
+	\`deleted\` integer DEFAULT false NOT NULL,
+	\`pushed\` integer DEFAULT false NOT NULL,
+	\`local\` text
+);
+--> statement-breakpoint
+CREATE INDEX \`account_songs_pushed_idx\` ON \`account_songs\` (\`pushed\`);
+--> statement-breakpoint
+CREATE TABLE \`sync_pending\` (
+	\`kind\` text NOT NULL,
+	\`id\` text NOT NULL,
+	\`song_key\` text,
+	\`playlist_key\` text,
+	\`row\` text NOT NULL,
+	PRIMARY KEY(\`kind\`, \`id\`)
+);
+--> statement-breakpoint
+CREATE INDEX \`sync_pending_song_idx\` ON \`sync_pending\` (\`song_key\`);
+--> statement-breakpoint
+CREATE INDEX \`sync_pending_playlist_idx\` ON \`sync_pending\` (\`playlist_key\`);
+--> statement-breakpoint
+CREATE TABLE \`sync_state\` (
+	\`id\` integer PRIMARY KEY NOT NULL,
+	\`account\` text,
+	\`cursor\` text
+);
+--> statement-breakpoint
+INSERT INTO \`sync_state\` (\`id\`) VALUES (1);
+`;
+
 export default {
   journal: {
     entries: [
@@ -592,6 +665,7 @@ export default {
       { idx: 16, when: 1_793_188_800_000, tag: "0016_playlist_yt_entries", breakpoints: true },
       { idx: 17, when: 1_793_275_200_000, tag: "0017_imported_plays", breakpoints: true },
       { idx: 18, when: 1_793_361_600_000, tag: "0018_sync_identity", breakpoints: true },
+      { idx: 19, when: 1_793_448_000_000, tag: "0019_sync_state", breakpoints: true },
     ],
   },
   migrations: {
@@ -614,5 +688,6 @@ export default {
     m0016: mPlaylistYtEntries,
     m0017: mImportedPlays,
     m0018: mSyncIdentity,
+    m0019: mSyncState,
   },
 };

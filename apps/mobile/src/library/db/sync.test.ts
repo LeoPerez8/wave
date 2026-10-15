@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  blackPlayerPlayId,
   normalizeTrack,
   orderKeyBetween,
   recordingKey,
@@ -16,7 +17,7 @@ import type { IndexedTrack } from "../LibraryStore.ts";
 import { importedPlays, saveImportedPlays } from "./blackPlayer.ts";
 import { creditSplits } from "./credits.ts";
 import { libraryCounts } from "./counts.ts";
-import { listFavorites, recordPlay } from "./playHistory.ts";
+import { latestPlay, listFavorites, recordPlay } from "./playHistory.ts";
 import { selectPlaylistEntries } from "./playlists.ts";
 import { saveBatch } from "./save.ts";
 import * as schema from "./schema.ts";
@@ -26,6 +27,7 @@ import {
   selectTrackIdentities,
   stampPreference,
 } from "./sync.ts";
+import { selectJoinedAccount, selectUnpushed } from "./syncRows.ts";
 import {
   addTrack,
   migrateTestDatabase,
@@ -308,6 +310,40 @@ const playKeys = (db: TestDatabase) =>
     .select({ trackId: schema.playEvents.trackId, key: schema.playEvents.recordingKey })
     .from(schema.playEvents)
     .all();
+
+describe("migration 0019", () => {
+  test("every play with a song goes up once, imported ones by BlackPlayer's ids; the latest goes on", async () => {
+    const { db, airbag, lucky, gone } = await before();
+    await migrateTestDatabase(db);
+    const keys = new Map(selectTrackIdentities(db).map((track) => [track.id, track.recordingKey]));
+
+    const plays = selectUnpushed(db, 100, () => null).rows.plays;
+    assert.deepEqual(
+      plays.map((row) => [row.songId, row.startedAt, row.importedFrom]),
+      [
+        [keys.get(airbag), 1_000, "blackplayer"],
+        [keys.get(airbag), 2_000, null],
+        [keys.get(lucky), 3_000, null],
+      ],
+    );
+    assert.equal(plays[0]?.id, blackPlayerPlayId(keys.get(airbag) ?? "", 1));
+    assert.match(plays[1]?.id ?? "", /^[0-9a-f]{32}$/);
+    assert.match(plays[2]?.id ?? "", /^[0-9a-f]{32}$/);
+    // The play the player may still be on is picked back up as before.
+    assert.equal(latestPlay(db)?.play.trackId, String(gone));
+  });
+
+  test("nothing is on the account yet: every playlist, entry and star waits to go up", async () => {
+    const { db } = await before();
+    await migrateTestDatabase(db);
+    const rows = selectUnpushed(db, 100, () => null).rows;
+    assert.deepEqual(
+      [rows.playlists.length, rows.playlistEntries.length, rows.favorites.length],
+      [2, 4, 2],
+    );
+    assert.equal(selectJoinedAccount(db), null);
+  });
+});
 
 describe("plays", () => {
   test("a play records its song's recording key, which it keeps once the file is deleted", async () => {

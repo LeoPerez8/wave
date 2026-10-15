@@ -47,27 +47,41 @@ const progress = (play: PlayEvent) => ({
 });
 
 /**
- * Records a play as it starts, with its song's recording key; returns its row
- * id, to update it as it goes on.
+ * Records a play as it starts, with its song's recording key, as the play
+ * going on now (`ongoing`: the one before, if it never ended, is over);
+ * returns its row id, to update it as it goes on.
  */
 export const recordPlay = (db: LibraryDatabase, play: PlayEvent): number =>
-  db
-    .insert(schema.playEvents)
-    .values({
-      trackId: Number(play.trackId),
-      recordingKey: playRecordingKey(Number(play.trackId)),
-      startedAt: play.startedAt,
-      contextType: play.context?.kind ?? null,
-      contextId: play.context?.id ?? null,
-      source: play.source,
-      ...progress(play),
-    })
-    .returning({ id: schema.playEvents.id })
-    .get().id;
+  db.transaction((tx) => {
+    const { playEvents } = schema;
+    tx.update(playEvents).set({ ongoing: false }).where(eq(playEvents.ongoing, true)).run();
+    return tx
+      .insert(playEvents)
+      .values({
+        trackId: Number(play.trackId),
+        recordingKey: playRecordingKey(Number(play.trackId)),
+        startedAt: play.startedAt,
+        contextType: play.context?.kind ?? null,
+        contextId: play.context?.id ?? null,
+        source: play.source,
+        ongoing: true,
+        ...progress(play),
+      })
+      .returning({ id: playEvents.id })
+      .get().id;
+  });
 
 /** Brings a recorded play up to date: listened time, length, how it ended (so far), counted. */
 export const updatePlay = (db: LibraryDatabase, id: number, play: PlayEvent): void => {
   db.update(schema.playEvents).set(progress(play)).where(eq(schema.playEvents.id, id)).run();
+};
+
+/** Records how a play ended: it no longer changes, so it can go to the Wave account. */
+export const endPlay = (db: LibraryDatabase, id: number, play: PlayEvent): void => {
+  db.update(schema.playEvents)
+    .set({ ...progress(play), ongoing: false })
+    .where(eq(schema.playEvents.id, id))
+    .run();
 };
 
 /** A recorded play with its row id. */
@@ -77,15 +91,15 @@ export interface RecordedPlay {
 }
 
 /**
- * The play recorded last, as it was last brought up to date; `PlayHistory`
- * picks it back up when JS restarts while the player kept going.
+ * The play going on, as it was last brought up to date; `PlayHistory` picks
+ * it back up when JS restarts while the player kept going.
  */
 export const latestPlay = (db: LibraryDatabase): RecordedPlay | null => {
   const row = db
     .select()
     .from(schema.playEvents)
-    // Imported plays (BlackPlayer's) never went on in this player.
-    .where(isNull(schema.playEvents.importedFrom))
+    // Imported plays (BlackPlayer's) and plays from the Wave account never went on in this player.
+    .where(and(isNull(schema.playEvents.importedFrom), eq(schema.playEvents.ongoing, true)))
     .orderBy(desc(schema.playEvents.id))
     .limit(1)
     .get();

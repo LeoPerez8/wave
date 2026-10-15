@@ -49,6 +49,14 @@ const play = (id: string, overrides: Readonly<Record<string, unknown>> = {}) => 
   ...overrides,
 });
 
+const preference = (changedAt: number, value: unknown) => ({
+  id: "settings.ytMusic",
+  changedAt,
+  phoneId: "phone-a",
+  deleted: false,
+  value,
+});
+
 describe("POST /v1/push and GET /v1/pull", () => {
   test("rows pushed by one phone come back to another phone of the account", async () => {
     const service = await harness();
@@ -97,6 +105,17 @@ describe("POST /v1/push and GET /v1/pull", () => {
     assert.deepEqual(pulled.preferences[0]?.value, { dark: "black" });
     assert.deepEqual(pulled.plays, [play("play-1")]);
     assert.equal(pulled.more, false);
+  });
+
+  test("a preference back at its default goes up as null and comes back as null", async () => {
+    const service = await harness();
+    const session = await service.signIn();
+    await push(service, session, { preferences: [preference(10, "off")] });
+    const pushed = await push(service, session, { preferences: [preference(20, null)] });
+    assert.equal((pushed.accepted as Record<string, number>).preferences, 1);
+
+    const pulled = await pull(service, session);
+    assert.deepEqual(pulled.preferences, [preference(20, null)]);
   });
 
   test("the later change of a row wins, whichever phone pushes first", async () => {

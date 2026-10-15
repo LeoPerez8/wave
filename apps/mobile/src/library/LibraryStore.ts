@@ -25,6 +25,7 @@ import * as Layer from "effect/Layer";
 import { openDatabaseSync } from "expo-sqlite";
 
 import type { NativeYtSong } from "@/native/waveYtMusic";
+import { syncCycle, type SyncCycleInput, type SyncCycleResult } from "@/sync/syncCycle";
 
 import { selectAlbums } from "./db/albums";
 import { importedPlays, saveImportedPlays, selectImportTracks } from "./db/blackPlayer";
@@ -57,6 +58,7 @@ import {
   selectFavoriteTrackIds,
   setFavorites,
   updatePlay,
+  endPlay,
   type FavoriteRow,
   type HomeSections,
   type RecordedPlay,
@@ -91,6 +93,7 @@ import {
 } from "./db/tracks";
 import { creditedPlayTotals, songListening, songsCrediting, trackPlayTotals } from "./db/stats";
 import { keyRecordings, stampPreference } from "./db/sync";
+import { leaveAccount } from "./db/syncRows";
 import { saveYtArtist, selectYtArtist } from "./db/ytArtists";
 import type { KnownFile } from "./NativeScanner";
 
@@ -505,6 +508,8 @@ export class LibraryStore extends Context.Service<
     readonly recordPlay: (play: PlayEvent) => Effect.Effect<number, LibraryStoreError>;
     /** Brings a recorded play up to date: listened time, how it ended (so far), counted. */
     readonly updatePlay: (id: number, play: PlayEvent) => Effect.Effect<void, LibraryStoreError>;
+    /** Records how a play ended; it no longer changes, so it can go to the Wave account. */
+    readonly endPlay: (id: number, play: PlayEvent) => Effect.Effect<void, LibraryStoreError>;
     /** The Home tab: Recently Added, Recently Played, Most Played and Favorites. */
     readonly home: Effect.Effect<HomeSections, LibraryStoreError>;
     /** The play recorded last, to pick back up when JS restarts while the player kept going. */
@@ -566,6 +571,16 @@ export class LibraryStore extends Context.Service<
     ) => Effect.Effect<void, LibraryStoreError>;
     /** Records that the owner changed the synced preference [key] on this phone, now. */
     readonly stampPreference: (key: string) => Effect.Effect<void, LibraryStoreError>;
+    /**
+     * Syncs the Library with the Wave account signed in (`syncCycle`): pulls,
+     * pushes what changed here, and pulls again after a push. Fails where a
+     * request failed; what was done by then stays done.
+     */
+    readonly syncWithAccount: (
+      input: Omit<SyncCycleInput, "db">,
+    ) => Effect.Effect<SyncCycleResult, LibraryStoreError>;
+    /** Signed out: the Library leaves the account, and the next sign-in joins anew. */
+    readonly leaveAccount: Effect.Effect<void, LibraryStoreError>;
   }
 >()("@wave/mobile/library/LibraryStore") {}
 
@@ -996,6 +1011,7 @@ const make = Effect.gen(function* () {
     recordPlay: (play) => attempt("record the play", () => recordPlay(db, play)),
 
     updatePlay: (id, play) => attempt("update the play", () => updatePlay(db, id, play)),
+    endPlay: (id, play) => attempt("end the play", () => endPlay(db, id, play)),
 
     home: attempt("read Home", () => homeSections(db)),
 
@@ -1042,6 +1058,14 @@ const make = Effect.gen(function* () {
 
     stampPreference: (key) =>
       attempt("record a preference change", () => stampPreference(db, key, Date.now())),
+
+    syncWithAccount: (input) =>
+      Effect.tryPromise({
+        try: () => syncCycle({ ...input, db }),
+        catch: (cause) => new LibraryStoreError({ operation: "sync with the Wave account", cause }),
+      }),
+
+    leaveAccount: attempt("leave the Wave account", () => leaveAccount(db)),
   });
 });
 

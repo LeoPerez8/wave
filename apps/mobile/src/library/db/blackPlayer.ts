@@ -9,7 +9,7 @@ import { eq, inArray, sql } from "drizzle-orm";
 
 import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
-import { playRecordingKey } from "./sync.ts";
+import { identifyImportedPlays, playRecordingKey } from "./sync.ts";
 import { filePath, hasFile } from "./tracks.ts";
 
 /** Every track with what an import matches BlackPlayer's rows by. */
@@ -54,7 +54,7 @@ const CHUNK = 200;
 /**
  * Adds imported plays to the history in one transaction: counted plays,
  * listened through (the song's length, as the player would have played it),
- * with no play context.
+ * with no play context, each with the id the Wave account knows it by.
  */
 export const saveImportedPlays = (
   db: LibraryDatabase,
@@ -87,10 +87,13 @@ export const saveImportedPlays = (
               counted: true,
               importedFrom: "blackplayer" as const,
               recordingKey: playRecordingKey(play.trackId),
+              // Its id for the account comes from its song and place (`identifyImportedPlays`).
+              syncId: null,
             };
           }),
         )
         .run();
     }
+    identifyImportedPlays(tx);
   });
 };

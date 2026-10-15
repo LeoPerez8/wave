@@ -8,6 +8,7 @@ import { LibraryStore } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import type { AutoRequest } from "@/native/wavePlayer";
 import { connectPlayer } from "@/playback/actions";
+import { WaveSync } from "@/sync/WaveSync";
 import { startDownloads } from "@/ytmusic/YtDownloads";
 
 /** What starts the app services: the Activity's root layout or the headless `WaveService` task. */
@@ -28,13 +29,18 @@ const answerAuto = (request: AutoRequest): Promise<unknown> =>
     }),
   );
 
-/** Stamps a synced preference the owner changed in the Library store, for the Wave account. */
+/**
+ * Stamps a synced preference the owner changed in the Library store, for the
+ * Wave account, which takes it up a few seconds later.
+ */
 const stampPreference = (key: string): void => {
   appRuntime
     .runPromise(
       Effect.gen(function* () {
         const store = yield* LibraryStore;
         yield* store.stampPreference(key);
+        const sync = yield* WaveSync;
+        yield* sync.changed({ songs: false });
       }),
     )
     .catch((error: unknown) => console.warn("[wave] Couldn't record a preference change", error));

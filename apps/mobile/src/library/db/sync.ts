@@ -6,8 +6,8 @@
  * syncs here. Kept free of Expo so the store tests run it against a real
  * SQLite (`testDatabase.ts`).
  */
-import { recordingKey } from "@wave/core";
-import { and, asc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
+import { blackPlayerPlayId, recordingKey } from "@wave/core";
+import { and, asc, eq, gt, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 
 import type { LibraryDatabase } from "./database.ts";
@@ -25,10 +25,12 @@ export const selectPhoneId = (db: LibraryDatabase): string => {
  * The stamp of a change this phone makes at [now] to rows of [table] (a
  * playlist, an entry, a star, a preference): this phone, and [now], or just after the
  * row's last change if that's later, so no two changes of a row share a time.
+ * The change waits for the next push (`pushed`).
  */
 export const stamped = (table: { readonly changedAt: SQLiteColumn }, now: number) => ({
   changedAt: sql<number>`max(${now}, ${table.changedAt} + 1)`,
   phoneId: thisPhoneId(),
+  pushed: false,
 });
 
 /**
@@ -52,9 +54,57 @@ const CHUNK = 500;
  * gives the plays of those Tracks theirs. Only the update that brought
  * recording keys in leaves Tracks without one, so this does nothing (one
  * small query) after the first launch since. Plays of songs deleted before
- * the update keep none.
+ * the update keep none. Imported plays then get their ids for the account
+ * (`identifyImportedPlays`).
  */
 export const keyRecordings = (db: LibraryDatabase): void => {
+  keyTracks(db);
+  identifyImportedPlays(db);
+};
+
+/**
+ * Gives every imported play with a recording key and no id its id for the
+ * account: the n-th BlackPlayer play of its song (Core's
+ * `blackPlayerPlayId`, counted over the song's imported plays by when they
+ * were played), the same on every phone that imports it. Only the update
+ * that brought play ids in leaves plays without one.
+ */
+export const identifyImportedPlays = (db: LibraryDatabase): void => {
+  const { playEvents } = schema;
+  const imported = and(isNotNull(playEvents.importedFrom), isNotNull(playEvents.recordingKey));
+  const keys = db
+    .selectDistinct({ key: playEvents.recordingKey })
+    .from(playEvents)
+    .where(and(imported, isNull(playEvents.syncId)))
+    .all()
+    .flatMap((row) => row.key ?? []);
+  if (keys.length === 0) return;
+  db.transaction((tx) => {
+    for (let i = 0; i < keys.length; i += CHUNK) {
+      const plays = tx
+        .select({ id: playEvents.id, key: playEvents.recordingKey, syncId: playEvents.syncId })
+        .from(playEvents)
+        .where(and(imported, inArray(playEvents.recordingKey, keys.slice(i, i + CHUNK))))
+        .orderBy(asc(playEvents.recordingKey), asc(playEvents.startedAt), asc(playEvents.id))
+        .all();
+      let key: string | null = null;
+      let ordinal = 0;
+      for (const play of plays) {
+        ordinal = play.key === key ? ordinal + 1 : 1;
+        key = play.key;
+        if (play.syncId !== null || key === null) continue;
+        // A play pulled from the account may hold the id already: that one stays.
+        tx.run(
+          sql`UPDATE OR IGNORE ${playEvents} SET sync_id = ${blackPlayerPlayId(key, ordinal)}
+            WHERE ${playEvents.id} = ${play.id}`,
+        );
+      }
+    }
+  });
+};
+
+/** Gives every Track without a recording key its key, then gives their plays theirs. */
+const keyTracks = (db: LibraryDatabase): void => {
   const { tracks, albums, playEvents } = schema;
   const unkeyed = db
     .select({

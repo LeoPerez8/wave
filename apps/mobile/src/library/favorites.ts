@@ -145,6 +145,41 @@ export const useIsFavorite = (trackId: number | string | null): boolean => {
   );
 };
 
+/**
+ * Reads the stars again after they changed outside this phone's own toggles
+ * (the Wave account sent some): stars with a write in flight keep showing
+ * what was asked, and lists over favorites re-run.
+ */
+export const reloadFavorites = (): void => {
+  void appRuntime
+    .runPromise(LibraryStore.use((store) => store.favoriteTrackIds))
+    .then((ids) => {
+      const shown = new Set(ids);
+      for (const [id, star] of writing) {
+        if (star.shown) shown.add(id);
+        else shown.delete(id);
+      }
+      favorites.update((state) => ({
+        ...state,
+        ids: shown,
+        loaded: true,
+        edits: state.edits + 1,
+        saved: state.saved + 1,
+      }));
+    })
+    .catch(() => {});
+};
+
+/** Calls [listener] whenever a star has been saved; returns how to stop. */
+export const onFavoritesSaved = (listener: () => void): (() => void) => {
+  let saved = favorites.get().saved;
+  return favorites.subscribe(() => {
+    if (favorites.get().saved === saved) return;
+    saved = favorites.get().saved;
+    listener();
+  });
+};
+
 /** Changes whenever a star has been saved (re-run queries over favorites on it). */
 export const useFavoritesSaved = (): number =>
   useSyncExternalStore(favorites.subscribe, () => favorites.get().saved);
