@@ -41,7 +41,9 @@ its Wave account (keyed by Google's `sub`).
 ```
 
 `401 { "error": "invalid_id_token" }` when the token doesn't check out,
-`403 { "error": "not_allowed" }` when `ALLOWED_EMAILS` is set and the email isn't on it.
+`403 { "error": "not_allowed" }` when `ALLOWED_EMAILS` is set and the email isn't on it,
+`429` past `maxSignInsPerMinute`: attempts from one address (Cloudflare's `CF-Connecting-IP`,
+counted before the ID token is checked) or sign-ins to one Google account.
 
 The service keeps only a SHA-256 of the session token. A session lasts until it is ended
 or the account is deleted.
@@ -177,11 +179,12 @@ Deletes every row and every session of the account, its Soulseek account, and th
 | 404    | `{ "error": "not_found" }`                                                  |
 | 413    | `{ "error": "limit", "limit": "<name>" }`                                   |
 | 429    | `{ "error": "limit", "limit": "maxRequestsPerMinute" }`, with `Retry-After` |
+| 429    | `{ "error": "limit", "limit": "maxSignInsPerMinute" }`, with `Retry-After`  |
 | 500    | `{ "error": "internal" }`                                                   |
 
 ## Limits
 
-`SYNC_LIMITS` in `src/limits.ts`. Past one, the service answers `413` (or `429` for the
+`SYNC_LIMITS` in `src/limits.ts`. Past one, the service answers `413` (or `429` for a
 rate) and names it. Starting values, so a 50,000-song Library with 200,000 plays fits:
 
 | Limit                  | Value     |                                                 |
@@ -194,6 +197,7 @@ rate) and names it. Starting values, so a 50,000-song Library with 200,000 plays
 | `maxPreferences`       | 200       |                                                 |
 | `maxPlays`             | 1,000,000 |                                                 |
 | `maxRequestsPerMinute` | 120       | per session                                     |
+| `maxSignInsPerMinute`  | 10        | `POST /v1/session`, per address and per account |
 
 A push that would take a table past its limit is refused whole.
 

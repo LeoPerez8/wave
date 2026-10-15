@@ -162,8 +162,13 @@ describe("DELETE /v1/account", () => {
     const left = await service.db.execute(
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT IN ('migrations', 'sqlite_sequence')",
     );
+    // Whose each table's rows are: a sign-in window's key is `sub:` and the Google subject.
+    const owners: Readonly<Record<string, string>> = {
+      accounts: "google_sub",
+      sign_in_windows: "substr(key, length('sub:') + 1)",
+    };
     for (const { name } of left.rows) {
-      const owner = name === "accounts" ? "google_sub" : "account_id";
+      const owner = owners[String(name)] ?? "account_id";
       const rows = await service.db.execute(`SELECT ${owner} AS owner FROM ${String(name)}`);
       assert.ok(rows.rows.length > 0, `${String(name)} kept Bo's rows`);
       for (const row of rows.rows) {

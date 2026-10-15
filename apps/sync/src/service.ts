@@ -101,6 +101,14 @@ const invalid = (detail: string): Answer => new Answer(json({ error: "bad_reques
 const overLimit = (limit: SyncLimitName, status = 413): Answer =>
   new Answer(json({ error: "limit", limit }, status));
 
+/** A 429 past a per-minute rate at [at], whose `Retry-After` is the seconds left in that minute. */
+const tooMany = (limit: SyncLimitName, at: number): Answer =>
+  new Answer(
+    json({ error: "limit", limit }, 429, {
+      "retry-after": String(Math.ceil((60_000 - (at % 60_000)) / 1000)),
+    }),
+  );
+
 const base64url = (bytes: Uint8Array): string =>
   btoa(String.fromCharCode(...bytes))
     .replaceAll("+", "-")
@@ -143,7 +151,34 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
     }
   };
 
+  /**
+   * Counts a sign-in against [key]'s minute (`sign_in_windows`), refusing with
+   * 429 past `maxSignInsPerMinute`. Rows of past minutes go as it counts.
+   */
+  const countSignIn = async (key: string): Promise<void> => {
+    const at = now();
+    const window = Math.floor(at / 60_000);
+    const [, counted] = await db.batch(
+      [
+        { sql: "DELETE FROM sign_in_windows WHERE window_start <> ?", args: [window] },
+        {
+          sql: `INSERT INTO sign_in_windows (key, window_start, window_count) VALUES (?, ?, 1)
+                ON CONFLICT (key) DO UPDATE SET window_count = window_count + 1
+                RETURNING window_count`,
+          args: [key, window],
+        },
+      ],
+      "write",
+    );
+    if (Number(counted?.rows[0]?.window_count) > limits.maxSignInsPerMinute) {
+      throw tooMany("maxSignInsPerMinute", at);
+    }
+  };
+
   const createSession: Route = async ({ request }) => {
+    // Counted before the ID token is checked, so failing ones count too.
+    const address = request.headers.get("cf-connecting-ip");
+    if (address !== null) await countSignIn(`ip:${await sha256Hex(address)}`);
     const body = await readJson(request);
     const idToken =
       typeof body === "object" && body !== null && "idToken" in body ? body.idToken : undefined;
@@ -157,6 +192,7 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
     if (allowlist !== null && !allowlist.has(identity.email.toLowerCase())) {
       throw failure(403, "not_allowed");
     }
+    await countSignIn(`sub:${identity.sub}`);
     const sessionToken = base64url(crypto.getRandomValues(new Uint8Array(32)));
     const at = now();
     await db.batch(
@@ -199,12 +235,7 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
     const row = result.rows[0];
     if (row === undefined) throw failure(401, "unauthorized");
     if (Number(row.window_count) > limits.maxRequestsPerMinute) {
-      const retryAfter = Math.ceil(((window + 1) * 60_000 - at) / 1000);
-      throw new Answer(
-        json({ error: "limit", limit: "maxRequestsPerMinute" }, 429, {
-          "retry-after": String(retryAfter),
-        }),
-      );
+      throw tooMany("maxRequestsPerMinute", at);
     }
     return { accountId: String(row.account_id), tokenHash };
   };

@@ -86,6 +86,44 @@ describe("POST /v1/session", () => {
     assert.deepEqual(await refused.json(), { error: "not_allowed" });
   });
 
+  test("past maxSignInsPerMinute, a Google account's sign-ins answer 429 until the next minute", async () => {
+    const service = await harness({ limits: { maxSignInsPerMinute: 2 } });
+    service.now = Date.UTC(2026, 9, 14, 12, 0, 45);
+    await service.signIn();
+    await service.signIn();
+    const refused = await service.request("POST", "/v1/session", {
+      json: { idToken: await service.google.idToken() },
+    });
+    assert.equal(refused.status, 429);
+    assert.deepEqual(await refused.json(), { error: "limit", limit: "maxSignInsPerMinute" });
+    assert.equal(refused.headers.get("retry-after"), "15");
+    assert.equal(await sessionCount(service), 2);
+
+    // Another Google account isn't held back by it.
+    await service.signIn({ sub: "google-sub-2", email: "bo@example.com" });
+    service.now = Date.UTC(2026, 9, 14, 12, 1);
+    await service.signIn();
+  });
+
+  test("past maxSignInsPerMinute, an address's attempts answer 429, even with tokens that fail", async () => {
+    const service = await harness({ limits: { maxSignInsPerMinute: 2 } });
+    const from = (ip: string) => async (idToken: string) =>
+      service.request("POST", "/v1/session", {
+        json: { idToken },
+        headers: { "cf-connecting-ip": ip },
+      });
+    const attacker = from("203.0.113.7");
+    assert.equal((await attacker(await service.google.forgedIdToken())).status, 401);
+    assert.equal((await attacker("not a token")).status, 401);
+    const refused = await attacker(await service.google.idToken());
+    assert.equal(refused.status, 429);
+    assert.deepEqual(await refused.json(), { error: "limit", limit: "maxSignInsPerMinute" });
+    assert.equal(await sessionCount(service), 0);
+
+    const neighbour = from("203.0.113.8");
+    assert.equal((await neighbour(await service.google.idToken())).status, 200);
+  });
+
   test("Google's keys are fetched once and kept", async () => {
     const service = await harness();
     await service.signIn();

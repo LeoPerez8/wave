@@ -18,6 +18,11 @@ export const SYNC_LIMITS = {
   maxPlays: 1_000_000,
   /** Requests one session may make per minute. */
   maxRequestsPerMinute: 120,
+  /**
+   * `POST /v1/session` attempts per minute from one address (before the ID
+   * token is checked), and sign-ins per minute to one Google account.
+   */
+  maxSignInsPerMinute: 10,
 } as const;
 
 export type SyncLimits = { readonly [K in keyof typeof SYNC_LIMITS]: number };
