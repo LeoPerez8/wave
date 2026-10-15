@@ -19,14 +19,17 @@ const run = (effect: Effect.Effect<readonly string[] | void, unknown, LibrarySto
     });
 };
 
+// oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
 const load = (): void => run(LibraryStore.use((store) => store.listRecentSearches));
 
 /** Keeps a search (on submit, or when a result is opened). */
 export const rememberSearch = (query: string): void =>
+  // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
   run(LibraryStore.use((store) => store.rememberSearch(query)));
 
 export const clearRecentSearches = (): void => {
   recent.set([]);
+  // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
   run(LibraryStore.use((store) => store.clearRecentSearches));
 };
 

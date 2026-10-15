@@ -13,6 +13,7 @@ import { sortedForKind } from "./songSort";
 type Store = LibraryStore["Service"];
 type Query<A> = (store: Store) => Effect.Effect<A, LibraryStoreError>;
 
+// oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
 const run = <A>(query: Query<A>): Promise<A> => appRuntime.runPromise(LibraryStore.use(query));
 
 /** The Library songs among a playlist's entries, in playlist order. */

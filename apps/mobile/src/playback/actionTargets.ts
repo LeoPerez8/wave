@@ -107,9 +107,9 @@ const KIND_ALBUM: KindInfo<AlbumRow> = {
   noun: "album",
 };
 
-/** Runs [use] with a mixed item's own kind and the item, typed for each other. */
-const asOwnKind = <R>(mixed: MixedItem, use: <T>(kind: KindInfo<T>, item: T) => R): R =>
-  mixed.kind === "track" ? use(KIND_TRACK, mixed.item) : use(KIND_ALBUM, mixed.item);
+/** Runs [run] with a mixed item's own kind and the item, typed for each other. */
+const asOwnKind = <R>(mixed: MixedItem, run: <T>(kind: KindInfo<T>, item: T) => R): R =>
+  mixed.kind === "track" ? run(KIND_TRACK, mixed.item) : run(KIND_ALBUM, mixed.item);
 
 const KINDS: { readonly [K in ItemKind]: KindInfo<ItemOf[K]> } = {
   track: KIND_TRACK,
