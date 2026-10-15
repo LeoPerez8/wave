@@ -122,6 +122,11 @@ export interface IndexedTrack extends LibraryTrack {
    * the file again without one (a rescan) keeps the one it has.
    */
   readonly videoId?: string | null;
+  /**
+   * The missing song a download of it was asked for (its Track id): the file
+   * fills that Track in, keeping its recording key, whatever its tags say.
+   */
+  readonly fills?: number;
 }
 
 export interface IndexedArtwork {

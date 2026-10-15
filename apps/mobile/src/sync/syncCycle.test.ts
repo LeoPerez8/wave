@@ -139,6 +139,10 @@ const phone = async (service: TestSyncService, songs: readonly Song[] = OK_COMPU
       tracks.set(song.title, id);
       return id;
     },
+    /** A download asked for missing song [trackId] saves [song]'s file, as its import does. */
+    download: (song: Song, trackId: number): void => {
+      saveBatch(db, splits, [{ ...scanned(song), fills: trackId }], [], [], now());
+    },
     /** A scan no longer finds the files of these songs (an unmounted or emptied folder). */
     loseFiles: (titles: readonly string[]) => {
       const paths = db
@@ -492,6 +496,60 @@ describe("syncCycle", () => {
     ]);
     // Nothing went up twice, and the account still has the song b lacks.
     assert.equal(service.rows().songs.filter((song) => !song.deleted).length, 4);
+  });
+
+  test("a download fills in the missing song it was asked for, even tagged otherwise, keeping its places, star and plays", async () => {
+    const service = testSyncService();
+    const a = await phone(service, [...OK_COMPUTER, EXIT_MUSIC]);
+    const exit = a.track("Exit Music");
+    createPlaylist(
+      a.db,
+      "Night",
+      [
+        { source: "library", trackId: exit },
+        { source: "library", trackId: a.track("Lucky") },
+      ],
+      a.now(),
+    );
+    setFavorites(a.db, [exit], true, a.now());
+    endPlay(a.db, recordPlay(a.db, played(exit, 7_000)), played(exit, 7_000));
+    await a.sync();
+
+    const b = await phone(service, []);
+    await b.sync();
+    const missing = b.track("Exit Music");
+    // YouTube Music's file says another title and album: by its tags it's another recording.
+    b.download(
+      { title: "Exit Music (For a Film)", album: "OK Computer OKNOTOK", artist: "Radiohead" },
+      missing,
+    );
+    const filled = b.db
+      .select({ id: schema.tracks.id, path: schema.tracks.path })
+      .from(schema.tracks)
+      .where(eq(schema.tracks.id, missing))
+      .get();
+    assert.equal(filled?.path, "/Music/OK Computer OKNOTOK/Exit Music (For a Film).mp3");
+    assert.deepEqual(selectFavoriteTrackIds(b.db), [missing]);
+    assert.deepEqual(
+      selectPlaylist(b.db, selectPlaylists(b.db)[0]?.id ?? -1)?.items.map((item) =>
+        item.source === "library" ? item.track.id : null,
+      ),
+      [missing, b.track("Lucky")],
+    );
+    assert.equal(playCounts(b.db).length, 1);
+
+    // It stays the account's song: nothing new goes up, and it doesn't come back missing.
+    await b.sync({ songsChanged: true });
+    assert.equal(service.rows().songs.filter((song) => !song.deleted).length, 4);
+    assert.equal(
+      b.db
+        .select()
+        .from(schema.tracks)
+        .all()
+        .filter((track) => track.path === null).length,
+      3,
+    );
+    assert.deepEqual(favoriteTitles(a.db), ["Exit Music"]);
   });
 
   test("files a scan no longer finds while signed in become missing songs, and the account keeps them", async () => {
