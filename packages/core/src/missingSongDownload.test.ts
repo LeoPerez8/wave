@@ -9,6 +9,7 @@ import {
   missingSongLookup,
   missingSongSearch,
   missingSongTags,
+  missingSongTrackId,
   missingSongsDownload,
   recordingKey,
   missingSongVideo,
@@ -36,6 +37,14 @@ describe("missingSongJob", () => {
     assert.equal(missingSongJobId(7), "missing:7");
     assert.equal(missingSongJob(track()).videoId, "missing:7");
     assert.equal(missingSongJob(track({ videoId: "abc" })).videoId, "missing:7");
+  });
+
+  test("a job's id says which Track it fills in, and a YT Music song's says none", () => {
+    assert.equal(missingSongTrackId("missing:7"), 7);
+    assert.equal(missingSongTrackId(missingSongJobId(1_234)), 1_234);
+    assert.equal(missingSongTrackId("dQw4w9WgXcQ"), null);
+    assert.equal(missingSongTrackId("missing:"), null);
+    assert.equal(missingSongTrackId("missing:x7"), null);
   });
 
   test("the job carries the song as its Track has it: title, artists, album and length", () => {

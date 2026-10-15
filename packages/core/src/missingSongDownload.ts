@@ -70,6 +70,13 @@ export interface MissingSongJob extends YtSong {
 /** The download job of the missing song whose Track is [trackId]. */
 export const missingSongJobId = (trackId: number): string => `${JOB_PREFIX}${trackId}`;
 
+/** The Track download job [jobId] fills in; null for any other job (a YT Music song's). */
+export const missingSongTrackId = (jobId: string): number | null => {
+  if (!jobId.startsWith(JOB_PREFIX)) return null;
+  const id = jobId.slice(JOB_PREFIX.length);
+  return /^\d+$/.test(id) ? Number(id) : null;
+};
+
 /** The job that downloads missing song [track]. */
 export const missingSongJob = (track: MissingTrack): MissingSongJob => ({
   videoId: missingSongJobId(track.id),
