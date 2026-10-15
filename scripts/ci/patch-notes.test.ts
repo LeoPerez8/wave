@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -168,6 +168,21 @@ describe("patchNotes", () => {
 });
 
 describe("patch-notes.ts as a command", () => {
+  it("rejects malformed merged PR data with its input line and expected shape", () => {
+    const script = fileURLToPath(new URL("./patch-notes.ts", import.meta.url));
+    const dir = mkdtempSync(join(tmpdir(), "patch-notes-"));
+    writeFileSync(join(dir, "commits.txt"), "commit-90\n");
+    writeFileSync(join(dir, "bugs.txt"), "");
+    const result = spawnSync(
+      process.execPath,
+      [script, join(dir, "commits.txt"), join(dir, "bugs.txt")],
+      { input: JSON.stringify({ ...pr(90), files: [42] }), encoding: "utf8" },
+    );
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Invalid merged PR on line 1.*files.*string/i);
+    assert.equal(result.stdout, "");
+  });
+
   it("prints the notes for the PRs on stdin, given the release's commits and bug issues", () => {
     const script = fileURLToPath(new URL("./patch-notes.ts", import.meta.url));
     const dir = mkdtempSync(join(tmpdir(), "patch-notes-"));

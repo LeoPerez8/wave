@@ -48,7 +48,9 @@ const IMAGE = /\.(avif|bmp|gif|heic|heif|ico|jpe?g|ktx|png|psd|svg|tiff?|webp)$/
  * native fingerprint (native modules, native dependencies, the app config, config plugins),
  * the Android project prebuild generated in `<appDir>/android` (it also catches what the
  * fingerprint misses, like files a config plugin imports), and the app's image assets.
- * Bump the version when the full build's own recipe in ci.yml changes.
+ * The CI workflow and scripts are part of the recipe too: build flags and the bundle
+ * handoff can change the native APK. Hashing all CI files conservatively rebuilds it
+ * after a CI-only change; a TS/TSX-only app change still reuses the key.
  */
 export const apkCacheKey = ({ fingerprint, appDir }: { fingerprint: string; appDir: string }) => {
   const android = join(appDir, "android");
@@ -76,11 +78,44 @@ export const apkCacheKey = ({ fingerprint, appDir }: { fingerprint: string; appD
       /^(package\.json|app\.json|app\.config\.[cm]?[jt]s)$/.test(path),
     ),
   );
-  return `apk-v1-${sha256(`${fingerprint}\n${project}\n${images}\n${config}\n`)}`;
+  const repo = resolve(appDir, "../..");
+  const recipe = digest(repo, [
+    ".github/workflows/ci.yml",
+    ...files(
+      join(repo, "scripts/ci"),
+      () => false,
+      () => true,
+    ).map((path) => `scripts/ci/${path}`),
+  ]);
+  return `apk-v1-${sha256(`${fingerprint}\n${project}\n${images}\n${config}\n${recipe}\n`)}`;
 };
 
 /** The files Metro wrote to its assets folder (Android resources), by path, with their hashes. */
 export type AssetManifest = Record<string, string>;
+
+const isAssetManifest = (value: unknown): value is AssetManifest =>
+  typeof value === "object" &&
+  value !== null &&
+  !Array.isArray(value) &&
+  Object.values(value).every(
+    (hash: unknown) => typeof hash === "string" && /^[a-f0-9]{64}$/i.test(hash),
+  );
+
+const readAssetManifest = (path: string): AssetManifest => {
+  let value: unknown;
+  try {
+    value = JSON.parse(readFileSync(path, "utf8"));
+  } catch (cause) {
+    throw new Error(`Invalid kept asset manifest ${path}: expected a readable JSON file.`, {
+      cause,
+    });
+  }
+  if (!isAssetManifest(value))
+    throw new Error(
+      `Invalid kept asset manifest ${path}: expected an object mapping asset paths to SHA-256 strings.`,
+    );
+  return value;
+};
 
 export const assetManifest = (dir: string): AssetManifest =>
   Object.fromEntries(
@@ -163,7 +198,7 @@ const cli = async ([command, ...args]: string[]) => {
       console.log(JSON.stringify(assetManifest(args[0] ?? "."), null, 2));
       return;
     case "check-assets": {
-      const kept = JSON.parse(readFileSync(args[0] ?? "", "utf8")) as AssetManifest;
+      const kept = readAssetManifest(args[0] ?? "");
       for (const path of assetsNotInKeptApk(kept, assetManifest(args[1] ?? "."))) console.log(path);
       return;
     }

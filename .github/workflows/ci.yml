@@ -317,16 +317,18 @@ jobs:
       - uses: gradle/actions/setup-gradle@v5
         if: env.APK_BUILD == 'full'
 
-      # Main saves the ccache directory, PRs only restore it. A lockfile change
-      # starts a new entry, which begins from the most recent older one.
+      # Each main commit saves its compiled objects; PRs only restore them. Prefer
+      # the same lockfile's latest entry, then seed new dependencies from an older one.
       - name: Restore ccache
         id: ccache
         if: env.APK_BUILD == 'full'
         uses: actions/cache/restore@v4
         with:
           path: ~/.cache/ccache
-          key: ccache-android-v2-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: ccache-android-v2-
+          key: ccache-android-v2-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            ccache-android-v2-${{ hashFiles('pnpm-lock.yaml') }}-
+            ccache-android-v2-
 
       - name: Set up ccache
         if: env.APK_BUILD == 'full'

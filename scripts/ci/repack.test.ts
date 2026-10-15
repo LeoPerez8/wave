@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   apkCacheKey,
   assetManifest,
@@ -22,15 +24,26 @@ const tree = (files: Record<string, string>): string => {
 };
 
 // An app folder after prebuild: sources, image assets and the generated android project.
-const app = (files: Record<string, string> = {}) =>
-  tree({
+const app = (files: Record<string, string> = {}) => {
+  const appFiles = {
     "src/app/index.tsx": "export default () => null;",
     "assets/icon.png": "icon",
     "package.json": '{"dependencies":{"expo-constants":"~58.0.10"}}',
     "android/app/build.gradle": "react {}",
     "android/app/src/main/AndroidManifest.xml": "<manifest/>",
     ...files,
+  };
+  const root = tree({
+    ".github/workflows/ci.yml":
+      "run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a",
+    "scripts/ci/prebuilt-bundle.gradle": "// verify the bundle handoff",
+    "scripts/ci/bundle.sh": "pnpm exec expo export --platform android",
+    ...Object.fromEntries(
+      Object.entries(appFiles).map(([path, contents]) => [`apps/mobile/${path}`, contents]),
+    ),
   });
+  return join(root, "apps/mobile");
+};
 
 const key = (appDir: string, fingerprint = "f1") => apkCacheKey({ fingerprint, appDir });
 
@@ -68,6 +81,26 @@ describe("planApkBuild", () => {
 });
 
 describe("apkCacheKey", () => {
+  it("changes when CI builds another native architecture", () => {
+    const dir = app();
+    const previous = key(dir);
+    writeFileSync(
+      resolve(dir, "../../.github/workflows/ci.yml"),
+      "run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a,x86_64",
+    );
+    assert.notEqual(key(dir), previous);
+  });
+
+  it("changes when a native build script changes", () => {
+    const dir = app();
+    const previous = key(dir);
+    writeFileSync(
+      resolve(dir, "../../scripts/ci/prebuilt-bundle.gradle"),
+      "// a different handoff",
+    );
+    assert.notEqual(key(dir), previous);
+  });
+
   it("doesn't change when only JS or TS changes", () => {
     const before = app();
     const after = app({
@@ -160,6 +193,33 @@ describe("assetsNotInKeptApk", () => {
   it("ignores an asset the new bundle no longer uses", () => {
     const built = assetManifest(tree({ "raw/app_data.json": "{}" }));
     assert.deepEqual(assetsNotInKeptApk(kept, built), []);
+  });
+});
+
+describe("check-assets as a command", () => {
+  it("rejects a malformed kept manifest instead of treating it as a cache miss", () => {
+    const script = fileURLToPath(new URL("./repack.ts", import.meta.url));
+    const kept = join(tree({ "kept.json": JSON.stringify({ "raw/data.json": 42 }) }), "kept.json");
+    const built = tree({ "raw/data.json": "{}" });
+    const result = spawnSync(process.execPath, [script, "check-assets", kept, built], {
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Invalid kept asset manifest.*SHA-256/i);
+    assert.equal(result.stdout, "");
+  });
+
+  it("accepts the manifest emitted by a full build and prints only changed assets", () => {
+    const script = fileURLToPath(new URL("./repack.ts", import.meta.url));
+    const previous = tree({ "raw/data.json": "{}", "drawable-mdpi/cover.png": "cover" });
+    const kept = join(tree({ "kept.json": JSON.stringify(assetManifest(previous)) }), "kept.json");
+    const built = tree({ "raw/data.json": '{"changed":true}', "drawable-mdpi/cover.png": "cover" });
+    const result = spawnSync(process.execPath, [script, "check-assets", kept, built], {
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0);
+    assert.equal(result.stdout.trim(), "raw/data.json");
+    assert.equal(result.stderr, "");
   });
 });
 
