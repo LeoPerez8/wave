@@ -806,6 +806,7 @@ export {
 } from "./missingSongDownload.ts";
 export type {
   MissingSongJob,
+  MissingSongJobId,
   MissingSongJobTags,
   MissingSongVideo,
   MissingSongsDownload,
