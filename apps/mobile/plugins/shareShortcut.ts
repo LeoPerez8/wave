@@ -11,8 +11,7 @@ type IntentFilter = AndroidConfig.Manifest.ManifestIntentFilter;
 type MetaData = AndroidConfig.Manifest.ManifestMetaData;
 /** An activity or alias. Expo's types leave out an activity's meta-data, which it can have. */
 export type ManifestEntry = (
-  | AndroidConfig.Manifest.ManifestActivity
-  | AndroidConfig.Manifest.ManifestActivityAlias
+  AndroidConfig.Manifest.ManifestActivity | AndroidConfig.Manifest.ManifestActivityAlias
 ) & { "meta-data"?: MetaData[] };
 
 /**

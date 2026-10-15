@@ -47,6 +47,13 @@ pnpm react-doctor:check --base origin/main # Fail on new React errors only
 See the [lint policy](docs/lint.md) for TypeScript and React Hooks rules, native
 exceptions, and excluded generated files.
 
+Prettier formats supported authored files with a 100-column print width. Run `pnpm fmt`
+to write changes or `pnpm fmt:check` to check them; CI and PR autofix use those same commands.
+The project pins Prettier's version so local and CI results match. `.prettierignore`
+excludes generated native projects, dependencies, lockfiles, captured third-party responses,
+and local scratch directories and worktrees. Prettier also respects `.gitignore`.
+Text files use LF line endings in every checkout through `.gitattributes`.
+
 React Doctor scans the Expo / React Native app. Fetch the target branch before
 running `react-doctor:check`, and use that branch as `--base` when the pull request
 targets a branch other than `main`. The local check also includes untracked source.

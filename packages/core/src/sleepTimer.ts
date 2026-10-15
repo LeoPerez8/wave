@@ -17,8 +17,7 @@ export const SLEEP_TIMER_PRESETS: readonly number[] = [15, 30, 45, 60];
 
 /** What the owner picks. */
 export type SleepTimerChoice =
-  | { readonly type: "minutes"; readonly minutes: number }
-  | { readonly type: "endOfTrack" };
+  { readonly type: "minutes"; readonly minutes: number } | { readonly type: "endOfTrack" };
 
 /**
  * A running timer. A deadline is wall-clock milliseconds, so it keeps counting
@@ -26,8 +25,7 @@ export type SleepTimerChoice =
  * whichever track that is by then.
  */
 export type SleepTimer =
-  | { readonly type: "deadline"; readonly endsAt: number }
-  | { readonly type: "endOfTrack" };
+  { readonly type: "deadline"; readonly endsAt: number } | { readonly type: "endOfTrack" };
 
 /** The timer a choice starts at `now`. */
 export const startSleepTimer = (choice: SleepTimerChoice, now: number): SleepTimer | null => {
