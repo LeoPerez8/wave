@@ -12,11 +12,16 @@ import { eq } from "drizzle-orm";
 import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
 
-/** The page saved as JSON, or null when it can't be read back (nothing is shown then). */
+/**
+ * The page saved as JSON, or null when it can't be read back (nothing is
+ * shown then). A page saved before every song of the artist was read has no
+ * `allSongs` and still reads; one whose `allSongs` isn't a list doesn't.
+ */
 const readPage = <S extends YtSong>(json: string): YtArtistPage<S> | null => {
   try {
     const page = JSON.parse(json) as YtArtistPage<S> | null;
-    return typeof page === "object" && page !== null && Array.isArray(page.songs) ? page : null;
+    if (typeof page !== "object" || page === null || !Array.isArray(page.songs)) return null;
+    return page.allSongs === undefined || Array.isArray(page.allSongs) ? page : null;
   } catch {
     return null;
   }
