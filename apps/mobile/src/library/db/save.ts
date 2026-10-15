@@ -7,7 +7,7 @@ import {
   fillMissingSongs,
   recordingKey,
   type LibraryTrack,
-  type MissingSongTrack,
+  type MissingSongSave,
 } from "@wave/core";
 import { and, eq, inArray, isNotNull, isNull, sql, type SQL } from "drizzle-orm";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
@@ -375,19 +375,6 @@ export const saveBatch = (
     if (linkEntries) linkPlaylistEntries(tx, now, [...trackIds.values()]);
   });
 };
-
-/** A missing song to save: an account song the phone has no file for. */
-export interface MissingSongSave {
-  /** Its Track, when it's in the Library already (its tags are brought up to date); null for a new one. */
-  readonly trackId: number | null;
-  /** The account's recording key for it. */
-  readonly recordingKey: string;
-  /** Its tags (Core's `missingSongTrack`). */
-  readonly track: MissingSongTrack;
-  readonly videoId: string | null;
-  /** When it entered the Library, on the phone that first had it. */
-  readonly addedAt: number;
-}
 
 /** Where missing songs are filed: they have no folder on this phone. */
 const NO_FOLDER = "";

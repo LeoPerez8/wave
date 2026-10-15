@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { accountTrackIds, blackPlayerPlayId, missingSongTrack, planSongSync } from "./index.ts";
+import {
+  accountTrackIds,
+  blackPlayerPlayId,
+  missingSongTrack,
+  planMissingSongs,
+  planSongSync,
+} from "./index.ts";
 import type { AccountSongState, SyncSong, SyncSongFields } from "./index.ts";
 
 const fields = (title: string, more: Partial<SyncSongFields> = {}): SyncSongFields => ({
@@ -226,5 +232,76 @@ describe("missingSongTrack", () => {
       fields("Teardrop", { credit: "Massive Attack", albumArtist: "Various Artists" }),
     );
     assert.deepEqual([track.artist, track.albumArtist], ["Massive Attack", "Various Artists"]);
+  });
+});
+
+describe("planMissingSongs", () => {
+  test("an account song no Track has comes in as a missing song", () => {
+    const plan = planMissingSongs({
+      account: [
+        { recordingKey: "airbag", song: fields("Airbag") },
+        { recordingKey: "lucky", song: fields("Lucky", { videoId: "lucky-video", addedAt: 5 }) },
+      ],
+      held: ["airbag"],
+      missing: [],
+    });
+    assert.deepEqual(
+      plan.save.map((song) => [song.trackId, song.recordingKey, song.track.title, song.videoId]),
+      [[null, "lucky", "Lucky", "lucky-video"]],
+    );
+    assert.equal(plan.save[0]?.addedAt, 5);
+    assert.deepEqual([plan.leave, plan.prune], [[], false]);
+  });
+
+  /** Missing song Lucky (Track 4) as the Library shows `fields("Lucky")`. */
+  const shownLucky = {
+    id: 4,
+    recordingKey: "lucky",
+    title: "Lucky",
+    artist: "Radiohead",
+    album: "OK Computer",
+    albumArtist: "Radiohead",
+    genre: null,
+    year: 1997,
+    trackNumber: null,
+    discNumber: null,
+    durationMs: 180_000,
+    videoId: null,
+  };
+
+  test("a missing song whose tags the account has already stays as it is", () => {
+    const plan = planMissingSongs({
+      account: [{ recordingKey: "lucky", song: fields("Lucky") }],
+      held: ["lucky"],
+      missing: [shownLucky],
+    });
+    assert.deepEqual(plan, { save: [], leave: [], prune: false });
+  });
+
+  test("a missing song takes the account's tags when another phone changed them", () => {
+    const retagged = (song: Partial<SyncSongFields>) =>
+      planMissingSongs({
+        account: [{ recordingKey: "lucky", song: fields("Lucky", song) }],
+        held: ["lucky"],
+        missing: [shownLucky],
+      });
+    const plan = retagged({ genre: "Alternative", trackNumber: 11 });
+    assert.deepEqual(
+      plan.save.map((song) => [song.trackId, song.recordingKey, song.track.genre]),
+      [[4, "lucky", "Alternative"]],
+    );
+    assert.equal(plan.save[0]?.track.trackNumber, 11);
+    assert.equal(plan.prune, true);
+    // A video id the song was downloaded from is a change too.
+    assert.equal(retagged({ videoId: "lucky-video" }).save[0]?.videoId, "lucky-video");
+  });
+
+  test("a missing song the account no longer has leaves, as does one it never had", () => {
+    const plan = planMissingSongs({
+      account: [{ recordingKey: "airbag", song: fields("Airbag") }],
+      held: ["airbag", "lucky"],
+      missing: [shownLucky, { ...shownLucky, id: 9, recordingKey: null }],
+    });
+    assert.deepEqual(plan, { save: [], leave: [4, 9], prune: true });
   });
 });
