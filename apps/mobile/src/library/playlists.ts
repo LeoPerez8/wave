@@ -21,6 +21,7 @@ export const usePlaylistsVersion = (): number =>
 const edit = <A>(
   run: (store: LibraryStore["Service"]) => Effect.Effect<A, LibraryStoreError>,
 ): Promise<A> =>
+  // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
   appRuntime.runPromise(LibraryStore.use(run)).finally(() => {
     playlistsVersion.update((version) => version + 1);
     // Re-read now, so the next card that lists them doesn't wait for it.

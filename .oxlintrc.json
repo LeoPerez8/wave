@@ -7,6 +7,13 @@
   },
   "rules": {
     "react/react-in-jsx-scope": "off",
+    "react/rules-of-hooks": "error",
+    "react/exhaustive-deps": "error",
+    "typescript/ban-ts-comment": "error",
+    "typescript/no-empty-object-type": "error",
+    "typescript/no-explicit-any": "error",
+    "typescript/no-unsafe-function-type": "error",
+    "typescript/no-wrapper-object-types": "error",
     "no-restricted-imports": [
       "error",
       {
@@ -25,6 +32,18 @@
     "**/android/**",
     "**/ios/**",
     "**/.expo/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/out/**",
+    "**/coverage/**",
+    "**/.cache/**",
+    "**/.turbo/**",
+    "**/.next/**",
+    "**/.scratch/**",
+    "**/.worktrees/**",
+    "**/worktrees/**",
+    "**/.claude/worktrees/**",
+    "apps/mobile/expo-env.d.ts",
     "apps/mobile/uniwind-types.d.ts"
   ],
   "overrides": [
