@@ -5,6 +5,7 @@ import {
   pagePlayback,
   playlistPlayback,
   skipMissingSongs,
+  tappedMissingSong,
   type UpNextMove,
   startSleepTimer,
   type QueueCommand,
@@ -19,6 +20,7 @@ import * as Effect from "effect/Effect";
 import { songHasFile, type PlayableSongRow, type SongRow } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { ytMusicEnabled } from "@/settings/ytMusic";
+import { downloadMissingSongs } from "@/ytmusic/YtDownloads";
 import type { YtMusic } from "@/ytmusic/YtMusic";
 
 import { Player, playbackState } from "./Player";
@@ -54,6 +56,20 @@ export const connectPlayer = (): Promise<void> => run(Effect.asVoid(Queue));
 const playable = (song: MixedSong<YtSong, SongRow>): boolean =>
   song.source === "stream" || songHasFile(song.track);
 
+/**
+ * A tapped missing song downloads rather than plays (Core's `tappedMissingSong`); true when
+ * the tap was on one.
+ */
+const downloadTapped = (
+  listed: readonly MixedSong<YtSong, SongRow>[],
+  listedStart: number | undefined,
+): boolean => {
+  const tapped = tappedMissingSong(listed, listedStart, playable);
+  if (tapped?.source !== "library") return false;
+  downloadMissingSongs([tapped.track.id]);
+  return true;
+};
+
 /** The Library songs of a mixed list as the queue takes them (those with a file). */
 const libraryQueueTracks = (songs: readonly MixedSong<YtSong, SongRow>[]): QueueTrack[] =>
   songs.flatMap((song) =>
@@ -64,7 +80,7 @@ const libraryQueueTracks = (songs: readonly MixedSong<YtSong, SongRow>[]): Queue
  * Plays a list (an album, the Songs list…) from `startIndex`, queueing the rest
  * of it. Omit `startIndex` to start at the top, or anywhere with `shuffle`.
  * Missing songs (no file on this phone) are left out (Core's
- * `skipMissingSongs`): a tapped one plays nothing.
+ * `skipMissingSongs`): a tapped one downloads instead.
  */
 export const playSongs = async (
   songs: readonly SongRow[],
@@ -72,6 +88,8 @@ export const playSongs = async (
   context: QueueContext,
   options: { readonly shuffle?: boolean } = {},
 ): Promise<void> => {
+  const tapped = tappedMissingSong(songs, startIndex, songHasFile);
+  if (tapped !== null) return downloadMissingSongs([tapped.id]);
   const play = skipMissingSongs(songs, startIndex, songHasFile);
   if (play === null) return;
   const tracks = play.songs.filter(songHasFile);
@@ -142,7 +160,7 @@ export const playYtSongs = (
  * Plays a list that mixes the Library's songs and YT Music's (Discover,
  * Search, an artist's or album's page) from `startIndex` (or shuffled),
  * queueing the rest: the Library's files, the others streamed. Missing songs
- * are left out, and a tapped one plays nothing.
+ * are left out, and a tapped one downloads instead.
  */
 export const playDiscoverSongs = async (
   listed: readonly MixedSong<YtSong, SongRow>[],
@@ -150,6 +168,7 @@ export const playDiscoverSongs = async (
   context: QueueContext,
   options: { readonly shuffle?: boolean } = {},
 ): Promise<void> => {
+  if (downloadTapped(listed, listedStart)) return;
   const play = skipMissingSongs(listed, listedStart, playable);
   if (play === null) return;
   const { songs, startIndex } = play;
@@ -174,7 +193,7 @@ export const playDiscoverSongs = async (
  * from `startIndex` (or shuffled), by Core's `pagePlayback`: in an integrated
  * view, with YouTube Music's songs among them, the mixed list (the Library's
  * files, the rest streamed); otherwise the Library's songs alone, so nothing
- * streams outside one. Missing songs are left out, and a tapped one plays nothing.
+ * streams outside one. Missing songs are left out, and a tapped one downloads instead.
  */
 export const playPage = async (
   listed: readonly MixedSong<YtSong, SongRow>[],
@@ -182,6 +201,7 @@ export const playPage = async (
   context: QueueContext,
   options: { readonly shuffle?: boolean } = {},
 ): Promise<void> => {
+  if (downloadTapped(listed, listedStart)) return;
   // Left out first, so a tapped song's place is its place among what plays.
   const play = skipMissingSongs(listed, listedStart, playable);
   if (play === null) return;
@@ -196,7 +216,8 @@ export const playPage = async (
  * Plays a playlist's [entries] from `startIndex` (or shuffled), by Core's
  * `playlistPlayback`: with YT Music on and YT Music entries among them, the
  * whole list (the Library's files, the rest streamed); with it off, the
- * Library's songs alone. Missing songs never play. Resolves false when
+ * Library's songs alone. Missing songs never play: a tapped one downloads
+ * instead. Resolves false when
  * there's nothing to play because YT Music is off (a YT Music entry tapped).
  */
 export const playPlaylist = async (
@@ -205,6 +226,7 @@ export const playPlaylist = async (
   context: QueueContext,
   options: { readonly shuffle?: boolean } = {},
 ): Promise<boolean> => {
+  if (downloadTapped(entries, listedStart)) return true;
   const files = skipMissingSongs(entries, listedStart, playable);
   // A missing song tapped, or nothing but missing songs: YT Music isn't why.
   if (files === null) return true;
