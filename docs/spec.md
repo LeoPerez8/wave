@@ -278,6 +278,7 @@ One row per playback start: track, started-at, listened milliseconds, track dura
 ### Build and CI
 
 - GitHub Actions on every PR and on `main`: install, typecheck, lint, core tests, Kotlin unit tests, and assemble an APK uploaded as a build artifact that I install on the phone.
+- **Releases.** Wave's version lives only in `apps/mobile/app.config.ts` (`version`, `major.minor.patch`, minor and patch under 100). Android's versionCode follows from it (major × 10000 + minor × 100 + patch, so 0.5.0 is 500), so each version installs over the one before and keeps the Library and settings. To cut a release: open a PR that bumps the version, merge it, then tag the merge commit on `main` with `v<version>` and push the tag (`git tag v0.5.0 <commit> && git push origin v0.5.0`). CI checks the tag against the app's version before building (a mismatch fails the Checks job and says which version the app is at), builds the APK in full, and publishes the GitHub Release "Wave <version>" with `wave-<version>.apk` attached, marked as the repo's latest release. Releases are signed with the same debug keystore as every other build. In `.github/workflows/ci.yml` a tag's run has `IS_RELEASE == 'true'`, and nothing that skips or shortcuts the APK build applies to it. PR builds (`pr-<n>`) and main's rolling `latest` prerelease are unchanged.
 
 ## Testing Decisions
 
