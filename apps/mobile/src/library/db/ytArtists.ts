@@ -3,7 +3,7 @@
  * last answer YouTube Music gave for each artist, by artist key, so the page
  * shows it without asking again (Core's `ytArtistSectionView`) and a later
  * load reuses the match (Core's `ytArtistLookup`). The whole page is kept
- * (top songs, albums, singles), whatever the section shows of it. Kept free
+ * (top songs, every song of the artist, albums, singles), whatever the section shows of it. Kept free
  * of Expo so the store tests run it against a real SQLite.
  */
 import type { YtArtistPage, YtArtistSaved, YtSong } from "@wave/core";

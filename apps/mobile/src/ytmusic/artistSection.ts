@@ -37,10 +37,26 @@ const readSaved = (artistKey: string) =>
   }).pipe(Effect.orElseSucceed(() => null));
 
 /**
+ * The artist page [browseId] with every song of the artist (`allSongs`): the
+ * Songs shelf's playlist read whole after the page (Core's `readYtPlaylist`,
+ * with its cap), or the top songs when the page has none. A playlist page
+ * that fails fails it all, so a half-read list is never saved.
+ */
+const readArtist = (browseId: string) =>
+  Effect.gen(function* () {
+    const ytMusic = yield* YtMusic;
+    const page = yield* ytMusic.artist(browseId);
+    const playlistId = page.songsPlaylistId ?? null;
+    const allSongs = playlistId === null ? page.songs : (yield* ytMusic.playlist(playlistId)).songs;
+    return { ...page, allSongs };
+  });
+
+/**
  * Asks YouTube Music for [name]'s page: the saved match's, or the one an
- * Artists search finds (Core's `ytArtistLookup`, `pickYtArtist`). The answer,
- * the page or "no match", is saved before it's shown; a request that gets no
- * answer saves nothing. Only the name and the artist's browse id are sent.
+ * Artists search finds (Core's `ytArtistLookup`, `pickYtArtist`), then the
+ * playlist of every song of theirs. The answer, the page or "no match", is
+ * saved before it's shown; a request that gets no answer saves nothing. Only
+ * the name, the artist's browse id and their songs playlist's id are sent.
  */
 export const fetchArtist = (name: string, artistKey: string, saved: Saved | null) =>
   Effect.gen(function* () {
@@ -56,7 +72,7 @@ export const fetchArtist = (name: string, artistKey: string, saved: Saved | null
     const answer: Saved =
       browseId === null
         ? { outcome: "unmatched", checkedAt }
-        : { outcome: "found", checkedAt, browseId, page: yield* ytMusic.artist(browseId) };
+        : { outcome: "found", checkedAt, browseId, page: yield* readArtist(browseId) };
     // Not saved, it's still shown; the next opening asks again.
     yield* store.saveYtArtist(artistKey, answer).pipe(Effect.ignore);
     return answer;
@@ -169,7 +185,7 @@ export interface YtArtistSectionShown {
   /** What the section shows, or null when it's hidden (Core's `ytArtistSectionView`). */
   readonly view: YtArtistSectionView<NativeYtSong> | null;
   /**
-   * The artist's albums and singles under the top songs, each with the Library
+   * The artist's albums and singles under their songs, each with the Library
    * album it already is (Core's `ytArtistShelves`, `libraryAlbumFinder`).
    */
   readonly shelves: readonly YtArtistShelf<AlbumRow>[];
@@ -214,7 +230,7 @@ export const useYtArtistSection = (
   const find = useLoadedLibraryFinder();
   const findAlbum = useMemo(() => libraryAlbumFinder(artistId, albums), [artistId, albums]);
 
-  // Until the Library has been read, which top songs it lacks isn't known: nothing shows.
+  // Until the Library has been read, which songs it lacks isn't known: nothing shows.
   const view =
     find === null
       ? null

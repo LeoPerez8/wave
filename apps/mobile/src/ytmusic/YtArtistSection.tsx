@@ -8,8 +8,8 @@ import { openYtAlbumActions } from "./YtAlbumActions";
 /** The quiet line under an artist's page while it shows what YouTube Music has. */
 export const YT_ARTIST_NOTE: Readonly<Record<YtArtistSectionNote, string>> = {
   loading: "Looking on YouTube Music…",
-  allInLibrary: "Your library already has this artist's top songs.",
-  noSongs: "YouTube Music lists no top songs for this artist.",
+  allInLibrary: "Your library already has every song of this artist.",
+  noSongs: "YouTube Music lists no songs for this artist.",
   notFound: "Not found on YouTube Music.",
   offline: "You're offline. Try again when you're back online.",
   failed: "YouTube Music didn't answer. Try again in a moment.",

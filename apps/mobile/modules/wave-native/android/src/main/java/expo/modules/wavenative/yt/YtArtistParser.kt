@@ -36,6 +36,11 @@ data class YtArtistPage(
   val albums: List<YtShelfItem.Album>,
   /** Singles and EPs. */
   val singles: List<YtShelfItem.Album>,
+  /**
+   * The playlist of every song of the artist, the Songs shelf's "See all"
+   * (without the `VL` its browse id adds); null when the page has none.
+   */
+  val songsPlaylistId: String? = null,
 ) {
   fun toMap(): Map<String, Any?> =
     mapOf(
@@ -44,6 +49,7 @@ data class YtArtistPage(
       "songs" to songs.map(YtSong::toMap),
       "albums" to albums.map(YtShelfItem.Album::toMap),
       "singles" to singles.map(YtShelfItem.Album::toMap),
+      "songsPlaylistId" to songsPlaylistId,
     )
 }
 
@@ -51,7 +57,8 @@ data class YtArtistPage(
  * Reads YouTube Music's (WEB_REMIX) Artists search and artist pages (`browse`
  * with the artist's `UC…` id). The walk follows Metrolist's `ArtistPage`
  * (GPL-3.0): the header names the artist, the first `musicShelfRenderer` is
- * the top songs (song rows, read as search reads them), and the
+ * the top songs (song rows, read as search reads them) whose "See all" opens
+ * the playlist of every song of theirs, and the
  * `musicCarouselShelfRenderer`s titled "Albums" and "Singles…" hold album
  * tiles (read as the home reads them). Videos, playlists, live performances
  * and related artists have no place in Wave and are left out. YT Music is
@@ -61,6 +68,9 @@ object YtArtistParser {
   private val json = Json { ignoreUnknownKeys = true }
   private val AUDIENCE = Regex("""^(\d+(?:\.\d+)?)\s*([KMB])?\s+(?:subscribers?|monthly audience|monthly listeners)\b""")
   private const val ARTIST_PAGE = "MUSIC_PAGE_TYPE_ARTIST"
+  private const val PLAYLIST_PAGE = "MUSIC_PAGE_TYPE_PLAYLIST"
+  /** What a playlist page's browse id adds before the playlist's id. */
+  private const val PLAYLIST_BROWSE = "VL"
   private const val ALBUMS = "Albums"
   private const val SINGLES = "Singles"
   private const val SEPARATOR = " • "
@@ -105,8 +115,8 @@ object YtArtistParser {
     val sections = root.path("contents", "singleColumnBrowseResultsRenderer", "tabs").arr
       ?.firstOrNull().path("tabRenderer", "content", "sectionListRenderer", "contents").arr
       ?: return null
-    val songs = sections.firstNotNullOfOrNull { it.path("musicShelfRenderer").obj }
-      ?.get("contents").arr.orEmpty()
+    val songShelf = sections.firstNotNullOfOrNull { it.path("musicShelfRenderer").obj }
+    val songs = songShelf?.get("contents").arr.orEmpty()
       .mapNotNull { it.path("musicResponsiveListItemRenderer").obj?.let(YtSearchParser::songRow) }
       .distinctBy { it.videoId }
     val carousels = sections.mapNotNull { it.path("musicCarouselShelfRenderer").obj }
@@ -130,8 +140,28 @@ object YtArtistParser {
       songs = songs,
       albums = albums { it == ALBUMS },
       singles = albums { it.startsWith(SINGLES) },
+      songsPlaylistId = songShelf?.let(::seeAll),
     )
   }
+
+  /**
+   * The playlist a Songs shelf's "See all" opens (`VL…`, a playlist page),
+   * without the `VL`: its bottom link, or its title's when it has no bottom
+   * link. Null when neither opens a playlist.
+   */
+  private fun seeAll(shelf: JsonObject): String? =
+    listOf(
+      shelf.path("bottomEndpoint"),
+      shelf.path("title", "runs").arr?.firstOrNull().path("navigationEndpoint"),
+    ).firstNotNullOfOrNull { link ->
+      val endpoint = link.path("browseEndpoint")
+      val pageType = endpoint.path(
+        "browseEndpointContextSupportedConfigs", "browseEndpointContextMusicConfig", "pageType",
+      ).string
+      endpoint.path("browseId").string
+        ?.takeIf { pageType == PLAYLIST_PAGE && it.startsWith(PLAYLIST_BROWSE) }
+        ?.removePrefix(PLAYLIST_BROWSE)?.takeIf(String::isNotEmpty)
+    }
 
   /**
    * The image at [url] asked for as a square: the header's is a wide banner

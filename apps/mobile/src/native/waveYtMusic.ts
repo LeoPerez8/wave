@@ -22,7 +22,10 @@ export interface NativeYtSong extends YtSong {
 /** A home shelf as the native parser reads it (Core's `YtShelf`). */
 export type NativeYtShelf = YtShelf<NativeYtSong>;
 
-/** An artist page as the native parser reads it: top songs, albums and singles (Core's `YtArtistPage`). */
+/**
+ * An artist page as the native parser reads it: top songs, albums, singles and
+ * the playlist of every song of theirs (Core's `YtArtistPage`).
+ */
 export type NativeYtArtistPage = YtArtistPage<NativeYtSong>;
 
 /**
@@ -69,7 +72,7 @@ declare class WaveYtMusicModule extends NativeModule<WaveYtMusicEvents> {
   searchArtists(query: string): Promise<readonly YtArtistCandidate[]>;
   /** Albums, singles and EPs on YT Music for [query] (YouTube Music's "Albums" filter), in its order. */
   searchAlbums(query: string): Promise<readonly YtArtistAlbum[]>;
-  /** The artist page [browseId] (`UC…`): their top songs, albums and singles. */
+  /** The artist page [browseId] (`UC…`): their top songs, albums, singles and songs playlist. */
   artist(browseId: string): Promise<NativeYtArtistPage>;
   /** The session's account's recommendations: YouTube Music's home shelves (songs, albums, playlists). */
   home(): Promise<readonly NativeYtShelf[]>;

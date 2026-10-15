@@ -13,23 +13,25 @@ beforeEach(async () => {
   db = await openTestDatabase();
 });
 
+const instantCrush = {
+  videoId: "khnokW3Mw24",
+  title: "Instant Crush (feat. Julian Casablancas)",
+  artists: ["Daft Punk", "Julian Casablancas"],
+  album: "Random Access Memories",
+  durationMs: null,
+  artworkUrl: "https://yt3.googleusercontent.com/cover=w120-h120",
+  explicit: false,
+};
+
 const found: YtArtistSaved = {
   outcome: "found",
   checkedAt: 1_000,
   browseId: "UCRr1xG_2WIDs18a6cIiCxeA",
   page: {
     name: "Daft Punk",
-    songs: [
-      {
-        videoId: "khnokW3Mw24",
-        title: "Instant Crush (feat. Julian Casablancas)",
-        artists: ["Daft Punk", "Julian Casablancas"],
-        album: "Random Access Memories",
-        durationMs: null,
-        artworkUrl: "https://yt3.googleusercontent.com/cover=w120-h120",
-        explicit: false,
-      },
-    ],
+    songs: [instantCrush],
+    songsPlaylistId: "OLAK5uy_lNVBcjNtiCwq-n95uoxJ-Gd4vsfMkyZNs",
+    allSongs: [instantCrush, { ...instantCrush, videoId: "veoQXniI6mI", title: "Touch" }],
     albums: [
       {
         kind: "album",
@@ -58,7 +60,7 @@ describe("the artist page's saved YT Music section", () => {
     assert.equal(selectYtArtist(db, "daft punk"), null);
   });
 
-  test("a found artist is kept whole: the match, when, and the page's songs, albums and singles", () => {
+  test("a found artist is kept whole: the match, when, the page's songs, every song, albums and singles", () => {
     saveYtArtist(db, "daft punk", found);
     assert.deepEqual(selectYtArtist(db, "daft punk"), found);
     assert.equal(selectYtArtist(db, "justice"), null);

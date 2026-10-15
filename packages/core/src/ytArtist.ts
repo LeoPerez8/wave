@@ -74,14 +74,29 @@ export type YtArtistAlbum = Extract<YtShelfItem, { readonly kind: "album" }>;
 
 /**
  * A YouTube Music artist page as far as Wave reads it: their top songs and
- * their albums and singles, in the page's order.
+ * their albums and singles, in the page's order, and every song of theirs
+ * once the Songs shelf's playlist is read after it.
  */
 export interface YtArtistPage<S extends YtSong = YtSong> {
   /** The artist's name as YouTube Music writes it. */
   readonly name: string;
   /** Their image, when the page has one (pages saved before it was read have none). */
   readonly artworkUrl?: string | null;
+  /** Their top songs. */
   readonly songs: readonly S[];
+  /**
+   * The playlist of every song of theirs, the Songs shelf's "See all"
+   * (without `VL`), or null when the page has none. Pages saved before it
+   * was read have none.
+   */
+  readonly songsPlaylistId?: string | null;
+  /**
+   * Every song of the artist, in YouTube Music's order: [songsPlaylistId]
+   * read after the page (Core's `readYtPlaylist`), or the top songs when the
+   * page has no such playlist. Undefined on the page as read, and in answers
+   * saved before it was read: those don't stand on a Library artist's page.
+   */
+  readonly allSongs?: readonly S[];
   readonly albums: readonly YtArtistAlbum[];
   readonly singles: readonly YtArtistAlbum[];
 }
@@ -129,6 +144,14 @@ export const YT_ARTIST_FRESH_MS = 7 * DAY_MS;
 /** Whether [saved] still stands at [now]: fetched less than a week ago. */
 const isFresh = (saved: YtArtistSaved, now: number): boolean =>
   now - saved.checkedAt < YT_ARTIST_FRESH_MS;
+
+/**
+ * Whether [saved] stands on a Library artist's page at [now]: fresh and, for
+ * a match, with the artist's full list (`allSongs`). A match saved before the
+ * list was read counts as expired, so the page asks again.
+ */
+const standsOnArtistPage = (saved: YtArtistSaved, now: number): boolean =>
+  isFresh(saved, now) && (saved.outcome === "unmatched" || saved.page.allSongs !== undefined);
 
 /** A Library album as matching a release to it sees it. */
 export interface LibraryAlbumKey {
@@ -267,16 +290,16 @@ export const stepYtArtistSection = <S extends YtSong>(
 /** A quiet line the section shows instead of (or until) songs. */
 export type YtArtistSectionNote =
   | "loading"
-  /** The Library already has every top song. */
+  /** The Library already has every song of the artist. */
   | "allInLibrary"
-  /** The artist's page lists no top songs. */
+  /** YouTube Music lists no songs for the artist. */
   | "noSongs"
   /** No YouTube Music artist matched. */
   | "notFound"
   | YtQuietReason;
 
 export interface YtArtistSectionView<S extends YtSong> {
-  /** The artist's top songs the Library doesn't have, in YouTube Music's order. */
+  /** Every song of the artist the Library doesn't have (`allSongs`), in YouTube Music's order. */
   readonly songs: readonly S[];
   readonly note: YtArtistSectionNote | null;
   /** Whether Show on YouTube Music is offered. */
@@ -303,7 +326,8 @@ export interface YtArtistSectionContext<S extends YtSong> {
  * What the section shows at the end of the artist page, or null when it's
  * hidden: YT Music off, a name that isn't an artist's, or what was saved not
  * read yet. A saved answer shows for a week without the button; after that,
- * or with nothing saved, the button is back, unless the page was opened
+ * with nothing saved, or with a match saved before the artist's full list
+ * was read (no `allSongs`), the button is back, unless the page was opened
  * integrated: then it's looking (it asks on its own, `ytArtistSectionAsks`)
  * until an ask fails.
  */
@@ -315,11 +339,11 @@ export const ytArtistSectionView = <S extends YtSong>(
   if (state.status === "reading") return null;
   if (state.status === "loading") return { songs: [], note: "loading", button: false };
   const { saved } = state;
-  if (saved !== null && isFresh(saved, context.now)) {
+  if (saved !== null && standsOnArtistPage(saved, context.now)) {
     if (saved.outcome === "unmatched") return { songs: [], note: "notFound", button: false };
-    const songs = saved.page.songs.filter((song) => !context.inLibrary(song));
-    const note =
-      songs.length > 0 ? null : saved.page.songs.length === 0 ? "noSongs" : "allInLibrary";
+    const all = saved.page.allSongs ?? [];
+    const songs = all.filter((song) => !context.inLibrary(song));
+    const note = songs.length > 0 ? null : all.length === 0 ? "noSongs" : "allInLibrary";
     return { songs, note, button: false };
   }
   if (context.integrated === true && state.failure === null)
@@ -340,7 +364,8 @@ export interface YtArtistSectionAsksContext {
 /**
  * Whether a Library artist page asks YouTube Music now, on its own: only
  * when it was opened integrated, once what was saved is read, with nothing
- * standing for the artist (`YT_ARTIST_FRESH_MS`) and YT Music on. After a
+ * standing for the artist (`YT_ARTIST_FRESH_MS`, or a match saved without
+ * the artist's full list) and YT Music on. After a
  * failure it waits for the button (`requested`).
  */
 export const ytArtistSectionAsks = (
@@ -352,7 +377,7 @@ export const ytArtistSectionAsks = (
   ytArtistQuery(context.name) !== null &&
   state.status === "ready" &&
   state.failure === null &&
-  (state.saved === null || !isFresh(state.saved, context.now));
+  (state.saved === null || !standsOnArtistPage(state.saved, context.now));
 
 /**
  * Whether the artist page is an integrated view: YT Music on and the
@@ -368,7 +393,7 @@ export const ytArtistIntegrated = (
   ytArtistQuery(context.name) !== null &&
   state.status === "ready" &&
   state.saved?.outcome === "found" &&
-  isFresh(state.saved, context.now);
+  standsOnArtistPage(state.saved, context.now);
 
 /** A release on one of the section's shelves, with the Library album it already is. */
 export interface YtArtistRelease<A> {
@@ -422,7 +447,7 @@ const pageShelves = <A>(
 };
 
 /**
- * The shelves under the section's top songs: Albums, then Singles & EPs, from
+ * The shelves under the section's songs: Albums, then Singles & EPs, from
  * the saved artist page, each newest first. They show while the saved page
  * does (`ytArtistSectionView`); a shelf with nothing on it is left out.
  */
@@ -432,7 +457,7 @@ export const ytArtistShelves = <A>(
 ): YtArtistShelf<A>[] => {
   if (!context.enabled || ytArtistQuery(context.name) === null) return [];
   if (state.status !== "ready" || state.saved?.outcome !== "found") return [];
-  if (!isFresh(state.saved, context.now)) return [];
+  if (!standsOnArtistPage(state.saved, context.now)) return [];
   return pageShelves(state.saved.page, context.libraryAlbum);
 };
 

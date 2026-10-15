@@ -254,7 +254,10 @@ export const ytArtists = sqliteTable("yt_artists", {
   checkedAt: integer("checked_at").notNull(),
   /** The matched artist's YouTube Music browse id (`UC…`); set when `found`. */
   browseId: text("browse_id"),
-  /** Their page as JSON (Core's `YtArtistPage`: top songs, albums, singles); set when `found`. */
+  /**
+   * Their page as JSON (Core's `YtArtistPage`: top songs, every song of theirs, albums,
+   * singles); set when `found`.
+   */
   page: text("page"),
 });
 
