@@ -5,7 +5,9 @@ import groovy.json.JsonSlurper
 import java.security.MessageDigest
 
 gradle.projectsEvaluated {
-    def app = gradle.rootProject.project(':app')
+    // Init scripts also run for included builds, such as RN's Gradle plugin.
+    def app = gradle.rootProject.findProject(':app')
+    if (app == null) return
     app.tasks.named('createBundleReleaseJsAndAssets').configure { task ->
         onlyIf('CI supplied the verified release bundle') {
             def marker = System.getenv('WAVE_CI_BUNDLE_MANIFEST')
