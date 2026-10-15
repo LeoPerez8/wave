@@ -783,16 +783,20 @@ export type {
   SyncedRow,
 } from "./syncWire.ts";
 export {
+  MISSING_SONGS_DOWNLOAD_ACTION_LABELS,
   missingSongJob,
   missingSongJobId,
   missingSongLookup,
   missingSongSearch,
   missingSongTags,
   missingSongVideo,
+  missingSongsDownload,
 } from "./missingSongDownload.ts";
 export type {
   MissingSongJob,
   MissingSongJobTags,
   MissingSongVideo,
+  MissingSongsDownload,
+  MissingSongsDownloadAction,
   MissingTrack,
 } from "./missingSongDownload.ts";

@@ -11,7 +11,16 @@ import { UNKNOWN_ALBUM } from "./library.ts";
 import { songLookup, type FoundTags, type SongLookup } from "./lyricsAndGenre.ts";
 import { spotifySearchQuery, spotifyYtMatch } from "./spotifyImport.ts";
 import { largeCover, type YtDownloadTags } from "./ytDownload.ts";
+import {
+  ytDownloadStatus,
+  ytDownloadsFromJournal,
+  type YtDownloadFailure,
+  type YtDownloadJournalJob,
+  type YtDownloadStatus,
+} from "./ytDownloads.ts";
 import type { YtSong } from "./ytMusic.ts";
+
+const JOB_PREFIX = "missing:";
 
 /** A missing song as a download takes it: its Track's tags, as the Library keeps them. */
 export interface MissingTrack {
@@ -59,7 +68,7 @@ export interface MissingSongJob extends YtSong {
 }
 
 /** The download job of the missing song whose Track is [trackId]. */
-export const missingSongJobId = (trackId: number): string => `missing:${trackId}`;
+export const missingSongJobId = (trackId: number): string => `${JOB_PREFIX}${trackId}`;
 
 /** The job that downloads missing song [track]. */
 export const missingSongJob = (track: MissingTrack): MissingSongJob => ({
@@ -150,5 +159,112 @@ export const missingSongTags = (
     genre: missing.genre ?? found?.genre ?? null,
     lyrics: found?.lyrics?.text ?? null,
     artworkUrl: artworkUrl === null ? null : largeCover(artworkUrl),
+  };
+};
+
+/** What Settings › Wave Account's Download All offers: Download All, Retry Failed, Cancel. */
+export type MissingSongsDownloadAction = "downloadAll" | "retryFailed" | "cancel";
+
+export const MISSING_SONGS_DOWNLOAD_ACTION_LABELS: {
+  readonly [A in MissingSongsDownloadAction]: string;
+} = {
+  downloadAll: "Download All",
+  retryFailed: "Retry Failed",
+  cancel: "Cancel",
+};
+
+/** Where downloading the missing songs stands, and what acting on it does. */
+export interface MissingSongsDownload<S extends YtSong> {
+  /**
+   * "312 songs aren't on this phone", or while they download "Downloading ·
+   * N of M" (M: the missing songs downloaded or asked for this session, N:
+   * those saved); null with none missing and nothing on its way.
+   */
+  readonly line: string | null;
+  /** The entries offered, in order. */
+  readonly actions: readonly MissingSongsDownloadAction[];
+  /** What Download All queues, in order: the songs not on their way and not failed. */
+  readonly toDownload: readonly S[];
+  /** What Retry Failed asks for again, in order: the songs whose download failed. */
+  readonly toRetry: readonly S[];
+  /** The jobs Cancel cancels: songs queued or downloading, not yet saving. */
+  readonly toCancel: readonly string[];
+  /**
+   * Once nothing is on its way, the songs nothing matched (no Soulseek copy,
+   * no YouTube Music match, a video YouTube won't serve): they stay missing
+   * and the summary lists them. Null when there are none, or before then.
+   */
+  readonly summary: { readonly line: string; readonly songs: readonly S[] } | null;
+}
+
+/** Failures that mean no source has the song, rather than that downloading it failed. */
+const NOT_FOUND: readonly YtDownloadFailure[] = ["notFound", "unavailable", "ytUnavailable"];
+
+const onItsWay = (status: YtDownloadStatus | null): boolean =>
+  status?.kind === "queued" || status?.kind === "downloading" || status?.kind === "saving";
+
+const cancellable = (status: YtDownloadStatus | null): boolean =>
+  status?.kind === "queued" || status?.kind === "downloading";
+
+const counted = (count: number, one: string, many: string): string =>
+  `${count.toLocaleString("en")} ${count === 1 ? one : many}`;
+
+/**
+ * Where downloading the [missing] songs (their jobs, `missingSongJob`)
+ * stands, from the download journal's [jobs]: Download All queues the songs
+ * not on their way, Cancel stops the ones still cancellable, and once the
+ * rest has ended Retry Failed asks again for the failures, as an album's
+ * download does. A song filled in is no longer missing; its job still counts
+ * as saved on the progress line.
+ */
+export const missingSongsDownload = <S extends YtSong>(
+  missing: readonly S[],
+  jobs: readonly YtDownloadJournalJob<S>[],
+): MissingSongsDownload<S> => {
+  const downloads = ytDownloadsFromJournal(jobs.filter((job) => job.id.startsWith(JOB_PREFIX)));
+  const statuses = missing.map((song) => ytDownloadStatus(downloads, song.videoId));
+  const listed = new Set(missing.map((song) => song.videoId));
+  // Filled in: saved this session, and no longer missing.
+  const landed = downloads.jobs.filter(
+    (job) => job.status.kind === "done" && !listed.has(job.song.videoId),
+  ).length;
+  const failed = (index: number) => statuses[index]?.kind === "failed";
+  const toDownload = missing.filter(
+    (_, index) => !onItsWay(statuses[index] ?? null) && !failed(index),
+  );
+  const toRetry = missing.filter((_, index) => failed(index));
+  const toCancel = missing
+    .filter((_, index) => cancellable(statuses[index] ?? null))
+    .map((song) => song.videoId);
+  const batch = statuses.filter((status) => status !== null);
+  const downloading = batch.some(onItsWay);
+  const saved = batch.filter((status) => status.kind === "done").length + landed;
+  const actions: MissingSongsDownloadAction[] = [];
+  if (toDownload.length > 0) actions.push("downloadAll");
+  if (toRetry.length > 0 && !downloading) actions.push("retryFailed");
+  if (toCancel.length > 0) actions.push("cancel");
+  const notFound = downloading
+    ? []
+    : missing.filter((_, index) => {
+        const status = statuses[index];
+        return status?.kind === "failed" && NOT_FOUND.includes(status.reason);
+      });
+  return {
+    line: downloading
+      ? `Downloading · ${saved} of ${batch.length + landed}`
+      : missing.length === 0
+        ? null
+        : `${counted(missing.length, "song isn't", "songs aren't")} on this phone`,
+    actions,
+    toDownload,
+    toRetry,
+    toCancel,
+    summary:
+      notFound.length === 0
+        ? null
+        : {
+            line: `${counted(notFound.length, "song wasn't", "songs weren't")} found`,
+            songs: notFound,
+          },
   };
 };

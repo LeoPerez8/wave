@@ -2,16 +2,18 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  MISSING_SONGS_DOWNLOAD_ACTION_LABELS,
   UNKNOWN_ALBUM,
   missingSongJob,
   missingSongJobId,
   missingSongLookup,
   missingSongSearch,
   missingSongTags,
+  missingSongsDownload,
   recordingKey,
   missingSongVideo,
 } from "./index.ts";
-import type { MissingTrack, YtSong } from "./index.ts";
+import type { MissingSongJob, MissingTrack, YtDownloadJournalJob, YtSong } from "./index.ts";
 
 const track = (patch: Partial<MissingTrack> = {}): MissingTrack => ({
   id: 7,
@@ -156,5 +158,114 @@ describe("missingSongTags", () => {
       album: "I Am... Sasha Fierce",
       durationMs: 261_000,
     });
+  });
+});
+
+describe("missingSongsDownload", () => {
+  const songs = (count: number): MissingSongJob[] =>
+    Array.from({ length: count }, (_, index) =>
+      missingSongJob(track({ id: index + 1, title: `Song ${index + 1}` })),
+    );
+  const job = (
+    song: MissingSongJob,
+    patch: Partial<YtDownloadJournalJob<MissingSongJob>> = {},
+  ): YtDownloadJournalJob<MissingSongJob> => ({
+    id: song.videoId,
+    song,
+    phase: "queued",
+    ...patch,
+  });
+  const imported = { phase: "completed", acknowledged: true, saved: { path: "/m.mp3" } } as const;
+  const ids = (list: readonly YtSong[]) => list.map((song) => song.videoId);
+
+  test("Settings counts the missing songs and offers Download All, which queues them all", () => {
+    const missing = songs(312);
+    const view = missingSongsDownload(missing, []);
+    assert.equal(view.line, "312 songs aren't on this phone");
+    assert.deepEqual(view.actions, ["downloadAll"]);
+    assert.deepEqual(ids(view.toDownload), ids(missing));
+    assert.equal(MISSING_SONGS_DOWNLOAD_ACTION_LABELS.downloadAll, "Download All");
+  });
+
+  test("one song, and thousands, are counted as said", () => {
+    assert.equal(missingSongsDownload(songs(1), []).line, "1 song isn't on this phone");
+    assert.equal(missingSongsDownload(songs(1204), []).line, "1,204 songs aren't on this phone");
+  });
+
+  test("with no missing songs there's nothing to say or offer", () => {
+    const view = missingSongsDownload([], []);
+    assert.equal(view.line, null);
+    assert.deepEqual(view.actions, []);
+    assert.equal(view.summary, null);
+  });
+
+  test("while they download, the line counts the songs saved, filled-in ones included, and Cancel stops the rest", () => {
+    const [first, second, third] = songs(3) as [MissingSongJob, MissingSongJob, MissingSongJob];
+    // The first is filled in: it's no longer missing.
+    const jobs = [
+      job(first, imported),
+      job(second, { phase: "transferring", received: 5, total: 10 }),
+      job(third),
+    ];
+    const view = missingSongsDownload([second, third], jobs);
+    assert.equal(view.line, "Downloading · 1 of 3");
+    assert.deepEqual(view.actions, ["cancel"]);
+    assert.deepEqual(view.toCancel, [second.videoId, third.videoId]);
+    assert.deepEqual(view.toDownload, []);
+  });
+
+  test("songs not asked for yet are still offered while others download", () => {
+    const [first, second] = songs(2) as [MissingSongJob, MissingSongJob];
+    const view = missingSongsDownload([first, second], [job(first)]);
+    assert.deepEqual(view.actions, ["downloadAll", "cancel"]);
+    assert.deepEqual(ids(view.toDownload), [second.videoId]);
+  });
+
+  test("once nothing is on its way, Retry Failed asks again only for the failures, and the summary lists the songs nothing matched", () => {
+    const [found, notFound, offline, unavailable] = songs(4) as [
+      MissingSongJob,
+      MissingSongJob,
+      MissingSongJob,
+      MissingSongJob,
+    ];
+    const jobs = [
+      job(found, imported),
+      job(notFound, { phase: "failed", reason: "notFound" }),
+      job(offline, { phase: "failed", reason: "offline" }),
+      job(unavailable, { phase: "failed", reason: "unavailable" }),
+    ];
+    const view = missingSongsDownload([notFound, offline, unavailable], jobs);
+    assert.equal(view.line, "3 songs aren't on this phone");
+    assert.deepEqual(view.actions, ["retryFailed"]);
+    assert.deepEqual(ids(view.toRetry), [notFound.videoId, offline.videoId, unavailable.videoId]);
+    assert.deepEqual(view.toDownload, []);
+    assert.equal(view.summary?.line, "2 songs weren't found");
+    assert.deepEqual(ids(view.summary?.songs ?? []), [notFound.videoId, unavailable.videoId]);
+  });
+
+  test("failures wait for Retry Failed until the rest has ended, and the summary until then too", () => {
+    const [failed, queued] = songs(2) as [MissingSongJob, MissingSongJob];
+    const notFound = job(failed, { phase: "failed", reason: "notFound" });
+    const view = missingSongsDownload([failed, queued], [notFound, job(queued)]);
+    assert.deepEqual(view.actions, ["cancel"]);
+    assert.equal(view.summary, null);
+    assert.equal(missingSongsDownload([failed], [notFound]).summary?.line, "1 song wasn't found");
+  });
+
+  test("Cancel forgets the jobs: the songs stay missing, and Download All is back", () => {
+    const missing = songs(2);
+    const view = missingSongsDownload(
+      missing,
+      missing.map((song) => job(song, { phase: "cancelled" })),
+    );
+    assert.equal(view.line, "2 songs aren't on this phone");
+    assert.deepEqual(view.actions, ["downloadAll"]);
+  });
+
+  test("YT Music songs' downloads aren't counted", () => {
+    const yt = result("yt") as unknown as MissingSongJob;
+    const [song] = songs(1) as [MissingSongJob];
+    const view = missingSongsDownload([song], [job(yt, imported), job(song)]);
+    assert.equal(view.line, "Downloading · 0 of 1");
   });
 });
