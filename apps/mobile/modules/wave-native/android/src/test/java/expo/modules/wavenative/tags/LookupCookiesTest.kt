@@ -9,7 +9,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
- * Find Lyrics and Genre looks songs up with React Native's `fetch`, which is
+ * Fix Song looks songs up with React Native's `fetch`, which is
  * OkHttp with a `JavaNetCookieJar` in front of the system cookie store. Deezer
  * sets cookies on its first answer, so the album request after a track search
  * carries them, and so does every later Deezer request (they last six months).
