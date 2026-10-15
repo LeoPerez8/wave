@@ -614,6 +614,52 @@ describe("syncCycle", () => {
     );
   });
 
+  test("a removed song's star and playlist entries leave the account with it, even on a phone that keeps its file", async () => {
+    const service = testSyncService();
+    const a = await phone(service, [...OK_COMPUTER, EXIT_MUSIC]);
+    const exit = a.track("Exit Music");
+    const lucky = a.track("Lucky");
+    createPlaylist(
+      a.db,
+      "Night",
+      [
+        { source: "library", trackId: a.track("Airbag") },
+        { source: "library", trackId: lucky },
+        { source: "library", trackId: exit },
+      ],
+      a.now(),
+    );
+    setFavorites(a.db, [lucky, exit], true, a.now());
+    await a.sync();
+    const b = await phone(service);
+    await b.sync();
+    assert.deepEqual(favoriteTitles(b.db).toSorted(), ["Exit Music", "Lucky"]);
+
+    // a deletes Lucky, which b has the file of; b removes Exit Music, which it lacks.
+    a.remove("Lucky");
+    await a.sync({ songsChanged: true });
+    b.remove("Exit Music");
+    await b.sync();
+    await a.sync();
+
+    assert.deepEqual(favoriteTitles(a.db), []);
+    assert.deepEqual(favoriteTitles(b.db), []);
+    assert.deepEqual(playlistTitles(a.db), [{ name: "Night", songs: ["Airbag"] }]);
+    assert.deepEqual(playlistTitles(b.db), [{ name: "Night", songs: ["Airbag"] }]);
+    assert.deepEqual(
+      files(b.db).map(([title]) => title),
+      ["Airbag", "Paranoid Android", "Lucky"],
+    );
+    // The removals went up once.
+    assert.equal((await a.sync()).pushed, 0);
+    assert.equal((await b.sync()).pushed, 0);
+    // A phone signing in later gets none of them back.
+    const c = await phone(service);
+    await c.sync();
+    assert.deepEqual(favoriteTitles(c.db), []);
+    assert.deepEqual(playlistTitles(c.db), [{ name: "Night", songs: ["Airbag"] }]);
+  });
+
   test("signing out leaves no missing song, and a playlist entry of one becomes a YT Music entry or leaves", async () => {
     const service = testSyncService();
     const a = await phone(service, [...OK_COMPUTER, { ...EXIT_MUSIC, videoId: "exit-video" }]);
