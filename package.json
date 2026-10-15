@@ -12,6 +12,8 @@
     "lint": "oxlint",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
+    "react-doctor": "react-doctor apps/mobile --yes --scope full --blocking none --json --json-out .cache/react-doctor/full.json && node scripts/ci/react-doctor-report.mjs .cache/react-doctor/full.json",
+    "react-doctor:check": "react-doctor apps/mobile --yes --scope changed --blocking error --include-untracked --verbose",
     "fallow": "fallow --only dead-code,dupes",
     "fallow:dead-code": "fallow dead-code",
     "fallow:dupes": "fallow dupes",
@@ -20,7 +22,8 @@
   "devDependencies": {
     "fallow": "3.33.1",
     "oxfmt": "0.72.0",
-    "oxlint": "^1.0.0"
+    "oxlint": "^1.0.0",
+    "react-doctor": "0.9.18"
   },
   "engines": {
     "node": ">=22.18"
