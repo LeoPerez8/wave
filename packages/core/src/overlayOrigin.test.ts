@@ -6,7 +6,7 @@ import {
   highlightedOrigin,
   originOfNewCard,
   restingRect,
-  veilAround,
+  veilPath,
   visibleHighlight,
 } from "./index.ts";
 
@@ -98,36 +98,34 @@ describe("highlightedOrigin", () => {
   });
 });
 
-describe("veilAround", () => {
+describe("veilPath", () => {
   const window = { width: 412, height: 915 };
-  const full = { left: 0, top: 0, right: 412, bottom: 915 };
+  const full = "M0 0H412V915H0Z";
 
-  test("a full-width row leaves the veil above and below it", () => {
-    assert.deepEqual(veilAround(window, { left: 0, top: 200, right: 412, bottom: 256 }), [
-      { left: 0, top: 0, right: 412, bottom: 200 },
-      { left: 0, top: 256, right: 412, bottom: 915 },
-    ]);
-  });
-
-  test("a button leaves bands above, below and on either side", () => {
-    assert.deepEqual(veilAround(window, { left: 340, top: 60, right: 388, bottom: 108 }), [
-      { left: 0, top: 0, right: 412, bottom: 60 },
-      { left: 0, top: 108, right: 412, bottom: 915 },
-      { left: 0, top: 60, right: 340, bottom: 108 },
-      { left: 388, top: 60, right: 412, bottom: 108 },
-    ]);
+  test("a row's hole has corners rounded by the radius", () => {
+    assert.equal(
+      veilPath(window, { left: 0, top: 200, right: 412, bottom: 256 }, 8),
+      `${full}M8 200H404A8 8 0 0 1 412 208V248A8 8 0 0 1 404 256H8A8 8 0 0 1 0 248V208A8 8 0 0 1 8 200Z`,
+    );
   });
 
   test("a tile partly off screen is cut where the screen ends", () => {
-    assert.deepEqual(veilAround(window, { left: 300, top: 860, right: 480, bottom: 1000 }), [
-      { left: 0, top: 0, right: 412, bottom: 860 },
-      { left: 0, top: 860, right: 300, bottom: 915 },
-    ]);
+    assert.equal(
+      veilPath(window, { left: 300, top: 860, right: 480, bottom: 1000 }, 8),
+      `${full}M308 860H404A8 8 0 0 1 412 868V907A8 8 0 0 1 404 915H308A8 8 0 0 1 300 907V868A8 8 0 0 1 308 860Z`,
+    );
+  });
+
+  test("the corners round by at most half the hole's shorter side", () => {
+    assert.equal(
+      veilPath(window, { left: 340, top: 60, right: 388, bottom: 72 }, 8),
+      `${full}M346 60H382A6 6 0 0 1 388 66V66A6 6 0 0 1 382 72H346A6 6 0 0 1 340 66V66A6 6 0 0 1 346 60Z`,
+    );
   });
 
   test("with nothing to highlight, or it is off screen, the veil covers everything", () => {
-    assert.deepEqual(veilAround(window, undefined), [full]);
-    assert.deepEqual(veilAround(window, { left: 0, top: 1000, right: 412, bottom: 1056 }), [full]);
+    assert.equal(veilPath(window, undefined, 8), full);
+    assert.equal(veilPath(window, { left: 0, top: 1000, right: 412, bottom: 1056 }, 8), full);
   });
 });
 
