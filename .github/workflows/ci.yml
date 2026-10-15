@@ -85,7 +85,6 @@ jobs:
         continue-on-error: ${{ env.IS_RELEASE != 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
-          PATCH_NOTES_SINCE: fee18a4544bb51e7322a6f9e79901f547fe7ae96 # TEMPORARY proof for #192, revert
         run: |
           notes="$(scripts/ci/patch-notes.sh)"
           echo "$notes"
