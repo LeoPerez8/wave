@@ -84,11 +84,13 @@ already held is ignored.
 | `playlists`       | playlist id                 | `name`, `createdAt`                                                                                                                                                                                                                                |
 | `playlistEntries` | entry id                    | `playlistId`, `orderKey` (Core's `orderKeyBetween`), `songId?` (recording key), `ytSong?` (the YT Music song as the app stores it, text), `addedAt`. Exactly one of `songId` and `ytSong` is set.                                                  |
 | `favorites`       | recording key               | `addedAt`                                                                                                                                                                                                                                          |
-| `preferences`     | preference key              | `value?` (any JSON; the app sends what its key-value store holds, `null` for nothing)                                                                                                                                                              |
+| `preferences`     | preference key              | `value?` (text: what the app's key-value store holds, `null` for nothing)                                                                                                                                                                          |
 | `plays`           | play id (made on the phone) | `songId` (recording key), `startedAt`, `listenedMs`, `durationMs?`, `endReason` (`completed`, `skipped`, `stopped`, `interrupted`), `counted` (boolean), `contextType?`, `contextId?`, `source` (`phone`, `auto`), `importedFrom?` (`blackplayer`) |
 
 Times are ms since the epoch; numbers are integers. Ids and text are at most 16,384
-characters.
+characters. The tables and their fields are Core's wire (`SYNC_TABLE_NAMES`, `SYNC_FIELDS` in
+`packages/core/src/syncWire.ts`), which the app reads pulls with; `src/tables.ts` builds its
+tables from them.
 
 `200`, how many rows of each table won (and were stored):
 

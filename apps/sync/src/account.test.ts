@@ -143,7 +143,7 @@ describe("DELETE /v1/account", () => {
         },
       ],
       favorites: [favorite("song-1", 1)],
-      preferences: [{ id: "glass", changedAt: 1, phoneId: "phone-a", deleted: false, value: true }],
+      preferences: [{ id: "glass", changedAt: 1, phoneId: "phone-a", deleted: false, value: "on" }],
       plays: [play("play-1")],
     };
     await push(service, ana, everything);

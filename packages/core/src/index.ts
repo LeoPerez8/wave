@@ -779,9 +779,18 @@ export type {
   PhoneSong,
   SongSyncPlan,
 } from "./syncPlan.ts";
-export { EMPTY_SYNC_TABLES, SYNC_PUSH_BATCH, pushBatches, readPullPage } from "./syncWire.ts";
+export {
+  EMPTY_SYNC_TABLES,
+  SYNC_FIELDS,
+  SYNC_PUSH_BATCH,
+  SYNC_TABLE_NAMES,
+  pushBatches,
+  readPullPage,
+  syncFieldFits,
+} from "./syncWire.ts";
 export type {
   SyncFavorite,
+  SyncFieldKind,
   SyncPullPage,
   SyncPlayEnd,
   SyncPlayRow,
