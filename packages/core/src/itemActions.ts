@@ -213,31 +213,49 @@ export const itemActions = (subject: ActionSubject): ItemActionEntry[] => {
   return entries;
 };
 
-/** One entry of a YT Music song's menu; Go to Artist carries where it leads. */
+/** One entry of a YT Music song's menu; Go to entries carry where they lead. */
 export type YtSongActionEntry<A> =
   | { readonly action: "playNext" | "addToQueue" | "addToPlaylist" | "removeFromPlaylist" }
+  /** The song's YT Music album page, by its browse id (`MPREb_…`). */
+  | { readonly action: "goToAlbum"; readonly album: string }
   | {
       readonly action: "goToArtist";
       readonly artists: Exclude<StreamedArtistLink<A>, { readonly kind: "here" }>;
     };
 
+/** What a YT Music song's menu needs to know besides where its artists lead. */
+export interface YtSongActionOptions {
+  /** Shown in a playlist, which it can be removed from. */
+  readonly inPlaylist?: boolean | undefined;
+  /** The browse id (`MPREb_…`) of the song's YT Music album, when it has one. */
+  readonly album?: string | null | undefined;
+  /** The browse id of the YT Music album page you're on, so Go to Album doesn't lead to it. */
+  readonly ytAlbumHere?: string | null | undefined;
+  /** Whether YT Music is on in Settings: an album page asks YouTube, so off, there's no Go to Album. */
+  readonly ytMusic?: boolean | undefined;
+}
+
 /**
  * The entries a YT Music song's long-press menu offers: it can join the
  * queue and playlists beside the Library's songs (shown in a playlist
- * ([inPlaylist]), it can leave it too) and, given where its [artists] link
- * leads (Core's `streamedArtistLink`), Go to Artist opens them integrated
- * (none when its only artist is the page you're on). The Library's other
- * entries (favorites, Go to Album, Delete) are about its files, which a
- * streamed song isn't.
+ * ([inPlaylist]), it can leave it too); with YT Music on, Go to Album opens
+ * its YT Music [album] page (none on that page, or for a song without an
+ * album); and, given where its [artists] link leads (Core's
+ * `streamedArtistLink`), Go to Artist opens them integrated (none when its
+ * only artist is the page you're on). The Library's other entries
+ * (favorites, Delete) are about its files, which a streamed song isn't.
  */
 export const ytSongActions = <A>(
   artists?: StreamedArtistLink<A>,
-  { inPlaylist = false }: { readonly inPlaylist?: boolean } = {},
+  { inPlaylist = false, album, ytAlbumHere, ytMusic = false }: YtSongActionOptions = {},
 ): YtSongActionEntry<A>[] => [
   { action: "playNext" },
   { action: "addToQueue" },
   { action: "addToPlaylist" },
   ...(inPlaylist ? [{ action: "removeFromPlaylist" } as const] : []),
+  ...(ytMusic && album !== undefined && album !== null && album !== "" && album !== ytAlbumHere
+    ? [{ action: "goToAlbum", album } as const]
+    : []),
   ...(artists === undefined || artists.kind === "here"
     ? []
     : [{ action: "goToArtist", artists } as const]),

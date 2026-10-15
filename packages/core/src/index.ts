@@ -305,6 +305,7 @@ export type {
   ItemAction,
   ItemActionEntry,
   YtSongActionEntry,
+  YtSongActionOptions,
   ItemKind,
 } from "./itemActions.ts";
 export { concentricRadius } from "./corners.ts";
