@@ -93,13 +93,60 @@ export interface YtArtistPage<S extends YtSong = YtSong> {
   /**
    * Every song of the artist, in YouTube Music's order: [songsPlaylistId]
    * read after the page (Core's `readYtPlaylist`), or the top songs when the
-   * page has no such playlist. Undefined on the page as read, and in answers
-   * saved before it was read: those don't stand on an artist's page.
+   * page has no such playlist or YouTube can't give it (`ytArtistFullPage`).
+   * Undefined on the page as read, in answers saved before it was read and in
+   * a Library album's (which reads the page only): those don't stand on an
+   * artist's page.
    */
   readonly allSongs?: readonly S[];
+  /**
+   * Whether [allSongs] stops short of every song of the artist: the
+   * playlist's read stopped at its cap, or it couldn't be read and the top
+   * songs stand in (`ytArtistFullPage`). Undefined: the list is whole.
+   */
+  readonly allSongsCut?: boolean;
   readonly albums: readonly YtArtistAlbum[];
   readonly singles: readonly YtArtistAlbum[];
 }
+
+/** How reading an artist's songs playlist (`readYtPlaylist`) went. */
+export type YtArtistSongsRead<S extends YtSong = YtSong> =
+  /** Every page in, or as many as the cap allows ([truncated]). */
+  | { readonly status: "read"; readonly songs: readonly S[]; readonly truncated: boolean }
+  /** A page got no answer, after [pagesRead] pages had come. */
+  | {
+      readonly status: "failed";
+      readonly reason: YtQuietReason | "disabled";
+      readonly pagesRead: number;
+    };
+
+/** The artist's page with every song of theirs, or why the whole request fails. */
+export type YtArtistFullPage<S extends YtSong = YtSong> =
+  | { readonly status: "read"; readonly page: YtArtistPage<S> }
+  | { readonly status: "failed"; readonly reason: YtQuietReason | "disabled" };
+
+/**
+ * The artist [page] as read, with every song of theirs (`allSongs`) from how
+ * reading its songs playlist went ([read]; null when the page has none, and
+ * then its top songs are the whole list). A list the read cut at its cap is
+ * kept as cut short (`allSongsCut`). When YouTube can't give the playlist at
+ * all (its first page failed, not offline), the top songs stand in, cut
+ * short. Offline, YT Music turned off, or a later page failing after earlier
+ * ones came, the whole request fails, so a half-read list never stands.
+ */
+export const ytArtistFullPage = <S extends YtSong>(
+  page: YtArtistPage<S>,
+  read: YtArtistSongsRead<S> | null,
+): YtArtistFullPage<S> => {
+  if (read === null) return { status: "read", page: { ...page, allSongs: page.songs } };
+  if (read.status === "read") {
+    const cut = read.truncated ? { allSongsCut: true } : {};
+    return { status: "read", page: { ...page, allSongs: read.songs, ...cut } };
+  }
+  if (read.reason !== "failed" || read.pagesRead > 0)
+    return { status: "failed", reason: read.reason };
+  return { status: "read", page: { ...page, allSongs: page.songs, allSongsCut: true } };
+};
 
 /**
  * What was saved for a Library artist the last time YouTube Music answered:
@@ -153,6 +200,22 @@ const isFresh = (saved: YtArtistSaved, now: number): boolean =>
  */
 const standsOnArtistPage = (saved: YtArtistSaved, now: number): boolean =>
   isFresh(saved, now) && (saved.outcome === "unmatched" || saved.page.allSongs !== undefined);
+
+/**
+ * What's saved for the artist once [answer] comes at [now], given what's
+ * saved meanwhile ([current]): the answer, unless it was read without the
+ * artist's full list (a Library album's ask reads their page only) while
+ * [current] stands on the artist page with it. Then [current] stays, and
+ * the album finds its release in it all the same.
+ */
+export const ytArtistAnswerKept = <S extends YtSong>(
+  current: YtArtistSaved<S> | null,
+  answer: YtArtistSaved<S>,
+  now: number,
+): YtArtistSaved<S> =>
+  current !== null && standsOnArtistPage(current, now) && !standsOnArtistPage(answer, now)
+    ? current
+    : answer;
 
 /** A Library album as matching a release to it sees it. */
 export interface LibraryAlbumKey {
@@ -344,7 +407,9 @@ export const ytArtistSectionView = <S extends YtSong>(
     if (saved.outcome === "unmatched") return { songs: [], note: "notFound", button: false };
     const all = saved.page.allSongs ?? [];
     const songs = all.filter((song) => !context.inLibrary(song));
-    const note = songs.length > 0 ? null : all.length === 0 ? "noSongs" : "allInLibrary";
+    // A list cut short can't tell that the Library has every song, or that there are none.
+    const quiet = songs.length > 0 || saved.page.allSongsCut === true;
+    const note = quiet ? null : all.length === 0 ? "noSongs" : "allInLibrary";
     return { songs, note, button: false };
   }
   if (context.integrated === true && state.failure === null)

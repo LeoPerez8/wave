@@ -87,7 +87,9 @@ export const useYtArtistPage = (
   const key = byName === null ? savedKey(browseId ?? "") : identityKey(byName);
   const ask = useCallback(
     (saved: Saved | null) =>
-      byName === null ? fetchPage(browseId ?? "") : fetchArtist(byName, key, saved),
+      byName === null
+        ? fetchPage(browseId ?? "")
+        : fetchArtist(byName, key, saved, { allSongs: true }),
     [browseId, byName, key],
   );
   const { state, enabled, openedAt, show } = useSavedYtArtist(key, ask);

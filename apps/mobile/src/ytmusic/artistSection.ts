@@ -4,6 +4,8 @@ import {
   libraryAlbumFinder,
   pickYtArtist,
   stepYtArtistSection,
+  ytArtistAnswerKept,
+  ytArtistFullPage,
   ytArtistIntegrated,
   ytArtistLookup,
   ytArtistSectionAsks,
@@ -14,6 +16,7 @@ import {
   type YtArtistSectionEvent,
   type YtArtistSectionView,
   type YtArtistShelf,
+  type YtArtistSongsRead,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
@@ -38,28 +41,59 @@ const readSaved = (artistKey: string) =>
 
 /**
  * The artist page [browseId] with every song of the artist (`allSongs`): the
- * Songs shelf's playlist read whole after the page (Core's `readYtPlaylist`,
- * with its cap), or the top songs when the page has none. A playlist page
- * that fails fails it all, so a half-read list is never saved. A Library
- * artist's section and a YouTube Music artist page both read it so.
+ * Songs shelf's playlist read after the page (Core's `readYtPlaylist`, with
+ * its cap), or the top songs when the page has none or YouTube can't give it.
+ * Offline, or a later playlist page failing, fails it all, so a half-read
+ * list is never saved (Core's `ytArtistFullPage`). Interrupted, it asks for
+ * no further page. A Library artist's section and a YouTube Music artist page
+ * both read it so.
  */
 export const readArtist = (browseId: string) =>
   Effect.gen(function* () {
     const ytMusic = yield* YtMusic;
     const page = yield* ytMusic.artist(browseId);
     const playlistId = page.songsPlaylistId ?? null;
-    const allSongs = playlistId === null ? page.songs : (yield* ytMusic.playlist(playlistId)).songs;
-    return { ...page, allSongs };
+    let read: YtArtistSongsRead<NativeYtSong> | null = null;
+    if (playlistId !== null) {
+      let pagesRead = 0;
+      const onPage = () => {
+        pagesRead += 1;
+      };
+      const result = yield* Effect.result(ytMusic.playlist(playlistId, { onPage }));
+      read = Result.isSuccess(result)
+        ? { status: "read", songs: result.success.songs, truncated: result.success.truncated }
+        : { status: "failed", reason: result.failure.reason, pagesRead };
+    }
+    const full = ytArtistFullPage(page, read);
+    if (full.status === "failed") return yield* new YtMusicError({ reason: full.reason });
+    return full.page;
   });
+
+/** How much of the artist an ask reads. */
+export interface ArtistReads {
+  /**
+   * Every song of theirs too (`readArtist`), as the artist's pages want; a
+   * Library album's page only needs their releases, so it reads the page only.
+   */
+  readonly allSongs: boolean;
+}
 
 /**
  * Asks YouTube Music for [name]'s page: the saved match's, or the one an
- * Artists search finds (Core's `ytArtistLookup`, `pickYtArtist`), then the
- * playlist of every song of theirs. The answer, the page or "no match", is
- * saved before it's shown; a request that gets no answer saves nothing. Only
- * the name, the artist's browse id and their songs playlist's id are sent.
+ * Artists search finds (Core's `ytArtistLookup`, `pickYtArtist`), then, when
+ * [reads] asks for it, the playlist of every song of theirs. The answer, the
+ * page or "no match", is saved before it's shown, unless it's the page alone
+ * and what was saved meanwhile stands with the full list: that stays and is
+ * shown (Core's `ytArtistAnswerKept`). A request that gets no answer, or is
+ * interrupted, saves nothing. Only the name, the artist's browse id and their
+ * songs playlist's id are sent.
  */
-export const fetchArtist = (name: string, artistKey: string, saved: Saved | null) =>
+export const fetchArtist = (
+  name: string,
+  artistKey: string,
+  saved: Saved | null,
+  reads: ArtistReads,
+) =>
   Effect.gen(function* () {
     const ytMusic = yield* YtMusic;
     const store = yield* LibraryStore;
@@ -73,7 +107,14 @@ export const fetchArtist = (name: string, artistKey: string, saved: Saved | null
     const answer: Saved =
       browseId === null
         ? { outcome: "unmatched", checkedAt }
-        : { outcome: "found", checkedAt, browseId, page: yield* readArtist(browseId) };
+        : {
+            outcome: "found",
+            checkedAt,
+            browseId,
+            page: reads.allSongs ? yield* readArtist(browseId) : yield* ytMusic.artist(browseId),
+          };
+    const kept = ytArtistAnswerKept(yield* readSaved(artistKey), answer, checkedAt);
+    if (kept !== answer) return kept;
     // Not saved, it's still shown; the next opening asks again.
     yield* store.saveYtArtist(artistKey, answer).pipe(Effect.ignore);
     return answer;
@@ -132,19 +173,23 @@ export const useSavedYtArtist = (artistKey: string, ask: AskArtist): YtArtistAns
   // Whether a saved answer still stands is decided as the page opens (an answer
   // that comes later is newer, so it stands).
   const [openedAt] = useState(() => Date.now());
+  // Aborted once the page is gone (or shows another artist): what it reads
+  // and asks for the artist stops, and a request saves nothing, so nothing
+  // is read in the background.
+  const leaving = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    let current = true;
+    const controller = new AbortController();
+    leaving.current = controller;
     const restored = (saved: Saved | null) => {
-      if (current) dispatch({ key: artistKey, event: { type: "restored", saved } });
+      if (!controller.signal.aborted)
+        dispatch({ key: artistKey, event: { type: "restored", saved } });
     };
     void appRuntime
-      .runPromise(readSaved(artistKey))
+      .runPromise(readSaved(artistKey), { signal: controller.signal })
       // A defect reads as nothing saved, so the section can still ask.
       .then(restored, () => restored(null));
-    return () => {
-      current = false;
-    };
+    return () => controller.abort();
   }, [artistKey]);
 
   // What's saved, while a tap can ask (undefined while reading or asking).
@@ -152,16 +197,20 @@ export const useSavedYtArtist = (artistKey: string, ask: AskArtist): YtArtistAns
   const show = useCallback(() => {
     if (saved === undefined) return;
     const step = (event: YtArtistSectionEvent<NativeYtSong>) => dispatch({ key: artistKey, event });
+    const signal = leaving.current?.signal;
     step({ type: "requested" });
-    void appRuntime.runPromise(Effect.result(ask(saved))).then(
+    void appRuntime.runPromise(Effect.result(ask(saved)), { signal }).then(
       (result) =>
         step(
           Result.isSuccess(result)
             ? { type: "answered", saved: result.success }
             : { type: "failed", reason: result.failure.reason },
         ),
-      // A defect fails like any other request, so the section doesn't stay loading.
-      () => step({ type: "failed", reason: "failed" }),
+      // A defect fails like any other request, so the section doesn't stay
+      // loading; an interrupted one belongs to a page that's gone.
+      () => {
+        if (signal?.aborted !== true) step({ type: "failed", reason: "failed" });
+      },
     );
   }, [artistKey, ask, saved]);
 
@@ -171,13 +220,15 @@ export const useSavedYtArtist = (artistKey: string, ask: AskArtist): YtArtistAns
 /**
  * The YouTube Music answer for the Library artist [name], as the artist page
  * and their albums' pages share it: it reads what was saved and never asks
- * YouTube Music until `show` is called (Core's `stepYtArtistSection`).
+ * YouTube Music until `show` is called (Core's `stepYtArtistSection`). [reads]
+ * says whether asking reads every song of theirs too (`fetchArtist`).
  */
-export const useYtArtistAnswer = (name: string): YtArtistAnswer => {
+export const useYtArtistAnswer = (name: string, reads: ArtistReads): YtArtistAnswer => {
   const artistKey = identityKey(name);
+  const { allSongs } = reads;
   const ask = useCallback(
-    (saved: Saved | null) => fetchArtist(name, artistKey, saved),
-    [name, artistKey],
+    (saved: Saved | null) => fetchArtist(name, artistKey, saved, { allSongs }),
+    [name, artistKey, allSongs],
   );
   return useSavedYtArtist(artistKey, ask);
 };
@@ -214,7 +265,7 @@ export const useYtArtistSection = (
   albums: readonly AlbumRow[],
   openedIntegrated: boolean,
 ): YtArtistSectionShown => {
-  const { state, enabled, openedAt, show } = useYtArtistAnswer(name);
+  const { state, enabled, openedAt, show } = useYtArtistAnswer(name, { allSongs: true });
   const asks = ytArtistSectionAsks(state, {
     name,
     enabled,
