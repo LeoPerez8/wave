@@ -1,6 +1,7 @@
 import type { ExpoConfig } from "expo/config";
 
 import { versionCode } from "./plugins/appVersion.ts";
+import { withGradleBuildCache } from "./plugins/withGradleBuildCache.ts";
 import { withLauncherIcons } from "./plugins/withLauncherIcons.ts";
 import { withLaunchSplash } from "./plugins/withLaunchSplash.ts";
 
@@ -92,5 +93,6 @@ const config: ExpoConfig = {
 // The moving logo on the launch splash and a splash for each choice Settings › Theme offers
 // (Android 13+), and one launcher icon per primary × secondary, switched from Settings › Theme.
 // Applied here, before the plugin list, so the splash's changes run after expo-splash-screen's
-// (Expo runs mods in reverse order) and can edit that splash's style.
-export default withLaunchSplash(withLauncherIcons(config));
+// (Expo runs mods in reverse order) and can edit that splash's style. Gradle's build cache
+// is on so CI reuses outputs from earlier builds (#185).
+export default withGradleBuildCache(withLaunchSplash(withLauncherIcons(config)));
