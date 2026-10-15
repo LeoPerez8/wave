@@ -5,6 +5,8 @@
   // plugins discover app routes, config plugins, package exports, and tests.
   // These maintenance CLIs are invoked directly, outside package scripts.
   "entry": [
+    "apps/mobile/scripts/check-release-tag.ts",
+    "scripts/ci/step-durations-cli.ts",
     "scripts/music-folder/organize.ts",
     "scripts/music-folder/replace.ts",
     "scripts/**/*.test.ts",
