@@ -21,18 +21,24 @@ cli="$(node --print "require.resolve('@expo/cli', { paths: [require.resolve('exp
 entry="$(node -e "require('expo/scripts/resolveAppEntry')" "$app" android absolute)"
 hermes="$(dirname "$(node --print "require.resolve('hermes-compiler/package.json', { paths: [require.resolve('react-native/package.json')] })")")"
 mapfile -t flags < <(node "$here/repack.ts" hermes-flags android/app/build.gradle)
+# Metro's map is only an input to the composed one, written when hermesc writes its own.
+source_map=false
+if printf '%s\n' "${flags[@]}" | grep -qx -- '-output-source-map'; then source_map=true; fi
+metro_map=()
+if $source_map; then metro_map=(--sourcemap-output "$intermediate/index.android.bundle.packager.map"); fi
 
+# Unlike Gradle's task, no --reset-cache: CI restores Metro's cache (/tmp/metro-cache) to reuse it.
 start=$SECONDS
-node "$cli" export:embed --platform android --dev false --reset-cache \
+node "$cli" export:embed --platform android --dev false \
   --entry-file "$entry" --bundle-output "$bundle" --assets-dest "$resources" \
-  --sourcemap-output "$intermediate/index.android.bundle.packager.map" --minify false --verbose
+  "${metro_map[@]}" --minify false --verbose
 echo "Metro: $((SECONDS - start)) s"
 
 start=$SECONDS
 "$hermes/hermesc/linux64-bin/hermesc" -w -emit-binary -max-diagnostic-width=80 \
   -out "$intermediate/index.android.bundle.hbc" "$bundle" "${flags[@]}"
 mv "$intermediate/index.android.bundle.hbc" "$bundle"
-if printf '%s\n' "${flags[@]}" | grep -qx -- '-output-source-map'; then
+if $source_map; then
   mv "$intermediate/index.android.bundle.hbc.map" "$intermediate/index.android.bundle.compiler.map"
   rn="$(dirname "$(node --print "require.resolve('react-native/package.json')")")"
   node "$rn/scripts/compose-source-maps.js" "$intermediate/index.android.bundle.packager.map" \

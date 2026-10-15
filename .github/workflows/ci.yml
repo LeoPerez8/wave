@@ -433,7 +433,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          extra="APK build: **${APK_BUILD:-full}**. ${APK_BUILD_REASON:-}"
+          # A job that fails before "Plan the APK build" has no build mode to report.
+          extra=""
+          if [ -n "${APK_BUILD:-}" ]; then extra="APK build: **$APK_BUILD**. ${APK_BUILD_REASON:-}"; fi
           if [ -n "${{ steps.publish.outputs.url }}" ]; then
             extra="$extra"$'\n\n'"📱 **[Download APK](${{ steps.publish.outputs.url }})** (built from \`${HEAD_SHA:0:7}\`)"
           fi
