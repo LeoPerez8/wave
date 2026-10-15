@@ -28,13 +28,16 @@ const settings = (gradle: string, key: string): string[] =>
 
 describe("compileHermesWithoutSourceMap", () => {
   test("keeps Hermes' optimiser and drops the source map", () => {
-    assert.deepEqual(settings(compileHermesWithoutSourceMap(prebuildAppBuildGradle), "hermesFlags"), [
-      'hermesFlags = ["-O"]',
-    ]);
+    assert.deepEqual(
+      settings(compileHermesWithoutSourceMap(prebuildAppBuildGradle), "hermesFlags"),
+      ['hermesFlags = ["-O"]'],
+    );
   });
 
   test("sets the flags once when prebuild runs again on its output", () => {
-    const twice = compileHermesWithoutSourceMap(compileHermesWithoutSourceMap(prebuildAppBuildGradle));
+    const twice = compileHermesWithoutSourceMap(
+      compileHermesWithoutSourceMap(prebuildAppBuildGradle),
+    );
     assert.deepEqual(settings(twice, "hermesFlags"), ['hermesFlags = ["-O"]']);
   });
 
