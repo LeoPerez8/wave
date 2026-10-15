@@ -4,7 +4,6 @@ import "../../global.css";
 import "@/settings/theme";
 
 import { Stack } from "expo-router";
-import logotype from "@expo-google-fonts/inter/100Thin/Inter_100Thin.ttf.png";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -23,7 +22,10 @@ import { startSync } from "@/sync/startSync";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 // TEMPORARY CI probe: a package image Metro must emit as a new resource.
-export const ciProbeAsset = logotype;
+/* oxlint-disable */
+// @ts-ignore
+export const ciProbeAsset: number = require("@expo-google-fonts/inter/100Thin/Inter_100Thin.ttf.png");
+/* oxlint-enable */
 
 export default function RootLayout() {
   const background = useThemeColor("background");
