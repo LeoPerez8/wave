@@ -1,30 +1,27 @@
 import {
   ANCHOR_UNMEASURED,
   defaultSongSort,
-  ITEM_ACTION_LABELS,
-  isDestructiveAction,
-  itemActions,
   playlistImportSources,
   songSortsFor,
   watchAnchor,
-  type ActionSubject,
   type DesignPreviewState,
 } from "@wave/core";
-import { usePathname } from "expo-router";
 import { useCallback, useEffect, useRef, type ComponentRef, type ReactNode } from "react";
 import { View } from "react-native";
 
 import type { AlbumSummary } from "@/catalog/AlbumTile";
-import { SourceMenu } from "@/library/importPlaylistLink";
-import { askNewPlaylistName } from "@/library/PlaylistSheets";
-import { SortMenu } from "@/library/SongSortButton";
+import { openSourceMenu } from "@/library/importPlaylistLink";
+import type { AlbumRow, SongRow } from "@/library/LibraryStore";
+import { promptNewPlaylist } from "@/library/PlaylistSheets";
+import type { PlaylistsControl } from "@/library/PlaylistsList";
+import { openSortMenu } from "@/library/SongSortButton";
 import { measureRect } from "@/motion/measureRect";
-import { pressedRect, runPressedAt } from "@/motion/pressedRect";
+import { runPressedAt } from "@/motion/pressedRect";
 import { HandOverPress, type PressHandle } from "@/motion/pressHandle";
-import { dismissOverlaysFrom, openOverlay } from "@/overlay/overlay";
-import { MenuCard } from "@/playback/ActionsMenu";
-import type { Heading } from "@/playback/actionTargets";
-import { useLyricsAndGenreLookupsEnabled } from "@/settings/lyricsAndGenre";
+import { dismissOverlaysFrom } from "@/overlay/overlay";
+import { ItemMenuCard, openItemCard } from "@/playback/ActionsMenu";
+import type { ActionItems } from "@/playback/actionTargets";
+import { actionEntries, usePlannedActions } from "@/playback/itemActions";
 
 import {
   LONG_TITLE_TRACK_ID,
@@ -38,7 +35,7 @@ import {
 export type Shelf = "albums" | "songs" | "playlists";
 
 /** A control on a shelf that opens a card: the Songs' Sort, the Playlists' Import and New. */
-export type Control = "sort" | "importPlaylists" | "newPlaylist";
+export type Control = "sort" | PlaylistsControl;
 
 /**
  * A state the Design preview opens straight into from
@@ -115,87 +112,107 @@ export const PREVIEW_STATES: readonly PreviewState[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// The cards, opened through the overlay as the real controls open them, each
-// entry only closing its card, so nothing reads or changes the Library.
+// The cards, opened by the openers the real controls use, with choices and
+// entries that only close them, so nothing reads or changes the Library.
 
 /** The card a long press on a Library song opens, for a synthetic song. */
-export const openSongCard = ({ track, favorite }: SyntheticTrack): void =>
-  openItemCard(
-    { title: track.title, subtitle: track.artist, covers: [] },
-    // Synthetic album and artist ids: Go to Album and Go to Artist show, and go nowhere.
-    { kind: "track", items: [{ albumId: 1, artistIds: [1], favorite, inPlaylist: false }] },
-  );
+export const openSongCard = (item: SyntheticTrack): void => {
+  const song = songRow(item);
+  const target: ActionItems = { kind: "track", items: [{ song }] };
+  const favorites = new Set(item.favorite ? [song.id] : []);
+  openItemCard(target, (close) => (
+    <PreviewItemMenu target={target} favorites={favorites} close={close} />
+  ));
+};
 
 /** The card a long press on a Library album opens, for a synthetic album. */
-export const openAlbumCard = (album: AlbumSummary): void =>
-  openItemCard(
-    { title: album.title, subtitle: album.albumArtist, covers: [] },
-    // A synthetic artist id: Go to Artist shows, and goes nowhere.
-    { kind: "album", items: [{ artistIds: [1] }] },
-  );
+export const openAlbumCard = (album: AlbumSummary): void => {
+  const target: ActionItems = { kind: "album", items: [albumRow(album)] };
+  openItemCard(target, (close) => (
+    <PreviewItemMenu target={target} favorites={NO_FAVORITES} close={close} />
+  ));
+};
 
 /** The Sort card of the Songs list, its default sort (the synthetic Songs' order) checked. */
-export const openSortCard = (): void => {
-  openOverlay({
-    label: "Sort by",
-    anchor: pressedRect(),
-    render: (close) => (
-      <SortMenu sorts={songSortsFor("songs")} current={defaultSongSort("songs")} choose={close} />
-    ),
-  });
-};
+export const openSortCard = (): void =>
+  openSortMenu(songSortsFor("songs"), defaultSongSort("songs"), () => undefined);
 
 /** The Import card Import Playlists opens with YT Music on (with it off there is no card). */
-export const openImportCard = (): void => {
-  openOverlay({
-    label: "Import",
-    anchor: pressedRect(),
-    render: (close) => (
-      <SourceMenu sources={playlistImportSources({ ytMusic: true })} choose={close} />
-    ),
-  });
-};
+export const openImportCard = (): void =>
+  openSourceMenu(playlistImportSources({ ytMusic: true }), () => undefined);
 
 /** New Playlist's name prompt, the synthetic playlists' names taken; the name is dropped. */
 export const openNewPlaylistPrompt = (): void => {
-  void askNewPlaylistName(SYNTHETIC_PLAYLISTS.map((playlist) => playlist.name));
+  void promptNewPlaylist(
+    () => Promise.resolve(SYNTHETIC_PLAYLISTS.map((playlist) => playlist.name)),
+    () => Promise.resolve(null),
+  );
 };
 
-/** A Library item's long-press card, through the overlay: [heading], then the entries for [subject]. */
-const openItemCard = (heading: Heading, subject: Pick<ActionSubject, "kind" | "items">): void => {
-  openOverlay({
-    label: heading.title,
-    anchor: pressedRect(),
-    render: (close) => <PreviewItemMenu heading={heading} subject={subject} close={close} />,
-  });
-};
+const NO_FAVORITES: ReadonlySet<number> = new Set();
 
+/**
+ * A Library item's long-press card for [target], as `ActionsMenu` draws it:
+ * the entries the app plans for it, each only closing the card. [favorites]
+ * stands in for the Library's stars.
+ */
 function PreviewItemMenu({
-  heading,
-  subject,
+  target,
+  favorites,
   close,
 }: {
-  heading: Heading;
-  subject: Pick<ActionSubject, "kind" | "items">;
+  target: ActionItems;
+  favorites: ReadonlySet<number>;
   close: () => void;
 }) {
-  const here = usePathname();
-  const onlineLookups = useLyricsAndGenreLookupsEnabled();
-  const entries = itemActions({
-    ...subject,
-    surface: "menu",
-    // The Library's Songs and Albums can select, so their menus offer Select.
-    selectable: true,
-    onlineLookups,
-    here,
-  }).map((entry) => ({
-    key: entry.action,
-    label: ITEM_ACTION_LABELS[entry.action],
-    onPress: close,
-    destructive: isDestructiveAction(entry.action),
-  }));
-  return <MenuCard heading={heading} entries={entries} />;
+  // The Library's Songs and Albums can select, so their menus offer Select.
+  const planned = usePlannedActions(target, favorites, { surface: "menu", selectable: true });
+  return <ItemMenuCard target={target} actions={actionEntries(planned, () => close)} />;
 }
+
+// Synthetic album and artist ids: Go to Album and Go to Artist show, and go nowhere.
+const SYNTHETIC_ID = 1;
+
+/** [item] as a Library song (no artwork, like the synthetic rows). */
+const songRow = (item: SyntheticTrack): SongRow => {
+  const { track } = item;
+  return {
+    id: SYNTHETIC_TRACKS.indexOf(item) + 1,
+    path: "",
+    title: track.title,
+    artist: track.artist,
+    album: "",
+    durationMs: track.durationMs ?? 0,
+    thumbPath: null,
+    artworkPath: null,
+    titleSort: track.title,
+    artistSort: track.artist,
+    albumSort: "",
+    addedAt: 0,
+    albumId: SYNTHETIC_ID,
+    artistId: SYNTHETIC_ID,
+    artistIds: [SYNTHETIC_ID],
+    discNumber: null,
+    trackNumber: track.trackNumber ?? null,
+    year: null,
+  };
+};
+
+/** [album] as a Library album (no artwork, like the synthetic tiles). */
+const albumRow = (album: AlbumSummary): AlbumRow => ({
+  id: SYNTHETIC_ALBUMS.indexOf(album) + 1,
+  title: album.title,
+  titleSort: album.title,
+  albumArtist: album.albumArtist,
+  albumArtistId: SYNTHETIC_ID,
+  albumArtistIds: [SYNTHETIC_ID],
+  year: album.year ?? null,
+  compilation: false,
+  trackCount: album.trackCount,
+  durationMs: album.durationMs,
+  thumbPath: null,
+  artworkPath: null,
+});
 
 // ---------------------------------------------------------------------------
 // Visits: every time the Design preview opens (from a link, again from the

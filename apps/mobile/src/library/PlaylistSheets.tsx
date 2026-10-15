@@ -61,9 +61,8 @@ const askName = (request: NameRequest): Promise<string | null> =>
 /**
  * New Playlist's name prompt, the first free "New Playlist" filled in and the
  * playlists' [names] refused. Resolves with the name, or null when cancelled.
- * The Design preview opens it too, with synthetic names, and drops the answer.
  */
-export const askNewPlaylistName = (names: readonly string[]): Promise<string | null> =>
+const askNewPlaylistName = (names: readonly string[]): Promise<string | null> =>
   askName({
     title: "New playlist",
     confirmLabel: "Create",
@@ -227,16 +226,31 @@ function AddCard({ subject, close }: { subject: AddSubject; close: () => void })
 export const newPlaylist = (
   songs?: () => Promise<readonly PlaylistSong[]>,
 ): Promise<NamedPlaylist | null> =>
-  // The name prompt highlights what the flow was started from.
-  followUp(() => createNamedPlaylist(songs));
-
-const createNamedPlaylist = async (
-  songs?: () => Promise<readonly PlaylistSong[]>,
-): Promise<NamedPlaylist | null> => {
   // Remembered names open the prompt at once. The songs (every song, from
   // Library › Songs) are read only once a name is chosen, so they never hold it up.
-  const name = await askNewPlaylistName(await playlistNames());
-  if (name === null) return null;
+  promptNewPlaylist(playlistNames, (name) => createNamedPlaylist(name, songs));
+
+/**
+ * New Playlist's flow, from the press that starts it (call it before anything
+ * awaits): reads the playlists' [names], asks for a name (the first free "New
+ * Playlist" filled in, [names] refused), then hands it to [named]. The prompt
+ * and any card [named] opens highlight what the press was on. Resolves with
+ * what [named] does, or null when cancelled. The Design preview runs it too,
+ * with synthetic names and a [named] that does nothing.
+ */
+export const promptNewPlaylist = <T,>(
+  names: () => Promise<readonly string[]>,
+  named: (name: string) => Promise<T | null>,
+): Promise<T | null> =>
+  followUp(async () => {
+    const name = await askNewPlaylistName(await names());
+    return name === null ? null : named(name);
+  });
+
+const createNamedPlaylist = async (
+  name: string,
+  songs?: () => Promise<readonly PlaylistSong[]>,
+): Promise<NamedPlaylist | null> => {
   try {
     const rows = songs === undefined ? [] : await songs();
     if (songs !== undefined && rows.length === 0) {
