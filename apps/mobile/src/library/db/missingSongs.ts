@@ -24,6 +24,7 @@ import type { LibraryDatabase } from "./database.ts";
 import { pruneOrphans, saveMissingSongs, type MissingSongSave } from "./save.ts";
 import * as schema from "./schema.ts";
 import { thisPhoneId } from "./schema.ts";
+import { stamped } from "./sync.ts";
 import { leaveAccount, selectJoinedAccount } from "./syncRows.ts";
 import { deleteTracks, deleteTracksById } from "./tracks.ts";
 
@@ -294,7 +295,7 @@ export const removeSongs = (
         .values({ recordingKey, changedAt: now, ...removal })
         .onConflictDoUpdate({
           target: accountSongs.recordingKey,
-          set: { ...removal, changedAt: sql`max(${now}, ${accountSongs.changedAt} + 1)` },
+          set: { ...removal, ...stamped(accountSongs, now) },
         })
         .run();
     }
