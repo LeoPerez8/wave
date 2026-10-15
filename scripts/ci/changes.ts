@@ -1,9 +1,10 @@
-// Which parts of the repo a change touches, and whether it can change the APK.
+// Which parts of the repo a change touches, whether it can change the APK, and
+// whether it can change the result of wave-native's JVM tests.
 // The CI workflow runs it on a PR's changed files and turns jobs off by it:
 //   <paths, one per line> | node scripts/ci/changes.ts   # PRs
 //   node scripts/ci/changes.ts --all                      # everything else
-// It prints `<area>=true|false` lines, `apk=true|false` and `allPackages=true|false`,
-// ready for $GITHUB_OUTPUT. Checks also runs it, through affected-packages.sh.
+// It prints `<area>=true|false` lines, then the decisions `apk`, `allPackages` and
+// `nativeTests`, ready for $GITHUB_OUTPUT. Checks also runs it, through affected-packages.sh.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
@@ -16,6 +17,13 @@ const AREAS = {
   ci: [".github/", "scripts/ci/"],
   // TypeScript config the packages extend.
   tsconfig: ["tsconfig.base.json"],
+  // wave-native and what decides how prebuild generates the project it builds in.
+  native: [
+    "apps/mobile/modules/wave-native/",
+    "apps/mobile/app.config.ts",
+    "apps/mobile/plugins/",
+    "apps/mobile/package.json",
+  ],
 } as const;
 
 type Area = keyof typeof AREAS;
@@ -27,7 +35,10 @@ const APK_AREAS: readonly Area[] = ["app", "core", "workspace", "ci"];
 // all of them. Otherwise it checks only the packages a PR changed and their dependents.
 const ALL_PACKAGES_AREAS: readonly Area[] = ["workspace", "ci", "tsconfig"];
 
-export type Changes = Record<Area | "apk" | "allPackages", boolean>;
+// wave-native's JVM tests can only change result when one of these does.
+const NATIVE_TEST_AREAS: readonly Area[] = ["native", "workspace", "ci"];
+
+export type Changes = Record<Area | "apk" | "allPackages" | "nativeTests", boolean>;
 
 const covers = (entry: string, path: string) =>
   entry.endsWith("/") ? path.startsWith(entry) : path === entry;
@@ -40,6 +51,7 @@ const decide = (touched: (area: Area) => boolean): Changes => {
     ...areas,
     apk: APK_AREAS.some((area) => areas[area]),
     allPackages: ALL_PACKAGES_AREAS.some((area) => areas[area]),
+    nativeTests: NATIVE_TEST_AREAS.some((area) => areas[area]),
   };
 };
 
