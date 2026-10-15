@@ -197,6 +197,8 @@ export {
   tabBarTabs,
 } from "./shortcutTab.ts";
 export type { TabBarTab } from "./shortcutTab.ts";
+export { SETTINGS_PAGES, accountsSummary } from "./settingsPages.ts";
+export type { SettingsPage, SettingsPageEntry } from "./settingsPages.ts";
 export { TAB_PATH, detailPath, inLibraryStack, isDetailPath, tabOfPath } from "./navigation.ts";
 export type { DetailScreen } from "./navigation.ts";
 export { planAlert } from "./alert.ts";

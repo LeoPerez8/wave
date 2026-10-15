@@ -144,7 +144,7 @@ function MissingSongsDownloadRows() {
 }
 
 /**
- * Settings › Wave Account: signing in with Google, signing out and deleting
+ * Settings › Accounts › Wave Account: signing in with Google, signing out and deleting
  * the account, and downloading the songs this phone has no file for.
  */
 export function WaveAccountSettingsSection() {
@@ -152,8 +152,8 @@ export function WaveAccountSettingsSection() {
   const view = waveAccountView(account.state, WAVE_ACCOUNT_CONFIG !== null);
 
   return (
-    <>
-      <CatalogLine className="mb-2 mt-12">Wave Account</CatalogLine>
+    <View>
+      <CatalogLine className="mb-2">Wave Account</CatalogLine>
       <Hairline />
       {view.kind === "account" ? (
         <>
@@ -183,6 +183,6 @@ export function WaveAccountSettingsSection() {
           Wave accounts aren't set up on this build, so there's nothing to sign in to.
         </Text>
       )}
-    </>
+    </View>
   );
 }
