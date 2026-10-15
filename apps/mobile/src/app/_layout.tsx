@@ -4,6 +4,7 @@ import "../../global.css";
 import "@/settings/theme";
 
 import { Stack } from "expo-router";
+import logotype from "expo-router/assets/logotype.png";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -20,6 +21,9 @@ import { NowPlayingSheet, UnderNowPlaying } from "@/nowPlaying/NowPlayingSheet";
 import { startServices } from "@/services";
 import { startSync } from "@/sync/startSync";
 import { useThemeColor } from "@/theme/useThemeColor";
+
+// TEMPORARY CI probe: a package image Metro must emit as a new resource.
+export const ciProbeAsset = logotype;
 
 export default function RootLayout() {
   const background = useThemeColor("background");
