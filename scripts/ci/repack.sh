@@ -42,7 +42,7 @@ tools="$(ls -d "${ANDROID_HOME:?}"/build-tools/* | sort -V | tail -n 1)"
   --ks-key-alias androiddebugkey --key-pass pass:android --out "$output" "$work/aligned.apk"
 
 # It must install over the kept build: same signer, package and versionCode.
-signer() { "$tools/apksigner" verify --print-certs "$1" | grep 'certificate SHA-256 digest'; }
+signer() { "$tools/apksigner" verify --print-certs "$1" | grep 'certificate SHA-256 digest:' | sed 's/.*digest: //' | sort -u; }
 package() { "$tools/aapt2" dump badging "$1" | grep '^package:'; }
 signer "$output"
 package "$output"
