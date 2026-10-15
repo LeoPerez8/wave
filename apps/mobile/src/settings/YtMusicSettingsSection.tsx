@@ -1,6 +1,4 @@
-import { artistInitial, ytAccountView, type YtAccount, type YtAccountNote } from "@wave/core";
-import { IconUser } from "@tabler/icons-react-native";
-import { Image } from "expo-image";
+import { ytAccountView, type YtAccount, type YtAccountNote } from "@wave/core";
 import { Switch, Text, View } from "react-native";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
@@ -9,16 +7,14 @@ import { Hairline } from "@/catalog/Hairline";
 import { TextButton } from "@/components/TextButton";
 import { useThemeColor } from "@/theme/useThemeColor";
 
+import { AccountPhoto } from "./AccountPhoto";
 import { useYtAccount } from "./ytAccount";
 import { setYtMusicEnabled, useYtMusicEnabled } from "./ytMusic";
-
-/** The account picture's size: a row's leading circle, like an artist's. */
-const PHOTO = CELL * 5;
 
 const NOTES: Record<YtAccountNote, string> = {
   optional:
     "Signing in is optional. Signed in, Search, playback and Discover use your " +
-    "account. The session stays on this phone. Without a Soulseek account, or when Soulseek " +
+    "account. The session stays on this phone. With Download in best quality off, or when Soulseek " +
     "can't deliver a song, downloads come from YouTube Music: AAC at 256 kbps with Premium, " +
     "about 128 kbps without.",
   expired:
@@ -33,32 +29,6 @@ const SIGN_IN_LABELS = {
   signingIn: "Signing In…",
 } as const;
 
-/** The account's picture as a circle (people, like artists, are round), else its initial. */
-function AccountPhoto({ account }: { account: YtAccount }) {
-  const secondary = useThemeColor("secondary");
-  const fill = useThemeColor("fill");
-  const circle = { width: PHOTO, height: PHOTO, borderRadius: PHOTO / 2 };
-  if (account.photoUrl !== null)
-    return (
-      <Image
-        source={{ uri: account.photoUrl }}
-        style={[circle, { backgroundColor: fill }]}
-        contentFit="cover"
-        accessibilityIgnoresInvertColors
-      />
-    );
-  const initial = artistInitial(account.name);
-  return (
-    <View className="items-center justify-center bg-fill" style={circle}>
-      {initial === "" ? (
-        <IconUser size={PHOTO / 3} color={secondary} strokeWidth={1.25} />
-      ) : (
-        <Text className="font-sans text-body font-light text-secondary">{initial}</Text>
-      )}
-    </View>
-  );
-}
-
 /** The signed-in account: its picture, name and email, and Sign Out. */
 function AccountRow({ account, onSignOut }: { account: YtAccount; onSignOut: () => void }) {
   return (
@@ -69,7 +39,7 @@ function AccountRow({ account, onSignOut }: { account: YtAccount; onSignOut: () 
         className="flex-row items-center"
         style={{ minHeight: grid.row, gap: CELL * 1.5 }}
       >
-        <AccountPhoto account={account} />
+        <AccountPhoto name={account.name} photoUrl={account.photoUrl} />
         <View className="flex-1 justify-center">
           <Text numberOfLines={1} className="font-sans text-body font-medium text-foreground">
             {account.name}

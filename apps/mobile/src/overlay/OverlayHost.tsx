@@ -3,7 +3,7 @@ import {
   cardKeyboard,
   cardShowsHeading,
   placeOverlayCard,
-  veilAround,
+  veilPath,
   visibleHighlight,
   withOpacity,
   type OverlayRect,
@@ -33,6 +33,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Svg, { Path } from "react-native-svg";
 import { scheduleOnRN } from "react-native-worklets";
 
 import { CELL, grid } from "@/catalog/grid";
@@ -79,9 +80,12 @@ const SCRIM_OPACITY = 0.25;
 /**
  * What a card was opened from stays clear of the veil, washed with the accent
  * at this strength so it stands out on any theme. The wash fills the clear hole
- * exactly, square like the veil's edges, so no corner of a row's artwork pokes out.
+ * exactly, so no corner of a row's artwork pokes out.
  */
 const ORIGIN_TINT_OPACITY = 0.16;
+
+/** Rounded corners of the veil's hole and the wash that fills it. */
+const ORIGIN_RADIUS = CELL;
 
 /**
  * Hosts Wave's glass dialogs. Wrap the app's navigator with it: the navigator
@@ -254,19 +258,25 @@ function OverlayCard({ entry, frontmost }: { entry: OverlayEntry; frontmost: boo
           accessibilityLabel="Close"
           onPress={() => dismissOverlay(entry)}
         >
-          {veilAround(veil ?? window, highlight).map((band) => (
-            <View
-              key={`${band.left},${band.top}`}
-              pointerEvents="none"
-              style={{ ...frameOf(band), backgroundColor: withOpacity(scrim, SCRIM_OPACITY) }}
+          <Svg
+            pointerEvents="none"
+            width={(veil ?? window).width}
+            height={(veil ?? window).height}
+            style={StyleSheet.absoluteFill}
+          >
+            <Path
+              d={veilPath(veil ?? window, highlight, ORIGIN_RADIUS)}
+              fill={withOpacity(scrim, SCRIM_OPACITY)}
+              fillRule="evenodd"
             />
-          ))}
+          </Svg>
           {/* Only the frontmost card's veil tints it, so stacked cards don't deepen it. */}
           {highlight !== undefined && frontmost && (
             <View
               pointerEvents="none"
               style={{
                 ...frameOf(highlight),
+                borderRadius: ORIGIN_RADIUS,
                 backgroundColor: withOpacity(accent, ORIGIN_TINT_OPACITY),
               }}
             />

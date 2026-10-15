@@ -25,6 +25,7 @@ interface Shown {
   readonly items: readonly PlaylistEntryRow[] | undefined;
 }
 
+// oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
 const readPlaylist = (id: number) => LibraryStore.use((store) => store.getPlaylist(id));
 
 function PlaylistHead({ shown }: { shown: Shown }) {

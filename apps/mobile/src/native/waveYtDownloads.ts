@@ -38,11 +38,7 @@ export interface NativeSavedDownload {
  * couldn't be saved.
  */
 export type YtDownloadErrorCode =
-  | "ERR_YT_OFFLINE"
-  | "ERR_YT_FAILED"
-  | "ERR_YT_DISABLED"
-  | "ERR_YT_CANCELLED"
-  | "ERR_YT_STORAGE";
+  "ERR_YT_OFFLINE" | "ERR_YT_FAILED" | "ERR_YT_DISABLED" | "ERR_YT_CANCELLED" | "ERR_YT_STORAGE";
 
 declare class WaveYtDownloadsModule extends NativeModule {
   album(browseId: string): Promise<NativeYtAlbum>;

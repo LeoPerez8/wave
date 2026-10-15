@@ -13,7 +13,8 @@ export interface ArtistRankingSong {
   readonly discNumber: number | null;
   readonly trackNumber: number | null;
   readonly titleSort: string;
-  readonly path: string;
+  /** The file; null for a missing song. */
+  readonly path: string | null;
 }
 
 export interface ArtistRankingInput {

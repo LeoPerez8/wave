@@ -5,6 +5,7 @@ import { withGradleBuildCache } from "./plugins/withGradleBuildCache.ts";
 import { withHermesFlags } from "./plugins/withHermesFlags.ts";
 import { withLauncherIcons } from "./plugins/withLauncherIcons.ts";
 import { withLaunchSplash } from "./plugins/withLaunchSplash.ts";
+import { withShareShortcut } from "./plugins/withShareShortcut.ts";
 
 // Font files ship inside the @expo-google-fonts/inter package and are embedded
 // natively at prebuild time, so text renders in Inter from the first frame.
@@ -36,11 +37,19 @@ const config: ExpoConfig = {
     // Acceptable because Wave is sideloaded, not distributed on the Play Store.
     permissions: ["android.permission.MANAGE_EXTERNAL_STORAGE"],
     // Lists Wave in the share sheet for shared text and links, and only those: a playlist
-    // link shared from YT Music or a browser opens its import card (docs/spec.md).
+    // link shared from YT Music or a browser opens its import card (docs/spec.md). The
+    // "Import to Wave" sharing shortcut (withShareShortcut) sends its shares here too.
     intentFilters: [{ action: "SEND", category: ["DEFAULT"], data: [{ mimeType: "text/plain" }] }],
   },
   experiments: {
     typedRoutes: true,
+  },
+  // The Wave account (docs/spec.md, "Wave account and sync"): the sync service's URL and Wave's
+  // web OAuth client id, the audience of the Google ID tokens it accepts. Neither is a secret.
+  // Empty, Settings says the account isn't set up on this build.
+  extra: {
+    syncUrl: "https://wave-sync.leonardolp2424.workers.dev",
+    googleWebClientId: "334515982590-tq2ks7u11rt4708ifaotkumjfakgodk8.apps.googleusercontent.com",
   },
   plugins: [
     "expo-router",
@@ -94,7 +103,9 @@ const config: ExpoConfig = {
 // The moving logo on the launch splash and a splash for each choice Settings › Theme offers
 // (Android 13+), and one launcher icon per primary × secondary, switched from Settings › Theme.
 // Applied here, before the plugin list, so the splash's changes run after expo-splash-screen's
-// (Expo runs mods in reverse order) and can edit that splash's style. Gradle's build cache
-// is on so CI reuses outputs from earlier builds (#185), and Hermes skips the source map
-// nothing reads (#187).
-export default withHermesFlags(withGradleBuildCache(withLaunchSplash(withLauncherIcons(config))));
+// (Expo runs mods in reverse order) and can edit that splash's style. The sharing shortcut's
+// share target comes first so it runs last, once the launcher icons' aliases exist.
+// Gradle reuses cached outputs (#185), and Hermes skips the unused source map (#187).
+export default withHermesFlags(
+  withGradleBuildCache(withLaunchSplash(withLauncherIcons(withShareShortcut(config)))),
+);

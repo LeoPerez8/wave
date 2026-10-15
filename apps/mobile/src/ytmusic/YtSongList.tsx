@@ -210,7 +210,7 @@ export const useYtAlbumDownloadButton = (
  * its progress line ("Downloading · 3 of 10") and its button, or null.
  */
 export const useYtPlaylistDownloadButton = (
-  entries: readonly MixedSong<NativeYtSong, { readonly path: string }>[],
+  entries: readonly MixedSong<NativeYtSong, { readonly path: string | null }>[],
 ): { readonly progress: string | null; readonly button: YtListDownloadButton | null } => {
   const inLibrary = useLoadedInLibrary();
   const download = useYtPlaylistDownload(entries, inLibrary);

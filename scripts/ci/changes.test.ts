@@ -17,6 +17,13 @@ describe("changes", () => {
     assert.equal(changes(["docs/spec.md", "apps/mobile/src/app/_layout.tsx"]).apk, true);
   });
 
+  it("checks a sync-service change without building the APK or running native tests", () => {
+    const result = changes(["apps/sync/src/worker.ts", "apps/sync/package.json"]);
+    assert.equal(result.apk, false);
+    assert.equal(result.nativeTests, false);
+    assert.equal(result.allPackages, false);
+  });
+
   for (const path of [
     "packages/core/src/queue.ts",
     "package.json",

@@ -55,6 +55,7 @@ import { lyricsWritten } from "./lyricsEdits";
 export class LookupFailed extends Data.TaggedError("LookupFailed")<{ readonly cause: unknown }> {}
 
 /** Settings turned lookups off: no request was made. */
+// oxlint-disable-next-line typescript/no-empty-object-type -- Effect TaggedError uses {} for a tag-only error with no fields.
 export class LookupsOff extends Data.TaggedError("LookupsOff")<{}> {}
 
 /** The file couldn't be written; it is left as it was. */
@@ -234,7 +235,7 @@ export const writeLyricsAndGenre = (
         )
         // Drops a genre no song has any more.
         .pipe(
-          Effect.andThen(store.removeTracks([])),
+          Effect.andThen(store.filesGone([])),
           Effect.ensuring(Effect.sync(libraryEdited)),
           // The file has its new tags; the next scan brings the index up to date.
           Effect.ignore,

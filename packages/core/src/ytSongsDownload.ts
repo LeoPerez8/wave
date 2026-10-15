@@ -171,9 +171,7 @@ export const ytAlbumDownload = <S extends YtSong>(
 ): YtAlbumDownload<S> => named(ytSongsDownload(songs, input), ALBUM_ACTIONS);
 
 export type YtPlaylistDownloadAction =
-  | "downloadPlaylist"
-  | "retryFailed"
-  | "cancelPlaylistDownload";
+  "downloadPlaylist" | "retryFailed" | "cancelPlaylistDownload";
 
 /** Where a playlist's download stands, and what acting on it does. */
 export type YtPlaylistDownload<S extends YtSong = YtSong> = YtSongsDownload<
@@ -194,7 +192,7 @@ const PLAYLIST_ACTIONS: { readonly [K in YtSongsDownloadAction]: YtPlaylistDownl
  * entry that has taken its place, and counts as saved.
  */
 export const ytPlaylistDownload = <S extends YtSong>(
-  entries: readonly MixedSong<S, { readonly path: string }>[],
+  entries: readonly MixedSong<S, { readonly path: string | null }>[],
   input: SongsDownloadInput<S>,
 ): YtPlaylistDownload<S> => {
   const downloads = ytDownloadsFromJournal(input.jobs);
@@ -203,7 +201,8 @@ export const ytPlaylistDownload = <S extends YtSong>(
   );
   const songs = entries.flatMap((entry) => (entry.source === "stream" ? [entry.song] : []));
   const landed = entries.filter(
-    (entry) => entry.source === "library" && savedPaths.has(entry.track.path),
+    (entry) =>
+      entry.source === "library" && entry.track.path !== null && savedPaths.has(entry.track.path),
   ).length;
   return named(songsDownload(songs, input, downloads, landed), PLAYLIST_ACTIONS);
 };

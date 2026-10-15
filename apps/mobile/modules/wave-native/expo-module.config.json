@@ -7,6 +7,7 @@
       "expo.modules.wavenative.yt.YtMusicModule",
       "expo.modules.wavenative.yt.YtDownloadModule",
       "expo.modules.wavenative.soulseek.SoulseekModule",
+      "expo.modules.wavenative.account.WaveAccountModule",
       "expo.modules.wavenative.lookup.LibraryLookupModule"
     ]
   }

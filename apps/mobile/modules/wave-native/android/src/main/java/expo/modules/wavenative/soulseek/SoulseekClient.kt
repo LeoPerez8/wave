@@ -21,11 +21,20 @@ import kotlin.concurrent.thread
 
 class SoulseekCredentials(val username: String, val password: String) {
   override fun toString() = "SoulseekCredentials([redacted])"
+
+  /** The same account: the same username and password. */
+  fun sameAs(other: SoulseekCredentials?) = other != null && username == other.username && password == other.password
 }
 
 interface SoulseekCredentialsStore {
   fun load(): SoulseekCredentials?
   fun save(value: SoulseekCredentials?)
+}
+
+/** Whether Download in best quality is on: null on a phone from before the switch. */
+interface SoulseekSwitchStore {
+  fun load(): Boolean?
+  fun save(on: Boolean)
 }
 
 /** Process-owned client. All network and file work runs on the caller's IO thread, outside JS. */
@@ -35,10 +44,17 @@ class SoulseekClient(
   private val port: Int = 2242,
   /** Whether the phone is online, which tells Soulseek's server being unreachable from being offline. */
   private val online: () -> Boolean = { true },
+  private val switch: SoulseekSwitchStore,
+  /** While the phone is signed in to one, the Soulseek account belongs to the Wave account. */
+  private val waveAccount: WaveAccountSoulseek = NoWaveAccount,
 ) : Closeable {
   @Volatile private var server: Socket? = null
   private var listener: ServerSocket? = null
   private var credentials = credentialsStore.load()
+  /** The account [server] is logged in as: an old one after a switch, until its downloads end. */
+  @Volatile private var connectedAs: SoulseekCredentials? = null
+  /** Download in best quality. A phone connected to an account of its own before the switch keeps it, on. */
+  @Volatile private var on = switch.load() ?: (credentials != null)
   private val token = AtomicInteger(java.security.SecureRandom().nextInt(Int.MAX_VALUE / 2 - 1) + 1)
   private val peers = ConcurrentHashMap<String, Socket>()
   /**
@@ -68,11 +84,113 @@ class SoulseekClient(
   private val transfers = ConcurrentHashMap<Pair<String, Long>, Pending>()
 
   fun session(): Map<String, Any?> = mapOf(
-    "status" to if (credentials == null) "signedOut" else if (server?.isClosed == false) "connected" else "disconnected",
+    "status" to if (!on || credentials == null) "off" else if (server?.isClosed == false) "connected" else "disconnected",
     "username" to credentials?.username,
   )
 
+  /**
+   * Turns Download in best quality on: connects the phone's Soulseek account, making one when it
+   * has none. Signed in to a Wave account, the Wave account's comes first: the phone uses it
+   * instead of its own or a new one, and one the Wave account lacks (or Soulseek rejected) goes
+   * up at once. When Wave's server can't be asked, the phone goes on as signed out, and the next
+   * pull settles it ([followWaveAccount]).
+   */
+  @Synchronized fun turnOn(): Map<String, Any?> {
+    val kept = askWaveAccount()
+    kept?.account?.let { if (!it.sameAs(credentials)) adopt(it) }
+    connectAccount()
+    val connected = credentials
+    if (kept != null && connected != null && !connected.sameAs(kept.account)) keepOnWaveAccount(connected)
+    turn(true)
+    return session()
+  }
+
+  /**
+   * Follows the Wave account's Soulseek account, at sign-in and each pull while signed in: when
+   * it has one and the phone's is different, the phone switches to it and forgets its own; when
+   * it has none, the phone's goes up. Signed out, it does nothing. Throws when Wave's server
+   * can't be asked; nothing changes then.
+   */
+  @Synchronized fun followWaveAccount(): Map<String, Any?> {
+    if (!waveAccount.signedIn()) return session()
+    val kept = waveAccount.read()
+    val own = credentials
+    if (kept != null && !kept.sameAs(own)) adopt(kept)
+    else if (kept == null && own != null) waveAccount.keep(own)
+    return session()
+  }
+
+  /** What the Wave account keeps ([account], null for none); null when signed out or it can't be asked. */
+  private class Kept(val account: SoulseekCredentials?)
+
+  private fun askWaveAccount(): Kept? =
+    if (!waveAccount.signedIn()) null else runCatching { Kept(waveAccount.read()) }.getOrNull()
+
+  /** Sends [account] up as the Wave account's while signed in. A failure waits for the next pull. */
+  private fun keepOnWaveAccount(account: SoulseekCredentials) {
+    if (waveAccount.signedIn()) runCatching { waveAccount.keep(account) }
+  }
+
+  /**
+   * The Wave account's Soulseek account becomes the phone's, which is forgotten. Downloads running
+   * on a connection with the old one finish on it; the next search or download with none running
+   * connects with [account] ([ensureConnected]).
+   */
+  private fun adopt(account: SoulseekCredentials) {
+    try { credentialsStore.save(account) }
+    catch (e: Exception) { throw SoulseekException(SoulseekFailure.STORAGE, cause = e) }
+    credentials = account
+    if (server != null && downloads.isEmpty()) close()
+  }
+
+  /**
+   * Connects the account downloads use. The one place that picks it: the phone's own, else a new
+   * one with random credentials, drawn again while Soulseek says a name is taken (a taken name
+   * and a wrong password look the same to it). An account of its own that Soulseek rejects is
+   * forgotten, and a new one made.
+   */
+  private fun connectAccount() {
+    credentials?.let { saved ->
+      try { return login(saved) }
+      catch (e: SoulseekException) { if (e.failure == SoulseekFailure.AUTH) forget() else throw e }
+    }
+    repeat(ACCOUNT_DRAWS) {
+      try { return login(SoulseekAccounts.draw()) }
+      catch (e: SoulseekException) { if (e.failure != SoulseekFailure.AUTH) throw e }
+    }
+    throw SoulseekException(SoulseekFailure.NO_ACCOUNT)
+  }
+
+  /**
+   * Connects [username]'s account and downloads use it, with Download in best quality on. Signed
+   * in, it goes up as the Wave account's. The app never calls it (it has no Soulseek sign-in);
+   * scripts/music-folder's PC bridge (PcSoulseek.kt) logs in with it.
+   */
   @Synchronized fun connect(username: String, password: String): Map<String, Any?> {
+    val account = SoulseekCredentials(username, password)
+    login(account)
+    keepOnWaveAccount(account)
+    turn(true)
+    return session()
+  }
+
+  /** Turns Download in best quality off. The account stays on the phone for the next time. */
+  @Synchronized fun turnOff(): Map<String, Any?> {
+    turn(false)
+    close()
+    return session()
+  }
+
+  private fun turn(on: Boolean) {
+    try { switch.save(on) }
+    catch (e: Exception) { throw SoulseekException(SoulseekFailure.STORAGE, cause = e) }
+    this.on = on
+  }
+
+  /** Logs in to Soulseek's server as [account] and keeps it as the phone's account. */
+  private fun login(account: SoulseekCredentials) {
+    val username = account.username
+    val password = account.password
     if (username.isBlank() || username.length > 30 || username.trim() != username || username.any { it.code !in 32..126 } || password.isEmpty() || password.length > 1024) {
       throw SoulseekException(SoulseekFailure.AUTH)
     }
@@ -96,10 +214,10 @@ class SoulseekClient(
       try { credentialsStore.save(authenticated) }
       catch (e: Exception) { throw SoulseekException(SoulseekFailure.STORAGE, cause = e) }
       credentials = authenticated
+      connectedAs = authenticated
       socket.soTimeout = 0
       server = socket
       startReaders(socket, incoming)
-      return session()
     } catch (e: Exception) {
       socket.close()
       listener?.close()
@@ -185,7 +303,8 @@ class SoulseekClient(
     val remoteAddress = try { future.get(12, TimeUnit.SECONDS) } finally { addressRequests.remove(user, future) }
     try {
       val remote = open(remoteAddress)
-      SoulseekWire.write(remote.getOutputStream(), 1, true) { string(credentials!!.username); string("P"); uint(0) }
+      val us = connectedAs ?: throw connectionLost()
+      SoulseekWire.write(remote.getOutputStream(), 1, true) { string(us.username); string("P"); uint(0) }
       peers[user] = remote
       launchPeer(remote, forDownload = true) { handlePeer(user, "P", remote) }
       return remote
@@ -205,11 +324,15 @@ class SoulseekClient(
   }
 
   @Synchronized private fun ensureConnected() {
-    if (server?.isClosed == false) return
+    // Off, downloads don't use Soulseek, though the phone keeps its account.
+    if (!on) throw SoulseekException(SoulseekFailure.SIGNED_OUT)
+    // After a switch to the Wave account's, the old connection serves the downloads running on it.
+    if (server?.isClosed == false && (credentials?.sameAs(connectedAs) != false || downloads.isNotEmpty())) return
     val saved = credentials ?: throw SoulseekException(SoulseekFailure.SIGNED_OUT)
-    try { connect(saved.username, saved.password) }
+    try { login(saved) }
     catch (e: SoulseekException) {
-      if (e.failure == SoulseekFailure.AUTH) { credentials = null; credentialsStore.save(null) }
+      // Turning the switch on again makes a new account.
+      if (e.failure == SoulseekFailure.AUTH) { forget(); turn(false) }
       throw e
     }
   }
@@ -448,16 +571,19 @@ class SoulseekClient(
     InetAddress.getByAddress(ByteArray(4) { (ip ushr ((3 - it) * 8)).toByte() }), port.toInt(),
   )
 
-  @Synchronized fun disconnect(): Map<String, Any?> {
-    close()
+  /** Forgets an account Soulseek rejected. */
+  private fun forget() {
     credentials = null
     credentialsStore.save(null)
-    return session()
   }
 
   @Synchronized override fun close() {
+    // Waiting downloads lose the connection before their peer sockets close: a peer thread that
+    // sees its socket go must not fail them as the peer's fault.
+    downloads.values.forEach { it.finished.completeExceptionally(connectionLost()) }
     server?.close()
     server = null
+    connectedAs = null
     listener?.close()
     listener = null
     sockets.forEach { runCatching { it.close() } }
@@ -472,6 +598,9 @@ class SoulseekClient(
     addressRequests.clear()
   }
 }
+
+/** How many usernames turning Download in best quality on draws before it gives up. */
+private const val ACCOUNT_DRAWS = 5
 
 /** How often a waiting download asks whether it is still wanted. */
 private const val CANCEL_POLL_MS = 250L

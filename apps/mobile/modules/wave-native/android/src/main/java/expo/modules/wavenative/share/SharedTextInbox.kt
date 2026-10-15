@@ -4,9 +4,9 @@ import android.content.Intent
 
 /**
  * Text shared to Wave from another app's share sheet (the `text/plain` SEND intent filter in
- * app.config.ts), held until JS takes it. The main activity's intents arrive here from
- * [expo.modules.wavenative.WaveNativePackage]: the one that started it and any later one
- * (a share with Wave already open). Only the latest share is kept.
+ * app.config.ts, or the "Import to Wave" [ShareShortcut]), held until JS takes it. The main
+ * activity's intents arrive here from [expo.modules.wavenative.WaveNativePackage]: the one that
+ * started it and any later one (a share with Wave already open). Only the latest share is kept.
  */
 object SharedTextInbox {
   private var pending: String? = null

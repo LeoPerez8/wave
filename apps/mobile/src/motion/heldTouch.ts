@@ -10,8 +10,7 @@ import { makeExternalStore } from "@/lib/externalStore";
  * stop scrolling meanwhile. Points are in the app window, in dp.
  */
 export type HeldTouchEvent =
-  | { readonly type: "move" | "release"; readonly point: SlidePoint }
-  | { readonly type: "cancel" };
+  { readonly type: "move" | "release"; readonly point: SlidePoint } | { readonly type: "cancel" };
 
 const held = makeExternalStore<SlidePoint | null>(null);
 const listeners = new Set<(event: HeldTouchEvent) => void>();

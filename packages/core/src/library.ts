@@ -279,14 +279,23 @@ export const normalizeTrack = (raw: RawTrack): LibraryTrack => {
 /** Orders strings by code unit, the way SQLite's default collation does. */
 export const compareStrings = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
+/** A track's file, or none (null) for a missing song, which the Wave account has and the phone lacks. */
+interface TrackFile {
+  readonly path: string | null;
+}
+
+/** Orders by file, the last tie-break: a missing song (no file) before the files. */
+const compareFiles = (a: TrackFile, b: TrackFile): number =>
+  compareStrings(a.path ?? "", b.path ?? "");
+
 /** Orders tracks by title, the way the Songs list shows them. */
 export const compareByTitle = (
-  a: Pick<LibraryTrack, "titleSort" | "artistSort" | "path">,
-  b: Pick<LibraryTrack, "titleSort" | "artistSort" | "path">,
+  a: Pick<LibraryTrack, "titleSort" | "artistSort"> & TrackFile,
+  b: Pick<LibraryTrack, "titleSort" | "artistSort"> & TrackFile,
 ): number =>
   compareStrings(a.titleSort, b.titleSort) ||
   compareStrings(a.artistSort, b.artistSort) ||
-  compareStrings(a.path, b.path);
+  compareFiles(a, b);
 
 /**
  * Orders tracks within an album: by disc, then track number. A missing disc
@@ -294,10 +303,10 @@ export const compareByTitle = (
  * disc, by title.
  */
 export const compareAlbumTracks = (
-  a: Pick<LibraryTrack, "discNumber" | "trackNumber" | "titleSort" | "path">,
-  b: Pick<LibraryTrack, "discNumber" | "trackNumber" | "titleSort" | "path">,
+  a: Pick<LibraryTrack, "discNumber" | "trackNumber" | "titleSort"> & TrackFile,
+  b: Pick<LibraryTrack, "discNumber" | "trackNumber" | "titleSort"> & TrackFile,
 ): number =>
   (a.discNumber ?? 1) - (b.discNumber ?? 1) ||
   (a.trackNumber ?? Number.MAX_SAFE_INTEGER) - (b.trackNumber ?? Number.MAX_SAFE_INTEGER) ||
   compareStrings(a.titleSort, b.titleSort) ||
-  compareStrings(a.path, b.path);
+  compareFiles(a, b);

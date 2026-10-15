@@ -37,7 +37,7 @@ let db: TestDatabase;
 const deleteSongs = (...ids: number[]): void => {
   const paths = ids.map((id) => {
     const track = db.select().from(schema.tracks).where(eq(schema.tracks.id, id)).get();
-    if (track === undefined) throw new Error(`no track ${id}`);
+    if (track?.path == null) throw new Error(`no track ${id} with a file`);
     return track.path;
   });
   deleteTracks(db, paths);

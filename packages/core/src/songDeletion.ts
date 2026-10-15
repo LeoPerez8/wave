@@ -21,21 +21,50 @@ export interface SongDeleteFailure {
   readonly reason: SongDeleteFailureReason;
 }
 
-/** The alert that asks first, `Delete "Song"?`, with a destructive Delete. */
+/**
+ * The alert that asks first, `Delete "Song"?`, with a destructive Delete.
+ * [signedIn] to a Wave account, the songs leave the account too.
+ */
 export const confirmSongDeletion = (
+  songs: readonly { readonly title: string }[],
+  { signedIn = false }: { readonly signedIn?: boolean } = {},
+): AlertSpec & { readonly action: NonNullable<AlertSpec["action"]> } => {
+  const only = songs.length === 1 ? songs[0] : undefined;
+  const files =
+    only === undefined
+      ? "The files are removed from your phone"
+      : "The file is removed from your phone";
+  const account = only === undefined ? "the songs" : "the song";
+  return {
+    title:
+      only === undefined
+        ? `Delete ${songs.length.toLocaleString("en")} songs?`
+        : `Delete “${only.title}”?`,
+    message: signedIn ? `${files}, and ${account} from your Wave account.` : `${files}.`,
+    action: { label: "Delete", destructive: true },
+  };
+};
+
+/**
+ * The alert that asks before missing songs (no file on this phone) leave the
+ * Library, `Remove "Song" from your Library?`: they leave the Wave account
+ * too, and the other phones at their next pull, except a phone that has the
+ * file, as a pull never takes a file's song away.
+ */
+export const confirmSongRemoval = (
   songs: readonly { readonly title: string }[],
 ): AlertSpec & { readonly action: NonNullable<AlertSpec["action"]> } => {
   const only = songs.length === 1 ? songs[0] : undefined;
   return {
     title:
       only === undefined
-        ? `Delete ${songs.length.toLocaleString("en")} songs?`
-        : `Delete “${only.title}”?`,
+        ? `Remove ${songs.length.toLocaleString("en")} songs from your Library?`
+        : `Remove “${only.title}” from your Library?`,
     message:
       only === undefined
-        ? "The files are removed from your phone."
-        : "The file is removed from your phone.",
-    action: { label: "Delete", destructive: true },
+        ? "They leave your Wave account too. Your other phones lose them at their next sync, unless they have their files."
+        : "It leaves your Wave account too. Your other phones lose it at their next sync, unless they have its file.",
+    action: { label: "Remove", destructive: true },
   };
 };
 

@@ -24,3 +24,7 @@
 # Desktop JVM classes ktor mentions but never uses on Android.
 -dontwarn java.lang.management.**
 -dontwarn org.slf4j.impl.**
+
+# Wave account: Credential Manager finds its Play services provider by reflection.
+-if class androidx.credentials.CredentialManager
+-keep class androidx.credentials.playservices.** { *; }

@@ -1,4 +1,5 @@
 import { YT_PLAYLIST_DOWNLOAD_ACTION_LABELS, entryDivider } from "@wave/core";
+import type { ReactNode } from "react";
 import { Text, View } from "react-native";
 
 import { ArtistImage } from "@/catalog/ArtistImage";
@@ -26,10 +27,11 @@ import { useSlideToChoose } from "@/overlay/useSlideToChoose";
 import { useLoadedInLibrary } from "@/ytmusic/libraryFinder";
 import { playlistYtSongs, runYtDownloadAction, useYtPlaylistDownload } from "@/ytmusic/YtDownloads";
 
-import { targetHeading, type ActionItems, type PlaylistPlace } from "./actionTargets";
-import { useItemActions } from "./itemActions";
+import { targetHeading, type ActionItems, type Heading, type PlaylistPlace } from "./actionTargets";
+import { useItemActions, type ActionEntry } from "./itemActions";
 
 const NO_ENTRIES: readonly PlaylistEntryRow[] = [];
+const NO_DOWNLOADS: readonly MenuEntry[] = [];
 
 /** How a menu was opened. */
 export interface MenuOptions {
@@ -38,20 +40,28 @@ export interface MenuOptions {
 }
 
 /**
- * Floats the menu next to the row (or button) whose press opened it ([anchor],
- * taken at the press), centred when opened some other way. A playlist's menu
- * is given its [entries], for its download entries.
+ * Floats [target]'s card, drawn by [render], next to the row (or button) whose
+ * press opened it ([anchor], taken at the press), centred when opened some
+ * other way. The Design preview opens its menus with it too.
  */
+export const openItemCard = (
+  target: ActionItems,
+  render: (close: () => void) => ReactNode,
+  anchor = pressedRect(),
+): void => {
+  openOverlay({ label: targetHeading(target, undefined)?.title ?? "Actions", anchor, render });
+};
+
+/** Opens [target]'s menu. A playlist's menu is given its [entries], for its download entries. */
 const openActions = (
   target: ActionItems,
   options: MenuOptions = {},
   anchor = pressedRect(),
   entries: readonly PlaylistEntryRow[] = NO_ENTRIES,
-): void => {
-  openOverlay({
-    label: targetHeading(target, undefined)?.title ?? "Actions",
-    anchor,
-    render: (close) =>
+): void =>
+  openItemCard(
+    target,
+    (close) =>
       target.kind === "section" ? (
         <SectionActionsMenu target={target} close={close} />
       ) : (
@@ -62,8 +72,8 @@ const openActions = (
           playlistEntries={entries}
         />
       ),
-  });
-};
+    anchor,
+  );
 
 /** Opens the long-press menu for a track (in a playlist, pass its place there). */
 export const openTrackActions = (
@@ -167,15 +177,66 @@ function ActionsMenu({
   /** A playlist's entries, for its download entries; none for other targets. */
   playlistEntries: readonly PlaylistEntryRow[];
 }) {
-  const head = targetHeading(target, sectionSongs);
   const actions = useItemActions(target, { surface: "menu", finish: close, onSelect });
   const downloads = usePlaylistDownloadEntries(listed, close);
+  return (
+    <ItemMenuCard
+      target={target}
+      sectionSongs={sectionSongs}
+      actions={actions}
+      downloads={downloads}
+    />
+  );
+}
+
+/**
+ * [target]'s menu card: what it is, then [actions], a playlist's [downloads]
+ * after Add to Playlist. The Design preview draws it too, for synthetic items,
+ * with actions that only close it.
+ */
+export function ItemMenuCard({
+  target,
+  sectionSongs,
+  actions,
+  downloads = NO_DOWNLOADS,
+}: {
+  target: ActionItems;
+  /** Each Library entry's song count, for a Library entry's heading. */
+  sectionSongs?: LibraryCounts | undefined;
+  actions: readonly ActionEntry[];
+  /** A playlist's download entries; none for other targets. */
+  downloads?: readonly MenuEntry[];
+}) {
   // A playlist's download entries follow Add to Playlist, before Rename and Delete.
   const entries: MenuEntry[] = actions.flatMap((entry): MenuEntry[] => [
     { key: entry.action, ...entry },
     ...(entry.action === "addToPlaylist" ? downloads : []),
   ]);
 
+  return (
+    <MenuCard
+      heading={targetHeading(target, sectionSongs)}
+      // A Library entry's heading counts the songs it acts on, which its row doesn't show.
+      alwaysHeading={target.kind === "section"}
+      entries={entries}
+    />
+  );
+}
+
+/**
+ * What a menu card draws: its heading (unless the row it was opened from is
+ * highlighted), then its entries.
+ */
+function MenuCard({
+  heading: head,
+  alwaysHeading = false,
+  entries,
+}: {
+  heading: Heading | undefined;
+  /** Shows the heading even under a highlight (`CardHeading`'s `always`). */
+  alwaysHeading?: boolean;
+  entries: readonly MenuEntry[];
+}) {
   // The finger that long-pressed the row can slide onto an entry and lift to run it;
   // the entry under it shows pressed meanwhile.
   const { underFinger, trackEntry, trackList } = useSlideToChoose((index) =>
@@ -186,8 +247,7 @@ function ActionsMenu({
   return (
     <>
       {head !== undefined && (
-        // A Library entry's heading counts the songs it acts on, which its row doesn't show.
-        <CardHeading always={target.kind === "section"}>
+        <CardHeading always={alwaysHeading}>
           {head.covers !== undefined && <Mosaic paths={head.covers} size={CELL * 5} />}
           {head.artist !== undefined && <ArtistImage artist={head.artist} size={CELL * 5} />}
           <View className="flex-1">

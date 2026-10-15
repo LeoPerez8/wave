@@ -385,4 +385,19 @@ describe("ordering", () => {
       ],
     );
   });
+
+  test("a missing song (no file) takes its place among its album's tracks and the Songs list", () => {
+    const missing = { ...albumTrack("", "1", "2", "Two"), path: null };
+    const album = [albumTrack("/d1t3.mp3", "1", "3", "Three"), missing];
+    assert.deepEqual(
+      album.sort(compareAlbumTracks).map((t) => t.title),
+      ["Two", "Three"],
+    );
+    // Two copies of one song, the missing one first.
+    const songs = [albumTrack("/two.mp3", "1", "2", "Two"), missing];
+    assert.deepEqual(
+      songs.sort(compareByTitle).map((t) => t.path),
+      [null, "/two.mp3"],
+    );
+  });
 });

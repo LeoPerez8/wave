@@ -8,12 +8,14 @@ import {
   playlistRemovals,
   type ActionSurface,
   type ItemAction,
+  type ItemActionEntry,
 } from "@wave/core";
 import * as Haptics from "expo-haptics";
 import { router, usePathname } from "expo-router";
 
 import { followArtistLink } from "@/library/ArtistChoice";
-import { confirmDeleteSongs } from "@/library/deleteSongs";
+import { confirmDeleteSongs, confirmRemoveSongs } from "@/library/deleteSongs";
+import { songHasFile } from "@/library/LibraryStore";
 import { setFavorites, useFavoriteIds } from "@/library/favorites";
 import { findLyricsAndGenreFor } from "@/library/findLyricsAndGenre";
 import { useLinkRows } from "@/library/hooks";
@@ -27,6 +29,11 @@ import { openAlbum } from "@/library/routes";
 import { showError } from "@/overlay/alert";
 import { useLyricsAndGenreLookupsEnabled } from "@/settings/lyricsAndGenre";
 import { ytMusicEnabled } from "@/settings/ytMusic";
+import {
+  cancelMissingSongDownload,
+  downloadMissingSongs,
+  useMissingSongDownloadStatus,
+} from "@/ytmusic/YtDownloads";
 
 import {
   targetCount,
@@ -62,6 +69,53 @@ export interface ActionOptions {
   readonly onSelect?: (() => void) | undefined;
 }
 
+/** The one missing song [target] is, if it is one: its menu offers its download. */
+const onlyMissingSong = (target: ActionItems): number | null => {
+  const only = target.kind === "track" && target.items.length === 1 ? target.items[0] : undefined;
+  return only === undefined || songHasFile(only.song) ? null : only.song.id;
+};
+
+/**
+ * The entries Core's `itemActions` offers for [target] on [surface], here and
+ * with the Settings as they are; [favorites] says which tracks are starred,
+ * and a missing song's download is followed as it goes.
+ * The Design preview plans its menus with it too, from synthetic items.
+ */
+export function usePlannedActions(
+  target: ActionItems,
+  favorites: ReadonlySet<number>,
+  { surface, selectable }: { readonly surface: ActionSurface; readonly selectable: boolean },
+): readonly ItemActionEntry[] {
+  const here = usePathname();
+  const onlineLookups = useLyricsAndGenreLookupsEnabled();
+  const download = useMissingSongDownloadStatus(onlyMissingSong(target));
+  const facts = targetFacts(target, favorites);
+  return itemActions({
+    kind: target.kind,
+    items: facts.map((item) => (item.missing === true ? { ...item, download } : item)),
+    surface,
+    selectable,
+    onlineLookups,
+    here,
+  });
+}
+
+/**
+ * [planned] as entries: each labelled, deleting ones in the destructive
+ * colour, [press] giving what each does. The Design preview's entries only
+ * close their card.
+ */
+export const actionEntries = (
+  planned: readonly ItemActionEntry[],
+  press: (entry: ItemActionEntry) => () => void,
+): ActionEntry[] =>
+  planned.map((entry) => ({
+    action: entry.action,
+    label: ITEM_ACTION_LABELS[entry.action],
+    onPress: press(entry),
+    destructive: isDestructiveAction(entry.action),
+  }));
+
 /**
  * The entries to show for [target] (Core decides which), each wired to what it
  * does. [target] is resolved when an entry runs, so a bar can pass the
@@ -73,9 +127,9 @@ export function useItemActions(
 ): readonly ActionEntry[] {
   const here = usePathname();
   const favorites = useFavoriteIds();
-  const onlineLookups = useLyricsAndGenreLookupsEnabled();
-  const facts = targetFacts(target, favorites);
   const tracks = target.kind === "track" ? target.items : [];
+  // What acts on files (Delete, Find Lyrics and Genre) shows only when every song has one.
+  const withFiles = tracks.flatMap(({ song }) => (songHasFile(song) ? [song] : []));
 
   const run = (action: () => void) => () => {
     finish();
@@ -123,13 +177,9 @@ export function useItemActions(
       ? (targetHeading(target, undefined)?.title ?? targetCount(target))
       : targetCount(target);
 
-  const planned = itemActions({
-    kind: target.kind,
-    items: facts,
+  const planned = usePlannedActions(target, favorites, {
     surface,
     selectable: onSelect !== undefined,
-    onlineLookups,
-    here,
   });
 
   // Read ahead, so Go to Album / Go to Artist open header-first.
@@ -142,54 +192,43 @@ export function useItemActions(
   }
   const links = useLinkRows(goAlbumId, goArtistId);
 
-  return planned.map((entry): ActionEntry => {
-    const label = ITEM_ACTION_LABELS[entry.action];
-    const make = (onPress: () => void): ActionEntry => ({
-      action: entry.action,
-      label,
-      onPress,
-      destructive: isDestructiveAction(entry.action),
-    });
+  return actionEntries(planned, (entry): (() => void) => {
     switch (entry.action) {
       case "playNext":
-        return make(queue("playNext"));
+        return queue("playNext");
       case "addToQueue":
-        return make(queue("addToQueue"));
+        return queue("addToQueue");
       case "addToPlaylist":
-        return make(
-          run(() =>
-            openAddToPlaylist({
-              title: addTitle,
-              songs: () => targetEntries(target).then(toPlaylistSongs),
-            }),
-          ),
-        );
-      case "favorite":
-        return make(star(true));
-      case "unfavorite":
-        return make(star(false));
-      case "removeFromPlaylist":
-        return make(
-          run(() => {
-            const places = tracks.flatMap(({ playlistItem }) => playlistItem ?? []);
-            for (const { playlistId, itemIds } of playlistRemovals(places)) {
-              removePlaylistItems(playlistId, itemIds).catch((error: unknown) =>
-                showError("Couldn't remove the songs", error),
-              );
-            }
+        return run(() =>
+          openAddToPlaylist({
+            title: addTitle,
+            songs: () => targetEntries(target).then(toPlaylistSongs),
           }),
         );
+      case "favorite":
+        return star(true);
+      case "unfavorite":
+        return star(false);
+      case "removeFromPlaylist":
+        return run(() => {
+          const places = tracks.flatMap(({ playlistItem }) => playlistItem ?? []);
+          for (const { playlistId, itemIds } of playlistRemovals(places)) {
+            removePlaylistItems(playlistId, itemIds).catch((error: unknown) =>
+              showError("Couldn't remove the songs", error),
+            );
+          }
+        });
       case "goToAlbum": {
         const { albumId } = entry;
-        return make(run(() => openAlbum(albumId, links.album)));
+        return run(() => openAlbum(albumId, links.album));
       }
       case "goToArtist": {
         // Several credited artists: a card to pick one from (`ArtistChoice`).
         const { artists } = entry;
-        return make(run(() => followArtistLink(artists, links.artist)));
+        return run(() => followArtistLink(artists, links.artist));
       }
       case "renamePlaylist":
-        return make(run(() => playlist !== undefined && void renamePlaylistFlow(playlist)));
+        return run(() => playlist !== undefined && void renamePlaylistFlow(playlist));
       case "deletePlaylist":
       case "deletePlaylists": {
         const playlists = target.kind === "playlist" ? target.items : [];
@@ -197,23 +236,30 @@ export function useItemActions(
           // Leave a playlist's screen once it's gone.
           if (playlists.some(({ id }) => isDetailPath(here, "playlist", id))) router.back();
         };
-        return make(
-          asking(entry.action, (onConfirm) => {
-            void confirmDeletePlaylists(playlists, { onConfirm, onDeleted });
-          }),
-        );
+        return asking(entry.action, (onConfirm) => {
+          void confirmDeletePlaylists(playlists, { onConfirm, onDeleted });
+        });
       }
       case "findLyricsAndGenre":
-        return make(run(() => void findLyricsAndGenreFor(tracks.map(({ song }) => song))));
+        return run(() => void findLyricsAndGenreFor(withFiles));
       case "select":
-        return make(run(() => onSelect?.()));
-      case "delete": {
+        return run(() => onSelect?.());
+      case "delete":
+        return asking(entry.action, (onConfirm) => {
+          void confirmDeleteSongs(withFiles, { onConfirm });
+        });
+      case "download":
+      case "retryDownload":
+        return run(() => downloadMissingSongs(tracks.map(({ song }) => song.id)));
+      case "cancelDownload":
+        return run(() => {
+          for (const { song } of tracks) cancelMissingSongDownload(song.id);
+        });
+      case "removeFromLibrary": {
         const songs = tracks.map(({ song }) => song);
-        return make(
-          asking(entry.action, (onConfirm) => {
-            void confirmDeleteSongs(songs, { onConfirm });
-          }),
-        );
+        return asking(entry.action, (onConfirm) => {
+          void confirmRemoveSongs(songs, { onConfirm });
+        });
       }
     }
   });

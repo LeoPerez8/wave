@@ -1,0 +1,24 @@
+{
+  "$schema": "https://react.doctor/schema/config.json",
+  "noScore": true,
+  "supplyChain": { "enabled": false },
+  "adoptExistingLintConfig": false,
+  "ignore": {
+    "files": [
+      "**/node_modules/**",
+      "android/**",
+      "ios/**",
+      "**/.expo/**",
+      "**/dist/**",
+      "**/build/**",
+      "**/coverage/**",
+      "**/.cache/**",
+      "**/.scratch/**",
+      "**/.worktrees/**",
+      "**/worktrees/**",
+      "**/generated/**",
+      "expo-env.d.ts",
+      "uniwind-types.d.ts"
+    ]
+  }
+}

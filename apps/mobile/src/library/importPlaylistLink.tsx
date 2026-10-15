@@ -53,6 +53,7 @@ import { appRuntime } from "./runtime";
 /** A linked playlist read, or why it wasn't. */
 export type LinkRead = LinkImportRead<NativeYtSong>;
 
+// oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
 const listLibrary = () => appRuntime.runPromise(LibraryStore.use((store) => store.listSongs));
 
 /** Spotify through `fetch`, as Core's `readSpotifyPlaylist` asks; rejects when out of reach. */
@@ -223,6 +224,21 @@ export const openPlaylistImport = (): void => {
     void importPlaylists();
     return;
   }
+  openSourceMenu(sources, (source) => {
+    if (source === "files") void importPlaylists();
+    else void followUp(fromClipboard).then(askForLink);
+  });
+};
+
+/**
+ * Opens the Import card next to the button whose press calls it, one entry per
+ * source in [sources]. Choosing one closes the card, then hands it to
+ * [choose]. The Design preview opens it too, with a [choose] that does nothing.
+ */
+export const openSourceMenu = (
+  sources: readonly PlaylistImportSource[],
+  choose: (source: PlaylistImportSource) => void,
+): void => {
   openOverlay({
     label: "Import",
     anchor: pressedRect(),
@@ -231,8 +247,7 @@ export const openPlaylistImport = (): void => {
         sources={sources}
         choose={(source) => {
           close();
-          if (source === "files") void importPlaylists();
-          else void followUp(fromClipboard).then(askForLink);
+          choose(source);
         }}
       />
     ),
@@ -244,6 +259,7 @@ const SOURCE_LABELS: Record<PlaylistImportSource, string> = {
   files: "From Files",
 };
 
+/** The Import card: one entry per source, each handed to [choose]. */
 function SourceMenu({
   sources,
   choose,

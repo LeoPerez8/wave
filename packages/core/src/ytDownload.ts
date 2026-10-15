@@ -53,7 +53,7 @@ const COVER_SIZE = 1200;
  * [url] asking YouTube Music's image server for a [COVER_SIZE] square: its
  * covers carry their size (`=w120-h120-l90-rj`). Other images stay as they are.
  */
-const largeCover = (url: string): string =>
+export const largeCover = (url: string): string =>
   url.replace(/=w\d+-h\d+(?=[-?]|$)/, `=w${COVER_SIZE}-h${COVER_SIZE}`);
 
 /** [song] on its album page: the same video, else the same title (the page may list another video of it). */

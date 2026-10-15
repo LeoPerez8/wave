@@ -171,16 +171,20 @@ describe("a YT Music song's download, as its row and menu show it", () => {
     );
   });
 
-  test("without YT Music or a Soulseek account, the row says to connect one, and keeps Retry", () => {
+  test("with YT Music and Download in best quality off, the row says what to turn on, and keeps Retry", () => {
     const status = { kind: "failed", reason: "noSource" } as const;
-    assert.equal(ytDownloadLine(status), "Connect YT Music or Soulseek in Settings");
+    assert.equal(
+      ytDownloadLine(status),
+      "Turn on YT Music or Download in best quality in Settings",
+    );
     assert.deepEqual(actions(status), ["retryDownload", "cancelDownload"]);
   });
 
   test("Soulseek's own failures read as before; an unreachable server isn't called offline", () => {
     assert.equal(line("unavailable"), "This recording is unavailable in 320 kbps");
-    assert.equal(line("account"), "Connect a free Soulseek account in Settings");
-    assert.equal(line("accountRejected"), "Connect a free Soulseek account in Settings");
+    // Soulseek turned off, or an account it rejected (which turns it off): the switch makes a new one.
+    assert.equal(line("account"), "Turn on Download in best quality in Settings");
+    assert.equal(line("accountRejected"), "Turn on Download in best quality in Settings");
     assert.equal(line("timedOut"), "Download failed");
     assert.equal(line("unreachable"), "Download failed: Soulseek can't be reached");
     assert.deepEqual(actions({ kind: "failed", reason: "unreachable" }), [
@@ -192,6 +196,12 @@ describe("a YT Music song's download, as its row and menu show it", () => {
   test("a song YouTube Music won't serve says so, and keeps Retry", () => {
     const status = { kind: "failed", reason: "ytUnavailable" } as const;
     assert.equal(ytDownloadLine(status), "This song is unavailable on YouTube Music");
+    assert.deepEqual(actions(status), ["retryDownload", "cancelDownload"]);
+  });
+
+  test("a missing song YouTube Music's search has no match for says so, and keeps Retry", () => {
+    const status = { kind: "failed", reason: "notFound" } as const;
+    assert.equal(ytDownloadLine(status), "Not found on YouTube Music");
     assert.deepEqual(actions(status), ["retryDownload", "cancelDownload"]);
   });
 

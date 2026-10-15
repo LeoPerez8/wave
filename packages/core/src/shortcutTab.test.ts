@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { SHORTCUT_TAB_CHOICES, parseShortcutTab, tabBarTabs } from "./index.ts";
+import { SHORTCUT_TAB_CHOICES, parseShortcutTab, storedShortcutTab, tabBarTabs } from "./index.ts";
 
 describe("shortcut tab", () => {
   test("Settings offers None, then the Library sections in Library order", () => {
@@ -16,8 +16,14 @@ describe("shortcut tab", () => {
     ]);
   });
 
-  test("a fresh install (nothing stored) has no shortcut", () => {
-    assert.equal(parseShortcutTab(null), null);
+  test("a fresh install (nothing stored) has Playlists as its shortcut", () => {
+    assert.equal(parseShortcutTab(null), "playlists");
+  });
+
+  test("every choice, None included, reads back as itself once stored", () => {
+    for (const choice of SHORTCUT_TAB_CHOICES) {
+      assert.equal(parseShortcutTab(storedShortcutTab(choice)), choice);
+    }
   });
 
   test("a stored section comes back as that section", () => {

@@ -6,6 +6,7 @@ export { LONG_PRESS_DELAY } from "@wave/core";
 
 const longPressDelay = persistedSetting<number>({
   key: "settings.longPressDelayMs",
+  synced: true,
   read: readLongPressDelay,
   write: String,
 });
