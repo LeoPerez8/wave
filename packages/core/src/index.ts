@@ -760,3 +760,19 @@ export type {
   TrackEntry,
   VanishedFileFate,
 } from "./sync.ts";
+export { accountTrackIds, blackPlayerPlayId, planSongSync } from "./syncPlan.ts";
+export type { AccountSongState, KeyedTrack, PhoneSong, SongSyncPlan } from "./syncPlan.ts";
+export { EMPTY_SYNC_TABLES, SYNC_PUSH_BATCH, pushBatches, readPullPage } from "./syncWire.ts";
+export type {
+  SyncFavorite,
+  SyncPullPage,
+  SyncPlayEnd,
+  SyncPlayRow,
+  SyncPlaylist,
+  SyncPlaylistEntry,
+  SyncPreference,
+  SyncSong,
+  SyncSongFields,
+  SyncTables,
+  SyncedRow,
+} from "./syncWire.ts";
