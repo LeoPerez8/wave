@@ -3,6 +3,7 @@ import "../../global.css";
 // oxlint-disable-next-line import/no-unassigned-import
 import "@/settings/theme";
 
+// TEMP (#187): a JS-only change to time bundling from a warm Metro cache.
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
