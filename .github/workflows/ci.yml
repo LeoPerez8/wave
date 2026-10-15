@@ -275,12 +275,6 @@ jobs:
       - name: Bundle JavaScript
         run: scripts/ci/step.sh "Bundle JavaScript" scripts/ci/bundle.sh
 
-      - name: "PROBE (temporary): bundle again from the warm Metro cache"
-        run: |
-          du -sh /tmp/metro-cache
-          scripts/ci/bundle.sh 2>&1 | grep -E '^(Metro|hermesc)'
-          ls -la apps/mobile/android/app/build/intermediates/sourcemaps/react/release
-
       # Each full build keeps its APK under a key for its native side and Metro's assets
       # (scripts/ci/repack.ts). A PR whose key finds one swaps its JS bundle into it instead
       # of running Gradle.
