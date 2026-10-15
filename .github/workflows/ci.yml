@@ -38,6 +38,8 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
+          # Only node runs here; without this, setup-node looks for pnpm to cache.
+          package-manager-cache: false
 
       - name: Apply the change rule
         id: rule
