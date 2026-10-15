@@ -148,11 +148,25 @@ const metadata = (song: NativeYtSong) =>
     return ytDownloadTags(song, album, found, lyrics);
   });
 
-/** Core's source for a download now: YT Music's setting and Download in best quality. */
+/**
+ * Core's source for a download now: YT Music's setting and Download in best quality (Soulseek's
+ * [session]), and for a missing song whether it has its own [video].
+ */
 const currentSource = (
   session: SoulseekSession,
   ytMusicOn = ytMusicEnabled(),
-): DownloadSource | null => downloadSource({ ytMusicOn, bestQuality: session.status !== "off" });
+  video = false,
+): DownloadSource | null =>
+  downloadSource({ ytMusicOn, bestQuality: session.status !== "off", video });
+
+/** Soulseek's session now; off when the module can't tell. */
+const sessionNow = async (): Promise<SoulseekSession> => {
+  try {
+    return await WaveSoulseek.session();
+  } catch {
+    return { status: "off", username: null };
+  }
+};
 
 /**
  * What the journal keeps to carry a Soulseek job on from YouTube Music: where the M4A goes and
@@ -187,13 +201,8 @@ type PrepareAnswer =
     };
 
 /** The source a download is asked for with; the prepare decision decides again when it starts. */
-const requestedSource = async (): Promise<DownloadSource | null> => {
-  try {
-    return currentSource(await WaveSoulseek.session());
-  } catch {
-    return currentSource({ status: "off", username: null });
-  }
-};
+const requestedSource = async (): Promise<DownloadSource | null> =>
+  currentSource(await sessionNow());
 
 /**
  * The journal's "prepare" decision: the source, the song's tags and where it goes, and for
@@ -346,12 +355,11 @@ const prepareMissingSong = (trackId: number) =>
     if (roots.length === 0) return yield* new DownloadFailed({ reason: "noFolder" });
     const job = missingSongJob(track);
     const ytMusicOn = ytMusicEnabled();
-    const session = yield* native(() => WaveSoulseek.session());
-    const source = downloadSource({
+    const source = currentSource(
+      yield* native(() => WaveSoulseek.session()),
       ytMusicOn,
-      bestQuality: session.status !== "off",
-      video: job.missing.videoId !== null,
-    });
+      job.missing.videoId !== null,
+    );
     if (source === null) return yield* new DownloadFailed({ reason: "noSource" });
     const ytMusic = yield* YtMusic;
     const search = missingSongSearch(job);
@@ -774,25 +782,12 @@ const journalSong = (job: MissingSongJob): NativeYtSong => ({
   albumId: null,
 });
 
-/** Soulseek's session now; off when the module can't tell. */
-const sessionNow = async (): Promise<SoulseekSession> => {
-  try {
-    return await WaveSoulseek.session();
-  } catch {
-    return { status: "off", username: null };
-  }
-};
-
 /** Asks the journal for missing songs [jobs], in order, each from the source Core picks for it. */
 const enqueueMissingSongs = async (jobs: readonly MissingSongJob[]): Promise<void> => {
   const session = await sessionNow();
   const ytMusicOn = ytMusicEnabled();
   for (const job of jobs) {
-    const source = downloadSource({
-      ytMusicOn,
-      bestQuality: session.status !== "off",
-      video: job.missing.videoId !== null,
-    });
+    const source = currentSource(session, ytMusicOn, job.missing.videoId !== null);
     await WaveSoulseek.enqueueJob(journalSong(job), soulseekRecording(job), null, source);
   }
 };
