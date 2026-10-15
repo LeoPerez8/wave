@@ -1,8 +1,10 @@
-// Which parts of the repo a change touches, and whether it can change the APK.
+// Which parts of the repo a change touches, whether it can change the APK, and
+// whether it can change the result of wave-native's JVM tests.
 // The CI workflow runs it on a PR's changed files and turns jobs off by it:
 //   <paths, one per line> | node scripts/ci/changes.ts   # PRs
 //   node scripts/ci/changes.ts --all                      # everything else
-// It prints `<area>=true|false` lines and `apk=true|false`, ready for $GITHUB_OUTPUT.
+// It prints `<area>=true|false` lines, then the decisions `apk` and `nativeTests`,
+// ready for $GITHUB_OUTPUT.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
@@ -13,6 +15,13 @@ const AREAS = {
   core: ["packages/core/"],
   workspace: ["package.json", "pnpm-workspace.yaml", "pnpm-lock.yaml"],
   ci: [".github/", "scripts/ci/"],
+  // wave-native and what decides how prebuild generates the project it builds in.
+  native: [
+    "apps/mobile/modules/wave-native/",
+    "apps/mobile/app.config.ts",
+    "apps/mobile/plugins/",
+    "apps/mobile/package.json",
+  ],
 } as const;
 
 type Area = keyof typeof AREAS;
@@ -20,7 +29,10 @@ type Area = keyof typeof AREAS;
 // The APK is built from these areas: a change outside them can't alter it.
 const APK_AREAS: readonly Area[] = ["app", "core", "workspace", "ci"];
 
-export type Changes = Record<Area | "apk", boolean>;
+// wave-native's JVM tests can only change result when one of these does.
+const NATIVE_TEST_AREAS: readonly Area[] = ["native", "workspace", "ci"];
+
+export type Changes = Record<Area | "apk" | "nativeTests", boolean>;
 
 const covers = (entry: string, path: string) =>
   entry.endsWith("/") ? path.startsWith(entry) : path === entry;
@@ -29,7 +41,11 @@ const decide = (touched: (area: Area) => boolean): Changes => {
   const areas = Object.fromEntries(
     (Object.keys(AREAS) as Area[]).map((area) => [area, touched(area)]),
   ) as Record<Area, boolean>;
-  return { ...areas, apk: APK_AREAS.some((area) => areas[area]) };
+  return {
+    ...areas,
+    apk: APK_AREAS.some((area) => areas[area]),
+    nativeTests: NATIVE_TEST_AREAS.some((area) => areas[area]),
+  };
 };
 
 export const changes = (paths: readonly string[]): Changes =>

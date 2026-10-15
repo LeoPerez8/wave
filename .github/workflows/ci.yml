@@ -33,7 +33,9 @@ jobs:
       core: ${{ steps.rule.outputs.core }}
       workspace: ${{ steps.rule.outputs.workspace }}
       ci: ${{ steps.rule.outputs.ci }}
+      native: ${{ steps.rule.outputs.native }}
       apk: ${{ steps.rule.outputs.apk }}
+      nativeTests: ${{ steps.rule.outputs.nativeTests }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -58,6 +60,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: scripts/ci/report-apk-skipped.sh
+
+      - name: Report the skipped native unit tests
+        if: steps.rule.outputs.nativeTests == 'false' && env.IS_SAME_REPO_PR == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          scripts/ci/report.sh skipped "Native unit tests" \
+            "Nothing they test changed (wave-native, the app config, config plugins, the lockfile or CI), so they didn't run."
 
   checks:
     name: Checks
@@ -112,6 +123,56 @@ jobs:
           HEAD_SHA: ${{ steps.autofix.outputs.sha || github.event.pull_request.head.sha }}
         run: scripts/ci/report.sh "${{ job.status }}" "Checks"
 
+  # JVM tests for the local native module (tag reading, folder walking, artwork), in a
+  # job of their own so they run beside the APK build instead of before it.
+  native-tests:
+    name: Native unit tests
+    needs: [changes, checks]
+    # Only PRs can skip: on main and release tags every area counts as changed.
+    if: needs.changes.outputs.nativeTests == 'true'
+    runs-on: ubuntu-latest
+    env:
+      HEAD_SHA: ${{ needs.checks.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.checks.outputs.sha }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Install
+        run: scripts/ci/step.sh "Install" pnpm install --frozen-lockfile
+
+      # The module builds inside the generated Android project.
+      - name: Prebuild native project
+        working-directory: apps/mobile
+        env:
+          EXPO_NO_GIT_STATUS: "1"
+        run: ../../scripts/ci/step.sh "Prebuild" pnpm exec expo prebuild --platform android --no-install
+
+      # AGP 9 only creates unit-test tasks for the tested build type (debug) in libraries.
+      - name: Native unit tests
+        working-directory: apps/mobile/android
+        run: ../../../scripts/ci/step.sh "Native unit tests" ./gradlew :wave-native:testDebugUnitTest --no-daemon --console=plain
+
+      - name: Report
+        if: always() && env.IS_SAME_REPO_PR == 'true' && job.status != 'cancelled'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/ci/report.sh "${{ job.status }}" "Native unit tests"
+
   android:
     name: Android APK
     needs: [changes, checks]
@@ -148,9 +209,11 @@ jobs:
           EXPO_NO_GIT_STATUS: "1"
         run: ../../scripts/ci/step.sh "Prebuild" pnpm exec expo prebuild --platform android --no-install
 
-      # JVM tests for the local native module (tag reading, folder walking, artwork).
+      # The native-tests job runs these beside this one; a release also runs them here first,
+      # so a tag whose tests fail never publishes.
       # AGP 9 only creates unit-test tasks for the tested build type (debug) in libraries.
       - name: Native unit tests
+        if: env.IS_RELEASE == 'true'
         working-directory: apps/mobile/android
         run: ../../../scripts/ci/step.sh "Native unit tests" ./gradlew :wave-native:testDebugUnitTest --no-daemon --console=plain
 
