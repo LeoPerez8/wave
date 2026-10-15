@@ -26,6 +26,7 @@ const app = (files: Record<string, string> = {}) =>
   tree({
     "src/app/index.tsx": "export default () => null;",
     "assets/icon.png": "icon",
+    "package.json": '{"dependencies":{"expo-constants":"~58.0.10"}}',
     "android/app/build.gradle": "react {}",
     "android/app/src/main/AndroidManifest.xml": "<manifest/>",
     ...files,
@@ -79,6 +80,13 @@ describe("apkCacheKey", () => {
   it("changes with Expo's native fingerprint", () => {
     const dir = app();
     assert.notEqual(key(dir, "f2"), key(dir, "f1"));
+  });
+
+  it("changes when the app declares another native dependency version", () => {
+    const changed = app({
+      "package.json": '{"dependencies":{"expo-constants":"~58.0.11"}}',
+    });
+    assert.notEqual(key(changed), key(app()));
   });
 
   // What config plugins generate, including files they import that the fingerprint misses.

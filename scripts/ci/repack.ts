@@ -68,7 +68,15 @@ export const apkCacheKey = ({ fingerprint, appDir }: { fingerprint: string; appD
       (path) => IMAGE.test(path),
     ),
   );
-  return `apk-v1-${sha256(`${fingerprint}\n${project}\n${images}\n`)}`;
+  // Expo deliberately ignores fields such as the app version for OTA updates. APKs must
+  // invalidate on every app config and dependency declaration change, including those.
+  const config = digest(
+    appDir,
+    readdirSync(appDir).filter((path) =>
+      /^(package\.json|app\.json|app\.config\.[cm]?[jt]s)$/.test(path),
+    ),
+  );
+  return `apk-v1-${sha256(`${fingerprint}\n${project}\n${images}\n${config}\n`)}`;
 };
 
 /** The files Metro wrote to its assets folder (Android resources), by path, with their hashes. */
