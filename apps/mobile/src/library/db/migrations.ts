@@ -643,6 +643,18 @@ CREATE TABLE \`sync_state\` (
 INSERT INTO \`sync_state\` (\`id\`) VALUES (1);
 `;
 
+// Removals whose rows went with their song, waiting to go up as tombstones
+// (\`sync_removals\`): a removed song's star and entries, a retagged song's old star.
+const mSyncRemovals = `
+CREATE TABLE \`sync_removals\` (
+	\`kind\` text NOT NULL,
+	\`id\` text NOT NULL,
+	\`changed_at\` integer NOT NULL,
+	\`phone_id\` text NOT NULL,
+	PRIMARY KEY(\`kind\`, \`id\`)
+);
+`;
+
 export default {
   journal: {
     entries: [
@@ -666,6 +678,7 @@ export default {
       { idx: 17, when: 1_793_275_200_000, tag: "0017_imported_plays", breakpoints: true },
       { idx: 18, when: 1_793_361_600_000, tag: "0018_sync_identity", breakpoints: true },
       { idx: 19, when: 1_793_448_000_000, tag: "0019_sync_state", breakpoints: true },
+      { idx: 20, when: 1_793_534_400_000, tag: "0020_sync_removals", breakpoints: true },
     ],
   },
   migrations: {
@@ -689,5 +702,6 @@ export default {
     m0017: mImportedPlays,
     m0018: mSyncIdentity,
     m0019: mSyncState,
+    m0020: mSyncRemovals,
   },
 };

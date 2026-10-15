@@ -476,6 +476,26 @@ export const syncPending = sqliteTable(
   ],
 );
 
+/**
+ * Removals made here whose rows the Library no longer has, waiting to go up
+ * as tombstones (Core's `songsLeaving`): the star and playlist entries of a
+ * song removed from the Library (Remove from Library, Delete), and the star
+ * of a retagged song's old recording key. Each leaves once a push takes it.
+ * Emptied when a sign-in joins an account.
+ */
+export const syncRemovals = sqliteTable(
+  "sync_removals",
+  {
+    /** The wire table: `favorites` or `playlistEntries`. */
+    kind: text("kind").notNull(),
+    /** The row's id on the account (a star's recording key, an entry's sync id). */
+    id: text("id").notNull(),
+    changedAt: integer("changed_at").notNull(),
+    phoneId: text("phone_id").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.kind, t.id] })],
+);
+
 /** Where syncing with the Wave account stands. A single row, id 1. */
 export const syncState = sqliteTable("sync_state", {
   id: integer("id").primaryKey(),

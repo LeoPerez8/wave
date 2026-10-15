@@ -19,6 +19,7 @@ import {
   planSongs,
   pushMarkKey,
   selectAccountTrackIds,
+  selectJoinedAccount,
   selectSyncCursor,
   selectUnpushed,
   type PulledChanges,
@@ -56,7 +57,6 @@ export interface SyncCycleInput {
   readonly wait: (ms: number) => Promise<void>;
 }
 
-/** What a sync did. */
 /** What a sync changed on the phone. */
 export interface SyncedChanges extends PulledChanges {
   /** Missing songs came in, changed or left: the Library's lists read again. */
@@ -79,6 +79,18 @@ export class SyncRequestFailed extends Error {
   }
 }
 
+/**
+ * The Library left the account (signed out) while a request was on its way:
+ * the sync stops there, and what the answer brought isn't applied. Its code
+ * is the one the native module rejects a request made signed out with.
+ */
+export class SyncSignedOut extends Error {
+  readonly code = "ERR_WAVE_SIGNED_OUT";
+  constructor() {
+    super("Signed out of the Wave account during a sync");
+  }
+}
+
 /** Rows read per table at a time, so a first push of a large history never sits in memory whole. */
 const READ_AT_ONCE = 5_000;
 /** How long to wait when the service refuses for the request rate (its window is a minute). */
@@ -96,6 +108,7 @@ const send = async (
 ): Promise<string> => {
   for (let attempt = 0; ; attempt++) {
     const response = await input.transport.request(method, path, body);
+    if (selectJoinedAccount(input.db) !== input.account) throw new SyncSignedOut();
     if (response.status === 429 && attempt < RATE_RETRIES) {
       await input.wait(RATE_WAIT_MS);
       continue;
@@ -191,7 +204,8 @@ const pushAll = async (input: SyncCycleInput): Promise<number> => {
  * changed (the account's with the phone's files, the Library's missing songs
  * with the account's), pushes, and pulls again after a push. A failed
  * request stops it where it is (it throws): what was pulled or pushed by
- * then stays done, and the next sync goes on from there.
+ * then stays done, and the next sync goes on from there. Signing out stops
+ * it too (`SyncSignedOut`), before the answer on its way is applied.
  */
 export const syncCycle = async (input: SyncCycleInput): Promise<SyncCycleResult> => {
   const joined = joinAccount(input.db, input.account);

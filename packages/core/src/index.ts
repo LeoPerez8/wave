@@ -324,6 +324,8 @@ export {
 export type { HighlightInput, NewCardInput, OriginCard } from "./overlayOrigin.ts";
 export { confirmSongDeletion, confirmSongRemoval, songDeletionFailure } from "./songDeletion.ts";
 export type { SongDeleteFailure, SongDeleteFailureReason } from "./songDeletion.ts";
+export { songsLeaving } from "./songsLeaving.ts";
+export type { LeavingTrack, SongsLeaving } from "./songsLeaving.ts";
 export { artistArtwork, artistInitial } from "./artistImage.ts";
 export type { ArtistAlbumLink } from "./artistImage.ts";
 export { rowWindow, windowRows } from "./rowWindow.ts";
@@ -771,12 +773,21 @@ export type {
   TrackEntry,
   VanishedFileFate,
 } from "./sync.ts";
-export { accountTrackIds, blackPlayerPlayId, missingSongTrack, planSongSync } from "./syncPlan.ts";
+export {
+  accountTrackIds,
+  blackPlayerPlayId,
+  missingSongTrack,
+  planMissingSongs,
+  planSongSync,
+} from "./syncPlan.ts";
 export type {
   AccountSongState,
   KeyedTrack,
+  MissingSongSave,
   MissingSongTrack,
+  MissingSongsPlan,
   PhoneSong,
+  ShownMissingSong,
   SongSyncPlan,
 } from "./syncPlan.ts";
 export {
@@ -811,6 +822,7 @@ export {
   missingSongTags,
   missingSongTrackId,
   missingSongVideo,
+  missingSongYtSong,
   missingSongsDownload,
 } from "./missingSongDownload.ts";
 export type {

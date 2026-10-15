@@ -13,6 +13,7 @@ import {
   missingSongsDownload,
   recordingKey,
   missingSongVideo,
+  missingSongYtSong,
 } from "./index.ts";
 import type { MissingSongJob, MissingTrack, YtDownloadJournalJob, YtSong } from "./index.ts";
 
@@ -60,6 +61,31 @@ describe("missingSongJob", () => {
     const job = missingSongJob(track({ album: UNKNOWN_ALBUM, durationMs: 0 }));
     assert.equal(job.album, null);
     assert.equal(job.durationMs, null);
+  });
+});
+
+describe("missingSongYtSong", () => {
+  test("a missing song downloaded from YouTube Music is YT Music's song of its video", () => {
+    assert.deepEqual(missingSongYtSong(track({ videoId: "abc", artists: ["Beyoncé", "Jay-Z"] })), {
+      videoId: "abc",
+      title: "Halo",
+      artists: ["Beyoncé", "Jay-Z"],
+      album: "I Am... Sasha Fierce",
+      durationMs: 261_000,
+      artworkUrl: null,
+      explicit: false,
+    });
+  });
+
+  test("no album and no length are unknown, and a credit without artists names its own", () => {
+    const song = missingSongYtSong(
+      track({ videoId: "abc", artists: [], album: UNKNOWN_ALBUM, durationMs: 0 }),
+    );
+    assert.deepEqual([song?.artists, song?.album, song?.durationMs], [["Beyoncé"], null, null]);
+  });
+
+  test("one never downloaded from YouTube Music has no YT Music song", () => {
+    assert.equal(missingSongYtSong(track()), null);
   });
 });
 

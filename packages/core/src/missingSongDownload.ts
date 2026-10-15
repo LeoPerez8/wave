@@ -87,15 +87,31 @@ export const missingSongTrackId = (jobId: string): number | null => {
   return /^\d+$/.test(id) ? Number(id) : null;
 };
 
-/** The job that downloads missing song [track]. */
-export const missingSongJob = (track: MissingTrack): MissingSongJob => ({
-  videoId: missingSongJobId(track.id),
+/** Missing song [track] shaped as a YT Music song named [videoId]: what isn't known is null. */
+const asYtSong = <Id extends string>(
+  track: MissingTrack,
+  videoId: Id,
+): YtSong & { readonly videoId: Id } => ({
+  videoId,
   title: track.title,
   artists: track.artists.length > 0 ? track.artists : [track.artist],
   album: track.album === UNKNOWN_ALBUM || track.album === "" ? null : track.album,
   durationMs: track.durationMs > 0 ? track.durationMs : null,
   artworkUrl: null,
   explicit: false,
+});
+
+/**
+ * Missing song [track] as YT Music's song of the video it was downloaded
+ * from (what its playlist entries become once signed out, Core's
+ * `signOutPlan`); null for one that never came from YouTube Music.
+ */
+export const missingSongYtSong = (track: MissingTrack): YtSong | null =>
+  track.videoId === null ? null : asYtSong(track, track.videoId);
+
+/** The job that downloads missing song [track]. */
+export const missingSongJob = (track: MissingTrack): MissingSongJob => ({
+  ...asYtSong(track, missingSongJobId(track.id)),
   missing: {
     trackId: track.id,
     artist: track.artist,
