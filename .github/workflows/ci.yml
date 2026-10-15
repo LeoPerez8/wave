@@ -93,8 +93,18 @@ jobs:
         if: env.IS_RELEASE == 'true'
         run: scripts/ci/step.sh "Check release tag" scripts/ci/check-release-tag.sh "$GITHUB_REF_NAME"
 
+      # On PRs, by the rule in scripts/ci/changes.ts: the packages the PR changed and their
+      # dependents, or all of them. Pushes to main and release tags always check every package.
+      - name: Pick the packages to check
+        id: packages
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: scripts/ci/affected-packages.sh
+
       - name: Typecheck
-        run: scripts/ci/step.sh "Typecheck" pnpm typecheck
+        env:
+          PACKAGES_FILTER: ${{ steps.packages.outputs.filter }}
+        run: scripts/ci/step.sh "Typecheck" scripts/ci/packages.sh typecheck
 
       - name: Lint
         run: scripts/ci/step.sh "Lint" pnpm lint
@@ -103,7 +113,9 @@ jobs:
         run: scripts/ci/step.sh "Format check" pnpm fmt:check
 
       - name: Test
-        run: scripts/ci/step.sh "Test" pnpm test
+        env:
+          PACKAGES_FILTER: ${{ steps.packages.outputs.filter }}
+        run: scripts/ci/step.sh "Test" scripts/ci/packages.sh test
 
       - name: Report
         if: always() && env.IS_SAME_REPO_PR == 'true' && job.status != 'cancelled'
