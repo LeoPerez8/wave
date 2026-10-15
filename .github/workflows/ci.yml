@@ -389,7 +389,11 @@ jobs:
         id: apk
         run: |
           name="wave-${HEAD_SHA:0:7}.apk"
-          cp "${REPACKED_APK:-apps/mobile/android/app/build/outputs/apk/release/app-release.apk}" "$RUNNER_TEMP/$name"
+          built="${REPACKED_APK:-apps/mobile/android/app/build/outputs/apk/release/app-release.apk}"
+          bundle="apps/mobile/android/app/build/generated/assets/react/release/index.android.bundle"
+          unzip -p "$built" assets/index.android.bundle | cmp - "$bundle"
+          echo "Packaged this run's bundle: $(sha256sum "$bundle")"
+          cp "$built" "$RUNNER_TEMP/$name"
           echo "path=$RUNNER_TEMP/$name" >> "$GITHUB_OUTPUT"
           echo "name=$name" >> "$GITHUB_OUTPUT"
 
