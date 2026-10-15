@@ -30,8 +30,8 @@ import {
   type YtSongSearch,
 } from "@wave/core";
 import * as Result from "effect/Result";
-import { PermissionsAndroid, Platform } from "react-native";
 
+import { askForNotifications } from "@/lib/askForNotifications";
 import { persistedSetting } from "@/lib/persistedSetting";
 import { WavePlaylistImport } from "@/native/wavePlaylistImport";
 import { showError } from "@/overlay/alert";
@@ -207,16 +207,6 @@ const runImports = async (): Promise<void> => {
     running = false;
     WavePlaylistImport.end();
   }
-};
-
-let askedForNotifications = false;
-/** Android 13+ hides the import's notification unless Wave may post notifications. */
-const askForNotifications = (): void => {
-  if (askedForNotifications || Platform.OS !== "android" || Number(Platform.Version) < 33) return;
-  askedForNotifications = true;
-  void PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS).catch(
-    () => undefined,
-  );
 };
 
 // ---------------------------------------------------------------------------

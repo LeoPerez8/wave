@@ -54,8 +54,8 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { useMemo, useSyncExternalStore } from "react";
-import { PermissionsAndroid, Platform } from "react-native";
 
+import { askForNotifications } from "@/lib/askForNotifications";
 import { libraryEdited, toIndexedArtwork, toIndexedTrack } from "@/library/LibraryScan";
 import { LibraryStore } from "@/library/LibraryStore";
 import { useMissingSongs } from "@/library/hooks";
@@ -623,15 +623,6 @@ export const startDownloads = (resume = false): void => {
   // Replays anything that changed before the listener was attached, e.g. while JS was starting.
   refreshQuietly();
   if (resume) void WaveSoulseek.resumeJobs().catch(() => undefined);
-};
-
-let askedForNotifications = false;
-const askForNotifications = (): void => {
-  if (askedForNotifications || Platform.OS !== "android" || Number(Platform.Version) < 33) return;
-  askedForNotifications = true;
-  void PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS).catch(
-    () => undefined,
-  );
 };
 
 let requests = Promise.resolve();
