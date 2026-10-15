@@ -4,7 +4,7 @@ import "../../global.css";
 import "@/settings/theme";
 
 import { Stack } from "expo-router";
-import logotype from "expo-router/assets/logotype.png";
+import logotype from "@expo-google-fonts/inter/100Thin/Inter_100Thin.ttf.png";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
