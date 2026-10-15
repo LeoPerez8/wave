@@ -23,6 +23,42 @@ env:
   IS_RELEASE: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
 
 jobs:
+  # What the change touches, by the rule in scripts/ci/changes.ts. Jobs that only
+  # matter for some parts of the repo read these outputs to skip themselves.
+  changes:
+    name: Changes
+    runs-on: ubuntu-latest
+    outputs:
+      app: ${{ steps.rule.outputs.app }}
+      core: ${{ steps.rule.outputs.core }}
+      workspace: ${{ steps.rule.outputs.workspace }}
+      ci: ${{ steps.rule.outputs.ci }}
+      apk: ${{ steps.rule.outputs.apk }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          sparse-checkout: scripts/ci
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          # Only node runs here; without this, setup-node looks for pnpm to cache.
+          package-manager-cache: false
+
+      - name: Apply the change rule
+        id: rule
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/ci/changes.sh
+
+      - name: Report the skipped APK build
+        if: steps.rule.outputs.apk == 'false' && env.IS_SAME_REPO_PR == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: scripts/ci/report-apk-skipped.sh
+
   checks:
     name: Checks
     runs-on: ubuntu-latest
@@ -57,8 +93,18 @@ jobs:
         if: env.IS_RELEASE == 'true'
         run: scripts/ci/step.sh "Check release tag" scripts/ci/check-release-tag.sh "$GITHUB_REF_NAME"
 
+      # On PRs, by the rule in scripts/ci/changes.ts: the packages the PR changed and their
+      # dependents, or all of them. Pushes to main and release tags always check every package.
+      - name: Pick the packages to check
+        id: packages
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: scripts/ci/affected-packages.sh
+
       - name: Typecheck
-        run: scripts/ci/step.sh "Typecheck" pnpm typecheck
+        env:
+          PACKAGES_FILTER: ${{ steps.packages.outputs.filter }}
+        run: scripts/ci/step.sh "Typecheck" scripts/ci/packages.sh typecheck
 
       - name: Lint
         run: scripts/ci/step.sh "Lint" pnpm lint
@@ -67,7 +113,9 @@ jobs:
         run: scripts/ci/step.sh "Format check" pnpm fmt:check
 
       - name: Test
-        run: scripts/ci/step.sh "Test" pnpm test
+        env:
+          PACKAGES_FILTER: ${{ steps.packages.outputs.filter }}
+        run: scripts/ci/step.sh "Test" scripts/ci/packages.sh test
 
       - name: Report
         if: always() && env.IS_SAME_REPO_PR == 'true' && job.status != 'cancelled'
@@ -78,9 +126,10 @@ jobs:
 
   android:
     name: Android APK
-    needs: checks
-    # TEMP (#187): run despite Checks failing on the syntax error below.
-    if: ${{ !cancelled() }}
+    needs: [changes, checks]
+    # Only PRs can skip: on main and release tags every area counts as changed.
+    # TEMP (#187): !cancelled() runs it despite Checks failing on the syntax error.
+    if: ${{ !cancelled() && needs.changes.outputs.apk == 'true' }}
     runs-on: ubuntu-latest
     env:
       HEAD_SHA: ${{ needs.checks.outputs.sha }}
