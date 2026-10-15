@@ -2,6 +2,7 @@ import type { ExpoConfig } from "expo/config";
 
 import { versionCode } from "./plugins/appVersion.ts";
 import { withGradleBuildCache } from "./plugins/withGradleBuildCache.ts";
+import { withHermesFlags } from "./plugins/withHermesFlags.ts";
 import { withLauncherIcons } from "./plugins/withLauncherIcons.ts";
 import { withLaunchSplash } from "./plugins/withLaunchSplash.ts";
 
@@ -94,5 +95,6 @@ const config: ExpoConfig = {
 // (Android 13+), and one launcher icon per primary × secondary, switched from Settings › Theme.
 // Applied here, before the plugin list, so the splash's changes run after expo-splash-screen's
 // (Expo runs mods in reverse order) and can edit that splash's style. Gradle's build cache
-// is on so CI reuses outputs from earlier builds (#185).
-export default withGradleBuildCache(withLaunchSplash(withLauncherIcons(config)));
+// is on so CI reuses outputs from earlier builds (#185), and Hermes skips the source map
+// nothing reads (#187).
+export default withHermesFlags(withGradleBuildCache(withLaunchSplash(withLauncherIcons(config))));
