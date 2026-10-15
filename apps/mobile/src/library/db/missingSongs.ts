@@ -22,9 +22,7 @@ import type { CreditSplits } from "./credits.ts";
 import type { LibraryDatabase } from "./database.ts";
 import { pruneOrphans, saveMissingSongs } from "./save.ts";
 import * as schema from "./schema.ts";
-import { thisPhoneId } from "./schema.ts";
-import { stamped } from "./sync.ts";
-import { leaveAccount, selectJoinedAccount } from "./syncRows.ts";
+import { leaveAccount, leaveKeys, selectJoinedAccount } from "./syncRows.ts";
 import { deleteTracks, deleteTracksById } from "./tracks.ts";
 
 /**
@@ -179,8 +177,9 @@ export const leaveFiles = (tx: LibraryDatabase, paths: readonly string[]): void 
  * Remove from Library on missing songs, and Delete once their files are
  * gone. Their favorites and playlist entries go with them; their plays
  * stay. Each song whose recording key no other Track has leaves the account
- * as a removal (a tombstone) the next push sends, and other phones lose it
- * at their next pull (`syncMissingSongs`).
+ * with its star and entries, as removals (tombstones) the next push sends
+ * (`leaveKeys`): other phones lose them at their next pull, and the song too
+ * where it's a missing song (`syncMissingSongs`).
  */
 export const removeSongs = (
   db: LibraryDatabase,
@@ -189,48 +188,18 @@ export const removeSongs = (
   now: number,
 ): void => {
   if (trackIds.length === 0) return;
-  const { tracks, accountSongs } = schema;
+  const { tracks } = schema;
   db.transaction((tx) => {
-    const keys = new Set(
-      chunks(trackIds).flatMap((ids) =>
-        tx
-          .selectDistinct({ key: tracks.recordingKey })
-          .from(tracks)
-          .where(inArray(tracks.id, ids))
-          .all()
-          .flatMap((row) => row.key ?? []),
-      ),
+    const leaving = chunks(trackIds).flatMap((ids) =>
+      tx
+        .select({ trackId: tracks.id, recordingKey: sql<string>`${tracks.recordingKey}` })
+        .from(tracks)
+        .where(and(inArray(tracks.id, ids), isNotNull(tracks.recordingKey)))
+        .all(),
     );
+    leaveKeys(tx, leaving, { removed: true, now });
     deleteTracksById(tx, trackIds);
     pruneOrphans(tx, splits);
-    if (selectJoinedAccount(tx) === null) return;
-    const stillHeld = new Set(
-      chunks([...keys]).flatMap((some) =>
-        tx
-          .selectDistinct({ key: tracks.recordingKey })
-          .from(tracks)
-          .where(inArray(tracks.recordingKey, some))
-          .all()
-          .flatMap((row) => row.key ?? []),
-      ),
-    );
-    for (const recordingKey of keys) {
-      if (stillHeld.has(recordingKey)) continue;
-      const removal = {
-        song: null,
-        deleted: true,
-        phoneId: thisPhoneId(),
-        pushed: false,
-        local: null,
-      };
-      tx.insert(accountSongs)
-        .values({ recordingKey, changedAt: now, ...removal })
-        .onConflictDoUpdate({
-          target: accountSongs.recordingKey,
-          set: { ...removal, ...stamped(accountSongs, now) },
-        })
-        .run();
-    }
   });
 };
 

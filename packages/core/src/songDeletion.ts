@@ -47,7 +47,9 @@ export const confirmSongDeletion = (
 
 /**
  * The alert that asks before missing songs (no file on this phone) leave the
- * Library, `Remove "Song" from your Library?`: they leave the Wave account too.
+ * Library, `Remove "Song" from your Library?`: they leave the Wave account
+ * too, and the other phones at their next pull, except a phone that has the
+ * file, as a pull never takes a file's song away.
  */
 export const confirmSongRemoval = (
   songs: readonly { readonly title: string }[],
@@ -58,7 +60,10 @@ export const confirmSongRemoval = (
       only === undefined
         ? `Remove ${songs.length.toLocaleString("en")} songs from your Library?`
         : `Remove “${only.title}” from your Library?`,
-    message: `${only === undefined ? "They leave" : "It leaves"} your Wave account, and your other phones at their next sync.`,
+    message:
+      only === undefined
+        ? "They leave your Wave account too. Your other phones lose them at their next sync, unless they have their files."
+        : "It leaves your Wave account too. Your other phones lose it at their next sync, unless they have its file.",
     action: { label: "Remove", destructive: true },
   };
 };

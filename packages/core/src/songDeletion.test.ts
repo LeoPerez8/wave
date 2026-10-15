@@ -38,10 +38,11 @@ describe("confirmSongDeletion", () => {
 });
 
 describe("confirmSongRemoval", () => {
-  test("names the one missing song and says it leaves the account, in destructive style", () => {
+  test("names the one missing song and says it leaves the account, but not a phone with its file", () => {
     assert.deepEqual(confirmSongRemoval([{ title: "Hey Jude" }]), {
       title: "Remove “Hey Jude” from your Library?",
-      message: "It leaves your Wave account, and your other phones at their next sync.",
+      message:
+        "It leaves your Wave account too. Your other phones lose it at their next sync, unless they have its file.",
       action: { label: "Remove", destructive: true },
     });
   });
@@ -49,7 +50,8 @@ describe("confirmSongRemoval", () => {
   test("counts several", () => {
     assert.deepEqual(confirmSongRemoval([{ title: "A" }, { title: "B" }]), {
       title: "Remove 2 songs from your Library?",
-      message: "They leave your Wave account, and your other phones at their next sync.",
+      message:
+        "They leave your Wave account too. Your other phones lose them at their next sync, unless they have their files.",
       action: { label: "Remove", destructive: true },
     });
   });

@@ -324,6 +324,8 @@ export {
 export type { HighlightInput, NewCardInput, OriginCard } from "./overlayOrigin.ts";
 export { confirmSongDeletion, confirmSongRemoval, songDeletionFailure } from "./songDeletion.ts";
 export type { SongDeleteFailure, SongDeleteFailureReason } from "./songDeletion.ts";
+export { songsLeaving } from "./songsLeaving.ts";
+export type { LeavingTrack, SongsLeaving } from "./songsLeaving.ts";
 export { artistArtwork, artistInitial } from "./artistImage.ts";
 export type { ArtistAlbumLink } from "./artistImage.ts";
 export { rowWindow, windowRows } from "./rowWindow.ts";
