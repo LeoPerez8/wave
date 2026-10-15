@@ -128,6 +128,19 @@ export const MIGRATIONS: readonly Migration[] = [
       `CREATE INDEX plays_change_idx ON plays (account_id, change_no)`,
     ],
   },
+  {
+    // The account's Soulseek account (src/soulseek.ts). `password` is base64 of the AES-GCM
+    // IV and ciphertext under SOULSEEK_KEY, never the password itself.
+    id: "0003_soulseek_accounts",
+    statements: [
+      `CREATE TABLE soulseek_accounts (
+        account_id TEXT PRIMARY KEY,
+        username TEXT NOT NULL,
+        password TEXT NOT NULL,
+        changed_at INTEGER NOT NULL
+      )`,
+    ],
+  },
 ];
 
 /** Runs the migrations [db] hasn't run yet, each in its own transaction. Gives the ids it ran. */

@@ -10,6 +10,12 @@
 import type { Client } from "@libsql/client";
 import { type GoogleKeys, googleKeys, verifyGoogleIdToken } from "./google.ts";
 import { type SyncLimitName, type SyncLimits, SYNC_LIMITS } from "./limits.ts";
+import {
+  importSoulseekKey,
+  keepSoulseekAccount,
+  parseSoulseekAccount,
+  readSoulseekAccount,
+} from "./soulseek.ts";
 import { type PushBatch, deleteAccount, pullRows, pushRows } from "./store.ts";
 import { type IncomingRow, type SyncTable, InvalidRow, SYNC_TABLES, parseRow } from "./tables.ts";
 
@@ -27,6 +33,11 @@ export interface SyncServiceOptions {
   readonly limits?: SyncLimits;
   /** How many rows a pull answers at most. */
   readonly pullPageSize?: number;
+  /**
+   * `SOULSEEK_KEY`: base64 of the 32-byte AES-GCM key Soulseek passwords are
+   * kept under. Without it, the Soulseek routes answer 500 and the rest work.
+   */
+  readonly soulseekKey?: string;
 }
 
 /** How many rows a pull answers at most, by default. */
@@ -235,6 +246,27 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
     return new Response(null, { status: 204 });
   });
 
+  // Imported at the first Soulseek request, and again after a failed import.
+  let soulseekKey: Promise<CryptoKey> | null = null;
+  const soulseekCipherKey = (): Promise<CryptoKey> => {
+    soulseekKey ??= importSoulseekKey(options.soulseekKey).catch((error: unknown) => {
+      soulseekKey = null;
+      throw error;
+    });
+    return soulseekKey;
+  };
+
+  const putSoulseek = withSession(async ({ request }, session) => {
+    const account = parseSoulseekAccount(await readJson(request));
+    if (account === null) throw invalid("a Soulseek username and password are needed");
+    await keepSoulseekAccount(db, await soulseekCipherKey(), session.accountId, account, now());
+    return new Response(null, { status: 204 });
+  });
+
+  const getSoulseek = withSession(async (_context, session) =>
+    json({ account: await readSoulseekAccount(db, await soulseekCipherKey(), session.accountId) }),
+  );
+
   /** Each route by method and path. */
   const routes: Readonly<Record<string, Route>> = {
     "POST /v1/session": createSession,
@@ -242,6 +274,8 @@ export const createSyncService = (options: SyncServiceOptions): SyncService => {
     "POST /v1/push": pushChanges,
     "GET /v1/pull": pullChanges,
     "DELETE /v1/account": removeAccount,
+    "PUT /v1/soulseek": putSoulseek,
+    "GET /v1/soulseek": getSoulseek,
   };
 
   return async (request) => {

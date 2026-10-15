@@ -8,6 +8,8 @@ import { Hairline } from "@/catalog/Hairline";
 import { WaveSoulseek, soulseekErrorCode, type SoulseekSession } from "@/native/waveSoulseek";
 import { useThemeColor } from "@/theme/useThemeColor";
 
+import { setBestQuality } from "./bestQuality";
+
 const sessionCall = <A,>(call: () => Promise<A>) =>
   Effect.runPromise(Effect.tryPromise({ try: call, catch: (cause) => cause }));
 
@@ -67,8 +69,14 @@ export function DownloadsSettingsSection() {
     setAsked(on);
     setMessage(null);
     void sessionCall(() => (on ? WaveSoulseek.turnOn() : WaveSoulseek.turnOff()))
-      .then(setSession, (error: unknown) =>
-        setMessage(on ? turnOnMessage(error) : "Couldn't turn it off. Try again."),
+      .then(
+        (next) => {
+          setSession(next);
+          // The switch syncs as a preference once it has moved here.
+          setBestQuality(on);
+        },
+        (error: unknown) =>
+          setMessage(on ? turnOnMessage(error) : "Couldn't turn it off. Try again."),
       )
       .finally(() => {
         setBusy(false);

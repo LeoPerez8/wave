@@ -2,8 +2,8 @@
 
 `apps/sync` is Wave's only backend: a Cloudflare Worker in front of one Turso (libSQL)
 database. It checks Google ID tokens, holds sessions, merges pushed rows by Core's rules
-(`mergeRows`, `mergePlays` from `@wave/core`), serves pulls and deletes accounts. See "Wave
-account and sync" in `docs/spec.md`.
+(`mergeRows`, `mergePlays` from `@wave/core`), serves pulls, keeps each account's Soulseek
+account and deletes accounts. See "Wave account and sync" in `docs/spec.md`.
 
 | File                 | What it holds                                                           |
 | -------------------- | ----------------------------------------------------------------------- |
@@ -11,6 +11,7 @@ account and sync" in `docs/spec.md`.
 | `src/service.ts`     | The routes, sessions, the rate limit and the allowlist                  |
 | `src/google.ts`      | Checking a Google ID token (RS256 against Google's JWKS)                |
 | `src/store.ts`       | Push (merge and number changes), pull (pages) and account deletion      |
+| `src/soulseek.ts`    | The account's Soulseek account, its password encrypted (`SOULSEEK_KEY`) |
 | `src/tables.ts`      | The synced tables: wire fields, checks and columns                      |
 | `src/migrations.ts`  | The schema, as ordered migrations                                       |
 | `src/limits.ts`      | `SYNC_LIMITS`                                                           |
@@ -20,7 +21,7 @@ account and sync" in `docs/spec.md`.
 
 Every body is JSON. Every route but `POST /v1/session` needs the session token as
 `Authorization: Bearer <sessionToken>`. Only `POST /v1/session` ever answers a session token,
-and nothing logs a session token or an ID token.
+and nothing logs a session token, an ID token or a Soulseek password.
 
 ### `POST /v1/session`
 
@@ -131,9 +132,39 @@ Each accepted change gets the account's next change number in the transaction th
 it, and a pull reads every table in one snapshot, so a pull never misses a change pushed
 while it runs.
 
+### `PUT /v1/soulseek`
+
+Keeps the Soulseek account Download in best quality uses as the account's, replacing the one
+it had. Only the app's native module sends it, with the session it holds: the credentials
+never pass through the app's JS.
+
+```json
+{ "username": "quietfern42", "password": "…" }
+```
+
+`204`, no body. `400 { "error": "bad_request", "detail": "…" }` for a username Soulseek
+can't log in with (1 to 30 printable ASCII characters, no space at either end) or an empty
+password (at most 1,024 characters).
+
+The password is kept encrypted with AES-GCM under `SOULSEEK_KEY`, with the account's id as
+additional data; the database never holds it in the clear.
+
+### `GET /v1/soulseek`
+
+The account's Soulseek account, or `null` when it has none:
+
+```json
+{ "account": { "username": "quietfern42", "password": "…" } }
+```
+
+A password that doesn't decrypt (`SOULSEEK_KEY` was replaced) answers `null` too, so the next
+phone's account goes up in its place. Without `SOULSEEK_KEY`, both Soulseek routes answer
+`500` and the log says so; the other routes still work.
+
 ### `DELETE /v1/account`
 
-Deletes every row and every session of the account, and the account. `204`, no body.
+Deletes every row and every session of the account, its Soulseek account, and the account.
+`204`, no body.
 
 ### Errors
 
@@ -170,12 +201,13 @@ A push that would take a table past its limit is refused whole.
 
 Set on the Worker, never in the repo (`wrangler.toml` holds none of them):
 
-| Name                 | Kind   |                                                                     |
-| -------------------- | ------ | ------------------------------------------------------------------- |
-| `TURSO_DATABASE_URL` | secret | `libsql://<db>-<org>.turso.io`                                      |
-| `TURSO_AUTH_TOKEN`   | secret | a Turso token for that database                                     |
-| `GOOGLE_CLIENT_ID`   | secret | Wave's **web** OAuth client id, the audience of the app's ID tokens |
-| `ALLOWED_EMAILS`     | secret | optional: emails that may sign in, separated by commas              |
+| Name                 | Kind   |                                                                      |
+| -------------------- | ------ | -------------------------------------------------------------------- |
+| `TURSO_DATABASE_URL` | secret | `libsql://<db>-<org>.turso.io`                                       |
+| `TURSO_AUTH_TOKEN`   | secret | a Turso token for that database                                      |
+| `GOOGLE_CLIENT_ID`   | secret | Wave's **web** OAuth client id, the audience of the app's ID tokens  |
+| `SOULSEEK_KEY`       | secret | base64 of 32 random bytes: the key Soulseek passwords are kept under |
+| `ALLOWED_EMAILS`     | secret | optional: emails that may sign in, separated by commas               |
 
 ## Running it locally
 
@@ -202,6 +234,7 @@ TURSO_DATABASE_URL=http://127.0.0.1:8080 pnpm --filter @wave/sync migrate
 # apps/sync/.dev.vars
 TURSO_DATABASE_URL=http://127.0.0.1:8080
 GOOGLE_CLIENT_ID=<web client id>.apps.googleusercontent.com
+SOULSEEK_KEY=<openssl rand -base64 32>
 ```
 
 ```sh
@@ -225,7 +258,8 @@ the Turso database and a token for it, Google's consent screen and OAuth clients
 client the service checks ID tokens against, and an Android client for `dev.leoperez.wave`
 with the SHA-1 of Expo's template debug keystore, which signs both the release and the debug
 builds), signing in to Cloudflare, the migrations, `wrangler deploy`, the Worker's secrets,
-and a check that the live service answers `401` to requests without a valid sign-in. Last,
+`SOULSEEK_KEY` (made once, and kept on the Worker on later runs), and a check that the live
+service answers `401` to requests without a valid sign-in. Last,
 it writes `syncUrl` and `googleWebClientId` into `extra` in `apps/mobile/app.config.ts`, for
 you to commit. It never prints a secret or writes one to disk; it keeps the web client id
 and the Worker's URL in `apps/sync/.env.setup` (ignored by git) for the next run. Running it
@@ -245,7 +279,11 @@ By hand, the steps are:
    pnpm exec wrangler secret put TURSO_DATABASE_URL
    pnpm exec wrangler secret put TURSO_AUTH_TOKEN
    pnpm exec wrangler secret put GOOGLE_CLIENT_ID
+   openssl rand -base64 32 | pnpm exec wrangler secret put SOULSEEK_KEY
    ```
+
+   Make `SOULSEEK_KEY` once and never replace it: the Soulseek accounts kept under the old
+   one can't be read again (each Wave account's goes up anew from the next phone that syncs).
 
 4. Migrate and deploy. The `deploy` script runs the pending migrations against the database
    in your shell's environment, then `wrangler deploy` (it needs `run`: `pnpm deploy` is a

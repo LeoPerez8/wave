@@ -11,7 +11,16 @@ switch off keeps the account for the next time, and a phone connected to an
 account of its own before the switch keeps it, with the switch on. An account
 Soulseek later rejects is forgotten and the switch goes off. `SoulseekClient`
 picks the account in one place (`connectAccount`). Subsequent searches reuse
-it. Android Keystore protects the credentials with AES-GCM in the app's
+it. While the phone is signed in to a Wave account, the Soulseek account is
+the Wave account's: `SoulseekClient` asks the sync service for it
+(`GET /v1/soulseek`, through `SyncServiceSoulseek` with the Wave session the
+native module holds) when the switch turns on and at each pull
+(`followWaveAccount`). The phone switches to the Wave account's when it has
+one, forgetting its own, and sends its own up (`PUT /v1/soulseek`) when it
+has none; an account the switch makes while signed in goes up at once.
+When Wave's server can't be asked, turning the switch on goes on as signed
+out and the next pull settles it. Signing out and deleting the Wave account
+leave the phone's account as it is. Android Keystore protects the credentials with AES-GCM in the app's
 no-backup directory. The password never reaches JS (the session reports only
 the status and username), and neither credential is logged.
 Soulseek's login protocol itself uses plain TCP, as existing clients do.
@@ -118,7 +127,11 @@ store is tested with authenticated AES-GCM encryption and tamper rejection.
 fresh account made and connected, a taken name drawn again, giving up after
 five, the same account after turning it off and on, an owner's account kept,
 the switch staying off offline or with the server down, and a rejected
-account forgotten.
+account forgotten. `SoulseekOnWaveAccountTest` adds a fake sync service: a
+new account sent up at once, a fresh phone using the Wave account's without
+making one, a phone's own account replaced at a pull (or sent up when the
+Wave account has none), nothing sent while signed out or when the service
+can't be asked, and a rejected Wave account's account replaced.
 
 `DurableDownloadsTest` covers the journal through its public API: recreation
 mid-transfer and mid-decision, persisted queue position and deadlines,

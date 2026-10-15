@@ -29,6 +29,12 @@ export interface PersistedSettingOptions<A> {
    * `applySyncedSetting`).
    */
   readonly synced?: boolean;
+  /**
+   * Runs with a value applied from the Wave account (`applySyncedSetting`),
+   * once saved: for a synced setting whose value also lives elsewhere and
+   * takes more than `onValue` to apply (Download in best quality's native switch).
+   */
+  readonly onApplied?: (value: A) => void;
 }
 
 let syncedChange: ((key: string) => void) | null = null;
@@ -81,6 +87,7 @@ export function persistedSetting<A>({
   persistDelayMs,
   onValue,
   synced = false,
+  onApplied,
 }: PersistedSettingOptions<A>): PersistedSetting<A> {
   let loaded = false;
   let current: A;
@@ -112,6 +119,7 @@ export function persistedSetting<A>({
     else pending = setTimeout(persist, persistDelayMs);
     onValue?.(value);
     if (synced && here) syncedChange?.(key);
+    if (!here) onApplied?.(value);
     for (const listener of listeners) listener();
   };
 

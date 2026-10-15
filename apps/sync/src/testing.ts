@@ -16,6 +16,9 @@ import { type SyncServiceOptions, createSyncService } from "./service.ts";
 
 export const CLIENT_ID = "wave-web-client.apps.googleusercontent.com";
 
+/** A `SOULSEEK_KEY` for the tests: base64 of 32 bytes. */
+export const SOULSEEK_KEY = Buffer.alloc(32, 7).toString("base64");
+
 const encoder = new TextEncoder();
 
 const base64url = (bytes: Uint8Array): string =>
@@ -142,10 +145,12 @@ export interface HarnessOptions {
   readonly allowedEmails?: string;
   readonly limits?: Partial<SyncLimits>;
   readonly pullPageSize?: number;
+  /** `SOULSEEK_KEY`; `SOULSEEK_KEY` above by default, null for none. */
+  readonly soulseekKey?: string | null;
 }
 
-export const harness = async (options: HarnessOptions = {}): Promise<Harness> => {
-  const db = await freshDatabase();
+export const harness = async (options: HarnessOptions = {}, db?: Client): Promise<Harness> => {
+  db ??= await freshDatabase();
   const state = { now: Date.UTC(2026, 9, 14, 12) };
   const clock = (): number => state.now;
   const google = await fakeGoogle(clock);
@@ -157,6 +162,7 @@ export const harness = async (options: HarnessOptions = {}): Promise<Harness> =>
     limits: { ...SYNC_LIMITS, ...options.limits },
     ...(options.allowedEmails === undefined ? {} : { allowedEmails: options.allowedEmails }),
     ...(options.pullPageSize === undefined ? {} : { pullPageSize: options.pullPageSize }),
+    ...(options.soulseekKey === null ? {} : { soulseekKey: options.soulseekKey ?? SOULSEEK_KEY }),
   };
   const service = createSyncService(serviceOptions);
 
