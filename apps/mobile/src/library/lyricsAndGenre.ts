@@ -234,7 +234,7 @@ export const writeLyricsAndGenre = (
         )
         // Drops a genre no song has any more.
         .pipe(
-          Effect.andThen(store.removeTracks([])),
+          Effect.andThen(store.filesGone([])),
           Effect.ensuring(Effect.sync(libraryEdited)),
           // The file has its new tags; the next scan brings the index up to date.
           Effect.ignore,

@@ -1,10 +1,10 @@
-import { libraryVersion } from "@/library/LibraryScan";
+import { libraryEdited, libraryVersion } from "@/library/LibraryScan";
 import { onFavoritesSaved, reloadFavorites } from "@/library/favorites";
 import { onPlaylistsEdited, playlistsChanged } from "@/library/playlists";
 import { appRuntime } from "@/library/runtime";
-import type { PulledChanges } from "@/library/db/syncRows";
 import { playHistoryVersion } from "@/playback/PlayHistory";
 
+import type { SyncedChanges } from "./syncCycle";
 import { syncedPreferences } from "./syncedPreferences";
 import { WaveSync } from "./WaveSync";
 
@@ -14,8 +14,12 @@ const changed = (songs: boolean) => (): void => {
   void appRuntime.runPromise(WaveSync.use((sync) => sync.changed({ songs }))).catch(() => {});
 };
 
-/** Shows what the Wave account changed: lists over playlists, stars and plays re-read. */
-const showPulled = (changes: PulledChanges): void => {
+/**
+ * Shows what the Wave account changed: lists over playlists, stars and plays
+ * re-read, and every list once missing songs came in or left.
+ */
+const showPulled = (changes: SyncedChanges): void => {
+  if (changes.library) libraryEdited();
   if (changes.playlists) playlistsChanged();
   if (changes.favorites) reloadFavorites();
   if (changes.plays) playHistoryVersion.update((version) => version + 1);

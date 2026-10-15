@@ -2,8 +2,15 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import type { PlayEvent } from "@wave/core";
+import { normalizeTrack, type PlayEvent } from "@wave/core";
+import { eq, inArray } from "drizzle-orm";
 
+import type { IndexedTrack } from "../library/LibraryStore.ts";
+import { selectAlbumDetail, selectAlbums } from "../library/db/albums.ts";
+import { creditSplits } from "../library/db/credits.ts";
+import { filesGone, removeSongs, signOut } from "../library/db/missingSongs.ts";
+import { saveBatch } from "../library/db/save.ts";
+import * as schema from "../library/db/schema.ts";
 import {
   endPlay,
   listFavorites,
@@ -57,10 +64,41 @@ const OK_COMPUTER: readonly FixtureTrack[] = [
   },
 ];
 
+/** A song on a phone; [videoId] for one downloaded from YouTube Music. */
+type Song = FixtureTrack & { readonly videoId?: string };
+
+/** The file of [song] as a scan reads it. */
+const scanned = (song: Song): IndexedTrack => ({
+  ...normalizeTrack({
+    path: `/Music/${song.album}/${song.title}.mp3`,
+    title: song.title,
+    artist: song.artist,
+    album: song.album,
+    trackNumber: song.trackNumber === undefined ? null : String(song.trackNumber),
+    durationMs: song.durationMs,
+  }),
+  videoId: song.videoId ?? null,
+  sizeBytes: 1_000,
+  modifiedAt: 0,
+  sampleRate: null,
+  bitrateKbps: null,
+  artworkHash: null,
+  hasLyrics: false,
+});
+
 /** A phone signed in to the account [service] holds: its Library, its preferences and its clock. */
-const phone = async (service: TestSyncService, songs: readonly FixtureTrack[] = OK_COMPUTER) => {
+const phone = async (service: TestSyncService, songs: readonly Song[] = OK_COMPUTER) => {
   const db = await openTestDatabase();
+  const splits = creditSplits();
   const tracks = new Map(songs.map((song) => [song.title, addTrack(db, song)]));
+  for (const song of songs) {
+    if (song.videoId !== undefined) {
+      db.update(schema.tracks)
+        .set({ videoId: song.videoId })
+        .where(eq(schema.tracks.id, tracks.get(song.title) ?? -1))
+        .run();
+    }
+  }
   const stored = new Map<string, string>();
   let clock = 1_000;
   const preferences: SyncPreferences = {
@@ -71,22 +109,53 @@ const phone = async (service: TestSyncService, songs: readonly FixtureTrack[] = 
     },
   };
   const now = () => (clock += 1_000);
+  /** The phone's Track of a song, by title. */
+  const track = (title: string): number => {
+    const id =
+      tracks.get(title) ??
+      db
+        .select({ id: schema.tracks.id })
+        .from(schema.tracks)
+        .where(eq(schema.tracks.title, title))
+        .get()?.id;
+    if (id === undefined) throw new Error(`no ${title}`);
+    return id;
+  };
   return {
     db,
     stored,
     now,
-    /** The phone's Track of a song, by title. */
-    track: (title: string): number => {
-      const id = tracks.get(title);
-      if (id === undefined) throw new Error(`no ${title}`);
-      return id;
-    },
-    /** Copies a file to the phone (as Syncthing would) and indexes it. */
-    addFile: (song: FixtureTrack): number => {
-      const id = addTrack(db, song);
+    track,
+    /** Copies a file to the phone (as Syncthing would), and a scan saves it. */
+    addFile: (song: Song): number => {
+      const file = scanned(song);
+      saveBatch(db, splits, [file], [], [], now());
+      const id = db
+        .select({ id: schema.tracks.id })
+        .from(schema.tracks)
+        .where(eq(schema.tracks.path, file.path))
+        .get()?.id;
+      if (id === undefined) throw new Error(`${song.title} wasn't saved`);
       tracks.set(song.title, id);
       return id;
     },
+    /** A scan no longer finds the files of these songs (an unmounted or emptied folder). */
+    loseFiles: (titles: readonly string[]) => {
+      const paths = db
+        .select({ path: schema.tracks.path })
+        .from(schema.tracks)
+        .where(inArray(schema.tracks.title, [...titles]))
+        .all()
+        .flatMap((row) => row.path ?? []);
+      filesGone(db, splits, paths);
+    },
+    /** Remove from Library (a missing song), or Delete once the file is gone (a song with one). */
+    remove: (title: string) => {
+      removeSongs(db, splits, [track(title)], now());
+      tracks.delete(title);
+    },
+    /** Signs out of the Wave account. */
+    signOut: () => signOut(db, splits),
     /** Changes a synced preference here, as Settings does. */
     setPreference: (key: string, value: string) => {
       stored.set(key, value);
@@ -101,6 +170,7 @@ const phone = async (service: TestSyncService, songs: readonly FixtureTrack[] = 
     ) =>
       syncCycle({
         db,
+        splits,
         transport: options.to ?? service,
         preferences,
         account: options.account ?? "ana@example.com",
@@ -120,6 +190,16 @@ const EXIT_MUSIC: FixtureTrack = {
 };
 
 const favoriteTitles = (db: TestDatabase) => listFavorites(db).map((row) => row.title);
+
+/** Every song in the Library, album by album in album order, and whether the phone has its file. */
+const files = (db: TestDatabase): [string, boolean][] =>
+  selectAlbums(db, undefined).flatMap(
+    (album) =>
+      selectAlbumDetail(db, album.id)?.tracks.map((track): [string, boolean] => [
+        track.title,
+        track.path !== null,
+      ]) ?? [],
+  );
 
 /** A play of [trackId] as the player records it. */
 const played = (
@@ -335,7 +415,8 @@ describe("syncCycle", () => {
       );
     }
     assert.deepEqual(favoriteTitles(b.db).toSorted(), ["Airbag", "Exit Music", "Lucky"]);
-    assert.deepEqual(favoriteTitles(a.db).toSorted(), ["Airbag", "Lucky"]);
+    // a lacks Exit Music's file: it's a missing song there, starred.
+    assert.deepEqual(favoriteTitles(a.db).toSorted(), ["Airbag", "Exit Music", "Lucky"]);
     assert.deepEqual(
       playCounts(a.db).map((row) => row[0]),
       ["airbag", "lucky"],
@@ -344,7 +425,7 @@ describe("syncCycle", () => {
     assert.equal(service.rows().songs.filter((song) => !song.deleted).length, 4);
   });
 
-  test("an account song the phone lacks waits, with its star, entries and plays, until its file comes", async () => {
+  test("an account song the phone lacks comes in as a missing song, with its star, entries and plays, and its file fills it in", async () => {
     const service = testSyncService();
     const a = await phone(service, [...OK_COMPUTER, EXIT_MUSIC]);
     const exit = a.track("Exit Music");
@@ -362,18 +443,142 @@ describe("syncCycle", () => {
     await a.sync();
 
     const b = await phone(service);
-    await b.sync();
-    assert.deepEqual(playlistTitles(b.db), [{ name: "Night", songs: ["Lucky"] }]);
-    assert.deepEqual(favoriteTitles(b.db), []);
+    const pulled = await b.sync();
+    assert.ok(pulled.pulled.songs);
+    assert.deepEqual(playlistTitles(b.db), [{ name: "Night", songs: ["Lucky", "Exit Music"] }]);
+    assert.deepEqual(favoriteTitles(b.db), ["Exit Music"]);
+    assert.deepEqual(playCounts(b.db), playCounts(a.db));
+    assert.deepEqual(files(b.db), [
+      ["Airbag", true],
+      ["Paranoid Android", true],
+      ["Exit Music", false],
+      ["Lucky", true],
+    ]);
     // Nothing the phone lacks goes back up as removed, and a sync with nothing new pulls only.
     assert.equal((await b.sync()).pushed, 0);
     assert.deepEqual(favoriteTitles(a.db), ["Exit Music"]);
 
-    b.addFile(EXIT_MUSIC);
+    // The file comes (Syncthing): it fills the missing song in, the same Track.
+    const missing = b.track("Exit Music");
+    assert.equal(b.addFile(EXIT_MUSIC), missing);
     await b.sync({ songsChanged: true });
+    assert.deepEqual(files(b.db).at(2), ["Exit Music", true]);
     assert.deepEqual(playlistTitles(b.db), [{ name: "Night", songs: ["Lucky", "Exit Music"] }]);
     assert.deepEqual(favoriteTitles(b.db), ["Exit Music"]);
     assert.deepEqual(playCounts(b.db), playCounts(a.db));
+    assert.equal(service.rows().songs.length, 4);
+  });
+
+  test("a fresh install signed in shows the whole Library at once, every song missing, and files fill it in without doubles", async () => {
+    const service = testSyncService();
+    const a = await phone(service, [...OK_COMPUTER, EXIT_MUSIC]);
+    await a.sync();
+
+    const b = await phone(service, []);
+    await b.sync();
+    assert.deepEqual(
+      selectAlbums(b.db, undefined).map((album) => [album.title, album.trackCount]),
+      [["OK Computer", 4]],
+    );
+    assert.ok(files(b.db).every(([, file]) => !file));
+
+    for (const song of OK_COMPUTER) b.addFile(song);
+    await b.sync({ songsChanged: true });
+    assert.deepEqual(files(b.db), [
+      ["Airbag", true],
+      ["Paranoid Android", true],
+      ["Exit Music", false],
+      ["Lucky", true],
+    ]);
+    // Nothing went up twice, and the account still has the song b lacks.
+    assert.equal(service.rows().songs.filter((song) => !song.deleted).length, 4);
+  });
+
+  test("files a scan no longer finds while signed in become missing songs, and the account keeps them", async () => {
+    const service = testSyncService();
+    const a = await phone(service);
+    setFavorites(a.db, [a.track("Lucky")], true, a.now());
+    await a.sync();
+
+    a.loseFiles(["Airbag", "Paranoid Android", "Lucky"]);
+    await a.sync({ songsChanged: true });
+    assert.ok(files(a.db).every(([, file]) => !file));
+    assert.equal(files(a.db).length, 3);
+    assert.deepEqual(favoriteTitles(a.db), ["Lucky"]);
+    assert.equal(service.rows().songs.filter((song) => !song.deleted).length, 3);
+    assert.equal(service.rows().favorites.filter((star) => !star.deleted).length, 1);
+
+    // The folder is back: the files fill their songs in again.
+    for (const song of OK_COMPUTER) a.addFile(song);
+    assert.ok(files(a.db).every(([, file]) => file));
+    assert.equal(files(a.db).length, 3);
+  });
+
+  test("signed out, a scan that no longer finds a file removes its song, as before", async () => {
+    const a = await phone(testSyncService());
+    a.loseFiles(["Lucky"]);
+    assert.deepEqual(
+      files(a.db).map(([title]) => title),
+      ["Airbag", "Paranoid Android"],
+    );
+  });
+
+  test("Remove from Library and Delete take the song out of the account, and other phones lose it at their next pull", async () => {
+    const service = testSyncService();
+    const a = await phone(service, [...OK_COMPUTER, EXIT_MUSIC]);
+    await a.sync();
+    const b = await phone(service, []);
+    await b.sync();
+
+    // b removes a song it doesn't have; a deletes one it has.
+    b.remove("Exit Music");
+    await b.sync();
+    a.remove("Lucky");
+    await a.sync({ songsChanged: true });
+    await b.sync();
+    await a.sync();
+
+    assert.deepEqual(
+      service
+        .rows()
+        .songs.flatMap((song) => (song.deleted ? [] : [song.title]))
+        .toSorted(),
+      ["Airbag", "Paranoid Android"],
+    );
+    assert.deepEqual(
+      files(b.db).map(([title]) => title),
+      ["Airbag", "Paranoid Android"],
+    );
+    // a has Exit Music's file: a pull never takes a file's song away.
+    assert.deepEqual(
+      files(a.db).map(([title]) => title),
+      ["Airbag", "Paranoid Android", "Exit Music"],
+    );
+  });
+
+  test("signing out leaves no missing song, and a playlist entry of one becomes a YT Music entry or leaves", async () => {
+    const service = testSyncService();
+    const a = await phone(service, [...OK_COMPUTER, { ...EXIT_MUSIC, videoId: "exit-video" }]);
+    createPlaylist(
+      a.db,
+      "Night",
+      [
+        { source: "library", trackId: a.track("Lucky") },
+        { source: "library", trackId: a.track("Exit Music") },
+        { source: "library", trackId: a.track("Airbag") },
+      ],
+      a.now(),
+    );
+    await a.sync();
+    const b = await phone(service, [OK_COMPUTER[0] as FixtureTrack]);
+    await b.sync();
+
+    b.signOut();
+    assert.deepEqual(files(b.db), [["Airbag", true]]);
+    assert.deepEqual(playlistTitles(b.db), [{ name: "Night", songs: ["yt:Exit Music", "Airbag"] }]);
+    // Signing in again joins anew: the missing songs come back, the YT Music entry stays one.
+    await b.sync();
+    assert.equal(files(b.db).length, 4);
   });
 
   test("signing in again joins as the first time does: everything goes up to the account", async () => {

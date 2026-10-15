@@ -10,7 +10,8 @@ import type { AlbumRow, SongRow } from "../LibraryStore.ts";
 import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
 import { playRecordingKey, stamped } from "./sync.ts";
-import { albumArtistIds, BY_TITLE, songColumns, withFile } from "./tracks.ts";
+import { selectAlbums } from "./albums.ts";
+import { BY_TITLE, inScope, songColumns, type TrackScope } from "./tracks.ts";
 
 /** A Most Played song with its number of counted plays. */
 export interface MostPlayedRow extends SongRow {
@@ -120,37 +121,19 @@ export const latestPlay = (db: LibraryDatabase): RecordedPlay | null => {
   };
 };
 
-/** Albums by id, with their track count and length, in the order of `ids`. */
-const albumsInOrder = (db: LibraryDatabase, ids: readonly number[]): AlbumRow[] => {
+/** Albums by id with Tracks in [scope], with their track count and length, in the order of `ids`. */
+const albumsInOrder = (
+  db: LibraryDatabase,
+  ids: readonly number[],
+  scope: TrackScope,
+): AlbumRow[] => {
   if (ids.length === 0) return [];
-  const { tracks, artists, albums, artwork } = schema;
-  const rows = db
-    .select({
-      id: albums.id,
-      title: albums.title,
-      titleSort: albums.titleSort,
-      albumArtist: albums.albumArtistCredit,
-      albumArtistId: albums.albumArtistId,
-      albumArtistIds,
-      year: albums.year,
-      compilation: albums.compilation,
-      trackCount: sql<number>`count(${tracks.id})`,
-      durationMs: sql<number>`coalesce(sum(${tracks.durationMs}), 0)`,
-      thumbPath: artwork.thumbPath,
-      artworkPath: artwork.path,
-    })
-    .from(albums)
-    .innerJoin(artists, eq(albums.albumArtistId, artists.id))
-    .innerJoin(tracks, eq(tracks.albumId, albums.id))
-    .leftJoin(artwork, eq(albums.artworkHash, artwork.hash))
-    .where(inArray(albums.id, [...ids]))
-    .groupBy(albums.id)
-    .all();
+  const rows = selectAlbums(db, inArray(schema.albums.id, [...ids]), undefined, scope);
   const byId = new Map(rows.map((row) => [row.id, row]));
   return ids.flatMap((id) => byId.get(id) ?? []);
 };
 
-const recentlyAddedAlbums = (db: LibraryDatabase): AlbumRow[] => {
+const recentlyAddedAlbums = (db: LibraryDatabase, scope: TrackScope): AlbumRow[] => {
   const { tracks } = schema;
   const ids = db
     .select({ id: tracks.albumId })
@@ -160,10 +143,10 @@ const recentlyAddedAlbums = (db: LibraryDatabase): AlbumRow[] => {
     .limit(SHELF)
     .all()
     .map((row) => row.id);
-  return albumsInOrder(db, ids);
+  return albumsInOrder(db, ids, scope);
 };
 
-const recentlyPlayedAlbums = (db: LibraryDatabase): AlbumRow[] => {
+const recentlyPlayedAlbums = (db: LibraryDatabase, scope: TrackScope): AlbumRow[] => {
   const { playEvents, tracks } = schema;
   const ids = db
     .select({ id: tracks.albumId })
@@ -174,16 +157,16 @@ const recentlyPlayedAlbums = (db: LibraryDatabase): AlbumRow[] => {
     .limit(SHELF)
     .all()
     .map((row) => row.id);
-  return albumsInOrder(db, ids);
+  return albumsInOrder(db, ids, scope);
 };
 
-const mostPlayedSongs = (db: LibraryDatabase): MostPlayedRow[] => {
+const mostPlayedSongs = (db: LibraryDatabase, scope: TrackScope): MostPlayedRow[] => {
   const { playEvents, tracks, artists, albums, artwork } = schema;
   const playCount = sql<number>`count(*)`;
   return db
     .select({ ...songColumns, playCount })
     .from(playEvents)
-    .innerJoin(tracks, withFile(eq(playEvents.trackId, tracks.id)))
+    .innerJoin(tracks, inScope(eq(playEvents.trackId, tracks.id), scope))
     .innerJoin(artists, eq(tracks.artistId, artists.id))
     .innerJoin(albums, eq(tracks.albumId, albums.id))
     .leftJoin(artwork, eq(tracks.artworkHash, artwork.hash))
@@ -194,12 +177,12 @@ const mostPlayedSongs = (db: LibraryDatabase): MostPlayedRow[] => {
     .all();
 };
 
-const recentFavorites = (db: LibraryDatabase): SongRow[] => {
+const recentFavorites = (db: LibraryDatabase, scope: TrackScope): SongRow[] => {
   const { favorites, tracks, artists, albums, artwork } = schema;
   return db
     .select(songColumns)
     .from(favorites)
-    .innerJoin(tracks, withFile(eq(favorites.trackId, tracks.id)))
+    .innerJoin(tracks, inScope(eq(favorites.trackId, tracks.id), scope))
     .innerJoin(artists, eq(tracks.artistId, artists.id))
     .innerJoin(albums, eq(tracks.albumId, albums.id))
     .leftJoin(artwork, eq(tracks.artworkHash, artwork.hash))
@@ -215,7 +198,7 @@ export const listFavorites = (db: LibraryDatabase): FavoriteRow[] => {
   return db
     .select({ ...songColumns, starredAt: favorites.addedAt })
     .from(favorites)
-    .innerJoin(tracks, withFile(eq(favorites.trackId, tracks.id)))
+    .innerJoin(tracks, eq(favorites.trackId, tracks.id))
     .innerJoin(artists, eq(tracks.artistId, artists.id))
     .innerJoin(albums, eq(tracks.albumId, albums.id))
     .leftJoin(artwork, eq(tracks.artworkHash, artwork.hash))
@@ -270,9 +253,10 @@ export const setFavorites = (
   });
 };
 
-export const homeSections = (db: LibraryDatabase): HomeSections => ({
-  recentlyAdded: recentlyAddedAlbums(db),
-  recentlyPlayed: recentlyPlayedAlbums(db),
-  mostPlayed: mostPlayedSongs(db),
-  favorites: recentFavorites(db),
+/** The Home tab's sections, of the Tracks in [scope] (Android Auto's Home: those with a file). */
+export const homeSections = (db: LibraryDatabase, scope: TrackScope = "library"): HomeSections => ({
+  recentlyAdded: recentlyAddedAlbums(db, scope),
+  recentlyPlayed: recentlyPlayedAlbums(db, scope),
+  mostPlayed: mostPlayedSongs(db, scope),
+  favorites: recentFavorites(db, scope),
 });
