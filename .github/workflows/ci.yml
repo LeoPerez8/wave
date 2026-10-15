@@ -238,6 +238,7 @@ jobs:
       CCACHE_MAXSIZE: 1G
       # A full build's APK, debug keystore and Metro assets, kept for repacks (scripts/ci/repack.ts).
       KEPT_APK: ${{ github.workspace }}/../kept-apk
+      WAVE_CI_BUNDLE_MANIFEST: ${{ runner.temp }}/wave-ci-bundle.json
     steps:
       - uses: actions/checkout@v5
         with:
@@ -290,6 +291,11 @@ jobs:
           key: metro-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
           restore-keys: metro-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
 
+      # Expo + Hermes run once in either mode. A resource mismatch can fall back to a full
+      # build using these same outputs. The Gradle init script verifies its handoff below.
+      - name: Bundle JavaScript
+        run: scripts/ci/step.sh "Bundle JavaScript" scripts/ci/bundle.sh
+
       # Metro and hermesc, then the bundle goes into the kept APK. When the bundle needs assets
       # the kept APK lacks, the job falls back to the full build below.
       - name: Repack the kept APK
@@ -334,14 +340,6 @@ jobs:
         working-directory: apps/mobile/android
         run: ../../../scripts/ci/step.sh "Native unit tests" ./gradlew :wave-native:testDebugUnitTest --no-daemon --console=plain
 
-      # The JS bundle is built once, by the task assembleRelease would run. Running it as its own
-      # step keeps Metro's errors at the top of the log; assembleRelease then finds it up to date.
-      # Expo doesn't reset Metro's cache when CI is set, despite the --reset-cache Gradle passes.
-      - name: Bundle JavaScript
-        if: env.APK_BUILD == 'full'
-        working-directory: apps/mobile/android
-        run: ../../../scripts/ci/step.sh "Bundle JavaScript" ./gradlew :app:createBundleReleaseJsAndAssets --no-daemon --console=plain
-
       - name: Save Metro's cache
         if: github.ref == 'refs/heads/main'
         uses: actions/cache/save@v4
@@ -352,7 +350,7 @@ jobs:
       - name: Build release APK
         if: env.APK_BUILD == 'full'
         working-directory: apps/mobile/android
-        run: ../../../scripts/ci/step.sh "Gradle assembleRelease" ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon --console=plain --profile
+        run: ../../../scripts/ci/step.sh "Gradle assembleRelease" ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --init-script ../../../scripts/ci/prebuilt-bundle.gradle --no-daemon --console=plain --profile
 
       - name: CMake task times
         if: always() && env.APK_BUILD == 'full'

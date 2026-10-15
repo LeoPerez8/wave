@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Builds the APK without Gradle, from a kept full build whose native side matches this one
-# (repack.ts decides when). It bundles the JS the way Gradle's createBundleReleaseJsAndAssets
-# does (Expo CLI's export:embed, then hermesc with the flags in app/build.gradle), swaps the
-# bundle into the kept APK, then zipaligns and signs it with the kept build's debug keystore.
+# (repack.ts decides when). bundle.sh has already produced the JS/Hermes bundle once.
+# This swaps it into the kept APK, then aligns and signs with that build's debug keystore.
 #   scripts/ci/repack.sh <kept dir> <output apk>
 # The kept dir holds app-release.apk, debug.keystore and metro-assets.json (Metro's assets
 # folder in that build, from `repack.ts assets`). Run it after prebuild, from the repo root.
@@ -17,39 +16,24 @@ app="$(realpath apps/mobile)"
 work="${RUNNER_TEMP:-/tmp}/repack"
 rm -rf "$work"
 mkdir -p "$work/bundle/assets" "$work/res"
-bundle="$work/bundle/assets/index.android.bundle"
+assets="$app/android/app/build/generated/assets/react/release"
+resources="$app/android/app/build/generated/res/react/release"
+test -s "${WAVE_CI_BUNDLE_MANIFEST:?}"
+test -s "$assets/index.android.bundle"
 
-cd "$app"
-# The same commands app/build.gradle's react block resolves.
-cli="$(node --print "require.resolve('@expo/cli', { paths: [require.resolve('expo/package.json')] })")"
-entry="$(node -e "require('expo/scripts/resolveAppEntry')" "$app" android absolute)"
-hermes="$(dirname "$(node --print "require.resolve('hermes-compiler/package.json', { paths: [require.resolve('react-native/package.json')] })")")"
-mapfile -t flags < <(node "$here/repack.ts" hermes-flags android/app/build.gradle)
-
-start=$SECONDS
-node "$cli" export:embed --platform android --dev false --reset-cache \
-  --entry-file "$entry" --bundle-output "$bundle" --assets-dest "$work/res" \
-  --sourcemap-output "$work/index.android.bundle.packager.map" --minify false --verbose
-echo "Metro: $((SECONDS - start)) s"
-
-missing="$(node "$here/repack.ts" check-assets "$kept/metro-assets.json" "$work/res")"
+missing="$(node "$here/repack.ts" check-assets "$kept/metro-assets.json" "$resources")"
 if [ -n "$missing" ]; then
   echo "The kept APK lacks these assets, so this needs a full build:"
   echo "$missing"
   exit 0
 fi
 
-start=$SECONDS
-"$hermes/hermesc/linux64-bin/hermesc" -w -emit-binary -max-diagnostic-width=80 \
-  -out "$bundle.hbc" "$bundle" "${flags[@]}"
-mv "$bundle.hbc" "$bundle"
-echo "hermesc ${flags[*]}: $((SECONDS - start)) s"
-
 # The bundle is stored uncompressed, as Gradle stores it (enableBundleCompression is off),
 # so Hermes can map it.
 unzip -l "$kept/app-release.apk" assets/index.android.bundle > /dev/null
+cp -a "$assets/." "$work/bundle/assets/"
 cp "$kept/app-release.apk" "$work/unsigned.apk"
-(cd "$work/bundle" && zip -q -0 -X "$work/unsigned.apk" assets/index.android.bundle)
+(cd "$work/bundle" && zip -q -0 -X -r "$work/unsigned.apk" assets)
 
 tools="$(ls -d "${ANDROID_HOME:?}"/build-tools/* | sort -V | tail -n 1)"
 # -P 16: native libraries stay aligned to 16 KB pages, as AGP aligns them.
