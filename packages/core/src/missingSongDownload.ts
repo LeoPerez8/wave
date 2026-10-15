@@ -117,7 +117,11 @@ export const missingSongJob = (track: MissingTrack): MissingSongJob => ({
 export const missingSongSearch = (job: MissingSongJob): string | null =>
   job.missing.videoId === null ? spotifySearchQuery(job) : null;
 
-/** A YouTube Music video a missing song downloads, and its cover when YouTube Music showed one. */
+/**
+ * A YouTube Music video a missing song downloads, and its cover when the
+ * search showed one. A song's own video comes without: the app reads its
+ * cover from the video's album page, as a YT Music song's download does.
+ */
 export interface MissingSongVideo {
   readonly videoId: string;
   readonly artworkUrl: string | null;

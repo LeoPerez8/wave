@@ -34,6 +34,7 @@ import {
   type DownloadFailurePlan,
   type DownloadSource,
   type MissingSongJob,
+  type MissingSongVideo,
   type MissingSongsDownload,
   type MissingSongsDownloadAction,
   type MissingTrack,
@@ -306,11 +307,30 @@ const searchFailure = (error: YtMusicError): DownloadFailed =>
   });
 
 /**
+ * The cover of the album YouTube Music files video [videoId] under, read as a YT Music song's
+ * download reads its album (the watch page, then the album page); null when it has none, or
+ * YouTube Music doesn't answer in time.
+ */
+const videoCover = (videoId: string) =>
+  optional(
+    Effect.gen(function* () {
+      const { albumId } = yield* native(() => WaveYtDownloads.watchSong(videoId));
+      return albumId === null ? null : (yield* native(() => readYtAlbum(albumId))).artworkUrl;
+    }),
+  );
+
+/** [video] with its album's cover (`videoCover`) when it came without one: a missing song's own video. */
+const withCover = (video: MissingSongVideo | null) =>
+  video === null || video.artworkUrl !== null
+    ? Effect.succeed(video)
+    : videoCover(video.videoId).pipe(Effect.map((artworkUrl) => ({ ...video, artworkUrl })));
+
+/**
  * The journal's "prepare" decision for missing song [trackId] (job `missing:<id>`), read from
  * its Track as it is now. Core picks the source: the video it was downloaded from, while YT
  * Music is on; else Soulseek's peers with the recording while Download in best quality is on,
  * falling back to YouTube Music's match; else that match (`missingSongVideo`). The file gets the
- * Track's tags. Nothing matched on YouTube Music fails it as notFound, and the song stays missing.
+ * Track's tags and the video's cover (its own video's from its album page, `withCover`). Nothing matched on YouTube Music fails it as notFound, and the song stays missing.
  */
 const prepareMissingSong = (trackId: number) =>
   Effect.gen(function* () {
@@ -338,7 +358,7 @@ const prepareMissingSong = (trackId: number) =>
     const findVideo = !ytMusicOn
       ? Effect.succeed(null)
       : search === null
-        ? Effect.succeed(missingSongVideo(job, null))
+        ? withCover(missingSongVideo(job, null))
         : ytMusic.searchSongs(search).pipe(
             Effect.map((page) => missingSongVideo(job, page.songs)),
             Effect.mapError(searchFailure),
