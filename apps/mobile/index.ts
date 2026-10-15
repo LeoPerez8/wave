@@ -16,3 +16,4 @@ AppRegistry.registerHeadlessTask("WaveService", () => async () => {
   startServices("headless");
   await new Promise<never>(() => {});
 });
+// CI probe for #184: an app change builds the APK.
