@@ -1,0 +1,55 @@
+// CI's bundle.sh already ran RN's Expo/Hermes commands. Keep the task registered so
+// AGP still consumes its assets/resources; skip its action only after checking the
+// current task configuration and every output against the completion manifest.
+import groovy.json.JsonSlurper
+import java.security.MessageDigest
+
+gradle.projectsEvaluated {
+    // Init scripts also run for included builds, such as RN's Gradle plugin.
+    def app = gradle.rootProject.findProject(':app')
+    if (app == null) return
+    def task = app.tasks.named('createBundleReleaseJsAndAssets').get()
+    def verifyBundle = {
+            def marker = System.getenv('WAVE_CI_BUNDLE_MANIFEST')
+            if (!marker || !new File(marker).isFile()) {
+                throw new GradleException('CI bundle manifest is missing; run scripts/ci/bundle.sh first.')
+            }
+            def manifest = new JsonSlurper().parse(new File(marker))
+            if (task.jsBundleDir.get().asFile.canonicalPath != new File(manifest.assetsDir).canonicalPath ||
+                task.resourcesDir.get().asFile.canonicalPath != new File(manifest.resourcesDir).canonicalPath ||
+                task.hermesFlags.get() != manifest.hermesFlags ||
+                !task.hermesEnabled.get() || task.devEnabled.get() || task.minifyEnabled.get() ||
+                task.bundleCommand.get() != 'export:embed' || task.bundleAssetName.get() != 'index.android.bundle' ||
+                task.bundleConfig.isPresent() || !task.extraPackagerArgs.get().isEmpty()) {
+                throw new GradleException('The React Native bundle configuration changed; update CI bundle.sh.')
+            }
+            [assets: task.jsBundleDir.get().asFile, resources: task.resourcesDir.get().asFile].each { kind, dir ->
+                if (!dir.isDirectory()) throw new GradleException("CI bundle output is missing: $dir")
+                def actual = [:]
+                dir.eachFileRecurse { file ->
+                    if (file.isFile()) {
+                        def name = dir.toPath().relativize(file.toPath()).toString().replace('\\', '/')
+                        actual[name] = MessageDigest.getInstance('SHA-256').digest(file.bytes).encodeHex().toString()
+                    }
+                }
+                if (actual != manifest[kind]) throw new GradleException("CI bundle output changed: $dir")
+            }
+            def bundle = new File(task.jsBundleDir.get().asFile, 'index.android.bundle').bytes
+            // Hermes bytecode magic: c6 1f bc 03 c1 03 19 1f.
+            def magic = [198, 31, 188, 3, 193, 3, 25, 31]
+            if (bundle.length < 8) throw new GradleException('CI bundle is not Hermes bytecode.')
+            for (int index = 0; index < 8; index++) {
+                if (Byte.toUnsignedInt(bundle[index]) != magic[index]) {
+                    throw new GradleException('CI bundle is not Hermes bytecode.')
+                }
+            }
+    }
+    // Fail during graph configuration, before expensive native compilation. Recheck at the
+    // task's normal position too, in case another build task changed its generated files.
+    verifyBundle()
+    task.onlyIf('CI supplied the verified release bundle') {
+        verifyBundle()
+        task.logger.lifecycle('Using the verified CI bundle; Metro and Hermes will not run again.')
+        return false
+    }
+}

@@ -39,7 +39,7 @@ body="$dir/ci-comment.md"
     clean="$dir/ci-step.clean.log"
     sed -e 's/\x1b\[[0-9;]*[A-Za-z]//g' "$dir/ci-step.log" > "$clean"
     # The root cause is usually the first error, which can scroll far above the tail.
-    first="$(grep -n -m1 -E '(^|[^a-zA-Z])(Error|ERROR|error:|FAILURE|Cannot find)' "$clean" | cut -d: -f1 || true)"
+    first="$(grep -n -m1 -E '(^|[^a-zA-Z])(SyntaxError|TransformError|Error|ERROR|error:|FAILURE|Cannot find)' "$clean" | cut -d: -f1 || true)"
     if [ -n "$first" ]; then
       echo "First error (line $first):"
       echo

@@ -236,6 +236,9 @@ jobs:
       # Some libraries build with precompiled headers, which ccache only caches with these.
       CCACHE_SLOPPINESS: pch_defines,time_macros,include_file_mtime,include_file_ctime
       CCACHE_MAXSIZE: 1G
+      # A full build's APK, debug keystore and Metro assets, kept for repacks (scripts/ci/repack.ts).
+      KEPT_APK: ${{ github.workspace }}/.cache/kept-apk
+      WAVE_CI_BUNDLE_MANIFEST: ${{ github.workspace }}/../wave-ci-bundle.json
     steps:
       - uses: actions/checkout@v5
         with:
@@ -248,26 +251,6 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: 17
-
-      - uses: gradle/actions/setup-gradle@v5
-
-      # Main saves the ccache directory, PRs only restore it. A lockfile change
-      # starts a new entry, which begins from the most recent older one.
-      - name: Restore ccache
-        id: ccache
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/.cache/ccache
-          key: ccache-android-v2-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: ccache-android-v2-
-
-      - name: Set up ccache
-        run: scripts/ci/ccache.sh setup
-
       - name: Install
         run: scripts/ci/step.sh "Install" pnpm install --frozen-lockfile
 
@@ -277,13 +260,26 @@ jobs:
           EXPO_NO_GIT_STATUS: "1"
         run: ../../scripts/ci/step.sh "Prebuild" pnpm exec expo prebuild --platform android --no-install
 
-      # The native-tests job runs these beside this one; a release also runs them here first,
-      # so a tag whose tests fail never publishes.
-      # AGP 9 only creates unit-test tasks for the tested build type (debug) in libraries.
-      - name: Native unit tests
-        if: env.IS_RELEASE == 'true'
-        working-directory: apps/mobile/android
-        run: ../../../scripts/ci/step.sh "Native unit tests" ./gradlew :wave-native:testDebugUnitTest --no-daemon --console=plain
+      # Each full build keeps its APK under a key for its native side (scripts/ci/repack.ts).
+      # A PR whose key finds one swaps its JS bundle into it instead of running Gradle.
+      - name: Key the native side
+        id: key
+        run: node scripts/ci/repack.ts key apps/mobile | tee -a "$GITHUB_OUTPUT"
+
+      - name: Restore the kept APK
+        id: kept
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.KEPT_APK }}
+          key: ${{ steps.key.outputs.key }}
+          # Only PRs repack; elsewhere it's enough to know whether to keep this build.
+          lookup-only: ${{ github.event_name != 'pull_request' }}
+
+      # Sets APK_BUILD (full or repack) and APK_BUILD_REASON. Main and release tags build in full.
+      - name: Plan the APK build
+        env:
+          KEPT: ${{ steps.kept.outputs.cache-hit }}
+        run: node scripts/ci/repack.ts plan | tee -a "$GITHUB_ENV"
 
       # Main saves Metro's cache, PRs only read it. Metro only adds entries, so the key starts
       # over when dependencies change. The path is uniwind's cache store (os.tmpdir()), which
@@ -295,12 +291,54 @@ jobs:
           key: metro-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
           restore-keys: metro-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
 
-      # The JS bundle is built once, by the task assembleRelease would run. Running it as its own
-      # step keeps Metro's errors at the top of the log; assembleRelease then finds it up to date.
-      # Expo doesn't reset Metro's cache when CI is set, despite the --reset-cache Gradle passes.
+      # Expo + Hermes run once in either mode. A resource mismatch can fall back to a full
+      # build using these same outputs. The Gradle init script verifies its handoff below.
       - name: Bundle JavaScript
+        run: scripts/ci/step.sh "Bundle JavaScript" scripts/ci/bundle.sh
+
+      # Metro and hermesc, then the bundle goes into the kept APK. When the bundle needs assets
+      # the kept APK lacks, the job falls back to the full build below.
+      - name: Repack the kept APK
+        if: env.APK_BUILD == 'repack'
+        run: |
+          scripts/ci/step.sh "Repack the kept APK" scripts/ci/repack.sh "$KEPT_APK" "$RUNNER_TEMP/repacked.apk"
+          if [ -f "$RUNNER_TEMP/repacked.apk" ]; then
+            echo "REPACKED_APK=$RUNNER_TEMP/repacked.apk" >> "$GITHUB_ENV"
+          else
+            { echo "APK_BUILD=full"; echo "APK_BUILD_REASON=The new bundle has assets the kept APK lacks."; } >> "$GITHUB_ENV"
+          fi
+
+      - uses: actions/setup-java@v5
+        if: env.APK_BUILD == 'full'
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v5
+        if: env.APK_BUILD == 'full'
+
+      # Main saves the ccache directory, PRs only restore it. A lockfile change
+      # starts a new entry, which begins from the most recent older one.
+      - name: Restore ccache
+        id: ccache
+        if: env.APK_BUILD == 'full'
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/ccache
+          key: ccache-android-v2-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: ccache-android-v2-
+
+      - name: Set up ccache
+        if: env.APK_BUILD == 'full'
+        run: scripts/ci/ccache.sh setup
+
+      # The native-tests job runs these beside this one; a release also runs them here first,
+      # so a tag whose tests fail never publishes.
+      # AGP 9 only creates unit-test tasks for the tested build type (debug) in libraries.
+      - name: Native unit tests
+        if: env.IS_RELEASE == 'true'
         working-directory: apps/mobile/android
-        run: ../../../scripts/ci/step.sh "Bundle JavaScript" ./gradlew :app:createBundleReleaseJsAndAssets --no-daemon --console=plain
+        run: ../../../scripts/ci/step.sh "Native unit tests" ./gradlew :wave-native:testDebugUnitTest --no-daemon --console=plain
 
       - name: Save Metro's cache
         if: github.ref == 'refs/heads/main'
@@ -310,15 +348,16 @@ jobs:
           key: metro-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
 
       - name: Build release APK
+        if: env.APK_BUILD == 'full'
         working-directory: apps/mobile/android
-        run: ../../../scripts/ci/step.sh "Gradle assembleRelease" ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon --console=plain --profile
+        run: ../../../scripts/ci/step.sh "Gradle assembleRelease" ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --init-script ../../../scripts/ci/prebuilt-bundle.gradle --no-daemon --console=plain --profile --stacktrace
 
       - name: CMake task times
-        if: always()
+        if: always() && env.APK_BUILD == 'full'
         run: scripts/ci/cmake-times.sh apps/mobile/android
 
       - name: ccache statistics
-        if: always()
+        if: always() && env.APK_BUILD == 'full'
         run: scripts/ci/ccache.sh stats
 
       - name: Save ccache
@@ -328,11 +367,33 @@ jobs:
           path: ~/.cache/ccache
           key: ${{ steps.ccache.outputs.cache-primary-key }}
 
+      # Full PR builds may keep their own native APK too. GitHub scopes these cache entries
+      # to that PR, so another PR can only read builds saved on its base or the default branch.
+      # Gradle and Metro cache writes above stay limited to main.
+      - name: Keep the full build for JS-only PRs
+        if: env.APK_BUILD == 'full' && steps.kept.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p "$KEPT_APK"
+          cp apps/mobile/android/app/build/outputs/apk/release/app-release.apk "$KEPT_APK/"
+          cp apps/mobile/android/app/debug.keystore "$KEPT_APK/"
+          node scripts/ci/repack.ts assets apps/mobile/android/app/build/generated/res/react/release > "$KEPT_APK/metro-assets.json"
+
+      - name: Save the kept APK
+        if: env.APK_BUILD == 'full' && steps.kept.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.KEPT_APK }}
+          key: ${{ steps.key.outputs.key }}
+
       - name: Collect APK
         id: apk
         run: |
           name="wave-${HEAD_SHA:0:7}.apk"
-          cp apps/mobile/android/app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/$name"
+          built="${REPACKED_APK:-apps/mobile/android/app/build/outputs/apk/release/app-release.apk}"
+          bundle="apps/mobile/android/app/build/generated/assets/react/release/index.android.bundle"
+          unzip -p "$built" assets/index.android.bundle | cmp - "$bundle"
+          echo "Packaged this run's bundle: $(sha256sum "$bundle")"
+          cp "$built" "$RUNNER_TEMP/$name"
           echo "path=$RUNNER_TEMP/$name" >> "$GITHUB_OUTPUT"
           echo "name=$name" >> "$GITHUB_OUTPUT"
 
@@ -376,8 +437,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          extra=""
+          extra="APK build: **${APK_BUILD:-full}**. ${APK_BUILD_REASON:-}"
           if [ -n "${{ steps.publish.outputs.url }}" ]; then
-            extra="📱 **[Download APK](${{ steps.publish.outputs.url }})** (built from \`${HEAD_SHA:0:7}\`)"
+            extra="$extra"$'\n\n'"📱 **[Download APK](${{ steps.publish.outputs.url }})** (built from \`${HEAD_SHA:0:7}\`)"
           fi
           scripts/ci/report.sh "${{ job.status }}" "Android APK" "$extra"
