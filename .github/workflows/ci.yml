@@ -79,6 +79,8 @@ jobs:
   android:
     name: Android APK
     needs: checks
+    # TEMP (#187): run despite Checks failing on the syntax error below.
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     env:
       HEAD_SHA: ${{ needs.checks.outputs.sha }}
