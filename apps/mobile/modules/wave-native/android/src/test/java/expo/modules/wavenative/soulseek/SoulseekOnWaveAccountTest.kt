@@ -9,7 +9,13 @@ import expo.modules.wavenative.account.WaveAccountInfo
 import expo.modules.wavenative.account.WaveAccountStore
 import expo.modules.wavenative.account.WaveSessionState
 import java.io.File
+import java.net.ServerSocket
+import java.net.Socket
 import java.nio.file.Files
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.TimeUnit
+import kotlin.concurrent.thread
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -234,6 +240,83 @@ class SoulseekOnWaveAccountTest {
     }
   }
 
+  /** A Wave account that keeps [kept], with no sync service in between. */
+  private class KeptOnWaveAccount(@Volatile var kept: SoulseekCredentials?) : WaveAccountSoulseek {
+    override fun signedIn() = true
+    override fun read() = kept
+    override fun keep(account: SoulseekCredentials) { kept = account }
+  }
+
+  @Test fun `switching to the Wave account's account at a pull lets a running download finish, then connects with it`() {
+    val fixture = File(javaClass.getResource("/fixtures/soulseek-320.mp3")!!.toURI()).readBytes()
+    val theirs = SoulseekCredentials("quietfern42", "fixture-soulseek-password")
+    val logins = CopyOnWriteArrayList<String>()
+    val switched = CompletableFuture<Unit>()
+    val ended = CompletableFuture<Unit>()
+    ServerSocket(0).use { server ->
+      ServerSocket(0).use { peer ->
+        thread(isDaemon = true) {
+          try {
+            server.accept().use { socket ->
+              logins.add(login(socket))
+              assertEquals(3, SoulseekWire.read(socket.getInputStream()).code)
+              SoulseekWire.write(socket.getOutputStream(), 3) { string("fixture-peer"); uint(LOCALHOST); uint(peer.localPort.toLong()) }
+              peer.accept().use { connection ->
+                SoulseekWire.read(connection.getInputStream(), true)
+                val filename = SoulseekWire.reader(SoulseekWire.read(connection.getInputStream()).payload).string()
+                SoulseekWire.read(connection.getInputStream())
+                SoulseekWire.write(connection.getOutputStream(), 44) { string(filename); uint(3) }
+                // The peer only sends the file once the phone has switched accounts.
+                switched.get(5, TimeUnit.SECONDS)
+                SoulseekWire.write(connection.getOutputStream(), 40) { uint(1); uint(1234); string(filename); ulong(fixture.size.toLong()) }
+                SoulseekWire.read(connection.getInputStream())
+                SoulseekWire.write(socket.getOutputStream(), 18) { string("fixture-peer"); string("F"); uint(LOCALHOST); uint(peer.localPort.toLong()); uint(56); byte(0) }
+                peer.accept().use { transfer ->
+                  SoulseekWire.read(transfer.getInputStream(), true)
+                  transfer.getOutputStream().write(SoulseekWire.Writer().apply { uint(1234) }.result())
+                  transfer.getOutputStream().flush()
+                  SoulseekWire.Reader(transfer.getInputStream()).ulong()
+                  transfer.getOutputStream().write(fixture)
+                  transfer.getOutputStream().flush()
+                  // The next download logs in again, with the old connection still open.
+                  server.accept().use { again -> logins.add(login(again)); ended.get(5, TimeUnit.SECONDS) }
+                }
+              }
+            }
+          } catch (_: Exception) {
+            // The client closing its sockets ends the fixture.
+          }
+        }
+        val phone = MemoryCredentials(SoulseekCredentials("amberkite7", "phone-made-password"))
+        val client = SoulseekClient(phone, "127.0.0.1", server.localPort, switch = MemorySwitch(true), waveAccount = KeptOnWaveAccount(theirs))
+        val part = Files.createTempFile("wave-switched", ".mp3").toFile()
+        try {
+          val candidate = SoulseekCandidate("fixture-peer", "Music\\Fixture Title.mp3", fixture.size.toLong(), 320, 1500, false, 100000, 3)
+          val result = client.download("recording", candidate, part, 1500,
+            onQueued = { thread { client.followWaveAccount(); switched.complete(Unit) } },
+            isCancelled = { ended.isDone })
+          assertEquals(fixture.toList(), part.readBytes().toList())
+          assertEquals(fixture.size.toLong(), result.bytes)
+          assertTrue(same(theirs, phone.load()))
+
+          client.search("Fixture Title", 100)
+          assertEquals(listOf("amberkite7", "quietfern42"), logins.toList())
+        } finally { ended.complete(Unit); client.close(); part.delete() }
+      }
+    }
+  }
+
+  /** Answers a login like Soulseek's server; returns the username. */
+  private fun login(socket: Socket): String {
+    val login = SoulseekWire.read(socket.getInputStream())
+    assertEquals(1, login.code)
+    val username = SoulseekWire.reader(login.payload).string()
+    SoulseekWire.write(socket.getOutputStream(), 1) { byte(1); string("Welcome"); uint(0); string(""); byte(0) }
+    assertEquals(2, SoulseekWire.read(socket.getInputStream()).code)
+    assertEquals(35, SoulseekWire.read(socket.getInputStream()).code)
+    return username
+  }
+
   @Test fun `credentials given instead go up while signed in`() {
     val routes = SoulseekRoutes(SoulseekCredentials("quietfern42", "fixture-soulseek-password"))
     FakeWaveService(routes::respond).use { service ->
@@ -247,3 +330,6 @@ class SoulseekOnWaveAccountTest {
     }
   }
 }
+
+/** 127.0.0.1 as the Soulseek server sends an IP: reversed, so the first octet is the high byte. */
+private const val LOCALHOST = 0x7f000001L

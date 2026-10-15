@@ -51,6 +51,8 @@ class SoulseekClient(
   @Volatile private var server: Socket? = null
   private var listener: ServerSocket? = null
   private var credentials = credentialsStore.load()
+  /** The account [server] is logged in as: an old one after a switch, until its downloads end. */
+  @Volatile private var connectedAs: SoulseekCredentials? = null
   /** Download in best quality. A phone connected to an account of its own before the switch keeps it, on. */
   @Volatile private var on = switch.load() ?: (credentials != null)
   private val token = AtomicInteger(java.security.SecureRandom().nextInt(Int.MAX_VALUE / 2 - 1) + 1)
@@ -130,14 +132,15 @@ class SoulseekClient(
   }
 
   /**
-   * The Wave account's Soulseek account becomes the phone's, which is forgotten. A connection
-   * with the old one closes; the next search or download connects with [account].
+   * The Wave account's Soulseek account becomes the phone's, which is forgotten. Downloads running
+   * on a connection with the old one finish on it; the next search or download with none running
+   * connects with [account] ([ensureConnected]).
    */
   private fun adopt(account: SoulseekCredentials) {
     try { credentialsStore.save(account) }
     catch (e: Exception) { throw SoulseekException(SoulseekFailure.STORAGE, cause = e) }
     credentials = account
-    if (server != null) close()
+    if (server != null && downloads.isEmpty()) close()
   }
 
   /**
@@ -210,6 +213,7 @@ class SoulseekClient(
       try { credentialsStore.save(authenticated) }
       catch (e: Exception) { throw SoulseekException(SoulseekFailure.STORAGE, cause = e) }
       credentials = authenticated
+      connectedAs = authenticated
       socket.soTimeout = 0
       server = socket
       startReaders(socket, incoming)
@@ -298,7 +302,8 @@ class SoulseekClient(
     val remoteAddress = try { future.get(12, TimeUnit.SECONDS) } finally { addressRequests.remove(user, future) }
     try {
       val remote = open(remoteAddress)
-      SoulseekWire.write(remote.getOutputStream(), 1, true) { string(credentials!!.username); string("P"); uint(0) }
+      val us = connectedAs ?: throw connectionLost()
+      SoulseekWire.write(remote.getOutputStream(), 1, true) { string(us.username); string("P"); uint(0) }
       peers[user] = remote
       launchPeer(remote, forDownload = true) { handlePeer(user, "P", remote) }
       return remote
@@ -320,7 +325,8 @@ class SoulseekClient(
   @Synchronized private fun ensureConnected() {
     // Off, downloads don't use Soulseek, though the phone keeps its account.
     if (!on) throw SoulseekException(SoulseekFailure.SIGNED_OUT)
-    if (server?.isClosed == false) return
+    // After a switch to the Wave account's, the old connection serves the downloads running on it.
+    if (server?.isClosed == false && (credentials?.sameAs(connectedAs) != false || downloads.isNotEmpty())) return
     val saved = credentials ?: throw SoulseekException(SoulseekFailure.SIGNED_OUT)
     try { login(saved) }
     catch (e: SoulseekException) {
@@ -576,6 +582,7 @@ class SoulseekClient(
     downloads.values.forEach { it.finished.completeExceptionally(connectionLost()) }
     server?.close()
     server = null
+    connectedAs = null
     listener?.close()
     listener = null
     sockets.forEach { runCatching { it.close() } }
