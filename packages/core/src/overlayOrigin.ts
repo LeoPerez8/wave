@@ -90,28 +90,30 @@ export const visibleHighlight = ({
 };
 
 /**
- * The dimmed veil behind a card, as rects covering the window except where the
- * highlighted element sits, so it stays clear of the dimming: full-width bands
- * above and below it, and bands either side of it. Edges are cut to the window.
+ * The dimmed veil behind a card as an SVG path, filled by the even-odd rule:
+ * the window, with a hole where the highlighted element sits so it stays clear
+ * of the dimming. The hole is cut to the window and its corners round by
+ * [radius], at most half its shorter side, as the highlight's tint does.
  */
-export const veilAround = (
+export const veilPath = (
   window: { readonly width: number; readonly height: number },
   hole: OverlayRect | undefined,
-): readonly OverlayRect[] => {
-  const full = { left: 0, top: 0, right: window.width, bottom: window.height };
-  if (hole === undefined) return [full];
+  radius: number,
+): string => {
+  const full = `M0 0H${window.width}V${window.height}H0Z`;
+  if (hole === undefined) return full;
   const left = Math.max(hole.left, 0);
   const right = Math.min(hole.right, window.width);
   const top = Math.max(hole.top, 0);
   const bottom = Math.min(hole.bottom, window.height);
-  if (left >= right || top >= bottom) return [full];
-  const bands = [
-    { left: 0, top: 0, right: window.width, bottom: top },
-    { left: 0, top: bottom, right: window.width, bottom: window.height },
-    { left: 0, top, right: left, bottom },
-    { left: right, top, right: window.width, bottom },
-  ];
-  return bands.filter((band) => band.right > band.left && band.bottom > band.top);
+  if (left >= right || top >= bottom) return full;
+  const r = Math.max(0, Math.min(radius, (right - left) / 2, (bottom - top) / 2));
+  const corner = (x: number, y: number) => `A${r} ${r} 0 0 1 ${x} ${y}`;
+  return (
+    `${full}M${left + r} ${top}H${right - r}${corner(right, top + r)}` +
+    `V${bottom - r}${corner(right - r, bottom)}H${left + r}${corner(left, bottom - r)}` +
+    `V${top + r}${corner(left + r, top)}Z`
+  );
 };
 
 /**

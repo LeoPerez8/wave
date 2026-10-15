@@ -70,6 +70,44 @@ class YtArtistParserTest {
   }
 
   @Test
+  fun readsTheSongsShelfsSeeAllPlaylist() {
+    val page = YtArtistParser.page(body("artist-page.json"))!!
+    assertEquals("OLAK5uy_lNVBcjNtiCwq-n95uoxJ-Gd4vsfMkyZNs", page.songsPlaylistId)
+  }
+
+  @Test
+  fun aSongsShelfLinkedOnlyFromItsTitleStillHasItsPlaylist() {
+    val playlist = """{"browseEndpoint":{"browseId":"VLOLAK5uy_title",""" +
+      """"browseEndpointContextSupportedConfigs":{"browseEndpointContextMusicConfig":""" +
+      """{"pageType":"MUSIC_PAGE_TYPE_PLAYLIST"}}}}"""
+    val page = YtArtistParser.page(
+      pageWithSections(
+        """{"musicShelfRenderer":{"title":{"runs":[{"text":"Top songs","navigationEndpoint":$playlist}]},""" +
+          """"contents":[]}}""",
+      ),
+    )!!
+    assertEquals("OLAK5uy_title", page.songsPlaylistId)
+  }
+
+  @Test
+  fun aPageWithoutASongsPlaylistHasNone() {
+    assertNull(YtArtistParser.page(pageWithSections())!!.songsPlaylistId)
+    val notAPlaylist = """{"browseEndpoint":{"browseId":"UCelsewhere",""" +
+      """"browseEndpointContextSupportedConfigs":{"browseEndpointContextMusicConfig":""" +
+      """{"pageType":"MUSIC_PAGE_TYPE_ARTIST"}}}}"""
+    val page = YtArtistParser.page(
+      pageWithSections("""{"musicShelfRenderer":{"bottomEndpoint":$notAPlaylist,"contents":[]}}"""),
+    )!!
+    assertNull(page.songsPlaylistId)
+  }
+
+  /** An artist page named "X" whose sections are [sections] (written as JSON). */
+  private fun pageWithSections(vararg sections: String) =
+    """{"header":{"musicImmersiveHeaderRenderer":{"title":{"runs":[{"text":"X"}]}}},""" +
+      """"contents":{"singleColumnBrowseResultsRenderer":{"tabs":[{"tabRenderer":{"content":""" +
+      """{"sectionListRenderer":{"contents":[${sections.joinToString(",")}]}}}}]}}}"""
+
+  @Test
   fun readsTheArtistsImageAsASquare() {
     val page = YtArtistParser.page(body("artist-page.json"))!!
     assertEquals(

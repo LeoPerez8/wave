@@ -22,6 +22,8 @@ dependencies {
   // Tag reading (and, in v2, writing) for MP3, FLAC, M4A, Ogg Vorbis and WAV.
   implementation 'net.jthink:jaudiotagger:3.0.1'
   implementation 'androidx.palette:palette:1.0.0'
+  // The "Import to Wave" sharing shortcut (ShareShortcut): ShortcutManagerCompat.
+  implementation 'androidx.core:core:1.16.0'
   // Playback: ExoPlayer in a MediaSessionService (notification, lock screen, headset buttons).
   implementation 'androidx.media3:media3-exoplayer:1.11.1'
   implementation 'androidx.media3:media3-session:1.11.1'

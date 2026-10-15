@@ -46,7 +46,7 @@ type AlbumCell =
   | { readonly kind: "library"; readonly album: AlbumRow }
   | { readonly kind: "yt"; readonly album: YtArtistAlbum; readonly shelf: "albums" | "singles" };
 
-/** A row of the Songs section: the Library's song, or a top song YouTube Music adds. */
+/** A row of the Songs section: the Library's song, or a song of the artist YouTube Music adds. */
 type PageSong =
   | { readonly kind: "library"; readonly song: SongRow }
   | { readonly kind: "yt"; readonly song: NativeYtSong };
@@ -58,7 +58,7 @@ const SECTION_HEAD = CELL * 6;
 /** Height of an album shelf's row, the gap under it included. */
 const SHELF_ROW = albumRowHeight(COVER_ROW_TILE);
 
-/** What YouTube Music adds to the page once asked: releases and top songs the Library lacks. */
+/** What YouTube Music adds to the page once asked: the artist's releases and songs the Library lacks. */
 interface YtAdditions {
   readonly albums: readonly YtArtistAlbum[];
   readonly singles: readonly YtArtistAlbum[];
@@ -252,7 +252,8 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
         .map((release) => release.album) ?? [];
     return { albums: missing("albums"), singles: missing("singles"), songs: ytView.songs };
   }, [ytView, ytShelves]);
-  // The page's songs in page order: the Library's, then the top songs YouTube Music adds.
+  // The page's songs in page order: the Library's, then every song of the artist YouTube Music
+  // adds, in its order.
   const mixed = useMemo(
     (): MixedSong<YtSong, SongRow>[] => [
       ...songs.map((track) => ({ source: "library" as const, track })),
@@ -261,7 +262,7 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
     [songs, additions.songs],
   );
   // Play, Shuffle and rows play this list by one rule (`playPage`): with YouTube Music's songs
-  // on the page (an integrated view) the mixed list, the Library's files and the top songs
+  // on the page (an integrated view) the mixed list, the Library's files and the artist's songs
   // streamed, and the Library's rows are marked downloaded; otherwise the Library's songs alone.
   const downloaded = additions.songs.length > 0;
   const items = useMemo(() => artistItems(detail, songs, additions), [detail, songs, additions]);
@@ -383,8 +384,8 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
 /**
  * An artist: their albums, the albums they appear on (each shelf one row of
  * covers that scrolls sideways), their songs and, while YT Music is on, Show
- * on YouTube Music (asked only on a tap): then the releases and top songs
- * YouTube Music has that the Library lacks join the albums and songs, the
+ * on YouTube Music (asked only on a tap): then the releases and every song
+ * YouTube Music has of theirs that the Library lacks join the albums and songs, the
  * Library's songs are marked downloaded, and Play, Shuffle and taps play the
  * mixed list. Opened integrated (`openArtist`'s `integrated`, from a streamed
  * song's artist), it asks on its own, with no tap. Opened from a list that
