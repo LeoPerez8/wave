@@ -91,6 +91,14 @@ declare class WaveSoulseekModule extends NativeModule<{
   turnOn(): Promise<SoulseekSession>;
   /** Download in best quality off: downloads stop using Soulseek and the account stays. */
   turnOff(): Promise<SoulseekSession>;
+  /**
+   * At sign-in and each pull while signed in: the phone switches to the Wave
+   * account's Soulseek account when it has one (forgetting its own), or sends
+   * its own up when it has none. The native module asks the sync service with
+   * the session it holds, so the credentials never reach JS. Signed out, does
+   * nothing. Rejects with an `ERR_WAVE_*` code when the service can't be asked.
+   */
+  followWaveAccount(): Promise<SoulseekSession>;
   search(query: string): Promise<SoulseekCandidate[]>;
 }
 
