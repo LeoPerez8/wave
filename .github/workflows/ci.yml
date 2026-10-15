@@ -115,6 +115,7 @@ jobs:
   android:
     name: Android APK
     needs: [changes, checks]
+    # Only PRs can skip: on main and release tags every area counts as changed.
     if: needs.changes.outputs.apk == 'true'
     runs-on: ubuntu-latest
     env:

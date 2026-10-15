@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Writes what this run's change touches to $GITHUB_OUTPUT (see changes.ts for the
 # areas and the rule). On a PR that's the PR's files, old names of moved files
-# included; on anything else, every area counts as changed.
+# included; on anything else (main, release tags), every area counts as changed.
 # Env: GH_TOKEN, PR_NUMBER (empty outside PRs), GITHUB_REPOSITORY.
 set -euo pipefail
 
