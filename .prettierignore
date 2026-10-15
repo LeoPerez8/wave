@@ -1,0 +1,33 @@
+# Dependencies and generated output
+**/node_modules/**
+**/.pnp/**
+**/android/**
+**/ios/**
+**/.expo/**
+**/dist/**
+**/build/**
+**/out/**
+**/coverage/**
+**/.cache/**
+**/.turbo/**
+**/.next/**
+apps/mobile/expo-env.d.ts
+apps/mobile/uniwind-types.d.ts
+
+# Lockfiles are written by the package manager
+**/pnpm-lock.yaml
+**/package-lock.json
+**/npm-shrinkwrap.json
+**/yarn.lock
+**/bun.lock
+**/bun.lockb
+
+# Local research, agent artifacts, and nested worktrees
+**/.scratch/**
+**/.claude/**
+**/.worktrees/**
+**/worktrees/**
+**/.impeccable/**
+
+# Captured third-party responses are evidence, not authored source
+docs/spotify-samples/**

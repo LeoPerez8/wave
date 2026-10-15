@@ -10,12 +10,12 @@
     "test": "pnpm -r test",
     "test:core": "pnpm --filter @wave/core test",
     "lint": "oxlint",
-    "fmt": "oxfmt",
-    "fmt:check": "oxfmt --check"
+    "fmt": "prettier --write .",
+    "fmt:check": "prettier --check ."
   },
   "devDependencies": {
-    "oxfmt": "0.72.0",
-    "oxlint": "^1.0.0"
+    "oxlint": "^1.0.0",
+    "prettier": "3.9.10"
   },
   "engines": {
     "node": ">=22.18"

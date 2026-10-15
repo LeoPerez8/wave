@@ -45,6 +45,13 @@ pnpm test           # Core tests run with plain `node --test`
 See the [lint policy](docs/lint.md) for TypeScript and React Hooks rules, native
 exceptions, and excluded generated files.
 
+Prettier formats supported authored files with a 100-column print width. Run `pnpm fmt`
+to write changes or `pnpm fmt:check` to check them; CI and PR autofix use those same commands.
+The project pins Prettier's version so local and CI results match. `.prettierignore`
+excludes generated native projects, dependencies, lockfiles, captured third-party responses,
+and local scratch directories and worktrees. Prettier also respects `.gitignore`.
+Text files use LF line endings in every checkout through `.gitattributes`.
+
 ## Agent skills
 
 This repo is set up for [Matt Pocock's skills](https://github.com/mattpocock/skills) (MIT),
