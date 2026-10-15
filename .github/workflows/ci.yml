@@ -80,6 +80,8 @@ jobs:
       # The NDK is installed fresh on every run, so its compilers' mtimes change.
       CCACHE_COMPILERCHECK: content
       CCACHE_INODECACHE: "true"
+      # Some libraries build with precompiled headers, which ccache only caches with these.
+      CCACHE_SLOPPINESS: pch_defines,time_macros,include_file_mtime,include_file_ctime
       CCACHE_MAXSIZE: 1G
     steps:
       - uses: actions/checkout@v5
@@ -107,8 +109,8 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/.cache/ccache
-          key: ccache-android-v1-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: ccache-android-v1-
+          key: ccache-android-v2-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: ccache-android-v2-
 
       - name: Set up ccache
         run: scripts/ci/ccache.sh setup
