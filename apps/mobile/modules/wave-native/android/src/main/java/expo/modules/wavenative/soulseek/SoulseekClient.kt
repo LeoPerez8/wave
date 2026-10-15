@@ -163,7 +163,8 @@ class SoulseekClient(
 
   /**
    * Connects [username]'s account and downloads use it, with Download in best quality on. Signed
-   * in, it goes up as the Wave account's.
+   * in, it goes up as the Wave account's. The app never calls it (it has no Soulseek sign-in);
+   * scripts/music-folder's PC bridge (PcSoulseek.kt) logs in with it.
    */
   @Synchronized fun connect(username: String, password: String): Map<String, Any?> {
     val account = SoulseekCredentials(username, password)
