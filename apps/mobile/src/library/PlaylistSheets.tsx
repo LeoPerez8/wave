@@ -58,6 +58,19 @@ const askName = (request: NameRequest): Promise<string | null> =>
     render: (finish) => <NameCard request={request} finish={finish} />,
   });
 
+/**
+ * New Playlist's name prompt, the first free "New Playlist" filled in and the
+ * playlists' [names] refused. Resolves with the name, or null when cancelled.
+ * The Design preview opens it too, with synthetic names, and drops the answer.
+ */
+export const askNewPlaylistName = (names: readonly string[]): Promise<string | null> =>
+  askName({
+    title: "New playlist",
+    confirmLabel: "Create",
+    initial: nextPlaylistName(names),
+    otherNames: names,
+  });
+
 const PROBLEM: Record<Exclude<PlaylistNameCheck, { ok: true }>["problem"], string> = {
   empty: "Give the playlist a name.",
   taken: "Another playlist already has this name.",
@@ -222,13 +235,7 @@ const createNamedPlaylist = async (
 ): Promise<NamedPlaylist | null> => {
   // Remembered names open the prompt at once. The songs (every song, from
   // Library › Songs) are read only once a name is chosen, so they never hold it up.
-  const names = await playlistNames();
-  const name = await askName({
-    title: "New playlist",
-    confirmLabel: "Create",
-    initial: nextPlaylistName(names),
-    otherNames: names,
-  });
+  const name = await askNewPlaylistName(await playlistNames());
   if (name === null) return null;
   try {
     const rows = songs === undefined ? [] : await songs();

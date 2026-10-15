@@ -244,7 +244,11 @@ const SOURCE_LABELS: Record<PlaylistImportSource, string> = {
   files: "From Files",
 };
 
-function SourceMenu({
+/**
+ * The Import card: one entry per source, each handed to [choose]. The Design
+ * preview draws it too, with a [choose] that only closes it.
+ */
+export function SourceMenu({
   sources,
   choose,
 }: {
