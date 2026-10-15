@@ -53,6 +53,12 @@ export interface PreviewState extends DesignPreviewState {
 /** Where the long-titled song sits in the synthetic Songs. */
 const LONG_TITLE = SYNTHETIC_TRACKS.findIndex(({ track }) => track.id === LONG_TITLE_TRACK_ID);
 
+/** The first plain song: not the playing one, not a missing one, not a favorite, a short title. */
+const PLAIN = SYNTHETIC_TRACKS.findIndex(
+  ({ track, state, favorite }) =>
+    state === undefined && !favorite && track.id !== LONG_TITLE_TRACK_ID,
+);
+
 /**
  * Every state, by name: the one list of them. Add one here: a name, a line on
  * what it shows, the shelf, what opens the card, and how to open it.
@@ -62,9 +68,8 @@ export const PREVIEW_STATES: readonly PreviewState[] = [
     name: "song-card-open",
     shows: "A song's card open over its row, as a long press opens it: the row highlighted.",
     shelf: "songs",
-    // A plain row: not the playing one, not a missing one, not a favorite.
-    from: 3,
-    open: () => openSongCard(SYNTHETIC_TRACKS[3] as SyntheticTrack),
+    from: PLAIN,
+    open: () => openSongCard(SYNTHETIC_TRACKS[PLAIN] as SyntheticTrack),
   },
   {
     name: "song-card-open-long-title",

@@ -108,15 +108,16 @@ export const indexLetter = (text: string): string => {
 };
 
 /**
- * Sorted copy by title. Hermes has no `Array#toSorted`, so this copies, then sorts.
+ * Sorted copy by [titleOf]. Hermes has no `Array#toSorted`, so this copies, then sorts.
  */
-const byTitle = <T extends { title: string }>(items: T[]): T[] =>
+const byTitle = <T>(items: readonly T[], titleOf: (item: T) => string): T[] =>
   // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
-  [...items].sort((a, b) => sortKey(a.title).localeCompare(sortKey(b.title)));
+  [...items].sort((a, b) => sortKey(titleOf(a)).localeCompare(sortKey(titleOf(b))));
 
 const next = random(42);
 
-export const SYNTHETIC_ALBUMS: readonly AlbumSummary[] = byTitle(
+/** The albums the songs are made from, before the long-titled song joins the first. */
+const ALBUMS: readonly AlbumSummary[] = byTitle(
   Array.from({ length: 48 }, (_, i) => {
     const trackCount = 6 + Math.floor(next() * 9);
     return {
@@ -129,26 +130,13 @@ export const SYNTHETIC_ALBUMS: readonly AlbumSummary[] = byTitle(
       tint: pick(TINTS, next),
     };
   }),
+  (album) => album.title,
 );
 
 export type SyntheticTrack = { track: TrackSummary; state: TrackState; favorite: boolean };
 
-/**
- * The id of a song whose title runs past its row, which truncates it. Its
- * title sorts first, so its row is on screen as the Songs open.
- */
-export const LONG_TITLE_TRACK_ID = "long-title";
-
-const longTitleTrack = (album: AlbumSummary): TrackSummary => ({
-  id: LONG_TITLE_TRACK_ID,
-  title: "Along the Northern Harbour, Where Late Light Drifts over Still Water (Extended Version)",
-  artist: album.albumArtist,
-  durationMs: 498_000,
-  tint: album.tint,
-});
-
-export const SYNTHETIC_TRACKS: readonly SyntheticTrack[] = byTitle([
-  ...SYNTHETIC_ALBUMS.flatMap((album) =>
+const SONGS: readonly SyntheticTrack[] = byTitle(
+  ALBUMS.flatMap((album) =>
     Array.from({ length: album.trackCount }, (_, n) => ({
       id: `${album.id}-${n + 1}`,
       title: title(next),
@@ -158,13 +146,50 @@ export const SYNTHETIC_TRACKS: readonly SyntheticTrack[] = byTitle([
       tint: album.tint,
     })),
   ),
-  // Made apart from the others, so they come out as they always have.
-  longTitleTrack(SYNTHETIC_ALBUMS[0] as AlbumSummary),
-]).map((track, i) => ({
+  (track) => track.title,
+).map((track, i) => ({
   track,
   state: i === 2 ? "playing" : i === 7 ? "missing" : undefined,
   favorite: i % 9 === 4,
 }));
+
+/**
+ * A song whose title runs past its row, which truncates it, on the first
+ * album. Made apart from the others, so they come out (and play, go missing,
+ * are favorites) as they always have. Its title sorts first, so its row is on
+ * screen as the Songs open.
+ */
+const LONG_TITLE_ALBUM = ALBUMS[0] as AlbumSummary;
+const LONG_TITLE: SyntheticTrack = {
+  track: {
+    id: `${LONG_TITLE_ALBUM.id}-long-title`,
+    title: "Along the Northern Harbour, Where Late Light Drifts over Still Water (Extended Version)",
+    artist: LONG_TITLE_ALBUM.albumArtist,
+    durationMs: 498_000,
+    trackNumber: LONG_TITLE_ALBUM.trackCount + 1,
+    tint: LONG_TITLE_ALBUM.tint,
+  },
+  state: undefined,
+  favorite: false,
+};
+
+/** The id of the song whose title runs past its row. */
+export const LONG_TITLE_TRACK_ID = LONG_TITLE.track.id;
+
+export const SYNTHETIC_ALBUMS: readonly AlbumSummary[] = ALBUMS.map((album) =>
+  album === LONG_TITLE_ALBUM
+    ? {
+        ...album,
+        trackCount: album.trackCount + 1,
+        durationMs: album.durationMs + LONG_TITLE.track.durationMs,
+      }
+    : album,
+);
+
+export const SYNTHETIC_TRACKS: readonly SyntheticTrack[] = byTitle(
+  [...SONGS, LONG_TITLE],
+  ({ track }) => track.title,
+);
 
 export type SyntheticPlaylist = { id: string; name: string; trackCount: number };
 
