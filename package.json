@@ -11,9 +11,14 @@
     "test:core": "pnpm --filter @wave/core test",
     "lint": "oxlint",
     "fmt": "prettier --write .",
-    "fmt:check": "prettier --check ."
+    "fmt:check": "prettier --check .",
+    "fallow": "fallow --only dead-code,dupes",
+    "fallow:dead-code": "fallow dead-code",
+    "fallow:dupes": "fallow dupes",
+    "fallow:check": "fallow audit --gate new-only"
   },
   "devDependencies": {
+    "fallow": "3.33.1",
     "oxlint": "^1.0.0",
     "prettier": "3.9.10"
   },

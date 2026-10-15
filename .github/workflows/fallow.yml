@@ -1,0 +1,69 @@
+name: Fallow
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: fallow-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  PR_NUMBER: ${{ github.event.pull_request.number }}
+  IS_SAME_REPO_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+
+jobs:
+  fallow:
+    name: Dead code and duplication
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: scripts/ci/step.sh "Install" pnpm install --frozen-lockfile
+
+      - name: Full diagnostic report
+        id: full
+        # JSON diagnostics report the backlog without gating on its findings.
+        # Configuration/runtime errors and the parse-error gate still fail.
+        run: scripts/ci/step.sh "Fallow full diagnostic" pnpm --silent fallow --format json --output-file "$RUNNER_TEMP/fallow-full.json"
+
+      - name: Check introduced findings
+        shell: bash
+        env:
+          FALLOW_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          # Pin the actual event base, even when the PR targets a release branch.
+          git rev-parse --verify "${FALLOW_BASE}^{commit}"
+          scripts/ci/step.sh "Fallow regressions" pnpm --silent fallow:check \
+            --base "$FALLOW_BASE" --format github-summary | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload full diagnostic report
+        if: always() && steps.full.outcome != 'skipped'
+        uses: actions/upload-artifact@v4
+        with:
+          name: fallow-full-report
+          path: ${{ runner.temp }}/fallow-full.json
+          if-no-files-found: error
+
+      - name: Report
+        if: always() && env.IS_SAME_REPO_PR == 'true' && job.status != 'cancelled'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: scripts/ci/report.sh "${{ job.status }}" "Fallow"
