@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { confirmSongDeletion, songDeletionFailure } from "./index.ts";
+import { confirmSongDeletion, confirmSongRemoval, songDeletionFailure } from "./index.ts";
 
 describe("confirmSongDeletion", () => {
   test("names the one song and says the file leaves the phone, in destructive style", () => {
@@ -23,6 +23,35 @@ describe("confirmSongDeletion", () => {
   test("a large selection's count is grouped", () => {
     const songs = Array.from({ length: 1200 }, (_, i) => ({ title: `Song ${i}` }));
     assert.equal(confirmSongDeletion(songs).title, "Delete 1,200 songs?");
+  });
+
+  test("signed in to a Wave account, says the songs leave the account too", () => {
+    assert.equal(
+      confirmSongDeletion([{ title: "Hey Jude" }], { signedIn: true }).message,
+      "The file is removed from your phone, and the song from your Wave account.",
+    );
+    assert.equal(
+      confirmSongDeletion([{ title: "A" }, { title: "B" }], { signedIn: true }).message,
+      "The files are removed from your phone, and the songs from your Wave account.",
+    );
+  });
+});
+
+describe("confirmSongRemoval", () => {
+  test("names the one missing song and says it leaves the account, in destructive style", () => {
+    assert.deepEqual(confirmSongRemoval([{ title: "Hey Jude" }]), {
+      title: "Remove “Hey Jude” from your Library?",
+      message: "It leaves your Wave account, and your other phones at their next sync.",
+      action: { label: "Remove", destructive: true },
+    });
+  });
+
+  test("counts several", () => {
+    assert.deepEqual(confirmSongRemoval([{ title: "A" }, { title: "B" }]), {
+      title: "Remove 2 songs from your Library?",
+      message: "They leave your Wave account, and your other phones at their next sync.",
+      action: { label: "Remove", destructive: true },
+    });
   });
 });
 

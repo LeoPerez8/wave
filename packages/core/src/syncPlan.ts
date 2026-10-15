@@ -4,6 +4,7 @@
  * which of the phone's songs go up, and the ids imported plays carry.
  */
 
+import { normalizeTrack, type LibraryTrack } from "./library.ts";
 import { findRecording, joinLibraries } from "./sync.ts";
 import type { SyncSong, SyncSongFields } from "./syncWire.ts";
 
@@ -146,6 +147,35 @@ export const planSongSync = (input: {
     }
   }
   return { push, local };
+};
+
+/** A missing song's tags as the Library stores a Track's, without the file a Track has. */
+export type MissingSongTrack = Omit<LibraryTrack, "path" | "folder" | "fileName">;
+
+/**
+ * The Track an account song the phone has no file for comes in as (a
+ * missing song): its tags read as a scan reads a file's, so it files under
+ * the album, artists and genre a scanned copy would, and sorts where one would.
+ */
+export const missingSongTrack = (song: SyncSongFields): MissingSongTrack => {
+  const {
+    path: _path,
+    folder: _folder,
+    fileName: _fileName,
+    ...track
+  } = normalizeTrack({
+    path: "",
+    title: song.title,
+    artist: song.credit,
+    album: song.album,
+    albumArtist: song.albumArtist,
+    genre: song.genre,
+    year: song.year === null ? null : String(song.year),
+    trackNumber: song.trackNumber === null ? null : String(song.trackNumber),
+    discNumber: song.discNumber === null ? null : String(song.discNumber),
+    durationMs: song.durationMs,
+  });
+  return track;
 };
 
 /**

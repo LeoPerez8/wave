@@ -56,16 +56,47 @@ describe("itemActions", () => {
     assert.deepEqual(names(menu).slice(-2), ["select", "delete"]);
     assert.deepEqual(
       Object.keys(ITEM_ACTION_LABELS).filter((action) => isDestructiveAction(action as ItemAction)),
-      ["delete"],
+      ["delete", "removeFromLibrary"],
     );
     assert.ok(!names(itemActions({ kind: "album", items: [{}], here: "/" })).includes("delete"));
   });
 
-  test("Delete asks first, so the selection only ends once it's confirmed", () => {
+  test("Delete and Remove from Library ask first, so the selection only ends once it's confirmed", () => {
     assert.deepEqual(
       Object.keys(ITEM_ACTION_LABELS).filter((action) => confirmsFirst(action as ItemAction)),
-      ["deletePlaylist", "deletePlaylists", "delete"],
+      ["deletePlaylist", "deletePlaylists", "delete", "removeFromLibrary"],
     );
+  });
+
+  test("a missing song's menu: no queueing, no file to delete or write to, Remove from Library last", () => {
+    const missing = { ...song(), missing: true };
+    assert.deepEqual(
+      names(itemActions(tracks([missing], { selectable: true, onlineLookups: true }))),
+      ["addToPlaylist", "favorite", "goToAlbum", "goToArtist", "select", "removeFromLibrary"],
+    );
+    assert.equal(ITEM_ACTION_LABELS.removeFromLibrary, "Remove from Library");
+    // Like Delete, it keeps a button of its own on a crowded bar.
+    const bar = itemActions(tracks([missing, missing], { surface: "selection" }));
+    assert.ok(names(splitActionBar(bar, 2).bar).includes("removeFromLibrary"));
+  });
+
+  test("missing songs checked with songs that have a file queue those, and neither Delete nor Remove from Library shows", () => {
+    const bar = names(
+      itemActions(
+        tracks([song(), { ...song(), missing: true }], {
+          surface: "selection",
+          onlineLookups: true,
+        }),
+      ),
+    );
+    assert.deepEqual(bar, [
+      "playNext",
+      "addToQueue",
+      "addToPlaylist",
+      "favorite",
+      "goToAlbum",
+      "goToArtist",
+    ]);
   });
 
   test("songs offer Find Lyrics and Genre while online lookups are on, before Select and Delete", () => {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { accountTrackIds, blackPlayerPlayId, planSongSync } from "./index.ts";
+import { accountTrackIds, blackPlayerPlayId, missingSongTrack, planSongSync } from "./index.ts";
 import type { AccountSongState, SyncSong, SyncSongFields } from "./index.ts";
 
 const fields = (title: string, more: Partial<SyncSongFields> = {}): SyncSongFields => ({
@@ -173,5 +173,58 @@ describe("blackPlayerPlayId", () => {
     assert.equal(blackPlayerPlayId("airbag", 3), blackPlayerPlayId("airbag", 3));
     assert.notEqual(blackPlayerPlayId("airbag", 3), blackPlayerPlayId("airbag", 4));
     assert.notEqual(blackPlayerPlayId("airbag", 3), blackPlayerPlayId("lucky", 3));
+  });
+});
+
+describe("missingSongTrack", () => {
+  test("an account song comes in with the tags its file would give, without a file", () => {
+    const track = missingSongTrack(
+      fields("Airbag", {
+        trackNumber: 1,
+        discNumber: 1,
+        genre: "Alternative",
+        durationMs: 284_000,
+      }),
+    );
+    assert.deepEqual(
+      {
+        title: track.title,
+        artist: track.artist,
+        artistCredits: track.artistCredits,
+        album: track.album,
+        albumArtist: track.albumArtist,
+        genre: track.genre,
+        year: track.year,
+        trackNumber: track.trackNumber,
+        discNumber: track.discNumber,
+        durationMs: track.durationMs,
+      },
+      {
+        title: "Airbag",
+        artist: "Radiohead",
+        artistCredits: ["Radiohead"],
+        album: "OK Computer",
+        albumArtist: "Radiohead",
+        genre: "Alternative",
+        year: 1997,
+        trackNumber: 1,
+        discNumber: 1,
+        durationMs: 284_000,
+      },
+    );
+    // Filed as a scanned copy would be: its album, and its place in title order.
+    assert.equal(track.albumKey, missingSongTrack(fields("Lucky")).albumKey);
+    assert.equal(track.titleSort, missingSongTrack(fields("airbag")).titleSort);
+  });
+
+  test("a song with no album tag files under Unknown Album, as a scanned one does", () => {
+    assert.equal(missingSongTrack(fields("Creep", { album: null })).album, "Unknown Album");
+  });
+
+  test("a compilation's song keeps its album artist", () => {
+    const track = missingSongTrack(
+      fields("Teardrop", { credit: "Massive Attack", albumArtist: "Various Artists" }),
+    );
+    assert.deepEqual([track.artist, track.albumArtist], ["Massive Attack", "Various Artists"]);
   });
 });
