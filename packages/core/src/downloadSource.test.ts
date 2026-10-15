@@ -21,6 +21,16 @@ describe("downloadSource", () => {
   test("with YT Music and Download in best quality both off, a download has no source", () => {
     assert.equal(downloadSource({ ytMusicOn: false, bestQuality: false }), null);
   });
+
+  test("a missing song with a video id downloads that video from YouTube Music, even with Download in best quality on", () => {
+    assert.equal(downloadSource({ ytMusicOn: true, bestQuality: true, video: true }), "youtube");
+    assert.equal(downloadSource({ ytMusicOn: true, bestQuality: false, video: true }), "youtube");
+  });
+
+  test("with YT Music off, a missing song with a video id comes from Soulseek while Download in best quality is on", () => {
+    assert.equal(downloadSource({ ytMusicOn: false, bestQuality: true, video: true }), "soulseek");
+    assert.equal(downloadSource({ ytMusicOn: false, bestQuality: false, video: true }), null);
+  });
 });
 
 describe("downloadFallback", () => {

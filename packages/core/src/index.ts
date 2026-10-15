@@ -782,3 +782,17 @@ export type {
   SyncTables,
   SyncedRow,
 } from "./syncWire.ts";
+export {
+  missingSongJob,
+  missingSongJobId,
+  missingSongLookup,
+  missingSongSearch,
+  missingSongTags,
+  missingSongVideo,
+} from "./missingSongDownload.ts";
+export type {
+  MissingSongJob,
+  MissingSongJobTags,
+  MissingSongVideo,
+  MissingTrack,
+} from "./missingSongDownload.ts";
