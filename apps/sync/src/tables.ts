@@ -99,8 +99,8 @@ export const SYNC_TABLES: readonly SyncTable[] = [
     sqlName: "preferences",
     kind: "rows",
     limit: "maxPreferences",
-    // The id is the preference's name; its value is any JSON.
-    fields: { value: { type: "json" } },
+    // The id is the preference's key; its value is any JSON, null for none (the default).
+    fields: { value: { type: "json", nullable: true } },
   },
   {
     name: "plays",

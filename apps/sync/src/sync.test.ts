@@ -99,6 +99,24 @@ describe("POST /v1/push and GET /v1/pull", () => {
     assert.equal(pulled.more, false);
   });
 
+  test("a preference back at its default goes up as null and comes back as null", async () => {
+    const service = await harness();
+    const session = await service.signIn();
+    const preference = (changedAt: number, value: unknown) => ({
+      id: "settings.ytMusic",
+      changedAt,
+      phoneId: "phone-a",
+      deleted: false,
+      value,
+    });
+    await push(service, session, { preferences: [preference(10, "off")] });
+    const pushed = await push(service, session, { preferences: [preference(20, null)] });
+    assert.equal((pushed.accepted as Record<string, number>).preferences, 1);
+
+    const pulled = await pull(service, session);
+    assert.deepEqual(pulled.preferences, [preference(20, null)]);
+  });
+
   test("the later change of a row wins, whichever phone pushes first", async () => {
     const service = await harness();
     const phoneA = await service.signIn();
