@@ -156,6 +156,7 @@ export const useIsFavorite = (trackId: number | string | null): boolean => {
  */
 export const reloadFavorites = (): void => {
   void appRuntime
+    // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
     .runPromise(LibraryStore.use((store) => store.favoriteTrackIds))
     .then((ids) => {
       const shown = new Set(ids);

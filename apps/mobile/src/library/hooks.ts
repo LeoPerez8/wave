@@ -136,6 +136,7 @@ const countTracks = Effect.gen(function* () {
 
 const NO_SONGS: readonly SongRow[] = [];
 
+// oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
 const listMissingSongs = LibraryStore.use((store) => store.missingSongs());
 const NO_MISSING_SONGS: readonly MissingTrack[] = [];
 
