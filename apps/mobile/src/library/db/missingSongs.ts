@@ -18,6 +18,7 @@ import {
 } from "@wave/core";
 import { and, eq, inArray, isNotNull, isNull, sql, type SQL } from "drizzle-orm";
 
+import { chunks } from "./chunks.ts";
 import type { CreditSplits } from "./credits.ts";
 import type { LibraryDatabase } from "./database.ts";
 import { pruneOrphans, saveMissingSongs, type MissingSongSave } from "./save.ts";
@@ -25,15 +26,6 @@ import * as schema from "./schema.ts";
 import { thisPhoneId } from "./schema.ts";
 import { leaveAccount, selectJoinedAccount } from "./syncRows.ts";
 import { deleteTracks, deleteTracksById } from "./tracks.ts";
-
-/** Ids per statement, well under SQLite's limit on bound values. */
-const CHUNK = 500;
-
-const chunks = <A>(items: readonly A[]): A[][] => {
-  const out: A[][] = [];
-  for (let i = 0; i < items.length; i += CHUNK) out.push(items.slice(i, i + CHUNK));
-  return out;
-};
 
 /** What a missing Track shows of its account song, to tell when the account's tags changed. */
 const shownTags = (track: {
