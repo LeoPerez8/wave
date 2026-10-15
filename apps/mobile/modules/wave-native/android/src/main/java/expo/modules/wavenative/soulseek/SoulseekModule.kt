@@ -6,6 +6,7 @@ import expo.modules.kotlin.exception.Exceptions
 import expo.modules.kotlin.functions.Coroutine
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import expo.modules.wavenative.account.WaveAccountException
 import expo.modules.wavenative.download.AndroidDownloads
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -63,6 +64,13 @@ class SoulseekModule : Module() {
       sendEvent("onSessionChanged", session)
       session
     }
+    // At sign-in and each pull while signed in: the phone follows the Wave account's Soulseek
+    // account, or sends its own up. JS gets the session's status and username, never a password.
+    AsyncFunction("followWaveAccount") Coroutine { ->
+      val session = coded { withContext(Dispatchers.IO) { owner.client.followWaveAccount() } }
+      sendEvent("onSessionChanged", session)
+      session
+    }
     AsyncFunction("search") Coroutine { query: String ->
       coded { withContext(Dispatchers.IO) { owner.client.search(query).map { it.toMap() } } }
     }
@@ -80,5 +88,6 @@ class SoulseekModule : Module() {
 
   private suspend fun <T> coded(block: suspend () -> T): T = try { block() }
   catch (e: SoulseekException) { throw CodedException(e.failure.code, e.failure.notice, e) }
+  catch (e: WaveAccountException) { throw CodedException(e.failure.code, e.failure.notice, null) }
   catch (e: CancellationException) { throw CodedException(SoulseekFailure.CANCELLED.code, SoulseekFailure.CANCELLED.notice, e) }
 }

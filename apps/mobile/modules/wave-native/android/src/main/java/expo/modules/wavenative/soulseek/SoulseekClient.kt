@@ -21,6 +21,9 @@ import kotlin.concurrent.thread
 
 class SoulseekCredentials(val username: String, val password: String) {
   override fun toString() = "SoulseekCredentials([redacted])"
+
+  /** The same account: the same username and password. */
+  fun sameAs(other: SoulseekCredentials?) = other != null && username == other.username && password == other.password
 }
 
 interface SoulseekCredentialsStore {
@@ -42,6 +45,8 @@ class SoulseekClient(
   /** Whether the phone is online, which tells Soulseek's server being unreachable from being offline. */
   private val online: () -> Boolean = { true },
   private val switch: SoulseekSwitchStore,
+  /** While the phone is signed in to one, the Soulseek account belongs to the Wave account. */
+  private val waveAccount: WaveAccountSoulseek = NoWaveAccount,
 ) : Closeable {
   @Volatile private var server: Socket? = null
   private var listener: ServerSocket? = null
@@ -81,11 +86,58 @@ class SoulseekClient(
     "username" to credentials?.username,
   )
 
-  /** Turns Download in best quality on: connects the phone's Soulseek account, making one when it has none. */
+  /**
+   * Turns Download in best quality on: connects the phone's Soulseek account, making one when it
+   * has none. Signed in to a Wave account, the Wave account's comes first: the phone uses it
+   * instead of its own or a new one, and one the Wave account lacks (or Soulseek rejected) goes
+   * up at once. When Wave's server can't be asked, the phone goes on as signed out, and the next
+   * pull settles it ([followWaveAccount]).
+   */
   @Synchronized fun turnOn(): Map<String, Any?> {
+    val kept = askWaveAccount()
+    kept?.account?.let { if (!it.sameAs(credentials)) adopt(it) }
     connectAccount()
+    val connected = credentials
+    if (kept != null && connected != null && !connected.sameAs(kept.account)) keepOnWaveAccount(connected)
     turn(true)
     return session()
+  }
+
+  /**
+   * Follows the Wave account's Soulseek account, at sign-in and each pull while signed in: when
+   * it has one and the phone's is different, the phone switches to it and forgets its own; when
+   * it has none, the phone's goes up. Signed out, it does nothing. Throws when Wave's server
+   * can't be asked; nothing changes then.
+   */
+  @Synchronized fun followWaveAccount(): Map<String, Any?> {
+    if (!waveAccount.signedIn()) return session()
+    val kept = waveAccount.read()
+    val own = credentials
+    if (kept != null && !kept.sameAs(own)) adopt(kept)
+    else if (kept == null && own != null) waveAccount.keep(own)
+    return session()
+  }
+
+  /** What the Wave account keeps ([account], null for none); null when signed out or it can't be asked. */
+  private class Kept(val account: SoulseekCredentials?)
+
+  private fun askWaveAccount(): Kept? =
+    if (!waveAccount.signedIn()) null else runCatching { Kept(waveAccount.read()) }.getOrNull()
+
+  /** Sends [account] up as the Wave account's while signed in. A failure waits for the next pull. */
+  private fun keepOnWaveAccount(account: SoulseekCredentials) {
+    if (waveAccount.signedIn()) runCatching { waveAccount.keep(account) }
+  }
+
+  /**
+   * The Wave account's Soulseek account becomes the phone's, which is forgotten. A connection
+   * with the old one closes; the next search or download connects with [account].
+   */
+  private fun adopt(account: SoulseekCredentials) {
+    try { credentialsStore.save(account) }
+    catch (e: Exception) { throw SoulseekException(SoulseekFailure.STORAGE, cause = e) }
+    credentials = account
+    if (server != null) close()
   }
 
   /**
@@ -106,9 +158,14 @@ class SoulseekClient(
     throw SoulseekException(SoulseekFailure.NO_ACCOUNT)
   }
 
-  /** Connects [username]'s account and downloads use it, with Download in best quality on. */
+  /**
+   * Connects [username]'s account and downloads use it, with Download in best quality on. Signed
+   * in, it goes up as the Wave account's.
+   */
   @Synchronized fun connect(username: String, password: String): Map<String, Any?> {
-    login(SoulseekCredentials(username, password))
+    val account = SoulseekCredentials(username, password)
+    login(account)
+    keepOnWaveAccount(account)
     turn(true)
     return session()
   }
