@@ -35,6 +35,8 @@ export const toTrackSummary = (song: SongRow): TrackSummary => ({
   artist: song.artist,
   durationMs: song.durationMs,
   artworkUri: song.thumbPath === null ? undefined : `file://${song.thumbPath}`,
+  // A missing song: dimmed, as a YT Music song not downloaded is.
+  notDownloaded: song.path === null,
 });
 
 export const songCount = (count: number): string => counted(count, "song");

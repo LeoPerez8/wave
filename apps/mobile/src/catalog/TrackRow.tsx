@@ -20,7 +20,16 @@ export type TrackSummary = {
   trackNumber?: number | undefined;
   artworkUri?: string | undefined;
   tint?: string | undefined;
+  /**
+   * A missing song: the Wave account has it and this phone has no file for
+   * it. The row is dimmed, with the look of a YT Music song not downloaded
+   * (no downloaded icon), and doesn't play.
+   */
+  notDownloaded?: boolean | undefined;
 };
+
+/** How much a missing song's row shows (docs/spec.md, "Missing songs"). */
+const NOT_DOWNLOADED_OPACITY = 0.45;
 
 export type TrackState = "playing" | "missing" | undefined;
 
@@ -67,7 +76,8 @@ const THUMB = CELL * 5;
  * wavy underline under its visible text. A missing file shows its icon (in
  * place of the number in numbered lists, trailing in artwork lists). Title and
  * artist share one size; rank is weight and tint. In selection mode a check
- * cell leads the row.
+ * cell leads the row. A missing song (`notDownloaded`) is dimmed, its long
+ * press still open.
  */
 export function TrackRow({
   track,
@@ -89,6 +99,7 @@ export function TrackRow({
   const tertiary = useThemeColor("tertiary");
   const missing = state === "missing";
   const playing = state === "playing";
+  const notDownloaded = track.notDownloaded === true;
   const selecting = checked !== undefined;
   const missingIcon = <IconFileOff size={18} color={tertiary} strokeWidth={1.5} />;
   const trailing = trackRowTrailing({ durationMs: track.durationMs, countedPlays: plays });
@@ -100,7 +111,8 @@ export function TrackRow({
         track.title,
         track.artist,
         ...(plays === undefined ? [] : [trailing]),
-        ...(downloaded ? ["downloaded"] : []),
+        ...(downloaded && !notDownloaded ? ["downloaded"] : []),
+        ...(notDownloaded ? ["not downloaded"] : []),
         ...(playing ? ["now playing"] : []),
       ].join(", ")}
       accessibilityState={
@@ -113,7 +125,14 @@ export function TrackRow({
       onAccessibilityAction={onAccessibilityAction}
       depth={0.015}
     >
-      <View className="flex-row items-center" style={{ height: grid.row, gap: CELL * 1.5 }}>
+      <View
+        className="flex-row items-center"
+        style={{
+          height: grid.row,
+          gap: CELL * 1.5,
+          ...(notDownloaded ? { opacity: NOT_DOWNLOADED_OPACITY } : {}),
+        }}
+      >
         {selecting && <CheckCell checked={checked} />}
         {leading === "artwork" ? (
           <Artwork uri={track.artworkUri} tint={track.tint} size={THUMB} />
@@ -138,7 +157,9 @@ export function TrackRow({
             {playing && <WavyUnderline />}
           </View>
           <View className="flex-row items-center" style={{ gap: CELL / 2 }}>
-            {downloaded && !missing && <IconCircleArrowDownFilled size={14} color={accent} />}
+            {downloaded && !missing && !notDownloaded && (
+              <IconCircleArrowDownFilled size={14} color={accent} />
+            )}
             <Text numberOfLines={1} className="flex-1 font-sans text-body text-secondary">
               {missing ? "File not found" : track.artist}
             </Text>

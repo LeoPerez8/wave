@@ -267,7 +267,7 @@ export const useFavoriteSongs = (): readonly FavoriteRow[] | undefined =>
     useFavoritesSaved(),
   );
 
-const readHome = LibraryStore.use((store) => store.home);
+const readHome = LibraryStore.use((store) => store.home());
 
 /**
  * The Home tab's sections, or undefined while loading. Re-read as soon as a

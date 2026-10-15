@@ -576,7 +576,7 @@ export const useYtAlbumDownload = (
 };
 
 /** A playlist's entry: a Library song (its file) or a YT Music song. */
-type PlaylistEntry = MixedSong<NativeYtSong, { readonly path: string }>;
+type PlaylistEntry = MixedSong<NativeYtSong, { readonly path: string | null }>;
 
 /** What a playlist's download entries act on: its YT Music entries' songs, in playlist order. */
 export const playlistYtSongs = (entries: readonly PlaylistEntry[]): NativeYtSong[] =>

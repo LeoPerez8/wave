@@ -12,6 +12,7 @@ import {
   IconStar,
   IconStarOff,
   IconTrash,
+  IconTrashX,
 } from "@tabler/icons-react-native";
 import { actionBarLabel, entryDivider, splitActionBar, type ItemAction } from "@wave/core";
 import type { ComponentType } from "react";
@@ -52,6 +53,7 @@ const ICONS: { readonly [A in ItemAction]: ComponentType<IconProps> } = {
   findLyricsAndGenre: IconMusicSearch,
   select: IconListCheck,
   delete: IconTrash,
+  removeFromLibrary: IconTrashX,
 };
 
 /**

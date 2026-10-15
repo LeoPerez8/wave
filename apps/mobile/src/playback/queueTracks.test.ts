@@ -5,7 +5,7 @@ import { beforeEach, describe, test } from "node:test";
 import type { QueueEntry, YtSong } from "@wave/core";
 import * as Effect from "effect/Effect";
 
-import type { SongRow } from "../library/LibraryStore.ts";
+import type { PlayableSongRow } from "../library/LibraryStore.ts";
 import {
   YT_COVERS_AT_ONCE,
   cacheYtCoversLater,
@@ -18,7 +18,10 @@ import {
   tracksToLookUp,
 } from "./queueTracks.ts";
 
-const song = (id: number, thumbPath: string | null = `/covers/${id}.thumb.jpg`): SongRow => ({
+const song = (
+  id: number,
+  thumbPath: string | null = `/covers/${id}.thumb.jpg`,
+): PlayableSongRow => ({
   id,
   path: `/music/${id}.flac`,
   title: `Song ${id}`,
@@ -253,7 +256,7 @@ describe("learnUnknownQueueTracks", () => {
       },
       null,
     );
-    const none = () => Effect.succeed([] as SongRow[]);
+    const none = () => Effect.succeed([] as PlayableSongRow[]);
     await Effect.runPromise(
       learnUnknownQueueTracks([entry("yt:dQw4w9WgXcQ")], none, () => [saved]),
     );
