@@ -350,7 +350,7 @@ jobs:
       - name: Build release APK
         if: env.APK_BUILD == 'full'
         working-directory: apps/mobile/android
-        run: ../../../scripts/ci/step.sh "Gradle assembleRelease" ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --init-script ../../../scripts/ci/prebuilt-bundle.gradle --no-daemon --console=plain --profile
+        run: ../../../scripts/ci/step.sh "Gradle assembleRelease" ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --init-script ../../../scripts/ci/prebuilt-bundle.gradle --no-daemon --console=plain --profile --stacktrace
 
       - name: CMake task times
         if: always() && env.APK_BUILD == 'full'

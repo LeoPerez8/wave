@@ -8,8 +8,8 @@ gradle.projectsEvaluated {
     // Init scripts also run for included builds, such as RN's Gradle plugin.
     def app = gradle.rootProject.findProject(':app')
     if (app == null) return
-    app.tasks.named('createBundleReleaseJsAndAssets').configure { task ->
-        onlyIf('CI supplied the verified release bundle') {
+    def task = app.tasks.named('createBundleReleaseJsAndAssets').get()
+    def verifyBundle = {
             def marker = System.getenv('WAVE_CI_BUNDLE_MANIFEST')
             if (!marker || !new File(marker).isFile()) {
                 throw new GradleException('CI bundle manifest is missing; run scripts/ci/bundle.sh first.')
@@ -36,11 +36,20 @@ gradle.projectsEvaluated {
             }
             def bundle = new File(task.jsBundleDir.get().asFile, 'index.android.bundle').bytes
             // Hermes bytecode magic: c6 1f bc 03 c1 03 19 1f.
-            if (bundle.length < 8 || bundle.take(8).collect { it & 0xff } != [198, 31, 188, 3, 193, 3, 25, 31]) {
-                throw new GradleException('CI bundle is not Hermes bytecode.')
+            def magic = [198, 31, 188, 3, 193, 3, 25, 31]
+            if (bundle.length < 8) throw new GradleException('CI bundle is not Hermes bytecode.')
+            for (int index = 0; index < 8; index++) {
+                if (Byte.toUnsignedInt(bundle[index]) != magic[index]) {
+                    throw new GradleException('CI bundle is not Hermes bytecode.')
+                }
             }
-            logger.lifecycle('Using the verified CI bundle; Metro and Hermes will not run again.')
-            return false
-        }
+    }
+    // Fail during graph configuration, before expensive native compilation. Recheck at the
+    // task's normal position too, in case another build task changed its generated files.
+    verifyBundle()
+    task.onlyIf('CI supplied the verified release bundle') {
+        verifyBundle()
+        task.logger.lifecycle('Using the verified CI bundle; Metro and Hermes will not run again.')
+        return false
     }
 }
