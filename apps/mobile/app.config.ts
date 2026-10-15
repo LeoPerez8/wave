@@ -40,8 +40,8 @@ const config: ExpoConfig = {
   // web OAuth client id, the audience of the Google ID tokens it accepts. Neither is a secret.
   // Empty, Settings says the account isn't set up on this build.
   extra: {
-    syncUrl: "",
-    googleWebClientId: "",
+    syncUrl: "https://wave-sync.leonardolp2424.workers.dev",
+    googleWebClientId: "334515982590-tq2ks7u11rt4708ifaotkumjfakgodk8.apps.googleusercontent.com",
   },
   plugins: [
     "expo-router",
