@@ -40,7 +40,6 @@ export function TitlePress({
         titleLongPress.open();
       }}
       depth={0.02}
-      style={{ alignSelf: "flex-start" }}
     >
       {children}
     </Press>

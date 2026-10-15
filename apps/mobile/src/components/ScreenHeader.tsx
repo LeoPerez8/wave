@@ -28,7 +28,11 @@ export function ScreenHeader({
         <IconButton icon={IconArrowLeft} label="Back" onPress={() => router.back()} />
       </View>
       {title !== undefined && (
-        <View style={{ paddingHorizontal: grid.margin, paddingBottom: 16 }}>
+        <View
+          // A title that takes a long press hugs its text, so its highlight does too.
+          className={titleLongPress === undefined ? undefined : "items-start"}
+          style={{ paddingHorizontal: grid.margin, paddingBottom: 16 }}
+        >
           <TitlePress titleLongPress={titleLongPress}>
             <Text
               accessibilityRole="header"
