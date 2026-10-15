@@ -217,7 +217,7 @@ export interface ArtistPhotoFiles {
 }
 
 /** A playlist's own image: the large one (its page) and the thumbnail (lists, Android Auto). */
-export interface PlaylistImageFiles {
+interface PlaylistImageFiles {
   readonly path: string;
   readonly thumbPath: string;
 }
