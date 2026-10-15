@@ -37,7 +37,8 @@ import {
   type FixtureTrack,
   type TestDatabase,
 } from "../library/db/testDatabase.ts";
-import { syncCycle, type SyncPreferences } from "./syncCycle.ts";
+import { selectJoinedAccount } from "../library/db/syncRows.ts";
+import { syncCycle, type SyncPreferences, type SyncTransport } from "./syncCycle.ts";
 import { testSyncService, type TestSyncService } from "./testSyncService.ts";
 
 const OK_COMPUTER: readonly FixtureTrack[] = [
@@ -139,6 +140,19 @@ const phone = async (service: TestSyncService, songs: readonly Song[] = OK_COMPU
       tracks.set(song.title, id);
       return id;
     },
+    /** The file of [song] is retagged as [tags] (an editor, then a scan saves it again). */
+    retag: (song: Song, tags: Partial<Song>): void => {
+      const file = scanned(song);
+      const retagged = { ...scanned({ ...song, ...tags }), path: file.path };
+      saveBatch(
+        db,
+        splits,
+        [{ ...retagged, folder: file.folder, fileName: file.fileName }],
+        [],
+        [],
+        now(),
+      );
+    },
     /** A download asked for missing song [trackId] saves [song]'s file, as its import does. */
     download: (song: Song, trackId: number): void => {
       saveBatch(db, splits, [{ ...scanned(song), fills: trackId }], [], [], now());
@@ -168,7 +182,7 @@ const phone = async (service: TestSyncService, songs: readonly Song[] = OK_COMPU
     sync: (
       options: {
         readonly songsChanged?: boolean;
-        readonly to?: TestSyncService;
+        readonly to?: SyncTransport;
         readonly account?: string;
       } = {},
     ) =>
@@ -614,6 +628,124 @@ describe("syncCycle", () => {
     );
   });
 
+  test("a removed song's star and playlist entries leave the account with it, even on a phone that keeps its file", async () => {
+    const service = testSyncService();
+    const a = await phone(service, [...OK_COMPUTER, EXIT_MUSIC]);
+    const exit = a.track("Exit Music");
+    const lucky = a.track("Lucky");
+    createPlaylist(
+      a.db,
+      "Night",
+      [
+        { source: "library", trackId: a.track("Airbag") },
+        { source: "library", trackId: lucky },
+        { source: "library", trackId: exit },
+      ],
+      a.now(),
+    );
+    setFavorites(a.db, [lucky, exit], true, a.now());
+    await a.sync();
+    const b = await phone(service);
+    await b.sync();
+    assert.deepEqual(favoriteTitles(b.db).toSorted(), ["Exit Music", "Lucky"]);
+
+    // a deletes Lucky, which b has the file of; b removes Exit Music, which it lacks.
+    a.remove("Lucky");
+    await a.sync({ songsChanged: true });
+    b.remove("Exit Music");
+    await b.sync();
+    await a.sync();
+
+    assert.deepEqual(favoriteTitles(a.db), []);
+    assert.deepEqual(favoriteTitles(b.db), []);
+    assert.deepEqual(playlistTitles(a.db), [{ name: "Night", songs: ["Airbag"] }]);
+    assert.deepEqual(playlistTitles(b.db), [{ name: "Night", songs: ["Airbag"] }]);
+    assert.deepEqual(
+      files(b.db).map(([title]) => title),
+      ["Airbag", "Paranoid Android", "Lucky"],
+    );
+    // The removals went up once.
+    assert.equal((await a.sync()).pushed, 0);
+    assert.equal((await b.sync()).pushed, 0);
+    // A phone signing in later gets none of them back.
+    const c = await phone(service);
+    await c.sync();
+    assert.deepEqual(favoriteTitles(c.db), []);
+    assert.deepEqual(playlistTitles(c.db), [{ name: "Night", songs: ["Airbag"] }]);
+  });
+
+  test("a file retagged to another recording key takes its star and entries along, and its old version leaves the account", async () => {
+    const service = testSyncService();
+    const a = await phone(service);
+    const lucky = a.track("Lucky");
+    createPlaylist(
+      a.db,
+      "Night",
+      [
+        { source: "library", trackId: a.track("Airbag") },
+        { source: "library", trackId: lucky },
+      ],
+      a.now(),
+    );
+    setFavorites(a.db, [lucky], true, a.now());
+    endPlay(a.db, recordPlay(a.db, played(lucky, 7_000)), played(lucky, 7_000));
+    await a.sync();
+    // b has the files, still tagged as they were; c has none.
+    const b = await phone(service);
+    await b.sync();
+    const c = await phone(service, []);
+    await c.sync();
+
+    const LUCKY = OK_COMPUTER[2] as FixtureTrack;
+    a.retag(LUCKY, { title: "Lucky (Remastered)" });
+    await a.sync({ songsChanged: true });
+    await b.sync();
+    await c.sync();
+    await a.sync();
+
+    // a shows its file once, under its new tags, with its star, place and plays.
+    assert.deepEqual(files(a.db), [
+      ["Airbag", true],
+      ["Paranoid Android", true],
+      ["Lucky (Remastered)", true],
+    ]);
+    assert.deepEqual(favoriteTitles(a.db), ["Lucky (Remastered)"]);
+    assert.deepEqual(playlistTitles(a.db), [
+      { name: "Night", songs: ["Airbag", "Lucky (Remastered)"] },
+    ]);
+    assert.equal(playCounts(a.db).length, 1);
+    assert.deepEqual(
+      service
+        .rows()
+        .songs.flatMap((song) => (song.deleted ? [] : [song.title]))
+        .toSorted(),
+      ["Airbag", "Lucky (Remastered)", "Paranoid Android"],
+    );
+    // c, with no file, has only the new version, starred and in its place.
+    assert.deepEqual(files(c.db), [
+      ["Airbag", false],
+      ["Paranoid Android", false],
+      ["Lucky (Remastered)", false],
+    ]);
+    assert.deepEqual(favoriteTitles(c.db), ["Lucky (Remastered)"]);
+    assert.deepEqual(playlistTitles(c.db), [
+      { name: "Night", songs: ["Airbag", "Lucky (Remastered)"] },
+    ]);
+    // b keeps its file as it's tagged there; the star and the place move to the new version.
+    assert.deepEqual(files(b.db), [
+      ["Airbag", true],
+      ["Paranoid Android", true],
+      ["Lucky", true],
+      ["Lucky (Remastered)", false],
+    ]);
+    assert.deepEqual(favoriteTitles(b.db), ["Lucky (Remastered)"]);
+    assert.deepEqual(playlistTitles(b.db), [
+      { name: "Night", songs: ["Airbag", "Lucky (Remastered)"] },
+    ]);
+    assert.equal((await a.sync()).pushed, 0);
+    assert.equal((await b.sync()).pushed, 0);
+  });
+
   test("signing out leaves no missing song, and a playlist entry of one becomes a YT Music entry or leaves", async () => {
     const service = testSyncService();
     const a = await phone(service, [...OK_COMPUTER, { ...EXIT_MUSIC, videoId: "exit-video" }]);
@@ -637,6 +769,27 @@ describe("syncCycle", () => {
     // Signing in again joins anew: the missing songs come back, the YT Music entry stays one.
     await b.sync();
     assert.equal(files(b.db).length, 4);
+  });
+
+  test("a pull that lands after signing out changes nothing: no missing song comes back", async () => {
+    const service = testSyncService();
+    const a = await phone(service, [...OK_COMPUTER, EXIT_MUSIC]);
+    await a.sync();
+    const b = await phone(service, [OK_COMPUTER[0] as FixtureTrack]);
+    await b.sync();
+    b.signOut();
+
+    // Signed in again, and out while the first pull is on its way.
+    const signedOutMidPull: SyncTransport = {
+      request: async (method, path, body) => {
+        const response = await service.request(method, path, body);
+        if (path.startsWith("/v1/pull")) b.signOut();
+        return response;
+      },
+    };
+    await assert.rejects(b.sync({ to: signedOutMidPull }), { code: "ERR_WAVE_SIGNED_OUT" });
+    assert.deepEqual(files(b.db), [["Airbag", true]]);
+    assert.equal(selectJoinedAccount(b.db), null);
   });
 
   test("signing in again joins as the first time does: everything goes up to the account", async () => {

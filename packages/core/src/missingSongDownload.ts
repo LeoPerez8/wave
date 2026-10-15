@@ -59,16 +59,26 @@ export interface MissingSongJobTags {
 }
 
 /**
+ * The download journal's id for a missing song's job: `missing:<trackId>`,
+ * named after the Track it fills in. A YT Music song's job goes by its
+ * video's id; this one never names a video.
+ */
+export type MissingSongJobId = `${typeof JOB_PREFIX}${number}`;
+
+/**
  * A missing song as the download journal holds it: shaped like a YT Music
- * song, so rows, matching and the journal take it as they take one, but
- * named after its Track ([videoId] is the job's id, never a video's).
+ * song, so rows, matching and the journal take it as they take one. The
+ * journal names a job after its song's `videoId`, so that field holds the
+ * job's id (`MissingSongJobId`); the video it downloads, when it has one, is
+ * `missing.videoId`.
  */
 export interface MissingSongJob extends YtSong {
+  readonly videoId: MissingSongJobId;
   readonly missing: MissingSongJobTags;
 }
 
 /** The download job of the missing song whose Track is [trackId]. */
-export const missingSongJobId = (trackId: number): string => `${JOB_PREFIX}${trackId}`;
+export const missingSongJobId = (trackId: number): MissingSongJobId => `${JOB_PREFIX}${trackId}`;
 
 /** The Track download job [jobId] fills in; null for any other job (a YT Music song's). */
 export const missingSongTrackId = (jobId: string): number | null => {
@@ -77,15 +87,31 @@ export const missingSongTrackId = (jobId: string): number | null => {
   return /^\d+$/.test(id) ? Number(id) : null;
 };
 
-/** The job that downloads missing song [track]. */
-export const missingSongJob = (track: MissingTrack): MissingSongJob => ({
-  videoId: missingSongJobId(track.id),
+/** Missing song [track] shaped as a YT Music song named [videoId]: what isn't known is null. */
+const asYtSong = <Id extends string>(
+  track: MissingTrack,
+  videoId: Id,
+): YtSong & { readonly videoId: Id } => ({
+  videoId,
   title: track.title,
   artists: track.artists.length > 0 ? track.artists : [track.artist],
   album: track.album === UNKNOWN_ALBUM || track.album === "" ? null : track.album,
   durationMs: track.durationMs > 0 ? track.durationMs : null,
   artworkUrl: null,
   explicit: false,
+});
+
+/**
+ * Missing song [track] as YT Music's song of the video it was downloaded
+ * from (what its playlist entries become once signed out, Core's
+ * `signOutPlan`); null for one that never came from YouTube Music.
+ */
+export const missingSongYtSong = (track: MissingTrack): YtSong | null =>
+  track.videoId === null ? null : asYtSong(track, track.videoId);
+
+/** The job that downloads missing song [track]. */
+export const missingSongJob = (track: MissingTrack): MissingSongJob => ({
+  ...asYtSong(track, missingSongJobId(track.id)),
   missing: {
     trackId: track.id,
     artist: track.artist,
@@ -107,7 +133,11 @@ export const missingSongJob = (track: MissingTrack): MissingSongJob => ({
 export const missingSongSearch = (job: MissingSongJob): string | null =>
   job.missing.videoId === null ? spotifySearchQuery(job) : null;
 
-/** A YouTube Music video a missing song downloads, and its cover when YouTube Music showed one. */
+/**
+ * A YouTube Music video a missing song downloads, and its cover when the
+ * search showed one. A song's own video comes without: the app reads its
+ * cover from the video's album page, as a YT Music song's download does.
+ */
 export interface MissingSongVideo {
   readonly videoId: string;
   readonly artworkUrl: string | null;

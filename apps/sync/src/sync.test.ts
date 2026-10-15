@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
+import { readPullPage } from "@wave/core";
 import { favorite, harness, pull, pullAll, push } from "./testing.ts";
 
 const song = (
@@ -83,7 +84,7 @@ describe("POST /v1/push and GET /v1/pull", () => {
           changedAt: 10,
           phoneId: "phone-a",
           deleted: false,
-          value: { dark: "black" },
+          value: "black",
         },
       ],
       plays: [play("play-1")],
@@ -102,7 +103,7 @@ describe("POST /v1/push and GET /v1/pull", () => {
     const pulled = await pull(service, phoneB);
     assert.deepEqual(pulled.songs, [song("song-1", 10)]);
     assert.equal(pulled.playlistEntries[0]?.songId, "song-1");
-    assert.deepEqual(pulled.preferences[0]?.value, { dark: "black" });
+    assert.equal(pulled.preferences[0]?.value, "black");
     assert.deepEqual(pulled.plays, [play("play-1")]);
     assert.equal(pulled.more, false);
   });
@@ -318,6 +319,52 @@ describe("POST /v1/push and GET /v1/pull", () => {
     const notJson = await service.request("POST", "/v1/push", { session, body: "{" });
     assert.equal(notJson.status, 400);
     assert.deepEqual((await pull(service, session)).songs, []);
+  });
+
+  test("a row is held to Core's wire: a preference whose value isn't text is refused", async () => {
+    const service = await harness();
+    const session = await service.signIn();
+    const response = await service.request("POST", "/v1/push", {
+      session,
+      json: { preferences: [preference(10, { dark: "black" })] },
+    });
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), {
+      error: "bad_request",
+      detail: "preferences[0].value isn't text",
+    });
+  });
+
+  test("a pull reads with Core's readPullPage as every table's rows were pushed", async () => {
+    const service = await harness();
+    const session = await service.signIn();
+    const rows = {
+      songs: [song("song-1", 10)],
+      playlists: [playlist("list-1", 10, "phone-a", "Mix")],
+      playlistEntries: [
+        {
+          id: "entry-1",
+          changedAt: 10,
+          phoneId: "phone-a",
+          deleted: false,
+          playlistId: "list-1",
+          orderKey: "a0",
+          songId: null,
+          ytSong: '{"videoId":"u7K72X4eo_s"}',
+          addedAt: 10,
+        },
+      ],
+      favorites: [
+        favorite("song-1", 10),
+        { id: "song-2", changedAt: 11, phoneId: "phone-a", deleted: true },
+      ],
+      preferences: [preference(10, "on")],
+      plays: [play("play-1", { durationMs: null, importedFrom: "blackplayer" })],
+    };
+    await push(service, session, rows);
+    const response = await service.request("GET", "/v1/pull", { session });
+    const page = readPullPage(await response.text());
+    assert.deepEqual({ ...page, cursor: undefined }, { ...rows, cursor: undefined, more: false });
   });
 
   test("a cursor that isn't one is refused", async () => {

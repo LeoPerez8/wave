@@ -100,7 +100,7 @@ export const EMPTY_SYNC_TABLES: SyncTables = {
  * The tables in the order a push sends them: songs and playlists before the
  * rows that point at them.
  */
-const TABLES = [
+export const SYNC_TABLE_NAMES = [
   "songs",
   "playlists",
   "playlistEntries",
@@ -110,10 +110,15 @@ const TABLES = [
 ] as const satisfies readonly (keyof SyncTables)[];
 
 /** What one field holds: text, a whole number, a boolean, or one of a few values; `?` allows null. */
-type FieldKind = "text" | "text?" | "int" | "int?" | "bool" | readonly (string | null)[];
+export type SyncFieldKind = "text" | "text?" | "int" | "int?" | "bool" | readonly (string | null)[];
 
-/** Each table's own fields, as `readPullPage` checks them. */
-const FIELDS: { readonly [K in keyof SyncTables]: Readonly<Record<string, FieldKind>> } = {
+/**
+ * Each table's own fields, as `readPullPage` checks them and the sync
+ * service checks a push (its `SYNC_TABLES` are built from them).
+ */
+export const SYNC_FIELDS: {
+  readonly [K in keyof SyncTables]: Readonly<Record<string, SyncFieldKind>>;
+} = {
   songs: {
     title: "text",
     credit: "text",
@@ -154,7 +159,8 @@ const FIELDS: { readonly [K in keyof SyncTables]: Readonly<Record<string, FieldK
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-const fits = (kind: FieldKind, value: unknown): boolean => {
+/** Whether [value] is what a field of [kind] holds (`undefined` counts as null). */
+export const syncFieldFits = (kind: SyncFieldKind, value: unknown): boolean => {
   if (typeof kind !== "string") return kind.includes(value as string | null);
   if (value === null || value === undefined) return kind.endsWith("?");
   switch (kind) {
@@ -181,9 +187,9 @@ const readRow = (table: keyof SyncTables, raw: unknown): object | null => {
     row.deleted = raw.deleted;
     if (raw.deleted) return row;
   }
-  for (const [name, kind] of Object.entries(FIELDS[table])) {
+  for (const [name, kind] of Object.entries(SYNC_FIELDS[table])) {
     const value = raw[name] ?? null;
-    if (!fits(kind, value)) return null;
+    if (!syncFieldFits(kind, value)) return null;
     row[name] = value;
   }
   return row;
@@ -213,7 +219,7 @@ export const readPullPage = (body: string): SyncPullPage | null => {
     return null;
   }
   const tables = Object.fromEntries(
-    TABLES.map((table) => {
+    SYNC_TABLE_NAMES.map((table) => {
       const rows = raw[table];
       return [
         table,
@@ -252,7 +258,7 @@ const ENVELOPE = utf8Length(JSON.stringify(EMPTY_SYNC_TABLES));
 
 /**
  * Cuts [changes] into pushes the service takes in one request each (each
- * under `SYNC_PUSH_BATCH`), every row once, in table order (`TABLES`) and
+ * under `SYNC_PUSH_BATCH`), every row once, in table order (`SYNC_TABLE_NAMES`) and
  * in the order given. Nothing to push is no push.
  */
 export const pushBatches = (
@@ -263,7 +269,7 @@ export const pushBatches = (
   let open: { [K in keyof SyncTables]: SyncTables[K][number][] } | null = null;
   let bytes = 0;
   let rows = 0;
-  for (const table of TABLES) {
+  for (const table of SYNC_TABLE_NAMES) {
     for (const row of changes[table]) {
       // The row and the comma before it.
       const size = utf8Length(JSON.stringify(row)) + 1;

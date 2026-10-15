@@ -6,6 +6,7 @@ import {
   skipMissingSongs,
   tappedMissingSong,
   type MixedSong,
+  type PlayableSongs,
   type YtSong,
 } from "./index.ts";
 
@@ -78,5 +79,26 @@ describe("skipMissingSongs", () => {
 
   test("a list of missing songs plays nothing", () => {
     assert.equal(skipMissingSongs([{ id: 2 }, { id: 4 }], undefined, hasFile), null);
+  });
+
+  test("what plays is typed as having a file when [hasFile] says so", () => {
+    interface Row {
+      readonly id: number;
+      readonly path: string | null;
+    }
+    const rows: readonly Row[] = [
+      { id: 1, path: "/a.mp3" },
+      { id: 2, path: null },
+    ];
+    const withPath = (row: Row): row is Row & { readonly path: string } => row.path !== null;
+    const play: PlayableSongs<Row & { readonly path: string }> | null = skipMissingSongs(
+      rows,
+      0,
+      withPath,
+    );
+    assert.deepEqual(
+      play?.songs.map((row) => row.path),
+      ["/a.mp3"],
+    );
   });
 });

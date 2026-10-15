@@ -22,13 +22,23 @@ export interface PlayableSongs<T> {
  * missing songs (a Track the Wave account has and this phone has no file
  * for): only those [hasFile] says have one, in list order, from the tapped
  * one at [startIndex]. A tapped missing song plays nothing (null), as does a
- * list with no file.
+ * list with no file. When [hasFile] is a type guard, what plays has its type.
  */
-export const skipMissingSongs = <T>(
+export function skipMissingSongs<T, P extends T>(
+  songs: readonly T[],
+  startIndex: number | undefined,
+  hasFile: (song: T) => song is P,
+): PlayableSongs<P> | null;
+export function skipMissingSongs<T>(
   songs: readonly T[],
   startIndex: number | undefined,
   hasFile: (song: T) => boolean,
-): PlayableSongs<T> | null => {
+): PlayableSongs<T> | null;
+export function skipMissingSongs<T>(
+  songs: readonly T[],
+  startIndex: number | undefined,
+  hasFile: (song: T) => boolean,
+): PlayableSongs<T> | null {
   const tapped = startIndex === undefined ? undefined : songs[startIndex];
   if (tapped !== undefined && !hasFile(tapped)) return null;
   const playable = songs.filter(hasFile);
@@ -38,7 +48,7 @@ export const skipMissingSongs = <T>(
     startIndex:
       startIndex === undefined ? undefined : songs.slice(0, startIndex).filter(hasFile).length,
   };
-};
+}
 
 /**
  * The missing song a tap on [songs] at [startIndex] downloads (docs/spec.md,

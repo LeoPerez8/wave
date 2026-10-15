@@ -12,6 +12,7 @@ import {
   accountTrackIds,
   mergeRows,
   planSongSync,
+  songsLeaving,
   type AccountSongState,
   type PhoneSong,
   type SyncFavorite,
@@ -27,19 +28,11 @@ import {
 } from "@wave/core";
 import { and, asc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 
+import { chunks } from "./chunks.ts";
 import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
-import { selectPhoneId, selectTrackIdentities } from "./sync.ts";
+import { selectPhoneId, selectTrackIdentities, stamped } from "./sync.ts";
 import { hasFile } from "./tracks.ts";
-
-/** Ids per statement, well under SQLite's limit on bound values. */
-const CHUNK = 500;
-
-const chunks = <A>(items: readonly A[]): A[][] => {
-  const out: A[][] = [];
-  for (let i = 0; i < items.length; i += CHUNK) out.push(items.slice(i, i + CHUNK));
-  return out;
-};
 
 // --- The account the Library is joined with ---------------------------------
 
@@ -70,6 +63,7 @@ export const joinAccount = (db: LibraryDatabase, account: string): boolean => {
     }
     tx.delete(schema.accountSongs).run();
     tx.delete(schema.syncPending).run();
+    tx.delete(schema.syncRemovals).run();
   });
   return true;
 };
@@ -123,7 +117,16 @@ type PushMark =
   | { readonly table: "playlists" | "entries"; readonly id: number; readonly changedAt: number }
   | { readonly table: "favorites"; readonly trackId: number; readonly changedAt: number }
   | { readonly table: "preferences"; readonly key: string; readonly changedAt: number }
-  | { readonly table: "plays"; readonly id: number };
+  | { readonly table: "plays"; readonly id: number }
+  | {
+      readonly table: "removals";
+      readonly kind: RemovalKind;
+      readonly id: string;
+      readonly changedAt: number;
+    };
+
+/** The tables whose removals can outlive their rows (`sync_removals`). */
+type RemovalKind = "favorites" | "playlistEntries";
 
 /** Rows that wait to go up, as the service takes them, and where each came from. */
 export interface UnpushedRows {
@@ -177,7 +180,7 @@ export const selectUnpushed = (
   preferenceValue: (key: string) => string | null,
 ): UnpushedRows => {
   const { accountSongs, playlists, playlistItems, favorites, tracks, preferenceChanges } = schema;
-  const { playEvents } = schema;
+  const { playEvents, syncRemovals } = schema;
   const marks = new Map<string, PushMark[]>();
   const mark = (table: keyof SyncTables, id: string, from: PushMark) => {
     const key = pushMarkKey(table, id);
@@ -185,6 +188,25 @@ export const selectUnpushed = (
     if (held === undefined) marks.set(key, [from]);
     else held.push(from);
   };
+
+  /** The removals of [kind] whose rows are gone, as tombstones. */
+  const removals = (kind: RemovalKind) =>
+    db
+      .select()
+      .from(syncRemovals)
+      .where(eq(syncRemovals.kind, kind))
+      .orderBy(asc(syncRemovals.id))
+      .limit(limit)
+      .all()
+      .map((row) => {
+        mark(kind, row.id, { table: "removals", kind, id: row.id, changedAt: row.changedAt });
+        return {
+          id: row.id,
+          changedAt: row.changedAt,
+          phoneId: row.phoneId,
+          deleted: true as const,
+        };
+      });
 
   const songs = db
     .select()
@@ -354,9 +376,9 @@ export const selectUnpushed = (
     rows: {
       songs,
       playlists: playlistRows,
-      playlistEntries: entries,
+      playlistEntries: [...entries, ...removals("playlistEntries")],
       // Two Tracks with one key are one song for the account: one star, the later change.
-      favorites: mergeRows([], stars).rows,
+      favorites: mergeRows([], [...stars, ...removals("favorites")]).rows,
       preferences,
       plays,
     },
@@ -371,6 +393,7 @@ export const selectUnpushed = (
 export const markPushed = (db: LibraryDatabase, marks: readonly PushMark[]): void => {
   const { accountSongs, playlists, playlistItems, favorites, preferenceChanges, playEvents } =
     schema;
+  const { syncRemovals } = schema;
   db.transaction((tx) => {
     const plays: number[] = [];
     for (const from of marks) {
@@ -419,6 +442,17 @@ export const markPushed = (db: LibraryDatabase, marks: readonly PushMark[]): voi
           break;
         case "plays":
           plays.push(from.id);
+          break;
+        case "removals":
+          tx.delete(syncRemovals)
+            .where(
+              and(
+                eq(syncRemovals.kind, from.kind),
+                eq(syncRemovals.id, from.id),
+                eq(syncRemovals.changedAt, from.changedAt),
+              ),
+            )
+            .run();
           break;
       }
     }
@@ -501,6 +535,122 @@ export const planSongs = (db: LibraryDatabase, now: number): void => {
         .run();
     }
   });
+};
+
+/**
+ * Tracks [leaving] their recording keys while the Library is joined with an
+ * account (Core's `songsLeaving`): a song no Track keeps leaves the account,
+ * its star with it, as tombstones the next push sends. [removed] Tracks
+ * leave the Library, and their playlist entries leave the account with
+ * them; retagged ones keep theirs. Run it in the transaction that removes
+ * the Tracks, before it deletes them, or that retags them, after.
+ */
+export const leaveKeys = (
+  tx: LibraryDatabase,
+  leaving: readonly { readonly trackId: number; readonly recordingKey: string }[],
+  { removed, now }: { readonly removed: boolean; readonly now: number },
+): void => {
+  if (leaving.length === 0 || selectJoinedAccount(tx) === null) return;
+  const { tracks, favorites, playlistItems, accountSongs, syncRemovals } = schema;
+  const ids = leaving.map((track) => track.trackId);
+  const keys = [...new Set(leaving.map((track) => track.recordingKey))];
+  // A star or an entry the account may hold: live, or removed here since the last push.
+  const onAccount = (table: typeof favorites | typeof playlistItems) =>
+    or(eq(table.deleted, false), eq(table.pushed, false));
+  const stars = new Map(
+    chunks(ids).flatMap((some) =>
+      tx
+        .select({ trackId: favorites.trackId, changedAt: favorites.changedAt })
+        .from(favorites)
+        .where(and(inArray(favorites.trackId, some), onAccount(favorites)))
+        .all()
+        .map((row) => [row.trackId, { changedAt: row.changedAt }] as const),
+    ),
+  );
+  const entries = new Map<number, { id: string; changedAt: number }[]>();
+  for (const some of removed ? chunks(ids) : []) {
+    const rows = tx
+      .select({
+        trackId: sql<number>`${playlistItems.trackId}`,
+        id: playlistItems.syncId,
+        changedAt: playlistItems.changedAt,
+      })
+      .from(playlistItems)
+      .where(and(inArray(playlistItems.trackId, some), onAccount(playlistItems)))
+      .all();
+    for (const { trackId, ...entry } of rows) {
+      const held = entries.get(trackId);
+      if (held === undefined) entries.set(trackId, [entry]);
+      else held.push(entry);
+    }
+  }
+  const leavingIds = new Set(ids);
+  const staying = chunks(keys).flatMap((some) =>
+    tx
+      .select({
+        id: tracks.id,
+        recordingKey: sql<string>`${tracks.recordingKey}`,
+        starred: sql<number | null>`${favorites.deleted} = 0`,
+      })
+      .from(tracks)
+      .leftJoin(favorites, eq(favorites.trackId, tracks.id))
+      .where(inArray(tracks.recordingKey, some))
+      .all()
+      .filter((track) => !leavingIds.has(track.id))
+      .map((track) => ({ recordingKey: track.recordingKey, starred: track.starred === 1 })),
+  );
+  const account = chunks(keys).flatMap((some) =>
+    tx
+      .select({
+        recordingKey: accountSongs.recordingKey,
+        changedAt: accountSongs.changedAt,
+        deleted: accountSongs.deleted,
+      })
+      .from(accountSongs)
+      .where(inArray(accountSongs.recordingKey, some))
+      .all(),
+  );
+  const removal = songsLeaving({
+    leaving: leaving.map((track) => ({
+      recordingKey: track.recordingKey,
+      star: stars.get(track.trackId) ?? null,
+      entries: entries.get(track.trackId) ?? [],
+    })),
+    staying,
+    account,
+    now,
+    phoneId: selectPhoneId(tx),
+  });
+  for (const row of removal.songs) {
+    const values = { song: null, ...stamp(row), pushed: false, local: null };
+    tx.insert(accountSongs)
+      .values({ recordingKey: row.id, ...values })
+      .onConflictDoUpdate({ target: accountSongs.recordingKey, set: values })
+      .run();
+  }
+  const outgoing = [
+    ...removal.favorites.map((row) => ({ kind: "favorites" as const, row })),
+    ...removal.playlistEntries.map((row) => ({ kind: "playlistEntries" as const, row })),
+  ];
+  for (const { kind, row } of outgoing) {
+    const values = { changedAt: row.changedAt, phoneId: row.phoneId };
+    tx.insert(syncRemovals)
+      .values({ kind, id: row.id, ...values })
+      .onConflictDoUpdate({ target: [syncRemovals.kind, syncRemovals.id], set: values })
+      .run();
+  }
+  if (removed) return;
+  // Retagged: the star and the entries stay with the Track, and go up again under its new key.
+  for (const some of chunks(ids)) {
+    tx.update(favorites)
+      .set(stamped(favorites, now))
+      .where(and(inArray(favorites.trackId, some), eq(favorites.deleted, false)))
+      .run();
+    tx.update(playlistItems)
+      .set(stamped(playlistItems, now))
+      .where(and(inArray(playlistItems.trackId, some), eq(playlistItems.deleted, false)))
+      .run();
+  }
 };
 
 // --- What comes down -----------------------------------------------------------

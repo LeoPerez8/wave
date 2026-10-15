@@ -5,12 +5,16 @@ import * as Layer from "effect/Layer";
 import { AppState } from "react-native";
 
 import { LibraryStore } from "@/library/LibraryStore";
-import { WaveAccount, waveAccountErrorCode } from "@/native/waveAccount";
+import { WaveAccount, waveAccountErrorCode, type WaveAccountErrorCode } from "@/native/waveAccount";
 
 import type { SyncedChanges, SyncPreferences } from "./syncCycle";
 
 /** How long a push waits after the last change, so a run of edits goes up as one. */
 const PUSH_DELAY_MS = 3_000;
+
+/** Offline or signed out: a sync stops, and tries again at the next chance, with nothing to warn of. */
+const expected = (code: WaveAccountErrorCode | null): boolean =>
+  code === "ERR_WAVE_OFFLINE" || code === "ERR_WAVE_SIGNED_OUT";
 
 /** What syncing needs from the app that only the app (not a headless start) has. */
 export interface WaveSyncPorts {
@@ -89,9 +93,7 @@ const make = Effect.gen(function* () {
         (error: unknown) => {
           // The song list is looked at again next time.
           if (songs) songsChanged = true;
-          const cause = (error as { cause?: unknown }).cause;
-          const code = waveAccountErrorCode(cause);
-          if (code !== "ERR_WAVE_OFFLINE" && code !== "ERR_WAVE_SIGNED_OUT") {
+          if (!expected(waveAccountErrorCode((error as { cause?: unknown }).cause))) {
             console.warn("[wave] Syncing with the Wave account didn't finish", error);
           }
         },
@@ -100,7 +102,7 @@ const make = Effect.gen(function* () {
       .then(() => (account === null ? undefined : soulseek()))
       .catch((error: unknown) => {
         const code = waveAccountErrorCode(error);
-        if (code !== "ERR_WAVE_OFFLINE" && code !== "ERR_WAVE_SIGNED_OUT") {
+        if (!expected(code)) {
           // The code only: the native module's errors never carry the account.
           console.warn("[wave] Couldn't follow the Wave account's Soulseek account", { code });
         }

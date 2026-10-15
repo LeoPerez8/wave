@@ -1,7 +1,8 @@
 /**
  * Translating between the phone's Library and the Wave account (docs/spec.md,
  * "Wave account and sync"): which Track an account song is on this phone,
- * which of the phone's songs go up, and the ids imported plays carry.
+ * which of the phone's songs go up, which of the account's come down as
+ * missing songs, and the ids imported plays carry.
  */
 
 import { normalizeTrack, type LibraryTrack } from "./library.ts";
@@ -176,6 +177,107 @@ export const missingSongTrack = (song: SyncSongFields): MissingSongTrack => {
     durationMs: song.durationMs,
   });
   return track;
+};
+
+/** A missing song to save: an account song the phone has no file for. */
+export interface MissingSongSave {
+  /** Its Track, when it's in the Library already (its tags are brought up to date); null for a new one. */
+  readonly trackId: number | null;
+  /** The account's recording key for it. */
+  readonly recordingKey: string;
+  /** Its tags (`missingSongTrack`). */
+  readonly track: MissingSongTrack;
+  readonly videoId: string | null;
+  /** When it entered the Library, on the phone that first had it. */
+  readonly addedAt: number;
+}
+
+/** A missing song as the Library shows it: its Track, and the tags read back from it. */
+export interface ShownMissingSong {
+  readonly id: number;
+  readonly recordingKey: string | null;
+  readonly title: string;
+  readonly artist: string;
+  readonly album: string;
+  readonly albumArtist: string;
+  readonly genre: string | null;
+  readonly year: number | null;
+  readonly trackNumber: number | null;
+  readonly discNumber: number | null;
+  readonly durationMs: number;
+  readonly videoId: string | null;
+}
+
+/** What a missing song shows of its account song, to tell when the account's tags changed. */
+const shownTags = (song: Omit<ShownMissingSong, "id" | "recordingKey">): string =>
+  JSON.stringify([
+    song.title,
+    song.artist,
+    song.album,
+    song.albumArtist,
+    song.genre,
+    song.year,
+    song.trackNumber,
+    song.discNumber,
+    song.durationMs,
+    song.videoId,
+  ]);
+
+/** What `planMissingSongs` decides. */
+export interface MissingSongsPlan {
+  /** Account songs no Track has (new), and missing songs whose account tags changed. */
+  readonly save: readonly MissingSongSave[];
+  /** The Tracks of the missing songs that leave the Library. */
+  readonly leave: readonly number[];
+  /** Tags changed or songs left: albums, artists and genres may be left empty. */
+  readonly prune: boolean;
+}
+
+/**
+ * Brings the Library's [missing] songs in line with the [account]'s songs
+ * (its live ones, as last pulled): an account song no Track has ([held]:
+ * every Track's recording key, missing songs' too) comes in as a missing
+ * song, a missing song takes the account's tags when they changed on
+ * another phone, and one the account no longer has (removed there, or never
+ * sent up) leaves. Tracks with a file are never touched.
+ */
+export const planMissingSongs = (input: {
+  readonly account: readonly { readonly recordingKey: string; readonly song: SyncSongFields }[];
+  readonly held: readonly string[];
+  readonly missing: readonly ShownMissingSong[];
+}): MissingSongsPlan => {
+  const live = new Map(input.account.map(({ recordingKey, song }) => [recordingKey, song]));
+  const held = new Set(input.held);
+  const save: MissingSongSave[] = [];
+  const leave: number[] = [];
+  for (const shown of input.missing) {
+    const song = shown.recordingKey === null ? undefined : live.get(shown.recordingKey);
+    if (song === undefined || shown.recordingKey === null) {
+      leave.push(shown.id);
+      continue;
+    }
+    const track = missingSongTrack(song);
+    if (shownTags(shown) === shownTags({ ...track, videoId: song.videoId })) continue;
+    save.push({
+      trackId: shown.id,
+      recordingKey: shown.recordingKey,
+      track,
+      videoId: song.videoId,
+      addedAt: song.addedAt,
+    });
+  }
+  const retagged = save.length > 0;
+  for (const { recordingKey, song } of input.account) {
+    if (held.has(recordingKey)) continue;
+    save.push({
+      trackId: null,
+      recordingKey,
+      track: missingSongTrack(song),
+      videoId: song.videoId,
+      addedAt: song.addedAt,
+    });
+  }
+  return { save, leave, prune: retagged || leave.length > 0 };
 };
 
 /**
