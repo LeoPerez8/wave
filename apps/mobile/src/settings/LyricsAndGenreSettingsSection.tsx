@@ -50,11 +50,10 @@ export function LyricsAndGenreSettingsSection() {
       </View>
       <Hairline />
       <Text className="mt-2 font-sans text-footnote text-secondary">
-        Fix Song, in the menu of a song missing lyrics, a genre, a year or a track number, looks
-        up only what it lacks: its lyrics on LRCLIB, and its album&apos;s genre, year and track
-        number on Deezer, which means sending them its title, artist, album and length. It writes
-        what it finds into the file and never replaces what&apos;s there. Off, Wave makes no
-        lookups.
+        Fix Song, in the menu of a song missing lyrics, a genre, a year or a track number, looks up
+        only what it lacks: its lyrics on LRCLIB, and its album&apos;s genre, year and track number
+        on Deezer, which means sending them its title, artist, album and length. It writes what it
+        finds into the file and never replaces what&apos;s there. Off, Wave makes no lookups.
       </Text>
       {run.status === "running" ? (
         <View className="mt-4 flex-row items-center">
