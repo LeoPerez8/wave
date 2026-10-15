@@ -148,6 +148,10 @@ describe("DELETE /v1/account", () => {
     };
     await push(service, ana, everything);
     await push(service, bo, everything);
+    for (const session of [ana, bo]) {
+      const soulseek = { username: "quietfern42", password: "fixture-soulseek-password" };
+      await service.request("PUT", "/v1/soulseek", { session, json: soulseek });
+    }
 
     const deleted = await service.request("DELETE", "/v1/account", { session: ana });
     assert.equal(deleted.status, 204);

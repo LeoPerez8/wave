@@ -1,6 +1,6 @@
 # Wave's sync service. No secret or account-specific value lives here:
-# TURSO_DATABASE_URL, TURSO_AUTH_TOKEN, GOOGLE_CLIENT_ID and the optional
-# ALLOWED_EMAILS are set with `wrangler secret put` (or `.dev.vars` locally).
+# TURSO_DATABASE_URL, TURSO_AUTH_TOKEN, GOOGLE_CLIENT_ID, SOULSEEK_KEY and the
+# optional ALLOWED_EMAILS are set with `wrangler secret put` (or `.dev.vars` locally).
 name = "wave-sync"
 main = "src/worker.ts"
 compatibility_date = "2026-10-01"
