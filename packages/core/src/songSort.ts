@@ -27,7 +27,8 @@ export interface SortableSong {
   readonly trackNumber: number | null;
   /** When the file entered the library (epoch ms). */
   readonly addedAt: number;
-  readonly path: string;
+  /** The file; null for a missing song. */
+  readonly path: string | null;
   /** When the song was starred (epoch ms); only Favorites sort by it. */
   readonly starredAt?: number | undefined;
 }
