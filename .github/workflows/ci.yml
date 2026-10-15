@@ -90,9 +90,6 @@ jobs:
           node-version: 22
           package-manager-cache: false
 
-      - name: Temporary B4 probe
-        run: exit 1
-
       - name: Build the patch notes
         id: notes
         # Only a release needs them: anywhere else, failing here mustn't hold up the APK.
