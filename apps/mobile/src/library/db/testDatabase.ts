@@ -4,7 +4,7 @@
  * migrator, exactly as the app applies them on the phone, and helpers that
  * seed fixture tracks.
  */
-import { identityKey } from "@wave/core";
+import { albumKey as coreAlbumKey, identityKey } from "@wave/core";
 import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/sql-js";
 import { migrate } from "drizzle-orm/expo-sqlite/migrator";
@@ -118,7 +118,8 @@ export const addTrack = (db: TestDatabase, track: FixtureTrack): number => {
       .onConflictDoNothing()
       .run();
   }
-  const albumKey = `${albumTitle}|${albumArtistName}`;
+  // As a scan files it, so missing songs and scanned files share their album.
+  const albumKey = coreAlbumKey(albumTitle, albumArtistName);
   const albumId = upsertId(
     db
       .select({ id: albums.id, key: albums.key })
@@ -208,6 +209,16 @@ export const addTrack = (db: TestDatabase, track: FixtureTrack): number => {
   }
   // As saving a scanned file keys it.
   if (hasColumn(db, "tracks", "recording_key")) keyRecordings(db);
+  return id;
+};
+
+/**
+ * Adds a missing song: a Track the Wave account has and this phone has no
+ * file for (no path), filed as `addTrack` files a song; returns its id.
+ */
+export const addMissingSong = (db: TestDatabase, track: FixtureTrack): number => {
+  const id = addTrack(db, track);
+  db.update(schema.tracks).set({ path: null }).where(eq(schema.tracks.id, id)).run();
   return id;
 };
 

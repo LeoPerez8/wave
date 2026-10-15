@@ -181,7 +181,7 @@ const scanFolders = (roots: readonly string[]) =>
       return;
     }
     // Also prunes albums and artists that changed tags left empty.
-    yield* store.removeTracks(missing.map((file) => file.path));
+    yield* store.filesGone(missing.map((file) => file.path));
     yield* store.markScanned(roots, startedAt);
     bumpLibraryVersion();
     scanState.set({ status: "done", filesFound: completed.filesFound });

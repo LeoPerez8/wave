@@ -1,5 +1,4 @@
 import {
-  compareAlbumTracks,
   filesLeavingWithRoot,
   rememberSearch,
   type BlackPlayerPlay,
@@ -27,7 +26,7 @@ import { openDatabaseSync } from "expo-sqlite";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { syncCycle, type SyncCycleInput, type SyncCycleResult } from "@/sync/syncCycle";
 
-import { selectAlbums } from "./db/albums";
+import { selectAlbumDetail, selectAlbums } from "./db/albums";
 import { importedPlays, saveImportedPlays, selectImportTracks } from "./db/blackPlayer";
 import {
   selectArtistCovers,
@@ -78,22 +77,23 @@ import {
   selectTrackPaths,
   type PlaylistEntry,
 } from "./db/playlists";
-import { pruneOrphans, removeTracks, saveBatch } from "./db/save";
+import { pruneOrphans, saveBatch } from "./db/save";
 import * as schema from "./db/schema";
 import {
   BY_TITLE,
-  deleteTracks,
   filePath,
   hasFile,
   selectKnownFiles,
   selectLibraryLookupSongs,
   trackArtistIds,
+  selectPlayableSongs,
   trackQuery,
+  type TrackScope,
   withFile,
 } from "./db/tracks";
 import { creditedPlayTotals, songListening, songsCrediting, trackPlayTotals } from "./db/stats";
 import { keyRecordings, stampPreference } from "./db/sync";
-import { leaveAccount } from "./db/syncRows";
+import { filesGone, leaveFiles, removeSongs, signOut } from "./db/missingSongs";
 import { saveYtArtist, selectYtArtist } from "./db/ytArtists";
 import type { KnownFile } from "./NativeScanner";
 
@@ -158,8 +158,11 @@ export interface LibraryLookupSong {
 /** One row of the Songs list. */
 export interface SongRow {
   readonly id: number;
-  /** The file: song lists list only Tracks with one (a missing song can't be played from a file). */
-  readonly path: string;
+  /**
+   * The file; null for a missing song (a Track the Wave account has and this
+   * phone has no file for), which lists show dimmed and nothing plays.
+   */
+  readonly path: string | null;
   readonly title: string;
   /** The credit as written ("Ariana Grande, Doja Cat"). */
   readonly artist: string;
@@ -185,6 +188,13 @@ export interface SongRow {
   /** Find Lyrics and Genre fills it in when it's missing. */
   readonly year: number | null;
 }
+
+/** A song that can play: one with a file (the queue's, Android Auto's). */
+export type PlayableSongRow = SongRow & { readonly path: string };
+
+/** Whether [song] has a file to play (it isn't a missing song). */
+export const songHasFile = <S extends SongRow>(song: S): song is S & { readonly path: string } =>
+  song.path !== null;
 
 /** A track on an album screen, with what orders it there. */
 export type AlbumTrackRow = SongRow;
@@ -337,7 +347,8 @@ export class LibraryStore extends Context.Service<
       drop: readonly string[],
     ) => Effect.Effect<void, LibraryStoreError>;
     /**
-     * Removes a root and the tracks no other root covers, then the albums,
+     * Removes a root and the tracks no other root covers (signed in to a Wave
+     * account, they stay as missing songs: `leaveFiles`), then the albums,
      * artists, genres and folders left without tracks. The last root can't be removed.
      */
     readonly removeRoot: (path: string) => Effect.Effect<void, LibraryStoreError>;
@@ -379,22 +390,28 @@ export class LibraryStore extends Context.Service<
     readonly listLibraryLookupSongs: Effect.Effect<readonly LibraryLookupSong[], LibraryStoreError>;
     /** Every album by title, then album artist, for Library › Albums. */
     readonly listAlbums: Effect.Effect<readonly AlbumRow[], LibraryStoreError>;
-    /** [page] of the albums in the same order, for lists that page (Auto). */
+    /**
+     * [page] of the albums with a file in the same order, for lists that page
+     * (Auto, which leaves missing songs out).
+     */
     readonly listAlbumsPage: (
       page: RowPage,
     ) => Effect.Effect<readonly AlbumRow[], LibraryStoreError>;
     /** Every artist with songs, by name, for Library › Artists. */
     readonly listArtists: Effect.Effect<readonly ArtistRow[], LibraryStoreError>;
-    /** [page] of the artists in the same order, for lists that page (Auto). */
+    /** [page] of the artists with a file in the same order, for lists that page (Auto). */
     readonly listArtistsPage: (
       page: RowPage,
     ) => Effect.Effect<readonly ArtistRow[], LibraryStoreError>;
-    /** [page] of an artist's songs, in their screen's order (by title), for Auto. */
+    /** [page] of an artist's songs with a file, in their screen's order (by title), for Auto. */
     readonly listArtistSongsPage: (
       id: number,
       page: RowPage,
     ) => Effect.Effect<readonly SongRow[], LibraryStoreError>;
-    /** [page] of a playlist's entries, in playlist order, for Auto. */
+    /**
+     * [page] of a playlist's entries, in playlist order, for Auto: its YT
+     * Music entries and its Library songs with a file.
+     */
     readonly listPlaylistEntriesPage: (
       id: number,
       page: RowPage,
@@ -405,9 +422,19 @@ export class LibraryStore extends Context.Service<
     ) => Effect.Effect<ReadonlyMap<number, string>, LibraryStoreError>;
     /** Every genre with songs, by name, for Library › Genres. */
     readonly listGenres: Effect.Effect<readonly GenreRow[], LibraryStoreError>;
-    /** An album and its tracks, or null when it's no longer in the library. */
-    readonly getAlbum: (id: number) => Effect.Effect<AlbumDetail | null, LibraryStoreError>;
-    readonly getArtist: (id: number) => Effect.Effect<ArtistDetail | null, LibraryStoreError>;
+    /**
+     * An album and its tracks in [scope] (missing songs included unless
+     * "files"), or null when it has none.
+     */
+    readonly getAlbum: (
+      id: number,
+      scope?: TrackScope,
+    ) => Effect.Effect<AlbumDetail | null, LibraryStoreError>;
+    /** An artist's page, of their songs in [scope]; null when they have none. */
+    readonly getArtist: (
+      id: number,
+      scope?: TrackScope,
+    ) => Effect.Effect<ArtistDetail | null, LibraryStoreError>;
     readonly getGenre: (id: number) => Effect.Effect<GenreDetail | null, LibraryStoreError>;
 
     /** The indexed files under [roots], for an incremental scan to skip the unchanged ones. */
@@ -419,20 +446,30 @@ export class LibraryStore extends Context.Service<
       paths: readonly string[],
     ) => Effect.Effect<readonly IndexedFile[], LibraryStoreError>;
     /**
-     * Removes the tracks at [paths], then the albums, artists, genres and
-     * folders left without tracks (also after tag changes, so call it once per scan).
+     * The files at [paths] are gone (a scan no longer found them): signed in
+     * to a Wave account their songs stay as missing songs, signed out they
+     * leave the Library. Then the albums, artists, genres and folders left
+     * without tracks go (also after tag changes, so call it once per scan).
      */
-    readonly removeTracks: (paths: readonly string[]) => Effect.Effect<void, LibraryStoreError>;
+    readonly filesGone: (paths: readonly string[]) => Effect.Effect<void, LibraryStoreError>;
+    /**
+     * Takes these songs out of the Library and, signed in, out of the Wave
+     * account (Remove from Library; Delete once their files are gone).
+     */
+    readonly removeSongs: (trackIds: readonly number[]) => Effect.Effect<void, LibraryStoreError>;
     /** Excludes [path] and drops the exclusions in [drop] (see Core's `planExclusion`). */
     readonly addExcludedFolder: (
       path: string,
       drop: readonly string[],
     ) => Effect.Effect<void, LibraryStoreError>;
     readonly removeExcludedFolder: (path: string) => Effect.Effect<void, LibraryStoreError>;
-    /** The tracks with these ids, in no particular order; ids no longer indexed are left out. */
+    /**
+     * The songs with these ids that can play, for the queue, in no particular
+     * order; ids no longer indexed, and missing songs, are left out.
+     */
     readonly songsByIds: (
       ids: readonly number[],
-    ) => Effect.Effect<readonly SongRow[], LibraryStoreError>;
+    ) => Effect.Effect<readonly PlayableSongRow[], LibraryStoreError>;
     readonly loadPlayback: Effect.Effect<SavedPlayback | null, LibraryStoreError>;
     /** Saves the queue with where its current entry is. */
     readonly saveQueue: (
@@ -449,7 +486,11 @@ export class LibraryStore extends Context.Service<
     readonly clearRecentSearches: Effect.Effect<void, LibraryStoreError>;
     /** Every playlist by name, with its mosaic. */
     readonly listPlaylists: Effect.Effect<readonly PlaylistRow[], LibraryStoreError>;
-    readonly getPlaylist: (id: number) => Effect.Effect<PlaylistDetail | null, LibraryStoreError>;
+    /** A playlist with its YT Music entries and its Library songs in [scope]. */
+    readonly getPlaylist: (
+      id: number,
+      scope?: TrackScope,
+    ) => Effect.Effect<PlaylistDetail | null, LibraryStoreError>;
     /**
      * Creates a playlist holding [songs], Library tracks and YT Music songs in
      * the order given (Core's `checkPlaylistName` must accept the name, or it
@@ -510,8 +551,11 @@ export class LibraryStore extends Context.Service<
     readonly updatePlay: (id: number, play: PlayEvent) => Effect.Effect<void, LibraryStoreError>;
     /** Records how a play ended; it no longer changes, so it can go to the Wave account. */
     readonly endPlay: (id: number, play: PlayEvent) => Effect.Effect<void, LibraryStoreError>;
-    /** The Home tab: Recently Added, Recently Played, Most Played and Favorites. */
-    readonly home: Effect.Effect<HomeSections, LibraryStoreError>;
+    /**
+     * The Home tab: Recently Added, Recently Played, Most Played and
+     * Favorites, of the songs in [scope] (Auto's: those with a file).
+     */
+    readonly home: (scope?: TrackScope) => Effect.Effect<HomeSections, LibraryStoreError>;
     /** The play recorded last, to pick back up when JS restarts while the player kept going. */
     readonly latestPlay: Effect.Effect<RecordedPlay | null, LibraryStoreError>;
     /** Each track's counted plays within [window] (tracks still in the library), in no order. */
@@ -577,9 +621,12 @@ export class LibraryStore extends Context.Service<
      * request failed; what was done by then stays done.
      */
     readonly syncWithAccount: (
-      input: Omit<SyncCycleInput, "db">,
+      input: Omit<SyncCycleInput, "db" | "splits">,
     ) => Effect.Effect<SyncCycleResult, LibraryStoreError>;
-    /** Signed out: the Library leaves the account, and the next sign-in joins anew. */
+    /**
+     * Signed out: the Library leaves the account (the next sign-in joins
+     * anew) and its missing songs go (`signOut`).
+     */
     readonly leaveAccount: Effect.Effect<void, LibraryStoreError>;
   }
 >()("@wave/mobile/library/LibraryStore") {}
@@ -616,7 +663,7 @@ const removeRootSync = (db: Database, splits: CreditSplits, path: string): void 
       .all()
       .map((row) => row.path);
     const leaving = filesLeavingWithRoot(under, path, remaining);
-    deleteTracks(tx, leaving);
+    leaveFiles(tx, leaving);
     tx.delete(scanRoots).where(eq(scanRoots.path, path)).run();
 
     // Exclusions only mean something inside a root.
@@ -639,23 +686,6 @@ const removeRootSync = (db: Database, splits: CreditSplits, path: string): void 
 /** Artists with songs (see `selectArtists`), only [ids] if given. */
 const listArtistsSync = (db: Database, ids?: readonly number[]): ArtistRow[] =>
   selectArtists(db, { ids });
-
-const getAlbumSync = (db: Database, id: number): AlbumDetail | null => {
-  const { tracks, genres } = schema;
-  const album = selectAlbums(db, eq(schema.albums.id, id))[0];
-  if (album === undefined) return null;
-  const genre = db
-    .select({ name: genres.name })
-    .from(tracks)
-    .innerJoin(genres, eq(tracks.genreId, genres.id))
-    .where(eq(tracks.albumId, id))
-    .groupBy(genres.id)
-    .orderBy(desc(sql`count(*)`), asc(genres.sort))
-    .get();
-  const rows = trackQuery(db).where(eq(tracks.albumId, id)).all();
-  // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
-  return { album, genre: genre?.name ?? null, tracks: rows.sort(compareAlbumTracks) };
-};
 
 const getGenreSync = (db: Database, id: number): GenreDetail | null => {
   const { genres } = schema;
@@ -835,17 +865,19 @@ const make = Effect.gen(function* () {
 
     listAlbums: attempt("list albums", () => selectAlbums(db, undefined)),
 
-    listAlbumsPage: (page) => attempt("list albums", () => selectAlbums(db, undefined, page)),
+    listAlbumsPage: (page) =>
+      attempt("list albums", () => selectAlbums(db, undefined, page, "files")),
 
     listArtists: attempt("list artists", () => listArtistsSync(db)),
 
-    listArtistsPage: (page) => attempt("list artists", () => selectArtists(db, { page })),
+    listArtistsPage: (page) =>
+      attempt("list artists", () => selectArtists(db, { page, scope: "files" })),
 
     listArtistSongsPage: (id, page) =>
-      attempt("list the artist's songs", () => selectArtistSongs(db, id, page)),
+      attempt("list the artist's songs", () => selectArtistSongs(db, id, page, "files")),
 
     listPlaylistEntriesPage: (id, page) =>
-      attempt("list the playlist's songs", () => selectPlaylistEntries(db, id, page)),
+      attempt("list the playlist's songs", () => selectPlaylistEntries(db, id, page, "files")),
 
     artistCovers: (ids) => attempt("load artist covers", () => selectArtistCovers(db, ids)),
 
@@ -865,9 +897,9 @@ const make = Effect.gen(function* () {
         .all();
     }),
 
-    getAlbum: (id) => attempt("open the album", () => getAlbumSync(db, id)),
+    getAlbum: (id, scope) => attempt("open the album", () => selectAlbumDetail(db, id, scope)),
 
-    getArtist: (id) => attempt("open the artist", () => selectArtistDetail(db, id)),
+    getArtist: (id, scope) => attempt("open the artist", () => selectArtistDetail(db, id, scope)),
 
     getGenre: (id) => attempt("open the genre", () => getGenreSync(db, id)),
 
@@ -891,7 +923,11 @@ const make = Effect.gen(function* () {
         ),
       ),
 
-    removeTracks: (paths) => attempt("remove missing songs", () => removeTracks(db, splits, paths)),
+    filesGone: (paths) =>
+      attempt("update songs whose files are gone", () => filesGone(db, splits, paths)),
+
+    removeSongs: (trackIds) =>
+      attempt("remove songs from the library", () => removeSongs(db, splits, trackIds, Date.now())),
 
     addExcludedFolder: (path, drop) =>
       attempt("exclude a folder", () =>
@@ -914,11 +950,7 @@ const make = Effect.gen(function* () {
       }),
 
     songsByIds: (ids) =>
-      attempt("read queued songs", () =>
-        chunks(ids).flatMap((chunk) =>
-          trackQuery(db).where(inArray(schema.tracks.id, chunk)).all(),
-        ),
-      ),
+      attempt("read queued songs", () => selectPlayableSongs(db, ids).filter(songHasFile)),
 
     loadPlayback: attempt(
       "read the saved queue",
@@ -961,7 +993,7 @@ const make = Effect.gen(function* () {
 
     listPlaylists: attempt("list playlists", () => selectPlaylists(db)),
 
-    getPlaylist: (id) => attempt("open the playlist", () => selectPlaylist(db, id)),
+    getPlaylist: (id, scope) => attempt("open the playlist", () => selectPlaylist(db, id, scope)),
 
     createPlaylist: (name, songs) =>
       attempt("create the playlist", () => createPlaylist(db, name, songs, Date.now())),
@@ -1013,7 +1045,7 @@ const make = Effect.gen(function* () {
     updatePlay: (id, play) => attempt("update the play", () => updatePlay(db, id, play)),
     endPlay: (id, play) => attempt("end the play", () => endPlay(db, id, play)),
 
-    home: attempt("read Home", () => homeSections(db)),
+    home: (scope) => attempt("read Home", () => homeSections(db, scope)),
 
     latestPlay: attempt("read the latest play", () => latestPlay(db)),
 
@@ -1061,11 +1093,11 @@ const make = Effect.gen(function* () {
 
     syncWithAccount: (input) =>
       Effect.tryPromise({
-        try: () => syncCycle({ ...input, db }),
+        try: () => syncCycle({ ...input, db, splits }),
         catch: (cause) => new LibraryStoreError({ operation: "sync with the Wave account", cause }),
       }),
 
-    leaveAccount: attempt("leave the Wave account", () => leaveAccount(db)),
+    leaveAccount: attempt("leave the Wave account", () => signOut(db, splits)),
   });
 });
 

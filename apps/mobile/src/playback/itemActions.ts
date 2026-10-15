@@ -13,7 +13,8 @@ import * as Haptics from "expo-haptics";
 import { router, usePathname } from "expo-router";
 
 import { followArtistLink } from "@/library/ArtistChoice";
-import { confirmDeleteSongs } from "@/library/deleteSongs";
+import { confirmDeleteSongs, confirmRemoveSongs } from "@/library/deleteSongs";
+import { songHasFile } from "@/library/LibraryStore";
 import { setFavorites, useFavoriteIds } from "@/library/favorites";
 import { findLyricsAndGenreFor } from "@/library/findLyricsAndGenre";
 import { useLinkRows } from "@/library/hooks";
@@ -76,6 +77,8 @@ export function useItemActions(
   const onlineLookups = useLyricsAndGenreLookupsEnabled();
   const facts = targetFacts(target, favorites);
   const tracks = target.kind === "track" ? target.items : [];
+  // What acts on files (Delete, Find Lyrics and Genre) shows only when every song has one.
+  const withFiles = tracks.flatMap(({ song }) => (songHasFile(song) ? [song] : []));
 
   const run = (action: () => void) => () => {
     finish();
@@ -204,14 +207,20 @@ export function useItemActions(
         );
       }
       case "findLyricsAndGenre":
-        return make(run(() => void findLyricsAndGenreFor(tracks.map(({ song }) => song))));
+        return make(run(() => void findLyricsAndGenreFor(withFiles)));
       case "select":
         return make(run(() => onSelect?.()));
-      case "delete": {
+      case "delete":
+        return make(
+          asking(entry.action, (onConfirm) => {
+            void confirmDeleteSongs(withFiles, { onConfirm });
+          }),
+        );
+      case "removeFromLibrary": {
         const songs = tracks.map(({ song }) => song);
         return make(
           asking(entry.action, (onConfirm) => {
-            void confirmDeleteSongs(songs, { onConfirm });
+            void confirmRemoveSongs(songs, { onConfirm });
           }),
         );
       }

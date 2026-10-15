@@ -315,7 +315,7 @@ export {
   visibleHighlight,
 } from "./overlayOrigin.ts";
 export type { HighlightInput, NewCardInput, OriginCard } from "./overlayOrigin.ts";
-export { confirmSongDeletion, songDeletionFailure } from "./songDeletion.ts";
+export { confirmSongDeletion, confirmSongRemoval, songDeletionFailure } from "./songDeletion.ts";
 export type { SongDeleteFailure, SongDeleteFailureReason } from "./songDeletion.ts";
 export { artistArtwork, artistInitial } from "./artistImage.ts";
 export type { ArtistAlbumLink } from "./artistImage.ts";
@@ -654,8 +654,8 @@ export type {
   StreamedArtistLink,
   StreamedArtistTarget,
 } from "./streamedArtist.ts";
-export { pagePlayback } from "./pagePlayback.ts";
-export type { PagePlayback } from "./pagePlayback.ts";
+export { pagePlayback, skipMissingSongs } from "./pagePlayback.ts";
+export type { PagePlayback, PlayableSongs } from "./pagePlayback.ts";
 export {
   planPlaylistSongs,
   playlistEntryLinks,
@@ -760,8 +760,14 @@ export type {
   TrackEntry,
   VanishedFileFate,
 } from "./sync.ts";
-export { accountTrackIds, blackPlayerPlayId, planSongSync } from "./syncPlan.ts";
-export type { AccountSongState, KeyedTrack, PhoneSong, SongSyncPlan } from "./syncPlan.ts";
+export { accountTrackIds, blackPlayerPlayId, missingSongTrack, planSongSync } from "./syncPlan.ts";
+export type {
+  AccountSongState,
+  KeyedTrack,
+  MissingSongTrack,
+  PhoneSong,
+  SongSyncPlan,
+} from "./syncPlan.ts";
 export { EMPTY_SYNC_TABLES, SYNC_PUSH_BATCH, pushBatches, readPullPage } from "./syncWire.ts";
 export type {
   SyncFavorite,

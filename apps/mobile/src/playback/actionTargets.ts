@@ -92,6 +92,7 @@ const KIND_TRACK: KindInfo<TrackItem> = {
     artistIds: song.artistIds,
     favorite: favorites.has(song.id),
     inPlaylist: playlistItem !== undefined,
+    missing: song.path === null,
   }),
   noun: "song",
 };

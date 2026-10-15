@@ -1,6 +1,12 @@
-import { confirmSongDeletion, songDeletionFailure, type SongDeleteFailureReason } from "@wave/core";
+import {
+  confirmSongDeletion,
+  confirmSongRemoval,
+  songDeletionFailure,
+  type SongDeleteFailureReason,
+} from "@wave/core";
 import * as Effect from "effect/Effect";
 
+import { WaveAccount } from "@/native/waveAccount";
 import { WaveNative, type FileDeleteOutcome } from "@/native/waveNative";
 import { confirmAction, showMessage } from "@/overlay/alert";
 import { Queue } from "@/playback/Queue";
@@ -31,9 +37,9 @@ const deleteFiles = (paths: readonly string[]) =>
 
 /**
  * Deletes the songs' audio files (and sidecar `.lrc` files) from the phone,
- * without asking. The songs whose files are gone leave the library, every
- * playlist, Favorites and the queue (the playing one moves on to the next);
- * their play history stays. Songs whose files couldn't be deleted stay as they were.
+ * without asking. The songs whose files are gone leave the library and,
+ * signed in, the Wave account (`leaveLibrary`). Songs whose files couldn't be
+ * deleted stay as they were.
  */
 export const deleteSongs = <S extends DeletableSong>(
   songs: readonly S[],
@@ -50,20 +56,54 @@ export const deleteSongs = <S extends DeletableSong>(
       });
       if (deleted.length === 0) return { deleted, failed };
 
-      const store = yield* LibraryStore;
-      const queue = yield* Queue;
-      // Playlist items and stars go with the tracks (foreign keys); history doesn't.
-      yield* store
-        .removeTracks(deleted.map((song) => song.path))
-        .pipe(Effect.ensuring(Effect.sync(libraryEdited)));
-      forgetFavorites(deleted.map((song) => song.id));
-      yield* queue.dispatch({
-        type: "removeTracks",
-        trackIds: deleted.map((song) => String(song.id)),
-      });
+      yield* leaveLibrary(deleted.map((song) => song.id));
       return { deleted, failed };
     }),
   );
+
+/**
+ * Takes the songs [ids] out of the Library and, signed in, out of the Wave
+ * account: every playlist, Favorites and the queue lose them too (the
+ * playing one moves on to the next); their play history stays.
+ */
+const leaveLibrary = (ids: readonly number[]) =>
+  Effect.gen(function* () {
+    const store = yield* LibraryStore;
+    const queue = yield* Queue;
+    // Playlist items and stars go with the tracks (foreign keys); history doesn't.
+    yield* store.removeSongs(ids).pipe(Effect.ensuring(Effect.sync(libraryEdited)));
+    forgetFavorites(ids);
+    yield* queue.dispatch({ type: "removeTracks", trackIds: ids.map(String) });
+  });
+
+/** Whether the phone is signed in to a Wave account, which deleted songs leave too. */
+const signedIn = (): Promise<boolean> =>
+  WaveAccount.session().then(
+    (session) => session.status === "signedIn",
+    () => false,
+  );
+
+/**
+ * Asks first ("Remove "Song" from your Library?"), then takes missing songs
+ * (no file on this phone) out of the Library and the Wave account. [onConfirm]
+ * runs once the user confirms (the selection bar ends selection mode there).
+ */
+export const confirmRemoveSongs = async (
+  songs: readonly { readonly id: number; readonly title: string }[],
+  { onConfirm }: { readonly onConfirm?: (() => void) | undefined } = {},
+): Promise<void> => {
+  if (songs.length === 0) return;
+  if (!(await confirmAction(confirmSongRemoval(songs)))) return;
+  onConfirm?.();
+  try {
+    await appRuntime.runPromise(leaveLibrary(songs.map((song) => song.id)));
+  } catch (cause) {
+    await showMessage(
+      "Couldn't remove the songs",
+      cause instanceof Error ? cause.message : String(cause),
+    );
+  }
+};
 
 /**
  * Asks first ("Delete "Song"?", "Delete 12 songs?"), then deletes the songs
@@ -77,7 +117,8 @@ export const confirmDeleteSongs = async <S extends DeletableSong>(
   { onConfirm }: { readonly onConfirm?: (() => void) | undefined } = {},
 ): Promise<readonly S[]> => {
   if (songs.length === 0) return [];
-  if (!(await confirmAction(confirmSongDeletion(songs)))) return [];
+  const signedInNow = await signedIn();
+  if (!(await confirmAction(confirmSongDeletion(songs, { signedIn: signedInNow })))) return [];
   onConfirm?.();
   try {
     const { deleted, failed } = await deleteSongs(songs);

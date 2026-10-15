@@ -8,7 +8,9 @@
  */
 import { pushBatches, readPullPage, type SyncTables } from "@wave/core";
 
+import type { CreditSplits } from "../library/db/credits.ts";
 import type { LibraryDatabase } from "../library/db/database.ts";
+import { syncMissingSongs } from "../library/db/missingSongs.ts";
 import {
   applyPending,
   applyPulledPage,
@@ -41,6 +43,8 @@ export interface SyncPreferences {
 
 export interface SyncCycleInput {
   readonly db: LibraryDatabase;
+  /** The store's credit splitter, which missing songs are filed with. */
+  readonly splits: CreditSplits;
   readonly transport: SyncTransport;
   readonly preferences: SyncPreferences;
   /** The account signed in (its email): the Library is joined with it (`joinAccount`). */
@@ -53,9 +57,15 @@ export interface SyncCycleInput {
 }
 
 /** What a sync did. */
+/** What a sync changed on the phone. */
+export interface SyncedChanges extends PulledChanges {
+  /** Missing songs came in, changed or left: the Library's lists read again. */
+  readonly library: boolean;
+}
+
 export interface SyncCycleResult {
   /** What the account's changes changed on the phone. */
-  readonly pulled: PulledChanges;
+  readonly pulled: SyncedChanges;
   /** How many rows went up. */
   readonly pushed: number;
 }
@@ -99,6 +109,7 @@ const send = async (
 
 interface Seen {
   songs: boolean;
+  library: boolean;
   playlists: boolean;
   favorites: boolean;
   plays: boolean;
@@ -113,8 +124,8 @@ const take = (seen: Seen, changes: PulledChanges): void => {
   seen.preferences.push(...changes.preferences);
 };
 
-/** Pulls every page changed after the cursor kept, applying each; then the rows that waited. */
-const pullAll = async (input: SyncCycleInput, seen: Seen): Promise<void> => {
+/** Pulls every page changed after the cursor kept, applying each; true when any row came. */
+const pullAll = async (input: SyncCycleInput, seen: Seen): Promise<boolean> => {
   const { db } = input;
   const trackIds = selectAccountTrackIds(db);
   let pulledAny = false;
@@ -128,7 +139,26 @@ const pullAll = async (input: SyncCycleInput, seen: Seen): Promise<void> => {
     pulledAny ||= Object.values(page).some((rows) => Array.isArray(rows) && rows.length > 0);
     if (!page.more) break;
   }
-  if (pulledAny || input.songsChanged) take(seen, applyPending(db, trackIds));
+  return pulledAny;
+};
+
+/**
+ * After a pull: when the songs may have changed, brings the account's song
+ * list up to date with the phone's ([plan]: before a push) and the Library's
+ * missing songs with the account's (`syncMissingSongs`); then places the
+ * rows that waited for a song or a playlist the phone now has.
+ */
+const settle = (
+  input: SyncCycleInput,
+  seen: Seen,
+  { pulled, songs, plan }: { pulled: boolean; songs: boolean; plan: boolean },
+): void => {
+  const { db } = input;
+  if (songs) {
+    if (plan) planSongs(db, input.now());
+    seen.library ||= syncMissingSongs(db, input.splits, input.now());
+  }
+  if (pulled || songs) take(seen, applyPending(db, selectAccountTrackIds(db)));
 };
 
 const rowCount = (rows: SyncTables): number =>
@@ -157,23 +187,31 @@ const pushAll = async (input: SyncCycleInput): Promise<number> => {
 
 /**
  * Syncs the Library with the account: joins it first if it isn't yet (a
- * sign-in), pulls, brings the song list up to date when the songs may have
- * changed, pushes, and pulls again after a push. A failed request stops it
- * where it is (it throws): what was pulled or pushed by then stays done, and
- * the next sync goes on from there.
+ * sign-in), pulls, brings the song lists up to date when the songs may have
+ * changed (the account's with the phone's files, the Library's missing songs
+ * with the account's), pushes, and pulls again after a push. A failed
+ * request stops it where it is (it throws): what was pulled or pushed by
+ * then stays done, and the next sync goes on from there.
  */
 export const syncCycle = async (input: SyncCycleInput): Promise<SyncCycleResult> => {
   const joined = joinAccount(input.db, input.account);
   const seen: Seen = {
     songs: false,
+    library: false,
     playlists: false,
     favorites: false,
     plays: false,
     preferences: [],
   };
-  await pullAll(input, seen);
-  if (joined || input.songsChanged || seen.songs) planSongs(input.db, input.now());
+  const pulled = await pullAll(input, seen);
+  settle(input, seen, { pulled, songs: joined || input.songsChanged || seen.songs, plan: true });
   const pushed = await pushAll(input);
-  if (pushed > 0) await pullAll(input, seen);
+  if (pushed > 0) {
+    const songsBefore = seen.songs;
+    seen.songs = false;
+    const again = await pullAll(input, seen);
+    settle(input, seen, { pulled: again, songs: seen.songs, plan: false });
+    seen.songs ||= songsBefore;
+  }
   return { pulled: seen, pushed };
 };

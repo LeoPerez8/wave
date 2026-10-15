@@ -5,10 +5,9 @@ import * as Layer from "effect/Layer";
 import { AppState } from "react-native";
 
 import { LibraryStore } from "@/library/LibraryStore";
-import type { PulledChanges } from "@/library/db/syncRows";
 import { WaveAccount, waveAccountErrorCode } from "@/native/waveAccount";
 
-import type { SyncPreferences } from "./syncCycle";
+import type { SyncedChanges, SyncPreferences } from "./syncCycle";
 
 /** How long a push waits after the last change, so a run of edits goes up as one. */
 const PUSH_DELAY_MS = 3_000;
@@ -18,7 +17,7 @@ export interface WaveSyncPorts {
   /** The synced preferences' values (`syncedPreferences`). */
   readonly preferences: SyncPreferences;
   /** Hears what each sync changed on the phone, to show it. */
-  readonly pulled: (changes: PulledChanges) => void;
+  readonly pulled: (changes: SyncedChanges) => void;
   /**
    * Follows the Wave account's Soulseek account after each pull, natively
    * (`WaveSoulseek.followWaveAccount`): JS never sees its credentials.
@@ -121,9 +120,18 @@ const make = Effect.gen(function* () {
     account = null;
     if (pending !== undefined) clearTimeout(pending);
     pending = undefined;
-    // The Library stays; the next sign-in joins it with the account anew.
-    void Effect.runPromise(store.leaveAccount).catch((error: unknown) =>
-      console.warn("[wave] Couldn't leave the Wave account", error),
+    // The Library stays, but for its missing songs; the next sign-in joins it with the account anew.
+    void Effect.runPromise(store.leaveAccount).then(
+      () =>
+        ports?.pulled({
+          songs: false,
+          library: true,
+          playlists: true,
+          favorites: true,
+          plays: false,
+          preferences: [],
+        }),
+      (error: unknown) => console.warn("[wave] Couldn't leave the Wave account", error),
     );
   };
 

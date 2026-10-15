@@ -38,6 +38,8 @@ import {
   LibraryStore,
   type LibraryStoreError,
   type PlaylistEntryRow,
+  songHasFile,
+  type PlayableSongRow,
   type SongRow,
 } from "@/library/LibraryStore";
 import type { AutoPlayback, AutoRequest } from "@/native/wavePlayer";
@@ -74,20 +76,23 @@ const decode = (mediaId: string): Effect.Effect<AutoNode, AutoError> => {
 };
 
 /**
- * A song of a track list: a Library song, or a playlist's YT Music entry,
- * streamed as a streamed song is anywhere else.
+ * A song of a track list: a Library song with a file, or a playlist's YT
+ * Music entry, streamed as a streamed song is anywhere else. Auto leaves
+ * missing songs out: the store reads Auto's lists with files only (`TrackScope`).
  */
-type AutoSong = MixedSong<YtSong, SongRow>;
+type AutoSong = MixedSong<YtSong, PlayableSongRow>;
 
 const fromLibrary = (songs: readonly SongRow[]): readonly AutoSong[] =>
-  songs.map((track) => ({ source: "library", track }));
+  songs.filter(songHasFile).map((track) => ({ source: "library", track }));
 
 /** A playlist's entries as a track list's songs. */
 const playlistSongs = (entries: readonly PlaylistEntryRow[]): readonly AutoSong[] =>
-  entries.map((entry) =>
-    entry.source === "library"
-      ? { source: "library", track: entry.track }
-      : { source: "stream", song: entry.song },
+  entries.flatMap((entry): AutoSong[] =>
+    entry.source === "stream"
+      ? [{ source: "stream", song: entry.song }]
+      : songHasFile(entry.track)
+        ? [{ source: "library", track: entry.track }]
+        : [],
   );
 
 /** A song as Core's track lists need it. A YT Music entry has no cached cover to show. */
@@ -136,21 +141,21 @@ export const layer = Layer.effect(
     > = {
       album: (id) =>
         store
-          .getAlbum(Number(id))
+          .getAlbum(Number(id), "files")
           .pipe(Effect.map((detail) => (detail === null ? null : fromLibrary(detail.tracks)))),
       // Its YT Music entries too, in their places.
       playlist: (id) =>
         store
-          .getPlaylist(Number(id))
+          .getPlaylist(Number(id), "files")
           .pipe(Effect.map((detail) => (detail === null ? null : playlistSongs(detail.items)))),
       // The app's Home tab lists.
       home: (id) =>
-        store.home.pipe(
-          Effect.map((home) => (isHomeList(id) ? fromLibrary(HOME_SONGS[id](home)) : null)),
-        ),
+        store
+          .home("files")
+          .pipe(Effect.map((home) => (isHomeList(id) ? fromLibrary(HOME_SONGS[id](home)) : null))),
       artistSongs: (id) =>
         store
-          .getArtist(Number(id))
+          .getArtist(Number(id), "files")
           .pipe(Effect.map((detail) => (detail === null ? null : fromLibrary(detail.songs)))),
     };
 
@@ -202,9 +207,9 @@ export const layer = Layer.effect(
           );
         // The app's Home shelf: a handful of albums.
         case "recentlyPlayed":
-          return store.home.pipe(
-            Effect.map((home) => pageOf(home.recentlyPlayed, page).map(autoAlbumItem)),
-          );
+          return store
+            .home("files")
+            .pipe(Effect.map((home) => pageOf(home.recentlyPlayed, page).map(autoAlbumItem)));
         case "artists":
           return store.listArtistsPage(page).pipe(
             Effect.flatMap(withCovers),
@@ -212,7 +217,7 @@ export const layer = Layer.effect(
           );
         case "artistAlbums":
           return store
-            .getArtist(Number(source.id))
+            .getArtist(Number(source.id), "files")
             .pipe(
               Effect.flatMap((detail) =>
                 detail === null
@@ -247,17 +252,17 @@ export const layer = Layer.effect(
         if (node.type === "list") {
           switch (node.list.kind) {
             case "album": {
-              const detail = yield* store.getAlbum(Number(node.list.id));
+              const detail = yield* store.getAlbum(Number(node.list.id), "files");
               return detail === null ? yield* notFound : autoAlbumItem(detail.album);
             }
             case "playlist": {
-              const detail = yield* store.getPlaylist(Number(node.list.id));
+              const detail = yield* store.getPlaylist(Number(node.list.id), "files");
               return detail === null ? yield* notFound : autoPlaylistItem(detail.playlist);
             }
           }
         }
         if (node.type === "artist") {
-          const detail = yield* store.getArtist(Number(node.id));
+          const detail = yield* store.getArtist(Number(node.id), "files");
           if (detail === null) return yield* notFound;
           const [artist] = yield* withCovers([detail.artist]);
           return autoArtistItem(artist ?? detail.artist);
@@ -332,15 +337,16 @@ export const layer = Layer.effect(
       if (libraryIds.length === 0) return null;
       const [song] = yield* store.songsByIds(libraryIds);
       if (song === undefined) return null;
-      const detail = yield* store.getArtist(song.artistId);
+      const detail = yield* store.getArtist(song.artistId, "files");
       if (detail === null) return null;
+      const playable = detail.songs.filter(songHasFile);
       const plays = yield* store.trackPlayTotals(statsWindow("all", Date.now()));
       const ranking = artistRanking({
         albumIds: [...detail.albums, ...detail.appearsOn].map((album) => album.id),
-        songs: detail.songs,
+        songs: playable,
         plays,
       });
-      yield* queue.dispatch({ type: "moreFromArtist", ranking }, detail.songs.map(toQueueTrack));
+      yield* queue.dispatch({ type: "moreFromArtist", ranking }, playable.map(toQueueTrack));
       return null;
     });
 

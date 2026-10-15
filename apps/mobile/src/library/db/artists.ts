@@ -10,20 +10,34 @@ import type { ArtistDetail, ArtistRow } from "../LibraryStore.ts";
 import { selectAlbums } from "./albums.ts";
 import type { LibraryDatabase, RowPage } from "./database.ts";
 import * as schema from "./schema.ts";
-import { BY_TITLE, trackQuery } from "./tracks.ts";
+import { BY_TITLE, trackQuery, type TrackScope } from "./tracks.ts";
 
 export interface ArtistsQuery {
   /** Only these artists. */
   readonly ids?: readonly number[];
   /** A window of the list. */
   readonly page?: RowPage;
+  /** Which songs count (the Library's by default). */
+  readonly scope?: TrackScope;
 }
 
 /**
- * Every song an artist is credited on: each artist its credit names, and
- * each album artist its album's credit names (so Watch the Throne counts for
- * Kanye West as well). A song shows once per artist.
+ * Every song in [scope] an artist is credited on: each artist its credit
+ * names, and each album artist its album's credit names (so Watch the Throne
+ * counts for Kanye West as well). A song shows once per artist.
  */
+export const creditedSongs = (scope: TrackScope = "library") =>
+  scope === "files"
+    ? sql`
+  SELECT track_artists.track_id, track_artists.artist_id FROM track_artists
+  JOIN tracks ON tracks.id = track_artists.track_id WHERE tracks.path IS NOT NULL
+  UNION
+  SELECT tracks.id, album_artists.artist_id
+  FROM tracks JOIN album_artists ON album_artists.album_id = tracks.album_id
+  WHERE tracks.path IS NOT NULL`
+    : CREDITED_SONGS;
+
+/** Every song an artist is credited on, missing songs included (`creditedSongs`). */
 export const CREDITED_SONGS = sql`
   SELECT track_id, artist_id FROM track_artists
   UNION
@@ -31,13 +45,16 @@ export const CREDITED_SONGS = sql`
   FROM tracks JOIN album_artists ON album_artists.album_id = tracks.album_id`;
 
 /**
- * Artists with songs, by sort name (leading articles and accents ignored,
- * the Library's order): a song belongs to every artist credited on it
- * (`CREDITED_SONGS`), so a collaboration counts for each of its artists.
+ * Artists with songs in [scope], by sort name (leading articles and accents
+ * ignored, the Library's order): a song belongs to every artist credited on
+ * it (`creditedSongs`), so a collaboration counts for each of its artists.
  */
-export const selectArtists = (db: LibraryDatabase, { ids, page }: ArtistsQuery): ArtistRow[] =>
+export const selectArtists = (
+  db: LibraryDatabase,
+  { ids, page, scope = "library" }: ArtistsQuery,
+): ArtistRow[] =>
   db.all<ArtistRow>(sql`
-    WITH links AS (${CREDITED_SONGS})
+    WITH links AS (${creditedSongs(scope)})
     SELECT artists.id AS "id", artists.name AS "name", artists.sort AS "sort",
       (SELECT count(*) FROM albums WHERE albums.album_artist_id = artists.id) AS "albumCount",
       count(links.track_id) AS "trackCount",
@@ -110,12 +127,18 @@ export const selectArtistCovers = (
 };
 
 /**
- * An artist's songs, as their screen lists them: every song they're credited
- * on (`CREDITED_SONGS`), by title (`BY_TITLE`); [page] of them if given.
+ * An artist's songs in [scope], as their screen lists them: every song
+ * they're credited on (`creditedSongs`), by title (`BY_TITLE`); [page] of
+ * them if given.
  */
-export const selectArtistSongs = (db: LibraryDatabase, artistId: number, page?: RowPage) => {
+export const selectArtistSongs = (
+  db: LibraryDatabase,
+  artistId: number,
+  page?: RowPage,
+  scope: TrackScope = "library",
+) => {
   const { tracks } = schema;
-  const query = trackQuery(db)
+  const query = trackQuery(db, scope)
     .where(
       inArray(
         tracks.id,
@@ -127,12 +150,16 @@ export const selectArtistSongs = (db: LibraryDatabase, artistId: number, page?: 
 };
 
 /**
- * An artist's page: their row, their songs (`selectArtistSongs`) and the
- * albums they're credited on, split into Albums (filed under them: its first
- * credited album artist) and Appears on (Core's `artistAlbums`). Null when the
- * artist is no longer in the library.
+ * An artist's page: their row, their songs in [scope] (`selectArtistSongs`)
+ * and the albums with songs in [scope] they're credited on, split into
+ * Albums (filed under them: its first credited album artist) and Appears on
+ * (Core's `artistAlbums`). Null when the artist is no longer in the library.
  */
-export const selectArtistDetail = (db: LibraryDatabase, id: number): ArtistDetail | null => {
+export const selectArtistDetail = (
+  db: LibraryDatabase,
+  id: number,
+  scope: TrackScope = "library",
+): ArtistDetail | null => {
   const { artists, albums, artwork } = schema;
   const artist = db
     .select({
@@ -147,7 +174,7 @@ export const selectArtistDetail = (db: LibraryDatabase, id: number): ArtistDetai
     .where(eq(artists.id, id))
     .get();
   if (artist === undefined) return null;
-  const songs = selectArtistSongs(db, id);
+  const songs = selectArtistSongs(db, id, undefined, scope);
   const split = artistAlbums(
     id,
     selectAlbums(
@@ -161,6 +188,8 @@ export const selectArtistDetail = (db: LibraryDatabase, id: number): ArtistDetai
             WHERE track_artists.artist_id = ${id})`,
         ),
       ),
+      undefined,
+      scope,
     ),
   );
   return {

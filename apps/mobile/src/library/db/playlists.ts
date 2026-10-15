@@ -20,13 +20,13 @@ import {
   type PlaylistSong,
   type YtAlbumSong,
 } from "@wave/core";
-import { and, asc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 
 import type { PlaylistAddResult, PlaylistDetail, PlaylistRow } from "../LibraryStore.ts";
 import type { LibraryDatabase, RowPage } from "./database.ts";
 import * as schema from "./schema.ts";
 import { stamped } from "./sync.ts";
-import { filePath, hasFile, songColumns, withFile } from "./tracks.ts";
+import { filePath, hasFile, inScope, songColumns, type TrackScope } from "./tracks.ts";
 
 /** Playlist order: by order key, then by entry id for entries two phones gave one key (Core's `compareOrderKeys`). */
 const IN_ORDER = [asc(schema.playlistItems.orderKey), asc(schema.playlistItems.syncId)] as const;
@@ -34,13 +34,18 @@ const IN_ORDER = [asc(schema.playlistItems.orderKey), asc(schema.playlistItems.s
 /** Entries the playlist holds: not removed (tombstones). */
 const live = eq(schema.playlistItems.deleted, false);
 
-/** A playlist's Library tracks with their playlist item, in playlist order. */
-const playlistTracks = (db: LibraryDatabase, playlistId: number, itemIds?: readonly number[]) => {
+/** A playlist's Library tracks in [scope] with their playlist item. */
+const playlistTracks = (
+  db: LibraryDatabase,
+  playlistId: number,
+  itemIds: readonly number[] | undefined,
+  scope: TrackScope,
+) => {
   const { playlistItems, tracks, artists, albums, artwork } = schema;
   return db
     .select({ ...songColumns, itemId: playlistItems.id })
     .from(playlistItems)
-    .innerJoin(tracks, withFile(eq(playlistItems.trackId, tracks.id)))
+    .innerJoin(tracks, inScope(eq(playlistItems.trackId, tracks.id), scope))
     .innerJoin(artists, eq(tracks.artistId, artists.id))
     .innerJoin(albums, eq(tracks.albumId, albums.id))
     .leftJoin(artwork, eq(tracks.artworkHash, artwork.hash))
@@ -66,19 +71,35 @@ export type PlaylistEntry<T = PlaylistTrack> = MixedSong<YtAlbumSong, T> & {
 };
 
 /**
- * A playlist's entries in playlist order, [page] of them if given. A YT Music
- * entry whose stored song can't be read is left out.
+ * A playlist's entries in playlist order, [page] of them if given: its YT
+ * Music entries and its Library tracks in [scope] (Android Auto's: only
+ * those with a file). A YT Music entry whose stored song can't be read is left out.
  */
 export const selectPlaylistEntries = (
   db: LibraryDatabase,
   playlistId: number,
   page?: RowPage,
+  scope: TrackScope = "library",
 ): PlaylistEntry[] => {
   const { playlistItems } = schema;
   const query = db
     .select({ id: playlistItems.id, ytSong: playlistItems.ytSong })
     .from(playlistItems)
-    .where(and(eq(playlistItems.playlistId, playlistId), live))
+    .where(
+      and(
+        eq(playlistItems.playlistId, playlistId),
+        live,
+        scope === "files"
+          ? or(
+              isNull(playlistItems.trackId),
+              inArray(
+                playlistItems.trackId,
+                db.select({ id: schema.tracks.id }).from(schema.tracks).where(hasFile),
+              ),
+            )
+          : undefined,
+      ),
+    )
     .orderBy(...IN_ORDER);
   const items =
     page === undefined ? query.all() : query.limit(page.limit).offset(page.offset).all();
@@ -89,6 +110,7 @@ export const selectPlaylistEntries = (
       db,
       playlistId,
       page === undefined ? undefined : items.map((item) => item.id),
+      scope,
     ).map(({ itemId, ...track }) => [itemId, track]),
   );
   return items.flatMap((item): PlaylistEntry[] => {
@@ -547,7 +569,11 @@ export const selectPlaylists = (db: LibraryDatabase): PlaylistRow[] => {
 };
 
 /** A playlist with its entries in playlist order; null when it's gone (or deleted). */
-export const selectPlaylist = (db: LibraryDatabase, id: number): PlaylistDetail | null => {
+export const selectPlaylist = (
+  db: LibraryDatabase,
+  id: number,
+  scope: TrackScope = "library",
+): PlaylistDetail | null => {
   const { playlists } = schema;
   const playlist = db
     .select({ id: playlists.id, name: playlists.name })
@@ -555,7 +581,7 @@ export const selectPlaylist = (db: LibraryDatabase, id: number): PlaylistDetail 
     .where(and(eq(playlists.id, id), livePlaylist))
     .get();
   if (playlist === undefined) return null;
-  const items = selectPlaylistEntries(db, id);
+  const items = selectPlaylistEntries(db, id, undefined, scope);
   const covers = selectPlaylistCovers(db, id).get(id) ?? NO_COVERS;
   // As Library › Playlists counts it.
   const { trackCount, durationMs } = selectPlaylistTotals(db, id).get(id) ?? NO_SONGS;
