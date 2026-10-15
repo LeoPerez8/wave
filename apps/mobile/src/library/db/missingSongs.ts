@@ -196,10 +196,19 @@ export const selectMissingSongs = (
       : chunks(ids).flatMap((some) => read(and(isNull(tracks.path), inArray(tracks.id, some))));
   return rows
     .sort((a, b) => (a.titleSort < b.titleSort ? -1 : a.titleSort > b.titleSort ? 1 : a.id - b.id))
-    .map(({ titleSort: _, artists, ...song }) => ({
-      ...song,
-      artists: artists === null ? [song.artist] : (JSON.parse(artists) as string[]),
-      genre: song.genre ?? null,
+    .map((row) => ({
+      id: row.id,
+      title: row.title,
+      artist: row.artist,
+      artists: row.artists === null ? [row.artist] : (JSON.parse(row.artists) as string[]),
+      album: row.album,
+      albumArtist: row.albumArtist,
+      year: row.year,
+      trackNumber: row.trackNumber,
+      discNumber: row.discNumber,
+      genre: row.genre ?? null,
+      durationMs: row.durationMs,
+      videoId: row.videoId,
     }));
 };
 
