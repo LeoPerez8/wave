@@ -45,6 +45,7 @@ export const useArtistPhotoCount = (): number =>
 const CONCURRENCY = 3;
 /** A lookup (search and both downloads) that takes longer than this has failed. */
 const LOOKUP_TIMEOUT = "30 seconds";
+// oxlint-disable-next-line typescript/no-empty-object-type -- Effect TaggedError uses {} for a tag-only error with no fields.
 class Offline extends Data.TaggedError("Offline")<{}> {}
 
 /** Searches [artist], picks the confident match and saves its photo. */

@@ -171,9 +171,7 @@ export const ytAlbumDownload = <S extends YtSong>(
 ): YtAlbumDownload<S> => named(ytSongsDownload(songs, input), ALBUM_ACTIONS);
 
 export type YtPlaylistDownloadAction =
-  | "downloadPlaylist"
-  | "retryFailed"
-  | "cancelPlaylistDownload";
+  "downloadPlaylist" | "retryFailed" | "cancelPlaylistDownload";
 
 /** Where a playlist's download stands, and what acting on it does. */
 export type YtPlaylistDownload<S extends YtSong = YtSong> = YtSongsDownload<

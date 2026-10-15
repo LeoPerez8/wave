@@ -1,0 +1,71 @@
+name: React Doctor
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: react-doctor-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  PR_NUMBER: ${{ github.event.pull_request.number }}
+  IS_SAME_REPO_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+
+jobs:
+  react-doctor:
+    name: React Doctor
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: scripts/ci/step.sh "Install" pnpm install --frozen-lockfile
+
+      - name: Test report validation
+        run: scripts/ci/step.sh "React Doctor report tests" pnpm test:react-doctor
+
+      # Keep legacy findings visible, while scanner failures still fail the job.
+      - name: Full mobile diagnostics
+        run: scripts/ci/step.sh "React Doctor full diagnostics" pnpm react-doctor
+
+      - name: Check new React errors
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        # The project CLI keeps checkout's full history and validates the native
+        # comparison report. The upstream action fetches the base at depth 1.
+        run: scripts/ci/step.sh "React Doctor regressions" pnpm react-doctor:check --base "$BASE_SHA"
+
+      - name: Upload diagnostic reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: react-doctor-reports
+          path: .cache/react-doctor/*.json
+          if-no-files-found: ignore
+
+      - name: Report
+        if: always() && env.IS_SAME_REPO_PR == 'true' && job.status != 'cancelled'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          diagnostics="$(cat .cache/react-doctor/full.json.md .cache/react-doctor/baseline.json.md 2>/dev/null || true)"
+          scripts/ci/report.sh "${{ job.status }}" "React Doctor" "$diagnostics"

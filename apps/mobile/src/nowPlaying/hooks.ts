@@ -131,6 +131,7 @@ export const useQueueTracks = (entries: readonly QueueEntry[]): ReadonlyMap<stri
   const tracks = useSyncExternalStore(queueTracks.subscribe, queueTracks.get);
   useEffect(() => {
     void appRuntime.runPromise(
+      // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
       LibraryStore.use((store) =>
         learnUnknownQueueTracks(entries, store.songsByIds, savedYtQueueTracks),
       ),
