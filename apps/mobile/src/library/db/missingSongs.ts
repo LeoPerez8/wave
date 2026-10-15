@@ -13,9 +13,10 @@ import {
   vanishedFile,
   writePlaylistYtSong,
   type MissingSongTrack,
+  type MissingTrack,
   type SyncSongFields,
 } from "@wave/core";
-import { and, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, sql, type SQL } from "drizzle-orm";
 
 import type { CreditSplits } from "./credits.ts";
 import type { LibraryDatabase } from "./database.ts";
@@ -155,6 +156,51 @@ export const syncMissingSongs = (
     if (retagged || leaving.length > 0) pruneOrphans(tx, splits);
   });
   return true;
+};
+
+/**
+ * The missing songs, as downloading them takes them (Core's `MissingTrack`):
+ * each Track's tags, in title order. With [ids], only those Tracks', when
+ * they're still missing.
+ */
+export const selectMissingSongs = (
+  db: LibraryDatabase,
+  ids?: readonly number[],
+): MissingTrack[] => {
+  const { tracks, albums, genres } = schema;
+  const read = (where: SQL | undefined) =>
+    db
+      .select({
+        id: tracks.id,
+        title: tracks.title,
+        artist: tracks.artistCredit,
+        artists: tracks.artistCredits,
+        album: albums.title,
+        albumArtist: albums.albumArtistCredit,
+        year: tracks.year,
+        trackNumber: tracks.trackNumber,
+        discNumber: tracks.discNumber,
+        genre: genres.name,
+        durationMs: tracks.durationMs,
+        videoId: tracks.videoId,
+        titleSort: tracks.titleSort,
+      })
+      .from(tracks)
+      .innerJoin(albums, eq(tracks.albumId, albums.id))
+      .leftJoin(genres, eq(tracks.genreId, genres.id))
+      .where(where)
+      .all();
+  const rows =
+    ids === undefined
+      ? read(isNull(tracks.path))
+      : chunks(ids).flatMap((some) => read(and(isNull(tracks.path), inArray(tracks.id, some))));
+  return rows
+    .sort((a, b) => (a.titleSort < b.titleSort ? -1 : a.titleSort > b.titleSort ? 1 : a.id - b.id))
+    .map(({ titleSort: _, artists, ...song }) => ({
+      ...song,
+      artists: artists === null ? [song.artist] : (JSON.parse(artists) as string[]),
+      genre: song.genre ?? null,
+    }));
 };
 
 /**

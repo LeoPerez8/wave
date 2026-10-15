@@ -2,12 +2,16 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, test } from "node:test";
 
+import { eq } from "drizzle-orm";
+
 import { selectAlbumDetail, selectAlbums } from "./albums.ts";
 import { selectArtistDetail, selectArtistSongs, selectArtists } from "./artists.ts";
 import { libraryCounts } from "./counts.ts";
 import { selectGenreSongs } from "./genres.ts";
 import { homeSections, listFavorites, setFavorites } from "./playHistory.ts";
+import { selectMissingSongs } from "./missingSongs.ts";
 import { createPlaylist, selectPlaylist, selectPlaylistEntries } from "./playlists.ts";
+import * as schema from "./schema.ts";
 import { selectPlayableSongs } from "./tracks.ts";
 import { addMissingSong, addTrack, openTestDatabase, type TestDatabase } from "./testDatabase.ts";
 
@@ -139,5 +143,45 @@ describe("what plays, and Android Auto, leave missing songs out", () => {
   test("Home's songs are only those with a file", () => {
     setFavorites(db, [everything, airbag], true, 2);
     assert.deepEqual(titles(homeSections(db, "files").favorites), ["Airbag"]);
+  });
+});
+
+describe("what downloading missing songs reads", () => {
+  test("the missing songs, as a download takes them: their Track's tags, in title order", () => {
+    db.update(schema.tracks).set({ videoId: "abc" }).where(eq(schema.tracks.id, lucky)).run();
+    assert.deepEqual(selectMissingSongs(db), [
+      {
+        id: everything,
+        title: "Everything",
+        artist: "Radiohead",
+        artists: ["Radiohead"],
+        album: "Kid A",
+        albumArtist: "Radiohead",
+        year: null,
+        trackNumber: null,
+        discNumber: null,
+        genre: null,
+        durationMs: 180_000,
+        videoId: null,
+      },
+      {
+        id: lucky,
+        title: "Lucky",
+        artist: "Radiohead",
+        artists: ["Radiohead"],
+        album: "OK Computer",
+        albumArtist: "Radiohead",
+        year: null,
+        trackNumber: null,
+        discNumber: null,
+        genre: "Rock",
+        durationMs: 180_000,
+        videoId: "abc",
+      },
+    ]);
+  });
+
+  test("one of them by its Track, and none for a song with a file", () => {
+    assert.deepEqual(titles(selectMissingSongs(db, [lucky, airbag])), ["Lucky"]);
   });
 });
