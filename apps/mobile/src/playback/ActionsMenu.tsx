@@ -26,7 +26,7 @@ import { useSlideToChoose } from "@/overlay/useSlideToChoose";
 import { useLoadedInLibrary } from "@/ytmusic/libraryFinder";
 import { playlistYtSongs, runYtDownloadAction, useYtPlaylistDownload } from "@/ytmusic/YtDownloads";
 
-import { targetHeading, type ActionItems, type PlaylistPlace } from "./actionTargets";
+import { targetHeading, type ActionItems, type Heading, type PlaylistPlace } from "./actionTargets";
 import { useItemActions } from "./itemActions";
 
 const NO_ENTRIES: readonly PlaylistEntryRow[] = [];
@@ -116,7 +116,7 @@ function SectionActionsMenu({ target, close }: { target: ActionItems; close: () 
 }
 
 /** One row of the menu card. */
-interface MenuEntry {
+export interface MenuEntry {
   readonly key: string;
   readonly label: string;
   readonly onPress: () => void;
@@ -167,7 +167,6 @@ function ActionsMenu({
   /** A playlist's entries, for its download entries; none for other targets. */
   playlistEntries: readonly PlaylistEntryRow[];
 }) {
-  const head = targetHeading(target, sectionSongs);
   const actions = useItemActions(target, { surface: "menu", finish: close, onSelect });
   const downloads = usePlaylistDownloadEntries(listed, close);
   // A playlist's download entries follow Add to Playlist, before Rename and Delete.
@@ -176,6 +175,31 @@ function ActionsMenu({
     ...(entry.action === "addToPlaylist" ? downloads : []),
   ]);
 
+  return (
+    <MenuCard
+      heading={targetHeading(target, sectionSongs)}
+      // A Library entry's heading counts the songs it acts on, which its row doesn't show.
+      alwaysHeading={target.kind === "section"}
+      entries={entries}
+    />
+  );
+}
+
+/**
+ * What a menu card draws: its heading (unless the row it was opened from is
+ * highlighted), then its entries. The Design preview draws it too, with
+ * entries that only close it.
+ */
+export function MenuCard({
+  heading: head,
+  alwaysHeading = false,
+  entries,
+}: {
+  heading: Heading | undefined;
+  /** Shows the heading even under a highlight (`CardHeading`'s `always`). */
+  alwaysHeading?: boolean;
+  entries: readonly MenuEntry[];
+}) {
   // The finger that long-pressed the row can slide onto an entry and lift to run it;
   // the entry under it shows pressed meanwhile.
   const { underFinger, trackEntry, trackList } = useSlideToChoose((index) =>
@@ -186,8 +210,7 @@ function ActionsMenu({
   return (
     <>
       {head !== undefined && (
-        // A Library entry's heading counts the songs it acts on, which its row doesn't show.
-        <CardHeading always={target.kind === "section"}>
+        <CardHeading always={alwaysHeading}>
           {head.covers !== undefined && <Mosaic paths={head.covers} size={CELL * 5} />}
           {head.artist !== undefined && <ArtistImage artist={head.artist} size={CELL * 5} />}
           <View className="flex-1">

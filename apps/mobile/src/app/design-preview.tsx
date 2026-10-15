@@ -1,5 +1,6 @@
+import { designPreviewState, type IndexEntry } from "@wave/core";
+import { useLocalSearchParams } from "expo-router";
 import { useMemo, useRef, useState } from "react";
-import type { IndexEntry } from "@wave/core";
 import {
   FlatList,
   type NativeScrollEvent,
@@ -17,6 +18,7 @@ import { CELL, grid } from "@/catalog/grid";
 import { TrackRow } from "@/catalog/TrackRow";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { Press } from "@/motion/Press";
+import { PREVIEW_STATES, type PreviewState, type Shelf, StateAnchor } from "@/preview/states";
 import {
   letterIndex,
   SYNTHETIC_ALBUMS,
@@ -24,15 +26,23 @@ import {
   type SyntheticTrack,
 } from "@/preview/syntheticLibrary";
 
-type Shelf = "albums" | "songs";
-
 /** Fixed height of an album tile's caption block (catalog line, title, furniture). */
 const CAPTION = CELL * 12;
 const ROW_GAP = CELL * 3;
 
-/** The Library's components on synthetic data. Developer-only; see Settings. */
+/**
+ * The Library's components on synthetic data. Developer-only; see Settings.
+ * `wave://design-preview?state=<name>` opens it at one of `PREVIEW_STATES`.
+ */
 export default function DesignPreviewScreen() {
-  const [view, setView] = useState<Shelf>("albums");
+  const { state } = useLocalSearchParams<{ state?: string | string[] }>();
+  const opening = designPreviewState(PREVIEW_STATES, state);
+  // A link naming another state starts the preview over, at that one.
+  return <DesignPreview key={opening?.name ?? ""} opening={opening} />;
+}
+
+function DesignPreview({ opening }: { opening: PreviewState | undefined }) {
+  const [view, setView] = useState<Shelf>(opening?.shelf ?? "albums");
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const reserved = grid.spineHit + grid.spineInset;
@@ -133,15 +143,22 @@ export default function DesignPreviewScreen() {
               paddingRight: reserved,
               paddingBottom: insets.bottom + 48,
             }}
-            renderItem={({ item }) => (
-              <TrackRow
-                track={item.track}
-                state={item.state}
-                favorite={item.favorite}
-                leading="artwork"
-                onPress={() => undefined}
-              />
-            )}
+            renderItem={({ item, index }) => {
+              const row = (
+                <TrackRow
+                  track={item.track}
+                  state={item.state}
+                  favorite={item.favorite}
+                  leading="artwork"
+                  onPress={() => undefined}
+                />
+              );
+              return opening?.shelf === "songs" && opening.item === index ? (
+                <StateAnchor open={opening.open}>{row}</StateAnchor>
+              ) : (
+                row
+              );
+            }}
           />
         )}
         <AlphabetSpine entries={entries} onJump={jump} topRow={topRow} />
