@@ -278,13 +278,15 @@ describe("planMissingSongs", () => {
     assert.deepEqual(plan, { save: [], leave: [], prune: false });
   });
 
+  /** The plan once another phone changed Lucky's tags by [song]. */
+  const retagged = (song: Partial<SyncSongFields>) =>
+    planMissingSongs({
+      account: [{ recordingKey: "lucky", song: fields("Lucky", song) }],
+      held: ["lucky"],
+      missing: [shownLucky],
+    });
+
   test("a missing song takes the account's tags when another phone changed them", () => {
-    const retagged = (song: Partial<SyncSongFields>) =>
-      planMissingSongs({
-        account: [{ recordingKey: "lucky", song: fields("Lucky", song) }],
-        held: ["lucky"],
-        missing: [shownLucky],
-      });
     const plan = retagged({ genre: "Alternative", trackNumber: 11 });
     assert.deepEqual(
       plan.save.map((song) => [song.trackId, song.recordingKey, song.track.genre]),
