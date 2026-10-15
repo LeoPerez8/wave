@@ -454,11 +454,22 @@ put_secret() {
 put_secret TURSO_DATABASE_URL "$TURSO_DATABASE_URL"
 put_secret TURSO_AUTH_TOKEN "$TURSO_AUTH_TOKEN"
 put_secret GOOGLE_CLIENT_ID "$GOOGLE_CLIENT_ID"
+# SOULSEEK_KEY encrypts the Soulseek accounts the service keeps. It's made
+# once, straight into the Worker (no shell variable, no file, never printed),
+# and never replaced: accounts kept under an old key can't be read again.
 SECRETS=$(wrangler secret list --format json 2>/dev/null) || die "wrangler secret list failed."
-for name in TURSO_DATABASE_URL TURSO_AUTH_TOKEN GOOGLE_CLIENT_ID; do
+if grep -q '"SOULSEEK_KEY"' <<<"$SECRETS"; then
+  ok "SOULSEEK_KEY is already set: kept as it is"
+else
+  node -e "process.stdout.write(require('node:crypto').randomBytes(32).toString('base64'))" |
+    wrangler secret put SOULSEEK_KEY >/dev/null || die "wrangler secret put SOULSEEK_KEY failed."
+  ok "made SOULSEEK_KEY (32 random bytes) and set it"
+  SECRETS=$(wrangler secret list --format json 2>/dev/null) || die "wrangler secret list failed."
+fi
+for name in TURSO_DATABASE_URL TURSO_AUTH_TOKEN GOOGLE_CLIENT_ID SOULSEEK_KEY; do
   grep -q "\"$name\"" <<<"$SECRETS" || die "wrangler secret list doesn't show $name."
 done
-ok "wrangler secret list shows all three"
+ok "wrangler secret list shows all four"
 if grep -q '"ALLOWED_EMAILS"' <<<"$SECRETS"; then
   note "ALLOWED_EMAILS is set too: only the emails on it can sign in."
 fi

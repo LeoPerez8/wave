@@ -2,6 +2,7 @@ import { libraryEdited, libraryVersion } from "@/library/LibraryScan";
 import { onFavoritesSaved, reloadFavorites } from "@/library/favorites";
 import { onPlaylistsEdited, playlistsChanged } from "@/library/playlists";
 import { appRuntime } from "@/library/runtime";
+import { WaveSoulseek } from "@/native/waveSoulseek";
 import { playHistoryVersion } from "@/playback/PlayHistory";
 
 import type { SyncedChanges } from "./syncCycle";
@@ -38,7 +39,13 @@ export const startSync = (): void => {
   started = true;
   void appRuntime
     .runPromise(
-      WaveSync.use((sync) => sync.start({ preferences: syncedPreferences, pulled: showPulled })),
+      WaveSync.use((sync) =>
+        sync.start({
+          preferences: syncedPreferences,
+          pulled: showPulled,
+          soulseek: () => WaveSoulseek.followWaveAccount(),
+        }),
+      ),
     )
     .catch((error: unknown) => console.warn("[wave] Couldn't start syncing", error));
   onPlaylistsEdited(changed(false));

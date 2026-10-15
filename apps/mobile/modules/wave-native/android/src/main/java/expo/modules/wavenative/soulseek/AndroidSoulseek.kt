@@ -1,6 +1,7 @@
 package expo.modules.wavenative.soulseek
 
 import android.content.Context
+import expo.modules.wavenative.account.AndroidWaveAccount
 import expo.modules.wavenative.net.Connectivity
 import expo.modules.wavenative.secrets.KeystoreCipher
 import expo.modules.wavenative.tags.JAudioTaggerReader
@@ -16,6 +17,8 @@ class AndroidSoulseek private constructor(context: Context) {
     SoulseekSessionStore(File(context.noBackupFilesDir, "soulseek-session"), KeystoreCipher("wave-soulseek-session-v1")),
     online = connectivity::online,
     switch = SoulseekSwitchFile(File(context.noBackupFilesDir, "soulseek-best-quality")),
+    // Signed in, the account belongs to the Wave account, reached with the session native code holds.
+    waveAccount = SyncServiceSoulseek(AndroidWaveAccount.get(context).client),
   )
 
   fun download(

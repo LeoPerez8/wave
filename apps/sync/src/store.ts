@@ -226,6 +226,7 @@ export const deleteAccount = async (db: Client, accountId: string): Promise<void
         sql: `DELETE FROM ${table.sqlName} WHERE account_id = ?`,
         args: [accountId],
       })),
+      { sql: "DELETE FROM soulseek_accounts WHERE account_id = ?", args: [accountId] },
       { sql: "DELETE FROM sessions WHERE account_id = ?", args: [accountId] },
       { sql: "DELETE FROM accounts WHERE id = ?", args: [accountId] },
     ],

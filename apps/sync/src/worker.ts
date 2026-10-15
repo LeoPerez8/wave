@@ -14,6 +14,8 @@ export interface Env {
   readonly GOOGLE_CLIENT_ID?: string;
   /** Emails that may sign in, separated by commas. Unset lets any Google account in. */
   readonly ALLOWED_EMAILS?: string;
+  /** Base64 of the 32-byte AES-GCM key the Soulseek accounts' passwords are kept under. */
+  readonly SOULSEEK_KEY?: string;
 }
 
 // Kept for the isolate's life, so a sign-in doesn't fetch Google's keys each time.
@@ -31,6 +33,7 @@ export default {
       googleClientId: GOOGLE_CLIENT_ID,
       googleKeys: keys,
       ...(env.ALLOWED_EMAILS === undefined ? {} : { allowedEmails: env.ALLOWED_EMAILS }),
+      ...(env.SOULSEEK_KEY === undefined ? {} : { soulseekKey: env.SOULSEEK_KEY }),
     });
     return service(request);
   },

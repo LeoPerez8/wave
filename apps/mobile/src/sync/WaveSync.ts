@@ -18,6 +18,11 @@ export interface WaveSyncPorts {
   readonly preferences: SyncPreferences;
   /** Hears what each sync changed on the phone, to show it. */
   readonly pulled: (changes: SyncedChanges) => void;
+  /**
+   * Follows the Wave account's Soulseek account after each pull, natively
+   * (`WaveSoulseek.followWaveAccount`): JS never sees its credentials.
+   */
+  readonly soulseek: () => Promise<unknown>;
 }
 
 /**
@@ -66,7 +71,7 @@ const make = Effect.gen(function* () {
     again = false;
     const songs = songsChanged;
     songsChanged = false;
-    const { preferences, pulled } = ports;
+    const { preferences, pulled, soulseek } = ports;
     void Effect.runPromise(
       store.syncWithAccount({
         transport: WaveAccount,
@@ -89,6 +94,15 @@ const make = Effect.gen(function* () {
           }
         },
       )
+      // The Soulseek account follows the Wave account's at each pull, the first after sign-in too.
+      .then(() => (account === null ? undefined : soulseek()))
+      .catch((error: unknown) => {
+        const code = waveAccountErrorCode(error);
+        if (code !== "ERR_WAVE_OFFLINE" && code !== "ERR_WAVE_SIGNED_OUT") {
+          // The code only: the native module's errors never carry the account.
+          console.warn("[wave] Couldn't follow the Wave account's Soulseek account", { code });
+        }
+      })
       .finally(() => {
         running = false;
         if (again) sync();
