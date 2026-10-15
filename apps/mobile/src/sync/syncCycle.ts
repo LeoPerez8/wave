@@ -71,7 +71,7 @@ export interface SyncCycleResult {
 }
 
 /** The service answered something other than success. */
-export class SyncRequestFailed extends Error {
+class SyncRequestFailed extends Error {
   readonly status: number;
   constructor(status: number, body: string) {
     super(`The sync service answered ${status}: ${body.slice(0, 200)}`);
@@ -84,7 +84,7 @@ export class SyncRequestFailed extends Error {
  * the sync stops there, and what the answer brought isn't applied. Its code
  * is the one the native module rejects a request made signed out with.
  */
-export class SyncSignedOut extends Error {
+class SyncSignedOut extends Error {
   readonly code = "ERR_WAVE_SIGNED_OUT";
   constructor() {
     super("Signed out of the Wave account during a sync");

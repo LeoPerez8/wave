@@ -7,7 +7,7 @@ import { CELL } from "@/catalog/grid";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 /** The account picture's size: a row's leading circle, like an artist's. */
-export const ACCOUNT_PHOTO = CELL * 5;
+const ACCOUNT_PHOTO = CELL * 5;
 
 /** An account's picture as a circle (people, like artists, are round), else its initial. */
 export function AccountPhoto({ name, photoUrl }: { name: string; photoUrl: string | null }) {

@@ -14,10 +14,10 @@ import { type SyncLimits, SYNC_LIMITS } from "./limits.ts";
 import { migrate } from "./migrations.ts";
 import { type SyncServiceOptions, createSyncService } from "./service.ts";
 
-export const CLIENT_ID = "wave-web-client.apps.googleusercontent.com";
+const CLIENT_ID = "wave-web-client.apps.googleusercontent.com";
 
 /** A `SOULSEEK_KEY` for the tests: base64 of 32 bytes. */
-export const SOULSEEK_KEY = Buffer.alloc(32, 7).toString("base64");
+const SOULSEEK_KEY = Buffer.alloc(32, 7).toString("base64");
 
 const encoder = new TextEncoder();
 
@@ -61,7 +61,7 @@ export interface FakeGoogle {
 
 const KID = "test-key-1";
 
-export const fakeGoogle = async (now: () => number): Promise<FakeGoogle> => {
+const fakeGoogle = async (now: () => number): Promise<FakeGoogle> => {
   const key = await generateKey();
   const forger = await generateKey();
   const jwk = await crypto.subtle.exportKey("jwk", key.publicKey);
@@ -107,7 +107,7 @@ export const fakeGoogle = async (now: () => number): Promise<FakeGoogle> => {
 };
 
 /** A fresh database file, deleted when the test file ends. */
-export const freshDatabase = async (): Promise<Client> => {
+const freshDatabase = async (): Promise<Client> => {
   const dir = mkdtempSync(join(tmpdir(), "wave-sync-"));
   const db = createClient({ url: `file:${join(dir, "sync.db").replaceAll("\\", "/")}` });
   after(() => {

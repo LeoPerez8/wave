@@ -41,7 +41,7 @@ export interface SyncServiceOptions {
 }
 
 /** How many rows a pull answers at most, by default. */
-export const PULL_PAGE_SIZE = 1_000;
+const PULL_PAGE_SIZE = 1_000;
 
 export type SyncService = (request: Request) => Promise<Response>;
 

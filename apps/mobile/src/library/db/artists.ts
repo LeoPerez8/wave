@@ -26,7 +26,7 @@ export interface ArtistsQuery {
  * names, and each album artist its album's credit names (so Watch the Throne
  * counts for Kanye West as well). A song shows once per artist.
  */
-export const creditedSongs = (scope: TrackScope = "library") =>
+const creditedSongs = (scope: TrackScope = "library") =>
   scope === "files"
     ? sql`
   SELECT track_artists.track_id, track_artists.artist_id FROM track_artists
