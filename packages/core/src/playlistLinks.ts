@@ -281,13 +281,7 @@ export type LinkImportRead<S extends YtSong> =
  * that isn't the playlist), or a short link that led to a song or another page.
  */
 export type LinkReadFailure =
-  | YtQuietReason
-  | "disabled"
-  | "missing"
-  | "unreachable"
-  | "spotifyFailed"
-  | "song"
-  | "notPlaylist";
+  YtQuietReason | "disabled" | "missing" | "unreachable" | "spotifyFailed" | "song" | "notPlaylist";
 
 const FAILURES: Record<LinkReadFailure, { readonly line: string; readonly retry: boolean }> = {
   offline: { line: "You're offline. Try again when you're back online.", retry: true },

@@ -20,6 +20,7 @@ import { confirmAction, showError } from "@/overlay/alert";
 import { presentOverlay } from "@/overlay/overlay";
 
 import { LibraryStore } from "./LibraryStore";
+import { cancelPlaylistImport } from "./playlistImports";
 import {
   createPlaylist,
   currentPlaylists,
@@ -69,6 +70,8 @@ export const saveImportedPlaylist = async (
   const playlists = await currentPlaylists();
   const clash = importNameClash(name, playlists);
   if (clash !== undefined && (await confirmAction(confirmImportReplace(clash.name)))) {
+    // A link import still filling it would add its songs to the new ones.
+    cancelPlaylistImport(clash.id);
     await replacePlaylistSongs(clash.id, songs);
     return { playlistId: clash.id, name: clash.name, replaced: true };
   }

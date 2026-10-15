@@ -251,7 +251,8 @@ export const nextImportStep = <S extends YtSong>(
   now: number,
 ): { readonly job: PlaylistImport<S>; readonly step: ImportStep } => {
   if (job.state.kind !== "importing") return { job, step: { kind: "none" } };
-  const waiting = job.asking.length > 0 ? ({ kind: "answers" } as const) : ({ kind: "none" } as const);
+  const waiting =
+    job.asking.length > 0 ? ({ kind: "answers" } as const) : ({ kind: "none" } as const);
   if (job.asking.length >= SPOTIFY_SEARCHES_AT_ONCE) return { job, step: waiting };
   const query = nextQuery(job);
   if (query === null) return { job, step: waiting };
