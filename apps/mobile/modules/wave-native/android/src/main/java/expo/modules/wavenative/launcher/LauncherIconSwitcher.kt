@@ -16,11 +16,12 @@ import android.os.PowerManager
  * with [request] and applied when Wave's activity stops, unless the screen
  * just went off (Wave is still what shows on unlock) or [isBusy] (a file
  * picker Wave opened is over it). [PackageManager.DONT_KILL_APP] keeps the process,
- * and with it playback, running.
+ * and with it playback, running. [onSwitched] runs after an icon was switched.
  */
 class LauncherIconSwitcher(
   private val context: Context,
   private val isBusy: () -> Boolean,
+  private val onSwitched: () -> Unit = {},
 ) : Application.ActivityLifecycleCallbacks {
   private val packageManager: PackageManager = context.packageManager
 
@@ -47,6 +48,7 @@ class LauncherIconSwitcher(
         PackageManager.DONT_KILL_APP,
       )
     }
+    if (changes.isNotEmpty()) onSwitched()
   }
 
   override fun onActivityStopped(activity: Activity) {
