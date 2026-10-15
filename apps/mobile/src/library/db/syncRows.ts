@@ -30,7 +30,7 @@ import { and, asc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 
 import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
-import { selectPhoneId, selectTrackIdentities } from "./sync.ts";
+import { selectPhoneId, selectTrackIdentities, stamped } from "./sync.ts";
 import { hasFile } from "./tracks.ts";
 
 /** Ids per statement, well under SQLite's limit on bound values. */
@@ -645,6 +645,18 @@ export const leaveKeys = (
     tx.insert(syncRemovals)
       .values({ kind, id: row.id, ...values })
       .onConflictDoUpdate({ target: [syncRemovals.kind, syncRemovals.id], set: values })
+      .run();
+  }
+  if (removed) return;
+  // Retagged: the star and the entries stay with the Track, and go up again under its new key.
+  for (const some of chunks(ids)) {
+    tx.update(favorites)
+      .set(stamped(favorites, now))
+      .where(and(inArray(favorites.trackId, some), eq(favorites.deleted, false)))
+      .run();
+    tx.update(playlistItems)
+      .set(stamped(playlistItems, now))
+      .where(and(inArray(playlistItems.trackId, some), eq(playlistItems.deleted, false)))
       .run();
   }
 };

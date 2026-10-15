@@ -25,6 +25,7 @@ import {
 import type { LibraryDatabase } from "./database.ts";
 import { linkPlaylistEntries } from "./playlists.ts";
 import * as schema from "./schema.ts";
+import { leaveKeys, selectJoinedAccount } from "./syncRows.ts";
 import { deleteTracks } from "./tracks.ts";
 
 const excluded = (column: SQLiteColumn): SQL => sql.raw(`excluded."${column.name}"`);
@@ -260,12 +261,37 @@ const fillMissing = (tx: LibraryDatabase, tracks: readonly IndexedTrack[]): Map<
 };
 
 /**
+ * The Tracks among [paths] that have a recording key, by path: what a save
+ * that retags them changes (`saveBatch`).
+ */
+const selectKeysByPath = (
+  tx: LibraryDatabase,
+  paths: readonly string[],
+): Map<string, { readonly trackId: number; readonly recordingKey: string }> => {
+  const t = schema.tracks;
+  const keyed = new Map<string, { trackId: number; recordingKey: string }>();
+  for (let i = 0; i < paths.length; i += CHUNK) {
+    const rows = tx
+      .select({ trackId: t.id, path: t.path, recordingKey: t.recordingKey })
+      .from(t)
+      .where(and(inArray(t.path, paths.slice(i, i + CHUNK)), isNotNull(t.recordingKey)))
+      .all();
+    for (const { path, recordingKey: key, trackId } of rows) {
+      if (path !== null && key !== null) keyed.set(path, { trackId, recordingKey: key });
+    }
+  }
+  return keyed;
+};
+
+/**
  * Upserts one scanner batch (and the artwork it references) in a single
  * transaction. [moves] first re-point indexed tracks to the paths they were
  * found under, so they keep their id (and with it history and favorites);
  * new files fill in the missing songs they are (`fillMissing`). Each track
  * is keyed by its tags (Core's `recordingKey`), and keeps the video id a
- * YouTube Music download gave it (`IndexedTrack.videoId`). Tracks and albums
+ * YouTube Music download gave it (`IndexedTrack.videoId`). Signed in, a
+ * file retagged to another key leaves its old one (`leaveKeys`): its old
+ * version leaves the account, and its star and entries go up under the new key. Tracks and albums
  * are filed under every artist their credit names (see `credits.ts`), split
  * with the store's [splits]. Playlists' YT Music entries that the saved
  * tracks positively are become those tracks (`linkPlaylistEntries`), so a
@@ -306,6 +332,16 @@ export const saveBatch = (
     if (tracks.length === 0) return;
 
     const keptKeys = fillMissing(tx, tracks);
+    const keys = new Map(
+      tracks.map((track) => [track.path, keptKeys.get(track.path) ?? recordingKey(track)]),
+    );
+    const keyedBefore =
+      selectJoinedAccount(tx) === null
+        ? new Map<string, { trackId: number; recordingKey: string }>()
+        : selectKeysByPath(
+            tx,
+            tracks.map((track) => track.path),
+          );
     const filing = fileTracks(tx, splits, tracks);
     const t = schema.tracks;
     const trackIds = new Map(
@@ -315,7 +351,7 @@ export const saveBatch = (
           tracks.map((track) => ({
             ...tagColumns(filing, track),
             path: track.path,
-            recordingKey: keptKeys.get(track.path) ?? recordingKey(track),
+            recordingKey: keys.get(track.path) ?? recordingKey(track),
             videoId: track.videoId ?? null,
             folderId: filing.folderId(track),
             fileName: track.fileName,
@@ -370,6 +406,13 @@ export const saveBatch = (
       tx,
       filing,
       tracks.map((track) => ({ id: requireId(trackIds, track.path, "track"), track })),
+    );
+    leaveKeys(
+      tx,
+      [...keyedBefore].flatMap(([path, before]) =>
+        keys.get(path) === before.recordingKey ? [] : [before],
+      ),
+      { removed: false, now },
     );
     // A song a playlist streamed from YT Music becomes this Library song there.
     if (linkEntries) linkPlaylistEntries(tx, now, [...trackIds.values()]);
