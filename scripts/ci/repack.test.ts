@@ -127,7 +127,7 @@ describe("apkCacheKey", () => {
     ["android/app/build.gradle", 'react { hermesFlags = ["-O"] }'],
     ["android/app/src/main/res/drawable/ic_launcher_teal_coral_foreground.xml", "<vector/>"],
     ["android/gradle.properties", "org.gradle.caching=true"],
-  ]) {
+  ] as const) {
     it(`changes when prebuild generates a different ${path}`, () => {
       assert.notEqual(key(app({ [path]: contents })), key(app()));
     });

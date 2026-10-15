@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runs a package script (typecheck, test) in the packages affected-packages.sh picked:
 #   PACKAGES_FILTER="<its filter>" scripts/ci/packages.sh <script>
-# With no filter it runs the root script, which covers every package and the root's own tests.
+# With no filter it runs the root script, which covers every package and the CI scripts.
 set -euo pipefail
 
 if [ -z "${PACKAGES_FILTER:-}" ]; then

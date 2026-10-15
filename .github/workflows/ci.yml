@@ -221,7 +221,12 @@ jobs:
     name: Android APK
     needs: [changes, checks, notes]
     # Only PRs can skip: on main and release tags every area counts as changed.
-    if: needs.changes.outputs.apk == 'true'
+    # Only a release needs the patch notes, so elsewhere a failed notes job doesn't stop the
+    # APK. A job-level `if` can't read `env`, so the release test is IS_RELEASE spelled out.
+    if: >-
+      ${{ !cancelled() && needs.changes.outputs.apk == 'true' && needs.checks.result == 'success' &&
+      (needs.notes.result == 'success' ||
+      !(github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))) }}
     runs-on: ubuntu-latest
     env:
       HEAD_SHA: ${{ needs.checks.outputs.sha }}

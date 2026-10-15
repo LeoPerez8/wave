@@ -13,6 +13,8 @@ import { fileURLToPath } from "node:url";
 const AREAS = {
   app: ["apps/mobile/"],
   core: ["packages/core/"],
+  // The Wave account's sync service. Not in the APK, but users see what it does.
+  sync: ["apps/sync/"],
   workspace: ["package.json", "pnpm-workspace.yaml", "pnpm-lock.yaml"],
   ci: [".github/", "scripts/ci/"],
   // TypeScript config the packages extend.

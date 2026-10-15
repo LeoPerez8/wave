@@ -108,6 +108,7 @@ describe("changes", () => {
     assert.deepEqual(changes(["packages/core/src/queue.ts", "pnpm-lock.yaml"]), {
       app: false,
       core: true,
+      sync: false,
       workspace: true,
       ci: false,
       tsconfig: false,
@@ -119,6 +120,7 @@ describe("changes", () => {
     assert.deepEqual(changes(["apps/mobile/app.config.ts", ".github/workflows/ci.yml"]), {
       app: true,
       core: false,
+      sync: false,
       workspace: false,
       ci: true,
       tsconfig: false,
@@ -134,14 +136,14 @@ describe("changes.ts as a command", () => {
   it("prints one GitHub output line per area for the paths on stdin", () => {
     assert.equal(
       run([], "docs/spec.md\npackages/core/src/queue.ts\n"),
-      "app=false\ncore=true\nworkspace=false\nci=false\ntsconfig=false\nnative=false\napk=true\nallPackages=false\nnativeTests=false\n",
+      "app=false\ncore=true\nsync=false\nworkspace=false\nci=false\ntsconfig=false\nnative=false\napk=true\nallPackages=false\nnativeTests=false\n",
     );
   });
 
   it("counts every area as changed with --all, as on pushes to main", () => {
     assert.equal(
       run(["--all"], ""),
-      "app=true\ncore=true\nworkspace=true\nci=true\ntsconfig=true\nnative=true\napk=true\nallPackages=true\nnativeTests=true\n",
+      "app=true\ncore=true\nsync=true\nworkspace=true\nci=true\ntsconfig=true\nnative=true\napk=true\nallPackages=true\nnativeTests=true\n",
     );
   });
 });
