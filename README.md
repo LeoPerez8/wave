@@ -44,6 +44,9 @@ pnpm react-doctor   # Full mobile diagnostics, including existing findings
 pnpm react-doctor:check --base origin/main # Fail on new React errors only
 ```
 
+See the [lint policy](docs/lint.md) for TypeScript and React Hooks rules, native
+exceptions, and excluded generated files.
+
 React Doctor scans the Expo / React Native app. Fetch the target branch before
 running `react-doctor:check`, and use that branch as `--base` when the pull request
 targets a branch other than `main`. The local check also includes untracked source.
