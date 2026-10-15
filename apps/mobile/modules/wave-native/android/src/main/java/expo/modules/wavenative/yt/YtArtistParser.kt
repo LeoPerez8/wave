@@ -68,9 +68,6 @@ object YtArtistParser {
   private val json = Json { ignoreUnknownKeys = true }
   private val AUDIENCE = Regex("""^(\d+(?:\.\d+)?)\s*([KMB])?\s+(?:subscribers?|monthly audience|monthly listeners)\b""")
   private const val ARTIST_PAGE = "MUSIC_PAGE_TYPE_ARTIST"
-  private const val PLAYLIST_PAGE = "MUSIC_PAGE_TYPE_PLAYLIST"
-  /** What a playlist page's browse id adds before the playlist's id. */
-  private const val PLAYLIST_BROWSE = "VL"
   private const val ALBUMS = "Albums"
   private const val SINGLES = "Singles"
   private const val SEPARATOR = " • "
@@ -153,15 +150,7 @@ object YtArtistParser {
     listOf(
       shelf.path("bottomEndpoint"),
       shelf.path("title", "runs").arr?.firstOrNull().path("navigationEndpoint"),
-    ).firstNotNullOfOrNull { link ->
-      val endpoint = link.path("browseEndpoint")
-      val pageType = endpoint.path(
-        "browseEndpointContextSupportedConfigs", "browseEndpointContextMusicConfig", "pageType",
-      ).string
-      endpoint.path("browseId").string
-        ?.takeIf { pageType == PLAYLIST_PAGE && it.startsWith(PLAYLIST_BROWSE) }
-        ?.removePrefix(PLAYLIST_BROWSE)?.takeIf(String::isNotEmpty)
-    }
+    ).firstNotNullOfOrNull(YtHomeParser::playlistId)
 
   /**
    * The image at [url] asked for as a square: the header's is a wide banner

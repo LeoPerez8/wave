@@ -283,16 +283,20 @@ export const useYtArtistSection = (
   const findAlbum = useMemo(() => libraryAlbumFinder(artistId, albums), [artistId, albums]);
 
   // Until the Library has been read, which songs it lacks isn't known: nothing shows.
-  const view =
-    find === null
-      ? null
-      : ytArtistSectionView(state, {
-          name,
-          enabled,
-          now: openedAt,
-          integrated: openedIntegrated,
-          inLibrary: (song) => find(song) !== null,
-        });
+  // Memoized: it filters every song of the artist, and the page's memos key on it.
+  const view = useMemo(
+    () =>
+      find === null
+        ? null
+        : ytArtistSectionView(state, {
+            name,
+            enabled,
+            now: openedAt,
+            integrated: openedIntegrated,
+            inLibrary: (song) => find(song) !== null,
+          }),
+    [find, state, name, enabled, openedAt, openedIntegrated],
+  );
   const shelves = useMemo(
     () => ytArtistShelves(state, { name, enabled, now: openedAt, libraryAlbum: findAlbum }),
     [state, name, enabled, openedAt, findAlbum],

@@ -72,4 +72,11 @@ describe("the artist page's saved YT Music section", () => {
     saveYtArtist(db, "daft punk", found);
     assert.deepEqual(selectYtArtist(db, "daft punk"), found);
   });
+
+  test("a saved page whose every-song list isn't a list can't be read back", () => {
+    const broken = { ...found.page, allSongs: { videoId: "khnokW3Mw24" } };
+    // Saved as an older or damaged build could have written it.
+    saveYtArtist(db, "daft punk", { ...found, page: broken } as unknown as YtArtistSaved);
+    assert.equal(selectYtArtist(db, "daft punk"), null);
+  });
 });
