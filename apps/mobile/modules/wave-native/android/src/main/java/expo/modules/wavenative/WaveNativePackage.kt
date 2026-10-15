@@ -7,6 +7,7 @@ import android.os.Bundle
 import expo.modules.core.interfaces.Package
 import expo.modules.core.interfaces.ReactActivityLifecycleListener
 import expo.modules.wavenative.launch.LaunchSplashExit
+import expo.modules.wavenative.share.ShareShortcut
 import expo.modules.wavenative.share.SharedTextInbox
 
 /** Hooks Wave's own handling into the main activity's lifecycle. */
@@ -21,6 +22,8 @@ class WaveNativePackage : Package {
         LaunchSplashExit.install(activity)
         // A share that started Wave. A recreated activity carries the same intent, already handled.
         if (savedInstanceState == null) SharedTextInbox.receive(activity.intent)
+        // Wave in the share sheet's direct-share row, published again in case it's gone.
+        ShareShortcut.publish(activity)
       }
 
       // A share with Wave already open (the main activity is singleTask).
