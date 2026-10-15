@@ -51,6 +51,8 @@ export interface ActionItem {
   readonly missing?: boolean | undefined;
   /** Where a missing song's download is (`ytDownloadStatus`); null or undefined when never asked for. */
   readonly download?: YtDownloadStatus | null | undefined;
+  /** A playlist shown with an image of its own instead of its mosaic. */
+  readonly hasImage?: boolean | undefined;
 }
 
 export interface ActionSubject {
@@ -77,6 +79,8 @@ export type ItemAction =
   | "goToAlbum"
   | "goToArtist"
   | "renamePlaylist"
+  | "changeImage"
+  | "removeImage"
   | "deletePlaylist"
   | "deletePlaylists"
   | "findLyricsAndGenre"
@@ -112,6 +116,8 @@ export const ITEM_ACTION_LABELS: { readonly [A in ItemAction]: string } = {
   goToAlbum: "Go to Album",
   goToArtist: "Go to Artist",
   renamePlaylist: "Rename Playlist",
+  changeImage: "Change Image",
+  removeImage: "Remove Image",
   deletePlaylist: "Delete Playlist",
   deletePlaylists: "Delete Playlists",
   findLyricsAndGenre: "Find Lyrics and Genre",
@@ -196,12 +202,16 @@ export const itemActions = (subject: ActionSubject): ItemActionEntry[] => {
     entries.push({ action: "goToAlbum", albumId });
   const artists = artistLink(sharedArtists(items), here);
   if (artists !== undefined) entries.push({ action: "goToArtist", artists });
-  if (kind === "playlist")
-    entries.push(
-      ...(items.length === 1
-        ? [{ action: "renamePlaylist" } as const, { action: "deletePlaylist" } as const]
-        : [{ action: "deletePlaylists" } as const]),
-    );
+  if (kind === "playlist" && items.length === 1) {
+    entries.push({ action: "renamePlaylist" });
+    // Its own image is set from its menu (the selection bar leaves it out); the mosaic shows without one.
+    if (surface === "menu") {
+      entries.push({ action: "changeImage" });
+      if (only?.hasImage === true) entries.push({ action: "removeImage" });
+    }
+    entries.push({ action: "deletePlaylist" });
+  }
+  if (kind === "playlist" && items.length > 1) entries.push({ action: "deletePlaylists" });
   // Looks the songs up online and writes what it finds into their files.
   if (kind === "track" && subject.onlineLookups === true && missing === 0)
     entries.push({ action: "findLyricsAndGenre" });

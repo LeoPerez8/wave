@@ -30,7 +30,9 @@ import {
   currentPlaylists,
   deletePlaylist,
   knownPlaylists,
+  pickPlaylistImage,
   playlistNames,
+  removePlaylistImage,
   renamePlaylist,
 } from "./playlists";
 
@@ -288,6 +290,14 @@ const renameNamedPlaylist = async (playlist: NamedPlaylist): Promise<void> => {
   if (name === null || name === playlist.name) return;
   await renamePlaylist(playlist.id, name).catch(failed("rename the playlist"));
 };
+
+/** Change Image: Android's photo picker, then the picked photo, square, in place of the mosaic. */
+export const changePlaylistImageFlow = (playlist: NamedPlaylist): Promise<void> =>
+  pickPlaylistImage(playlist.id).then(() => {}, failed("change the image"));
+
+/** Remove Image: the playlist's mosaic shows again. */
+export const removePlaylistImageFlow = (playlist: NamedPlaylist): Promise<void> =>
+  removePlaylistImage(playlist.id).catch(failed("remove the image"));
 
 /**
  * Asks once before deleting [playlists] ("Delete 3 playlists?"). `onConfirm`

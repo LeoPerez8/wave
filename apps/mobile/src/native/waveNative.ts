@@ -162,6 +162,14 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
   /** Deletes every downloaded artist photo. */
   clearArtistPhotos(): Promise<void>;
   /**
+   * Opens Android's photo picker for a playlist's image and saves the picked
+   * photo, cropped to a square, in Wave's storage (new files each time).
+   * Null when nothing was picked; rejects when the photo can't be read.
+   */
+  pickPlaylistImage(): Promise<PlaylistImageFiles | null>;
+  /** Deletes playlist image files `pickPlaylistImage` saved; other paths are left alone. */
+  deletePlaylistImages(paths: readonly string[]): Promise<void>;
+  /**
    * Makes `alias` (one of `aliases`, activity-alias names without the package)
    * Wave's launcher icon. It switches once Wave leaves the screen.
    */
@@ -204,6 +212,12 @@ export interface NativeTagWrite {
 
 /** A saved artist photo: the large image (artist page) and the thumbnail (lists). */
 export interface ArtistPhotoFiles {
+  readonly path: string;
+  readonly thumbPath: string;
+}
+
+/** A playlist's own image: the large one (its page) and the thumbnail (lists, Android Auto). */
+export interface PlaylistImageFiles {
   readonly path: string;
   readonly thumbPath: string;
 }
