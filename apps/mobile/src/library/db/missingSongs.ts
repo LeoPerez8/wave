@@ -7,8 +7,8 @@
  * so the store tests run it against a real SQLite (`testDatabase.ts`).
  */
 import {
-  UNKNOWN_ALBUM,
   missingSongTrack,
+  missingSongYtSong,
   signOutPlan,
   vanishedFile,
   writePlaylistYtSong,
@@ -311,21 +311,8 @@ export const removeSongs = (
  */
 export const signOut = (db: LibraryDatabase, splits: CreditSplits): void => {
   leaveAccount(db);
-  const { tracks, albums, playlistItems } = schema;
-  const missing = db
-    .select({
-      id: tracks.id,
-      videoId: tracks.videoId,
-      title: tracks.title,
-      artist: tracks.artistCredit,
-      artists: tracks.artistCredits,
-      album: albums.title,
-      durationMs: tracks.durationMs,
-    })
-    .from(tracks)
-    .innerJoin(albums, eq(tracks.albumId, albums.id))
-    .where(isNull(tracks.path))
-    .all();
+  const { playlistItems } = schema;
+  const missing = selectMissingSongs(db);
   if (missing.length === 0) return;
   const entries = chunks(missing.map((song) => song.id)).flatMap((ids) =>
     db
@@ -336,23 +323,13 @@ export const signOut = (db: LibraryDatabase, splits: CreditSplits): void => {
   );
   const plan = signOutPlan({ missing, entries });
   db.transaction((tx) => {
-    for (const { entry, videoId } of plan.toYtMusic) {
+    for (const { entry } of plan.toYtMusic) {
       const song = missing.find((each) => each.id === entry.trackId);
-      if (song === undefined) continue;
+      const ytSong = song === undefined ? null : missingSongYtSong(song);
+      if (ytSong === null) continue;
       // A change on this phone alone: it isn't stamped, so it goes nowhere.
       tx.update(playlistItems)
-        .set({
-          trackId: null,
-          ytSong: writePlaylistYtSong({
-            videoId,
-            title: song.title,
-            artists: song.artists === null ? [song.artist] : (JSON.parse(song.artists) as string[]),
-            album: song.album === UNKNOWN_ALBUM ? null : song.album,
-            durationMs: song.durationMs > 0 ? song.durationMs : null,
-            artworkUrl: null,
-            explicit: false,
-          }),
-        })
+        .set({ trackId: null, ytSong: writePlaylistYtSong(ytSong) })
         .where(eq(playlistItems.id, entry.id))
         .run();
     }
