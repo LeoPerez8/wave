@@ -1,9 +1,11 @@
-import { useMemo, useRef, useState } from "react";
-import type { IndexEntry } from "@wave/core";
+import { defaultSongSort, designPreviewState, type IndexEntry } from "@wave/core";
+import { useLocalSearchParams } from "expo-router";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import {
   FlatList,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
+  ScrollView,
   Text,
   useWindowDimensions,
   View,
@@ -14,25 +16,56 @@ import { type AlbumSummary, AlbumTile } from "@/catalog/AlbumTile";
 import { AlphabetSpine } from "@/catalog/AlphabetSpine";
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
+import { PlaylistEntry } from "@/catalog/PlaylistEntry";
 import { TrackRow } from "@/catalog/TrackRow";
 import { ScreenHeader } from "@/components/ScreenHeader";
+import { PlaylistsButtons, PlaylistsHeader } from "@/library/PlaylistsList";
+import { SortButton } from "@/library/SongSortButton";
+import { ListIntroLayout, songCount } from "@/library/TrackList";
 import { Press } from "@/motion/Press";
+import {
+  type Control,
+  openAlbumCard,
+  openImportCard,
+  openNewPlaylistPrompt,
+  openSongCard,
+  openSortCard,
+  PREVIEW_STATES,
+  type PreviewState,
+  type Shelf,
+  StateAnchor,
+} from "@/preview/states";
 import {
   letterIndex,
   SYNTHETIC_ALBUMS,
+  SYNTHETIC_PLAYLISTS,
   SYNTHETIC_TRACKS,
   type SyntheticTrack,
 } from "@/preview/syntheticLibrary";
-
-type Shelf = "albums" | "songs";
 
 /** Fixed height of an album tile's caption block (catalog line, title, furniture). */
 const CAPTION = CELL * 12;
 const ROW_GAP = CELL * 3;
 
-/** The Library's components on synthetic data. Developer-only; see Settings. */
+const SHELVES: readonly { readonly shelf: Shelf; readonly label: string }[] = [
+  { shelf: "albums", label: "Albums" },
+  { shelf: "songs", label: "Songs" },
+  { shelf: "playlists", label: "Playlists" },
+];
+
+/**
+ * The Library's components on synthetic data. Developer-only; see Settings.
+ * `wave://design-preview?state=<name>` opens it at one of `PREVIEW_STATES`.
+ */
 export default function DesignPreviewScreen() {
-  const [view, setView] = useState<Shelf>("albums");
+  const { state } = useLocalSearchParams<{ state?: string | string[] }>();
+  const opening = designPreviewState(PREVIEW_STATES, state);
+  // A link naming another state starts the preview over, at that one.
+  return <DesignPreview key={opening?.name ?? ""} opening={opening} />;
+}
+
+function DesignPreview({ opening }: { opening: PreviewState | undefined }) {
+  const [view, setView] = useState<Shelf>(opening?.shelf ?? "albums");
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const reserved = grid.spineHit + grid.spineInset;
@@ -42,6 +75,24 @@ export default function DesignPreviewScreen() {
   const albums = useRef<FlatList<AlbumSummary>>(null);
   const songs = useRef<FlatList<SyntheticTrack>>(null);
   const scrolled = useRef(0);
+  // The state's card opens once, not again when its shelf is shown again.
+  const opened = useRef(false);
+
+  /** [node], wrapped so the state's card opens over it when it's what the state opens from. */
+  const anchored = (from: number | Control, node: ReactNode): ReactNode =>
+    opening?.shelf === view && opening.from === from ? (
+      <StateAnchor
+        open={() => {
+          if (opened.current) return;
+          opened.current = true;
+          opening.open();
+        }}
+      >
+        {node}
+      </StateAnchor>
+    ) : (
+      node
+    );
 
   const albumLetters = useMemo(() => letterIndex(SYNTHETIC_ALBUMS.map((a) => a.title)), []);
   const songLetters = useMemo(() => letterIndex(SYNTHETIC_TRACKS.map((t) => t.track.title)), []);
@@ -73,24 +124,24 @@ export default function DesignPreviewScreen() {
       <View style={{ paddingHorizontal: grid.margin, gap: CELL * 2, paddingBottom: CELL * 2 }}>
         <CatalogLine>Synthetic data · not your library</CatalogLine>
         <View accessibilityRole="tablist" className="flex-row" style={{ gap: CELL * 3 }}>
-          {(["albums", "songs"] as const).map((option) => (
+          {SHELVES.map(({ shelf, label }) => (
             <Press
-              key={option}
+              key={shelf}
               accessibilityRole="tab"
-              accessibilityState={{ selected: view === option }}
-              onPress={() => setView(option)}
+              accessibilityState={{ selected: view === shelf }}
+              onPress={() => setView(shelf)}
               haptic="selection"
               style={{ minHeight: 48, justifyContent: "center" }}
             >
               <Text
                 className={`font-sans text-body ${
-                  view === option ? "font-semibold text-foreground" : "text-secondary"
+                  view === shelf ? "font-semibold text-foreground" : "text-secondary"
                 }`}
               >
-                {option === "albums" ? "Albums" : "Songs"}
+                {label}
               </Text>
               <View
-                className={view === option ? "bg-accent" : "bg-transparent"}
+                className={view === shelf ? "bg-accent" : "bg-transparent"}
                 style={{ height: 2, marginTop: CELL / 2 }}
               />
             </Press>
@@ -98,54 +149,115 @@ export default function DesignPreviewScreen() {
         </View>
       </View>
 
-      <View className="flex-1">
-        {view === "albums" ? (
-          <FlatList
-            key="albums"
-            ref={albums}
-            onScroll={onScroll}
-            data={SYNTHETIC_ALBUMS}
-            keyExtractor={(album) => album.id}
-            numColumns={2}
-            columnWrapperStyle={{ gap: grid.gutter }}
-            contentContainerStyle={{
-              paddingLeft: grid.margin,
-              paddingRight: reserved,
-              paddingBottom: insets.bottom + 48,
-              gap: ROW_GAP,
-            }}
-            renderItem={({ item }) => (
-              <View style={{ height: tile + CAPTION }}>
-                <AlbumTile album={item} size={tile} onPress={() => undefined} />
-              </View>
-            )}
-          />
-        ) : (
-          <FlatList
-            key="songs"
-            ref={songs}
-            onScroll={onScroll}
-            data={SYNTHETIC_TRACKS}
-            keyExtractor={(item) => item.track.id}
-            getItemLayout={(_, index) => ({ length: grid.row, offset: grid.row * index, index })}
-            contentContainerStyle={{
-              paddingLeft: grid.margin,
-              paddingRight: reserved,
-              paddingBottom: insets.bottom + 48,
-            }}
-            renderItem={({ item }) => (
-              <TrackRow
-                track={item.track}
-                state={item.state}
-                favorite={item.favorite}
-                leading="artwork"
-                onPress={() => undefined}
+      {view === "playlists" ? (
+        // Library › Playlists: its count, Import Playlists and New Playlist, then the playlists.
+        <ScrollView
+          contentContainerStyle={{
+            paddingHorizontal: grid.margin,
+            paddingBottom: insets.bottom + 48,
+          }}
+        >
+          <PlaylistsHeader count={SYNTHETIC_PLAYLISTS.length}>
+            {/* As with YT Music on: Import Playlists opens a card. */}
+            <PlaylistsButtons
+              importOpensMenu
+              onImport={openImportCard}
+              onNewPlaylist={openNewPlaylistPrompt}
+              wrap={anchored}
+            />
+          </PlaylistsHeader>
+          {SYNTHETIC_PLAYLISTS.map((playlist) => (
+            <PlaylistEntry
+              key={playlist.id}
+              name={playlist.name}
+              detail={songCount(playlist.trackCount)}
+              paths={[]}
+              onPress={() => undefined}
+            />
+          ))}
+        </ScrollView>
+      ) : (
+        <>
+          {view === "songs" && (
+            // A song list's opening, as `ListIntro` draws it: the count over Play, Shuffle and Sort.
+            <View style={{ paddingHorizontal: grid.margin }}>
+              <ListIntroLayout
+                line={songCount(SYNTHETIC_TRACKS.length)}
+                onPlay={() => undefined}
+                onShuffle={() => undefined}
+                sortControl={anchored(
+                  "sort",
+                  <SortButton sort={defaultSongSort("songs")} onPress={openSortCard} />,
+                )}
+              />
+            </View>
+          )}
+          <View className="flex-1">
+            {view === "albums" ? (
+              <FlatList
+                key="albums"
+                ref={albums}
+                onScroll={onScroll}
+                data={SYNTHETIC_ALBUMS}
+                keyExtractor={(album) => album.id}
+                numColumns={2}
+                columnWrapperStyle={{ gap: grid.gutter }}
+                contentContainerStyle={{
+                  paddingLeft: grid.margin,
+                  paddingRight: reserved,
+                  paddingBottom: insets.bottom + 48,
+                  gap: ROW_GAP,
+                }}
+                renderItem={({ item, index }) => (
+                  <View style={{ height: tile + CAPTION }}>
+                    {anchored(
+                      index,
+                      <AlbumTile
+                        album={item}
+                        size={tile}
+                        onPress={() => undefined}
+                        onLongPress={() => openAlbumCard(item)}
+                      />,
+                    )}
+                  </View>
+                )}
+              />
+            ) : (
+              <FlatList
+                key="songs"
+                ref={songs}
+                onScroll={onScroll}
+                data={SYNTHETIC_TRACKS}
+                keyExtractor={(item) => item.track.id}
+                getItemLayout={(_, index) => ({
+                  length: grid.row,
+                  offset: grid.row * index,
+                  index,
+                })}
+                contentContainerStyle={{
+                  paddingLeft: grid.margin,
+                  paddingRight: reserved,
+                  paddingBottom: insets.bottom + 48,
+                }}
+                renderItem={({ item, index }) =>
+                  anchored(
+                    index,
+                    <TrackRow
+                      track={item.track}
+                      state={item.state}
+                      favorite={item.favorite}
+                      leading="artwork"
+                      onPress={() => undefined}
+                      onLongPress={() => openSongCard(item)}
+                    />,
+                  )
+                }
               />
             )}
-          />
-        )}
-        <AlphabetSpine entries={entries} onJump={jump} topRow={topRow} />
-      </View>
+            <AlphabetSpine entries={entries} onJump={jump} topRow={topRow} />
+          </View>
+        </>
+      )}
     </View>
   );
 }
