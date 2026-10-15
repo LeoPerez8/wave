@@ -1,0 +1,60 @@
+name: React Doctor
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  statuses: write
+
+concurrency:
+  group: react-doctor-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  react-doctor:
+    name: React Doctor
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Keep legacy findings visible, while scanner failures still fail the job.
+      - name: Full mobile diagnostics
+        run: pnpm react-doctor
+
+      - name: Verify pull request baseline
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: git merge-base "$BASE_SHA" HEAD
+
+      - name: Check new React errors and report on the pull request
+        if: github.event_name == 'pull_request'
+        uses: millionco/react-doctor@0093cb0b89971c0e70f47816a3368e17357393a5 # v2
+        with:
+          directory: apps/mobile
+          version: "0.9.18"
+          node-version: "22"
+          scope: changed
+          blocking: error
+          comment: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+          review-comments: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+          commit-status: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
