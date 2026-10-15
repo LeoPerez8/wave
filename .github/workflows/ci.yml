@@ -238,7 +238,7 @@ jobs:
       CCACHE_MAXSIZE: 1G
       # A full build's APK, debug keystore and Metro assets, kept for repacks (scripts/ci/repack.ts).
       KEPT_APK: ${{ github.workspace }}/../kept-apk
-      WAVE_CI_BUNDLE_MANIFEST: ${{ runner.temp }}/wave-ci-bundle.json
+      WAVE_CI_BUNDLE_MANIFEST: ${{ github.workspace }}/../wave-ci-bundle.json
     steps:
       - uses: actions/checkout@v5
         with:
