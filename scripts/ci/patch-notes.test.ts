@@ -37,7 +37,12 @@ describe("patchNotes", () => {
     const notes = patchNotes({
       commits: ["commit-44"],
       bugIssues: [],
-      pullRequests: [pr(44, { title: "Queue: show Up Next songs once they load", branch: "fix/queue-row-songs" })],
+      pullRequests: [
+        pr(44, {
+          title: "Queue: show Up Next songs once they load",
+          branch: "fix/queue-row-songs",
+        }),
+      ],
     });
     assert.equal(
       notes,
@@ -125,10 +130,17 @@ describe("patchNotes", () => {
       pullRequests: [
         pr(60, { title: "Faster CI and versioned releases", branch: "feat/183-faster-ci" }),
         pr(61, { title: "Wave gets version numbers", base: "feat/183-faster-ci" }),
-        pr(62, { title: "Skip the APK build", base: "feat/183-faster-ci", files: ["scripts/ci/changes.ts"] }),
+        pr(62, {
+          title: "Skip the APK build",
+          base: "feat/183-faster-ci",
+          files: ["scripts/ci/changes.ts"],
+        }),
       ],
     });
-    assert.equal(notes, "## New\n\n- [Wave gets version numbers](https://github.com/LeoPerez8/wave/pull/61)\n");
+    assert.equal(
+      notes,
+      "## New\n\n- [Wave gets version numbers](https://github.com/LeoPerez8/wave/pull/61)\n",
+    );
   });
 
   it("keeps a title's <angle brackets> and [brackets] as text, and its `code` as code", () => {
@@ -145,7 +157,11 @@ describe("patchNotes", () => {
 
   it("is empty when no PR is listed", () => {
     assert.equal(
-      patchNotes({ commits: ["commit-80"], bugIssues: [], pullRequests: [pr(80, { files: ["docs/spec.md"] })] }),
+      patchNotes({
+        commits: ["commit-80"],
+        bugIssues: [],
+        pullRequests: [pr(80, { files: ["docs/spec.md"] })],
+      }),
       "",
     );
   });

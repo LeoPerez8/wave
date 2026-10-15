@@ -51,7 +51,7 @@ const linkText = (title: string) =>
     .map((part) => (part.startsWith("`") ? part : part.replace(/[\\<>[\]]/g, "\\$&")))
     .join("");
 
-const section =(heading: string, prs: readonly MergedPr[]) =>
+const section = (heading: string, prs: readonly MergedPr[]) =>
   prs.length === 0
     ? []
     : [`## ${heading}\n\n${prs.map((pr) => `- [${linkText(pr.title)}](${pr.url})\n`).join("")}`];
