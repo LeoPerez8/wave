@@ -226,7 +226,7 @@ const counted = (count: number, one: string, many: string): string =>
  */
 export const missingSongsDownload = <S extends YtSong>(
   missing: readonly S[],
-  jobs: readonly YtDownloadJournalJob<S>[],
+  jobs: readonly YtDownloadJournalJob[],
 ): MissingSongsDownload<S> => {
   const downloads = ytDownloadsFromJournal(jobs.filter((job) => job.id.startsWith(JOB_PREFIX)));
   const statuses = missing.map((song) => ytDownloadStatus(downloads, song.videoId));

@@ -10,11 +10,13 @@ import {
   downloadSource,
   isWithin,
   missingSongJob,
+  missingSongJobId,
   missingSongLookup,
   missingSongSearch,
   missingSongTags,
   missingSongTrackId,
   missingSongVideo,
+  missingSongsDownload,
   soulseekCandidates,
   soulseekQuery,
   soulseekReceivedMatches,
@@ -31,6 +33,10 @@ import {
   ytSongsDownload,
   type DownloadFailurePlan,
   type DownloadSource,
+  type MissingSongJob,
+  type MissingSongsDownload,
+  type MissingSongsDownloadAction,
+  type MissingTrack,
   type MixedSong,
   type SoulseekCandidate,
   type YtAlbumDownload,
@@ -51,6 +57,7 @@ import { PermissionsAndroid, Platform } from "react-native";
 
 import { libraryEdited, toIndexedArtwork, toIndexedTrack } from "@/library/LibraryScan";
 import { LibraryStore } from "@/library/LibraryStore";
+import { useMissingSongs } from "@/library/hooks";
 import { refreshDownloadPolicy } from "@/library/downloadPolicy";
 import { fillInLyricsAndGenre, lookUpLyricsAndGenre } from "@/library/lyricsAndGenre";
 import { appRuntime } from "@/library/runtime";
@@ -730,4 +737,108 @@ export const useYtPlaylistDownload = (
     () => ytPlaylistDownload(entries, { inLibrary, jobs }),
     [entries, inLibrary, jobs],
   );
+};
+
+/**
+ * What the journal holds of missing song [job]: a YT Music song named after its Track. Its
+ * Track's tags stay in the Library, read again when the job is prepared.
+ */
+const journalSong = (job: MissingSongJob): NativeYtSong => ({
+  videoId: job.videoId,
+  title: job.title,
+  artists: job.artists,
+  album: job.album,
+  durationMs: job.durationMs,
+  artworkUrl: null,
+  explicit: false,
+  albumId: null,
+});
+
+/** Soulseek's session now; off when the module can't tell. */
+const sessionNow = async (): Promise<SoulseekSession> => {
+  try {
+    return await WaveSoulseek.session();
+  } catch {
+    return { status: "off", username: null };
+  }
+};
+
+/** Asks the journal for missing songs [jobs], in order, each from the source Core picks for it. */
+const enqueueMissingSongs = async (jobs: readonly MissingSongJob[]): Promise<void> => {
+  const session = await sessionNow();
+  const ytMusicOn = ytMusicEnabled();
+  for (const job of jobs) {
+    const source = downloadSource({
+      ytMusicOn,
+      bestQuality: session.status !== "off",
+      video: job.missing.videoId !== null,
+    });
+    await WaveSoulseek.enqueueJob(journalSong(job), soulseekRecording(job), null, source);
+  }
+};
+
+/** The missing songs as they are now ([trackIds] only, when given), as download jobs. */
+const missingSongJobs = (trackIds?: readonly number[]): Promise<MissingSongJob[]> =>
+  appRuntime
+    .runPromise(LibraryStore.use((store) => store.missingSongs(trackIds)))
+    .then((tracks) => tracks.map(missingSongJob));
+
+/**
+ * A missing song's Download (its tap or its menu entry) and Retry: asks for each of the songs
+ * [trackIds] that is still missing. Its file fills in the same Track.
+ */
+export const downloadMissingSongs = (trackIds: readonly number[]): void => {
+  askForNotifications();
+  startDownloads();
+  requests = requests
+    .then(async () => {
+      await enqueueMissingSongs(await missingSongJobs(trackIds));
+      await refresh();
+    })
+    .catch(() => undefined);
+};
+
+/** A missing song's Cancel Download: it stays missing. */
+export const cancelMissingSongDownload = (trackId: number): void =>
+  cancelYtDownload(missingSongJobId(trackId));
+
+/** Where missing song [trackId]'s download stands, following the journal; null when not asked for. */
+export const useMissingSongDownloadStatus = (trackId: number): YtDownloadStatus | null =>
+  useYtDownloadStatus(missingSongJobId(trackId));
+
+/**
+ * Settings › Wave Account's Download All, Retry Failed and Cancel, decided on the missing songs
+ * and the journal as they are now (Core's `missingSongsDownload`).
+ */
+export const runMissingSongsDownloadAction = (action: MissingSongsDownloadAction): void => {
+  if (action !== "cancel") {
+    askForNotifications();
+    startDownloads();
+  }
+  requests = requests
+    .then(async () => {
+      const [missing, jobs] = await Promise.all([missingSongJobs(), WaveSoulseek.jobsSnapshot()]);
+      const download = missingSongsDownload(missing, jobs);
+      switch (action) {
+        case "downloadAll":
+          await enqueueMissingSongs(download.toDownload);
+          break;
+        case "retryFailed":
+          await enqueueMissingSongs(download.toRetry);
+          break;
+        case "cancel":
+          for (const id of download.toCancel) await WaveSoulseek.cancelJob(id);
+          break;
+      }
+      await refresh();
+    })
+    .catch(() => undefined);
+};
+
+/** Where downloading the missing songs stands (Core's `missingSongsDownload`), following both. */
+export const useMissingSongsDownload = (): MissingSongsDownload<MissingSongJob> => {
+  const missing: readonly MissingTrack[] = useMissingSongs();
+  const jobs = useSyncExternalStore(journal.subscribe, journal.get);
+  const songs = useMemo(() => missing.map(missingSongJob), [missing]);
+  return useMemo(() => missingSongsDownload(songs, jobs), [songs, jobs]);
 };
