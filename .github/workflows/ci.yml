@@ -4,6 +4,8 @@ on:
   pull_request:
   push:
     branches: [main]
+    # Pushing v<version> on main publishes that version's release (docs/spec.md, Releases).
+    tags: ["v*"]
 
 permissions:
   contents: write
@@ -16,6 +18,9 @@ concurrency:
 env:
   PR_NUMBER: ${{ github.event.pull_request.number }}
   IS_SAME_REPO_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+  # A release tag's run. Releases are always full builds: steps that skip or shortcut the
+  # APK build must not apply when this is 'true'.
+  IS_RELEASE: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
 
 jobs:
   # What the change touches, by the rule in scripts/ci/changes.ts. Jobs that only
@@ -82,6 +87,11 @@ jobs:
 
       - name: Install
         run: scripts/ci/step.sh "Install" pnpm install --frozen-lockfile
+
+      # Fails a tag that isn't v<app version> before the APK job starts.
+      - name: Check release tag
+        if: env.IS_RELEASE == 'true'
+        run: scripts/ci/step.sh "Check release tag" scripts/ci/check-release-tag.sh "$GITHUB_REF_NAME"
 
       - name: Typecheck
         run: scripts/ci/step.sh "Typecheck" pnpm typecheck
@@ -170,6 +180,7 @@ jobs:
       # that installs straight from the phone's browser.
       - name: Publish APK to a prerelease
         id: publish
+        if: env.IS_RELEASE != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -181,6 +192,12 @@ jobs:
               --notes "Sideloadable APK, rebuilt on every push. Not for distribution."
           gh release upload "$tag" "$RUNNER_TEMP/$asset" --clobber
           echo "url=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${tag}/${asset}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish the release
+        if: env.IS_RELEASE == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/ci/publish-release.sh "${{ steps.apk.outputs.path }}"
 
       - name: Report
         if: always() && env.IS_SAME_REPO_PR == 'true' && job.status != 'cancelled'
