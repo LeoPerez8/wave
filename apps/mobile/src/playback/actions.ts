@@ -207,20 +207,31 @@ export const playYtSongs = (
   );
 
 /**
+ * Leaves the missing songs out of [listed] (a tapped one downloads instead),
+ * then hands what can play to [start]; nothing when nothing can. Left out
+ * first, so a tapped song's place is its place among what plays.
+ */
+const playListed = async (
+  listed: readonly ListedSong[],
+  listedStart: number | undefined,
+  start: (play: PlayableSongs<PlayableListedSong>) => Promise<void>,
+): Promise<void> => {
+  const play = leaveOutMissing(listed, listedStart, playable, libraryTrack);
+  if (play !== null) await start(play);
+};
+
+/**
  * Plays a list that mixes the Library's songs and YT Music's (Discover,
  * Search, an artist's or album's page) from `startIndex` (or shuffled),
  * queueing the rest: the Library's files, the others streamed. Missing songs
  * are left out, and a tapped one downloads instead.
  */
-export const playDiscoverSongs = async (
+export const playDiscoverSongs = (
   listed: readonly ListedSong[],
   listedStart: number | undefined,
   context: QueueContext,
   options: PlayOptions = {},
-): Promise<void> => {
-  const play = leaveOutMissing(listed, listedStart, playable, libraryTrack);
-  if (play !== null) await startMixed(play, context, options);
-};
+): Promise<void> => playListed(listed, listedStart, (play) => startMixed(play, context, options));
 
 /**
  * Plays a page's songs (Search's song results, an artist's or album's page)
@@ -229,17 +240,15 @@ export const playDiscoverSongs = async (
  * files, the rest streamed); otherwise the Library's songs alone, so nothing
  * streams outside one. Missing songs are left out, and a tapped one downloads instead.
  */
-export const playPage = async (
+export const playPage = (
   listed: readonly ListedSong[],
   listedStart: number | undefined,
   context: QueueContext,
   options: PlayOptions = {},
-): Promise<void> => {
-  // Left out first, so a tapped song's place is its place among what plays.
-  const play = leaveOutMissing(listed, listedStart, playable, libraryTrack);
-  if (play !== null)
-    await startPlayback(pagePlayback(play.songs), play.startIndex, context, options);
-};
+): Promise<void> =>
+  playListed(listed, listedStart, (play) =>
+    startPlayback(pagePlayback(play.songs), play.startIndex, context, options),
+  );
 
 /**
  * Plays a playlist's [entries] from `startIndex` (or shuffled), by Core's

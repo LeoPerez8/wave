@@ -12,8 +12,7 @@ export interface YtListHead {
 export type YtListScreen = "yt-album" | "yt-playlist";
 
 let opening:
-  | { readonly screen: YtListScreen; readonly id: string; readonly head: YtListHead }
-  | undefined;
+  { readonly screen: YtListScreen; readonly id: string; readonly head: YtListHead } | undefined;
 
 const open = (screen: YtListScreen, id: string, head: YtListHead): void => {
   opening = { screen, id, head };

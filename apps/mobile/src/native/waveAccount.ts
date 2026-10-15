@@ -2,7 +2,7 @@ import type { WaveSession } from "@wave/core";
 import { NativeModule, requireNativeModule } from "expo";
 
 /** The sync service's answer to a request the native module sent with the session. */
-export interface WaveServiceResponse {
+interface WaveServiceResponse {
   readonly status: number;
   /** The response body as text (JSON from the service). */
   readonly body: string;

@@ -34,7 +34,9 @@ export const playlistsChanged = (): void => {
 
 const edit = <A>(
   run: (store: LibraryStore["Service"]) => Effect.Effect<A, LibraryStoreError>,
-): Promise<A> => appRuntime.runPromise(LibraryStore.use(run)).finally(playlistsChanged);
+): Promise<A> =>
+  // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+  appRuntime.runPromise(LibraryStore.use(run)).finally(playlistsChanged);
 
 /** The playlists as last read, and the `playlistsVersion` they were read at. */
 let remembered: { readonly version: number; readonly rows: readonly PlaylistRow[] } | undefined;

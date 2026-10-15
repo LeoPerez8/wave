@@ -10,12 +10,21 @@
     "test": "pnpm -r test",
     "test:core": "pnpm --filter @wave/core test",
     "lint": "oxlint",
-    "fmt": "oxfmt",
-    "fmt:check": "oxfmt --check"
+    "fmt": "prettier --write .",
+    "fmt:check": "prettier --check .",
+    "react-doctor": "node scripts/ci/react-doctor.mjs full",
+    "react-doctor:check": "node scripts/ci/react-doctor.mjs baseline",
+    "fallow": "fallow --only dead-code,dupes",
+    "fallow:dead-code": "fallow dead-code",
+    "fallow:dupes": "fallow dupes",
+    "fallow:check": "fallow audit --gate new-only",
+    "test:react-doctor": "node --test scripts/ci/react-doctor-report.test.mjs"
   },
   "devDependencies": {
-    "oxfmt": "0.72.0",
-    "oxlint": "^1.0.0"
+    "fallow": "3.33.1",
+    "oxlint": "^1.0.0",
+    "prettier": "3.9.10",
+    "react-doctor": "0.9.18"
   },
   "engines": {
     "node": ">=22.18"

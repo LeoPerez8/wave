@@ -14,7 +14,7 @@ export interface SoulseekAccount {
 }
 
 /** Thrown when `SOULSEEK_KEY` is missing or isn't 32 bytes of base64. */
-export class SoulseekKeyMissing extends Error {
+class SoulseekKeyMissing extends Error {
   constructor() {
     super("SOULSEEK_KEY isn't set to 32 bytes of base64");
   }

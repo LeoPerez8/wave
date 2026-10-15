@@ -77,7 +77,7 @@ export const SYNC_TABLES: readonly SyncTable[] = SYNC_TABLE_NAMES.map((name) => 
 }));
 
 /** The longest id or text a row may carry. */
-export const MAX_TEXT_LENGTH = 16_384;
+const MAX_TEXT_LENGTH = 16_384;
 
 /** A pushed row, checked: `values` holds its fields in the table's order, or `null` for a tombstone. */
 export interface IncomingRow {

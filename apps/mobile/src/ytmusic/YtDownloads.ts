@@ -795,6 +795,7 @@ const enqueueMissingSongs = async (jobs: readonly MissingSongJob[]): Promise<voi
 /** The missing songs as they are now ([trackIds] only, when given), as download jobs. */
 const missingSongJobs = (trackIds?: readonly number[]): Promise<MissingSongJob[]> =>
   appRuntime
+    // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
     .runPromise(LibraryStore.use((store) => store.missingSongs(trackIds)))
     .then((tracks) => tracks.map(missingSongJob));
 

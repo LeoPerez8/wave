@@ -260,7 +260,7 @@ Wave uses the network for three features, each behind its own Settings switch (o
 
 ### Stack (mirrors the T3 Code mobile app)
 
-- pnpm monorepo. Expo (SDK matching T3 Code), React Native, React, TypeScript strict with erasable-syntax-only, Expo Router, uniwind (Tailwind), Effect, Legend List, Reanimated, Gesture Handler, React Native Skia, expo-sqlite + Drizzle ORM, expo-haptics. Linting/formatting with oxlint/oxfmt.
+- pnpm monorepo. Expo (SDK matching T3 Code), React Native, React, TypeScript strict with erasable-syntax-only, Expo Router, uniwind (Tailwind), Effect, Legend List, Reanimated, Gesture Handler, React Native Skia, expo-sqlite + Drizzle ORM, expo-haptics. Linting with oxlint and formatting with Prettier.
 - Code, UI copy, docs, issues, PRs and commits are in English.
 
 ### Modules

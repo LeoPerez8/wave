@@ -1,0 +1,71 @@
+{
+  "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/v3.33.1/schema.json",
+  "minimumVersion": "3.33.1",
+  // Manifests and built-in Expo, Expo Router, React Native, and node:test
+  // plugins discover app routes, config plugins, package exports, and tests.
+  // These maintenance CLIs are invoked directly, outside package scripts.
+  "entry": [
+    "scripts/music-folder/organize.ts",
+    "scripts/music-folder/replace.ts",
+    "scripts/**/*.test.ts",
+  ],
+  // Core's exports map preserves its public API; internal modules remain checked.
+  // Android loads this WebView asset through Kotlin rather than a JS import.
+  "dynamicallyLoaded": [
+    "apps/mobile/modules/wave-native/android/src/main/assets/wave_po_token.html",
+  ],
+  "ignorePatterns": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/out/**",
+    "**/coverage/**",
+    "**/.expo/**",
+    "**/.fallow/**",
+    "**/.scratch/**",
+    "**/.worktrees/**",
+    "**/.claude/worktrees/**",
+    "**/worktrees/**",
+    "**/.cache/**",
+    "**/.turbo/**",
+    "**/.impeccable/**",
+    "**/*.generated.*",
+    "apps/mobile/android/**",
+    "apps/mobile/ios/**",
+    "apps/mobile/expo-env.d.ts",
+    "apps/mobile/uniwind-types.d.ts",
+  ],
+  "ignoreDependencies": [
+    // app.config.ts embeds these font assets at native prebuild time.
+    "@expo-google-fonts/inter",
+    // Expo autolinks these modules; Expo Router requires native screens.
+    "expo-constants",
+    "expo-system-ui",
+    "react-native-screens",
+  ],
+  "rules": {
+    // Independent modules intentionally share names such as Effect's `layer`.
+    "duplicate-exports": "warn",
+    // This integration gates dead code and duplication, not complexity or policy.
+    "complexity-cyclomatic": "off",
+    "complexity-cognitive": "off",
+    "complexity-crap": "off",
+    "boundary-violation": "off",
+    "policy-violation": "off",
+  },
+  "duplicates": {
+    "enabled": true,
+    "mode": "mild",
+    "minTokens": 50,
+    "minLines": 5,
+    "minOccurrences": 2,
+    "ignoreSymlinks": true,
+    // Zero disables the gate. This positive floor gates any new clone group.
+    "threshold": 0.0001,
+  },
+  "audit": {
+    "gate": "new-only",
+    "css": false,
+  },
+  "failOnParseError": true,
+}

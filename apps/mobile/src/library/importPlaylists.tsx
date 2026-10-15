@@ -94,6 +94,7 @@ export const importPlaylists = async (): Promise<void> => {
   try {
     const files = await WaveNative.pickPlaylistFiles();
     if (files.length === 0) return;
+    // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
     const tracks = await appRuntime.runPromise(LibraryStore.use((store) => store.trackPaths));
     const library = libraryPathIndex(tracks);
     const outcomes: M3uImportOutcome[] = [];

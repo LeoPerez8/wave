@@ -136,6 +136,7 @@ const countTracks = Effect.gen(function* () {
 
 const NO_SONGS: readonly SongRow[] = [];
 
+// oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
 const listMissingSongs = LibraryStore.use((store) => store.missingSongs());
 const NO_MISSING_SONGS: readonly MissingTrack[] = [];
 
@@ -148,6 +149,7 @@ export const useSongs = (): readonly SongRow[] => useLibraryQuery(listSongs, NO_
 /** Number of tracks in the library, or null before the first count arrives. */
 export const useTrackCount = (): number | null => useLibraryQuery<number | null>(countTracks, null);
 
+// oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
 const countLibrary = LibraryStore.use((store) => store.countLibrary);
 
 /**
@@ -162,6 +164,7 @@ export const useLibraryCounts = (): LibraryCounts | undefined =>
     usePlaylistsVersion() + useFavoritesSaved(),
   );
 
+// oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
 const countSectionSongs = LibraryStore.use((store) => store.countSectionSongs);
 
 /**
@@ -185,8 +188,11 @@ const NO_ROOTS: readonly ScanRootSummary[] = [];
 /** The music folders Wave indexes, with their song counts. */
 export const useScanRoots = (): readonly ScanRootSummary[] => useLibraryQuery(listRoots, NO_ROOTS);
 
+// oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
 const listAlbums = LibraryStore.use((store) => store.listAlbums);
+// oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
 const listArtists = LibraryStore.use((store) => store.listArtists);
+// oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
 const listGenres = LibraryStore.use((store) => store.listGenres);
 
 const NO_ALBUMS: readonly AlbumRow[] = [];
@@ -205,6 +211,7 @@ const useDetail = <A>(
   id: number,
   get: (store: LibraryStore["Service"], id: number) => Effect.Effect<A | null, LibraryStoreError>,
 ): A | null | undefined => {
+  // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
   const query = useMemo(() => LibraryStore.use((store) => get(store, id)), [get, id]);
   return useLibraryQuery<A | null | undefined>(query, undefined);
 };
@@ -227,6 +234,7 @@ export const useLinkRows = (
   artistId: number | undefined,
 ): LinkRows => {
   const query = useMemo(
+    // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
     () => LibraryStore.use((store) => store.linkRows({ albumId, artistId })),
     [albumId, artistId],
   );
@@ -242,6 +250,7 @@ export const useAlbum = (id: number): AlbumDetail | null | undefined => useDetai
 export const useArtist = (id: number): ArtistDetail | null | undefined => useDetail(id, getArtist);
 export const useGenre = (id: number): GenreDetail | null | undefined => useDetail(id, getGenre);
 
+// oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
 const listExcludedFolders = LibraryStore.use((store) => store.excludedFolders);
 
 const NO_EXCLUDED_FOLDERS: readonly string[] = [];
@@ -250,6 +259,7 @@ const NO_EXCLUDED_FOLDERS: readonly string[] = [];
 export const useExcludedFolders = (): readonly string[] =>
   useLibraryQuery(listExcludedFolders, NO_EXCLUDED_FOLDERS);
 
+// oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
 const listFavorites = LibraryStore.use((store) => store.listFavorites);
 
 const NO_PLAYLISTS: readonly PlaylistRow[] = [];
@@ -263,6 +273,7 @@ export const usePlaylists = (): readonly PlaylistRow[] =>
 
 /** A playlist screen's data (see `useDetail`), refreshed as soon as it is edited. */
 export const usePlaylist = (id: number): PlaylistDetail | null | undefined => {
+  // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
   const query = useMemo(() => LibraryStore.use((store) => store.getPlaylist(id)), [id]);
   return useLibraryQuery<PlaylistDetail | null | undefined>(
     query,
@@ -279,6 +290,7 @@ export const useFavoriteSongs = (): readonly FavoriteRow[] | undefined =>
     useFavoritesSaved(),
   );
 
+// oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
 const readHome = LibraryStore.use((store) => store.home());
 
 /**
@@ -295,6 +307,7 @@ export const useHome = (): HomeSections | undefined => {
   );
 };
 
+// oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
 const readListeningOverview = LibraryStore.use((store) =>
   Effect.map(Effect.all([store.countLibrary, store.songListening]), ([counts, songs]) =>
     listeningOverview(counts, listeningTotals(songs)),

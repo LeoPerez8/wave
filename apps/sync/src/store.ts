@@ -15,8 +15,7 @@ import { type IncomingRow, type SyncTable, SYNC_TABLES, column, wireRow } from "
 export type PushBatch = ReadonlyMap<SyncTable, readonly IncomingRow[]>;
 
 export type PushResult =
-  | { readonly accepted: Readonly<Record<string, number>> }
-  | { readonly overLimit: SyncLimitName };
+  { readonly accepted: Readonly<Record<string, number>> } | { readonly overLimit: SyncLimitName };
 
 /** How many ids go in one `IN (…)`. */
 const IDS_PER_QUERY = 200;

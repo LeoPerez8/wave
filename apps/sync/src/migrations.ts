@@ -7,12 +7,12 @@
 
 import type { Client } from "@libsql/client";
 
-export interface Migration {
+interface Migration {
   readonly id: string;
   readonly statements: readonly string[];
 }
 
-export const MIGRATIONS: readonly Migration[] = [
+const MIGRATIONS: readonly Migration[] = [
   {
     id: "0001_accounts_and_sessions",
     statements: [

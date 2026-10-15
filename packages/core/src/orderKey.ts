@@ -59,18 +59,27 @@ const fractionBetween = (a: string, b: string | null): string => {
   return (DIGITS[low] ?? ZERO) + fractionBetween(a.slice(1), null);
 };
 
+/**
+ * Steps [digits] one [step] up or down in place, carrying to the left; false
+ * when the carry runs past the first digit (every digit is then [carried]).
+ */
+const stepDigits = (digits: string[], step: 1 | -1, carried: string): boolean => {
+  for (let i = digits.length - 1; i >= 0; i--) {
+    const digit = DIGITS[DIGITS.indexOf(digits[i] ?? ZERO) + step];
+    if (digit !== undefined) {
+      digits[i] = digit;
+      return true;
+    }
+    digits[i] = carried;
+  }
+  return false;
+};
+
 /** The next head with digits after [integer], or `null` past the last. */
 const incrementInteger = (integer: string): string | null => {
   const head = integer.charAt(0);
   const digits = integer.slice(1).split("");
-  for (let i = digits.length - 1; i >= 0; i--) {
-    const next = DIGITS.indexOf(digits[i] ?? ZERO) + 1;
-    if (next < DIGITS.length) {
-      digits[i] = DIGITS[next] ?? ZERO;
-      return head + digits.join("");
-    }
-    digits[i] = ZERO;
-  }
+  if (stepDigits(digits, 1, ZERO)) return head + digits.join("");
   if (head === "Z") return `a${ZERO}`;
   if (head === "z") return null;
   const nextHead = String.fromCharCode(head.charCodeAt(0) + 1);
@@ -83,14 +92,7 @@ const incrementInteger = (integer: string): string | null => {
 const decrementInteger = (integer: string): string | null => {
   const head = integer.charAt(0);
   const digits = integer.slice(1).split("");
-  for (let i = digits.length - 1; i >= 0; i--) {
-    const previous = DIGITS.indexOf(digits[i] ?? ZERO) - 1;
-    if (previous >= 0) {
-      digits[i] = DIGITS[previous] ?? ZERO;
-      return head + digits.join("");
-    }
-    digits[i] = LAST_DIGIT;
-  }
+  if (stepDigits(digits, -1, LAST_DIGIT)) return head + digits.join("");
   if (head === "a") return `Z${LAST_DIGIT}`;
   if (head === "A") return null;
   const previousHead = String.fromCharCode(head.charCodeAt(0) - 1);

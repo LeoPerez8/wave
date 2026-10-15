@@ -21,6 +21,7 @@ export const importBlackPlayerStats = async (): Promise<void> => {
     const files = await WaveNative.pickStatFiles();
     if (files.length === 0) return;
     const [tracks, imported] = await appRuntime.runPromise(
+      // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
       LibraryStore.use((store) => Effect.all([store.importTracks, store.importedPlays])),
     );
     const plan = planBlackPlayerImport(
@@ -29,6 +30,7 @@ export const importBlackPlayerStats = async (): Promise<void> => {
       imported,
     );
     if (plan.plays.length > 0) {
+      // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
       await appRuntime.runPromise(LibraryStore.use((store) => store.saveImportedPlays(plan.plays)));
       // Stats, Home and the artist pages read the history again.
       playHistoryVersion.update((version) => version + 1);

@@ -9,8 +9,7 @@ import type { SyncRow } from "./sync.ts";
 
 /** A synced row with its table's own [Fields], or a tombstone, which carries none. */
 export type SyncedRow<Fields> =
-  | (SyncRow & { readonly deleted: false } & Fields)
-  | (SyncRow & { readonly deleted: true });
+  (SyncRow & { readonly deleted: false } & Fields) | (SyncRow & { readonly deleted: true });
 
 /** A song as the account knows it; its id is its recording key. */
 export interface SyncSongFields {

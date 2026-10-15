@@ -40,6 +40,7 @@ export const startSync = (): void => {
   started = true;
   void appRuntime
     .runPromise(
+      // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
       WaveSync.use((sync) =>
         sync.start({
           preferences: syncedPreferences,
