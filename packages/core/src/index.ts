@@ -486,6 +486,8 @@ export type {
 } from "./blackPlayer.ts";
 export { libraryTrackIds, playerErrorNotice, queuedYtTracks, restorableTrack } from "./ytQueue.ts";
 export type { PlayerErrorCode, RestorableTracks } from "./ytQueue.ts";
+export { settleBestQuality } from "./bestQuality.ts";
+export type { BestQualityState, BestQualityStep } from "./bestQuality.ts";
 export {
   downloadFailurePlan,
   downloadFallback,
