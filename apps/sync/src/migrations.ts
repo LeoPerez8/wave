@@ -141,6 +141,19 @@ export const MIGRATIONS: readonly Migration[] = [
       )`,
     ],
   },
+  {
+    // `POST /v1/session`'s rate (`maxSignInsPerMinute`), counted per minute for each key:
+    // `ip:` and the SHA-256 (hex) of an address, or `sub:` and a Google account's subject.
+    // Only the current minute's rows are kept.
+    id: "0004_sign_in_windows",
+    statements: [
+      `CREATE TABLE sign_in_windows (
+        key TEXT PRIMARY KEY,
+        window_start INTEGER NOT NULL,
+        window_count INTEGER NOT NULL
+      )`,
+    ],
+  },
 ];
 
 /** Runs the migrations [db] hasn't run yet, each in its own transaction. Gives the ids it ran. */

@@ -162,7 +162,7 @@ export const SYNTHETIC_TRACKS: readonly SyntheticTrack[] = byTitle([
   longTitleTrack(SYNTHETIC_ALBUMS[0] as AlbumSummary),
 ]).map((track, i) => ({
   track,
-  state: i === 2 ? "playing" : i === 7 ? "missing" : undefined,
+  state: i === 2 ? "playing" : i === 7 ? "fileNotFound" : undefined,
   favorite: i % 9 === 4,
 }));
 

@@ -203,6 +203,8 @@ ANDROID_PACKAGE="dev.leoperez.wave"
 # SHA-1 of the debug keystore in Expo's Android template. `expo prebuild`
 # copies it to apps/mobile/android/app/debug.keystore, and the generated
 # build.gradle signs both debug and release builds with it, CI's APK included.
+# A release build signed with a keystore of its own needs a second Android
+# client with that key's SHA-1: stage 6 offers it.
 EXPO_DEBUG_SHA1="5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25"
 
 cd "$SYNC_DIR"
@@ -382,17 +384,69 @@ if [[ -n "$KEYTOOL" && -f "$KEYSTORE" ]]; then
     note "Add a second Android client with it, so your local builds can sign in too."
   fi
 fi
-say "CI's release APK, your own release builds and the debug builds are all signed"
-say "with the debug keystore from Expo's template, so this one SHA-1 covers them all:"
+say "CI's release APK, release builds and debug builds are all signed with the debug"
+say "keystore from Expo's template (unless you gave a release build a keystore of its"
+say "own: that comes next), so this one SHA-1 covers them all:"
 printf '\n    %s%s%s\n\n' "$BOLD" "$EXPO_DEBUG_SHA1" "$RESET"
 open_url "https://console.cloud.google.com/auth/clients/create"
 step "Application type: Android. Name: Wave Android."
 step "Package name: $ANDROID_PACKAGE"
 step "SHA-1 certificate fingerprint: the one above. Then press Create."
 note "Nothing to copy: the app never uses the Android client's id."
-note "If Wave is ever signed with a keystore of its own, add an Android client for"
-note "that keystore's SHA-1 too."
 confirm "Is the Android client created?" || die "Signing in from the phone needs the Android client."
+
+# Optional: a release build signed with a keystore of its own (not Expo's debug one)
+# signs in only through a second Android client with that key's SHA-1.
+printf '\n'
+if confirm "Is a release build of Wave signed with a keystore of its own, not the debug one?"; then
+  RELEASE_SHA1=""
+  if [[ -n "$KEYTOOL" ]]; then
+    ask RELEASE_KEYSTORE "Path to the release keystore (Enter to paste its SHA-1 instead):"
+    if [[ -n "$RELEASE_KEYSTORE" ]]; then
+      [[ -f "$RELEASE_KEYSTORE" ]] || die "There's no keystore at $RELEASE_KEYSTORE."
+      write_env RELEASE_KEYSTORE "$RELEASE_KEYSTORE"
+      ask RELEASE_KEY_ALIAS "Its key alias:"
+      write_env RELEASE_KEY_ALIAS "$RELEASE_KEY_ALIAS"
+      ask_secret RELEASE_STORE_PASSWORD "Its store password (hidden, never saved):"
+      # The password reaches keytool through its environment, never its arguments.
+      RELEASE_SHA1=$(WAVE_STORE_PASSWORD="$RELEASE_STORE_PASSWORD" "$KEYTOOL" -list -v \
+        -keystore "$RELEASE_KEYSTORE" -storepass:env WAVE_STORE_PASSWORD -alias "$RELEASE_KEY_ALIAS" 2>/dev/null |
+        sed -n 's/^[[:space:]]*SHA1:[[:space:]]*//p' | tr -d '[:space:]' || true)
+      RELEASE_STORE_PASSWORD=""
+      [[ -n "$RELEASE_SHA1" ]] || warn "keytool couldn't read that key (is the alias or the password wrong?)."
+    fi
+  else
+    note "keytool isn't on this machine (it comes with a JDK), so paste the SHA-1 instead."
+  fi
+  if [[ -z "$RELEASE_SHA1" ]]; then
+    note "keytool -list -v -keystore <release keystore> -alias <alias> shows it, after \"SHA1:\"."
+    for _ in 1 2 3; do
+      ask RELEASE_SHA1 "Paste the release key's SHA-1 (Enter to skip):"
+      RELEASE_SHA1=$(printf '%s' "$RELEASE_SHA1" | tr -d '[:space:]' | tr '[:lower:]' '[:upper:]')
+      [[ -z "$RELEASE_SHA1" || "$RELEASE_SHA1" =~ ^([0-9A-F]{2}:){19}[0-9A-F]{2}$ ]] && break
+      warn "That doesn't look like a SHA-1 (20 pairs of hex digits, separated by colons)."
+      RELEASE_SHA1=""
+    done
+  fi
+  if [[ -z "$RELEASE_SHA1" ]]; then
+    SKIPPED+=("an Android client for the release key's SHA-1 (package $ANDROID_PACKAGE)")
+    warn "skipped the release Android client; add it later, or that build can't sign in."
+  elif [[ "$RELEASE_SHA1" == "$EXPO_DEBUG_SHA1" ]]; then
+    ok "That key is the debug one after all: the client above covers it."
+  else
+    write_env RELEASE_SHA1 "$RELEASE_SHA1"
+    say "Add a second Android client for the release key:"
+    printf '\n    %s%s%s\n\n' "$BOLD" "$RELEASE_SHA1" "$RESET"
+    open_url "https://console.cloud.google.com/auth/clients/create"
+    step "Application type: Android. Name: Wave Android (release)."
+    step "Package name: $ANDROID_PACKAGE"
+    step "SHA-1 certificate fingerprint: the one above. Then press Create."
+    if ! confirm "Is the release Android client created?"; then
+      SKIPPED+=("an Android client for the release key's SHA-1 $RELEASE_SHA1 (package $ANDROID_PACKAGE)")
+      warn "skipped the release Android client; add it later, or that build can't sign in."
+    fi
+  fi
+fi
 
 # ── 7 ─────────────────────────────────────────────────────────────────────
 stage "Cloudflare: sign in"

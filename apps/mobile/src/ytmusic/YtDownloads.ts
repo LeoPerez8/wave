@@ -34,6 +34,7 @@ import {
   type DownloadFailurePlan,
   type DownloadSource,
   type MissingSongJob,
+  type MissingSongVideo,
   type MissingSongsDownload,
   type MissingSongsDownloadAction,
   type MissingTrack,
@@ -147,11 +148,25 @@ const metadata = (song: NativeYtSong) =>
     return ytDownloadTags(song, album, found, lyrics);
   });
 
-/** Core's source for a download now: YT Music's setting and Download in best quality. */
+/**
+ * Core's source for a download now: YT Music's setting and Download in best quality (Soulseek's
+ * [session]), and for a missing song whether it has its own [video].
+ */
 const currentSource = (
   session: SoulseekSession,
   ytMusicOn = ytMusicEnabled(),
-): DownloadSource | null => downloadSource({ ytMusicOn, bestQuality: session.status !== "off" });
+  video = false,
+): DownloadSource | null =>
+  downloadSource({ ytMusicOn, bestQuality: session.status !== "off", video });
+
+/** Soulseek's session now; off when the module can't tell. */
+const sessionNow = async (): Promise<SoulseekSession> => {
+  try {
+    return await WaveSoulseek.session();
+  } catch {
+    return { status: "off", username: null };
+  }
+};
 
 /**
  * What the journal keeps to carry a Soulseek job on from YouTube Music: where the M4A goes and
@@ -186,13 +201,8 @@ type PrepareAnswer =
     };
 
 /** The source a download is asked for with; the prepare decision decides again when it starts. */
-const requestedSource = async (): Promise<DownloadSource | null> => {
-  try {
-    return currentSource(await WaveSoulseek.session());
-  } catch {
-    return currentSource({ status: "off", username: null });
-  }
-};
+const requestedSource = async (): Promise<DownloadSource | null> =>
+  currentSource(await sessionNow());
 
 /**
  * The journal's "prepare" decision: the source, the song's tags and where it goes, and for
@@ -306,11 +316,30 @@ const searchFailure = (error: YtMusicError): DownloadFailed =>
   });
 
 /**
+ * The cover of the album YouTube Music files video [videoId] under, read as a YT Music song's
+ * download reads its album (the watch page, then the album page); null when it has none, or
+ * YouTube Music doesn't answer in time.
+ */
+const videoCover = (videoId: string) =>
+  optional(
+    Effect.gen(function* () {
+      const { albumId } = yield* native(() => WaveYtDownloads.watchSong(videoId));
+      return albumId === null ? null : (yield* native(() => readYtAlbum(albumId))).artworkUrl;
+    }),
+  );
+
+/** [video] with its album's cover (`videoCover`) when it came without one: a missing song's own video. */
+const withCover = (video: MissingSongVideo | null) =>
+  video === null || video.artworkUrl !== null
+    ? Effect.succeed(video)
+    : videoCover(video.videoId).pipe(Effect.map((artworkUrl) => ({ ...video, artworkUrl })));
+
+/**
  * The journal's "prepare" decision for missing song [trackId] (job `missing:<id>`), read from
  * its Track as it is now. Core picks the source: the video it was downloaded from, while YT
  * Music is on; else Soulseek's peers with the recording while Download in best quality is on,
  * falling back to YouTube Music's match; else that match (`missingSongVideo`). The file gets the
- * Track's tags. Nothing matched on YouTube Music fails it as notFound, and the song stays missing.
+ * Track's tags and the video's cover (its own video's from its album page, `withCover`). Nothing matched on YouTube Music fails it as notFound, and the song stays missing.
  */
 const prepareMissingSong = (trackId: number) =>
   Effect.gen(function* () {
@@ -326,19 +355,18 @@ const prepareMissingSong = (trackId: number) =>
     if (roots.length === 0) return yield* new DownloadFailed({ reason: "noFolder" });
     const job = missingSongJob(track);
     const ytMusicOn = ytMusicEnabled();
-    const session = yield* native(() => WaveSoulseek.session());
-    const source = downloadSource({
+    const source = currentSource(
+      yield* native(() => WaveSoulseek.session()),
       ytMusicOn,
-      bestQuality: session.status !== "off",
-      video: job.missing.videoId !== null,
-    });
+      job.missing.videoId !== null,
+    );
     if (source === null) return yield* new DownloadFailed({ reason: "noSource" });
     const ytMusic = yield* YtMusic;
     const search = missingSongSearch(job);
     const findVideo = !ytMusicOn
       ? Effect.succeed(null)
       : search === null
-        ? Effect.succeed(missingSongVideo(job, null))
+        ? withCover(missingSongVideo(job, null))
         : ytMusic.searchSongs(search).pipe(
             Effect.map((page) => missingSongVideo(job, page.songs)),
             Effect.mapError(searchFailure),
@@ -754,25 +782,12 @@ const journalSong = (job: MissingSongJob): NativeYtSong => ({
   albumId: null,
 });
 
-/** Soulseek's session now; off when the module can't tell. */
-const sessionNow = async (): Promise<SoulseekSession> => {
-  try {
-    return await WaveSoulseek.session();
-  } catch {
-    return { status: "off", username: null };
-  }
-};
-
 /** Asks the journal for missing songs [jobs], in order, each from the source Core picks for it. */
 const enqueueMissingSongs = async (jobs: readonly MissingSongJob[]): Promise<void> => {
   const session = await sessionNow();
   const ytMusicOn = ytMusicEnabled();
   for (const job of jobs) {
-    const source = downloadSource({
-      ytMusicOn,
-      bestQuality: session.status !== "off",
-      video: job.missing.videoId !== null,
-    });
+    const source = currentSource(session, ytMusicOn, job.missing.videoId !== null);
     await WaveSoulseek.enqueueJob(journalSong(job), soulseekRecording(job), null, source);
   }
 };

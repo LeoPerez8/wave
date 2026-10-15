@@ -110,7 +110,7 @@ function MissingSongsDownloadRows() {
     <View className="mt-6">
       <Hairline />
       {line !== null && (
-        <View style={{ minHeight: grid.row, justifyContent: "center" }}>
+        <View className="justify-center" style={{ minHeight: grid.row }}>
           <Text className="font-sans text-body text-foreground">{line}</Text>
         </View>
       )}
@@ -168,7 +168,7 @@ export function WaveAccountSettingsSection() {
         </>
       ) : view.kind === "signedOut" ? (
         <>
-          <View className="items-start" style={{ minHeight: grid.row, justifyContent: "center" }}>
+          <View className="items-start justify-center" style={{ minHeight: grid.row }}>
             <TextButton
               label={SIGN_IN_LABELS[view.action]}
               disabled={view.action === "signingIn"}
