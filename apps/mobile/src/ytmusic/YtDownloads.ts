@@ -802,9 +802,14 @@ export const downloadMissingSongs = (trackIds: readonly number[]): void => {
 export const cancelMissingSongDownload = (trackId: number): void =>
   cancelYtDownload(missingSongJobId(trackId));
 
-/** Where missing song [trackId]'s download stands, following the journal; null when not asked for. */
-export const useMissingSongDownloadStatus = (trackId: number): YtDownloadStatus | null =>
-  useYtDownloadStatus(missingSongJobId(trackId));
+/**
+ * Where missing song [trackId]'s download stands, following the journal; null when not asked
+ * for, or for no song ([trackId] null).
+ */
+export const useMissingSongDownloadStatus = (trackId: number | null): YtDownloadStatus | null =>
+  useSyncExternalStore(downloads.subscribe, () =>
+    trackId === null ? null : ytDownloadStatus(downloads.get(), missingSongJobId(trackId)),
+  );
 
 /**
  * Settings › Wave Account's Download All, Retry Failed and Cancel, decided on the missing songs
