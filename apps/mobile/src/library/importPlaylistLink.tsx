@@ -53,6 +53,7 @@ import { appRuntime } from "./runtime";
 /** A linked playlist read, or why it wasn't. */
 export type LinkRead = LinkImportRead<NativeYtSong>;
 
+// oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
 const listLibrary = () => appRuntime.runPromise(LibraryStore.use((store) => store.listSongs));
 
 /** Spotify through `fetch`, as Core's `readSpotifyPlaylist` asks; rejects when out of reach. */

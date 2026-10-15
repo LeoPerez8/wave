@@ -42,6 +42,9 @@ pnpm fmt:check      # `pnpm fmt` to fix
 pnpm test           # Core tests run with plain `node --test`
 ```
 
+See the [lint policy](docs/lint.md) for TypeScript and React Hooks rules, native
+exceptions, and excluded generated files.
+
 ## Agent skills
 
 This repo is set up for [Matt Pocock's skills](https://github.com/mattpocock/skills) (MIT),

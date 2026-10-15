@@ -87,6 +87,7 @@ export const followStreamedArtistLink = (link: StreamedArtistLink<ArtistRow>): v
 /** Each artist's row, in [ids]' order; one cheap read per artist, gone ones left out. */
 const artistRows = (ids: readonly number[]): Promise<readonly ArtistRow[]> =>
   appRuntime.runPromise(
+    // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
     LibraryStore.use((store) =>
       Effect.forEach(ids, (artistId) => store.linkRows({ artistId })).pipe(
         Effect.map((rows) => rows.flatMap((row) => row.artist ?? [])),
