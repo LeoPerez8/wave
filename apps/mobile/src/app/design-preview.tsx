@@ -157,7 +157,12 @@ function DesignPreview({ opening }: { opening: PreviewState | undefined }) {
               key={shelf}
               accessibilityRole="tab"
               accessibilityState={{ selected: view === shelf }}
-              onPress={() => setView(shelf)}
+              onPress={() => {
+                if (shelf === view) return;
+                // The shelf's list starts at its top; the spine reads its offset.
+                scrolled.current = 0;
+                setView(shelf);
+              }}
               haptic="selection"
               style={{ minHeight: 48, justifyContent: "center" }}
             >
