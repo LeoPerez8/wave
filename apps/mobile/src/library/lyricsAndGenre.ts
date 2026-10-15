@@ -260,7 +260,7 @@ export const writeLyricsAndGenre = (
  * has. A song with nothing missing (Core's `canFixSong`) makes no request. A
  * failure is an outcome (the file is left as it was); only `LookupsOff` fails.
  */
-export const fixSong = (
+const fixSong = (
   song: TaggableSong,
 ): Effect.Effect<SongTagOutcome, LookupsOff, LibraryStore> =>
   Effect.gen(function* () {
@@ -306,7 +306,7 @@ const SONG_MIN_MS = 400;
  * Stops early (`unreachable`) when LRCLIB and Deezer can't be reached (Core's
  * `lookupsUnreachable`); interrupt it to cancel.
  */
-export const fixSongs = <S extends TaggableSong>(
+export const fixEachSong = <S extends TaggableSong>(
   songs: readonly S[],
   onResult: (song: S, outcome: SongTagOutcome) => void,
 ): Effect.Effect<"done" | "unreachable", LookupsOff, LibraryStore> =>

@@ -27,7 +27,7 @@ import { WaveLibraryLookup } from "@/native/waveLibraryLookup";
 import { showMessage } from "@/overlay/alert";
 
 import { LibraryStore, type LibraryLookupSong } from "./LibraryStore";
-import { fixSongs as fixEach, LookupsOff, type TaggableSong } from "./lyricsAndGenre";
+import { fixEachSong, LookupsOff, type TaggableSong } from "./lyricsAndGenre";
 import { appRuntime } from "./runtime";
 
 type Result = { readonly title: string; readonly outcome: SongTagOutcome };
@@ -40,7 +40,7 @@ const run = async <S extends TaggableSong>(
   signal?: AbortSignal,
 ): Promise<{ readonly stop: TagLookupStop | undefined; readonly error: unknown }> => {
   const exit = await appRuntime.runPromiseExit(
-    fixEach(songs, (song, outcome) => {
+    fixEachSong(songs, (song, outcome) => {
       results.push({ title: song.title, outcome });
       onResult();
     }),
