@@ -14,6 +14,9 @@ import { useThemeColor } from "@/theme/useThemeColor";
 
 import { setLyricsAndGenreLookupsEnabled, useLyricsAndGenreLookupsEnabled } from "./lyricsAndGenre";
 
+/** The lookups switch, as shown and as read out. */
+const LOOKUPS_LABEL = "Fix songs online";
+
 const setLookups = (on: boolean): void => {
   setLyricsAndGenreLookupsEnabled(on);
   // Off means no more requests, including the Library-wide run's.
@@ -38,10 +41,10 @@ export function LyricsAndGenreSettingsSection() {
       <Hairline />
       <View className="flex-row items-center" style={{ minHeight: grid.row }}>
         <Text className="flex-1 font-sans text-title3 font-normal text-foreground">
-          Fix songs online
+          {LOOKUPS_LABEL}
         </Text>
         <Switch
-          accessibilityLabel="Fix songs online"
+          accessibilityLabel={LOOKUPS_LABEL}
           value={enabled}
           onValueChange={setLookups}
           trackColor={{ false: fill, true: accent }}
