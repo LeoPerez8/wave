@@ -7,7 +7,7 @@
     "dev": "pnpm --filter @wave/mobile start",
     "android": "pnpm --filter @wave/mobile android",
     "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r test",
+    "test": "pnpm -r test && node --test \"scripts/ci/*.test.ts\"",
     "test:core": "pnpm --filter @wave/core test",
     "lint": "oxlint",
     "fmt": "oxfmt",
