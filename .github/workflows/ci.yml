@@ -225,6 +225,17 @@ jobs:
     runs-on: ubuntu-latest
     env:
       HEAD_SHA: ${{ needs.checks.outputs.sha }}
+      # ccache (scripts/ci/ccache.sh) keeps its cache in ~/.cache/ccache.
+      # Paths under the checkout are hashed relative to it, and the working directory
+      # isn't hashed, so a different checkout path still hits.
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_NOHASHDIR: "true"
+      # The NDK is installed fresh on every run, so its compilers' mtimes change.
+      CCACHE_COMPILERCHECK: content
+      CCACHE_INODECACHE: "true"
+      # Some libraries build with precompiled headers, which ccache only caches with these.
+      CCACHE_SLOPPINESS: pch_defines,time_macros,include_file_mtime,include_file_ctime
+      CCACHE_MAXSIZE: 1G
     steps:
       - uses: actions/checkout@v5
         with:
@@ -243,6 +254,19 @@ jobs:
           java-version: 17
 
       - uses: gradle/actions/setup-gradle@v5
+
+      # Main saves the ccache directory, PRs only restore it. A lockfile change
+      # starts a new entry, which begins from the most recent older one.
+      - name: Restore ccache
+        id: ccache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/ccache
+          key: ccache-android-v2-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: ccache-android-v2-
+
+      - name: Set up ccache
+        run: scripts/ci/ccache.sh setup
 
       - name: Install
         run: scripts/ci/step.sh "Install" pnpm install --frozen-lockfile
@@ -268,7 +292,22 @@ jobs:
 
       - name: Build release APK
         working-directory: apps/mobile/android
-        run: ../../../scripts/ci/step.sh "Gradle assembleRelease" ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon --console=plain
+        run: ../../../scripts/ci/step.sh "Gradle assembleRelease" ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon --console=plain --profile
+
+      - name: CMake task times
+        if: always()
+        run: scripts/ci/cmake-times.sh apps/mobile/android
+
+      - name: ccache statistics
+        if: always()
+        run: scripts/ci/ccache.sh stats
+
+      - name: Save ccache
+        if: github.ref == 'refs/heads/main' && steps.ccache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/ccache
+          key: ${{ steps.ccache.outputs.cache-primary-key }}
 
       - name: Collect APK
         id: apk
