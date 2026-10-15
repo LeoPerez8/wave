@@ -7,7 +7,7 @@ import {
   type SongListKind,
   type SongSort,
 } from "@wave/core";
-import { Text, View } from "react-native";
+import { Text } from "react-native";
 
 import { EntryRow } from "@/catalog/EntryRow";
 import { CELL } from "@/catalog/grid";
@@ -20,11 +20,8 @@ import { openOverlay } from "@/overlay/overlay";
 
 import { setSongSort, useSongSort } from "./songSort";
 
-/**
- * The sort card: the [sorts] on offer, [current] checked. The Design preview
- * draws it too, with a [choose] that only closes it.
- */
-export function SortMenu({
+/** The sort card: the [sorts] on offer, [current] checked. */
+function SortMenu({
   sorts,
   current,
   choose,
@@ -59,20 +56,31 @@ export function SortMenu({
   );
 }
 
-/** A [kind] list's sorts, the current one checked; choosing one sorts by it and closes the card. */
-function KindSortMenu({ kind, close }: { kind: SongListKind; close: () => void }) {
-  const current = useSongSort(kind);
-  return (
-    <SortMenu
-      sorts={songSortsFor(kind)}
-      current={current}
-      choose={(sort) => {
-        setSongSort(kind, sort);
-        close();
-      }}
-    />
-  );
-}
+/**
+ * Opens the sort card next to the button whose press calls it: the [sorts] on
+ * offer, [current] checked. Choosing one closes the card and hands it to
+ * [choose]. The Design preview opens it too, with a [choose] that does nothing.
+ */
+export const openSortMenu = (
+  sorts: readonly SongSort[],
+  current: SongSort,
+  choose: (sort: SongSort) => void,
+): void => {
+  openOverlay({
+    label: "Sort by",
+    anchor: pressedRect(),
+    render: (close) => (
+      <SortMenu
+        sorts={sorts}
+        current={current}
+        choose={(sort) => {
+          choose(sort);
+          close();
+        }}
+      />
+    ),
+  });
+};
 
 /** The sort glyph, its label telling screen readers [sort]; its press opens a card. */
 export function SortButton({ sort, onPress }: { sort: SongSort; onPress: () => void }) {
@@ -87,24 +95,16 @@ export function SortButton({ sort, onPress }: { sort: SongSort; onPress: () => v
 }
 
 /**
- * The sort control of a song list's header: opens a menu of sorts next to
- * itself. Its label tells screen readers the current sort.
+ * The sort control of a song list's header (`ListIntro`'s `sortControl`):
+ * opens a menu of the [kind] list's sorts next to itself. Its label tells
+ * screen readers the current sort.
  */
 export function SongSortButton({ kind }: { kind: SongListKind }) {
   const sort = useSongSort(kind);
   return (
-    // Its glyph sits on the right margin, like Back on the left.
-    <View className="-mr-3">
-      <SortButton
-        sort={sort}
-        onPress={() =>
-          openOverlay({
-            label: "Sort by",
-            anchor: pressedRect(),
-            render: (close) => <KindSortMenu kind={kind} close={close} />,
-          })
-        }
-      />
-    </View>
+    <SortButton
+      sort={sort}
+      onPress={() => openSortMenu(songSortsFor(kind), sort, (chosen) => setSongSort(kind, chosen))}
+    />
   );
 }

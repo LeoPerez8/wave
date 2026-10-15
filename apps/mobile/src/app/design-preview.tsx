@@ -1,4 +1,4 @@
-import { counted, defaultSongSort, designPreviewState, type IndexEntry } from "@wave/core";
+import { defaultSongSort, designPreviewState, type IndexEntry } from "@wave/core";
 import { useLocalSearchParams } from "expo-router";
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import {
@@ -17,11 +17,11 @@ import { AlphabetSpine } from "@/catalog/AlphabetSpine";
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { PlaylistEntry } from "@/catalog/PlaylistEntry";
-import { PlayShuffle } from "@/catalog/PlayShuffle";
 import { TrackRow } from "@/catalog/TrackRow";
 import { ScreenHeader } from "@/components/ScreenHeader";
-import { TextButton } from "@/components/TextButton";
+import { PlaylistsButtons, PlaylistsHeader } from "@/library/PlaylistsList";
 import { SortButton } from "@/library/SongSortButton";
+import { ListIntroLayout, songCount } from "@/library/TrackList";
 import { Press } from "@/motion/Press";
 import {
   type Control,
@@ -157,26 +157,20 @@ function DesignPreview({ opening }: { opening: PreviewState | undefined }) {
             paddingBottom: insets.bottom + 48,
           }}
         >
-          <View className="flex-row items-center" style={{ paddingBottom: CELL }}>
-            <View className="flex-1">
-              <CatalogLine>{counted(SYNTHETIC_PLAYLISTS.length, "playlist")}</CatalogLine>
-            </View>
-            <View className="flex-row items-center" style={{ gap: CELL * 3 }}>
-              {anchored(
-                "importPlaylists",
-                <TextButton label="Import Playlists" opensMenu onPress={openImportCard} />,
-              )}
-              {anchored(
-                "newPlaylist",
-                <TextButton label="New Playlist" opensMenu onPress={openNewPlaylistPrompt} />,
-              )}
-            </View>
-          </View>
+          <PlaylistsHeader count={SYNTHETIC_PLAYLISTS.length}>
+            {/* As with YT Music on: Import Playlists opens a card. */}
+            <PlaylistsButtons
+              importOpensMenu
+              onImport={openImportCard}
+              onNewPlaylist={openNewPlaylistPrompt}
+              wrap={anchored}
+            />
+          </PlaylistsHeader>
           {SYNTHETIC_PLAYLISTS.map((playlist) => (
             <PlaylistEntry
               key={playlist.id}
               name={playlist.name}
-              detail={counted(playlist.trackCount, "song")}
+              detail={songCount(playlist.trackCount)}
               paths={[]}
               onPress={() => undefined}
             />
@@ -186,18 +180,16 @@ function DesignPreview({ opening }: { opening: PreviewState | undefined }) {
         <>
           {view === "songs" && (
             // A song list's opening, as `ListIntro` draws it: the count over Play, Shuffle and Sort.
-            <View style={{ paddingHorizontal: grid.margin, gap: CELL, paddingBottom: CELL }}>
-              <CatalogLine>{counted(SYNTHETIC_TRACKS.length, "song")}</CatalogLine>
-              <View className="flex-row items-center justify-between">
-                <PlayShuffle onPlay={() => undefined} onShuffle={() => undefined} />
-                {/* Its glyph sits on the right margin, as in `SongSortButton`. */}
-                <View className="-mr-3">
-                  {anchored(
-                    "sort",
-                    <SortButton sort={defaultSongSort("songs")} onPress={openSortCard} />,
-                  )}
-                </View>
-              </View>
+            <View style={{ paddingHorizontal: grid.margin }}>
+              <ListIntroLayout
+                line={songCount(SYNTHETIC_TRACKS.length)}
+                onPlay={() => undefined}
+                onShuffle={() => undefined}
+                sortControl={anchored(
+                  "sort",
+                  <SortButton sort={defaultSongSort("songs")} onPress={openSortCard} />,
+                )}
+              />
             </View>
           )}
           <View className="flex-1">
