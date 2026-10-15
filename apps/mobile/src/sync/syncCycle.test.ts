@@ -37,7 +37,8 @@ import {
   type FixtureTrack,
   type TestDatabase,
 } from "../library/db/testDatabase.ts";
-import { syncCycle, type SyncPreferences } from "./syncCycle.ts";
+import { selectJoinedAccount } from "../library/db/syncRows.ts";
+import { syncCycle, type SyncPreferences, type SyncTransport } from "./syncCycle.ts";
 import { testSyncService, type TestSyncService } from "./testSyncService.ts";
 
 const OK_COMPUTER: readonly FixtureTrack[] = [
@@ -637,6 +638,27 @@ describe("syncCycle", () => {
     // Signing in again joins anew: the missing songs come back, the YT Music entry stays one.
     await b.sync();
     assert.equal(files(b.db).length, 4);
+  });
+
+  test("a pull that lands after signing out changes nothing: no missing song comes back", async () => {
+    const service = testSyncService();
+    const a = await phone(service, [...OK_COMPUTER, EXIT_MUSIC]);
+    await a.sync();
+    const b = await phone(service, [OK_COMPUTER[0] as FixtureTrack]);
+    await b.sync();
+    b.signOut();
+
+    // Signed in again, and out while the first pull is on its way.
+    const signedOutMidPull: SyncTransport = {
+      request: async (method, path, body) => {
+        const response = await service.request(method, path, body);
+        if (path.startsWith("/v1/pull")) b.signOut();
+        return response;
+      },
+    };
+    await assert.rejects(b.sync({ to: signedOutMidPull }), { code: "ERR_WAVE_SIGNED_OUT" });
+    assert.deepEqual(files(b.db), [["Airbag", true]]);
+    assert.equal(selectJoinedAccount(b.db), null);
   });
 
   test("signing in again joins as the first time does: everything goes up to the account", async () => {
