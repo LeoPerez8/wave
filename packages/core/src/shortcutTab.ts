@@ -1,7 +1,7 @@
 /**
  * The shortcut tab: a Library section the user picks in Settings, shown as a
- * third tab in the Home/Library pill. None (null) is the default and leaves
- * the tab bar as it always was.
+ * third tab in the Home/Library pill. Playlists is the default; None (null)
+ * leaves the tab bar as Home, Library and Search.
  */
 import { LIBRARY_SECTION_SLUGS, type LibrarySectionSlug } from "./librarySections.ts";
 
@@ -11,9 +11,21 @@ export const SHORTCUT_TAB_CHOICES: readonly (LibrarySectionSlug | null)[] = [
   ...LIBRARY_SECTION_SLUGS,
 ];
 
-/** The shortcut a stored value names; nothing stored, or anything unknown, is None. */
+/** The shortcut tab of an install that never picked one. */
+export const DEFAULT_SHORTCUT_TAB: LibrarySectionSlug = "playlists";
+
+/** How None is stored, so choosing it isn't read back as the default. */
+const NONE_STORED = "none";
+
+/** The shortcut a stored value names: nothing stored is the default, anything unknown is None. */
 export const parseShortcutTab = (stored: string | null): LibrarySectionSlug | null =>
-  SHORTCUT_TAB_CHOICES.find((choice) => choice !== null && choice === stored) ?? null;
+  stored === null
+    ? DEFAULT_SHORTCUT_TAB
+    : (SHORTCUT_TAB_CHOICES.find((choice) => choice !== null && choice === stored) ?? null);
+
+/** What to store for [choice]; `parseShortcutTab` reads it back as that choice. */
+export const storedShortcutTab = (choice: LibrarySectionSlug | null): string =>
+  choice ?? NONE_STORED;
 
 /** The tab bar's tabs. */
 export type TabBarTab = "index" | "library" | "shortcut" | "search";

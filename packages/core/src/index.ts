@@ -14,6 +14,8 @@ export type { LibraryTrack, RawTrack } from "./library.ts";
 export { creditSplitter, respreadDeletedSongs, splitCredit } from "./credits.ts";
 export type { PrunedArtist } from "./credits.ts";
 export { formatDuration, formatRemaining } from "./time.ts";
+export { designPreviewState } from "./designPreview.ts";
+export type { DesignPreviewState } from "./designPreview.ts";
 export { trackRowTrailing } from "./trackRowTrailing.ts";
 export type { TrackRowTrailingInput } from "./trackRowTrailing.ts";
 export { describeFolder, filesLeavingWithRoot, isWithin, planAddRoot } from "./scanRoots.ts";
@@ -188,7 +190,12 @@ export type { OverlayAnchor, OverlayRect } from "./overlay.ts";
 export type { CardKeyboard, OverlayAlign, OverlayFlow } from "./overlay.ts";
 export { moveSlide, slideEntry, slideTicks, startSlide } from "./slideToChoose.ts";
 export type { MenuSlide, SlidePoint } from "./slideToChoose.ts";
-export { SHORTCUT_TAB_CHOICES, parseShortcutTab, tabBarTabs } from "./shortcutTab.ts";
+export {
+  SHORTCUT_TAB_CHOICES,
+  parseShortcutTab,
+  storedShortcutTab,
+  tabBarTabs,
+} from "./shortcutTab.ts";
 export type { TabBarTab } from "./shortcutTab.ts";
 export { TAB_PATH, detailPath, inLibraryStack, isDetailPath, tabOfPath } from "./navigation.ts";
 export type { DetailScreen } from "./navigation.ts";
@@ -311,7 +318,7 @@ export {
   highlightedOrigin,
   originOfNewCard,
   restingRect,
-  veilAround,
+  veilPath,
   visibleHighlight,
 } from "./overlayOrigin.ts";
 export type { HighlightInput, NewCardInput, OriginCard } from "./overlayOrigin.ts";
@@ -609,6 +616,8 @@ export {
   libraryReleaseFinder,
   pickYtArtist,
   stepYtArtistSection,
+  ytArtistAnswerKept,
+  ytArtistFullPage,
   ytArtistLookup,
   ytArtistPageAsks,
   ytArtistPageView,
@@ -628,6 +637,7 @@ export type {
   YtArtistShelvesContext,
   YtArtistAlbum,
   YtArtistCandidate,
+  YtArtistFullPage,
   YtArtistLookup,
   YtArtistPageContext,
   YtArtistPageNote,
@@ -641,6 +651,7 @@ export type {
   YtArtistSectionEvent,
   YtArtistSectionNote,
   YtArtistSectionView,
+  YtArtistSongsRead,
   LibraryAlbumTrack,
   YtAlbumEntry,
   YtLibraryAlbumContext,

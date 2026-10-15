@@ -37,10 +37,14 @@ const release = (browseId: string, year: number | null): YtArtistAlbum => ({
   artworkUrl: null,
 });
 
+/**
+ * A saved page whose top songs are [parts.top] (the first of [allSongs] by default) and whose
+ * full list, read after it, is [allSongs].
+ */
 const found = (
   checkedAt: number,
-  songs: YtSong[] = [song("a")],
-  releases: { albums?: YtArtistAlbum[]; singles?: YtArtistAlbum[] } = {},
+  allSongs: YtSong[] = [song("a")],
+  parts: { top?: YtSong[]; albums?: YtArtistAlbum[]; singles?: YtArtistAlbum[] } = {},
 ): YtArtistSaved => ({
   outcome: "found",
   checkedAt,
@@ -48,11 +52,20 @@ const found = (
   page: {
     name: "Daft Punk",
     artworkUrl: "https://lh3.googleusercontent.com/daftpunk",
-    songs,
-    albums: releases.albums ?? [],
-    singles: releases.singles ?? [],
+    songs: parts.top ?? allSongs.slice(0, 1),
+    allSongs,
+    albums: parts.albums ?? [],
+    singles: parts.singles ?? [],
   },
 });
+
+/** A page saved before the artist's songs playlist was read: it has no full list. */
+const savedBefore = (checkedAt: number): YtArtistSaved => {
+  const saved = found(checkedAt);
+  if (saved.outcome !== "found") return saved;
+  const { allSongs: _, ...top } = saved.page;
+  return { ...saved, page: top };
+};
 
 type Page = YtArtistSection;
 
@@ -73,6 +86,10 @@ describe("when a YouTube Music artist page asks YouTube Music", () => {
   test("an answer saved less than a week ago is shown instead; an older one is asked again", () => {
     assert.equal(asks(restored(found(NOW - 6 * DAY))), false);
     assert.equal(asks(restored(found(NOW - 8 * DAY))), true);
+  });
+
+  test("an answer saved without the artist's full list counts as expired: it asks again", () => {
+    assert.equal(asks(restored(savedBefore(NOW - DAY))), true);
   });
 
   test("after a failure it waits for Try Again; the tap asks, and a new failure waits again", () => {
@@ -116,8 +133,10 @@ const view = (state: Page, context: { enabled?: boolean; now?: number } = {}) =>
   });
 
 describe("what a YouTube Music artist page shows", () => {
-  test("the artist's image, name and top songs in YouTube's order; the Library's play its files", () => {
-    const shown = view(restored(found(NOW, [song("b"), song("mine1"), song("a")])));
+  test("the artist's image, name and every song of theirs in YouTube's order; the Library's play its files", () => {
+    const shown = view(
+      restored(found(NOW, [song("b"), song("mine1"), song("a")], { top: [song("top")] })),
+    );
     assert.equal(shown.name, "Daft Punk");
     assert.equal(shown.artworkUrl, "https://lh3.googleusercontent.com/daftpunk");
     assert.deepEqual(shown.songs, [
@@ -194,6 +213,14 @@ describe("what a YouTube Music artist page shows", () => {
     const shown = view(restored(found(NOW - 8 * DAY)));
     assert.equal(shown.note, "loading");
     assert.deepEqual(shown.songs, []);
+    assert.equal(shown.name, "Daft Punk");
+  });
+
+  test("an answer saved without the artist's full list isn't shown: it's looking, keeping the name", () => {
+    const shown = view(restored(savedBefore(NOW - DAY)));
+    assert.equal(shown.note, "loading");
+    assert.deepEqual(shown.songs, []);
+    assert.deepEqual(shown.shelves, []);
     assert.equal(shown.name, "Daft Punk");
   });
 

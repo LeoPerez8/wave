@@ -40,6 +40,7 @@ import expo.modules.wavenative.scan.ScanProgress
 import expo.modules.wavenative.scan.ScannedTrack
 import expo.modules.wavenative.scan.artworkToMap
 import expo.modules.wavenative.scan.trackToMap
+import expo.modules.wavenative.share.ShareShortcut
 import expo.modules.wavenative.share.SharedTextInbox
 import expo.modules.wavenative.tags.AlbumPlace
 import expo.modules.wavenative.tags.AudioTagReader
@@ -322,15 +323,18 @@ class WaveNativeModule : Module() {
   private var launcherIconSwitcher: LauncherIconSwitcher? = null
 
   private fun launcherIcons(): LauncherIconSwitcher =
-    launcherIconSwitcher
-      ?: LauncherIconSwitcher(
-        context.applicationContext,
+    launcherIconSwitcher ?: context.applicationContext.let { app ->
+      LauncherIconSwitcher(
+        app,
         // A picker Wave opened is over it: switching now could close Wave's task under it.
         isBusy = { pendingFolderPick != null || pendingPlaylistPick != null },
+        // The share shortcut belonged to the icon just turned off.
+        onSwitched = { ShareShortcut.publish(app) },
       ).also {
-        (context.applicationContext as Application).registerActivityLifecycleCallbacks(it)
+        (app as Application).registerActivityLifecycleCallbacks(it)
         launcherIconSwitcher = it
       }
+    }
 
   private fun onFolderPicked(payload: OnActivityResultPayload) {
     val promise = pendingFolderPick ?: return

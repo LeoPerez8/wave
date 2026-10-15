@@ -3,7 +3,7 @@
  * last answer YouTube Music gave for each artist, by artist key, so the page
  * shows it without asking again (Core's `ytArtistSectionView`) and a later
  * load reuses the match (Core's `ytArtistLookup`). The whole page is kept
- * (top songs, albums, singles), whatever the section shows of it. Kept free
+ * (top songs, every song of the artist, albums, singles), whatever the section shows of it. Kept free
  * of Expo so the store tests run it against a real SQLite.
  */
 import type { YtArtistPage, YtArtistSaved, YtSong } from "@wave/core";
@@ -12,11 +12,16 @@ import { eq } from "drizzle-orm";
 import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
 
-/** The page saved as JSON, or null when it can't be read back (nothing is shown then). */
+/**
+ * The page saved as JSON, or null when it can't be read back (nothing is
+ * shown then). A page saved before every song of the artist was read has no
+ * `allSongs` and still reads; one whose `allSongs` isn't a list doesn't.
+ */
 const readPage = <S extends YtSong>(json: string): YtArtistPage<S> | null => {
   try {
     const page = JSON.parse(json) as YtArtistPage<S> | null;
-    return typeof page === "object" && page !== null && Array.isArray(page.songs) ? page : null;
+    if (typeof page !== "object" || page === null || !Array.isArray(page.songs)) return null;
+    return page.allSongs === undefined || Array.isArray(page.allSongs) ? page : null;
   } catch {
     return null;
   }

@@ -1,4 +1,4 @@
-import { IconMusic } from "@tabler/icons-react-native";
+import { IconMusic, IconSettings } from "@tabler/icons-react-native";
 import { Link, router } from "expo-router";
 import { Pressable, Text, View } from "react-native";
 
@@ -7,6 +7,7 @@ import { CELL } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { TitledSection } from "@/catalog/TitledSection";
 import { EmptyState } from "@/components/EmptyState";
+import { IconButton } from "@/components/IconButton";
 import { LargeTitleScreen } from "@/components/LargeTitleScreen";
 import { AlbumShelf, ArtistShelf, SongRows } from "@/home/HomeSections";
 import { ListeningOverview } from "@/home/ListeningOverview";
@@ -44,7 +45,12 @@ export default function HomeScreen() {
     home !== undefined && home.recentlyPlayed.length === 0 && home.mostPlayed.length === 0;
 
   return (
-    <LargeTitleScreen title="Home">
+    <LargeTitleScreen
+      title="Home"
+      action={
+        <IconButton icon={IconSettings} label="Settings" onPress={() => router.push("/settings")} />
+      }
+    >
       {empty && (
         <EmptyState
           icon={IconMusic}

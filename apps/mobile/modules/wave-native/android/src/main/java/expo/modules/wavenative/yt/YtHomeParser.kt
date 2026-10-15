@@ -82,6 +82,8 @@ object YtHomeParser {
   )
   private const val ALBUM_PAGE = "MUSIC_PAGE_TYPE_ALBUM"
   private const val PLAYLIST_PAGE = "MUSIC_PAGE_TYPE_PLAYLIST"
+  /** What a playlist page's browse id adds before the playlist's id. */
+  private const val PLAYLIST_BROWSE = "VL"
 
   /** The shelves on [body] (a first page or a continuation); none when it's neither. */
   fun home(body: String): YtHomePage {
@@ -144,15 +146,26 @@ object YtHomeParser {
         year = subtitle.mapNotNull { it["text"].string?.trim() }.lastOrNull { YEAR.matches(it) }?.toInt(),
         artworkUrl = artworkUrl,
       )
-      PLAYLIST_PAGE -> YtShelfItem.Playlist(
-        playlistId = browseId.removePrefix("VL"),
-        title = title,
-        credit = subtitle.joinToString("") { it["text"].string.orEmpty() }.trim().takeIf(String::isNotEmpty),
-        artworkUrl = artworkUrl,
-      )
+      PLAYLIST_PAGE -> playlistId(endpoint)?.let { playlistId ->
+        YtShelfItem.Playlist(
+          playlistId = playlistId,
+          title = title,
+          credit = subtitle.joinToString("") { it["text"].string.orEmpty() }.trim().takeIf(String::isNotEmpty),
+          artworkUrl = artworkUrl,
+        )
+      }
       else -> null
     }
   }
+
+  /**
+   * The playlist [endpoint] (a navigation endpoint) opens: its playlist page's
+   * browse id (`VL…`) without the `VL`. Null when it opens anything else.
+   */
+  internal fun playlistId(endpoint: JsonElement?): String? =
+    endpoint.path("browseEndpoint", "browseId").string
+      ?.takeIf { pageType(endpoint) == PLAYLIST_PAGE }
+      ?.removePrefix(PLAYLIST_BROWSE)?.takeIf(String::isNotEmpty)
 
   private fun linkedArtists(runs: List<JsonObject>): List<String> =
     runs.filter { pageType(it.path("navigationEndpoint")) in ARTIST_PAGES }

@@ -1,0 +1,108 @@
+/// <reference types="node" />
+import assert from "node:assert/strict";
+import { describe, test } from "node:test";
+
+import { LAUNCHER_ICONS } from "@wave/core";
+import type { AndroidConfig } from "expo/config-plugins";
+
+import { addLauncherAliases } from "./launcherIcons.ts";
+import { addShareShortcuts, shareShortcutFiles, type ManifestEntry } from "./shareShortcut.ts";
+
+type Manifest = AndroidConfig.Manifest.AndroidManifest;
+
+const named = (name: string) => ({ $: { "android:name": name } });
+
+/** The parts of prebuild's manifest that matter here, with app.config.ts's SEND filter. */
+const prebuildManifest = (): Manifest => ({
+  manifest: {
+    $: { "xmlns:android": "http://schemas.android.com/apk/res/android" },
+    queries: [],
+    application: [
+      {
+        $: { "android:name": ".MainApplication" },
+        activity: [
+          {
+            $: { "android:name": ".MainActivity", "android:launchMode": "singleTask" },
+            "intent-filter": [
+              {
+                action: [named("android.intent.action.MAIN")],
+                category: [named("android.intent.category.LAUNCHER")],
+              },
+              {
+                action: [named("android.intent.action.SEND")],
+                category: [named("android.intent.category.DEFAULT")],
+                data: [{ $: { "android:mimeType": "text/plain" } }],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+});
+
+const application = (manifest: Manifest) => manifest.manifest.application![0]!;
+
+/** What `entry`'s shortcuts meta-data points at. */
+const shortcutsResources = (entry: ManifestEntry): (string | undefined)[] =>
+  (entry["meta-data"] ?? [])
+    .filter((m) => m.$["android:name"] === "android.app.shortcuts")
+    .map((m) => m.$["android:resource"]);
+
+describe("addShareShortcuts", () => {
+  test("every launcher icon points Android at the shortcuts file, whichever one is on", () => {
+    const manifest = addShareShortcuts(addLauncherAliases(prebuildManifest()));
+    const aliases = application(manifest)["activity-alias"] ?? [];
+    assert.equal(aliases.length, LAUNCHER_ICONS.length);
+    for (const alias of aliases) {
+      assert.deepEqual(shortcutsResources(alias), ["@xml/shortcuts"], alias.$?.["android:name"]);
+    }
+  });
+
+  test("without launcher icons, MainActivity is the launcher entry and points at it", () => {
+    const main = application(addShareShortcuts(prebuildManifest())).activity![0]!;
+    assert.deepEqual(shortcutsResources(main), ["@xml/shortcuts"]);
+  });
+
+  test("running prebuild again doesn't point at it twice", () => {
+    const twice = addShareShortcuts(addShareShortcuts(addLauncherAliases(prebuildManifest())));
+    for (const alias of application(twice)["activity-alias"] ?? []) {
+      assert.equal(shortcutsResources(alias).length, 1);
+    }
+  });
+
+  test("Wave stays listed in the share sheet for shared text, and only that", () => {
+    const main = application(addShareShortcuts(addLauncherAliases(prebuildManifest())))
+      .activity![0]!;
+    const sends = (main["intent-filter"] ?? []).filter((f) =>
+      (f.action ?? []).some((a) => a.$["android:name"] === "android.intent.action.SEND"),
+    );
+    assert.deepEqual(
+      sends.flatMap((f) => (f.data ?? []).map((d) => d.$["android:mimeType"])),
+      ["text/plain"],
+    );
+  });
+});
+
+describe("shareShortcutFiles", () => {
+  const shortcuts = shareShortcutFiles("dev.leoperez.wave")["xml/shortcuts.xml"] ?? "";
+
+  test("declares one share target: shared text, into MainActivity, for the import category", () => {
+    const targets = [...shortcuts.matchAll(/<share-target([^>]*)>([\s\S]*?)<\/share-target>/g)];
+    assert.equal(targets.length, 1);
+    const [, attributes, body] = targets[0]!;
+    assert.match(attributes!, /android:targetClass="dev\.leoperez\.wave\.MainActivity"/);
+    assert.deepEqual(
+      [...body!.matchAll(/<data android:mimeType="([^"]*)"/g)].map(([, type]) => type),
+      ["text/plain"],
+    );
+    assert.deepEqual(
+      [...body!.matchAll(/<category android:name="([^"]*)"/g)].map(([, name]) => name),
+      ["dev.leoperez.wave.category.IMPORT_SHARED_LINK"],
+    );
+  });
+
+  test("declares no static shortcut, so the launcher's long-press menu stays as it was", () => {
+    assert.doesNotMatch(shortcuts, /<shortcut[\s>]/);
+  });
+});
