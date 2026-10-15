@@ -59,6 +59,38 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: scripts/ci/report-apk-skipped.sh
 
+  # The patch notes a release cut from this commit gets (scripts/ci/patch-notes.sh),
+  # shown in the run's summary. A release tag's run publishes them.
+  notes:
+    name: Patch notes
+    runs-on: ubuntu-latest
+    outputs:
+      notes: ${{ steps.notes.outputs.notes }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          # The previous version's tag and every commit since it; file contents on demand.
+          fetch-depth: 0
+          filter: blob:none
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Build the patch notes
+        id: notes
+        # Only a release needs them: anywhere else, failing here mustn't hold up the APK.
+        continue-on-error: ${{ env.IS_RELEASE != 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes="$(scripts/ci/patch-notes.sh)"
+          echo "$notes"
+          { echo "notes<<WAVE_PATCH_NOTES"; echo "$notes"; echo "WAVE_PATCH_NOTES"; } >> "$GITHUB_OUTPUT"
+          { echo "# Patch notes"; echo; echo "${notes:-Nothing to list: no PR since the last version changes the app.}"; } >> "$GITHUB_STEP_SUMMARY"
+
   checks:
     name: Checks
     runs-on: ubuntu-latest
@@ -126,7 +158,7 @@ jobs:
 
   android:
     name: Android APK
-    needs: [changes, checks]
+    needs: [changes, checks, notes]
     # Only PRs can skip: on main and release tags every area counts as changed.
     if: needs.changes.outputs.apk == 'true'
     runs-on: ubuntu-latest
@@ -210,7 +242,13 @@ jobs:
         if: env.IS_RELEASE == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: scripts/ci/publish-release.sh "${{ steps.apk.outputs.path }}"
+          PATCH_NOTES: ${{ needs.notes.outputs.notes }}
+        run: |
+          if [ -n "$PATCH_NOTES" ]; then
+            export RELEASE_NOTES_FILE="$RUNNER_TEMP/patch-notes.md"
+            printf '%s\n' "$PATCH_NOTES" > "$RELEASE_NOTES_FILE"
+          fi
+          scripts/ci/publish-release.sh "${{ steps.apk.outputs.path }}"
 
       - name: Report
         if: always() && env.IS_SAME_REPO_PR == 'true' && job.status != 'cancelled'
