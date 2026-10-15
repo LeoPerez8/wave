@@ -94,7 +94,7 @@ export interface YtArtistPage<S extends YtSong = YtSong> {
    * Every song of the artist, in YouTube Music's order: [songsPlaylistId]
    * read after the page (Core's `readYtPlaylist`), or the top songs when the
    * page has no such playlist. Undefined on the page as read, and in answers
-   * saved before it was read: those don't stand on a Library artist's page.
+   * saved before it was read: those don't stand on an artist's page.
    */
   readonly allSongs?: readonly S[];
   readonly albums: readonly YtArtistAlbum[];
@@ -146,9 +146,10 @@ const isFresh = (saved: YtArtistSaved, now: number): boolean =>
   now - saved.checkedAt < YT_ARTIST_FRESH_MS;
 
 /**
- * Whether [saved] stands on a Library artist's page at [now]: fresh and, for
- * a match, with the artist's full list (`allSongs`). A match saved before the
- * list was read counts as expired, so the page asks again.
+ * Whether [saved] stands on an artist's page, the Library's or YouTube
+ * Music's, at [now]: fresh and, for a match, with the artist's full list
+ * (`allSongs`). A match saved before the list was read counts as expired, so
+ * the page asks again.
  */
 const standsOnArtistPage = (saved: YtArtistSaved, now: number): boolean =>
   isFresh(saved, now) && (saved.outcome === "unmatched" || saved.page.allSongs !== undefined);
@@ -648,14 +649,15 @@ export interface YtArtistPageContext {
  * Whether a YouTube Music artist page (an artist opened by their browse id)
  * asks YouTube Music now, on its own: the user asked for the artist by
  * opening the page. It asks once what was saved is read, when nothing saved
- * stands (`YT_ARTIST_FRESH_MS`) and YT Music is on; after a failure it waits
- * for Try Again (`requested`).
+ * stands (`YT_ARTIST_FRESH_MS`, or a match saved without the artist's full
+ * list) and YT Music is on; after a failure it waits for Try Again
+ * (`requested`).
  */
 export const ytArtistPageAsks = (state: YtArtistSection, context: YtArtistPageContext): boolean =>
   context.enabled &&
   state.status === "ready" &&
   state.failure === null &&
-  (state.saved === null || !isFresh(state.saved, context.now));
+  (state.saved === null || !standsOnArtistPage(state.saved, context.now));
 
 /** A quiet line a YouTube Music artist page shows in place of what it can't show. */
 export type YtArtistPageNote =
@@ -670,7 +672,10 @@ export interface YtArtistPageView<S extends YtSong, L, A> {
   /** The artist's name and image from their page, once it's been read (and saved). */
   readonly name: string | null;
   readonly artworkUrl: string | null;
-  /** Their top songs in YouTube Music's order: the Library's play its files, the rest stream. */
+  /**
+   * Every song of theirs (`allSongs`) in YouTube Music's order: the Library's
+   * play its files, the rest stream.
+   */
   readonly songs: readonly DiscoverSong<S, L>[];
   /** Their Albums, then Singles & EPs, newest first, each with the Library's album for it. */
   readonly shelves: readonly YtArtistShelf<A>[];
@@ -680,7 +685,7 @@ export interface YtArtistPageView<S extends YtSong, L, A> {
 }
 
 export interface YtArtistPageViewContext<S extends YtSong, L, A> extends YtArtistPageContext {
-  /** The Library's song a top song already is, or null (Core's `libraryFinder`). */
+  /** The Library's song a song of the artist already is, or null (Core's `libraryFinder`). */
   readonly librarySong: (song: S) => L | null;
   /** The Library's album a release already is, or null (Core's `libraryAlbumFinder`). */
   readonly libraryAlbum: (album: YtArtistAlbum) => A | null;
@@ -690,7 +695,8 @@ export interface YtArtistPageViewContext<S extends YtSong, L, A> extends YtArtis
  * What a YouTube Music artist page shows: the artist page's integrated view
  * with nothing from the Library but the songs and releases it already has.
  * A saved answer shows for a week (`YT_ARTIST_FRESH_MS`), "no match" (a page
- * opened by name) as a quiet Not found line; without one the page is looking
+ * opened by name) as a quiet Not found line; a match saved without the
+ * artist's full list doesn't stand. Without one the page is looking
  * (it asks on its own, `ytArtistPageAsks`) or, after a failure, a quiet line
  * with Try Again. With YT Music off it says so.
  */
@@ -711,15 +717,16 @@ export const ytArtistPageView = <S extends YtSong, L, A>(
   if (!context.enabled) return quiet("off");
   if (state.status === "reading") return quiet(null);
   if (state.status === "loading") return quiet("loading");
-  if (saved?.outcome === "unmatched" && isFresh(saved, context.now)) return quiet("notFound");
-  if (page === null || saved === null || !isFresh(saved, context.now))
-    // Nothing standing: it asks on its own (`ytArtistPageAsks`) unless the last ask failed.
-    return state.failure === null ? quiet("loading") : quiet(state.failure, true);
-  return {
-    ...head,
-    songs: discoverSongs(page.songs, context.librarySong),
-    shelves: pageShelves(page, context.libraryAlbum),
-    note: null,
-    retry: false,
-  };
+  if (saved !== null && standsOnArtistPage(saved, context.now)) {
+    if (saved.outcome === "unmatched") return quiet("notFound");
+    return {
+      ...head,
+      songs: discoverSongs(saved.page.allSongs ?? [], context.librarySong),
+      shelves: pageShelves(saved.page, context.libraryAlbum),
+      note: null,
+      retry: false,
+    };
+  }
+  // Nothing standing: it asks on its own (`ytArtistPageAsks`) unless the last ask failed.
+  return state.failure === null ? quiet("loading") : quiet(state.failure, true);
 };

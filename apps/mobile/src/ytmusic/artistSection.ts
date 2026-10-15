@@ -40,9 +40,10 @@ const readSaved = (artistKey: string) =>
  * The artist page [browseId] with every song of the artist (`allSongs`): the
  * Songs shelf's playlist read whole after the page (Core's `readYtPlaylist`,
  * with its cap), or the top songs when the page has none. A playlist page
- * that fails fails it all, so a half-read list is never saved.
+ * that fails fails it all, so a half-read list is never saved. A Library
+ * artist's section and a YouTube Music artist page both read it so.
  */
-const readArtist = (browseId: string) =>
+export const readArtist = (browseId: string) =>
   Effect.gen(function* () {
     const ytMusic = yield* YtMusic;
     const page = yield* ytMusic.artist(browseId);

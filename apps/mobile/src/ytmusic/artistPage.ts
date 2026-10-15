@@ -15,9 +15,8 @@ import { useAlbums, useArtists } from "@/library/hooks";
 import { LibraryStore, type AlbumRow, type SongRow } from "@/library/LibraryStore";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 
-import { fetchArtist, useSavedYtArtist } from "./artistSection";
+import { fetchArtist, readArtist, useSavedYtArtist } from "./artistSection";
 import { useLoadedLibraryFinder } from "./libraryFinder";
-import { YtMusic } from "./YtMusic";
 
 type Saved = YtArtistSaved<NativeYtSong>;
 
@@ -27,12 +26,15 @@ type Saved = YtArtistSaved<NativeYtSong>;
  */
 const savedKey = (browseId: string): string => `yt:${browseId}`;
 
-/** Reads the artist page [browseId] and saves it before it's shown. Only the browse id is sent. */
+/**
+ * Reads the artist page [browseId] with every song of the artist
+ * (`readArtist`) and saves it before it's shown. Only the browse id and their
+ * songs playlist's id are sent.
+ */
 const fetchPage = (browseId: string) =>
   Effect.gen(function* () {
-    const ytMusic = yield* YtMusic;
     const store = yield* LibraryStore;
-    const page = yield* ytMusic.artist(browseId);
+    const page = yield* readArtist(browseId);
     const answer: Saved = { outcome: "found", checkedAt: Date.now(), browseId, page };
     // Not saved, it's still shown; the next opening asks again.
     yield* store.saveYtArtist(savedKey(browseId), answer).pipe(Effect.ignore);
