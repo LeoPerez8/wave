@@ -9,12 +9,14 @@ on:
 permissions:
   contents: read
   pull-requests: write
-  issues: write
-  statuses: write
 
 concurrency:
   group: react-doctor-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
+
+env:
+  PR_NUMBER: ${{ github.event.pull_request.number }}
+  IS_SAME_REPO_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
 
 jobs:
   react-doctor:
@@ -34,27 +36,36 @@ jobs:
           cache: pnpm
 
       - name: Install
-        run: pnpm install --frozen-lockfile
+        run: scripts/ci/step.sh "Install" pnpm install --frozen-lockfile
+
+      - name: Test report validation
+        run: scripts/ci/step.sh "React Doctor report tests" pnpm test:react-doctor
 
       # Keep legacy findings visible, while scanner failures still fail the job.
       - name: Full mobile diagnostics
-        run: pnpm react-doctor
+        run: scripts/ci/step.sh "React Doctor full diagnostics" pnpm react-doctor
 
-      - name: Verify pull request baseline
+      - name: Check new React errors
         if: github.event_name == 'pull_request'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: git merge-base "$BASE_SHA" HEAD
+        # The project CLI keeps checkout's full history and validates the native
+        # comparison report. The upstream action fetches the base at depth 1.
+        run: scripts/ci/step.sh "React Doctor regressions" pnpm react-doctor:check --base "$BASE_SHA"
 
-      - name: Check new React errors and report on the pull request
-        if: github.event_name == 'pull_request'
-        uses: millionco/react-doctor@0093cb0b89971c0e70f47816a3368e17357393a5 # v2
+      - name: Upload diagnostic reports
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          directory: apps/mobile
-          version: "0.9.18"
-          node-version: "22"
-          scope: changed
-          blocking: error
-          comment: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
-          review-comments: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
-          commit-status: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+          name: react-doctor-reports
+          path: .cache/react-doctor/*.json
+          if-no-files-found: ignore
+
+      - name: Report
+        if: always() && env.IS_SAME_REPO_PR == 'true' && job.status != 'cancelled'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          diagnostics="$(cat .cache/react-doctor/full.json.md .cache/react-doctor/baseline.json.md 2>/dev/null || true)"
+          scripts/ci/report.sh "${{ job.status }}" "React Doctor" "$diagnostics"
