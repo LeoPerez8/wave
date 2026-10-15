@@ -41,7 +41,7 @@ const digest = (dir: string, paths: readonly string[]) =>
 const PROJECT_STATE = new Set(["build", ".gradle", ".cxx", ".kotlin"]);
 // Folders of the app that hold no image assets of its own.
 const NOT_APP_ASSETS = new Set(["android", "ios", "node_modules"]);
-const IMAGE = /\.(png|jpe?g|gif|webp|bmp)$/i;
+const IMAGE = /\.(avif|bmp|gif|heic|heif|ico|jpe?g|ktx|png|psd|svg|tiff?|webp)$/i;
 
 /**
  * The key a full build's APK is kept under: what the APK's native side is made of. Expo's

@@ -113,7 +113,13 @@ describe("apkCacheKey", () => {
     assert.equal(key(app({ "node_modules/expo-router/assets/error.png": "x" })), key(app()));
   });
 
-  for (const path of ["assets/icon.png", "src/components/cover.webp", "assets/new.jpg"]) {
+  for (const path of [
+    "assets/icon.png",
+    "src/components/cover.webp",
+    "assets/new.jpg",
+    "assets/new.avif",
+    "assets/new.svg",
+  ]) {
     it(`changes when the image asset ${path} changes`, () => {
       assert.notEqual(key(app({ [path]: "new pixels" })), key(app()));
     });
