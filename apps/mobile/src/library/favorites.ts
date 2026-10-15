@@ -35,6 +35,7 @@ const loadFavorites = (): void => {
   loading = true;
   const edits = favorites.get().edits;
   void appRuntime
+    // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
     .runPromise(LibraryStore.use((store) => store.favoriteTrackIds))
     .then((ids) => {
       loading = false;
@@ -98,9 +99,12 @@ export const setFavorites = (
     }
     showStars(settled, saved !== null);
   };
-  return appRuntime
-    .runPromise(LibraryStore.use((store) => store.setFavorites(ids, on)))
-    .then(settle(on), settle(null));
+  return (
+    appRuntime
+      // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+      .runPromise(LibraryStore.use((store) => store.setFavorites(ids, on)))
+      .then(settle(on), settle(null))
+  );
 };
 
 /** Stars or unstars a track. Accepts a queue track id (a string) as well. */

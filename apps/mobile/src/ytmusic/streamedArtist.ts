@@ -10,6 +10,7 @@ import { useYtMusicEnabled } from "@/settings/ytMusic";
 
 import { ytArtistPageHere } from "./routes";
 
+// oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
 const listArtists = LibraryStore.use((store) => store.listArtists);
 
 /**
