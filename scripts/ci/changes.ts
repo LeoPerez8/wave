@@ -2,7 +2,8 @@
 // The CI workflow runs it on a PR's changed files and turns jobs off by it:
 //   <paths, one per line> | node scripts/ci/changes.ts   # PRs
 //   node scripts/ci/changes.ts --all                      # everything else
-// It prints `<area>=true|false` lines and `apk=true|false`, ready for $GITHUB_OUTPUT.
+// It prints `<area>=true|false` lines, `apk=true|false` and `allPackages=true|false`,
+// ready for $GITHUB_OUTPUT. Checks also runs it, through affected-packages.sh.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
@@ -13,6 +14,8 @@ const AREAS = {
   core: ["packages/core/"],
   workspace: ["package.json", "pnpm-workspace.yaml", "pnpm-lock.yaml"],
   ci: [".github/", "scripts/ci/"],
+  // TypeScript config the packages extend.
+  tsconfig: ["tsconfig.base.json"],
 } as const;
 
 type Area = keyof typeof AREAS;
@@ -20,7 +23,11 @@ type Area = keyof typeof AREAS;
 // The APK is built from these areas: a change outside them can't alter it.
 const APK_AREAS: readonly Area[] = ["app", "core", "workspace", "ci"];
 
-export type Changes = Record<Area | "apk", boolean>;
+// A change to these areas can break any package, so Checks then typechecks and tests
+// all of them. Otherwise it checks only the packages a PR changed and their dependents.
+const ALL_PACKAGES_AREAS: readonly Area[] = ["workspace", "ci", "tsconfig"];
+
+export type Changes = Record<Area | "apk" | "allPackages", boolean>;
 
 const covers = (entry: string, path: string) =>
   entry.endsWith("/") ? path.startsWith(entry) : path === entry;
@@ -29,7 +36,11 @@ const decide = (touched: (area: Area) => boolean): Changes => {
   const areas = Object.fromEntries(
     (Object.keys(AREAS) as Area[]).map((area) => [area, touched(area)]),
   ) as Record<Area, boolean>;
-  return { ...areas, apk: APK_AREAS.some((area) => areas[area]) };
+  return {
+    ...areas,
+    apk: APK_AREAS.some((area) => areas[area]),
+    allPackages: ALL_PACKAGES_AREAS.some((area) => areas[area]),
+  };
 };
 
 export const changes = (paths: readonly string[]): Changes =>
