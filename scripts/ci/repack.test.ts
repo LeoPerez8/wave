@@ -1,14 +1,11 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { describe, it } from "node:test";
-import { fileURLToPath } from "node:url";
 import {
   apkCacheKey,
   assetManifest,
-  assetsNotInKeptApk,
   hermesFlags,
   planApkBuild,
 } from "./repack.ts";
@@ -45,7 +42,12 @@ const app = (files: Record<string, string> = {}) => {
   return join(root, "apps/mobile");
 };
 
-const key = (appDir: string, fingerprint = "f1") => apkCacheKey({ fingerprint, appDir });
+// Metro's assets folder (Android resources) for a bundle.
+const metro = (files: Record<string, string> = { "drawable-mdpi/src_assets_cover.png": "cover" }) =>
+  assetManifest(tree(files));
+
+const key = (appDir: string, fingerprint = "f1", metroAssets = metro()) =>
+  apkCacheKey({ fingerprint, appDir, metroAssets });
 
 const pr = { event: "pull_request", ref: "refs/pull/7/merge", release: false, kept: true };
 
@@ -142,6 +144,23 @@ describe("apkCacheKey", () => {
     assert.equal(key(built), key(app()));
   });
 
+  // A JS-only change can make Metro emit another resource, such as an image from a package.
+  // Those are compiled into the APK, so they need a full build kept under its own key.
+  it("changes when Metro emits another asset", () => {
+    const dir = app();
+    const withIcon = metro({
+      "drawable-mdpi/src_assets_cover.png": "cover",
+      "drawable-mdpi/node_modules_exporouter_assets_error.png": "error",
+    });
+    assert.notEqual(key(dir, "f1", withIcon), key(dir));
+  });
+
+  it("changes when an asset Metro emits changes", () => {
+    const dir = app();
+    const redrawn = metro({ "drawable-mdpi/src_assets_cover.png": "redrawn" });
+    assert.notEqual(key(dir, "f1", redrawn), key(dir));
+  });
+
   it("ignores images in node_modules", () => {
     assert.equal(key(app({ "node_modules/expo-router/assets/error.png": "x" })), key(app()));
   });
@@ -157,70 +176,6 @@ describe("apkCacheKey", () => {
       assert.notEqual(key(app({ [path]: "new pixels" })), key(app()));
     });
   }
-});
-
-// Metro's asset output for the kept full build, and for a new bundle.
-describe("assetsNotInKeptApk", () => {
-  const kept = assetManifest(
-    tree({ "drawable-mdpi/src_assets_cover.png": "cover", "raw/app_data.json": "{}" }),
-  );
-
-  it("lets the bundle in when Metro emits the same assets", () => {
-    const built = assetManifest(
-      tree({ "drawable-mdpi/src_assets_cover.png": "cover", "raw/app_data.json": "{}" }),
-    );
-    assert.deepEqual(assetsNotInKeptApk(kept, built), []);
-  });
-
-  it("lists an asset the kept APK doesn't have", () => {
-    const built = assetManifest(
-      tree({
-        "drawable-mdpi/src_assets_cover.png": "cover",
-        "drawable-mdpi/src_assets_new.png": "new",
-        "raw/app_data.json": "{}",
-      }),
-    );
-    assert.deepEqual(assetsNotInKeptApk(kept, built), ["drawable-mdpi/src_assets_new.png"]);
-  });
-
-  it("lists an asset whose contents changed", () => {
-    const built = assetManifest(
-      tree({ "drawable-mdpi/src_assets_cover.png": "redrawn", "raw/app_data.json": "{}" }),
-    );
-    assert.deepEqual(assetsNotInKeptApk(kept, built), ["drawable-mdpi/src_assets_cover.png"]);
-  });
-
-  it("ignores an asset the new bundle no longer uses", () => {
-    const built = assetManifest(tree({ "raw/app_data.json": "{}" }));
-    assert.deepEqual(assetsNotInKeptApk(kept, built), []);
-  });
-});
-
-describe("check-assets as a command", () => {
-  it("rejects a malformed kept manifest instead of treating it as a cache miss", () => {
-    const script = fileURLToPath(new URL("./repack.ts", import.meta.url));
-    const kept = join(tree({ "kept.json": JSON.stringify({ "raw/data.json": 42 }) }), "kept.json");
-    const built = tree({ "raw/data.json": "{}" });
-    const result = spawnSync(process.execPath, [script, "check-assets", kept, built], {
-      encoding: "utf8",
-    });
-    assert.equal(result.status, 1);
-    assert.match(result.stderr, /Invalid kept asset manifest.*SHA-256/i);
-    assert.equal(result.stdout, "");
-  });
-
-  it("accepts the manifest emitted by a full build and prints only changed assets", () => {
-    const script = fileURLToPath(new URL("./repack.ts", import.meta.url));
-    const previous = tree({ "raw/data.json": "{}", "drawable-mdpi/cover.png": "cover" });
-    const kept = join(tree({ "kept.json": JSON.stringify(assetManifest(previous)) }), "kept.json");
-    const built = tree({ "raw/data.json": '{"changed":true}', "drawable-mdpi/cover.png": "cover" });
-    const result = spawnSync(process.execPath, [script, "check-assets", kept, built], {
-      encoding: "utf8",
-    });
-    assert.equal(result.status, 0);
-    assert.equal(result.stdout.trim(), "raw/data.json");
-    assert.equal(result.stderr, "");
-  });
 });
 
 // The repack compiles the bundle with the flags the full build would use.

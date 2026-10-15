@@ -3,30 +3,20 @@
 # (repack.ts decides when). bundle.sh has already produced the JS/Hermes bundle once.
 # This swaps it into the kept APK, then aligns and signs with that build's debug keystore.
 #   scripts/ci/repack.sh <kept dir> <output apk>
-# The kept dir holds app-release.apk, debug.keystore and metro-assets.json (Metro's assets
-# folder in that build, from `repack.ts assets`). Run it after prebuild, from the repo root.
-# When Metro emits assets the kept APK doesn't have, it writes no APK and prints why: those are
-# Android resources, which only Gradle can build in. Env: ANDROID_HOME, RUNNER_TEMP.
+# The kept dir holds app-release.apk and debug.keystore. Run it after prebuild, from the repo
+# root. The kept APK's key covers Metro's assets (Android resources only Gradle can build in),
+# so they match this bundle's and only the bundle is swapped. Env: ANDROID_HOME, RUNNER_TEMP.
 set -euo pipefail
 
 kept="$(realpath "$1")"
 output="$(realpath -m "$2")"
-here="$(realpath "$(dirname "$0")")"
 app="$(realpath apps/mobile)"
 work="${RUNNER_TEMP:-/tmp}/repack"
 rm -rf "$work"
-mkdir -p "$work/bundle/assets" "$work/res"
+mkdir -p "$work/bundle/assets"
 assets="$app/android/app/build/generated/assets/react/release"
-resources="$app/android/app/build/generated/res/react/release"
 test -s "${WAVE_CI_BUNDLE_MANIFEST:?}"
 test -s "$assets/index.android.bundle"
-
-missing="$(node "$here/repack.ts" check-assets "$kept/metro-assets.json" "$resources")"
-if [ -n "$missing" ]; then
-  echo "The kept APK lacks these assets, so this needs a full build:"
-  echo "$missing"
-  exit 0
-fi
 
 # The bundle is stored uncompressed, as Gradle stores it (enableBundleCompression is off),
 # so Hermes can map it.

@@ -1,9 +1,8 @@
 // A PR whose native side matches a kept full build gets its APK by swapping a new JS bundle
 // into that build (repack.sh), without Gradle. This module holds the decisions:
-//   node scripts/ci/repack.ts key <app dir>          `key=` for the kept APK (after prebuild)
+//   node scripts/ci/repack.ts key <app dir> <Metro's assets dir>   `key=` for the kept APK
+//                                                    (after prebuild and bundle.sh)
 //   node scripts/ci/repack.ts plan                   `APK_BUILD=full|repack` and why, for $GITHUB_ENV
-//   node scripts/ci/repack.ts assets <dir>           Metro's assets folder as JSON, kept with the APK
-//   node scripts/ci/repack.ts check-assets <kept.json> <dir>   assets the kept APK lacks, one per line
 //   node scripts/ci/repack.ts hermes-flags <app/build.gradle>  hermesc's flags, one per line
 // `plan` reads GITHUB_EVENT_NAME, GITHUB_REF, IS_RELEASE and KEPT (the cache hit, 'true' or not).
 import { createHash } from "node:crypto";
@@ -47,12 +46,23 @@ const IMAGE = /\.(avif|bmp|gif|heic|heif|ico|jpe?g|ktx|png|psd|svg|tiff?|webp)$/
  * The key a full build's APK is kept under: what the APK's native side is made of. Expo's
  * native fingerprint (native modules, native dependencies, the app config, config plugins),
  * the Android project prebuild generated in `<appDir>/android` (it also catches what the
- * fingerprint misses, like files a config plugin imports), and the app's image assets.
+ * fingerprint misses, like files a config plugin imports), the app's image assets, and the
+ * assets Metro emitted for this bundle. Metro's assets are Android resources that Gradle
+ * compiles into the APK, and a JS-only change can add one (an image from a package), so a
+ * repack is only safe when they match the kept build's exactly.
  * The CI workflow and scripts are part of the recipe too: build flags and the bundle
  * handoff can change the native APK. Hashing all CI files conservatively rebuilds it
  * after a CI-only change; a TS/TSX-only app change still reuses the key.
  */
-export const apkCacheKey = ({ fingerprint, appDir }: { fingerprint: string; appDir: string }) => {
+export const apkCacheKey = ({
+  fingerprint,
+  appDir,
+  metroAssets,
+}: {
+  fingerprint: string;
+  appDir: string;
+  metroAssets: AssetManifest;
+}) => {
   const android = join(appDir, "android");
   const project = digest(
     android,
@@ -87,35 +97,12 @@ export const apkCacheKey = ({ fingerprint, appDir }: { fingerprint: string; appD
       () => true,
     ).map((path) => `scripts/ci/${path}`),
   ]);
-  return `apk-v1-${sha256(`${fingerprint}\n${project}\n${images}\n${config}\n${recipe}\n`)}`;
+  const metro = sha256(JSON.stringify(Object.entries(metroAssets).sort()));
+  return `apk-v1-${sha256(`${fingerprint}\n${project}\n${images}\n${config}\n${recipe}\n${metro}\n`)}`;
 };
 
 /** The files Metro wrote to its assets folder (Android resources), by path, with their hashes. */
 export type AssetManifest = Record<string, string>;
-
-const isAssetManifest = (value: unknown): value is AssetManifest =>
-  typeof value === "object" &&
-  value !== null &&
-  !Array.isArray(value) &&
-  Object.values(value).every(
-    (hash: unknown) => typeof hash === "string" && /^[a-f0-9]{64}$/i.test(hash),
-  );
-
-const readAssetManifest = (path: string): AssetManifest => {
-  let value: unknown;
-  try {
-    value = JSON.parse(readFileSync(path, "utf8"));
-  } catch (cause) {
-    throw new Error(`Invalid kept asset manifest ${path}: expected a readable JSON file.`, {
-      cause,
-    });
-  }
-  if (!isAssetManifest(value))
-    throw new Error(
-      `Invalid kept asset manifest ${path}: expected an object mapping asset paths to SHA-256 strings.`,
-    );
-  return value;
-};
 
 export const assetManifest = (dir: string): AssetManifest =>
   Object.fromEntries(
@@ -127,14 +114,6 @@ export const assetManifest = (dir: string): AssetManifest =>
       .sort()
       .map((path) => [path, sha256(readFileSync(join(dir, path)))]),
   );
-
-/**
- * The assets a new bundle needs that the kept APK doesn't have as they are now. Metro's assets
- * are Android resources, compiled into the APK by Gradle, so a repack can only swap the bundle
- * when this is empty. An asset the bundle stopped using can stay in the APK.
- */
-export const assetsNotInKeptApk = (kept: AssetManifest, built: AssetManifest): string[] =>
-  Object.keys(built).filter((path) => kept[path] !== built[path]);
 
 // React Native's flags when app/build.gradle sets none.
 const DEFAULT_HERMES_FLAGS = ["-O", "-output-source-map"];
@@ -179,8 +158,9 @@ const cli = async ([command, ...args]: string[]) => {
     case "key": {
       const appDir = resolve(args[0] ?? ".");
       const fingerprint = await nativeFingerprint(appDir);
+      const metroAssets = assetManifest(args[1] ?? "");
       console.log(`fingerprint=${fingerprint}`);
-      console.log(`key=${apkCacheKey({ fingerprint, appDir })}`);
+      console.log(`key=${apkCacheKey({ fingerprint, appDir, metroAssets })}`);
       return;
     }
     case "plan": {
@@ -192,14 +172,6 @@ const cli = async ([command, ...args]: string[]) => {
       });
       console.log(`APK_BUILD=${plan.build}`);
       console.log(`APK_BUILD_REASON=${plan.reason}`);
-      return;
-    }
-    case "assets":
-      console.log(JSON.stringify(assetManifest(args[0] ?? "."), null, 2));
-      return;
-    case "check-assets": {
-      const kept = readAssetManifest(args[0] ?? "");
-      for (const path of assetsNotInKeptApk(kept, assetManifest(args[1] ?? "."))) console.log(path);
       return;
     }
     case "hermes-flags":

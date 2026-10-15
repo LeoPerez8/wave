@@ -236,7 +236,7 @@ jobs:
       # Some libraries build with precompiled headers, which ccache only caches with these.
       CCACHE_SLOPPINESS: pch_defines,time_macros,include_file_mtime,include_file_ctime
       CCACHE_MAXSIZE: 1G
-      # A full build's APK, debug keystore and Metro assets, kept for repacks (scripts/ci/repack.ts).
+      # A full build's APK and debug keystore, kept for repacks (scripts/ci/repack.ts).
       KEPT_APK: ${{ github.workspace }}/.cache/kept-apk
       WAVE_CI_BUNDLE_MANIFEST: ${{ github.workspace }}/../wave-ci-bundle.json
     steps:
@@ -260,11 +260,27 @@ jobs:
           EXPO_NO_GIT_STATUS: "1"
         run: ../../scripts/ci/step.sh "Prebuild" pnpm exec expo prebuild --platform android --no-install
 
-      # Each full build keeps its APK under a key for its native side (scripts/ci/repack.ts).
-      # A PR whose key finds one swaps its JS bundle into it instead of running Gradle.
+      # Main saves Metro's cache, PRs only read it. Metro only adds entries, so the key starts
+      # over when dependencies change. The path is uniwind's cache store (os.tmpdir()), which
+      # replaces Expo's in metro.config.js.
+      - name: Restore Metro's cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/metro-cache
+          key: metro-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: metro-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+
+      # Expo + Hermes run once in either mode, before the key: Metro's assets are part of it.
+      # The Gradle init script verifies its handoff below.
+      - name: Bundle JavaScript
+        run: scripts/ci/step.sh "Bundle JavaScript" scripts/ci/bundle.sh
+
+      # Each full build keeps its APK under a key for its native side and Metro's assets
+      # (scripts/ci/repack.ts). A PR whose key finds one swaps its JS bundle into it instead
+      # of running Gradle.
       - name: Key the native side
         id: key
-        run: node scripts/ci/repack.ts key apps/mobile | tee -a "$GITHUB_OUTPUT"
+        run: node scripts/ci/repack.ts key apps/mobile apps/mobile/android/app/build/generated/res/react/release | tee -a "$GITHUB_OUTPUT"
 
       - name: Restore the kept APK
         id: kept
@@ -281,32 +297,11 @@ jobs:
           KEPT: ${{ steps.kept.outputs.cache-hit }}
         run: node scripts/ci/repack.ts plan | tee -a "$GITHUB_ENV"
 
-      # Main saves Metro's cache, PRs only read it. Metro only adds entries, so the key starts
-      # over when dependencies change. The path is uniwind's cache store (os.tmpdir()), which
-      # replaces Expo's in metro.config.js.
-      - name: Restore Metro's cache
-        uses: actions/cache/restore@v4
-        with:
-          path: /tmp/metro-cache
-          key: metro-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
-          restore-keys: metro-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
-
-      # Expo + Hermes run once in either mode. A resource mismatch can fall back to a full
-      # build using these same outputs. The Gradle init script verifies its handoff below.
-      - name: Bundle JavaScript
-        run: scripts/ci/step.sh "Bundle JavaScript" scripts/ci/bundle.sh
-
-      # Metro and hermesc, then the bundle goes into the kept APK. When the bundle needs assets
-      # the kept APK lacks, the job falls back to the full build below.
       - name: Repack the kept APK
         if: env.APK_BUILD == 'repack'
         run: |
           scripts/ci/step.sh "Repack the kept APK" scripts/ci/repack.sh "$KEPT_APK" "$RUNNER_TEMP/repacked.apk"
-          if [ -f "$RUNNER_TEMP/repacked.apk" ]; then
-            echo "REPACKED_APK=$RUNNER_TEMP/repacked.apk" >> "$GITHUB_ENV"
-          else
-            { echo "APK_BUILD=full"; echo "APK_BUILD_REASON=The new bundle has assets the kept APK lacks."; } >> "$GITHUB_ENV"
-          fi
+          echo "REPACKED_APK=$RUNNER_TEMP/repacked.apk" >> "$GITHUB_ENV"
 
       - uses: actions/setup-java@v5
         if: env.APK_BUILD == 'full'
@@ -378,7 +373,6 @@ jobs:
           mkdir -p "$KEPT_APK"
           cp apps/mobile/android/app/build/outputs/apk/release/app-release.apk "$KEPT_APK/"
           cp apps/mobile/android/app/debug.keystore "$KEPT_APK/"
-          node scripts/ci/repack.ts assets apps/mobile/android/app/build/generated/res/react/release > "$KEPT_APK/metro-assets.json"
 
       - name: Save the kept APK
         if: env.APK_BUILD == 'full' && steps.kept.outputs.cache-hit != 'true'
