@@ -18,6 +18,7 @@ import { useOpenSharedText } from "@/library/sharedText";
 import { startInitialScan } from "@/library/runtime";
 import { NowPlayingSheet, UnderNowPlaying } from "@/nowPlaying/NowPlayingSheet";
 import { startServices } from "@/services";
+import { startSync } from "@/sync/startSync";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 export default function RootLayout() {
@@ -31,6 +32,9 @@ export default function RootLayout() {
 
   // A no-op when Android Auto already started them headless (src/services.ts).
   useEffect(() => startServices("app"), []);
+
+  // While signed in to a Wave account, the Library syncs with it (src/sync/WaveSync.ts).
+  useEffect(startSync, []);
 
   // A whole-Library lyrics and genre run that ended in the background says how it went.
   useEffect(followLibraryLookupSummary, []);

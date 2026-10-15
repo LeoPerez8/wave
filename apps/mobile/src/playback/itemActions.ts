@@ -14,7 +14,8 @@ import * as Haptics from "expo-haptics";
 import { router, usePathname } from "expo-router";
 
 import { followArtistLink } from "@/library/ArtistChoice";
-import { confirmDeleteSongs } from "@/library/deleteSongs";
+import { confirmDeleteSongs, confirmRemoveSongs } from "@/library/deleteSongs";
+import { songHasFile } from "@/library/LibraryStore";
 import { setFavorites, useFavoriteIds } from "@/library/favorites";
 import { findLyricsAndGenreFor } from "@/library/findLyricsAndGenre";
 import { useLinkRows } from "@/library/hooks";
@@ -28,6 +29,11 @@ import { openAlbum } from "@/library/routes";
 import { showError } from "@/overlay/alert";
 import { useLyricsAndGenreLookupsEnabled } from "@/settings/lyricsAndGenre";
 import { ytMusicEnabled } from "@/settings/ytMusic";
+import {
+  cancelMissingSongDownload,
+  downloadMissingSongs,
+  useMissingSongDownloadStatus,
+} from "@/ytmusic/YtDownloads";
 
 import {
   targetCount,
@@ -63,9 +69,16 @@ export interface ActionOptions {
   readonly onSelect?: (() => void) | undefined;
 }
 
+/** The one missing song [target] is, if it is one: its menu offers its download. */
+const onlyMissingSong = (target: ActionItems): number | null => {
+  const only = target.kind === "track" && target.items.length === 1 ? target.items[0] : undefined;
+  return only === undefined || songHasFile(only.song) ? null : only.song.id;
+};
+
 /**
  * The entries Core's `itemActions` offers for [target] on [surface], here and
- * with the Settings as they are; [favorites] says which tracks are starred.
+ * with the Settings as they are; [favorites] says which tracks are starred,
+ * and a missing song's download is followed as it goes.
  * The Design preview plans its menus with it too, from synthetic items.
  */
 export function usePlannedActions(
@@ -75,9 +88,11 @@ export function usePlannedActions(
 ): readonly ItemActionEntry[] {
   const here = usePathname();
   const onlineLookups = useLyricsAndGenreLookupsEnabled();
+  const download = useMissingSongDownloadStatus(onlyMissingSong(target));
+  const facts = targetFacts(target, favorites);
   return itemActions({
     kind: target.kind,
-    items: targetFacts(target, favorites),
+    items: facts.map((item) => (item.missing === true ? { ...item, download } : item)),
     surface,
     selectable,
     onlineLookups,
@@ -113,6 +128,8 @@ export function useItemActions(
   const here = usePathname();
   const favorites = useFavoriteIds();
   const tracks = target.kind === "track" ? target.items : [];
+  // What acts on files (Delete, Find Lyrics and Genre) shows only when every song has one.
+  const withFiles = tracks.flatMap(({ song }) => (songHasFile(song) ? [song] : []));
 
   const run = (action: () => void) => () => {
     finish();
@@ -224,13 +241,24 @@ export function useItemActions(
         });
       }
       case "findLyricsAndGenre":
-        return run(() => void findLyricsAndGenreFor(tracks.map(({ song }) => song)));
+        return run(() => void findLyricsAndGenreFor(withFiles));
       case "select":
         return run(() => onSelect?.());
-      case "delete": {
+      case "delete":
+        return asking(entry.action, (onConfirm) => {
+          void confirmDeleteSongs(withFiles, { onConfirm });
+        });
+      case "download":
+      case "retryDownload":
+        return run(() => downloadMissingSongs(tracks.map(({ song }) => song.id)));
+      case "cancelDownload":
+        return run(() => {
+          for (const { song } of tracks) cancelMissingSongDownload(song.id);
+        });
+      case "removeFromLibrary": {
         const songs = tracks.map(({ song }) => song);
         return asking(entry.action, (onConfirm) => {
-          void confirmDeleteSongs(songs, { onConfirm });
+          void confirmRemoveSongs(songs, { onConfirm });
         });
       }
     }

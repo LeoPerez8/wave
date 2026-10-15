@@ -12,16 +12,11 @@ import { creditSplitter, identityKey, respreadDeletedSongs, sortKey } from "@wav
 import { sql } from "drizzle-orm";
 
 import { refreshArtistImages } from "./artists.ts";
+import { chunks } from "./chunks.ts";
 import type { LibraryDatabase } from "./database.ts";
 
-/** Rows per statement, well under SQLite's limit on bound values. */
-const CHUNK = 200;
-
-const chunked = <A>(items: readonly A[]): A[][] => {
-  const result: A[][] = [];
-  for (let i = 0; i < items.length; i += CHUNK) result.push(items.slice(i, i + CHUNK));
-  return result;
-};
+/** Rows per statement (several values each), well under SQLite's limit on bound values. */
+const ROWS_PER_STATEMENT = 200;
 
 /** A track's or album's credits: one per value of its tag, usually one. */
 export type Credits = readonly string[];
@@ -115,7 +110,7 @@ const artistIds = (
   names: ReadonlyMap<string, string>,
 ): Map<string, number> => {
   const rows = [...names].map(([key, name]) => ({ key, name, sort: sortKey(name) }));
-  for (const chunk of chunked(rows)) {
+  for (const chunk of chunks(rows, ROWS_PER_STATEMENT)) {
     db.run(sql`INSERT INTO artists (key, name, sort) VALUES ${sql.join(
       chunk.map((row) => sql`(${row.key}, ${row.name}, ${row.sort})`),
       sql`, `,
@@ -123,7 +118,7 @@ const artistIds = (
       WHERE artists.name <> excluded.name`);
   }
   const ids = new Map<string, number>();
-  for (const chunk of chunked(rows)) {
+  for (const chunk of chunks(rows)) {
     const found = db.all<{ id: number; key: string }>(
       sql`SELECT id AS "id", key AS "key" FROM artists WHERE key IN (${sql.join(
         chunk.map((row) => sql`${row.key}`),
@@ -214,7 +209,7 @@ const currentLinks = (
   const rows =
     ids === undefined
       ? read(sql``)
-      : chunked(ids).flatMap((chunk) =>
+      : chunks(ids).flatMap((chunk) =>
           read(
             sql`WHERE ${owner} IN (${sql.join(
               chunk.map((id) => sql`${id}`),

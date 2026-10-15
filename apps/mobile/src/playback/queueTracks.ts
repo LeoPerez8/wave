@@ -17,7 +17,7 @@ import {
 import * as Effect from "effect/Effect";
 
 import { makeExternalStore } from "../lib/externalStore.ts";
-import type { SongRow } from "../library/LibraryStore.ts";
+import type { PlayableSongRow } from "../library/LibraryStore.ts";
 
 /** What the player and the queue rows need to know about a track. */
 export interface QueueTrack {
@@ -43,7 +43,7 @@ export interface QueueTrack {
 }
 
 /** A library song as the queue needs it. */
-export const toQueueTrack = (song: SongRow): QueueTrack => ({
+export const toQueueTrack = (song: PlayableSongRow): QueueTrack => ({
   id: String(song.id),
   path: song.path,
   title: song.title,
@@ -167,7 +167,7 @@ export const lookupFailed = (ids: readonly string[]): void => {
  */
 export const learnUnknownQueueTracks = <E, R>(
   entries: readonly QueueEntry[],
-  songsByIds: (ids: readonly number[]) => Effect.Effect<readonly SongRow[], E, R>,
+  songsByIds: (ids: readonly number[]) => Effect.Effect<readonly PlayableSongRow[], E, R>,
   savedYtTracks: () => readonly QueueTrack[] = () => [],
 ): Effect.Effect<void, never, R> =>
   Effect.suspend(() => {

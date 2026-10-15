@@ -6,34 +6,53 @@
  * (`testDatabase.ts`).
  */
 import {
+  checkPlaylistName,
+  compareStrings,
+  placeEntries,
   planPlaylistSongs,
   playlistEntryLinks,
   playlistMosaic,
   readPlaylistYtSong,
+  sortKey,
   writePlaylistYtSong,
   type MixedSong,
+  type OrderedEntry,
   type PlaylistSong,
   type YtAlbumSong,
 } from "@wave/core";
-import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 
+import type { PlaylistAddResult, PlaylistDetail, PlaylistRow } from "../LibraryStore.ts";
 import type { LibraryDatabase, RowPage } from "./database.ts";
 import * as schema from "./schema.ts";
-import { songColumns } from "./tracks.ts";
+import { stamped } from "./sync.ts";
+import { filePath, hasFile, inScope, songColumns, type TrackScope } from "./tracks.ts";
 
-/** A playlist's Library tracks with their playlist item, in playlist order. */
-const playlistTracks = (db: LibraryDatabase, playlistId: number, itemIds?: readonly number[]) => {
+/** Playlist order: by order key, then by entry id for entries two phones gave one key (Core's `compareOrderKeys`). */
+const IN_ORDER = [asc(schema.playlistItems.orderKey), asc(schema.playlistItems.syncId)] as const;
+
+/** Entries the playlist holds: not removed (tombstones). */
+const live = eq(schema.playlistItems.deleted, false);
+
+/** A playlist's Library tracks in [scope] with their playlist item. */
+const playlistTracks = (
+  db: LibraryDatabase,
+  playlistId: number,
+  itemIds: readonly number[] | undefined,
+  scope: TrackScope,
+) => {
   const { playlistItems, tracks, artists, albums, artwork } = schema;
   return db
     .select({ ...songColumns, itemId: playlistItems.id })
     .from(playlistItems)
-    .innerJoin(tracks, eq(playlistItems.trackId, tracks.id))
+    .innerJoin(tracks, inScope(eq(playlistItems.trackId, tracks.id), scope))
     .innerJoin(artists, eq(tracks.artistId, artists.id))
     .innerJoin(albums, eq(tracks.albumId, albums.id))
     .leftJoin(artwork, eq(tracks.artworkHash, artwork.hash))
     .where(
       and(
         eq(playlistItems.playlistId, playlistId),
+        live,
         itemIds === undefined ? undefined : inArray(playlistItems.id, [...itemIds]),
       ),
     )
@@ -52,20 +71,36 @@ export type PlaylistEntry<T = PlaylistTrack> = MixedSong<YtAlbumSong, T> & {
 };
 
 /**
- * A playlist's entries in playlist order, [page] of them if given. A YT Music
- * entry whose stored song can't be read is left out.
+ * A playlist's entries in playlist order, [page] of them if given: its YT
+ * Music entries and its Library tracks in [scope] (Android Auto's: only
+ * those with a file). A YT Music entry whose stored song can't be read is left out.
  */
 export const selectPlaylistEntries = (
   db: LibraryDatabase,
   playlistId: number,
   page?: RowPage,
+  scope: TrackScope = "library",
 ): PlaylistEntry[] => {
   const { playlistItems } = schema;
   const query = db
     .select({ id: playlistItems.id, ytSong: playlistItems.ytSong })
     .from(playlistItems)
-    .where(eq(playlistItems.playlistId, playlistId))
-    .orderBy(asc(playlistItems.position), asc(playlistItems.id));
+    .where(
+      and(
+        eq(playlistItems.playlistId, playlistId),
+        live,
+        scope === "files"
+          ? or(
+              isNull(playlistItems.trackId),
+              inArray(
+                playlistItems.trackId,
+                db.select({ id: schema.tracks.id }).from(schema.tracks).where(hasFile),
+              ),
+            )
+          : undefined,
+      ),
+    )
+    .orderBy(...IN_ORDER);
   const items =
     page === undefined ? query.all() : query.limit(page.limit).offset(page.offset).all();
   if (items.length === 0) return [];
@@ -75,6 +110,7 @@ export const selectPlaylistEntries = (
       db,
       playlistId,
       page === undefined ? undefined : items.map((item) => item.id),
+      scope,
     ).map(({ itemId, ...track }) => [itemId, track]),
   );
   return items.flatMap((item): PlaylistEntry[] => {
@@ -87,9 +123,12 @@ export const selectPlaylistEntries = (
   });
 };
 
-/** Every track's id and file path, for matching an imported playlist's entries (Core's `libraryPathIndex`). */
+/**
+ * Every track's id and file path, for matching an imported playlist's
+ * entries (Core's `libraryPathIndex`); missing songs have no file to match.
+ */
 export const selectTrackPaths = (db: LibraryDatabase) =>
-  db.select({ id: schema.tracks.id, path: schema.tracks.path }).from(schema.tracks).all();
+  db.select({ id: schema.tracks.id, path: filePath }).from(schema.tracks).where(hasFile).all();
 
 /** Rows per insert, well under SQLite's limit on bound values. */
 const INSERT_CHUNK = 200;
@@ -106,20 +145,65 @@ const insertPlaylistItems = (
   }
 };
 
-/** [songs] as playlist rows from [position] on. */
-const itemRows = (
+/**
+ * A playlist's entries as their order sees them (`id`: the entry's sync id),
+ * with their row id, in playlist order.
+ */
+const orderedEntries = (
+  db: LibraryDatabase,
   playlistId: number,
+): (OrderedEntry & { readonly itemId: number })[] => {
+  const { playlistItems } = schema;
+  return db
+    .select({
+      itemId: playlistItems.id,
+      id: playlistItems.syncId,
+      orderKey: playlistItems.orderKey,
+    })
+    .from(playlistItems)
+    .where(and(eq(playlistItems.playlistId, playlistId), live))
+    .orderBy(...IN_ORDER)
+    .all();
+};
+
+/** Gives entries their new keys (`placeEntries`' `rekeyed`), stamping each. */
+const rekey = (db: LibraryDatabase, rekeyed: readonly OrderedEntry[], now: number): void => {
+  const { playlistItems } = schema;
+  for (const entry of rekeyed) {
+    db.update(playlistItems)
+      .set({ orderKey: entry.orderKey, ...stamped(playlistItems, now) })
+      .where(eq(playlistItems.syncId, entry.id))
+      .run();
+  }
+};
+
+/**
+ * Inserts [songs] as entries of a playlist at [index] of its [entries], in
+ * the order given, each with its order key (Core's `placeEntries`).
+ */
+const placeSongs = (
+  db: LibraryDatabase,
+  playlistId: number,
+  entries: readonly OrderedEntry[],
+  index: number,
   songs: readonly PlaylistSong[],
-  position: number,
   now: number,
-): (typeof schema.playlistItems.$inferInsert)[] =>
-  songs.map((song, i) => ({
-    playlistId,
-    trackId: song.source === "library" ? song.trackId : null,
-    ytSong: song.source === "stream" ? writePlaylistYtSong(song.song) : null,
-    position: position + i,
-    addedAt: now,
-  }));
+): void => {
+  if (songs.length === 0) return;
+  const { keys, rekeyed } = placeEntries(entries, index, songs.length);
+  rekey(db, rekeyed, now);
+  insertPlaylistItems(
+    db,
+    songs.map((song, i) => ({
+      playlistId,
+      trackId: song.source === "library" ? song.trackId : null,
+      ytSong: song.source === "stream" ? writePlaylistYtSong(song.song) : null,
+      orderKey: keys[i] ?? "",
+      addedAt: now,
+      changedAt: now,
+    })),
+  );
+};
 
 /** What a playlist holds, as Core's `planPlaylistSongs` compares it. */
 const heldSongs = (db: LibraryDatabase, playlistId: number): PlaylistSong[] => {
@@ -127,7 +211,7 @@ const heldSongs = (db: LibraryDatabase, playlistId: number): PlaylistSong[] => {
   return db
     .select({ trackId: playlistItems.trackId, ytSong: playlistItems.ytSong })
     .from(playlistItems)
-    .where(eq(playlistItems.playlistId, playlistId))
+    .where(and(eq(playlistItems.playlistId, playlistId), live))
     .all()
     .flatMap((row): PlaylistSong[] => {
       if (row.trackId !== null) return [{ source: "library", trackId: row.trackId }];
@@ -147,21 +231,36 @@ export const appendPlaylistSongs = (
   songs: readonly PlaylistSong[],
   now: number,
 ): { readonly added: number; readonly alreadyIn: number } => {
-  const { playlistItems } = schema;
   const plan = planPlaylistSongs(heldSongs(db, playlistId), songs);
-  const last =
-    db
-      .select({ position: sql<number | null>`max(${playlistItems.position})` })
-      .from(playlistItems)
-      .where(eq(playlistItems.playlistId, playlistId))
-      .get()?.position ?? -1;
-  insertPlaylistItems(db, itemRows(playlistId, plan.add, last + 1, now));
+  const entries = orderedEntries(db, playlistId);
+  placeSongs(db, playlistId, entries, entries.length, plan.add, now);
   return { added: plan.add.length, alreadyIn: plan.alreadyIn };
+};
+
+/** Removes the entries [itemIds] of a playlist (all of them if not given), leaving tombstones. */
+const tombstoneEntries = (
+  db: LibraryDatabase,
+  playlistId: number,
+  itemIds: readonly number[] | undefined,
+  now: number,
+): void => {
+  const { playlistItems } = schema;
+  db.update(playlistItems)
+    .set({ deleted: true, ...stamped(playlistItems, now) })
+    .where(
+      and(
+        eq(playlistItems.playlistId, playlistId),
+        live,
+        itemIds === undefined ? undefined : inArray(playlistItems.id, [...itemIds]),
+      ),
+    )
+    .run();
 };
 
 /**
  * Makes a playlist hold exactly [songs], in that order (an import's
- * Replace): the same playlist, so its name and place stay.
+ * Replace): the same playlist, so its name and place stay. The entries it
+ * held are removed (tombstones).
  */
 export const replacePlaylistSongs = (
   db: LibraryDatabase,
@@ -170,16 +269,17 @@ export const replacePlaylistSongs = (
   now: number,
 ): void => {
   db.transaction((tx) => {
-    const { playlists, playlistItems } = schema;
-    tx.delete(playlistItems).where(eq(playlistItems.playlistId, playlistId)).run();
-    insertPlaylistItems(tx, itemRows(playlistId, songs, 0, now));
+    const { playlists } = schema;
+    tombstoneEntries(tx, playlistId, undefined, now);
+    placeSongs(tx, playlistId, [], 0, songs, now);
     tx.update(playlists).set({ updatedAt: now }).where(eq(playlists.id, playlistId)).run();
   });
 };
 
 /**
  * Removes the given entries from a playlist in one go (each entry on its own,
- * so another copy of the same song stays); ids from other playlists are ignored.
+ * so another copy of the same song stays), leaving tombstones; ids from other
+ * playlists are ignored.
  */
 export const removePlaylistItems = (
   db: LibraryDatabase,
@@ -189,13 +289,37 @@ export const removePlaylistItems = (
 ): void => {
   if (itemIds.length === 0) return;
   db.transaction((tx) => {
-    const { playlists, playlistItems } = schema;
-    tx.delete(playlistItems)
-      .where(and(eq(playlistItems.playlistId, playlistId), inArray(playlistItems.id, [...itemIds])))
-      .run();
+    const { playlists } = schema;
+    tombstoneEntries(tx, playlistId, itemIds, now);
     tx.update(playlists).set({ updatedAt: now }).where(eq(playlists.id, playlistId)).run();
   });
 };
+
+/**
+ * Moves an entry to [toIndex] (0-based, clamped) in its playlist: only its
+ * order key changes (Core's `placeEntries`), and those of entries two phones
+ * gave one key when it lands between them.
+ */
+export const movePlaylistItem = (
+  db: LibraryDatabase,
+  playlistId: number,
+  itemId: number,
+  toIndex: number,
+  now: number,
+): void =>
+  db.transaction((tx) => {
+    const { playlists, playlistItems } = schema;
+    const entries = orderedEntries(tx, playlistId);
+    if (!entries.some((entry) => entry.itemId === itemId)) return;
+    const others = entries.filter((entry) => entry.itemId !== itemId);
+    const { keys, rekeyed } = placeEntries(others, toIndex, 1);
+    rekey(tx, rekeyed, now);
+    tx.update(playlistItems)
+      .set({ orderKey: keys[0] ?? "", ...stamped(playlistItems, now) })
+      .where(eq(playlistItems.id, itemId))
+      .run();
+    tx.update(playlists).set({ updatedAt: now }).where(eq(playlists.id, playlistId)).run();
+  });
 
 /** Track ids per query, well under SQLite's limit on bound values. */
 const LINK_CHUNK = 500;
@@ -205,17 +329,21 @@ const LINK_CHUNK = 500;
  * [trackIds] (just downloaded; the whole Library when not given, as a scan
  * does once it ends) positively are (Core's `playlistEntryLinks`) into those
  * tracks, in the same place; an entry whose track its playlist already holds
- * is removed instead. Returns how many entries it changed. Does nothing (one
- * small query) while no playlist holds a YT Music entry. Run it inside the
- * caller's transaction.
+ * is removed instead (a tombstone). Each change is stamped at [now]. Returns
+ * how many entries it changed. Does nothing (one small query) while no
+ * playlist holds a YT Music entry. Run it inside the caller's transaction.
  */
-export const linkPlaylistEntries = (db: LibraryDatabase, trackIds?: readonly number[]): number => {
+export const linkPlaylistEntries = (
+  db: LibraryDatabase,
+  now: number,
+  trackIds?: readonly number[],
+): number => {
   const { playlistItems, tracks } = schema;
   if (trackIds?.length === 0) return 0;
   const anyEntry = db
     .select({ id: playlistItems.id })
     .from(playlistItems)
-    .where(isNotNull(playlistItems.ytSong))
+    .where(and(isNotNull(playlistItems.ytSong), live))
     .limit(1)
     .get();
   if (anyEntry === undefined) return 0;
@@ -226,8 +354,8 @@ export const linkPlaylistEntries = (db: LibraryDatabase, trackIds?: readonly num
       ytSong: playlistItems.ytSong,
     })
     .from(playlistItems)
-    .where(isNotNull(playlistItems.ytSong))
-    .orderBy(asc(playlistItems.playlistId), asc(playlistItems.position), asc(playlistItems.id))
+    .where(and(isNotNull(playlistItems.ytSong), live))
+    .orderBy(asc(playlistItems.playlistId), ...IN_ORDER)
     .all()
     .flatMap(({ itemId, playlistId, ytSong }) => {
       const song = ytSong === null ? null : readPlaylistYtSong(ytSong);
@@ -240,14 +368,15 @@ export const linkPlaylistEntries = (db: LibraryDatabase, trackIds?: readonly num
     artist: tracks.artistCredit,
     durationMs: tracks.durationMs,
   };
+  // Only songs with a file: a missing song isn't the Library having the song.
   const library: { id: number; title: string; artist: string; durationMs: number }[] =
-    trackIds === undefined ? db.select(columns).from(tracks).all() : [];
+    trackIds === undefined ? db.select(columns).from(tracks).where(hasFile).all() : [];
   for (let i = 0; trackIds !== undefined && i < trackIds.length; i += LINK_CHUNK) {
     library.push(
       ...db
         .select(columns)
         .from(tracks)
-        .where(inArray(tracks.id, trackIds.slice(i, i + LINK_CHUNK)))
+        .where(and(inArray(tracks.id, trackIds.slice(i, i + LINK_CHUNK)), hasFile))
         .all(),
     );
   }
@@ -257,6 +386,7 @@ export const linkPlaylistEntries = (db: LibraryDatabase, trackIds?: readonly num
     .where(
       and(
         isNotNull(playlistItems.trackId),
+        live,
         inArray(playlistItems.playlistId, [...new Set(entries.map((entry) => entry.playlistId))]),
       ),
     )
@@ -265,12 +395,13 @@ export const linkPlaylistEntries = (db: LibraryDatabase, trackIds?: readonly num
   const { links, drops } = playlistEntryLinks(entries, library, held);
   for (const { itemId, trackId } of links) {
     db.update(playlistItems)
-      .set({ trackId, ytSong: null })
+      .set({ trackId, ytSong: null, ...stamped(playlistItems, now) })
       .where(and(eq(playlistItems.id, itemId), isNull(playlistItems.trackId)))
       .run();
   }
   for (let i = 0; i < drops.length; i += LINK_CHUNK) {
-    db.delete(playlistItems)
+    db.update(playlistItems)
+      .set({ deleted: true, ...stamped(playlistItems, now) })
       .where(inArray(playlistItems.id, drops.slice(i, i + LINK_CHUNK)))
       .run();
   }
@@ -301,7 +432,7 @@ export const selectPlaylistCovers = (
   // (both at once); unreadable stored songs give none.
   const rows = db.all<{ playlistId: number; thumbPath: string; path: string }>(sql`
     WITH items AS (
-      SELECT pi.playlist_id, pi.position, pi.id, al.artwork_hash,
+      SELECT pi.playlist_id, pi.order_key, pi.sync_id, al.artwork_hash,
         CASE WHEN json_valid(pi.yt_song) THEN
           CASE json_type(pi.yt_song, '$.artworkUrl')
             WHEN 'text' THEN json_extract(pi.yt_song, '$.artworkUrl')
@@ -310,10 +441,10 @@ export const selectPlaylistCovers = (
       FROM playlist_items pi
       LEFT JOIN tracks t ON t.id = pi.track_id
       LEFT JOIN albums al ON al.id = t.album_id
-      WHERE ${inPlaylist}
+      WHERE NOT pi.deleted AND ${inPlaylist}
     ),
     covers AS (
-      SELECT items.playlist_id, items.position, items.id,
+      SELECT items.playlist_id, items.order_key, items.sync_id,
         coalesce(aw.hash, items.url) AS cover,
         coalesce(aw.thumb_path, items.url) AS thumb_path,
         coalesce(aw.path, items.url) AS path
@@ -322,14 +453,14 @@ export const selectPlaylistCovers = (
     ),
     firsts AS (
       SELECT *, row_number() OVER (
-        PARTITION BY playlist_id, cover ORDER BY position, id
+        PARTITION BY playlist_id, cover ORDER BY order_key, sync_id
       ) AS seen
       FROM covers
       WHERE cover IS NOT NULL
     ),
     tiles AS (
       SELECT *, row_number() OVER (
-        PARTITION BY playlist_id ORDER BY position, id
+        PARTITION BY playlist_id ORDER BY order_key, sync_id
       ) AS tile
       FROM firsts
       WHERE seen = 1
@@ -386,7 +517,7 @@ export const selectPlaylistTotals = (
       .from(playlistItems)
       // A Library entry whose track is gone is on its way out (the cascade), never counted.
       .innerJoin(tracks, eq(playlistItems.trackId, tracks.id))
-      .where(inPlaylist)
+      .where(and(live, inPlaylist))
       .groupBy(playlistItems.playlistId)
       .all()
       .map(({ playlistId: id, ...total }) => [id, total]),
@@ -394,7 +525,7 @@ export const selectPlaylistTotals = (
   const streamed = db
     .select({ playlistId: playlistItems.playlistId, ytSong: playlistItems.ytSong })
     .from(playlistItems)
-    .where(and(isNotNull(playlistItems.ytSong), inPlaylist))
+    .where(and(isNotNull(playlistItems.ytSong), live, inPlaylist))
     .all();
   for (const row of streamed) {
     const song = row.ytSong === null ? null : readPlaylistYtSong(row.ytSong);
@@ -406,3 +537,153 @@ export const selectPlaylistTotals = (
   }
   return totals;
 };
+
+const NO_COVERS = { thumbPaths: [], artworkPaths: [] } as const;
+
+const NO_SONGS = { trackCount: 0, durationMs: 0 } as const;
+
+/** Playlists the owner has: not deleted (tombstones). */
+const livePlaylist = eq(schema.playlists.deleted, false);
+
+/** Every playlist by name, with its mosaic and totals; deleted ones (tombstones) aren't listed. */
+export const selectPlaylists = (db: LibraryDatabase): PlaylistRow[] => {
+  const { playlists } = schema;
+  // Library tracks and YT Music entries alike.
+  const covers = selectPlaylistCovers(db);
+  const totals = selectPlaylistTotals(db);
+  return (
+    db
+      .select({ id: playlists.id, name: playlists.name })
+      .from(playlists)
+      .where(livePlaylist)
+      .all()
+      .map((row) => ({
+        ...row,
+        sort: sortKey(row.name),
+        ...(totals.get(row.id) ?? NO_SONGS),
+        ...(covers.get(row.id) ?? NO_COVERS),
+      }))
+      // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
+      .sort((a, b) => compareStrings(a.sort, b.sort) || a.id - b.id)
+  );
+};
+
+/** A playlist with its entries in playlist order; null when it's gone (or deleted). */
+export const selectPlaylist = (
+  db: LibraryDatabase,
+  id: number,
+  scope: TrackScope = "library",
+): PlaylistDetail | null => {
+  const { playlists } = schema;
+  const playlist = db
+    .select({ id: playlists.id, name: playlists.name })
+    .from(playlists)
+    .where(and(eq(playlists.id, id), livePlaylist))
+    .get();
+  if (playlist === undefined) return null;
+  const items = selectPlaylistEntries(db, id, undefined, scope);
+  const covers = selectPlaylistCovers(db, id).get(id) ?? NO_COVERS;
+  // As Library › Playlists counts it.
+  const { trackCount, durationMs } = selectPlaylistTotals(db, id).get(id) ?? NO_SONGS;
+  return {
+    playlist: {
+      ...playlist,
+      sort: sortKey(playlist.name),
+      trackCount,
+      durationMs,
+      thumbPaths: covers.thumbPaths,
+      artworkPaths: covers.artworkPaths,
+    },
+    items,
+  };
+};
+
+/** The names of the playlists the owner has, but [except]'s. */
+const otherNames = (db: LibraryDatabase, except?: number): string[] => {
+  const { playlists } = schema;
+  return db
+    .select({ name: playlists.name })
+    .from(playlists)
+    .where(and(livePlaylist, except === undefined ? undefined : ne(playlists.id, except)))
+    .all()
+    .map((row) => row.name);
+};
+
+/** Fails with the reason when Core rejects the name. */
+const requireName = (name: string, others: readonly string[]): string => {
+  const check = checkPlaylistName(name, others);
+  if (!check.ok) throw new Error(`Playlist name rejected (${check.problem})`);
+  return check.name;
+};
+
+/**
+ * Creates a playlist holding [songs], Library tracks and YT Music songs in
+ * the order given (Core's `checkPlaylistName` must accept the name, or it
+ * fails), with an id of its own for every phone.
+ */
+export const createPlaylist = (
+  db: LibraryDatabase,
+  name: string,
+  songs: readonly PlaylistSong[],
+  now: number,
+): PlaylistAddResult =>
+  db.transaction((tx) => {
+    const { playlists } = schema;
+    const stored = requireName(name, otherNames(tx));
+    const created = tx
+      .insert(playlists)
+      .values({ name: stored, createdAt: now, updatedAt: now, changedAt: now })
+      .returning({ id: playlists.id })
+      .get();
+    return {
+      playlistId: created.id,
+      name: stored,
+      ...appendPlaylistSongs(tx, created.id, songs, now),
+    };
+  });
+
+/** Renames a playlist (Core's `checkPlaylistName` must accept the name, or it fails). */
+export const renamePlaylist = (db: LibraryDatabase, id: number, name: string, now: number): void =>
+  db.transaction((tx) => {
+    const { playlists } = schema;
+    tx.update(playlists)
+      .set({
+        name: requireName(name, otherNames(tx, id)),
+        updatedAt: now,
+        ...stamped(playlists, now),
+      })
+      .where(and(eq(playlists.id, id), livePlaylist))
+      .run();
+  });
+
+/** Deletes a playlist: it and its entries stay as tombstones, which nothing lists. */
+export const deletePlaylist = (db: LibraryDatabase, id: number, now: number): void =>
+  db.transaction((tx) => {
+    const { playlists } = schema;
+    tombstoneEntries(tx, id, undefined, now);
+    tx.update(playlists)
+      .set({ deleted: true, updatedAt: now, ...stamped(playlists, now) })
+      .where(and(eq(playlists.id, id), livePlaylist))
+      .run();
+  });
+
+/** Appends the songs a playlist doesn't hold yet (Core's `planPlaylistSongs`); fails when it's gone. */
+export const addToPlaylist = (
+  db: LibraryDatabase,
+  id: number,
+  songs: readonly PlaylistSong[],
+  now: number,
+): PlaylistAddResult =>
+  db.transaction((tx) => {
+    const { playlists } = schema;
+    const playlist = tx
+      .select({ name: playlists.name })
+      .from(playlists)
+      .where(and(eq(playlists.id, id), livePlaylist))
+      .get();
+    if (playlist === undefined) throw new Error("The playlist no longer exists");
+    const result = appendPlaylistSongs(tx, id, songs, now);
+    if (result.added > 0)
+      tx.update(playlists).set({ updatedAt: now }).where(eq(playlists.id, id)).run();
+    return { playlistId: id, name: playlist.name, ...result };
+  });

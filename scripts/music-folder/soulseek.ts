@@ -27,6 +27,8 @@ const sources = [
   join(appClient, "Mp3Validation.kt"),
   join(appClient, "SoulseekCandidate.kt"),
   join(appClient, "SoulseekFailure.kt"),
+  join(appClient, "SoulseekAccounts.kt"),
+  join(appClient, "WaveAccountSoulseek.kt"),
   join(here, "soulseek", "PcSoulseek.kt"),
 ];
 

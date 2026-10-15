@@ -6,12 +6,13 @@ own, inspired by Apple Music. Personal project, sideloaded — see the
 
 ## Layout
 
-| Path            | What                                                               |
-| --------------- | ------------------------------------------------------------------ |
-| `apps/mobile`   | The Expo / React Native app (Expo Router, uniwind, Inter)          |
-| `packages/core` | Domain logic in pure TypeScript with **zero runtime dependencies** |
-| `scripts/ci`    | Helpers used by GitHub Actions                                     |
-| `docs`          | Spec and design decisions                                          |
+| Path            | What                                                                                    |
+| --------------- | --------------------------------------------------------------------------------------- |
+| `apps/mobile`   | The Expo / React Native app (Expo Router, uniwind, Inter)                               |
+| `apps/sync`     | The sync service: a Cloudflare Worker in front of Turso ([README](apps/sync/README.md)) |
+| `packages/core` | Domain logic in pure TypeScript with **zero runtime dependencies**                      |
+| `scripts/ci`    | Helpers used by GitHub Actions                                                          |
+| `docs`          | Spec and design decisions                                                               |
 
 ## Getting the app on a phone
 

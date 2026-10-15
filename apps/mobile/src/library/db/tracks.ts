@@ -2,8 +2,9 @@
  * The track rows every song list reads (a `SongRow`). Kept free of Expo so
  * the store tests run them against a real SQLite (`testDatabase.ts`).
  */
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, sql, type SQL } from "drizzle-orm";
 
+import { chunks } from "./chunks.ts";
 import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
 
@@ -26,9 +27,35 @@ export const albumArtistIds = sql<readonly number[]>`(
     SELECT artist_id FROM album_artists
     WHERE album_artists.album_id = ${schema.albums.id} ORDER BY position))`.mapWith(idList);
 
-/** What every track list shows (a `SongRow`), plus what orders albums. */
+/**
+ * Tracks with a file. A missing song (a Track the Wave account has and this
+ * phone has no file for: `path` null) shows in the Library's lists, but
+ * can't be played from a file, so what plays or reads files reads only
+ * these: the queue and Android Auto (`TrackScope` "files"), and the scan's,
+ * imports' and lookups' queries (`filePath` where `hasFile`).
+ */
+export const hasFile = isNotNull(schema.tracks.path);
+
+/** A join's [on] condition, for joining `tracks`: only tracks with a file (`hasFile`). */
+export const withFile = (on: SQL): SQL => and(on, hasFile) ?? on;
+
+/** A track's file, for queries that read only tracks with one (`hasFile`, `withFile`). */
+export const filePath = sql<string>`${schema.tracks.path}`;
+
+/**
+ * Which Tracks a read sees: the Library's (every song, missing songs
+ * included, as its lists show them) or only those with a file (what plays:
+ * the queue, Android Auto).
+ */
+export type TrackScope = "library" | "files";
+
+/** A join's [on] condition for joining `tracks` in [scope]. */
+export const inScope = (on: SQL, scope: TrackScope): SQL => (scope === "files" ? withFile(on) : on);
+
+/** What every track list shows (a `SongRow`), plus what orders albums. Join `tracks` `inScope`. */
 export const songColumns = {
   id: schema.tracks.id,
+  /** Null for a missing song. */
   path: schema.tracks.path,
   title: schema.tracks.title,
   artist: schema.tracks.artistCredit,
@@ -48,16 +75,28 @@ export const songColumns = {
   year: schema.tracks.year,
 };
 
-/** Tracks with their `songColumns`. */
-export const trackQuery = (db: LibraryDatabase) => {
+/** The Tracks in [scope], with their `songColumns`. */
+export const trackQuery = (db: LibraryDatabase, scope: TrackScope = "library") => {
   const { tracks, artists, albums, artwork } = schema;
-  return db
-    .select(songColumns)
-    .from(tracks)
-    .innerJoin(artists, eq(tracks.artistId, artists.id))
-    .innerJoin(albums, eq(tracks.albumId, albums.id))
-    .leftJoin(artwork, eq(tracks.artworkHash, artwork.hash));
+  return (
+    db
+      .select(songColumns)
+      .from(tracks)
+      // In the join, so that callers' own `where` keeps it.
+      .innerJoin(artists, inScope(eq(tracks.artistId, artists.id), scope))
+      .innerJoin(albums, eq(tracks.albumId, albums.id))
+      .leftJoin(artwork, eq(tracks.artworkHash, artwork.hash))
+  );
 };
+
+/**
+ * The songs with these ids that can play (those with a file: a queue's), in
+ * no particular order; ids no longer in the Library, or missing songs, are left out.
+ */
+export const selectPlayableSongs = (db: LibraryDatabase, ids: readonly number[]) =>
+  chunks(ids).flatMap((some) =>
+    trackQuery(db, "files").where(inArray(schema.tracks.id, some)).all(),
+  );
 
 /** The order of song lists (Songs, an artist's or a genre's songs): by title, then artist. */
 export const BY_TITLE = [
@@ -75,7 +114,7 @@ export const selectLibraryLookupSongs = (db: LibraryDatabase) => {
   const { tracks, artists, albums, genres } = schema;
   return db
     .select({
-      path: tracks.path,
+      path: filePath,
       title: tracks.title,
       artist: tracks.artistCredit,
       album: albums.title,
@@ -89,6 +128,7 @@ export const selectLibraryLookupSongs = (db: LibraryDatabase) => {
     .innerJoin(artists, eq(tracks.artistId, artists.id))
     .innerJoin(albums, eq(tracks.albumId, albums.id))
     .leftJoin(genres, eq(tracks.genreId, genres.id))
+    .where(hasFile)
     .orderBy(...BY_TITLE)
     .all();
 };
@@ -101,14 +141,11 @@ export const selectKnownFiles = (db: LibraryDatabase, roots: readonly string[]) 
     (root) => sql`substr(${tracks.path}, 1, length(${root}) + 1) = ${`${root}/`}`,
   );
   return db
-    .select({ path: tracks.path, sizeBytes: tracks.sizeBytes, modifiedAt: tracks.modifiedAt })
+    .select({ path: filePath, sizeBytes: tracks.sizeBytes, modifiedAt: tracks.modifiedAt })
     .from(tracks)
-    .where(sql.join(under, sql` OR `))
+    .where(and(hasFile, sql.join(under, sql` OR `)))
     .all();
 };
-
-/** Statements stay small; SQLite's limit on bound parameters is far above this. */
-const CHUNK = 500;
 
 /**
  * Deletes the tracks at `paths` (their playlist items and stars go with them).
@@ -118,34 +155,41 @@ const CHUNK = 500;
  * tracks leave empty.
  */
 export const deleteTracks = (db: LibraryDatabase, paths: readonly string[]): void => {
+  for (const some of chunks(paths)) deleteTracksWhere(db, inArray(schema.tracks.path, some));
+};
+
+/** Deletes the Tracks with these ids, missing songs included, as `deleteTracks` deletes files'. */
+export const deleteTracksById = (db: LibraryDatabase, ids: readonly number[]): void => {
+  for (const some of chunks(ids)) deleteTracksWhere(db, inArray(schema.tracks.id, some));
+};
+
+/** Deletes the tracks [which] picks (a chunk's worth), keeping what their plays need. */
+const deleteTracksWhere = (db: LibraryDatabase, which: SQL): void => {
   const { tracks, playEvents, trackArtists, deletedTrackArtists } = schema;
-  for (let i = 0; i < paths.length; i += CHUNK) {
-    const chunk = paths.slice(i, i + CHUNK);
-    const leaving = db.select({ id: tracks.id }).from(tracks).where(inArray(tracks.path, chunk));
-    db.update(playEvents)
-      .set({
-        albumId: sql`(SELECT ${tracks.albumId} FROM ${tracks} WHERE ${tracks.id} = ${playEvents.trackId})`,
-      })
-      .where(inArray(playEvents.trackId, leaving))
-      .run();
-    db.insert(deletedTrackArtists)
-      .select(
-        db
-          .select({
-            trackId: trackArtists.trackId,
-            artistId: trackArtists.artistId,
-            position: trackArtists.position,
-          })
-          .from(trackArtists)
-          .where(
-            and(
-              inArray(trackArtists.trackId, leaving),
-              inArray(trackArtists.trackId, db.select({ id: playEvents.trackId }).from(playEvents)),
-            ),
+  const leaving = db.select({ id: tracks.id }).from(tracks).where(which);
+  db.update(playEvents)
+    .set({
+      albumId: sql`(SELECT ${tracks.albumId} FROM ${tracks} WHERE ${tracks.id} = ${playEvents.trackId})`,
+    })
+    .where(inArray(playEvents.trackId, leaving))
+    .run();
+  db.insert(deletedTrackArtists)
+    .select(
+      db
+        .select({
+          trackId: trackArtists.trackId,
+          artistId: trackArtists.artistId,
+          position: trackArtists.position,
+        })
+        .from(trackArtists)
+        .where(
+          and(
+            inArray(trackArtists.trackId, leaving),
+            inArray(trackArtists.trackId, db.select({ id: playEvents.trackId }).from(playEvents)),
           ),
-      )
-      .onConflictDoNothing()
-      .run();
-    db.delete(tracks).where(inArray(tracks.path, chunk)).run();
-  }
+        ),
+    )
+    .onConflictDoNothing()
+    .run();
+  db.delete(tracks).where(which).run();
 };

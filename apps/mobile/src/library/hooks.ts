@@ -1,4 +1,9 @@
-import { listeningOverview, listeningTotals, type ListeningOverview } from "@wave/core";
+import {
+  listeningOverview,
+  listeningTotals,
+  type ListeningOverview,
+  type MissingTrack,
+} from "@wave/core";
 import * as Effect from "effect/Effect";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { AppState } from "react-native";
@@ -130,6 +135,14 @@ const countTracks = Effect.gen(function* () {
 });
 
 const NO_SONGS: readonly SongRow[] = [];
+
+// oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+const listMissingSongs = LibraryStore.use((store) => store.missingSongs());
+const NO_MISSING_SONGS: readonly MissingTrack[] = [];
+
+/** The missing songs, by title: the Wave account's songs with no file on this phone. */
+export const useMissingSongs = (): readonly MissingTrack[] =>
+  useLibraryQuery(listMissingSongs, NO_MISSING_SONGS);
 
 export const useSongs = (): readonly SongRow[] => useLibraryQuery(listSongs, NO_SONGS);
 
@@ -278,7 +291,7 @@ export const useFavoriteSongs = (): readonly FavoriteRow[] | undefined =>
   );
 
 // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
-const readHome = LibraryStore.use((store) => store.home);
+const readHome = LibraryStore.use((store) => store.home());
 
 /**
  * The Home tab's sections, or undefined while loading. Re-read as soon as a

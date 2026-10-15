@@ -322,8 +322,10 @@ export {
   visibleHighlight,
 } from "./overlayOrigin.ts";
 export type { HighlightInput, NewCardInput, OriginCard } from "./overlayOrigin.ts";
-export { confirmSongDeletion, songDeletionFailure } from "./songDeletion.ts";
+export { confirmSongDeletion, confirmSongRemoval, songDeletionFailure } from "./songDeletion.ts";
 export type { SongDeleteFailure, SongDeleteFailureReason } from "./songDeletion.ts";
+export { songsLeaving } from "./songsLeaving.ts";
+export type { LeavingTrack, SongsLeaving } from "./songsLeaving.ts";
 export { artistArtwork, artistInitial } from "./artistImage.ts";
 export type { ArtistAlbumLink } from "./artistImage.ts";
 export { rowWindow, windowRows } from "./rowWindow.ts";
@@ -364,6 +366,25 @@ export {
   ytTrackId,
 } from "./ytMusic.ts";
 export type { LibrarySongKey, TrackRef, YtSong } from "./ytMusic.ts";
+export {
+  CONFIRM_WAVE_ACCOUNT_DELETION,
+  WAVE_ACCOUNT_CARD,
+  WAVE_ACCOUNT_SIGNED_OUT,
+  stepWaveAccount,
+  waveAccountConfig,
+  waveAccountView,
+} from "./waveAccount.ts";
+export type {
+  WaveAccount,
+  WaveAccountConfig,
+  WaveDeleteFailure,
+  WaveSignInFailure,
+  WaveAccountEvent,
+  WaveAccountNote,
+  WaveAccountState,
+  WaveAccountView,
+  WaveSession,
+} from "./waveAccount.ts";
 export { YT_ACCOUNT_SIGNED_OUT, stepYtAccount, ytAccountView } from "./ytAccount.ts";
 export type {
   YtAccount,
@@ -465,6 +486,8 @@ export type {
 } from "./blackPlayer.ts";
 export { libraryTrackIds, playerErrorNotice, queuedYtTracks, restorableTrack } from "./ytQueue.ts";
 export type { PlayerErrorCode, RestorableTracks } from "./ytQueue.ts";
+export { settleBestQuality } from "./bestQuality.ts";
+export type { BestQualityState, BestQualityStep } from "./bestQuality.ts";
 export {
   downloadFailurePlan,
   downloadFallback,
@@ -646,8 +669,8 @@ export type {
   StreamedArtistLink,
   StreamedArtistTarget,
 } from "./streamedArtist.ts";
-export { pagePlayback } from "./pagePlayback.ts";
-export type { PagePlayback } from "./pagePlayback.ts";
+export { pagePlayback, skipMissingSongs, tappedMissingSong } from "./pagePlayback.ts";
+export type { PagePlayback, PlayableSongs } from "./pagePlayback.ts";
 export {
   planPlaylistSongs,
   playlistEntryLinks,
@@ -720,3 +743,96 @@ export type {
   SpotifySong,
   SpotifyTransport,
 } from "./spotifyPlaylist.ts";
+export { compareOrderKeys, orderKeyBetween, placeEntries } from "./orderKey.ts";
+export type { EntryPlacement, OrderedEntry } from "./orderKey.ts";
+export {
+  RECORDING_LENGTH_TOLERANCE_MS,
+  fillMissingSongs,
+  findRecording,
+  joinLibraries,
+  mergePlays,
+  mergeRows,
+  recordingKey,
+  signOutPlan,
+  vanishedFile,
+} from "./sync.ts";
+export type {
+  FilledSong,
+  JoinedTrack,
+  KeyedSong,
+  LibraryJoin,
+  LibrarySide,
+  MergedPlays,
+  MergedRows,
+  MissingSong,
+  MissingSongsFill,
+  Recording,
+  RecordingTags,
+  SignOutPlan,
+  StreamedEntry,
+  SyncPlay,
+  SyncRow,
+  TrackEntry,
+  VanishedFileFate,
+} from "./sync.ts";
+export {
+  accountTrackIds,
+  blackPlayerPlayId,
+  missingSongTrack,
+  planMissingSongs,
+  planSongSync,
+} from "./syncPlan.ts";
+export type {
+  AccountSongState,
+  KeyedTrack,
+  MissingSongSave,
+  MissingSongTrack,
+  MissingSongsPlan,
+  PhoneSong,
+  ShownMissingSong,
+  SongSyncPlan,
+} from "./syncPlan.ts";
+export {
+  EMPTY_SYNC_TABLES,
+  SYNC_FIELDS,
+  SYNC_PUSH_BATCH,
+  SYNC_TABLE_NAMES,
+  pushBatches,
+  readPullPage,
+  syncFieldFits,
+} from "./syncWire.ts";
+export type {
+  SyncFavorite,
+  SyncFieldKind,
+  SyncPullPage,
+  SyncPlayEnd,
+  SyncPlayRow,
+  SyncPlaylist,
+  SyncPlaylistEntry,
+  SyncPreference,
+  SyncSong,
+  SyncSongFields,
+  SyncTables,
+  SyncedRow,
+} from "./syncWire.ts";
+export {
+  MISSING_SONGS_DOWNLOAD_ACTION_LABELS,
+  missingSongJob,
+  missingSongJobId,
+  missingSongLookup,
+  missingSongSearch,
+  missingSongTags,
+  missingSongTrackId,
+  missingSongVideo,
+  missingSongYtSong,
+  missingSongsDownload,
+} from "./missingSongDownload.ts";
+export type {
+  MissingSongJob,
+  MissingSongJobId,
+  MissingSongJobTags,
+  MissingSongVideo,
+  MissingSongsDownload,
+  MissingSongsDownloadAction,
+  MissingTrack,
+} from "./missingSongDownload.ts";

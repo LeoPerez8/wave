@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import {
   type AnySQLiteColumn,
   check,
@@ -103,8 +103,21 @@ export const tracks = sqliteTable(
   "tracks",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    /** Track identity in v1 (see the spec); moved files are matched by Core's reconciliation. */
-    path: text("path").notNull().unique(),
+    /**
+     * The file: the track's identity on this phone (see the spec); moved files
+     * are matched by Core's reconciliation. Null for a missing song (one the
+     * Wave account has and this phone has no file for), which can't be played
+     * from a file.
+     */
+    path: text("path").unique(),
+    /**
+     * What makes it the same song on another phone (Core's `recordingKey`),
+     * computed whenever the file is saved. Null only from the update that
+     * brought it in until the store keys the Library (`keyRecordings`).
+     */
+    recordingKey: text("recording_key"),
+    /** The YouTube video id of a song downloaded from YouTube Music; null for any other. */
+    videoId: text("video_id"),
     folderId: integer("folder_id")
       .notNull()
       .references(() => folders.id),
@@ -154,6 +167,7 @@ export const tracks = sqliteTable(
     index("tracks_album_idx").on(t.albumId),
     index("tracks_genre_idx").on(t.genreId),
     index("tracks_folder_idx").on(t.folderId),
+    index("tracks_recording_key_idx").on(t.recordingKey),
   ],
 );
 
@@ -293,47 +307,202 @@ export const recentSearches = sqliteTable("recent_searches", {
   searchedAt: integer("searched_at").notNull(),
 });
 
-/** Playlists the owner made. */
-export const playlists = sqliteTable("playlists", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  name: text("name").notNull(),
-  createdAt: integer("created_at").notNull(),
-  /** When the name or the items last changed. */
-  updatedAt: integer("updated_at").notNull(),
+/**
+ * This install. A single row, id 1: its phone id, random, made by the
+ * migration that brought Wave accounts in (or the first launch's), never changed.
+ */
+export const phone = sqliteTable("phone", {
+  id: integer("id").primaryKey(),
+  phoneId: text("phone_id").notNull(),
+});
+
+/** This install's phone id (`phone`), as SQL: rows changed here are stamped with it. */
+export const thisPhoneId = (): SQL<string> => sql<string>`(SELECT phone_id FROM phone)`;
+
+/** A new id for a synced row, the same on every phone it goes to: 32 random hex digits, from SQLite. */
+const newSyncId = (): SQL<string> => sql<string>`lower(hex(randomblob(16)))`;
+
+/**
+ * What every synced row of the Wave account records (Core's `SyncRow`): when
+ * it last changed, by the clock of the phone that changed it, and which phone
+ * that was (this one unless it came from the account). Removing the row
+ * leaves it as a tombstone (`deleted`), which the Library never shows.
+ */
+const changeStamp = () => ({
+  changedAt: integer("changed_at").notNull(),
+  phoneId: text("phone_id").notNull().$defaultFn(thisPhoneId),
+  deleted: integer("deleted", { mode: "boolean" }).notNull().default(false),
+  ...pushedFlag(),
 });
 
 /**
- * A playlist's songs, ordered by `position` (gaps allowed): each a Library
- * track (`track_id`) or a YT Music song the Library doesn't have (`yt_song`,
- * Core's `writePlaylistYtSong`), never both. Items go with their playlist,
- * and a track's with it when its file leaves the library.
+ * Whether the row's last change is on the Wave account: false from a change
+ * made on this phone until a push takes it (`db/sync.ts`); true for a change
+ * that came from the account.
+ */
+const pushedFlag = () => ({
+  pushed: integer("pushed", { mode: "boolean" }).notNull().default(false),
+});
+
+/** Playlists the owner made; a deleted one is a tombstone (`deleted`). */
+export const playlists = sqliteTable(
+  "playlists",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    /** The playlist's id on every phone, made on the phone that created it. */
+    syncId: text("sync_id").notNull().unique().$defaultFn(newSyncId),
+    name: text("name").notNull(),
+    createdAt: integer("created_at").notNull(),
+    /** When the name or the items last changed. */
+    updatedAt: integer("updated_at").notNull(),
+    /** When the name changed or the playlist was created or deleted (its entries have their own). */
+    ...changeStamp(),
+  },
+  (t) => [
+    index("playlists_changed_at_idx").on(t.changedAt),
+    index("playlists_pushed_idx").on(t.pushed),
+  ],
+);
+
+/**
+ * A playlist's entries, ordered by `order_key` (Core's `orderKeyBetween`),
+ * then `sync_id` for the entries two phones gave one key (Core's
+ * `compareOrderKeys`): each a Library track (`track_id`) or a YT Music song
+ * the Library doesn't have (`yt_song`, Core's `writePlaylistYtSong`), never
+ * both. A removed entry is a tombstone (`deleted`). Entries go with their
+ * playlist, and a track's with it when the track leaves the library.
  */
 export const playlistItems = sqliteTable(
   "playlist_items",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
+    /** The entry's id on every phone, made on the phone that added it. */
+    syncId: text("sync_id").notNull().unique().$defaultFn(newSyncId),
     playlistId: integer("playlist_id")
       .notNull()
       .references(() => playlists.id, { onDelete: "cascade" }),
     trackId: integer("track_id").references(() => tracks.id, { onDelete: "cascade" }),
     ytSong: text("yt_song"),
-    position: integer("position").notNull(),
+    orderKey: text("order_key").notNull(),
     addedAt: integer("added_at").notNull(),
+    ...changeStamp(),
   },
   (t) => [
-    index("playlist_items_playlist_position_idx").on(t.playlistId, t.position),
+    index("playlist_items_playlist_order_idx").on(t.playlistId, t.orderKey, t.syncId),
     index("playlist_items_track_idx").on(t.trackId),
+    index("playlist_items_changed_at_idx").on(t.changedAt),
+    index("playlist_items_pushed_idx").on(t.pushed),
     check("playlist_items_one_song", sql`(${t.trackId} IS NULL) <> (${t.ytSong} IS NULL)`),
   ],
 );
 
-/** Starred tracks; a star goes with its track when the file leaves the library. */
-export const favorites = sqliteTable("favorites", {
-  trackId: integer("track_id")
-    .primaryKey()
-    .references(() => tracks.id, { onDelete: "cascade" }),
-  /** When the track was starred (the Favorites list is newest first). */
-  addedAt: integer("added_at").notNull(),
+/**
+ * Starred tracks; an unstarred one is a tombstone (`deleted`). A star goes
+ * with its track when the track leaves the library.
+ */
+export const favorites = sqliteTable(
+  "favorites",
+  {
+    trackId: integer("track_id")
+      .primaryKey()
+      .references(() => tracks.id, { onDelete: "cascade" }),
+    /** When the track was starred (the Favorites list is newest first). */
+    addedAt: integer("added_at").notNull(),
+    ...changeStamp(),
+  },
+  (t) => [
+    index("favorites_changed_at_idx").on(t.changedAt),
+    index("favorites_pushed_idx").on(t.pushed),
+  ],
+);
+
+/**
+ * When each synced preference (a setting the Wave account keeps, by its
+ * key-value store key) last changed and on which phone. The values stay in
+ * the key-value store.
+ */
+export const preferenceChanges = sqliteTable("preference_changes", {
+  key: text("key").primaryKey(),
+  changedAt: integer("changed_at").notNull(),
+  phoneId: text("phone_id").notNull().$defaultFn(thisPhoneId),
+  ...pushedFlag(),
+});
+
+/**
+ * The Wave account's songs as this phone knows them (Core's `SyncSong`, by
+ * recording key), the songs it has no Track for included: what was last
+ * pulled or pushed, and what this phone's own song with the key was then
+ * (`local`, Core's `planSongSync`). A song changed here waits with `pushed`
+ * false. Emptied when a sign-in joins an account.
+ */
+export const accountSongs = sqliteTable(
+  "account_songs",
+  {
+    recordingKey: text("recording_key").primaryKey(),
+    /** Core's `SyncSongFields` as JSON; null for a removed song (a tombstone). */
+    song: text("song"),
+    changedAt: integer("changed_at").notNull(),
+    phoneId: text("phone_id").notNull(),
+    deleted: integer("deleted", { mode: "boolean" }).notNull().default(false),
+    ...pushedFlag(),
+    /** Opaque (Core's `planSongSync`); null while this phone has no file with the key. */
+    local: text("local"),
+  },
+  (t) => [index("account_songs_pushed_idx").on(t.pushed)],
+);
+
+/**
+ * Rows the Wave account sent that this phone can't place yet: a star, an
+ * entry or a play of a song it has no Track for (`song_key`), or an entry of
+ * a playlist that hasn't come yet (`playlist_key`). Each is applied once
+ * what it waits for is in the Library, and a newer change of the same row
+ * replaces it. Emptied when a sign-in joins an account.
+ */
+export const syncPending = sqliteTable(
+  "sync_pending",
+  {
+    /** The wire table: `playlistEntries`, `favorites` or `plays`. */
+    kind: text("kind").notNull(),
+    id: text("id").notNull(),
+    songKey: text("song_key"),
+    playlistKey: text("playlist_key"),
+    /** The row as the account sent it (JSON). */
+    row: text("row").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.kind, t.id] }),
+    index("sync_pending_song_idx").on(t.songKey),
+    index("sync_pending_playlist_idx").on(t.playlistKey),
+  ],
+);
+
+/**
+ * Removals made here whose rows the Library no longer has, waiting to go up
+ * as tombstones (Core's `songsLeaving`): the star and playlist entries of a
+ * song removed from the Library (Remove from Library, Delete), and the star
+ * of a retagged song's old recording key. Each leaves once a push takes it.
+ * Emptied when a sign-in joins an account.
+ */
+export const syncRemovals = sqliteTable(
+  "sync_removals",
+  {
+    /** The wire table: `favorites` or `playlistEntries`. */
+    kind: text("kind").notNull(),
+    /** The row's id on the account (a star's recording key, an entry's sync id). */
+    id: text("id").notNull(),
+    changedAt: integer("changed_at").notNull(),
+    phoneId: text("phone_id").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.kind, t.id] })],
+);
+
+/** Where syncing with the Wave account stands. A single row, id 1. */
+export const syncState = sqliteTable("sync_state", {
+  id: integer("id").primaryKey(),
+  /** The account this phone's Library is joined with (its email); null while not joined. */
+  account: text("account"),
+  /** The service's cursor after the last page pulled; null to pull everything. */
+  cursor: text("cursor"),
 });
 
 /**
@@ -375,9 +544,30 @@ export const playEvents = sqliteTable(
      * stats, `db/blackPlayer.ts`); null for Wave's own plays.
      */
     importedFrom: text("imported_from", { enum: ["blackplayer"] }),
+    /**
+     * The song's recording key (Core's `recordingKey`), written when the play
+     * is recorded, so the play keeps its song once the file is gone. Null for
+     * plays of songs deleted before Wave kept it: those stay on this phone.
+     */
+    recordingKey: text("recording_key"),
+    /**
+     * The play's id on every phone: random for Wave's own plays, the same on
+     * every phone for an imported one (Core's `blackPlayerPlayId`), the
+     * account's for a pulled one. Null for an imported play until the store
+     * keys it (`keyRecordings`), and for plays of songs deleted before Wave
+     * kept recording keys.
+     */
+    syncId: text("sync_id").unique().$defaultFn(newSyncId),
+    /**
+     * The play going on now (at most one): it still changes, so it goes to
+     * the Wave account only once it ends, or once a newer play starts.
+     */
+    ongoing: integer("ongoing", { mode: "boolean" }).notNull().default(false),
+    ...pushedFlag(),
   },
   (t) => [
     index("play_events_track_idx").on(t.trackId),
     index("play_events_started_at_idx").on(t.startedAt),
+    index("play_events_pushed_idx").on(t.pushed),
   ],
 );

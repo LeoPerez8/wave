@@ -4,6 +4,7 @@ import { persistedSetting, sameFields } from "@/lib/persistedSetting";
 
 const glass = persistedSetting<GlassSettings>({
   key: "settings.glass",
+  synced: true,
   read: readGlassSettings,
   write: (settings) => JSON.stringify(settings),
   equals: sameFields,

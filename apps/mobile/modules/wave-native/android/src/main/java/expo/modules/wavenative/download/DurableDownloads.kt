@@ -101,7 +101,7 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
         existing["generation"] = existing.number("generation") + 1
         existing.remove("token"); existing.remove("reason"); existing.remove("importFailure")
         // Retry starts again from the source decided now, Soulseek first while it has an account.
-        existing.remove("fallback"); existing.remove("fellBackFrom")
+        existing.remove("fallback"); existing.remove("fellBackFrom"); existing.remove("video")
         // Asked for again: it waits behind what's already queued.
         val key = existing["id"] as String
         jobs.remove(key); jobs[key] = existing
@@ -426,14 +426,21 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
     if (source == null) return
     job["source"] = source; job["policy"] = if (source == YOUTUBE) YOUTUBE_M4A else MP3_320
   }
-  private fun youtubeCandidates(job: Map<String, Any?>) = listOf(mapOf("source" to YOUTUBE, "videoId" to job.map("song")["videoId"]))
+  /**
+   * The video YouTube Music downloads: the one the prepare answer (or its fallback) named for a
+   * job not named after a video, such as a missing song's, else the song's own.
+   */
+  private fun youtubeCandidates(job: Map<String, Any?>) =
+    listOf(mapOf("source" to YOUTUBE, "videoId" to (job["video"] as? String ?: job.map("song")["videoId"])))
 
   /**
    * Keeps what a prepare answer says to do when a failure comes: the plan for the job's source
    * and, for a Soulseek job, YouTube Music's fallback (the M4A's place and YouTube's own plan).
    * The tags come with a failed answer too, so a job that never found a peer can still fall back.
+   * The video it names, if any, is the one YouTube Music downloads; an answer without one forgets it.
    */
   private fun keepPlans(job: MutableMap<String, Any?>, payload: Map<String, Any?>) {
+    (payload["video"] as? String)?.let { job["video"] = it } ?: job.remove("video")
     if (payload["failurePlan"] != null) job["failurePlan"] = clean(payload.map("failurePlan")) else job.remove("failurePlan")
     val fallback = payload.map("fallback")
     if (job["source"] != YOUTUBE && fallback["source"] == YOUTUBE && (fallback["targetPath"] as? String)?.endsWith(".m4a", true) == true) {
@@ -460,6 +467,7 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
     setSource(job, YOUTUBE)
     fallback["failurePlan"]?.let { job["failurePlan"] = clean(it) }
     job["fellBackFrom"] = reason
+    (fallback["video"] as? String)?.let { job["video"] = it }
     job["targetPath"] = fallback["targetPath"]
     job["candidates"] = youtubeCandidates(job); job["candidateIndex"] = 0L; job["attempts"] = 0L
     job["deadline"] = clock() + JOB_MS

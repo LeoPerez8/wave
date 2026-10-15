@@ -36,6 +36,13 @@ const config: ExpoConfig = {
   experiments: {
     typedRoutes: true,
   },
+  // The Wave account (docs/spec.md, "Wave account and sync"): the sync service's URL and Wave's
+  // web OAuth client id, the audience of the Google ID tokens it accepts. Neither is a secret.
+  // Empty, Settings says the account isn't set up on this build.
+  extra: {
+    syncUrl: "",
+    googleWebClientId: "",
+  },
   plugins: [
     "expo-router",
     "expo-status-bar",

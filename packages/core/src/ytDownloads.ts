@@ -11,12 +11,14 @@ import { soulseekSameRecording } from "./soulseekDownload.ts";
 
 /**
  * Why acquisition failed, including account setup and an unavailable recording:
- * `account` is no Soulseek account (signed out), `accountRejected` one Soulseek
- * turned down, `unreachable` Soulseek's server not answering while the phone
- * is online (`offline` is the phone), `unavailable` no Soulseek copy in 320
- * kbps, `timedOut` a download that used up its time, `noSource` neither YT
- * Music nor a Soulseek account, and `ytUnavailable` a song YouTube Music won't
- * serve (or serves audio of another length).
+ * `account` is Soulseek with Download in best quality off (or no account),
+ * `accountRejected` an account Soulseek turned down (which turns it off),
+ * `unreachable` Soulseek's server not answering while the phone is online
+ * (`offline` is the phone), `unavailable` no Soulseek copy in 320 kbps,
+ * `timedOut` a download that used up its time, `noSource` both YT Music and
+ * Download in best quality off, `ytUnavailable` a song YouTube Music won't
+ * serve (or serves audio of another length), and `notFound` a missing song
+ * YouTube Music's search has no match for (`missingSongVideo`).
  */
 export type YtDownloadFailure =
   | "offline"
@@ -29,7 +31,8 @@ export type YtDownloadFailure =
   | "unreachable"
   | "unavailable"
   | "noSource"
-  | "ytUnavailable";
+  | "ytUnavailable"
+  | "notFound";
 
 export type YtDownloadPhase = "connecting" | "searching" | "queued" | "transferring" | "validating";
 
@@ -220,13 +223,14 @@ const FAILURE_LINES: { readonly [F in YtDownloadFailure]: string } = {
   timedOut: "Download failed",
   noFolder: "Download failed: no music folder",
   storage: "Download failed: couldn't save the file",
-  account: "Connect a free Soulseek account in Settings",
-  // Soulseek forgets an account it rejects, so the way back is the same.
-  accountRejected: "Connect a free Soulseek account in Settings",
+  account: "Turn on Download in best quality in Settings",
+  // A rejected account is forgotten and the switch turned off; turning it on makes a new one.
+  accountRejected: "Turn on Download in best quality in Settings",
   unreachable: "Download failed: Soulseek can't be reached",
   unavailable: "This recording is unavailable in 320 kbps",
-  noSource: "Connect YT Music or Soulseek in Settings",
+  noSource: "Turn on YT Music or Download in best quality in Settings",
   ytUnavailable: "This song is unavailable on YouTube Music",
+  notFound: "Not found on YouTube Music",
 };
 
 /** The fraction of the file that has arrived, or null when there's no size to measure against. */

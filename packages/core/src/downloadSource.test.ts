@@ -9,17 +9,27 @@ const step = (plan: DownloadFailurePlan, failure: YtDownloadFailure) =>
   plan.retry.includes(failure) ? "retry" : plan.end.includes(failure) ? "end" : "next";
 
 describe("downloadSource", () => {
-  test("with YT Music on and no Soulseek account, a download comes from YouTube Music", () => {
-    assert.equal(downloadSource({ ytMusicOn: true, soulseekAccount: false }), "youtube");
+  test("with Download in best quality off, a download comes from YouTube Music while YT Music is on", () => {
+    assert.equal(downloadSource({ ytMusicOn: true, bestQuality: false }), "youtube");
   });
 
-  test("with a Soulseek account, downloads stay on Soulseek whether YT Music is on or off", () => {
-    assert.equal(downloadSource({ ytMusicOn: true, soulseekAccount: true }), "soulseek");
-    assert.equal(downloadSource({ ytMusicOn: false, soulseekAccount: true }), "soulseek");
+  test("with Download in best quality on, downloads come from Soulseek whether YT Music is on or off", () => {
+    assert.equal(downloadSource({ ytMusicOn: true, bestQuality: true }), "soulseek");
+    assert.equal(downloadSource({ ytMusicOn: false, bestQuality: true }), "soulseek");
   });
 
-  test("with YT Music off and no Soulseek account, a download has no source", () => {
-    assert.equal(downloadSource({ ytMusicOn: false, soulseekAccount: false }), null);
+  test("with YT Music and Download in best quality both off, a download has no source", () => {
+    assert.equal(downloadSource({ ytMusicOn: false, bestQuality: false }), null);
+  });
+
+  test("a missing song with a video id downloads that video from YouTube Music, even with Download in best quality on", () => {
+    assert.equal(downloadSource({ ytMusicOn: true, bestQuality: true, video: true }), "youtube");
+    assert.equal(downloadSource({ ytMusicOn: true, bestQuality: false, video: true }), "youtube");
+  });
+
+  test("with YT Music off, a missing song with a video id comes from Soulseek while Download in best quality is on", () => {
+    assert.equal(downloadSource({ ytMusicOn: false, bestQuality: true, video: true }), "soulseek");
+    assert.equal(downloadSource({ ytMusicOn: false, bestQuality: false, video: true }), null);
   });
 });
 
