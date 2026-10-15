@@ -40,7 +40,24 @@ pnpm typecheck
 pnpm lint
 pnpm fmt:check      # `pnpm fmt` to fix
 pnpm test           # Core tests run with plain `node --test`
+pnpm react-doctor   # Full mobile diagnostics, including existing findings
+pnpm react-doctor:check --base origin/main # Fail on new React errors only
 ```
+
+React Doctor scans the Expo / React Native app. Fetch the target branch before
+running `react-doctor:check`, and use that branch as `--base` when the pull request
+targets a branch other than `main`. The local check also includes untracked source.
+The full scan reports the existing backlog without failing on findings. Both
+commands fail when a scan cannot complete. The full JSON report is saved locally
+in `.cache/react-doctor/full.json`.
+
+The React Doctor workflow prints full diagnostics on every run and compares pull
+requests with their actual base commit using full git history. New errors fail the
+check; warnings stay advisory. Same-repository pull requests receive a summary
+comment and inline feedback. Fork pull requests get the same scan and gate in the
+Actions logs. React Doctor's score API and dependency supply-chain network checks
+are disabled so these code checks work offline. Oxlint remains the authority for
+the project's lint rules and native import exceptions.
 
 ## Agent skills
 
