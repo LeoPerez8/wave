@@ -4,6 +4,7 @@
  */
 import { and, asc, eq, inArray, isNotNull, sql, type SQL } from "drizzle-orm";
 
+import { chunks } from "./chunks.ts";
 import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
 
@@ -88,24 +89,14 @@ export const trackQuery = (db: LibraryDatabase, scope: TrackScope = "library") =
   );
 };
 
-/** Track ids per statement, well under SQLite's limit on bound values. */
-const ID_CHUNK = 500;
-
 /**
  * The songs with these ids that can play (those with a file: a queue's), in
  * no particular order; ids no longer in the Library, or missing songs, are left out.
  */
-export const selectPlayableSongs = (db: LibraryDatabase, ids: readonly number[]) => {
-  const rows: ReturnType<ReturnType<typeof trackQuery>["all"]> = [];
-  for (let i = 0; i < ids.length; i += ID_CHUNK) {
-    rows.push(
-      ...trackQuery(db, "files")
-        .where(inArray(schema.tracks.id, ids.slice(i, i + ID_CHUNK)))
-        .all(),
-    );
-  }
-  return rows;
-};
+export const selectPlayableSongs = (db: LibraryDatabase, ids: readonly number[]) =>
+  chunks(ids).flatMap((some) =>
+    trackQuery(db, "files").where(inArray(schema.tracks.id, some)).all(),
+  );
 
 /** The order of song lists (Songs, an artist's or a genre's songs): by title, then artist. */
 export const BY_TITLE = [
@@ -156,9 +147,6 @@ export const selectKnownFiles = (db: LibraryDatabase, roots: readonly string[]) 
     .all();
 };
 
-/** Statements stay small; SQLite's limit on bound parameters is far above this. */
-const CHUNK = 500;
-
 /**
  * Deletes the tracks at `paths` (their playlist items and stars go with them).
  * Their play history stays, and keeps each track's album and every artist its
@@ -167,16 +155,12 @@ const CHUNK = 500;
  * tracks leave empty.
  */
 export const deleteTracks = (db: LibraryDatabase, paths: readonly string[]): void => {
-  for (let i = 0; i < paths.length; i += CHUNK) {
-    deleteTracksWhere(db, inArray(schema.tracks.path, paths.slice(i, i + CHUNK)));
-  }
+  for (const some of chunks(paths)) deleteTracksWhere(db, inArray(schema.tracks.path, some));
 };
 
 /** Deletes the Tracks with these ids, missing songs included, as `deleteTracks` deletes files'. */
 export const deleteTracksById = (db: LibraryDatabase, ids: readonly number[]): void => {
-  for (let i = 0; i < ids.length; i += CHUNK) {
-    deleteTracksWhere(db, inArray(schema.tracks.id, ids.slice(i, i + CHUNK)));
-  }
+  for (const some of chunks(ids)) deleteTracksWhere(db, inArray(schema.tracks.id, some));
 };
 
 /** Deletes the tracks [which] picks (a chunk's worth), keeping what their plays need. */

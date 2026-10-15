@@ -7,69 +7,31 @@
  * so the store tests run it against a real SQLite (`testDatabase.ts`).
  */
 import {
-  UNKNOWN_ALBUM,
-  missingSongTrack,
+  missingSongYtSong,
+  planMissingSongs,
   signOutPlan,
   vanishedFile,
   writePlaylistYtSong,
-  type MissingSongTrack,
   type MissingTrack,
   type SyncSongFields,
 } from "@wave/core";
 import { and, eq, inArray, isNotNull, isNull, sql, type SQL } from "drizzle-orm";
 
+import { chunks } from "./chunks.ts";
 import type { CreditSplits } from "./credits.ts";
 import type { LibraryDatabase } from "./database.ts";
-import { pruneOrphans, saveMissingSongs, type MissingSongSave } from "./save.ts";
+import { pruneOrphans, saveMissingSongs } from "./save.ts";
 import * as schema from "./schema.ts";
 import { thisPhoneId } from "./schema.ts";
+import { stamped } from "./sync.ts";
 import { leaveAccount, selectJoinedAccount } from "./syncRows.ts";
 import { deleteTracks, deleteTracksById } from "./tracks.ts";
 
-/** Ids per statement, well under SQLite's limit on bound values. */
-const CHUNK = 500;
-
-const chunks = <A>(items: readonly A[]): A[][] => {
-  const out: A[][] = [];
-  for (let i = 0; i < items.length; i += CHUNK) out.push(items.slice(i, i + CHUNK));
-  return out;
-};
-
-/** What a missing Track shows of its account song, to tell when the account's tags changed. */
-const shownTags = (track: {
-  readonly title: string;
-  readonly artist: string;
-  readonly album: string;
-  readonly albumArtist: string;
-  readonly genre: string | null;
-  readonly year: number | null;
-  readonly trackNumber: number | null;
-  readonly discNumber: number | null;
-  readonly durationMs: number;
-  readonly videoId: string | null;
-}): string =>
-  JSON.stringify([
-    track.title,
-    track.artist,
-    track.album,
-    track.albumArtist,
-    track.genre,
-    track.year,
-    track.trackNumber,
-    track.discNumber,
-    track.durationMs,
-    track.videoId,
-  ]);
-
-const tagsOf = (track: MissingSongTrack, videoId: string | null) =>
-  shownTags({ ...track, videoId });
-
 /**
  * Brings the Library's missing songs in line with the account's songs (the
- * phone's last pull): an account song no Track has comes in as a missing
- * song, a missing song takes the account's tags when they changed on another
- * phone, and one the account no longer has (removed there, or never sent up)
- * leaves. Tracks with a file are never touched. True when the Library changed.
+ * phone's last pull), as Core's `planMissingSongs` decides: account songs no
+ * Track has come in, missing songs take tags changed on another phone, and
+ * those the account no longer has leave. True when the Library changed.
  */
 export const syncMissingSongs = (
   db: LibraryDatabase,
@@ -77,26 +39,20 @@ export const syncMissingSongs = (
   now: number,
 ): boolean => {
   const { accountSongs, tracks, albums, genres } = schema;
-  const live = new Map(
-    db
-      .select({ recordingKey: accountSongs.recordingKey, song: accountSongs.song })
-      .from(accountSongs)
-      .where(and(eq(accountSongs.deleted, false), isNotNull(accountSongs.song)))
-      .all()
-      .flatMap((row) =>
-        row.song === null
-          ? []
-          : [[row.recordingKey, JSON.parse(row.song) as SyncSongFields] as const],
-      ),
-  );
-  const held = new Set(
-    db
-      .selectDistinct({ key: tracks.recordingKey })
-      .from(tracks)
-      .where(isNotNull(tracks.recordingKey))
-      .all()
-      .flatMap((row) => row.key ?? []),
-  );
+  const account = db
+    .select({ recordingKey: accountSongs.recordingKey, song: accountSongs.song })
+    .from(accountSongs)
+    .where(and(eq(accountSongs.deleted, false), isNotNull(accountSongs.song)))
+    .all()
+    .flatMap(({ recordingKey, song }) =>
+      song === null ? [] : [{ recordingKey, song: JSON.parse(song) as SyncSongFields }],
+    );
+  const held = db
+    .selectDistinct({ key: tracks.recordingKey })
+    .from(tracks)
+    .where(isNotNull(tracks.recordingKey))
+    .all()
+    .flatMap((row) => row.key ?? []);
   const missing = db
     .select({
       id: tracks.id,
@@ -117,43 +73,12 @@ export const syncMissingSongs = (
     .leftJoin(genres, eq(tracks.genreId, genres.id))
     .where(isNull(tracks.path))
     .all();
-
-  const save: MissingSongSave[] = [];
-  const leaving: number[] = [];
-  for (const track of missing) {
-    const song = track.recordingKey === null ? undefined : live.get(track.recordingKey);
-    if (song === undefined || track.recordingKey === null) {
-      leaving.push(track.id);
-      continue;
-    }
-    const tags = missingSongTrack(song);
-    if (shownTags(track) !== tagsOf(tags, song.videoId)) {
-      save.push({
-        trackId: track.id,
-        recordingKey: track.recordingKey,
-        track: tags,
-        videoId: song.videoId,
-        addedAt: song.addedAt,
-      });
-    }
-  }
-  const retagged = save.length > 0;
-  for (const [recordingKey, song] of live) {
-    if (held.has(recordingKey)) continue;
-    save.push({
-      trackId: null,
-      recordingKey,
-      track: missingSongTrack(song),
-      videoId: song.videoId,
-      addedAt: song.addedAt,
-    });
-  }
-  if (save.length === 0 && leaving.length === 0) return false;
+  const plan = planMissingSongs({ account, held, missing });
+  if (plan.save.length === 0 && plan.leave.length === 0) return false;
   db.transaction((tx) => {
-    saveMissingSongs(tx, splits, save, now);
-    deleteTracksById(tx, leaving);
-    // What left, or changed its tags, can leave albums, artists and genres empty.
-    if (retagged || leaving.length > 0) pruneOrphans(tx, splits);
+    saveMissingSongs(tx, splits, plan.save, now);
+    deleteTracksById(tx, plan.leave);
+    if (plan.prune) pruneOrphans(tx, splits);
   });
   return true;
 };
@@ -302,7 +227,7 @@ export const removeSongs = (
         .values({ recordingKey, changedAt: now, ...removal })
         .onConflictDoUpdate({
           target: accountSongs.recordingKey,
-          set: { ...removal, changedAt: sql`max(${now}, ${accountSongs.changedAt} + 1)` },
+          set: { ...removal, ...stamped(accountSongs, now) },
         })
         .run();
     }
@@ -318,21 +243,8 @@ export const removeSongs = (
  */
 export const signOut = (db: LibraryDatabase, splits: CreditSplits): void => {
   leaveAccount(db);
-  const { tracks, albums, playlistItems } = schema;
-  const missing = db
-    .select({
-      id: tracks.id,
-      videoId: tracks.videoId,
-      title: tracks.title,
-      artist: tracks.artistCredit,
-      artists: tracks.artistCredits,
-      album: albums.title,
-      durationMs: tracks.durationMs,
-    })
-    .from(tracks)
-    .innerJoin(albums, eq(tracks.albumId, albums.id))
-    .where(isNull(tracks.path))
-    .all();
+  const { playlistItems } = schema;
+  const missing = selectMissingSongs(db);
   if (missing.length === 0) return;
   const entries = chunks(missing.map((song) => song.id)).flatMap((ids) =>
     db
@@ -343,23 +255,13 @@ export const signOut = (db: LibraryDatabase, splits: CreditSplits): void => {
   );
   const plan = signOutPlan({ missing, entries });
   db.transaction((tx) => {
-    for (const { entry, videoId } of plan.toYtMusic) {
+    for (const { entry } of plan.toYtMusic) {
       const song = missing.find((each) => each.id === entry.trackId);
-      if (song === undefined) continue;
+      const ytSong = song === undefined ? null : missingSongYtSong(song);
+      if (ytSong === null) continue;
       // A change on this phone alone: it isn't stamped, so it goes nowhere.
       tx.update(playlistItems)
-        .set({
-          trackId: null,
-          ytSong: writePlaylistYtSong({
-            videoId,
-            title: song.title,
-            artists: song.artists === null ? [song.artist] : (JSON.parse(song.artists) as string[]),
-            album: song.album === UNKNOWN_ALBUM ? null : song.album,
-            durationMs: song.durationMs > 0 ? song.durationMs : null,
-            artworkUrl: null,
-            explicit: false,
-          }),
-        })
+        .set({ trackId: null, ytSong: writePlaylistYtSong(ytSong) })
         .where(eq(playlistItems.id, entry.id))
         .run();
     }

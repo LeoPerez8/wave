@@ -27,19 +27,11 @@ import {
 } from "@wave/core";
 import { and, asc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 
+import { chunks } from "./chunks.ts";
 import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
 import { selectPhoneId, selectTrackIdentities } from "./sync.ts";
 import { hasFile } from "./tracks.ts";
-
-/** Ids per statement, well under SQLite's limit on bound values. */
-const CHUNK = 500;
-
-const chunks = <A>(items: readonly A[]): A[][] => {
-  const out: A[][] = [];
-  for (let i = 0; i < items.length; i += CHUNK) out.push(items.slice(i, i + CHUNK));
-  return out;
-};
 
 // --- The account the Library is joined with ---------------------------------
 

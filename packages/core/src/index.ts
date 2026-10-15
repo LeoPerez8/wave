@@ -771,12 +771,21 @@ export type {
   TrackEntry,
   VanishedFileFate,
 } from "./sync.ts";
-export { accountTrackIds, blackPlayerPlayId, missingSongTrack, planSongSync } from "./syncPlan.ts";
+export {
+  accountTrackIds,
+  blackPlayerPlayId,
+  missingSongTrack,
+  planMissingSongs,
+  planSongSync,
+} from "./syncPlan.ts";
 export type {
   AccountSongState,
   KeyedTrack,
+  MissingSongSave,
   MissingSongTrack,
+  MissingSongsPlan,
   PhoneSong,
+  ShownMissingSong,
   SongSyncPlan,
 } from "./syncPlan.ts";
 export { EMPTY_SYNC_TABLES, SYNC_PUSH_BATCH, pushBatches, readPullPage } from "./syncWire.ts";
@@ -802,6 +811,7 @@ export {
   missingSongTags,
   missingSongTrackId,
   missingSongVideo,
+  missingSongYtSong,
   missingSongsDownload,
 } from "./missingSongDownload.ts";
 export type {
