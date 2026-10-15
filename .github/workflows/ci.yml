@@ -158,7 +158,7 @@ jobs:
         run: scripts/ci/ccache.sh stats
 
       - name: Save ccache
-        if: (github.ref == 'refs/heads/main' || github.head_ref == 'feat/186-ccache') && steps.ccache.outputs.cache-hit != 'true'
+        if: github.ref == 'refs/heads/main' && steps.ccache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: ~/.cache/ccache
