@@ -12,6 +12,7 @@ import * as Queue from "@/playback/Queue";
 import * as Stats from "@/stats/Stats";
 import * as Auto from "@/auto/Auto";
 import * as YtMusic from "@/ytmusic/YtMusic";
+import * as WaveSync from "@/sync/WaveSync";
 
 import {
   chooseExcludedFolder,
@@ -41,15 +42,13 @@ export const appLayer = Layer.mergeAll(
   Stats.layer,
   Auto.layer,
   YtMusic.layer,
+  WaveSync.layer,
 ).pipe(Layer.provideMerge(services));
 
 export const appRuntime = ManagedRuntime.make(appLayer);
 
 export type AppServices =
-  | LibraryStore.LibraryStore
-  | NativeScanner.NativeScanner
-  | Player.Player
-  | Queue.Queue;
+  LibraryStore.LibraryStore | NativeScanner.NativeScanner | Player.Player | Queue.Queue;
 
 /** The scan running now, so a second request (pull to refresh) waits for it instead. */
 let currentScan: Promise<void> | null = null;

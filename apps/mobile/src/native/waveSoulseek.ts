@@ -24,6 +24,11 @@ export interface NativeDownloadJob extends YtDownloadJournalJob<NativeYtSong> {
   readonly receiptId?: string;
   /** The Soulseek failure a job carrying on from YouTube Music fell back from. */
   readonly fellBackFrom?: YtDownloadFailure;
+  /**
+   * The YouTube Music video a job not named after one downloads (a missing
+   * song's, `missing:<id>`), once its prepare answer or fallback named it.
+   */
+  readonly video?: string;
 }
 
 /** A decision the journal leased to JS; answered with `submitDecision` before [leaseUntil]. */
@@ -35,7 +40,8 @@ export interface NativeDownloadDecision extends NativeDownloadJob {
 }
 
 export interface SoulseekSession {
-  readonly status: "signedOut" | "disconnected" | "connected";
+  /** "off" while Download in best quality is off; the phone keeps its account then. */
+  readonly status: "off" | "disconnected" | "connected";
   readonly username: string | null;
 }
 
@@ -86,8 +92,18 @@ declare class WaveSoulseekModule extends NativeModule<{
   refreshDownloadPolicy(roots: readonly string[], excluded: readonly string[]): Promise<number>;
   cancelJob(id: string): Promise<void>;
   session(): Promise<SoulseekSession>;
-  connect(username: string, password: string): Promise<SoulseekSession>;
-  disconnect(): Promise<SoulseekSession>;
+  /** Download in best quality: connects the phone's Soulseek account, making one when it has none. */
+  turnOn(): Promise<SoulseekSession>;
+  /** Download in best quality off: downloads stop using Soulseek and the account stays. */
+  turnOff(): Promise<SoulseekSession>;
+  /**
+   * At sign-in and each pull while signed in: the phone switches to the Wave
+   * account's Soulseek account when it has one (forgetting its own), or sends
+   * its own up when it has none. The native module asks the sync service with
+   * the session it holds, so the credentials never reach JS. Signed out, does
+   * nothing. Rejects with an `ERR_WAVE_*` code when the service can't be asked.
+   */
+  followWaveAccount(): Promise<SoulseekSession>;
   search(query: string): Promise<SoulseekCandidate[]>;
 }
 

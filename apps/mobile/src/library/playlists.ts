@@ -18,14 +18,25 @@ const playlistsVersion = makeExternalStore(0);
 export const usePlaylistsVersion = (): number =>
   useSyncExternalStore(playlistsVersion.subscribe, playlistsVersion.get);
 
+/** Calls [listener] after every playlist edit; returns how to stop. */
+export const onPlaylistsEdited = (listener: () => void): (() => void) =>
+  playlistsVersion.subscribe(listener);
+
+/**
+ * The playlists changed (an edit here, or the Wave account sent some):
+ * playlist queries re-run, and the remembered list is read again now, so the
+ * next card that lists them doesn't wait for it.
+ */
+export const playlistsChanged = (): void => {
+  playlistsVersion.update((version) => version + 1);
+  appRuntime.runPromise(listPlaylistsRemembered).catch(() => {});
+};
+
 const edit = <A>(
   run: (store: LibraryStore["Service"]) => Effect.Effect<A, LibraryStoreError>,
 ): Promise<A> =>
-  appRuntime.runPromise(LibraryStore.use(run)).finally(() => {
-    playlistsVersion.update((version) => version + 1);
-    // Re-read now, so the next card that lists them doesn't wait for it.
-    appRuntime.runPromise(listPlaylistsRemembered).catch(() => {});
-  });
+  // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+  appRuntime.runPromise(LibraryStore.use(run)).finally(playlistsChanged);
 
 /** The playlists as last read, and the `playlistsVersion` they were read at. */
 let remembered: { readonly version: number; readonly rows: readonly PlaylistRow[] } | undefined;

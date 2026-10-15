@@ -9,22 +9,28 @@ import { eq, inArray, sql } from "drizzle-orm";
 
 import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
+import { identifyImportedPlays, playRecordingKey } from "./sync.ts";
+import { filePath, hasFile } from "./tracks.ts";
 
 /** Every track with what an import matches BlackPlayer's rows by. */
 export const selectImportTracks = (db: LibraryDatabase): BlackPlayerTrack<number>[] => {
   const { albums, tracks } = schema;
-  return db
-    .select({
-      id: tracks.id,
-      path: tracks.path,
-      title: tracks.title,
-      artist: tracks.artistCredit,
-      album: albums.title,
-      durationMs: tracks.durationMs,
-    })
-    .from(tracks)
-    .innerJoin(albums, eq(albums.id, tracks.albumId))
-    .all();
+  return (
+    db
+      .select({
+        id: tracks.id,
+        path: filePath,
+        title: tracks.title,
+        artist: tracks.artistCredit,
+        album: albums.title,
+        durationMs: tracks.durationMs,
+      })
+      .from(tracks)
+      .innerJoin(albums, eq(albums.id, tracks.albumId))
+      // Plays are matched to files: a missing song has none.
+      .where(hasFile)
+      .all()
+  );
 };
 
 /** Each track's BlackPlayer plays already in the history, in no order. */
@@ -48,7 +54,7 @@ const CHUNK = 200;
 /**
  * Adds imported plays to the history in one transaction: counted plays,
  * listened through (the song's length, as the player would have played it),
- * with no play context.
+ * with no play context, each with the id the Wave account knows it by.
  */
 export const saveImportedPlays = (
   db: LibraryDatabase,
@@ -80,10 +86,14 @@ export const saveImportedPlays = (
               endReason: "completed" as const,
               counted: true,
               importedFrom: "blackplayer" as const,
+              recordingKey: playRecordingKey(play.trackId),
+              // Its id for the account comes from its song and place (`identifyImportedPlays`).
+              syncId: null,
             };
           }),
         )
         .run();
     }
+    identifyImportedPlays(tx);
   });
 };

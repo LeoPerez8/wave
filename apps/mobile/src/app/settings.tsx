@@ -28,7 +28,8 @@ import {
 } from "@/settings/longPressDelay";
 import { setTapAnimationMs, TAP_ANIMATION, useTapAnimationMs } from "@/settings/tapAnimation";
 import { YtMusicSettingsSection } from "@/settings/YtMusicSettingsSection";
-import { SoulseekSettingsSection } from "@/settings/SoulseekSettingsSection";
+import { DownloadsSettingsSection } from "@/settings/DownloadsSettingsSection";
+import { WaveAccountSettingsSection } from "@/settings/WaveAccountSettingsSection";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 /** One of the shortcut tab choices; the current one carries a check. */
@@ -172,7 +173,9 @@ export default function SettingsScreen() {
         <LyricsAndGenreSettingsSection />
 
         <YtMusicSettingsSection />
-        <SoulseekSettingsSection />
+        <DownloadsSettingsSection />
+
+        <WaveAccountSettingsSection />
 
         <CatalogLine className="mb-2 mt-12">Developer</CatalogLine>
         <Hairline />

@@ -25,7 +25,7 @@ SDK. When that's the case:
 - `pnpm --filter @wave/core test` (or `node --test` in `packages/core`) still works — Core
   has no dependencies.
 - Don't hand-edit `pnpm-lock.yaml`. Change `package.json` and push: on PRs, CI resolves the
-  lockfile and runs `oxfmt`, then commits the result back to the branch. Pull before
+  lockfile and runs `pnpm fmt` (Prettier), then commits the result back to the branch. Pull before
   continuing.
 - CI reports each job as a sticky PR comment (`<!-- wave-ci:… -->`) with the tail of the
   failing step's log — read it with

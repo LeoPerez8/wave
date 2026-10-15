@@ -27,6 +27,9 @@ const readRelease = (browseId: string) =>
 
 const pageKey = (browseId: string, attempt: number): string => `${browseId}#${attempt}`;
 
+/** The album only needs the artist's releases: their page, not every song of theirs. */
+const RELEASES_ONLY = { allSongs: false } as const;
+
 export interface YtAlbumSection {
   /** What the album's page shows from YouTube Music, or null: nothing (Core's `ytLibraryAlbumView`). */
   readonly view: YtLibraryAlbumView<NativeYtSong, SongRow> | null;
@@ -41,10 +44,11 @@ export interface YtAlbumSection {
  * What a Library [album]'s page shows from YouTube Music, through its album
  * artist [name] ([artistId]). Opened from an integrated view
  * ([openedIntegrated]), or once Show on YouTube Music is tapped, the album is
- * integrated: it asks for the artist if nothing stands for them (saving the
- * answer for their page too), finds its release among their releases and
- * reads it, its songs joining the album's [tracks]. Otherwise nothing is
- * asked.
+ * integrated: it asks for the artist's page if nothing stands for them (the
+ * page only, not every song of theirs: saved, it doesn't stand on their
+ * artist page, and it never replaces an answer that does), finds its release
+ * among their releases and reads it, its songs joining the album's
+ * [tracks]. Otherwise nothing is asked.
  */
 export const useYtAlbumSection = (
   name: string,
@@ -53,7 +57,7 @@ export const useYtAlbumSection = (
   tracks: readonly SongRow[],
   openedIntegrated: boolean,
 ): YtAlbumSection => {
-  const { state, enabled, openedAt, show: askArtist } = useYtArtistAnswer(name);
+  const { state, enabled, openedAt, show: askArtist } = useYtArtistAnswer(name, RELEASES_ONLY);
   const find = useLoadedLibraryFinder();
   const [integrated, setIntegrated] = useState(openedIntegrated);
   // Bumped to read the release's page again after it got no answer.

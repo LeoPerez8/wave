@@ -1,7 +1,8 @@
 import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
 import { IconPlaylist } from "@tabler/icons-react-native";
+import { counted } from "@wave/core";
 import { useScrollToTop } from "expo-router";
-import { useCallback, useRef } from "react";
+import { useCallback, useRef, type ReactNode } from "react";
 import { View } from "react-native";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
@@ -106,16 +107,26 @@ export function PlaylistsList({ empty }: { empty: string }) {
       recycleItems
       contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottomInset }}
       ListHeaderComponent={
-        <View className="flex-row items-center" style={{ paddingBottom: CELL }}>
-          <View className="flex-1">
-            <CatalogLine>
-              {`${playlists.length} ${playlists.length === 1 ? "playlist" : "playlists"}`}
-            </CatalogLine>
-          </View>
+        <PlaylistsHeader count={playlists.length}>
           <PlaylistsActions />
-        </View>
+        </PlaylistsHeader>
       }
     />
+  );
+}
+
+/**
+ * Library › Playlists' header: how many playlists there are, then [children]
+ * (its buttons) on the right. The Design preview draws it too.
+ */
+export function PlaylistsHeader({ count, children }: { count: number; children: ReactNode }) {
+  return (
+    <View className="flex-row items-center" style={{ paddingBottom: CELL }}>
+      <View className="flex-1">
+        <CatalogLine>{counted(count, "playlist")}</CatalogLine>
+      </View>
+      {children}
+    </View>
   );
 }
 
@@ -126,9 +137,42 @@ export function PlaylistsList({ empty }: { empty: string }) {
 function PlaylistsActions() {
   const ytMusic = useYtMusicEnabled();
   return (
+    <PlaylistsButtons
+      importOpensMenu={ytMusic}
+      onImport={openPlaylistImport}
+      onNewPlaylist={createAndOpen}
+    />
+  );
+}
+
+/** A button of Library › Playlists' header. */
+export type PlaylistsControl = "importPlaylists" | "newPlaylist";
+
+const asItIs = (_: PlaylistsControl, button: ReactNode): ReactNode => button;
+
+/**
+ * Import Playlists (opening a card of sources when [importOpensMenu]) and New
+ * Playlist, side by side, [wrap] putting each in what it needs (the Design
+ * preview opens its states over them). The Design preview draws them too.
+ */
+export function PlaylistsButtons({
+  importOpensMenu,
+  onImport,
+  onNewPlaylist,
+  wrap = asItIs,
+}: {
+  importOpensMenu: boolean;
+  onImport: () => void;
+  onNewPlaylist: () => void;
+  wrap?: (control: PlaylistsControl, button: ReactNode) => ReactNode;
+}) {
+  return (
     <View className="flex-row items-center" style={{ gap: CELL * 3 }}>
-      <TextButton label="Import Playlists" opensMenu={ytMusic} onPress={openPlaylistImport} />
-      <TextButton label="New Playlist" opensMenu onPress={createAndOpen} />
+      {wrap(
+        "importPlaylists",
+        <TextButton label="Import Playlists" opensMenu={importOpensMenu} onPress={onImport} />,
+      )}
+      {wrap("newPlaylist", <TextButton label="New Playlist" opensMenu onPress={onNewPlaylist} />)}
     </View>
   );
 }

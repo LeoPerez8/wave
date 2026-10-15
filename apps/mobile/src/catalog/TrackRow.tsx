@@ -1,9 +1,10 @@
 import { IconCircleArrowDownFilled, IconFileOff, IconStarFilled } from "@tabler/icons-react-native";
-import { trackRowTrailing } from "@wave/core";
+import { trackRowTrailing, ytDownloadLine, ytDownloadProgress } from "@wave/core";
 import { Text, View, type PressableProps as PressProps } from "react-native";
 
 import { Press } from "@/motion/Press";
 import { useThemeColor } from "@/theme/useThemeColor";
+import { useMissingSongDownloadStatus } from "@/ytmusic/YtDownloads";
 
 import { Artwork } from "./Artwork";
 import { CheckCell } from "./CheckCell";
@@ -20,9 +21,17 @@ export type TrackSummary = {
   trackNumber?: number | undefined;
   artworkUri?: string | undefined;
   tint?: string | undefined;
+  /**
+   * A missing song's Track: the Wave account has it and this phone has no
+   * file for it. The row is dimmed, with the look of a YT Music song not
+   * downloaded (no downloaded icon), and a tap downloads it; while it
+   * downloads, its line and progress show as a YT Music song's do.
+   */
+  missingTrackId?: number | undefined;
 };
 
-export type TrackState = "playing" | "missing" | undefined;
+/** A row playing now, or one whose file a scan no longer finds ("File not found"). */
+export type TrackState = "playing" | "fileNotFound" | undefined;
 
 type Props = {
   track: TrackSummary;
@@ -64,10 +73,11 @@ const THUMB = CELL * 5;
 /**
  * A track: leading thumbnail or track number, title over artist, then the
  * favorite cell and the duration (the counted plays on a ranking by plays). The playing track's title is in ember with a
- * wavy underline under its visible text. A missing file shows its icon (in
+ * wavy underline under its visible text. A file not found shows its icon (in
  * place of the number in numbered lists, trailing in artwork lists). Title and
  * artist share one size; rank is weight and tint. In selection mode a check
- * cell leads the row.
+ * cell leads the row. A missing song (`missingTrackId`) is dimmed (as docs/spec.md,
+ * "Missing songs", says), its long press still open, and shows its download as it goes.
  */
 export function TrackRow({
   track,
@@ -87,10 +97,14 @@ export function TrackRow({
   const highlight = useThemeColor("highlight");
   const accent = useThemeColor("accent");
   const tertiary = useThemeColor("tertiary");
-  const missing = state === "missing";
+  const fileNotFound = state === "fileNotFound";
   const playing = state === "playing";
+  const missingSong = track.missingTrackId !== undefined;
+  const download = useMissingSongDownloadStatus(track.missingTrackId ?? null);
+  const downloadLine = ytDownloadLine(download);
+  const shownProgress = progress ?? ytDownloadProgress(download);
   const selecting = checked !== undefined;
-  const missingIcon = <IconFileOff size={18} color={tertiary} strokeWidth={1.5} />;
+  const fileNotFoundIcon = <IconFileOff size={18} color={tertiary} strokeWidth={1.5} />;
   const trailing = trackRowTrailing({ durationMs: track.durationMs, countedPlays: plays });
 
   return (
@@ -100,28 +114,34 @@ export function TrackRow({
         track.title,
         track.artist,
         ...(plays === undefined ? [] : [trailing]),
-        ...(downloaded ? ["downloaded"] : []),
+        ...(downloaded && !missingSong ? ["downloaded"] : []),
+        ...(missingSong ? [downloadLine ?? "not downloaded"] : []),
         ...(playing ? ["now playing"] : []),
       ].join(", ")}
       accessibilityState={
-        selecting ? { disabled: missing, checked } : { disabled: missing, selected: playing }
+        selecting
+          ? { disabled: fileNotFound, checked }
+          : { disabled: fileNotFound, selected: playing }
       }
-      disabled={missing}
+      disabled={fileNotFound}
       onPress={onPress}
       onLongPress={onLongPress}
       accessibilityActions={accessibilityActions}
       onAccessibilityAction={onAccessibilityAction}
       depth={0.015}
     >
-      <View className="flex-row items-center" style={{ height: grid.row, gap: CELL * 1.5 }}>
+      <View
+        className={`flex-row items-center ${missingSong ? "opacity-45" : ""}`}
+        style={{ height: grid.row, gap: CELL * 1.5 }}
+      >
         {selecting && <CheckCell checked={checked} />}
         {leading === "artwork" ? (
           <Artwork uri={track.artworkUri} tint={track.tint} size={THUMB} />
-        ) : !missing && track.trackNumber !== undefined ? (
+        ) : !fileNotFound && track.trackNumber !== undefined ? (
           <RankNumber rank={track.trackNumber} top={topNumber} />
         ) : (
           <View className="items-center" style={{ width: grid.stateCell }}>
-            {missing && missingIcon}
+            {fileNotFound && fileNotFoundIcon}
           </View>
         )}
         <View className="flex-1">
@@ -130,7 +150,7 @@ export function TrackRow({
             <Text
               numberOfLines={1}
               className={`font-sans text-body font-medium ${
-                playing ? "text-highlight" : missing ? "text-secondary" : "text-foreground"
+                playing ? "text-highlight" : fileNotFound ? "text-secondary" : "text-foreground"
               }`}
             >
               {track.title}
@@ -138,23 +158,25 @@ export function TrackRow({
             {playing && <WavyUnderline />}
           </View>
           <View className="flex-row items-center" style={{ gap: CELL / 2 }}>
-            {downloaded && !missing && <IconCircleArrowDownFilled size={14} color={accent} />}
+            {downloaded && !fileNotFound && !missingSong && (
+              <IconCircleArrowDownFilled size={14} color={accent} />
+            )}
             <Text numberOfLines={1} className="flex-1 font-sans text-body text-secondary">
-              {missing ? "File not found" : track.artist}
+              {fileNotFound ? "File not found" : (downloadLine ?? track.artist)}
             </Text>
           </View>
-          {progress !== undefined && progress !== null && (
+          {shownProgress !== undefined && shownProgress !== null && (
             <View className="bg-separator" style={{ height: 2, marginTop: CELL / 2 }}>
               <View
                 className="bg-accent"
-                style={{ height: 2, width: `${Math.round(progress * 100)}%` }}
+                style={{ height: 2, width: `${Math.round(shownProgress * 100)}%` }}
               />
             </View>
           )}
         </View>
-        {leading === "artwork" && missing && (
+        {leading === "artwork" && fileNotFound && (
           <View className="items-center" style={{ width: CELL * 3 }}>
-            {missingIcon}
+            {fileNotFoundIcon}
           </View>
         )}
         <View className="items-center" style={{ width: CELL * 3 }}>

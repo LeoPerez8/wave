@@ -133,8 +133,22 @@ export const SYNTHETIC_ALBUMS: readonly AlbumSummary[] = byTitle(
 
 export type SyntheticTrack = { track: TrackSummary; state: TrackState; favorite: boolean };
 
-export const SYNTHETIC_TRACKS: readonly SyntheticTrack[] = byTitle(
-  SYNTHETIC_ALBUMS.flatMap((album) =>
+/**
+ * The id of a song whose title runs past its row, which truncates it. Its
+ * title sorts first, so its row is on screen as the Songs open.
+ */
+export const LONG_TITLE_TRACK_ID = "long-title";
+
+const longTitleTrack = (album: AlbumSummary): TrackSummary => ({
+  id: LONG_TITLE_TRACK_ID,
+  title: "Along the Northern Harbour, Where Late Light Drifts over Still Water (Extended Version)",
+  artist: album.albumArtist,
+  durationMs: 498_000,
+  tint: album.tint,
+});
+
+export const SYNTHETIC_TRACKS: readonly SyntheticTrack[] = byTitle([
+  ...SYNTHETIC_ALBUMS.flatMap((album) =>
     Array.from({ length: album.trackCount }, (_, n) => ({
       id: `${album.id}-${n + 1}`,
       title: title(next),
@@ -144,11 +158,24 @@ export const SYNTHETIC_TRACKS: readonly SyntheticTrack[] = byTitle(
       tint: album.tint,
     })),
   ),
-).map((track, i) => ({
+  // Made apart from the others, so they come out as they always have.
+  longTitleTrack(SYNTHETIC_ALBUMS[0] as AlbumSummary),
+]).map((track, i) => ({
   track,
-  state: i === 2 ? "playing" : i === 7 ? "missing" : undefined,
+  state: i === 2 ? "playing" : i === 7 ? "fileNotFound" : undefined,
   favorite: i % 9 === 4,
 }));
+
+export type SyntheticPlaylist = { id: string; name: string; trackCount: number };
+
+/** By name, as Library › Playlists lists them. */
+export const SYNTHETIC_PLAYLISTS: readonly SyntheticPlaylist[] = [
+  "Harbour Mornings",
+  "Kestrel Mix",
+  "Late Light",
+  "Quiet Hours",
+  "Winter Drives",
+].map((name, i) => ({ id: `playlist-${i}`, name, trackCount: 8 + i * 7 }));
 
 /** First index of each letter in an ordered list, for the A–Z spine. */
 export const letterIndex = (titles: readonly string[]): Map<string, number> => {

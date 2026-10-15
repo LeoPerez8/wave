@@ -1,14 +1,10 @@
-import { IconSettings, IconStack2 } from "@tabler/icons-react-native";
+import { IconStack2 } from "@tabler/icons-react-native";
 import { router } from "expo-router";
-import { Text, View } from "react-native";
 
-import { CatalogLine } from "@/catalog/CatalogLine";
 import { EntryRow } from "@/catalog/EntryRow";
-import { CELL } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { LIBRARY_SECTIONS } from "@/catalog/sections";
 import { EmptyState } from "@/components/EmptyState";
-import { IconButton } from "@/components/IconButton";
 import { LargeTitleScreen } from "@/components/LargeTitleScreen";
 import { ScanProgressBanner } from "@/components/ScanProgressBanner";
 import { TextButton } from "@/components/TextButton";
@@ -20,9 +16,6 @@ import { openLibrarySectionActions } from "@/playback/ActionsMenu";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 import { openDiscover } from "@/ytmusic/routes";
 
-/** Empty cover slots stand in for Recently Added until the first scan. */
-const SLOT = CELL * 9;
-
 export default function LibraryScreen() {
   const scan = useScanState();
   const trackCount = useTrackCount();
@@ -32,13 +25,7 @@ export default function LibraryScreen() {
   const empty = scan.status === "done" && trackCount === 0;
 
   return (
-    <LargeTitleScreen
-      title="Library"
-      refreshControl={<RescanRefreshControl />}
-      action={
-        <IconButton icon={IconSettings} label="Settings" onPress={() => router.push("/settings")} />
-      }
-    >
+    <LargeTitleScreen title="Library" refreshControl={<RescanRefreshControl />}>
       <ScanProgressBanner />
       {empty && (
         <EmptyState
@@ -62,17 +49,6 @@ export default function LibraryScreen() {
       ))}
       {/* YouTube Music's recommendations; gone while YT Music is off. */}
       {ytMusic && <EntryRow label="Discover" onPress={openDiscover} />}
-      <View style={{ marginTop: CELL * 5, gap: CELL * 1.5 }}>
-        <CatalogLine>Recently added</CatalogLine>
-        <View accessible={false} className="flex-row" style={{ gap: CELL * 2 }}>
-          {[0, 1, 2].map((slot) => (
-            <View key={slot} className="bg-fill" style={{ width: SLOT, height: SLOT }} />
-          ))}
-        </View>
-        <Text className="font-sans text-subheadline text-secondary">
-          No albums yet. They appear here as Wave scans {folderPhrase(roots)}.
-        </Text>
-      </View>
     </LargeTitleScreen>
   );
 }

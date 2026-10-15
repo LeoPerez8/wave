@@ -80,7 +80,7 @@ export const layer = Layer.effectDiscard(
           rowId = write(store.recordPlay(step.play));
           lastSave = Date.now();
         } else {
-          if (rowId !== null) write(store.updatePlay(rowId, step.play));
+          if (rowId !== null) write(store.endPlay(rowId, step.play));
           rowId = null;
         }
         playHistoryVersion.update((version) => version + 1);

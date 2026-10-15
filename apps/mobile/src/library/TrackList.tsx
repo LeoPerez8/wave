@@ -35,6 +35,8 @@ export const toTrackSummary = (song: SongRow): TrackSummary => ({
   artist: song.artist,
   durationMs: song.durationMs,
   artworkUri: song.thumbPath === null ? undefined : `file://${song.thumbPath}`,
+  // A missing song: dimmed, as a YT Music song not downloaded is.
+  missingTrackId: song.path === null ? song.id : undefined,
 });
 
 export const songCount = (count: number): string => counted(count, "song");
@@ -71,11 +73,39 @@ export function ListIntro({
   );
   const play = usePlayPage(mixed ?? library, context);
   return (
+    <ListIntroLayout
+      line={line}
+      onPlay={() => play(false)}
+      onShuffle={() => play(true)}
+      sortControl={sortControl}
+    />
+  );
+}
+
+/**
+ * What `ListIntro` draws: [line] over Play and Shuffle, [sortControl] (if any)
+ * on the right. The Design preview draws it too, on synthetic songs.
+ */
+export function ListIntroLayout({
+  line,
+  onPlay,
+  onShuffle,
+  sortControl,
+}: {
+  line: string;
+  onPlay: () => void;
+  onShuffle: () => void;
+  sortControl?: ReactNode;
+}) {
+  return (
     <View style={{ gap: CELL, paddingBottom: CELL }}>
       <CatalogLine>{line}</CatalogLine>
       <View className="flex-row items-center justify-between">
-        <PlayShuffle onPlay={() => play(false)} onShuffle={() => play(true)} />
-        {sortControl}
+        <PlayShuffle onPlay={onPlay} onShuffle={onShuffle} />
+        {sortControl !== undefined && (
+          // Its glyph sits on the right margin, like Back on the left.
+          <View className="-mr-3">{sortControl}</View>
+        )}
       </View>
     </View>
   );

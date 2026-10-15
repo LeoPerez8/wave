@@ -58,7 +58,7 @@ export class YtMusic extends Context.Service<
     ) => Effect.Effect<readonly YtArtistCandidate[], YtMusicError>;
     /** Albums, singles and EPs on YT Music for [query]. */
     readonly searchAlbums: (query: string) => Effect.Effect<readonly YtArtistAlbum[], YtMusicError>;
-    /** The artist page [browseId] (`UC…`): their top songs, albums and singles. */
+    /** The artist page [browseId] (`UC…`): their top songs, albums, singles and songs playlist. */
     readonly artist: (browseId: string) => Effect.Effect<NativeYtArtistPage, YtMusicError>;
     /** The account's recommendations: YouTube Music's home shelves. */
     readonly home: Effect.Effect<YtHome<NativeYtSong>, YtMusicError>;

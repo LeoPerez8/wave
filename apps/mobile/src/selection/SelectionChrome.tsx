@@ -2,16 +2,20 @@ import {
   IconArrowForwardUp,
   IconDisc,
   IconDots,
+  IconDownload,
   IconListCheck,
   IconMicrophone2,
   IconMusicSearch,
   IconPencil,
   IconPlaylistAdd,
   IconPlaylistX,
+  IconRefresh,
   IconRowInsertBottom,
   IconStar,
   IconStarOff,
   IconTrash,
+  IconTrashX,
+  IconX,
 } from "@tabler/icons-react-native";
 import { actionBarLabel, entryDivider, splitActionBar, type ItemAction } from "@wave/core";
 import type { ComponentType } from "react";
@@ -52,6 +56,10 @@ const ICONS: { readonly [A in ItemAction]: ComponentType<IconProps> } = {
   findLyricsAndGenre: IconMusicSearch,
   select: IconListCheck,
   delete: IconTrash,
+  removeFromLibrary: IconTrashX,
+  download: IconDownload,
+  cancelDownload: IconX,
+  retryDownload: IconRefresh,
 };
 
 /**

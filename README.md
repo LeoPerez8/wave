@@ -6,12 +6,13 @@ own, inspired by Apple Music. Personal project, sideloaded — see the
 
 ## Layout
 
-| Path            | What                                                               |
-| --------------- | ------------------------------------------------------------------ |
-| `apps/mobile`   | The Expo / React Native app (Expo Router, uniwind, Inter)          |
-| `packages/core` | Domain logic in pure TypeScript with **zero runtime dependencies** |
-| `scripts/ci`    | Helpers used by GitHub Actions                                     |
-| `docs`          | Spec and design decisions                                          |
+| Path            | What                                                                                    |
+| --------------- | --------------------------------------------------------------------------------------- |
+| `apps/mobile`   | The Expo / React Native app (Expo Router, uniwind, Inter)                               |
+| `apps/sync`     | The sync service: a Cloudflare Worker in front of Turso ([README](apps/sync/README.md)) |
+| `packages/core` | Domain logic in pure TypeScript with **zero runtime dependencies**                      |
+| `scripts/ci`    | Helpers used by GitHub Actions                                                          |
+| `docs`          | Spec and design decisions                                                               |
 
 ## Getting the app on a phone
 
@@ -40,7 +41,37 @@ pnpm typecheck
 pnpm lint
 pnpm fmt:check      # `pnpm fmt` to fix
 pnpm test           # Core tests run with plain `node --test`
+pnpm test:react-doctor # Validate Doctor report handling
+pnpm react-doctor   # Full mobile diagnostics, including existing findings
+pnpm react-doctor:check --base origin/main # Fail on new React errors only
 ```
+
+See the [lint policy](docs/lint.md) for TypeScript and React Hooks rules, native
+exceptions, and excluded generated files.
+
+Prettier formats supported authored files with a 100-column print width. Run `pnpm fmt`
+to write changes or `pnpm fmt:check` to check them; CI and PR autofix use those same commands.
+The project pins Prettier's version so local and CI results match. `.prettierignore`
+excludes generated native projects, dependencies, lockfiles, captured third-party responses,
+and local scratch directories and worktrees. Prettier also respects `.gitignore`.
+Text files use LF line endings in every checkout through `.gitattributes`.
+
+React Doctor scans the Expo / React Native app. Fetch the target branch before
+running `react-doctor:check`, and use that branch as `--base` when the pull request
+targets a branch other than `main`. The local check also includes untracked source.
+The full scan reports the existing backlog without failing on findings. Both
+commands fail when a scan cannot complete or the baseline comparison degrades.
+Native JSON reports are saved in `.cache/react-doctor/full.json` and
+`.cache/react-doctor/baseline.json`.
+
+The React Doctor workflow prints full diagnostics on every run and compares pull
+requests with their actual base commit using full git history. New errors fail the
+check; warnings stay advisory. Same-repository pull requests receive a
+sticky comment with diagnostics and any failed step's logs. JSON reports are also
+uploaded as run artifacts. Fork pull requests get the same scan and gate in the
+Actions logs. React Doctor's score API and dependency supply-chain network checks
+are disabled so these code checks work offline. Oxlint remains the authority for
+the project's lint rules and native import exceptions.
 
 ## Agent skills
 

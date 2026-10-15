@@ -1,0 +1,23 @@
+{
+  "name": "@wave/sync",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Wave's sync service: a Cloudflare Worker in front of one Turso (libSQL) database.",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "migrate": "node scripts/migrate.ts",
+    "deploy": "node scripts/migrate.ts && wrangler deploy",
+    "test": "node --test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.18.0",
+    "@wave/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "wrangler": "^4.0.0"
+  }
+}

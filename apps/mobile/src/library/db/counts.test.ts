@@ -48,8 +48,12 @@ describe("libraryCounts", () => {
     star(db, airbag, 1);
     star(db, joga, 2);
 
-    db.insert(schema.playlists).values({ name: "Drive", createdAt: 0, updatedAt: 0 }).run();
-    db.insert(schema.playlists).values({ name: "Empty", createdAt: 0, updatedAt: 0 }).run();
+    db.insert(schema.playlists)
+      .values({ name: "Drive", createdAt: 0, updatedAt: 0, changedAt: 0 })
+      .run();
+    db.insert(schema.playlists)
+      .values({ name: "Empty", createdAt: 0, updatedAt: 0, changedAt: 0 })
+      .run();
 
     assert.deepEqual(libraryCounts(db), {
       playlists: 2,
@@ -73,14 +77,16 @@ describe("sectionSongCounts", () => {
 
     const drive = db
       .insert(schema.playlists)
-      .values({ name: "Drive", createdAt: 0, updatedAt: 0 })
+      .values({ name: "Drive", createdAt: 0, updatedAt: 0, changedAt: 0 })
       .returning()
       .get().id;
-    db.insert(schema.playlists).values({ name: "Empty", createdAt: 0, updatedAt: 0 }).run();
+    db.insert(schema.playlists)
+      .values({ name: "Empty", createdAt: 0, updatedAt: 0, changedAt: 0 })
+      .run();
     // A playlist holding a song twice plays it twice.
     for (const [position, trackId] of [airbag, airbag, joga].entries()) {
       db.insert(schema.playlistItems)
-        .values({ playlistId: drive, trackId, position, addedAt: 0 })
+        .values({ playlistId: drive, trackId, orderKey: `a${position}`, addedAt: 0, changedAt: 0 })
         .run();
     }
     // The section queues a playlist's Library songs only, so a YT Music entry isn't counted.
@@ -88,7 +94,8 @@ describe("sectionSongCounts", () => {
       .values({
         playlistId: drive,
         ytSong: JSON.stringify({ videoId: "a", title: "Lucky", artists: ["Radiohead"] }),
-        position: 3,
+        orderKey: "a3",
+        changedAt: 0,
         addedAt: 0,
       })
       .run();

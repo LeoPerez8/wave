@@ -8,6 +8,11 @@
 
 import { isDetailPath } from "./navigation.ts";
 import type { StreamedArtistLink } from "./streamedArtist.ts";
+import {
+  YT_DOWNLOAD_ACTION_LABELS,
+  ytDownloadActions,
+  type YtDownloadStatus,
+} from "./ytDownloads.ts";
 
 /**
  * What kind of library item the actions are about. `mixed` is items of
@@ -38,6 +43,14 @@ export interface ActionItem {
   readonly favorite?: boolean | undefined;
   /** A track shown in a playlist, which it can be removed from. */
   readonly inPlaylist?: boolean | undefined;
+  /**
+   * A missing song: a track the Wave account has and this phone has no file
+   * for. It can't be queued, deleted or written to, only downloaded or
+   * removed from the Library.
+   */
+  readonly missing?: boolean | undefined;
+  /** Where a missing song's download is (`ytDownloadStatus`); null or undefined when never asked for. */
+  readonly download?: YtDownloadStatus | null | undefined;
 }
 
 export interface ActionSubject {
@@ -68,7 +81,11 @@ export type ItemAction =
   | "deletePlaylists"
   | "findLyricsAndGenre"
   | "select"
-  | "delete";
+  | "delete"
+  | "removeFromLibrary"
+  | "download"
+  | "cancelDownload"
+  | "retryDownload";
 
 /**
  * Where a link to an item's artists leads (Go to Artist, Now Playing's artist
@@ -100,17 +117,23 @@ export const ITEM_ACTION_LABELS: { readonly [A in ItemAction]: string } = {
   findLyricsAndGenre: "Find Lyrics and Genre",
   select: "Select",
   delete: "Delete",
+  removeFromLibrary: "Remove from Library",
+  ...YT_DOWNLOAD_ACTION_LABELS,
 };
 
 /** Entries that delete something for good, shown in the destructive colour. */
-export const isDestructiveAction = (action: ItemAction): boolean => action === "delete";
+export const isDestructiveAction = (action: ItemAction): boolean =>
+  action === "delete" || action === "removeFromLibrary";
 
 /**
  * Entries that ask before acting: selection mode stays until the question is
  * answered, so Cancel leaves the checked items as they were.
  */
 export const confirmsFirst = (action: ItemAction): boolean =>
-  action === "delete" || action === "deletePlaylist" || action === "deletePlaylists";
+  action === "delete" ||
+  action === "removeFromLibrary" ||
+  action === "deletePlaylist" ||
+  action === "deletePlaylists";
 
 /** The value every item has, or undefined when they differ or any lacks one. */
 const shared = (values: readonly (number | undefined)[]): number | undefined => {
@@ -149,9 +172,19 @@ export const itemActions = (subject: ActionSubject): ItemActionEntry[] => {
   const { kind, items, here } = subject;
   if (items.length === 0) return [];
   const surface = subject.surface ?? "menu";
+  // Missing songs have no file: they don't play, and there's none to delete or write to.
+  const missing = items.filter((item) => item.missing === true).length;
+  const [only] = items;
+  // A missing song's menu leads with its download, as a YT Music song's offers it.
+  const download =
+    surface === "menu" && kind === "track" && items.length === 1 && only?.missing === true
+      ? ytDownloadActions(only.download ?? null, { inLibrary: false })
+      : [];
   const entries: ItemActionEntry[] = [
-    { action: "playNext" },
-    { action: "addToQueue" },
+    ...download.map((action) => ({ action })),
+    ...(missing < items.length
+      ? [{ action: "playNext" } as const, { action: "addToQueue" } as const]
+      : []),
     { action: "addToPlaylist" },
   ];
   if (kind === "track") {
@@ -170,11 +203,13 @@ export const itemActions = (subject: ActionSubject): ItemActionEntry[] => {
         : [{ action: "deletePlaylists" } as const]),
     );
   // Looks the songs up online and writes what it finds into their files.
-  if (kind === "track" && subject.onlineLookups === true)
+  if (kind === "track" && subject.onlineLookups === true && missing === 0)
     entries.push({ action: "findLyricsAndGenre" });
   if (surface === "menu" && subject.selectable === true) entries.push({ action: "select" });
-  // Last, and destructive: deletes the songs' files from the phone (after asking).
-  if (kind === "track") entries.push({ action: "delete" });
+  // Last, and destructive (after asking): deletes the songs' files from the
+  // phone, or takes missing songs out of the Library.
+  if (kind === "track" && missing === 0) entries.push({ action: "delete" });
+  if (kind === "track" && missing === items.length) entries.push({ action: "removeFromLibrary" });
   return entries;
 };
 
@@ -209,8 +244,8 @@ export const ytSongActions = <A>(
 ];
 
 /**
- * What items are mostly selected for, and Delete (songs): always a button of
- * their own on the bar, never behind More.
+ * What items are mostly selected for, and Delete and Remove from Library
+ * (songs): always a button of their own on the bar, never behind More.
  */
 const KEPT_ON_BAR: ReadonlySet<ItemAction> = new Set<ItemAction>([
   "playNext",
@@ -220,6 +255,7 @@ const KEPT_ON_BAR: ReadonlySet<ItemAction> = new Set<ItemAction>([
   "unfavorite",
   "removeFromPlaylist",
   "delete",
+  "removeFromLibrary",
 ]);
 
 /**

@@ -212,8 +212,8 @@ function QuietLine({
  * name (`/library/yt-artist/by-name?name=<name>`, found with an Artists
  * search; "Not found on YouTube Music" when nobody matches): their image and
  * name, Play and Shuffle, their Albums and Singles & EPs (a release the Library has opens
- * the Library album) and their top songs (the Library's play its files, the
- * rest stream). It's read as it opens and saved for a week; offline or
+ * the Library album) and every song of theirs, their songs playlist read
+ * whole (the Library's play its files, the rest stream). It's read as it opens and saved for a week; offline or
  * failing, a quiet line with Try Again; with YT Music off, it says so.
  */
 export default function YtArtistScreen() {

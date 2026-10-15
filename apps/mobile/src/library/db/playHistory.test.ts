@@ -4,16 +4,19 @@ import { eq, sql } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { beforeEach, describe, test } from "node:test";
 
+import { libraryCounts, sectionSongCounts } from "./counts.ts";
 import {
   homeSections,
   latestPlay,
   listFavorites,
   recordPlay,
+  selectFavoriteTrackIds,
   setFavorites,
   updatePlay,
 } from "./playHistory.ts";
 import * as schema from "./schema.ts";
 import { trackPlayTotals } from "./stats.ts";
+import { selectChangesSince, selectPhoneId } from "./sync.ts";
 import {
   addTrack,
   migrateTestDatabase,
@@ -146,6 +149,55 @@ describe("Favorites", () => {
       listFavorites(db).map((row) => row.title),
       ["Bloom"],
     );
+  });
+
+  test("an unstarred song's star stays as a tombstone, stamped by this phone, that nothing shows", () => {
+    const a = addTrack(db, { title: "Airbag" });
+    const b = addTrack(db, { title: "Bloom" });
+    for (const id of [a, b]) star(db, id, 1_000);
+
+    setFavorites(db, [a], false, 5_000);
+
+    assert.deepEqual(
+      selectChangesSince(db, 1_000).favorites.map((row) => [
+        row.trackId,
+        row.changedAt,
+        row.phoneId,
+        row.deleted,
+      ]),
+      [[a, 5_000, selectPhoneId(db), true]],
+    );
+    assert.deepEqual(selectFavoriteTrackIds(db), [b]);
+    assert.deepEqual(
+      homeSections(db).favorites.map((row) => row.title),
+      ["Bloom"],
+    );
+    assert.equal(libraryCounts(db).favorites, 1);
+    assert.equal(sectionSongCounts(db).favorites, 1);
+  });
+
+  test("starring a song again brings its star back, starred now", () => {
+    const a = addTrack(db, { title: "Airbag" });
+    star(db, a, 1_000);
+    setFavorites(db, [a], false, 5_000);
+    // In the same millisecond: the star's changes still get two times.
+    setFavorites(db, [a], true, 5_000);
+
+    assert.deepEqual(
+      listFavorites(db).map((row) => [row.title, row.starredAt]),
+      [["Airbag", 5_000]],
+    );
+    assert.deepEqual(
+      selectChangesSince(db, 0).favorites.map((row) => [row.changedAt, row.deleted]),
+      [[5_001, false]],
+    );
+  });
+
+  test("starring a starred song changes nothing", () => {
+    const a = addTrack(db, { title: "Airbag" });
+    star(db, a, 1_000);
+    setFavorites(db, [a], true, 5_000);
+    assert.deepEqual(selectChangesSince(db, 1_000).favorites, []);
   });
 });
 
