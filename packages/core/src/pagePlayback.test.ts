@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { pagePlayback, skipMissingSongs, type MixedSong, type YtSong } from "./index.ts";
+import {
+  pagePlayback,
+  skipMissingSongs,
+  tappedMissingSong,
+  type MixedSong,
+  type YtSong,
+} from "./index.ts";
 
 interface Track {
   readonly id: number;
@@ -58,6 +64,16 @@ describe("skipMissingSongs", () => {
 
   test("a tapped missing song plays nothing", () => {
     assert.equal(skipMissingSongs(songs, 1, hasFile), null);
+  });
+
+  test("a tapped missing song is downloaded instead", () => {
+    assert.deepEqual(tappedMissingSong(songs, 1, hasFile), { id: 2 });
+  });
+
+  test("a tapped song with a file, Play and Shuffle download nothing", () => {
+    assert.equal(tappedMissingSong(songs, 0, hasFile), null);
+    assert.equal(tappedMissingSong(songs, undefined, hasFile), null);
+    assert.equal(tappedMissingSong([{ id: 2 }], undefined, hasFile), null);
   });
 
   test("a list of missing songs plays nothing", () => {

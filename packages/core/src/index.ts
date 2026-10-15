@@ -665,7 +665,7 @@ export type {
   StreamedArtistLink,
   StreamedArtistTarget,
 } from "./streamedArtist.ts";
-export { pagePlayback, skipMissingSongs } from "./pagePlayback.ts";
+export { pagePlayback, skipMissingSongs, tappedMissingSong } from "./pagePlayback.ts";
 export type { PagePlayback, PlayableSongs } from "./pagePlayback.ts";
 export {
   planPlaylistSongs,
@@ -793,3 +793,22 @@ export type {
   SyncTables,
   SyncedRow,
 } from "./syncWire.ts";
+export {
+  MISSING_SONGS_DOWNLOAD_ACTION_LABELS,
+  missingSongJob,
+  missingSongJobId,
+  missingSongLookup,
+  missingSongSearch,
+  missingSongTags,
+  missingSongTrackId,
+  missingSongVideo,
+  missingSongsDownload,
+} from "./missingSongDownload.ts";
+export type {
+  MissingSongJob,
+  MissingSongJobTags,
+  MissingSongVideo,
+  MissingSongsDownload,
+  MissingSongsDownloadAction,
+  MissingTrack,
+} from "./missingSongDownload.ts";

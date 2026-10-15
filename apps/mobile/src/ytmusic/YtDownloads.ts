@@ -9,6 +9,14 @@ import {
   downloadFailurePlan,
   downloadSource,
   isWithin,
+  missingSongJob,
+  missingSongJobId,
+  missingSongLookup,
+  missingSongSearch,
+  missingSongTags,
+  missingSongTrackId,
+  missingSongVideo,
+  missingSongsDownload,
   soulseekCandidates,
   soulseekQuery,
   soulseekReceivedMatches,
@@ -25,6 +33,10 @@ import {
   ytSongsDownload,
   type DownloadFailurePlan,
   type DownloadSource,
+  type MissingSongJob,
+  type MissingSongsDownload,
+  type MissingSongsDownloadAction,
+  type MissingTrack,
   type MixedSong,
   type SoulseekCandidate,
   type YtAlbumDownload,
@@ -35,6 +47,7 @@ import {
   type YtDownloadStatus,
   type YtDownloadTags,
   type YtDownloads,
+  type YtSong,
 } from "@wave/core";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -44,6 +57,7 @@ import { PermissionsAndroid, Platform } from "react-native";
 
 import { libraryEdited, toIndexedArtwork, toIndexedTrack } from "@/library/LibraryScan";
 import { LibraryStore } from "@/library/LibraryStore";
+import { useMissingSongs } from "@/library/hooks";
 import { refreshDownloadPolicy } from "@/library/downloadPolicy";
 import { fillInLyricsAndGenre, lookUpLyricsAndGenre } from "@/library/lyricsAndGenre";
 import { appRuntime } from "@/library/runtime";
@@ -65,6 +79,7 @@ import {
 import { ytMusicEnabled } from "@/settings/ytMusic";
 
 import { readYtAlbum } from "./albumPages";
+import { YtMusic, type YtMusicError } from "./YtMusic";
 
 export class DownloadFailed extends Data.TaggedError("DownloadFailed")<{
   readonly reason: YtDownloadFailure;
@@ -145,6 +160,8 @@ const currentSource = (
  */
 interface DownloadFallbackPlan {
   readonly source: "youtube";
+  /** The video it downloads, for a job not named after one (a missing song's). */
+  readonly video?: string;
   readonly targetPath: string;
   readonly failurePlan: DownloadFailurePlan;
 }
@@ -153,6 +170,8 @@ interface DownloadFallbackPlan {
 type PrepareAnswer =
   | {
       readonly source: DownloadSource;
+      /** The video YouTube Music downloads, for a job not named after one (a missing song's). */
+      readonly video?: string;
       readonly candidates: readonly SoulseekCandidate[];
       readonly tags: YtDownloadTags;
       readonly targetPath: string;
@@ -204,29 +223,54 @@ export const prepareDownload = (song: NativeYtSong) =>
         failurePlan: downloadFailurePlan(source, { ytMusicOn }),
       } satisfies PrepareAnswer;
     }
-    const query = soulseekQuery(song);
-    const [found, tags] = yield* Effect.all(
-      [
-        Effect.result(
-          query === ""
-            ? Effect.fail(new DownloadFailed({ reason: "unavailable" }))
-            : native(() => WaveSoulseek.search(query)),
-        ),
-        metadata(song),
-      ],
-      { concurrency: "unbounded" },
-    );
+    const [found, tags] = yield* Effect.all([searchSoulseek(song), metadata(song)], {
+      concurrency: "unbounded",
+    });
+    return yield* soulseekAnswer(song, found, tags, { roots, excludedFolders }, ytMusicOn);
+  });
+
+/** The Library's folders, where a download's file goes. */
+interface DownloadFolders {
+  readonly roots: readonly { readonly path: string; readonly isDefault: boolean }[];
+  readonly excludedFolders: readonly string[];
+}
+
+/** Soulseek's search for [song]'s recording, its failure kept for the prepare answer. */
+const searchSoulseek = (song: YtSong) => {
+  const query = soulseekQuery(song);
+  return Effect.result(
+    query === ""
+      ? Effect.fail(new DownloadFailed({ reason: "unavailable" }))
+      : native(() => WaveSoulseek.search(query)),
+  );
+};
+
+/**
+ * A Soulseek job's prepare answer from its search ([found]): the peers with [song]'s recording,
+ * or Soulseek's failure, with YouTube Music's fallback while YT Music is on ([ytMusicOn]) and
+ * its M4A has a place. A job not named after a video falls back only to the [video] named.
+ */
+const soulseekAnswer = (
+  song: YtSong,
+  found: Result.Result<readonly SoulseekCandidate[], DownloadFailed>,
+  tags: YtDownloadTags,
+  { roots, excludedFolders }: DownloadFolders,
+  ytMusicOn: boolean,
+  video?: string,
+) =>
+  Effect.gen(function* () {
     const youtube = ytMusicOn
       ? ytDownloadDestination(roots, excludedFolders, tags, "youtube")
       : null;
     // YouTube Music carries the job on only where its M4A has a place.
-    const failurePlan = downloadFailurePlan(source, { ytMusicOn: youtube !== null });
+    const failurePlan = downloadFailurePlan("soulseek", { ytMusicOn: youtube !== null });
     const fallback: { readonly fallback?: DownloadFallbackPlan } =
       youtube === null
         ? {}
         : {
             fallback: {
               source: "youtube",
+              ...(video === undefined ? {} : { video }),
               targetPath: youtube.path,
               failurePlan: downloadFailurePlan("youtube", { ytMusicOn }),
             },
@@ -241,16 +285,100 @@ export const prepareDownload = (song: NativeYtSong) =>
     const candidates = soulseekCandidates(song, found.success);
     if (candidates.length === 0)
       return { failure: "unavailable", tags, failurePlan, ...fallback } satisfies PrepareAnswer;
-    const target = ytDownloadDestination(roots, excludedFolders, tags, source);
+    const target = ytDownloadDestination(roots, excludedFolders, tags, "soulseek");
     if (target === null) return yield* new DownloadFailed({ reason: "noFolder" });
     return {
-      source,
+      source: "soulseek",
       candidates,
       tags,
       targetPath: target.path,
       failurePlan,
       ...fallback,
     } satisfies PrepareAnswer;
+  });
+
+/** A YT Music search's failure as a download's. */
+const searchFailure = (error: YtMusicError): DownloadFailed =>
+  new DownloadFailed({
+    reason:
+      error.reason === "offline" ? "offline" : error.reason === "disabled" ? "noSource" : "failed",
+    cause: error,
+  });
+
+/**
+ * The journal's "prepare" decision for missing song [trackId] (job `missing:<id>`), read from
+ * its Track as it is now. Core picks the source: the video it was downloaded from, while YT
+ * Music is on; else Soulseek's peers with the recording while Download in best quality is on,
+ * falling back to YouTube Music's match; else that match (`missingSongVideo`). The file gets the
+ * Track's tags. Nothing matched on YouTube Music fails it as notFound, and the song stays missing.
+ */
+const prepareMissingSong = (trackId: number) =>
+  Effect.gen(function* () {
+    const store = yield* LibraryStore;
+    const [roots, excludedFolders, tracks] = yield* Effect.all([
+      store.listRoots,
+      store.excludedFolders,
+      store.missingSongs([trackId]),
+    ]).pipe(Effect.mapError((cause) => new DownloadFailed({ reason: "storage", cause })));
+    const track = tracks[0];
+    // Gone, or filled in since (a scan found its file): there's nothing left to download.
+    if (track === undefined) return yield* new DownloadFailed({ reason: "failed" });
+    if (roots.length === 0) return yield* new DownloadFailed({ reason: "noFolder" });
+    const job = missingSongJob(track);
+    const ytMusicOn = ytMusicEnabled();
+    const session = yield* native(() => WaveSoulseek.session());
+    const source = downloadSource({
+      ytMusicOn,
+      bestQuality: session.status !== "off",
+      video: job.missing.videoId !== null,
+    });
+    if (source === null) return yield* new DownloadFailed({ reason: "noSource" });
+    const ytMusic = yield* YtMusic;
+    const search = missingSongSearch(job);
+    const findVideo = !ytMusicOn
+      ? Effect.succeed(null)
+      : search === null
+        ? Effect.succeed(missingSongVideo(job, null))
+        : ytMusic.searchSongs(search).pipe(
+            Effect.map((page) => missingSongVideo(job, page.songs)),
+            Effect.mapError(searchFailure),
+          );
+    const lookup = missingSongLookup(job);
+    const findTags =
+      lookup === null ? Effect.succeed(null) : optional(lookUpLyricsAndGenre(lookup));
+    if (source === "youtube") {
+      const [video, found] = yield* Effect.all([findVideo, findTags], { concurrency: "unbounded" });
+      if (video === null) return yield* new DownloadFailed({ reason: "notFound" });
+      const tags = missingSongTags(job, found, video.artworkUrl);
+      const target = ytDownloadDestination(roots, excludedFolders, tags, source);
+      if (target === null) return yield* new DownloadFailed({ reason: "noFolder" });
+      return {
+        source,
+        video: video.videoId,
+        candidates: [],
+        tags,
+        targetPath: target.path,
+        failurePlan: downloadFailurePlan(source, { ytMusicOn }),
+      } satisfies PrepareAnswer;
+    }
+    const [peers, video, found] = yield* Effect.all(
+      [
+        searchSoulseek(job),
+        // Soulseek doesn't wait on YouTube Music: no match only leaves it no fallback.
+        findVideo.pipe(Effect.orElseSucceed(() => null)),
+        findTags,
+      ],
+      { concurrency: "unbounded" },
+    );
+    const tags = missingSongTags(job, found, video?.artworkUrl ?? null);
+    return yield* soulseekAnswer(
+      job,
+      peers,
+      tags,
+      { roots, excludedFolders },
+      ytMusicOn && video !== null,
+      video?.videoId,
+    );
   });
 
 /** Recheck current folders both before publication and before recovered completion import. */
@@ -269,16 +397,21 @@ export const downloadPathIncluded = (path: string) =>
 /**
  * Transactional upsert preserves ids, favorites, playlists and history on
  * repeated delivery. A song downloaded from YouTube Music keeps its
- * [videoId] on its Track; a Soulseek download has none.
+ * [videoId] on its Track; a Soulseek download has none. A missing song's
+ * download fills in its Track ([fills]), so its places, star and plays stay.
  */
-export const importDownload = (saved: NativeSavedDownload, videoId: string | null) =>
+export const importDownload = (
+  saved: NativeSavedDownload,
+  videoId: string | null,
+  fills: number | null = null,
+) =>
   Effect.gen(function* () {
     if (!(yield* downloadPathIncluded(saved.path)))
       return yield* new DownloadFailed({ reason: "noFolder" });
     const store = yield* LibraryStore;
     yield* store
       .saveBatch(
-        [{ ...toIndexedTrack(saved.track), videoId }],
+        [{ ...toIndexedTrack(saved.track), videoId, ...(fills === null ? {} : { fills }) }],
         saved.artwork === null ? [] : [toIndexedArtwork(saved.artwork)],
       )
       .pipe(Effect.mapError((cause) => new DownloadFailed({ reason: "storage", cause })));
@@ -310,8 +443,12 @@ const publicationTarget = (claim: NativeDownloadDecision) =>
 const answer = (claim: NativeDownloadDecision) =>
   Effect.gen(function* () {
     switch (claim.decision) {
-      case "prepare":
-        return yield* prepareDownload(claim.song);
+      case "prepare": {
+        const trackId = missingSongTrackId(claim.id);
+        return trackId === null
+          ? yield* prepareDownload(claim.song)
+          : yield* prepareMissingSong(trackId);
+      }
       case "confirm": {
         if (claim.audio === undefined) return yield* new DownloadFailed({ reason: "failed" });
         if (!("receivedTags" in claim.audio)) {
@@ -333,9 +470,14 @@ const answer = (claim: NativeDownloadDecision) =>
       case "import": {
         if (claim.saved === undefined) return yield* new DownloadFailed({ reason: "failed" });
         yield* refreshDownloadPolicy;
+        // A missing song's job is named after its Track: its video is the one prepare named.
+        const fills = missingSongTrackId(claim.id);
         // A job from before YouTube Music downloads is Soulseek's.
-        const videoId = claim.source === "youtube" ? claim.song.videoId : null;
-        return { path: yield* importDownload(claim.saved, videoId) };
+        const videoId =
+          claim.source !== "youtube"
+            ? null
+            : (claim.video ?? (fills === null ? claim.song.videoId : null));
+        return { path: yield* importDownload(claim.saved, videoId, fills) };
       }
     }
   }).pipe(
@@ -595,4 +737,113 @@ export const useYtPlaylistDownload = (
     () => ytPlaylistDownload(entries, { inLibrary, jobs }),
     [entries, inLibrary, jobs],
   );
+};
+
+/**
+ * What the journal holds of missing song [job]: a YT Music song named after its Track. Its
+ * Track's tags stay in the Library, read again when the job is prepared.
+ */
+const journalSong = (job: MissingSongJob): NativeYtSong => ({
+  videoId: job.videoId,
+  title: job.title,
+  artists: job.artists,
+  album: job.album,
+  durationMs: job.durationMs,
+  artworkUrl: null,
+  explicit: false,
+  albumId: null,
+});
+
+/** Soulseek's session now; off when the module can't tell. */
+const sessionNow = async (): Promise<SoulseekSession> => {
+  try {
+    return await WaveSoulseek.session();
+  } catch {
+    return { status: "off", username: null };
+  }
+};
+
+/** Asks the journal for missing songs [jobs], in order, each from the source Core picks for it. */
+const enqueueMissingSongs = async (jobs: readonly MissingSongJob[]): Promise<void> => {
+  const session = await sessionNow();
+  const ytMusicOn = ytMusicEnabled();
+  for (const job of jobs) {
+    const source = downloadSource({
+      ytMusicOn,
+      bestQuality: session.status !== "off",
+      video: job.missing.videoId !== null,
+    });
+    await WaveSoulseek.enqueueJob(journalSong(job), soulseekRecording(job), null, source);
+  }
+};
+
+/** The missing songs as they are now ([trackIds] only, when given), as download jobs. */
+const missingSongJobs = (trackIds?: readonly number[]): Promise<MissingSongJob[]> =>
+  appRuntime
+    .runPromise(LibraryStore.use((store) => store.missingSongs(trackIds)))
+    .then((tracks) => tracks.map(missingSongJob));
+
+/**
+ * A missing song's Download (its tap or its menu entry) and Retry: asks for each of the songs
+ * [trackIds] that is still missing. Its file fills in the same Track.
+ */
+export const downloadMissingSongs = (trackIds: readonly number[]): void => {
+  askForNotifications();
+  startDownloads();
+  requests = requests
+    .then(async () => {
+      await enqueueMissingSongs(await missingSongJobs(trackIds));
+      await refresh();
+    })
+    .catch(() => undefined);
+};
+
+/** A missing song's Cancel Download: it stays missing. */
+export const cancelMissingSongDownload = (trackId: number): void =>
+  cancelYtDownload(missingSongJobId(trackId));
+
+/**
+ * Where missing song [trackId]'s download stands, following the journal; null when not asked
+ * for, or for no song ([trackId] null).
+ */
+export const useMissingSongDownloadStatus = (trackId: number | null): YtDownloadStatus | null =>
+  useSyncExternalStore(downloads.subscribe, () =>
+    trackId === null ? null : ytDownloadStatus(downloads.get(), missingSongJobId(trackId)),
+  );
+
+/**
+ * Settings › Wave Account's Download All, Retry Failed and Cancel, decided on the missing songs
+ * and the journal as they are now (Core's `missingSongsDownload`).
+ */
+export const runMissingSongsDownloadAction = (action: MissingSongsDownloadAction): void => {
+  if (action !== "cancel") {
+    askForNotifications();
+    startDownloads();
+  }
+  requests = requests
+    .then(async () => {
+      const [missing, jobs] = await Promise.all([missingSongJobs(), WaveSoulseek.jobsSnapshot()]);
+      const download = missingSongsDownload(missing, jobs);
+      switch (action) {
+        case "downloadAll":
+          await enqueueMissingSongs(download.toDownload);
+          break;
+        case "retryFailed":
+          await enqueueMissingSongs(download.toRetry);
+          break;
+        case "cancel":
+          for (const id of download.toCancel) await WaveSoulseek.cancelJob(id);
+          break;
+      }
+      await refresh();
+    })
+    .catch(() => undefined);
+};
+
+/** Where downloading the missing songs stands (Core's `missingSongsDownload`), following both. */
+export const useMissingSongsDownload = (): MissingSongsDownload<MissingSongJob> => {
+  const missing: readonly MissingTrack[] = useMissingSongs();
+  const jobs = useSyncExternalStore(journal.subscribe, journal.get);
+  const songs = useMemo(() => missing.map(missingSongJob), [missing]);
+  return useMemo(() => missingSongsDownload(songs, jobs), [songs, jobs]);
 };

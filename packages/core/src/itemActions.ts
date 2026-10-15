@@ -8,6 +8,11 @@
 
 import { isDetailPath } from "./navigation.ts";
 import type { StreamedArtistLink } from "./streamedArtist.ts";
+import {
+  YT_DOWNLOAD_ACTION_LABELS,
+  ytDownloadActions,
+  type YtDownloadStatus,
+} from "./ytDownloads.ts";
 
 /**
  * What kind of library item the actions are about. `mixed` is items of
@@ -40,9 +45,12 @@ export interface ActionItem {
   readonly inPlaylist?: boolean | undefined;
   /**
    * A missing song: a track the Wave account has and this phone has no file
-   * for. It can't be queued, deleted or written to, only removed from the Library.
+   * for. It can't be queued, deleted or written to, only downloaded or
+   * removed from the Library.
    */
   readonly missing?: boolean | undefined;
+  /** Where a missing song's download is (`ytDownloadStatus`); null or undefined when never asked for. */
+  readonly download?: YtDownloadStatus | null | undefined;
 }
 
 export interface ActionSubject {
@@ -74,7 +82,10 @@ export type ItemAction =
   | "findLyricsAndGenre"
   | "select"
   | "delete"
-  | "removeFromLibrary";
+  | "removeFromLibrary"
+  | "download"
+  | "cancelDownload"
+  | "retryDownload";
 
 /**
  * Where a link to an item's artists leads (Go to Artist, Now Playing's artist
@@ -107,6 +118,7 @@ export const ITEM_ACTION_LABELS: { readonly [A in ItemAction]: string } = {
   select: "Select",
   delete: "Delete",
   removeFromLibrary: "Remove from Library",
+  ...YT_DOWNLOAD_ACTION_LABELS,
 };
 
 /** Entries that delete something for good, shown in the destructive colour. */
@@ -162,7 +174,14 @@ export const itemActions = (subject: ActionSubject): ItemActionEntry[] => {
   const surface = subject.surface ?? "menu";
   // Missing songs have no file: they don't play, and there's none to delete or write to.
   const missing = items.filter((item) => item.missing === true).length;
+  const [only] = items;
+  // A missing song's menu leads with its download, as a YT Music song's offers it.
+  const download =
+    surface === "menu" && kind === "track" && items.length === 1 && only?.missing === true
+      ? ytDownloadActions(only.download ?? null, { inLibrary: false })
+      : [];
   const entries: ItemActionEntry[] = [
+    ...download.map((action) => ({ action })),
     ...(missing < items.length
       ? [{ action: "playNext" } as const, { action: "addToQueue" } as const]
       : []),

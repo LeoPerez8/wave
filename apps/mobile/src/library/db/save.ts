@@ -206,10 +206,37 @@ const tagColumns = (filing: Filing, track: FiledTrack) => ({
  * missing songs they are (Core's `fillMissingSongs`: by recording key,
  * length breaking a tie), so the save that follows fills each song in: it
  * keeps its id, and with it its favorites, playlist entries and plays. Files
- * Syncthing brings, or a download, never show twice.
+ * Syncthing brings, or a download, never show twice. A download asked for a
+ * missing song (`IndexedTrack.fills`) fills that one in whatever its tags
+ * say, and keeps its recording key, so it stays the account's song: the
+ * keys kept, by path, for the save to write.
  */
-const fillMissing = (tx: LibraryDatabase, tracks: readonly IndexedTrack[]): void => {
+const fillMissing = (tx: LibraryDatabase, tracks: readonly IndexedTrack[]): Map<string, string> => {
   const t = schema.tracks;
+  const kept = new Map<string, string>();
+  const indexed = new Set<string>();
+  for (let i = 0; i < tracks.length; i += CHUNK) {
+    const paths = tracks.slice(i, i + CHUNK).map((track) => track.path);
+    for (const row of tx.select({ path: t.path }).from(t).where(inArray(t.path, paths)).all()) {
+      if (row.path !== null) indexed.add(row.path);
+    }
+  }
+  for (const track of tracks) {
+    if (track.fills === undefined) continue;
+    const target = tx
+      .select({ path: t.path, recordingKey: t.recordingKey })
+      .from(t)
+      .where(eq(t.id, track.fills))
+      .get();
+    // Gone (removed meanwhile), or another file's: the file is saved as any other.
+    if (target === undefined || (target.path !== null && target.path !== track.path)) continue;
+    if (target.path === null) {
+      if (indexed.has(track.path)) continue;
+      tx.update(t).set({ path: track.path }).where(eq(t.id, track.fills)).run();
+      indexed.add(track.path);
+    }
+    if (target.recordingKey !== null) kept.set(track.path, target.recordingKey);
+  }
   const missing = tx
     .select({ id: t.id, recordingKey: t.recordingKey, durationMs: t.durationMs })
     .from(t)
@@ -218,14 +245,7 @@ const fillMissing = (tx: LibraryDatabase, tracks: readonly IndexedTrack[]): void
     .flatMap(({ recordingKey: key, ...song }) =>
       key === null ? [] : [{ ...song, recordingKey: key }],
     );
-  if (missing.length === 0) return;
-  const indexed = new Set<string>();
-  for (let i = 0; i < tracks.length; i += CHUNK) {
-    const paths = tracks.slice(i, i + CHUNK).map((track) => track.path);
-    for (const row of tx.select({ path: t.path }).from(t).where(inArray(t.path, paths)).all()) {
-      if (row.path !== null) indexed.add(row.path);
-    }
-  }
+  if (missing.length === 0) return kept;
   const found = tracks
     .filter((track) => !indexed.has(track.path))
     .map((track) => ({
@@ -236,6 +256,7 @@ const fillMissing = (tx: LibraryDatabase, tracks: readonly IndexedTrack[]): void
   for (const { file, song } of fillMissingSongs(found, missing).filled) {
     tx.update(t).set({ path: file.path }).where(eq(t.id, song.id)).run();
   }
+  return kept;
 };
 
 /**
@@ -284,7 +305,7 @@ export const saveBatch = (
     }
     if (tracks.length === 0) return;
 
-    fillMissing(tx, tracks);
+    const keptKeys = fillMissing(tx, tracks);
     const filing = fileTracks(tx, splits, tracks);
     const t = schema.tracks;
     const trackIds = new Map(
@@ -294,7 +315,7 @@ export const saveBatch = (
           tracks.map((track) => ({
             ...tagColumns(filing, track),
             path: track.path,
-            recordingKey: recordingKey(track),
+            recordingKey: keptKeys.get(track.path) ?? recordingKey(track),
             videoId: track.videoId ?? null,
             folderId: filing.folderId(track),
             fileName: track.fileName,

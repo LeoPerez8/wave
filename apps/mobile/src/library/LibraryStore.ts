@@ -7,6 +7,7 @@ import {
   type IndexedFile,
   type PlaylistSong,
   type LibraryTrack,
+  type MissingTrack,
   type CreditedPlayTotals,
   type PlayEvent,
   type PlayTotals,
@@ -93,7 +94,7 @@ import {
 } from "./db/tracks";
 import { creditedPlayTotals, songListening, songsCrediting, trackPlayTotals } from "./db/stats";
 import { keyRecordings, stampPreference } from "./db/sync";
-import { filesGone, leaveFiles, removeSongs, signOut } from "./db/missingSongs";
+import { filesGone, leaveFiles, removeSongs, selectMissingSongs, signOut } from "./db/missingSongs";
 import { saveYtArtist, selectYtArtist } from "./db/ytArtists";
 import type { KnownFile } from "./NativeScanner";
 
@@ -122,6 +123,11 @@ export interface IndexedTrack extends LibraryTrack {
    * the file again without one (a rescan) keeps the one it has.
    */
   readonly videoId?: string | null;
+  /**
+   * The missing song a download of it was asked for (its Track id): the file
+   * fills that Track in, keeping its recording key, whatever its tags say.
+   */
+  readonly fills?: number;
 }
 
 export interface IndexedArtwork {
@@ -457,6 +463,13 @@ export class LibraryStore extends Context.Service<
      * account (Remove from Library; Delete once their files are gone).
      */
     readonly removeSongs: (trackIds: readonly number[]) => Effect.Effect<void, LibraryStoreError>;
+    /**
+     * The missing songs as downloading them takes them, in title order; with
+     * [trackIds], only those still missing of them.
+     */
+    readonly missingSongs: (
+      trackIds?: readonly number[],
+    ) => Effect.Effect<readonly MissingTrack[], LibraryStoreError>;
     /** Excludes [path] and drops the exclusions in [drop] (see Core's `planExclusion`). */
     readonly addExcludedFolder: (
       path: string,
@@ -928,6 +941,8 @@ const make = Effect.gen(function* () {
 
     removeSongs: (trackIds) =>
       attempt("remove songs from the library", () => removeSongs(db, splits, trackIds, Date.now())),
+    missingSongs: (trackIds) =>
+      attempt("read missing songs", () => selectMissingSongs(db, trackIds)),
 
     addExcludedFolder: (path, drop) =>
       attempt("exclude a folder", () =>

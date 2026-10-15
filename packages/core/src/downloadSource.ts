@@ -16,18 +16,26 @@ export interface DownloadSourceSetup {
   readonly ytMusicOn: boolean;
   /** Download in best quality is on in Settings, connected to Soulseek or not. */
   readonly bestQuality: boolean;
+  /**
+   * The song is a YouTube Music video it was downloaded from before: a
+   * missing song with a video id, which downloads that video again.
+   */
+  readonly video?: boolean;
 }
 
 /**
  * The source a download uses: Soulseek while Download in best quality is on,
  * else YouTube Music while YT Music is on; null when both are off, which fails
  * the download with "Turn on YT Music or Download in best quality in Settings".
+ * A missing song with a video id ([video]) comes from that video while YT
+ * Music is on, whatever Download in best quality says.
  */
 export const downloadSource = ({
   ytMusicOn,
   bestQuality,
+  video = false,
 }: DownloadSourceSetup): DownloadSource | null =>
-  bestQuality ? "soulseek" : ytMusicOn ? "youtube" : null;
+  video && ytMusicOn ? "youtube" : bestQuality ? "soulseek" : ytMusicOn ? "youtube" : null;
 
 /** What Soulseek's fallback depends on. */
 export interface DownloadFallbackSetup {

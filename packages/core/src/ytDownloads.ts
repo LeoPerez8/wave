@@ -16,8 +16,9 @@ import { soulseekSameRecording } from "./soulseekDownload.ts";
  * `unreachable` Soulseek's server not answering while the phone is online
  * (`offline` is the phone), `unavailable` no Soulseek copy in 320 kbps,
  * `timedOut` a download that used up its time, `noSource` both YT Music and
- * Download in best quality off, and `ytUnavailable` a song YouTube Music won't
- * serve (or serves audio of another length).
+ * Download in best quality off, `ytUnavailable` a song YouTube Music won't
+ * serve (or serves audio of another length), and `notFound` a missing song
+ * YouTube Music's search has no match for (`missingSongVideo`).
  */
 export type YtDownloadFailure =
   | "offline"
@@ -30,7 +31,8 @@ export type YtDownloadFailure =
   | "unreachable"
   | "unavailable"
   | "noSource"
-  | "ytUnavailable";
+  | "ytUnavailable"
+  | "notFound";
 
 export type YtDownloadPhase = "connecting" | "searching" | "queued" | "transferring" | "validating";
 
@@ -228,6 +230,7 @@ const FAILURE_LINES: { readonly [F in YtDownloadFailure]: string } = {
   unavailable: "This recording is unavailable in 320 kbps",
   noSource: "Turn on YT Music or Download in best quality in Settings",
   ytUnavailable: "This song is unavailable on YouTube Music",
+  notFound: "Not found on YouTube Music",
 };
 
 /** The fraction of the file that has arrived, or null when there's no size to measure against. */

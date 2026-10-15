@@ -41,6 +41,20 @@ export const skipMissingSongs = <T>(
 };
 
 /**
+ * The missing song a tap on [songs] at [startIndex] downloads (docs/spec.md,
+ * "Missing songs": tapping one downloads it), or null when the tapped song
+ * has a file ([hasFile]) or nothing was tapped (Play, Shuffle).
+ */
+export const tappedMissingSong = <T>(
+  songs: readonly T[],
+  startIndex: number | undefined,
+  hasFile: (song: T) => boolean,
+): T | null => {
+  const tapped = startIndex === undefined ? undefined : songs[startIndex];
+  return tapped === undefined || hasFile(tapped) ? null : tapped;
+};
+
+/**
  * One rule for every page: a page with YouTube Music's songs among its own is an
  * integrated view, and plays [songs] as they stand, in page order; any other
  * plays the Library's songs alone, so nothing streams outside an integrated view.

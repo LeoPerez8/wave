@@ -199,6 +199,12 @@ describe("a YT Music song's download, as its row and menu show it", () => {
     assert.deepEqual(actions(status), ["retryDownload", "cancelDownload"]);
   });
 
+  test("a missing song YouTube Music's search has no match for says so, and keeps Retry", () => {
+    const status = { kind: "failed", reason: "notFound" } as const;
+    assert.equal(ytDownloadLine(status), "Not found on YouTube Music");
+    assert.deepEqual(actions(status), ["retryDownload", "cancelDownload"]);
+  });
+
   test("the row's progress rule shows how much has arrived, once the size is known", () => {
     assert.equal(ytDownloadProgress({ kind: "downloading", received: 2_500, total: 10_000 }), 0.25);
     assert.equal(ytDownloadProgress({ kind: "downloading", received: 2_500, total: null }), null);

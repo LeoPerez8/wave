@@ -24,6 +24,11 @@ export interface NativeDownloadJob extends YtDownloadJournalJob<NativeYtSong> {
   readonly receiptId?: string;
   /** The Soulseek failure a job carrying on from YouTube Music fell back from. */
   readonly fellBackFrom?: YtDownloadFailure;
+  /**
+   * The YouTube Music video a job not named after one downloads (a missing
+   * song's, `missing:<id>`), once its prepare answer or fallback named it.
+   */
+  readonly video?: string;
 }
 
 /** A decision the journal leased to JS; answered with `submitDecision` before [leaseUntil]. */

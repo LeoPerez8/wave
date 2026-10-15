@@ -1,9 +1,10 @@
 import { IconCircleArrowDownFilled, IconFileOff, IconStarFilled } from "@tabler/icons-react-native";
-import { trackRowTrailing } from "@wave/core";
+import { trackRowTrailing, ytDownloadLine, ytDownloadProgress } from "@wave/core";
 import { Text, View, type PressableProps as PressProps } from "react-native";
 
 import { Press } from "@/motion/Press";
 import { useThemeColor } from "@/theme/useThemeColor";
+import { useMissingSongDownloadStatus } from "@/ytmusic/YtDownloads";
 
 import { Artwork } from "./Artwork";
 import { CheckCell } from "./CheckCell";
@@ -21,11 +22,12 @@ export type TrackSummary = {
   artworkUri?: string | undefined;
   tint?: string | undefined;
   /**
-   * A missing song: the Wave account has it and this phone has no file for
-   * it. The row is dimmed, with the look of a YT Music song not downloaded
-   * (no downloaded icon), and doesn't play.
+   * A missing song's Track: the Wave account has it and this phone has no
+   * file for it. The row is dimmed, with the look of a YT Music song not
+   * downloaded (no downloaded icon), and a tap downloads it; while it
+   * downloads, its line and progress show as a YT Music song's do.
    */
-  notDownloaded?: boolean | undefined;
+  missingTrackId?: number | undefined;
 };
 
 /** How much a missing song's row shows (docs/spec.md, "Missing songs"). */
@@ -76,8 +78,8 @@ const THUMB = CELL * 5;
  * wavy underline under its visible text. A missing file shows its icon (in
  * place of the number in numbered lists, trailing in artwork lists). Title and
  * artist share one size; rank is weight and tint. In selection mode a check
- * cell leads the row. A missing song (`notDownloaded`) is dimmed, its long
- * press still open.
+ * cell leads the row. A missing song (`missingTrackId`) is dimmed, its long
+ * press still open, and shows its download as it goes.
  */
 export function TrackRow({
   track,
@@ -99,7 +101,10 @@ export function TrackRow({
   const tertiary = useThemeColor("tertiary");
   const missing = state === "missing";
   const playing = state === "playing";
-  const notDownloaded = track.notDownloaded === true;
+  const notDownloaded = track.missingTrackId !== undefined;
+  const download = useMissingSongDownloadStatus(track.missingTrackId ?? null);
+  const downloadLine = ytDownloadLine(download);
+  const shownProgress = progress ?? ytDownloadProgress(download);
   const selecting = checked !== undefined;
   const missingIcon = <IconFileOff size={18} color={tertiary} strokeWidth={1.5} />;
   const trailing = trackRowTrailing({ durationMs: track.durationMs, countedPlays: plays });
@@ -112,7 +117,7 @@ export function TrackRow({
         track.artist,
         ...(plays === undefined ? [] : [trailing]),
         ...(downloaded && !notDownloaded ? ["downloaded"] : []),
-        ...(notDownloaded ? ["not downloaded"] : []),
+        ...(notDownloaded ? [downloadLine ?? "not downloaded"] : []),
         ...(playing ? ["now playing"] : []),
       ].join(", ")}
       accessibilityState={
@@ -161,14 +166,14 @@ export function TrackRow({
               <IconCircleArrowDownFilled size={14} color={accent} />
             )}
             <Text numberOfLines={1} className="flex-1 font-sans text-body text-secondary">
-              {missing ? "File not found" : track.artist}
+              {missing ? "File not found" : (downloadLine ?? track.artist)}
             </Text>
           </View>
-          {progress !== undefined && progress !== null && (
+          {shownProgress !== undefined && shownProgress !== null && (
             <View className="bg-separator" style={{ height: 2, marginTop: CELL / 2 }}>
               <View
                 className="bg-accent"
-                style={{ height: 2, width: `${Math.round(progress * 100)}%` }}
+                style={{ height: 2, width: `${Math.round(shownProgress * 100)}%` }}
               />
             </View>
           )}

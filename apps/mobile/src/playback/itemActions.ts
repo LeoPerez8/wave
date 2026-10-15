@@ -29,6 +29,11 @@ import { openAlbum } from "@/library/routes";
 import { showError } from "@/overlay/alert";
 import { useLyricsAndGenreLookupsEnabled } from "@/settings/lyricsAndGenre";
 import { ytMusicEnabled } from "@/settings/ytMusic";
+import {
+  cancelMissingSongDownload,
+  downloadMissingSongs,
+  useMissingSongDownloadStatus,
+} from "@/ytmusic/YtDownloads";
 
 import {
   targetCount,
@@ -64,9 +69,16 @@ export interface ActionOptions {
   readonly onSelect?: (() => void) | undefined;
 }
 
+/** The one missing song [target] is, if it is one: its menu offers its download. */
+const onlyMissingSong = (target: ActionItems): number | null => {
+  const only = target.kind === "track" && target.items.length === 1 ? target.items[0] : undefined;
+  return only === undefined || songHasFile(only.song) ? null : only.song.id;
+};
+
 /**
  * The entries Core's `itemActions` offers for [target] on [surface], here and
- * with the Settings as they are; [favorites] says which tracks are starred.
+ * with the Settings as they are; [favorites] says which tracks are starred,
+ * and a missing song's download is followed as it goes.
  * The Design preview plans its menus with it too, from synthetic items.
  */
 export function usePlannedActions(
@@ -76,9 +88,11 @@ export function usePlannedActions(
 ): readonly ItemActionEntry[] {
   const here = usePathname();
   const onlineLookups = useLyricsAndGenreLookupsEnabled();
+  const download = useMissingSongDownloadStatus(onlyMissingSong(target));
+  const facts = targetFacts(target, favorites);
   return itemActions({
     kind: target.kind,
-    items: targetFacts(target, favorites),
+    items: facts.map((item) => (item.missing === true ? { ...item, download } : item)),
     surface,
     selectable,
     onlineLookups,
@@ -233,6 +247,13 @@ export function useItemActions(
       case "delete":
         return asking(entry.action, (onConfirm) => {
           void confirmDeleteSongs(withFiles, { onConfirm });
+        });
+      case "download":
+      case "retryDownload":
+        return run(() => downloadMissingSongs(tracks.map(({ song }) => song.id)));
+      case "cancelDownload":
+        return run(() => {
+          for (const { song } of tracks) cancelMissingSongDownload(song.id);
         });
       case "removeFromLibrary": {
         const songs = tracks.map(({ song }) => song);

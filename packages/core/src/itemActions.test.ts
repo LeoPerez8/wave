@@ -68,16 +68,50 @@ describe("itemActions", () => {
     );
   });
 
-  test("a missing song's menu: no queueing, no file to delete or write to, Remove from Library last", () => {
+  test("a missing song's menu: Download first, no queueing, no file to delete or write to, Remove from Library last", () => {
     const missing = { ...song(), missing: true };
     assert.deepEqual(
       names(itemActions(tracks([missing], { selectable: true, onlineLookups: true }))),
-      ["addToPlaylist", "favorite", "goToAlbum", "goToArtist", "select", "removeFromLibrary"],
+      [
+        "download",
+        "addToPlaylist",
+        "favorite",
+        "goToAlbum",
+        "goToArtist",
+        "select",
+        "removeFromLibrary",
+      ],
     );
     assert.equal(ITEM_ACTION_LABELS.removeFromLibrary, "Remove from Library");
     // Like Delete, it keeps a button of its own on a crowded bar.
     const bar = itemActions(tracks([missing, missing], { surface: "selection" }));
     assert.ok(names(splitActionBar(bar, 2).bar).includes("removeFromLibrary"));
+  });
+
+  test("a missing song on its way offers Cancel Download; one that failed, Retry Download and Cancel Download", () => {
+    const menu = (download: NonNullable<ActionSubject["items"][number]["download"]>) =>
+      names(itemActions(tracks([{ ...song(), missing: true, download }]))).slice(0, 2);
+    assert.deepEqual(menu({ kind: "queued" }), ["cancelDownload", "addToPlaylist"]);
+    assert.deepEqual(menu({ kind: "downloading", received: 1, total: 2 }), [
+      "cancelDownload",
+      "addToPlaylist",
+    ]);
+    assert.deepEqual(menu({ kind: "failed", reason: "notFound" }), [
+      "retryDownload",
+      "cancelDownload",
+    ]);
+    // Too late to cancel while the file is saved.
+    assert.deepEqual(menu({ kind: "saving" }), ["addToPlaylist", "favorite"]);
+    assert.equal(ITEM_ACTION_LABELS.download, "Download");
+    assert.equal(ITEM_ACTION_LABELS.cancelDownload, "Cancel Download");
+    assert.equal(ITEM_ACTION_LABELS.retryDownload, "Retry Download");
+  });
+
+  test("missing songs checked together, or a song with a file, offer no download entries", () => {
+    const missing = { ...song(), missing: true };
+    const bar = names(itemActions(tracks([missing, missing], { surface: "selection" })));
+    assert.ok(!bar.includes("download"));
+    assert.ok(!names(itemActions(tracks([song()]))).includes("download"));
   });
 
   test("missing songs checked with songs that have a file queue those, and neither Delete nor Remove from Library shows", () => {
