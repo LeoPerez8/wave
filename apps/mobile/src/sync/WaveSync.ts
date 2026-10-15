@@ -20,7 +20,9 @@ export interface WaveSyncPorts {
   readonly pulled: (changes: SyncedChanges) => void;
   /**
    * Follows the Wave account's Soulseek account after each pull, natively
-   * (`WaveSoulseek.followWaveAccount`): JS never sees its credentials.
+   * (`WaveSoulseek.followWaveAccount`): JS never sees its credentials. Then
+   * Download in best quality's switch settles with its synced copy
+   * (`followPulledBestQuality`), even when the first part failed.
    */
   readonly soulseek: () => Promise<unknown>;
 }

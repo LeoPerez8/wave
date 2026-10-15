@@ -4,6 +4,7 @@ import { onPlaylistsEdited, playlistsChanged } from "@/library/playlists";
 import { appRuntime } from "@/library/runtime";
 import { WaveSoulseek } from "@/native/waveSoulseek";
 import { playHistoryVersion } from "@/playback/PlayHistory";
+import { followPulledBestQuality } from "@/settings/bestQuality";
 
 import type { SyncedChanges } from "./syncCycle";
 import { syncedPreferences } from "./syncedPreferences";
@@ -43,7 +44,7 @@ export const startSync = (): void => {
         sync.start({
           preferences: syncedPreferences,
           pulled: showPulled,
-          soulseek: () => WaveSoulseek.followWaveAccount(),
+          soulseek: () => WaveSoulseek.followWaveAccount().finally(followPulledBestQuality),
         }),
       ),
     )

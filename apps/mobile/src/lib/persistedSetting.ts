@@ -30,9 +30,10 @@ export interface PersistedSettingOptions<A> {
    */
   readonly synced?: boolean;
   /**
-   * Runs with a value applied from the Wave account (`applySyncedSetting`),
-   * once saved: for a synced setting whose value also lives elsewhere and
-   * takes more than `onValue` to apply (Download in best quality's native switch).
+   * Runs with every value pulled from the Wave account (`applySyncedSetting`),
+   * changed or not, before it's saved: for a synced setting whose value also
+   * lives elsewhere and takes more than `onValue` to follow (Download in best
+   * quality's native switch).
    */
   readonly onApplied?: (value: A) => void;
 }
@@ -46,6 +47,14 @@ let syncedChange: ((key: string) => void) | null = null;
 export const onSyncedSettingChange = (listener: (key: string) => void): void => {
   syncedChange = listener;
 };
+
+/**
+ * Tells `onSyncedSettingChange`'s listener the owner chose the synced setting
+ * [key]'s value again here, unchanged: for a setting whose value also lives
+ * elsewhere, so the choice still beats an older one from another phone
+ * (Download in best quality, whose synced copy a phone from before it never set).
+ */
+export const stampSyncedSetting = (key: string): void => syncedChange?.(key);
 
 /** A synced setting as the Wave account reads and writes it: what's stored for it. */
 interface SyncedSetting {
@@ -119,7 +128,6 @@ export function persistedSetting<A>({
     else pending = setTimeout(persist, persistDelayMs);
     onValue?.(value);
     if (synced && here) syncedChange?.(key);
-    if (!here) onApplied?.(value);
     for (const listener of listeners) listener();
   };
 
@@ -128,7 +136,11 @@ export function persistedSetting<A>({
   if (synced) {
     syncedSettings.set(key, {
       stored: () => write(get()),
-      apply: (stored) => change(read(stored), false),
+      apply: (stored) => {
+        const value = read(stored);
+        onApplied?.(value);
+        change(value, false);
+      },
     });
   }
 
