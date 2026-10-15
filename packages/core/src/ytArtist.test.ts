@@ -10,6 +10,8 @@ import {
   ytArtistQuery,
   ytArtistRelease,
   ytArtistIntegrated,
+  ytArtistAnswerKept,
+  ytArtistFullPage,
   ytArtistSectionAsks,
   ytArtistSectionView,
   ytAlbumTracklist,
@@ -97,9 +99,11 @@ const song = (videoId: string): YtSong => ({
   explicit: false,
 });
 
-const page = (songs: YtSong[]): YtArtistPage => ({
+/** A page whose top songs are [songs] and whose full list, read after it, is [allSongs]. */
+const page = (songs: YtSong[], allSongs: YtSong[] = songs): YtArtistPage => ({
   name: "Daft Punk",
   songs,
+  allSongs,
   albums: [
     {
       kind: "album",
@@ -113,14 +117,32 @@ const page = (songs: YtSong[]): YtArtistPage => ({
   singles: [],
 });
 
-const found = (checkedAt: number, songs: YtSong[] = [song("a")]): YtArtistSaved => ({
+const found = (
+  checkedAt: number,
+  songs: YtSong[] = [song("a")],
+  allSongs: YtSong[] = songs,
+): YtArtistSaved => ({
   outcome: "found",
   checkedAt,
   browseId: "UCdaftpunk",
-  page: page(songs),
+  page: page(songs, allSongs),
 });
 
 const unmatched = (checkedAt: number): YtArtistSaved => ({ outcome: "unmatched", checkedAt });
+
+/** A match saved before the artist's songs playlist was read: the page has no full list. */
+const savedBefore = (checkedAt: number): YtArtistSaved => {
+  const { allSongs: _, ...top } = page([song("a")]);
+  return { outcome: "found", checkedAt, browseId: "UCdaftpunk", page: top };
+};
+
+/** A match saved now whose list of every song, [allSongs], stops short of them all. */
+const cut = (allSongs: YtSong[]): YtArtistSaved => ({
+  outcome: "found",
+  checkedAt: NOW,
+  browseId: "UCdaftpunk",
+  page: { ...page([], allSongs), allSongsCut: true },
+});
 
 describe("ytArtistLookup", () => {
   test("first time, the artist is searched for by name", () => {
@@ -187,7 +209,7 @@ describe("the artist page's YT Music section", () => {
     });
   });
 
-  test("the answer shows the top songs the Library doesn't have, in YouTube's order", () => {
+  test("the answer shows the artist's songs the Library doesn't have, in YouTube's order", () => {
     const answered = step(
       restored(null),
       { type: "requested" },
@@ -196,8 +218,22 @@ describe("the artist page's YT Music section", () => {
     assert.deepEqual(view(answered), { songs: [song("b"), song("a")], note: null, button: false });
   });
 
-  test("says so quietly when the Library has every top song, or there are none", () => {
-    assert.deepEqual(view(restored(found(NOW, [song("mine1"), song("mine2")]))), {
+  test("adds every song of the artist the Library lacks, not just the top songs", () => {
+    const shown = view(
+      restored(
+        found(
+          NOW,
+          [song("mine1"), song("mine2")],
+          [song("mine1"), song("c"), song("mine2"), song("d")],
+        ),
+      ),
+    );
+    assert.deepEqual(shown, { songs: [song("c"), song("d")], note: null, button: false });
+  });
+
+  test("says so quietly when the Library has every song of the artist, or there are none", () => {
+    const all = [song("mine1"), song("mine2"), song("mine3")];
+    assert.deepEqual(view(restored(found(NOW, [song("mine1")], all))), {
       songs: [],
       note: "allInLibrary",
       button: false,
@@ -205,10 +241,25 @@ describe("the artist page's YT Music section", () => {
     assert.deepEqual(view(restored(found(NOW, []))), { songs: [], note: "noSongs", button: false });
   });
 
+  test("a list cut short never says the Library has every song, or that there are none", () => {
+    const quiet = { songs: [], note: null, button: false };
+    assert.deepEqual(view(restored(cut([song("mine1"), song("mine2")]))), quiet);
+    assert.deepEqual(view(restored(cut([]))), quiet);
+    assert.deepEqual(view(restored(cut([song("mine1"), song("c")]))), {
+      songs: [song("c")],
+      note: null,
+      button: false,
+    });
+  });
+
   test("a saved section shows straight away for a week, then the button comes back", () => {
     const saved = restored(found(NOW - 6 * DAY, [song("a")]));
     assert.deepEqual(view(saved), { songs: [song("a")], note: null, button: false });
     assert.deepEqual(view(saved, { now: NOW + DAY }), BUTTON);
+  });
+
+  test("an answer saved without the artist's full list counts as expired: the button is back", () => {
+    assert.deepEqual(view(restored(savedBefore(NOW - DAY))), BUTTON);
   });
 
   test("'no match' is a quiet line for a week, then the button comes back", () => {
@@ -280,6 +331,7 @@ describe("an artist page opened integrated", () => {
     assert.equal(asks(restored(null)), true);
     assert.equal(asks(restored(found(NOW - 8 * DAY))), true);
     assert.equal(asks(restored(unmatched(NOW - 8 * DAY))), true);
+    assert.equal(asks(restored(savedBefore(NOW - DAY))), true);
   });
 
   test("is looking meanwhile, without the button", () => {
@@ -350,6 +402,85 @@ describe("ytArtistIntegrated", () => {
     assert.equal(integrated(restored(unmatched(NOW))), false);
     assert.equal(integrated(restored(found(NOW - 8 * DAY))), false);
     assert.equal(integrated(restored(found(NOW)), { enabled: false }), false);
+  });
+
+  test("not with an answer saved without the artist's full list", () => {
+    assert.equal(integrated(restored(savedBefore(NOW - DAY))), false);
+  });
+});
+
+describe("ytArtistAnswerKept", () => {
+  test("an answer read without the artist's full list (an album's) never replaces one standing with it", () => {
+    const standing = found(NOW - DAY);
+    assert.equal(ytArtistAnswerKept(standing, savedBefore(NOW), NOW), standing);
+  });
+
+  test("otherwise the new answer is kept: nothing saved, a week on, or no full list either", () => {
+    const answer = savedBefore(NOW);
+    assert.equal(ytArtistAnswerKept(null, answer, NOW), answer);
+    assert.equal(ytArtistAnswerKept(found(NOW - 8 * DAY), answer, NOW), answer);
+    assert.equal(ytArtistAnswerKept(savedBefore(NOW - DAY), answer, NOW), answer);
+  });
+
+  test("an answer with the full list, or 'no match', replaces whatever was saved", () => {
+    const standing = found(NOW - DAY);
+    const full = found(NOW, [song("b")]);
+    assert.equal(ytArtistAnswerKept(standing, full, NOW), full);
+    const none = unmatched(NOW);
+    assert.equal(ytArtistAnswerKept(standing, none, NOW), none);
+  });
+});
+
+describe("ytArtistFullPage", () => {
+  /** The artist's page as read, before their songs playlist: top songs only. */
+  const { allSongs: _, ...asRead } = page([song("top1"), song("top2")]);
+  const every = [song("top1"), song("b"), song("top2"), song("c")];
+
+  test("every song of the artist is their songs playlist, read whole", () => {
+    assert.deepEqual(ytArtistFullPage(asRead, { status: "read", songs: every, truncated: false }), {
+      status: "read",
+      page: { ...asRead, allSongs: every },
+    });
+  });
+
+  test("a playlist read that stopped at its cap is kept as cut short", () => {
+    assert.deepEqual(ytArtistFullPage(asRead, { status: "read", songs: every, truncated: true }), {
+      status: "read",
+      page: { ...asRead, allSongs: every, allSongsCut: true },
+    });
+  });
+
+  test("a page without the songs playlist keeps its top songs as the whole list", () => {
+    assert.deepEqual(ytArtistFullPage(asRead, null), {
+      status: "read",
+      page: { ...asRead, allSongs: asRead.songs },
+    });
+  });
+
+  test("a playlist YouTube can't give keeps the top songs as the list, cut short", () => {
+    assert.deepEqual(
+      ytArtistFullPage(asRead, { status: "failed", reason: "failed", pagesRead: 0 }),
+      { status: "read", page: { ...asRead, allSongs: asRead.songs, allSongsCut: true } },
+    );
+  });
+
+  test("offline, YT Music turned off, or a later page failing fails it all: a half list never stands", () => {
+    assert.deepEqual(
+      ytArtistFullPage(asRead, { status: "failed", reason: "offline", pagesRead: 0 }),
+      { status: "failed", reason: "offline" },
+    );
+    assert.deepEqual(
+      ytArtistFullPage(asRead, { status: "failed", reason: "offline", pagesRead: 3 }),
+      { status: "failed", reason: "offline" },
+    );
+    assert.deepEqual(
+      ytArtistFullPage(asRead, { status: "failed", reason: "failed", pagesRead: 2 }),
+      { status: "failed", reason: "failed" },
+    );
+    assert.deepEqual(
+      ytArtistFullPage(asRead, { status: "failed", reason: "disabled", pagesRead: 0 }),
+      { status: "failed", reason: "disabled" },
+    );
   });
 });
 
@@ -430,7 +561,7 @@ const withReleases = (
   outcome: "found",
   checkedAt,
   browseId: "UCdaftpunk",
-  page: { name: "Daft Punk", songs: [], albums, singles },
+  page: { name: "Daft Punk", songs: [], allSongs: [], albums, singles },
 });
 
 /** The Library has the releases whose id starts with "mine", as album 7. */
@@ -499,6 +630,7 @@ describe("the YT Music section's albums and singles", () => {
     assert.deepEqual(shelves(saved, { enabled: false }), []);
     assert.deepEqual(shelves(step(restored(null), { type: "requested" })), []);
     assert.deepEqual(shelves(restored(unmatched(NOW))), []);
+    assert.deepEqual(shelves(restored(savedBefore(NOW - DAY))), []);
   });
 });
 
@@ -665,6 +797,13 @@ describe("a Library album's YT Music songs", () => {
     assert.deepEqual(shown?.songs, songs);
     assert.equal(shown?.note, null);
     assert.equal(shown?.button, false);
+    assert.equal(shown?.release?.browseId, "MPREb_ram");
+  });
+
+  test("an answer saved without the artist's full list still finds the release", () => {
+    const { shown, asked } = albumView(restored(savedBefore(NOW - DAY)));
+    assert.deepEqual(asked, ["MPREb_ram"]);
+    assert.equal(shown?.askArtist, false);
     assert.equal(shown?.release?.browseId, "MPREb_ram");
   });
 
