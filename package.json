@@ -11,9 +11,14 @@
     "test:core": "pnpm --filter @wave/core test",
     "lint": "oxlint",
     "fmt": "oxfmt",
-    "fmt:check": "oxfmt --check"
+    "fmt:check": "oxfmt --check",
+    "fallow": "fallow --only dead-code,dupes",
+    "fallow:dead-code": "fallow dead-code",
+    "fallow:dupes": "fallow dupes",
+    "fallow:check": "fallow audit --gate new-only"
   },
   "devDependencies": {
+    "fallow": "3.33.1",
     "oxfmt": "0.72.0",
     "oxlint": "^1.0.0"
   },
