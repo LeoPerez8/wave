@@ -169,7 +169,7 @@ const phone = async (service: TestSyncService, songs: readonly Song[] = OK_COMPU
     sync: (
       options: {
         readonly songsChanged?: boolean;
-        readonly to?: TestSyncService;
+        readonly to?: SyncTransport;
         readonly account?: string;
       } = {},
     ) =>
