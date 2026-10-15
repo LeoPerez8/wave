@@ -12,7 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@libsql/client": "^0.15.0",
+    "@libsql/client": "^0.18.0",
     "@wave/core": "workspace:*"
   },
   "devDependencies": {
