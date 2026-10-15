@@ -731,6 +731,8 @@ const applyPlay = (
     .where(eq(playEvents.syncId, row.id))
     .get();
   if (held !== undefined) {
+    // The account has it already (another phone imported the same stats): it needn't go up.
+    tx.update(playEvents).set({ pushed: true }).where(eq(playEvents.id, held.id)).run();
     unpend(tx, "plays", row.id);
     return false;
   }

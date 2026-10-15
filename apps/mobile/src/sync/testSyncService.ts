@@ -41,6 +41,8 @@ export interface TestSyncService extends SyncTransport {
   readonly requests: string[];
   /** While true, every request fails as it would offline. */
   offline: boolean;
+  /** How many of the next requests are refused for the request rate (429). */
+  refuse: number;
 }
 
 export const testSyncService = (options: { readonly pageSize?: number } = {}): TestSyncService => {
@@ -101,12 +103,17 @@ export const testSyncService = (options: { readonly pageSize?: number } = {}): T
 
   const service: TestSyncService = {
     offline: false,
+    refuse: 0,
     requests: [],
     rows: () =>
       Object.fromEntries(TABLES.map((table) => [table, rowsOf(table)])) as unknown as SyncTables,
     request: async (method, path, body) => {
       service.requests.push(`${method} ${path}`);
       if (service.offline) throw Object.assign(new Error("offline"), { code: "ERR_WAVE_OFFLINE" });
+      if (service.refuse > 0) {
+        service.refuse -= 1;
+        return { status: 429, body: '{"error":"limit","limit":"maxRequestsPerMinute"}' };
+      }
       if (method === "POST" && path === "/v1/push") {
         if (body === null) return { status: 400, body: '{"error":"bad_request"}' };
         if (new TextEncoder().encode(body).length > MAX_BODY_BYTES) {
