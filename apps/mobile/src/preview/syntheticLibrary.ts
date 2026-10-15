@@ -160,12 +160,14 @@ const SONGS: readonly SyntheticTrack[] = byTitle(
  * screen as the Songs open.
  */
 const LONG_TITLE_ALBUM = ALBUMS[0] as AlbumSummary;
+const LONG_TITLE_MS = 498_000;
 const LONG_TITLE: SyntheticTrack = {
   track: {
     id: `${LONG_TITLE_ALBUM.id}-long-title`,
-    title: "Along the Northern Harbour, Where Late Light Drifts over Still Water (Extended Version)",
+    title:
+      "Along the Northern Harbour, Where Late Light Drifts over Still Water (Extended Version)",
     artist: LONG_TITLE_ALBUM.albumArtist,
-    durationMs: 498_000,
+    durationMs: LONG_TITLE_MS,
     trackNumber: LONG_TITLE_ALBUM.trackCount + 1,
     tint: LONG_TITLE_ALBUM.tint,
   },
@@ -181,7 +183,7 @@ export const SYNTHETIC_ALBUMS: readonly AlbumSummary[] = ALBUMS.map((album) =>
     ? {
         ...album,
         trackCount: album.trackCount + 1,
-        durationMs: album.durationMs + LONG_TITLE.track.durationMs,
+        durationMs: album.durationMs + LONG_TITLE_MS,
       }
     : album,
 );
