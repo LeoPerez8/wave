@@ -378,7 +378,7 @@ jobs:
           mkdir -p "$KEPT_APK"
           cp apps/mobile/android/app/build/outputs/apk/release/app-release.apk "$KEPT_APK/"
           cp apps/mobile/android/app/debug.keystore "$KEPT_APK/"
-          node scripts/ci/repack.ts assets apps/mobile/android/app/build/generated/res/createBundleReleaseJsAndAssets > "$KEPT_APK/metro-assets.json"
+          node scripts/ci/repack.ts assets apps/mobile/android/app/build/generated/res/react/release > "$KEPT_APK/metro-assets.json"
 
       - name: Save the kept APK
         if: env.APK_BUILD == 'full' && steps.kept.outputs.cache-hit != 'true'
