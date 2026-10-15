@@ -23,6 +23,42 @@ env:
   IS_RELEASE: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
 
 jobs:
+  # What the change touches, by the rule in scripts/ci/changes.ts. Jobs that only
+  # matter for some parts of the repo read these outputs to skip themselves.
+  changes:
+    name: Changes
+    runs-on: ubuntu-latest
+    outputs:
+      app: ${{ steps.rule.outputs.app }}
+      core: ${{ steps.rule.outputs.core }}
+      workspace: ${{ steps.rule.outputs.workspace }}
+      ci: ${{ steps.rule.outputs.ci }}
+      apk: ${{ steps.rule.outputs.apk }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          sparse-checkout: scripts/ci
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          # Only node runs here; without this, setup-node looks for pnpm to cache.
+          package-manager-cache: false
+
+      - name: Apply the change rule
+        id: rule
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/ci/changes.sh
+
+      - name: Report the skipped APK build
+        if: steps.rule.outputs.apk == 'false' && env.IS_SAME_REPO_PR == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: scripts/ci/report-apk-skipped.sh
+
   checks:
     name: Checks
     runs-on: ubuntu-latest
@@ -78,7 +114,9 @@ jobs:
 
   android:
     name: Android APK
-    needs: checks
+    needs: [changes, checks]
+    # Only PRs can skip: on main and release tags every area counts as changed.
+    if: needs.changes.outputs.apk == 'true'
     runs-on: ubuntu-latest
     env:
       HEAD_SHA: ${{ needs.checks.outputs.sha }}
