@@ -63,7 +63,8 @@ class PlaylistImageStoreTest {
   fun aBigPhotoIsDecodedSmallerButNeverBelowTheLargeSize() {
     assertEquals(1, PlaylistImageStore.sampleSize(1200, 1600, 1200))
     assertEquals(2, PlaylistImageStore.sampleSize(4000, 3000, 1200))
-    assertEquals(4, PlaylistImageStore.sampleSize(12000, 9600, 1200))
+    assertEquals(8, PlaylistImageStore.sampleSize(12000, 9600, 1200))
+    assertEquals(4, PlaylistImageStore.sampleSize(12000, 9599, 1200))
     assertEquals(1, PlaylistImageStore.sampleSize(200, 200, 1200))
   }
 }
