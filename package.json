@@ -12,12 +12,13 @@
     "lint": "oxlint",
     "fmt": "prettier --write .",
     "fmt:check": "prettier --check .",
-    "react-doctor": "react-doctor apps/mobile --yes --scope full --blocking none --json --json-out .cache/react-doctor/full.json && node scripts/ci/react-doctor-report.mjs .cache/react-doctor/full.json",
-    "react-doctor:check": "react-doctor apps/mobile --yes --scope changed --blocking error --include-untracked --verbose",
+    "react-doctor": "node scripts/ci/react-doctor.mjs full",
+    "react-doctor:check": "node scripts/ci/react-doctor.mjs baseline",
     "fallow": "fallow --only dead-code,dupes",
     "fallow:dead-code": "fallow dead-code",
     "fallow:dupes": "fallow dupes",
-    "fallow:check": "fallow audit --gate new-only"
+    "fallow:check": "fallow audit --gate new-only",
+    "test:react-doctor": "node --test scripts/ci/react-doctor-report.test.mjs"
   },
   "devDependencies": {
     "fallow": "3.33.1",
