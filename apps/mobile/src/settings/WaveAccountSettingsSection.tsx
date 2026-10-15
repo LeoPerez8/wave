@@ -1,10 +1,17 @@
-import { waveAccountView, type WaveAccount, type WaveAccountNote } from "@wave/core";
+import {
+  MISSING_SONGS_DOWNLOAD_ACTION_LABELS,
+  waveAccountView,
+  ytSongArtist,
+  type WaveAccount,
+  type WaveAccountNote,
+} from "@wave/core";
 import { Text, View } from "react-native";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { TextButton } from "@/components/TextButton";
+import { runMissingSongsDownloadAction, useMissingSongsDownload } from "@/ytmusic/YtDownloads";
 
 import { AccountPhoto } from "./AccountPhoto";
 import { WAVE_ACCOUNT_CONFIG, useWaveAccount } from "./waveAccount";
@@ -91,7 +98,55 @@ function AccountRow({
   );
 }
 
-/** Settings › Wave Account: signing in with Google, signing out and deleting the account. */
+/**
+ * The account's songs this phone has no file for: how many, or how far their
+ * download is, with Download All, Retry Failed and Cancel (Core's
+ * `missingSongsDownload`), then the songs nothing matched, which stay missing.
+ */
+function MissingSongsDownloadRows() {
+  const { line, actions, summary } = useMissingSongsDownload();
+  if (line === null && summary === null) return null;
+  return (
+    <View className="mt-6">
+      <Hairline />
+      {line !== null && (
+        <View style={{ minHeight: grid.row, justifyContent: "center" }}>
+          <Text className="font-sans text-body text-foreground">{line}</Text>
+        </View>
+      )}
+      {actions.length > 0 && (
+        <View className="flex-row items-center" style={{ gap: CELL * 3 }}>
+          {actions.map((action) => (
+            <TextButton
+              key={action}
+              label={MISSING_SONGS_DOWNLOAD_ACTION_LABELS[action]}
+              onPress={() => runMissingSongsDownloadAction(action)}
+            />
+          ))}
+        </View>
+      )}
+      {summary !== null && (
+        <View className="mt-2">
+          <Text className="font-sans text-footnote text-secondary">{summary.line}</Text>
+          {summary.songs.map((song) => (
+            <Text
+              key={song.videoId}
+              numberOfLines={1}
+              className="font-sans text-footnote text-secondary"
+            >
+              {`${song.title} · ${ytSongArtist(song)}`}
+            </Text>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+/**
+ * Settings › Wave Account: signing in with Google, signing out and deleting
+ * the account, and downloading the songs this phone has no file for.
+ */
 export function WaveAccountSettingsSection() {
   const account = useWaveAccount();
   const view = waveAccountView(account.state, WAVE_ACCOUNT_CONFIG !== null);
@@ -101,13 +156,16 @@ export function WaveAccountSettingsSection() {
       <CatalogLine className="mb-2 mt-12">Wave Account</CatalogLine>
       <Hairline />
       {view.kind === "account" ? (
-        <AccountRow
-          account={view.account}
-          busy={view.busy}
-          note={view.note}
-          onSignOut={account.signOut}
-          onDelete={account.deleteAccount}
-        />
+        <>
+          <AccountRow
+            account={view.account}
+            busy={view.busy}
+            note={view.note}
+            onSignOut={account.signOut}
+            onDelete={account.deleteAccount}
+          />
+          <MissingSongsDownloadRows />
+        </>
       ) : view.kind === "signedOut" ? (
         <>
           <View className="items-start" style={{ minHeight: grid.row, justifyContent: "center" }}>
