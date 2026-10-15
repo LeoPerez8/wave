@@ -1,3 +1,4 @@
+// Probe for #190: a JS-only change. Not for merging.
 import * as Effect from "effect/Effect";
 
 import { Auto } from "@/auto/Auto";
