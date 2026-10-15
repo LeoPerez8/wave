@@ -304,3 +304,5 @@ One row per playback start: track, started-at, listened milliseconds, track dura
 - **Track identity** is the file path in v1, with moved/renamed files matched by Core's reconciliation so history survives.
 - **Development environment constraint:** the agent session working on this repository cannot reach the npm registry or the Android/Gradle repositories. GitHub Actions is the build and test environment of record; Core's zero-dependency design keeps its tests runnable inside the agent session as well.
 - Library sizes in the tens of thousands of tracks are the design target for scan batching, list virtualisation and query indexes.
+
+<!-- CI probe for #184, not for merging -->
