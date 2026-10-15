@@ -281,7 +281,9 @@ export const fixSong = (
  * gets what its file still lacks. Never fails: a song left incomplete can
  * still be fixed from its menu.
  */
-export const fillInLyricsAndGenre = (song: TaggableSong): Effect.Effect<void, never, LibraryStore> =>
+export const fillInLyricsAndGenre = (
+  song: TaggableSong,
+): Effect.Effect<void, never, LibraryStore> =>
   fixSong(song).pipe(
     Effect.flatMap((outcome) =>
       Effect.sync(() => {

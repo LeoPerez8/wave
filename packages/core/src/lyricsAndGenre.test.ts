@@ -547,8 +547,14 @@ describe("canFixSong", () => {
     assert.equal(canFixSong(indexed("Everything", true, "Rock")), false);
     assert.equal(canFixSong(indexed("No lyrics", false, "Rock")), true);
     assert.equal(canFixSong(indexed("No genre", true, null)), true);
-    assert.equal(canFixSong(indexed("No number", true, "Rock", { trackNumber: null, year: 1 })), true);
-    assert.equal(canFixSong(indexed("No year", true, "Rock", { trackNumber: 1, year: null })), true);
+    assert.equal(
+      canFixSong(indexed("No number", true, "Rock", { trackNumber: null, year: 1 })),
+      true,
+    );
+    assert.equal(
+      canFixSong(indexed("No year", true, "Rock", { trackNumber: 1, year: null })),
+      true,
+    );
   });
 
   test("counts a blank genre and a track number or year of 0 as none", () => {
