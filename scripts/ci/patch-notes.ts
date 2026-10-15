@@ -75,12 +75,13 @@ const closedIssues = (pr: MergedPr) => [
   ...Array.from(pr.body.matchAll(CLOSING_KEYWORD), (match) => Number(match[1])),
 ];
 
-// Users see what changes the APK. A PR that changes only CI, docs or specs (by the
-// change rule) isn't news to them. `files` is null when GitHub couldn't list them all.
+// Users see what changes the APK or the sync service. A PR that changes only CI, docs or
+// specs (by the change rule) isn't news to them. `files` is null when GitHub couldn't list
+// them all.
 const isListed = (pr: MergedPr) => {
   if (pr.files === null) return true;
   const touched = changes(pr.files);
-  return touched.app || touched.core || touched.workspace;
+  return touched.app || touched.core || touched.sync || touched.workspace;
 };
 
 // A title is plain text with `code` in it: Markdown would drop "<version>" as an HTML

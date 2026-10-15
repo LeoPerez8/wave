@@ -105,6 +105,15 @@ describe("patchNotes", () => {
     );
   });
 
+  it("lists a PR that changes only the sync service", () => {
+    const notes = patchNotes({
+      commits: ["commit-37"],
+      bugIssues: [],
+      pullRequests: [pr(37, { title: "Sync favorites", files: ["apps/sync/src/worker.ts"] })],
+    });
+    assert.equal(notes, "## New\n\n- [Sync favorites](https://github.com/LeoPerez8/wave/pull/37)\n");
+  });
+
   it("lists only PRs merged in the release's commits, in PR order", () => {
     const notes = patchNotes({
       commits: ["commit-52", "a-direct-commit", "commit-50"],
