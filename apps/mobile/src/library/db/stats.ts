@@ -10,8 +10,9 @@
  * real SQLite (`testDatabase.ts`).
  */
 import type { CreditedPlayTotals, PlayTotals, SongListening, StatsWindow } from "@wave/core";
-import { and, eq, gte, lte, sql, type SQL } from "drizzle-orm";
+import { and, eq, gte, inArray, lte, sql, type SQL } from "drizzle-orm";
 
+import { chunks } from "./chunks.ts";
 import type { LibraryDatabase } from "./database.ts";
 import * as schema from "./schema.ts";
 
@@ -32,16 +33,29 @@ const sums = {
   latestPlayAt: sql<number>`max(${schema.playEvents.startedAt})`,
 };
 
-/** Each track's counted plays within `window`, for tracks still in the library, in no order. */
-export const trackPlayTotals = (db: LibraryDatabase, window: StatsWindow): PlayTotals[] => {
+/**
+ * Each track's counted plays within `window`, for tracks still in the library,
+ * in no order; with [trackIds], only those tracks' (each read through the
+ * play events' track index, so a few songs don't cost the whole history).
+ */
+export const trackPlayTotals = (
+  db: LibraryDatabase,
+  window: StatsWindow,
+  trackIds?: readonly number[],
+): PlayTotals[] => {
   const { playEvents, tracks } = schema;
-  return db
-    .select({ id: tracks.id, sortKey: tracks.titleSort, ...sums })
-    .from(playEvents)
-    .innerJoin(tracks, eq(playEvents.trackId, tracks.id))
-    .where(countedIn(window))
-    .groupBy(tracks.id)
-    .all();
+  const read = (only?: readonly number[]) =>
+    db
+      .select({ id: tracks.id, sortKey: tracks.titleSort, ...sums })
+      .from(playEvents)
+      .innerJoin(tracks, eq(playEvents.trackId, tracks.id))
+      .where(
+        and(countedIn(window), only === undefined ? undefined : inArray(playEvents.trackId, only)),
+      )
+      .groupBy(tracks.id)
+      .all();
+  // Grouped by track, so each run's rows are its own tracks'.
+  return trackIds === undefined ? read() : chunks(trackIds).flatMap(read);
 };
 
 /**

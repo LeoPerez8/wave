@@ -33,6 +33,7 @@ export {
   parseQueueState,
   readShuffleKind,
   reduceQueue,
+  shuffledTrackIds,
   shufflesQueue,
   upNext,
   upNextMove,
