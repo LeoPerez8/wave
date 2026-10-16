@@ -136,6 +136,14 @@ describe("createPagedRows", () => {
     assert.deepEqual(reads[1]!.keys, [...range(1, 2), ...range(4, 7)]);
   });
 
+  test("finds a held row by its key too, wherever the order puts it", () => {
+    const { rows, answer } = setUp({ pageSize: 10, ahead: 0, keep: 0 });
+    rows.setOrder(range(1, 10));
+    answer(0);
+    assert.equal(rows.rowOf(7)?.title, "v1 7");
+    assert.equal(rows.rowOf(70), undefined);
+  });
+
   test("a failed read is asked again when the list next moves", () => {
     const { rows, reads, shown } = setUp({ pageSize: 10, ahead: 0, keep: 0 });
     rows.setOrder(range(1, 10));

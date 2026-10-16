@@ -44,6 +44,8 @@ export interface PagedRows<K, R> {
   readonly view: (start: number, end: number) => void;
   /** The row at [index], or undefined while it loads. */
   readonly row: (index: number) => R | undefined;
+  /** The row of [key], or undefined while it isn't held (not read yet, or far from the screen). */
+  readonly rowOf: (key: K) => R | undefined;
   /** Calls [listener] whenever rows arrive; returns how to stop. */
   readonly subscribe: (listener: () => void) => () => void;
   readonly stats: () => PagedRowsStats;
@@ -152,6 +154,7 @@ export const createPagedRows = <K, R>(options: {
       const key = keys[index];
       return key === undefined ? undefined : held.get(key)?.row;
     },
+    rowOf: (key) => held.get(key)?.row,
     subscribe: (listener) => {
       listeners.add(listener);
       return () => {

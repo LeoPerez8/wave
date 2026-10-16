@@ -5,6 +5,7 @@ import {
   type BlackPlayerTrack,
   type ImportedPlays,
   type IndexedFile,
+  type LibrarySongSort,
   type PlaylistSong,
   type LibraryTrack,
   type MissingTrack,
@@ -122,6 +123,13 @@ import {
   signOut,
 } from "./db/missingSongs";
 import { saveYtArtist, selectYtArtist } from "./db/ytArtists";
+import {
+  selectSongOrder,
+  selectSongSummaries,
+  selectSongsWithIds,
+  type SongOrder,
+  type SongSummary,
+} from "./db/songOrder";
 import type { KnownFile } from "./NativeScanner";
 
 const DATABASE_NAME = "wave.db";
@@ -235,7 +243,7 @@ export const songHasFile = <S extends SongRow>(song: S): song is S & { readonly 
 /** A track on an album screen, with what orders it there. */
 export type AlbumTrackRow = SongRow;
 
-export type { FavoriteRow };
+export type { FavoriteRow, SongOrder, SongSummary };
 
 /** One album of the Albums grid (and of an artist's albums). */
 export interface AlbumRow {
@@ -427,6 +435,23 @@ export class LibraryStore extends Context.Service<
     readonly measureScale: Effect.Effect<LibraryScale, LibraryStoreError>;
     /** Every track ordered by title, for Library › Songs. */
     readonly listSongs: Effect.Effect<readonly SongRow[], LibraryStoreError>;
+    /**
+     * Library › Songs in [sort] as Track ids, with its A–Z spine and its
+     * missing songs, without the rows' details (`songSummaries` reads those
+     * for the rows on screen).
+     */
+    readonly listSongOrder: (sort: LibrarySongSort) => Effect.Effect<SongOrder, LibraryStoreError>;
+    /** What the Songs list's rows of [ids] show, in that order; ids gone are left out. */
+    readonly songSummaries: (
+      ids: readonly number[],
+    ) => Effect.Effect<readonly SongSummary[], LibraryStoreError>;
+    /**
+     * The full song rows of [ids], missing songs included, in that order, for
+     * what acts on them (a menu, a selection); ids gone are left out.
+     */
+    readonly songsWithIds: (
+      ids: readonly number[],
+    ) => Effect.Effect<readonly SongRow[], LibraryStoreError>;
     /**
      * Every song with what a lyrics and genre lookup sends, its genre and
      * whether it has lyrics, for the whole-Library run.
@@ -919,6 +944,12 @@ const make = Effect.gen(function* () {
         .orderBy(...BY_TITLE)
         .all(),
     ),
+
+    listSongOrder: (sort) => attempt("order songs", () => selectSongOrder(db, sort)),
+
+    songSummaries: (ids) => attempt("read songs", () => selectSongSummaries(db, ids)),
+
+    songsWithIds: (ids) => attempt("read songs", () => selectSongsWithIds(db, ids)),
 
     listLibraryLookupSongs: attempt("list songs to look up", () => selectLibraryLookupSongs(db)),
 
