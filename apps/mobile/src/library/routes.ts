@@ -1,19 +1,59 @@
 import { detailPath, type DetailScreen, type StatsPeriod, type StatsRanking } from "@wave/core";
-import { router, useLocalSearchParams, usePathname, type Href } from "expo-router";
-import { useEffect, useState } from "react";
+import {
+  router,
+  useGlobalSearchParams,
+  useLocalSearchParams,
+  usePathname,
+  type Href,
+} from "expo-router";
+import { useLayoutEffect, useState, useSyncExternalStore } from "react";
+
+import { makeExternalStore } from "@/lib/externalStore";
 
 import type { AlbumRow, ArtistRow, GenreRow, PlaylistRow } from "./LibraryStore";
 
-/** The current screen's path, for opening screens from outside React. */
-let here = "/";
+/** The route showing: its path and its params (the global ones, every segment's). */
+export interface CurrentRoute {
+  readonly pathname: string;
+  readonly params: Readonly<Record<string, string | string[] | undefined>>;
+}
 
-/** Keeps `here` current. Called once, by the root layout. */
-export const useTrackCurrentPath = (): void => {
+/**
+ * The route showing, for opening screens from outside React and for
+ * components that follow it (`useCurrentRoute`). expo-router's own hooks read
+ * a context that changes on every navigation, so each caller renders again on
+ * every push, pop and tab switch; this store lets an always-mounted component
+ * pick the part it needs, or stop following while it's hidden.
+ */
+const currentRoute = makeExternalStore<CurrentRoute>({ pathname: "/", params: {} });
+
+/**
+ * Keeps the current route's store up to date. Rendered once, by the root
+ * layout: it renders nothing, so following the route renders only it. It
+ * writes before the frame is drawn, so followers draw the new route with it.
+ */
+export function FollowCurrentRoute(): null {
   const pathname = usePathname();
-  useEffect(() => {
-    here = pathname;
-  }, [pathname]);
-};
+  const params = useGlobalSearchParams();
+  useLayoutEffect(() => currentRoute.set({ pathname, params }), [pathname, params]);
+  return null;
+}
+
+const idle = () => () => {};
+
+/**
+ * [select]ed from the route showing (return a primitive or a stable value).
+ * The caller renders again when the selection changes, and only while
+ * [active]: inactive, the selection is read when it renders for another
+ * reason (Now Playing reads it as it opens, not on every navigation under it).
+ */
+export const useCurrentRoute = <A>(select: (route: CurrentRoute) => A, active = true): A =>
+  useSyncExternalStore(active ? currentRoute.subscribe : idle, () => select(currentRoute.get()));
+
+const pathOf = (route: CurrentRoute): string => route.pathname;
+
+/** The path showing, followed while [active] (`useCurrentRoute`). */
+export const useCurrentPath = (active = true): string => useCurrentRoute(pathOf, active);
 
 /** The row a list shows for each detail screen's item. */
 interface DetailRows {
@@ -39,7 +79,7 @@ const open = <S extends DetailScreen>(
   query = "",
 ): void => {
   opening = known === undefined || known === null ? undefined : { screen, row: known };
-  router.push(`${detailPath(here, screen, id)}${query}` as Href);
+  router.push(`${detailPath(currentRoute.get().pathname, screen, id)}${query}` as Href);
 };
 
 /**

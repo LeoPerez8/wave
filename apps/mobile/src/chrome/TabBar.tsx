@@ -1,5 +1,6 @@
 import type { TabBarTab } from "@wave/core";
 import { useTabTrigger } from "expo-router/ui";
+import { memo } from "react";
 import { Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -70,9 +71,10 @@ const RADIUS = chrome.tabBar / 2;
  * The floating glass tab bar the owner arranges: Home and the tabs after it
  * share one pill, and Search, when it's on, sits beside it in a pill of its
  * own. Tapping Search brings the keyboard up; a long press on any tab opens
- * the bar's editor.
+ * the bar's editor. Memoized: the tabs layout renders on navigation, and the
+ * bar needn't (its tabs follow the focused one themselves; pass a stable `onTabTap`).
  */
-export function TabBar({ onTabTap }: { onTabTap: (to: TabBarTab) => void }) {
+export const TabBar = memo(function TabBar({ onTabTap }: { onTabTap: (to: TabBarTab) => void }) {
   useRenderCount("TabBar");
   const insets = useSafeAreaInsets();
   const bar = useTabBar();
@@ -104,4 +106,4 @@ export function TabBar({ onTabTap }: { onTabTap: (to: TabBarTab) => void }) {
       </View>
     </OnFloatingChrome>
   );
-}
+});

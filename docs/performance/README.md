@@ -245,7 +245,8 @@ ticket needs evidence, and give a new response mark a scenario step's `expect` i
 - touches with their native timestamp, from the root view's `onTouchStart`.
 
 Render counts are in RootLayout, TabsLayout, LibraryLayout, TabBar, MiniPlayer, NowPlayingSheet,
-UpNextList, HomeScreen, LibraryScreen, SearchScreen, SettingsScreen, SongsList and TrackList.
+PlayerView, UpNextList, HomeScreen, LibraryScreen, SearchScreen, SettingsScreen, LargeTitleScreen
+(Home's and Library's), SongsList and TrackList.
 
 A new scenario goes in `SCENARIOS` (`scripts/perf/scenarios.ts`). Then make the simulated phone in
 `fakeDevice.ts` answer it, so `--dry-run` and the tests cover it.
