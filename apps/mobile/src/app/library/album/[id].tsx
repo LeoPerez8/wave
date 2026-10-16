@@ -31,13 +31,19 @@ import { parseId, useKnownRow, useOpenedIntegrated } from "@/library/routes";
 import { songCount, toTrackSummary } from "@/library/TrackList";
 import { useListScrollable } from "@/motion/heldTouch";
 import type { NativeYtSong } from "@/native/waveYtMusic";
-import type { ActionItems } from "@/playback/actionTargets";
+import {
+  listedTrackItem,
+  trackItemKey,
+  tracksTarget,
+  type TrackItem,
+} from "@/playback/actionTargets";
 import { selectableRow } from "@/selection/selectableRow";
 import { useListSelection, type ListSelection } from "@/selection/useListSelection";
 import { useYtAlbumSection } from "@/ytmusic/albumSection";
 import { YtLookupFooter } from "@/ytmusic/YtLookupFooter";
 import { ListDownloadAction, useYtAlbumDownloadButton } from "@/ytmusic/YtSongList";
 import { YtSongRow } from "@/ytmusic/YtSongRow";
+import { openYtSongActions } from "@/ytmusic/YtSongActions";
 
 type Entry = YtAlbumEntry<NativeYtSong, SongRow>;
 
@@ -48,14 +54,6 @@ type Item =
   | { readonly type: "entry"; readonly entry: Entry; readonly index: number };
 
 const DISC_HEAD = CELL * 6;
-
-const trackKey = (track: AlbumTrackRow): string => String(track.id);
-
-/** In selection mode the bar acts on the checked tracks, in disc and track order. */
-const tracksOf = (tracks: readonly AlbumTrackRow[]): ActionItems => ({
-  kind: "track",
-  items: tracks.map((song) => ({ song })),
-});
 
 /** Tracks in album order, with a "Disc n" head before each disc when there is more than one. */
 const albumItems = (tracks: readonly AlbumTrackRow[]): Item[] => {
@@ -109,8 +107,6 @@ const mixedSongs = (entries: readonly Entry[]): MixedSong<YtSong, SongRow>[] =>
       ? { source: "library", track: entry.track }
       : { source: "stream", song: entry.song },
   );
-
-const ignore = (): void => undefined;
 
 function AlbumHead({
   shown,
@@ -197,8 +193,7 @@ function AlbumHead({
 
 /**
  * A row of the album with YouTube Music's songs joined in: a Library song,
- * marked downloaded, or a streamed one with the YT Music song's menu. Only
- * Library songs can be selected.
+ * marked downloaded, or a streamed one with the YT Music song's menu.
  */
 function EntryRow({
   entry,
@@ -210,7 +205,7 @@ function EntryRow({
   entry: Entry;
   playing: boolean;
   favorite: boolean;
-  listSelection: ListSelection<AlbumTrackRow>;
+  listSelection: ListSelection<TrackItem>;
   onPress: () => void;
 }) {
   if (entry.source === "stream")
@@ -219,8 +214,9 @@ function EntryRow({
         song={entry.song}
         trackNumber={entry.number}
         playing={playing}
-        onPress={listSelection.selecting ? ignore : onPress}
-        onLongPress={listSelection.selecting ? ignore : undefined}
+        {...selectableRow({ ytSong: entry.song }, listSelection, onPress, (options) =>
+          openYtSongActions(entry.song, options),
+        )}
       />
     );
   return (
@@ -230,7 +226,7 @@ function EntryRow({
       favorite={favorite}
       leading="number"
       downloaded
-      {...selectableRow(entry.track, listSelection, onPress, (options) =>
+      {...selectableRow({ song: entry.track }, listSelection, onPress, (options) =>
         openTrackActions(entry.track, options),
       )}
     />
@@ -260,10 +256,15 @@ function AlbumTracks({ shown, openedIntegrated }: { shown: Shown; openedIntegrat
   const currentId = useCurrentTrackId();
   const favorites = useFavoriteIds();
   // Selection keys the tracks themselves (every disc), not the disc heads.
+  const selectable = useMemo(
+    (): TrackItem[] =>
+      entries === null ? tracks.map((song) => ({ song })) : entries.map(listedTrackItem),
+    [entries, tracks],
+  );
   const listSelection = useListSelection({
-    items: tracks,
-    keyOf: trackKey,
-    target: tracksOf,
+    items: selectable,
+    keyOf: trackItemKey,
+    target: tracksTarget,
   });
   const rowState = useMemo(
     () => ({ currentId, favorites, selection: listSelection.selection }),
@@ -313,7 +314,7 @@ function AlbumTracks({ shown, openedIntegrated }: { shown: Shown; openedIntegrat
               favorite={favorites.has(item.track.id)}
               leading="number"
               {...selectableRow(
-                item.track,
+                { song: item.track },
                 listSelection,
                 () => playSongs(tracks, item.index, context),
                 (options) => openTrackActions(item.track, options),

@@ -108,14 +108,17 @@ describe("itemActions", () => {
     assert.equal(ITEM_ACTION_LABELS.retryDownload, "Retry Download");
   });
 
-  test("missing songs checked together, or a song with a file, offer no download entries", () => {
+  test("missing songs checked together offer Download; a song with a file offers no download entries", () => {
     const missing = { ...song(), missing: true };
     const bar = names(itemActions(tracks([missing, missing], { surface: "selection" })));
-    assert.ok(!bar.includes("download"));
+    assert.deepEqual(bar.slice(0, 3), ["addToPlaylist", "favorite", "download"]);
     assert.ok(!names(itemActions(tracks([song()]))).includes("download"));
+    assert.ok(
+      !names(itemActions(tracks([song(), song()], { surface: "selection" }))).includes("download"),
+    );
   });
 
-  test("missing songs checked with songs that have a file queue those, and neither Delete nor Remove from Library shows", () => {
+  test("missing songs checked with songs that have a file queue those and download the rest; neither Delete nor Remove from Library shows", () => {
     const bar = names(
       itemActions(
         tracks([song(), { ...song(), missing: true }], {
@@ -129,6 +132,7 @@ describe("itemActions", () => {
       "addToQueue",
       "addToPlaylist",
       "favorite",
+      "download",
       "goToAlbum",
       "goToArtist",
     ]);
@@ -582,6 +586,139 @@ describe("itemActions on albums and songs checked together", () => {
     const entries = itemActions(mixed([{ albumId: 2, artistIds: [30] }, song({ albumId: 2 })]));
     assert.deepEqual(entries.at(-1), { action: "goToAlbum", albumId: 2 });
   });
+
+  test("a YT Music song checked beside an album offers only their shared actions", () => {
+    const entries = itemActions({
+      ...mixed([
+        { albumId: 2, artistIds: [10] },
+        { streamed: true, artistNames: ["Justice"] },
+      ]),
+      surface: "selection",
+    });
+    assert.deepEqual(names(entries), ["playNext", "addToQueue", "addToPlaylist"]);
+  });
+});
+
+/** A YT Music song, streamed, credited to [artistNames]. */
+const streamed = (...artistNames: string[]) => ({ streamed: true, artistNames });
+
+describe("itemActions on YT Music songs checked with the Library's", () => {
+  test("they join the queue and playlists and download; Favorite, Fix Songs and Delete are the files'", () => {
+    const bar = itemActions(
+      tracks([{ ...song({ favorite: true }), fixable: true }, streamed("Justice")], {
+        surface: "selection",
+        onlineLookups: true,
+      }),
+    );
+    assert.deepEqual(names(bar), ["playNext", "addToQueue", "addToPlaylist", "download"]);
+  });
+
+  test("a playlist's YT Music entries checked with its Library songs can be removed from it", () => {
+    const bar = itemActions(
+      tracks(
+        [song({ favorite: true }), streamed("Justice")].map((item) => ({
+          ...item,
+          inPlaylist: true,
+        })),
+        {
+          surface: "selection",
+        },
+      ),
+    );
+    assert.deepEqual(names(bar), [
+      "playNext",
+      "addToQueue",
+      "addToPlaylist",
+      "removeFromPlaylist",
+      "download",
+    ]);
+  });
+
+  test("streamed songs alone offer what they offer beside the Library's", () => {
+    const bar = itemActions(
+      tracks([streamed("Justice"), streamed("Daft Punk")], { surface: "selection" }),
+    );
+    assert.deepEqual(names(bar), ["playNext", "addToQueue", "addToPlaylist", "download"]);
+  });
+
+  test("Download shows only while a checked song isn't downloaded", () => {
+    const bar = (...items: ActionSubject["items"]) =>
+      names(itemActions(tracks(items, { surface: "selection" })));
+    // Downloaded since Search listed it: the Library has its file now.
+    assert.ok(!bar(song(), { ...streamed("Justice"), downloaded: true }).includes("download"));
+    assert.ok(bar({ ...song(), missing: true }, streamed("Justice")).includes("download"));
+    // The long-press menu has its own download entries; Download is the bar's.
+    assert.ok(!names(itemActions(tracks([streamed("Justice")]))).includes("download"));
+  });
+});
+
+describe("Go to Artist on YT Music songs checked with the Library's", () => {
+  const daftPunk = { id: 10, name: "Daft Punk" };
+  /** The Library has Daft Punk (artist 10), not Justice. */
+  const libraryArtist = (name: string) => (name === "Daft Punk" ? daftPunk : null);
+  const goTo = (
+    items: ActionSubject["items"],
+    { enabled = true, here = "/search", ytArtistHere = null as string | null } = {},
+  ) =>
+    itemActions({
+      kind: "track",
+      items,
+      surface: "selection",
+      here,
+      streamedArtists: { libraryArtist, enabled, ytArtistHere },
+    }).find((entry) => entry.action === "goToArtist");
+
+  test("a Library song and a streamed one by the same Library artist open their page, integrated", () => {
+    assert.deepEqual(goTo([song({ artistId: 10 }), streamed("Daft Punk")]), {
+      action: "goToArtist",
+      streamedArtists: { kind: "open", target: { kind: "library", artist: daftPunk } },
+    });
+  });
+
+  test("streamed songs by an artist the Library lacks open the YouTube Music artist page", () => {
+    assert.deepEqual(goTo([streamed("Justice"), streamed("Justice")]), {
+      action: "goToArtist",
+      streamedArtists: { kind: "open", target: { kind: "yt", name: "Justice" } },
+    });
+  });
+
+  test("a shared collaboration is a choice, in the first streamed song's credit order", () => {
+    assert.equal(goTo([song({ artistId: 10 }), streamed("Justice", "Daft Punk")]), undefined);
+    assert.deepEqual(goTo([streamed("Justice", "Daft Punk"), streamed("Daft Punk", "Justice")]), {
+      action: "goToArtist",
+      streamedArtists: {
+        kind: "choose",
+        targets: [
+          { kind: "yt", name: "Justice" },
+          { kind: "library", artist: daftPunk },
+        ],
+      },
+    });
+  });
+
+  test("songs by different artists, YT Music off or the artist page you're on offer none", () => {
+    assert.equal(goTo([song({ artistId: 10 }), streamed("Justice")]), undefined);
+    assert.equal(goTo([song({ artistId: 11 }), streamed("Daft Punk")]), undefined);
+    assert.equal(
+      goTo([song({ artistId: 10 }), streamed("Daft Punk")], { enabled: false }),
+      undefined,
+    );
+    assert.equal(
+      goTo([streamed("Justice"), streamed("Justice")], { ytArtistHere: "Justice" }),
+      undefined,
+    );
+    assert.equal(
+      goTo([song({ artistId: 10 }), streamed("Daft Punk")], { here: "/library/artist/10" }),
+      undefined,
+    );
+  });
+
+  test("streamed songs whose artists can't be told offer none", () => {
+    const bar = itemActions(
+      tracks([streamed("Justice"), streamed("Justice")], { surface: "selection" }),
+    );
+    assert.ok(!names(bar).includes("goToArtist"));
+  });
 });
 
 describe("commonKind", () => {
@@ -746,6 +883,15 @@ describe("ytSongActions", () => {
       "addToPlaylist",
       "goToAlbum",
     ]);
+  });
+
+  test("opened from a list that can select, it offers Select last, as a Library song's menu does", () => {
+    const artists = { kind: "open", target: { kind: "yt", name: "Justice" } } as const;
+    assert.deepEqual(
+      ytSongActions(artists, { selectable: true }).map((entry) => entry.action),
+      ["playNext", "addToQueue", "addToPlaylist", "goToArtist", "select"],
+    );
+    assert.ok(!ytSongActions(artists).some((entry) => entry.action === "select"));
   });
 
   test("a song without an album, or with YT Music off (a playlist's entry), has no Go to Album", () => {
