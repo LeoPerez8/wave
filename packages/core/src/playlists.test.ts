@@ -8,6 +8,7 @@ import {
   moveItem,
   nextPlaylistName,
   planPlaylistAdd,
+  playlistArtwork,
   playlistMosaic,
   playlistRemovals,
 } from "./index.ts";
@@ -142,6 +143,25 @@ describe("playlistMosaic", () => {
   test("an empty playlist, or one with no artwork at all, has no covers", () => {
     assert.deepEqual(playlistMosaic([]), []);
     assert.deepEqual(playlistMosaic([null, null]), []);
+  });
+});
+
+describe("playlistArtwork", () => {
+  test("a playlist's own image stands alone in place of its mosaic", () => {
+    const covers = ["kid-a", "blue", "ok", "dummy"];
+    assert.deepEqual(playlistArtwork("road-trip.jpg", covers), ["road-trip.jpg"]);
+    assert.deepEqual(playlistArtwork("road-trip.jpg", []), ["road-trip.jpg"]);
+  });
+
+  test("without an image, the mosaic shows", () => {
+    assert.deepEqual(playlistArtwork(null, ["kid-a", "blue", "ok", "dummy", "x"]), [
+      "kid-a",
+      "blue",
+      "ok",
+      "dummy",
+    ]);
+    assert.deepEqual(playlistArtwork(null, ["blue", null]), ["blue"]);
+    assert.deepEqual(playlistArtwork(null, []), []);
   });
 });
 

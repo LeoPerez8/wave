@@ -187,7 +187,7 @@ const KINDS: { readonly [K in ItemKind]: KindInfo<ItemOf[K]> } = {
       subtitle: counted(playlist.trackCount, "song"),
       covers: playlist.thumbPaths,
     }),
-    facts: () => NO_FACTS,
+    facts: (playlist) => ({ hasImage: playlist.hasImage }),
     noun: "playlist",
   },
   genre: {

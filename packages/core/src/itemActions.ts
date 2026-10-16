@@ -61,6 +61,8 @@ export interface ActionItem {
   readonly missing?: boolean | undefined;
   /** Where a missing song's download is (`ytDownloadStatus`); null or undefined when never asked for. */
   readonly download?: YtDownloadStatus | null | undefined;
+  /** A playlist shown with an image of its own instead of its mosaic. */
+  readonly hasImage?: boolean | undefined;
   /**
    * A YT Music song checked beside the Library's (Search, a playlist's
    * entry…): streamed, not a file. It joins the queue and playlists and can
@@ -125,6 +127,8 @@ export type ItemAction =
   | "goToAlbum"
   | "goToArtist"
   | "renamePlaylist"
+  | "changeImage"
+  | "removeImage"
   | "deletePlaylist"
   | "deletePlaylists"
   | "fixSong"
@@ -171,6 +175,8 @@ export const ITEM_ACTION_LABELS: { readonly [A in ItemAction]: string } = {
   goToAlbum: "Go to Album",
   goToArtist: "Go to Artist",
   renamePlaylist: "Rename Playlist",
+  changeImage: "Change Image",
+  removeImage: "Remove Image",
   deletePlaylist: "Delete Playlist",
   deletePlaylists: "Delete Playlists",
   fixSong: "Fix Song",
@@ -322,12 +328,16 @@ export const itemActions = <A extends LibraryArtistRef = LibraryArtistRef>(
     const artists = artistLink(sharedArtists(items), here);
     if (artists !== undefined) entries.push({ action: "goToArtist", artists });
   }
-  if (kind === "playlist")
-    entries.push(
-      ...(items.length === 1
-        ? [{ action: "renamePlaylist" } as const, { action: "deletePlaylist" } as const]
-        : [{ action: "deletePlaylists" } as const]),
-    );
+  if (kind === "playlist" && items.length === 1) {
+    entries.push({ action: "renamePlaylist" });
+    // Its own image is set from its menu (the selection bar leaves it out); the mosaic shows without one.
+    if (surface === "menu") {
+      entries.push({ action: "changeImage" });
+      if (only?.hasImage === true) entries.push({ action: "removeImage" });
+    }
+    entries.push({ action: "deletePlaylist" });
+  }
+  if (kind === "playlist" && items.length > 1) entries.push({ action: "deletePlaylists" });
   // Looks up online what the songs lack and writes it into their files; it
   // works on the checked songs missing something, so one of them is enough.
   if (
