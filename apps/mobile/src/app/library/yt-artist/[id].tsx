@@ -110,8 +110,12 @@ function ReleaseRow({ covers, selecting }: { covers: readonly Cover[]; selecting
               key={`album-${library.id}`}
               album={toAlbumSummary(library)}
               size={COVER_ROW_TILE}
-              onPress={() => { if (!selecting) openAlbum(library.id, library, { integrated: true }); }}
-              onLongPress={() => { if (!selecting) openAlbumActions(library); }}
+              onPress={() => {
+                if (!selecting) openAlbum(library.id, library, { integrated: true });
+              }}
+              onLongPress={() => {
+                if (!selecting) openAlbumActions(library);
+              }}
             />
           ),
         )}
@@ -227,7 +231,11 @@ export default function YtArtistScreen() {
   const { view, retry } = useYtArtistPage(browseId, knownName);
   const songs = view?.songs ?? NO_SONGS;
   const selectable = useMemo(() => songs.map(listedTrackItem), [songs]);
-  const selection = useListSelection({ items: selectable, keyOf: trackItemKey, target: tracksTarget });
+  const selection = useListSelection({
+    items: selectable,
+    keyOf: trackItemKey,
+    target: tracksTarget,
+  });
   const items = useMemo(() => (view === null ? [] : pageItems(view.shelves, view.songs)), [view]);
   const contextId = browseId ?? `name:${knownName ?? ""}`;
   const context = useMemo(() => ({ kind: "ytArtist", id: contextId }) as const, [contextId]);
@@ -249,9 +257,17 @@ export default function YtArtistScreen() {
           );
         case "shelf":
           // Keyed by shelf, so a recycled row doesn't keep another shelf's scroll position.
-          return <ReleaseRow key={item.label} covers={item.covers} selecting={selection.selecting} />;
+          return (
+            <ReleaseRow key={item.label} covers={item.covers} selecting={selection.selecting} />
+          );
         case "song":
-          return <DiscoverSongRow song={item.song} selection={selection} onPress={() => play(item.index)} />;
+          return (
+            <DiscoverSongRow
+              song={item.song}
+              selection={selection}
+              onPress={() => play(item.index)}
+            />
+          );
       }
     },
     [play, selection],

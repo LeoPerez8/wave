@@ -540,7 +540,10 @@ describe("itemActions on albums and songs checked together", () => {
 
   test("a YT Music song checked beside an album offers only their shared actions", () => {
     const entries = itemActions({
-      ...mixed([{ albumId: 2, artistIds: [10] }, { streamed: true, artistNames: ["Justice"] }]),
+      ...mixed([
+        { albumId: 2, artistIds: [10] },
+        { streamed: true, artistNames: ["Justice"] },
+      ]),
       surface: "selection",
     });
     assert.deepEqual(names(entries), ["playNext", "addToQueue", "addToPlaylist"]);
@@ -563,9 +566,15 @@ describe("itemActions on YT Music songs checked with the Library's", () => {
 
   test("a playlist's YT Music entries checked with its Library songs can be removed from it", () => {
     const bar = itemActions(
-      tracks([song({ favorite: true }), streamed("Justice")].map((item) => ({ ...item, inPlaylist: true })), {
-        surface: "selection",
-      }),
+      tracks(
+        [song({ favorite: true }), streamed("Justice")].map((item) => ({
+          ...item,
+          inPlaylist: true,
+        })),
+        {
+          surface: "selection",
+        },
+      ),
     );
     assert.deepEqual(names(bar), [
       "playNext",
@@ -641,8 +650,14 @@ describe("Go to Artist on YT Music songs checked with the Library's", () => {
   test("songs by different artists, YT Music off or the artist page you're on offer none", () => {
     assert.equal(goTo([song({ artistId: 10 }), streamed("Justice")]), undefined);
     assert.equal(goTo([song({ artistId: 11 }), streamed("Daft Punk")]), undefined);
-    assert.equal(goTo([song({ artistId: 10 }), streamed("Daft Punk")], { enabled: false }), undefined);
-    assert.equal(goTo([streamed("Justice"), streamed("Justice")], { ytArtistHere: "Justice" }), undefined);
+    assert.equal(
+      goTo([song({ artistId: 10 }), streamed("Daft Punk")], { enabled: false }),
+      undefined,
+    );
+    assert.equal(
+      goTo([streamed("Justice"), streamed("Justice")], { ytArtistHere: "Justice" }),
+      undefined,
+    );
     assert.equal(
       goTo([song({ artistId: 10 }), streamed("Daft Punk")], { here: "/library/artist/10" }),
       undefined,

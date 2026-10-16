@@ -381,9 +381,11 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
   const tracksOf = useCallback(
     (selected: readonly PlaylistEntryRow[]): ActionItems => ({
       kind: "track",
-      items: selected.map((item) => item.source === "library"
-        ? { song: item.track, playlistItem: placeOf(item) }
-        : { ytSong: item.song, playlistItem: placeOf(item) }),
+      items: selected.map((item) =>
+        item.source === "library"
+          ? { song: item.track, playlistItem: placeOf(item) }
+          : { ytSong: item.song, playlistItem: placeOf(item) },
+      ),
     }),
     [placeOf],
   );

@@ -335,7 +335,8 @@ export const itemActions = <A extends LibraryArtistRef = LibraryArtistRef>(
 /** One entry of a YT Music song's menu; Go to entries carry where they lead. */
 export type YtSongActionEntry<A> =
   | {
-      readonly action: "playNext" | "addToQueue" | "addToPlaylist" | "removeFromPlaylist" | "select";
+      readonly action:
+        "playNext" | "addToQueue" | "addToPlaylist" | "removeFromPlaylist" | "select";
     }
   /** The song's YT Music album page, by its browse id (`MPREb_…`). */
   | { readonly action: "goToAlbum"; readonly album: string }
@@ -371,7 +372,13 @@ export interface YtSongActionOptions {
  */
 export const ytSongActions = <A>(
   artists?: StreamedArtistLink<A>,
-  { inPlaylist = false, album, ytAlbumHere, ytMusic = false, selectable = false }: YtSongActionOptions = {},
+  {
+    inPlaylist = false,
+    album,
+    ytAlbumHere,
+    ytMusic = false,
+    selectable = false,
+  }: YtSongActionOptions = {},
 ): YtSongActionEntry<A>[] => [
   { action: "playNext" },
   { action: "addToQueue" },

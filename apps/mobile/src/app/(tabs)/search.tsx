@@ -133,14 +133,22 @@ export default function SearchScreen() {
   // Song results can be selected. The selection lives here, not in the list,
   // so a new query (or none matching) keeps it: checked songs that drop out of
   // the results stay checked, found again among every song shown since.
-  const songs = useMemo((): TrackItem[] => [
-    ...(results === null ? [] : songResults(results).map((song) => ({ song }))),
-    ...(ytView?.songs ?? []).map((ytSong) => ({ ytSong })),
-  ], [results, ytView]);
+  const songs = useMemo(
+    (): TrackItem[] => [
+      ...(results === null ? [] : songResults(results).map((song) => ({ song }))),
+      ...(ytView?.songs ?? []).map((ytSong) => ({ ytSong })),
+    ],
+    [results, ytView],
+  );
   const [seen] = useState(() => new Map<string, TrackItem>());
   for (const song of songs) seen.set(trackItemKey(song), song);
   const lookup = useCallback((key: string) => seen.get(key), [seen]);
-  const selection = useListSelection({ items: songs, keyOf: trackItemKey, target: tracksTarget, lookup });
+  const selection = useListSelection({
+    items: songs,
+    keyOf: trackItemKey,
+    target: tracksTarget,
+    lookup,
+  });
 
   const changeQuery = useCallback((text: string) => {
     setQuery(text);

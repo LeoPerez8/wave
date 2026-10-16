@@ -61,7 +61,12 @@ export const openYtSongActions = (song: NativeYtSong, options: YtSongMenuOptions
         label: song.title,
         anchor,
         render: (close) => (
-          <YtSongActionsMenu song={song} playlistItem={options.playlistItem} onSelect={options.onSelect} close={close} />
+          <YtSongActionsMenu
+            song={song}
+            playlistItem={options.playlistItem}
+            onSelect={options.onSelect}
+            close={close}
+          />
         ),
       });
     }),
@@ -72,7 +77,8 @@ export const openYtSongActions = (song: NativeYtSong, options: YtSongMenuOptions
 type Entry =
   | {
       readonly kind: "queue";
-      readonly action: "playNext" | "addToQueue" | "addToPlaylist" | "removeFromPlaylist" | "select";
+      readonly action:
+        "playNext" | "addToQueue" | "addToPlaylist" | "removeFromPlaylist" | "select";
     }
   | { readonly kind: "album"; readonly action: "goToAlbum"; readonly album: string }
   | {

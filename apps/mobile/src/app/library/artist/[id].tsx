@@ -117,7 +117,11 @@ const ytTrackItem = (ytSong: NativeYtSong): MixedItem => ({ kind: "track", item:
  * What can be checked on the page, in page order: the albums (their shelf,
  * then Appears on), then the songs. Albums and songs check together.
  */
-const selectableItems = (detail: ArtistDetail, songs: readonly SongRow[], ytSongs: readonly NativeYtSong[]): MixedItem[] => [
+const selectableItems = (
+  detail: ArtistDetail,
+  songs: readonly SongRow[],
+  ytSongs: readonly NativeYtSong[],
+): MixedItem[] => [
   ...detail.albums.map(albumItem),
   ...detail.appearsOn.map(albumItem),
   ...songs.map(trackItem),
@@ -268,7 +272,10 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
   const downloaded = additions.songs.length > 0;
   const items = useMemo(() => artistItems(detail, songs, additions), [detail, songs, additions]);
   // Albums and songs select together; the bar acts on them in page order.
-  const selectable = useMemo(() => selectableItems(detail, songs, additions.songs), [detail, songs, additions.songs]);
+  const selectable = useMemo(
+    () => selectableItems(detail, songs, additions.songs),
+    [detail, songs, additions.songs],
+  );
   const page = useListSelection({ items: selectable, keyOf: selectableKey, target: mixedTarget });
   const albumSelection = useMemo(() => albumSelectionOf(page), [page]);
   const { selection } = page;
@@ -307,9 +314,12 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
               <YtSongRow
                 song={song}
                 playing={ytTrackId(song.videoId) === currentId}
-                {...selectableRow(ytTrackItem(song), page,
+                {...selectableRow(
+                  ytTrackItem(song),
+                  page,
                   () => void playPage(mixed, item.index, context),
-                  (options) => openYtSongActions(song, options))}
+                  (options) => openYtSongActions(song, options),
+                )}
               />
             );
           }

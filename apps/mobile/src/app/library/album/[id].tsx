@@ -31,7 +31,12 @@ import { parseId, useKnownRow, useOpenedIntegrated } from "@/library/routes";
 import { songCount, toTrackSummary } from "@/library/TrackList";
 import { useListScrollable } from "@/motion/heldTouch";
 import type { NativeYtSong } from "@/native/waveYtMusic";
-import { listedTrackItem, trackItemKey, tracksTarget, type TrackItem } from "@/playback/actionTargets";
+import {
+  listedTrackItem,
+  trackItemKey,
+  tracksTarget,
+  type TrackItem,
+} from "@/playback/actionTargets";
 import { selectableRow } from "@/selection/selectableRow";
 import { useListSelection, type ListSelection } from "@/selection/useListSelection";
 import { useYtAlbumSection } from "@/ytmusic/albumSection";
@@ -209,8 +214,9 @@ function EntryRow({
         song={entry.song}
         trackNumber={entry.number}
         playing={playing}
-        {...selectableRow({ ytSong: entry.song }, listSelection, onPress,
-          (options) => openYtSongActions(entry.song, options))}
+        {...selectableRow({ ytSong: entry.song }, listSelection, onPress, (options) =>
+          openYtSongActions(entry.song, options),
+        )}
       />
     );
   return (
@@ -250,9 +256,11 @@ function AlbumTracks({ shown, openedIntegrated }: { shown: Shown; openedIntegrat
   const currentId = useCurrentTrackId();
   const favorites = useFavoriteIds();
   // Selection keys the tracks themselves (every disc), not the disc heads.
-  const selectable = useMemo((): TrackItem[] => entries === null
-    ? tracks.map((song) => ({ song }))
-    : entries.map(listedTrackItem), [entries, tracks]);
+  const selectable = useMemo(
+    (): TrackItem[] =>
+      entries === null ? tracks.map((song) => ({ song })) : entries.map(listedTrackItem),
+    [entries, tracks],
+  );
   const listSelection = useListSelection({
     items: selectable,
     keyOf: trackItemKey,

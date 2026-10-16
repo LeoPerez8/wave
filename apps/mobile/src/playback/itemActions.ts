@@ -38,7 +38,7 @@ import {
   useMissingSongDownloadStatuses,
   downloadYtSong,
 } from "@/ytmusic/YtDownloads";
-import { useLibraryFinder } from "@/ytmusic/libraryFinder";
+import { useLoadedLibraryFinder, type FindInLibrary } from "@/ytmusic/libraryFinder";
 import { useStreamedArtistContext } from "@/ytmusic/streamedArtist";
 
 import {
@@ -47,8 +47,10 @@ import {
   targetFacts,
   targetHeading,
   toPlaylistSongs,
-  type ActionItems,
+  hasStreamedSongs,
   isLibraryTrack,
+  type ActionItems,
+  type TargetEntry,
 } from "./actionTargets";
 import { addToQueue, playNext, queueDiscoverSongs } from "./actions";
 
@@ -79,8 +81,19 @@ export interface ActionOptions {
 /** The one missing song [target] is, if it is one: its menu offers its download. */
 const onlyMissingSong = (target: ActionItems): number | null => {
   const only = target.kind === "track" && target.items.length === 1 ? target.items[0] : undefined;
-  return only === undefined || !isLibraryTrack(only) || songHasFile(only.song) ? null : only.song.id;
+  return only === undefined || !isLibraryTrack(only) || songHasFile(only.song)
+    ? null
+    : only.song.id;
 };
+
+const findsNothing: FindInLibrary = () => null;
+
+/**
+ * The Library finder, read only while YT Music songs are among the items
+ * ([streams]): the Library song each is by now, if any.
+ */
+const useStreamedSongFinder = (streams: boolean): FindInLibrary =>
+  useLoadedLibraryFinder(streams) ?? findsNothing;
 
 interface PlanOptions {
   readonly surface: ActionSurface;
@@ -96,15 +109,17 @@ function usePlan(
   target: ActionItems,
   favorites: ReadonlySet<number>,
   { surface, selectable }: PlanOptions,
-): { readonly planned: readonly ItemActionEntry<ArtistRow>[]; readonly missingSongs: readonly number[] } {
+): {
+  readonly planned: readonly ItemActionEntry<ArtistRow>[];
+  readonly missingSongs: readonly number[];
+} {
   const here = usePathname();
   const onlineLookups = useLyricsAndGenreLookupsEnabled();
   const download = useMissingSongDownloadStatus(onlyMissingSong(target));
-  const find = useLibraryFinder();
-  const hasStreams = target.kind === "track"
-    ? target.items.some((item) => !isLibraryTrack(item))
-    : target.kind === "mixed" && target.items.some((item) => item.kind === "track" && !isLibraryTrack(item.item));
-  const streamedArtists = useStreamedArtistContext(hasStreams);
+  // YT Music songs among the items: whether each is a file by now, and who their artists are.
+  const streams = hasStreamedSongs(target);
+  const find = useStreamedSongFinder(streams);
+  const streamedArtists = useStreamedArtistContext(streams);
   const perAlbum = useAlbumsMissingSongs(
     target.kind === "album" ? target.items.map((album) => album.id) : [],
   );
@@ -115,13 +130,7 @@ function usePlan(
     const start = perAlbum.slice(0, index).reduce((sum, ids) => sum + ids.length, 0);
     return statuses.slice(start, start + (perAlbum[index]?.length ?? 0));
   };
-  const facts = targetFacts(target, favorites).map((item, index) => {
-    const track = target.kind === "track" ? target.items[index]
-      : target.kind === "mixed" && target.items[index]?.kind === "track" ? target.items[index].item : undefined;
-    return track !== undefined && "ytSong" in track
-      ? { ...item, downloaded: find(track.ytSong)?.path != null }
-      : item;
-  });
+  const facts = targetFacts(target, favorites, find);
   const planned = itemActions({
     kind: target.kind,
     items: facts.map((item, index) =>
@@ -182,15 +191,17 @@ export function useItemActions(
   const favorites = useFavoriteIds();
   const allTracks = target.kind === "track" ? target.items : [];
   const tracks = allTracks.filter(isLibraryTrack);
-  const find = useLibraryFinder();
+  const find = useStreamedSongFinder(hasStreamedSongs(target));
   // What acts on files (Delete, Find Lyrics and Genre) shows only when every song has one.
   const withFiles = tracks.flatMap(({ song }) => (songHasFile(song) ? [song] : []));
-  // A song downloaded since it was checked uses its Library track now.
-  const entriesNow = () => targetEntries(target).then((entries) => entries.map((entry) => {
-    if (entry.source === "library") return entry;
-    const track = find(entry.song);
-    return track === null ? entry : { source: "library" as const, track };
-  }));
+  // A YT Music song downloaded since it was checked is the Library's file now.
+  const entriesNow = () =>
+    targetEntries(target).then((entries) =>
+      entries.map((entry): TargetEntry => {
+        const track = entry.source === "stream" ? find(entry.song) : null;
+        return track === null || !songHasFile(track) ? entry : { source: "library", track };
+      }),
+    );
 
   const run = (action: () => void) => () => {
     finish();
@@ -286,7 +297,8 @@ export function useItemActions(
       }
       case "goToArtist": {
         // Several credited artists: a card to pick one from (`ArtistChoice`).
-        if ("streamedArtists" in entry) return run(() => followStreamedArtistLink(entry.streamedArtists));
+        if ("streamedArtists" in entry)
+          return run(() => followStreamedArtistLink(entry.streamedArtists));
         const { artists } = entry;
         return run(() => followArtistLink(artists, links.artist));
       }
@@ -313,14 +325,16 @@ export function useItemActions(
         });
       case "download":
       case "retryDownload":
+        // Missing songs download into their Library entries; YT Music songs
+        // the Library doesn't have yet download as new songs.
         return run(() => {
-          downloadMissingSongs(tracks.filter(({ song }) => !songHasFile(song)).map(({ song }) => song.id));
+          const missing: number[] = [];
           for (const item of allTracks) {
-            if (isLibraryTrack(item)) continue;
-            const library = find(item.ytSong);
-            if (library === null) downloadYtSong(item.ytSong);
-            else if (!songHasFile(library)) downloadMissingSongs([library.id]);
+            const song = isLibraryTrack(item) ? item.song : find(item.ytSong);
+            if (song === null && !isLibraryTrack(item)) downloadYtSong(item.ytSong);
+            else if (song !== null && !songHasFile(song)) missing.push(song.id);
           }
+          if (missing.length > 0) downloadMissingSongs(missing);
         });
       case "cancelDownload":
         return run(() => {

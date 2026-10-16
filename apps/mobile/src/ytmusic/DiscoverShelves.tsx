@@ -23,10 +23,9 @@ import type { NativeYtSong } from "@/native/waveYtMusic";
 import { openTrackActions } from "@/playback/ActionsMenu";
 import { playDiscoverSongs } from "@/playback/actions";
 import { useCurrentTrackId } from "@/playback/hooks";
-import { listedTrackItem, trackItemKey, tracksTarget, type TrackItem } from "@/playback/actionTargets";
+import { listedTrackItem, type TrackItem } from "@/playback/actionTargets";
 import { selectableRow } from "@/selection/selectableRow";
-import { useListSelection, type ListSelection } from "@/selection/useListSelection";
-import { useMemo } from "react";
+import type { ListSelection } from "@/selection/useListSelection";
 
 import { openYtAlbum, openYtPlaylist } from "./routes";
 import { openYtAlbumActions } from "./YtAlbumActions";
@@ -68,7 +67,8 @@ export const runDiscoverAction = (
 
 /**
  * A Discover song as a Songs-list row: the Library track (its star, its
- * menu) when the Library has it, else the YT Music song, streamed.
+ * menu) when the Library has it, else the YT Music song, streamed. In a list
+ * that can select ([selection]), either kind checks.
  */
 export function DiscoverSongRow({
   song,
@@ -85,12 +85,13 @@ export function DiscoverSongRow({
   const currentId = useCurrentTrackId();
   const favorites = useFavoriteIds();
   const playing = discoverTrackId(song) === currentId;
+  const row = selectableRow(listedTrackItem(song), selection, onPress, (options) =>
+    song.source === "library"
+      ? openTrackActions(song.track, options)
+      : openYtSongActions(song.song, options),
+  );
   if (song.source === "stream")
-    return (
-      <YtSongRow song={song.song} playing={playing} trackNumber={trackNumber}
-        {...selectableRow(listedTrackItem(song), selection, onPress,
-          (options) => openYtSongActions(song.song, options))} />
-    );
+    return <YtSongRow song={song.song} playing={playing} trackNumber={trackNumber} {...row} />;
   return (
     <TrackRow
       track={{ ...toTrackSummary(song.track), trackNumber }}
@@ -98,11 +99,14 @@ export function DiscoverSongRow({
       favorite={favorites.has(song.track.id)}
       leading={trackNumber === undefined ? "artwork" : "number"}
       downloaded
-      {...selectableRow(listedTrackItem(song), selection, onPress,
-        (options) => openTrackActions(song.track, options))}
+      {...row}
     />
   );
 }
+
+/** A song's long-press menu: the Library track's when it plays the file, else a YT Music song's. */
+const openSongActions = (song: Song): void =>
+  song.source === "library" ? openTrackActions(song.track) : openYtSongActions(song.song);
 
 /** Song shelves show this many rows per column, the next column peeking in. */
 const ROWS_PER_COLUMN = 4;
@@ -118,7 +122,7 @@ const columnsOf = <A,>(items: readonly A[], size: number): A[][] => {
 };
 
 /** A shelf of songs ("Quick picks"): columns of rows that scroll sideways, edge to edge. */
-function SongColumns({ shelf, context, selection }: { shelf: Shelf; context: QueueContext; selection: ListSelection<TrackItem> }) {
+function SongColumns({ shelf, context }: { shelf: Shelf; context: QueueContext }) {
   const scrollable = useListScrollable();
   const { width } = useWindowDimensions();
   const indexed = shelf.items.map((item, index) => ({ item, index }));
@@ -140,7 +144,6 @@ function SongColumns({ shelf, context, selection }: { shelf: Shelf; context: Que
               <DiscoverSongRow
                 key={index}
                 song={item.song}
-                selection={selection}
                 onPress={() => runDiscoverAction(discoverItemAction(shelf, index), context)}
               />
             ) : null,
@@ -157,28 +160,12 @@ const artworkOf = (item: Item): string | null =>
 const titleOf = (item: Item): string => (item.kind === "song" ? item.song.song.title : item.title);
 
 /** A shelf of covers (mixes, albums, playlists): a row that scrolls sideways, edge to edge. */
-function TileShelf({ shelf, context, selection }: { shelf: Shelf; context: QueueContext; selection: ListSelection<TrackItem> }) {
+function TileShelf({ shelf, context }: { shelf: Shelf; context: QueueContext }) {
   return (
     <CoverRow>
       {shelf.items.map((item, index) => {
         const caption = discoverTileCaption(item);
         const artworkUrl = artworkOf(item);
-        const open = () => runDiscoverAction(discoverItemAction(shelf, index), context, {
-          line: caption.line, artworkUrl,
-        });
-        const row = item.kind === "song"
-          ? selectableRow(listedTrackItem(item.song), selection, open,
-              (options) => item.song.source === "library"
-                ? openTrackActions(item.song.track, options)
-                : openYtSongActions(item.song.song, options))
-          : {
-              onPress: () => { if (!selection.selecting) open(); },
-              onLongPress: () => {
-                if (!selection.selecting && item.kind === "album") openYtAlbumActions({
-                  browseId: item.browseId, title: item.title, line: caption.line, artworkUrl,
-                });
-              },
-            };
         return (
           <AlbumTile
             key={index}
@@ -192,7 +179,25 @@ function TileShelf({ shelf, context, selection }: { shelf: Shelf; context: Queue
             }}
             size={COVER_ROW_TILE}
             detail={caption.detail}
-            {...row}
+            onPress={() =>
+              runDiscoverAction(discoverItemAction(shelf, index), context, {
+                line: caption.line,
+                artworkUrl,
+              })
+            }
+            onLongPress={
+              item.kind === "song"
+                ? () => openSongActions(item.song)
+                : item.kind === "album"
+                  ? () =>
+                      openYtAlbumActions({
+                        browseId: item.browseId,
+                        title: item.title,
+                        line: caption.line,
+                        artworkUrl,
+                      })
+                  : undefined
+            }
           />
         );
       })}
@@ -202,9 +207,6 @@ function TileShelf({ shelf, context, selection }: { shelf: Shelf; context: Queue
 
 /** Discover's shelves, each under its catalog line: song rows or covers (Core's layout). */
 export function DiscoverShelves({ shelves }: { shelves: readonly Shelf[] }) {
-  const selectable = useMemo(() => shelves.flatMap((shelf) => shelf.items.flatMap((item) =>
-    item.kind === "song" ? [listedTrackItem(item.song)] : [])), [shelves]);
-  const selection = useListSelection({ items: selectable, keyOf: trackItemKey, target: tracksTarget });
   return (
     <>
       {shelves.map((shelf, index) => {
@@ -212,9 +214,9 @@ export function DiscoverShelves({ shelves }: { shelves: readonly Shelf[] }) {
         return (
           <TitledSection key={`${index}-${shelf.title}`} title={shelf.title} first={index === 0}>
             {shelf.layout === "songs" ? (
-              <SongColumns shelf={shelf} context={context} selection={selection} />
+              <SongColumns shelf={shelf} context={context} />
             ) : (
-              <TileShelf shelf={shelf} context={context} selection={selection} />
+              <TileShelf shelf={shelf} context={context} />
             )}
           </TitledSection>
         );

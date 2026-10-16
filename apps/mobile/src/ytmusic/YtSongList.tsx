@@ -318,7 +318,11 @@ export function YtSongList({
   const download = useYtAlbumDownloadButton(albumDownload && page !== null ? page.songs : NO_SONGS);
   const songs = useMemo(() => (page === null ? [] : discoverSongs(page.songs, find)), [page, find]);
   const selectable = useMemo(() => songs.map(listedTrackItem), [songs]);
-  const selection = useListSelection({ items: selectable, keyOf: trackItemKey, target: tracksTarget });
+  const selection = useListSelection({
+    items: selectable,
+    keyOf: trackItemKey,
+    target: tracksTarget,
+  });
   const play = useCallback(
     (startIndex: number | undefined, shuffle = false) =>
       void playDiscoverSongs(songs, startIndex, context, { shuffle }),

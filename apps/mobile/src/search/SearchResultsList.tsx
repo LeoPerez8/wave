@@ -92,10 +92,15 @@ function SearchYtSongRow({
       song={song}
       kind={top ? "Song · " : ""}
       playing={playing}
-      {...selectableRow({ ytSong: song }, selection, () => {
-        onOpen();
-        playResults(songs, index);
-      }, (options) => openYtSongActions(song, options))}
+      {...selectableRow(
+        { ytSong: song },
+        selection,
+        () => {
+          onOpen();
+          playResults(songs, index);
+        },
+        (options) => openYtSongActions(song, options),
+      )}
     />
   );
 }
