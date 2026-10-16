@@ -2,7 +2,7 @@ import Svg, { Path } from "react-native-svg";
 
 type Props = { size?: number; color?: string; strokeWidth?: number };
 
-/** A brain between the shuffle arrows, with Tabler's 24dp grid and rounded strokes. */
+/** Shuffle with a single spark, on Tabler's 24dp grid with rounded strokes. */
 export function SmartShuffleIcon({ size = 24, color = "currentColor", strokeWidth = 2 }: Props) {
   return (
     <Svg
@@ -15,10 +15,8 @@ export function SmartShuffleIcon({ size = 24, color = "currentColor", strokeWidt
       strokeLinecap="round"
       strokeLinejoin="round"
     >
-      <Path d="M2 5h2c2 0 2.5 1 3.5 2M16.5 17c1 1 1.5 2 3.5 2h2m-3-3 3 3-3 3" />
-      <Path d="M2 19h2c2 0 2.5-1 3.5-2M16.5 7c1-1 1.5-2 3.5-2h2m-3-3 3 3-3 3" />
-      <Path d="M12 7.5a2 2 0 0 0-3.8-.8 2.5 2.5 0 0 0-1 4.3 2.5 2.5 0 0 0 .8 4.6A2 2 0 0 0 12 17V7.5Z" />
-      <Path d="M12 7.5a2 2 0 0 1 3.8-.8 2.5 2.5 0 0 1 1 4.3 2.5 2.5 0 0 1-.8 4.6A2 2 0 0 1 12 17M8 11h1m6 2h1" />
+      <Path d="M3 17h2c3.8 0 6.2-10 10-10M3 7h2c1.6 0 3 1.4 4.3 3.3M13.7 13.7C15 15.6 16.4 17 18 17h3m-3-3 3 3-3 3" />
+      <Path d="m19 2 1.1 3.4L23 6.5l-2.9 1.1L19 11l-1.1-3.4L15 6.5l2.9-1.1L19 2Z" />
     </Svg>
   );
 }

@@ -12,7 +12,7 @@ const options = [
   {
     file: "03-single-spark",
     name: "Single spark",
-    description: "One arrow becomes a spark. More room inside.",
+    description: "Selected: one spark in its original orientation.",
   },
   {
     file: "04-focus-dot",
@@ -43,8 +43,8 @@ const options = [
 
 const params = new URLSearchParams(location.search);
 const requested = Number(params.get("variant"));
-let selected = requested >= 1 && requested <= options.length ? Math.trunc(requested) - 1 : 0;
-let rotation = params.get("rotation") === "0" ? 0 : 45;
+let selected = requested >= 1 && requested <= options.length ? Math.trunc(requested) - 1 : 2;
+let rotation = params.get("rotation") === "45" ? 45 : 0;
 const themeButton = document.querySelector(".theme");
 const markup = new Map();
 

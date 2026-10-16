@@ -1,6 +1,6 @@
 # Smart Shuffle icon review
 
-Eight SVG candidates across the review rounds. These are design studies; the production icon stays unchanged until the owner chooses and refines a direction.
+The owner selected option 3, **Single spark**, with the preview on its original (0°) orientation. `SmartShuffleIcon` uses that drawing for every shared Smart Shuffle control. The gallery opens on this choice; the other seven directions and the rotated spark remain available as review history.
 
 Tracked in [#320](https://github.com/LeoPerez8/wave/issues/320), one ticket covering the comparison, review rounds and final integration.
 
@@ -16,7 +16,7 @@ The original spark (0°) and rotated spark (45°) stay side by side above the ei
 
 1. **Quiet brain.** An outline and central division; no arrows or interior marks.
 2. **Guided brain.** A smaller brain with arrows outside its outline.
-3. **Single spark.** Shuffle with a spark replacing one arrowhead, rotated 45 degrees in the owner's first refinement.
+3. **Single spark (selected).** Shuffle with a spark replacing one arrowhead, in its original orientation. The 45-degree variation remains in the comparison.
 4. **Focus dot.** Shuffle with a single dot above the paths.
 5. **Tuned mix.** Two arrows with adjustable lanes suggest balancing the mix.
 6. **Flow loop.** An open, interwoven loop and one arrow suggest continuous mixing.
