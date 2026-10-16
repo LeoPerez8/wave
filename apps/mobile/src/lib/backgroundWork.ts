@@ -69,6 +69,13 @@ export const touchEnded = (event: GestureResponderEvent): void => {
   if (event.nativeEvent.touches.length === 0) work.touchEnded();
 };
 
+/**
+ * React Native cancels the root's touch when a native scroll or a gesture
+ * handler takes it over, with the finger still down, and the lift then goes
+ * unheard: background work goes on waiting, for Core's `takeoverMs` at most.
+ */
+export const touchTakenOver = (): void => work.touchTakenOver();
+
 // A perf build's runs record when startup work went and how long slices waited.
 registerPerfMeta("startup", () => {
   const stats = work.stats();

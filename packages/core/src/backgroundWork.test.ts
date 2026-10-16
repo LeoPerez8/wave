@@ -3,7 +3,12 @@ import { describe, test } from "node:test";
 
 import { createBackgroundWork, type BackgroundWorkLimits } from "./index.ts";
 
-const LIMITS: BackgroundWorkLimits = { quietMs: 400, maxWaitMs: 2000, contentCapMs: 3000 };
+const LIMITS: BackgroundWorkLimits = {
+  quietMs: 400,
+  maxWaitMs: 2000,
+  takeoverMs: 3000,
+  contentCapMs: 3000,
+};
 
 /** Background work on a virtual clock; `ran` lists what ran, with when. */
 const setup = (limits: Partial<BackgroundWorkLimits> = {}) => {
@@ -101,6 +106,42 @@ describe("background work yields to interaction", () => {
     assert.deepEqual(ran, ["first", "second@400"]);
   });
 
+  test("a touch a scroll or gesture took over still holds work, though its lift goes unheard", () => {
+    const { work, advance, ran, note } = setup();
+    work.touchStarted();
+    advance(100);
+    work.touchTakenOver();
+    work.whenFree(note("save"));
+    advance(1500);
+    assert.deepEqual(ran, []);
+  });
+
+  test("a taken-over touch counts as lifted takeoverMs after the takeover, so work never waits on it for good", () => {
+    const { work, advance, ran, note } = setup({ maxWaitMs: 60_000 });
+    work.touchStarted();
+    work.touchTakenOver();
+    work.whenFree(note("save"));
+    advance(3399);
+    assert.deepEqual(ran, []);
+    advance(1);
+    assert.deepEqual(ran, ["save@3400"]);
+  });
+
+  test("after a takeover, the next touch's lift ends the wait as usual", () => {
+    const { work, advance, ran, note } = setup({ maxWaitMs: 60_000 });
+    work.touchStarted();
+    work.touchTakenOver();
+    work.whenFree(note("save"));
+    advance(500);
+    work.touchStarted();
+    advance(100);
+    work.touchEnded();
+    advance(399);
+    assert.deepEqual(ran, []);
+    advance(1);
+    assert.deepEqual(ran, ["save@1000"]);
+  });
+
   test("coming back to the foreground holds work like a touch: the owner is about to tap", () => {
     const { work, advance, ran, note } = setup();
     work.resumed();
@@ -109,6 +150,17 @@ describe("background work yields to interaction", () => {
     assert.deepEqual(ran, []);
     advance(1);
     assert.deepEqual(ran, ["rescan@400"]);
+  });
+
+  test("a piece of work that throws doesn't stall the work queued after it", () => {
+    const { work, advance, ran, note } = setup();
+    work.whenFree(() => {
+      throw new Error("slice failed");
+    });
+    work.whenFree(note("next"));
+    assert.throws(() => advance(0), /slice failed/);
+    advance(0);
+    assert.deepEqual(ran, ["next@0"]);
   });
 
   test("cancelled work never runs, and the next goes in its place", () => {

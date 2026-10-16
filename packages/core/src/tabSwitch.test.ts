@@ -115,4 +115,29 @@ describe("tab switches", () => {
     const { send } = stepTabSwitch(startTabSwitch("index"), { type: "tap", tab: "index", at: 0 });
     assert.equal(send, null);
   });
+
+  test("a tap on the tab on screen, with no switch on its way, re-taps it (back to its top and root)", () => {
+    const step = stepTabSwitch(startTabSwitch<Tab>("index"), tap("index"));
+    assert.equal(step.retapped, true);
+  });
+
+  test("a tap that switches, or waits for a switch on its way, is no re-tap", () => {
+    const first = stepTabSwitch(startTabSwitch<Tab>("index"), tap("library"));
+    assert.equal(first.retapped, false);
+    // Back to the tab on screen while the switch is on its way: a switch back, not a re-tap.
+    assert.equal(stepTabSwitch(first.state, tap("index", 100)).retapped, false);
+    assert.equal(stepTabSwitch(first.state, tap("songs", 100)).retapped, false);
+  });
+
+  test("once the switch showed, a tap on that tab re-taps it", () => {
+    const { state } = run([tap("library"), shown("library")]);
+    assert.equal(stepTabSwitch(state, tap("library", 200)).retapped, true);
+  });
+
+  test("a tap on the tab on screen after a switch was lost re-taps it", () => {
+    const { state } = run([tap("library", 0)]);
+    const step = stepTabSwitch(state, tap("index", 1_000));
+    assert.equal(step.send, null);
+    assert.equal(step.retapped, true);
+  });
 });
