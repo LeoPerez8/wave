@@ -30,9 +30,15 @@ export interface LibraryChange {
    */
   readonly ids?: readonly number[];
   /**
-   * One of a run of changes (scan batches, an import filling a playlist):
-   * readers may take several at once, at most once per `throttleMs`. Absent:
-   * an edit the owner should see at once.
+   * One of a stream of changes that only add to or update what screens show
+   * (scan batches, an import filling a playlist, plays): screens in sight
+   * take several at once, at most one read per `throttleMs`, and hidden ones
+   * wait until they're shown again.
+   *
+   * Absent: an edit that may remove or alter items (deleted songs, a tag
+   * edit, a scan's end dropping gone files, a star, a playlist edit). Every
+   * screen showing a query it reaches re-reads at once, hidden ones too, so
+   * none shows a removed item when it comes back.
    */
   readonly burst?: boolean;
 }
@@ -145,6 +151,8 @@ interface Entry<V> {
   urgent: boolean;
   /** The read under way (its number), or null. */
   reading: number | null;
+  /** The read under way is for an edit (or a first read, or a return): hidden consumers hear of it. */
+  forEdit: boolean;
   /** An edit landed while the read under way was reading: its result is out of date. */
   outdated: boolean;
   /** When the last read started. */
@@ -162,10 +170,12 @@ interface Entry<V> {
  * - consumers of a key share its result and its reads: one read at a time,
  *   later consumers start from the current result;
  * - a change re-reads only the queries whose reads it reaches; an edit at
- *   once, a burst (scan batches) at most once per `throttleMs`;
- * - a query only hidden consumers show doesn't re-read; it catches up once,
- *   at once, when one is shown again. A first read happens even hidden, so a
- *   warmed screen has its content;
+ *   once, a burst (scan batches, plays) at most once per `throttleMs`;
+ * - a query only hidden consumers show doesn't re-read for bursts, and its
+ *   hidden consumers aren't told of burst results; it catches up once, at
+ *   once, when one is shown again. Edits re-read it even hidden, so no screen
+ *   comes back showing a removed item. A first read happens even hidden, so
+ *   a warmed screen has its content. Queries in sight read first;
  * - a result an edit made out of date while it was read is dropped, and the
  *   query reads again;
  * - with no consumer left, a current result is kept for `retainMs`, at most
@@ -177,6 +187,8 @@ export const createLibraryQueries = <V>(options: {
   readonly schedule: (ms: number, run: () => void) => () => void;
   /** Starts reading query [key]; [settle] must be called once with how it ended. */
   readonly read: (key: string, settle: (outcome: LibraryQueryOutcome<V>) => void) => void;
+  /** Query [key] is gone (no consumer, no kept result): what the app holds for it can go. */
+  readonly dropped?: (key: string) => void;
   readonly limits?: Partial<LibraryQueryLimits>;
 }): LibraryQueries<V> => {
   const { now, schedule, read } = options;
@@ -185,11 +197,15 @@ export const createLibraryQueries = <V>(options: {
   let nextRead = 0;
   const counts = { reads: 0, shared: 0, paused: 0, discarded: 0, evicted: 0 };
 
-  const tell = (entry: Entry<V>): void => {
+  /**
+   * Tells [entry]'s consumers of its new result. A hidden one hears of its
+   * first result (a warmed tab renders it ahead) and, with [everyone], of an
+   * edit's; of a burst's only once it's shown again.
+   */
+  const tell = (entry: Entry<V>, everyone: boolean): void => {
     for (const consumer of entry.consumers) {
       if (consumer.seen === entry.result) continue;
-      // A hidden screen hears of its first result (a warmed tab renders it ahead), of later ones on return.
-      if (!consumer.visible && consumer.seen !== undefined) continue;
+      if (!consumer.visible && !everyone && consumer.seen !== undefined) continue;
       consumer.seen = entry.result;
       consumer.onChange();
     }
@@ -206,13 +222,14 @@ export const createLibraryQueries = <V>(options: {
     entry.cancelExpiry?.();
     entry.cancelExpiry = null;
     entries.delete(entry.key);
+    options.dropped?.(entry.key);
   };
 
   /** Drops kept results nobody shows past `maxRetained`, the least recently shown first. */
   const trimRetained = (): void => {
-    const retained = [...entries.values()]
-      .filter((entry) => entry.consumers.size === 0)
-      .sort((a, b) => a.releasedAt - b.releasedAt);
+    const retained = [...entries.values()].filter((entry) => entry.consumers.size === 0);
+    // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
+    retained.sort((a, b) => a.releasedAt - b.releasedAt);
     for (const entry of retained.slice(0, Math.max(0, retained.length - limits.maxRetained))) {
       drop(entry);
       counts.evicted++;
@@ -250,6 +267,7 @@ export const createLibraryQueries = <V>(options: {
     const number = nextRead++;
     counts.reads++;
     entry.reading = number;
+    entry.forEdit = entry.urgent;
     entry.outdated = false;
     entry.stale = false;
     entry.urgent = false;
@@ -264,7 +282,7 @@ export const createLibraryQueries = <V>(options: {
     if (entry.outdated) counts.discarded++;
     else if (outcome.ok) {
       entry.result = { value: outcome.value };
-      tell(entry);
+      tell(entry, entry.forEdit);
     }
     plan(entry);
   };
@@ -273,8 +291,8 @@ export const createLibraryQueries = <V>(options: {
   const plan = (entry: Entry<V>): void => {
     if (entry.reading !== null) return;
     if (!entry.stale) return;
-    // Paused: a hidden screen keeps what it shows. Its first read still happens.
-    if (entry.result !== undefined && !inSight(entry)) return;
+    // Paused: bursts wait while only hidden screens show it. Edits and its first read don't.
+    if (entry.result !== undefined && !entry.urgent && !inSight(entry)) return;
     const wait =
       entry.urgent || entry.result === undefined ? 0 : entry.readAt + limits.throttleMs - now();
     if (wait > 0) {
@@ -301,6 +319,7 @@ export const createLibraryQueries = <V>(options: {
           stale: true,
           urgent: true,
           reading: null,
+          forEdit: false,
           outdated: false,
           readAt: 0,
           cancelWait: null,
@@ -326,7 +345,7 @@ export const createLibraryQueries = <V>(options: {
           // Coming back to stale data: read it now, not after a scan's throttle.
           if (owner.stale) owner.urgent = true;
           plan(owner);
-          tell(owner);
+          tell(owner, false);
         },
         hide: () => {
           consumer.visible = false;
@@ -343,6 +362,8 @@ export const createLibraryQueries = <V>(options: {
     },
     current: (key) => entries.get(key)?.result,
     change: (change) => {
+      const edit = change.burst !== true;
+      const hidden: Entry<V>[] = [];
       for (const entry of entries.values()) {
         if (!libraryChangeAffects(entry.reads, change)) continue;
         if (entry.consumers.size === 0) {
@@ -351,8 +372,13 @@ export const createLibraryQueries = <V>(options: {
           counts.evicted++;
           continue;
         }
-        invalidate(entry, change.burst !== true);
-        if (entry.result !== undefined && !inSight(entry)) counts.paused++;
+        invalidate(entry, edit);
+        if (inSight(entry)) plan(entry);
+        else hidden.push(entry);
+      }
+      // What's in sight reads first.
+      for (const entry of hidden) {
+        if (!edit && entry.result !== undefined) counts.paused++;
         plan(entry);
       }
     },

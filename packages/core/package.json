@@ -10,6 +10,7 @@
   "scripts": {
     "test": "node --test",
     "bench:import": "node bench/playlistImport.ts",
+    "bench:queries": "node bench/libraryQueries.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
