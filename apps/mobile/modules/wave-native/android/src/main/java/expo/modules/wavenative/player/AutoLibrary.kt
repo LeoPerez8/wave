@@ -17,6 +17,7 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import expo.modules.wavenative.artwork.ArtworkProvider
+import expo.modules.wavenative.log.WaveLog
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.Executors
@@ -109,7 +110,7 @@ object AutoLibrary {
       { answer ->
         when (answer) {
           is AutoReply.Ok -> runCatching { playback(JSONObject(answer.json)) }.getOrElse { error ->
-            Log.w(JsRuntime.LOG_TAG, "Unreadable play answer", error)
+            WaveLog.w(JsRuntime.LOG_TAG, "Unreadable play answer", error)
             throw AutoPlayException(UNREADABLE)
           }
           is AutoReply.Failed -> throw AutoPlayException(answer.message)
@@ -199,7 +200,7 @@ object AutoLibrary {
       { answer ->
         when (answer) {
           is AutoReply.Ok -> runCatching { toResult(answer.json) }.getOrElse { error ->
-            Log.w(JsRuntime.LOG_TAG, "Unreadable $type answer", error)
+            WaveLog.w(JsRuntime.LOG_TAG, "Unreadable $type answer", error)
             LibraryResult.ofError<T>(SessionError(SessionError.ERROR_UNKNOWN, UNREADABLE))
           }
           is AutoReply.Failed, null ->

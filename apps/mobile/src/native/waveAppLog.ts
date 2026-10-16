@@ -17,6 +17,10 @@ declare class WaveAppLogModule extends NativeModule {
   device(): LogDevice;
   /** Writes `header` and the log to a `.txt` named `fileName` and opens the share sheet with it. */
   share(header: string, fileName: string): Promise<void>;
+  /** The route showing, which a freeze's entry names (`log/NativeLog.kt`). */
+  setScreen(path: string): void;
+  /** Throws an uncaught Kotlin exception on the main thread: Settings › Developer's debug trigger. */
+  crash(): void;
 }
 
 /**

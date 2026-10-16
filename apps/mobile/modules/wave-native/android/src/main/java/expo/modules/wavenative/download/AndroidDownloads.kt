@@ -6,9 +6,9 @@ import android.media.MediaScannerConnection
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
-import android.util.Log
 import expo.modules.wavenative.artwork.AndroidArtworkProcessor
 import expo.modules.wavenative.artwork.ArtworkStore
+import expo.modules.wavenative.log.WaveLog
 import expo.modules.wavenative.player.JsRuntime
 import expo.modules.wavenative.scan.LibraryScanner
 import expo.modules.wavenative.scan.artworkToMap
@@ -43,7 +43,7 @@ import java.util.concurrent.TimeUnit
 /** Application-context owner, independent of Expo module and Activity lifetimes. */
 class AndroidDownloads private constructor(private val context: Context) {
   // Each failure's cause also goes to Logcat, so a device run shows why a download stopped.
-  val jobs = DurableDownloads(File(context.noBackupFilesDir, "soulseek-download-jobs-v1"), log = { Log.w(TAG, it) })
+  val jobs = DurableDownloads(File(context.noBackupFilesDir, "soulseek-download-jobs-v1"), log = { WaveLog.w(TAG, it) })
   private val soulseek = AndroidSoulseek.get(context)
   private val main = Handler(Looper.getMainLooper())
   private var worker: ScheduledExecutorService? = null
@@ -85,7 +85,7 @@ class AndroidDownloads private constructor(private val context: Context) {
         YtStreamFailure.UNAVAILABLE -> "ytUnavailable"
         YtStreamFailure.FAILED -> "failed"
       }
-      Log.w(TAG, "A YouTube transfer failed ($reason)")
+      WaveLog.w(TAG, "A YouTube transfer failed ($reason)")
       throw DurableFailure(reason, error)
     } catch (error: CancellationException) {
       source.delete(); throw DurableFailure("cancelled", error)
@@ -98,7 +98,7 @@ class AndroidDownloads private constructor(private val context: Context) {
         !ytStreams.online() -> "offline"
         else -> "failed"
       }
-      Log.w(TAG, "A YouTube transfer failed ($reason): ${error.message}")
+      WaveLog.w(TAG, "A YouTube transfer failed ($reason): ${error.message}")
       throw DurableFailure(reason, error)
     }
   }
@@ -113,7 +113,7 @@ class AndroidDownloads private constructor(private val context: Context) {
     } catch (error: SoulseekException) {
       // Which check a peer's file failed is what tells a strict check from a bad file.
       if (error.failure != SoulseekFailure.CANCELLED) {
-        Log.w(TAG, "A Soulseek transfer failed (${error.failure}): ${error.message}; ${error.cause?.message ?: ""}")
+        WaveLog.w(TAG, "A Soulseek transfer failed (${error.failure}): ${error.message}; ${error.cause?.message ?: ""}")
       }
       val reason = when (error.failure) {
         SoulseekFailure.SIGNED_OUT -> "account"
@@ -129,7 +129,7 @@ class AndroidDownloads private constructor(private val context: Context) {
       // Only a full or unwritable folder is a storage problem; a broken connection is a source that went away.
       throw DurableFailure(if (DownloadFiles.storageProblem(error, source.parentFile)) "storage" else "unavailable", error)
     }
-    catch (error: Exception) { Log.w(TAG, "A Soulseek transfer failed", error); throw error }
+    catch (error: Exception) { WaveLog.w(TAG, "A Soulseek transfer failed", error); throw error }
   private val publication = object : DurablePublication {
     override fun tag(source: File, tags: Map<String, Any?>) {
       val fields = DownloadTags.fromJs(tags) ?: throw java.io.IOException("Invalid download tags")
@@ -192,7 +192,7 @@ class AndroidDownloads private constructor(private val context: Context) {
 
   /** An unexpected failure (a full disk can't even write the journal) ends the started jobs, never the queue. */
   private fun workerFailed(error: Throwable) {
-    Log.w(TAG, "The download worker failed", error)
+    WaveLog.w(TAG, "The download worker failed", error)
     runCatching { jobs.expire(transport, true, stopCause = describe(error)) }
   }
 

@@ -9,7 +9,7 @@ import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.Shader
 import android.graphics.Typeface
-import android.util.Log
+import expo.modules.wavenative.log.WaveLog
 import expo.modules.wavenative.player.AutoLyrics
 import expo.modules.wavenative.player.LyricArtCanvas
 import expo.modules.wavenative.player.LyricArtPainter
@@ -40,7 +40,7 @@ object LyricArtworkFiles {
       // Another reader may have drawn it meanwhile; either copy is the same image.
       if (temp.renameTo(target) || target.isFile) target.also { temp.delete() } else null.also { temp.delete() }
     } catch (e: Exception) {
-      Log.w("WaveArtwork", "Couldn't draw a lyrics image", e)
+      WaveLog.w("WaveArtwork", "Couldn't draw a lyrics image", e)
       null
     }
   }
