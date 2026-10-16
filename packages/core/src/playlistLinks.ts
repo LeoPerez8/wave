@@ -5,7 +5,7 @@
  */
 
 import { counted } from "./listening.ts";
-import type { LinkImportPlan } from "./playlistImport.ts";
+import type { ImportService, LinkImportPlan } from "./playlistImport.ts";
 import type { YtSong } from "./ytMusic.ts";
 import type { YtQuietReason } from "./ytSearch.ts";
 
@@ -247,6 +247,8 @@ export interface LinkedPlaylist<S extends YtSong> {
   readonly title: string;
   readonly artworkUrl: string | null;
   readonly songs: readonly S[];
+  /** The rows that list one of [songs] again (`readYtPlaylist`). */
+  readonly repeats: readonly S[];
   /** It goes on past what was read (YouTube Music's 5,000-song cap). */
   readonly truncated: boolean;
 }
@@ -312,6 +314,11 @@ export interface LinkImportView {
   readonly artworkUrl: string | null;
   /** Its songs and how many the Library has, or what stands in for them. */
   readonly line: string;
+  /**
+   * When some of what the source lists doesn't go in as listed: the source's
+   * own count and why ("2,451 songs on Spotify · 21 listed twice go in once").
+   */
+  readonly source: string | null;
   /** A second, quieter line: that only part of the playlist was read. */
   readonly note: string | null;
   /** Whether Import is offered. */
@@ -320,11 +327,31 @@ export interface LinkImportView {
   readonly retry: boolean;
 }
 
+const SERVICE_NAMES: Record<ImportService, string> = {
+  ytMusic: "YouTube Music",
+  spotify: "Spotify",
+};
+
+/**
+ * What the source lists and what doesn't go in as listed: "2,451 songs on
+ * Spotify · 21 listed twice go in once · 1 isn't a song". Null when
+ * everything it lists goes in.
+ */
+const sourceLine = <S extends YtSong>(plan: LinkImportPlan<S>): string | null => {
+  const twice = plan.leftOut.filter((left) => left.reason === "listedTwice").length;
+  if (twice === 0 && plan.notSongs === 0) return null;
+  const parts = [`${counted(plan.sourceTotal, "song")} on ${SERVICE_NAMES[plan.service]}`];
+  if (twice > 0) parts.push(counted(twice, "listed twice goes in once", "listed twice go in once"));
+  if (plan.notSongs > 0) parts.push(counted(plan.notSongs, "isn't a song", "aren't songs"));
+  return parts.join(" · ");
+};
+
 /** A card with a message in place of the playlist. */
 const message = (line: string): LinkImportView => ({
   name: null,
   artworkUrl: null,
   line,
+  source: null,
   note: null,
   canImport: false,
   retry: false,
@@ -354,6 +381,7 @@ export const linkImportView = <S extends YtSong>(read: LinkImportRead<S>): LinkI
   return {
     ...head,
     line: `${counted(total, "song")} · ${had} in your Library`,
+    source: sourceLine(plan),
     note: playlist.truncated
       ? `It goes on past ${counted(playlist.songs.length, "song")}. Only those are imported.`
       : null,

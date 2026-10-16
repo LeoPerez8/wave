@@ -52,14 +52,22 @@ const library = [
   { id: 2, title: "Touch", artist: "Daft Punk", durationMs: 498_000 },
 ];
 
-const ytPlaylist = (songs: readonly YtSong[], title = "Late Night") => ({
+const ytPlaylist = (
+  songs: readonly YtSong[],
+  title = "Late Night",
+  repeats: readonly YtSong[] = [],
+) => ({
   service: "ytMusic" as const,
-  playlist: { title, artworkUrl: null, songs, truncated: false },
+  playlist: { title, artworkUrl: null, songs, repeats, truncated: false },
 });
 
-const spotifyPlaylist = (songs: readonly SpotifySong[], title = "Late Night") => ({
+const spotifyPlaylist = (
+  songs: readonly SpotifySong[],
+  title = "Late Night",
+  total = songs.length,
+) => ({
   service: "spotify" as const,
-  playlist: { title, artworkUrl: null, songs, truncated: false },
+  playlist: { title, artworkUrl: null, songs, truncated: false, total },
 });
 
 /** Hands over everything settled, as the app does, and gives back what was added. */
@@ -107,6 +115,30 @@ describe("a YouTube Music playlist import", () => {
     assert.equal(plan.songs.length, 2, "the card counts each song once");
     assert.equal(plan.inLibrary, 1);
   });
+
+  test("names the rows listed again and the songs that are one Library song, which add up to its rows", () => {
+    const plan = planLinkImport(
+      ytPlaylist(
+        [
+          yt("a", "Touch", { durationMs: 498_000 }),
+          yt("b", "Within"),
+          yt("c", "Touch (feat. Paul Williams)", { durationMs: 498_000 }),
+        ],
+        "Late Night",
+        [yt("b", "Within")],
+      ),
+      library,
+    );
+    assert.equal(plan.sourceTotal, 4);
+    assert.deepEqual(plan.leftOut, [
+      {
+        song: spotify("Touch (feat. Paul Williams)", { durationMs: 498_000 }),
+        reason: "listedTwice",
+      },
+      { song: spotify("Within"), reason: "listedTwice" },
+    ]);
+    assert.equal(plan.songs.length + plan.leftOut.length + plan.notSongs, 4);
+  });
 });
 
 describe("a Spotify playlist listing a song more than once", () => {
@@ -135,6 +167,47 @@ describe("a Spotify playlist listing a song more than once", () => {
       { kind: "notFound" },
       null,
     ]);
+  });
+
+  test("names each song listed twice, so the songs imported and those add up to Spotify's count", () => {
+    const plan = planLinkImport(
+      spotifyPlaylist([
+        spotify("Touch", { durationMs: 498_000 }),
+        spotify("Within", { durationMs: 228_000 }),
+        spotify("Touch (feat. Paul Williams)", { durationMs: 498_000 }),
+        spotify("Within", { durationMs: 228_000 }),
+        spotify("Within (Live)", { durationMs: 228_000 }),
+      ]),
+      library,
+    );
+    assert.equal(plan.sourceTotal, 5);
+    assert.deepEqual(plan.leftOut, [
+      {
+        song: spotify("Touch (feat. Paul Williams)", { durationMs: 498_000 }),
+        reason: "listedTwice",
+      },
+      { song: spotify("Within", { durationMs: 228_000 }), reason: "listedTwice" },
+    ]);
+    assert.equal(plan.songs.length + plan.leftOut.length, 5);
+  });
+
+  test("counts the items Spotify lists that aren't songs, such as podcast episodes", () => {
+    const listed = [spotify("Touch"), spotify("Within"), spotify("Within")];
+    const plan = planLinkImport(spotifyPlaylist(listed, "Late Night", 5), library);
+    assert.equal(plan.sourceTotal, 5);
+    assert.equal(plan.notSongs, 2);
+    assert.equal(plan.songs.length + plan.leftOut.length + plan.notSongs, 5);
+  });
+
+  test("a playlist only partly read counts what was read", () => {
+    const listed = [spotify("Touch"), spotify("Within"), spotify("Within")];
+    const { playlist } = spotifyPlaylist(listed, "Late Night", 2451);
+    const plan = planLinkImport(
+      { service: "spotify", playlist: { ...playlist, truncated: true } },
+      library,
+    );
+    assert.equal(plan.sourceTotal, 3);
+    assert.equal(plan.notSongs, 0);
   });
 });
 
@@ -487,10 +560,15 @@ describe("the imports waiting their turn", () => {
     imports = updatePlaylistImport(imports, handOver(job).job);
     assert.equal(importTurn(imports)?.playlistId, 8);
     assert.deepEqual(view(imports, 7), ["2 songs weren't found", false, false]);
-    assert.deepEqual(playlistImportView(imports, 7, 0, readSpotifySearchPacing(null))?.notFound, {
+    assert.deepEqual(playlistImportView(imports, 7, 0, readSpotifySearchPacing(null))?.leftOut, {
       title: "2 songs weren't found",
-      message:
-        "Late Night was imported without them:\n\nUntitled · Unknown Artist\nDoin' it Right · Daft Punk & Panda Bear",
+      message: "Late Night was imported without them.",
+      sections: [
+        {
+          heading: "Not found",
+          songs: ["Untitled · Unknown Artist", "Doin' it Right · Daft Punk & Panda Bear"],
+        },
+      ],
     });
     assert.equal(
       playlistImportView(withoutPlaylistImport(imports, 7), 7, 0, readSpotifySearchPacing(null)),
@@ -546,6 +624,124 @@ describe("the imports waiting their turn", () => {
       assert.ok(retried);
       assert.deepEqual(askAll(retried).asked, [WITHIN, DOIN], "asked again at once");
     }
+  });
+});
+
+describe("the songs an import left out, once done", () => {
+  const songs = [
+    spotify("Giorgio by Moroder", { durationMs: 544_000 }),
+    spotify("Within", { durationMs: 228_000 }),
+    spotify("Untitled", { artists: [] }),
+    spotify("Touch", { durationMs: 498_000 }),
+    spotify("Within", { durationMs: 228_000 }),
+    spotify("Doin' it Right", { artists: ["Daft Punk", "Panda Bear"], durationMs: 251_000 }),
+    spotify("Touch (feat. Paul Williams)", { durationMs: 498_000 }),
+  ];
+  const within = yt("w", "Within", { durationMs: 228_000 });
+  /** Runs the import of [listed] to its end: Within is found, the rest isn't. */
+  const imported = (listed: readonly SpotifySong[], total = listed.length) => {
+    const plan = planLinkImport(spotifyPlaylist(listed, "Late Night", total), library);
+    let { job, asked } = askAll(startPlaylistImport(plan, { playlistId: 7, name: "Late Night" }));
+    for (const query of asked) {
+      const found = query === "Within Daft Punk" ? [within] : [];
+      job = importSearchAnswered(job, query, { ok: true, songs: found }, 0);
+    }
+    const handed = handOver(job);
+    return { plan, job: handed.job, given: handed.songs };
+  };
+  const leftOut = (job: PlaylistImport<YtSong>) => playlistImportView([job], 7, 0, NONE)?.leftOut;
+
+  test("lists the songs not found and those listed twice under their own headings", () => {
+    const { job } = imported(songs);
+    assert.equal(job.state.kind, "done");
+    assert.equal(
+      playlistImportView([job], 7, 0, NONE)?.line,
+      "2 songs weren't found · 2 listed twice",
+    );
+    assert.deepEqual(leftOut(job), {
+      title: "2 songs weren't found · 2 listed twice",
+      message:
+        "Late Night was imported without the songs not found. Each song listed twice went in once.",
+      sections: [
+        {
+          heading: "Not found",
+          songs: ["Untitled · Unknown Artist", "Doin' it Right · Daft Punk & Panda Bear"],
+        },
+        {
+          heading: "Listed twice",
+          songs: ["Within · Daft Punk", "Touch (feat. Paul Williams) · Daft Punk"],
+        },
+      ],
+    });
+  });
+
+  test("the songs imported, not found, listed twice and not songs add up to Spotify's count", () => {
+    const { plan, job, given } = imported(songs, 8);
+    const [notFound = 0, twice = 0] = (leftOut(job)?.sections ?? []).map(
+      (section) => section.songs.length,
+    );
+    assert.deepEqual([given.length, notFound, twice, plan.notSongs], [3, 2, 2, 1]);
+    assert.equal(given.length + notFound + twice + plan.notSongs, 8);
+  });
+
+  test("two songs found as the same YouTube Music song count as listed twice", () => {
+    const one = yt("o", "One", { durationMs: 200_000 });
+    const plan = planLinkImport(
+      spotifyPlaylist([
+        spotify("One", { durationMs: 200_000 }),
+        spotify("One", { artists: ["Daft Punk", "Someone"], durationMs: 200_000 }),
+      ]),
+      library,
+    );
+    let { job, asked } = askAll(startPlaylistImport(plan, { playlistId: 7, name: "Late Night" }));
+    for (const query of asked) {
+      job = importSearchAnswered(job, query, { ok: true, songs: [one] }, 0);
+    }
+    const { job: done, songs: given } = handOver(job);
+    assert.equal(given.length, 1);
+    assert.deepEqual(leftOut(done)?.sections, [
+      { heading: "Listed twice", songs: ["One · Daft Punk & Someone"] },
+    ]);
+  });
+
+  test("with every song found, the songs listed twice are still shown until dismissed", () => {
+    const { job } = imported([
+      spotify("Giorgio by Moroder", { durationMs: 544_000 }),
+      spotify("Within", { durationMs: 228_000 }),
+      spotify("Within", { durationMs: 228_000 }),
+    ]);
+    const imports = updatePlaylistImport(queuePlaylistImport([], job), job);
+    assert.equal(playlistImportView(imports, 7, 0, NONE)?.line, "1 song was listed twice");
+    assert.deepEqual(leftOut(job), {
+      title: "1 song was listed twice",
+      message: "Each went into Late Night once.",
+      sections: [{ heading: "Listed twice", songs: ["Within · Daft Punk"] }],
+    });
+  });
+
+  test("with no song listed twice, only the songs not found are shown", () => {
+    const { job } = imported(songs.slice(0, 3));
+    assert.deepEqual(leftOut(job), {
+      title: "1 song wasn't found",
+      message: "Late Night was imported without it.",
+      sections: [{ heading: "Not found", songs: ["Untitled · Unknown Artist"] }],
+    });
+  });
+
+  test("the songs listed twice are kept while Wave is closed", () => {
+    const { job } = imported(songs);
+    const [read] = readPlaylistImports(writePlaylistImports([job]));
+    assert.ok(read);
+    assert.deepEqual(leftOut(read), leftOut(job));
+  });
+
+  test("an import kept before songs listed twice were named reads as having none", () => {
+    const { job } = imported(songs.slice(0, 3));
+    const kept = JSON.parse(writePlaylistImports([job])) as { imports: Record<string, unknown>[] };
+    for (const stored of kept.imports) delete stored.leftOut;
+    const [read] = readPlaylistImports(JSON.stringify(kept));
+    assert.ok(read);
+    assert.deepEqual(read.leftOut, []);
   });
 });
 
@@ -713,7 +909,11 @@ describe("a Spotify import as its answers arrive, in any order", () => {
     handed = handOver(job);
     assert.deepEqual(handed.songs, [], "the second One was given already, Four wasn't found");
     assert.equal(handed.job.state.kind, "done");
-    assert.equal(playlistImportView([handed.job], 7, 0, NONE)?.line, "1 song wasn't found");
+    assert.equal(
+      playlistImportView([handed.job], 7, 0, NONE)?.line,
+      "1 song wasn't found · 2 listed twice",
+      "both later Ones were found as the first",
+    );
   });
 
   test("an earlier state of an import stays as it was after later answers, and two imports of one plan stay apart", () => {

@@ -204,7 +204,10 @@ const run = (
   const core = timed(calls);
   const chance = random(size);
   const plan = planLinkImport(
-    { service: "spotify", playlist: { title: "Big", artworkUrl: null, songs, truncated: false } },
+    {
+      service: "spotify",
+      playlist: { title: "Big", artworkUrl: null, songs, truncated: false, total: songs.length },
+    },
     library,
   );
   let job: PlaylistImport<YtSong> = startPlaylistImport(plan, { playlistId: 1, name: "Big" });

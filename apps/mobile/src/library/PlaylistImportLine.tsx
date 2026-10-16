@@ -1,4 +1,4 @@
-import { playlistImportView, type ImportNotice, type PlaylistImportView } from "@wave/core";
+import { playlistImportView, type ImportLeftOut, type PlaylistImportView } from "@wave/core";
 import { useEffect, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 
@@ -39,13 +39,13 @@ export const usePlaylistImportView = (playlistId: number): PlaylistImportView | 
 /**
  * The playlist page's import line, under its length: how far the import has
  * got with Cancel, why it stopped with Try Again, or, once done, how many
- * songs weren't found, with Show (the list) and Dismiss.
+ * songs weren't found or were listed twice, with Show (the list) and Dismiss.
  */
 export function PlaylistImportLine({ playlistId }: { playlistId: number }) {
   useRenderCount("PlaylistImportLine");
   const view = usePlaylistImportView(playlistId);
   if (view === null) return null;
-  const { notFound } = view;
+  const { leftOut } = view;
   return (
     <View>
       <Text
@@ -56,10 +56,10 @@ export function PlaylistImportLine({ playlistId }: { playlistId: number }) {
         {view.line}
       </Text>
       <View className="flex-row items-center" style={{ gap: CELL * 3 }}>
-        {notFound !== null && (
-          <TextButton label="Show" opensMenu onPress={() => void showNotFound(notFound)} />
+        {leftOut !== null && (
+          <TextButton label="Show" opensMenu onPress={() => void showLeftOut(leftOut)} />
         )}
-        {notFound !== null && (
+        {leftOut !== null && (
           <TextButton label="Dismiss" onPress={() => cancelPlaylistImport(playlistId)} />
         )}
         {view.canRetry && (
@@ -73,21 +73,34 @@ export function PlaylistImportLine({ playlistId }: { playlistId: number }) {
   );
 }
 
-/** The songs an import didn't find, scrolling when they don't fit. */
-const showNotFound = (notice: ImportNotice): Promise<void> =>
+/** The songs an import left out, under their headings, scrolling when they don't fit. */
+const showLeftOut = (leftOut: ImportLeftOut): Promise<void> =>
   presentOverlay<void>({
-    label: notice.title,
+    label: leftOut.title,
     dismissed: undefined,
-    render: (finish) => <NotFoundCard notice={notice} finish={() => finish(undefined)} />,
+    render: (finish) => <LeftOutCard leftOut={leftOut} finish={() => finish(undefined)} />,
   });
 
-function NotFoundCard({ notice, finish }: { notice: ImportNotice; finish: () => void }) {
+function LeftOutCard({ leftOut, finish }: { leftOut: ImportLeftOut; finish: () => void }) {
   return (
     <>
       <View style={{ gap: CELL, paddingTop: CELL, paddingBottom: CELL * 2, flexShrink: 1 }}>
-        <Text className="font-sans text-title3 font-normal text-foreground">{notice.title}</Text>
+        <Text className="font-sans text-title3 font-normal text-foreground">{leftOut.title}</Text>
         <ScrollView bounces={false} overScrollMode="never" style={{ flexGrow: 0 }}>
-          <Text className="font-sans text-subheadline text-secondary">{notice.message}</Text>
+          <Text className="font-sans text-subheadline text-secondary">{leftOut.message}</Text>
+          {leftOut.sections.map((section) => (
+            <View key={section.heading} style={{ paddingTop: CELL * 2, gap: CELL / 2 }}>
+              <Text
+                accessibilityRole="header"
+                className="font-sans text-subheadline font-medium text-foreground"
+              >
+                {section.heading}
+              </Text>
+              <Text className="font-sans text-subheadline text-secondary">
+                {section.songs.join("\n")}
+              </Text>
+            </View>
+          ))}
         </ScrollView>
       </View>
       <View className="flex-row items-center justify-end">
