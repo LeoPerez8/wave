@@ -82,8 +82,8 @@ export { contrastRatio, paletteGradient } from "./palette.ts";
 export type { ArtworkPalette, Gradient, GradientTheme } from "./palette.ts";
 export { settleSheet } from "./sheet.ts";
 export type { SheetDrag, SheetState } from "./sheet.ts";
-export { reorderShift, reorderTarget } from "./reorder.ts";
-export type { ReorderDrag, ReorderRow } from "./reorder.ts";
+export { reorderScrollSpeed, reorderShift, reorderTarget } from "./reorder.ts";
+export type { ReorderDrag, ReorderEdge, ReorderRow } from "./reorder.ts";
 export {
   RECENT_SEARCHES,
   createSearchIndex,

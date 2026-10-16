@@ -15,7 +15,9 @@ export type ElapsedWave = {
   amplitude: number;
 };
 
+/** The wave's SVG path. Runs on the UI thread too (a worklet), as the scrubber follows a finger. */
 export const elapsedWavePath = ({ length, wavelength, amplitude }: ElapsedWave): string => {
+  "worklet";
   if (length <= 0) return "";
   const half = wavelength / 2;
   const whole = Math.floor(length / half);
