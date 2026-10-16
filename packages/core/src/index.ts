@@ -313,13 +313,24 @@ export {
   readSongSort,
   sameSongSort,
   SONG_SORTS,
+  librarySongSort,
+  songOrderTerms,
+  songSpineField,
   songSortLabel,
   songSortsFor,
   songSpineKeys,
   sortSongs,
   writeSongSort,
 } from "./songSort.ts";
-export type { SongListKind, SongSort, SongSortKey, SortableSong } from "./songSort.ts";
+export type {
+  LibrarySongSort,
+  SongListKind,
+  SongOrderField,
+  SongOrderTerm,
+  SongSort,
+  SongSortKey,
+  SortableSong,
+} from "./songSort.ts";
 export {
   allSelected,
   clearSelection,
@@ -975,3 +986,5 @@ export type { HeldSongs, SongsInPlace } from "./songsInPlace.ts";
 
 export { PERF_FLUSH_QUIET_MS, PERF_LOG_TAG, createPerfRecorder, parsePerfLog } from "./perfLog.ts";
 export type { PerfEntry, PerfFlush, PerfMeta, PerfRecorder, PerfTiming } from "./perfLog.ts";
+export { createPagedRows, PAGED_ROWS_LIMITS } from "./pagedRows.ts";
+export type { PagedRows, PagedRowsLimits, PagedRowsStats } from "./pagedRows.ts";

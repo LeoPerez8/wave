@@ -333,6 +333,78 @@ export const addTrack = (db: TestDatabase, track: FixtureTrack): number => {
 };
 
 /**
+ * Grows the Library fast, for benchmarks and scale tests: [tracks] songs by
+ * [artists] artists on [albums] albums (each with a cover), titles spread over
+ * the alphabet, track numbers, a genre on every third song and one missing
+ * song (no file) in fifty. Written in bulk: 10,000 songs take well under a second.
+ */
+export const addLibrary = (
+  db: TestDatabase,
+  options: { readonly tracks: number; readonly artists: number; readonly albums: number },
+): void => {
+  const seed = addTrack(db, {
+    title: "Library seed",
+    artist: "Library seed artist",
+    artworkHash: "library-seed",
+    genre: "Library genre",
+  });
+  const firstArtist = db.get<{ n: number }>(sql`SELECT coalesce(max(id), 0) + 1 AS n FROM artists`).n;
+  const firstAlbum = db.get<{ n: number }>(sql`SELECT coalesce(max(id), 0) + 1 AS n FROM albums`).n;
+  const count = (n: number) => `WITH RECURSIVE n(x) AS (VALUES(0) UNION ALL SELECT x + 1 FROM n WHERE x < ${n - 1})`;
+  // A name's first letter, spread over the alphabet.
+  const letter = (x: string) => `char(97 + (${x}) % 26)`;
+  db.run(
+    sql.raw(`${count(options.artists)} INSERT INTO artists (key, name, sort)
+      SELECT 'library-artist-' || x, upper(${letter("x * 7")}) || 'rtist ' || x,
+        ${letter("x * 7")} || 'rtist ' || printf('%05d', x) FROM n`),
+  );
+  db.run(
+    sql.raw(`${count(options.albums)} INSERT INTO artwork (hash, path, thumb_path, palette)
+      SELECT 'library-cover-' || x, '/covers/library-' || x || '.jpg',
+        '/covers/library-' || x || '.thumb.jpg', '{}' FROM n`),
+  );
+  db.run(
+    sql.raw(`${count(options.albums)} INSERT INTO albums (key, title, title_sort, album_artist_id,
+        album_artist_credit, artwork_hash)
+      SELECT 'library-album-' || x, upper(${letter("x * 11")}) || 'lbum ' || x,
+        ${letter("x * 11")} || 'lbum ' || printf('%05d', x),
+        ${firstArtist} + x % ${options.artists}, 'Artist ' || (x % ${options.artists}),
+        'library-cover-' || x FROM n`),
+  );
+  const columns = db
+    .all<{ name: string }>(sql`PRAGMA table_info(tracks)`)
+    .map((column) => column.name)
+    .filter((name) => name !== "id");
+  const album = `(x % ${options.albums})`;
+  const overrides: Record<string, string> = {
+    path: `CASE WHEN x % 50 = 49 THEN NULL ELSE '/Music/Library/' || x || '.mp3' END`,
+    file_name: `'library-' || x || '.mp3'`,
+    title: `upper(${letter("x * 31")}) || 'ong ' || x`,
+    title_sort: `${letter("x * 31")} || 'ong ' || printf('%06d', x)`,
+    recording_key: `'library-recording-' || x`,
+    artist_id: `${firstArtist} + ${album} % ${options.artists}`,
+    artist_credit: `'Artist ' || (${album} % ${options.artists})`,
+    album_id: `${firstAlbum} + ${album}`,
+    artwork_hash: `'library-cover-' || ${album}`,
+    genre_id: `CASE WHEN x % 3 = 0 THEN seed.genre_id ELSE NULL END`,
+    track_number: `1 + (x / ${options.albums}) % 14`,
+    added_at: `1000000 + x * 1000`,
+  };
+  const quoted = columns.map((name) => `"${name}"`).join(", ");
+  const values = columns.map((name) => overrides[name] ?? `seed."${name}"`).join(", ");
+  db.run(
+    sql.raw(`${count(options.tracks)} INSERT INTO tracks (${quoted})
+      SELECT ${values} FROM n, tracks AS seed WHERE seed.id = ${seed}`),
+  );
+  db.run(sql`DELETE FROM tracks WHERE id = ${seed}`);
+  db.run(sql`DELETE FROM track_artists WHERE track_id = ${seed}`);
+  db.run(
+    sql`INSERT OR IGNORE INTO track_artists (track_id, artist_id, position)
+      SELECT id, artist_id, 0 FROM tracks WHERE id > ${seed}`,
+  );
+};
+
+/**
  * Adds a missing song: a Track the Wave account has and this phone has no
  * file for (no path), filed as `addTrack` files a song; returns its id.
  */
