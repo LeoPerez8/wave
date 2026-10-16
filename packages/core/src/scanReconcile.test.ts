@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { reconcileScan, type IndexedFile } from "./index.ts";
+import { reconcileScan, scanEnd, scanSaveSlices, type IndexedFile } from "./index.ts";
 
 const MUSIC = "/storage/emulated/0/Music";
 
@@ -117,5 +117,71 @@ describe("reconcileScan", () => {
       [`${MUSIC}/Old/01.mp3`, `${MUSIC}/Old/02.mp3`],
     );
     assert.deepEqual(second.unmatched, []);
+  });
+});
+
+describe("saving a scan batch in slices", () => {
+  const changes = reconcileScan({
+    missing: [song("Old/a.mp3", { title: "Moved A" }), song("Old/b.mp3", { title: "Moved B" })],
+    read: [
+      song("New/1.mp3", { title: "One" }),
+      song("Kept/2.mp3", { title: "Two" }),
+      song("New/a.mp3", { title: "Moved A" }),
+      song("New/3.mp3", { title: "Three" }),
+      song("New/b.mp3", { title: "Moved B" }),
+    ],
+    isIndexed: (path) => path.startsWith(`${MUSIC}/Kept/`),
+  });
+
+  test("each slice holds at most the size, and every file the batch saves, once", () => {
+    const slices = scanSaveSlices(changes, 2);
+    assert.deepEqual(
+      slices.map((slice) => slice.tracks.map((track) => track.title)),
+      [["One", "Three"], ["Two", "Moved A"], ["Moved B"]],
+    );
+  });
+
+  test("a move goes in the slice that saves the file it moved to, in the batch's order", () => {
+    const slices = scanSaveSlices(changes, 2);
+    assert.deepEqual(
+      slices.map((slice) => slice.moves),
+      [
+        [],
+        [{ from: `${MUSIC}/Old/a.mp3`, to: `${MUSIC}/New/a.mp3` }],
+        [{ from: `${MUSIC}/Old/b.mp3`, to: `${MUSIC}/New/b.mp3` }],
+      ],
+    );
+  });
+
+  test("a batch with nothing to save has no slices", () => {
+    const none = reconcileScan({ missing: [], read: [], isIndexed: () => false });
+    assert.deepEqual(scanSaveSlices(none, 100), []);
+  });
+});
+
+describe("what a scan does once it ends", () => {
+  const quiet = { saved: 0, gone: 0, entriesChanged: false };
+
+  test("a rescan that found nothing new and nothing gone links nothing and tells no screen", () => {
+    assert.deepEqual(scanEnd(quiet), { linkEntries: false, announce: null });
+  });
+
+  test("saved files are linked to playlists' streamed entries and shown as additions", () => {
+    assert.deepEqual(scanEnd({ ...quiet, saved: 3 }), { linkEntries: true, announce: "added" });
+  });
+
+  test("entries that came since the last link (a sync, an import) are linked with no file saved", () => {
+    assert.deepEqual(scanEnd({ ...quiet, entriesChanged: true }), {
+      linkEntries: true,
+      announce: null,
+    });
+  });
+
+  test("files gone are shown at once, everywhere", () => {
+    assert.deepEqual(scanEnd({ ...quiet, gone: 2 }), { linkEntries: false, announce: "removed" });
+    assert.deepEqual(scanEnd({ ...quiet, saved: 1, gone: 2 }), {
+      linkEntries: true,
+      announce: "removed",
+    });
   });
 });

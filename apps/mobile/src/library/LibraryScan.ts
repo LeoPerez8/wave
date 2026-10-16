@@ -3,6 +3,8 @@ import {
   planAddRoot,
   planExclusion,
   reconcileScan,
+  scanEnd,
+  scanSaveSlices,
   type IndexedFile,
   type LibraryChange,
 } from "@wave/core";
@@ -11,6 +13,7 @@ import * as Effect from "effect/Effect";
 import { refreshDownloadPolicy } from "./downloadPolicy";
 import * as Stream from "effect/Stream";
 
+import { freeTurnEffect } from "@/lib/backgroundWork";
 import { makeExternalStore } from "@/lib/externalStore";
 import { argbToHex, type NativeArtwork, type NativeScannedTrack } from "@/native/waveNative";
 
@@ -53,6 +56,14 @@ const bumpLibraryVersion = (...changes: readonly LibraryChange[]): void => {
 /** A scan batch (or the end of a scan that dropped nothing): readers take several at once (Core's `burst`). */
 const SCAN_BATCH: LibraryChange = { kind: "tracks", burst: true };
 const FOLDERS: LibraryChange = { kind: "folders" };
+/** A scan's link turned playlists' streamed entries into Library songs. */
+const ENTRIES_LINKED: LibraryChange = { kind: "playlists" };
+
+/**
+ * Playlists' entries' revision (`playlistEntriesRevision`) when a scan last
+ * linked them; null until the first scan of this process links.
+ */
+let linkedAtRevision: number | null = null;
 
 /**
  * The owner changed the library outside a scan (deleted songs, edited tags, a
@@ -124,6 +135,8 @@ const scanFolders = (roots: readonly string[]) =>
     const indexed = new Set(known.map((file) => file.path));
     // Indexed files the scan didn't find that no batch has matched yet.
     let missing: readonly IndexedFile[] = [];
+    /** Files this scan saved (new, changed, moved). */
+    let saved = 0;
     const startedAt = Date.now();
     scanState.set({
       status: "scanning",
@@ -157,19 +170,30 @@ const scanFolders = (roots: readonly string[]) =>
               isIndexed: (path) => indexed.has(path),
             });
             missing = changes.unmatched;
-            yield* store.saveBatch(
-              [...changes.added, ...changes.updated, ...changes.moved.map((move) => move.to)],
-              event.artwork.map(toIndexedArtwork),
-              changes.moved.map((move) => ({ from: move.from, to: move.to.path })),
-              // Linked once, against the whole Library, when the scan ends.
-              { linkEntries: false },
-            );
+            const artwork = event.artwork.map(toIndexedArtwork);
+            const slices = scanSaveSlices(changes);
+            // New artwork alone (files that were read but saved nothing) still gets saved.
+            const parts =
+              slices.length > 0 ? slices : artwork.length > 0 ? [{ tracks: [], moves: [] }] : [];
+            // Up to 500 files a batch: saved a slice per free turn, so a tap never waits on it.
+            for (const [index, slice] of parts.entries()) {
+              yield* freeTurnEffect;
+              yield* store.saveBatch(
+                slice.tracks,
+                // Before any file that shows it.
+                index === 0 ? artwork : [],
+                slice.moves,
+                // Linked once, against the whole Library, when the scan ends.
+                { linkEntries: false },
+              );
+              saved += slice.tracks.length;
+            }
             for (const track of changes.added) indexed.add(track.path);
             for (const move of changes.moved) {
               indexed.delete(move.from);
               indexed.add(move.to.path);
             }
-            bumpLibraryVersion(SCAN_BATCH);
+            if (slices.length > 0) bumpLibraryVersion(SCAN_BATCH);
             return;
           }
           case "Complete":
@@ -186,17 +210,34 @@ const scanFolders = (roots: readonly string[]) =>
       }),
     );
 
-    // Playlists' YT Music entries become the songs this scan (or one cut short) brought in.
-    yield* store.linkPlaylistEntries;
+    const finished = completed !== undefined && !completed.cancelled;
+    const end = scanEnd({
+      saved,
+      gone: finished ? missing.length : 0,
+      entriesChanged: (yield* store.playlistEntriesRevision) !== linkedAtRevision,
+    });
+    // Playlists' YT Music entries become the songs this scan (or one cut short) brought in,
+    // or the Library songs entries that came meanwhile (a sync, an import) are.
+    let linked = 0;
+    if (end.linkEntries) {
+      yield* freeTurnEffect;
+      linked = yield* store.linkPlaylistEntries;
+      linkedAtRevision = yield* store.playlistEntriesRevision;
+    }
     if (completed === undefined || completed.cancelled) {
+      if (linked > 0) bumpLibraryVersion(ENTRIES_LINKED);
       scanState.set({ status: "idle" });
       return;
     }
+    yield* freeTurnEffect;
     // Also prunes albums and artists that changed tags left empty.
     yield* store.filesGone(missing.map((file) => file.path));
     yield* store.markScanned(roots, startedAt);
     // Songs whose files are gone left the Library: every screen drops them now, hidden ones too.
-    bumpLibraryVersion(missing.length > 0 ? { kind: "tracks" } : SCAN_BATCH);
+    // A rescan that changed nothing (the usual return to Wave) has nobody re-read anything.
+    if (end.announce === "removed") bumpLibraryVersion({ kind: "tracks" });
+    else if (end.announce === "added") bumpLibraryVersion(SCAN_BATCH);
+    else if (linked > 0) bumpLibraryVersion(ENTRIES_LINKED);
     scanState.set({ status: "done", filesFound: completed.filesFound });
   });
 

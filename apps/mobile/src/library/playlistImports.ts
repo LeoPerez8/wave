@@ -39,6 +39,7 @@ import * as Result from "effect/Result";
 import { useSyncExternalStore } from "react";
 
 import { askForNotifications } from "@/lib/askForNotifications";
+import { freeTurn } from "@/lib/backgroundWork";
 import { makeExternalStore } from "@/lib/externalStore";
 import { persistedSetting } from "@/lib/persistedSetting";
 import { WavePlaylistImport } from "@/native/wavePlaylistImport";
@@ -53,15 +54,18 @@ type Job = PlaylistImport<YtAlbumSong>;
 
 /**
  * The imports going on, waiting, stopped, or done with songs not found, kept
- * until Wave starts again. Written at most once a second: a song given the
- * playlist but not yet counted here isn't given twice, as a playlist doesn't
- * take a song it holds.
+ * until Wave starts again. Written once a second while answers come (a
+ * steady stream doesn't put the write off), and at once when Wave leaves the
+ * foreground, so a Wave killed mid-import goes on from at most a second
+ * back: a song given the playlist but not yet counted here isn't given
+ * twice, as a playlist doesn't take a song it holds.
  */
 const imports = persistedSetting<PlaylistImports<YtAlbumSong>>({
   key: "playlistImports",
   read: readPlaylistImports,
   write: (value) => (value.length === 0 ? null : writePlaylistImports(value)),
   persistDelayMs: 1000,
+  persistMaxDelayMs: 1000,
 });
 
 /**
@@ -104,6 +108,7 @@ const spotifySearches = persistedSetting<SpotifySearchPacing>({
   read: readSpotifySearchPacing,
   write: (value) => (value.searchesAt.length === 0 ? null : writeSpotifySearchPacing(value)),
   persistDelayMs: 1000,
+  persistMaxDelayMs: 1000,
 });
 
 /**
@@ -212,6 +217,8 @@ const give = async (
 /** Runs [playlistId]'s import while it's the one going on: cancelled, stopped or done, it returns. */
 const runImport = async (playlistId: number): Promise<void> => {
   let givenAt = 0;
+  /** A free turn was just taken for the next give: the import is read again first. */
+  let turnTaken = false;
   for (;;) {
     const job = importTurn(imports.get());
     if (job === null || job.playlistId !== playlistId) {
@@ -226,6 +233,7 @@ const runImport = async (playlistId: number): Promise<void> => {
     const now = Date.now();
     const { job: next, step, searches } = nextImportStep(job, now, spotifySearches.get());
     if (step.kind === "search") {
+      turnTaken = false;
       spotifySearches.set(searches);
       setImports(updatePlaylistImport(imports.get(), next));
       ask(playlistId, step.query);
@@ -234,11 +242,19 @@ const runImport = async (playlistId: number): Promise<void> => {
     const additions = importAdditions(job);
     const toGive = additions.through > job.added;
     if (toGive && (step.kind === "none" || now - givenAt >= GIVE_EVERY_MS)) {
+      // Writing to the playlist holds the JavaScript thread: not while the owner taps.
+      if (!turnTaken) {
+        await freeTurn();
+        turnTaken = true;
+        continue;
+      }
+      turnTaken = false;
       givenAt = now;
       await give(playlistId, additions);
       continue;
     }
     if (step.kind === "none") return;
+    turnTaken = false;
     const until = Math.min(
       step.kind === "wait" ? step.untilMs : Infinity,
       toGive ? givenAt + GIVE_EVERY_MS : Infinity,
