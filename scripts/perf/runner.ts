@@ -413,6 +413,10 @@ export const runPerf = async (
         throw new ScenarioError(
           "The fixture has no importLink (scripts/perf/fixture.json or --import-link).",
         );
+      if (scenario.needsArtist === true && options.config.artist === null)
+        throw new ScenarioError(
+          "The fixture has no artist (scripts/perf/fixture.json or --artist).",
+        );
       if (scenario.coldEachIteration !== true) await start();
       const iterations = options.iterations ?? scenario.iterations;
       for (let i = 1; i <= scenario.warmup + iterations; i++) {
@@ -473,6 +477,7 @@ export const runPerf = async (
       compile: options.compile,
       perfetto: options.perfetto !== null,
       tabs: options.config.tabs,
+      artist: options.config.artist,
     },
     ...meta,
   });

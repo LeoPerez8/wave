@@ -44,6 +44,7 @@ node scripts/perf/perf.ts run --dry-run             # the whole pipeline on a si
 - `--compile <filter>`: sets the ART compiler filter first (`cmd package compile -m <filter> -f`),
   e.g. `speed-profile` or `verify`. #317 uses this.
 - `--import-link <url>`: overrides the fixture's playlist link.
+- `--artist <name>`: overrides the fixture's artist (`push-artist`).
 - `--meta key=value`: records a value as given. On a plain APK, pass the Library's size this way
   (`--meta library.tracks=12000 --meta library.playEvents=54000`).
 - `--perfetto`: records a Perfetto trace per scenario under `perf-results/traces/`.
@@ -85,6 +86,9 @@ version, package and signature as the release it's built from, so it installs ov
 - `importLink`: a public playlist link for the large import, shared to Wave as a share sheet would.
   **Not set yet.** Pick a YouTube Music or Spotify playlist of at least 2,000 songs and commit its
   link here. The import variant can't run without it.
+- `artist`: the artist `push-artist` opens, by name as Library › Artists shows it. **Not set
+  yet.** Pick an artist with a long play history that shows on the list's first screen without
+  scrolling, and commit the name here. `push-artist` can't run without it. `--artist` overrides it.
 - `settleMs`, `windowMs`, `launchSettleMs`, `memoryIdleMs`, `flushTimeoutMs`: timing (below).
 
 The phone, for runs that compare:
@@ -118,6 +122,7 @@ launch, the share and the import's idle window have no touch.
 | `push-settings`    | Home › Settings (`push`), Back (`pop`)                                              | `route`                   |         10 |
 | `push-library`     | Library › Albums (`push`), Back (`pop`)                                             | `route`                   |         10 |
 | `push-tracklist`   | Library › Songs, the whole Library as a Track list (`push`), Back (`pop`)           | `route`                   |         10 |
+| `push-artist`      | Library › Artists › the fixture's artist, to its stats block (`push`), Back (`pop`) | `artist.stats`, `route`   |         10 |
 | `push-empty`       | Settings › Developer, one row: the empty-screen control (`push`, `pop`)             | `route`                   |         10 |
 | `now-playing`      | mini player (`open`), Close Now Playing (`close`)                                   | `nowPlaying.shown/hidden` |         10 |
 | `queue`            | Queue in Now Playing (`open`), Queue again (`close`)                                | `visible` queue           |         10 |
@@ -242,10 +247,13 @@ ticket needs evidence, and give a new response mark a scenario step's `expect` i
 - `nowPlaying.shown`, `nowPlaying.hidden`;
 - `visible` "queue" (Up Next mounted);
 - `import.running` (songs in the import), `import.idle`;
+- `artist.stats` ("played" or "not played"), on the frame after an artist page's stats block
+  shows what it read (again after each re-read);
 - touches with their native timestamp, from the root view's `onTouchStart`.
 
 Render counts are in RootLayout, TabsLayout, LibraryLayout, TabBar, MiniPlayer, NowPlayingSheet,
-UpNextList, HomeScreen, LibraryScreen, SearchScreen, SettingsScreen, SongsList and TrackList.
+UpNextList, HomeScreen, LibraryScreen, SearchScreen, SettingsScreen, SongsList, TrackList and
+ArtistStatsBlock.
 
 A new scenario goes in `SCENARIOS` (`scripts/perf/scenarios.ts`). Then make the simulated phone in
 `fakeDevice.ts` answer it, so `--dry-run` and the tests cover it.
@@ -285,7 +293,8 @@ Things only a phone can confirm, to check on the first device run:
   every step waits out its flush timeout.
 - gfxinfo's `framestats` columns and the `dumpsys` shapes match the parsers on One UI.
 - `uiautomator dump` finds each target. Labels: the tab labels, `Settings`, `Back`, `Albums`,
-  `Songs`, `Developer`, `Now playing: …`, `Close Now Playing`, `Queue`, `Import`.
+  `Songs`, `Artists`, the fixture's artist, `Developer`, `Now playing: …`, `Close Now Playing`,
+  `Queue`, `Import`.
 
 ## A ticket's performance doc
 
