@@ -5,8 +5,8 @@
 # made sure it is v<app version> (check-release-tag.sh).
 #   scripts/ci/publish-release.sh <apk path>
 # Run from a checkout of the repo. Env: GH_TOKEN, RELEASE_TAG (default GITHUB_REF_NAME),
-# GITHUB_REF_TYPE and GITHUB_SHA (a branch push tags GITHUB_SHA), RELEASE_NOTES_FILE
-# (optional: the patch notes).
+# GITHUB_REF_TYPE, RELEASE_SHA (the commit a branch push tags: main's version bump; default
+# GITHUB_SHA), RELEASE_NOTES_FILE (optional: the patch notes).
 set -euo pipefail
 
 apk="$1"
@@ -25,12 +25,12 @@ fi
 flags=(--latest)
 if [[ "$version" == *-ti ]]; then flags=(--prerelease --latest=false); fi
 
-# A branch push creates the tag on its own commit. If the tag already exists on another
-# commit (an earlier push with the same version got there first, or this is a re-run of an
-# older push), that release stays as it is and this run publishes nothing.
+# A branch push creates the tag on the commit Checks handed on. If the tag already exists on
+# another commit (an earlier push with the same version got there first, or this is a re-run
+# of an older push), that release stays as it is and this run publishes nothing.
 target=()
 if [ "${GITHUB_REF_TYPE:-tag}" = "branch" ]; then
-  sha="${GITHUB_SHA:?}"
+  sha="${RELEASE_SHA:-${GITHUB_SHA:?}}"
   # The tag's commit (the peeled ^{} line when the tag is annotated), empty when untagged.
   tagged="$(git ls-remote origin "refs/tags/$tag" "refs/tags/$tag^{}" | sort -k2 | tail -n 1 | cut -f1)"
   if [ -n "$tagged" ] && [ "$tagged" != "$sha" ]; then
