@@ -74,6 +74,8 @@ export type MeasuredStep = StepRecord & {
    * entries, retained, consumers.
    */
   readonly libraryQueries?: Readonly<Record<string, unknown>>;
+  /** Search's index counters at the step's flush, since launch (Core's `SearchCatalogStats`). */
+  readonly search?: Readonly<Record<string, unknown>>;
 };
 
 export type MemoryRecord = Meminfo & {

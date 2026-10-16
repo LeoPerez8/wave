@@ -84,6 +84,8 @@ export class FakeDevice implements Device {
   private nowPlaying = false;
   private queue = false;
   private keyboard = false;
+  /** What is typed in Search's field. */
+  private searchQuery = "";
   private importCard = false;
   private importing = false;
   private frames: Frame[] = [];
@@ -163,6 +165,10 @@ export class FakeDevice implements Device {
       "libraryQueries.paused": this.importing ? this.flushes * 4 : 0,
       "libraryQueries.discarded": 0,
       "libraryQueries.evicted": this.flushes,
+      // Search's index counters (apps/mobile/src/search/searchIndex.ts), since launch.
+      "search.entries": 13_000,
+      "search.prepared": 13_000,
+      "search.indexes": 1,
     };
     this.flushes++;
     this.logcat.push(...this.recorder.drain(meta));
@@ -184,6 +190,7 @@ export class FakeDevice implements Device {
     this.routes = ["/"];
     this.visited = new Set(["Home"]);
     this.nowPlaying = this.queue = this.keyboard = this.importCard = false;
+    this.searchQuery = "";
     this.frames = [];
     this.framesSinceReset = 0;
     this.recorder = this.perfBuild ? createPerfRecorder({ now: () => this.clock }) : null;
@@ -242,6 +249,9 @@ export class FakeDevice implements Device {
         this.keyboard = true;
         this.respond("keyboard.show");
       }
+    } else if (label === "Clear search") {
+      this.searchQuery = "";
+      this.render(this.clock, 10);
     } else if (label === "Settings") this.navigate("/settings");
     else if (label === "Developer") this.navigate("/settings/developer");
     else if (label === "Albums") this.navigate("/library/albums");
@@ -282,6 +292,19 @@ export class FakeDevice implements Device {
       this.render(this.clock, 20);
       this.advance(40);
       this.respond("import.running", "2000");
+    }
+  }
+
+  /** Keys typed into the focused field: Search narrows its results with each one. */
+  private type(text: string): void {
+    if (!this.keyboard || this.route !== "/search") return;
+    for (const key of text) {
+      this.searchQuery += key;
+      this.advance(8);
+      this.respond("search.typed", this.searchQuery);
+      this.render(this.clock, 4);
+      this.advance(40);
+      this.respond("search.results", this.searchQuery);
     }
   }
 
@@ -351,6 +374,14 @@ export class FakeDevice implements Device {
       bounds: [80 + i * 300, 2900, 340 + i * 300, 3040],
     }));
     const mini: Node = { desc: "Now playing: Airbag, Radiohead", bounds: [40, 2700, 1400, 2860] };
+    if (route === "/search")
+      return [
+        ...(this.searchQuery === ""
+          ? []
+          : [{ desc: "Clear search", bounds: [1260, 400, 1400, 540] } as Node]),
+        mini,
+        ...tabs,
+      ];
     if (route === "/library")
       return [
         { text: "Albums", bounds: [80, 700, 600, 800] },
@@ -521,6 +552,7 @@ export class FakeDevice implements Device {
       },
     ],
     [/^input keyevent 4$/, () => (this.back(), "")],
+    [/^input text '([^']*)'$/, (match) => (this.type(match[1] ?? ""), "")],
     [/^input swipe -?\d+ -?\d+ -?\d+ -?\d+ (\d+)$/, (match) => (this.swipe(Number(match[1])), "")],
     [/^wm density$/, () => "Physical density: 480\n"],
     [

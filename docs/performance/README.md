@@ -121,7 +121,9 @@ Each scenario starts from a fresh launch (`am force-stop`, then `am start -W`), 
 `launchSettleMs`, runs its setup, then repeats its steps. The first iterations are warm-up and
 aren't recorded. Every measured navigation step is a tap, so it has a touch to measure from:
 pops tap the header's Back button, and Now Playing closes with its Close button. Only the cold
-launch, the share and the import's idle window have no touch.
+launch, the share, the import's idle window and typed keys have no touch. A typing step measures
+from the app's mark for the first key instead (its `from` mark), so its latencies start when
+JavaScript saw that key, not when it was pressed.
 
 | Scenario           | Steps (measure)                                                                      | Response mark             | Iterations |
 | ------------------ | ------------------------------------------------------------------------------------ | ------------------------- | ---------: |
@@ -141,6 +143,7 @@ launch, the share and the import's idle window have no touch.
 | `scrub`            | Now Playing's scrubber dragged 240 dp forward (`forward`), then back (`back`)        | (none)                    |         10 |
 | `queue-drag`       | The first Up Next row dragged three rows down by its handle (`down`), then up (`up`) | (none)                    |         10 |
 | `search-first-tap` | the first Search tap after a fresh launch (`first-tap`)                              | `keyboard.show`           |          5 |
+| `search-typing`    | after a Search tap, types `love` (`type`), from `search.typed`; Clear search after   | `search.results` love     |         10 |
 | `import`           | share the link (`card`), tap Import (`start`), 10 s of the import (`during-import`)  | `import.running`          |          1 |
 
 `skip` measures how long a skip takes to reach the player, so it depends on the queue's length:
@@ -277,6 +280,10 @@ ticket needs evidence, and give a new response mark a scenario step's `expect` i
 
 - `route` (pathname), each time the route changes, on the next frame;
 - `keyboard.show`, `keyboard.hide`;
+- `search.focus` (`focus` or `refocus`), each time Search asks its field for the focus (#306);
+- `search.typed` (the query), each keystroke Search's field reports, and `search.results` (the
+  query), on the frame after the results for what was typed are on screen;
+- `search.index` (entries), each time Search's index is put together;
 - `nowPlaying.shown`, `nowPlaying.hidden`;
 - `visible` "queue" (Up Next mounted);
 - `import.running` (songs in the import), `import.idle`;
@@ -296,6 +303,9 @@ Each flush also reports the shared Library queries' counters since launch, as `l
 result or a read under way), `paused` (changes a hidden screen waited out), `discarded` (results an
 edit overtook), `evicted`, and `entries`, `retained`, `consumers` at the flush. The runner copies
 them to each step as `libraryQueries`; a step's reads are its `reads` minus the previous step's.
+Search's index counters (Core's `SearchCatalogStats`, #306) come the same way, as `search.*` in the
+flush and `search` on each step: `entries` in the index, `prepared` (entries prepared since launch;
+a source given again unchanged prepares none) and `indexes` put together.
 
 The `tabs` metadata (first flush) names how hidden tabs are kept (`tabs.screens`, #304).
 

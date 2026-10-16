@@ -98,6 +98,16 @@ export type {
   SearchOptions,
   SearchResults,
 } from "./search.ts";
+export { createSearchCatalog } from "./searchCatalog.ts";
+export type { SearchCatalog, SearchCatalogStats } from "./searchCatalog.ts";
+export { SEARCH_FOCUS_LIMITS, startSearchFocus, stepSearchFocus } from "./searchFocus.ts";
+export type {
+  SearchFocusCommand,
+  SearchFocusEvent,
+  SearchFocusLimits,
+  SearchFocusState,
+  SearchFocusStep,
+} from "./searchFocus.ts";
 export {
   PLAYLIST_NAME_MAX,
   checkPlaylistName,

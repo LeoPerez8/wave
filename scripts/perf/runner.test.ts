@@ -93,6 +93,7 @@ describe("runPerf on the simulated phone", () => {
       "queue-drag/idle/down",
       "queue-drag/idle/up",
       "search-first-tap/idle/first-tap",
+      "search-typing/idle/type",
     ]);
     const expecting = steps.filter((step) => step.expectMissing !== null);
     assert.ok(expecting.length > 0);
@@ -200,6 +201,19 @@ describe("runPerf on the simulated phone", () => {
     assert.ok(queries.length > 0);
     assert.ok(queries.every((counters) => typeof counters?.["reads"] === "number"));
     assert.ok(queries.every((counters) => typeof counters?.["paused"] === "number"));
+  });
+
+  it("records Search's index counters with each step of a perf build", async () => {
+    const { out } = await runPerf(
+      new FakeDevice(),
+      options("search", { scenarios: ["search-typing"] }),
+    );
+    const { steps } = readResults(readFileSync(out, "utf8"));
+    const search = (steps as (StepRecord & { search?: Record<string, unknown> })[]).map(
+      (step) => step.search,
+    );
+    assert.ok(search.length > 0);
+    assert.ok(search.every((counters) => typeof counters?.["prepared"] === "number"));
   });
 
   it("records a scenario it can't run and goes on", async () => {

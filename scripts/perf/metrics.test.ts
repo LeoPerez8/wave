@@ -120,6 +120,26 @@ describe("stepMetrics", () => {
     assert.equal(metrics.responseMs, 180);
   });
 
+  it("measures a step with no touch (typing) from the mark it names", () => {
+    const metrics = stepMetrics({
+      frames,
+      summary: SUMMARY,
+      flush: flush([
+        { kind: "mark", name: "search.results", detail: "lo", at: 990 },
+        { kind: "mark", name: "search.typed", detail: "l", at: 1_000 },
+        { kind: "mark", name: "search.typed", detail: "lo", at: 1_030 },
+        { kind: "mark", name: "search.results", detail: "lo", at: 1_120 },
+      ]),
+      expect: { mark: "search.results", detail: "lo" },
+      from: { mark: "search.typed" },
+    });
+    assert.equal(metrics.touchAt, null);
+    assert.equal(metrics.inputToJsMs, null);
+    assert.equal(metrics.responseMs, 120);
+    assert.equal(metrics.firstFrameMs, 10);
+    assert.equal(metrics.expectMissing, false);
+  });
+
   it("says when the expected mark never came", () => {
     const metrics = stepMetrics({
       frames,

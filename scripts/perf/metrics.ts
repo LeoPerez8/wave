@@ -111,14 +111,28 @@ export const stepMetrics = (step: {
   readonly expect: Expect | undefined;
   /** Which touch the latencies count from: the first (default) or the last (rapid taps). */
   readonly anchor?: "first" | "last";
-  /** Marks to time from the touch, each to its first occurrence after it. */
+  /**
+   * For a step with no touch (typed keys): the mark latencies count from, its
+   * first occurrence in the step.
+   */
+  readonly from?: Expect | undefined;
+  /** Marks to time from the touch (or the `from` mark), each to its first occurrence after it. */
   readonly phases?: readonly string[];
 }): StepMetrics => {
   const entries = step.flush?.entries ?? [];
   const stepTouches = touches(entries);
   const touch = step.anchor === "last" ? stepTouches[stepTouches.length - 1] : stepTouches[0];
-  const touchAt = touch?.eventAt ?? null;
-  const burst = burstOf(step.frames, touchAt);
+  const fromMark =
+    touch !== undefined || step.from === undefined
+      ? undefined
+      : marks(entries).find(
+          (mark) =>
+            mark.name === step.from?.mark &&
+            (step.from.detail === undefined || mark.detail === step.from.detail),
+        );
+  // What latencies count from: the touch, or the step's own mark when it has no touch.
+  const anchorAt = touch?.eventAt ?? fromMark?.at ?? null;
+  const burst = burstOf(step.frames, anchorAt);
   const first = burst[0];
   const last = burst[burst.length - 1];
   const interval = first?.intervalMs ?? 16.7;
@@ -126,14 +140,14 @@ export const stepMetrics = (step: {
   const dropped = (step.summary.totalFrames ?? 0) > step.frames.length;
   const framesCovered =
     !dropped ||
-    touchAt === null ||
-    (first !== undefined && first.intendedVsyncMs <= touchAt + 2 * interval);
+    anchorAt === null ||
+    (first !== undefined && first.intendedVsyncMs <= anchorAt + 2 * interval);
   const expected =
-    step.expect === undefined || touchAt === null
+    step.expect === undefined || anchorAt === null
       ? undefined
       : marks(entries).find(
           (mark) =>
-            mark.at >= touchAt &&
+            mark.at >= anchorAt &&
             mark.name === step.expect?.mark &&
             (step.expect.detail === undefined || mark.detail === step.expect.detail),
         );
@@ -142,11 +156,11 @@ export const stepMetrics = (step: {
     (entry): entry is Extract<PerfEntry, { kind: "longtask" }> => entry.kind === "longtask",
   );
   return {
-    touchAt,
+    touchAt: touch?.eventAt ?? null,
     inputToJsMs: touch === undefined ? null : round(touch.at - touch.eventAt),
-    firstFrameMs: framesCovered ? sinceTouch(first?.completedMs ?? null, touchAt) : null,
-    responseMs: sinceTouch(expected?.at ?? null, touchAt),
-    settleMs: framesCovered ? sinceTouch(last?.completedMs ?? null, touchAt) : null,
+    firstFrameMs: framesCovered ? sinceTouch(first?.completedMs ?? null, anchorAt) : null,
+    responseMs: sinceTouch(expected?.at ?? null, anchorAt),
+    settleMs: framesCovered ? sinceTouch(last?.completedMs ?? null, anchorAt) : null,
     burstMs:
       first === undefined || last === undefined
         ? null
@@ -167,10 +181,10 @@ export const stepMetrics = (step: {
           phasesMs: Object.fromEntries(
             step.phases.map((phase) => {
               const mark =
-                touchAt === null
+                anchorAt === null
                   ? undefined
-                  : marks(entries).find((entry) => entry.at >= touchAt && entry.name === phase);
-              return [phase, sinceTouch(mark?.at ?? null, touchAt)];
+                  : marks(entries).find((entry) => entry.at >= anchorAt && entry.name === phase);
+              return [phase, sinceTouch(mark?.at ?? null, anchorAt)];
             }),
           ),
         }),
