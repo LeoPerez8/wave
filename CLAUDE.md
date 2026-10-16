@@ -11,14 +11,14 @@ Pick tickets whose blockers are closed.
   says `Closes #<issue>`. The PR title is the release's patch-note line: one line a user
   understands, saying what changed for them.
 - Day-to-day test builds target `ti`. Its version in `apps/mobile/package.json` ends in
-  `-ti` (for example `0.5.1-ti`). Merging a version bump publishes it: the push to `ti`
-  tags `v0.5.1-ti` and publishes the prerelease, so don't tag by hand. Compatible ti pushes
-  and tags repack a kept APK. A new Android version, native input or Metro resource first
-  needs a full build. Stable versions have no suffix and release from `main` on their own:
-  every push to `main` that changes the app gets a bot commit "Release Wave <version>" (the
-  next patch version) that CI tags and publishes, so don't bump or tag `main`'s version by
-  hand. Only a major bump is a hand edit of `package.json`. Pull `main` after merging. Main
-  always builds fully. See `docs/spec.md`, Build and CI.
+  `-ti` (for example `0.5.6-ti`). Nobody bumps or tags a version by hand: every push to `main`
+  or `ti` that changes the app gets a bot commit "Release Wave <version>" (the next patch
+  version) that CI tags and publishes. Both branches count from the highest `v*` tag, so they
+  share one sequence (0.5.4-ti, 0.5.5, 0.5.6-ti), and ti's releases are prereleases. Only a
+  major bump is a hand edit of `package.json`. Pull the branch after merging. Main always
+  builds fully. ti pushes and tags repack a kept APK when only JS changed, and the repack
+  writes the new version into it; a new native input or Metro resource first needs a full
+  build. See `docs/spec.md`, Build and CI.
 - Decision-heavy logic (queue, counted plays, search, sorting, scan reconciliation, LRC,
   sleep timer) goes in `packages/core`, which must keep **zero runtime dependencies** and
   use only erasable TypeScript syntax with `.ts` import extensions. Test it through its
