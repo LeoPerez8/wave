@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { SETTINGS_PAGES, accountsSummary, type WaveSession, type YtSession } from "./index.ts";
+import {
+  SETTINGS_PAGES,
+  accountsSummary,
+  downloadsSummary,
+  type WaveSession,
+  type YtSession,
+} from "./index.ts";
 
 const YT_SIGNED_IN: YtSession = {
   status: "signedIn",
@@ -60,5 +66,13 @@ describe("Accounts row summary", () => {
       ),
       null,
     );
+  });
+});
+
+describe("the Downloads row's line", () => {
+  test("counts the songs whose download failed, and says nothing while none has", () => {
+    assert.equal(downloadsSummary(0), null);
+    assert.equal(downloadsSummary(1), "1 song failed");
+    assert.equal(downloadsSummary(1200), "1,200 songs failed");
   });
 });

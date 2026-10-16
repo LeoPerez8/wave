@@ -144,6 +144,10 @@ const NO_MISSING_SONGS: readonly MissingTrack[] = [];
 export const useMissingSongs = (): readonly MissingTrack[] =>
   useLibraryQuery(listMissingSongs, NO_MISSING_SONGS);
 
+/** The missing songs, or null until they're first read: none read isn't none missing. */
+export const useLoadedMissingSongs = (): readonly MissingTrack[] | null =>
+  useLibraryQuery<readonly MissingTrack[] | null>(listMissingSongs, null);
+
 interface AlbumsMissingSongs {
   /** The albums read, as `albumIds.join(",")`. */
   readonly key: string;

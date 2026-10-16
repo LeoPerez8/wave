@@ -45,6 +45,26 @@ export interface StreamedArtistContext<A> {
   readonly ytArtistHere?: string | null;
 }
 
+/** Who [name] is, the Library's [artist] when it has them: one key per artist. */
+const artistKey = (name: string, artist: { readonly id: number } | null): string =>
+  artist === null ? `yt:${artistPhotoName(name)}` : `library:${artist.id}`;
+
+/**
+ * The artists a streamed song credited to [artists] is by, as keys a Library
+ * song's artist ids compare with (`libraryArtistKey`): the Library's artist
+ * for a name it has, else the name. Names that aren't an artist's are left out.
+ */
+export const streamedArtistKeys = <A extends { readonly id: number }>(
+  artists: readonly string[],
+  libraryArtist: (name: string) => A | null,
+): string[] =>
+  artists.flatMap((name) =>
+    ytArtistQuery(name) === null ? [] : [artistKey(name, libraryArtist(name))],
+  );
+
+/** A Library artist's key, as `streamedArtistKeys` gives it. */
+export const libraryArtistKey = (artistId: number): string => artistKey("", { id: artistId });
+
 /**
  * Where the link to a streamed song's [artists] (as YouTube Music credits
  * them) leads, the artist opening integrated: each name the Library has
@@ -69,7 +89,7 @@ export const streamedArtistLink = <A extends { readonly id: number; readonly nam
   for (const name of artists) {
     if (ytArtistQuery(name) === null) continue;
     const artist = context.libraryArtist(name);
-    const key = artist === null ? `yt:${artistPhotoName(name)}` : `library:${artist.id}`;
+    const key = artistKey(name, artist);
     if (key === ytHere || (artist !== null && isDetailPath(context.here, "artist", artist.id))) {
       here = true;
       continue;

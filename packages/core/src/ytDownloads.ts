@@ -202,7 +202,8 @@ export const YT_DOWNLOAD_ACTION_LABELS: { readonly [A in YtDownloadAction]: stri
 /**
  * The download entries a YT Music song's menu offers, given its download's
  * [status]. A song downloaded this session offers Download again only once
- * it's no longer in the Library ([inLibrary], from `libraryFinder`).
+ * it's no longer in the Library ([inLibrary], from `libraryFinder`). A failed
+ * one offers Retry alone: Settings › Downloads clears failures.
  */
 export const ytDownloadActions = (
   status: YtDownloadStatus | null,
@@ -215,7 +216,7 @@ export const ytDownloadActions = (
     case "downloading":
       return ["cancelDownload"];
     case "failed":
-      return ["retryDownload", "cancelDownload"];
+      return ["retryDownload"];
     case "saving":
       return [];
     case "done":

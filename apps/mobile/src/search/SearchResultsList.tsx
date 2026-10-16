@@ -16,7 +16,7 @@ import { NameRow } from "@/catalog/NameRow";
 import { TrackRow } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { TextButton } from "@/components/TextButton";
-import type { SongRow } from "@/library/LibraryStore";
+import type { TrackItem } from "@/playback/actionTargets";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { openAlbum, openArtist, openGenre, openPlaylist } from "@/library/routes";
 import { toTrackSummary } from "@/library/TrackList";
@@ -39,6 +39,7 @@ import type { ListSelection } from "@/selection/useListSelection";
 import { openYtAlbum, openYtArtist } from "@/ytmusic/routes";
 import { openYtAlbumActions } from "@/ytmusic/YtAlbumActions";
 import { YtSongRow } from "@/ytmusic/YtSongRow";
+import { openYtSongActions } from "@/ytmusic/YtSongActions";
 
 /** Tapping a song plays the song results from it. */
 const SEARCH_CONTEXT: QueueContext = { kind: "search", id: null };
@@ -55,7 +56,7 @@ const HEIGHT: Readonly<Record<ResultRow["type"], number>> = {
   askYt: CELL * 6,
 };
 
-/** While selecting, results other than Library songs do nothing. */
+/** Non-song results stay in place while selecting. */
 const ignore = (): void => undefined;
 
 /**
@@ -67,7 +68,7 @@ const playResults = (songs: readonly ResultSong[], index: number): void =>
 
 /**
  * A song YT Music found, among the song results. Tapping plays the results
- * from it. While Library songs are being selected, it does nothing.
+ * from it, or checks it while selecting.
  */
 function SearchYtSongRow({
   song,
@@ -76,7 +77,7 @@ function SearchYtSongRow({
   top,
   playing,
   onOpen,
-  selecting,
+  selection,
 }: {
   song: NativeYtSong;
   songs: readonly ResultSong[];
@@ -84,22 +85,22 @@ function SearchYtSongRow({
   top: boolean;
   playing: boolean;
   onOpen: () => void;
-  selecting: boolean;
+  selection: ListSelection<TrackItem>;
 }) {
   return (
     <YtSongRow
       song={song}
       kind={top ? "Song · " : ""}
       playing={playing}
-      onPress={
-        selecting
-          ? ignore
-          : () => {
-              onOpen();
-              playResults(songs, index);
-            }
-      }
-      onLongPress={selecting ? ignore : undefined}
+      {...selectableRow(
+        { ytSong: song },
+        selection,
+        () => {
+          onOpen();
+          playResults(songs, index);
+        },
+        (options) => openYtSongActions(song, options),
+      )}
     />
   );
 }
@@ -126,7 +127,7 @@ type Props = {
   /** Search shows YouTube Music's results (an integrated view): Library albums open integrated. */
   integrated: boolean;
   /** Song results are selectable; other results ignore taps while selecting. */
-  selection: ListSelection<SongRow>;
+  selection: ListSelection<TrackItem>;
 };
 
 function Hit({
@@ -148,7 +149,7 @@ function Hit({
   integrated: boolean;
   playing: boolean;
   onOpen: () => void;
-  selection: ListSelection<SongRow>;
+  selection: ListSelection<TrackItem>;
 }) {
   const { selecting } = selection;
   const open = (action: () => void) =>
@@ -189,7 +190,7 @@ function Hit({
           leading="artwork"
           downloaded={downloaded}
           {...selectableRow(
-            hit.song,
+            { song: hit.song },
             selection,
             open(() =>
               playResults(
@@ -294,7 +295,7 @@ export function SearchResultsList({
               top={item.top}
               playing={ytTrackId(item.song.videoId) === currentId}
               onOpen={onOpen}
-              selecting={selection.selecting}
+              selection={selection}
             />
           );
         case "ytArtist": {
