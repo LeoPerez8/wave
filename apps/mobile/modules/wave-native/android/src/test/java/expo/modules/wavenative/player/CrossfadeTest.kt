@@ -9,19 +9,23 @@ import org.junit.Test
 class CrossfadeTest {
   private class Deck : CrossfadeDeck {
     override var positionMs = 0L
-    override var isPlaying = true
     override var ended = false
-    var volume = 1f
-    var speed = 1f
-    var playing = true
+
+    // Plain fields under other names: a `var volume` would clash with setVolume on the JVM.
+    var sounding = true
+    var level = 1f
+    var rate = 1f
+    var wanted = true
     val seeks = mutableListOf<Long>()
 
+    override val isPlaying get() = sounding
+
     override fun setVolume(volume: Float) {
-      this.volume = volume
+      level = volume
     }
 
     override fun setSpeed(speed: Float) {
-      this.speed = speed
+      rate = speed
     }
 
     override fun seekTo(positionMs: Long) {
@@ -30,7 +34,7 @@ class CrossfadeTest {
     }
 
     override fun setPlaying(playing: Boolean) {
-      this.playing = playing
+      wanted = playing
     }
   }
 
@@ -89,18 +93,18 @@ class CrossfadeTest {
     val crossfade = crossfade(service)
     crossfade.playTo(service, 172_000)
     val outgoing = service.tail!!
-    assertEquals(0f, outgoing.volume)
+    assertEquals(0f, outgoing.level)
 
     crossfade.playTo(service, 175_000)
     assertEquals(1, service.advanced)
-    assertEquals(1f, outgoing.volume)
-    assertEquals(0f, service.main.volume)
+    assertEquals(1f, outgoing.level)
+    assertEquals(0f, service.main.level)
 
     service.main.positionMs = 2500
     outgoing.positionMs = 177_500
     crossfade.tick()
-    assertEquals(0.707f, outgoing.volume, 0.01f)
-    assertEquals(0.707f, service.main.volume, 0.01f)
+    assertEquals(0.707f, outgoing.level, 0.01f)
+    assertEquals(0.707f, service.main.level, 0.01f)
     assertEquals(0, service.fadesEnded)
 
     service.main.positionMs = 5000
@@ -109,7 +113,7 @@ class CrossfadeTest {
     crossfade.tick()
     assertNull(service.tail)
     assertEquals(1, service.fadesEnded)
-    assertEquals(1f, service.main.volume)
+    assertEquals(1f, service.main.level)
   }
 
   @Test
@@ -143,7 +147,7 @@ class CrossfadeTest {
     crossfade.interrupt()
     assertNull(service.tail)
     assertEquals(1, service.fadesEnded)
-    assertEquals(1f, service.main.volume)
+    assertEquals(1f, service.main.level)
   }
 
   @Test
@@ -166,12 +170,12 @@ class CrossfadeTest {
 
     service.mainWantsToPlay = false
     crossfade.onPlayingChanged()
-    assertFalse(outgoing.playing)
+    assertFalse(outgoing.wanted)
     assertNull(crossfade.tick())
 
     service.mainWantsToPlay = true
     crossfade.onPlayingChanged()
-    assertTrue(outgoing.playing)
+    assertTrue(outgoing.wanted)
   }
 
   @Test
@@ -184,11 +188,11 @@ class CrossfadeTest {
 
     outgoing.positionMs = 172_100
     crossfade.tick()
-    assertTrue(outgoing.speed < 1f)
+    assertTrue(outgoing.rate < 1f)
 
     outgoing.positionMs = 171_900
     crossfade.tick()
-    assertTrue(outgoing.speed > 1f)
+    assertTrue(outgoing.rate > 1f)
 
     outgoing.positionMs = 174_000
     crossfade.tick()
@@ -202,7 +206,7 @@ class CrossfadeTest {
     outgoing.positionMs = 175_000
     crossfade.tick()
     assertEquals(1, service.advanced)
-    assertEquals(1f, outgoing.speed)
+    assertEquals(1f, outgoing.rate)
   }
 
   @Test
@@ -210,7 +214,7 @@ class CrossfadeTest {
     val service = Service()
     val crossfade = crossfade(service)
     crossfade.playTo(service, 172_000)
-    service.tail!!.isPlaying = false // still buffering
+    service.tail!!.sounding = false // still buffering
     service.main.positionMs = 177_500
     crossfade.tick()
     assertNull(service.tail)
