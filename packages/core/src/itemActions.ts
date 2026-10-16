@@ -7,7 +7,13 @@
  */
 
 import { isDetailPath } from "./navigation.ts";
-import type { StreamedArtistLink } from "./streamedArtist.ts";
+import {
+  libraryArtistKey,
+  streamedArtistKeys,
+  streamedArtistLink,
+  type StreamedArtistContext,
+  type StreamedArtistLink,
+} from "./streamedArtist.ts";
 import {
   YT_DOWNLOAD_ACTION_LABELS,
   ytDownloadActions,
@@ -51,9 +57,32 @@ export interface ActionItem {
   readonly missing?: boolean | undefined;
   /** Where a missing song's download is (`ytDownloadStatus`); null or undefined when never asked for. */
   readonly download?: YtDownloadStatus | null | undefined;
+  /**
+   * A YT Music song checked beside the Library's (Search, a playlist's
+   * entry…): streamed, not a file. It joins the queue and playlists and can
+   * be downloaded; what acts on files (favorites, Delete) isn't for it.
+   */
+  readonly streamed?: boolean | undefined;
+  /** A streamed song's artists, as YouTube Music credits them. */
+  readonly artistNames?: readonly string[] | undefined;
+  /** A streamed song the Library has a file of since it was listed: nothing left to download. */
+  readonly downloaded?: boolean | undefined;
 }
 
-export interface ActionSubject {
+/** A Library artist, as streamed songs' artists resolve to them. */
+export interface LibraryArtistRef {
+  readonly id: number;
+  readonly name: string;
+}
+
+/**
+ * What tells a streamed song's artists apart (Core's `streamedArtistLink`,
+ * the page you're on aside): which names the Library has, and whether YT
+ * Music is on.
+ */
+export type StreamedArtists<A extends LibraryArtistRef> = Omit<StreamedArtistContext<A>, "here">;
+
+export interface ActionSubject<A extends LibraryArtistRef = LibraryArtistRef> {
   readonly kind: ItemKind;
   /** The items acted on: one for a menu, the checked ones (in list order) for the bar. */
   readonly items: readonly ActionItem[];
@@ -65,6 +94,11 @@ export interface ActionSubject {
   readonly onlineLookups?: boolean | undefined;
   /** The current route, so Go to doesn't lead to the page you're on. */
   readonly here: string;
+  /**
+   * How streamed songs' artists resolve, so Go to Artist can offer the
+   * artists they share with the other items; without it, they offer none.
+   */
+  readonly streamedArtists?: StreamedArtists<A> | undefined;
 }
 
 export type ItemAction =
@@ -95,11 +129,19 @@ export type ArtistLink =
   | { readonly kind: "open"; readonly artistId: number }
   | { readonly kind: "choose"; readonly artistIds: readonly number[] };
 
-/** One entry, in the order shown; Go to entries carry where they lead. */
-export type ItemActionEntry =
+/**
+ * One entry, in the order shown; Go to entries carry where they lead. Go to
+ * Artist on items that include streamed songs leads where a streamed song's
+ * artist link does (`streamedArtistLink`).
+ */
+export type ItemActionEntry<A extends LibraryArtistRef = LibraryArtistRef> =
   | { readonly action: Exclude<ItemAction, "goToAlbum" | "goToArtist"> }
   | { readonly action: "goToAlbum"; readonly albumId: number }
-  | { readonly action: "goToArtist"; readonly artists: ArtistLink };
+  | { readonly action: "goToArtist"; readonly artists: ArtistLink }
+  | {
+      readonly action: "goToArtist";
+      readonly streamedArtists: Exclude<StreamedArtistLink<A>, { readonly kind: "here" }>;
+    };
 
 /** What each entry says. */
 export const ITEM_ACTION_LABELS: { readonly [A in ItemAction]: string } = {
@@ -135,6 +177,10 @@ export const confirmsFirst = (action: ItemAction): boolean =>
   action === "deletePlaylist" ||
   action === "deletePlaylists";
 
+/** A song with no file here yet (missing, or streamed): Download fetches it. */
+const needsDownload = (item: ActionItem): boolean =>
+  item.missing === true || (item.streamed === true && item.downloaded !== true);
+
 /** The value every item has, or undefined when they differ or any lacks one. */
 const shared = (values: readonly (number | undefined)[]): number | undefined => {
   const first = values[0];
@@ -167,20 +213,54 @@ const sharedArtists = (items: readonly ActionItem[]): readonly number[] => {
   return items.every((item) => same(item.artistIds)) ? first : [];
 };
 
+/**
+ * Go to Artist on items that include streamed songs: when every item is by
+ * the same artists (a streamed song's names resolved as its menu resolves
+ * them), it leads where the first streamed song's link does. None with YT
+ * Music off, as a streamed song's menu has none.
+ */
+const streamedGoToArtist = <A extends LibraryArtistRef>(
+  items: readonly ActionItem[],
+  { here, streamedArtists: context }: ActionSubject<A>,
+): ItemActionEntry<A> | undefined => {
+  if (context === undefined || !context.enabled) return undefined;
+  const keysOf = (item: ActionItem): ReadonlySet<string> =>
+    new Set(
+      item.streamed === true
+        ? streamedArtistKeys(item.artistNames ?? [], context.libraryArtist)
+        : (item.artistIds ?? []).map(libraryArtistKey),
+    );
+  const [first, ...rest] = items.map(keysOf);
+  if (first === undefined || first.size === 0) return undefined;
+  const same = (keys: ReadonlySet<string>): boolean =>
+    keys.size === first.size && [...keys].every((key) => first.has(key));
+  if (!rest.every(same)) return undefined;
+  const lead = items.find((item) => item.streamed === true);
+  const link = streamedArtistLink(lead?.artistNames ?? [], { ...context, here });
+  return link === undefined || link.kind === "here"
+    ? undefined
+    : { action: "goToArtist", streamedArtists: link };
+};
+
 /** The entries to offer on [subject]'s items, in order. */
-export const itemActions = (subject: ActionSubject): ItemActionEntry[] => {
+export const itemActions = <A extends LibraryArtistRef = LibraryArtistRef>(
+  subject: ActionSubject<A>,
+): ItemActionEntry<A>[] => {
   const { kind, items, here } = subject;
   if (items.length === 0) return [];
   const surface = subject.surface ?? "menu";
   // Missing songs have no file: they don't play, and there's none to delete or write to.
   const missing = items.filter((item) => item.missing === true).length;
+  // Streamed songs have no file either, and aren't the Library's to star or delete.
+  const streamed = items.filter((item) => item.streamed === true).length;
+  const files = items.length - missing - streamed;
   const [only] = items;
   // A missing song's menu leads with its download, as a YT Music song's offers it.
   const download =
     surface === "menu" && kind === "track" && items.length === 1 && only?.missing === true
       ? ytDownloadActions(only.download ?? null, { inLibrary: false })
       : [];
-  const entries: ItemActionEntry[] = [
+  const entries: ItemActionEntry<A>[] = [
     ...download.map((action) => ({ action })),
     ...(missing < items.length
       ? [{ action: "playNext" } as const, { action: "addToQueue" } as const]
@@ -188,14 +268,22 @@ export const itemActions = (subject: ActionSubject): ItemActionEntry[] => {
     { action: "addToPlaylist" },
   ];
   if (kind === "track") {
-    entries.push({ action: items.every((item) => item.favorite) ? "unfavorite" : "favorite" });
+    if (streamed === 0)
+      entries.push({ action: items.every((item) => item.favorite) ? "unfavorite" : "favorite" });
     if (items.every((item) => item.inPlaylist)) entries.push({ action: "removeFromPlaylist" });
   }
+  // In selection, Download fetches the checked songs that aren't the Library's files yet.
+  if (surface === "selection" && items.some(needsDownload)) entries.push({ action: "download" });
   const albumId = shared(items.map((item) => item.albumId));
   if (albumId !== undefined && !isDetailPath(here, "album", albumId))
     entries.push({ action: "goToAlbum", albumId });
-  const artists = artistLink(sharedArtists(items), here);
-  if (artists !== undefined) entries.push({ action: "goToArtist", artists });
+  if (streamed > 0) {
+    const goToArtist = streamedGoToArtist(items, subject);
+    if (goToArtist !== undefined) entries.push(goToArtist);
+  } else {
+    const artists = artistLink(sharedArtists(items), here);
+    if (artists !== undefined) entries.push({ action: "goToArtist", artists });
+  }
   if (kind === "playlist")
     entries.push(
       ...(items.length === 1
@@ -203,19 +291,21 @@ export const itemActions = (subject: ActionSubject): ItemActionEntry[] => {
         : [{ action: "deletePlaylists" } as const]),
     );
   // Looks the songs up online and writes what it finds into their files.
-  if (kind === "track" && subject.onlineLookups === true && missing === 0)
+  if (kind === "track" && subject.onlineLookups === true && files === items.length)
     entries.push({ action: "findLyricsAndGenre" });
   if (surface === "menu" && subject.selectable === true) entries.push({ action: "select" });
   // Last, and destructive (after asking): deletes the songs' files from the
   // phone, or takes missing songs out of the Library.
-  if (kind === "track" && missing === 0) entries.push({ action: "delete" });
+  if (kind === "track" && files === items.length) entries.push({ action: "delete" });
   if (kind === "track" && missing === items.length) entries.push({ action: "removeFromLibrary" });
   return entries;
 };
 
 /** One entry of a YT Music song's menu; Go to entries carry where they lead. */
 export type YtSongActionEntry<A> =
-  | { readonly action: "playNext" | "addToQueue" | "addToPlaylist" | "removeFromPlaylist" }
+  | {
+      readonly action: "playNext" | "addToQueue" | "addToPlaylist" | "removeFromPlaylist" | "select";
+    }
   /** The song's YT Music album page, by its browse id (`MPREb_…`). */
   | { readonly action: "goToAlbum"; readonly album: string }
   | {
@@ -233,6 +323,8 @@ export interface YtSongActionOptions {
   readonly ytAlbumHere?: string | null | undefined;
   /** Whether YT Music is on in Settings: an album page asks YouTube, so off, there's no Go to Album. */
   readonly ytMusic?: boolean | undefined;
+  /** The menu was opened from a list that can select: it offers Select. */
+  readonly selectable?: boolean | undefined;
 }
 
 /**
@@ -242,12 +334,13 @@ export interface YtSongActionOptions {
  * its YT Music [album] page (none on that page, or for a song without an
  * album); and, given where its [artists] link leads (Core's
  * `streamedArtistLink`), Go to Artist opens them integrated (none when its
- * only artist is the page you're on). The Library's other entries
- * (favorites, Delete) are about its files, which a streamed song isn't.
+ * only artist is the page you're on); last, Select, opened from a list that
+ * can select ([selectable]). The Library's other entries (favorites, Delete)
+ * are about its files, which a streamed song isn't.
  */
 export const ytSongActions = <A>(
   artists?: StreamedArtistLink<A>,
-  { inPlaylist = false, album, ytAlbumHere, ytMusic = false }: YtSongActionOptions = {},
+  { inPlaylist = false, album, ytAlbumHere, ytMusic = false, selectable = false }: YtSongActionOptions = {},
 ): YtSongActionEntry<A>[] => [
   { action: "playNext" },
   { action: "addToQueue" },
@@ -259,6 +352,7 @@ export const ytSongActions = <A>(
   ...(artists === undefined || artists.kind === "here"
     ? []
     : [{ action: "goToArtist", artists } as const]),
+  ...(selectable ? [{ action: "select" } as const] : []),
 ];
 
 /**

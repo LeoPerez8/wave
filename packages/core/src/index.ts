@@ -311,6 +311,8 @@ export type {
   ArtistLink,
   ItemAction,
   ItemActionEntry,
+  LibraryArtistRef,
+  StreamedArtists,
   YtSongActionEntry,
   YtSongActionOptions,
   ItemKind,
