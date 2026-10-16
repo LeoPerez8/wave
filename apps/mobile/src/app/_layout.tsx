@@ -11,6 +11,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { followLibraryLookupSummary } from "@/library/findLyricsAndGenre";
 import { useAllFilesAccess } from "@/library/hooks";
+import { resumePlaylistImports } from "@/library/playlistImports";
 import { primePlaylists } from "@/library/playlists";
 import { OverlayHost } from "@/overlay/OverlayHost";
 import { useTrackCurrentPath } from "@/library/routes";
@@ -45,6 +46,8 @@ export default function RootLayout() {
       startInitialScan();
       // Playlists don't wait for the scan: they live in the database already.
       primePlaylists();
+      // Link imports kept when Wave last closed go on filling their playlists.
+      resumePlaylistImports();
     }
   }, [granted]);
 

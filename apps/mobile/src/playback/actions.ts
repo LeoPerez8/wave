@@ -13,6 +13,7 @@ import {
   type QueueCommand,
   type QueueContext,
   type RepeatMode,
+  type ShuffleKind,
   type SleepTimerChoice,
   type YtSong,
   ytTrackId,
@@ -21,6 +22,7 @@ import * as Effect from "effect/Effect";
 
 import { songHasFile, type PlayableSongRow, type SongRow } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
+import { setShuffleKind } from "@/settings/shuffleKind";
 import { ytMusicEnabled } from "@/settings/ytMusic";
 import { downloadMissingSongs } from "@/ytmusic/YtDownloads";
 import type { YtMusic } from "@/ytmusic/YtMusic";
@@ -330,6 +332,15 @@ export const addToQueue = (songs: readonly SongRow[]): Promise<void> =>
 export const setShuffle = (on: boolean): Promise<void> => dispatch({ type: "setShuffle", on });
 
 export const toggleShuffle = (): Promise<void> => setShuffle(!queueState.get().shuffle);
+
+/**
+ * A kind of shuffle picked on the shuffle card: saved for every shuffle from
+ * now on, and shuffle turns on with Up Next shuffled that way.
+ */
+export const chooseShuffleKind = (kind: ShuffleKind): Promise<void> => {
+  setShuffleKind(kind);
+  return dispatch({ type: "reshuffle" });
+};
 
 export const setRepeat = (mode: RepeatMode): Promise<void> => dispatch({ type: "setRepeat", mode });
 
