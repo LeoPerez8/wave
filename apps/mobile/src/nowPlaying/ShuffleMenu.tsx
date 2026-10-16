@@ -18,7 +18,7 @@ const KINDS: readonly { readonly kind: ShuffleKind; readonly label: string }[] =
 ];
 
 /** What the shuffle button says while [kind] is chosen. */
-export const shuffleLabel = (kind: ShuffleKind): string =>
+const shuffleLabel = (kind: ShuffleKind): string =>
   kind === "smart" ? "Smart Shuffle" : "Shuffle";
 
 /** Every shuffle control follows the saved choice and opens the same card. */
@@ -65,7 +65,7 @@ function ShuffleMenu({ close }: { close: () => void }) {
 }
 
 /** Opens the shuffle card next to the shuffle button whose long press calls it. */
-export const openShuffleMenu = (): void => {
+const openShuffleMenu = (): void => {
   openOverlay({
     label: "Shuffle",
     anchor: pressedRect(),

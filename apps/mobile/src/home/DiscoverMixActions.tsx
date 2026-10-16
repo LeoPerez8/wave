@@ -21,15 +21,27 @@ import { followUp, openOverlay } from "@/overlay/overlay";
 import { showToast } from "@/overlay/toast";
 import { useSlideToChoose } from "@/overlay/useSlideToChoose";
 import { queueDiscoverSongs } from "@/playback/actions";
-import { useLibraryFinder, useLoadedInLibrary } from "@/ytmusic/libraryFinder";
+import {
+  currentLibraryFinder,
+  useLibraryFinder,
+  useLoadedInLibrary,
+} from "@/ytmusic/libraryFinder";
 import { runYtDownloadAction, useYtAlbumDownload } from "@/ytmusic/YtDownloads";
 
-/** Opens immediately from the cached songs, with the pressed cover highlighted by the overlay. */
+/** Prepares local Library matches before opening the cached mix's menu. */
 export const openDiscoverMixActions = (mix: DiscoverMix): void => {
-  openOverlay({
-    label: discoverMixCaption(mix).title,
-    anchor: pressedRect(),
-    render: (close) => <DiscoverMixActionsMenu mix={mix} close={close} />,
+  const anchor = pressedRect();
+  void followUp(async () => {
+    try {
+      await currentLibraryFinder();
+      openOverlay({
+        label: discoverMixCaption(mix).title,
+        anchor,
+        render: (close) => <DiscoverMixActionsMenu mix={mix} close={close} />,
+      });
+    } catch (error) {
+      await showError("Couldn't open the mix's actions", error);
+    }
   });
 };
 
