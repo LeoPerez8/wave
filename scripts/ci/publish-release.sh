@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Publishes "Wave <version>" with wave-<version>.apk. Versions ending in -ti are
 # prereleases; stable versions become Latest.
-# The Checks job has already decided the tag (release-tag.sh) and, for a hand-pushed tag,
-# made sure it is v<app version> (check-release-tag.sh).
+# The Checks job has already decided the tag (bump-version.sh on main and ti) and, for a
+# hand-pushed tag, made sure it is v<app version> (check-release-tag.sh).
 #   scripts/ci/publish-release.sh <apk path>
 # Run from a checkout of the repo. Env: GH_TOKEN, RELEASE_TAG (default GITHUB_REF_NAME),
-# GITHUB_REF_TYPE, RELEASE_SHA (the commit a branch push tags: main's version bump; default
+# GITHUB_REF_TYPE, RELEASE_SHA (the commit a branch push tags: its version bump; default
 # GITHUB_SHA), RELEASE_NOTES_FILE (optional: the patch notes).
 set -euo pipefail
 

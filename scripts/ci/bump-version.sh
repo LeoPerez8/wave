@@ -1,18 +1,25 @@
 #!/usr/bin/env bash
-# Pushes to main only: releases the next version (docs/spec.md, Releases). next-version.ts
-# picks it from the repo's v* tags and what changed since main's previous release. When the
-# push releases, this writes the version into apps/mobile/package.json, commits that alone as
-# "Release Wave <version>" and pushes it to main with the workflow's token, which doesn't start
-# another run. If main moved on meanwhile, it starts over from main's new tip.
+# Pushes to main and ti: releases the next version (docs/spec.md, Releases; ti's end in -ti).
+# next-version.ts picks it from the repo's v* tags, one counter for both branches, and what
+# changed since the branch's previous release. When the push releases, this writes the version
+# into apps/mobile/package.json, commits that alone as "Release Wave <version>" and pushes it to
+# the branch with the workflow's token, which doesn't start another run. If the branch moved on
+# meanwhile, it starts over from its new tip.
 # Writes `tag=v<version>` (empty when nothing is released) and `sha=<commit>` (the commit the
 # rest of the run checks, builds and tags) to $GITHUB_OUTPUT.
-#   scripts/ci/bump-version.sh
-# Run from a checkout of main (HEAD on its tip). Env: GITHUB_OUTPUT.
+#   scripts/ci/bump-version.sh main|ti
+# Run from a checkout of that branch (HEAD on its tip). Env: GITHUB_OUTPUT.
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
 cd "$here/../.."
-branch=main
+branch="${1:-}"
+channel=()
+case "$branch" in
+  main) ;;
+  ti) channel=(--ti) ;;
+  *) echo "::error::Only main and ti release a version, not \"$branch\"." >&2; exit 1 ;;
+esac
 package=apps/mobile/package.json
 out="${GITHUB_OUTPUT:-/dev/null}"
 tmp="$(mktemp -d)"
@@ -29,9 +36,16 @@ fetch "${unshallow[@]}"
 
 for attempt in 1 2 3 4 5; do
   git tag --list 'v*' > "$tmp/tags.txt"
-  # main's previous release: the newest stable version tag in its history.
-  since="$(git tag --merged HEAD --list 'v[0-9]*' --sort=-v:refname \
-    | { grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true; } | head -n 1)"
+  # The branch's previous release, as patch-notes.sh picks it: the newest version tag of its
+  # channel in its history. Stable ones for main; for ti the newest -ti one, or the newest
+  # stable one before ti's first.
+  newest() {
+    git tag --merged HEAD --list 'v[0-9]*' --sort=-v:refname \
+      | { grep -E "^v[0-9]+\.[0-9]+\.[0-9]+$1\$" || true; } | head -n 1
+  }
+  since=""
+  if [ "$branch" = ti ]; then since="$(newest -ti)"; fi
+  if [ -z "$since" ]; then since="$(newest "")"; fi
   changed=()
   if [ -n "$since" ]; then
     # Both names of a moved file, as in changes.sh.
@@ -41,12 +55,12 @@ for attempt in 1 2 3 4 5; do
     cat "$tmp/changed.txt"
     echo "::endgroup::"
   else
-    echo "No stable version tag in main's history: everything counts as changed."
+    echo "No version tag in $branch's history: everything counts as changed."
   fi
 
   current="$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).version)' "$package")"
   echo "The app's version is $current ($package)."
-  version="$(node "$here/next-version.ts" "$current" "$tmp/tags.txt" ${changed[@]+"${changed[@]}"} \
+  version="$(node "$here/next-version.ts" ${channel[@]+"${channel[@]}"} "$current" "$tmp/tags.txt" ${changed[@]+"${changed[@]}"} \
     | sed -n 's/^version=//p')"
 
   if [ -z "$version" ]; then
@@ -54,8 +68,8 @@ for attempt in 1 2 3 4 5; do
     exit 0
   fi
 
-  # A version set by hand, or one an earlier run committed but didn't release, is on main
-  # already: the release goes on this commit.
+  # A version set by hand, or one an earlier run committed but didn't release, is on the
+  # branch already: the release goes on this commit.
   if [ "$current" = "$version" ]; then
     echo "$package already says $version, so there's nothing to commit."
     { echo "tag=v$version"; echo "sha=$(git rev-parse HEAD)"; } | tee -a "$out"
