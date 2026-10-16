@@ -4,7 +4,7 @@ import { Text, View } from "react-native";
 import { Press } from "@/motion/Press";
 import { useThemeColor } from "@/theme/useThemeColor";
 
-import { grid } from "./grid";
+import { CELL, grid } from "./grid";
 import { Hairline } from "./Hairline";
 
 type Props = {
@@ -46,9 +46,11 @@ export function EntryRow({
       haptic="selection"
       highlighted={highlighted}
     >
-      <View className="flex-row items-center" style={{ height: grid.row }}>
+      {/* At least a row tall, taller where large text or a wrapping label needs it. */}
+      <View className="flex-row items-center" style={{ minHeight: grid.row }}>
         <Text
           className={`flex-1 font-sans text-title3 font-normal ${destructive ? "text-destructive" : "text-foreground"}`}
+          style={{ paddingVertical: CELL / 2 }}
         >
           {label}
         </Text>
