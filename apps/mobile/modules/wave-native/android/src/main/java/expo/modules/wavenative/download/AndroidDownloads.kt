@@ -63,7 +63,8 @@ class AndroidDownloads private constructor(private val context: Context) {
 
   /**
    * The M4A YouTube serves, saved as it is, then read through to its last sample for its length,
-   * which the journal's confirm decision checks against the song's (Core's `ytAudioMatches`).
+   * which the journal's confirm decision checks against the song's (Core's `ytAudioMatches`) and
+   * logs with the video YouTube answered for (Core's `ytDownloadReport`).
    */
   private fun fromYoutube(id: String, candidate: Map<String, Any?>, source: File, progress: (Long, Long, Long?) -> Unit): Map<String, Any?> {
     val videoId = candidate["videoId"] as? String ?: throw DurableFailure("failed")
@@ -75,7 +76,13 @@ class AndroidDownloads private constructor(private val context: Context) {
         isCancelled = cancelled,
       )
       val durationMs = AndroidM4aDuration.of(source, cancelled)
-      mapOf("partPath" to source.path, "bytes" to file.bytes, "mimeType" to file.mimeType, "itag" to file.itag.toLong(), "bitrate" to file.bitrate.toLong(), "durationMs" to durationMs)
+      // What YouTube answered with goes along, so the confirm decision logs it beside the lengths.
+      mapOf(
+        "partPath" to source.path, "bytes" to file.bytes, "mimeType" to file.mimeType, "itag" to file.itag.toLong(),
+        "bitrate" to file.bitrate.toLong(), "durationMs" to durationMs, "requested" to videoId,
+        "resolved" to file.source.videoId, "client" to file.source.client, "videoType" to file.source.videoType,
+        "announcedMs" to file.source.lengthMs,
+      )
     } catch (error: YtException) {
       source.delete()
       val reason = when (YtStreamResolver.failureOf(error)) {
