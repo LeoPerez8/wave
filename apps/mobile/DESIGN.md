@@ -309,6 +309,10 @@ A YT Music song's long-press menu is the track menu's card (quiet entries under 
 
 A square cover at the computed tile width, then 12dp, then the caption: artist as a catalog line, the title in Body 500 with two lines always reserved, then the furniture line in Footnote graphite ("1975 · 9 · 41 min", tabular). Covers without art show a field square with a thin music note in pewter.
 
+### Text Field
+
+Set like a row, flat on the ground or the card: no box, no fill, no radius. The input is Body ink (Title3 for a playlist's name) with the placeholder in graphite and a teal cursor, a row tall (56dp), over a hairline. The Search tab's field (`src/search/SearchField.tsx`) leads with the search glyph (24dp, graphite) in a 32dp cell, and keeps a 48dp cell at the end for the clear X (24dp, graphite, "Clear search"), reserved while the field is empty so the query never reflows; the X's target reaches 12dp into the margin, so both glyphs sit on the margins. Its hairline turns teal while it has the keyboard. The Design preview's Search shelf shows it empty, filled and focused (`wave://design-preview?state=search-field`).
+
 ### Catalog Line
 
 Small tracked caps (Label) in graphite by default, with teal and ember tones available. One line, truncating. Used as section heads and cover captions.
