@@ -1,12 +1,28 @@
+import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 
 // React Doctor 0.9.18 can return 0 after incomplete scans or baseline failures.
 // Trust its native finding comparison only when the report confirms completion.
 const [reportPath, mode = "full"] = process.argv.slice(2);
 const report = JSON.parse(readFileSync(reportPath, "utf8"));
+
+// React Doctor counts every changed file in the scanned directory, native code included, but
+// only scans a project when React source changed. Ask git whether any did; any doubt (no
+// directory, unknown base, git failing) counts as a source change, so the gate stays closed.
+const SOURCE = /\.(?:astro|[cm]?[jt]sx?|mts|cts|html?)$/i;
+function changesReactSource() {
+  if (!report.directory || !report.baseline?.baseRef) return true;
+  const git = (...args) =>
+    spawnSync("git", ["-C", report.directory, ...args], { encoding: "utf8" });
+  const changed = git("diff", "--name-only", "--relative", report.baseline.baseRef);
+  const untracked = git("ls-files", "--others", "--exclude-standard");
+  if (changed.status !== 0 || untracked.status !== 0) return true;
+  return `${changed.stdout}\n${untracked.stdout}`.split("\n").some((file) => SOURCE.test(file));
+}
+
 const emptyComparison =
   mode === "baseline" &&
-  report.diff?.changedFileCount === 0 &&
+  (report.diff?.changedFileCount === 0 || !changesReactSource()) &&
   report.projects?.length === 0 &&
   report.diagnostics?.length === 0 &&
   report.summary?.errorCount === 0 &&

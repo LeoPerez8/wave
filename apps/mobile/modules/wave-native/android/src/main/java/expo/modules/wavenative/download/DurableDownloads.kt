@@ -35,16 +35,26 @@ interface DurablePublication {
  * Every failure keeps what actually went wrong as the job's `cause` (an exception's class and
  * message, or what JS reported with its answer) and writes it to [log]. The reason stays one of
  * Core's failures; `storage` only for a real storage problem (`DownloadFiles.storageProblem`).
+ *
+ * Up to [slots] songs download at once, in the order they were asked for; the next one starts as
+ * one of them frees its slot. A song that waits (in a peer's queue, for a pause before trying
+ * again, or for JS's answer longer than [DECISION_WAIT_MS]) doesn't hold a slot, so it never
+ * holds up the songs behind it; at most twice [slots] are started at once all the same. Saving to
+ * the Library goes one song at a time: the publish and import decisions, and publication itself.
  */
 class DurableDownloads(
   private val journal: File,
   private val clock: () -> Long = System::currentTimeMillis,
   private val log: (String) -> Unit = {},
+  private val slots: Int = SLOTS,
 ) {
   private val jobs = LinkedHashMap<String, MutableMap<String, Any?>>()
   private var policy = mutableMapOf<String, Any?>("roots" to emptyList<String>(), "excluded" to emptyList<String>(), "revision" to 0L)
   @Volatile private var stopped = false
-  @Volatile private var activeTransfer: String? = null
+  /** The jobs a worker is on (under the lock), so no job's step ever runs twice at once. */
+  private val running = HashSet<String>()
+  /** The transfers under way, which [stopWork] cancels without the lock. */
+  private val transfers = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
   /**
    * What readers see, copied whenever the journal changes. The notification reads it on the main
    * thread while the worker holds the lock for slow work (cover fetch, tag writing, publication).
@@ -145,6 +155,8 @@ class DurableDownloads(
   @Synchronized fun claim(id: String): Map<String, Any?>? {
     val job = jobs[id] ?: return null
     if (job["phase"] !in DECISIONS || job["token"] != null || job["acknowledged"] == true || job["importFailure"] != null || job.number("retryAt") > clock()) return null
+    // Songs join the Library one at a time: the next is offered once the one before is imported.
+    if (job["phase"] == "awaitingPublication" && jobs.values.any { it !== job && saving(it) }) return null
     if (job.number("deadline") <= clock()) {
       // As in expire(): a published file is never a failed download, only one the Library didn't import.
       val cause = "Out of time before the ${DECISIONS[job["phase"]]} decision"
@@ -235,20 +247,45 @@ class DurableDownloads(
 
   fun hasWork(): Boolean = published.any(::pending)
 
-  /** How many songs are still to download, the current one included; the notification counts them. */
-  fun pendingCount(): Int = published.count(::pending)
+  /** The songs started and not yet in the Library, and those still waiting to start; the notification shows both. */
+  fun counts(): DownloadCounts {
+    val all = published
+    val left = all.count { it["phase"] == "queued" }
+    return DownloadCounts(running = all.count(::pending) - left, left = left)
+  }
 
-  /** The job the serial worker is on, else the next one waiting; what the notification shows. */
-  fun current(): Map<String, Any?>? = next(published)
+  /** The first song started, else the next one waiting; what the notification shows. */
+  fun current(): Map<String, Any?>? =
+    published.firstOrNull { it["phase"] != "queued" && pending(it) } ?: published.firstOrNull { it["phase"] == "queued" }
 
   private fun pending(job: Map<String, Any?>) = job["phase"] !in TERMINAL && !(job["phase"] == "completed" && (job["acknowledged"] == true || job["importFailure"] != null))
-  private fun next(): MutableMap<String, Any?>? = next(jobs.values)
-  private fun <M : Map<String, Any?>> next(all: Collection<M>): M? =
-    all.firstOrNull { it["phase"] != "queued" && pending(it) } ?: all.firstOrNull { it["phase"] == "queued" }
+
+  /** Between its publish decision and its import: what only one song does at a time. */
+  private fun saving(job: Map<String, Any?>) = pending(job) &&
+    (job["phase"] == "publishing" || job["phase"] == "completed" || (job["phase"] == "awaitingPublication" && job["token"] != null))
+  /** Started and not yet accepted and tagged: the part of a download that takes a slot. */
+  private fun started(job: Map<String, Any?>) = job["phase"] in ACQUIRING || job["phase"] == "tagging"
+  /** A started song that only waits for now, so it leaves its slot to the next one. */
+  private fun waits(job: Map<String, Any?>) = job["queuePosition"] != null || job.number("retryAt") > clock() ||
+    (job["phase"] in DECISIONS && clock() - job.number("phaseAt") >= DECISION_WAIT_MS)
+
+  /** Starts queued songs, in order, while a slot is free. A song's time starts when it does. */
+  private fun admit() {
+    var busy = jobs.values.count { started(it) && !waits(it) }
+    var startedCount = jobs.values.count(::started)
+    var changed = false
+    for (job in jobs.values) {
+      if (busy >= slots || startedCount >= slots * 2) break
+      if (job["phase"] != "queued") continue
+      job["deadline"] = clock() + JOB_MS; transition(job, "preparing")
+      busy++; startedCount++; changed = true
+    }
+    if (changed) persist()
+  }
 
   fun startWork() { stopped = false }
   /** Stops socket work immediately, without waiting for an IO operation's journal lock. */
-  fun stopWork(transport: DurableTransfer) { stopped = true; activeTransfer?.let(transport::cancel) }
+  fun stopWork(transport: DurableTransfer) { stopped = true; for (id in transfers) transport.cancel(id) }
 
   /**
    * Whether [id]'s transfer still has its turn: it is the job's current step and within its start,
@@ -298,7 +335,7 @@ class DurableDownloads(
   @Synchronized fun expire(transport: DurableTransfer, stopAll: Boolean = false, stopCause: String? = null) {
     for (job in jobs.values) {
       if (job["phase"] in TERMINAL || job["acknowledged"] == true || job["importFailure"] != null) continue
-      // A queued job's time starts when the serial worker reaches it.
+      // A queued job's time starts when it gets a slot.
       if (job["phase"] == "queued") continue
       if (stopAll || job.number("deadline") <= clock()) {
         val cause = if (stopAll) stopCause ?: "Android stopped the download service" else "Out of time while ${job["phase"]}"
@@ -322,17 +359,27 @@ class DurableDownloads(
     persist()
   }
 
-  /** One serial native operation. Network IO runs outside the journal lock. */
+  /** Expires what's out of time, then runs the next native step, if there is one, on this thread. */
   fun advance(transport: DurableTransfer, publication: DurablePublication) {
     if (stopped) return
     expire(transport)
-    val work = synchronized(this) {
-      val job = next() ?: return
-      if (job.number("retryAt") > clock()) return
-      if (job["phase"] == "queued") { job["deadline"] = clock() + JOB_MS; transition(job, "preparing") }
+    nextStep(transport, publication)?.invoke()
+  }
+
+  /**
+   * Starts queued songs while a slot is free, then hands out the next native step (a transfer,
+   * tagging or publication) of a song no worker is on, for a worker thread to run; null when
+   * nothing can go on now. Network IO runs outside the journal lock.
+   */
+  @Synchronized fun nextStep(transport: DurableTransfer, publication: DurablePublication): (() -> Unit)? {
+    if (stopped) return null
+    admit()
+    for (job in jobs.values) {
+      val id = job["id"] as String
+      if (id in running || job.number("retryAt") > clock()) continue
       if (job["phase"] == "prepared") {
-        if (job.number("attempts") >= MAX_ATTEMPTS || job.number("candidateIndex") >= job.maps("candidates").size) { fail(job, exhausted(job)); persist(); return }
-        if (job.number("resumeAttemptDeadline") in 1..clock() || job.number("resumeQueueDeadline") in 1..clock()) { nextCandidate(job); persist(); return }
+        if (job.number("attempts") >= MAX_ATTEMPTS || job.number("candidateIndex") >= job.maps("candidates").size) { fail(job, exhausted(job)); persist(); continue }
+        if (job.number("resumeAttemptDeadline") in 1..clock() || job.number("resumeQueueDeadline") in 1..clock()) { nextCandidate(job); persist(); continue }
         job["attempts"] = job.number("attempts") + 1
         job["sourcePath"] = DownloadFiles.partFileFor(File(job["targetPath"] as String), "${job["id"]}-${job["generation"]}-${job["attempts"]}").path
         job["peer"] = job.maps("candidates")[job.number("candidateIndex").toInt()]
@@ -340,16 +387,25 @@ class DurableDownloads(
         job["queuePosition"] = null; job["queueDeadline"] = job.remove("resumeQueueDeadline") ?: minOf(clock() + QUEUE_MS, job.number("deadline"))
         job["attemptDeadline"] = job.remove("resumeAttemptDeadline") ?: minOf(clock() + ATTEMPT_MS, job.number("deadline"))
         transition(job, "transferring")
+        persist()
       }
-      persist(); job.toMap()
+      if (job["phase"] !in WORK) continue
+      val work = job.toMap()
+      running += id
+      // A step run after the work stopped only lets go of its job; the next start takes it up again.
+      return { try { if (!stopped) run(work, transport, publication) } finally { synchronized(this) { running -= id } } }
     }
+    return null
+  }
+
+  private fun run(work: Map<String, Any?>, transport: DurableTransfer, publication: DurablePublication) {
     val id = work["id"] as String
     val generation = work.number("generation")
     try {
       when (work["phase"]) {
         "transferring" -> {
           val source = File(work["sourcePath"] as String)
-          activeTransfer = id
+          transfers += id
           var lastProgressAt = 0L
           val durationMs = work.map("song").number("durationMs").takeIf { it > 0 } ?: work.map("peer").number("durationMs")
           val audio = transport.receive(id, work.map("peer"), source, durationMs) { received, total, queue ->
@@ -368,11 +424,16 @@ class DurableDownloads(
             job["audio"] = clean(audio); job["receiptId"] = UUID.randomUUID().toString(); transition(job, "sourceReady"); persist()
           }
         }
-        "tagging" -> synchronized(this) {
-          val job = held(id, generation, "tagging") ?: return
-          publication.tag(File(work["sourcePath"] as String), work.map("tags"))
-          if (stopped) return
-          transition(job, "awaitingPublication"); persist()
+        "tagging" -> {
+          // The cover comes over the network: other songs' steps and decisions go on meanwhile.
+          val source = File(work["sourcePath"] as String)
+          publication.tag(source, work.map("tags"))
+          synchronized(this) {
+            // Cancelled while it was tagged: the file it tagged goes with it.
+            val job = held(id, generation, "tagging") ?: run { source.delete(); return }
+            if (stopped) return
+            transition(job, "awaitingPublication"); persist()
+          }
         }
         "publishing" -> synchronized(this) {
           val job = held(id, generation, "publishing") ?: return
@@ -413,7 +474,7 @@ class DurableDownloads(
       }
     } catch (error: Exception) {
       synchronized(this) {
-        val job = held(id, generation, work["phase"] as String) ?: return
+        val job = held(id, generation, work["phase"] as String) ?: run { if (work["phase"] == "tagging") File(work["sourcePath"] as String).delete(); return }
         val cause = describe(error)
         if (work["phase"] == "publishing" && job["finalPath"] != null && File(job["finalPath"] as String).isFile && job.number("publicationAttempts") < 3) {
           job["publicationAttempts"] = job.number("publicationAttempts") + 1
@@ -433,11 +494,11 @@ class DurableDownloads(
         }
         persist()
       }
-    } finally { if (activeTransfer == id) activeTransfer = null }
+    } finally { transfers -= id }
   }
 
   private fun held(id: String, generation: Long, phase: String): MutableMap<String, Any?>? = jobs[id]?.takeIf { it.number("generation") == generation && it["phase"] == phase }
-  private fun transition(job: MutableMap<String, Any?>, phase: String) { job["phase"] = phase; job.remove("token"); job["decisionAttempts"] = 0L; job.remove("retryAt") }
+  private fun transition(job: MutableMap<String, Any?>, phase: String) { job["phase"] = phase; job["phaseAt"] = clock(); job.remove("token"); job["decisionAttempts"] = 0L; job.remove("retryAt") }
   /** The next peer, or for YouTube its one stream again; failing once there's none left to try. */
   private fun nextCandidate(job: MutableMap<String, Any?>) {
     job.remove("resumeAttemptDeadline"); job.remove("resumeQueueDeadline")
@@ -550,6 +611,10 @@ class DurableDownloads(
   }
 
   companion object {
+    /** How many songs download at once (measured for #239). */
+    const val SLOTS = 3
+    /** How long a started song may wait for JS's answer before it leaves its slot to the next. */
+    const val DECISION_WAIT_MS = 30_000L
     const val LEASE_MS = 45_000L
     /** A job's whole budget from leaving the queue: search, peers' queues, transfers and saving. */
     const val JOB_MS = 20 * 60_000L
@@ -574,10 +639,15 @@ class DurableDownloads(
     /** Until the audio is accepted; afterwards a failure is the save's, which YouTube would share. */
     private val ACQUIRING = setOf("preparing", "prepared", "transferring", "sourceReady")
     private val DECISIONS = mapOf("preparing" to "prepare", "sourceReady" to "confirm", "awaitingPublication" to "publish", "completed" to "import")
+    /** The phases with native work: a worker thread runs them. */
+    private val WORK = setOf("transferring", "tagging", "publishing")
   }
 }
 
 class DurableFailure(val reason: String, cause: Throwable? = null) : java.io.IOException(reason, cause)
+
+/** What the download notification counts: songs on their way ([running]) and songs not started yet ([left]). */
+data class DownloadCounts(val running: Int, val left: Int)
 
 /**
  * What went wrong, as `<exception class>: <message>`, then what caused it (`<-`). A

@@ -168,7 +168,8 @@ class DurableDownloadsTest {
     val folder = Files.createTempDirectory("wave-serial").toFile()
     try {
       var now = 1_000L
-      val owner = DurableDownloads(File(folder, "jobs"), clock = { now })
+      // One slot, so the second song waits for it.
+      val owner = DurableDownloads(File(folder, "jobs"), clock = { now }, slots = 1)
       owner.enqueue(song, null)
       owner.enqueue(song + ("videoId" to "later"), null)
       now += DurableDownloads.JOB_MS + 1
@@ -771,9 +772,9 @@ class DurableDownloadsTest {
     try {
       val owner = DurableDownloads(File(folder, "jobs"))
       for (id in listOf("one", "two", "three")) owner.enqueue(mapOf("videoId" to id, "title" to id), null)
-      assertEquals(3, owner.pendingCount())
+      assertEquals(DownloadCounts(running = 0, left = 3), owner.counts())
       owner.cancel("two", NoTransfer)
-      assertEquals(2, owner.pendingCount())
+      assertEquals(DownloadCounts(running = 0, left = 2), owner.counts())
     } finally { folder.deleteRecursively() }
   }
 

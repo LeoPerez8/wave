@@ -34,7 +34,9 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.CancellationException
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 
@@ -45,6 +47,7 @@ class AndroidDownloads private constructor(private val context: Context) {
   private val soulseek = AndroidSoulseek.get(context)
   private val main = Handler(Looper.getMainLooper())
   private var worker: ScheduledExecutorService? = null
+  private var steps: ExecutorService? = null
   private var deadlines: ScheduledExecutorService? = null
   private val listeners = CopyOnWriteArrayList<() -> Unit>()
   private val ytStreams by lazy { AndroidYtAudioStreams(context) }
@@ -165,26 +168,39 @@ class AndroidDownloads private constructor(private val context: Context) {
     jobs.startWork()
     main.post { JsRuntime.ensureStarted(context, OWNER) }
     deadlines = Executors.newSingleThreadScheduledExecutor().also { executor ->
-      // Also refreshes the notification while the worker is blocked in a transfer.
+      // Also refreshes the notification and the rows while transfers go on.
       executor.scheduleWithFixedDelay({ runCatching { jobs.expire(transport); changed(); main.post(refresh) } }, 1, 1, TimeUnit.SECONDS)
     }
+    // Each song's transfer, tagging or publication runs on a thread of its own, several songs at once.
+    val pool = Executors.newCachedThreadPool().also { steps = it }
     worker = Executors.newSingleThreadScheduledExecutor().also { executor ->
       executor.scheduleWithFixedDelay({
-        // An unexpected failure (a full disk can't even write the journal) ends the started jobs, never the queue.
-        runCatching { jobs.advance(transport, publication) }.onFailure { error ->
-          Log.w(TAG, "The download worker failed", error)
-          runCatching { jobs.expire(transport, true, stopCause = describe(error)) }
-        }
+        runCatching {
+          jobs.expire(transport)
+          while (true) {
+            val step = jobs.nextStep(transport, publication) ?: break
+            // Stopped meanwhile: the step only lets go of its job.
+            try { pool.execute { runCatching(step).onFailure(::workerFailed); changed() } }
+            catch (_: RejectedExecutionException) { step() }
+          }
+        }.onFailure(::workerFailed)
         changed()
         main.post { refresh(); if (!jobs.hasWork()) onIdle() }
       }, 0, 500, TimeUnit.MILLISECONDS)
     }
   }
 
+  /** An unexpected failure (a full disk can't even write the journal) ends the started jobs, never the queue. */
+  private fun workerFailed(error: Throwable) {
+    Log.w(TAG, "The download worker failed", error)
+    runCatching { jobs.expire(transport, true, stopCause = describe(error)) }
+  }
+
   /** Android's time limit stops actual socket work before removing foreground protection. */
   @Synchronized fun stop(timedOut: Boolean = false) {
     jobs.stopWork(transport)
     worker?.shutdownNow(); worker = null
+    steps?.shutdownNow(); steps = null
     deadlines?.shutdownNow(); deadlines = null
     if (timedOut) Executors.newSingleThreadExecutor().also { executor ->
       executor.execute { try { jobs.expire(transport, true); changed() } finally { executor.shutdown() } }
