@@ -11,12 +11,7 @@ import type { YtSession } from "./ytAccount.ts";
 
 /** Each Settings page, by id. */
 export type SettingsPage =
-  | "library"
-  | "appearance"
-  | "lyricsAndTags"
-  | "downloads"
-  | "accounts"
-  | "developer";
+  "library" | "appearance" | "lyricsAndTags" | "downloads" | "accounts" | "developer";
 
 export interface SettingsPageEntry {
   readonly page: SettingsPage;
