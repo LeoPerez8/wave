@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # Pushes to main only: releases the next version (docs/spec.md, Releases). next-version.ts
-# picks it from the repo's v* tags and what changed since main's previous release. When the
-# push releases, this writes the version into apps/mobile/package.json, commits that alone as
+# picks it from the repo's v* tags, what changed since main's previous release and the PRs
+# merged since then (merged-prs.sh; a feat/ one makes it a minor bump). When the push releases, this writes the version into apps/mobile/package.json, commits that alone as
 # "Release Wave <version>" and pushes it to main with the workflow's token, which doesn't start
 # another run. If main moved on meanwhile, it starts over from main's new tip.
 # Writes `tag=v<version>` (empty when nothing is released) and `sha=<commit>` (the commit the
 # rest of the run checks, builds and tags) to $GITHUB_OUTPUT.
 #   scripts/ci/bump-version.sh
-# Run from a checkout of main (HEAD on its tip). Env: GITHUB_OUTPUT.
+# Run from a checkout of main (HEAD on its tip). Env: GITHUB_OUTPUT, GH_TOKEN,
+# GITHUB_REPOSITORY.
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -32,11 +33,14 @@ for attempt in 1 2 3 4 5; do
   # main's previous release: the newest stable version tag in its history.
   since="$(git tag --merged HEAD --list 'v[0-9]*' --sort=-v:refname \
     | { grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true; } | head -n 1)"
-  changed=()
+  inputs=()
   if [ -n "$since" ]; then
     # Both names of a moved file, as in changes.sh.
     git diff --name-only --no-renames "$since" HEAD > "$tmp/changed.txt"
-    changed=("$tmp/changed.txt")
+    # The PRs merged since then that the patch notes list decide the bump's size.
+    git rev-list "$since..HEAD" > "$tmp/commits.txt"
+    "$here/merged-prs.sh" "$since" HEAD > "$tmp/prs.jsonl"
+    inputs=("$tmp/changed.txt" "$tmp/commits.txt" "$tmp/prs.jsonl")
     echo "::group::Changed since $since"
     cat "$tmp/changed.txt"
     echo "::endgroup::"
@@ -46,7 +50,7 @@ for attempt in 1 2 3 4 5; do
 
   current="$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).version)' "$package")"
   echo "The app's version is $current ($package)."
-  version="$(node "$here/next-version.ts" "$current" "$tmp/tags.txt" ${changed[@]+"${changed[@]}"} \
+  version="$(node "$here/next-version.ts" "$current" "$tmp/tags.txt" ${inputs[@]+"${inputs[@]}"} \
     | sed -n 's/^version=//p')"
 
   if [ -z "$version" ]; then
