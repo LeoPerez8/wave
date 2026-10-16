@@ -6,9 +6,13 @@
  */
 import {
   YT_DOWNLOADS_NONE,
+  downloadFailureAnswer,
   downloadFailurePlan,
   downloadSource,
+  downloadStorageFull,
+  failedDownloads,
   isWithin,
+  libraryFinder,
   missingSongJob,
   missingSongJobId,
   missingSongLookup,
@@ -17,6 +21,7 @@ import {
   missingSongTrackId,
   missingSongVideo,
   missingSongsDownload,
+  settledDownloadFailures,
   soulseekCandidates,
   soulseekQuery,
   soulseekReceivedMatches,
@@ -33,6 +38,7 @@ import {
   ytSongsDownload,
   type DownloadFailurePlan,
   type DownloadSource,
+  type FailedDownload,
   type MissingSongJob,
   type MissingSongVideo,
   type MissingSongsDownload,
@@ -50,6 +56,7 @@ import {
   type YtDownloads,
   type YtSong,
 } from "@wave/core";
+import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
@@ -58,7 +65,7 @@ import { useMemo, useSyncExternalStore } from "react";
 import { askForNotifications } from "@/lib/askForNotifications";
 import { libraryEdited, toIndexedArtwork, toIndexedTrack } from "@/library/LibraryScan";
 import { LibraryStore } from "@/library/LibraryStore";
-import { useMissingSongs } from "@/library/hooks";
+import { useLoadedMissingSongs, useMissingSongs } from "@/library/hooks";
 import { refreshDownloadPolicy } from "@/library/downloadPolicy";
 import { fillInLyricsAndGenre, lookUpLyricsAndGenre } from "@/library/lyricsAndGenre";
 import { appRuntime } from "@/library/runtime";
@@ -80,6 +87,7 @@ import {
 import { ytMusicEnabled } from "@/settings/ytMusic";
 
 import { readYtAlbum } from "./albumPages";
+import { useLoadedLibraryFinder } from "./libraryFinder";
 import { YtMusic, type YtMusicError } from "./YtMusic";
 
 export class DownloadFailed extends Data.TaggedError("DownloadFailed")<{
@@ -109,6 +117,9 @@ const failure = (cause: unknown): DownloadFailed => {
     cause,
   });
 };
+/** The Library's database failing a download: storage only when the phone is full (Core's `downloadStorageFull`). */
+const libraryFailure = (cause: unknown): DownloadFailed =>
+  new DownloadFailed({ reason: downloadStorageFull(cause) ? "storage" : "failed", cause });
 const native = <A>(call: () => Promise<A>): Effect.Effect<A, DownloadFailed> =>
   Effect.tryPromise({ try: call, catch: failure });
 const optional = <A>(effect: Effect.Effect<A, unknown>): Effect.Effect<A | null> =>
@@ -216,7 +227,7 @@ export const prepareDownload = (song: NativeYtSong) =>
     const [roots, excludedFolders] = yield* Effect.all([
       store.listRoots,
       store.excludedFolders,
-    ]).pipe(Effect.mapError((cause) => new DownloadFailed({ reason: "storage", cause })));
+    ]).pipe(Effect.mapError(libraryFailure));
     if (roots.length === 0) return yield* new DownloadFailed({ reason: "noFolder" });
     const ytMusicOn = ytMusicEnabled();
     const source = currentSource(yield* native(() => WaveSoulseek.session()), ytMusicOn);
@@ -348,7 +359,7 @@ const prepareMissingSong = (trackId: number) =>
       store.listRoots,
       store.excludedFolders,
       store.missingSongs([trackId]),
-    ]).pipe(Effect.mapError((cause) => new DownloadFailed({ reason: "storage", cause })));
+    ]).pipe(Effect.mapError(libraryFailure));
     const track = tracks[0];
     // Gone, or filled in since (a scan found its file): there's nothing left to download.
     if (track === undefined) return yield* new DownloadFailed({ reason: "failed" });
@@ -414,7 +425,7 @@ export const downloadPathIncluded = (path: string) =>
   Effect.gen(function* () {
     const store = yield* LibraryStore;
     const [roots, excluded] = yield* Effect.all([store.listRoots, store.excludedFolders]).pipe(
-      Effect.mapError((cause) => new DownloadFailed({ reason: "storage", cause })),
+      Effect.mapError(libraryFailure),
     );
     return (
       roots.some((root) => isWithin(path, root.path)) &&
@@ -442,7 +453,7 @@ export const importDownload = (
         [{ ...toIndexedTrack(saved.track), videoId, ...(fills === null ? {} : { fills }) }],
         saved.artwork === null ? [] : [toIndexedArtwork(saved.artwork)],
       )
-      .pipe(Effect.mapError((cause) => new DownloadFailed({ reason: "storage", cause })));
+      .pipe(Effect.mapError(libraryFailure));
     libraryEdited();
     return saved.path;
   });
@@ -509,12 +520,32 @@ const answer = (claim: NativeDownloadDecision) =>
       }
     }
   }).pipe(
-    Effect.catch((error) =>
-      Effect.succeed({ failure: error instanceof DownloadFailed ? error.reason : "storage" }),
-    ),
+    Effect.catchCause((cause) => {
+      // An interrupted answer isn't one: the lease expires and the journal asks again.
+      if (Cause.hasInterruptsOnly(cause)) return Effect.failCause(cause);
+      // Anything unexpected (a defect too) fails as itself, never as storage, and says what it was.
+      const error = Cause.squash(cause);
+      const decided = error instanceof DownloadFailed;
+      if (!decided) console.warn(`[wave] the ${claim.decision} decision failed`, error);
+      return Effect.succeed(
+        downloadFailureAnswer(
+          claim.decision,
+          decided ? error.reason : "failed",
+          decided ? error.cause : error,
+          {
+            // A job's first prepare holds no plan yet: it gets its source's, to try again by.
+            failurePlan:
+              claim.failurePlan ??
+              downloadFailurePlan(claim.source ?? "soulseek", { ytMusicOn: ytMusicEnabled() }),
+            fallback: claim.fallback,
+            tags: claim.tags,
+          },
+        ),
+      );
+    }),
   );
 
-/** A download as Find Lyrics and Genre sees it: what its file says once tagged and saved. */
+/** A download as Fix Song sees it: what its file says once tagged and saved. */
 const downloadedSong = ({ path, track }: NativeSavedDownload) => {
   // The track number and year as the index reads them ("3/12" is 3).
   const { trackNumber, year } = toIndexedTrack(track);
@@ -609,11 +640,49 @@ const refreshQuietly = (): void => {
   void refresh().catch(() => undefined);
 };
 
+/** A failure Settings › Downloads lists until it settles: the download's, or the import's. */
+const hasFailed = (job: NativeDownloadJob): boolean =>
+  job.phase === "failed" || job.importFailure !== undefined;
+
+let requests = Promise.resolve();
+
+let forgotSettled = false;
+/**
+ * Has the journal forget the failures that settled another way since (Core's
+ * `settledDownloadFailures`): Settings › Downloads no longer lists them, and the
+ * journal would otherwise keep them, and rewrite them on every change, for good.
+ * Once a launch, and only while some download has failed.
+ */
+const forgetSettledFailures = (): void => {
+  if (forgotSettled) return;
+  forgotSettled = true;
+  requests = requests
+    .then(async () => {
+      const jobs = await WaveSoulseek.jobsSnapshot();
+      if (!jobs.some(hasFailed)) return;
+      const { songs, missing } = await appRuntime.runPromise(
+        Effect.gen(function* () {
+          const store = yield* LibraryStore;
+          return { songs: yield* store.listSongs, missing: yield* store.missingSongs() };
+        }),
+      );
+      const find = libraryFinder(songs);
+      const settled = settledDownloadFailures(jobs, {
+        inLibrary: (song) => find(song) !== null,
+        missingTrackIds: new Set(missing.map((track) => track.id)),
+      });
+      for (const videoId of settled) await WaveSoulseek.cancelJob(videoId);
+      if (settled.length > 0) await refresh();
+    })
+    .catch(() => undefined);
+};
+
 let attached = false;
 /**
  * Follows the native journal. The app and the headless task (started by the
  * download service after process recreation) share this; the app also asks
- * the service to resume work the journal still holds.
+ * the service to resume work the journal still holds, and has it forget the
+ * failures that settled since.
  */
 export const startDownloads = (resume = false): void => {
   if (!attached) {
@@ -622,10 +691,12 @@ export const startDownloads = (resume = false): void => {
   }
   // Replays anything that changed before the listener was attached, e.g. while JS was starting.
   refreshQuietly();
-  if (resume) void WaveSoulseek.resumeJobs().catch(() => undefined);
+  if (resume) {
+    void WaveSoulseek.resumeJobs().catch(() => undefined);
+    forgetSettledFailures();
+  }
 };
 
-let requests = Promise.resolve();
 export const downloadYtSong = (song: NativeYtSong): void => {
   askForNotifications();
   startDownloads();
@@ -773,14 +844,24 @@ const journalSong = (job: MissingSongJob): NativeYtSong => ({
   albumId: null,
 });
 
+/** Asks the journal for missing song [job], from the source Core picks for it now. */
+const enqueueMissingSong = (
+  job: MissingSongJob,
+  session: SoulseekSession,
+  ytMusicOn: boolean,
+): Promise<string> =>
+  WaveSoulseek.enqueueJob(
+    journalSong(job),
+    soulseekRecording(job),
+    null,
+    currentSource(session, ytMusicOn, job.missing.videoId !== null),
+  );
+
 /** Asks the journal for missing songs [jobs], in order, each from the source Core picks for it. */
 const enqueueMissingSongs = async (jobs: readonly MissingSongJob[]): Promise<void> => {
   const session = await sessionNow();
   const ytMusicOn = ytMusicEnabled();
-  for (const job of jobs) {
-    const source = currentSource(session, ytMusicOn, job.missing.videoId !== null);
-    await WaveSoulseek.enqueueJob(journalSong(job), soulseekRecording(job), null, source);
-  }
+  for (const job of jobs) await enqueueMissingSong(job, session, ytMusicOn);
 };
 
 /** The missing songs as they are now ([trackIds] only, when given), as download jobs. */
@@ -887,4 +968,82 @@ export const useMissingSongsDownload = (): MissingSongsDownload<MissingSongJob> 
   const jobs = useSyncExternalStore(journal.subscribe, journal.get);
   const songs = useMemo(() => missing.map(missingSongJob), [missing]);
   return useMemo(() => missingSongsDownload(songs, jobs), [songs, jobs]);
+};
+
+/**
+ * Settings › Downloads' failed songs (Core's `failedDownloads`), following the journal, the
+ * Library (a song downloaded some other way leaves the list) and its missing songs (one filled
+ * in or taken out leaves too).
+ */
+export const useFailedDownloads = (): readonly FailedDownload<NativeYtSong>[] => {
+  const jobs = useSyncExternalStore(journal.subscribe, journal.get);
+  // The Library is read for the finder only while some download has failed.
+  const find = useLoadedLibraryFinder(jobs.some(hasFailed));
+  const missing = useLoadedMissingSongs();
+  const missingTrackIds = useMemo(
+    () => (missing === null ? null : new Set(missing.map((track) => track.id))),
+    [missing],
+  );
+  return useMemo(
+    () =>
+      failedDownloads(jobs, {
+        // Nothing has settled until the Library is read.
+        inLibrary: (song) => find !== null && find(song) !== null,
+        missingTrackIds,
+      }),
+    [jobs, find, missingTrackIds],
+  );
+};
+
+/**
+ * Settings › Downloads' Retry and Retry All: asks again for each of [failed], in order, from
+ * the source Core picks now; a missing song only while it's still missing.
+ */
+export const retryFailedDownloads = (failed: readonly FailedDownload<NativeYtSong>[]): void => {
+  askForNotifications();
+  startDownloads();
+  requests = requests
+    .then(async () => {
+      const trackIds = failed.flatMap(({ retry }) =>
+        retry.kind === "missingSong" ? [retry.trackId] : [],
+      );
+      const missing = new Map(
+        (trackIds.length === 0 ? [] : await missingSongJobs(trackIds)).map((job) => [
+          job.missing.trackId,
+          job,
+        ]),
+      );
+      const session = await sessionNow();
+      const ytMusicOn = ytMusicEnabled();
+      for (const { retry } of failed) {
+        if (retry.kind === "song") {
+          const { song } = retry;
+          await WaveSoulseek.enqueueJob(
+            song,
+            soulseekRecording(song),
+            null,
+            currentSource(session, ytMusicOn),
+          );
+        } else {
+          const job = missing.get(retry.trackId);
+          if (job !== undefined) await enqueueMissingSong(job, session, ytMusicOn);
+        }
+      }
+      await refresh();
+    })
+    .catch(() => undefined);
+};
+
+/**
+ * Settings › Downloads' Clear All: [failed] leave the list and the journal. Every video asked
+ * for on a job lets go of it, so a shared job ends too.
+ */
+export const clearFailedDownloads = (failed: readonly FailedDownload<NativeYtSong>[]): void => {
+  requests = requests
+    .then(async () => {
+      for (const { clear } of failed)
+        for (const videoId of clear) await WaveSoulseek.cancelJob(videoId);
+      await refresh();
+    })
+    .catch(() => undefined);
 };

@@ -6,6 +6,7 @@ import {
   editHomeArrangement,
   hiddenHomeSections,
   homeItems,
+  homeSectionNote,
   homeSectionTitle,
   parseHomeArrangement,
   storedHomeArrangement,
@@ -19,6 +20,7 @@ const TODAYS_HOME = [
   "most-played",
   "most-played-albums",
   "most-played-artists",
+  "discover-mixes",
   "favorites",
   "stats",
   "listening-overview",
@@ -36,6 +38,7 @@ describe("Home's section catalogue", () => {
         ["most-played", "Most played"],
         ["most-played-albums", "Most played albums"],
         ["most-played-artists", "Most played artists"],
+        ["discover-mixes", "Discover mixes"],
         ["favorites", "Favorites"],
         ["stats", "Stats"],
         ["listening-overview", "Listening overview"],
@@ -85,12 +88,37 @@ describe("Home's arrangement", () => {
     // Saved by a Wave whose catalogue had no Listening overview.
     const stored = JSON.stringify({
       shown: ["favorites", "most-played", "recently-added"],
-      hidden: ["recently-played", "most-played-albums", "most-played-artists", "stats"],
+      hidden: [
+        "recently-played",
+        "most-played-albums",
+        "most-played-artists",
+        "discover-mixes",
+        "stats",
+      ],
     });
     assert.deepEqual(parseHomeArrangement(stored), [
       "favorites",
       "listening-overview",
       "most-played",
+      "recently-added",
+    ]);
+  });
+
+  test("Discover mixes joins a Home arranged before it, after Most played artists", () => {
+    const stored = JSON.stringify({
+      shown: ["favorites", "most-played-artists", "recently-added"],
+      hidden: [
+        "recently-played",
+        "most-played",
+        "most-played-albums",
+        "stats",
+        "listening-overview",
+      ],
+    });
+    assert.deepEqual(parseHomeArrangement(stored), [
+      "favorites",
+      "most-played-artists",
+      "discover-mixes",
       "recently-added",
     ]);
   });
@@ -122,43 +150,69 @@ describe("Home's arrangement", () => {
 describe("what Home lists", () => {
   test("once something is played, Home lists its sections as arranged", () => {
     assert.deepEqual(
-      homeItems(["favorites", "most-played", "stats"], { nothingPlayed: false }),
+      homeItems(["favorites", "most-played", "stats"], { nothingPlayed: false, ytMusic: true }),
       sections("favorites", "most-played", "stats"),
     );
   });
 
   test("with nothing played, the line asking for a play comes before the first section plays fill", () => {
-    assert.deepEqual(homeItems(TODAYS_HOME as HomeArrangement, { nothingPlayed: true }), [
-      { section: "recently-added" },
-      "play-hint",
-      ...sections(
-        "recently-played",
-        "most-played",
-        "most-played-albums",
-        "most-played-artists",
-        "favorites",
-        "stats",
-        "listening-overview",
-      ),
-    ]);
-    assert.deepEqual(homeItems(["most-played-artists", "favorites"], { nothingPlayed: true }), [
-      "play-hint",
-      ...sections("most-played-artists", "favorites"),
-    ]);
+    assert.deepEqual(
+      homeItems(TODAYS_HOME as HomeArrangement, { nothingPlayed: true, ytMusic: true }),
+      [
+        { section: "recently-added" },
+        "play-hint",
+        ...sections(
+          "recently-played",
+          "most-played",
+          "most-played-albums",
+          "most-played-artists",
+          "discover-mixes",
+          "favorites",
+          "stats",
+          "listening-overview",
+        ),
+      ],
+    );
+    assert.deepEqual(
+      homeItems(["most-played-artists", "favorites"], { nothingPlayed: true, ytMusic: true }),
+      ["play-hint", ...sections("most-played-artists", "favorites")],
+    );
   });
 
   test("with nothing played and no section plays fill, there's no line asking for a play", () => {
     assert.deepEqual(
       homeItems(["favorites", "recently-added", "stats", "listening-overview"], {
         nothingPlayed: true,
+        ytMusic: true,
       }),
       sections("favorites", "recently-added", "stats", "listening-overview"),
     );
   });
 
+  test("with YT Music off, sections that need it aren't listed", () => {
+    assert.deepEqual(
+      homeItems(["favorites", "discover-mixes", "stats"], { nothingPlayed: false, ytMusic: false }),
+      sections("favorites", "stats"),
+    );
+    assert.deepEqual(
+      homeItems(["discover-mixes", "favorites", "most-played"], {
+        nothingPlayed: true,
+        ytMusic: false,
+      }),
+      [{ section: "favorites" }, "play-hint", { section: "most-played" }],
+    );
+  });
+
+  test("with YT Music on and nothing played, Discover mixes waits for a play like the others", () => {
+    assert.deepEqual(
+      homeItems(["favorites", "discover-mixes"], { nothingPlayed: true, ytMusic: true }),
+      [{ section: "favorites" }, "play-hint", { section: "discover-mixes" }],
+    );
+  });
+
   test("with every section removed, Home says how to add them back", () => {
-    assert.deepEqual(homeItems([], { nothingPlayed: true }), ["no-sections"]);
-    assert.deepEqual(homeItems([], { nothingPlayed: false }), ["no-sections"]);
+    assert.deepEqual(homeItems([], { nothingPlayed: true, ytMusic: true }), ["no-sections"]);
+    assert.deepEqual(homeItems([], { nothingPlayed: false, ytMusic: true }), ["no-sections"]);
   });
 });
 
@@ -168,9 +222,16 @@ describe("Home's editor", () => {
       "recently-played",
       "most-played-albums",
       "most-played-artists",
+      "discover-mixes",
       "listening-overview",
     ]);
     assert.deepEqual(hiddenHomeSections(TODAYS_HOME as HomeArrangement), []);
+  });
+
+  test("says which sections show only with YT Music on, while it's off", () => {
+    assert.equal(homeSectionNote("discover-mixes", { ytMusic: false }), "Needs YT Music");
+    assert.equal(homeSectionNote("discover-mixes", { ytMusic: true }), null);
+    assert.equal(homeSectionNote("favorites", { ytMusic: false }), null);
   });
 
   test("removing a section takes it off Home, the rest keeping their order", () => {

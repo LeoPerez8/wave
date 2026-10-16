@@ -9,7 +9,7 @@ import {
 } from "@tabler/icons-react-native";
 import { LIBRARY_SECTION_SLUGS, type LibrarySectionSlug } from "@wave/core";
 
-/** A Library entry: its name, the icon a shortcut tab shows, and what its list says while empty. */
+/** A Library entry: its name, the icon its tab shows, and what its list says while empty. */
 export interface LibrarySection {
   readonly slug: LibrarySectionSlug;
   readonly icon: Icon;

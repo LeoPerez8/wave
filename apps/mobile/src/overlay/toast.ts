@@ -1,0 +1,44 @@
+/**
+ * Wave's toast: one line on a small glass pill above the mini player, drawn
+ * by `ToastHost` at the app root. It goes away on its own (Core's
+ * `toastDuration`), or sooner on a tap or a swipe. Show one from anywhere,
+ * React or not; a newer one takes the place of the one showing.
+ */
+import { makeExternalStore } from "../lib/externalStore.ts";
+
+export interface Toast {
+  readonly id: number;
+  readonly text: string;
+  /** Sliding away; the host removes it once the animation ends. */
+  readonly leaving: boolean;
+}
+
+/** The toast showing, or null. */
+export const currentToast = makeExternalStore<Toast | null>(null);
+
+let nextId = 1;
+/** Resolves the `showToast` of the toast showing. */
+let gone: (() => void) | null = null;
+
+/** Shows [text] on a toast; resolves once it's gone, or another took its place. */
+export const showToast = (text: string): Promise<void> => {
+  gone?.();
+  return new Promise((resolve) => {
+    gone = resolve;
+    currentToast.set({ id: nextId++, text, leaving: false });
+  });
+};
+
+/** Starts the toast [id] sliding away. Does nothing once it's leaving or gone. */
+export const dismissToast = (id: number): void =>
+  currentToast.update((toast) =>
+    toast?.id === id && !toast.leaving ? { ...toast, leaving: true } : toast,
+  );
+
+/** Takes the toast [id] off the screen (the host, once it has slid away). */
+export const removeToast = (id: number): void => {
+  if (currentToast.get()?.id !== id) return;
+  currentToast.set(null);
+  gone?.();
+  gone = null;
+};

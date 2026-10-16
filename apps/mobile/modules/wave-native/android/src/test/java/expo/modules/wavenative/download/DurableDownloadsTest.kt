@@ -168,7 +168,8 @@ class DurableDownloadsTest {
     val folder = Files.createTempDirectory("wave-serial").toFile()
     try {
       var now = 1_000L
-      val owner = DurableDownloads(File(folder, "jobs"), clock = { now })
+      // One slot, so the second song waits for it.
+      val owner = DurableDownloads(File(folder, "jobs"), clock = { now }, slots = 1)
       owner.enqueue(song, null)
       owner.enqueue(song + ("videoId" to "later"), null)
       now += DurableDownloads.JOB_MS + 1
@@ -344,7 +345,7 @@ class DurableDownloadsTest {
     } finally { folder.deleteRecursively() }
   }
 
-  @Test fun finishedJobsAreForgottenOnTheNextStartAndFailuresAfterADay() {
+  @Test fun finishedJobsAreForgottenOnTheNextStartAndFailuresOnceCleared() {
     val folder = Files.createTempDirectory("wave-prune").toFile()
     try {
       var now = 1_000L
@@ -359,7 +360,12 @@ class DurableDownloadsTest {
       val lease = owner.claim("failed")!!
       owner.submit("failed", lease["generation"] as Long, lease["token"] as String, "prepare", mapOf("failure" to "unavailable"))
       assertEquals(listOf("failed"), DurableDownloads(journal, clock = { now }).snapshot().map { it["id"] })
-      now += 24 * 60 * 60_000L + 1
+      // A failure waits on Settings › Downloads however long it takes, until it's cleared there.
+      now += 30L * 24 * 60 * 60_000L
+      val later = DurableDownloads(journal, clock = { now })
+      assertEquals(listOf("failed"), later.snapshot().map { it["id"] })
+      assertEquals("unavailable", later.snapshot().single()["reason"])
+      later.cancel("failed", NoTransfer)
       assertEquals(emptyList<Any>(), DurableDownloads(journal, clock = { now }).snapshot())
     } finally { folder.deleteRecursively() }
   }
@@ -766,9 +772,9 @@ class DurableDownloadsTest {
     try {
       val owner = DurableDownloads(File(folder, "jobs"))
       for (id in listOf("one", "two", "three")) owner.enqueue(mapOf("videoId" to id, "title" to id), null)
-      assertEquals(3, owner.pendingCount())
+      assertEquals(DownloadCounts(running = 0, left = 3), owner.counts())
       owner.cancel("two", NoTransfer)
-      assertEquals(2, owner.pendingCount())
+      assertEquals(DownloadCounts(running = 0, left = 2), owner.counts())
     } finally { folder.deleteRecursively() }
   }
 

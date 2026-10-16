@@ -52,6 +52,10 @@ export type TrackScope = "library" | "files";
 /** A join's [on] condition for joining `tracks` in [scope]. */
 export const inScope = (on: SQL, scope: TrackScope): SQL => (scope === "files" ? withFile(on) : on);
 
+/** A track's genre; null without one. */
+const trackGenre = sql<string | null>`(
+  SELECT name FROM genres WHERE genres.id = ${schema.tracks.genreId})`;
+
 /** What every track list shows (a `SongRow`), plus what orders albums. Join `tracks` `inScope`. */
 export const songColumns = {
   id: schema.tracks.id,
@@ -73,6 +77,8 @@ export const songColumns = {
   discNumber: schema.tracks.discNumber,
   trackNumber: schema.tracks.trackNumber,
   year: schema.tracks.year,
+  genre: trackGenre,
+  hasLyrics: schema.tracks.hasLyrics,
 };
 
 /** The Tracks in [scope], with their `songColumns`. */
@@ -108,7 +114,7 @@ export const BY_TITLE = [
 /**
  * Every song with what a lyrics and genre lookup sends, its genre, whether it
  * has lyrics, its track number and year, by title: the whole-Library run
- * picks from these (Core's `libraryLookupSongs`).
+ * picks from these (Core's `songsToFix`).
  */
 export const selectLibraryLookupSongs = (db: LibraryDatabase) => {
   const { tracks, artists, albums, genres } = schema;

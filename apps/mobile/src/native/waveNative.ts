@@ -1,4 +1,4 @@
-import type { LaunchTheme, TagDestination } from "@wave/core";
+import type { Appearance, LaunchTheme, TagDestination } from "@wave/core";
 import { NativeModule, requireNativeModule } from "expo";
 
 /** One audio file as read by the native scanner (`modules/wave-native`). Tag values are raw. */
@@ -162,6 +162,14 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
   /** Deletes every downloaded artist photo. */
   clearArtistPhotos(): Promise<void>;
   /**
+   * Opens Android's photo picker for a playlist's image and saves the picked
+   * photo, cropped to a square, in Wave's storage (new files each time).
+   * Null when nothing was picked; rejects when the photo can't be read.
+   */
+  pickPlaylistImage(): Promise<PlaylistImageFiles | null>;
+  /** Deletes playlist image files `pickPlaylistImage` saved; other paths are left alone. */
+  deletePlaylistImages(paths: readonly string[]): Promise<void>;
+  /**
    * Makes `alias` (one of `aliases`, activity-alias names without the package)
    * Wave's launcher icon. It switches once Wave leaves the screen.
    */
@@ -171,6 +179,13 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
    * Android 13+, picks its splash style for Android to draw.
    */
   setLaunchTheme(theme: LaunchTheme): Promise<void>;
+  /**
+   * Has Android keep Wave in `appearance` (its night mode for Wave alone),
+   * across restarts: the launch splash and system bars open in it.
+   */
+  setAppearance(appearance: Appearance): Promise<void>;
+  /** Dark or light navigation-bar buttons, for the scheme Wave shows now. */
+  setNavigationBarScheme(dark: boolean): Promise<void>;
   /**
    * Writes found lyrics (LRC or plain text) and genre into a song's file,
    * replacing what's there, and fills in its track number (with `discNumber`)
@@ -204,6 +219,12 @@ export interface NativeTagWrite {
 
 /** A saved artist photo: the large image (artist page) and the thumbnail (lists). */
 export interface ArtistPhotoFiles {
+  readonly path: string;
+  readonly thumbPath: string;
+}
+
+/** A playlist's own image: the large one (its page) and the thumbnail (lists, Android Auto). */
+interface PlaylistImageFiles {
   readonly path: string;
   readonly thumbPath: string;
 }

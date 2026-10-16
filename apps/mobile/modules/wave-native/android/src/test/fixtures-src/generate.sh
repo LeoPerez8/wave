@@ -87,6 +87,10 @@ ff -i "$tmp/tone.wav" $(with_cover "$tmp/cover.png") -c:a flac -c:v png "${TAGS[
 # M4A: AAC and ALAC, with cover
 ff -i "$tmp/tone.wav" $(with_cover "$tmp/cover.png") -c:a aac -b:a 16k -c:v png "${TAGS[@]}" "$out/tagged-aac.m4a"
 ff -i "$tmp/tone.wav" $(with_cover "$tmp/cover.png") -c:a alac -c:v png "${TAGS[@]}" "$out/tagged-alac.m4a"
+# Fragmented M4A, laid out like the itag 140 audio YouTube serves: an empty moov
+# with mvex, a sidx, moof/mdat fragments and an mfra index at the end.
+ff -i "$tmp/tone.wav" -c:a aac -b:a 16k -map_metadata -1 \
+  -movflags +empty_moov+default_base_moof+global_sidx -frag_duration 500000 "$out/fragmented-aac.m4a"
 # OGG Vorbis and Opus. ffmpeg can't mux a cover stream into Ogg, so the cover
 # goes in as a METADATA_BLOCK_PICTURE comment (a base64 FLAC picture block).
 picture="$(python3 - "$tmp/cover.png" <<'PY'

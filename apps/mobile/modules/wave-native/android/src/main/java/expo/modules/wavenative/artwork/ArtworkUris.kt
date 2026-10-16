@@ -32,6 +32,13 @@ object ArtworkUris {
   private const val LYRICS = "lyrics"
   const val MOSAIC_TILES = 4
 
+  /**
+   * The artwork folder's subfolder of playlists' own images
+   * (`PlaylistImageStore`), named as covers are, so a playlist's image is
+   * served as a cover.
+   */
+  const val PLAYLIST_IMAGES = "playlists"
+
   private val HASH = Regex("^[0-9a-f]{40}$")
   private val LYRICS_ID = Regex("^[0-9a-z]{1,40}$")
 
@@ -83,10 +90,14 @@ object ArtworkUris {
 
   private fun isSegment(segment: String): Boolean = segment == MOSAIC || isHash(segment)
 
-  /** The original image of cover [hash] in [directory], whatever its format; null when it isn't there. */
+  /**
+   * The original image of cover [hash] in [directory], whatever its format, or
+   * the playlist image [hash] in its [PLAYLIST_IMAGES] folder; null when it isn't there.
+   */
   fun coverFile(directory: File, hash: String): File? {
     if (!isHash(hash)) return null
-    return EXTENSIONS.map { File(directory, "$hash.$it") }.firstOrNull { it.isFile }
+    return (EXTENSIONS.map { File(directory, "$hash.$it") } + File(File(directory, PLAYLIST_IMAGES), "$hash.jpg"))
+      .firstOrNull { it.isFile }
   }
 
   /** The thumbnails a mosaic of [hashes] is drawn from, in reading order. */

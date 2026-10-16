@@ -19,9 +19,8 @@ import kotlin.coroutines.resume
 /**
  * YT Music for JS (`WaveYtMusic`): the switch in Settings, song, artist and
  * album search (Search; the artist page's section finds artists too), the
- * artist page, the home's
- * recommendations and playlists (Discover), the account and caching a
- * played song's cover. (Album pages are `WaveYtDownloads.album`.) (Playing is the playback
+ * artist page, playlists, the account and caching a played song's cover.
+ * (Album pages are `WaveYtDownloads.album`.) (Playing is the playback
  * service's: it streams `yt:` queue items, see [YtDataSource].) Requests go
  * through the process-wide [YtClient]; failures reject with the codes of
  * [YtFailure]. Nothing returned carries cookies or stream addresses: the
@@ -88,15 +87,6 @@ class YtMusicModule : Module() {
     }
 
     /**
-     * The account's recommendations, YouTube Music's home: `[{ title, items }]`,
-     * each item `{ kind: "song" | "album" | "playlist", … }`. Rejects with an
-     * `ERR_YT_*` code.
-     */
-    AsyncFunction("home") Coroutine { ->
-      coded { YtPages(client).home().map(YtShelf::toMap) }
-    }
-
-    /**
      * The playlist [playlistId]'s first page: `{ title, author, artworkUrl,
      * songs, continuation }`, or an `ERR_YT_*` rejection.
      */
@@ -110,6 +100,25 @@ class YtMusicModule : Module() {
      */
     AsyncFunction("playlistMore") Coroutine { continuation: String ->
       coded { YtPages(client).playlistMore(continuation).toMap() }
+    }
+
+    /**
+     * The first page of a song's radio: `{ songs, continuation }`, each song
+     * with `video` (a music video rather than a song), or an `ERR_YT_*`
+     * rejection. Needs no sign-in.
+     */
+    AsyncFunction("songRadio") Coroutine { videoId: String ->
+      coded { YtPages(client).songRadio(videoId).toMap() }
+    }
+
+    /** The first page of an artist's radio, from their page (`UC…`), as [songRadio]. */
+    AsyncFunction("artistRadio") Coroutine { browseId: String ->
+      coded { YtPages(client).artistRadio(browseId).toMap() }
+    }
+
+    /** The radio page a `continuation` leads to, as [songRadio]. */
+    AsyncFunction("radioMore") Coroutine { continuation: String ->
+      coded { YtPages(client).radioMore(continuation).toMap() }
     }
 
     /** The saved session, without asking YouTube. */

@@ -1,5 +1,6 @@
 package expo.modules.wavenative
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.Application
 import android.content.ActivityNotFoundException
@@ -9,21 +10,26 @@ import android.content.Context
 import android.content.Intent
 import android.media.MediaScannerConnection
 import android.net.Uri
+import android.os.Build
 import android.os.Environment
+import android.os.ext.SdkExtensions
 import android.os.storage.StorageManager
 import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.provider.Settings
+import androidx.core.view.WindowInsetsControllerCompat
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.events.OnActivityResultPayload
 import expo.modules.kotlin.exception.Exceptions
 import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import expo.modules.wavenative.appearance.AppearanceMode
 import expo.modules.wavenative.artwork.AndroidArtworkProcessor
 import expo.modules.wavenative.artwork.ArtistPhotoStore
 import expo.modules.wavenative.artwork.ArtworkInfo
+import expo.modules.wavenative.artwork.ArtworkProvider
 import expo.modules.wavenative.artwork.ArtworkStore
 import expo.modules.wavenative.files.DeleteOutcome
 import expo.modules.wavenative.files.TrackFileDeleter
@@ -32,7 +38,9 @@ import expo.modules.wavenative.launcher.LauncherIconSwitcher
 import expo.modules.wavenative.launch.LaunchTheme
 import expo.modules.wavenative.launch.LaunchThemeStore
 import expo.modules.wavenative.lyrics.LyricsReader
+import expo.modules.wavenative.playlists.AndroidPlaylistImages
 import expo.modules.wavenative.playlists.PlaylistFiles
+import expo.modules.wavenative.playlists.PlaylistImageStore
 import expo.modules.wavenative.scan.KnownFile
 import expo.modules.wavenative.scan.LibraryScanner
 import expo.modules.wavenative.scan.ScanListener
@@ -56,9 +64,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * Wave's native side: all-files access, the folder and playlist file pickers, the library scanner,
+ * Wave's native side: all-files access, the folder, playlist file and playlist image pickers, the library scanner,
  * lyrics, writing found lyrics and genre into files, deleting songs' files, saving artist photos,
- * the launch theme, the launcher icon, reading the clipboard and text shared to Wave. Scans run one at a time on a background thread and
+ * the launch theme, the appearance (light, dark or system), the launcher icon, reading the clipboard and text shared to Wave. Scans run one at a time on a background thread and
  * stream results to JS as events:
  * `onScanProgress`, `onScanMissing`, `onScanBatch`, `onScanComplete` and
  * `onScanError`, each carrying the `scanId` returned by `startScan`.
@@ -75,6 +83,7 @@ class WaveNativeModule : Module() {
   /** Only touched on the main thread, where the pickers start and their results arrive. */
   private var pendingFolderPick: Promise? = null
   private var pendingPlaylistPick: Promise? = null
+  private var pendingImagePick: Promise? = null
 
   private val context: Context
     get() = appContext.reactContext ?: throw Exceptions.ReactContextLost()
@@ -167,6 +176,23 @@ class WaveNativeModule : Module() {
     }.runOnQueue(Queues.MAIN)
 
     /**
+     * Opens Android's photo picker (the document picker where there is none)
+     * for a playlist's image. Resolves `{ path, thumbPath }` of the picked
+     * photo saved square in Wave's storage ([PlaylistImageStore], new files
+     * each time), or null when nothing was picked; rejects when the photo can't
+     * be read. The photo is processed off the main thread.
+     */
+    AsyncFunction("pickPlaylistImage") { promise: Promise ->
+      val activity = appContext.currentActivity ?: throw Exceptions.MissingActivity()
+      pendingImagePick?.resolve(null)
+      pendingImagePick = promise
+      activity.startActivityForResult(imagePickerIntent(), PICK_IMAGE_REQUEST)
+    }.runOnQueue(Queues.MAIN)
+
+    /** Deletes playlist images `pickPlaylistImage` saved; other paths are left alone. */
+    AsyncFunction("deletePlaylistImages") { paths: List<String> -> playlistImages().delete(paths) }
+
+    /**
      * The text on the clipboard, or null when it holds none (Import from a Link offers a
      * playlist link from it). Android only lets the app in front read it.
      */
@@ -182,6 +208,7 @@ class WaveNativeModule : Module() {
       when (payload.requestCode) {
         PICK_FOLDER_REQUEST -> onFolderPicked(payload)
         PICK_PLAYLISTS_REQUEST -> onPlaylistsPicked(payload)
+        PICK_IMAGE_REQUEST -> onImagePicked(payload)
       }
     }
 
@@ -303,6 +330,23 @@ class WaveNativeModule : Module() {
       appContext.currentActivity?.let { LaunchThemeStore.applySplash(it, launch) }
     }
 
+    /** Keeps Wave in Settings › Appearance's scheme (`system`, `light` or `dark`), across restarts too. */
+    AsyncFunction("setAppearance") { appearance: String ->
+      if (!AppearanceMode.apply(context, appearance)) {
+        throw IllegalArgumentException("Unknown appearance: $appearance")
+      }
+    }
+
+    /**
+     * Dark or light navigation-bar buttons for the scheme Wave shows. Android
+     * picks them as the activity starts; this follows a switch made while Wave
+     * is open, in Settings or by Android under System.
+     */
+    AsyncFunction("setNavigationBarScheme") { dark: Boolean ->
+      val window = appContext.currentActivity?.window ?: return@AsyncFunction
+      WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightNavigationBars = !dark
+    }.runOnQueue(Queues.MAIN)
+
     // JS may have saved the launch theme without an activity (Android Auto starts it headless).
     OnActivityEntersForeground {
       appContext.currentActivity?.let { LaunchThemeStore.applySplash(it, LaunchThemeStore.load(context)) }
@@ -327,7 +371,7 @@ class WaveNativeModule : Module() {
       LauncherIconSwitcher(
         app,
         // A picker Wave opened is over it: switching now could close Wave's task under it.
-        isBusy = { pendingFolderPick != null || pendingPlaylistPick != null },
+        isBusy = { pendingFolderPick != null || pendingPlaylistPick != null || pendingImagePick != null },
         // The share shortcut belonged to the icon just turned off.
         onSwitched = { ShareShortcut.publish(app) },
       ).also {
@@ -363,6 +407,49 @@ class WaveNativeModule : Module() {
     val uris = if (clip != null) List(clip.itemCount) { clip.getItemAt(it).uri } else listOfNotNull(data.data)
     Thread({ promise.resolve(uris.map(::readPlaylistFile)) }, "wave-playlist-import").start()
   }
+
+  /**
+   * Android's photo picker, images only: built in from Android 13, and on
+   * Android 12 through the SDK extension Google Play system updates bring.
+   * Without it, the document picker for images.
+   */
+  @SuppressLint("InlinedApi", "NewApi")
+  private fun imagePickerIntent(): Intent =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU ||
+      SdkExtensions.getExtensionVersion(Build.VERSION_CODES.R) >= 2
+    ) {
+      Intent(MediaStore.ACTION_PICK_IMAGES).apply { type = "image/*" }
+    } else {
+      Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+        addCategory(Intent.CATEGORY_OPENABLE)
+        type = "image/*"
+      }
+    }
+
+  private fun onImagePicked(payload: OnActivityResultPayload) {
+    val promise = pendingImagePick ?: return
+    pendingImagePick = null
+    val uri = payload.data?.data
+    if (payload.resultCode != Activity.RESULT_OK || uri == null) {
+      promise.resolve(null)
+      return
+    }
+    val resolver = context.contentResolver
+    val store = playlistImages()
+    Thread({
+      try {
+        val (large, thumb) = AndroidPlaylistImages.squareJpegs(resolver, uri)
+        promise.resolve(store.save(large, thumb).toMap())
+      } catch (e: Exception) {
+        promise.reject("ERR_PLAYLIST_IMAGE", "Couldn't read the photo", e)
+      } catch (e: OutOfMemoryError) {
+        promise.reject("ERR_PLAYLIST_IMAGE", "The photo is too big", e)
+      }
+    }, "wave-playlist-image").start()
+  }
+
+  private fun playlistImages() =
+    PlaylistImageStore(File(File(context.filesDir, ArtworkProvider.ARTWORK_DIR), PlaylistImageStore.DIRECTORY))
 
   /** `{ name, path, text }` of a picked playlist file; see `pickPlaylistFiles`. */
   private fun readPlaylistFile(uri: Uri): Map<String, Any?> {
@@ -479,5 +566,6 @@ class WaveNativeModule : Module() {
   private companion object {
     const val PICK_FOLDER_REQUEST = 0x5741
     const val PICK_PLAYLISTS_REQUEST = 0x5742
+    const val PICK_IMAGE_REQUEST = 0x5743
   }
 }

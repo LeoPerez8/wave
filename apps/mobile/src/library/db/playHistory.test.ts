@@ -1,5 +1,5 @@
 /// <reference types="node" />
-import { isCountedPlay, type PlayEvent } from "@wave/core";
+import { isCountedPlay, recordingKey, type PlayEvent } from "@wave/core";
 import { eq, sql } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { beforeEach, describe, test } from "node:test";
@@ -9,6 +9,7 @@ import {
   homeSections,
   latestPlay,
   listFavorites,
+  playedRecordingKeys,
   recordPlay,
   selectFavoriteTrackIds,
   setFavorites,
@@ -16,7 +17,7 @@ import {
 } from "./playHistory.ts";
 import * as schema from "./schema.ts";
 import { trackPlayTotals } from "./stats.ts";
-import { selectChangesSince, selectPhoneId } from "./sync.ts";
+import { keyRecordings, selectChangesSince, selectPhoneId } from "./sync.ts";
 import {
   addTrack,
   migrateTestDatabase,
@@ -86,6 +87,35 @@ describe("History of removed files", () => {
       home.mostPlayed.map((row) => row.title),
       ["Kept"],
     );
+  });
+
+  test("the recordings played stay known once their songs leave, each once", () => {
+    const gone = addTrack(db, { title: "Deleted", album: "Gone", trackNumber: 2 });
+    const kept = addTrack(db, { title: "Kept", album: "Here" });
+    addTrack(db, { title: "Never played", album: "Here" });
+    keyRecordings(db);
+    recordPlay(db, play(gone, 1_000));
+    recordPlay(db, play(gone, 1_500, { counted: false }));
+    recordPlay(db, play(kept, 2_000));
+
+    db.delete(schema.tracks).where(eq(schema.tracks.id, gone)).run();
+
+    assert.deepEqual(playedRecordingKeys(db).toSorted(), [
+      recordingKey({
+        title: "Deleted",
+        album: "Gone",
+        albumArtist: "Artist",
+        discNumber: null,
+        trackNumber: 2,
+      }),
+      recordingKey({
+        title: "Kept",
+        album: "Here",
+        albumArtist: "Artist",
+        discNumber: null,
+        trackNumber: null,
+      }),
+    ]);
   });
 });
 
