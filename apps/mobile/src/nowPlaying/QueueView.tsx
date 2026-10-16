@@ -1,6 +1,7 @@
 import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
 import {
   IconArrowsShuffle,
+  IconArrowsShuffle2,
   IconMenu2,
   IconRepeat,
   IconRepeatOnce,
@@ -52,12 +53,14 @@ import {
   toggleShuffle,
 } from "@/playback/actions";
 import { useQueue } from "@/playback/hooks";
+import { useShuffleKind } from "@/settings/shuffleKind";
 import { queueState } from "@/playback/Queue";
 import type { PlaybackState } from "@/playback/Player";
 import type { QueueTrack } from "@/playback/queueTracks";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { useQueueTracks } from "./hooks";
+import { openShuffleMenu, shuffleLabel } from "./ShuffleMenu";
 import { TrackHeader } from "./TrackHeader";
 
 type IconProps = { size?: number; color?: string; strokeWidth?: number };
@@ -79,10 +82,13 @@ type ToggleProps = {
   label: string;
   on: boolean;
   onPress: () => void;
+  /** Opens the toggle's card of choices, where it has one. */
+  onLongPress?: (() => void) | undefined;
+  accessibilityHint?: string | undefined;
 };
 
 /** A labelled toggle: teal while it's on, graphite while it's off. */
-function Toggle({ icon: Icon, label, on, onPress }: ToggleProps) {
+function Toggle({ icon: Icon, label, on, onPress, onLongPress, accessibilityHint }: ToggleProps) {
   const accent = useThemeColor("accent");
   const secondary = useThemeColor("secondary");
   const color = on ? accent : secondary;
@@ -91,7 +97,9 @@ function Toggle({ icon: Icon, label, on, onPress }: ToggleProps) {
       accessibilityRole="switch"
       accessibilityLabel={label}
       accessibilityState={{ checked: on }}
+      accessibilityHint={accessibilityHint}
       onPress={onPress}
+      onLongPress={onLongPress}
       haptic="selection"
       depth={0.04}
       className="flex-1 flex-row items-center justify-center"
@@ -115,10 +123,12 @@ const REPEAT_LABEL: Record<RepeatMode, string> = {
 
 /**
  * The top of the Queue view: what's playing (small), the shuffle and repeat
- * toggles, then the Up Next heading. Sits in the sheet's drag-to-dismiss area.
+ * toggles (a long press on shuffle opens the shuffle card; it reads Smart
+ * Shuffle, with its own icon, while that's chosen), then the Up Next heading. Sits in the sheet's drag-to-dismiss area.
  */
 export function QueueHeader({ item }: { item: NonNullable<PlaybackState["item"]> }) {
   const queue = useQueue();
+  const shuffleKind = useShuffleKind();
   const count = queue.entries.length - queue.index - 1;
   return (
     <View>
@@ -126,10 +136,12 @@ export function QueueHeader({ item }: { item: NonNullable<PlaybackState["item"]>
       <Hairline />
       <View className="flex-row" style={{ gap: CELL }}>
         <Toggle
-          icon={IconArrowsShuffle}
-          label="Shuffle"
+          icon={shuffleKind === "smart" ? IconArrowsShuffle2 : IconArrowsShuffle}
+          label={shuffleLabel(shuffleKind)}
           on={queue.shuffle}
           onPress={toggleShuffle}
+          onLongPress={openShuffleMenu}
+          accessibilityHint="Long press to choose Real Shuffle or Smart Shuffle"
         />
         <Toggle
           icon={queue.repeat === "one" ? IconRepeatOnce : IconRepeat}
