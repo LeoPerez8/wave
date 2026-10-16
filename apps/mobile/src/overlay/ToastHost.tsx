@@ -1,5 +1,5 @@
 import { toastDuration, toastSwipeDismisses } from "@wave/core";
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { AccessibilityInfo, Text, View } from "react-native";
 import {
   GestureDetector,
@@ -8,7 +8,6 @@ import {
   useTapGesture,
 } from "react-native-gesture-handler";
 import Animated, {
-  Easing,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
@@ -24,6 +23,7 @@ import { Glass } from "@/glass/Glass";
 import { useTapAnimationMs } from "@/settings/tapAnimation";
 
 import { currentToast, dismissToast, removeToast, type Toast } from "./toast";
+import { useEnterAndLeave } from "./useEnterAndLeave";
 
 /** The pill's corners: fully round on one line, an overlay card's corners on more. */
 const MAX_RADIUS = CELL * 3;
@@ -36,8 +36,6 @@ const DRAG_SLOP = CELL * 1.5;
 
 /** A line longer than this many lines is cut. */
 const MAX_LINES = 3;
-
-const EASE = Easing.out(Easing.exp);
 
 /**
  * Draws the toast (`showToast`) above the floating chrome. Render it at the
@@ -67,7 +65,6 @@ function ToastPill({ toast }: { toast: Toast }) {
   const pillHeight = useSharedValue(1);
   const dragging = useRef(false);
   const expired = useRef(false);
-  const progress = useSharedValue(0);
   const offsetX = useSharedValue(0);
   const offsetY = useSharedValue(0);
   const { id, text, leaving } = toast;
@@ -93,22 +90,7 @@ function ToastPill({ toast }: { toast: Toast }) {
   }, [id, text]);
 
   // Comes in once it knows its size, goes when leaving, then is taken off.
-  const measured = height !== null;
-  useLayoutEffect(() => {
-    if (!measured) return;
-    const target = leaving ? 0 : 1;
-    const remove = () => removeToast(id);
-    if (ms === 0) {
-      progress.set(target);
-      if (leaving) remove();
-      return;
-    }
-    progress.set(
-      withTiming(target, { duration: ms, easing: EASE }, (finished) => {
-        if (finished && target === 0) scheduleOnRN(remove);
-      }),
-    );
-  }, [measured, leaving, id, ms, progress]);
+  const progress = useEnterAndLeave({ id, ready: height !== null, leaving, remove: removeToast });
 
   const startDrag = () => {
     dragging.current = true;
