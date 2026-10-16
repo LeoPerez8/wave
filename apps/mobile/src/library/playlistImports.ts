@@ -10,8 +10,10 @@
  * again.
  */
 import {
+  IMPORT_PROGRESS_SHOWN_EVERY_MS,
   importAdded,
   importAdditions,
+  importProgressOnly,
   importSearchAnswered,
   importTurn,
   nextImportStep,
@@ -34,14 +36,17 @@ import {
   type YtSongSearch,
 } from "@wave/core";
 import * as Result from "effect/Result";
+import { useSyncExternalStore } from "react";
 
 import { askForNotifications } from "@/lib/askForNotifications";
+import { makeExternalStore } from "@/lib/externalStore";
 import { persistedSetting } from "@/lib/persistedSetting";
 import { WavePlaylistImport } from "@/native/wavePlaylistImport";
 import { showError } from "@/overlay/alert";
 import { perfMark, registerPerfMeta } from "@/perf/perf";
 import { askYtMusic } from "@/ytmusic/askYtMusic";
 
+import { playlistWorkReport } from "./db/playlistWork";
 import { addToPlaylist, currentPlaylists } from "./playlists";
 
 type Job = PlaylistImport<YtAlbumSong>;
@@ -59,8 +64,36 @@ const imports = persistedSetting<PlaylistImports<YtAlbumSong>>({
   persistDelayMs: 1000,
 });
 
-/** The imports, for the playlist page; re-renders as they go on. */
-export const usePlaylistImports = (): PlaylistImports<YtAlbumSong> => imports.useValue();
+/**
+ * The imports as the playlist page and the notification show them: how far
+ * they got at most once a second (Core's `importProgressOnly`), anything
+ * else at once. Null until the imports first change.
+ */
+const shown = makeExternalStore<PlaylistImports<YtAlbumSong> | null>(null);
+let showTimer: ReturnType<typeof setTimeout> | undefined;
+/** Progress notifications sent, for a perf build's runs. */
+let progressShown = 0;
+
+const shownImports = (): PlaylistImports<YtAlbumSong> => shown.get() ?? imports.get();
+
+/** Shows the imports as they are now: the page's line and the notification. */
+const show = (): void => {
+  clearTimeout(showTimer);
+  showTimer = undefined;
+  shown.set(imports.get());
+  showProgress();
+};
+
+/** The imports changed from [before]: shown at once, or with the next progress shown. */
+const follow = (before: PlaylistImports<YtAlbumSong>): void => {
+  if (shown.get() === null) shown.set(before);
+  if (!importProgressOnly(shownImports(), imports.get())) show();
+  else showTimer ??= setTimeout(show, IMPORT_PROGRESS_SHOWN_EVERY_MS);
+};
+
+/** The imports, for the playlist page; re-renders as they go on, progress at most once a second. */
+export const usePlaylistImports = (): PlaylistImports<YtAlbumSong> =>
+  useSyncExternalStore(shown.subscribe, shownImports);
 
 /**
  * The YouTube Music searches Spotify imports asked lately, which Core paces
@@ -73,8 +106,12 @@ const spotifySearches = persistedSetting<SpotifySearchPacing>({
   persistDelayMs: 1000,
 });
 
-/** The searches Spotify imports asked lately, for the playlist page's time left. */
-export const useSpotifySearches = (): SpotifySearchPacing => spotifySearches.useValue();
+/**
+ * The searches Spotify imports asked lately, for the playlist page's time
+ * left: read as the imports are shown (`usePlaylistImports`), not per search.
+ */
+export const useSpotifySearches = (): SpotifySearchPacing =>
+  useSyncExternalStore(shown.subscribe, spotifySearches.get);
 
 /** While the playlist is given found songs: at most once a second, so its page doesn't redraw for each. */
 const GIVE_EVERY_MS = 1000;
@@ -112,13 +149,15 @@ const find = (playlistId: number): Job | undefined =>
 const showProgress = (): void => {
   if (!running) return;
   const progress = playlistImportProgress(imports.get());
-  if (progress !== null)
-    WavePlaylistImport.progress(progress.title, progress.detail, progress.done, progress.total);
+  if (progress === null) return;
+  progressShown += 1;
+  WavePlaylistImport.progress(progress.title, progress.detail, progress.done, progress.total);
 };
 
 const setImports = (next: PlaylistImports<YtAlbumSong>): void => {
+  const before = imports.get();
   imports.set(next);
-  showProgress();
+  follow(before);
   wake();
 };
 
@@ -235,8 +274,13 @@ const runImports = async (): Promise<void> => {
 // A perf build's runs record how far the import going on has got (docs/performance/README.md).
 registerPerfMeta("import", () => {
   const progress = playlistImportProgress(imports.get());
-  return { running, done: progress?.done ?? null, total: progress?.total ?? null };
+  return { running, done: progress?.done ?? null, total: progress?.total ?? null, progressShown };
 });
+
+// And what the playlists cost meanwhile: the imports' own, and the others' (#308).
+registerPerfMeta("playlistWork", () =>
+  playlistWorkReport(imports.get().map((job) => job.playlistId)),
+);
 
 // ---------------------------------------------------------------------------
 // What the app asks

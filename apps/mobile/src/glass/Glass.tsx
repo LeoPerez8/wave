@@ -1,9 +1,10 @@
-import { glassTintAlpha } from "@wave/core";
+import { glassLayers, glassTintAlpha } from "@wave/core";
 import { Platform, StyleSheet, View } from "react-native";
 
 import { useGlassSettings } from "@/settings/glass";
 import { useThemeColor } from "@/theme/useThemeColor";
 
+import { glassProbe } from "./glassProbe";
 import { NativeGlassView } from "./waveGlass";
 
 /**
@@ -12,7 +13,8 @@ import { NativeGlassView } from "./waveGlass";
  * behind plus an AGSL edge refraction and specular rim, all on the RenderThread.
  * Blur, refraction, tint and rim come from Settings (`@/settings/glass`);
  * refraction 0 is the blur + tint + rim fallback. Below API 33 the native view
- * drops the refraction shader by itself.
+ * drops the refraction shader by itself. A perf build launched with a glass
+ * probe drops the layers the probe names (Core `glassLayers`, issue #316).
  */
 
 type Props = {
@@ -37,16 +39,18 @@ export function Glass({ backdropId, cornerRadius }: Props) {
       />
     );
   }
+  const layers = glassLayers(glass, glassProbe());
   return (
     <NativeGlassView
       pointerEvents="none"
       style={StyleSheet.absoluteFill}
-      backdropNativeId={backdropId}
-      blurRadius={glass.blur}
-      refraction={glass.refraction}
+      backdropNativeId={layers.backdrop ? backdropId : null}
+      blurRadius={layers.blur}
+      refraction={layers.refraction}
       cornerRadius={cornerRadius}
       tintColor={surface.startsWith("#") ? `${surface}${glassTintAlpha(glass.tint)}` : surface}
       rim={glass.rim}
+      coalesce={layers.coalesce}
     />
   );
 }

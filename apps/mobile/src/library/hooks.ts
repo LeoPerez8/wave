@@ -29,7 +29,6 @@ import {
   type PlaylistDetail,
   type PlaylistRow,
   type ScanRootSummary,
-  type SongRow,
 } from "./LibraryStore";
 import { knownPlaylists, listPlaylistsRemembered } from "./playlists";
 import { libraryQuery, useLibraryQuery, type LibraryQuery } from "./sharedQueries";
@@ -119,10 +118,6 @@ export const useAlbumsMissingSongs = (
 
 const listSongs = storeQuery("songs", TRACKS, (store) => store.listSongs);
 const countTracks = storeQuery("trackCount", TRACKS, (store) => store.countTracks);
-
-const NO_SONGS: readonly SongRow[] = [];
-
-export const useSongs = (): readonly SongRow[] => useLibraryQuery(listSongs, NO_SONGS);
 
 /** Number of tracks in the library, or null before the first count arrives. */
 export const useTrackCount = (): number | null => useLibraryQuery<number | null>(countTracks, null);
@@ -250,6 +245,19 @@ const NO_PLAYLISTS: readonly PlaylistRow[] = [];
  */
 export const usePlaylists = (): readonly PlaylistRow[] =>
   useLibraryQuery(listPlaylists, knownPlaylists() ?? NO_PLAYLISTS);
+
+/**
+ * The Library's lists as shared queries, for what reads them as they are
+ * (Search's index): the same reads as the Library's tabs, so a screen showing
+ * one shares it.
+ */
+export const libraryListQueries = {
+  songs: listSongs,
+  albums: listAlbums,
+  artists: listArtists,
+  genres: listGenres,
+  playlists: listPlaylists,
+} as const;
 
 /** A playlist screen's data (see `useDetail`), refreshed as soon as it is edited. */
 export const usePlaylist = (id: number): PlaylistDetail | null | undefined => {

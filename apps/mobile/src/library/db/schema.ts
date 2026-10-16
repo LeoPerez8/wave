@@ -404,6 +404,22 @@ export const playlistItems = sqliteTable(
 );
 
 /**
+ * A counter per playlist that SQLite triggers (migration 0022) raise on every
+ * write to its entries that can change its mosaic or totals: an entry added,
+ * removed, moved, linked to a Library song, pulled from the Wave account, or
+ * gone with its song. Row 0 is the Library's: raised when a track's length or
+ * album, an album's cover or a cover's files change. Library › Playlists
+ * works out again only the playlists whose counter (or the Library's) moved
+ * since it last read them (`db/playlists.ts`). Never synced; no row is a
+ * revision of 0.
+ */
+export const playlistRevisions = sqliteTable("playlist_revisions", {
+  /** A playlist's id, or 0 for the Library's tracks, albums and covers. No foreign key. */
+  playlistId: integer("playlist_id").primaryKey(),
+  revision: integer("revision").notNull().default(0),
+});
+
+/**
  * Starred tracks; an unstarred one is a tombstone (`deleted`). A star goes
  * with its track when the track leaves the library.
  */
@@ -581,7 +597,7 @@ export const playEvents = sqliteTable(
 
 /**
  * Each played track's listening over its whole history, kept by SQLite
- * triggers on `play_events` (migration `0022_play_totals`) as plays are
+ * triggers on `play_events` (migration `0023_play_totals`) as plays are
  * recorded, brought up to date, imported, pulled or edited, so Home reads
  * all-time totals without summing every play. One row per track with a play,
  * however it left the library (no foreign key, as in `play_events`).

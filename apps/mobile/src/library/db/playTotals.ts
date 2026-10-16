@@ -1,6 +1,6 @@
 /**
  * Each played track's all-time listening (`play_totals`), which SQLite keeps
- * as plays are written (the triggers of migration `0022_play_totals`), so
+ * as plays are written (the triggers of migration `0023_play_totals`), so
  * Home's all-time summaries read a row per played song, or a few of them,
  * rather than every play. Kept free of Expo so the store tests run it against
  * a real SQLite (`testDatabase.ts`).
@@ -36,7 +36,7 @@ export const playTotalsDrift = (db: LibraryDatabase): number[] =>
     )
     .map((row) => row.trackId);
 
-/** Sums every track's totals again from the history, as migration `0022_play_totals` first did. */
+/** Sums every track's totals again from the history, as migration `0023_play_totals` first did. */
 export const rebuildPlayTotals = (db: LibraryDatabase): void => {
   db.transaction((tx) => {
     tx.run(sql`DELETE FROM play_totals`);

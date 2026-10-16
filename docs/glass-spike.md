@@ -93,4 +93,5 @@ fallback is the same view with the shader off. B stays in the spike screen only.
   tab screens and the pushed Library stack each sit in such a backdrop view.
 
 Still to do on the S24+: fill in the table above, then confirm or switch to the fallback
-(or B) here.
+(or B) here. The release runner's glass probe (#316, `docs/performance/316-glass-frame-budget.md`)
+measures the same layers in the real app, with frame parts per step.

@@ -4,6 +4,8 @@ export interface ExternalStore<A> {
   readonly set: (value: A) => void;
   readonly update: (f: (value: A) => A) => void;
   readonly subscribe: (listener: () => void) => () => void;
+  /** How many listeners it has now (a perf build reports it). */
+  readonly listenerCount: () => number;
 }
 
 export const makeExternalStore = <A>(initial: A): ExternalStore<A> => {
@@ -22,5 +24,6 @@ export const makeExternalStore = <A>(initial: A): ExternalStore<A> => {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
+    listenerCount: () => listeners.size,
   };
 };

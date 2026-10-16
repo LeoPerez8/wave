@@ -3,7 +3,7 @@
  * the whole history (Recently Played and Most Played grouped every play,
  * the overview summed every song's listening, all-time album and artist
  * rankings summed every counted play); after, the play totals the triggers
- * of migration 0022 keep (`play_totals`). Checks that both give the same
+ * of migration 0023 keep (`play_totals`). Checks that both give the same
  * result at every size, then prints, per size and read, the statements run,
  * the rows they returned and the median time, and each statement's plan once.
  * Then the cost the totals add: recording a play (start, progress, end), a
@@ -315,15 +315,15 @@ for (const write of ["play", "import"] as const) {
 }
 assert.deepEqual(playTotalsDrift(writers[0]!.library), []);
 
-// The migration's one-time backfill, on a database as 0021 left it.
-const upgrading = await openTestDatabase({ through: "0021_playlist_images" });
+// The migration's one-time backfill, on a database as 0022 left it.
+const upgrading = await openTestDatabase({ through: "0022_playlist_revisions" });
 for (let artist = 0; artist < 10; artist++)
   addHistory(upgrading, { artist: `Artist ${artist + 1}`, ...PER_ARTIST });
 const started = performance.now();
 await migrateTestDatabase(upgrading);
 print({
   kind: "migrate",
-  migration: "0022_play_totals",
+  migration: "0023_play_totals",
   playEvents: count(upgrading, "play_events"),
   playedTracks: count(upgrading, "play_totals"),
   ms: Number((performance.now() - started).toFixed(2)),

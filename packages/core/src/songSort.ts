@@ -17,6 +17,9 @@ export interface SongSort {
   readonly descending: boolean;
 }
 
+/** A sort the Library's own tables can order by: every one but date starred (Favorites'). */
+export type LibrarySongSort = SongSort & { readonly key: Exclude<SongSortKey, "starred"> };
+
 /** What `sortSongs` needs to know about a song. */
 export interface SortableSong {
   readonly titleSort: string;
@@ -101,7 +104,7 @@ const ORDERS: Record<SongSortKey, Order> = {
 export const DEFAULT_SONG_SORT: SongSort = { key: "title", descending: false };
 
 /** Every sort the control offers, in its order: newest first leads for date added. */
-export const SONG_SORTS: readonly SongSort[] = [
+export const SONG_SORTS: readonly LibrarySongSort[] = [
   { key: "title", descending: false },
   { key: "title", descending: true },
   { key: "artist", descending: false },
@@ -169,6 +172,79 @@ export const songSpineKeys = (
   const { spineKey } = ORDERS[sort.key];
   return spineKey === undefined ? undefined : songs.map(spineKey);
 };
+
+/** A song field a list's order compares, as the Library's tables hold it (`id` is the Track's). */
+export type SongOrderField =
+  | "titleSort"
+  | "artistSort"
+  | "albumSort"
+  | "albumId"
+  | "discNumber"
+  | "trackNumber"
+  | "addedAt"
+  | "path"
+  | "id";
+
+/** One step of an order the database runs (an `ORDER BY` term). */
+export interface SongOrderTerm {
+  readonly field: SongOrderField;
+  readonly descending: boolean;
+  /** What a null compares as (a missing disc is disc 1); absent where the field is never null. */
+  readonly nullAs?: number | string;
+}
+
+/** [sort], or song name A to Z for date starred, which only Favorites can order by. */
+export const librarySongSort = (sort: SongSort): LibrarySongSort =>
+  sort.key === "starred" ? (DEFAULT_SONG_SORT as LibrarySongSort) : (sort as LibrarySongSort);
+
+const ascending = (field: SongOrderField, nullAs?: number | string): SongOrderTerm =>
+  nullAs === undefined ? { field, descending: false } : { field, descending: false, nullAs };
+
+/** compareFiles, then the id: songs alike in everything else keep one order. */
+const BY_FILE: readonly SongOrderTerm[] = [ascending("path", ""), ascending("id")];
+
+/** compareByTitle. */
+const BY_TITLE: readonly SongOrderTerm[] = [
+  ascending("titleSort"),
+  ascending("artistSort"),
+  ...BY_FILE,
+];
+
+/** byAlbumTracks: the album, then compareAlbumTracks. */
+const BY_ALBUM_TRACKS: readonly SongOrderTerm[] = [
+  ascending("albumId"),
+  ascending("discNumber", 1),
+  ascending("trackNumber", Number.MAX_SAFE_INTEGER),
+  ascending("titleSort"),
+  ...BY_FILE,
+];
+
+/** Each sort's primary field and its ties, as `ORDERS` compares them. */
+const ORDER_TERMS: Record<
+  LibrarySongSort["key"],
+  readonly [SongOrderField, readonly SongOrderTerm[]]
+> = {
+  title: ["titleSort", BY_TITLE],
+  artist: ["artistSort", [ascending("albumSort"), ...BY_ALBUM_TRACKS]],
+  album: ["albumSort", BY_ALBUM_TRACKS],
+  added: ["addedAt", BY_TITLE],
+};
+
+/**
+ * [sort] as the database runs it: the order `sortSongs` gives, as `ORDER BY`
+ * terms, ending on the Track id so the order is total (pages of it never
+ * overlap or skip). Strings compare as SQLite's BINARY collation does, by code
+ * point; `sortSongs` compares UTF-16 units, which differ only between
+ * characters past U+FFFF and those from U+E000 to U+FFFF.
+ */
+export const songOrderTerms = (sort: LibrarySongSort): readonly SongOrderTerm[] => {
+  const [primary, ties] = ORDER_TERMS[sort.key];
+  return [{ field: primary, descending: sort.descending }, ...ties];
+};
+
+/** The field [sort] files a song under on the A–Z spine (`songSpineKeys`); none for the date sorts. */
+export const songSpineField = (sort: LibrarySongSort): SongOrderField | undefined =>
+  ORDERS[sort.key].spineKey === undefined ? undefined : ORDER_TERMS[sort.key][0];
 
 /** [sort] as a string to save. */
 export const writeSongSort = (sort: SongSort): string =>

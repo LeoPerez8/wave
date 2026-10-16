@@ -174,7 +174,7 @@ describe("Play totals", () => {
   });
 
   test("an update sums the history it finds, then keeps up with new plays", async () => {
-    const before = await openTestDatabase({ through: "0021_playlist_images" });
+    const before = await openTestDatabase({ through: "0022_playlist_revisions" });
     const kept = addTrack(before, { title: "Kept" });
     const gone = addTrack(before, { title: "Gone" });
     playThrough(before, play(kept, 1_000));

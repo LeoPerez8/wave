@@ -26,9 +26,11 @@ export const UNDERLINE_WAVE = {
 
 /**
  * The start of a wave path: `halves` whole half-waves (crest first) from x = 0,
- * centre line at y = amplitude. With none, just the move to the start.
+ * centre line at y = amplitude. With none, just the move to the start. A
+ * worklet, for the scrubber's `elapsedWavePath` on the UI thread.
  */
 export const halfWaves = (halves: number, wavelength: number, amplitude: number): string => {
+  "worklet";
   const half = wavelength / 2;
   let d = `M0 ${amplitude}`;
   if (halves >= 1) d += `Q${half / 2} ${-amplitude} ${half} ${amplitude}`;
