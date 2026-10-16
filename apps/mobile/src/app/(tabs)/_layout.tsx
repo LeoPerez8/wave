@@ -9,6 +9,7 @@ import { BACKDROP, ChromeProvider } from "@/chrome/chrome";
 import { TabBar } from "@/chrome/TabBar";
 import { useTabEntry } from "@/chrome/tabEntry";
 import { openNowPlaying } from "@/nowPlaying/sheet";
+import { useRenderCount } from "@/perf/perf";
 import { MiniPlayer } from "@/playback/MiniPlayer";
 import { useIsSelecting } from "@/selection/selection";
 import { SelectionChrome } from "@/selection/SelectionChrome";
@@ -26,6 +27,7 @@ const TABS = Object.entries(TAB_PATH) as [TabBarTab, string][];
  * slides the new screen in from the tapped tab's side; the chrome stays put.
  */
 export default function TabsLayout() {
+  useRenderCount("TabsLayout");
   const background = useThemeColor("background");
   const tab = tabOfPath(usePathname());
   const bar = useTabBar();

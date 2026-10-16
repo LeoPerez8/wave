@@ -12,6 +12,7 @@ import { promptForMusicFolder } from "./promptForMusicFolder";
 import { SongSortButton } from "./SongSortButton";
 import { useSortedSongs } from "./songSort";
 import { ListIntro, songCount, TrackList } from "./TrackList";
+import { useRenderCount } from "@/perf/perf";
 
 /** Tapping a song plays the whole Songs list from it. */
 const SONGS_CONTEXT = { kind: "songs", id: null } as const;
@@ -21,6 +22,7 @@ const SONGS_CONTEXT = { kind: "songs", id: null } as const;
  * virtualised for libraries of tens of thousands.
  */
 export function SongsList() {
+  useRenderCount("SongsList");
   const library = useSongs();
   const { sort, songs } = useSortedSongs("songs", library);
   const scan = useScanState();

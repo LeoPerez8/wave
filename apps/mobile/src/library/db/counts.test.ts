@@ -4,7 +4,7 @@ import { beforeEach, describe, test } from "node:test";
 
 import { eq } from "drizzle-orm";
 
-import { libraryCounts, sectionSongCounts } from "./counts.ts";
+import { libraryCounts, libraryScale, sectionSongCounts } from "./counts.ts";
 import * as schema from "./schema.ts";
 import { addTrack, openTestDatabase, star, type TestDatabase } from "./testDatabase.ts";
 
@@ -108,6 +108,64 @@ describe("sectionSongCounts", () => {
       // Only Jóga has a genre.
       genres: 1,
       favorites: 1,
+    });
+  });
+});
+
+describe("libraryScale", () => {
+  const playlist = (name: string, deleted = false): number =>
+    db
+      .insert(schema.playlists)
+      .values({ name, createdAt: 0, updatedAt: 0, changedAt: 0, deleted })
+      .returning()
+      .get().id;
+  const item = (playlistId: number, trackId: number, orderKey: string, deleted = false): void => {
+    db.insert(schema.playlistItems)
+      .values({ playlistId, trackId, orderKey, addedAt: 0, changedAt: 0, deleted })
+      .run();
+  };
+  const play = (trackId: number, startedAt: number): void => {
+    db.insert(schema.playEvents)
+      .values({ trackId, startedAt, listenedMs: 1_000, endReason: "completed", counted: true })
+      .run();
+  };
+
+  test("an empty library has no scale", () => {
+    assert.deepEqual(libraryScale(db), {
+      tracks: 0,
+      playlists: 0,
+      playlistItems: 0,
+      largestPlaylist: 0,
+      playEvents: 0,
+    });
+  });
+
+  test("measures what a performance run reports: songs, playlists, entries and plays", () => {
+    const airbag = addTrack(db, { title: "Airbag", album: "OK Computer", artist: "Radiohead" });
+    const joga = addTrack(db, { title: "Jóga", album: "Homogenic", artist: "Björk" });
+    const drive = playlist("Drive");
+    const short = playlist("Short");
+    const gone = playlist("Gone", true);
+    item(drive, airbag, "a0");
+    item(drive, joga, "a1");
+    item(drive, airbag, "a2");
+    // A removed entry and a deleted playlist's entries aren't in any playlist the owner sees.
+    item(drive, joga, "a3", true);
+    item(short, joga, "a0");
+    item(gone, joga, "a0");
+    item(gone, airbag, "a1");
+    item(gone, airbag, "a2");
+    item(gone, airbag, "a3");
+    play(airbag, 1);
+    play(airbag, 2);
+    play(joga, 3);
+
+    assert.deepEqual(libraryScale(db), {
+      tracks: 2,
+      playlists: 2,
+      playlistItems: 4,
+      largestPlaylist: 3,
+      playEvents: 3,
     });
   });
 });

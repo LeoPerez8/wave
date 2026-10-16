@@ -18,12 +18,15 @@ import { useTrackCurrentPath } from "@/library/routes";
 import { useOpenSharedText } from "@/library/sharedText";
 import { startInitialScan } from "@/library/runtime";
 import { NowPlayingSheet, UnderNowPlaying } from "@/nowPlaying/NowPlayingSheet";
+import { PERF_ENABLED, perfTouch, useRenderCount } from "@/perf/perf";
+import { PerfProbe } from "@/perf/PerfProbe";
 import { startServices } from "@/services";
 import { useNavigationBarScheme } from "@/settings/appearance";
 import { startSync } from "@/sync/startSync";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 export default function RootLayout() {
+  useRenderCount("RootLayout");
   const background = useThemeColor("background");
   // The status bar follows `useColorScheme` (style "auto"); the navigation bar follows here.
   useNavigationBarScheme();
@@ -55,7 +58,12 @@ export default function RootLayout() {
   }, [granted]);
 
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: background }}>
+    <GestureHandlerRootView
+      style={{ flex: 1, backgroundColor: background }}
+      // A perf build notes every touch's native timestamp, for the runner's latencies.
+      onTouchStart={PERF_ENABLED ? perfTouch : undefined}
+    >
+      {PERF_ENABLED ? <PerfProbe /> : null}
       <SafeAreaProvider>
         <StatusBar style="auto" />
         <OverlayHost>

@@ -35,6 +35,7 @@ import {
 
 import { skipToNext, skipToPrevious, togglePlayPause } from "./actions";
 import { playbackState } from "./Player";
+import { useRenderCount } from "@/perf/perf";
 
 const RADIUS = chrome.miniPlayer / 2;
 
@@ -75,6 +76,7 @@ type Props = {
  * on screens without one.
  */
 export function MiniPlayer({ backdropId, onOpen }: Props) {
+  useRenderCount("MiniPlayer");
   const item = usePlaybackField("item");
   const playing = usePlaybackField("playWhenReady");
   const error = usePlaybackField("error");
