@@ -24,6 +24,7 @@ import {
   songLookup,
   songTagOutcome,
   songsToFix,
+  tagLookupsToast,
 } from "./index.ts";
 import type { GenreCandidate, LyricsCandidate, SongTagOutcome, TagWriteReport } from "./index.ts";
 
@@ -829,5 +830,78 @@ describe("describeTagLookups", () => {
       message:
         "1 fixed · 1 not found · 0 failed\n\nLRCLIB and Deezer couldn't be reached, so 1 song wasn't looked up.",
     });
+  });
+});
+
+describe("tagLookupsToast", () => {
+  test("names the one song fixed", () => {
+    assert.equal(tagLookupsToast([result("Airbag", updated())]), "Fixed “Airbag”");
+  });
+
+  test("says when the one song's lyrics went into an .lrc file", () => {
+    assert.equal(
+      tagLookupsToast([result("Airbag", updated("sidecar", "notWritten"))]),
+      "Fixed “Airbag” · lyrics saved as .lrc",
+    );
+  });
+
+  test("says when nothing was found for the one song, or it failed", () => {
+    assert.equal(tagLookupsToast([result("Airbag", notFound)]), "Nothing found for “Airbag”");
+    assert.equal(tagLookupsToast([result("Airbag", offline)]), "Couldn't look up “Airbag”");
+    assert.equal(tagLookupsToast([result("Airbag", unwritable)]), "Couldn't update “Airbag”");
+  });
+
+  test("counts many songs, leaving out the counts that are zero", () => {
+    const results = [
+      result("A", updated()),
+      result("B", updated("sidecar", "notWritten")),
+      result("C", updated()),
+      result("D", notFound),
+    ];
+    assert.equal(tagLookupsToast(results), "Fixed 3 songs · 1 not found");
+    assert.equal(
+      tagLookupsToast([result("A", updated()), result("B", offline), result("C", unwritable)]),
+      "Fixed 1 song · 2 failed",
+    );
+    assert.equal(
+      tagLookupsToast([result("A", notFound), result("B", notFound)]),
+      "Nothing fixed · 2 not found",
+    );
+  });
+
+  test("counts the songs skipped as already complete, as a run rather than one song", () => {
+    assert.equal(
+      tagLookupsToast([result("A", updated()), result("B", notFound)], undefined, 1_204),
+      "Fixed 1 song · 1 not found · 1,204 already complete",
+    );
+    assert.equal(
+      tagLookupsToast([result("A", updated())], undefined, 2),
+      "Fixed 1 song · 2 already complete",
+    );
+  });
+
+  test("says when every song already had everything", () => {
+    assert.equal(tagLookupsToast([], undefined, 40), "Nothing to fix");
+    assert.equal(tagLookupsToast([], undefined, 1), "Nothing to fix");
+  });
+
+  test("says how many songs a run that stopped early didn't get to", () => {
+    const results = [result("A", updated()), result("B", notFound)];
+    assert.equal(
+      tagLookupsToast(results, { left: 10, stopped: "cancelled" }),
+      "Fixed 1 song · 1 not found · 10 not looked up",
+    );
+    assert.equal(
+      tagLookupsToast(results, { left: 1, stopped: "unreachable" }),
+      "Fixed 1 song · 1 not found · 1 not looked up (offline)",
+    );
+    assert.equal(
+      tagLookupsToast([result("A", updated())], { left: 3, stopped: "cancelled" }),
+      "Fixed 1 song · 3 not looked up",
+    );
+    assert.equal(
+      tagLookupsToast([], { left: 5, stopped: "cancelled" }),
+      "Nothing fixed · 5 not looked up",
+    );
   });
 });

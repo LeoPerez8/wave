@@ -62,7 +62,7 @@ export const useFloatingChromeHeight = (): number => {
   const nowPlaying = useNowPlayingShown();
   if (nowPlaying) return 0;
   if (selecting) return chrome.gap + chrome.selectionBar;
-  // Tab screens, and screens opened inside the shortcut tab, are drawn under the floating tab bar.
+  // Tab screens, and screens opened inside a section tab, are drawn under the floating tab bar.
   const tabBar = tabOfPath(pathname) !== null;
   const miniPlayer = playing && (tabBar || inLibraryStack(pathname));
   return (

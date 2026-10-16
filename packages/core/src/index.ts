@@ -22,6 +22,8 @@ export { describeFolder, filesLeavingWithRoot, isWithin, planAddRoot } from "./s
 export type { AddRootPlan, FolderLabel, ScanRootState } from "./scanRoots.ts";
 export { resolveSkipSwipe } from "./swipe.ts";
 export type { SkipDirection, SkipSwipe } from "./swipe.ts";
+export { toastDuration, toastSwipeDismisses } from "./toast.ts";
+export type { ToastSwipe } from "./toast.ts";
 export {
   EMPTY_QUEUE,
   REAL_SHUFFLE,
@@ -197,13 +199,15 @@ export type { CardKeyboard, OverlayAlign, OverlayFlow } from "./overlay.ts";
 export { moveSlide, slideEntry, slideTicks, startSlide } from "./slideToChoose.ts";
 export type { MenuSlide, SlidePoint } from "./slideToChoose.ts";
 export {
-  SHORTCUT_TAB_CHOICES,
-  parseShortcutTab,
-  storedShortcutTab,
-  tabBarTabs,
-} from "./shortcutTab.ts";
-export type { TabBarTab } from "./shortcutTab.ts";
-export { SETTINGS_PAGES, accountsSummary } from "./settingsPages.ts";
+  editTabBar,
+  movableTabs,
+  parseTabBar,
+  storedTabBar,
+  tabBarFull,
+  tabsOffBar,
+} from "./tabBar.ts";
+export type { TabBar, TabBarEdit, TabBarTab } from "./tabBar.ts";
+export { SETTINGS_PAGES, accountsSummary, downloadsSummary } from "./settingsPages.ts";
 export type { SettingsPage, SettingsPageEntry } from "./settingsPages.ts";
 export {
   PLAYLIST_LAYOUTS,
@@ -217,12 +221,23 @@ export type { DetailScreen } from "./navigation.ts";
 export { planAlert } from "./alert.ts";
 export type { AlertButton, AlertChoice, AlertPlan, AlertSpec } from "./alert.ts";
 export { DEFAULT_THEME, NIGHT_SLATE, TONES, themeContrastIssues } from "./theme.ts";
-export { withOpacity } from "./colour.ts";
+export { hexToHsv, hsvToHex, parseHexColour, withOpacity } from "./colour.ts";
+export type { Hsv } from "./colour.ts";
+export {
+  colourPickerLayout,
+  colourPickerMarkers,
+  colourPickerTarget,
+  pickColour,
+} from "./colourPicker.ts";
+export type { ColourPickerLayout, ColourPickerTarget } from "./colourPicker.ts";
 export { overlayDivider } from "./overlayDivider.ts";
 export type { ContrastIssue, Theme, ThemeColors } from "./theme.ts";
 export {
+  CUSTOM_INK,
   DEFAULT_THEME_CHOICE,
   THEME_SWATCHES,
+  chooseCustomInk,
+  customInkPreview,
   isDefaultThemeChoice,
   readThemeChoice,
   themeFor,
@@ -230,9 +245,13 @@ export {
 } from "./themeChoice.ts";
 export type {
   BackgroundSwatch,
+  CustomInkPreview,
+  CustomSwatchOption,
+  InkGroup,
   InkSwatch,
   Scheme,
   ThemeChoice,
+  ThemeGroup,
   ThemeSwatchOption,
   ThemeSwatchRow,
 } from "./themeChoice.ts";
@@ -319,6 +338,8 @@ export type {
   ArtistLink,
   ItemAction,
   ItemActionEntry,
+  LibraryArtistRef,
+  StreamedArtists,
   YtSongActionEntry,
   YtSongActionOptions,
   ItemKind,
@@ -438,6 +459,7 @@ export {
   deezerTrackCandidates,
   deezerTrackSearchUrl,
   describeTagLookups,
+  tagLookupsToast,
   canFixSong,
   deezerFollowUps,
   fixLookups,
@@ -559,6 +581,12 @@ export type {
   YtSongsDownloadAction,
   YtSongsDownloadRequest,
 } from "./ytSongsDownload.ts";
+export { failedDownloads } from "./failedDownloads.ts";
+export type {
+  FailedDownload,
+  FailedDownloadRetry,
+  FailedDownloadsInput,
+} from "./failedDownloads.ts";
 export {
   YT_DOWNLOADS_NONE,
   YT_DOWNLOAD_ACTION_LABELS,
@@ -768,12 +796,7 @@ export type {
   PlaylistImportView,
   PlaylistImports,
 } from "./playlistImport.ts";
-export {
-  SPOTIFY_SONG_CAP,
-  readSpotifyPlaylist,
-  spotifyEmbed,
-  spotifyPlaylistPage,
-} from "./spotifyPlaylist.ts";
+export { readSpotifyPlaylist, spotifyEmbed, spotifyPlaylistPage } from "./spotifyPlaylist.ts";
 export type {
   SpotifyAnswer,
   SpotifyEmbed,
@@ -896,5 +919,14 @@ export type {
   HomeSection,
   HomeSectionId,
 } from "./homeSections.ts";
+
+export {
+  SPOTIFY_SEARCH_BUDGET,
+  SPOTIFY_SEARCH_WINDOW_MS,
+  readSpotifySearchPacing,
+  writeSpotifySearchPacing,
+} from "./spotifySearchPacing.ts";
+export type { SpotifySearchPacing } from "./spotifySearchPacing.ts";
+
 export { LIBRARY_SHELF_CHOICES, parseLibraryShelf, storedLibraryShelf } from "./libraryShelf.ts";
 export type { LibraryShelf } from "./libraryShelf.ts";

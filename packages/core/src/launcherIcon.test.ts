@@ -17,6 +17,12 @@ const choose = (change: Partial<ThemeChoice>): ThemeChoice => ({
   ...change,
 });
 
+/** The icon for a custom primary and secondary. */
+const customIcon = (customPrimary: string, customSecondary: string): string =>
+  launcherIconFor(
+    choose({ primary: "custom", customPrimary, secondary: "custom", customSecondary }),
+  ).id;
+
 describe("launcherIconFor", () => {
   test("the shipped theme keeps the teal-over-amber icon (#94)", () => {
     const icon = launcherIconFor(DEFAULT_THEME_CHOICE);
@@ -48,6 +54,20 @@ describe("launcherIconFor", () => {
       }
     assert.equal(ids.size, THEME_SWATCHES.primary.length * THEME_SWATCHES.secondary.length);
     assert.equal(LAUNCHER_ICONS.length, ids.size);
+  });
+
+  test("a custom colour shows the icon of the preset closest to it", () => {
+    // A preset's own tones, light or dark.
+    assert.equal(customIcon("#1f5fb8", "#e8c454"), "blue_gold");
+    assert.equal(customIcon("#a99af0", "#1b6a93"), "violet_sky");
+    // Deeper, paler or brighter than any preset, the hue decides.
+    assert.equal(customIcon("#0d2350", "#ff6a4d"), "blue_coral");
+    assert.equal(customIcon("#ffc4da", "#d400b4"), "rose_magenta");
+    assert.equal(customIcon("#00ff00", "#ffee00"), "green_lemon");
+  });
+
+  test("a kept custom colour doesn't change the icon while a preset is chosen", () => {
+    assert.equal(launcherIconFor(choose({ customPrimary: "#ff00aa" })).id, "teal_ember");
   });
 });
 

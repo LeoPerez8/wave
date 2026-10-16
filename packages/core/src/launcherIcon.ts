@@ -7,7 +7,12 @@
 
 import type { AlertSpec } from "./alert.ts";
 import { LOGO_WAVES, logoIconPaths, logoWaveY } from "./logo.ts";
-import { THEME_SWATCHES, type InkSwatch, type ThemeChoice } from "./themeChoice.ts";
+import {
+  THEME_SWATCHES,
+  presetThemeChoice,
+  type InkSwatch,
+  type ThemeChoice,
+} from "./themeChoice.ts";
 
 /** One launcher icon: a primary × secondary pair and the colours its waves take on black. */
 export interface LauncherIcon {
@@ -82,11 +87,17 @@ export const LAUNCHER_ICON_ART: {
   return { viewport, strokeWidth: Number(stroke.toFixed(3)), top, bottom };
 })();
 
-/** The icon a theme choice shows; an unknown swatch counts as its group's default. */
-export const launcherIconFor = (choice: ThemeChoice): LauncherIcon =>
-  LAUNCHER_ICONS.find(
-    (icon) => icon.primary === choice.primary && icon.secondary === choice.secondary,
-  ) ?? LAUNCHER_ICONS[0]!;
+/**
+ * The icon a theme choice shows: a custom colour takes the preset closest to
+ * it, and an unknown swatch counts as its group's default.
+ */
+export const launcherIconFor = (choice: ThemeChoice): LauncherIcon => {
+  const { primary, secondary } = presetThemeChoice(choice);
+  return (
+    LAUNCHER_ICONS.find((icon) => icon.primary === primary && icon.secondary === secondary) ??
+    LAUNCHER_ICONS[0]!
+  );
+};
 
 /** What the launcher does when Wave switches icons. */
 export interface LauncherBehaviour {

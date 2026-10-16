@@ -132,15 +132,13 @@ const actions = (status: YtDownloadStatus | null) =>
   ytDownloadActions(status, { inLibrary: false });
 
 describe("a YT Music song's download, as its row and menu show it", () => {
-  test("the menu offers Download, Cancel Download while it's on its way, Retry after a failure", () => {
+  test("the menu offers Download, Cancel Download while it's on its way, only Retry after a failure", () => {
     assert.deepEqual(actions(null), ["download"]);
     assert.deepEqual(actions({ kind: "queued" }), ["cancelDownload"]);
     assert.deepEqual(actions({ kind: "downloading", received: 1, total: 9 }), ["cancelDownload"]);
     assert.deepEqual(actions({ kind: "saving" }), []);
-    assert.deepEqual(actions({ kind: "failed", reason: "offline" }), [
-      "retryDownload",
-      "cancelDownload",
-    ]);
+    // Clearing a failure is the Downloads page's Clear, not the song's menu.
+    assert.deepEqual(actions({ kind: "failed", reason: "offline" }), ["retryDownload"]);
   });
 
   test("a downloaded song deleted from the Library offers Download again", () => {
@@ -177,7 +175,7 @@ describe("a YT Music song's download, as its row and menu show it", () => {
       ytDownloadLine(status),
       "Turn on YT Music or Download in best quality in Settings",
     );
-    assert.deepEqual(actions(status), ["retryDownload", "cancelDownload"]);
+    assert.deepEqual(actions(status), ["retryDownload"]);
   });
 
   test("Soulseek's own failures read as before; an unreachable server isn't called offline", () => {
@@ -187,22 +185,19 @@ describe("a YT Music song's download, as its row and menu show it", () => {
     assert.equal(line("accountRejected"), "Turn on Download in best quality in Settings");
     assert.equal(line("timedOut"), "Download failed");
     assert.equal(line("unreachable"), "Download failed: Soulseek can't be reached");
-    assert.deepEqual(actions({ kind: "failed", reason: "unreachable" }), [
-      "retryDownload",
-      "cancelDownload",
-    ]);
+    assert.deepEqual(actions({ kind: "failed", reason: "unreachable" }), ["retryDownload"]);
   });
 
   test("a song YouTube Music won't serve says so, and keeps Retry", () => {
     const status = { kind: "failed", reason: "ytUnavailable" } as const;
     assert.equal(ytDownloadLine(status), "This song is unavailable on YouTube Music");
-    assert.deepEqual(actions(status), ["retryDownload", "cancelDownload"]);
+    assert.deepEqual(actions(status), ["retryDownload"]);
   });
 
   test("a missing song YouTube Music's search has no match for says so, and keeps Retry", () => {
     const status = { kind: "failed", reason: "notFound" } as const;
     assert.equal(ytDownloadLine(status), "Not found on YouTube Music");
-    assert.deepEqual(actions(status), ["retryDownload", "cancelDownload"]);
+    assert.deepEqual(actions(status), ["retryDownload"]);
   });
 
   test("the row's progress rule shows how much has arrived, once the size is known", () => {
