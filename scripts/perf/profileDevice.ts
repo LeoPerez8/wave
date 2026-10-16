@@ -131,9 +131,7 @@ export interface GeneratedProfiles {
 }
 
 type JourneyStep =
-  | { readonly tap: Target }
-  | { readonly swipe: "up" | "down" }
-  | { readonly back: true };
+  { readonly tap: Target } | { readonly swipe: "up" | "down" } | { readonly back: true };
 
 /**
  * The owner's normal browsing (docs/spec.md): every tab, a Track list scrolled, Now Playing

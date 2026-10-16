@@ -59,7 +59,7 @@ sideload reaches (below).
      doesn't end up in the capture; then `cmd package compile --reset` clears ART's profile;
   2. three cold launches, each saved before the next kill (`SAVE_PROFILE` makes the app flush
      what ART recorded; a kill loses anything unsaved); `pm dump-profiles
-     --dump-classes-and-methods` then gives the **startup profile**;
+--dump-classes-and-methods` then gives the **startup profile**;
   3. three journeys, each from a cold launch: every tab, Library › Songs scrolled (a Track list),
      Back, the mini player to Now Playing, Queue scrolled and closed, Close Now Playing, Home ›
      Settings and Back, Search and the keyboard. Their dump, joined with the startup profile, is
@@ -186,7 +186,7 @@ node scripts/perf/perf.ts compare perf-results/317-before-baseline-*.jsonl perf-
 - Native ART against Hermes: a profile only changes how ART runs Java and Kotlin. Hermes runs
   precompiled bytecode. In the perf build, React Native's startup timings (`appStartup`) split
   launch into native startup and the JS bundle's run. One `--perfetto` pass per APK (`--compile
-  baseline`) shows the main thread (`bindApplication`, `activityStart`, `Choreographer#doFrame`)
+baseline`) shows the main thread (`bindApplication`, `activityStart`, `Choreographer#doFrame`)
   apart from the JS thread (`mqt_v_js`). A profile gain should shrink main-thread and binder
   slices, and leave `mqt_v_js` slices and the JS share of `appStartup` unchanged.
 
