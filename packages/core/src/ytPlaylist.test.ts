@@ -72,6 +72,7 @@ describe("readYtPlaylist", () => {
       pagesFrom({ p2: page(["c", "b"], null) }),
     );
     assert.deepEqual(ids(read.songs), ["a", "b", "c"]);
+    assert.deepEqual(ids(read.repeats), ["a", "b"], "the rows listed again, in their order");
   });
 
   test("stops at 5,000 songs and says the playlist goes on", async () => {

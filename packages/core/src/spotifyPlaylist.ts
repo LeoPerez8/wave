@@ -148,6 +148,11 @@ export interface SpotifyPlaylist {
   readonly songs: readonly SpotifySong[];
   /** It goes on past [songs]: the read stopped at the cap, or had only the embed page's first 100. */
   readonly truncated: boolean;
+  /**
+   * How many items Spotify says the playlist has (`totalCount`), songs or
+   * not; the songs read when only the embed page was.
+   */
+  readonly total: number;
 }
 
 /**
@@ -238,6 +243,7 @@ const readPages = async (
     artworkUrl: first.artworkUrl,
     songs,
     truncated: offset < total,
+    total,
   };
 };
 
@@ -273,6 +279,7 @@ export const readSpotifyPlaylist = async (
   const playlist = whole ?? {
     ...embed.playlist,
     truncated: embed.playlist.songs.length >= EMBED_CAP,
+    total: embed.playlist.songs.length,
   };
   return { ok: true, playlist };
 };
