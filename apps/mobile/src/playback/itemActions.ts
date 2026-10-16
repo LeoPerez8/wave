@@ -18,7 +18,7 @@ import { followArtistLink, followStreamedArtistLink } from "@/library/ArtistChoi
 import { confirmDeleteSongs, confirmRemoveSongs } from "@/library/deleteSongs";
 import { songHasFile, type ArtistRow } from "@/library/LibraryStore";
 import { setFavorites, useFavoriteIds } from "@/library/favorites";
-import { findLyricsAndGenreFor } from "@/library/findLyricsAndGenre";
+import { fixSongs } from "@/library/findLyricsAndGenre";
 import { useAlbumsMissingSongs, useLinkRows } from "@/library/hooks";
 import {
   confirmDeletePlaylists,
@@ -192,7 +192,7 @@ export function useItemActions(
   const allTracks = target.kind === "track" ? target.items : [];
   const tracks = allTracks.filter(isLibraryTrack);
   const find = useStreamedSongFinder(hasStreamedSongs(target));
-  // What acts on files (Delete, Find Lyrics and Genre) shows only when every song has one.
+  // What acts on files (Delete, Fix Song) shows only when every song has one.
   const withFiles = tracks.flatMap(({ song }) => (songHasFile(song) ? [song] : []));
   // A YT Music song downloaded since it was checked is the Library's file now.
   const entriesNow = () =>
@@ -315,8 +315,10 @@ export function useItemActions(
           void confirmDeletePlaylists(playlists, { onConfirm, onDeleted });
         });
       }
-      case "findLyricsAndGenre":
-        return run(() => void findLyricsAndGenreFor(withFiles));
+      case "fixSong":
+      case "fixSongs":
+        // Only the songs missing something are fixed (Core's `songsToFix`).
+        return run(() => void fixSongs(withFiles));
       case "select":
         return run(() => onSelect?.());
       case "delete":

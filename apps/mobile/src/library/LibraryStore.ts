@@ -155,7 +155,7 @@ export interface ScanRootSummary extends ScanRoot {
   readonly trackCount: number;
 }
 
-/** A song as the whole-Library lyrics and genre run sees it (Core's `libraryLookupSongs`). */
+/** A song as Fix Songs on the whole Library sees it (Core's `songsToFix`). */
 export interface LibraryLookupSong {
   readonly path: string;
   readonly title: string;
@@ -198,8 +198,12 @@ export interface SongRow {
   /** Orders the album's tracks, and so sorts by artist and by album. */
   readonly discNumber: number | null;
   readonly trackNumber: number | null;
-  /** Find Lyrics and Genre fills it in when it's missing. */
+  /** Fix Song fills it in when it's missing, as the track number, genre and lyrics. */
   readonly year: number | null;
+  /** Null for a song without a genre tag. */
+  readonly genre: string | null;
+  /** Lyrics in the file's tags or in a sidecar `.lrc`. */
+  readonly hasLyrics: boolean;
 }
 
 /** A song that can play: one with a file (the queue's, Android Auto's). */

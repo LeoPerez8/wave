@@ -1,4 +1,5 @@
 import {
+  canFixSong,
   commonKind,
   counted,
   discoverTrackId,
@@ -138,6 +139,7 @@ const KIND_TRACK: KindInfo<TrackItem> = {
           favorite: favorites.has(item.song.id),
           inPlaylist: item.playlistItem !== undefined,
           missing: item.song.path === null,
+          fixable: canFixSong(item.song),
         }
       : {
           streamed: true,
