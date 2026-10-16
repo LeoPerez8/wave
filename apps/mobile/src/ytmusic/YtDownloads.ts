@@ -6,8 +6,10 @@
  */
 import {
   YT_DOWNLOADS_NONE,
+  downloadFailureAnswer,
   downloadFailurePlan,
   downloadSource,
+  downloadStorageFull,
   isWithin,
   missingSongJob,
   missingSongJobId,
@@ -50,6 +52,7 @@ import {
   type YtDownloads,
   type YtSong,
 } from "@wave/core";
+import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
@@ -109,6 +112,9 @@ const failure = (cause: unknown): DownloadFailed => {
     cause,
   });
 };
+/** The Library's database failing a download: storage only when the phone is full (Core's `downloadStorageFull`). */
+const libraryFailure = (cause: unknown): DownloadFailed =>
+  new DownloadFailed({ reason: downloadStorageFull(cause) ? "storage" : "failed", cause });
 const native = <A>(call: () => Promise<A>): Effect.Effect<A, DownloadFailed> =>
   Effect.tryPromise({ try: call, catch: failure });
 const optional = <A>(effect: Effect.Effect<A, unknown>): Effect.Effect<A | null> =>
@@ -216,7 +222,7 @@ export const prepareDownload = (song: NativeYtSong) =>
     const [roots, excludedFolders] = yield* Effect.all([
       store.listRoots,
       store.excludedFolders,
-    ]).pipe(Effect.mapError((cause) => new DownloadFailed({ reason: "storage", cause })));
+    ]).pipe(Effect.mapError(libraryFailure));
     if (roots.length === 0) return yield* new DownloadFailed({ reason: "noFolder" });
     const ytMusicOn = ytMusicEnabled();
     const source = currentSource(yield* native(() => WaveSoulseek.session()), ytMusicOn);
@@ -348,7 +354,7 @@ const prepareMissingSong = (trackId: number) =>
       store.listRoots,
       store.excludedFolders,
       store.missingSongs([trackId]),
-    ]).pipe(Effect.mapError((cause) => new DownloadFailed({ reason: "storage", cause })));
+    ]).pipe(Effect.mapError(libraryFailure));
     const track = tracks[0];
     // Gone, or filled in since (a scan found its file): there's nothing left to download.
     if (track === undefined) return yield* new DownloadFailed({ reason: "failed" });
@@ -414,7 +420,7 @@ export const downloadPathIncluded = (path: string) =>
   Effect.gen(function* () {
     const store = yield* LibraryStore;
     const [roots, excluded] = yield* Effect.all([store.listRoots, store.excludedFolders]).pipe(
-      Effect.mapError((cause) => new DownloadFailed({ reason: "storage", cause })),
+      Effect.mapError(libraryFailure),
     );
     return (
       roots.some((root) => isWithin(path, root.path)) &&
@@ -442,7 +448,7 @@ export const importDownload = (
         [{ ...toIndexedTrack(saved.track), videoId, ...(fills === null ? {} : { fills }) }],
         saved.artwork === null ? [] : [toIndexedArtwork(saved.artwork)],
       )
-      .pipe(Effect.mapError((cause) => new DownloadFailed({ reason: "storage", cause })));
+      .pipe(Effect.mapError(libraryFailure));
     libraryEdited();
     return saved.path;
   });
@@ -509,9 +515,29 @@ const answer = (claim: NativeDownloadDecision) =>
       }
     }
   }).pipe(
-    Effect.catch((error) =>
-      Effect.succeed({ failure: error instanceof DownloadFailed ? error.reason : "storage" }),
-    ),
+    Effect.catchCause((cause) => {
+      // An interrupted answer isn't one: the lease expires and the journal asks again.
+      if (Cause.hasInterruptsOnly(cause)) return Effect.failCause(cause);
+      // Anything unexpected (a defect too) fails as itself, never as storage, and says what it was.
+      const error = Cause.squash(cause);
+      const decided = error instanceof DownloadFailed;
+      if (!decided) console.warn(`[wave] the ${claim.decision} decision failed`, error);
+      return Effect.succeed(
+        downloadFailureAnswer(
+          claim.decision,
+          decided ? error.reason : "failed",
+          decided ? error.cause : error,
+          {
+            // A job's first prepare holds no plan yet: it gets its source's, to try again by.
+            failurePlan:
+              claim.failurePlan ??
+              downloadFailurePlan(claim.source ?? "soulseek", { ytMusicOn: ytMusicEnabled() }),
+            fallback: claim.fallback,
+            tags: claim.tags,
+          },
+        ),
+      );
+    }),
   );
 
 /** A download as Find Lyrics and Genre sees it: what its file says once tagged and saved. */
