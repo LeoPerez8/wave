@@ -843,3 +843,19 @@ export type {
   MissingSongsDownloadAction,
   MissingTrack,
 } from "./missingSongDownload.ts";
+export {
+  HOME_SECTIONS,
+  editHomeArrangement,
+  hiddenHomeSections,
+  homeItems,
+  homeSectionTitle,
+  parseHomeArrangement,
+  storedHomeArrangement,
+} from "./homeSections.ts";
+export type {
+  HomeArrangement,
+  HomeArrangementEdit,
+  HomeItem,
+  HomeSection,
+  HomeSectionId,
+} from "./homeSections.ts";
