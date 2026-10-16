@@ -181,22 +181,23 @@ describe("readSpotifyPlaylist", () => {
     }
   });
 
-  test("a playlist past the song cap is read up to it and reads as cut short", async () => {
+  test("reads all 3,000 songs of a large playlist without truncating it", async () => {
     const { asked, transport } = spotify(
       async () => ok(EMBED),
       async (offset) =>
         ok(
           pageOf(
             Array.from({ length: 500 }, (_, n) => `Song ${offset + n}`),
-            10_000,
+            3000,
           ),
         ),
     );
     const read = await readSpotifyPlaylist(ID, transport);
     assert.ok(read.ok);
-    assert.equal(read.playlist.songs.length, 1000);
-    assert.equal(read.playlist.truncated, true);
-    assert.equal(asked.length, 3);
+    assert.equal(read.playlist.songs.length, 3000);
+    assert.equal(read.playlist.truncated, false);
+    assert.equal(asked.length, 7);
+    assert.equal(read.playlist.songs.at(-1)?.title, "Song 2999");
   });
 
   test("once cancelled, nothing more is asked", async () => {

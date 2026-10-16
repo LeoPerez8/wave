@@ -3,7 +3,8 @@
  * link"): Import makes the playlist at once, and this fills it, one import
  * at a time, while Wave is open or in the background (a foreground service,
  * `WavePlaylistImport`, with progress and Cancel in a notification). Core
- * decides each step (`nextImportStep`), what a search's answer settles
+ * decides each step (`nextImportStep`, which also paces a Spotify import's
+ * YouTube Music searches), what a search's answer settles
  * (`importSearchAnswered`) and what the playlist is given next
  * (`importAdditions`); the imports are kept, so they go on when Wave starts
  * again.
@@ -17,15 +18,18 @@ import {
   playlistImportProgress,
   queuePlaylistImport,
   readPlaylistImports,
+  readSpotifySearchPacing,
   retryPlaylistImport,
   startPlaylistImport,
   updatePlaylistImport,
   withoutPlaylistImport,
   writePlaylistImports,
+  writeSpotifySearchPacing,
   type ImportAdditions,
   type LinkImportPlan,
   type PlaylistImport,
   type PlaylistImports,
+  type SpotifySearchPacing,
   type YtAlbumSong,
   type YtSongSearch,
 } from "@wave/core";
@@ -56,6 +60,20 @@ const imports = persistedSetting<PlaylistImports<YtAlbumSong>>({
 
 /** The imports, for the playlist page; re-renders as they go on. */
 export const usePlaylistImports = (): PlaylistImports<YtAlbumSong> => imports.useValue();
+
+/**
+ * The YouTube Music searches Spotify imports asked lately, which Core paces
+ * (`nextImportStep`), kept so a restart doesn't start a fresh allowance.
+ */
+const spotifySearches = persistedSetting<SpotifySearchPacing>({
+  key: "spotifySearches",
+  read: readSpotifySearchPacing,
+  write: (value) => (value.searchesAt.length === 0 ? null : writeSpotifySearchPacing(value)),
+  persistDelayMs: 1000,
+});
+
+/** The searches Spotify imports asked lately, for the playlist page's time left. */
+export const useSpotifySearches = (): SpotifySearchPacing => spotifySearches.useValue();
 
 /** While the playlist is given found songs: at most once a second, so its page doesn't redraw for each. */
 const GIVE_EVERY_MS = 1000;
@@ -165,8 +183,9 @@ const runImport = async (playlistId: number): Promise<void> => {
       return;
     }
     const now = Date.now();
-    const { job: next, step } = nextImportStep(job, now);
+    const { job: next, step, searches } = nextImportStep(job, now, spotifySearches.get());
     if (step.kind === "search") {
+      spotifySearches.set(searches);
       setImports(updatePlaylistImport(imports.get(), next));
       ask(playlistId, step.query);
       continue;
