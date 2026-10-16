@@ -105,7 +105,13 @@ import {
   type TrackScope,
   withFile,
 } from "./db/tracks";
-import { creditedPlayTotals, songListening, songsCrediting, trackPlayTotals } from "./db/stats";
+import {
+  artistPlays,
+  creditedPlayTotals,
+  songListening,
+  trackPlayTotals,
+  type ArtistPlays,
+} from "./db/stats";
 import { keyRecordings, stampPreference } from "./db/sync";
 import {
   filesGone,
@@ -659,12 +665,15 @@ export class LibraryStore extends Context.Service<
      */
     readonly songListening: Effect.Effect<readonly SongListening[], LibraryStoreError>;
     /**
-     * The songs whose credit names [artistId], in no order: those the artist
-     * page's stats count its songs listened among.
+     * What [artistId]'s page needs for its stats block (Core's `artistStats`),
+     * read from that artist's songs and their plays alone: the songs in the
+     * library whose credit names them, those songs' all-time listening
+     * (deleted songs included) and their counted plays up to [now].
      */
-    readonly songsCrediting: (
+    readonly artistPlays: (
       artistId: number,
-    ) => Effect.Effect<readonly number[], LibraryStoreError>;
+      now: number,
+    ) => Effect.Effect<ArtistPlays, LibraryStoreError>;
     /** The artists whose photo is due for a lookup now (Core's `artistPhotoLookups`). */
     readonly artistPhotoLookups: Effect.Effect<readonly ArtistPhotoLookup[], LibraryStoreError>;
     /** Records how an artist's photo lookup went, by artist key. */
@@ -1157,8 +1166,8 @@ const make = Effect.gen(function* () {
 
     songListening: attempt("sum up listening", () => songListening(db)),
 
-    songsCrediting: (artistId) =>
-      attempt("list the artist's songs", () => songsCrediting(db, artistId)),
+    artistPlays: (artistId, now) =>
+      attempt("sum up the artist's plays", () => artistPlays(db, artistId, now)),
 
     artistPhotoLookups: attempt("list artist photo lookups", () =>
       selectArtistPhotoLookups(db, Date.now()),
