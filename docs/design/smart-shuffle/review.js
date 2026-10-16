@@ -29,6 +29,16 @@ const options = [
     name: "Flow loop",
     description: "An open loop carries the mix forward.",
   },
+  {
+    file: "07-crossed-mix",
+    name: "Crossed mix",
+    description: "Two tuning points feed paths that swap order.",
+  },
+  {
+    file: "08-mix-junction",
+    name: "Mix junction",
+    description: "One tuning point sits where the paths cross.",
+  },
 ];
 
 const params = new URLSearchParams(location.search);
