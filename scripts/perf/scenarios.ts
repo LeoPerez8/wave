@@ -20,8 +20,12 @@ export type Action =
   | { readonly kind: "share" }
   /** A cold launch, timed by `am start -W`. */
   | { readonly kind: "launch" }
-  /** Home, then Wave again from its launcher intent while its process lives: a warm launch. */
-  | { readonly kind: "resume" }
+  /**
+   * Home, then Wave again from its launcher intent while its process lives: a
+   * warm launch. [awayMs]: how long it stays on Home first (the run's settle
+   * time when unset).
+   */
+  | { readonly kind: "resume"; readonly awayMs?: number }
   /** Nothing: a window that watches the app on its own (an import filling). */
   | { readonly kind: "idle" }
   /**
@@ -93,7 +97,12 @@ export interface Scenario {
   readonly needsArtist?: boolean;
   /** Part of the glass comparison (#316), run with `--scenario glass`, not with `all`. */
   readonly glass?: boolean;
+  /** Not part of `all` (it takes minutes): run it by name. */
+  readonly byName?: boolean;
 }
+
+/** Longer than Wave's 60 s rescan interval (`RESCAN_ON_RETURN_AFTER_MS` in library/runtime.ts). */
+const PAST_RESCAN_INTERVAL_MS = 65_000;
 
 const tab = (label: string): Target => ({ desc: label });
 
@@ -198,6 +207,23 @@ export const SCENARIOS: readonly Scenario[] = [
     steps: () => [{ measure: "warm", action: { kind: "resume" } }],
     iterations: 5,
     warmup: 1,
+  },
+  {
+    name: "rescan-return",
+    summary:
+      "Home for 65 s, past Wave's rescan interval, then Wave again (am start -W) and a tab tapped while the rescan, sync and any import start (#315).",
+    steps: ({ tabs }) => [
+      {
+        measure: "return",
+        action: { kind: "resume", awayMs: PAST_RESCAN_INTERVAL_MS },
+        windowMs: 1_500,
+      },
+      tabStep("tab", tab(tabs[1] ?? "Library")),
+    ],
+    teardown: [{ kind: "tap", target: { desc: "Home" } }],
+    iterations: 3,
+    warmup: 1,
+    byName: true,
   },
   {
     name: "tab-first",
@@ -464,7 +490,7 @@ export const SCENARIOS: readonly Scenario[] = [
 
 /** The scenarios a full baseline runs, in order (`--scenario all`). */
 export const ALL_SCENARIOS: readonly string[] = SCENARIOS.filter(
-  (scenario) => scenario.name !== "import" && scenario.glass !== true,
+  (scenario) => scenario.name !== "import" && scenario.glass !== true && scenario.byName !== true,
 ).map((scenario) => scenario.name);
 
 /** The glass comparison's scenarios (`--scenario glass`), run once per glass probe. */

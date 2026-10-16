@@ -134,6 +134,7 @@ JavaScript saw that key, not when it was pressed.
 | ------------------- | -------------------------------------------------------------------------------------------- | ------------------------- | ---------: |
 | `startup`           | cold launch (`cold`)                                                                         | (am start -W)             |          5 |
 | `warm-start`        | Home, then Wave's launcher intent with its process alive (`warm`)                            | (am start -W)             |          5 |
+| `rescan-return`     | 65 s on Home, then Wave again (`return`), then the second of `tabs` tapped (`tab`); by name  | (am start -W), `route`    |          3 |
 | `tab-first`         | after a fresh launch, the first visit to each of `tabs` but Home (`first`)                   | `route`                   |          5 |
 | `tab-switch`        | ten tab taps cycling through `tabs` (`tab`): warm visits                                     | `route`                   |          3 |
 | `rapid-tabs`        | ten tab taps back to back, measured from the last (`burst`)                                  | `tab.settled` (last tab)  |          5 |
@@ -155,6 +156,10 @@ JavaScript saw that key, not when it was pressed.
 | `scroll-home`       | glass: a fling up (`fling-up`) and back down (`fling-down`) on Home                          | -                         |         10 |
 | `scroll-songs`      | glass: the same on Library › Songs, under the mini player                                    | -                         |         10 |
 | `idle-home`         | glass: 5 s of Home untouched (`idle`); any frame is idle rendering                           | -                         |          5 |
+
+`rescan-return` (#315) isn't part of `all` either: each iteration waits past Wave's 60 s rescan
+interval, so ask for it by name. Its return starts the rescan, a sync and any import's next
+answers; the tab tap measures navigation while they run.
 
 The glass scenarios (`--scenario glass`) aren't part of `all`. A fling is `input swipe` from 70%
 to 30% of the screen's height (or back) in 120 ms, at the screen's centre, clear of the chrome. A
@@ -319,6 +324,9 @@ ticket needs evidence, and give a new response mark a scenario step's `expect` i
   player took a queue change;
 - `artist.stats` ("played" or "not played"), on the frame after an artist page's stats block
   shows what it read (again after each re-read);
+- `startup.content`, on the frame after the first app screen in sight showed a Library query's
+  result: startup work may go (#315). `startup.started` (`scan`, `imports`, `sync`, `playlists`,
+  `downloads`, `lookupSummary`) as each piece of startup work starts;
 - touches with their native timestamp, from the root view's `onTouchStart`.
 
 Each flush also reports the shared Library queries' counters since launch, as `libraryQueries.*`
@@ -331,6 +339,13 @@ flush and `search` on each step: `entries` in the index, `prepared` (entries pre
 a source given again unchanged prepares none) and `indexes` put together.
 
 The `tabs` metadata (first flush) names how hidden tabs are kept (`tabs.screens`, #304).
+
+Startup scheduling (#315, Core's `BackgroundWorkStats`): `startup.contentAt` (when startup work
+was let go, on the `performance.now()` clock of React Native's `startup.*` timings),
+`startup.contentCapped` (let go by the 3 s cap, no screen showed content) and
+`startup.startedPieces`; a launch step's `appStartup` holds them. `backgroundWork.*`: `slices`
+run since launch, the `longestWaitMs` one waited, and `forcedSlices` (run by the 2 s cap while a
+touch went on). The runner copies them to each step as `backgroundWork`.
 
 It also reports what playlists cost since launch, as `playlistWork.*`
 (`apps/mobile/src/library/db/playlistWork.ts`, #308): `listReads` (Library › Playlists),
