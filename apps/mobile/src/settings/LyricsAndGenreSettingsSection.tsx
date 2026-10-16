@@ -1,16 +1,15 @@
 import { libraryLookupProgress } from "@wave/core";
-import { Switch, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
-import { grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
+import { SettingsSwitch } from "@/components/SettingsSwitch";
 import { TextButton } from "@/components/TextButton";
 import {
   cancelLibraryLookup,
   startLibraryLookup,
   useLibraryLookup,
 } from "@/library/findLyricsAndGenre";
-import { useThemeColor } from "@/theme/useThemeColor";
 
 import { setLyricsAndGenreLookupsEnabled, useLyricsAndGenreLookupsEnabled } from "./lyricsAndGenre";
 
@@ -28,26 +27,16 @@ const setLookups = (on: boolean): void => {
 export function LyricsAndGenreSettingsSection() {
   const enabled = useLyricsAndGenreLookupsEnabled();
   const run = useLibraryLookup();
-  const accent = useThemeColor("accent");
-  const fill = useThemeColor("fill");
-  const surface = useThemeColor("surface");
 
   return (
-    <>
-      <CatalogLine className="mb-2 mt-12">Lyrics and genre</CatalogLine>
+    <View>
+      <CatalogLine className="mb-2">Lyrics and genre</CatalogLine>
       <Hairline />
-      <View className="flex-row items-center" style={{ minHeight: grid.row }}>
-        <Text className="flex-1 font-sans text-title3 font-normal text-foreground">
-          Find lyrics and genre online
-        </Text>
-        <Switch
-          accessibilityLabel="Find lyrics and genre online"
-          value={enabled}
-          onValueChange={setLookups}
-          trackColor={{ false: fill, true: accent }}
-          thumbColor={surface}
-        />
-      </View>
+      <SettingsSwitch
+        label="Find lyrics and genre online"
+        value={enabled}
+        onValueChange={setLookups}
+      />
       <Hairline />
       <Text className="mt-2 font-sans text-footnote text-secondary">
         Find Lyrics and Genre, in a song&apos;s menu, looks up its lyrics on LRCLIB and its
@@ -74,6 +63,6 @@ export function LyricsAndGenreSettingsSection() {
           />
         </View>
       )}
-    </>
+    </View>
   );
 }

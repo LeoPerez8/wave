@@ -24,11 +24,14 @@ export { resolveSkipSwipe } from "./swipe.ts";
 export type { SkipDirection, SkipSwipe } from "./swipe.ts";
 export {
   EMPTY_QUEUE,
+  REAL_SHUFFLE,
   RESTART_THRESHOLD_MS,
   currentEntry,
   nextRepeatMode,
   parseQueueState,
+  readShuffleKind,
   reduceQueue,
+  shufflesQueue,
   upNext,
   upNextMove,
   withPendingMoves,
@@ -43,6 +46,8 @@ export type {
   QueueResult,
   QueueState,
   RepeatMode,
+  Shuffle,
+  ShuffleKind,
 } from "./queue.ts";
 export { applyPlayerSync, planPlayerSync } from "./playerSync.ts";
 export type { PlayerList, QueueList, SyncStep } from "./playerSync.ts";
@@ -197,6 +202,8 @@ export {
   tabBarTabs,
 } from "./shortcutTab.ts";
 export type { TabBarTab } from "./shortcutTab.ts";
+export { SETTINGS_PAGES, accountsSummary } from "./settingsPages.ts";
+export type { SettingsPage, SettingsPageEntry } from "./settingsPages.ts";
 export {
   PLAYLIST_LAYOUTS,
   parsePlaylistLayout,
@@ -312,6 +319,7 @@ export type {
   ItemAction,
   ItemActionEntry,
   YtSongActionEntry,
+  YtSongActionOptions,
   ItemKind,
 } from "./itemActions.ts";
 export { concentricRadius } from "./corners.ts";
@@ -705,9 +713,7 @@ export type {
   StreamedPlaylistEntry,
 } from "./playlistEntries.ts";
 export {
-  linkImportSummary,
   linkImportView,
-  planLinkImport,
   playlistImportSources,
   recognisePlaylistLink,
   sharedTextImport,
@@ -716,12 +722,10 @@ export {
 } from "./playlistLinks.ts";
 export type {
   ImportNotice,
-  LinkImportPlan,
   LinkImportRead,
   LinkImportView,
   LinkReadFailure,
   LinkedPlaylist,
-  NotFoundSong,
   ReadPlaylist,
   PlaylistImportSource,
   PlaylistLink,
@@ -729,19 +733,40 @@ export type {
   PlaylistLinkProblem,
   SharedTextImport,
 } from "./playlistLinks.ts";
+export { spotifySearchQuery, spotifyYtMatch } from "./spotifyImport.ts";
+export type { YtSongSearch } from "./spotifyImport.ts";
 export {
   SPOTIFY_SEARCHES_AT_ONCE,
-  findSpotifySongs,
-  planSpotifyImport,
-  spotifySearchQuery,
-  spotifyYtMatch,
-} from "./spotifyImport.ts";
+  importAdded,
+  importAdditions,
+  importSearchAnswered,
+  importTurn,
+  nextImportStep,
+  planLinkImport,
+  playlistImportProgress,
+  playlistImportView,
+  queuePlaylistImport,
+  readPlaylistImports,
+  retryPlaylistImport,
+  startPlaylistImport,
+  updatePlaylistImport,
+  withoutPlaylistImport,
+  writePlaylistImports,
+} from "./playlistImport.ts";
 export type {
-  SpotifyFind,
-  SpotifyFindFailure,
-  SpotifyFinding,
-  YtSongSearch,
-} from "./spotifyImport.ts";
+  ImportAdditions,
+  ImportFind,
+  ImportService,
+  ImportState,
+  ImportStep,
+  ImportStopReason,
+  LinkImportPlan,
+  LinkedSource,
+  PlaylistImport,
+  PlaylistImportProgress,
+  PlaylistImportView,
+  PlaylistImports,
+} from "./playlistImport.ts";
 export {
   SPOTIFY_SONG_CAP,
   readSpotifyPlaylist,
@@ -843,6 +868,7 @@ export {
   missingSongVideo,
   missingSongYtSong,
   missingSongsDownload,
+  missingSongsDownloadActions,
 } from "./missingSongDownload.ts";
 export type {
   MissingSongJob,
@@ -853,3 +879,19 @@ export type {
   MissingSongsDownloadAction,
   MissingTrack,
 } from "./missingSongDownload.ts";
+export {
+  HOME_SECTIONS,
+  editHomeArrangement,
+  hiddenHomeSections,
+  homeItems,
+  homeSectionTitle,
+  parseHomeArrangement,
+  storedHomeArrangement,
+} from "./homeSections.ts";
+export type {
+  HomeArrangement,
+  HomeArrangementEdit,
+  HomeItem,
+  HomeSection,
+  HomeSectionId,
+} from "./homeSections.ts";

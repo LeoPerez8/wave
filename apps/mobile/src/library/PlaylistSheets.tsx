@@ -24,6 +24,7 @@ import { useThemeColor } from "@/theme/useThemeColor";
 
 import { usePlaylists } from "./hooks";
 import type { PlaylistRow } from "./LibraryStore";
+import { cancelPlaylistImport } from "./playlistImports";
 import {
   addToPlaylist,
   createPlaylist,
@@ -310,7 +311,10 @@ export const confirmDeletePlaylists = (
     if (!confirmed) return;
     onConfirm?.();
     try {
-      for (const playlist of playlists) await deletePlaylist(playlist.id);
+      for (const playlist of playlists) {
+        cancelPlaylistImport(playlist.id);
+        await deletePlaylist(playlist.id);
+      }
       onDeleted?.();
     } catch {
       failed(playlists.length === 1 ? "delete the playlist" : "delete the playlists")();
