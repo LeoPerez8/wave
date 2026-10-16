@@ -34,6 +34,7 @@ import {
   ytDownloadStatus,
   ytDownloadTags,
   ytDownloadsFromJournal,
+  ytDownloadsToForget,
   ytPlaylistDownload,
   ytSongsDownload,
   type DownloadFailurePlan,
@@ -63,8 +64,13 @@ import * as Result from "effect/Result";
 import { useMemo, useSyncExternalStore } from "react";
 
 import { askForNotifications } from "@/lib/askForNotifications";
-import { libraryEdited, toIndexedArtwork, toIndexedTrack } from "@/library/LibraryScan";
-import { LibraryStore } from "@/library/LibraryStore";
+import {
+  libraryEdited,
+  libraryVersion,
+  toIndexedArtwork,
+  toIndexedTrack,
+} from "@/library/LibraryScan";
+import { LibraryStore, type SongRow } from "@/library/LibraryStore";
 import { useLoadedMissingSongs, useMissingSongs } from "@/library/hooks";
 import { refreshDownloadPolicy } from "@/library/downloadPolicy";
 import { fillInLyricsAndGenre, lookUpLyricsAndGenre } from "@/library/lyricsAndGenre";
@@ -607,6 +613,52 @@ let poll: ReturnType<typeof setInterval> | null = null;
 
 let refreshing = false;
 let refreshAgain = false;
+/** Read once per Library version, including when downloads finish between edits. */
+let downloadLibrary: { readonly version: number; readonly songs: readonly SongRow[] } | null = null;
+/** Progress on unfinished jobs doesn't change which finished jobs the Library still has. */
+let reconciledDownloads = "";
+
+/** Core's finished jobs to forget, decided against a Library read after their journal snapshot. */
+const forgetDeletedDownloads = async (
+  jobs: readonly NativeDownloadJob[],
+): Promise<readonly NativeDownloadJob[]> => {
+  if (!jobs.some((job) => job.phase === "completed" && job.acknowledged === true)) return jobs;
+  const version = libraryVersion.get();
+  const revision = JSON.stringify([
+    version,
+    jobs
+      .filter((job) => job.phase === "completed" && job.acknowledged === true)
+      .map((job) => [job.id, job.generation]),
+  ]);
+  if (revision === reconciledDownloads) return jobs;
+  if (downloadLibrary?.version !== version) {
+    const songs = await appRuntime.runPromise(
+      Effect.gen(function* () {
+        const store = yield* LibraryStore;
+        return yield* store.listSongs;
+      }),
+    );
+    // A scan or import landed while the read was pending. Re-read both snapshots before deciding.
+    if (version !== libraryVersion.get()) {
+      refreshAgain = true;
+      return jobs;
+    }
+    downloadLibrary = { version, songs };
+  }
+  const forgotten = new Set<string>();
+  for (const id of ytDownloadsToForget(jobs, downloadLibrary.songs)) {
+    if (version !== libraryVersion.get()) {
+      refreshAgain = true;
+      break;
+    }
+    const job = jobs.find((candidate) => candidate.id === id);
+    if (job !== undefined && (await WaveSoulseek.forgetCompletedJob(id, job.generation)))
+      forgotten.add(id);
+  }
+  if (version === libraryVersion.get()) reconciledDownloads = revision;
+  return forgotten.size === 0 ? jobs : jobs.filter((job) => !forgotten.has(job.id));
+};
+
 /** Mirrors the journal into the rows and answers what it waits on; coalesces overlapping calls. */
 const refresh = async (): Promise<void> => {
   if (refreshing) {
@@ -617,7 +669,9 @@ const refresh = async (): Promise<void> => {
   try {
     do {
       refreshAgain = false;
-      const jobs = await WaveSoulseek.jobsSnapshot();
+      const snapshotJobs = await WaveSoulseek.jobsSnapshot();
+      // A failed Library read keeps the journal intact and mustn't hide new progress or decisions.
+      const jobs = await forgetDeletedDownloads(snapshotJobs).catch(() => snapshotJobs);
       const snapshot = JSON.stringify(jobs);
       if (snapshot !== shown) {
         shown = snapshot;
@@ -688,6 +742,7 @@ export const startDownloads = (resume = false): void => {
   if (!attached) {
     attached = true;
     WaveSoulseek.addListener("onJobsChanged", refreshQuietly);
+    libraryVersion.subscribe(refreshQuietly);
   }
   // Replays anything that changed before the listener was attached, e.g. while JS was starting.
   refreshQuietly();

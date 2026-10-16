@@ -11,6 +11,7 @@ import {
   discoverMixReadsMore,
   discoverMixSeeds,
   discoverMixSongs,
+  discoverMixesBuilt,
   discoverMixesDue,
   discoverSeedQuery,
   discoverSeedVideo,
@@ -111,8 +112,8 @@ const readMix = (seed: DiscoverMixSeed, filter: Filter) =>
 /**
  * Builds the mixes from the owner's all-time most played artists and songs,
  * one seed after another so no song is in two mixes. Null when there's
- * nothing to build from (no plays yet) or no seed got an answer (offline):
- * what was saved stays.
+ * nothing to build from (no plays yet) or no seed made a usable mix: what
+ * was saved stays, and a later visit can try again.
  */
 const buildMixes = Effect.gen(function* () {
   const stats = yield* Stats;
@@ -128,23 +129,21 @@ const buildMixes = Effect.gen(function* () {
   const played = playedFinder(yield* store.playedRecordingKeys);
   const taken = new Set<string>();
   const mixes: DiscoverMix[] = [];
-  let answered = false;
   for (const seed of seeds) {
     const mix = yield* Effect.result(
       readMix(seed, { inLibrary: (song) => inLibrary(song) !== null, played, taken }),
     );
     if (Result.isFailure(mix)) continue;
-    answered = true;
     if (mix.success === null) continue;
     mixes.push(mix.success);
     for (const song of mix.success.songs) taken.add(song.videoId);
   }
-  return answered ? { builtAt: Date.now(), mixes } : null;
+  return discoverMixesBuilt(mixes, Date.now());
 });
 
 /** A build going on, so Home coming back into focus meanwhile doesn't start another. */
 let building = false;
-/** When a build last got no answer: it's tried again after a while, not on every visit. */
+/** When a build last made no mixes: try again after a while, not on every visit. */
 let failedAt: number | null = null;
 const RETRY_MS = 10 * 60 * 1000;
 

@@ -586,6 +586,7 @@ export type {
   YtSongsDownloadRequest,
 } from "./ytSongsDownload.ts";
 export { failedDownloads, settledDownloadFailures } from "./failedDownloads.ts";
+export { ytDownloadsToForget } from "./forgottenDownloads.ts";
 export type {
   FailedDownload,
   FailedDownloadRetry,
@@ -912,6 +913,7 @@ export {
   discoverMixReadsMore,
   discoverMixSeeds,
   discoverMixSongs,
+  discoverMixesBuilt,
   discoverMixesDue,
   discoverSeedQuery,
   discoverSeedVideo,
@@ -928,6 +930,8 @@ export type {
   DiscoverSeedArtist,
   DiscoverSeedSong,
 } from "./discoverMixes.ts";
+export { discoverMixActions, discoverMixPlaylist } from "./discoverMixActions.ts";
+export type { DiscoverMixAction } from "./discoverMixActions.ts";
 
 export {
   SPOTIFY_SEARCH_BUDGET,

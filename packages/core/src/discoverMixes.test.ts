@@ -6,6 +6,7 @@ import {
   discoverMixCaption,
   discoverMixReadsMore,
   discoverMixesDue,
+  discoverMixesBuilt,
   parseDiscoverMixes,
   storedDiscoverMixes,
   discoverMixSeeds,
@@ -424,10 +425,36 @@ describe("The saved mixes", () => {
     assert.deepEqual(parseDiscoverMixes(storedDiscoverMixes(saved)), saved);
   });
 
+  test("a refresh with no usable mixes cannot replace the saved mixes", () => {
+    assert.equal(discoverMixesBuilt([], 1_700_000_000_000), null);
+  });
+
+  test("a usable refresh saves its mixes and starts today's interval", () => {
+    const now = new Date(2026, 9, 16, 12).getTime();
+    const built = discoverMixesBuilt(saved.mixes, now);
+    assert.deepEqual(built?.mixes, saved.mixes);
+    assert.equal(built?.builtAt, now);
+    assert.equal(discoverMixesDue(built?.builtAt ?? null, now), false);
+  });
+
   test("are none when nothing, or nothing readable, is saved", () => {
     assert.equal(parseDiscoverMixes(null), null);
     assert.equal(parseDiscoverMixes("{"), null);
     assert.equal(parseDiscoverMixes(JSON.stringify({ mixes: [] })), null);
+  });
+
+  test("an empty cache doesn't postpone rebuilding until tomorrow", () => {
+    const now = new Date(2026, 9, 16, 12).getTime();
+    const cached = parseDiscoverMixes(JSON.stringify({ builtAt: now, mixes: [] }));
+    assert.equal(discoverMixesDue(cached?.builtAt ?? null, now), true);
+  });
+
+  test("a cache whose mixes are all unreadable is rebuilt too", () => {
+    const now = new Date(2026, 9, 16, 12).getTime();
+    const cached = parseDiscoverMixes(
+      JSON.stringify({ builtAt: now, mixes: [{ ...saved.mixes[0], songs: [] }] }),
+    );
+    assert.equal(discoverMixesDue(cached?.builtAt ?? null, now), true);
   });
 
   test("leave out a song or a mix that can't be read", () => {

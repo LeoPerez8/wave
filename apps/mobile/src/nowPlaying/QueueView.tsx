@@ -1,12 +1,5 @@
 import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
-import {
-  IconArrowsShuffle,
-  IconArrowsShuffle2,
-  IconMenu2,
-  IconRepeat,
-  IconRepeatOnce,
-  IconX,
-} from "@tabler/icons-react-native";
+import { IconMenu2, IconRepeat, IconRepeatOnce, IconX } from "@tabler/icons-react-native";
 import {
   currentEntry,
   reorderShift,
@@ -53,14 +46,13 @@ import {
   toggleShuffle,
 } from "@/playback/actions";
 import { useQueue } from "@/playback/hooks";
-import { useShuffleKind } from "@/settings/shuffleKind";
 import { queueState } from "@/playback/Queue";
 import type { PlaybackState } from "@/playback/Player";
 import type { QueueTrack } from "@/playback/queueTracks";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { useQueueTracks } from "./hooks";
-import { openShuffleMenu, shuffleLabel } from "./ShuffleMenu";
+import { useShuffleControl } from "./ShuffleMenu";
 import { TrackHeader } from "./TrackHeader";
 
 type IconProps = { size?: number; color?: string; strokeWidth?: number };
@@ -128,21 +120,14 @@ const REPEAT_LABEL: Record<RepeatMode, string> = {
  */
 export function QueueHeader({ item }: { item: NonNullable<PlaybackState["item"]> }) {
   const queue = useQueue();
-  const shuffleKind = useShuffleKind();
+  const shuffle = useShuffleControl();
   const count = queue.entries.length - queue.index - 1;
   return (
     <View>
       <TrackHeader item={item} />
       <Hairline />
       <View className="flex-row" style={{ gap: CELL }}>
-        <Toggle
-          icon={shuffleKind === "smart" ? IconArrowsShuffle2 : IconArrowsShuffle}
-          label={shuffleLabel(shuffleKind)}
-          on={queue.shuffle}
-          onPress={toggleShuffle}
-          onLongPress={openShuffleMenu}
-          accessibilityHint="Long press to choose Real Shuffle or Smart Shuffle"
-        />
+        <Toggle {...shuffle} on={queue.shuffle} onPress={toggleShuffle} />
         <Toggle
           icon={queue.repeat === "one" ? IconRepeatOnce : IconRepeat}
           label={REPEAT_LABEL[queue.repeat]}

@@ -106,6 +106,20 @@ class DurableDownloads(
   fun snapshot(): List<Map<String, Any?>> = published
 
   /**
+   * Core found that this imported job's song no longer has a Library file. A
+   * stale Library read cannot forget a job retried since its snapshot. The
+   * saved file may still exist outside the Library; forgetting never deletes it.
+   */
+  @Synchronized fun forgetCompleted(id: String, generation: Long): Boolean {
+    val job = jobs[id] ?: return false
+    if (job.number("generation") != generation || job["phase"] != "completed" ||
+      job["acknowledged"] != true || job["importFailure"] != null || job["saved"] == null) return false
+    jobs.remove(id)
+    persist()
+    return true
+  }
+
+  /**
    * Asks for [song], from the [source] Core decided for it (null when there's none, which the
    * prepare decision then reports). A Retry takes the source decided again.
    */
