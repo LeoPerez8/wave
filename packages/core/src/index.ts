@@ -913,6 +913,7 @@ export {
   discoverMixReadsMore,
   discoverMixSeeds,
   discoverMixSongs,
+  discoverMixesBuilt,
   discoverMixesDue,
   discoverSeedQuery,
   discoverSeedVideo,
