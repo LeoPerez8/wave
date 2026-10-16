@@ -7,8 +7,11 @@
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
-version="$(cd "$here/../../apps/mobile" && pnpm exec expo config --type public --json | jq -r .version)"
+cd "$here/../../apps/mobile"
+version="$(pnpm exec expo config --type public --json | jq -r .version)"
+# The branch the version is released from (releaseBranch), as check-release-tag.ts reports it.
+branch="$(node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-release-tag.ts "v$version" "$version" --branch)"
 tags="$(git ls-remote --tags --refs origin 'v*' | sed 's|.*refs/tags/||')"
 printf '%s\n' "$tags" \
-  | node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON "$here/release-tag.ts" "${GITHUB_REF:?}" "$version" \
+  | node "$here/release-tag.ts" "${GITHUB_REF:?}" "$version" "$branch" \
   | tee -a "${GITHUB_OUTPUT:-/dev/null}"
