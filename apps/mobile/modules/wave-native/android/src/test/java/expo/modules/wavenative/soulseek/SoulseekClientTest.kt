@@ -273,14 +273,19 @@ class SoulseekClientTest {
               SoulseekWire.write(socket.getOutputStream(), 3) { string("fixture-peer"); uint(LOCALHOST); uint(peer.localPort.toLong()) }
               peer.accept().use { connection ->
                 assertEquals(1, SoulseekWire.read(connection.getInputStream(), true).code)
-                repeat(2) {
-                  val queue = SoulseekWire.read(connection.getInputStream())
-                  assertEquals(43, queue.code)
-                  val filename = SoulseekWire.reader(queue.payload).string()
-                  requested += filename
-                  assertEquals(51, SoulseekWire.read(connection.getInputStream()).code)
-                  SoulseekWire.write(connection.getOutputStream(), 44) { string(filename); uint(it + 1L) }
+                // Each song sends its queue request (43) and place inquiry (51); the two songs'
+                // messages may interleave.
+                val asked = mutableListOf<Int>()
+                repeat(4) {
+                  val message = SoulseekWire.read(connection.getInputStream())
+                  asked += message.code
+                  if (message.code == 43) {
+                    val filename = SoulseekWire.reader(message.payload).string()
+                    requested += filename
+                    SoulseekWire.write(connection.getOutputStream(), 44) { string(filename); uint(requested.size.toLong()) }
+                  }
                 }
+                assertEquals(listOf(43, 43, 51, 51), asked.sorted())
                 done.get(10, TimeUnit.SECONDS)
               }
             }
