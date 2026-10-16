@@ -4,7 +4,9 @@
  * and the next switch goes out when the first one shows. So at most one switch
  * is ever in flight, a burst of taps never queues a switch per tap (each one
  * mounting a tab only to hide it), and the tabs settle on the last one tapped.
- * There is no debounce: the first tap is never held back.
+ * There is no debounce: the first tap is never held back. A tap on the tab
+ * on screen, with no switch on its way, is a re-tap: the tab goes back to its
+ * top and root, as tab bars do.
  */
 
 export interface TabSwitch<T extends string> {
@@ -33,6 +35,11 @@ export interface TabSwitchStep<T extends string> {
    * slides from. Null for anything else (a launch, Back, a link, a tap).
    */
   readonly enter: { readonly from: T; readonly to: T } | null;
+  /**
+   * The tab on screen tapped again, with no switch on its way: the tab's own
+   * re-tap runs (its list back to the top, its stack back to its root).
+   */
+  readonly retapped: boolean;
 }
 
 /**
@@ -54,19 +61,21 @@ const sending = <T extends string>(state: TabSwitch<T>, tab: T, at: number): Tab
   state: { ...state, sent: tab, sentAt: at, wanted: null },
   send: tab,
   enter: null,
+  retapped: false,
 });
 
 const quiet = <T extends string>(state: TabSwitch<T>): TabSwitchStep<T> => ({
   state,
   send: null,
   enter: null,
+  retapped: false,
 });
 
 const tapped = <T extends string>(state: TabSwitch<T>, tab: T, at: number): TabSwitchStep<T> => {
   if (state.sent !== null && at - state.sentAt < TAB_SWITCH_LOST_MS) {
     return quiet({ ...state, wanted: tab === state.sent ? null : tab });
   }
-  if (tab === state.shown) return quiet(state.sent === null ? state : startTabSwitch(tab));
+  if (tab === state.shown) return { ...quiet(startTabSwitch(tab)), retapped: true };
   return sending(state, tab, at);
 };
 
@@ -81,7 +90,7 @@ const shownNow = <T extends string>(
   if (sent === null) return quiet(next);
   // Whatever showed, the switch on its way is done: it showed, or something else overtook it.
   if (wanted !== null && wanted !== tab) return { ...sending(next, wanted, at), enter };
-  return { state: { ...next, sent: null, wanted: null }, send: null, enter };
+  return { state: { ...next, sent: null, wanted: null }, send: null, enter, retapped: false };
 };
 
 /** What [event] does to [state], and the switch to send for it, if any. */

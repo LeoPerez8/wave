@@ -138,8 +138,11 @@ What each choice is expected to show, to check against the numbers rather than a
   mounted navigator, so an unmounted tab's nested route is expected to come back with it. Check on
   the phone (pending): take a tab off the bar after opening an album in it, put it back, tap it.
 - A tab tap still runs Search's focus request first, and switches through the trigger's own
-  `switchTab` (the same `JUMP_TO`/`NAVIGATE` the trigger built). The trigger's `tabPress` event is
-  no longer emitted; nothing listened to it.
+  `switchTab` (the same `JUMP_TO`/`NAVIGATE` the trigger built). A tap on the tab on screen with
+  no switch on its way is a re-tap (Core `retapped`): it runs the trigger's own `onPress`, which
+  emits `tabPress`, so the tab's list scrolls to the top (`useScrollToTop`) and its stack pops to
+  its root, as before #304. (The first version of this ticket dropped `tabPress`; the review
+  caught it.)
 - `TabBar` stays memoized: `onTabTap` is a stable callback.
 - Accessibility: tab roles, labels and selected state unchanged; hidden tabs are detached or
   `display: none` as before (`keep-layout` hides them by detaching).
