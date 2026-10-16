@@ -1,6 +1,7 @@
 import {
   EMPTY_PLAY_TRACKER,
   fadingPlaySoFar,
+  parseTrackId,
   playSoFar,
   resumePlay,
   trackPlays,
@@ -103,16 +104,21 @@ export const layer = Layer.effectDiscard(
       const result = trackPlays(tracker, signal);
       tracker = result.state;
       for (const step of result.steps) {
+        // The play's row, if it has one: a play the store couldn't record changed no history.
+        let rowId: number | null | undefined;
         if (step.type === "started") {
-          const rowId = write(store.recordPlay(step.play, tracker.fading !== null));
+          rowId = write(store.recordPlay(step.play, tracker.fading !== null));
           if (rowId !== null) rowIds.set(identity(step.play), rowId);
           lastSave = Date.now();
         } else {
-          const rowId = rowIds.get(identity(step.play));
+          rowId = rowIds.get(identity(step.play));
           if (rowId !== undefined) write(store.endPlay(rowId, step.play));
           rowIds.delete(identity(step.play));
         }
-        playHistoryChanged([Number(step.play.trackId)]);
+        if (rowId === null || rowId === undefined) continue;
+        // Only a Library song has an id to name; a streamed play (`yt:<videoId>`) has none.
+        const played = parseTrackId(step.play.trackId);
+        playHistoryChanged(played?.kind === "library" ? [played.id] : undefined);
       }
     };
 

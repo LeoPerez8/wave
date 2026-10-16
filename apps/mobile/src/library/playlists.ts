@@ -1,6 +1,5 @@
 import { sortKey, type PlaylistSong } from "@wave/core";
 import * as Effect from "effect/Effect";
-import { useSyncExternalStore } from "react";
 
 import { makeExternalStore } from "@/lib/externalStore";
 import { WaveNative } from "@/native/waveNative";
@@ -15,11 +14,8 @@ import {
 import { publishLibraryChange } from "./libraryChanges";
 import { appRuntime } from "./runtime";
 
-/** Bumped after every playlist edit; playlist queries re-run on it straight away. */
+/** Bumped after every playlist edit, for what follows it (`onPlaylistsEdited`). */
 const playlistsVersion = makeExternalStore(0);
-
-export const usePlaylistsVersion = (): number =>
-  useSyncExternalStore(playlistsVersion.subscribe, playlistsVersion.get);
 
 /** Calls [listener] after every playlist edit; returns how to stop. */
 export const onPlaylistsEdited = (listener: () => void): (() => void) =>

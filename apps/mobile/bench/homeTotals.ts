@@ -47,6 +47,7 @@ import {
   type TestDatabase,
 } from "../src/library/db/testDatabase.ts";
 import { songColumns } from "../src/library/db/tracks.ts";
+import { printMeta, timeRuns } from "./measure.ts";
 
 const quick = process.argv.includes("--quick");
 const now = 10_000_000_000;
@@ -184,37 +185,12 @@ const READS: Record<string, Pair> = {
   },
 };
 
-const median = (samples: number[]): number => {
-  const sorted = samples.toSorted((a, b) => a - b);
-  return Number(sorted[Math.floor(sorted.length / 2)]!.toFixed(2));
-};
-
-/** [run]'s median wall time and mean CPU time (Windows counts CPU in 15.6 ms ticks), after a warm-up. */
-const time = (run: () => unknown, runs = RUNS) => {
-  run();
-  const wall: number[] = [];
-  const cpuBefore = process.cpuUsage();
-  for (let i = 0; i < runs; i++) {
-    const before = performance.now();
-    run();
-    wall.push(performance.now() - before);
-  }
-  const cpu = process.cpuUsage(cpuBefore);
-  return { ms: median(wall), cpuMs: Number(((cpu.user + cpu.system) / 1_000 / runs).toFixed(2)) };
-};
-
 const count = (db: TestDatabase, table: "tracks" | "play_events" | "play_totals") =>
   db.get<{ n: number }>(sql.raw(`SELECT count(*) AS n FROM ${table}`)).n;
 
 const print = (line: object) => console.log(JSON.stringify(line));
 
-print({
-  kind: "meta",
-  note: "Desktop: Node + sql.js (WebAssembly SQLite), not phone timings.",
-  node: process.version,
-  platform: `${process.platform}-${process.arch}`,
-  runs: RUNS,
-});
+printMeta({ runs: RUNS });
 
 /** Measures every read before and after on [db], checking they agree. */
 const measureReads = (db: TestDatabase, label: string, plansShown: Set<string>) => {
@@ -238,7 +214,7 @@ const measureReads = (db: TestDatabase, label: string, plansShown: Set<string>) 
         playedTracks: count(db, "play_totals"),
         statements: queries.length,
         rowsReturned: queries.reduce((sum, query) => sum + query.rows, 0),
-        ...time(() => pair[which](db)),
+        ...timeRuns(() => pair[which](db), RUNS),
       });
       const shown = `${read}:${which}`;
       if (plansShown.has(shown) || read === "refresh-after-play") continue;
@@ -336,7 +312,7 @@ for (const write of ["play", "import"] as const) {
       write: write === "play" ? "play" : "import-18000",
       triggers,
       playEvents: count(library, "play_events"),
-      ...time(run[write], write === "play" ? RUNS : 3),
+      ...timeRuns(run[write], write === "play" ? RUNS : 3),
     });
   }
 }

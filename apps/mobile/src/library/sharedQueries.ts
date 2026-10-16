@@ -1,6 +1,6 @@
 import { createLibraryQueries, type LibraryReads } from "@wave/core";
 import type * as Effect from "effect/Effect";
-import { useCallback, useContext, useEffect, useRef, useSyncExternalStore } from "react";
+import { useCallback, useContext, useEffect, useSyncExternalStore } from "react";
 
 import { firstContentShown } from "@/lib/backgroundWork";
 import { CoveredByNowPlaying, useScreenSight } from "@/lib/screenSight";
@@ -29,28 +29,7 @@ export const libraryQuery = <A>(
   read: Effect.Effect<A, LibraryStoreError, LibraryStore>,
 ): LibraryQuery<A> => ({ key, reads, read });
 
-/**
- * What a bare Effect query (the old `useLibraryQuery(effect, …)` form) follows:
- * every track and folder change, as it followed `libraryVersion`.
- */
-const EFFECT_READS: LibraryReads = { tracks: true, folders: true };
-
 type AnyQuery = LibraryQuery<unknown>;
-type StoreEffect<A> = Effect.Effect<A, LibraryStoreError, LibraryStore>;
-
-let nextEffectKey = 0;
-/** Bare Effects as queries: the same Effect object is the same query. */
-const effectQueries = new WeakMap<object, AnyQuery>();
-
-const asQuery = <A>(query: LibraryQuery<A> | StoreEffect<A>): AnyQuery => {
-  if ("key" in query && "reads" in query && "read" in query) return query as AnyQuery;
-  let known = effectQueries.get(query);
-  if (known === undefined) {
-    known = libraryQuery(`effect#${nextEffectKey++}`, EFFECT_READS, query as StoreEffect<unknown>);
-    effectQueries.set(query, known);
-  }
-  return known;
-};
 
 /** What each key reads, while the registry holds it. */
 const definitions = new Map<string, AnyQuery>();
@@ -96,24 +75,15 @@ const idle = () => () => {};
  * Runs a Library query for the calling screen and returns its result, or
  * [initial] until the first one. A null query asks nothing: [initial] stands.
  *
- * - [query]: a shared `LibraryQuery` (preferred), or a bare Effect, which is
- *   one query per Effect object and follows every track and folder change.
  * - Screens showing the same query share its result and its reads.
  * - It re-reads when a Library change reaches its reads: an edit at once,
  *   scan batches at most every 1.5 s. While the screen is out of sight
  *   (another tab, a pushed screen, Now Playing over it) it doesn't re-read;
  *   it catches up once when the screen comes back.
- * - [queryEdits]: changes when something the registry isn't told of changed
- *   what the query reads: it re-reads at once. Prefer declaring the reads.
  */
-export const useLibraryQuery = <A>(
-  query: LibraryQuery<A> | StoreEffect<A> | null,
-  initial: A,
-  queryEdits = 0,
-): A => {
-  const definition = query === null ? null : asQuery(query);
+export const useLibraryQuery = <A>(query: LibraryQuery<A> | null, initial: A): A => {
+  const definition: AnyQuery | null = query;
   const sight = useScreenSight();
-  const consumer = useRef<ReturnType<typeof registry.attach> | null>(null);
 
   const subscribe = useCallback(
     (onChange: () => void) => {
@@ -125,13 +95,11 @@ export const useLibraryQuery = <A>(
         visible: sight.visible(),
         onChange,
       });
-      consumer.current = attached;
       const stopWatching = sight.subscribe((visible) =>
         visible ? attached.show() : attached.hide(),
       );
       return () => {
         stopWatching();
-        if (consumer.current === attached) consumer.current = null;
         attached.detach();
       };
     },
@@ -149,13 +117,6 @@ export const useLibraryQuery = <A>(
   useEffect(() => {
     if (shown && coverable && sight.visible()) firstContentShown();
   }, [shown, coverable, sight]);
-
-  const lastEdits = useRef(queryEdits);
-  useEffect(() => {
-    if (queryEdits === lastEdits.current) return;
-    lastEdits.current = queryEdits;
-    consumer.current?.refresh();
-  }, [queryEdits]);
 
   return current === undefined ? initial : (current.value as A);
 };

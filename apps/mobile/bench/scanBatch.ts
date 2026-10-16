@@ -32,6 +32,7 @@ import { saveBatch } from "../src/library/db/save.ts";
 import * as schema from "../src/library/db/schema.ts";
 import { openTestDatabase } from "../src/library/db/testDatabase.ts";
 import { selectKnownFiles } from "../src/library/db/tracks.ts";
+import { median } from "./measure.ts";
 
 const quick = process.argv.includes("--quick");
 /** The Library already indexed. */
@@ -70,10 +71,6 @@ const file = (): IndexedTrack => {
 };
 const files = (count: number): IndexedTrack[] => Array.from({ length: count }, file);
 
-const median = (samples: readonly number[]): number => {
-  const sorted = samples.toSorted((a, b) => a - b);
-  return Number(sorted[Math.floor(sorted.length / 2)]!.toFixed(2));
-};
 const time = (run: () => unknown): number => {
   const start = performance.now();
   run();

@@ -127,6 +127,29 @@ export const traceQueries = <A>(
 };
 
 /**
+ * Copies the track [seed] once per row `x` of [rows] (a `WITH RECURSIVE n(x)`
+ * clause): each column is its SQL in [overrides] (over `x` and `seed`), or
+ * the seed's own value.
+ */
+const copySeedTrack = (
+  db: TestDatabase,
+  seed: number,
+  rows: string,
+  overrides: Readonly<Record<string, string>>,
+): void => {
+  const columns = db
+    .all<{ name: string }>(sql`PRAGMA table_info(tracks)`)
+    .map((column) => column.name)
+    .filter((name) => name !== "id");
+  const quoted = columns.map((name) => `"${name}"`).join(", ");
+  const values = columns.map((name) => overrides[name] ?? `seed."${name}"`).join(", ");
+  db.run(
+    sql.raw(`${rows} INSERT INTO tracks (${quoted})
+      SELECT ${values} FROM n, tracks AS seed WHERE seed.id = ${seed}`),
+  );
+};
+
+/**
  * Grows the library and its history fast, for benchmarks and scale tests:
  * [tracks] songs crediting a new artist [artist] (on one album, or spread
  * over [albums]), then [plays] counted plays spread over them, one in ten of a
@@ -148,22 +171,17 @@ export const addHistory = (
     .from(schema.tracks)
     .where(eq(schema.tracks.id, seed))
     .get()!;
-  const columns = db
-    .all<{ name: string }>(sql`PRAGMA table_info(tracks)`)
-    .map((column) => column.name)
-    .filter((name) => name !== "id");
-  const overrides: Record<string, string> = {
-    path: `'/Music/' || ${seed} || '-' || x || '.mp3'`,
-    file_name: `${seed} || '-' || x || '.mp3'`,
-    title: `'${options.artist.replaceAll("'", "''")} ' || x`,
-    title_sort: `printf('%08d', x)`,
-    recording_key: `'recording-' || ${seed} || '-' || x`,
-  };
-  const quoted = columns.map((name) => `"${name}"`).join(", ");
-  const values = columns.map((name) => overrides[name] ?? `seed."${name}"`).join(", ");
-  db.run(
-    sql.raw(`WITH RECURSIVE n(x) AS (VALUES(2) UNION ALL SELECT x + 1 FROM n WHERE x < ${options.tracks})
-      INSERT INTO tracks (${quoted}) SELECT ${values} FROM n, tracks AS seed WHERE seed.id = ${seed}`),
+  copySeedTrack(
+    db,
+    seed,
+    `WITH RECURSIVE n(x) AS (VALUES(2) UNION ALL SELECT x + 1 FROM n WHERE x < ${options.tracks})`,
+    {
+      path: `'/Music/' || ${seed} || '-' || x || '.mp3'`,
+      file_name: `${seed} || '-' || x || '.mp3'`,
+      title: `'${options.artist.replaceAll("'", "''")} ' || x`,
+      title_sort: `printf('%08d', x)`,
+      recording_key: `'recording-' || ${seed} || '-' || x`,
+    },
   );
   db.run(
     sql`INSERT INTO track_artists (track_id, artist_id, position)
@@ -400,12 +418,8 @@ export const addLibrary = (
         ${firstArtist} + x % ${options.artists}, 'Artist ' || (x % ${options.artists}),
         'library-cover-' || x FROM n`),
   );
-  const columns = db
-    .all<{ name: string }>(sql`PRAGMA table_info(tracks)`)
-    .map((column) => column.name)
-    .filter((name) => name !== "id");
   const album = `(x % ${options.albums})`;
-  const overrides: Record<string, string> = {
+  copySeedTrack(db, seed, count(options.tracks), {
     path: `CASE WHEN x % 50 = 49 THEN NULL ELSE '/Music/Library/' || x || '.mp3' END`,
     file_name: `'library-' || x || '.mp3'`,
     title: `upper(${letter("x * 31")}) || 'ong ' || x`,
@@ -418,13 +432,7 @@ export const addLibrary = (
     genre_id: `CASE WHEN x % 3 = 0 THEN seed.genre_id ELSE NULL END`,
     track_number: `1 + (x / ${options.albums}) % 14`,
     added_at: `1000000 + x * 1000`,
-  };
-  const quoted = columns.map((name) => `"${name}"`).join(", ");
-  const values = columns.map((name) => overrides[name] ?? `seed."${name}"`).join(", ");
-  db.run(
-    sql.raw(`${count(options.tracks)} INSERT INTO tracks (${quoted})
-      SELECT ${values} FROM n, tracks AS seed WHERE seed.id = ${seed}`),
-  );
+  });
   db.run(sql`DELETE FROM tracks WHERE id = ${seed}`);
   db.run(sql`DELETE FROM track_artists WHERE track_id = ${seed}`);
   db.run(

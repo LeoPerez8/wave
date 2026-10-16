@@ -98,7 +98,7 @@ import {
   selectTrackPaths,
   type PlaylistEntry,
 } from "./db/playlists";
-import { pruneOrphans, saveBatch } from "./db/save";
+import { hasUnscannedRoot, pruneOrphans, saveBatch } from "./db/save";
 import * as schema from "./db/schema";
 import {
   BY_TITLE,
@@ -424,6 +424,10 @@ export class LibraryStore extends Context.Service<
     readonly linkPlaylistEntries: Effect.Effect<number, LibraryStoreError>;
     /** Rises whenever playlists' entries are written: whether a link has new entries to see. */
     readonly playlistEntriesRevision: Effect.Effect<number, LibraryStoreError>;
+    /** Whether one of [roots] has never finished a scan (Core's `scanEnd` `firstScan`). */
+    readonly hasUnscannedRoot: (
+      roots: readonly string[],
+    ) => Effect.Effect<boolean, LibraryStoreError>;
     readonly markScanned: (
       roots: readonly string[],
       at: number,
@@ -925,6 +929,9 @@ const make = Effect.gen(function* () {
     playlistEntriesRevision: attempt("read the playlists' revision", () =>
       selectPlaylistEntriesRevision(db),
     ),
+
+    hasUnscannedRoot: (roots) =>
+      attempt("read which folders were scanned", () => hasUnscannedRoot(db, roots)),
 
     markScanned: (roots, at) =>
       attempt("record the scan", () => {

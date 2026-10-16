@@ -24,6 +24,7 @@ import { pathToFileURL } from "node:url";
 import type * as Playlists from "../src/library/db/playlists.ts";
 import type * as Schema from "../src/library/db/schema.ts";
 import type * as Fixtures from "../src/library/db/testDatabase.ts";
+import { median, printMeta } from "./measure.ts";
 
 const dbFlag = process.argv.indexOf("--db");
 const dbDir =
@@ -130,11 +131,6 @@ const giveBatch = (): void => {
   addToPlaylist(db, filling, batch(), 2);
 };
 
-const median = (samples: number[]): number => {
-  const sorted = samples.toSorted((a, b) => a - b);
-  return Number(sorted[Math.floor(sorted.length / 2)]!.toFixed(2));
-};
-
 /**
  * [step] once traced (statements, rows, decodes), then its median time over
  * RUNS, each after [between]. A first [step] runs before, as the screen in
@@ -166,18 +162,7 @@ const size = (): number =>
     `SELECT count(*) AS n FROM playlist_items WHERE playlist_id = ${filling} AND NOT deleted`,
   )!.n;
 
-console.log(
-  JSON.stringify({
-    kind: "meta",
-    note: "Desktop: Node + sql.js (WebAssembly SQLite), not phone timings.",
-    node: process.version,
-    platform: `${process.platform}-${process.arch}`,
-    runs: RUNS,
-    libraryTracks: LIBRARY_TRACKS,
-    others: OTHERS,
-    batch: BATCH,
-  }),
-);
+printMeta({ runs: RUNS, libraryTracks: LIBRARY_TRACKS, others: OTHERS, batch: BATCH });
 
 for (const target of SIZES) {
   while (size() < target) giveBatch();

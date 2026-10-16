@@ -86,9 +86,10 @@ export const reconcileScan = <T extends IndexedFile>(
 
 /**
  * What a scan does last, from the files it [saved], the indexed files
- * [gone], and whether playlists' entries changed since they were last linked
+ * [gone], whether playlists' entries changed since they were last linked
  * ([entriesChanged]: a sync or an import brought YT Music entries, or no
- * link ran yet in this process).
+ * link ran yet in this process), and whether a scanned folder had never
+ * finished a scan before ([firstScan]).
  */
 export interface ScanEnd {
   /**
@@ -98,23 +99,27 @@ export interface ScanEnd {
   readonly linkEntries: boolean;
   /**
    * What screens are told: `removed` (songs left, every screen re-reads at
-   * once), `added` (taken as a burst), or nothing when the scan changed
-   * nothing, the usual rescan on return.
+   * once), `added` (taken as a burst), `scanned` (a folder's first scan
+   * found nothing: only the folder list, which shows whether a folder was
+   * scanned, re-reads), or nothing when the scan changed nothing, the usual
+   * rescan on return.
    */
-  readonly announce: "added" | "removed" | null;
+  readonly announce: "added" | "removed" | "scanned" | null;
 }
 
 export const scanEnd = ({
   saved,
   gone,
   entriesChanged,
+  firstScan,
 }: {
   readonly saved: number;
   readonly gone: number;
   readonly entriesChanged: boolean;
+  readonly firstScan: boolean;
 }): ScanEnd => ({
   linkEntries: saved > 0 || entriesChanged,
-  announce: gone > 0 ? "removed" : saved > 0 ? "added" : null,
+  announce: gone > 0 ? "removed" : saved > 0 ? "added" : firstScan ? "scanned" : null,
 });
 
 /**

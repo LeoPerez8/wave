@@ -160,7 +160,7 @@ describe("saving a scan batch in slices", () => {
 });
 
 describe("what a scan does once it ends", () => {
-  const quiet = { saved: 0, gone: 0, entriesChanged: false };
+  const quiet = { saved: 0, gone: 0, entriesChanged: false, firstScan: false };
 
   test("a rescan that found nothing new and nothing gone links nothing and tells no screen", () => {
     assert.deepEqual(scanEnd(quiet), { linkEntries: false, announce: null });
@@ -174,6 +174,20 @@ describe("what a scan does once it ends", () => {
     assert.deepEqual(scanEnd({ ...quiet, entriesChanged: true }), {
       linkEntries: true,
       announce: null,
+    });
+  });
+
+  test("a folder's first scan that found nothing still tells the folder list it was scanned", () => {
+    assert.deepEqual(scanEnd({ ...quiet, firstScan: true }), {
+      linkEntries: false,
+      announce: "scanned",
+    });
+  });
+
+  test("a folder's first scan that saved songs is shown as additions, which the folder list follows", () => {
+    assert.deepEqual(scanEnd({ ...quiet, saved: 2, firstScan: true }), {
+      linkEntries: true,
+      announce: "added",
     });
   });
 

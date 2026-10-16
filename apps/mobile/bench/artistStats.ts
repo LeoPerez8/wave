@@ -14,7 +14,6 @@
 import { artistStats, statsWindow } from "@wave/core";
 import { eq } from "drizzle-orm";
 import assert from "node:assert/strict";
-import { performance } from "node:perf_hooks";
 
 import { creditSplits, relinkCredits } from "../src/library/db/credits.ts";
 import { recordPlay } from "../src/library/db/playHistory.ts";
@@ -33,6 +32,7 @@ import {
   type TestDatabase,
 } from "../src/library/db/testDatabase.ts";
 import { deleteTracks } from "../src/library/db/tracks.ts";
+import { printMeta, timeRuns } from "./measure.ts";
 
 const quick = process.argv.includes("--quick");
 const now = 10_000_000_000;
@@ -85,29 +85,6 @@ const reads = {
   after: () => artistStats({ artistId: selected, now, ...artistPlays(db, selected, now) }),
 };
 
-const median = (samples: number[]): number => {
-  const sorted = samples.toSorted((a, b) => a - b);
-  return Number(sorted[Math.floor(sorted.length / 2)]!.toFixed(2));
-};
-
-/**
- * [read]'s median wall time and its mean CPU time (process CPU over every
- * run: Windows counts CPU in 15.6 ms ticks, too coarse for one run), after a
- * warm-up run.
- */
-const time = (read: () => unknown) => {
-  read();
-  const wall: number[] = [];
-  const cpuBefore = process.cpuUsage();
-  for (let run = 0; run < RUNS; run++) {
-    const before = performance.now();
-    read();
-    wall.push(performance.now() - before);
-  }
-  const cpu = process.cpuUsage(cpuBefore);
-  return { ms: median(wall), cpuMs: Number(((cpu.user + cpu.system) / 1_000 / RUNS).toFixed(2)) };
-};
-
 const count = (table: "tracks" | "play_events") =>
   db.get<{ n: number }>(
     table === "tracks"
@@ -115,15 +92,7 @@ const count = (table: "tracks" | "play_events") =>
       : "SELECT count(*) AS n FROM play_events",
   )!.n;
 
-console.log(
-  JSON.stringify({
-    kind: "meta",
-    note: "Desktop: Node + sql.js (WebAssembly SQLite), not phone timings.",
-    node: process.version,
-    platform: `${process.platform}-${process.arch}`,
-    runs: RUNS,
-  }),
-);
+printMeta({ runs: RUNS });
 
 let added = 0;
 const plansShown = new Set<string>();
@@ -147,7 +116,7 @@ for (const level of LEVELS) {
         statements: queries.length,
         rowsReturned: queries.reduce((sum, query) => sum + query.rows, 0),
         rowsPerStatement: queries.map((query) => query.rows),
-        ...time(reads[which]),
+        ...timeRuns(reads[which], RUNS),
       }),
     );
     if (plansShown.has(which)) continue;

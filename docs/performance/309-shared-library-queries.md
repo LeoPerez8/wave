@@ -91,14 +91,14 @@ note which.
 
 ## Behavior kept
 
-- Core tests (`node --test` in `packages/core`; 28 tests in `libraryQueries.test.ts`) cover shared
+- Core tests (`node --test` in `packages/core`; 27 tests in `libraryQueries.test.ts`) cover shared
   reads, per-kind and per-playlist invalidation, the throttle, pause and catch-up, the Now Playing
   cover, dropped stale reads, failed reads, retention and its bound, and the order of reads.
 - App tests (`node --test 'src/**/*.test.ts' 'plugins/**/*.test.ts'` in `apps/mobile`) and the
   runner tests (`node --test scripts/perf/*.test.ts`) pass. Both typecheck.
-- `useLibraryQuery(effect, initial, queryEdits?)` still works. A bare Effect is one query per Effect
-  object and follows every track and folder change, as before. Every exported hook in `hooks.ts`
-  keeps its signature.
+- Every exported hook in `hooks.ts` keeps its signature. `useLibraryQuery` takes only a
+  `LibraryQuery` (or null): the bare-Effect form and its `queryEdits` re-read were removed once no
+  caller used them (review fix on #301).
 - A query's result is keyed by its parameters (`album:12`), so a screen never shows another key's
   result while its own loads. `useLinkRows` and `useAlbumsMissingSongs` no longer need their own
   guards.

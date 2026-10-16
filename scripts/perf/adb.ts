@@ -6,7 +6,7 @@ import type { Device } from "./runner.ts";
 const MAX_OUTPUT = 64 * 1024 * 1024;
 
 /** Runs adb with [args]; resolves stdout, whatever the remote command's exit code. */
-export const adb = (args: readonly string[], input?: string): Promise<string> =>
+const adb = (args: readonly string[], input?: string): Promise<string> =>
   new Promise((resolve, reject) => {
     const child = spawn("adb", args, { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
     let stdout = "";

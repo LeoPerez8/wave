@@ -122,7 +122,7 @@ const cancelDrag = (
 };
 
 /** The dragged row, for the lifted copy and the rows' looks (a re-render on start and on landing). */
-export type Drag = { readonly key: string };
+type Drag = { readonly key: string };
 
 /** What a row needs to be dragged and to step aside. */
 export type UpNextDragRows = {
