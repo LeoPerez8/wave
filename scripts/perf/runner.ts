@@ -23,6 +23,7 @@ import {
   type AmStart,
   type Target,
 } from "./device.ts";
+import { compileWithBaseline, readProfileState } from "./profileDevice.ts";
 import { stepMetrics, type StepRecord } from "./metrics.ts";
 import {
   findScenario,
@@ -69,7 +70,10 @@ export interface RunOptions {
   readonly apkFile: { readonly path: string; readonly sha256: string } | null;
   /** Values recorded as given (`--meta key=value`): Library size on a non-perf build, notes. */
   readonly manual: Readonly<Record<string, string>>;
-  /** Puts this ART compiler filter on the APK before running (`cmd package compile -m`). */
+  /**
+   * Puts this ART compiler filter on the APK before running (`cmd package compile -m`), or,
+   * for `baseline`, compiles it with only the profile the APK ships (#317).
+   */
   readonly compile: string | null;
   /** Records a Perfetto trace of each scenario into this folder. */
   readonly perfetto: { readonly dir: string; readonly config: string } | null;
@@ -452,7 +456,14 @@ export const runPerf = async (
   // The run
 
   await shell("input keyevent KEYCODE_WAKEUP");
-  if (options.compile !== null) await shell(`cmd package compile -m ${options.compile} -f ${pkg}`);
+  let artProfile: { classes: number; methods: number } | null = null;
+  if (options.compile === "baseline") {
+    await compileWithBaseline(device, pkg);
+    const { profile } = await readProfileState(device, pkg);
+    artProfile =
+      profile === null ? null : { classes: profile.classes.size, methods: profile.methods.size };
+  } else if (options.compile !== null)
+    await shell(`cmd package compile -m ${options.compile} -f ${pkg}`);
   const meta = await metadata();
   write({
     type: "run",
@@ -475,6 +486,7 @@ export const runPerf = async (
       tabs: options.config.tabs,
     },
     ...meta,
+    ...(options.compile === "baseline" ? { artProfile } : {}),
   });
   log(
     `${meta.device.model ?? "?"} (Android ${meta.device.android ?? "?"}), Wave ${

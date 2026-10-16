@@ -98,6 +98,17 @@ describe("runPerf on the simulated phone", () => {
     assert.equal(memory.length, ALL_SCENARIOS.length);
   });
 
+  it("compiles with only the APK's shipped profile first when asked for the baseline state", async () => {
+    const { out } = await runPerf(
+      new FakeDevice({ savedProfile: ["Lcom/example/Learned;"] }),
+      options("baseline", { scenarios: ["startup"], compile: "baseline" }),
+    );
+    const { run } = readResults(readFileSync(out, "utf8"));
+    assert.deepEqual(run?.compilation, { status: "speed-profile", reason: "cmdline" });
+    // The simulated APK ships two rules (one class, one method); what the phone learned is gone.
+    assert.deepEqual(run?.artProfile, { classes: 1, methods: 1 });
+  });
+
   it("times cold launches", async () => {
     const { out } = await runPerf(new FakeDevice(), options("startup", { scenarios: ["startup"] }));
     const [launch] = readResults(readFileSync(out, "utf8")).steps as (StepRecord & {
