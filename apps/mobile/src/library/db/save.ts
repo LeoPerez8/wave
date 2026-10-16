@@ -506,3 +506,21 @@ export const removeTracks = (
     pruneOrphans(tx, splits);
   });
 };
+
+/**
+ * Whether one of [roots] has never finished a scan: Music folders shows those
+ * without a song count, so their first scan has it re-read even when the
+ * scan found nothing.
+ */
+export const hasUnscannedRoot = (db: LibraryDatabase, roots: readonly string[]): boolean => {
+  if (roots.length === 0) return false;
+  const { scanRoots } = schema;
+  return (
+    db
+      .select({ path: scanRoots.path })
+      .from(scanRoots)
+      .where(and(inArray(scanRoots.path, [...roots]), isNull(scanRoots.lastScannedAt)))
+      .limit(1)
+      .get() !== undefined
+  );
+};

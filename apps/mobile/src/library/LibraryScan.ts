@@ -132,6 +132,8 @@ const scanFolders = (roots: readonly string[]) =>
     const excluded = yield* store.excludedFolders;
     const known = yield* store.knownFiles(roots);
     const kind = known.length === 0 ? "full" : "incremental";
+    // Music folders shows a folder no scan finished yet without its song count.
+    const firstScan = yield* store.hasUnscannedRoot(roots);
     const indexed = new Set(known.map((file) => file.path));
     // Indexed files the scan didn't find that no batch has matched yet.
     let missing: readonly IndexedFile[] = [];
@@ -215,6 +217,7 @@ const scanFolders = (roots: readonly string[]) =>
       saved,
       gone: finished ? missing.length : 0,
       entriesChanged: (yield* store.playlistEntriesRevision) !== linkedAtRevision,
+      firstScan,
     });
     // Playlists' YT Music entries become the songs this scan (or one cut short) brought in,
     // or the Library songs entries that came meanwhile (a sync, an import) are.
@@ -234,10 +237,16 @@ const scanFolders = (roots: readonly string[]) =>
     yield* store.filesGone(missing.map((file) => file.path));
     yield* store.markScanned(roots, startedAt);
     // Songs whose files are gone left the Library: every screen drops them now, hidden ones too.
+    // A folder's first scan that found nothing has Music folders show it scanned ("0 songs").
     // A rescan that changed nothing (the usual return to Wave) has nobody re-read anything.
     if (end.announce === "removed") bumpLibraryVersion({ kind: "tracks" });
     else if (end.announce === "added") bumpLibraryVersion(SCAN_BATCH);
-    else if (linked > 0) bumpLibraryVersion(ENTRIES_LINKED);
+    else if (end.announce === "scanned" || linked > 0) {
+      bumpLibraryVersion(
+        ...(end.announce === "scanned" ? [FOLDERS] : []),
+        ...(linked > 0 ? [ENTRIES_LINKED] : []),
+      );
+    }
     scanState.set({ status: "done", filesFound: completed.filesFound });
   });
 
