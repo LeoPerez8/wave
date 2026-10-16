@@ -1,4 +1,4 @@
-import type { LaunchTheme, TagDestination } from "@wave/core";
+import type { Appearance, LaunchTheme, TagDestination } from "@wave/core";
 import { NativeModule, requireNativeModule } from "expo";
 
 /** One audio file as read by the native scanner (`modules/wave-native`). Tag values are raw. */
@@ -171,6 +171,13 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
    * Android 13+, picks its splash style for Android to draw.
    */
   setLaunchTheme(theme: LaunchTheme): Promise<void>;
+  /**
+   * Has Android keep Wave in `appearance` (its night mode for Wave alone),
+   * across restarts: the launch splash and system bars open in it.
+   */
+  setAppearance(appearance: Appearance): Promise<void>;
+  /** Dark or light navigation-bar buttons, for the scheme Wave shows now. */
+  setNavigationBarScheme(dark: boolean): Promise<void>;
   /**
    * Writes found lyrics (LRC or plain text) and genre into a song's file,
    * replacing what's there, and fills in its track number (with `discNumber`)
