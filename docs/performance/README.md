@@ -221,7 +221,7 @@ measured. Records, in order:
 - `step`, one per measured step: `scenario`, `variant`, `measure`, `iteration`, `index`, the
   metrics above, `touchAt`, `expectMissing`, `framesCovered`, `finalRoute`, `flushComplete`, and
   `launch` and `appStartup` for a cold launch, `importProgress` while an import runs, and
-  `libraryQueries` on a perf build (the shared Library queries' counters since launch, below).
+  `libraryQueries` and `playlistWork` on a perf build (counters since launch, below).
 - `memory`, one per scenario: `scenario`, `variant` and the `dumpsys meminfo` fields in KB.
 - `trace`, one per scenario with `--perfetto`: the local `.pftrace` path.
 - `error`: a scenario that couldn't go on (target not found, Wave not in front, no import link) and
@@ -265,9 +265,18 @@ result or a read under way), `paused` (changes a hidden screen waited out), `dis
 edit overtook), `evicted`, and `entries`, `retained`, `consumers` at the flush. The runner copies
 them to each step as `libraryQueries`; a step's reads are its `reads` minus the previous step's.
 
+It also reports what playlists cost since launch, as `playlistWork.*`
+(`apps/mobile/src/library/db/playlistWork.ts`, #308): `listReads` (Library › Playlists),
+`notifiedAll` (playlist changes announced with no ids), and `decoded` (stored YT Music songs parsed
+in JavaScript), `summarized` (mosaics and totals worked out again), `pageReads`, `appends` and
+`notified`, each split into `.affected` (the playlists imports fill) and `.unrelated`. The runner
+copies them to each step as `playlistWork`. `import.progressShown` counts the import
+notification's updates; the runner adds it to `importProgress`.
+
 Render counts are in RootLayout, TabsLayout, LibraryLayout, TabBar, MiniPlayer, NowPlayingSheet,
 PlayerView, UpNextList, HomeScreen, LibraryScreen, SearchScreen, SettingsScreen, LargeTitleScreen
-(Home's and Library's), SongsList, TrackList and ArtistStatsBlock.
+(Home's and Library's), SongsList, TrackList, ArtistStatsBlock, PlaylistsList, PlaylistScreen and
+PlaylistImportLine.
 
 A new scenario goes in `SCENARIOS` (`scripts/perf/scenarios.ts`). Then make the simulated phone in
 `fakeDevice.ts` answer it, so `--dry-run` and the tests cover it.

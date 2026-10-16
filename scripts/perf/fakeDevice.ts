@@ -111,7 +111,25 @@ export class FakeDevice implements Device {
       "library.largestPlaylist": 2_500,
       "library.playEvents": 54_321,
       ...(this.importing
-        ? { "import.running": true, "import.done": 120, "import.total": 2_000 }
+        ? {
+            "import.running": true,
+            "import.done": 120,
+            "import.total": 2_000,
+            "import.progressShown": this.flushes * 4,
+            // What the playlists cost (apps/mobile/src/library/db/playlistWork.ts), since launch.
+            "playlistWork.listReads": this.flushes,
+            "playlistWork.notifiedAll": 1,
+            "playlistWork.decoded.affected": this.flushes * 20,
+            "playlistWork.decoded.unrelated": 0,
+            "playlistWork.summarized.affected": this.flushes,
+            "playlistWork.summarized.unrelated": 0,
+            "playlistWork.pageReads.affected": 0,
+            "playlistWork.pageReads.unrelated": 0,
+            "playlistWork.appends.affected": this.flushes * 4,
+            "playlistWork.appends.unrelated": 0,
+            "playlistWork.notified.affected": this.flushes * 4,
+            "playlistWork.notified.unrelated": 0,
+          }
         : {}),
       // The shared Library queries' counters (apps/mobile/src/library/sharedQueries.ts), since launch.
       "libraryQueries.entries": 9,

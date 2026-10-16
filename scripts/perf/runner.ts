@@ -332,11 +332,14 @@ export const runPerf = async (
     });
     const meta = perf?.meta ?? {};
     const importRunning = meta["import.running"];
-    const libraryQueries = Object.fromEntries(
-      Object.entries(meta)
-        .filter(([key]) => key.startsWith("libraryQueries."))
-        .map(([key, value]) => [key.slice("libraryQueries.".length), value]),
-    );
+    const prefixed = (prefix: string) =>
+      Object.fromEntries(
+        Object.entries(meta)
+          .filter(([key]) => key.startsWith(`${prefix}.`))
+          .map(([key, value]) => [key.slice(prefix.length + 1), value]),
+      );
+    const libraryQueries = prefixed("libraryQueries");
+    const playlistWork = prefixed("playlistWork");
     const record: StepRecord & Record<string, unknown> = {
       type: "step",
       run,
@@ -361,11 +364,13 @@ export const runPerf = async (
               running: importRunning,
               done: meta["import.done"] ?? null,
               total: meta["import.total"] ?? null,
+              progressShown: meta["import.progressShown"] ?? null,
             },
           }
         : {}),
       // Counters since launch: compare a step's with the one before it for its reads.
       ...(Object.keys(libraryQueries).length > 0 ? { libraryQueries } : {}),
+      ...(Object.keys(playlistWork).length > 0 ? { playlistWork } : {}),
     };
     write(record);
     log(
