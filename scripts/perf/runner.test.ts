@@ -122,6 +122,20 @@ describe("runPerf on the simulated phone", () => {
     assert.ok(pushes.every((step) => step.importProgress?.running === true));
   });
 
+  it("records the shared Library queries' counters with each step of a perf build", async () => {
+    const { out } = await runPerf(
+      new FakeDevice(),
+      options("queries", { scenarios: ["push-settings"] }),
+    );
+    const { steps } = readResults(readFileSync(out, "utf8"));
+    const queries = (steps as (StepRecord & { libraryQueries?: Record<string, unknown> })[]).map(
+      (step) => step.libraryQueries,
+    );
+    assert.ok(queries.length > 0);
+    assert.ok(queries.every((counters) => typeof counters?.["reads"] === "number"));
+    assert.ok(queries.every((counters) => typeof counters?.["paused"] === "number"));
+  });
+
   it("records a scenario it can't run and goes on", async () => {
     const { out } = await runPerf(
       new FakeDevice(),

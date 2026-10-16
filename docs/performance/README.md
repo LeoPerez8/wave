@@ -210,7 +210,8 @@ measured. Records, in order:
     build's first flush metadata); `manual` (`--meta`).
 - `step`, one per measured step: `scenario`, `variant`, `measure`, `iteration`, `index`, the
   metrics above, `touchAt`, `expectMissing`, `framesCovered`, `finalRoute`, `flushComplete`, and
-  `launch` and `appStartup` for a cold launch, `importProgress` while an import runs.
+  `launch` and `appStartup` for a cold launch, `importProgress` while an import runs, and
+  `libraryQueries` on a perf build (the shared Library queries' counters since launch, below).
 - `memory`, one per scenario: `scenario`, `variant` and the `dumpsys meminfo` fields in KB.
 - `trace`, one per scenario with `--perfetto`: the local `.pftrace` path.
 - `error`: a scenario that couldn't go on (target not found, Wave not in front, no import link) and
@@ -243,6 +244,12 @@ ticket needs evidence, and give a new response mark a scenario step's `expect` i
 - `visible` "queue" (Up Next mounted);
 - `import.running` (songs in the import), `import.idle`;
 - touches with their native timestamp, from the root view's `onTouchStart`.
+
+Each flush also reports the shared Library queries' counters since launch, as `libraryQueries.*`
+(Core's `LibraryQueryStats`, #309): `reads` started, `shared` (a screen served from a current
+result or a read under way), `paused` (changes a hidden screen waited out), `discarded` (results an
+edit overtook), `evicted`, and `entries`, `retained`, `consumers` at the flush. The runner copies
+them to each step as `libraryQueries`; a step's reads are its `reads` minus the previous step's.
 
 Render counts are in RootLayout, TabsLayout, LibraryLayout, TabBar, MiniPlayer, NowPlayingSheet,
 UpNextList, HomeScreen, LibraryScreen, SearchScreen, SettingsScreen, SongsList and TrackList.
