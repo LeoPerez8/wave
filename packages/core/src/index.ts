@@ -1033,3 +1033,13 @@ export { createPagedRows, PAGED_ROWS_LIMITS } from "./pagedRows.ts";
 export type { PagedRows, PagedRowsLimits, PagedRowsStats } from "./pagedRows.ts";
 export { recentlyPlayedAlbums } from "./recentlyPlayed.ts";
 export type { LatestPlayedSong } from "./recentlyPlayed.ts";
+export {
+  APP_LOG_LIMITS,
+  describeLogArgs,
+  formatLogEntry,
+  logFileName,
+  logHeader,
+  redactSecrets,
+  trimLog,
+} from "./appLog.ts";
+export type { LogDevice, LogEntry, LogLevel, LogLimits, LogTrim } from "./appLog.ts";
