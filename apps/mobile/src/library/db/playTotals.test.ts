@@ -279,7 +279,9 @@ const mostPlayedFromHistory = (scope: "library" | "files") => {
   );
   return trackPlayTotals(db, { from: Number.MIN_SAFE_INTEGER, to: Number.MAX_SAFE_INTEGER })
     .filter((song) => inScope.has(song.id))
-    .toSorted((a, b) => b.countedPlays - a.countedPlays || b.latestPlayAt - a.latestPlayAt)
+    .toSorted(
+      (a, b) => b.countedPlays - a.countedPlays || b.latestPlayAt - a.latestPlayAt || b.id - a.id,
+    )
     .slice(0, 10)
     .map((song) => [song.id, song.countedPlays]);
 };

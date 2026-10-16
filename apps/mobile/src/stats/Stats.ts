@@ -113,6 +113,32 @@ export const topArtists = (
     (credits) => rank(artistPlayTotals(credits), limit, store.artistsByIds),
   );
 
+/** The albums and the artists played most in a period, ranked from one read. */
+export interface TopAlbumsAndArtists {
+  readonly albums: readonly Ranked<AlbumRow>[];
+  readonly artists: readonly Ranked<ArtistRow>[];
+}
+
+/**
+ * The top [albumLimit] albums and [artistLimit] artists of `period`, as
+ * `topAlbums` and `topArtists` rank them, from one read of the credited
+ * totals: Home's Most played albums and artists, which show together.
+ */
+export const topAlbumsAndArtists = (
+  store: Store,
+  period: StatsPeriod,
+  albumLimit: number,
+  artistLimit: number,
+): Effect.Effect<TopAlbumsAndArtists, LibraryStoreError> =>
+  Effect.flatMap(
+    Effect.suspend(() => store.creditedPlayTotals(statsWindow(period, Date.now()))),
+    (credits) =>
+      Effect.all({
+        albums: rank(albumPlayTotals(credits), albumLimit, store.albumsByIds),
+        artists: rank(artistPlayTotals(credits), artistLimit, store.artistsByIds),
+      }),
+  );
+
 export const layer = Layer.effect(
   Stats,
   Effect.gen(function* () {

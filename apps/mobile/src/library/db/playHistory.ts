@@ -28,7 +28,7 @@ export interface HomeSections {
   readonly recentlyAdded: readonly AlbumRow[];
   /** Albums of the tracks played, the most recently played first. */
   readonly recentlyPlayed: readonly AlbumRow[];
-  /** Songs by counted plays (Core's rule), then by their latest counted play. */
+  /** Songs by counted plays (Core's rule), then by their latest counted play, then latest added. */
   readonly mostPlayed: readonly MostPlayedRow[];
   /** Starred songs, the most recently starred first. */
   readonly favorites: readonly SongRow[];
@@ -184,7 +184,11 @@ const mostPlayedSongs = (db: LibraryDatabase, scope: TrackScope): MostPlayedRow[
     .innerJoin(albums, eq(tracks.albumId, albums.id))
     .leftJoin(artwork, eq(tracks.artworkHash, artwork.hash))
     .where(gt(playTotals.countedPlays, 0))
-    .orderBy(desc(playTotals.countedPlays), desc(playTotals.lastCountedAt))
+    .orderBy(
+      desc(playTotals.countedPlays),
+      desc(playTotals.lastCountedAt),
+      desc(playTotals.trackId),
+    )
     .limit(LIST)
     .all();
 };

@@ -11,13 +11,13 @@ import { Hairline } from "@/catalog/Hairline";
 import { TitledSection } from "@/catalog/TitledSection";
 import type { HomeSections, MostPlayedRow } from "@/library/db/playHistory";
 import { openStats, openStatsSeeAll } from "@/library/routes";
-import { useAllTimeTopAlbums, useAllTimeTopArtists } from "@/stats/hooks";
 import type { Ranked } from "@/stats/Stats";
 import { playCount } from "@/stats/StatsViews";
 import { openDiscoverMix } from "@/ytmusic/routes";
 
 import { useDiscoverMixes } from "./discoverMixes";
 import { openDiscoverMixActions } from "./DiscoverMixActions";
+import { useMostPlayedOfAllTime } from "./mostPlayedOfAllTime";
 
 import { AlbumShelf, ArtistShelf, SongRows } from "./HomeSections";
 import { ListeningOverview } from "./ListeningOverview";
@@ -25,9 +25,6 @@ import { ListeningOverview } from "./ListeningOverview";
 /** Songs played from Home's lists are queued from the section they were in. */
 const MOST_PLAYED_CONTEXT = { kind: "home", id: "most-played" } as const;
 const FAVORITES_CONTEXT = { kind: "home", id: "favorites" } as const;
-
-/** How many artists Most played artists shows; the album shelf shows a Stats top. */
-const MOST_PLAYED_ARTISTS = 5;
 
 const countedPlays = (entry: { readonly countedPlays: number }): string =>
   playCount(entry.countedPlays);
@@ -47,8 +44,7 @@ type SectionProps = {
 };
 
 function MostPlayedAlbums({ title }: SectionProps) {
-  // Stats' all-time rankings, so the order matches Library › Stats.
-  const albums = withPlays(useAllTimeTopAlbums());
+  const albums = withPlays(useMostPlayedOfAllTime()?.albums);
   if (albums.length === 0) return null;
   return (
     <TitledSection
@@ -93,7 +89,7 @@ function DiscoverMixes({ title }: SectionProps) {
 }
 
 function MostPlayedArtists({ title }: SectionProps) {
-  const artists = withPlays(useAllTimeTopArtists(MOST_PLAYED_ARTISTS));
+  const artists = withPlays(useMostPlayedOfAllTime()?.artists);
   if (artists.length === 0) return null;
   return (
     <TitledSection
