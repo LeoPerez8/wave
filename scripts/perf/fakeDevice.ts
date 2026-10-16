@@ -269,8 +269,14 @@ export class FakeDevice implements Device {
     } else if (label === "Settings") this.navigate("/settings");
     else if (label === "Developer") this.navigate("/settings/developer");
     else if (label === "Albums") this.navigate("/library/albums");
-    else if (label === "Songs") this.navigate("/library/songs");
-    else if (label === "Artists") this.navigate("/library/artists");
+    else if (label === "Songs") {
+      this.navigate("/library/songs");
+      // The list reads its songs after the screen commits, then shows its first rows.
+      this.recorder?.render("SongsList");
+      this.render(this.clock, 8);
+      this.advance(40);
+      this.respond("songs.rows", "page");
+    } else if (label === "Artists") this.navigate("/library/artists");
     else if (label === this.artist && this.route === "/library/artists") {
       this.navigate("/library/artist/1");
       // The stats block reads the artist's plays after the page commits.

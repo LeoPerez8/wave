@@ -225,9 +225,17 @@ export const SCENARIOS: readonly Scenario[] = [
   },
   {
     name: "push-tracklist",
-    summary: "Library › Songs (the whole Library as a Track list) and back.",
+    summary:
+      "Library › Songs (the whole Library as a Track list), until its first rows are on screen, and back.",
     setup: [{ kind: "tap", target: tab("Library") }],
-    steps: () => pushPop({ text: "Songs" }),
+    steps: () => [
+      {
+        measure: "push",
+        action: { kind: "tap", target: { text: "Songs" } },
+        expect: { mark: "songs.rows" },
+      },
+      { measure: "pop", action: { kind: "tap", target: { desc: "Back" } }, expect: route },
+    ],
     iterations: 10,
     warmup: 1,
   },

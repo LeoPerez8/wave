@@ -43,7 +43,7 @@ export function useListSelection<T>({
 }: {
   items: readonly T[];
   keyOf: (item: T) => string;
-  target: (selected: readonly T[]) => ActionItems;
+  target: (selected: readonly T[]) => ActionItems | null;
   lookup?: ((key: string) => T | undefined) | undefined;
 }): ListSelection<T> {
   // A stable identity for this list, which no other list can share.
