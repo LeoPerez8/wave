@@ -64,10 +64,9 @@ class DurableDownloads(
         jobs[id] = record.toMutableMap()
       }
       policy = saved.map("libraryPolicy").toMutableMap()
-      // Imported and cancelled jobs have nothing left to show; failures keep Retry for a day.
-      jobs.values.removeAll {
-        it["phase"] == "cancelled" || it["acknowledged"] == true || (it["phase"] == "failed" && it.number("endedAt") + FORGET_FAILED_MS <= clock())
-      }
+      // Imported and cancelled jobs have nothing left to show; a failure keeps Retry until it's
+      // retried or cleared (Settings › Downloads cancels it).
+      jobs.values.removeAll { it["phase"] == "cancelled" || it["acknowledged"] == true }
       // A socket cannot survive process recreation. Counts and absolute deadlines do: a peer keeps
       // what was left of its turn. YouTube's stream starts over from byte 0 at an address resolved
       // afresh, so its transfer gets a whole window again, within the job's own deadline.
@@ -564,7 +563,6 @@ class DurableDownloads(
     /** The pause before a transfer from the same peer, or YouTube's stream, again: times the attempts so far. */
     const val RETRY_PAUSE_MS = 2_000L
     const val MAX_DECISIONS = 3L
-    const val FORGET_FAILED_MS = 24 * 60 * 60_000L
     /** A cause is a line for the Downloads page and the log, not a stack trace. */
     const val MAX_CAUSE = 1_000
     const val SOULSEEK = "soulseek"

@@ -5,12 +5,18 @@
  * `app/settings/` and, if it helps, a summary line.
  */
 
+import { counted } from "./listening.ts";
 import type { WaveSession } from "./waveAccount.ts";
 import type { YtSession } from "./ytAccount.ts";
 
 /** Each Settings page, by id. */
 export type SettingsPage =
-  "library" | "appearance" | "lyricsAndTags" | "downloads" | "accounts" | "developer";
+  | "library"
+  | "appearance"
+  | "lyricsAndTags"
+  | "downloads"
+  | "accounts"
+  | "developer";
 
 export interface SettingsPageEntry {
   readonly page: SettingsPage;
@@ -41,3 +47,10 @@ export const accountsSummary = (yt: YtSession, wave: WaveSession): string | null
   if (wave.status === "signedIn") parts.push(`Wave: ${wave.account.name ?? wave.account.email}`);
   return parts.length === 0 ? null : parts.join(" · ");
 };
+
+/**
+ * The Downloads row's line: how many songs' downloads failed and wait on its
+ * page (`failedDownloads`); null while none has.
+ */
+export const downloadsSummary = (failed: number): string | null =>
+  failed === 0 ? null : `${counted(failed, "song")} failed`;
