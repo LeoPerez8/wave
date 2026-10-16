@@ -1,5 +1,5 @@
-// The version a push to main releases, if any (docs/spec.md, Releases).
-//   node scripts/ci/next-version.ts <package.json version> <tags file> [<changed paths file>]
+// The version a push to main or ti releases, if any (docs/spec.md, Releases).
+//   node scripts/ci/next-version.ts [--ti] <package.json version> <tags file> [<changed paths file>]
 // bump-version.sh lists the repo's tags (one per line) and the paths changed since the
 // channel's previous tag; with no previous tag it passes no paths file and everything counts.
 // Prints `version=<version>` for $GITHUB_OUTPUT, empty when nothing is released, and why on
@@ -27,8 +27,10 @@ const format = ([major, minor, patch]: Version) => `${major}.${minor}.${patch}`;
 /** What a push releases: `version` is unset when it releases nothing. `reason` is for the log. */
 export type NextVersion = { version?: string; reason: string };
 
-/** What the next-version rule reads about a push. The ti channel and the bump size join it. */
+/** What the next-version rule reads about a push. */
 export type NextVersionInput = {
+  /** The branch it releases from: ti's versions end in -ti. main when unset. */
+  channel?: "main" | "ti";
   /** The version in apps/mobile/package.json. */
   version: string;
   /** The repo's tag names. Only `v<version>` ones count, a `-ti` one by its base. */
@@ -41,6 +43,7 @@ export type NextVersionInput = {
  * A push releases when users can see what changed since the previous release (by the change
  * rule, `reachesUsers`). Its version is a patch bump of the highest version on any tag, unless
  * package.json already holds a higher one (a hand-made bump), which is released as it is.
+ * Both channels count from the same tags; ti's version gets the -ti suffix.
  */
 export const nextVersion = (push: NextVersionInput): NextVersion => {
   if (push.changed?.length === 0)
@@ -53,6 +56,7 @@ export const nextVersion = (push: NextVersionInput): NextVersion => {
   const current = parse(push.version);
   if (!current)
     throw new Error(`package.json's version isn't major.minor.patch: "${push.version}"`);
+  const suffix = push.channel === "ti" ? "-ti" : "";
   const highest = push.tags
     .flatMap((tag) => {
       const version = tag.startsWith("v") ? parse(tag.slice(1)) : undefined;
@@ -62,16 +66,16 @@ export const nextVersion = (push: NextVersionInput): NextVersion => {
     .at(-1);
   if (!highest)
     return {
-      version: format(current),
-      reason: `No version is tagged yet: this run releases ${format(current)} from package.json.`,
+      version: format(current) + suffix,
+      reason: `No version is tagged yet: this run releases ${format(current) + suffix} from package.json.`,
     };
   if (compare(current, highest.version) > 0)
     return {
-      version: format(current),
+      version: format(current) + suffix,
       reason: `${push.version} in package.json is above every tag (the highest is ${highest.tag}): this run releases it as it is.`,
     };
   const [major, minor, patch] = highest.version;
-  const next = format([major, minor, patch + 1]);
+  const next = format([major, minor, patch + 1]) + suffix;
   if (patch + 1 >= 100)
     throw new Error(
       `The next version would be ${next}, but minor and patch must stay under 100 for Android's versionCode. ` +
@@ -84,9 +88,11 @@ export const nextVersion = (push: NextVersionInput): NextVersion => {
 };
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const [version = "", tagsFile = "", changedFile] = process.argv.slice(2);
+  const ti = process.argv[2] === "--ti";
+  const [version = "", tagsFile = "", changedFile] = process.argv.slice(ti ? 3 : 2);
   const lines = (path: string) => readFileSync(path, "utf8").split(/\r?\n/).filter(Boolean);
   const decision = nextVersion({
+    channel: ti ? "ti" : "main",
     version,
     tags: lines(tagsFile),
     changed: changedFile === undefined ? null : lines(changedFile),

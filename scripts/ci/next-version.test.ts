@@ -64,6 +64,49 @@ describe("nextVersion", () => {
     const tags = ["v0.5.3", "v0.5.4-ti"];
     assert.equal(nextVersion({ version: "0.5.4-ti", tags, changed: app }).version, "0.5.5");
   });
+
+  it("bumps from a -ti tag on main too: the counter is shared", () => {
+    const tags = ["v0.5.4", "v0.5.5-ti"];
+    assert.equal(nextVersion({ version: "0.5.4", tags, changed: app }).version, "0.5.6");
+  });
+});
+
+describe("nextVersion on ti", () => {
+  const ti = { channel: "ti", changed: app } as const;
+
+  it("bumps the patch of the highest version tagged, with the -ti suffix", () => {
+    const decision = nextVersion({ ...ti, version: "0.5.4-ti", tags: ["v0.5.3-ti", "v0.5.4"] });
+    assert.equal(decision.version, "0.5.5-ti");
+    assert.match(
+      decision.reason,
+      /v0\.5\.4 is the highest version tagged: this run releases 0\.5\.5-ti/,
+    );
+  });
+
+  it("takes the next number when a merge from main left a stable version in package.json", () => {
+    const decision = nextVersion({ ...ti, version: "0.5.6", tags: ["v0.5.5-ti", "v0.5.6"] });
+    assert.equal(decision.version, "0.5.7-ti");
+  });
+
+  it("releases a version set by hand above every tag as it is, as a -ti one", () => {
+    const tags = ["v0.5.6", "v0.5.7-ti"];
+    assert.equal(nextVersion({ ...ti, version: "1.0.0-ti", tags }).version, "1.0.0-ti");
+    assert.equal(nextVersion({ ...ti, version: "1.0.0", tags }).version, "1.0.0-ti");
+  });
+
+  it("starts from the version in package.json when no version is tagged yet", () => {
+    assert.equal(nextVersion({ ...ti, version: "0.5.1-ti", tags: [] }).version, "0.5.1-ti");
+  });
+
+  it("releases nothing when only CI, docs or specs changed since the previous tag", () => {
+    const decision = nextVersion({
+      channel: "ti",
+      version: "0.5.5-ti",
+      tags: ["v0.5.5-ti"],
+      changed: ["docs/spec.md", "scripts/ci/repack.ts"],
+    });
+    assert.equal(decision.version, undefined);
+  });
 });
 
 describe("next-version.ts", () => {
@@ -87,5 +130,9 @@ describe("next-version.ts", () => {
 
   it("counts everything as changed without a file of changed paths", () => {
     assert.equal(run(["0.5.3", tags]), "version=0.5.4\n");
+  });
+
+  it("releases a -ti version with --ti", () => {
+    assert.equal(run(["--ti", "0.5.3-ti", tags, file("ti.txt", app)]), "version=0.5.4-ti\n");
   });
 });
