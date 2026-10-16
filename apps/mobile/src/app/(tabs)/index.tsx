@@ -10,6 +10,7 @@ import { LargeTitleScreen } from "@/components/LargeTitleScreen";
 import { useHomeArrangement, homeTitleLongPress } from "@/home/homeArrangement";
 import { HomeSection, SECTION_GAP } from "@/home/HomeSection";
 import { useHome } from "@/library/hooks";
+import { useYtMusicEnabled } from "@/settings/ytMusic";
 
 /** The first section sits a cell under the large title, not a section's gap. */
 const FIRST_SECTION = { marginTop: CELL - SECTION_GAP } as const;
@@ -26,6 +27,7 @@ function HomeLine({ children, top }: { children: string; top: number }) {
 export default function HomeScreen() {
   const home = useHome();
   const arrangement = useHomeArrangement();
+  const ytMusic = useYtMusicEnabled();
   const empty = home !== undefined && home.recentlyAdded.length === 0;
   const nothingPlayed =
     home !== undefined && home.recentlyPlayed.length === 0 && home.mostPlayed.length === 0;
@@ -49,7 +51,7 @@ export default function HomeScreen() {
         <>
           {/* Sections with nothing to show draw nothing, so whichever shows first is pulled up. */}
           <View style={FIRST_SECTION}>
-            {homeItems(arrangement, { nothingPlayed }).map((item, index) =>
+            {homeItems(arrangement, { nothingPlayed, ytMusic }).map((item, index) =>
               item === "no-sections" ? (
                 <HomeLine key={item} top={SECTION_GAP}>
                   Long-press Home to add sections back.

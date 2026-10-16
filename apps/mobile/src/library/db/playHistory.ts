@@ -4,7 +4,7 @@
  * SQLite in plain Node (`testDatabase.ts`); `LibraryStore` calls them.
  */
 import type { PlayEvent } from "@wave/core";
-import { and, desc, eq, inArray, isNull, max, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, max, sql } from "drizzle-orm";
 
 import type { AlbumRow, SongRow } from "../LibraryStore.ts";
 import type { LibraryDatabase } from "./database.ts";
@@ -215,6 +215,19 @@ export const selectFavoriteTrackIds = (db: LibraryDatabase): number[] =>
     .where(eq(schema.favorites.deleted, false))
     .all()
     .map((row) => row.trackId);
+
+/**
+ * The recording key (Core's `recordingKey`) of every song ever played, each
+ * once, including songs whose files have since left the Library. Discover
+ * mixes leave them out.
+ */
+export const playedRecordingKeys = (db: LibraryDatabase): string[] =>
+  db
+    .selectDistinct({ key: schema.playEvents.recordingKey })
+    .from(schema.playEvents)
+    .where(isNotNull(schema.playEvents.recordingKey))
+    .all()
+    .flatMap((row) => (row.key === null ? [] : [row.key]));
 
 /** SQLite caps the variables in one statement; batches stay well under it. */
 const BATCH = 500;

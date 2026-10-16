@@ -2,6 +2,7 @@ import { IconMenu2, IconMinus, IconPlus } from "@tabler/icons-react-native";
 import {
   editHomeArrangement,
   hiddenHomeSections,
+  homeSectionNote,
   homeSectionTitle,
   reorderShift,
   reorderTarget,
@@ -25,6 +26,7 @@ import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { TextButton } from "@/components/TextButton";
 import { Press } from "@/motion/Press";
+import { useYtMusicEnabled } from "@/settings/ytMusic";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 const ROW = grid.row;
@@ -59,11 +61,20 @@ function RowButton({
   );
 }
 
+/** A section's title, and under it what it needs that's off ("Needs YT Music"). */
 function RowLabel({ id }: { id: HomeSectionId }) {
+  const note = homeSectionNote(id, { ytMusic: useYtMusicEnabled() });
   return (
-    <Text numberOfLines={1} className="flex-1 font-sans text-body text-foreground">
-      {homeSectionTitle(id)}
-    </Text>
+    <View className="flex-1">
+      <Text numberOfLines={1} className="font-sans text-body text-foreground">
+        {homeSectionTitle(id)}
+      </Text>
+      {note !== null && (
+        <Text numberOfLines={1} className="font-sans text-footnote text-secondary">
+          {note}
+        </Text>
+      )}
+    </View>
   );
 }
 

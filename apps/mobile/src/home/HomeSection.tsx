@@ -1,8 +1,10 @@
-import { homeSectionTitle, type HomeSectionId } from "@wave/core";
+import { discoverMixCaption, homeSectionTitle, type HomeSectionId } from "@wave/core";
 import { router } from "expo-router";
 import type { ComponentType } from "react";
 import { View } from "react-native";
 
+import { AlbumTile } from "@/catalog/AlbumTile";
+import { COVER_ROW_TILE, CoverRow } from "@/catalog/CoverRow";
 import { EntryRow } from "@/catalog/EntryRow";
 import { CELL } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
@@ -12,6 +14,9 @@ import { openStats, openStatsSeeAll } from "@/library/routes";
 import { useTopAlbums, useTopArtists } from "@/stats/hooks";
 import type { Ranked } from "@/stats/Stats";
 import { playCount } from "@/stats/StatsViews";
+import { openDiscoverMix } from "@/ytmusic/routes";
+
+import { useDiscoverMixes } from "./discoverMixes";
 
 import { AlbumShelf, ArtistShelf, SongRows } from "./HomeSections";
 import { ListeningOverview } from "./ListeningOverview";
@@ -50,6 +55,37 @@ function MostPlayedAlbums({ title }: SectionProps) {
       action={{ label: "See all", onPress: () => openStatsSeeAll("albums", "all") }}
     >
       <AlbumShelf albums={albums} detail={countedPlays} />
+    </TitledSection>
+  );
+}
+
+/** The mixes as covers, each opening its page; nothing until some are built, or with YT Music off. */
+function DiscoverMixes({ title }: SectionProps) {
+  const mixes = useDiscoverMixes();
+  if (mixes.length === 0) return null;
+  return (
+    <TitledSection title={title}>
+      <CoverRow>
+        {mixes.map((mix) => {
+          const caption = discoverMixCaption(mix);
+          return (
+            <AlbumTile
+              key={mix.id}
+              album={{
+                id: mix.id,
+                title: caption.title,
+                albumArtist: caption.artists,
+                trackCount: mix.songs.length,
+                durationMs: 0,
+                artworkUri: mix.songs[0]?.artworkUrl ?? undefined,
+              }}
+              size={COVER_ROW_TILE}
+              detail={caption.line}
+              onPress={() => openDiscoverMix(mix.id)}
+            />
+          );
+        })}
+      </CoverRow>
     </TitledSection>
   );
 }
@@ -93,6 +129,7 @@ const SECTIONS: Record<HomeSectionId, ComponentType<SectionProps>> = {
     ),
   "most-played-albums": MostPlayedAlbums,
   "most-played-artists": MostPlayedArtists,
+  "discover-mixes": DiscoverMixes,
   favorites: ({ home, title }) =>
     home.favorites.length > 0 && (
       <TitledSection

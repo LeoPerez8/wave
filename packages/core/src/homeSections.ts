@@ -15,6 +15,7 @@ export type HomeSectionId =
   | "most-played"
   | "most-played-albums"
   | "most-played-artists"
+  | "discover-mixes"
   | "favorites"
   | "stats"
   | "listening-overview";
@@ -26,6 +27,8 @@ export interface HomeSection {
   readonly title: string;
   /** It fills from the owner's plays: empty until something is played. */
   readonly fromPlays: boolean;
+  /** It shows only while YT Music is on in Settings. */
+  readonly needsYtMusic?: boolean;
 }
 
 /**
@@ -39,6 +42,7 @@ export const HOME_SECTIONS: readonly HomeSection[] = [
   { id: "most-played", title: "Most played", fromPlays: true },
   { id: "most-played-albums", title: "Most played albums", fromPlays: true },
   { id: "most-played-artists", title: "Most played artists", fromPlays: true },
+  { id: "discover-mixes", title: "Discover mixes", fromPlays: true, needsYtMusic: true },
   { id: "favorites", title: "Favorites", fromPlays: false },
   { id: "stats", title: "Stats", fromPlays: false },
   { id: "listening-overview", title: "Listening overview", fromPlays: false },
@@ -51,6 +55,16 @@ const sectionOf = (id: HomeSectionId): HomeSection | undefined =>
 export const homeSectionTitle = (id: HomeSectionId): string => sectionOf(id)?.title ?? id;
 
 /**
+ * What Home's editor says beside the section [id], or null: a section that
+ * needs YT Music says so while it's off (it keeps its place, and shows again
+ * once YT Music is on).
+ */
+export const homeSectionNote = (
+  id: HomeSectionId,
+  { ytMusic }: { readonly ytMusic: boolean },
+): string | null => (!ytMusic && sectionOf(id)?.needsYtMusic === true ? "Needs YT Music" : null);
+
+/**
  * One thing Home lists: a section of the catalogue (drawn only when it has
  * something to show), the line asking for a first play, or the line saying a
  * long press on Home's title adds sections back.
@@ -60,16 +74,18 @@ export type HomeItem = { readonly section: HomeSectionId } | "play-hint" | "no-s
 /**
  * What Home lists for [arrangement]: its sections in order. With nothing
  * played yet, a line asking for a play comes before the first section plays
- * fill (where those sections would be). With every section removed, the
- * line saying how to add them back.
+ * fill (where those sections would be). With YT Music off, the sections
+ * that need it aren't listed. With every section removed, the line saying
+ * how to add them back.
  */
 export const homeItems = (
   arrangement: HomeArrangement,
-  { nothingPlayed }: { readonly nothingPlayed: boolean },
+  { nothingPlayed, ytMusic }: { readonly nothingPlayed: boolean; readonly ytMusic: boolean },
 ): readonly HomeItem[] => {
   if (arrangement.length === 0) return ["no-sections"];
-  const items: HomeItem[] = arrangement.map((id) => ({ section: id }));
-  const hintAt = nothingPlayed ? arrangement.findIndex((id) => sectionOf(id)?.fromPlays) : -1;
+  const listed = arrangement.filter((id) => ytMusic || sectionOf(id)?.needsYtMusic !== true);
+  const items: HomeItem[] = listed.map((id) => ({ section: id }));
+  const hintAt = nothingPlayed ? listed.findIndex((id) => sectionOf(id)?.fromPlays) : -1;
   if (hintAt !== -1) items.splice(hintAt, 0, "play-hint");
   return items;
 };

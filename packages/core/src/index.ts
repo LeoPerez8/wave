@@ -884,6 +884,7 @@ export {
   editHomeArrangement,
   hiddenHomeSections,
   homeItems,
+  homeSectionNote,
   homeSectionTitle,
   parseHomeArrangement,
   storedHomeArrangement,
@@ -895,3 +896,26 @@ export type {
   HomeSection,
   HomeSectionId,
 } from "./homeSections.ts";
+export {
+  DISCOVER_MIX_COUNT,
+  discoverMix,
+  discoverMixCaption,
+  discoverMixReadsMore,
+  discoverMixSeeds,
+  discoverMixSongs,
+  discoverMixesDue,
+  discoverSeedQuery,
+  discoverSeedVideo,
+  parseDiscoverMixes,
+  playedFinder,
+  storedDiscoverMixes,
+} from "./discoverMixes.ts";
+export type {
+  DiscoverMix,
+  DiscoverMixFilter,
+  DiscoverMixSeed,
+  DiscoverMixes,
+  DiscoverRadioSong,
+  DiscoverSeedArtist,
+  DiscoverSeedSong,
+} from "./discoverMixes.ts";

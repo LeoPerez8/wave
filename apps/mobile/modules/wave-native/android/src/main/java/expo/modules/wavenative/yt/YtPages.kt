@@ -64,8 +64,47 @@ class YtPages(private val client: YtClient) {
     YtPlaylistParser.more(body) ?: throw IllegalStateException("Not a playlist continuation")
   }
 
+  /**
+   * The first page of [videoId]'s radio (the queue YouTube Music plays after
+   * it, starting with the song itself) and the token for the next page.
+   */
+  suspend fun songRadio(videoId: String): YtRadioPage = client.request {
+    radio(videoId = videoId, playlistId = "RDAMVM$videoId", params = RADIO_PARAMS)
+  }
+
+  /**
+   * The first page of the radio of the artist whose page is [browseId]
+   * (`UC…`), as their page's Mix button starts it, and the token for the next.
+   */
+  suspend fun artistRadio(browseId: String): YtRadioPage = client.request {
+    val page = client.innerTube.browse(YouTubeClient.WEB_REMIX, browseId).bodyAsText()
+    val start = YtRadioParser.artistRadio(page)
+      ?: throw IllegalStateException("No radio on the artist page: $browseId")
+    radio(videoId = null, playlistId = start.playlistId, params = start.params ?: RADIO_PARAMS)
+  }
+
+  /** The radio page [continuation] leads to: its songs and the token for the next. */
+  suspend fun radioMore(continuation: String): YtRadioPage = client.request {
+    val body = client.innerTube.next(
+      YouTubeClient.WEB_REMIX, videoId = null, playlistId = null, playlistSetVideoId = null,
+      index = null, params = null, continuation = continuation,
+    ).bodyAsText()
+    YtRadioParser.page(body) ?: throw IllegalStateException("Not a radio continuation")
+  }
+
+  private suspend fun radio(videoId: String?, playlistId: String, params: String): YtRadioPage {
+    val body = client.innerTube.next(
+      YouTubeClient.WEB_REMIX, videoId = videoId, playlistId = playlistId, playlistSetVideoId = null,
+      index = null, params = params,
+    ).bodyAsText()
+    return YtRadioParser.page(body) ?: throw IllegalStateException("Not a radio: $playlistId")
+  }
+
   private companion object {
     const val HOME = "FEmusic_home"
+
+    /** What YouTube Music's own Start radio sends with a radio's `next`. */
+    const val RADIO_PARAMS = "wAEB"
 
     /** Continuation pages asked for after the first: enough for the home's usual dozen shelves. */
     const val HOME_MORE_PAGES = 3
