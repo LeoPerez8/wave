@@ -35,7 +35,9 @@ function Instead({ view }: { view: Discover["view"] }) {
           icon={IconUserCircle}
           title="Recommendations come from your account"
           message="Discover shows what YouTube Music recommends for your YouTube account. Sign in to it in Settings to see them here."
-          action={<TextButton label="Open Settings" onPress={() => router.push("/settings")} />}
+          action={
+            <TextButton label="Open Settings" onPress={() => router.push("/settings/accounts")} />
+          }
         />
       );
     case "offline":

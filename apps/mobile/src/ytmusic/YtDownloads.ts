@@ -54,8 +54,8 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { useMemo, useSyncExternalStore } from "react";
-import { PermissionsAndroid, Platform } from "react-native";
 
+import { askForNotifications } from "@/lib/askForNotifications";
 import { libraryEdited, toIndexedArtwork, toIndexedTrack } from "@/library/LibraryScan";
 import { LibraryStore } from "@/library/LibraryStore";
 import { useMissingSongs } from "@/library/hooks";
@@ -625,15 +625,6 @@ export const startDownloads = (resume = false): void => {
   if (resume) void WaveSoulseek.resumeJobs().catch(() => undefined);
 };
 
-let askedForNotifications = false;
-const askForNotifications = (): void => {
-  if (askedForNotifications || Platform.OS !== "android" || Number(Platform.Version) < 33) return;
-  askedForNotifications = true;
-  void PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS).catch(
-    () => undefined,
-  );
-};
-
 let requests = Promise.resolve();
 export const downloadYtSong = (song: NativeYtSong): void => {
   askForNotifications();
@@ -828,17 +819,51 @@ export const useMissingSongDownloadStatus = (trackId: number | null): YtDownload
   );
 
 /**
- * Settings › Wave Account's Download All, Retry Failed and Cancel, decided on the missing songs
- * and the journal as they are now (Core's `missingSongsDownload`).
+ * Where the downloads of missing songs [trackIds] stand, each null when not asked for,
+ * following the journal.
  */
-export const runMissingSongsDownloadAction = (action: MissingSongsDownloadAction): void => {
+export const useMissingSongDownloadStatuses = (
+  trackIds: readonly number[],
+): readonly (YtDownloadStatus | null)[] => {
+  const state = useSyncExternalStore(downloads.subscribe, downloads.get);
+  return useMemo(
+    () => trackIds.map((id) => ytDownloadStatus(state, missingSongJobId(id))),
+    [state, trackIds],
+  );
+};
+
+/** [jobs] in the order of [trackIds], the Tracks they fill in. */
+const inOrder = (
+  jobs: readonly MissingSongJob[],
+  trackIds: readonly number[],
+): MissingSongJob[] => {
+  const place = new Map(trackIds.map((id, index) => [id, index]));
+  // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
+  return [...jobs].sort(
+    (a, b) => (place.get(a.missing.trackId) ?? 0) - (place.get(b.missing.trackId) ?? 0),
+  );
+};
+
+/**
+ * Settings › Wave Account's Download All, Retry Failed and Cancel, decided on the missing songs
+ * and the journal as they are now (Core's `missingSongsDownload`). With [trackIds] (an album's
+ * Download Missing Songs, Retry Failed and Cancel Download), only those songs, in that order.
+ */
+export const runMissingSongsDownloadAction = (
+  action: MissingSongsDownloadAction,
+  trackIds?: readonly number[],
+): void => {
   if (action !== "cancel") {
     askForNotifications();
     startDownloads();
   }
   requests = requests
     .then(async () => {
-      const [missing, jobs] = await Promise.all([missingSongJobs(), WaveSoulseek.jobsSnapshot()]);
+      const [found, jobs] = await Promise.all([
+        missingSongJobs(trackIds),
+        WaveSoulseek.jobsSnapshot(),
+      ]);
+      const missing = trackIds === undefined ? found : inOrder(found, trackIds);
       const download = missingSongsDownload(missing, jobs);
       switch (action) {
         case "downloadAll":

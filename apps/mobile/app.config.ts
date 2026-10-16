@@ -13,7 +13,7 @@ const inter = (file: string): string => `./node_modules/@expo-google-fonts/inter
 
 // Wave's version, kept here and nowhere else: Android's versionCode follows from it, and
 // pushing the tag v<version> publishes the release (docs/spec.md, Releases).
-const version = "0.5.1-ti";
+const version = "0.5.2-ti";
 
 const config: ExpoConfig = {
   name: "Wave",
