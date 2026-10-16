@@ -5,6 +5,7 @@ import android.content.Context
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -130,8 +131,7 @@ class WavePlayerModule : Module() {
     }
 
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-      val crossfadeTo = CrossfadeLink.handoffKey
-      CrossfadeLink.handoffKey = null
+      val crossfade = CrossfadeLink.handoff.take(mediaItem?.mediaId, SystemClock.elapsedRealtime())
       sendEvent(
         "onItemTransition",
         mapOf(
@@ -139,7 +139,7 @@ class WavePlayerModule : Module() {
           "reason" to PlayerEvents.transitionReason(
             reason,
             duringSync = syncing,
-            crossfade = crossfadeTo != null && crossfadeTo == mediaItem?.mediaId,
+            crossfade = crossfade,
           ),
         ),
       )
@@ -399,7 +399,7 @@ class WavePlayerModule : Module() {
    * module was made went unreported, so it isn't taken for a later one.
    */
   private fun followCrossfade() {
-    CrossfadeLink.handoffKey = null
+    CrossfadeLink.handoff.clear()
     CrossfadeLink.onFadeEnded = fadeEnded
   }
 

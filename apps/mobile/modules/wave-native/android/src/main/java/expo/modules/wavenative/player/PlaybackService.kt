@@ -286,7 +286,7 @@ class PlaybackService : MediaLibraryService() {
         if (next == C.INDEX_UNSET) return
         val key = player.getMediaItemAt(next).mediaId
         crossfadeTarget = key
-        CrossfadeLink.handoffKey = key
+        CrossfadeLink.handoff.mark(key, SystemClock.elapsedRealtime())
         player.seekTo(next, 0)
       }
 
