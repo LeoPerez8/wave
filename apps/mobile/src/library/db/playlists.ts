@@ -21,10 +21,17 @@ import {
   type PlaylistSong,
   type YtAlbumSong,
 } from "@wave/core";
-import { and, asc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 
 import type { PlaylistAddResult, PlaylistDetail, PlaylistRow } from "../LibraryStore.ts";
 import type { LibraryDatabase, RowPage } from "./database.ts";
+import {
+  countAppend,
+  countDecoded,
+  countListRead,
+  countPageRead,
+  countSummarized,
+} from "./playlistWork.ts";
 import * as schema from "./schema.ts";
 import { stamped } from "./sync.ts";
 import { filePath, hasFile, inScope, songColumns, type TrackScope } from "./tracks.ts";
@@ -34,6 +41,12 @@ const IN_ORDER = [asc(schema.playlistItems.orderKey), asc(schema.playlistItems.s
 
 /** Entries the playlist holds: not removed (tombstones). */
 const live = eq(schema.playlistItems.deleted, false);
+
+/** [playlistId]'s stored YT Music song [stored] (Core's `readPlaylistYtSong`), counted as decoded. */
+const decode = (playlistId: number, stored: string): YtAlbumSong | null => {
+  countDecoded(playlistId);
+  return readPlaylistYtSong(stored);
+};
 
 /** A playlist's Library tracks in [scope] with their playlist item. */
 const playlistTracks = (
@@ -71,10 +84,77 @@ export type PlaylistEntry<T = PlaylistTrack> = MixedSong<YtAlbumSong, T> & {
   readonly itemId: number;
 };
 
+/** A stored YT Music song as decoded, and the entry's stamp when it was. */
+interface DecodedSong {
+  readonly changedAt: number;
+  readonly song: YtAlbumSong | null;
+}
+
+/**
+ * Per database, the YT Music songs of the playlist last read whole, by entry:
+ * read again (an import filling it, its page in sight), only entries added
+ * or changed since are decoded. A streamed entry's song is written once,
+ * when it's added, and an entry that changes is stamped (`changed_at`) or,
+ * unstamped, first becomes a Library song (signing out), which drops it from
+ * here. One playlist's at a time, the songs its page shows anyway.
+ */
+const decodedSongs = new WeakMap<
+  LibraryDatabase,
+  { readonly playlistId: number; readonly songs: Map<number, DecodedSong> }
+>();
+
+/**
+ * The YT Music songs of [playlistId]'s entries [streamed] (in [whole] reads,
+ * every one it holds), decoded or, for a [whole] read, as decoded before.
+ */
+const streamedSongs = (
+  db: LibraryDatabase,
+  playlistId: number,
+  streamed: readonly { readonly id: number; readonly changedAt: number }[],
+  whole: boolean,
+): Map<number, DecodedSong> => {
+  const known = whole ? decodedSongs.get(db) : undefined;
+  const before = known?.playlistId === playlistId ? known.songs : undefined;
+  const songs = new Map<number, DecodedSong>();
+  const missing: number[] = [];
+  for (const { id, changedAt } of streamed) {
+    const decoded = before?.get(id);
+    if (decoded !== undefined && decoded.changedAt === changedAt) songs.set(id, decoded);
+    else missing.push(id);
+  }
+  const { playlistItems } = schema;
+  for (let i = 0; i < missing.length; i += LOOKUP_CHUNK) {
+    const rows = db
+      .select({
+        id: playlistItems.id,
+        changedAt: playlistItems.changedAt,
+        ytSong: sql<string>`${playlistItems.ytSong}`,
+      })
+      .from(playlistItems)
+      .where(
+        and(
+          sql`${playlistItems.id} IN ${jsonList(missing.slice(i, i + LOOKUP_CHUNK))}`,
+          isNotNull(playlistItems.ytSong),
+        ),
+      )
+      .all();
+    for (const row of rows) {
+      songs.set(row.id, { changedAt: row.changedAt, song: decode(playlistId, row.ytSong) });
+    }
+  }
+  if (whole) decodedSongs.set(db, { playlistId, songs });
+  return songs;
+};
+
+/** Entry ids per lookup of their stored songs. */
+const LOOKUP_CHUNK = 2_000;
+
 /**
  * A playlist's entries in playlist order, [page] of them if given: its YT
  * Music entries and its Library tracks in [scope] (Android Auto's: only
- * those with a file). A YT Music entry whose stored song can't be read is left out.
+ * those with a file). A YT Music entry whose stored song can't be read is
+ * left out. Reading the whole playlist again decodes only the YT Music
+ * entries added or changed since (`streamedSongs`).
  */
 export const selectPlaylistEntries = (
   db: LibraryDatabase,
@@ -84,7 +164,11 @@ export const selectPlaylistEntries = (
 ): PlaylistEntry[] => {
   const { playlistItems } = schema;
   const query = db
-    .select({ id: playlistItems.id, ytSong: playlistItems.ytSong })
+    .select({
+      id: playlistItems.id,
+      changedAt: playlistItems.changedAt,
+      streamed: sql<number>`${playlistItems.ytSong} IS NOT NULL`,
+    })
     .from(playlistItems)
     .where(
       and(
@@ -104,6 +188,12 @@ export const selectPlaylistEntries = (
     .orderBy(...IN_ORDER);
   const items =
     page === undefined ? query.all() : query.limit(page.limit).offset(page.offset).all();
+  const songs = streamedSongs(
+    db,
+    playlistId,
+    items.filter((item) => item.streamed),
+    page === undefined,
+  );
   if (items.length === 0) return [];
   // A page reads only its own tracks; the whole list, the playlist's.
   const tracks = new Map(
@@ -115,8 +205,8 @@ export const selectPlaylistEntries = (
     ).map(({ itemId, ...track }) => [itemId, track]),
   );
   return items.flatMap((item): PlaylistEntry[] => {
-    if (item.ytSong !== null) {
-      const song = readPlaylistYtSong(item.ytSong);
+    if (item.streamed) {
+      const song = songs.get(item.id)?.song ?? null;
       return song === null ? [] : [{ itemId: item.id, source: "stream", song }];
     }
     const track = tracks.get(item.id);
@@ -206,19 +296,75 @@ const placeSongs = (
   );
 };
 
-/** What a playlist holds, as Core's `planPlaylistSongs` compares it. */
-const heldSongs = (db: LibraryDatabase, playlistId: number): PlaylistSong[] => {
+/** A stored YT Music song's video id, read by SQLite; null for one that isn't JSON. */
+const storedVideoId = sql`CASE WHEN json_valid(${schema.playlistItems.ytSong})
+  THEN json_extract(${schema.playlistItems.ytSong}, '$.videoId') END`;
+
+/** [values] as one bound value that SQLite reads back as a list: `x IN ${jsonList(values)}`. */
+const jsonList = (values: readonly (string | number)[]) =>
+  sql`(SELECT value FROM json_each(${JSON.stringify(values)}))`;
+
+/**
+ * What a playlist holds of [songs], as Core's `planPlaylistSongs` compares
+ * them: its Library tracks among them, and its YT Music songs with their
+ * video ids. SQLite finds the candidates, so only the stored songs a batch
+ * could repeat are decoded, not the whole playlist; decoding them checks each
+ * is readable, as the playlist's list reads it.
+ */
+const heldAmong = (
+  db: LibraryDatabase,
+  playlistId: number,
+  songs: readonly PlaylistSong[],
+): PlaylistSong[] => {
   const { playlistItems } = schema;
-  return db
-    .select({ trackId: playlistItems.trackId, ytSong: playlistItems.ytSong })
-    .from(playlistItems)
-    .where(and(eq(playlistItems.playlistId, playlistId), live))
-    .all()
-    .flatMap((row): PlaylistSong[] => {
-      if (row.trackId !== null) return [{ source: "library", trackId: row.trackId }];
-      const song = row.ytSong === null ? null : readPlaylistYtSong(row.ytSong);
-      return song === null ? [] : [{ source: "stream", song }];
-    });
+  const trackIds: number[] = [];
+  const videoIds: string[] = [];
+  for (const song of songs) {
+    if (song.source === "library") trackIds.push(song.trackId);
+    else videoIds.push(song.song.videoId);
+  }
+  const inPlaylist = and(eq(playlistItems.playlistId, playlistId), live);
+  const held: PlaylistSong[] = [];
+  if (trackIds.length > 0) {
+    const rows = db
+      .select({ trackId: sql<number>`${playlistItems.trackId}` })
+      .from(playlistItems)
+      .where(and(inPlaylist, sql`${playlistItems.trackId} IN ${jsonList(trackIds)}`))
+      .all();
+    for (const { trackId } of rows) held.push({ source: "library", trackId });
+  }
+  if (videoIds.length > 0) {
+    const rows = db
+      .select({ ytSong: sql<string>`${playlistItems.ytSong}` })
+      .from(playlistItems)
+      .where(
+        and(
+          inPlaylist,
+          isNotNull(playlistItems.ytSong),
+          sql`${storedVideoId} IN ${jsonList(videoIds)}`,
+        ),
+      )
+      .all();
+    for (const { ytSong } of rows) {
+      const song = decode(playlistId, ytSong);
+      if (song !== null) held.push({ source: "stream", song });
+    }
+  }
+  return held;
+};
+
+/** A playlist's last entry in playlist order, which an append goes after; null when it's empty. */
+const lastEntry = (db: LibraryDatabase, playlistId: number): OrderedEntry | null => {
+  const { playlistItems } = schema;
+  return (
+    db
+      .select({ id: playlistItems.syncId, orderKey: playlistItems.orderKey })
+      .from(playlistItems)
+      .where(and(eq(playlistItems.playlistId, playlistId), live))
+      .orderBy(desc(playlistItems.orderKey), desc(playlistItems.syncId))
+      .limit(1)
+      .get() ?? null
+  );
 };
 
 /**
@@ -232,8 +378,12 @@ export const appendPlaylistSongs = (
   songs: readonly PlaylistSong[],
   now: number,
 ): { readonly added: number; readonly alreadyIn: number } => {
-  const plan = planPlaylistSongs(heldSongs(db, playlistId), songs);
-  const entries = orderedEntries(db, playlistId);
+  countAppend(playlistId);
+  if (songs.length === 0) return { added: 0, alreadyIn: 0 };
+  const plan = planPlaylistSongs(heldAmong(db, playlistId, songs), songs);
+  // At the end, the new keys only depend on the last entry's (Core's `placeEntries`).
+  const last = lastEntry(db, playlistId);
+  const entries = last === null ? [] : [last];
   placeSongs(db, playlistId, entries, entries.length, plan.add, now);
   return { added: plan.add.length, alreadyIn: plan.alreadyIn };
 };
@@ -326,6 +476,18 @@ export const movePlaylistItem = (
 const LINK_CHUNK = 500;
 
 /**
+ * A number that rises whenever any playlist's entries are written (here,
+ * by a sync, by an import, by a link), from `playlist_revisions`: a scan
+ * reads it to tell whether entries came that a link hasn't seen.
+ */
+export const selectPlaylistEntriesRevision = (db: LibraryDatabase): number =>
+  db
+    .select({ sum: sql<number>`coalesce(sum(${schema.playlistRevisions.revision}), 0)` })
+    .from(schema.playlistRevisions)
+    .where(ne(schema.playlistRevisions.playlistId, LIBRARY_REVISION))
+    .get()?.sum ?? 0;
+
+/**
  * Turns the YT Music entries of every playlist that the Library tracks
  * [trackIds] (just downloaded; the whole Library when not given, as a scan
  * does once it ends) positively are (Core's `playlistEntryLinks`) into those
@@ -359,7 +521,7 @@ export const linkPlaylistEntries = (
     .orderBy(asc(playlistItems.playlistId), ...IN_ORDER)
     .all()
     .flatMap(({ itemId, playlistId, ytSong }) => {
-      const song = ytSong === null ? null : readPlaylistYtSong(ytSong);
+      const song = ytSong === null ? null : decode(playlistId, ytSong);
       return song === null ? [] : [{ itemId, playlistId, song }];
     });
   if (entries.length === 0) return 0;
@@ -418,17 +580,86 @@ export interface PlaylistCovers {
 /** The most tiles a mosaic has (Core's `playlistMosaic`). */
 const MOSAIC_TILES = 4;
 
+/** Playlist entries `pi` of [playlists] (one id or several), or of every playlist when not given. */
+const entriesOf = (playlists: number | readonly number[] | undefined) =>
+  playlists === undefined
+    ? sql`1`
+    : typeof playlists === "number"
+      ? sql`pi.playlist_id = ${playlists}`
+      : sql`pi.playlist_id IN ${jsonList(playlists)}`;
+
+/** Up to this many playlists' mosaics are found by walking each from its top (`walkCovers`). */
+const WALKED_MOSAICS = 4;
+
+/** Entries `walkCovers` reads first; each further read takes four times as many. */
+const FIRST_WALK = 16;
+
+/**
+ * [playlistId]'s mosaic, found by reading its entries from the top, a few at
+ * a time, until four different covers turned up (or it ends): what
+ * `selectPlaylistCovers` picks for every playlist at once, without reading a
+ * long playlist whole. Null when it has no cover.
+ */
+const walkCovers = (db: LibraryDatabase, playlistId: number): PlaylistCovers | null => {
+  const thumbs: string[] = [];
+  const paths: string[] = [];
+  const seen = new Set<string>();
+  for (let offset = 0, limit = FIRST_WALK; thumbs.length < MOSAIC_TILES;) {
+    const rows = db.all<{ cover: string | null; thumbPath: string; path: string }>(sql`
+      SELECT coalesce(aw.hash, items.url) AS cover,
+        coalesce(aw.thumb_path, items.url) AS thumbPath,
+        coalesce(aw.path, items.url) AS path
+      FROM (
+        SELECT pi.order_key, pi.sync_id, al.artwork_hash,
+          CASE WHEN json_valid(pi.yt_song) THEN
+            CASE json_type(pi.yt_song, '$.artworkUrl')
+              WHEN 'text' THEN json_extract(pi.yt_song, '$.artworkUrl')
+            END
+          END AS url
+        FROM playlist_items pi
+        LEFT JOIN tracks t ON t.id = pi.track_id
+        LEFT JOIN albums al ON al.id = t.album_id
+        WHERE pi.playlist_id = ${playlistId} AND NOT pi.deleted
+        ORDER BY pi.order_key, pi.sync_id
+        LIMIT ${limit} OFFSET ${offset}
+      ) AS items
+      LEFT JOIN artwork aw ON aw.hash = items.artwork_hash
+      ORDER BY items.order_key, items.sync_id`);
+    for (const row of rows) {
+      if (row.cover === null || seen.has(row.cover)) continue;
+      seen.add(row.cover);
+      thumbs.push(row.thumbPath);
+      paths.push(row.path);
+      if (thumbs.length === MOSAIC_TILES) break;
+    }
+    if (rows.length < limit) break;
+    offset += limit;
+    limit *= 4;
+  }
+  if (thumbs.length === 0) return null;
+  return { thumbPaths: playlistMosaic(thumbs), artworkPaths: playlistMosaic(paths) };
+};
+
 /**
  * Each playlist's mosaic (Core's `playlistMosaic`), from what it holds in
  * playlist order: a Library track's album cover (a file), a YT Music entry's
- * cover (YouTube's address). Only [playlistId]'s when given. SQLite picks each
- * playlist's first four different covers, so only those are read.
+ * cover (YouTube's address). Only [playlists]' when given (one id or several).
+ * SQLite picks each playlist's first four different covers, so only those are read.
  */
 export const selectPlaylistCovers = (
   db: LibraryDatabase,
-  playlistId?: number,
+  playlists?: number | readonly number[],
 ): Map<number, PlaylistCovers> => {
-  const inPlaylist = playlistId === undefined ? sql`1` : sql`pi.playlist_id = ${playlistId}`;
+  if (typeof playlists === "number") playlists = [playlists];
+  if (playlists !== undefined && playlists.length <= WALKED_MOSAICS) {
+    const mosaics = new Map<number, PlaylistCovers>();
+    for (const id of playlists) {
+      const covers = walkCovers(db, id);
+      if (covers !== null) mosaics.set(id, covers);
+    }
+    return mosaics;
+  }
+  const inPlaylist = entriesOf(playlists);
   // A cover is an artwork row (its file and thumbnail) or an entry's address
   // (both at once); unreadable stored songs give none.
   const rows = db.all<{ playlistId: number; thumbPath: string; path: string }>(sql`
@@ -495,51 +726,135 @@ export interface PlaylistTotals {
 }
 
 /**
- * Each playlist's song count and length (only [playlistId]'s when given), YT
- * Music entries included (one of unknown length adds nothing to it). An entry
- * whose stored song can't be read is left out, as the playlist's list leaves
- * it out (`selectPlaylistEntries`: both read it with Core's
- * `readPlaylistYtSong`). Playlists holding nothing are left out.
+ * Whether the stored YT Music song `pi.yt_song` is one Core's
+ * `readPlaylistYtSong` reads: an object with a video id, a title, artists
+ * (names), an album and a cover (each a text or null) and a length (a number
+ * or null). SQLite checks it without handing the song to JavaScript.
+ */
+const READABLE_YT_SONG = sql`CASE
+  WHEN NOT json_valid(pi.yt_song) THEN 0
+  WHEN json_type(pi.yt_song) <> 'object' THEN 0
+  ELSE coalesce(
+    json_type(pi.yt_song, '$.videoId') = 'text'
+      AND json_extract(pi.yt_song, '$.videoId') <> ''
+      AND json_type(pi.yt_song, '$.title') = 'text'
+      AND json_type(pi.yt_song, '$.artists') = 'array'
+      AND NOT EXISTS (
+        SELECT 1 FROM json_each(pi.yt_song, '$.artists') WHERE json_each.type <> 'text')
+      AND json_type(pi.yt_song, '$.album') IN ('null', 'text')
+      AND json_type(pi.yt_song, '$.artworkUrl') IN ('null', 'text')
+      AND json_type(pi.yt_song, '$.durationMs') IN ('null', 'integer', 'real'),
+    0)
+END`;
+
+/**
+ * Each playlist's song count and length (only [playlists]' when given: one id
+ * or several), YT Music entries included (one of unknown length adds nothing
+ * to it). An entry whose stored song can't be read is left out, as the
+ * playlist's list leaves it out (`selectPlaylistEntries`, with Core's
+ * `readPlaylistYtSong`; SQLite makes the same checks here, `READABLE_YT_SONG`).
+ * Playlists holding nothing are left out.
  */
 export const selectPlaylistTotals = (
   db: LibraryDatabase,
-  playlistId?: number,
+  playlists?: number | readonly number[],
 ): Map<number, PlaylistTotals> => {
-  const { playlistItems, tracks } = schema;
-  const inPlaylist =
-    playlistId === undefined ? undefined : eq(playlistItems.playlistId, playlistId);
-  const totals = new Map<number, { trackCount: number; durationMs: number }>(
-    db
-      .select({
-        playlistId: playlistItems.playlistId,
-        trackCount: sql<number>`count(*)`,
-        durationMs: sql<number>`coalesce(sum(${tracks.durationMs}), 0)`,
-      })
-      .from(playlistItems)
-      // A Library entry whose track is gone is on its way out (the cascade), never counted.
-      .innerJoin(tracks, eq(playlistItems.trackId, tracks.id))
-      .where(and(live, inPlaylist))
-      .groupBy(playlistItems.playlistId)
-      .all()
-      .map(({ playlistId: id, ...total }) => [id, total]),
-  );
-  const streamed = db
-    .select({ playlistId: playlistItems.playlistId, ytSong: playlistItems.ytSong })
-    .from(playlistItems)
-    .where(and(isNotNull(playlistItems.ytSong), live, inPlaylist))
-    .all();
-  for (const row of streamed) {
-    const song = row.ytSong === null ? null : readPlaylistYtSong(row.ytSong);
-    if (song === null) continue;
-    const total = totals.get(row.playlistId) ?? { trackCount: 0, durationMs: 0 };
-    total.trackCount += 1;
-    total.durationMs += song.durationMs ?? 0;
-    totals.set(row.playlistId, total);
-  }
-  return totals;
+  const rows = db.all<{ playlistId: number; trackCount: number; durationMs: number }>(sql`
+    SELECT pi.playlist_id AS playlistId, count(*) AS trackCount,
+      coalesce(sum(CASE
+        WHEN pi.track_id IS NOT NULL THEN t.duration_ms
+        WHEN json_valid(pi.yt_song) THEN json_extract(pi.yt_song, '$.durationMs')
+      END), 0) AS durationMs
+    FROM playlist_items pi
+    LEFT JOIN tracks t ON t.id = pi.track_id
+    WHERE NOT pi.deleted AND ${entriesOf(playlists)}
+      -- A Library entry whose track is gone is on its way out (the cascade), never counted.
+      AND CASE WHEN pi.track_id IS NOT NULL THEN t.id IS NOT NULL ELSE ${READABLE_YT_SONG} END
+    GROUP BY pi.playlist_id`);
+  return new Map(rows.map(({ playlistId, ...total }) => [playlistId, total]));
 };
 
 const NO_COVERS = { thumbPaths: [], artworkPaths: [] } as const;
+const NO_SONGS = { trackCount: 0, durationMs: 0 } as const;
+
+/** A playlist's mosaic and totals, as Library › Playlists and its page show them. */
+interface PlaylistSummary {
+  readonly covers: PlaylistCovers;
+  readonly totals: PlaylistTotals;
+}
+
+/**
+ * Per database, each playlist's summary as last worked out, with the
+ * revisions it was worked out at (`playlistRevisions`: the playlist's, then
+ * the Library's). Holds one per live playlist at most: Library › Playlists
+ * drops deleted ones.
+ */
+const summaryCache = new WeakMap<
+  LibraryDatabase,
+  Map<number, { readonly at: string; readonly summary: PlaylistSummary }>
+>();
+
+/** The Library's row in `playlist_revisions` (no playlist has id 0). */
+const LIBRARY_REVISION = 0;
+
+/**
+ * [playlistIds]' mosaics and totals. Those whose entries (or the Library's
+ * tracks, albums and covers) changed since they were last worked out are
+ * worked out again, together; the others are taken as they were. SQLite's
+ * triggers keep the revisions (migration 0022), so every write counts: this
+ * phone's edits, pulled ones, links to downloads, songs leaving the Library.
+ * Not for use inside a write transaction that may roll back.
+ */
+const playlistSummaries = (
+  db: LibraryDatabase,
+  playlistIds: readonly number[],
+  /** Totals the caller just counted (a page from the entries it read): not counted again. */
+  counted?: ReadonlyMap<number, PlaylistTotals>,
+): Map<number, PlaylistSummary> => {
+  let cache = summaryCache.get(db);
+  if (cache === undefined) {
+    cache = new Map();
+    summaryCache.set(db, cache);
+  }
+  const revisions = new Map(
+    db
+      .select()
+      .from(schema.playlistRevisions)
+      .all()
+      .map((row) => [row.playlistId, row.revision]),
+  );
+  const library = revisions.get(LIBRARY_REVISION) ?? 0;
+  const at = (id: number): string => `${revisions.get(id) ?? 0}:${library}`;
+  const stale = playlistIds.filter((id) => cache.get(id)?.at !== at(id));
+  if (stale.length > 0) {
+    const covers = selectPlaylistCovers(db, stale);
+    const uncounted = stale.filter((id) => counted?.get(id) === undefined);
+    const totals = uncounted.length === 0 ? new Map() : selectPlaylistTotals(db, uncounted);
+    for (const id of stale) {
+      countSummarized(id);
+      cache.set(id, {
+        at: at(id),
+        summary: {
+          covers: covers.get(id) ?? NO_COVERS,
+          totals: counted?.get(id) ?? totals.get(id) ?? NO_SONGS,
+        },
+      });
+    }
+  }
+  const summaries = new Map<number, PlaylistSummary>();
+  for (const id of playlistIds) {
+    const known = cache.get(id);
+    if (known !== undefined) summaries.set(id, known.summary);
+  }
+  return summaries;
+};
+
+/** Forgets the summaries of playlists not in [kept] (deleted ones). */
+const keepSummaries = (db: LibraryDatabase, kept: ReadonlySet<number>): void => {
+  const cache = summaryCache.get(db);
+  if (cache === undefined) return;
+  for (const id of cache.keys()) if (!kept.has(id)) cache.delete(id);
+};
 
 /** A playlist's own image, when the owner gave it one (`db/playlistImages.ts`). */
 const imageColumns = {
@@ -564,28 +879,44 @@ const playlistArt = (
   };
 };
 
-const NO_SONGS = { trackCount: 0, durationMs: 0 } as const;
+/** How many songs [entries] are and how long they play (one of unknown length adds nothing). */
+const entriesTotals = (entries: readonly PlaylistEntry[]): PlaylistTotals => {
+  let durationMs = 0;
+  for (const entry of entries) {
+    durationMs +=
+      entry.source === "library" ? entry.track.durationMs : (entry.song.durationMs ?? 0);
+  }
+  return { trackCount: entries.length, durationMs };
+};
 
 /** Playlists the owner has: not deleted (tombstones). */
 const livePlaylist = eq(schema.playlists.deleted, false);
 
-/** Every playlist by name, with its artwork (its own image or its mosaic) and totals; deleted ones (tombstones) aren't listed. */
+/**
+ * Every playlist by name, with its artwork (its own image or its mosaic) and
+ * totals; deleted ones (tombstones) aren't listed. Only the playlists that
+ * changed since the last read have their mosaic and totals worked out again
+ * (`playlistSummaries`).
+ */
 export const selectPlaylists = (db: LibraryDatabase): PlaylistRow[] => {
   const { playlists } = schema;
+  countListRead();
+  const rows = db
+    .select({ id: playlists.id, name: playlists.name, ...imageColumns })
+    .from(playlists)
+    .where(livePlaylist)
+    .all();
+  const ids = rows.map((row) => row.id);
+  keepSummaries(db, new Set(ids));
   // Library tracks and YT Music entries alike.
-  const covers = selectPlaylistCovers(db);
-  const totals = selectPlaylistTotals(db);
+  const summaries = playlistSummaries(db, ids);
   return (
-    db
-      .select({ id: playlists.id, name: playlists.name, ...imageColumns })
-      .from(playlists)
-      .where(livePlaylist)
-      .all()
+    rows
       .map(({ imagePath, imageThumbPath, ...row }) => ({
         ...row,
         sort: sortKey(row.name),
-        ...(totals.get(row.id) ?? NO_SONGS),
-        ...playlistArt({ imagePath, imageThumbPath }, covers.get(row.id) ?? NO_COVERS),
+        ...(summaries.get(row.id)?.totals ?? NO_SONGS),
+        ...playlistArt({ imagePath, imageThumbPath }, summaries.get(row.id)?.covers ?? NO_COVERS),
       }))
       // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
       .sort((a, b) => compareStrings(a.sort, b.sort) || a.id - b.id)
@@ -599,6 +930,7 @@ export const selectPlaylist = (
   scope: TrackScope = "library",
 ): PlaylistDetail | null => {
   const { playlists } = schema;
+  countPageRead(id);
   const row = db
     .select({ id: playlists.id, name: playlists.name, ...imageColumns })
     .from(playlists)
@@ -607,9 +939,12 @@ export const selectPlaylist = (
   if (row === undefined) return null;
   const { imagePath, imageThumbPath, ...playlist } = row;
   const items = selectPlaylistEntries(db, id, undefined, scope);
-  const covers = selectPlaylistCovers(db, id).get(id) ?? NO_COVERS;
-  // As Library › Playlists counts it.
-  const { trackCount, durationMs } = selectPlaylistTotals(db, id).get(id) ?? NO_SONGS;
+  // As Library › Playlists counts it, and shared with it. Every Library song
+  // is among the entries, as is every readable YT Music song: counted from them.
+  const counted = scope === "library" ? new Map([[id, entriesTotals(items)]]) : undefined;
+  const summary = playlistSummaries(db, [id], counted).get(id);
+  const covers = summary?.covers ?? NO_COVERS;
+  const { trackCount, durationMs } = summary?.totals ?? NO_SONGS;
   return {
     playlist: {
       ...playlist,

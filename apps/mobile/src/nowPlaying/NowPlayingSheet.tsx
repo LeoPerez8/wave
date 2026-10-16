@@ -1,16 +1,19 @@
 import { IconChevronDown, IconListNumbers, IconQuote } from "@tabler/icons-react-native";
 import type { ComponentType, ReactNode } from "react";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { Activity, memo, useEffect, useState, useSyncExternalStore } from "react";
 import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CELL, grid } from "@/catalog/grid";
 import { IconButton } from "@/components/IconButton";
+import { CoveredByNowPlaying } from "@/lib/screenSight";
 import { Press } from "@/motion/Press";
 import { addScreenBackHandler } from "@/overlay/back";
+import { useRenderCount } from "@/perf/perf";
+import type { TrackDetails } from "@/library/LibraryStore";
 import { useCurrentTrackId } from "@/playback/hooks";
-import { playbackState } from "@/playback/Player";
+import { playbackState, type PlaybackState } from "@/playback/Player";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { Background } from "./Background";
@@ -68,7 +71,58 @@ function ViewToggle({
 
 const close = (): void => closeNowPlaying();
 
-/** Wraps the screens under Now Playing: screen readers skip them while it is up. */
+type Item = NonNullable<PlaybackState["item"]>;
+
+/**
+ * The Queue view: what's playing and the toggles in the drag-to-dismiss
+ * area, then Up Next. Once shown it stays mounted, hidden (`Activity`) while
+ * the player or Lyrics shows and while Now Playing is closed: coming back
+ * shows its rows as they were, re-rendering only what changed meanwhile.
+ * Hidden, it follows nothing (its store subscriptions, gestures and frame
+ * callbacks are effects, which `Activity` tears down) and holds only the
+ * rows Legend List had drawn. Memoized, so the sheet's renders (the playing
+ * state) don't reach it while it's hidden.
+ */
+const QueuePane = memo(function QueuePane({ item }: { item: Item }) {
+  return (
+    <View className="flex-1">
+      <DismissArea>
+        <QueueHeader item={item} />
+      </DismissArea>
+      <UpNextList bottomInset={CELL * 2} />
+    </View>
+  );
+});
+
+const PLAYER_AREA = { flex: 1, paddingTop: CELL } as const;
+
+/**
+ * The player view. It stays mounted, hidden (`Activity`) while the Queue or
+ * Lyrics shows, so coming back to it draws the artwork straight away; hidden,
+ * it follows nothing (links, the route, the star). While Now Playing is
+ * closed it shows (out of sight) and follows the playing track, so an open's
+ * first frame is right.
+ */
+const PlayerPane = memo(function PlayerPane({
+  item,
+  details,
+  playing,
+}: {
+  item: Item;
+  details: TrackDetails | null;
+  playing: boolean;
+}) {
+  return (
+    <DismissArea style={PLAYER_AREA}>
+      <PlayerView item={item} details={details} playing={playing} />
+    </DismissArea>
+  );
+});
+
+/**
+ * Wraps the screens under Now Playing: screen readers skip them while it is
+ * up, and their shared Library queries pause (`CoveredByNowPlaying`).
+ */
 export function UnderNowPlaying({ children }: { children: ReactNode }) {
   const shown = useNowPlayingShown();
   return (
@@ -77,7 +131,7 @@ export function UnderNowPlaying({ children }: { children: ReactNode }) {
       style={{ flex: 1 }}
       importantForAccessibility={shown ? "no-hide-descendants" : "auto"}
     >
-      {children}
+      <CoveredByNowPlaying.Provider value>{children}</CoveredByNowPlaying.Provider>
     </View>
   );
 }
@@ -93,6 +147,7 @@ export function UnderNowPlaying({ children }: { children: ReactNode }) {
  * spring and its first frame is already right.
  */
 export function NowPlayingSheet() {
+  useRenderCount("NowPlayingSheet");
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const shown = useNowPlayingShown();
@@ -105,6 +160,8 @@ export function NowPlayingSheet() {
   const details = useTrackDetails(trackId);
   const gradient = useNowPlayingGradient(useNowPlayingPalette(trackId, details));
   const [view, setView] = useState<NowPlayingView>("player");
+  // The Queue, once shown, stays mounted while another view shows (`QueuePane`).
+  const [queueWarm, setQueueWarm] = useState(false);
 
   useEffect(() => resizeNowPlaying(height), [height]);
 
@@ -124,7 +181,10 @@ export function NowPlayingSheet() {
     transform: [{ translateY: sheetOffset.get() }],
   }));
 
-  const toggleQueue = () => setView((current) => (current === "queue" ? "player" : "queue"));
+  const toggleQueue = () => {
+    setQueueWarm(true);
+    setView((current) => (current === "queue" ? "player" : "queue"));
+  };
   const toggleLyrics = () => setView((current) => (current === "lyrics" ? "player" : "lyrics"));
 
   return (
@@ -158,24 +218,25 @@ export function NowPlayingSheet() {
               <Text className="font-sans text-subheadline text-secondary">Nothing is playing.</Text>
             </View>
           </DismissArea>
-        ) : view === "queue" ? (
-          <View className="flex-1">
-            <DismissArea>
-              <QueueHeader item={item} />
-            </DismissArea>
-            <UpNextList bottomInset={CELL * 2} />
-          </View>
-        ) : view === "lyrics" ? (
-          <View className="flex-1">
-            <DismissArea>
-              <TrackHeader item={item} />
-            </DismissArea>
-            <LyricsView path={details?.path ?? null} />
-          </View>
         ) : (
-          <DismissArea style={{ flex: 1, paddingTop: CELL }}>
-            <PlayerView item={item} details={details} playing={playing} />
-          </DismissArea>
+          <>
+            {queueWarm && (
+              <Activity mode={view === "queue" ? "visible" : "hidden"} name="Queue">
+                <QueuePane item={item} />
+              </Activity>
+            )}
+            {view === "lyrics" && (
+              <View className="flex-1">
+                <DismissArea>
+                  <TrackHeader item={item} />
+                </DismissArea>
+                <LyricsView path={details?.path ?? null} />
+              </View>
+            )}
+            <Activity mode={view === "player" ? "visible" : "hidden"} name="Player">
+              <PlayerPane item={item} details={details} playing={playing} />
+            </Activity>
+          </>
         )}
 
         <DismissArea style={{ paddingTop: CELL * 3, gap: CELL * 2 }}>

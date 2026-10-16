@@ -20,7 +20,7 @@ import {
   IconX,
 } from "@tabler/icons-react-native";
 import { actionBarLabel, entryDivider, splitActionBar, type ItemAction } from "@wave/core";
-import type { ComponentType } from "react";
+import { memo, type ComponentType } from "react";
 import { Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -241,12 +241,19 @@ export function SelectionHeader() {
   );
 }
 
-/** Selection mode's chrome: the header on top and the action bar at the bottom. */
-export function SelectionChrome({ backdropId }: { backdropId: string }) {
+/**
+ * Selection mode's chrome: the header on top and the action bar at the bottom.
+ * Memoized: the layouts holding it render on navigation, and it needn't.
+ */
+export const SelectionChrome = memo(function SelectionChrome({
+  backdropId,
+}: {
+  backdropId: string;
+}) {
   return (
     <>
       <SelectionHeader />
       <SelectionBar backdropId={backdropId} />
     </>
   );
-}
+});

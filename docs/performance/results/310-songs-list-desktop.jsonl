@@ -1,0 +1,18 @@
+{"kind":"meta","tracks":10000,"runtime":"v24.19.0","platform":"win32-x64","note":"Desktop Node with sql.js; not phone timings. allocatedKb includes garbage."}
+{"kind":"open","sort":"title ascending","before":{"ms":121.83,"allocatedKb":107381,"retainedKb":12188},"order":{"ms":19.37,"allocatedKb":1156,"retainedKb":82},"after":{"ms":20.09,"allocatedKb":1523,"retainedKb":95}}
+{"kind":"open","sort":"title descending","before":{"ms":122.96,"allocatedKb":107205,"retainedKb":12188},"order":{"ms":21.56,"allocatedKb":1075,"retainedKb":86},"after":{"ms":22.42,"allocatedKb":1437,"retainedKb":95}}
+{"kind":"open","sort":"artist ascending","before":{"ms":132.74,"allocatedKb":107459,"retainedKb":12188},"order":{"ms":21.14,"allocatedKb":1153,"retainedKb":82},"after":{"ms":21.82,"allocatedKb":1512,"retainedKb":98}}
+{"kind":"open","sort":"artist descending","before":{"ms":134.05,"allocatedKb":107393,"retainedKb":12192},"order":{"ms":21.53,"allocatedKb":1153,"retainedKb":82},"after":{"ms":24.39,"allocatedKb":1512,"retainedKb":95}}
+{"kind":"open","sort":"album ascending","before":{"ms":133.22,"allocatedKb":107334,"retainedKb":12188},"order":{"ms":19.25,"allocatedKb":1153,"retainedKb":82},"after":{"ms":20.33,"allocatedKb":1512,"retainedKb":95}}
+{"kind":"open","sort":"album descending","before":{"ms":129.72,"allocatedKb":107390,"retainedKb":12188},"order":{"ms":21.36,"allocatedKb":1153,"retainedKb":82},"after":{"ms":59.46,"allocatedKb":1512,"retainedKb":90}}
+{"kind":"open","sort":"added descending","before":{"ms":209.38,"allocatedKb":106576,"retainedKb":12188},"order":{"ms":14.06,"allocatedKb":499,"retainedKb":80},"after":{"ms":15.76,"allocatedKb":856,"retainedKb":93}}
+{"kind":"open","sort":"added ascending","before":{"ms":124.49,"allocatedKb":107344,"retainedKb":12188},"order":{"ms":9.15,"allocatedKb":499,"retainedKb":80},"after":{"ms":10.41,"allocatedKb":856,"retainedKb":93}}
+{"kind":"page","rows":50,"ms":1.01,"allocatedKb":367,"retainedKb":13}
+{"kind":"scroll","rows":10000,"limits":{"pageSize":50,"ahead":1,"keep":3},"reads":200,"rowsRead":10000,"mostHeld":300,"ms":371.72,"allocatedKb":91213,"retainedKb":-17}
+{"kind":"play-all","songs":9800,"ms":146.26,"allocatedKb":113601,"retainedKb":11962}
+{"kind":"select-all","songs":10000,"ms":126.46,"allocatedKb":117477,"retainedKb":12197}
+{"kind":"plan","sort":"title ascending","plan":[["USE TEMP B-TREE FOR group_concat(ORDER BY)","SCAN tracks","SEARCH artists USING INTEGER PRIMARY KEY (rowid=?)","SEARCH albums USING INTEGER PRIMARY KEY (rowid=?)"]]}
+{"kind":"plan","sort":"artist ascending","plan":[["USE TEMP B-TREE FOR group_concat(ORDER BY)","SCAN tracks","SEARCH artists USING INTEGER PRIMARY KEY (rowid=?)","SEARCH albums USING INTEGER PRIMARY KEY (rowid=?)"]]}
+{"kind":"plan","sort":"album ascending","plan":[["USE TEMP B-TREE FOR group_concat(ORDER BY)","SCAN tracks","SEARCH artists USING INTEGER PRIMARY KEY (rowid=?)","SEARCH albums USING INTEGER PRIMARY KEY (rowid=?)"]]}
+{"kind":"plan","sort":"added ascending","plan":[["USE TEMP B-TREE FOR group_concat(ORDER BY)","SCAN tracks","SEARCH artists USING INTEGER PRIMARY KEY (rowid=?)","SEARCH albums USING INTEGER PRIMARY KEY (rowid=?)"]]}
+{"kind":"plan","read":"page","plan":[["SEARCH tracks USING INTEGER PRIMARY KEY (rowid=?)","SEARCH artwork USING INDEX sqlite_autoindex_artwork_1 (hash=?) LEFT-JOIN"]]}

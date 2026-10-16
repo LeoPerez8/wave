@@ -1,23 +1,21 @@
 import { sortKey, type PlaylistSong } from "@wave/core";
 import * as Effect from "effect/Effect";
-import { useSyncExternalStore } from "react";
 
 import { makeExternalStore } from "@/lib/externalStore";
 import { WaveNative } from "@/native/waveNative";
 
+import { countNotified } from "./db/playlistWork";
 import {
   LibraryStore,
   type LibraryStoreError,
   type PlaylistAddResult,
   type PlaylistRow,
 } from "./LibraryStore";
+import { publishLibraryChange } from "./libraryChanges";
 import { appRuntime } from "./runtime";
 
-/** Bumped after every playlist edit; playlist queries re-run on it straight away. */
+/** Bumped after every playlist edit, for what follows it (`onPlaylistsEdited`). */
 const playlistsVersion = makeExternalStore(0);
-
-export const usePlaylistsVersion = (): number =>
-  useSyncExternalStore(playlistsVersion.subscribe, playlistsVersion.get);
 
 /** Calls [listener] after every playlist edit; returns how to stop. */
 export const onPlaylistsEdited = (listener: () => void): (() => void) =>
@@ -26,20 +24,41 @@ export const onPlaylistsEdited = (listener: () => void): (() => void) =>
 /**
  * The playlists changed (an edit here, or the Wave account sent some):
  * playlist queries re-run, and the remembered list is read again now, so the
- * next card that lists them doesn't wait for it.
+ * next card that lists them doesn't wait for it. [playlistIds]: the playlists
+ * changed, when known; queries over other playlists stay as they are.
+ * [burst]: one of a stream of additions (an import filling a playlist), which
+ * screens take at their own pace (Core's `LibraryChange.burst`); the list
+ * isn't read ahead for each, and no playlist was deleted.
  */
-export const playlistsChanged = (): void => {
+export const playlistsChanged = (playlistIds?: readonly number[], burst = false): void => {
+  countNotified(playlistIds);
   playlistsVersion.update((version) => version + 1);
+  publishLibraryChange({
+    kind: "playlists",
+    ...(playlistIds === undefined ? {} : { ids: playlistIds }),
+    ...(burst ? { burst } : {}),
+  });
+  if (burst) return;
   appRuntime.runPromise(listPlaylistsRemembered).catch(() => {});
   // A deleted playlist's image goes with it.
   tidyDeletedPlaylistImages();
 };
 
+/**
+ * Runs a playlist edit, then announces it (for [playlistId] alone, when it
+ * edits one playlist; as a burst with [burst]).
+ */
 const edit = <A>(
   run: (store: LibraryStore["Service"]) => Effect.Effect<A, LibraryStoreError>,
-): Promise<A> =>
+  playlistId?: number,
+  burst = false,
+): Promise<A> => {
   // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
-  appRuntime.runPromise(LibraryStore.use(run)).finally(playlistsChanged);
+  const edited = LibraryStore.use(run);
+  return appRuntime
+    .runPromise(edited)
+    .finally(() => playlistsChanged(playlistId === undefined ? undefined : [playlistId], burst));
+};
 
 /** The playlists as last read, and the `playlistsVersion` they were read at. */
 let remembered: { readonly version: number; readonly rows: readonly PlaylistRow[] } | undefined;
@@ -117,10 +136,10 @@ export const emptyPlaylistRow = (id: number, name: string): PlaylistRow => ({
 });
 
 export const renamePlaylist = (id: number, name: string): Promise<void> =>
-  edit((store) => store.renamePlaylist(id, name));
+  edit((store) => store.renamePlaylist(id, name), id);
 
 export const deletePlaylist = (id: number): Promise<void> =>
-  edit((store) => store.deletePlaylist(id));
+  edit((store) => store.deletePlaylist(id), id);
 
 /** Deletes playlist image files nothing shows any more; one that won't go is left behind. */
 const deleteImageFiles = (paths: readonly string[]): Promise<void> =>
@@ -134,7 +153,7 @@ const deleteImageFiles = (paths: readonly string[]): Promise<void> =>
 export const pickPlaylistImage = async (id: number): Promise<boolean> => {
   const files = await WaveNative.pickPlaylistImage();
   if (files === null) return false;
-  const unused = await edit((store) => store.setPlaylistImage(id, files)).catch(
+  const unused = await edit((store) => store.setPlaylistImage(id, files), id).catch(
     async (error: unknown) => {
       await deleteImageFiles([files.path, files.thumbPath]);
       throw error;
@@ -146,7 +165,7 @@ export const pickPlaylistImage = async (id: number): Promise<boolean> => {
 
 /** Takes the playlist's image away, so its mosaic shows again. */
 export const removePlaylistImage = (id: number): Promise<void> =>
-  edit((store) => store.removePlaylistImage(id)).then(deleteImageFiles);
+  edit((store) => store.removePlaylistImage(id), id).then(deleteImageFiles);
 
 /**
  * Deletes the image files of playlists deleted here or, through the Wave
@@ -164,22 +183,25 @@ const tidyDeletedPlaylistImages = (): void => {
 export const addToPlaylist = (
   id: number,
   songs: readonly PlaylistSong[],
-): Promise<PlaylistAddResult> => edit((store) => store.addToPlaylist(id, songs));
+  /** One of a stream of additions (an import filling the playlist): see `playlistsChanged`. */
+  { burst = false }: { readonly burst?: boolean } = {},
+): Promise<PlaylistAddResult> => edit((store) => store.addToPlaylist(id, songs), id, burst);
 
 export const movePlaylistItem = (
   playlistId: number,
   itemId: number,
   toIndex: number,
-): Promise<void> => edit((store) => store.movePlaylistItem(playlistId, itemId, toIndex));
+): Promise<void> =>
+  edit((store) => store.movePlaylistItem(playlistId, itemId, toIndex), playlistId);
 
 /** Makes the playlist hold exactly these songs, in this order (an import's Replace). */
 export const replacePlaylistSongs = (
   playlistId: number,
   songs: readonly PlaylistSong[],
-): Promise<void> => edit((store) => store.replacePlaylistSongs(playlistId, songs));
+): Promise<void> => edit((store) => store.replacePlaylistSongs(playlistId, songs), playlistId);
 
 /** Removes these entries (not every copy of their songs) from the playlist. */
 export const removePlaylistItems = (
   playlistId: number,
   itemIds: readonly number[],
-): Promise<void> => edit((store) => store.removePlaylistItems(playlistId, itemIds));
+): Promise<void> => edit((store) => store.removePlaylistItems(playlistId, itemIds), playlistId);

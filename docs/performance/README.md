@@ -1,0 +1,486 @@
+# Release performance runner
+
+Every ticket under #301 measures its change the same way: the runner in `scripts/perf/` plays
+fixed scenarios on the Galaxy S24+ through adb, unattended, and writes what it measured to a
+results file. A ticket records its before and after in `docs/performance/<issue>-<slug>.md`
+(template at the end).
+
+The runner measures a release APK. It works with any APK, and gives more with a **perf build**,
+a release build with the opt-in instrumentation turned on:
+
+|                                                          | Plain release APK | Perf build |
+| -------------------------------------------------------- | :---------------: | :--------: |
+| Frame times, deadline misses, jank counters (gfxinfo)    |        yes        |    yes     |
+| Cold launch time (`am start -W`), retained memory        |        yes        |    yes     |
+| Perfetto traces (`--perfetto`)                           |        yes        |    yes     |
+| Latency from the touch: first frame, response, settle    |         -         |    yes     |
+| Keyboard latency, Now Playing and Queue shown            |         -         |    yes     |
+| Render counts, long tasks, Library size, import progress |         -         |    yes     |
+
+## Commands
+
+From the repo root, with Node 22.18 or newer (no install needed: the runner has no dependencies):
+
+```sh
+node scripts/perf/perf.ts scenarios                 # what each scenario does
+node scripts/perf/perf.ts doctor                    # phone settings the runs depend on
+node scripts/perf/perf.ts run --label baseline      # every scenario, idle variant
+node scripts/perf/perf.ts run --label baseline --variant idle,import
+node scripts/perf/perf.ts run --scenario now-playing,queue --label 304-after
+node scripts/perf/perf.ts run --scenario soak-routes,soak-player --label 318-soak
+node scripts/perf/perf.ts summary perf-results/<file>.jsonl
+node scripts/perf/perf.ts compare <before.jsonl> <after.jsonl>
+node scripts/perf/perf.ts run --dry-run             # the whole pipeline on a simulated phone
+```
+
+`pnpm perf <command>` does the same. `run` options:
+
+- `--scenario all|glass|<a>,<b>`: `all` is every scenario except `import` (see Variants) and the
+  glass scenarios; `glass` is the glass scenarios. Groups mix with names: `glass,tab-switch`.
+- `--variant idle|import|idle,import`.
+- `--iterations <n>`: overrides each scenario's count. Use it for quick checks, not for results.
+- `--label <name>`: names the run and its file, `perf-results/<label>-<time>.jsonl`. `--out` sets
+  the file.
+- `--apk <file>`: installs the APK first (`adb install -r`) and records its SHA-256.
+- `--commit <sha>`: the APK's commit when it can't say itself. A perf build reports its own.
+- `--compile <filter>`: sets the ART compiler filter first (`cmd package compile -m <filter> -f`),
+  e.g. `speed-profile` or `verify`. `--compile baseline` clears what the phone learned, has
+  profileinstaller install the profile the APK ships, then compiles `speed-profile`: the state a
+  fresh sideload reaches once the phone's idle compile has run. The run records profileinstaller's
+  result and the profile's size (`artProfile`). Use it whenever before and after ship different
+  profiles (#317).
+- `--import-link <url>`: overrides the fixture's playlist link.
+- `--artist <name>`: overrides the fixture's artist (`push-artist`).
+- `--meta key=value`: records a value as given. On a plain APK, pass the Library's size this way
+  (`--meta library.tracks=12000 --meta library.playEvents=54000`).
+- `--glass <probe>`: launches Wave with a glass probe (perf builds only; #316): `live`,
+  `coalesced`, `blur`, `record` or `off`. Each drops glass layers so runs differ by one cost; see
+  `perf.ts scenarios` and `docs/performance/316-glass-frame-budget.md`. The run stops before
+  measuring when the app reports a different probe than asked.
+- `--perfetto`: records a Perfetto trace per scenario under `perf-results/traces/`.
+- `--serial <serial>`: picks the phone when more than one is attached.
+- `--dry-run`: uses the simulated phone in `scripts/perf/fakeDevice.ts`.
+
+`perf-results/` is ignored by git. To keep a run, copy its `.jsonl` to `docs/performance/results/`
+and link it from the ticket's doc. Never record a dry run's numbers: they are made up.
+
+## Building a perf build
+
+The instrumentation (`apps/mobile/src/perf/perf.ts`) is compiled in only when the JS bundle is
+built with `EXPO_PUBLIC_WAVE_PERF=1`. Expo inlines the variable at bundle time. Without it, every
+instrumentation export is an empty function chosen when the module loads, and the root layout
+mounts no probe and attaches no touch handler. The cost of an instrumented call site in a normal
+build is one call to that empty function.
+
+Build it like any local release APK (see the Android build notes), with two variables set for
+the bundle step:
+
+```sh
+cd apps/mobile/android
+rm -rf app/build/generated/assets/react      # Gradle doesn't see env changes: force a re-bundle
+EXPO_PUBLIC_WAVE_PERF=1 EXPO_PUBLIC_WAVE_COMMIT=$(git rev-parse --short HEAD) \
+  ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a
+```
+
+For a **stall build**, add `EXPO_PUBLIC_WAVE_PERF_STALL_MS=<ms>`: every touch then blocks the
+JavaScript thread that long (a busy loop in the root view's touch handler), a controlled stand-in
+for an import's work. What still moves in the window is what doesn't wait for JavaScript. The
+run's `app` metadata records it as `stallMs` (0 in a plain perf build).
+
+Delete Metro's cache too (`$TMPDIR/metro-cache`) when switching between perf and plain builds. The
+run's first line says whether the app on the phone is a perf build. A perf build has the same
+version, package and signature as the release it's built from, so it installs over it in place.
+
+## Fixture
+
+`scripts/perf/fixture.json` holds what the scenarios assume:
+
+- `package`: `dev.leoperez.wave`.
+- `tabs`: the tab bar's tabs to cycle through, by label, Home first. The bar must hold them, plus
+  Search.
+- `importLink`: a public playlist link for the large import, shared to Wave as a share sheet would.
+  **Not set yet.** Pick a YouTube Music or Spotify playlist of at least 2,000 songs and commit its
+  link here. The import variant can't run without it.
+- `artist`: the artist `push-artist` opens, by name as Library › Artists shows it. **Not set
+  yet.** Pick an artist with a long play history that shows on the list's first screen without
+  scrolling, and commit the name here. `push-artist` can't run without it. `--artist` overrides it.
+- `settleMs`, `windowMs`, `launchSettleMs`, `memoryIdleMs`, `flushTimeoutMs`: timing (below).
+
+The phone, for runs that compare:
+
+- The owner's Library as it is. Every run records its size: songs, playlists, playlist entries,
+  the largest playlist and play-history rows. `compare` warns when they moved by more than 1%.
+- Something in the queue, so the mini player shows (Now Playing and Queue scenarios). Paused.
+- Motion smoothness on Adaptive or High (the run records the active rate and the setting).
+  Animation scales at 1x. Stay awake while charging (`adb shell svc power stayon usb`). Screen
+  unlocked, Wave in front, no other app opened during the run. The runner checks that Wave is in
+  front after each launch and each iteration, and stops a scenario if it isn't.
+- Same compiler filter for before and after (recorded; `--compile` sets it).
+- Thermal status 0 at the start (recorded at the start and end of the run).
+- After an import run, delete the imported playlist, so the next run's Library is the same.
+
+`doctor` checks the settings it can read.
+
+## Scenarios
+
+Each scenario starts from a fresh launch (`am force-stop`, then `am start -W`), waits
+`launchSettleMs`, runs its setup, then repeats its steps. The first iterations are warm-up and
+aren't recorded. Every measured navigation step is a tap, so it has a touch to measure from:
+pops tap the header's Back button, and Now Playing closes with its Close button. Only the cold
+launch, the share, the import's idle window and typed keys have no touch. A typing step measures
+from the app's mark for the first key instead (its `from` mark), so its latencies start when
+JavaScript saw that key, not when it was pressed.
+
+| Scenario            | Steps (measure)                                                                              | Response mark             | Iterations |
+| ------------------- | -------------------------------------------------------------------------------------------- | ------------------------- | ---------: |
+| `startup`           | cold launch (`cold`)                                                                         | (am start -W)             |          5 |
+| `warm-start`        | Home, then Wave's launcher intent with its process alive (`warm`)                            | (am start -W)             |          5 |
+| `rescan-return`     | 65 s on Home, then Wave again (`return`), then the second of `tabs` tapped (`tab`); by name  | (am start -W), `route`    |          3 |
+| `tab-first`         | after a fresh launch, the first visit to each of `tabs` but Home (`first`)                   | `route`                   |          5 |
+| `tab-switch`        | ten tab taps cycling through `tabs` (`tab`): warm visits                                     | `route`                   |          3 |
+| `rapid-tabs`        | ten tab taps back to back, measured from the last (`burst`)                                  | `tab.settled` (last tab)  |          5 |
+| `push-settings`     | Home › Settings (`push`), Back (`pop`)                                                       | `route`                   |         10 |
+| `push-library`      | Library › Albums (`push`), Back (`pop`)                                                      | `route`                   |         10 |
+| `push-tracklist`    | Library › Songs, the whole Library as a Track list, to its first rows (`push`), Back (`pop`) | `songs.rows`, `route`     |         10 |
+| `push-artist`       | Library › Artists › the fixture's artist, to its stats block (`push`), Back (`pop`)          | `artist.stats`, `route`   |         10 |
+| `push-empty`        | Settings › Developer, one row: the empty-screen control (`push`, `pop`)                      | `route`                   |         10 |
+| `now-playing`       | mini player (`open`), Close Now Playing (`close`)                                            | `nowPlaying.shown/hidden` |         10 |
+| `now-playing-first` | the first mini player tap after a fresh launch (`open`)                                      | `nowPlaying.shown`        |          5 |
+| `queue`             | Queue in Now Playing (`open`), Queue again (`close`)                                         | `visible` queue           |         10 |
+| `queue-first`       | the first Queue tap after a fresh launch, Now Playing already open (`open`)                  | `visible` queue           |          5 |
+| `skip`              | the mini player's Next track (`next`)                                                        | `queue.synced`            |         10 |
+| `scrub`             | Now Playing's scrubber dragged 240 dp forward (`forward`), then back (`back`)                | (none)                    |         10 |
+| `queue-drag`        | The first Up Next row dragged three rows down by its handle (`down`), then up (`up`)         | (none)                    |         10 |
+| `search-first-tap`  | the first Search tap after a fresh launch (`first-tap`)                                      | `keyboard.show`           |          5 |
+| `search-typing`     | after a Search tap, types `love` (`type`), from `search.typed`; Clear search after           | `search.results` love     |         10 |
+| `import`            | share the link (`card`), tap Import (`start`), 10 s of the import (`during-import`)          | `import.running`          |          1 |
+| `scroll-home`       | glass: a fling up (`fling-up`) and back down (`fling-down`) on Home                          | -                         |         10 |
+| `scroll-songs`      | glass: the same on Library › Songs, under the mini player                                    | -                         |         10 |
+| `idle-home`         | glass: 5 s of Home untouched (`idle`); any frame is idle rendering                           | -                         |          5 |
+| `soak-routes`       | a cycle: Library, Albums and back, Songs and back, the other tabs, Home, Settings and back   | `route`, `songs.rows`     |         20 |
+| `soak-player`       | a cycle: open Now Playing, Queue, Queue again, Close (`open`, `queue-open`, …, `close`)      | as `now-playing`, `queue` |         30 |
+
+`rescan-return` (#315) isn't part of `all` either: each iteration waits past Wave's 60 s rescan
+interval, so ask for it by name. Its return starts the rescan, a sync and any import's next
+answers; the tab tap measures navigation while they run.
+
+The soak scenarios (#318) aren't part of `all` either: they repeat one cycle at length to show
+whether memory keeps growing. Each reads `dumpsys meminfo` six times spread over its cycles (after
+the warm-up, then evenly to the last cycle; `--iterations` stretches or shortens them), and each
+step records Hermes's heap (`jsHeapUsed`) and the listener and Library query counts at its flush.
+`summary` and `compare` print a growth table from them: a field's first and last value and what
+the second half of the samples added. A field that still rose in the second half by more than its
+noise reads `still growing`: memory more than 1 MB or 2%, object counts (views, binders) more than
+2 or 2%, and listeners and cached queries by any amount. One that rose and stopped reads
+`levelled`. Read a soak's growth with the cycle count: a perf build spends about 8 s a step
+waiting for its flush, so `soak-routes` takes about 25 minutes and `soak-player` about 16.
+
+The glass scenarios (`--scenario glass`) aren't part of `all`. A fling is `input swipe` from 70%
+to 30% of the screen's height (or back) in 120 ms, at the screen's centre, clear of the chrome. A
+fling renders more frames than gfxinfo keeps, so its first frame and settle stay empty; its frame
+totals, histogram and frame parts are what it measures. `idle-home` needs the mini player paused.
+
+`skip` measures how long a skip takes to reach the player, so it depends on the queue's length:
+load the queue under test before the run (a short album, or the whole Library as Songs) and leave
+it paused. Each iteration moves one entry on, so start far enough from the end.
+
+`push-empty` is the control: navigation with next to nothing to render. If it's as slow as
+`push-settings`, the cost is in navigation itself, not in what the screen shows.
+
+`tab-first` and `tab-switch` compare a tab's first visit (built for it) with its warm visits
+(kept mounted). Both time the tab's phases (below). `rapid-tabs` counts from the last tap to
+`tab.settled` on the tab tapped last, so a burst that ends anywhere else counts as missing.
+
+`scrub` and `queue-drag` are drags (`input swipe`), given in dp from a target's centre and turned
+into pixels at the phone's density (`wm density`). Each scrub seeks where it lets go. The queue
+drag starts at the first row's handle (48 dp right of its Remove button: the handles are hidden
+from accessibility) and needs four songs up next; the second drag puts the row back. A drag has
+no response mark: compare its frames, first frame and settle, and the renders and `js:` counts
+(below).
+
+### Variants
+
+- `idle`: nothing else going on.
+- `import`: runs `import` first, then the other scenarios while the import fills (Wave resumes it
+  after each fresh launch). Each step records the import's progress, so a step taken after the
+  import finished shows it.
+
+Keys in summaries and comparisons are `<scenario>/<variant>/<measure>`, e.g.
+`push-settings/import/push`.
+
+## What a step measures
+
+The runner finds each tap's target with `uiautomator dump` before the window opens and keeps its
+position. Then, for each step:
+
+1. waits `settleMs` so the screen is still, clears logcat and resets gfxinfo;
+2. taps (`input tap`);
+3. keeps the window open `windowMs` (2.5 s; 4 s for `rapid-tabs`, 10 s for `during-import`);
+4. reads `dumpsys gfxinfo <package> framestats`;
+5. on a perf build, waits for the app's flush (below) and reads it from logcat.
+
+Times line up because `performance.now()`, a touch's native timestamp and gfxinfo's frame
+timestamps all use Android's CLOCK_MONOTONIC.
+
+| Metric         | Meaning                                                                                                                                           | Needs a perf build |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | :----------------: |
+| `firstFrameMs` | Touch to the first frame that finished rendering after it: the **first visible response**. The frame reaches the screen about one refresh later.  |        yes         |
+| `responseMs`   | Touch to the step's response mark: **navigation latency** (`route`), **keyboard latency** (`keyboard.show`), Now Playing or Queue shown.          |        yes         |
+| `settleMs`     | Touch to the last frame before 250 ms without frames: when the transition finished.                                                               |        yes         |
+| `burstMs`      | First to last frame of that burst. The only latency a plain APK gives.                                                                            |         no         |
+| `inputToJsMs`  | Touch to JavaScript's touch handler: input delayed by a busy JS thread.                                                                           |        yes         |
+| `frames`       | Frames rendered in the window, deadline misses, jank counters (slow UI thread, high input latency), the frame-time histogram.                     |         no         |
+| `frameParts`   | The kept frames split into parts (mean, p90, max ms): pre-draw and layout, draw (UI thread), sync, issue (RenderThread), GPU after the swap.      |         no         |
+| `renders`      | Renders per instrumented component in the step.                                                                                                   |        yes         |
+| `phasesMs`     | Touch to the first mark of each phase the step names (`phases` in `scenarios.ts`), e.g. a tab's `tab.commit` and `tab.layout`. Null if none came. |        yes         |
+| `longTasks`    | Long tasks React Native reported in the step, when it reports them.                                                                               |        yes         |
+| `launch`       | `am start -W`: `TotalTime`, `WaitTime`, launch state. A perf build adds React Native's startup timings.                                           |         no         |
+| memory         | `dumpsys meminfo` after each scenario plus `memoryIdleMs` idle: PSS, RSS, Java and native heap, graphics; views, activities, binders alive.       |         no         |
+
+`summary` reports each latency as median / 90th percentile, the frames' pooled 50th, 90th and
+99th percentiles and the share that missed their deadline. `Missing` counts steps whose response
+mark never came, which means the step didn't do what it should (a wrong target, an error on
+screen). Steps with phases get a second table, each phase's median / p90 from the touch;
+`compare` lines up their medians and p90s too.
+
+Limits:
+
+- gfxinfo keeps the last 120 frames per window, about 1 s at 120 Hz. Its totals and histogram
+  count every frame. When a step rendered more than 120 frames and the kept ones don't reach back
+  to the touch, `firstFrameMs` and `settleMs` are left empty (`framesCovered: false`), not
+  guessed.
+- A frame is "late" when gfxinfo says it missed its deadline (Android 12+ records the deadline per
+  frame).
+- `route` is marked on the first frame callback after the new route commits. It shows JavaScript
+  is done. The native transition may still be running: `settleMs` covers that.
+
+### How the perf build writes its log
+
+Marks, touches and render counts are kept in memory (Core's `createPerfRecorder`). The app writes
+them to logcat in one flush (`WavePerf` lines, tag `ReactNativeJS`) once it has had **no touch for
+`PERF_FLUSH_QUIET_MS` (4 s)**. Every window closes sooner after its last touch, so logging never
+lands inside a measured window, except in long windows with no touch (`during-import`), where the
+app may flush every 4 s.
+
+The runner never sends the app a command. A link or share would pause and resume the activity, and
+Wave reacts to coming back to the foreground (sync, the rescan on return): that work would land in
+the next window.
+
+## Results file
+
+JSON Lines, one record per line, appended as the run goes, so an interrupted run keeps what it
+measured. Records, in order:
+
+- `run`, first: `schema` (1), `run` (id), `label`, `startedAt`, `dryRun`, `runner` (repo commit,
+  Node, options), and the metadata:
+  - `apk`: package, `versionName`, `versionCode`, `lastUpdateTime`, `commit`, `file` (path and
+    SHA-256 with `--apk`);
+  - `device`: serial, manufacturer, model, Android version, SDK, build fingerprint;
+  - `display`: `refreshRateHz` (active mode), `peakRefreshRate`, `minRefreshRate`,
+    `refreshRateMode` (Samsung's Motion smoothness);
+  - `animationScales`; `compilation` (`status`, `reason`); `thermalStatus`;
+  - `perfBuild`; `library`: `tracks`, `playlists`, `playlistItems`, `largestPlaylist`,
+    `playEvents` (from a perf build, or `--meta library.<key>=<n>`); `importLink`; `app` (the perf
+    build's first flush metadata); `manual` (`--meta`).
+- `step`, one per measured step: `scenario`, `variant`, `measure`, `iteration`, `index`, the
+  metrics above, `touchAt`, `expectMissing`, `framesCovered`, `finalRoute`, `flushComplete`, and
+  `launch` and `appStartup` for a cold launch, `importProgress` while an import runs, and
+  `libraryQueries` and `playlistWork` on a perf build (counters since launch, below), and
+  `listeners` (subscribers to the playback stores and the sheet at the step's flush: `playback`,
+  `queue`, `queueTracks`, `nowPlaying`), and `jsHeapUsed` (Hermes's used heap in bytes at the
+  flush, when Hermes reports it).
+- `memory`, one per scenario: `scenario`, `variant`, the `dumpsys meminfo` fields in KB and its
+  object counts (`views`, `viewRoots`, `activities`, `appContexts`, `localBinders`,
+  `proxyBinders`, `deathRecipients`). A soak scenario writes six, each with the `iteration` (cycles
+  done; 0 is before the first). `compare` lines up each scenario's last one.
+- `trace`, one per scenario with `--perfetto`: the local `.pftrace` path.
+- `error`: a scenario that couldn't go on (target not found, Wave not in front, no import link) and
+  why. The run goes on with the next scenario.
+- `end`: `finishedAt`, `thermalStatus`.
+
+`scripts/perf/results.ts` has the types.
+
+## Instrumentation for later tickets
+
+`apps/mobile/src/perf/perf.ts`:
+
+```ts
+import { perfCount, perfMark, registerPerfMeta, usePerfVisible, useRenderCount } from "@/perf/perf";
+
+useRenderCount("UpNextList"); // first line of a component: counts its renders
+perfCount("scrub.release"); // counts a call a gesture made to JavaScript, reported as renders of `js:scrub.release`
+usePerfVisible("queue"); // marks `visible` "queue" on the first frame after mount
+perfMark("import.running", String(total)); // a timing mark, name `area.event`, optional detail
+registerPerfMeta("import", () => ({ done, total })); // reported with each flush
+registerPerfMeta("library", readScale, true); // reported with the first flush only
+```
+
+Always call them unconditionally; they are no-ops in normal builds. Add a count or a mark where a
+ticket needs evidence, and give a new response mark a scenario step's `expect` in
+`scripts/perf/scenarios.ts`. Marks already in place:
+
+- `route` (pathname), each time the route changes, on the next frame;
+- `keyboard.show`, `keyboard.hide`;
+- `search.focus` (`focus` or `refocus`), each time Search asks its field for the focus (#306);
+- `search.typed` (the query), each keystroke Search's field reports, and `search.results` (the
+  query), on the frame after the results for what was typed are on screen;
+- `search.index` (entries), each time Search's index is put together;
+- `nowPlaying.shown`, `nowPlaying.hidden`;
+- the sheet's phases (#305): `nowPlaying.step` (the event: `tap`, `dragBegin`, `release`, `close`,
+  `closed`), `nowPlaying.spring` (handed to the UI thread: `rise`, `open`, `closed`),
+  `nowPlaying.notified` (its phase listeners done) and `nowPlaying.motion` (the sheet left its
+  resting place on the UI thread; marked when JavaScript hears of it, with how much later that was
+  in ms as the detail). The `now-playing` steps time them as `phasesMs`;
+- `visible` "queue" (Up Next mounted);
+- `import.running` (songs in the import), `import.idle`;
+- `tab.commit` (`<tab> first|warm`), in the layout effect of the commit that shows a tab: React
+  is done with the switch. `first` means the tab was built for it, `warm` that it was kept;
+- `tab.layout` (tab), when the shown tab's screen gets a new layout. None when showing it changes
+  no layout (`keep-layout`, #304);
+- `tab.settled` (the tab's label), when a tab shows with no tab switch left on its way;
+- `queue.synced` (the plan's step types and the queue's length, e.g. `seek 4210`), each time the
+  player took a queue change;
+- `artist.stats` ("played" or "not played"), on the frame after an artist page's stats block
+  shows what it read (again after each re-read);
+- `startup.content`, on the frame after the first app screen in sight showed a Library query's
+  result: startup work may go (#315). `startup.started` (`scan`, `imports`, `sync`, `playlists`,
+  `downloads`, `lookupSummary`) as each piece of startup work starts;
+- touches with their native timestamp, from the root view's `onTouchStart`.
+
+Each flush also reports the shared Library queries' counters since launch, as `libraryQueries.*`
+(Core's `LibraryQueryStats`, #309): `reads` started, `shared` (a screen served from a current
+result or a read under way), `paused` (changes a hidden screen waited out), `discarded` (results an
+edit overtook), `evicted`, and `entries`, `retained`, `consumers` at the flush. The runner copies
+them to each step as `libraryQueries`; a step's reads are its `reads` minus the previous step's.
+Search's index counters (Core's `SearchCatalogStats`, #306) come the same way, as `search.*` in the
+flush and `search` on each step: `entries` in the index, `prepared` (entries prepared since launch;
+a source given again unchanged prepares none) and `indexes` put together.
+
+The `tabs` metadata (first flush) names how hidden tabs are kept (`tabs.screens`, #304).
+
+Startup scheduling (#315, Core's `BackgroundWorkStats`): `startup.contentAt` (when startup work
+was let go, on the `performance.now()` clock of React Native's `startup.*` timings),
+`startup.contentCapped` (let go by the 3 s cap, no screen showed content) and
+`startup.startedPieces`; a launch step's `appStartup` holds them. `backgroundWork.*`: `slices`
+run since launch, the `longestWaitMs` one waited, and `forcedSlices` (run by the 2 s cap while a
+touch went on). The runner copies them to each step as `backgroundWork`.
+
+It also reports what playlists cost since launch, as `playlistWork.*`
+(`apps/mobile/src/library/db/playlistWork.ts`, #308): `listReads` (Library › Playlists),
+`notifiedAll` (playlist changes announced with no ids), and `decoded` (stored YT Music songs parsed
+in JavaScript), `summarized` (mosaics and totals worked out again), `pageReads`, `appends` and
+`notified`, each split into `.affected` (the playlists imports fill) and `.unrelated`. The runner
+copies them to each step as `playlistWork`. `import.progressShown` counts the import
+notification's updates; the runner adds it to `importProgress`.
+
+Render counts are in RootLayout, TabsLayout, LibraryLayout, TabBar, MiniPlayer, NowPlayingSheet,
+PlayerView, UpNextList, UpNextRow, Scrubber, HomeScreen, LibraryScreen, SearchScreen,
+SettingsScreen, LargeTitleScreen (Home's and Library's), SongsList, TrackList, ArtistStatsBlock,
+PlaylistsList, PlaylistScreen and PlaylistImportLine. Gesture calls to JavaScript are counted as
+`js:scrub.*` and `js:upNext.*` (#313).
+
+A new scenario goes in `SCENARIOS` (`scripts/perf/scenarios.ts`). Then make the simulated phone in
+`fakeDevice.ts` answer it, so `--dry-run` and the tests cover it.
+
+## Attributing a stall
+
+`summary` also prints the frame parts (`frameParts`), where the kept frames' time went, from
+gfxinfo's framestats timestamps (the FrameInfo that `FrameMetrics` also reports, so no in-app
+meter is needed):
+
+| Part                | From → to                                | Holds                                                 |
+| ------------------- | ---------------------------------------- | ----------------------------------------------------- |
+| Pre-draw and layout | `PerformTraversalsStart` → `DrawStart`   | measure, layout, pre-draw listeners (glass recording) |
+| Draw                | `DrawStart` → `SyncQueued`               | the UI thread recording display lists                 |
+| Sync                | `SyncStart` → `IssueDrawCommandsStart`   | the RenderThread syncing the tree, preparing layers   |
+| Issue               | `IssueDrawCommandsStart` → `SwapBuffers` | the RenderThread drawing, offscreen layers (blur) too |
+| GPU after swap      | `SwapBuffers` → `GpuCompleted`           | GPU work still running once the RenderThread was done |
+
+Summaries pool each part's mean over every kept frame and report the median step's p90; `compare`
+lines up both. Parts come from the last 120 frames of each window, like `firstFrameMs`.
+
+`run --perfetto` records one trace per scenario: scheduling, CPU frequency, atrace for the app and
+the framework (input, view, gfx, am, wm, binder), SurfaceFlinger's frame timeline, process memory
+and Wave's logcat lines (`scripts/perf/perfetto.pbtx`). Open the trace at https://ui.perfetto.dev.
+Tracing costs CPU: compare traced runs only with traced runs, and take the comparison numbers from
+an untraced run.
+
+In the Wave process:
+
+- `main` thread, `Choreographer#doFrame` and `deliverInputEvent`: native main-thread work and
+  input delivery.
+- `mqt_v_js`: the JavaScript thread. Long slices while a frame is due are JavaScript work.
+- `RenderThread`, `DrawFrame`: rendering cost.
+- The frame timeline track: each frame's jank type (app deadline missed, buffer stuffing,
+  SurfaceFlinger).
+
+To find a step's touch in the trace, look up its `touchAt` (CLOCK_MONOTONIC ms) in the results.
+Perfetto shows boot time by default, which runs ahead of the monotonic clock by the time the phone
+spent in deep sleep. Line them up on the `deliverInputEvent` slice for that tap.
+
+## ART profiles
+
+`perf.ts profile` generates Wave's Baseline and Startup Profiles on the phone, checks that an APK
+ships them, and reads what ART holds for Wave. See
+[317-android-profiles.md](317-android-profiles.md) for the commands and when to refresh them.
+
+## Validating the runner without a phone
+
+`node scripts/perf/perf.ts run --dry-run` runs every scenario against `scripts/perf/fakeDevice.ts`.
+The simulated phone answers each adb command the way Android 14 prints it. It runs Core's recorder
+on a virtual clock as the app does, and throws on any command it doesn't know. The tests
+(`node --test scripts/perf/*.test.ts`) run the parsers on captured output shapes and the whole
+runner on the simulated phone.
+
+Things only a phone can confirm, to check on the first device run:
+
+- `touchAt` is set on each step. If not, the root view's `onTouchStart` isn't seeing touches, and
+  every step waits out its flush timeout.
+- gfxinfo's `framestats` columns and the `dumpsys` shapes match the parsers on One UI, meminfo's
+  Objects section (`views` in the memory records) included.
+- `jsHeapUsed` is set on a perf build's steps: Hermes reports `performance.memory`.
+- A fling (`input swipe`) scrolls the list and its touch reaches `onTouchStart` (`touchAt` set);
+  `--glass` shows the asked probe in the run's `Glass:` line.
+- `uiautomator dump` finds each target. Labels: the tab labels, `Settings`, `Back`, `Albums`,
+  `Songs`, `Artists`, the fixture's artist, `Developer`, `Now playing: …`, `Close Now Playing`,
+  `Queue`, `Next track`, `Import`.
+
+## A ticket's performance doc
+
+`docs/performance/<issue>-<slug>.md`, e.g. `docs/performance/304-now-playing.md`:
+
+```markdown
+# #<issue> <Title>: <what was measured, in a few words>
+
+Ticket: #<issue> (parent #301). Branch `feat/<issue>-<slug>`, based on `perf/301-performance` at
+<commit>.
+
+## What was measured
+
+The scenarios and variants (`node scripts/perf/perf.ts run --scenario <…> --variant <…>
+--label <issue>-before`), and why they cover the change. Any desktop or Core benchmark, with its
+command; label its numbers **desktop**.
+
+## Before (<commit>)
+
+The run's header from `perf.ts summary` (APK, commit, phone, Android, refresh rate, compiler
+filter, Library size), then the summary table for the scenarios that matter. Results file:
+`docs/performance/results/<file>.jsonl`.
+
+## After (<commit>)
+
+The same, then `perf.ts compare <before> <after>`'s table and any warnings it printed. Say what
+changed and by how much, and what didn't.
+
+## Behavior kept
+
+What was checked to stay the same (tests, the scenario's response marks, manual checks).
+
+## Not measured, and negative results
+
+Anything pending (no phone: **pending**, never invented numbers), experiments that didn't help, and
+limits of the measurement.
+```
+
+Before and after must come from the same phone with the same fixture, refresh rate, compiler filter
+and kind of build. `compare` prints a warning for each difference it sees.

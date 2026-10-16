@@ -17,6 +17,9 @@ const AREAS = {
   sync: ["apps/sync/"],
   workspace: ["package.json", "pnpm-workspace.yaml", "pnpm-lock.yaml"],
   ci: [".github/", "scripts/ci/"],
+  // The release performance runner (docs/performance/README.md). Not in the APK; its
+  // tests and typecheck are the root scripts', so a change to it checks everything.
+  perf: ["scripts/perf/"],
   // TypeScript config the packages extend.
   tsconfig: ["tsconfig.base.json"],
   // wave-native and what decides how prebuild generates the project it builds in.
@@ -35,7 +38,7 @@ const APK_AREAS: readonly Area[] = ["app", "core", "workspace", "ci"];
 
 // A change to these areas can break any package, so Checks then typechecks and tests
 // all of them. Otherwise it checks only the packages a PR changed and their dependents.
-const ALL_PACKAGES_AREAS: readonly Area[] = ["workspace", "ci", "tsconfig"];
+const ALL_PACKAGES_AREAS: readonly Area[] = ["workspace", "ci", "tsconfig", "perf"];
 
 // wave-native's JVM tests can only change result when one of these does.
 const NATIVE_TEST_AREAS: readonly Area[] = ["native", "workspace", "ci"];

@@ -4,11 +4,11 @@ import {
   type StreamedArtistLink,
   type StreamedArtistContext,
 } from "@wave/core";
-import { useGlobalSearchParams, usePathname } from "expo-router";
 import { useMemo, useSyncExternalStore } from "react";
 
 import { libraryVersion } from "@/library/LibraryScan";
 import { LibraryStore, type ArtistRow } from "@/library/LibraryStore";
+import { useCurrentPath, useCurrentRoute, type CurrentRoute } from "@/library/routes";
 import { appRuntime } from "@/library/runtime";
 import { makeVersionedCache } from "@/lib/versionedCache";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
@@ -72,6 +72,9 @@ export const useStreamedArtistLink = (
   );
 };
 
+const ytArtistOf = ({ pathname, params }: CurrentRoute): string | null =>
+  ytArtistPageHere(pathname, params);
+
 /** Shared artist resolution for a streamed song's menu and mixed selection. */
 export const useStreamedArtistContext = (
   active = true,
@@ -81,10 +84,10 @@ export const useStreamedArtistContext = (
     sharedArtists.get,
   );
   const enabled = useYtMusicEnabled();
-  const here = usePathname();
-  const params = useGlobalSearchParams<{ name?: string }>();
+  // The route is followed only while [active]; inactive, it's read as the caller renders.
+  const here = useCurrentPath(active);
   // On a YouTube Music artist page, the link leaves that artist out.
-  const ytArtistHere = ytArtistPageHere(here, params);
+  const ytArtistHere = useCurrentRoute(ytArtistOf, active);
   return useMemo(
     () => (libraryArtist === null ? undefined : { libraryArtist, enabled, here, ytArtistHere }),
     [libraryArtist, enabled, here, ytArtistHere],

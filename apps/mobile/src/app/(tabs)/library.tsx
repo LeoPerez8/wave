@@ -21,6 +21,7 @@ import {
 import { libraryShelfTitleLongPress, useLibraryShelf } from "@/library/libraryShelf";
 import { promptForMusicFolder } from "@/library/promptForMusicFolder";
 import { RescanRefreshControl } from "@/library/RescanRefreshControl";
+import { useRenderCount } from "@/perf/perf";
 import { openLibrarySectionActions } from "@/playback/ActionsMenu";
 
 /** The shelf under the Library's rows: Home's section [id] with Home's data, nothing while it's empty. */
@@ -30,6 +31,7 @@ function LibraryShelfSection({ id }: { id: HomeSectionId }) {
 }
 
 export default function LibraryScreen() {
+  useRenderCount("LibraryScreen");
   const scan = useScanState();
   const trackCount = useTrackCount();
   const roots = useScanRoots();

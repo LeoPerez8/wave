@@ -17,6 +17,7 @@ import { CELL, grid } from "@/catalog/grid";
 import { PlayShuffle } from "@/catalog/PlayShuffle";
 import { type TrackSummary, TrackRow } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
+import { useRenderCount } from "@/perf/perf";
 import { playSongs } from "@/playback/actions";
 import { useCurrentTrackId, usePlayPage } from "@/playback/hooks";
 import { openTrackActions } from "@/playback/ActionsMenu";
@@ -140,6 +141,7 @@ type Props = {
  * every row shows a check cell and taps check and uncheck.
  */
 export function TrackList({ songs, context, header, sort }: Props) {
+  useRenderCount("TrackList");
   const scrollable = useListScrollable();
   const list = useRef<LegendListRef>(null);
   useScrollToTop(list);

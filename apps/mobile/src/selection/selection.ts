@@ -24,8 +24,11 @@ export interface SelectionSource<T> {
   readonly items: () => readonly T[];
   /** An item's key: stable across sorts (its id). */
   readonly keyOf: (item: T) => string;
-  /** What the actions act on, given the checked items in list order. */
-  readonly target: (selected: readonly T[]) => ActionItems;
+  /**
+   * What the actions act on, given the checked items in list order; null while
+   * the list still reads what they need (the bar shows once it has them).
+   */
+  readonly target: (selected: readonly T[]) => ActionItems | null;
 }
 
 interface SelectionState {

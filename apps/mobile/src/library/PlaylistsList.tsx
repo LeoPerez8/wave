@@ -27,6 +27,7 @@ import { newPlaylist } from "./PlaylistSheets";
 import { openPlaylist } from "./routes";
 import { songCount } from "./TrackList";
 import { useListScrollable } from "@/motion/heldTouch";
+import { useRenderCount } from "@/perf/perf";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
 /** Makes an empty playlist and opens it. */
@@ -125,6 +126,7 @@ const rowHeight = (layout: PlaylistLayout, tile: number): number =>
  * Import Playlists and New Playlist above them.
  */
 export function PlaylistsList({ empty }: { empty: string }) {
+  useRenderCount("PlaylistsList");
   const scrollable = useListScrollable();
   const playlists = usePlaylists();
   const layout = usePlaylistLayout();

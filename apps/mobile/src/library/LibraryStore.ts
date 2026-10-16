@@ -5,13 +5,14 @@ import {
   type BlackPlayerTrack,
   type ImportedPlays,
   type IndexedFile,
+  type LibrarySongSort,
   type PlaylistSong,
   type LibraryTrack,
   type MissingTrack,
   type CreditedPlayTotals,
   type PlayEvent,
   type PlayTotals,
-  type SongListening,
+  type ListeningSums,
   type StatsWindow,
   type YtArtistSaved,
 } from "@wave/core";
@@ -44,13 +45,22 @@ import {
   type ArtistPhotoRecord,
   type ArtistPhotoRow,
 } from "./db/artistPhotos";
-import { libraryCounts, sectionSongCounts, type LibraryCounts } from "./db/counts";
+import {
+  libraryCounts,
+  libraryScale,
+  sectionSongCounts,
+  type LibraryCounts,
+  type LibraryScale,
+} from "./db/counts";
 import { creditSplits, relinkCreditsIfUnlinked, type CreditSplits } from "./db/credits";
 import { selectGenreSongs } from "./db/genres";
 import type { RowPage } from "./db/database";
 import migrations from "./db/migrations";
 import { selectLinkRows, type LinkIds, type LinkRows } from "./db/links";
 import {
+  homeAdded,
+  homeFavorites,
+  homePlays,
   homeSections,
   latestPlay,
   listFavorites,
@@ -61,9 +71,11 @@ import {
   updatePlay,
   endPlay,
   type FavoriteRow,
+  type HomePlays,
   type HomeSections,
   type RecordedPlay,
 } from "./db/playHistory";
+import { listeningSums } from "./db/playTotals";
 import {
   removePlaylistImage,
   setPlaylistImage,
@@ -81,11 +93,12 @@ import {
   replacePlaylistSongs,
   selectPlaylist,
   selectPlaylistEntries,
+  selectPlaylistEntriesRevision,
   selectPlaylists,
   selectTrackPaths,
   type PlaylistEntry,
 } from "./db/playlists";
-import { pruneOrphans, saveBatch } from "./db/save";
+import { hasUnscannedRoot, pruneOrphans, saveBatch } from "./db/save";
 import * as schema from "./db/schema";
 import {
   BY_TITLE,
@@ -99,7 +112,7 @@ import {
   type TrackScope,
   withFile,
 } from "./db/tracks";
-import { creditedPlayTotals, songListening, songsCrediting, trackPlayTotals } from "./db/stats";
+import { artistPlays, creditedPlayTotals, trackPlayTotals, type ArtistPlays } from "./db/stats";
 import { keyRecordings, stampPreference } from "./db/sync";
 import {
   filesGone,
@@ -110,6 +123,13 @@ import {
   signOut,
 } from "./db/missingSongs";
 import { saveYtArtist, selectYtArtist } from "./db/ytArtists";
+import {
+  selectSongOrder,
+  selectSongSummaries,
+  selectSongsWithIds,
+  type SongOrder,
+  type SongSummary,
+} from "./db/songOrder";
 import type { KnownFile } from "./NativeScanner";
 
 const DATABASE_NAME = "wave.db";
@@ -223,7 +243,7 @@ export const songHasFile = <S extends SongRow>(song: S): song is S & { readonly 
 /** A track on an album screen, with what orders it there. */
 export type AlbumTrackRow = SongRow;
 
-export type { FavoriteRow };
+export type { FavoriteRow, SongOrder, SongSummary };
 
 /** One album of the Albums grid (and of an artist's albums). */
 export interface AlbumRow {
@@ -399,9 +419,15 @@ export class LibraryStore extends Context.Service<
     /**
      * Turns playlists' YT Music entries the Library now has into its songs, in
      * the same place, matched against the whole Library; a scan runs it once
-     * when it ends.
+     * when it ends. Returns how many entries it changed.
      */
-    readonly linkPlaylistEntries: Effect.Effect<void, LibraryStoreError>;
+    readonly linkPlaylistEntries: Effect.Effect<number, LibraryStoreError>;
+    /** Rises whenever playlists' entries are written: whether a link has new entries to see. */
+    readonly playlistEntriesRevision: Effect.Effect<number, LibraryStoreError>;
+    /** Whether one of [roots] has never finished a scan (Core's `scanEnd` `firstScan`). */
+    readonly hasUnscannedRoot: (
+      roots: readonly string[],
+    ) => Effect.Effect<boolean, LibraryStoreError>;
     readonly markScanned: (
       roots: readonly string[],
       at: number,
@@ -411,8 +437,27 @@ export class LibraryStore extends Context.Service<
     readonly countLibrary: Effect.Effect<LibraryCounts, LibraryStoreError>;
     /** How many songs each Library entry's menu acts on, for its heading. */
     readonly countSectionSongs: Effect.Effect<LibraryCounts, LibraryStoreError>;
+    /** How big the Library is, for a perf build's run metadata (docs/performance/README.md). */
+    readonly measureScale: Effect.Effect<LibraryScale, LibraryStoreError>;
     /** Every track ordered by title, for Library › Songs. */
     readonly listSongs: Effect.Effect<readonly SongRow[], LibraryStoreError>;
+    /**
+     * Library › Songs in [sort] as Track ids, with its A–Z spine and its
+     * missing songs, without the rows' details (`songSummaries` reads those
+     * for the rows on screen).
+     */
+    readonly listSongOrder: (sort: LibrarySongSort) => Effect.Effect<SongOrder, LibraryStoreError>;
+    /** What the Songs list's rows of [ids] show, in that order; ids gone are left out. */
+    readonly songSummaries: (
+      ids: readonly number[],
+    ) => Effect.Effect<readonly SongSummary[], LibraryStoreError>;
+    /**
+     * The full song rows of [ids], missing songs included, in that order, for
+     * what acts on them (a menu, a selection); ids gone are left out.
+     */
+    readonly songsWithIds: (
+      ids: readonly number[],
+    ) => Effect.Effect<readonly SongRow[], LibraryStoreError>;
     /**
      * Every song with what a lyrics and genre lookup sends, its genre and
      * whether it has lyrics, for the whole-Library run.
@@ -616,6 +661,12 @@ export class LibraryStore extends Context.Service<
      * Favorites, of the songs in [scope] (Auto's: those with a file).
      */
     readonly home: (scope?: TrackScope) => Effect.Effect<HomeSections, LibraryStoreError>;
+    /** Home's Recently Added: only songs entering or leaving the library change it. */
+    readonly homeAdded: Effect.Effect<Pick<HomeSections, "recentlyAdded">, LibraryStoreError>;
+    /** Home's Recently Played and Most Played, from the all-time play totals (`play_totals`). */
+    readonly homePlays: Effect.Effect<HomePlays, LibraryStoreError>;
+    /** Home's Favorites: stars change it. */
+    readonly homeFavorites: Effect.Effect<Pick<HomeSections, "favorites">, LibraryStoreError>;
     /** The play recorded last, to pick back up when JS restarts while the player kept going. */
     readonly latestPlay: Effect.Effect<RecordedPlay | null, LibraryStoreError>;
     /**
@@ -645,18 +696,20 @@ export class LibraryStore extends Context.Service<
     /** The album and artist rows behind links to them, read ahead of a tap (`db/links.ts`). */
     readonly linkRows: (ids: LinkIds) => Effect.Effect<LinkRows, LibraryStoreError>;
     /**
-     * Each played song's all-time listening (every play's time, counted plays,
-     * latest play, the artists its credit names), in no order; Core's
-     * `listeningTotals` sums it.
+     * The whole history's listening summed in one row, from the all-time play
+     * totals (`play_totals`); Core's `summedListeningTotals` reads it.
      */
-    readonly songListening: Effect.Effect<readonly SongListening[], LibraryStoreError>;
+    readonly listeningSums: Effect.Effect<ListeningSums, LibraryStoreError>;
     /**
-     * The songs whose credit names [artistId], in no order: those the artist
-     * page's stats count its songs listened among.
+     * What [artistId]'s page needs for its stats block (Core's `artistStats`),
+     * read from that artist's songs and their plays alone: the songs in the
+     * library whose credit names them, those songs' all-time listening
+     * (deleted songs included) and their counted plays up to [now].
      */
-    readonly songsCrediting: (
+    readonly artistPlays: (
       artistId: number,
-    ) => Effect.Effect<readonly number[], LibraryStoreError>;
+      now: number,
+    ) => Effect.Effect<ArtistPlays, LibraryStoreError>;
     /** The artists whose photo is due for a lookup now (Core's `artistPhotoLookups`). */
     readonly artistPhotoLookups: Effect.Effect<readonly ArtistPhotoLookup[], LibraryStoreError>;
     /** Records how an artist's photo lookup went, by artist key. */
@@ -870,10 +923,15 @@ const make = Effect.gen(function* () {
       ),
 
     linkPlaylistEntries: attempt("link playlist entries", () =>
-      db.transaction((tx) => {
-        linkPlaylistEntries(tx, Date.now());
-      }),
+      db.transaction((tx) => linkPlaylistEntries(tx, Date.now())),
     ),
+
+    playlistEntriesRevision: attempt("read the playlists' revision", () =>
+      selectPlaylistEntriesRevision(db),
+    ),
+
+    hasUnscannedRoot: (roots) =>
+      attempt("read which folders were scanned", () => hasUnscannedRoot(db, roots)),
 
     markScanned: (roots, at) =>
       attempt("record the scan", () => {
@@ -895,12 +953,19 @@ const make = Effect.gen(function* () {
 
     countLibrary: attempt("count the library", () => libraryCounts(db)),
     countSectionSongs: attempt("count the library's songs", () => sectionSongCounts(db)),
+    measureScale: attempt("measure the library", () => libraryScale(db)),
 
     listSongs: attempt("list songs", () =>
       trackQuery(db)
         .orderBy(...BY_TITLE)
         .all(),
     ),
+
+    listSongOrder: (sort) => attempt("order songs", () => selectSongOrder(db, sort)),
+
+    songSummaries: (ids) => attempt("read songs", () => selectSongSummaries(db, ids)),
+
+    songsWithIds: (ids) => attempt("read songs", () => selectSongsWithIds(db, ids)),
 
     listLibraryLookupSongs: attempt("list songs to look up", () => selectLibraryLookupSongs(db)),
 
@@ -1127,6 +1192,9 @@ const make = Effect.gen(function* () {
     endPlay: (id, play) => attempt("end the play", () => endPlay(db, id, play)),
 
     home: (scope) => attempt("read Home", () => homeSections(db, scope)),
+    homeAdded: attempt("read Recently Added", () => homeAdded(db)),
+    homePlays: attempt("read Home's plays", () => homePlays(db)),
+    homeFavorites: attempt("read Home's favorites", () => homeFavorites(db)),
 
     latestPlay: attempt("read the latest play", () => latestPlay(db)),
 
@@ -1146,10 +1214,10 @@ const make = Effect.gen(function* () {
 
     linkRows: (ids) => attempt("read linked rows", () => selectLinkRows(db, ids)),
 
-    songListening: attempt("sum up listening", () => songListening(db)),
+    listeningSums: attempt("sum up listening", () => listeningSums(db)),
 
-    songsCrediting: (artistId) =>
-      attempt("list the artist's songs", () => songsCrediting(db, artistId)),
+    artistPlays: (artistId, now) =>
+      attempt("sum up the artist's plays", () => artistPlays(db, artistId, now)),
 
     artistPhotoLookups: attempt("list artist photo lookups", () =>
       selectArtistPhotoLookups(db, Date.now()),

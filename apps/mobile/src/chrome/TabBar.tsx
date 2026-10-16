@@ -1,11 +1,13 @@
 import type { TabBarTab } from "@wave/core";
 import { useTabTrigger } from "expo-router/ui";
+import { memo } from "react";
 import { Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { grid } from "@/catalog/grid";
 import { Glass } from "@/glass/Glass";
 import { Press } from "@/motion/Press";
+import { useRenderCount } from "@/perf/perf";
 import { requestSearchFocus } from "@/search/focusRequest";
 import { useTabBar } from "@/settings/tabBar";
 import { useThemeColor } from "@/theme/useThemeColor";
@@ -14,13 +16,20 @@ import { BACKDROP, chrome } from "./chrome";
 import { OnFloatingChrome } from "./onFloatingChrome";
 import { openTabBarEditor } from "./TabBarEditor";
 import { tabLook } from "./tabs";
+import type { TappedTrigger } from "./tabSwitches";
+
+/** A tab tapped, with its trigger. */
+type TabTap = (to: TabBarTab, trigger: TappedTrigger) => void;
 
 type TabProps = {
   name: TabBarTab;
   /** Show the label under the icon (the Search pill is icon-only). */
   showLabel?: boolean;
-  /** Runs before switching to this tab. */
-  onSwitch: (to: TabBarTab) => void;
+  /**
+   * Gets every tap on this tab; it decides whether to switch, or re-tap the
+   * tab on screen (`useTabSwitches`).
+   */
+  onSwitch: TabTap;
   /** Runs on every tap, the current tab included. */
   onTap?: () => void;
 };
@@ -30,7 +39,7 @@ type TabProps = {
  * A long press opens the tab bar's editor.
  */
 function Tab({ name, showLabel = true, onSwitch, onTap }: TabProps) {
-  const { triggerProps } = useTabTrigger({ name });
+  const { triggerProps, switchTab } = useTabTrigger({ name });
   const accent = useThemeColor("accent");
   const secondary = useThemeColor("secondary");
   const { label, icon: Icon } = tabLook(name);
@@ -43,9 +52,8 @@ function Tab({ name, showLabel = true, onSwitch, onTap }: TabProps) {
       accessibilityHint="Long press to edit the tab bar"
       accessibilityState={{ selected: focused }}
       onPress={(event) => {
-        if (!focused) onSwitch(name);
         onTap?.();
-        triggerProps.onPress?.(event);
+        onSwitch(name, { switchTab, press: () => triggerProps.onPress?.(event) });
       }}
       onLongPress={openTabBarEditor}
       haptic="selection"
@@ -69,9 +77,12 @@ const RADIUS = chrome.tabBar / 2;
  * The floating glass tab bar the owner arranges: Home and the tabs after it
  * share one pill, and Search, when it's on, sits beside it in a pill of its
  * own. Tapping Search brings the keyboard up; a long press on any tab opens
- * the bar's editor.
+ * the bar's editor. Memoized: the tabs layout renders on navigation, and the
+ * bar needn't (its tabs follow the focused one themselves; pass a stable `onTabTap`).
+ * Every tap goes to `onTabTap`, which switches or re-taps (`useTabSwitches`).
  */
-export function TabBar({ onTabTap }: { onTabTap: (to: TabBarTab) => void }) {
+export const TabBar = memo(function TabBar({ onTabTap }: { onTabTap: TabTap }) {
+  useRenderCount("TabBar");
   const insets = useSafeAreaInsets();
   const bar = useTabBar();
   return (
@@ -102,4 +113,4 @@ export function TabBar({ onTabTap }: { onTabTap: (to: TabBarTab) => void }) {
       </View>
     </OnFloatingChrome>
   );
-}
+});

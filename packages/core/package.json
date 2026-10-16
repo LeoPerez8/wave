@@ -9,6 +9,9 @@
   },
   "scripts": {
     "test": "node --test",
+    "bench:import": "node bench/playlistImport.ts",
+    "bench:queries": "node bench/libraryQueries.ts",
+    "bench:search": "node bench/searchCatalog.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

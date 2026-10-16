@@ -5,6 +5,7 @@ import { ScrollView, View } from "react-native";
 import { grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { ScreenHeader } from "@/components/ScreenHeader";
+import { useRenderCount } from "@/perf/perf";
 import { SettingsPageRow } from "@/settings/SettingsPage";
 import { useSettingsSummaries } from "@/settings/settingsSummaries";
 
@@ -22,6 +23,7 @@ function SettingsPageRows({ summaries }: { summaries: Record<SettingsPage, strin
 
 /** Settings: a row for each of its pages (Core's `SETTINGS_PAGES`), with a line on some. */
 export default function SettingsScreen() {
+  useRenderCount("SettingsScreen");
   const summaries = useSettingsSummaries();
   return (
     <View className="flex-1 bg-background">

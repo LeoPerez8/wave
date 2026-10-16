@@ -404,6 +404,22 @@ export const playlistItems = sqliteTable(
 );
 
 /**
+ * A counter per playlist that SQLite triggers (migration 0022) raise on every
+ * write to its entries that can change its mosaic or totals: an entry added,
+ * removed, moved, linked to a Library song, pulled from the Wave account, or
+ * gone with its song. Row 0 is the Library's: raised when a track's length or
+ * album, an album's cover or a cover's files change. Library › Playlists
+ * works out again only the playlists whose counter (or the Library's) moved
+ * since it last read them (`db/playlists.ts`). Never synced; no row is a
+ * revision of 0.
+ */
+export const playlistRevisions = sqliteTable("playlist_revisions", {
+  /** A playlist's id, or 0 for the Library's tracks, albums and covers. No foreign key. */
+  playlistId: integer("playlist_id").primaryKey(),
+  revision: integer("revision").notNull().default(0),
+});
+
+/**
  * Starred tracks; an unstarred one is a tombstone (`deleted`). A star goes
  * with its track when the track leaves the library.
  */
@@ -576,5 +592,38 @@ export const playEvents = sqliteTable(
     index("play_events_track_idx").on(t.trackId),
     index("play_events_started_at_idx").on(t.startedAt),
     index("play_events_pushed_idx").on(t.pushed),
+  ],
+);
+
+/**
+ * Each played track's listening over its whole history, kept by SQLite
+ * triggers on `play_events` (migration `0023_play_totals`) as plays are
+ * recorded, brought up to date, imported, pulled or edited, so Home reads
+ * all-time totals without summing every play. One row per track with a play,
+ * however it left the library (no foreign key, as in `play_events`).
+ * `playTotalsDrift` compares it with the history; `rebuildPlayTotals` sums
+ * it again.
+ */
+export const playTotals = sqliteTable(
+  "play_totals",
+  {
+    trackId: integer("track_id").primaryKey(),
+    /** Every play event, counted or not. */
+    plays: integer("plays").notNull(),
+    countedPlays: integer("counted_plays").notNull(),
+    /** Time listened over every play, skipped and uncounted ones included. */
+    listenedMs: integer("listened_ms").notNull(),
+    /** Time listened over the counted plays (what Stats ranks by). */
+    countedListenedMs: integer("counted_listened_ms").notNull(),
+    /** When the latest play, counted or not, started. */
+    lastPlayedAt: integer("last_played_at").notNull(),
+    /** When the latest counted play started; null without one. */
+    lastCountedAt: integer("last_counted_at"),
+    /** The highest `play_events.album_id` of the counted plays: the album of a deleted track. */
+    albumId: integer("album_id"),
+  },
+  (t) => [
+    index("play_totals_counted_idx").on(t.countedPlays, t.lastCountedAt),
+    index("play_totals_last_played_idx").on(t.lastPlayedAt),
   ],
 );

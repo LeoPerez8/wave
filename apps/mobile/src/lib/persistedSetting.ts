@@ -1,5 +1,7 @@
+import { pendingWriteDelay } from "@wave/core";
 import { Storage } from "expo-sqlite/kv-store";
 import { useSyncExternalStore } from "react";
+import { AppState } from "react-native";
 
 /** A setting kept in the key-value store, readable from React and from plain code. */
 export interface PersistedSetting<A> {
@@ -20,6 +22,12 @@ export interface PersistedSettingOptions<A> {
   readonly equals?: (a: A, b: A) => boolean;
   /** Waits this long after the last change before writing, so a dragged slider doesn't hit storage every frame. */
   readonly persistDelayMs?: number;
+  /**
+   * With `persistDelayMs`: a change waits at most this long however many
+   * follow it, so a steady stream (an import's answers) is still kept every
+   * so often (Core's `pendingWriteDelay`). Absent: each change puts it off.
+   */
+  readonly persistMaxDelayMs?: number;
   /** Runs with the first value read and with every change (e.g. to apply it). */
   readonly onValue?: (value: A) => void;
   /**
@@ -88,12 +96,25 @@ export const applySyncedSetting = (key: string, stored: string | null): boolean 
 export const sameFields = <A extends object>(a: A, b: A): boolean =>
   (Object.keys(a) as (keyof A)[]).every((field) => Object.is(a[field], b[field]));
 
+/** Writes waiting for their delay, run at once when Wave leaves the foreground. */
+const pendingWrites = new Set<() => void>();
+let flushOnLeave: { remove: () => void } | null = null;
+
+const followLeaving = (): void => {
+  // Wave in the background may be killed without a word: what waits is written now.
+  flushOnLeave ??= AppState.addEventListener("change", (state) => {
+    // Each write takes itself out, which a Set's iteration allows.
+    if (state !== "active") for (const persist of pendingWrites) persist();
+  });
+};
+
 export function persistedSetting<A>({
   key,
   read,
   write,
   equals = Object.is,
   persistDelayMs,
+  persistMaxDelayMs,
   onValue,
   synced = false,
   onApplied,
@@ -101,6 +122,8 @@ export function persistedSetting<A>({
   let loaded = false;
   let current: A;
   let pending: ReturnType<typeof setTimeout> | undefined;
+  /** When the first change not yet written was made. */
+  let firstChangeAt = 0;
   const listeners = new Set<() => void>();
 
   const get = (): A => {
@@ -113,7 +136,9 @@ export function persistedSetting<A>({
   };
 
   const persist = (): void => {
+    if (pending !== undefined) clearTimeout(pending);
     pending = undefined;
+    pendingWrites.delete(persist);
     const stored = write(current);
     if (stored === null) Storage.removeItemSync(key);
     else Storage.setItemSync(key, stored);
@@ -122,10 +147,24 @@ export function persistedSetting<A>({
   const change = (value: A, here: boolean): void => {
     if (equals(value, get())) return;
     current = value;
-    if (pending !== undefined) clearTimeout(pending);
+    const now = Date.now();
+    if (pending === undefined) firstChangeAt = now;
+    else clearTimeout(pending);
     // A value from the Wave account is written at once: no drag to wait out.
     if (persistDelayMs === undefined || !here) persist();
-    else pending = setTimeout(persist, persistDelayMs);
+    else {
+      pending = setTimeout(
+        persist,
+        pendingWriteDelay(
+          { firstChangeAt, now },
+          persistMaxDelayMs === undefined
+            ? { delayMs: persistDelayMs }
+            : { delayMs: persistDelayMs, maxDelayMs: persistMaxDelayMs },
+        ),
+      );
+      pendingWrites.add(persist);
+      followLeaving();
+    }
     onValue?.(value);
     if (synced && here) syncedChange?.(key);
     for (const listener of listeners) listener();

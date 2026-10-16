@@ -184,6 +184,7 @@ const phone = async (service: TestSyncService, songs: readonly Song[] = OK_COMPU
         readonly songsChanged?: boolean;
         readonly to?: SyncTransport;
         readonly account?: string;
+        readonly turn?: () => Promise<void>;
       } = {},
     ) =>
       syncCycle({
@@ -195,6 +196,7 @@ const phone = async (service: TestSyncService, songs: readonly Song[] = OK_COMPU
         now,
         songsChanged: options.songsChanged ?? false,
         wait: async () => {},
+        ...(options.turn === undefined ? {} : { turn: options.turn }),
       }),
   };
 };
@@ -812,6 +814,55 @@ describe("syncCycle", () => {
       [3, 1, 1],
     );
     assert.deepEqual([rows.preferences.length, rows.plays.length], [1, 1]);
+  });
+
+  test("a sync's database work waits for the app's free turns, and still finishes", async () => {
+    const service = testSyncService();
+    const a = await phone(service);
+    const b = await phone(service);
+    createPlaylist(a.db, "Day", [{ source: "library", trackId: a.track("Lucky") }], a.now());
+    await a.sync();
+
+    let open = false;
+    let turns = 0;
+    const waiting: (() => void)[] = [];
+    const turn = (): Promise<void> => {
+      turns += 1;
+      return open ? Promise.resolve() : new Promise((resolve) => waiting.push(resolve));
+    };
+    const syncing = b.sync({ turn });
+    for (let i = 0; i < 50; i++) await new Promise((resolve) => setImmediate(resolve));
+    // The owner is busy: the sync waits, with nothing of the account's applied yet.
+    assert.equal(waiting.length, 1);
+    assert.deepEqual(playlistTitles(b.db), []);
+
+    open = true;
+    for (const release of waiting.splice(0)) release();
+    await syncing;
+    assert.deepEqual(playlistTitles(b.db), [{ name: "Day", songs: ["Lucky"] }]);
+    // Joining, the pulled page, settling and the push's read (nothing to push): a turn each.
+    assert.equal(turns, 4);
+  });
+
+  test("signing out while a pulled page waits for its turn applies none of it", async () => {
+    const service = testSyncService();
+    const a = await phone(service);
+    const b = await phone(service);
+    createPlaylist(a.db, "Day", [{ source: "library", trackId: a.track("Lucky") }], a.now());
+    await a.sync();
+
+    let turns = 0;
+    let release = (): void => {};
+    // The first turn (joining) is free; the pulled page's waits.
+    const turn = (): Promise<void> =>
+      ++turns === 1 ? Promise.resolve() : new Promise((resolve) => (release = resolve));
+    const syncing = b.sync({ turn });
+    for (let i = 0; i < 50 && turns < 2; i++) await new Promise((r) => setImmediate(r));
+    assert.equal(turns, 2);
+    b.signOut();
+    release();
+    await assert.rejects(syncing, { code: "ERR_WAVE_SIGNED_OUT" });
+    assert.deepEqual(playlistTitles(b.db), []);
   });
 
   test("a request refused for the request rate goes again after a wait", async () => {

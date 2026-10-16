@@ -20,7 +20,12 @@ import {
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 
-import { songHasFile, type PlayableSongRow, type SongRow } from "@/library/LibraryStore";
+import {
+  LibraryStore,
+  songHasFile,
+  type PlayableSongRow,
+  type SongRow,
+} from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { setShuffleKind } from "@/settings/shuffleKind";
 import { ytMusicEnabled } from "@/settings/ytMusic";
@@ -32,17 +37,19 @@ import { Queue, currentPositionMs, queueState, toQueueTrack } from "./Queue";
 import { toYtQueueTrack, type QueueTrack } from "./queueTracks";
 import { cacheYtCoversInBackground, ytQueueTrack } from "./ytQueueTracks";
 
+/** Shows a playback action's failure. */
+const reportError = (error: unknown): void =>
+  playbackState.update((state) => ({
+    ...state,
+    error: error instanceof Error ? error.message : String(error),
+  }));
+
 /**
  * Runs [effect] and reports a failure. The promise settles once it has run
  * either way and never rejects, so callers that don't wait can drop it.
  */
 const run = (effect: Effect.Effect<void, unknown, Player | Queue | YtMusic>): Promise<void> =>
-  appRuntime.runPromise(effect).catch((error: unknown) =>
-    playbackState.update((state) => ({
-      ...state,
-      error: error instanceof Error ? error.message : String(error),
-    })),
-  );
+  appRuntime.runPromise(effect).catch(reportError);
 
 /** Applies [command] to the queue (see `run`), adding [songs] to the tracks it knows. */
 const dispatch = (command: QueueCommand, songs: readonly PlayableSongRow[] = []): Promise<void> =>
@@ -191,6 +198,42 @@ export const playSongs = async (
 ): Promise<void> => {
   const play = leaveOutMissing(songs, startIndex, songHasFile, (song) => song);
   if (play !== null) await startSongs(play, context, options);
+};
+
+/**
+ * Plays a list known by its Track ids (the paged Songs list), as `playSongs`
+ * plays rows: from `startIndex` (or the top, or shuffled), leaving out the
+ * [missing] songs, a tapped one downloading instead. Only now are the rows the
+ * queue needs read, for every song that plays, loaded on screen or not. Songs
+ * gone since the ids were read are left out; a tapped one that's gone plays nothing.
+ */
+export const playTrackIds = async (
+  ids: readonly number[],
+  missing: ReadonlySet<number>,
+  startIndex: number | undefined,
+  context: QueueContext,
+  options: PlayOptions = {},
+): Promise<void> => {
+  const hasFile = (id: number): boolean => !missing.has(id);
+  const tapped = tappedMissingSong(ids, startIndex, hasFile);
+  if (tapped !== null) downloadMissingSongs([tapped]);
+  if (skipMissingSongs(ids, startIndex, hasFile) === null) return;
+  const songs = await appRuntime
+    // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+    .runPromise(LibraryStore.use((store) => store.songsByIds(ids.filter(hasFile))))
+    .catch((error: unknown) => {
+      reportError(error);
+      return null;
+    });
+  if (songs === null) return;
+  const byId = new Map(songs.map((song) => [song.id, song]));
+  const play = skipMissingSongs(ids, startIndex, (id) => byId.has(id));
+  if (play === null) return;
+  await startSongs(
+    { songs: play.songs.map((id) => byId.get(id)!), startIndex: play.startIndex },
+    context,
+    options,
+  );
 };
 
 /**

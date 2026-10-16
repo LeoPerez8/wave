@@ -185,6 +185,79 @@ describe("queue tracks", () => {
     assert.deepEqual([...queueTracks.get().keys()], ["1"]);
   });
 
+  test("covers landing together reach subscribers in one change", async () => {
+    const songs = Array.from({ length: 50 }, (_, i) => ytSong(`s${i}`));
+    learnQueueTracks(
+      songs.map((s) => toYtQueueTrack(s, null)),
+      { forgetOthers: true },
+    );
+    let told = 0;
+    const stop = queueTracks.subscribe(() => told++);
+    await Effect.runPromise(cacheYtCoversLater(songs, (url) => Effect.succeed(cover(url))));
+    stop();
+
+    assert.equal(told, 1);
+    for (const s of songs) {
+      const track = queueTracks.get().get(`yt:${s.videoId}`);
+      assert.equal(track?.thumbPath, `https://covers/${s.videoId}.thumb.jpg`);
+      assert.deepEqual(track?.palette, { dominant: "#000" });
+    }
+  });
+
+  test("the playing song's cover shows at once, while the others' wait for company", async () => {
+    const songs = ["a", "b", "c"].map(ytSong);
+    learnQueueTracks(
+      songs.map((s) => toYtQueueTrack(s, null)),
+      { forgetOthers: true },
+    );
+    let release = (): void => {};
+    const later = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const seen: (string | null | undefined)[][] = [];
+    const cache = (url: string) =>
+      url.endsWith("/b")
+        ? Effect.succeed(cover(url))
+        : Effect.promise(() => later).pipe(Effect.as(cover(url)));
+    const stop = queueTracks.subscribe(() =>
+      seen.push(["a", "b", "c"].map((id) => queueTracks.get().get(`yt:${id}`)?.thumbPath)),
+    );
+    const caching = Effect.runPromise(
+      cacheYtCoversLater(songs, cache, (trackId) => trackId === "yt:b"),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    release();
+    await caching;
+    stop();
+
+    assert.deepEqual(seen, [
+      [null, "https://covers/b.thumb.jpg", null],
+      ["https://covers/a.thumb.jpg", "https://covers/b.thumb.jpg", "https://covers/c.thumb.jpg"],
+    ]);
+  });
+
+  test("a song that left the queue before its turn isn't cached", async () => {
+    const songs = ["a", "b", "c", "d"].map(ytSong);
+    learnQueueTracks(
+      songs.map((s) => toYtQueueTrack(s, null)),
+      { forgetOthers: true },
+    );
+    const cached: string[] = [];
+    const cache = (url: string) =>
+      Effect.sync(() => {
+        cached.push(url);
+        // A new play takes over while the first covers are cached.
+        learnQueueTracks([song(1)].map(toQueueTrack), { forgetOthers: true });
+        return cover(url);
+      });
+    await Effect.runPromise(cacheYtCoversLater(songs, cache));
+
+    // Those already under way when it took over may finish; none starts after.
+    assert.ok(cached.length <= YT_COVERS_AT_ONCE);
+    assert.ok(!cached.includes("https://covers/c") && !cached.includes("https://covers/d"));
+    assert.deepEqual([...queueTracks.get().keys()], ["1"]);
+  });
+
   test("a cover that can't be cached leaves YouTube's", async () => {
     learnQueueTracks([toYtQueueTrack(ytSong("a"), null)], { forgetOthers: true });
 
