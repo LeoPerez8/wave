@@ -6,6 +6,7 @@
  */
 
 import type { YtDownloadFailure } from "./ytDownloads.ts";
+import { formatDuration } from "./time.ts";
 
 /** A download's source: the file it saves comes from one of them. */
 export type DownloadSource = "soulseek" | "youtube";
@@ -148,4 +149,19 @@ export const ytAudioMatches = (
   if (!(durationMs > 0)) return false;
   if (song.durationMs === null || song.durationMs <= 0) return true;
   return Math.abs(durationMs - song.durationMs) <= Math.max(2_000, song.durationMs * 0.02);
+};
+
+/**
+ * Why the audio YouTube served, [durationMs] long, isn't the song
+ * (`ytAudioMatches`): the cause the confirm decision's rejection records, so
+ * the failed download's row says it rather than an earlier source's failure.
+ * Null when it is the song.
+ */
+export const ytAudioRejection = (
+  song: { readonly durationMs: number | null },
+  durationMs: number,
+): string | null => {
+  if (ytAudioMatches(song, durationMs)) return null;
+  if (!(durationMs > 0) || song.durationMs === null) return "YouTube's audio has no length";
+  return `YouTube's audio is ${formatDuration(durationMs)} long, but the song is ${formatDuration(song.durationMs)}`;
 };

@@ -6,6 +6,7 @@
  */
 
 import { counted } from "./listening.ts";
+import { queuedDownloadsSummary, type QueuedDownload } from "./queuedDownloads.ts";
 import type { WaveSession } from "./waveAccount.ts";
 import type { YtSession } from "./ytAccount.ts";
 
@@ -45,8 +46,17 @@ export const accountsSummary = (yt: YtSession, wave: WaveSession): string | null
 };
 
 /**
- * The Downloads row's line: how many songs' downloads failed and wait on its
- * page (`failedDownloads`); null while none has.
+ * The Downloads row's line: how many songs are on their way while any are
+ * ([queued], `queuedDownloads`), then how many songs' downloads failed and
+ * wait on its page (`failedDownloads`); null while none is either.
  */
-export const downloadsSummary = (failed: number): string | null =>
-  failed === 0 ? null : `${counted(failed, "song")} failed`;
+export const downloadsSummary = (
+  failed: number,
+  queued: readonly QueuedDownload[] = [],
+): string | null => {
+  const parts = [
+    queuedDownloadsSummary(queued),
+    failed === 0 ? null : `${counted(failed, "song")} failed`,
+  ].filter((part) => part !== null);
+  return parts.length === 0 ? null : parts.join(" · ");
+};
