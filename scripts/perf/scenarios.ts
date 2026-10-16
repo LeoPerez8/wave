@@ -33,6 +33,11 @@ export interface Step {
 export interface ScenarioConfig {
   /** The tab bar's tabs to cycle through, by label, Home first; Search stays out of it. */
   readonly tabs: readonly string[];
+  /**
+   * The artist push-artist opens, by name as Library › Artists shows it on its
+   * first screen; null when the fixture names none.
+   */
+  readonly artist: string | null;
 }
 
 export interface Scenario {
@@ -50,6 +55,8 @@ export interface Scenario {
   readonly warmup: number;
   /** Needs the fixture's playlist link. */
   readonly needsImportLink?: boolean;
+  /** Needs the fixture's artist. */
+  readonly needsArtist?: boolean;
 }
 
 const tab = (label: string): Target => ({ desc: label });
@@ -126,6 +133,26 @@ export const SCENARIOS: readonly Scenario[] = [
     steps: () => pushPop({ text: "Songs" }),
     iterations: 10,
     warmup: 1,
+  },
+  {
+    name: "push-artist",
+    summary:
+      "Library › Artists › the fixture's artist, until its page's stats block is on screen, and back.",
+    setup: [
+      { kind: "tap", target: tab("Library") },
+      { kind: "tap", target: { text: "Artists" } },
+    ],
+    steps: ({ artist }) => [
+      {
+        measure: "push",
+        action: { kind: "tap", target: { text: artist ?? "" } },
+        expect: { mark: "artist.stats" },
+      },
+      { measure: "pop", action: { kind: "tap", target: { desc: "Back" } }, expect: route },
+    ],
+    iterations: 10,
+    warmup: 1,
+    needsArtist: true,
   },
   {
     name: "push-empty",

@@ -18,6 +18,11 @@ import { keyRecordings } from "./sync.ts";
 
 export type TestDatabase = Awaited<ReturnType<typeof openTestDatabase>>;
 
+type SqlJsClient = InstanceType<Awaited<ReturnType<typeof initSqlJs>>["Database"]>;
+
+/** Each test database's sql.js client, for `traceQueries`. */
+const clients = new WeakMap<object, SqlJsClient>();
+
 type Migrator = Parameters<typeof migrate>[0];
 
 /** The migrations up to and including the one tagged `through`. */
@@ -38,6 +43,7 @@ export const openTestDatabase = async (options: { readonly through?: string } = 
   // As on the phone: cascades only happen with foreign keys on.
   client.exec("PRAGMA foreign_keys = ON;");
   const db = drizzle(client, { schema });
+  clients.set(db, client);
   // The Expo migrator is typed for Expo's database but only uses the dialect
   // and session every synchronous SQLite driver shares.
   await migrate(
@@ -56,6 +62,120 @@ export const migrateTestDatabase = async (db: TestDatabase): Promise<void> => {
   await migrate(db as unknown as Migrator, migrations);
   relinkCreditsIfUnlinked(db, creditSplits());
   keyRecordings(db);
+};
+
+/** A statement a read ran, with how SQLite planned it and the rows it returned. */
+export interface TracedQuery {
+  readonly sql: string;
+  /** `EXPLAIN QUERY PLAN`'s steps, e.g. "SEARCH play_events USING INDEX play_events_track_idx (track_id=?)". */
+  readonly plan: readonly string[];
+  readonly rows: number;
+}
+
+/**
+ * Runs [read] against [db] and records every statement it runs: its SQL,
+ * SQLite's plan for it (with the values it was bound) and how many rows it
+ * returned. Statements prepared but never run (Drizzle prepares some twice)
+ * are left out.
+ */
+export const traceQueries = <A>(
+  db: TestDatabase,
+  read: () => A,
+): { readonly result: A; readonly queries: readonly TracedQuery[] } => {
+  const client = clients.get(db);
+  if (client === undefined) throw new Error("not a test database");
+  type Params = Parameters<SqlJsClient["exec"]>[1];
+  const traced: { sql: string; params: Params; rows: number; ran: boolean }[] = [];
+  const prepare = client.prepare;
+  client.prepare = (text, params) => {
+    const statement = prepare.call(client, text, params);
+    const query = { sql: text, params, rows: 0, ran: false };
+    traced.push(query);
+    const bind = statement.bind;
+    statement.bind = (values) => {
+      if (values !== undefined) query.params = values;
+      return bind.call(statement, values);
+    };
+    const step = statement.step;
+    statement.step = () => {
+      query.ran = true;
+      const row = step.call(statement);
+      if (row) query.rows += 1;
+      return row;
+    };
+    return statement;
+  };
+  let result: A;
+  try {
+    result = read();
+  } finally {
+    client.prepare = prepare;
+  }
+  const queries = traced.flatMap(({ sql: text, params, rows, ran }) => {
+    if (!ran) return [];
+    return [
+      {
+        sql: text,
+        rows,
+        plan: client
+          .exec(`EXPLAIN QUERY PLAN ${text}`, params)
+          .flatMap((table) => table.values.map((step) => String(step[3]))),
+      },
+    ];
+  });
+  return { result, queries };
+};
+
+/**
+ * Grows the library and its history fast, for benchmarks and scale tests:
+ * [tracks] songs crediting a new artist [artist] (on one album), then [plays]
+ * counted plays spread over them, one in ten of a song since deleted that
+ * still credits the artist (`deleted_track_artists`). Written in bulk, so
+ * hundreds of thousands of plays take a second.
+ */
+export const addHistory = (
+  db: TestDatabase,
+  options: { readonly artist: string; readonly tracks: number; readonly plays: number },
+): void => {
+  const seed = addTrack(db, { title: `${options.artist} 1`, artist: options.artist });
+  const { artistId } = db
+    .select({ artistId: schema.tracks.artistId })
+    .from(schema.tracks)
+    .where(eq(schema.tracks.id, seed))
+    .get()!;
+  const columns = db
+    .all<{ name: string }>(sql`PRAGMA table_info(tracks)`)
+    .map((column) => column.name)
+    .filter((name) => name !== "id");
+  const overrides: Record<string, string> = {
+    path: `'/Music/' || ${seed} || '-' || x || '.mp3'`,
+    file_name: `${seed} || '-' || x || '.mp3'`,
+    title: `'${options.artist.replaceAll("'", "''")} ' || x`,
+    title_sort: `printf('%08d', x)`,
+    recording_key: `'recording-' || ${seed} || '-' || x`,
+  };
+  const quoted = columns.map((name) => `"${name}"`).join(", ");
+  const values = columns.map((name) => overrides[name] ?? `seed."${name}"`).join(", ");
+  db.run(
+    sql.raw(`WITH RECURSIVE n(x) AS (VALUES(2) UNION ALL SELECT x + 1 FROM n WHERE x < ${options.tracks})
+      INSERT INTO tracks (${quoted}) SELECT ${values} FROM n, tracks AS seed WHERE seed.id = ${seed}`),
+  );
+  db.run(
+    sql`INSERT INTO track_artists (track_id, artist_id, position)
+      SELECT id, ${artistId}, 0 FROM tracks WHERE id > ${seed} AND artist_id = ${artistId}`,
+  );
+  // Deleted songs' ids: past every track id, as AUTOINCREMENT never reuses them.
+  const deleted = 1_000_000_000 + seed * 1_000;
+  db.run(
+    sql`INSERT INTO deleted_track_artists (track_id, artist_id, position)
+      SELECT ${deleted} + value, ${artistId}, 0 FROM json_each('[0,1,2,3,4,5,6,7,8,9]')`,
+  );
+  db.run(
+    sql.raw(`WITH RECURSIVE n(x) AS (VALUES(0) UNION ALL SELECT x + 1 FROM n WHERE x < ${options.plays - 1})
+      INSERT INTO play_events (track_id, started_at, listened_ms, duration_ms, end_reason, counted, source)
+      SELECT CASE WHEN x % 10 = 9 THEN ${deleted} + (x / 10) % 10 ELSE ${seed} + x % ${options.tracks} END,
+        1000 + x, 180000, 180000, 'completed', 1, 'phone' FROM n`),
+  );
 };
 
 export interface FixtureTrack {

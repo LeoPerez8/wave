@@ -6,10 +6,16 @@
  * counts for each of them. Grouping into albums and artists, ordering and the
  * cut-off are Core's (`albumPlayTotals`, `artistPlayTotals`, `rankPlays`); so
  * are the all-time listening totals (`listeningTotals`) summed from
- * `songListening`. Kept free of Expo so the store tests run them against a
- * real SQLite (`testDatabase.ts`).
+ * `songListening`, or from `artistPlays` for one artist's page. Kept free of
+ * Expo so the store tests run them against a real SQLite (`testDatabase.ts`).
  */
-import type { CreditedPlayTotals, PlayTotals, SongListening, StatsWindow } from "@wave/core";
+import type {
+  ArtistStatsInput,
+  CreditedPlayTotals,
+  PlayTotals,
+  SongListening,
+  StatsWindow,
+} from "@wave/core";
 import { and, eq, gte, inArray, lte, sql, type SQL } from "drizzle-orm";
 
 import { chunks } from "./chunks.ts";
@@ -149,4 +155,80 @@ export const songsCrediting = (db: LibraryDatabase, artistId: number): number[] 
     .where(eq(trackArtists.artistId, artistId))
     .all()
     .map((row) => row.id);
+};
+
+/** What an artist page's stats block reads, beside the artist and the time (Core's `artistStats`). */
+export type ArtistPlays = Pick<ArtistStatsInput, "songIds" | "listening" | "songPlays">;
+
+/**
+ * The listening of the songs whose credit names [artistId], kept credits of
+ * deleted songs included: `songListening`'s rows for those songs. Reads
+ * only those songs' plays: the credits' artist indexes give the songs, the
+ * play events' track index their plays.
+ */
+const artistListening = (db: LibraryDatabase, artistId: number): SongListening[] => {
+  const songs = new Map<number, Omit<SongListening, "artistIds"> & { artistIds: number[] }>();
+  for (const { artistId: credited, ...song } of db.all<{
+    trackId: number;
+    inLibrary: number;
+    countedPlays: number;
+    listenedMs: number;
+    lastPlayedAt: number;
+    artistId: number;
+  }>(
+    sql`WITH songs AS (
+        SELECT track_id FROM track_artists WHERE artist_id = ${artistId}
+        UNION
+        SELECT track_id FROM deleted_track_artists WHERE artist_id = ${artistId}
+      ), played AS (
+        SELECT play_events.track_id AS track_id, sum(play_events.counted) AS counted_plays,
+          sum(play_events.listened_ms) AS listened_ms, max(play_events.started_at) AS last_played_at
+        FROM songs CROSS JOIN play_events ON play_events.track_id = songs.track_id
+        GROUP BY play_events.track_id
+      ), credited AS (
+        SELECT track_id, artist_id, position FROM track_artists
+        WHERE track_id IN (SELECT track_id FROM played)
+        UNION ALL
+        SELECT track_id, artist_id, position FROM deleted_track_artists
+        WHERE track_id IN (SELECT track_id FROM played)
+      )
+      SELECT played.track_id AS "trackId", tracks.id IS NOT NULL AS "inLibrary",
+        played.counted_plays AS "countedPlays", played.listened_ms AS "listenedMs",
+        played.last_played_at AS "lastPlayedAt", credited.artist_id AS "artistId"
+      FROM played
+      JOIN credited ON credited.track_id = played.track_id
+      LEFT JOIN tracks ON tracks.id = played.track_id
+      ORDER BY played.track_id, credited.position`,
+  )) {
+    const known = songs.get(song.trackId);
+    if (known === undefined) {
+      songs.set(song.trackId, { ...song, inLibrary: song.inLibrary === 1, artistIds: [credited] });
+    } else known.artistIds.push(credited);
+  }
+  return [...songs.values()];
+};
+
+/**
+ * What [artistId]'s page reads for its stats block, from that artist's songs
+ * alone, however long the rest of the history: the songs in the library whose
+ * credit names them (`songsCrediting`), those songs' listening over all time,
+ * deleted songs included (`songListening`'s rows for them), and the counted
+ * plays up to [now] of those still in the library that have one
+ * (`trackPlayTotals`).
+ */
+export const artistPlays = (db: LibraryDatabase, artistId: number, now: number): ArtistPlays => {
+  const listening = artistListening(db, artistId);
+  const played = listening.filter((song) => song.inLibrary && song.countedPlays > 0);
+  return {
+    songIds: songsCrediting(db, artistId),
+    listening,
+    songPlays:
+      played.length === 0
+        ? []
+        : trackPlayTotals(
+            db,
+            { from: null, to: now },
+            played.map((song) => song.trackId),
+          ),
+  };
 };

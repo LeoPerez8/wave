@@ -34,6 +34,8 @@ export interface FakeDeviceOptions {
   readonly perfBuild?: boolean;
   /** The tabs on the simulated tab bar, by label. */
   readonly tabs?: readonly string[];
+  /** The artist on the simulated Library › Artists list. */
+  readonly artist?: string;
 }
 
 export class FakeDevice implements Device {
@@ -42,6 +44,7 @@ export class FakeDevice implements Device {
   private clock = 81_000_000;
   private readonly perfBuild: boolean;
   private readonly tabs: readonly string[];
+  private readonly artist: string;
   private running = false;
   private recorder: PerfRecorder | null = null;
   private routes: string[] = ["/"];
@@ -58,6 +61,7 @@ export class FakeDevice implements Device {
   constructor(options: FakeDeviceOptions = {}) {
     this.perfBuild = options.perfBuild ?? true;
     this.tabs = options.tabs ?? ["Home", "Library", "Playlists", "Search"];
+    this.artist = options.artist ?? "Radiohead";
   }
 
   async sleep(ms: number): Promise<void> {
@@ -177,7 +181,15 @@ export class FakeDevice implements Device {
     else if (label === "Developer") this.navigate("/settings/developer");
     else if (label === "Albums") this.navigate("/library/albums");
     else if (label === "Songs") this.navigate("/library/songs");
-    else if (label === "Back") this.navigate(null);
+    else if (label === "Artists") this.navigate("/library/artists");
+    else if (label === this.artist && this.route === "/library/artists") {
+      this.navigate("/library/artist/1");
+      // The stats block reads the artist's plays after the page commits.
+      this.recorder?.render("ArtistStatsBlock");
+      this.render(this.clock, 6);
+      this.advance(30);
+      this.respond("artist.stats", "played");
+    } else if (label === "Back") this.navigate(null);
     else if (label.startsWith("Now playing:")) {
       this.nowPlaying = true;
       this.render(this.clock, 40);
@@ -229,6 +241,9 @@ export class FakeDevice implements Device {
         ...(route === "/settings"
           ? [{ text: "Developer", bounds: [80, 1500, 600, 1600] } as Node]
           : []),
+        ...(route === "/library/artists"
+          ? [{ text: this.artist, bounds: [80, 700, 900, 800] } as Node]
+          : []),
       ];
     const tabs = this.tabs.map((label, i): Node => ({
       desc: label,
@@ -239,6 +254,7 @@ export class FakeDevice implements Device {
       return [
         { text: "Albums", bounds: [80, 700, 600, 800] },
         { text: "Songs", bounds: [80, 900, 600, 1000] },
+        { text: "Artists", bounds: [80, 1100, 600, 1200] },
         mini,
         ...tabs,
       ];
