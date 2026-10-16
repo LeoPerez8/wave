@@ -287,10 +287,13 @@ export const targetEntries = async (target: ActionItems): Promise<readonly Targe
   const lists = await Promise.all(target.items.map((playlist) => playlistEntries(playlist.id)));
   return groupSongs(
     lists.map((entries) =>
-      entries.map((entry): TargetEntry =>
+      // An unavailable entry has nothing to queue or add.
+      entries.flatMap((entry): TargetEntry[] =>
         entry.source === "library"
-          ? { source: "library", track: entry.track }
-          : { source: "stream", song: entry.song },
+          ? [{ source: "library", track: entry.track }]
+          : entry.source === "stream"
+            ? [{ source: "stream", song: entry.song }]
+            : [],
       ),
     ),
     discoverTrackId,

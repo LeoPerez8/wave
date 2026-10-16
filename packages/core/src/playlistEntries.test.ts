@@ -126,7 +126,10 @@ describe("writePlaylistEntrySong / readPlaylistEntrySong", () => {
 
   test("what isn't a song reads as nothing", () => {
     assert.equal(readPlaylistEntrySong("not json"), null);
-    assert.equal(readPlaylistEntrySong(JSON.stringify({ unavailable: "notFound", artists: [] })), null);
+    assert.equal(
+      readPlaylistEntrySong(JSON.stringify({ unavailable: "notFound", artists: [] })),
+      null,
+    );
     assert.equal(
       readPlaylistEntrySong(JSON.stringify({ ...unavailable("Within").song, unavailable: "gone" })),
       null,
@@ -327,7 +330,11 @@ describe("playlistEntryLinks", () => {
     const entries = [
       { itemId: 10, playlistId: 1, song: unavailable("Within").song },
       { itemId: 11, playlistId: 2, song: unavailable("Within").song },
-      { itemId: 12, playlistId: 2, song: yt("w", { title: "Within", artists: ["Daft Punk"], durationMs: 228_000 }) },
+      {
+        itemId: 12,
+        playlistId: 2,
+        song: yt("w", { title: "Within", artists: ["Daft Punk"], durationMs: 228_000 }),
+      },
     ];
     const songs = [track(1, "Within", "Daft Punk", 228_000)];
     assert.deepEqual(playlistEntryLinks(entries, songs, [{ playlistId: 1, trackId: 1 }]), {
@@ -364,7 +371,9 @@ describe("an unavailable entry", () => {
   });
 
   test("Search looks for its title and main artist", () => {
-    const song = unavailable("Instant Crush", { artists: ["Daft Punk", "Julian Casablancas"] }).song;
+    const song = unavailable("Instant Crush", {
+      artists: ["Daft Punk", "Julian Casablancas"],
+    }).song;
     assert.equal(unavailableSearchQuery(song), "Instant Crush Daft Punk");
     const credited = unavailable("Touch", { artists: ["Daft Punk feat. Paul Williams"] }).song;
     assert.equal(unavailableSearchQuery(credited), "Touch Daft Punk");

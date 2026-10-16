@@ -48,7 +48,10 @@ const spotify = (title: string, fields: Partial<SpotifySong> = {}): SpotifySong 
 });
 
 /** [song] as it goes into the playlist when it isn't found: unavailable, in its place. */
-const unavailable = (song: SpotifySong | undefined, reason: "notFound" | "localFile" = "notFound") => {
+const unavailable = (
+  song: SpotifySong | undefined,
+  reason: "notFound" | "localFile" = "notFound",
+) => {
   assert.ok(song);
   return { source: "unavailable", song: { artworkUrl: null, ...song, reason } };
 };
@@ -817,7 +820,9 @@ describe("imports kept while Wave is closed", () => {
 
   test("a song's cover is kept while Wave is closed, so one not found goes in with it", () => {
     const cover = "https://i.scdn.co/image/doin";
-    const listed = songs.map((song, index) => (index === 2 ? { ...song, artworkUrl: cover } : song));
+    const listed = songs.map((song, index) =>
+      index === 2 ? { ...song, artworkUrl: cover } : song,
+    );
     let job = askAll(
       startPlaylistImport(planLinkImport(spotifyPlaylist(listed), library), {
         playlistId: 7,
@@ -989,7 +994,11 @@ describe("a Spotify import as its answers arrive, in any order", () => {
     handed = handOver(job);
     assert.deepEqual(
       handed.songs.map((song) =>
-        song.source === "library" ? song.trackId : song.source === "stream" ? song.song.videoId : null,
+        song.source === "library"
+          ? song.trackId
+          : song.source === "stream"
+            ? song.song.videoId
+            : null,
       ),
       ["t", 2, "f", "v"],
     );

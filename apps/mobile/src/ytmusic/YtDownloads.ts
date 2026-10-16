@@ -46,7 +46,7 @@ import {
   type MissingSongsDownload,
   type MissingSongsDownloadAction,
   type MissingTrack,
-  type MixedSong,
+  type PlaylistItem,
   type QueuedDownload,
   type SoulseekCandidate,
   type YtAlbumDownload,
@@ -865,8 +865,8 @@ export const useYtAlbumDownload = (
   return useMemo(() => ytAlbumDownload(songs, { inLibrary, jobs }), [songs, inLibrary, jobs]);
 };
 
-/** A playlist's entry: a Library song (its file) or a YT Music song. */
-type PlaylistEntry = MixedSong<NativeYtSong, { readonly path: string | null }>;
+/** A playlist's entry: a Library song (its file), a YT Music song, or an unavailable song. */
+type PlaylistEntry = PlaylistItem<NativeYtSong, { readonly path: string | null }>;
 
 /** What a playlist's download entries act on: its YT Music entries' songs, in playlist order. */
 export const playlistYtSongs = (entries: readonly PlaylistEntry[]): NativeYtSong[] =>

@@ -38,6 +38,7 @@ import {
   songResults,
   ytFooterRows,
 } from "@/search/rows";
+import { useSearchRequests } from "@/search/queryRequest";
 import { useYtMusicSection } from "@/search/ytMusicSearch";
 import { useSearchFieldFocus } from "@/search/fieldFocus";
 import { SearchField } from "@/search/SearchField";
@@ -185,6 +186,8 @@ export default function SearchScreen() {
     setQuery(recent);
     rememberSearch(recent);
   }, []);
+  // Opened with a query (an unavailable playlist entry's Search): it searches for it.
+  useSearchRequests(pickRecent);
   const showAll = useCallback(
     (kind: SearchKind) => setExpanded((kinds) => new Set(kinds).add(kind)),
     [],

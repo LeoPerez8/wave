@@ -86,7 +86,14 @@ const stream = (videoId: string): Entry => ({ source: "stream", song: song(video
 const file = (path: string): Entry => ({ source: "library", track: { path } });
 const unavailable = (title: string): Entry => ({
   source: "unavailable",
-  song: { title, artists: ["Artist"], album: null, durationMs: null, artworkUrl: null, reason: "notFound" },
+  song: {
+    title,
+    artists: ["Artist"],
+    album: null,
+    durationMs: null,
+    artworkUrl: null,
+    reason: "notFound",
+  },
 });
 
 describe("downloading a playlist's YT Music entries", () => {

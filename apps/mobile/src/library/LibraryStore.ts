@@ -346,6 +346,8 @@ export interface PlaylistRow {
   readonly sort: string;
   readonly trackCount: number;
   readonly durationMs: number;
+  /** Its unavailable entries (songs an import couldn't find), counted in [trackCount] too. */
+  readonly unavailableCount: number;
   /**
    * Thumbnails of its artwork (Core's `playlistArtwork`): its own image alone,
    * else its mosaic (none, one or four covers). Every place that shows a

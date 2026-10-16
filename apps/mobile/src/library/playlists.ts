@@ -130,6 +130,7 @@ export const emptyPlaylistRow = (id: number, name: string): PlaylistRow => ({
   sort: sortKey(name),
   trackCount: 0,
   durationMs: 0,
+  unavailableCount: 0,
   thumbPaths: [],
   artworkPaths: [],
   hasImage: false,

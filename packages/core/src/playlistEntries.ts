@@ -49,7 +49,8 @@ export type PlaylistSong<S extends YtSong = YtSong> =
   | UnavailableEntry;
 
 /** A playlist's entry as its page lists it: a Library track, a YT Music song, or an unavailable song. */
-export type PlaylistItem<S extends YtSong = YtSong, L = unknown> = MixedSong<S, L> | UnavailableEntry;
+export type PlaylistItem<S extends YtSong = YtSong, L = unknown> =
+  MixedSong<S, L> | UnavailableEntry;
 
 /**
  * What tells a playlist's songs apart: the id the song goes by in the queue
@@ -115,7 +116,10 @@ const playable = <S extends YtSong, L>(entry: PlaylistItem<S, L>): entry is Mixe
  */
 export const playlistPlayback = <S extends YtSong, L>(
   listed: readonly PlaylistItem<S, L>[],
-  { ytMusic, startIndex: listedStart }: { readonly ytMusic: boolean; readonly startIndex?: number | undefined },
+  {
+    ytMusic,
+    startIndex: listedStart,
+  }: { readonly ytMusic: boolean; readonly startIndex?: number | undefined },
 ): PlaylistPlay<S, L> | null => {
   const available = skipMissingSongs(listed, listedStart, playable);
   if (available === null) return null;
@@ -245,7 +249,10 @@ export const readPlaylistYtSong = (stored: string): YtAlbumSong | null => {
   };
 };
 
-const UNAVAILABLE_REASONS: readonly string[] = ["notFound", "localFile"] satisfies UnavailableReason[];
+const UNAVAILABLE_REASONS: readonly string[] = [
+  "notFound",
+  "localFile",
+] satisfies UnavailableReason[];
 
 /**
  * What a playlist stores of a song that isn't a Library track (`yt_song`):

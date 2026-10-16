@@ -85,12 +85,12 @@ type AutoSong = MixedSong<YtSong, PlayableSongRow>;
 const fromLibrary = (songs: readonly SongRow[]): readonly AutoSong[] =>
   songs.filter(songHasFile).map((track) => ({ source: "library", track }));
 
-/** A playlist's entries as a track list's songs. */
+/** A playlist's entries as a track list's songs; an unavailable entry plays nowhere, so isn't one. */
 const playlistSongs = (entries: readonly PlaylistEntryRow[]): readonly AutoSong[] =>
   entries.flatMap((entry): AutoSong[] =>
     entry.source === "stream"
       ? [{ source: "stream", song: entry.song }]
-      : songHasFile(entry.track)
+      : entry.source === "library" && songHasFile(entry.track)
         ? [{ source: "library", track: entry.track }]
         : [],
   );

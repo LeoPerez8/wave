@@ -582,7 +582,8 @@ const listedTwice = <S extends YtSong>(job: PlaylistImport<S>): SpotifySong[] =>
     .filter((left) => left.reason === "listedTwice")
     .map((left) => left.song);
   job.finds.forEach((found, index) => {
-    const song = found === null || found === undefined ? null : playlistSong(found, job.songs[index]);
+    const song =
+      found === null || found === undefined ? null : playlistSong(found, job.songs[index]);
     if (song === null) return;
     const first = firstAt.get(playlistSongKey(song));
     const listed = job.songs[index];

@@ -5,6 +5,7 @@ import {
   pagePlayback,
   type PagePlayback,
   type PlayableSongs,
+  type PlaylistItem,
   playlistPlayback,
   skipMissingSongs,
   tappedMissingSong,
@@ -295,21 +296,33 @@ export const playPage = (
     startPlayback(pagePlayback(play.songs), play.startIndex, context, options),
   );
 
+/** A playlist's entry: a listed song, or an unavailable song (Core's `PlaylistItem`). */
+type PlaylistListed = PlaylistItem<YtSong, SongRow>;
+
+/** A playlist's entry that isn't a missing song: Core's `playlistPlayback` skips the unavailable ones. */
+const notMissing = (
+  entry: PlaylistListed,
+): entry is PlayableListedSong | Extract<PlaylistListed, { source: "unavailable" }> =>
+  entry.source === "unavailable" || playable(entry);
+
 /**
  * Plays a playlist's [entries] from `startIndex` (or shuffled), by Core's
  * `playlistPlayback`: with YT Music on and YT Music entries among them, the
  * whole list (the Library's files, the rest streamed); with it off, the
- * Library's songs alone. Missing songs never play: a tapped one downloads
- * instead. Resolves false when
- * there's nothing to play because YT Music is off (a YT Music entry tapped).
+ * Library's songs alone. Unavailable entries never play (a tapped one is the
+ * caller's to explain). Missing songs never play: a tapped one downloads
+ * instead. Resolves false when there's nothing to play because YT Music is
+ * off (a YT Music entry tapped).
  */
 export const playPlaylist = async (
-  entries: readonly ListedSong[],
+  entries: readonly PlaylistListed[],
   listedStart: number | undefined,
   context: QueueContext,
   options: PlayOptions = {},
 ): Promise<boolean> => {
-  const files = leaveOutMissing(entries, listedStart, playable, libraryTrack);
+  const files = leaveOutMissing(entries, listedStart, notMissing, (entry) =>
+    entry.source === "library" ? entry.track : null,
+  );
   // A missing song tapped, or nothing but missing songs: YT Music isn't why.
   if (files === null) return true;
   const play = playlistPlayback(files.songs, {

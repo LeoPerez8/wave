@@ -1,4 +1,5 @@
 import { IconDots } from "@tabler/icons-react-native";
+import { playlistSongsLine } from "@wave/core";
 import { useLocalSearchParams } from "expo-router";
 import { Text, useWindowDimensions, View } from "react-native";
 
@@ -49,10 +50,11 @@ function PlaylistHead({ shown }: { shown: Shown }) {
   // Its YT Music entries download into the Library (Core's `ytPlaylistDownload`).
   const download = useYtPlaylistDownloadButton(items ?? NO_ENTRIES);
   const count = items?.length ?? playlist.trackCount;
+  // Every entry counts, and the line says how many can't play (Core's `playlistSongsLine`).
   const furniture =
     count === 0
       ? songCount(0)
-      : `${songCount(playlist.trackCount)} · ${Math.max(1, Math.round(playlist.durationMs / 60_000))} min`;
+      : `${playlistSongsLine(playlist.trackCount, playlist.unavailableCount)} · ${Math.max(1, Math.round(playlist.durationMs / 60_000))} min`;
   return (
     <View style={{ gap: CELL * 2, paddingBottom: CELL }}>
       <Mosaic paths={playlist.artworkPaths} size={width - grid.margin * 2} />
