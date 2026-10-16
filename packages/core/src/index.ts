@@ -123,6 +123,7 @@ export type { SleepTimer, SleepTimerChoice, SleepTimerClock } from "./sleepTimer
 export {
   COUNTED_PLAY_MS,
   EMPTY_PLAY_TRACKER,
+  fadingPlaySoFar,
   isCountedPlay,
   keptPlayingEntry,
   playSoFar,
@@ -919,6 +920,13 @@ export type {
   HomeSection,
   HomeSectionId,
 } from "./homeSections.ts";
+export {
+  CROSSFADE,
+  crossfadeDuration,
+  readCrossfade,
+  snapCrossfade,
+  type CrossfadeTransition,
+} from "./crossfade.ts";
 
 export {
   SPOTIFY_SEARCH_BUDGET,

@@ -600,7 +600,10 @@ export class LibraryStore extends Context.Service<
     /** Starred tracks, most recently starred first, for Library › Favorites. */
     readonly listFavorites: Effect.Effect<readonly FavoriteRow[], LibraryStoreError>;
     /** Records a play as it starts (Core's `PlayEvent`); returns its id, to update it as it goes on. */
-    readonly recordPlay: (play: PlayEvent) => Effect.Effect<number, LibraryStoreError>;
+    readonly recordPlay: (
+      play: PlayEvent,
+      overlapping?: boolean,
+    ) => Effect.Effect<number, LibraryStoreError>;
     /** Brings a recorded play up to date: listened time, how it ended (so far), counted. */
     readonly updatePlay: (id: number, play: PlayEvent) => Effect.Effect<void, LibraryStoreError>;
     /** Records how a play ended; it no longer changes, so it can go to the Wave account. */
@@ -1108,7 +1111,8 @@ const make = Effect.gen(function* () {
 
     listFavorites: attempt("list favorites", () => listFavorites(db)),
 
-    recordPlay: (play) => attempt("record the play", () => recordPlay(db, play)),
+    recordPlay: (play, overlapping) =>
+      attempt("record the play", () => recordPlay(db, play, overlapping)),
 
     updatePlay: (id, play) => attempt("update the play", () => updatePlay(db, id, play)),
     endPlay: (id, play) => attempt("end the play", () => endPlay(db, id, play)),

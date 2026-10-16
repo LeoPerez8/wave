@@ -364,7 +364,8 @@ export const layer = Layer.effect(
         Effect.runFork(lane.withPermit(restore));
         return;
       }
-      if (event.reason !== "auto" && event.reason !== "seek") return;
+      if (event.reason !== "auto" && event.reason !== "seek" && event.reason !== "crossfade")
+        return;
       Effect.runFork(
         dispatch({ type: "playerMoved", key: event.itemId }).pipe(
           Effect.catch((error) => Effect.sync(() => reportError(error))),
