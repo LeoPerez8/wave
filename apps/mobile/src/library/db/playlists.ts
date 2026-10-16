@@ -10,6 +10,7 @@ import {
   compareStrings,
   placeEntries,
   planPlaylistSongs,
+  playlistArtwork,
   playlistEntryLinks,
   playlistMosaic,
   readPlaylistYtSong,
@@ -540,12 +541,35 @@ export const selectPlaylistTotals = (
 
 const NO_COVERS = { thumbPaths: [], artworkPaths: [] } as const;
 
+/** A playlist's own image, when the owner gave it one (`db/playlistImages.ts`). */
+const imageColumns = {
+  imagePath: schema.playlists.imagePath,
+  imageThumbPath: schema.playlists.imageThumbPath,
+};
+
+/**
+ * What a playlist's artwork shows (Core's `playlistArtwork`): its own image,
+ * else its mosaic of [covers].
+ */
+const playlistArt = (
+  image: { readonly imagePath: string | null; readonly imageThumbPath: string | null },
+  covers: PlaylistCovers,
+): PlaylistCovers & { readonly hasImage: boolean } => {
+  // Both files are set together; a row with one alone shows its mosaic.
+  const own = image.imagePath !== null && image.imageThumbPath !== null;
+  return {
+    thumbPaths: playlistArtwork(own ? image.imageThumbPath : null, covers.thumbPaths),
+    artworkPaths: playlistArtwork(own ? image.imagePath : null, covers.artworkPaths),
+    hasImage: own,
+  };
+};
+
 const NO_SONGS = { trackCount: 0, durationMs: 0 } as const;
 
 /** Playlists the owner has: not deleted (tombstones). */
 const livePlaylist = eq(schema.playlists.deleted, false);
 
-/** Every playlist by name, with its mosaic and totals; deleted ones (tombstones) aren't listed. */
+/** Every playlist by name, with its artwork (its own image or its mosaic) and totals; deleted ones (tombstones) aren't listed. */
 export const selectPlaylists = (db: LibraryDatabase): PlaylistRow[] => {
   const { playlists } = schema;
   // Library tracks and YT Music entries alike.
@@ -553,15 +577,15 @@ export const selectPlaylists = (db: LibraryDatabase): PlaylistRow[] => {
   const totals = selectPlaylistTotals(db);
   return (
     db
-      .select({ id: playlists.id, name: playlists.name })
+      .select({ id: playlists.id, name: playlists.name, ...imageColumns })
       .from(playlists)
       .where(livePlaylist)
       .all()
-      .map((row) => ({
+      .map(({ imagePath, imageThumbPath, ...row }) => ({
         ...row,
         sort: sortKey(row.name),
         ...(totals.get(row.id) ?? NO_SONGS),
-        ...(covers.get(row.id) ?? NO_COVERS),
+        ...playlistArt({ imagePath, imageThumbPath }, covers.get(row.id) ?? NO_COVERS),
       }))
       // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
       .sort((a, b) => compareStrings(a.sort, b.sort) || a.id - b.id)
@@ -575,12 +599,13 @@ export const selectPlaylist = (
   scope: TrackScope = "library",
 ): PlaylistDetail | null => {
   const { playlists } = schema;
-  const playlist = db
-    .select({ id: playlists.id, name: playlists.name })
+  const row = db
+    .select({ id: playlists.id, name: playlists.name, ...imageColumns })
     .from(playlists)
     .where(and(eq(playlists.id, id), livePlaylist))
     .get();
-  if (playlist === undefined) return null;
+  if (row === undefined) return null;
+  const { imagePath, imageThumbPath, ...playlist } = row;
   const items = selectPlaylistEntries(db, id, undefined, scope);
   const covers = selectPlaylistCovers(db, id).get(id) ?? NO_COVERS;
   // As Library › Playlists counts it.
@@ -591,8 +616,7 @@ export const selectPlaylist = (
       sort: sortKey(playlist.name),
       trackCount,
       durationMs,
-      thumbPaths: covers.thumbPaths,
-      artworkPaths: covers.artworkPaths,
+      ...playlistArt({ imagePath, imageThumbPath }, covers),
     },
     items,
   };

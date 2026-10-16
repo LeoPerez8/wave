@@ -64,6 +64,12 @@ import {
   type RecordedPlay,
 } from "./db/playHistory";
 import {
+  removePlaylistImage,
+  setPlaylistImage,
+  takeDeletedPlaylistImages,
+  type PlaylistImageFiles,
+} from "./db/playlistImages";
+import {
   addToPlaylist,
   createPlaylist,
   deletePlaylist,
@@ -155,7 +161,7 @@ export interface ScanRootSummary extends ScanRoot {
   readonly trackCount: number;
 }
 
-/** A song as the whole-Library lyrics and genre run sees it (Core's `libraryLookupSongs`). */
+/** A song as Fix Songs on the whole Library sees it (Core's `songsToFix`). */
 export interface LibraryLookupSong {
   readonly path: string;
   readonly title: string;
@@ -198,8 +204,12 @@ export interface SongRow {
   /** Orders the album's tracks, and so sorts by artist and by album. */
   readonly discNumber: number | null;
   readonly trackNumber: number | null;
-  /** Find Lyrics and Genre fills it in when it's missing. */
+  /** Fix Song fills it in when it's missing, as the track number, genre and lyrics. */
   readonly year: number | null;
+  /** Null for a song without a genre tag. */
+  readonly genre: string | null;
+  /** Lyrics in the file's tags or in a sidecar `.lrc`. */
+  readonly hasLyrics: boolean;
 }
 
 /** A song that can play: one with a file (the queue's, Android Auto's). */
@@ -315,10 +325,16 @@ export interface PlaylistRow {
   readonly sort: string;
   readonly trackCount: number;
   readonly durationMs: number;
-  /** Thumbnails of its mosaic (Core's `playlistMosaic`): none, one or four. */
+  /**
+   * Thumbnails of its artwork (Core's `playlistArtwork`): its own image alone,
+   * else its mosaic (none, one or four covers). Every place that shows a
+   * playlist's artwork reads these.
+   */
   readonly thumbPaths: readonly string[];
-  /** Full-size covers of the same mosaic, for the playlist screen's header. */
+  /** Full-size versions of the same, for the playlist screen's header. */
   readonly artworkPaths: readonly string[];
+  /** Whether the owner gave it its own image (its menu then offers Remove Image). */
+  readonly hasImage: boolean;
 }
 
 /**
@@ -526,6 +542,20 @@ export class LibraryStore extends Context.Service<
     ) => Effect.Effect<PlaylistAddResult, LibraryStoreError>;
     readonly renamePlaylist: (id: number, name: string) => Effect.Effect<void, LibraryStoreError>;
     readonly deletePlaylist: (id: number) => Effect.Effect<void, LibraryStoreError>;
+    /**
+     * Gives a playlist its own image (it stays on this phone); returns the
+     * files nothing shows any more: its old image's, or [files] when it's gone.
+     */
+    readonly setPlaylistImage: (
+      id: number,
+      files: PlaylistImageFiles,
+    ) => Effect.Effect<readonly string[], LibraryStoreError>;
+    /** Brings a playlist's mosaic back; returns its image's files to delete. */
+    readonly removePlaylistImage: (
+      id: number,
+    ) => Effect.Effect<readonly string[], LibraryStoreError>;
+    /** Deleted playlists' image files, returned once to delete. */
+    readonly takeDeletedPlaylistImages: Effect.Effect<readonly string[], LibraryStoreError>;
     /** Appends the songs the playlist doesn't have yet (Core's `planPlaylistSongs`). */
     readonly addToPlaylist: (
       id: number,
@@ -1034,6 +1064,16 @@ const make = Effect.gen(function* () {
 
     deletePlaylist: (id) =>
       attempt("delete the playlist", () => deletePlaylist(db, id, Date.now())),
+
+    setPlaylistImage: (id, files) =>
+      attempt("change the playlist's image", () => setPlaylistImage(db, id, files)),
+
+    removePlaylistImage: (id) =>
+      attempt("remove the playlist's image", () => removePlaylistImage(db, id)),
+
+    takeDeletedPlaylistImages: attempt("tidy deleted playlists' images", () =>
+      takeDeletedPlaylistImages(db),
+    ),
 
     addToPlaylist: (id, songs) =>
       attempt("add to the playlist", () => addToPlaylist(db, id, songs, Date.now())),

@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import { useSyncExternalStore } from "react";
 
 import { makeExternalStore } from "@/lib/externalStore";
+import { WaveNative } from "@/native/waveNative";
 
 import {
   LibraryStore,
@@ -30,6 +31,8 @@ export const onPlaylistsEdited = (listener: () => void): (() => void) =>
 export const playlistsChanged = (): void => {
   playlistsVersion.update((version) => version + 1);
   appRuntime.runPromise(listPlaylistsRemembered).catch(() => {});
+  // A deleted playlist's image goes with it.
+  tidyDeletedPlaylistImages();
 };
 
 const edit = <A>(
@@ -60,9 +63,12 @@ export const listPlaylistsRemembered: Effect.Effect<
 
 /**
  * Reads the playlists once at app start, so the first New Playlist prompt or
- * Add to Playlist card of the session opens at once too. Safe to call repeatedly.
+ * Add to Playlist card of the session opens at once too, and deletes images
+ * a deletion left behind (Wave closed before it got to them). Safe to call
+ * repeatedly.
  */
 export const primePlaylists = (): void => {
+  tidyDeletedPlaylistImages();
   if (knownPlaylists() === undefined) {
     appRuntime.runPromise(listPlaylistsRemembered).catch(() => {});
   }
@@ -107,6 +113,7 @@ export const emptyPlaylistRow = (id: number, name: string): PlaylistRow => ({
   durationMs: 0,
   thumbPaths: [],
   artworkPaths: [],
+  hasImage: false,
 });
 
 export const renamePlaylist = (id: number, name: string): Promise<void> =>
@@ -114,6 +121,44 @@ export const renamePlaylist = (id: number, name: string): Promise<void> =>
 
 export const deletePlaylist = (id: number): Promise<void> =>
   edit((store) => store.deletePlaylist(id));
+
+/** Deletes playlist image files nothing shows any more; one that won't go is left behind. */
+const deleteImageFiles = (paths: readonly string[]): Promise<void> =>
+  paths.length === 0 ? Promise.resolve() : WaveNative.deletePlaylistImages(paths).catch(() => {});
+
+/**
+ * Opens Android's photo picker and gives the playlist the picked photo,
+ * cropped square, as its image in place of its mosaic. The image stays on
+ * this phone. Resolves false when nothing was picked.
+ */
+export const pickPlaylistImage = async (id: number): Promise<boolean> => {
+  const files = await WaveNative.pickPlaylistImage();
+  if (files === null) return false;
+  const unused = await edit((store) => store.setPlaylistImage(id, files)).catch(
+    async (error: unknown) => {
+      await deleteImageFiles([files.path, files.thumbPath]);
+      throw error;
+    },
+  );
+  await deleteImageFiles(unused);
+  return true;
+};
+
+/** Takes the playlist's image away, so its mosaic shows again. */
+export const removePlaylistImage = (id: number): Promise<void> =>
+  edit((store) => store.removePlaylistImage(id)).then(deleteImageFiles);
+
+/**
+ * Deletes the image files of playlists deleted here or, through the Wave
+ * account, on another phone. Runs after every playlist change and at app start.
+ */
+const tidyDeletedPlaylistImages = (): void => {
+  appRuntime
+    // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+    .runPromise(LibraryStore.use((store) => store.takeDeletedPlaylistImages))
+    .then(deleteImageFiles)
+    .catch(() => {});
+};
 
 /** Appends [songs] the playlist doesn't hold yet (Core's `planPlaylistSongs`). */
 export const addToPlaylist = (

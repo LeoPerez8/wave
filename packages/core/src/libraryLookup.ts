@@ -1,5 +1,5 @@
 /**
- * The whole-Library lyrics and genre run (docs/spec.md, "Lyrics and genre"):
+ * Fix Songs on the whole Library (docs/spec.md, "Lyrics and genre"):
  * what its progress says, in Settings and in its notification, and its end
  * summary as kept until the owner has seen it.
  */
@@ -11,9 +11,9 @@ export interface LibraryLookupProgress {
   readonly line: string;
 }
 
-const TITLE = "Finding lyrics and genre…";
+const TITLE = "Fixing songs…";
 
-/** What the run says with [done] of [total] songs looked up; [total] is 0 until they're known. */
+/** What the run says with [done] of [total] songs fixed; [total] is 0 until they're known. */
 export const libraryLookupProgress = (done: number, total: number): LibraryLookupProgress => {
   if (total === 0) return { title: TITLE, detail: null, line: TITLE };
   const detail = `${done.toLocaleString("en")} of ${total.toLocaleString("en")}`;
