@@ -91,7 +91,7 @@ note which.
 
 ## Behavior kept
 
-- Core tests (`node --test` in `packages/core`; 28 tests in `libraryQueries.test.ts`) cover shared
+- Core tests (`node --test` in `packages/core`; 27 tests in `libraryQueries.test.ts`) cover shared
   reads, per-kind and per-playlist invalidation, the throttle, pause and catch-up, the Now Playing
   cover, dropped stale reads, failed reads, retention and its bound, and the order of reads.
 - App tests (`node --test 'src/**/*.test.ts' 'plugins/**/*.test.ts'` in `apps/mobile`) and the
