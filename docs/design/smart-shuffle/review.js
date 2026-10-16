@@ -19,11 +19,21 @@ const options = [
     name: "Focus dot",
     description: "Familiar shuffle with one small marker.",
   },
+  {
+    file: "05-tuned-mix",
+    name: "Tuned mix",
+    description: "Two adjustable lanes suggest a balanced mix.",
+  },
+  {
+    file: "06-flow-loop",
+    name: "Flow loop",
+    description: "An open loop carries the mix forward.",
+  },
 ];
 
 const params = new URLSearchParams(location.search);
 const requested = Number(params.get("variant"));
-let selected = requested >= 1 && requested <= 4 ? Math.trunc(requested) - 1 : 0;
+let selected = requested >= 1 && requested <= options.length ? Math.trunc(requested) - 1 : 0;
 let rotation = params.get("rotation") === "0" ? 0 : 45;
 const themeButton = document.querySelector(".theme");
 const markup = new Map();
