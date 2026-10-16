@@ -90,7 +90,7 @@ Copy each APK to `/tmp/wave-318/<Id>.apk` as it's built.
    `node scripts/perf/perf.ts doctor` checks what it can.
 3. **Library size for plain builds.** B0 and B3 can't report it. Read it once from B2's first run
    header and pass it to every plain run: `--meta library.tracks=<n> --meta
-   library.playEvents=<n> --meta library.playlistItems=<n>`.
+library.playEvents=<n> --meta library.playlistItems=<n>`.
 4. **Order matters.** Install the builds oldest first: B0, B1, S0, N0, N1, then everything from the
    head. The head's migrations 0022 (`playlist_revisions`) and 0023 (`play_totals`) add tables and
    triggers that an older APK doesn't know about. Going back to an older APK afterwards should
@@ -359,7 +359,7 @@ Collected from each ticket's doc. Most are first-run confirmations the code reli
   under gesture handler); gfxinfo framestats and the `dumpsys` shapes parse on One UI, meminfo's
   Objects section included; `uiautomator dump` finds every target (tab labels, `Settings`, `Back`,
   `Albums`, `Songs`, `Artists`, the fixture's artist, `Developer`, `Now playing: …`, `Close Now
-  Playing`, `Queue`, `Next track`, `Import`); the perf build's `console.log` reaches logcat and
+Playing`, `Queue`, `Next track`, `Import`); the perf build's `console.log` reaches logcat and
   Expo inlined `EXPO_PUBLIC_WAVE_PERF` (the run's first line); `performance.now()` and the touch's
   timestamp share CLOCK_MONOTONIC. **Pending.**
 - **#303.** Per-step render counts as expected (row 22). A detail screen opens in the tab it came
@@ -401,7 +401,7 @@ Collected from each ticket's doc. Most are first-run confirmations the code reli
   (`push-library` pre-draw, `live` against `off`); whether glass layers re-render on frames where
   only the chrome changed (RenderThread slices in a fling's trace). **Pending.**
 - **#317.** The S24+'s Android version and the three sideload states for B0 and B3; `pm
-  dump-profiles` output on One UI parses (counts in `profiles.json` against `profile device`).
+dump-profiles` output on One UI parses (counts in `profiles.json` against `profile device`).
   **Pending.**
 
 ## Experiments and their outcomes
