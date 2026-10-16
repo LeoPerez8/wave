@@ -476,6 +476,18 @@ export const movePlaylistItem = (
 const LINK_CHUNK = 500;
 
 /**
+ * A number that rises whenever any playlist's entries are written (here,
+ * by a sync, by an import, by a link), from `playlist_revisions`: a scan
+ * reads it to tell whether entries came that a link hasn't seen.
+ */
+export const selectPlaylistEntriesRevision = (db: LibraryDatabase): number =>
+  db
+    .select({ sum: sql<number>`coalesce(sum(${schema.playlistRevisions.revision}), 0)` })
+    .from(schema.playlistRevisions)
+    .where(ne(schema.playlistRevisions.playlistId, LIBRARY_REVISION))
+    .get()?.sum ?? 0;
+
+/**
  * Turns the YT Music entries of every playlist that the Library tracks
  * [trackIds] (just downloaded; the whole Library when not given, as a scan
  * does once it ends) positively are (Core's `playlistEntryLinks`) into those

@@ -68,8 +68,15 @@ export { alphabetIndex, artistAlbums, indexLetter } from "./browse.ts";
 export type { ArtistAlbum, IndexEntry } from "./browse.ts";
 export { spineEntries, spineLayout, spineSection, spineSlotAt, spineStep } from "./spine.ts";
 export type { SpineLayout, SpineSlot, SpineSpace } from "./spine.ts";
-export { reconcileScan } from "./scanReconcile.ts";
-export type { IndexedFile, ScanChanges, ScanReconcileInput, TrackMove } from "./scanReconcile.ts";
+export { SCAN_SAVE_SLICE, reconcileScan, scanEnd, scanSaveSlices } from "./scanReconcile.ts";
+export type {
+  IndexedFile,
+  ScanChanges,
+  ScanEnd,
+  ScanReconcileInput,
+  ScanSaveSlice,
+  TrackMove,
+} from "./scanReconcile.ts";
 export { planExclusion } from "./scanRoots.ts";
 export type { ExclusionPlan } from "./scanRoots.ts";
 export { restorePlayback } from "./playbackRestore.ts";
@@ -450,6 +457,15 @@ export type {
   LibraryQueryStats,
   LibraryReads,
 } from "./libraryQueries.ts";
+export { BACKGROUND_WORK_LIMITS, createBackgroundWork } from "./backgroundWork.ts";
+export type {
+  BackgroundWork,
+  BackgroundWorkLimits,
+  BackgroundWorkOptions,
+  BackgroundWorkStats,
+} from "./backgroundWork.ts";
+export { pendingWriteDelay } from "./writePacing.ts";
+export type { WritePacing } from "./writePacing.ts";
 export { stepNowPlayingSheet } from "./sheetLifecycle.ts";
 export { QUEUE_COVER_FLUSH_MS, createQueueCoverBatcher, withQueueCovers } from "./queueCovers.ts";
 export type { QueueCover, QueueCoverBatcher, QueueCoverBatcherOptions } from "./queueCovers.ts";

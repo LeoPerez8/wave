@@ -1,8 +1,9 @@
 import { createLibraryQueries, type LibraryReads } from "@wave/core";
 import type * as Effect from "effect/Effect";
-import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
+import { useCallback, useContext, useEffect, useRef, useSyncExternalStore } from "react";
 
-import { useScreenSight } from "@/lib/screenSight";
+import { firstContentShown } from "@/lib/backgroundWork";
+import { CoveredByNowPlaying, useScreenSight } from "@/lib/screenSight";
 import { registerPerfMeta } from "@/perf/perf";
 
 import { onLibraryChange } from "./libraryChanges";
@@ -141,6 +142,13 @@ export const useLibraryQuery = <A>(
     subscribe,
     key === undefined ? NONE : () => registry.current(key),
   );
+
+  // The first result an app screen in sight shows lets startup work go (src/lib/backgroundWork.ts).
+  const coverable = useContext(CoveredByNowPlaying);
+  const shown = current !== undefined;
+  useEffect(() => {
+    if (shown && coverable && sight.visible()) firstContentShown();
+  }, [shown, coverable, sight]);
 
   const lastEdits = useRef(queryEdits);
   useEffect(() => {

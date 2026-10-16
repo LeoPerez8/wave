@@ -83,3 +83,76 @@ export const reconcileScan = <T extends IndexedFile>(
     unmatched: input.missing.filter((file) => !matched.has(file.path)),
   };
 };
+
+/**
+ * What a scan does last, from the files it [saved], the indexed files
+ * [gone], and whether playlists' entries changed since they were last linked
+ * ([entriesChanged]: a sync or an import brought YT Music entries, or no
+ * link ran yet in this process).
+ */
+export interface ScanEnd {
+  /**
+   * Turn playlists' YT Music entries into the Library songs they are. It
+   * reads every entry and every song, so only when either side changed.
+   */
+  readonly linkEntries: boolean;
+  /**
+   * What screens are told: `removed` (songs left, every screen re-reads at
+   * once), `added` (taken as a burst), or nothing when the scan changed
+   * nothing, the usual rescan on return.
+   */
+  readonly announce: "added" | "removed" | null;
+}
+
+export const scanEnd = ({
+  saved,
+  gone,
+  entriesChanged,
+}: {
+  readonly saved: number;
+  readonly gone: number;
+  readonly entriesChanged: boolean;
+}): ScanEnd => ({
+  linkEntries: saved > 0 || entriesChanged,
+  announce: gone > 0 ? "removed" : saved > 0 ? "added" : null,
+});
+
+/**
+ * Files a scan batch's slice saves per transaction: the scanner hands over
+ * up to 500 at once, and saving them in one go holds the JavaScript thread
+ * for as long. Measured in docs/performance/315-startup-scheduling.md.
+ */
+export const SCAN_SAVE_SLICE = 100;
+
+/** One transaction's worth of a scan batch: its files, and the moves to them. */
+export interface ScanSaveSlice<T> {
+  readonly tracks: readonly T[];
+  /** Applied before the slice's files are saved, so a moved file keeps its row. */
+  readonly moves: readonly { readonly from: string; readonly to: string }[];
+}
+
+/**
+ * Splits what [changes] saves into slices of at most [size] files (added,
+ * then updated, then moved), each carrying the moves to its own files, in
+ * the batch's order. Each slice stands alone: a scan stopped between slices
+ * leaves the rest unsaved, and the next scan reads those files again.
+ */
+export const scanSaveSlices = <T extends IndexedFile>(
+  changes: ScanChanges<T>,
+  size: number = SCAN_SAVE_SLICE,
+): ScanSaveSlice<T>[] => {
+  const tracks = [...changes.added, ...changes.updated, ...changes.moved.map((move) => move.to)];
+  const movedFrom = new Map(changes.moved.map((move) => [move.to, move.from]));
+  const slices: ScanSaveSlice<T>[] = [];
+  for (let start = 0; start < tracks.length; start += Math.max(1, size)) {
+    const slice = tracks.slice(start, start + Math.max(1, size));
+    slices.push({
+      tracks: slice,
+      moves: slice.flatMap((track) => {
+        const from = movedFrom.get(track);
+        return from === undefined ? [] : [{ from, to: track.path }];
+      }),
+    });
+  }
+  return slices;
+};

@@ -55,6 +55,13 @@ export interface SyncCycleInput {
   readonly songsChanged: boolean;
   /** Waits [ms]; the service is asked again after a while when it refuses for the request rate. */
   readonly wait: (ms: number) => Promise<void>;
+  /**
+   * Resolves when the app has a free turn (Core's `BackgroundWork`): each
+   * synchronous database step (joining, a pulled page, settling, a push's
+   * reads and marks) waits for one, so a sync never holds the JavaScript
+   * thread while the owner taps. Absent: no wait.
+   */
+  readonly turn?: () => Promise<void>;
 }
 
 /** What a sync changed on the phone. */
@@ -120,6 +127,16 @@ const send = async (
   }
 };
 
+/**
+ * Waits for the app's free turn before a database step; signed out
+ * meanwhile, the sync stops there, as it does when an answer comes back.
+ */
+const freeTurn = async (input: SyncCycleInput): Promise<void> => {
+  if (input.turn === undefined) return;
+  await input.turn();
+  if (selectJoinedAccount(input.db) !== input.account) throw new SyncSignedOut();
+};
+
 interface Seen {
   songs: boolean;
   library: boolean;
@@ -146,6 +163,7 @@ const pullAll = async (input: SyncCycleInput, seen: Seen): Promise<boolean> => {
     const since = encodeURIComponent(selectSyncCursor(db) ?? "0");
     const page = readPullPage(await send(input, "GET", `/v1/pull?since=${since}`, null));
     if (page === null) throw new SyncRequestFailed(200, "not a pull page");
+    await freeTurn(input);
     const changes = applyPulledPage(db, page, trackIds, input.now());
     take(seen, changes);
     for (const { key, value } of changes.preferences) input.preferences.apply(key, value);
@@ -182,10 +200,12 @@ const pushAll = async (input: SyncCycleInput): Promise<number> => {
   const { db } = input;
   let pushed = 0;
   for (let round = 0; round < MAX_ROUNDS; round++) {
+    await freeTurn(input);
     const unpushed = selectUnpushed(db, READ_AT_ONCE, input.preferences.value);
     if (rowCount(unpushed.rows) === 0) break;
     for (const batch of pushBatches(unpushed.rows)) {
       await send(input, "POST", "/v1/push", JSON.stringify(batch));
+      await freeTurn(input);
       markPushed(
         db,
         (Object.keys(batch) as (keyof SyncTables)[]).flatMap((table) =>
@@ -208,6 +228,8 @@ const pushAll = async (input: SyncCycleInput): Promise<number> => {
  * it too (`SyncSignedOut`), before the answer on its way is applied.
  */
 export const syncCycle = async (input: SyncCycleInput): Promise<SyncCycleResult> => {
+  // Not joined yet: no account to check after this turn.
+  await input.turn?.();
   const joined = joinAccount(input.db, input.account);
   const seen: Seen = {
     songs: false,
@@ -218,12 +240,14 @@ export const syncCycle = async (input: SyncCycleInput): Promise<SyncCycleResult>
     preferences: [],
   };
   const pulled = await pullAll(input, seen);
+  await freeTurn(input);
   settle(input, seen, { pulled, songs: joined || input.songsChanged || seen.songs, plan: true });
   const pushed = await pushAll(input);
   if (pushed > 0) {
     const songsBefore = seen.songs;
     seen.songs = false;
     const again = await pullAll(input, seen);
+    await freeTurn(input);
     settle(input, seen, { pulled: again, songs: seen.songs, plan: false });
     seen.songs ||= songsBefore;
   }

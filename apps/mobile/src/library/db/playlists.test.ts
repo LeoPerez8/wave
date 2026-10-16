@@ -21,6 +21,7 @@ import {
   selectPlaylist,
   selectPlaylistCovers,
   selectPlaylistEntries,
+  selectPlaylistEntriesRevision,
   selectPlaylists,
   selectPlaylistTotals,
   selectTrackPaths,
@@ -345,6 +346,20 @@ describe("linkPlaylistEntries", () => {
     linkPlaylistEntries(db, 0, [luckyId]);
     assert.deepEqual(titles(), ["Daydreaming", "Airbag", "Creep", "Airbag", "Lucky", "Bloom"]);
     assert.deepEqual(titlesOf(otherId), ["Lucky"]);
+  });
+
+  test("the entries' revision rises with any entry written, and not with the Library alone", () => {
+    const before = selectPlaylistEntriesRevision(db);
+    addTrack(db, { title: "Lucky", artist: "Radiohead" });
+    assert.equal(selectPlaylistEntriesRevision(db), before);
+    appendPlaylistSongs(db, playlistId, [stream(yt("a", { title: "Lucky" }))], 0);
+    const added = selectPlaylistEntriesRevision(db);
+    assert.ok(added > before);
+    // A link that changes nothing leaves it; one that links raises it.
+    linkPlaylistEntries(db, 0, []);
+    assert.equal(selectPlaylistEntriesRevision(db), added);
+    linkPlaylistEntries(db, 0);
+    assert.ok(selectPlaylistEntriesRevision(db) > added);
   });
 
   test("deleting the Library song then takes its entries out, as for any Library song", () => {

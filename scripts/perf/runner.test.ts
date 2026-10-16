@@ -183,6 +183,34 @@ describe("runPerf on the simulated phone", () => {
     assert.deepEqual(launches, ["HOT", "HOT"]);
   });
 
+  it("returns past the rescan interval, then taps a tab at once (#315); only when asked by name", async () => {
+    class Watched extends FakeDevice {
+      readonly slept: number[] = [];
+      override async sleep(ms: number): Promise<void> {
+        this.slept.push(ms);
+        return super.sleep(ms);
+      }
+    }
+    const device = new Watched();
+    const { out } = await runPerf(device, options("rescan", { scenarios: ["rescan-return"] }));
+    const { steps, errors } = readResults(readFileSync(out, "utf8"));
+    assert.deepEqual(errors, []);
+    assert.deepEqual(
+      summarize(steps).map((row) => row.key),
+      ["rescan-return/idle/return", "rescan-return/idle/tab"],
+    );
+    const returns = (steps as (StepRecord & { launch?: { launchState: string } })[]).filter(
+      (step) => step.measure === "return",
+    );
+    assert.deepEqual(
+      returns.map((step) => step.launch?.launchState),
+      ["HOT", "HOT"],
+    );
+    // Away longer than Wave's 60 s rescan interval before each return.
+    assert.equal(device.slept.filter((ms) => ms > 60_000).length, 3);
+    assert.equal(ALL_SCENARIOS.includes("rescan-return"), false);
+  });
+
   it("runs the import first in the import variant, and every step reports its progress", async () => {
     const { out } = await runPerf(
       new FakeDevice(),

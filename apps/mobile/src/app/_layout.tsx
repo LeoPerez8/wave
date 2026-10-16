@@ -6,9 +6,11 @@ import "@/settings/theme";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
+import type { GestureResponderEvent } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import { afterFirstContent, touchEnded, touchStarted } from "@/lib/backgroundWork";
 import { followLibraryLookupSummary } from "@/library/findLyricsAndGenre";
 import { useAllFilesAccess } from "@/library/hooks";
 import { resumePlaylistImports } from "@/library/playlistImports";
@@ -25,6 +27,14 @@ import { useNavigationBarScheme } from "@/settings/appearance";
 import { startSync } from "@/sync/startSync";
 import { useThemeColor } from "@/theme/useThemeColor";
 
+/** Every touch holds background work; a perf build also notes its native timestamp. */
+const onRootTouchStart = PERF_ENABLED
+  ? (event: GestureResponderEvent): void => {
+      touchStarted();
+      perfTouch(event);
+    }
+  : touchStarted;
+
 export default function RootLayout() {
   useRenderCount("RootLayout");
   const background = useThemeColor("background");
@@ -35,31 +45,38 @@ export default function RootLayout() {
   // read the Library (the import matches against it).
   useOpenSharedText(granted);
 
-  // A no-op when Android Auto already started them headless (src/services.ts).
+  // What the first screen and the player need starts now: the player, the queue it restores,
+  // Auto's responder. A no-op when Android Auto already started them headless (src/services.ts).
   useEffect(() => startServices("app"), []);
 
-  // While signed in to a Wave account, the Library syncs with it (src/sync/WaveSync.ts).
-  useEffect(startSync, []);
-
-  // A whole-Library lyrics and genre run that ended in the background says how it went.
-  useEffect(followLibraryLookupSummary, []);
-
-  // The first scan starts as soon as Wave can read the scan roots.
+  // The rest waits until the first screen shows its content, then goes one piece per free turn
+  // (src/lib/backgroundWork.ts), in this order.
   useEffect(() => {
     if (granted) {
-      startInitialScan();
-      // Playlists don't wait for the scan: they live in the database already.
-      primePlaylists();
+      // The scan, incremental after the first: new files show up, gone ones leave.
+      afterFirstContent("scan", startInitialScan);
       // Link imports kept when Wave last closed go on filling their playlists.
-      resumePlaylistImports();
+      afterFirstContent("imports", resumePlaylistImports);
     }
   }, [granted]);
+
+  // While signed in to a Wave account, the Library syncs with it (src/sync/WaveSync.ts).
+  useEffect(() => afterFirstContent("sync", startSync), []);
+
+  useEffect(() => {
+    // Playlists live in the database already: read ahead for the first Add to Playlist card.
+    if (granted) afterFirstContent("playlists", primePlaylists);
+  }, [granted]);
+
+  // A whole-Library lyrics and genre run that ended in the background says how it went.
+  useEffect(() => afterFirstContent("lookupSummary", followLibraryLookupSummary), []);
 
   return (
     <GestureHandlerRootView
       style={{ flex: 1, backgroundColor: background }}
-      // A perf build notes every touch's native timestamp, for the runner's latencies.
-      onTouchStart={PERF_ENABLED ? perfTouch : undefined}
+      onTouchStart={onRootTouchStart}
+      onTouchEnd={touchEnded}
+      onTouchCancel={touchEnded}
     >
       {PERF_ENABLED ? <PerfProbe /> : null}
       {/* Lets library screens open inside the tab they were opened from. The root itself

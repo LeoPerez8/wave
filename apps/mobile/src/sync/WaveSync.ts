@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { AppState } from "react-native";
 
+import { freeTurn } from "@/lib/backgroundWork";
 import { LibraryStore } from "@/library/LibraryStore";
 import { WaveAccount, waveAccountErrorCode, type WaveAccountErrorCode } from "@/native/waveAccount";
 
@@ -86,6 +87,8 @@ const make = Effect.gen(function* () {
         now: Date.now,
         songsChanged: songs,
         wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+        // Each database step waits until the owner's taps are through.
+        turn: freeTurn,
       }),
     )
       .then(

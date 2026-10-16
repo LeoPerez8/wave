@@ -93,6 +93,7 @@ import {
   replacePlaylistSongs,
   selectPlaylist,
   selectPlaylistEntries,
+  selectPlaylistEntriesRevision,
   selectPlaylists,
   selectTrackPaths,
   type PlaylistEntry,
@@ -418,9 +419,11 @@ export class LibraryStore extends Context.Service<
     /**
      * Turns playlists' YT Music entries the Library now has into its songs, in
      * the same place, matched against the whole Library; a scan runs it once
-     * when it ends.
+     * when it ends. Returns how many entries it changed.
      */
-    readonly linkPlaylistEntries: Effect.Effect<void, LibraryStoreError>;
+    readonly linkPlaylistEntries: Effect.Effect<number, LibraryStoreError>;
+    /** Rises whenever playlists' entries are written: whether a link has new entries to see. */
+    readonly playlistEntriesRevision: Effect.Effect<number, LibraryStoreError>;
     readonly markScanned: (
       roots: readonly string[],
       at: number,
@@ -916,9 +919,11 @@ const make = Effect.gen(function* () {
       ),
 
     linkPlaylistEntries: attempt("link playlist entries", () =>
-      db.transaction((tx) => {
-        linkPlaylistEntries(tx, Date.now());
-      }),
+      db.transaction((tx) => linkPlaylistEntries(tx, Date.now())),
+    ),
+
+    playlistEntriesRevision: attempt("read the playlists' revision", () =>
+      selectPlaylistEntriesRevision(db),
     ),
 
     markScanned: (roots, at) =>

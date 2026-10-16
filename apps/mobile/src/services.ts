@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import { Auto } from "@/auto/Auto";
 import { startAutoLyrics } from "@/auto/autoLyrics";
 import { startAutoResponder } from "@/auto/autoResponder";
+import { afterFirstContent } from "@/lib/backgroundWork";
 import { onSyncedSettingChange } from "@/lib/persistedSetting";
 import { LibraryStore } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
@@ -57,7 +58,9 @@ const stampPreference = (key: string): void => {
  * JS runtime never initialises them twice. The library scan stays with the UI.
  */
 export const startServices = (by: ServicesStarter): void => {
-  startDownloads(by === "app");
+  // The app's resume reads the journal and may read the whole Library: after the first screen.
+  if (by === "app") afterFirstContent("downloads", () => startDownloads(true));
+  else startDownloads(false);
   if (startedBy !== null) {
     console.log(`[wave] services already started by the ${startedBy}; the ${by} reuses them`);
     return;

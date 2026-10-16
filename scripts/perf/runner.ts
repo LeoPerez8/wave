@@ -380,7 +380,7 @@ export const runPerf = async (
       launched = await launch();
     } else if (step.action.kind === "resume") {
       await shell("input keyevent 3");
-      await device.sleep(options.settleMs);
+      await device.sleep(step.action.awayMs ?? options.settleMs);
       await shell("logcat -c");
       launched = parseAmStart(
         await shell(
@@ -421,6 +421,7 @@ export const runPerf = async (
     const search = prefixed("search.");
     const listeners = prefixed("listeners.");
     const playlistWork = prefixed("playlistWork.");
+    const backgroundWork = prefixed("backgroundWork.");
     const record: StepRecord & Record<string, unknown> = {
       type: "step",
       run,
@@ -453,6 +454,8 @@ export const runPerf = async (
       ...(Object.keys(libraryQueries).length > 0 ? { libraryQueries } : {}),
       ...(Object.keys(search).length > 0 ? { search } : {}),
       ...(Object.keys(playlistWork).length > 0 ? { playlistWork } : {}),
+      // Background work's slices since launch, how long they waited, and how many a long touch forced (#315).
+      ...(Object.keys(backgroundWork).length > 0 ? { backgroundWork } : {}),
       // Subscribers to the playback stores and the sheet when the step's flush was written.
       ...(Object.keys(listeners).length > 0 ? { listeners } : {}),
     };
