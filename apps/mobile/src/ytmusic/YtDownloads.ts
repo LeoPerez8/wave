@@ -12,6 +12,7 @@ import {
   downloadStorageFull,
   failedDownloads,
   isWithin,
+  libraryFinder,
   missingSongJob,
   missingSongJobId,
   missingSongLookup,
@@ -20,6 +21,7 @@ import {
   missingSongTrackId,
   missingSongVideo,
   missingSongsDownload,
+  settledDownloadFailures,
   soulseekCandidates,
   soulseekQuery,
   soulseekReceivedMatches,
@@ -638,11 +640,49 @@ const refreshQuietly = (): void => {
   void refresh().catch(() => undefined);
 };
 
+/** A failure Settings › Downloads lists until it settles: the download's, or the import's. */
+const hasFailed = (job: NativeDownloadJob): boolean =>
+  job.phase === "failed" || job.importFailure !== undefined;
+
+let requests = Promise.resolve();
+
+let forgotSettled = false;
+/**
+ * Has the journal forget the failures that settled another way since (Core's
+ * `settledDownloadFailures`): Settings › Downloads no longer lists them, and the
+ * journal would otherwise keep them, and rewrite them on every change, for good.
+ * Once a launch, and only while some download has failed.
+ */
+const forgetSettledFailures = (): void => {
+  if (forgotSettled) return;
+  forgotSettled = true;
+  requests = requests
+    .then(async () => {
+      const jobs = await WaveSoulseek.jobsSnapshot();
+      if (!jobs.some(hasFailed)) return;
+      const { songs, missing } = await appRuntime.runPromise(
+        Effect.gen(function* () {
+          const store = yield* LibraryStore;
+          return { songs: yield* store.listSongs, missing: yield* store.missingSongs() };
+        }),
+      );
+      const find = libraryFinder(songs);
+      const settled = settledDownloadFailures(jobs, {
+        inLibrary: (song) => find(song) !== null,
+        missingTrackIds: new Set(missing.map((track) => track.id)),
+      });
+      for (const videoId of settled) await WaveSoulseek.cancelJob(videoId);
+      if (settled.length > 0) await refresh();
+    })
+    .catch(() => undefined);
+};
+
 let attached = false;
 /**
  * Follows the native journal. The app and the headless task (started by the
  * download service after process recreation) share this; the app also asks
- * the service to resume work the journal still holds.
+ * the service to resume work the journal still holds, and has it forget the
+ * failures that settled since.
  */
 export const startDownloads = (resume = false): void => {
   if (!attached) {
@@ -651,10 +691,12 @@ export const startDownloads = (resume = false): void => {
   }
   // Replays anything that changed before the listener was attached, e.g. while JS was starting.
   refreshQuietly();
-  if (resume) void WaveSoulseek.resumeJobs().catch(() => undefined);
+  if (resume) {
+    void WaveSoulseek.resumeJobs().catch(() => undefined);
+    forgetSettledFailures();
+  }
 };
 
-let requests = Promise.resolve();
 export const downloadYtSong = (song: NativeYtSong): void => {
   askForNotifications();
   startDownloads();
@@ -936,9 +978,7 @@ export const useMissingSongsDownload = (): MissingSongsDownload<MissingSongJob> 
 export const useFailedDownloads = (): readonly FailedDownload<NativeYtSong>[] => {
   const jobs = useSyncExternalStore(journal.subscribe, journal.get);
   // The Library is read for the finder only while some download has failed.
-  const find = useLoadedLibraryFinder(
-    jobs.some((job) => job.phase === "failed" || job.importFailure !== undefined),
-  );
+  const find = useLoadedLibraryFinder(jobs.some(hasFailed));
   const missing = useLoadedMissingSongs();
   const missingTrackIds = useMemo(
     () => (missing === null ? null : new Set(missing.map((track) => track.id))),

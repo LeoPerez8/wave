@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { failedDownloads } from "./index.ts";
+import { failedDownloads, settledDownloadFailures } from "./index.ts";
 import type { YtDownloadJournalJob, YtSong } from "./index.ts";
 
 const song = (videoId: string): YtSong => ({
@@ -123,5 +123,42 @@ describe("Settings › Downloads: the songs whose download failed", () => {
     assert.equal(detail({ reason: "noSource", cause: "java.io.IOException: x" }), null);
     assert.equal(detail({ reason: "account", cause: "java.io.IOException: x" }), null);
     assert.equal(detail({ reason: "failed" }), null);
+  });
+});
+
+describe("Failures the journal can forget: those that settled another way", () => {
+  test("a settled failure is let go of under every video on its job; the rest stay", () => {
+    const jobs = [
+      job("a"),
+      job("b", { aliases: [song("b2")] }),
+      job("missing:1"),
+      job("missing:2"),
+      unfailed("moving", { phase: "transferring" }),
+      job("cleared", { phase: "cancelled" }),
+      unfailed("unimported", { phase: "completed", importFailure: "storage" }),
+    ];
+    const inLibrary = (found: YtSong) =>
+      ["b2", "moving", "cleared", "unimported"].includes(found.videoId);
+    assert.deepEqual(settledDownloadFailures(jobs, { inLibrary, missingTrackIds: new Set([2]) }), [
+      "b",
+      "b2",
+      "missing:1",
+      "unimported",
+    ]);
+  });
+
+  test("nothing has settled while the Library or its missing songs aren't read", () => {
+    assert.deepEqual(settledDownloadFailures([job("a"), job("missing:1")], nothingInLibrary), []);
+  });
+
+  test("exactly the failures the Downloads page no longer lists", () => {
+    const jobs = [job("a"), job("b"), job("missing:1"), job("missing:2")];
+    const input = {
+      inLibrary: (found: YtSong) => found.videoId === "b",
+      missingTrackIds: new Set([2]),
+    };
+    const listed = failedDownloads(jobs, input).flatMap((failed) => failed.clear);
+    const settled = settledDownloadFailures(jobs, input);
+    assert.deepEqual([...listed, ...settled].toSorted(), ["a", "b", "missing:1", "missing:2"]);
   });
 });
