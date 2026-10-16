@@ -424,7 +424,7 @@ describe("saving files", () => {
     const db = await openTestDatabase();
     saveBatch(db, creditSplits(), [{ ...scanned("Lucky"), videoId: "v-lucky" }], [], [], 0);
     assert.equal(identityOf(db, "/Music/Lucky.m4a")?.videoId, "v-lucky");
-    // A rescan, or Find Lyrics and Genre writing its tags.
+    // A rescan, or Fix Song writing its tags.
     saveBatch(db, creditSplits(), [scanned("Lucky", { album: "OK Computer OKNOTOK" })], [], [], 1);
     assert.equal(identityOf(db, "/Music/Lucky.m4a")?.videoId, "v-lucky");
   });

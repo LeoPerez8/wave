@@ -126,6 +126,17 @@ class ArtworkUrisTest {
   }
 
   @Test
+  fun aPlaylistsOwnImageIsServedAsACover() {
+    val dir = Fixtures.tempDir()
+    val playlists = File(dir, "playlists").apply { mkdirs() }
+    File(playlists, "${a}_thumb.jpg").writeBytes(byteArrayOf(1))
+    File(playlists, "$a.jpg").writeBytes(byteArrayOf(2))
+    val uri = ArtworkUris.forFiles(authority, listOf("${playlists.path}/${a}_thumb.jpg"))
+    assertEquals(ArtworkRequest.Cover(a), ArtworkUris.parse(authority, uri!!))
+    assertEquals(File(playlists, "$a.jpg"), ArtworkUris.coverFile(dir, a))
+  }
+
+  @Test
   fun aMissingCoverHasNoFile() {
     val dir = Fixtures.tempDir()
     File(dir, "${a}_thumb.jpg").writeBytes(byteArrayOf(1))

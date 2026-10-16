@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { selectKnownFiles, selectLibraryLookupSongs } from "./tracks.ts";
+import { selectKnownFiles, selectLibraryLookupSongs, trackQuery } from "./tracks.ts";
 import { addTrack, migrateTestDatabase, openTestDatabase } from "./testDatabase.ts";
 
 describe("selectLibraryLookupSongs", () => {
@@ -42,6 +42,22 @@ describe("selectLibraryLookupSongs", () => {
         trackNumber: 3,
         year: 1998,
       },
+    ]);
+  });
+});
+
+describe("trackQuery", () => {
+  test("song rows carry the genre and lyrics Fix Song looks at", async () => {
+    const db = await openTestDatabase();
+    addTrack(db, { title: "Teardrop", genre: "Trip-Hop", hasLyrics: true });
+    addTrack(db, { title: "Airbag" });
+    const rows = trackQuery(db)
+      .all()
+      .map(({ title, genre, hasLyrics }) => ({ title, genre, hasLyrics }))
+      .toSorted((a, b) => a.title.localeCompare(b.title));
+    assert.deepEqual(rows, [
+      { title: "Airbag", genre: null, hasLyrics: false },
+      { title: "Teardrop", genre: "Trip-Hop", hasLyrics: true },
     ]);
   });
 });
