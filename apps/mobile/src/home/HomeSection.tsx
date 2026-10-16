@@ -17,6 +17,7 @@ import { playCount } from "@/stats/StatsViews";
 import { openDiscoverMix } from "@/ytmusic/routes";
 
 import { useDiscoverMixes } from "./discoverMixes";
+import { openDiscoverMixActions } from "./DiscoverMixActions";
 
 import { AlbumShelf, ArtistShelf, SongRows } from "./HomeSections";
 import { ListeningOverview } from "./ListeningOverview";
@@ -82,6 +83,7 @@ function DiscoverMixes({ title }: SectionProps) {
               size={COVER_ROW_TILE}
               detail={caption.line}
               onPress={() => openDiscoverMix(mix.id)}
+              onLongPress={() => openDiscoverMixActions(mix)}
             />
           );
         })}

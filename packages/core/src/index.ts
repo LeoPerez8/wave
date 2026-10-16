@@ -928,6 +928,8 @@ export type {
   DiscoverSeedArtist,
   DiscoverSeedSong,
 } from "./discoverMixes.ts";
+export { discoverMixActions, discoverMixPlaylist } from "./discoverMixActions.ts";
+export type { DiscoverMixAction } from "./discoverMixActions.ts";
 
 export {
   SPOTIFY_SEARCH_BUDGET,
