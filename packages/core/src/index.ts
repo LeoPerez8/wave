@@ -586,6 +586,7 @@ export type {
   YtSongsDownloadRequest,
 } from "./ytSongsDownload.ts";
 export { failedDownloads, settledDownloadFailures } from "./failedDownloads.ts";
+export { ytDownloadsToForget } from "./forgottenDownloads.ts";
 export type {
   FailedDownload,
   FailedDownloadRetry,
