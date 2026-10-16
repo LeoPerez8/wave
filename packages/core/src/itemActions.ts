@@ -6,6 +6,10 @@
  * whenever the items still meet that condition.
  */
 
+import {
+  missingSongsDownloadActions,
+  type MissingSongsDownloadAction,
+} from "./missingSongDownload.ts";
 import { isDetailPath } from "./navigation.ts";
 import type { StreamedArtistLink } from "./streamedArtist.ts";
 import {
@@ -51,6 +55,11 @@ export interface ActionItem {
   readonly missing?: boolean | undefined;
   /** Where a missing song's download is (`ytDownloadStatus`); null or undefined when never asked for. */
   readonly download?: YtDownloadStatus | null | undefined;
+  /**
+   * An album's missing songs, each as where its download is (null when never
+   * asked for): the album offers to download them.
+   */
+  readonly missingSongs?: readonly (YtDownloadStatus | null)[] | undefined;
 }
 
 export interface ActionSubject {
@@ -85,7 +94,9 @@ export type ItemAction =
   | "removeFromLibrary"
   | "download"
   | "cancelDownload"
-  | "retryDownload";
+  | "retryDownload"
+  | "downloadMissingSongs"
+  | "retryFailed";
 
 /**
  * Where a link to an item's artists leads (Go to Artist, Now Playing's artist
@@ -119,6 +130,8 @@ export const ITEM_ACTION_LABELS: { readonly [A in ItemAction]: string } = {
   delete: "Delete",
   removeFromLibrary: "Remove from Library",
   ...YT_DOWNLOAD_ACTION_LABELS,
+  downloadMissingSongs: "Download Missing Songs",
+  retryFailed: "Retry Failed",
 };
 
 /** Entries that delete something for good, shown in the destructive colour. */
@@ -167,6 +180,16 @@ const sharedArtists = (items: readonly ActionItem[]): readonly number[] => {
   return items.every((item) => same(item.artistIds)) ? first : [];
 };
 
+/** An album's download entries, by what each stands for in Settings' Download All. */
+const ALBUM_DOWNLOAD_ACTIONS: {
+  readonly [A in MissingSongsDownloadAction]:
+    "downloadMissingSongs" | "retryFailed" | "cancelDownload";
+} = {
+  downloadAll: "downloadMissingSongs",
+  retryFailed: "retryFailed",
+  cancel: "cancelDownload",
+};
+
 /** The entries to offer on [subject]'s items, in order. */
 export const itemActions = (subject: ActionSubject): ItemActionEntry[] => {
   const { kind, items, here } = subject;
@@ -187,6 +210,13 @@ export const itemActions = (subject: ActionSubject): ItemActionEntry[] => {
       : []),
     { action: "addToPlaylist" },
   ];
+  // Albums' missing songs download as Settings' Download All does them, only theirs.
+  if (kind === "album")
+    entries.push(
+      ...missingSongsDownloadActions(items.flatMap((item) => item.missingSongs ?? [])).map(
+        (action) => ({ action: ALBUM_DOWNLOAD_ACTIONS[action] }),
+      ),
+    );
   if (kind === "track") {
     entries.push({ action: items.every((item) => item.favorite) ? "unfavorite" : "favorite" });
     if (items.every((item) => item.inPlaylist)) entries.push({ action: "removeFromPlaylist" });
@@ -262,8 +292,9 @@ export const ytSongActions = <A>(
 ];
 
 /**
- * What items are mostly selected for, and Delete and Remove from Library
- * (songs): always a button of their own on the bar, never behind More.
+ * What items are mostly selected for, Delete and Remove from Library
+ * (songs), and Download Missing Songs (albums): always a button of their own
+ * on the bar, never behind More.
  */
 const KEPT_ON_BAR: ReadonlySet<ItemAction> = new Set<ItemAction>([
   "playNext",
@@ -274,6 +305,7 @@ const KEPT_ON_BAR: ReadonlySet<ItemAction> = new Set<ItemAction>([
   "removeFromPlaylist",
   "delete",
   "removeFromLibrary",
+  "downloadMissingSongs",
 ]);
 
 /**
@@ -284,6 +316,7 @@ const KEPT_ON_BAR: ReadonlySet<ItemAction> = new Set<ItemAction>([
 const BAR_LABELS: { readonly [A in ItemAction]?: string } = {
   unfavorite: "Un­favorite",
   removeFromPlaylist: "Remove",
+  downloadMissingSongs: "Download",
 };
 
 /** A bar button's caption for [action]. */
