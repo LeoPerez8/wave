@@ -40,7 +40,8 @@ import java.util.concurrent.TimeUnit
 
 /** Application-context owner, independent of Expo module and Activity lifetimes. */
 class AndroidDownloads private constructor(private val context: Context) {
-  val jobs = DurableDownloads(File(context.noBackupFilesDir, "soulseek-download-jobs-v1"))
+  // Each failure's cause also goes to Logcat, so a device run shows why a download stopped.
+  val jobs = DurableDownloads(File(context.noBackupFilesDir, "soulseek-download-jobs-v1"), log = { Log.w(TAG, it) })
   private val soulseek = AndroidSoulseek.get(context)
   private val main = Handler(Looper.getMainLooper())
   private var worker: ScheduledExecutorService? = null
@@ -121,7 +122,10 @@ class AndroidDownloads private constructor(private val context: Context) {
         else -> "unavailable"
       }
       throw DurableFailure(reason, error)
-    } catch (error: java.io.IOException) { throw DurableFailure("storage", error) }
+    } catch (error: java.io.IOException) {
+      // Only a full or unwritable folder is a storage problem; a broken connection is a source that went away.
+      throw DurableFailure(if (DownloadFiles.storageProblem(error, source.parentFile)) "storage" else "unavailable", error)
+    }
     catch (error: Exception) { Log.w(TAG, "A Soulseek transfer failed", error); throw error }
   private val publication = object : DurablePublication {
     override fun tag(source: File, tags: Map<String, Any?>) {
@@ -167,7 +171,10 @@ class AndroidDownloads private constructor(private val context: Context) {
     worker = Executors.newSingleThreadScheduledExecutor().also { executor ->
       executor.scheduleWithFixedDelay({
         // An unexpected failure (a full disk can't even write the journal) ends the started jobs, never the queue.
-        runCatching { jobs.advance(transport, publication) }.onFailure { runCatching { jobs.expire(transport, true) } }
+        runCatching { jobs.advance(transport, publication) }.onFailure { error ->
+          Log.w(TAG, "The download worker failed", error)
+          runCatching { jobs.expire(transport, true, stopCause = describe(error)) }
+        }
         changed()
         main.post { refresh(); if (!jobs.hasWork()) onIdle() }
       }, 0, 500, TimeUnit.MILLISECONDS)
