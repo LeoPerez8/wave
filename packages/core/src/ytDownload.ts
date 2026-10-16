@@ -74,7 +74,7 @@ const tidyLyrics = (text: string | null): string | null => {
  * The tags for a downloaded [song]: its title and artists, its [album]
  * page's title, artists, year and the song's number there (the song's own
  * album and artists without the page), and the genre and lyrics [found] the
- * way Find Lyrics and Genre finds them, whose track number and year stand in
+ * way Fix Song finds them, whose track number and year stand in
  * for what the page doesn't give. YouTube Music's own lyrics ([ytLyrics],
  * plain text) are the fallback.
  */
@@ -106,7 +106,7 @@ export const ytDownloadTags = (
 };
 
 /**
- * What Find Lyrics and Genre's lookup sends for a download: its title, its
+ * What Fix Song's lookup sends for a download: its title, its
  * first artist (the services credit features in the title), its album and
  * length. Null for a song that is never looked up (see `songLookup`).
  */

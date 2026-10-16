@@ -93,6 +93,7 @@ export {
   moveItem,
   nextPlaylistName,
   planPlaylistAdd,
+  playlistArtwork,
   playlistMosaic,
   playlistRemovals,
 } from "./playlists.ts";
@@ -439,9 +440,9 @@ export {
   deezerTrackCandidates,
   deezerTrackSearchUrl,
   describeTagLookups,
-  lacksTrackNumber,
-  libraryLookupSongs,
-  libraryTagsToWrite,
+  canFixSong,
+  deezerFollowUps,
+  fixLookups,
   lookupsUnreachable,
   lrclibCandidates,
   lrclibSearchUrl,
@@ -451,7 +452,7 @@ export {
   settledTags,
   songLookup,
   songTagOutcome,
-  tagsToWrite,
+  songsToFix,
 } from "./lyricsAndGenre.ts";
 export type {
   DeezerAlbum,

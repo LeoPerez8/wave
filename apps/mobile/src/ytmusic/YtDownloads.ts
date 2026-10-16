@@ -540,7 +540,7 @@ const answer = (claim: NativeDownloadDecision) =>
     }),
   );
 
-/** A download as Find Lyrics and Genre sees it: what its file says once tagged and saved. */
+/** A download as Fix Song sees it: what its file says once tagged and saved. */
 const downloadedSong = ({ path, track }: NativeSavedDownload) => {
   // The track number and year as the index reads them ("3/12" is 3).
   const { trackNumber, year } = toIndexedTrack(track);

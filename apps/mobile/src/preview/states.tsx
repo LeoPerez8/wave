@@ -186,6 +186,8 @@ const songRow = (item: SyntheticTrack): SongRow => {
     discNumber: null,
     trackNumber: track.trackNumber ?? null,
     year: null,
+    genre: null,
+    hasLyrics: false,
   };
 };
 
