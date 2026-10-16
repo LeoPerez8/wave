@@ -1,5 +1,8 @@
 import type { ExpoConfig } from "expo/config";
 
+import { versionCode } from "./plugins/appVersion.ts";
+import { withGradleBuildCache } from "./plugins/withGradleBuildCache.ts";
+import { withHermesFlags } from "./plugins/withHermesFlags.ts";
 import { withLauncherIcons } from "./plugins/withLauncherIcons.ts";
 import { withLaunchSplash } from "./plugins/withLaunchSplash.ts";
 import { withShareShortcut } from "./plugins/withShareShortcut.ts";
@@ -8,17 +11,22 @@ import { withShareShortcut } from "./plugins/withShareShortcut.ts";
 // natively at prebuild time, so text renders in Inter from the first frame.
 const inter = (file: string): string => `./node_modules/@expo-google-fonts/inter/${file}`;
 
+// Wave's version, kept here and nowhere else: Android's versionCode follows from it, and
+// pushing the tag v<version> publishes the release (docs/spec.md, Releases).
+const version = "0.5.0";
+
 const config: ExpoConfig = {
   name: "Wave",
   slug: "wave",
   scheme: "wave",
-  version: "0.1.0",
+  version,
   platforms: ["android"],
   orientation: "portrait",
   userInterfaceStyle: "automatic",
   icon: "./assets/icon.png",
   android: {
     package: "dev.leoperez.wave",
+    versionCode: versionCode(version),
     adaptiveIcon: {
       foregroundImage: "./assets/adaptive-icon-foreground.png",
       monochromeImage: "./assets/adaptive-icon-monochrome.png",
@@ -97,4 +105,7 @@ const config: ExpoConfig = {
 // Applied here, before the plugin list, so the splash's changes run after expo-splash-screen's
 // (Expo runs mods in reverse order) and can edit that splash's style. The sharing shortcut's
 // share target comes first so it runs last, once the launcher icons' aliases exist.
-export default withLaunchSplash(withLauncherIcons(withShareShortcut(config)));
+// Gradle reuses cached outputs (#185), and Hermes skips the unused source map (#187).
+export default withHermesFlags(
+  withGradleBuildCache(withLaunchSplash(withLauncherIcons(withShareShortcut(config)))),
+);

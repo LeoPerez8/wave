@@ -4,6 +4,8 @@ on:
   pull_request:
   push:
     branches: [main]
+    # Pushing v<version> on main publishes that version's release (docs/spec.md, Releases).
+    tags: ["v*"]
 
 permissions:
   contents: write
@@ -16,8 +18,90 @@ concurrency:
 env:
   PR_NUMBER: ${{ github.event.pull_request.number }}
   IS_SAME_REPO_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+  # A release tag's run. Releases are always full builds: steps that skip or shortcut the
+  # APK build must not apply when this is 'true'.
+  IS_RELEASE: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
 
 jobs:
+  # What the change touches, by the rule in scripts/ci/changes.ts. Jobs that only
+  # matter for some parts of the repo read these outputs to skip themselves.
+  changes:
+    name: Changes
+    runs-on: ubuntu-latest
+    outputs:
+      app: ${{ steps.rule.outputs.app }}
+      core: ${{ steps.rule.outputs.core }}
+      workspace: ${{ steps.rule.outputs.workspace }}
+      ci: ${{ steps.rule.outputs.ci }}
+      native: ${{ steps.rule.outputs.native }}
+      apk: ${{ steps.rule.outputs.apk }}
+      nativeTests: ${{ steps.rule.outputs.nativeTests }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          sparse-checkout: scripts/ci
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          # Only node runs here; without this, setup-node looks for pnpm to cache.
+          package-manager-cache: false
+
+      - name: Apply the change rule
+        id: rule
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/ci/changes.sh
+
+      - name: Report the skipped APK build
+        if: steps.rule.outputs.apk == 'false' && env.IS_SAME_REPO_PR == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: scripts/ci/report-apk-skipped.sh
+
+      - name: Report the skipped native unit tests
+        if: steps.rule.outputs.nativeTests == 'false' && env.IS_SAME_REPO_PR == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          scripts/ci/report.sh skipped "Native unit tests" \
+            "Nothing they test changed (wave-native, the app config, config plugins, the lockfile or CI), so they didn't run."
+
+  # The patch notes a release cut from this commit gets (scripts/ci/patch-notes.sh),
+  # shown in the run's summary. A release tag's run publishes them.
+  notes:
+    name: Patch notes
+    runs-on: ubuntu-latest
+    outputs:
+      notes: ${{ steps.notes.outputs.notes }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          # The previous version's tag and every commit since it; file contents on demand.
+          fetch-depth: 0
+          filter: blob:none
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Build the patch notes
+        id: notes
+        # Only a release needs them: anywhere else, failing here mustn't hold up the APK.
+        continue-on-error: ${{ env.IS_RELEASE != 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes="$(scripts/ci/patch-notes.sh)"
+          echo "$notes"
+          { echo "notes<<WAVE_PATCH_NOTES"; echo "$notes"; echo "WAVE_PATCH_NOTES"; } >> "$GITHUB_OUTPUT"
+          { echo "# Patch notes"; echo; echo "${notes:-Nothing to list: no PR since the last version changes the app.}"; } >> "$GITHUB_STEP_SUMMARY"
+
   checks:
     name: Checks
     runs-on: ubuntu-latest
@@ -47,8 +131,23 @@ jobs:
       - name: Install
         run: scripts/ci/step.sh "Install" pnpm install --frozen-lockfile
 
+      # Fails a tag that isn't v<app version> before the APK job starts.
+      - name: Check release tag
+        if: env.IS_RELEASE == 'true'
+        run: scripts/ci/step.sh "Check release tag" scripts/ci/check-release-tag.sh "$GITHUB_REF_NAME"
+
+      # On PRs, by the rule in scripts/ci/changes.ts: the packages the PR changed and their
+      # dependents, or all of them. Pushes to main and release tags always check every package.
+      - name: Pick the packages to check
+        id: packages
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: scripts/ci/affected-packages.sh
+
       - name: Typecheck
-        run: scripts/ci/step.sh "Typecheck" pnpm typecheck
+        env:
+          PACKAGES_FILTER: ${{ steps.packages.outputs.filter }}
+        run: scripts/ci/step.sh "Typecheck" scripts/ci/packages.sh typecheck
 
       - name: Lint
         run: scripts/ci/step.sh "Lint" pnpm lint
@@ -57,7 +156,9 @@ jobs:
         run: scripts/ci/step.sh "Format check" pnpm fmt:check
 
       - name: Test
-        run: scripts/ci/step.sh "Test" pnpm test
+        env:
+          PACKAGES_FILTER: ${{ steps.packages.outputs.filter }}
+        run: scripts/ci/step.sh "Test" scripts/ci/packages.sh test
 
       - name: Report
         if: always() && env.IS_SAME_REPO_PR == 'true' && job.status != 'cancelled'
@@ -66,9 +167,13 @@ jobs:
           HEAD_SHA: ${{ steps.autofix.outputs.sha || github.event.pull_request.head.sha }}
         run: scripts/ci/report.sh "${{ job.status }}" "Checks"
 
-  android:
-    name: Android APK
-    needs: checks
+  # JVM tests for the local native module (tag reading, folder walking, artwork), in a
+  # job of their own so they run beside the APK build instead of before it.
+  native-tests:
+    name: Native unit tests
+    needs: [changes, checks]
+    # Only PRs can skip: on main and release tags every area counts as changed.
+    if: needs.changes.outputs.nativeTests == 'true'
     runs-on: ubuntu-latest
     env:
       HEAD_SHA: ${{ needs.checks.outputs.sha }}
@@ -94,32 +199,202 @@ jobs:
       - name: Install
         run: scripts/ci/step.sh "Install" pnpm install --frozen-lockfile
 
+      # The module builds inside the generated Android project.
       - name: Prebuild native project
         working-directory: apps/mobile
         env:
           EXPO_NO_GIT_STATUS: "1"
         run: ../../scripts/ci/step.sh "Prebuild" pnpm exec expo prebuild --platform android --no-install
 
-      # JVM tests for the local native module (tag reading, folder walking, artwork).
       # AGP 9 only creates unit-test tasks for the tested build type (debug) in libraries.
       - name: Native unit tests
         working-directory: apps/mobile/android
         run: ../../../scripts/ci/step.sh "Native unit tests" ./gradlew :wave-native:testDebugUnitTest --no-daemon --console=plain
 
-      # Bundling on its own first surfaces Metro errors clearly instead of deep in Gradle output.
-      - name: Bundle JavaScript
+      - name: Report
+        if: always() && env.IS_SAME_REPO_PR == 'true' && job.status != 'cancelled'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/ci/report.sh "${{ job.status }}" "Native unit tests"
+
+  android:
+    name: Android APK
+    needs: [changes, checks, notes]
+    # Only PRs can skip: on main and release tags every area counts as changed.
+    # Only a release needs the patch notes, so elsewhere a failed notes job doesn't stop the
+    # APK. A job-level `if` can't read `env`, so the release test is IS_RELEASE spelled out.
+    if: >-
+      ${{ !cancelled() && needs.changes.outputs.apk == 'true' && needs.checks.result == 'success' &&
+      (needs.notes.result == 'success' ||
+      !(github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))) }}
+    runs-on: ubuntu-latest
+    env:
+      HEAD_SHA: ${{ needs.checks.outputs.sha }}
+      # ccache (scripts/ci/ccache.sh) keeps its cache in ~/.cache/ccache.
+      # Paths under the checkout are hashed relative to it, and the working directory
+      # isn't hashed, so a different checkout path still hits.
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_NOHASHDIR: "true"
+      # The NDK is installed fresh on every run, so its compilers' mtimes change.
+      CCACHE_COMPILERCHECK: content
+      CCACHE_INODECACHE: "true"
+      # Some libraries build with precompiled headers, which ccache only caches with these.
+      CCACHE_SLOPPINESS: pch_defines,time_macros,include_file_mtime,include_file_ctime
+      CCACHE_MAXSIZE: 1G
+      # A full build's APK and debug keystore, kept for repacks (scripts/ci/repack.ts).
+      KEPT_APK: ${{ github.workspace }}/.cache/kept-apk
+      WAVE_CI_BUNDLE_MANIFEST: ${{ github.workspace }}/../wave-ci-bundle.json
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.checks.outputs.sha }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: scripts/ci/step.sh "Install" pnpm install --frozen-lockfile
+
+      - name: Prebuild native project
         working-directory: apps/mobile
-        run: ../../scripts/ci/step.sh "Bundle JavaScript" pnpm exec expo export --platform android --output-dir "$RUNNER_TEMP/js-export"
+        env:
+          EXPO_NO_GIT_STATUS: "1"
+        run: ../../scripts/ci/step.sh "Prebuild" pnpm exec expo prebuild --platform android --no-install
+
+      # Main saves Metro's cache, PRs only read it. Metro only adds entries, so the key starts
+      # over when dependencies change. The path is uniwind's cache store (os.tmpdir()), which
+      # replaces Expo's in metro.config.js.
+      - name: Restore Metro's cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/metro-cache
+          key: metro-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: metro-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+
+      # Expo + Hermes run once in either mode, before the key: Metro's assets are part of it.
+      # The Gradle init script verifies its handoff below.
+      - name: Bundle JavaScript
+        run: scripts/ci/step.sh "Bundle JavaScript" scripts/ci/bundle.sh
+
+      # Each full build keeps its APK under a key for its native side and Metro's assets
+      # (scripts/ci/repack.ts). A PR whose key finds one swaps its JS bundle into it instead
+      # of running Gradle.
+      - name: Key the native side
+        id: key
+        run: node scripts/ci/repack.ts key apps/mobile apps/mobile/android/app/build/generated/res/react/release | tee -a "$GITHUB_OUTPUT"
+
+      - name: Restore the kept APK
+        id: kept
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.KEPT_APK }}
+          key: ${{ steps.key.outputs.key }}
+          # Only PRs repack; elsewhere it's enough to know whether to keep this build.
+          lookup-only: ${{ github.event_name != 'pull_request' }}
+
+      # Sets APK_BUILD (full or repack) and APK_BUILD_REASON. Main and release tags build in full.
+      - name: Plan the APK build
+        env:
+          KEPT: ${{ steps.kept.outputs.cache-hit }}
+        run: node scripts/ci/repack.ts plan | tee -a "$GITHUB_ENV"
+
+      - name: Repack the kept APK
+        if: env.APK_BUILD == 'repack'
+        run: |
+          scripts/ci/step.sh "Repack the kept APK" scripts/ci/repack.sh "$KEPT_APK" "$RUNNER_TEMP/repacked.apk"
+          echo "REPACKED_APK=$RUNNER_TEMP/repacked.apk" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-java@v5
+        if: env.APK_BUILD == 'full'
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v5
+        if: env.APK_BUILD == 'full'
+
+      # Each main commit saves its compiled objects; PRs only restore them. Prefer
+      # the same lockfile's latest entry, then seed new dependencies from an older one.
+      - name: Restore ccache
+        id: ccache
+        if: env.APK_BUILD == 'full'
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/ccache
+          key: ccache-android-v2-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            ccache-android-v2-${{ hashFiles('pnpm-lock.yaml') }}-
+            ccache-android-v2-
+
+      - name: Set up ccache
+        if: env.APK_BUILD == 'full'
+        run: scripts/ci/ccache.sh setup
+
+      # The native-tests job runs these beside this one; a release also runs them here first,
+      # so a tag whose tests fail never publishes.
+      # AGP 9 only creates unit-test tasks for the tested build type (debug) in libraries.
+      - name: Native unit tests
+        if: env.IS_RELEASE == 'true'
+        working-directory: apps/mobile/android
+        run: ../../../scripts/ci/step.sh "Native unit tests" ./gradlew :wave-native:testDebugUnitTest --no-daemon --console=plain
+
+      - name: Save Metro's cache
+        if: github.ref == 'refs/heads/main'
+        uses: actions/cache/save@v4
+        with:
+          path: /tmp/metro-cache
+          key: metro-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
 
       - name: Build release APK
+        if: env.APK_BUILD == 'full'
         working-directory: apps/mobile/android
-        run: ../../../scripts/ci/step.sh "Gradle assembleRelease" ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon --console=plain
+        run: ../../../scripts/ci/step.sh "Gradle assembleRelease" ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --init-script ../../../scripts/ci/prebuilt-bundle.gradle --no-daemon --console=plain --profile --stacktrace
+
+      - name: CMake task times
+        if: always() && env.APK_BUILD == 'full'
+        run: scripts/ci/cmake-times.sh apps/mobile/android
+
+      - name: ccache statistics
+        if: always() && env.APK_BUILD == 'full'
+        run: scripts/ci/ccache.sh stats
+
+      - name: Save ccache
+        if: github.ref == 'refs/heads/main' && steps.ccache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/ccache
+          key: ${{ steps.ccache.outputs.cache-primary-key }}
+
+      # Full PR builds may keep their own native APK too. GitHub scopes these cache entries
+      # to that PR, so another PR can only read builds saved on its base or the default branch.
+      # Gradle and Metro cache writes above stay limited to main.
+      - name: Keep the full build for JS-only PRs
+        if: env.APK_BUILD == 'full' && steps.kept.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p "$KEPT_APK"
+          cp apps/mobile/android/app/build/outputs/apk/release/app-release.apk "$KEPT_APK/"
+          cp apps/mobile/android/app/debug.keystore "$KEPT_APK/"
+
+      - name: Save the kept APK
+        if: env.APK_BUILD == 'full' && steps.kept.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.KEPT_APK }}
+          key: ${{ steps.key.outputs.key }}
 
       - name: Collect APK
         id: apk
         run: |
           name="wave-${HEAD_SHA:0:7}.apk"
-          cp apps/mobile/android/app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/$name"
+          built="${REPACKED_APK:-apps/mobile/android/app/build/outputs/apk/release/app-release.apk}"
+          bundle="apps/mobile/android/app/build/generated/assets/react/release/index.android.bundle"
+          unzip -p "$built" assets/index.android.bundle | cmp - "$bundle"
+          echo "Packaged this run's bundle: $(sha256sum "$bundle")"
+          cp "$built" "$RUNNER_TEMP/$name"
           echo "path=$RUNNER_TEMP/$name" >> "$GITHUB_OUTPUT"
           echo "name=$name" >> "$GITHUB_OUTPUT"
 
@@ -133,6 +408,7 @@ jobs:
       # that installs straight from the phone's browser.
       - name: Publish APK to a prerelease
         id: publish
+        if: env.IS_RELEASE != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -145,13 +421,27 @@ jobs:
           gh release upload "$tag" "$RUNNER_TEMP/$asset" --clobber
           echo "url=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${tag}/${asset}" >> "$GITHUB_OUTPUT"
 
+      - name: Publish the release
+        if: env.IS_RELEASE == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PATCH_NOTES: ${{ needs.notes.outputs.notes }}
+        run: |
+          if [ -n "$PATCH_NOTES" ]; then
+            export RELEASE_NOTES_FILE="$RUNNER_TEMP/patch-notes.md"
+            printf '%s\n' "$PATCH_NOTES" > "$RELEASE_NOTES_FILE"
+          fi
+          scripts/ci/publish-release.sh "${{ steps.apk.outputs.path }}"
+
       - name: Report
         if: always() && env.IS_SAME_REPO_PR == 'true' && job.status != 'cancelled'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # A job that fails before "Plan the APK build" has no build mode to report.
           extra=""
+          if [ -n "${APK_BUILD:-}" ]; then extra="APK build: **$APK_BUILD**. ${APK_BUILD_REASON:-}"; fi
           if [ -n "${{ steps.publish.outputs.url }}" ]; then
-            extra="📱 **[Download APK](${{ steps.publish.outputs.url }})** (built from \`${HEAD_SHA:0:7}\`)"
+            extra="$extra"$'\n\n'"📱 **[Download APK](${{ steps.publish.outputs.url }})** (built from \`${HEAD_SHA:0:7}\`)"
           fi
           scripts/ci/report.sh "${{ job.status }}" "Android APK" "$extra"

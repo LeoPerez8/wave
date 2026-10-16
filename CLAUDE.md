@@ -7,7 +7,9 @@ Pick tickets whose blockers are closed.
 ## Conventions
 
 - Everything in English: UI copy, code, docs, issues, PRs, commits.
-- One PR per ticket, branch `feat/<issue>-<slug>`, PR body says `Closes #<issue>`.
+- One PR per ticket, branch `feat/<issue>-<slug>` (`fix/<issue>-<slug>` for a bug fix), PR body
+  says `Closes #<issue>`. The PR title is the release's patch-note line: one line a user
+  understands, saying what changed for them.
 - Decision-heavy logic (queue, counted plays, search, sorting, scan reconciliation, LRC,
   sleep timer) goes in `packages/core`, which must keep **zero runtime dependencies** and
   use only erasable TypeScript syntax with `.ts` import extensions. Test it through its
