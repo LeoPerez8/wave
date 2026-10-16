@@ -210,6 +210,8 @@ export const runPerf = async (
         return `am start -a android.intent.action.SEND -t text/plain --es android.intent.extra.TEXT ${quote(
           options.importLink,
         )} ${pkg}`;
+      case "type":
+        return `input text ${quote(action.text)}`;
       case "launch":
       case "idle":
         return null;
@@ -329,14 +331,18 @@ export const runPerf = async (
       flush: perf,
       expect: step.expect,
       ...(step.anchor === undefined ? {} : { anchor: step.anchor }),
+      from: step.from,
     });
     const meta = perf?.meta ?? {};
     const importRunning = meta["import.running"];
-    const libraryQueries = Object.fromEntries(
-      Object.entries(meta)
-        .filter(([key]) => key.startsWith("libraryQueries."))
-        .map(([key, value]) => [key.slice("libraryQueries.".length), value]),
-    );
+    const prefixed = (prefix: string): Record<string, unknown> =>
+      Object.fromEntries(
+        Object.entries(meta)
+          .filter(([key]) => key.startsWith(prefix))
+          .map(([key, value]) => [key.slice(prefix.length), value]),
+      );
+    const libraryQueries = prefixed("libraryQueries.");
+    const search = prefixed("search.");
     const record: StepRecord & Record<string, unknown> = {
       type: "step",
       run,
@@ -366,6 +372,7 @@ export const runPerf = async (
         : {}),
       // Counters since launch: compare a step's with the one before it for its reads.
       ...(Object.keys(libraryQueries).length > 0 ? { libraryQueries } : {}),
+      ...(Object.keys(search).length > 0 ? { search } : {}),
     };
     write(record);
     log(

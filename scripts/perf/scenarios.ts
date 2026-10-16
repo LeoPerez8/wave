@@ -15,7 +15,12 @@ export type Action =
   /** A cold launch, timed by `am start -W`. */
   | { readonly kind: "launch" }
   /** Nothing: a window that watches the app on its own (an import filling). */
-  | { readonly kind: "idle" };
+  | { readonly kind: "idle" }
+  /**
+   * Types [text] into the focused field (`input text`): key events, so no touch
+   * to measure from; the step names the mark it measures from instead.
+   */
+  | { readonly kind: "type"; readonly text: string };
 
 export interface Step {
   /** What the step measures, the third part of its summary key ("tab", "push", "pop"…). */
@@ -25,6 +30,8 @@ export interface Step {
   readonly expect?: Expect;
   /** Which touch latencies count from; "last" for a burst of taps. */
   readonly anchor?: "first" | "last";
+  /** For an action with no touch (typing): the mark latencies count from, its first occurrence. */
+  readonly from?: Expect;
   /** How long the step's window stays open; the run's window when unset. */
   readonly windowMs?: number;
 }
@@ -60,6 +67,9 @@ export interface Scenario {
 }
 
 const tab = (label: string): Target => ({ desc: label });
+
+/** What search-typing types: four keystrokes, each narrowing the last one's results. */
+const SEARCH_TYPED = "love";
 const route: Expect = { mark: "route" };
 
 /**
@@ -224,6 +234,22 @@ export const SCENARIOS: readonly Scenario[] = [
     teardown: [{ kind: "back" }],
     iterations: 5,
     warmup: 1,
+  },
+  {
+    name: "search-typing",
+    summary: `Types "${SEARCH_TYPED}" into Search, until its results are on screen; then clears the field.`,
+    setup: [{ kind: "tap", target: tab("Search") }],
+    steps: () => [
+      {
+        measure: "type",
+        action: { kind: "type", text: SEARCH_TYPED },
+        from: { mark: "search.typed" },
+        expect: { mark: "search.results", detail: SEARCH_TYPED },
+      },
+    ],
+    teardown: [{ kind: "tap", target: { desc: "Clear search" } }],
+    iterations: 10,
+    warmup: 2,
   },
   {
     name: "import",
