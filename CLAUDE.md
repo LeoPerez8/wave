@@ -15,9 +15,10 @@ Pick tickets whose blockers are closed.
   tags `v0.5.1-ti` and publishes the prerelease, so don't tag by hand. Compatible ti pushes
   and tags repack a kept APK. A new Android version, native input or Metro resource first
   needs a full build. Stable versions have no suffix and release from `main` on their own:
-  every push to `main` that changes the app gets a bot commit "Release Wave <version>" (the
-  next patch version) that CI tags and publishes, so don't bump or tag `main`'s version by
-  hand. Only a major bump is a hand edit of `package.json`. Pull `main` after merging. Main
+  every push to `main` that changes the app gets a bot commit "Release Wave <version>" that
+  CI tags and publishes, so don't bump or tag `main`'s version by hand. The bump is minor
+  when a PR the patch notes list since the previous tag has a `feat/` branch, else patch.
+  Only a major bump is a hand edit of `package.json`. Pull `main` after merging. Main
   always builds fully. See `docs/spec.md`, Build and CI.
 - Decision-heavy logic (queue, counted plays, search, sorting, scan reconciliation, LRC,
   sleep timer) goes in `packages/core`, which must keep **zero runtime dependencies** and
