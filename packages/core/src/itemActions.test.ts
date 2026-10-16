@@ -14,6 +14,7 @@ import {
   type ActionSubject,
   type ItemAction,
   type ItemActionEntry,
+  type YtSongActionOptions,
 } from "./index.ts";
 
 const names = (entries: readonly ItemActionEntry[]): string[] =>
@@ -593,5 +594,44 @@ describe("ytSongActions", () => {
       ytSongActions(artists, { inPlaylist: true }).map((entry) => entry.action),
       ["playNext", "addToQueue", "addToPlaylist", "removeFromPlaylist", "goToArtist"],
     );
+  });
+
+  test("a song with a YT Music album offers Go to Album, before Go to Artist, leading to it", () => {
+    const artists = { kind: "open", target: { kind: "yt", name: "Justice" } } as const;
+    assert.deepEqual(ytSongActions(artists, { album: "MPREb_cross", ytMusic: true }), [
+      { action: "playNext" },
+      { action: "addToQueue" },
+      { action: "addToPlaylist" },
+      { action: "goToAlbum", album: "MPREb_cross" },
+      { action: "goToArtist", artists },
+    ]);
+  });
+
+  test("on its album's own page there's no Go to Album; another album's page offers it", () => {
+    const actions = (ytAlbumHere: string) =>
+      ytSongActions(undefined, { album: "MPREb_cross", ytAlbumHere, ytMusic: true }).map(
+        (entry) => entry.action,
+      );
+    assert.deepEqual(actions("MPREb_cross"), ["playNext", "addToQueue", "addToPlaylist"]);
+    assert.deepEqual(actions("MPREb_other"), [
+      "playNext",
+      "addToQueue",
+      "addToPlaylist",
+      "goToAlbum",
+    ]);
+  });
+
+  test("a song without an album, or with YT Music off (a playlist's entry), has no Go to Album", () => {
+    const actions = (options: YtSongActionOptions) =>
+      ytSongActions(undefined, options).map((entry) => entry.action);
+    const queue = ["playNext", "addToQueue", "addToPlaylist"];
+    assert.deepEqual(actions({ album: null, ytMusic: true }), queue);
+    assert.deepEqual(actions({ album: "", ytMusic: true }), queue);
+    assert.deepEqual(actions({ ytMusic: true }), queue);
+    assert.deepEqual(actions({ album: "MPREb_cross", ytMusic: false }), queue);
+    assert.deepEqual(actions({ album: "MPREb_cross", inPlaylist: true }), [
+      ...queue,
+      "removeFromPlaylist",
+    ]);
   });
 });
