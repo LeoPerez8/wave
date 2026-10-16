@@ -355,6 +355,13 @@ export const playlists = sqliteTable(
     createdAt: integer("created_at").notNull(),
     /** When the name or the items last changed. */
     updatedAt: integer("updated_at").notNull(),
+    /**
+     * The image the owner gave the playlist, square, shown in place of its
+     * mosaic (`imageThumbPath` in lists). Files in Wave's own storage; they stay
+     * on this phone, so setting one isn't a change (no stamp, never synced).
+     */
+    imagePath: text("image_path"),
+    imageThumbPath: text("image_thumb_path"),
     /** When the name changed or the playlist was created or deleted (its entries have their own). */
     ...changeStamp(),
   },
