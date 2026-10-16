@@ -27,6 +27,7 @@ node scripts/perf/perf.ts doctor                    # phone settings the runs de
 node scripts/perf/perf.ts run --label baseline      # every scenario, idle variant
 node scripts/perf/perf.ts run --label baseline --variant idle,import
 node scripts/perf/perf.ts run --scenario now-playing,queue --label 304-after
+node scripts/perf/perf.ts run --scenario soak-routes,soak-player --label 318-soak
 node scripts/perf/perf.ts summary perf-results/<file>.jsonl
 node scripts/perf/perf.ts compare <before.jsonl> <after.jsonl>
 node scripts/perf/perf.ts run --dry-run             # the whole pipeline on a simulated phone
@@ -156,10 +157,23 @@ JavaScript saw that key, not when it was pressed.
 | `scroll-home`       | glass: a fling up (`fling-up`) and back down (`fling-down`) on Home                          | -                         |         10 |
 | `scroll-songs`      | glass: the same on Library › Songs, under the mini player                                    | -                         |         10 |
 | `idle-home`         | glass: 5 s of Home untouched (`idle`); any frame is idle rendering                           | -                         |          5 |
+| `soak-routes`       | a cycle: Library, Albums and back, Songs and back, the other tabs, Home, Settings and back   | `route`, `songs.rows`     |         20 |
+| `soak-player`       | a cycle: open Now Playing, Queue, Queue again, Close (`open`, `queue-open`, …, `close`)      | as `now-playing`, `queue` |         30 |
 
 `rescan-return` (#315) isn't part of `all` either: each iteration waits past Wave's 60 s rescan
 interval, so ask for it by name. Its return starts the rescan, a sync and any import's next
 answers; the tab tap measures navigation while they run.
+
+The soak scenarios (#318) aren't part of `all` either: they repeat one cycle at length to show
+whether memory keeps growing. Each reads `dumpsys meminfo` six times spread over its cycles (after
+the warm-up, then evenly to the last cycle; `--iterations` stretches or shortens them), and each
+step records Hermes's heap (`jsHeapUsed`) and the listener and Library query counts at its flush.
+`summary` and `compare` print a growth table from them: a field's first and last value and what
+the second half of the samples added. A field that still rose in the second half by more than its
+noise reads `still growing`: memory more than 1 MB or 2%, object counts (views, binders) more than
+2 or 2%, and listeners and cached queries by any amount. One that rose and stopped reads
+`levelled`. Read a soak's growth with the cycle count: a perf build spends about 8 s a step
+waiting for its flush, so `soak-routes` takes about 25 minutes and `soak-player` about 16.
 
 The glass scenarios (`--scenario glass`) aren't part of `all`. A fling is `input swipe` from 70%
 to 30% of the screen's height (or back) in 120 ms, at the screen's centre, clear of the chrome. A
@@ -221,7 +235,7 @@ timestamps all use Android's CLOCK_MONOTONIC.
 | `phasesMs`     | Touch to the first mark of each phase the step names (`phases` in `scenarios.ts`), e.g. a tab's `tab.commit` and `tab.layout`. Null if none came. |        yes         |
 | `longTasks`    | Long tasks React Native reported in the step, when it reports them.                                                                               |        yes         |
 | `launch`       | `am start -W`: `TotalTime`, `WaitTime`, launch state. A perf build adds React Native's startup timings.                                           |         no         |
-| memory         | `dumpsys meminfo` after each scenario plus `memoryIdleMs` idle: PSS, RSS, Java and native heap, graphics.                                         |         no         |
+| memory         | `dumpsys meminfo` after each scenario plus `memoryIdleMs` idle: PSS, RSS, Java and native heap, graphics; views, activities, binders alive.       |         no         |
 
 `summary` reports each latency as median / 90th percentile, the frames' pooled 50th, 90th and
 99th percentiles and the share that missed their deadline. `Missing` counts steps whose response
@@ -273,8 +287,12 @@ measured. Records, in order:
   `launch` and `appStartup` for a cold launch, `importProgress` while an import runs, and
   `libraryQueries` and `playlistWork` on a perf build (counters since launch, below), and
   `listeners` (subscribers to the playback stores and the sheet at the step's flush: `playback`,
-  `queue`, `queueTracks`, `nowPlaying`).
-- `memory`, one per scenario: `scenario`, `variant` and the `dumpsys meminfo` fields in KB.
+  `queue`, `queueTracks`, `nowPlaying`), and `jsHeapUsed` (Hermes's used heap in bytes at the
+  flush, when Hermes reports it).
+- `memory`, one per scenario: `scenario`, `variant`, the `dumpsys meminfo` fields in KB and its
+  object counts (`views`, `viewRoots`, `activities`, `appContexts`, `localBinders`,
+  `proxyBinders`, `deathRecipients`). A soak scenario writes six, each with the `iteration` (cycles
+  done; 0 is before the first). `compare` lines up each scenario's last one.
 - `trace`, one per scenario with `--perfetto`: the local `.pftrace` path.
 - `error`: a scenario that couldn't go on (target not found, Wave not in front, no import link) and
   why. The run goes on with the next scenario.
@@ -418,7 +436,9 @@ Things only a phone can confirm, to check on the first device run:
 
 - `touchAt` is set on each step. If not, the root view's `onTouchStart` isn't seeing touches, and
   every step waits out its flush timeout.
-- gfxinfo's `framestats` columns and the `dumpsys` shapes match the parsers on One UI.
+- gfxinfo's `framestats` columns and the `dumpsys` shapes match the parsers on One UI, meminfo's
+  Objects section (`views` in the memory records) included.
+- `jsHeapUsed` is set on a perf build's steps: Hermes reports `performance.memory`.
 - A fling (`input swipe`) scrolls the list and its touch reaches `onTouchStart` (`touchAt` set);
   `--glass` shows the asked probe in the run's `Glass:` line.
 - `uiautomator dump` finds each target. Labels: the tab labels, `Settings`, `Back`, `Albums`,
