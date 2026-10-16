@@ -811,9 +811,11 @@ export type {
 export { spotifySearchQuery, spotifyYtMatch } from "./spotifyImport.ts";
 export type { YtSongSearch } from "./spotifyImport.ts";
 export {
+  IMPORT_PROGRESS_SHOWN_EVERY_MS,
   SPOTIFY_SEARCHES_AT_ONCE,
   importAdded,
   importAdditions,
+  importProgressOnly,
   importSearchAnswered,
   importTurn,
   nextImportStep,

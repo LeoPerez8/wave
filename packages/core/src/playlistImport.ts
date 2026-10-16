@@ -813,3 +813,35 @@ export const playlistImportProgress = <S extends YtSong>(
     total,
   };
 };
+
+/**
+ * How often the playlist page's import line and the notification follow an
+ * import's progress: each search answered would otherwise redraw them.
+ */
+export const IMPORT_PROGRESS_SHOWN_EVERY_MS = 1000;
+
+const sameState = (a: ImportState, b: ImportState): boolean =>
+  a.kind === b.kind && (a.kind !== "stopped" || b.kind !== "stopped" || a.reason === b.reason);
+
+/**
+ * Whether the imports [next] differ from those [shown] only in how far they
+ * got (songs found and given, searches asked, refused or paused): the page
+ * and the notification take that at most every
+ * `IMPORT_PROGRESS_SHOWN_EVERY_MS`. Anything else (an import queued,
+ * cancelled, stopped, done or tried again) shows at once.
+ */
+export const importProgressOnly = <S extends YtSong>(
+  shown: PlaylistImports<S>,
+  next: PlaylistImports<S>,
+): boolean =>
+  shown.length === next.length &&
+  shown.every((job, index) => {
+    const other = next[index];
+    return (
+      other !== undefined &&
+      other.playlistId === job.playlistId &&
+      other.name === job.name &&
+      other.songs === job.songs &&
+      sameState(other.state, job.state)
+    );
+  });

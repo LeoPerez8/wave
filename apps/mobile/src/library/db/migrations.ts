@@ -662,6 +662,73 @@ ALTER TABLE \`playlists\` ADD \`image_path\` text;
 ALTER TABLE \`playlists\` ADD \`image_thumb_path\` text;
 `;
 
+// A revision counter per playlist (\`playlist_revisions\`), raised by triggers on
+// every write that can change a playlist's mosaic or totals, from this phone
+// or pulled from the Wave account; row 0 is the Library's tracks, albums and
+// covers. Updates that can't change them (\`pushed\`, stamps) don't raise it.
+const mPlaylistRevisions = `
+CREATE TABLE \`playlist_revisions\` (
+	\`playlist_id\` integer PRIMARY KEY NOT NULL,
+	\`revision\` integer DEFAULT 0 NOT NULL
+);
+--> statement-breakpoint
+CREATE TRIGGER \`playlist_items_revise_insert\` AFTER INSERT ON \`playlist_items\`
+BEGIN
+	INSERT INTO \`playlist_revisions\` (\`playlist_id\`, \`revision\`) VALUES (NEW.\`playlist_id\`, 1)
+		ON CONFLICT (\`playlist_id\`) DO UPDATE SET \`revision\` = \`revision\` + 1;
+END;
+--> statement-breakpoint
+CREATE TRIGGER \`playlist_items_revise_update\`
+AFTER UPDATE OF \`playlist_id\`, \`track_id\`, \`yt_song\`, \`order_key\`, \`sync_id\`, \`deleted\`
+ON \`playlist_items\`
+BEGIN
+	INSERT INTO \`playlist_revisions\` (\`playlist_id\`, \`revision\`) VALUES (NEW.\`playlist_id\`, 1)
+		ON CONFLICT (\`playlist_id\`) DO UPDATE SET \`revision\` = \`revision\` + 1;
+	INSERT INTO \`playlist_revisions\` (\`playlist_id\`, \`revision\`)
+		SELECT OLD.\`playlist_id\`, 1 WHERE OLD.\`playlist_id\` <> NEW.\`playlist_id\`
+		ON CONFLICT (\`playlist_id\`) DO UPDATE SET \`revision\` = \`revision\` + 1;
+END;
+--> statement-breakpoint
+CREATE TRIGGER \`playlist_items_revise_delete\` AFTER DELETE ON \`playlist_items\`
+BEGIN
+	INSERT INTO \`playlist_revisions\` (\`playlist_id\`, \`revision\`) VALUES (OLD.\`playlist_id\`, 1)
+		ON CONFLICT (\`playlist_id\`) DO UPDATE SET \`revision\` = \`revision\` + 1;
+END;
+--> statement-breakpoint
+CREATE TRIGGER \`tracks_revise_playlists\` AFTER UPDATE OF \`duration_ms\`, \`album_id\` ON \`tracks\`
+WHEN OLD.\`duration_ms\` IS NOT NEW.\`duration_ms\` OR OLD.\`album_id\` IS NOT NEW.\`album_id\`
+BEGIN
+	INSERT INTO \`playlist_revisions\` (\`playlist_id\`, \`revision\`) VALUES (0, 1)
+		ON CONFLICT (\`playlist_id\`) DO UPDATE SET \`revision\` = \`revision\` + 1;
+END;
+--> statement-breakpoint
+CREATE TRIGGER \`albums_revise_playlists\` AFTER UPDATE OF \`artwork_hash\` ON \`albums\`
+WHEN OLD.\`artwork_hash\` IS NOT NEW.\`artwork_hash\`
+BEGIN
+	INSERT INTO \`playlist_revisions\` (\`playlist_id\`, \`revision\`) VALUES (0, 1)
+		ON CONFLICT (\`playlist_id\`) DO UPDATE SET \`revision\` = \`revision\` + 1;
+END;
+--> statement-breakpoint
+CREATE TRIGGER \`artwork_revise_playlists_insert\` AFTER INSERT ON \`artwork\`
+BEGIN
+	INSERT INTO \`playlist_revisions\` (\`playlist_id\`, \`revision\`) VALUES (0, 1)
+		ON CONFLICT (\`playlist_id\`) DO UPDATE SET \`revision\` = \`revision\` + 1;
+END;
+--> statement-breakpoint
+CREATE TRIGGER \`artwork_revise_playlists_update\` AFTER UPDATE OF \`path\`, \`thumb_path\` ON \`artwork\`
+WHEN OLD.\`path\` IS NOT NEW.\`path\` OR OLD.\`thumb_path\` IS NOT NEW.\`thumb_path\`
+BEGIN
+	INSERT INTO \`playlist_revisions\` (\`playlist_id\`, \`revision\`) VALUES (0, 1)
+		ON CONFLICT (\`playlist_id\`) DO UPDATE SET \`revision\` = \`revision\` + 1;
+END;
+--> statement-breakpoint
+CREATE TRIGGER \`artwork_revise_playlists_delete\` AFTER DELETE ON \`artwork\`
+BEGIN
+	INSERT INTO \`playlist_revisions\` (\`playlist_id\`, \`revision\`) VALUES (0, 1)
+		ON CONFLICT (\`playlist_id\`) DO UPDATE SET \`revision\` = \`revision\` + 1;
+END;
+`;
+
 export default {
   journal: {
     entries: [
@@ -687,6 +754,7 @@ export default {
       { idx: 19, when: 1_793_448_000_000, tag: "0019_sync_state", breakpoints: true },
       { idx: 20, when: 1_793_534_400_000, tag: "0020_sync_removals", breakpoints: true },
       { idx: 21, when: 1_793_620_800_000, tag: "0021_playlist_images", breakpoints: true },
+      { idx: 22, when: 1_793_707_200_000, tag: "0022_playlist_revisions", breakpoints: true },
     ],
   },
   migrations: {
@@ -712,5 +780,6 @@ export default {
     m0019: mSyncState,
     m0020: mSyncRemovals,
     m0021: mPlaylistImages,
+    m0022: mPlaylistRevisions,
   },
 };

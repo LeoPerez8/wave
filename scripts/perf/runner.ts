@@ -420,6 +420,7 @@ export const runPerf = async (
     const libraryQueries = prefixed("libraryQueries.");
     const search = prefixed("search.");
     const listeners = prefixed("listeners.");
+    const playlistWork = prefixed("playlistWork.");
     const record: StepRecord & Record<string, unknown> = {
       type: "step",
       run,
@@ -444,12 +445,14 @@ export const runPerf = async (
               running: importRunning,
               done: meta["import.done"] ?? null,
               total: meta["import.total"] ?? null,
+              progressShown: meta["import.progressShown"] ?? null,
             },
           }
         : {}),
       // Counters since launch: compare a step's with the one before it for its reads.
       ...(Object.keys(libraryQueries).length > 0 ? { libraryQueries } : {}),
       ...(Object.keys(search).length > 0 ? { search } : {}),
+      ...(Object.keys(playlistWork).length > 0 ? { playlistWork } : {}),
       // Subscribers to the playback stores and the sheet when the step's flush was written.
       ...(Object.keys(listeners).length > 0 ? { listeners } : {}),
     };

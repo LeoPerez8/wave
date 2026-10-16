@@ -266,8 +266,8 @@ measured. Records, in order:
 - `step`, one per measured step: `scenario`, `variant`, `measure`, `iteration`, `index`, the
   metrics above, `touchAt`, `expectMissing`, `framesCovered`, `finalRoute`, `flushComplete`, and
   `launch` and `appStartup` for a cold launch, `importProgress` while an import runs, and
-  `libraryQueries` on a perf build (the shared Library queries' counters since launch, below),
-  and `listeners` (subscribers to the playback stores and the sheet at the step's flush: `playback`,
+  `libraryQueries` and `playlistWork` on a perf build (counters since launch, below), and
+  `listeners` (subscribers to the playback stores and the sheet at the step's flush: `playback`,
   `queue`, `queueTracks`, `nowPlaying`).
 - `memory`, one per scenario: `scenario`, `variant` and the `dumpsys meminfo` fields in KB.
 - `trace`, one per scenario with `--perfetto`: the local `.pftrace` path.
@@ -332,10 +332,19 @@ a source given again unchanged prepares none) and `indexes` put together.
 
 The `tabs` metadata (first flush) names how hidden tabs are kept (`tabs.screens`, #304).
 
+It also reports what playlists cost since launch, as `playlistWork.*`
+(`apps/mobile/src/library/db/playlistWork.ts`, #308): `listReads` (Library › Playlists),
+`notifiedAll` (playlist changes announced with no ids), and `decoded` (stored YT Music songs parsed
+in JavaScript), `summarized` (mosaics and totals worked out again), `pageReads`, `appends` and
+`notified`, each split into `.affected` (the playlists imports fill) and `.unrelated`. The runner
+copies them to each step as `playlistWork`. `import.progressShown` counts the import
+notification's updates; the runner adds it to `importProgress`.
+
 Render counts are in RootLayout, TabsLayout, LibraryLayout, TabBar, MiniPlayer, NowPlayingSheet,
 PlayerView, UpNextList, UpNextRow, Scrubber, HomeScreen, LibraryScreen, SearchScreen,
-SettingsScreen, LargeTitleScreen (Home's and Library's), SongsList, TrackList and ArtistStatsBlock.
-Gesture calls to JavaScript are counted as `js:scrub.*` and `js:upNext.*` (#313).
+SettingsScreen, LargeTitleScreen (Home's and Library's), SongsList, TrackList, ArtistStatsBlock,
+PlaylistsList, PlaylistScreen and PlaylistImportLine. Gesture calls to JavaScript are counted as
+`js:scrub.*` and `js:upNext.*` (#313).
 
 A new scenario goes in `SCENARIOS` (`scripts/perf/scenarios.ts`). Then make the simulated phone in
 `fakeDevice.ts` answer it, so `--dry-run` and the tests cover it.

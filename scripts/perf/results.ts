@@ -67,6 +67,8 @@ export type MeasuredStep = StepRecord & {
     readonly running: boolean;
     readonly done: unknown;
     readonly total: unknown;
+    /** Progress notifications sent since launch (paced, #308). */
+    readonly progressShown?: unknown;
   };
   /**
    * The shared Library queries' counters at the step's flush, since launch
@@ -76,6 +78,13 @@ export type MeasuredStep = StepRecord & {
   readonly libraryQueries?: Readonly<Record<string, unknown>>;
   /** Search's index counters at the step's flush, since launch (Core's `SearchCatalogStats`). */
   readonly search?: Readonly<Record<string, unknown>>;
+  /**
+   * What playlist reads and edits cost since launch (#308,
+   * `apps/mobile/src/library/db/playlistWork.ts`): `listReads`, `notifiedAll`,
+   * and `decoded`, `summarized`, `pageReads`, `appends`, `notified`, each as
+   * `.affected` (the playlists imports fill) and `.unrelated` (the others).
+   */
+  readonly playlistWork?: Readonly<Record<string, unknown>>;
 };
 
 export type MemoryRecord = Meminfo & {

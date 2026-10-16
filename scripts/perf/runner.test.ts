@@ -213,6 +213,26 @@ describe("runPerf on the simulated phone", () => {
     assert.ok(queries.every((counters) => typeof counters?.["paused"] === "number"));
   });
 
+  it("records what the playlists cost with each step while an import fills one", async () => {
+    const { out } = await runPerf(
+      new FakeDevice(),
+      options("playlist-work", { scenarios: ["push-settings"], variants: ["import"] }),
+    );
+    const { steps } = readResults(readFileSync(out, "utf8"));
+    const pushes = (
+      steps as (StepRecord & {
+        playlistWork?: Record<string, unknown>;
+        importProgress?: Record<string, unknown>;
+      })[]
+    ).filter((step) => step.scenario === "push-settings");
+    assert.ok(pushes.length > 0);
+    assert.ok(pushes.every((step) => typeof step.playlistWork?.["decoded.affected"] === "number"));
+    assert.ok(
+      pushes.every((step) => typeof step.playlistWork?.["summarized.unrelated"] === "number"),
+    );
+    assert.ok(pushes.every((step) => typeof step.importProgress?.["progressShown"] === "number"));
+  });
+
   it("records Search's index counters with each step of a perf build", async () => {
     const { out } = await runPerf(
       new FakeDevice(),

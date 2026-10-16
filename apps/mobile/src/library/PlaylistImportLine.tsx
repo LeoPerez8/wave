@@ -5,6 +5,7 @@ import { ScrollView, Text, View } from "react-native";
 import { CELL } from "@/catalog/grid";
 import { TextButton } from "@/components/TextButton";
 import { presentOverlay } from "@/overlay/overlay";
+import { useRenderCount } from "@/perf/perf";
 
 import {
   cancelPlaylistImport,
@@ -41,6 +42,7 @@ export const usePlaylistImportView = (playlistId: number): PlaylistImportView | 
  * songs weren't found, with Show (the list) and Dismiss.
  */
 export function PlaylistImportLine({ playlistId }: { playlistId: number }) {
+  useRenderCount("PlaylistImportLine");
   const view = usePlaylistImportView(playlistId);
   if (view === null) return null;
   const { notFound } = view;

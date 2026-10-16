@@ -5,6 +5,7 @@ import { useSyncExternalStore } from "react";
 import { makeExternalStore } from "@/lib/externalStore";
 import { WaveNative } from "@/native/waveNative";
 
+import { countNotified } from "./db/playlistWork";
 import {
   LibraryStore,
   type LibraryStoreError,
@@ -31,16 +32,18 @@ export const onPlaylistsEdited = (listener: () => void): (() => void) =>
  * changed, when known; queries over other playlists stay as they are.
  * [burst]: one of a stream of additions (an import filling a playlist), which
  * screens take at their own pace (Core's `LibraryChange.burst`); the list
- * isn't read ahead for each.
+ * isn't read ahead for each, and no playlist was deleted.
  */
 export const playlistsChanged = (playlistIds?: readonly number[], burst = false): void => {
+  countNotified(playlistIds);
   playlistsVersion.update((version) => version + 1);
   publishLibraryChange({
     kind: "playlists",
     ...(playlistIds === undefined ? {} : { ids: playlistIds }),
     ...(burst ? { burst } : {}),
   });
-  if (!burst) appRuntime.runPromise(listPlaylistsRemembered).catch(() => {});
+  if (burst) return;
+  appRuntime.runPromise(listPlaylistsRemembered).catch(() => {});
   // A deleted playlist's image goes with it.
   tidyDeletedPlaylistImages();
 };
