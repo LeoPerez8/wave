@@ -758,7 +758,6 @@ export type {
   PlaylistImports,
 } from "./playlistImport.ts";
 export {
-  SPOTIFY_SONG_CAP,
   readSpotifyPlaylist,
   spotifyEmbed,
   spotifyPlaylistPage,
@@ -885,3 +884,6 @@ export type {
   HomeSection,
   HomeSectionId,
 } from "./homeSections.ts";
+
+export { nextSpotifySearch } from "./spotifySearchPacing.ts";
+export type { SpotifySearchPacing } from "./spotifySearchPacing.ts";
