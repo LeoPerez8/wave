@@ -216,6 +216,30 @@ describe("search results", () => {
     );
   });
 
+  test("a skipped entry finds nothing: the top result and the groups' order are as without it", () => {
+    const held = entry("song", "Love", ["Lana Del Rey", "Lust for Life"]);
+    const index = createSearchIndex([
+      entry("artist", "Love Affair"),
+      entry("song", "Lovely", ["Billie Eilish", "Lovely"]),
+      held,
+    ]);
+    const results = index.search("love", { skip: (found) => found === held });
+    assert.equal(results.top?.name, "Love Affair");
+    assert.deepEqual(
+      results.groups.map((group) => [
+        group.kind,
+        group.items.map((item) => item.name),
+        group.total,
+      ]),
+      [
+        ["artist", ["Love Affair"], 1],
+        ["song", ["Lovely"], 1],
+      ],
+    );
+    // Skipping is one search's: the next one finds it again.
+    assert.equal(index.search("love").top, held);
+  });
+
   test("typing, deleting and retyping gives the same results as a fresh search", () => {
     const entries = [
       entry("song", "Love Story", ["Taylor Swift", "Fearless"]),

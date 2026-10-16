@@ -95,4 +95,106 @@ class DownloadTagWriterTest {
     assertNull(read.lyrics)
     assertNull(read.artwork)
   }
+
+  /**
+   * YouTube serves fragmented MP4 (#237): an empty sample table, the audio in
+   * moof/mdat fragments and an index of them at the end. jaudiotagger can't
+   * grow its moov ("incorrect offsets written"), which failed every YouTube
+   * download at Saving to the Library.
+   */
+  private fun youtubeDownload(): File =
+    Fixtures.libraryOf("fragmented-aac.m4a" to ".wave-237.part.m4a").resolve(".wave-237.part.m4a")
+
+  @Test
+  fun tagsTheFragmentedM4aYoutubeServesAndKeepsItsFragmentsPlayable() {
+    val file = youtubeDownload()
+    val audioBefore = AudioPayload.of(file)
+    val fragmentsBefore = Mp4Boxes.of(file).count { it.type == "moof" }
+
+    DownloadTagWriter().write(file, tags, Fixtures.cover())
+
+    val read = reader.read(file)
+    assertEquals(tags.title, read.title)
+    assertEquals(tags.artist, read.artist)
+    assertEquals("Random Access Memories", read.album)
+    assertEquals("Daft Punk", read.albumArtist)
+    assertEquals("2013", read.year)
+    assertEquals("8", read.trackNumber)
+    assertEquals("Dance", read.genre)
+    assertEquals(tags.lyrics, read.lyrics)
+    assertArrayEquals(Fixtures.cover(), read.artwork)
+    assertArrayEquals(audioBefore, AudioPayload.of(file))
+    val boxes = Mp4Boxes.of(file)
+    assertEquals(fragmentsBefore, boxes.count { it.type == "moof" })
+    // The fragment index still points at fragments once the moov has grown.
+    val moofs = boxes.filter { it.type == "moof" }.map { it.offset }.toSet()
+    val indexed = Mp4Boxes.fragmentIndex(file)
+    assertEquals(fragmentsBefore, indexed.size)
+    assertEquals(moofs, indexed.toSet())
+  }
+
+  @Test
+  fun retagsAFragmentedM4aItAlreadyTagged() {
+    val file = youtubeDownload()
+    val audioBefore = AudioPayload.of(file)
+    DownloadTagWriter().write(file, tags, Fixtures.cover())
+
+    DownloadTagWriter().write(file, tags.copy(title = "Get Lucky", lyrics = null), artwork = null)
+
+    val read = reader.read(file)
+    assertEquals("Get Lucky", read.title)
+    assertEquals("Random Access Memories", read.album)
+    assertNull(read.lyrics)
+    assertNull(read.artwork)
+    assertArrayEquals(audioBefore, AudioPayload.of(file))
+    assertEquals(Mp4Boxes.of(file).filter { it.type == "moof" }.map { it.offset }.toSet(), Mp4Boxes.fragmentIndex(file).toSet())
+  }
+}
+
+/** Top-level MP4 boxes and the `mfra` fragment index, parsed independently of the writer. */
+private object Mp4Boxes {
+  data class Box(val type: String, val offset: Long, val size: Long)
+
+  fun of(file: File): List<Box> {
+    val bytes = file.readBytes()
+    val boxes = mutableListOf<Box>()
+    var position = 0
+    while (position + 8 <= bytes.size) {
+      val size = java.nio.ByteBuffer.wrap(bytes, position, 4).int.toLong() and 0xffffffffL
+      val type = String(bytes, position + 4, 4, Charsets.ISO_8859_1)
+      boxes += Box(type, position.toLong(), size)
+      check(size >= 8) { "Box $type at $position has size $size" }
+      position += size.toInt()
+    }
+    check(position == bytes.size) { "Boxes end at $position, the file at ${bytes.size}" }
+    return boxes
+  }
+
+  /** The moof offsets every `tfra` in the file's `mfra` lists. */
+  fun fragmentIndex(file: File): List<Long> {
+    val bytes = file.readBytes()
+    val mfra = of(file).single { it.type == "mfra" }
+    val buffer = java.nio.ByteBuffer.wrap(bytes)
+    val offsets = mutableListOf<Long>()
+    var position = mfra.offset.toInt() + 8
+    while (position < mfra.offset + mfra.size) {
+      val size = buffer.getInt(position)
+      val type = String(bytes, position + 4, 4, Charsets.ISO_8859_1)
+      if (type == "tfra") {
+        buffer.position(position + 8)
+        val version = buffer.get().toInt()
+        buffer.position(buffer.position() + 3 + 4)
+        val lengths = buffer.int
+        val entries = buffer.int
+        repeat(entries) {
+          val wide = version == 1
+          if (wide) buffer.long else buffer.int
+          offsets += if (wide) buffer.long else buffer.int.toLong() and 0xffffffffL
+          buffer.position(buffer.position() + ((lengths shr 4) and 3) + 1 + ((lengths shr 2) and 3) + 1 + (lengths and 3) + 1)
+        }
+      }
+      position += size
+    }
+    return offsets
+  }
 }

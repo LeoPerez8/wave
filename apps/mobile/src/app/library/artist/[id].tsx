@@ -1,6 +1,7 @@
 import { LegendList } from "@legendapp/list/react-native";
 import {
   artistPageItems,
+  libraryFinder,
   ytTrackId,
   type ArtistPageItem,
   type MixedSong,
@@ -13,7 +14,7 @@ import { Text, useWindowDimensions, View } from "react-native";
 
 import { ArtistImage } from "@/catalog/ArtistImage";
 import { AlbumTile } from "@/catalog/AlbumTile";
-import { CatalogLine } from "@/catalog/CatalogLine";
+import { SECTION_HEAD, SectionHead } from "@/catalog/CatalogLine";
 import { COVER_ROW_TILE, CoverRow } from "@/catalog/CoverRow";
 import { CELL, grid } from "@/catalog/grid";
 import { TrackRow } from "@/catalog/TrackRow";
@@ -21,7 +22,7 @@ import { useChromeInset } from "@/chrome/chrome";
 import { playPage } from "@/playback/actions";
 import { useCurrentTrackId } from "@/playback/hooks";
 import { openAlbumActions, openTrackActions } from "@/playback/ActionsMenu";
-import { mixedTarget, type MixedItem } from "@/playback/actionTargets";
+import { mixedTarget, trackItemKey, type MixedItem } from "@/playback/actionTargets";
 import { albumRowHeight, toAlbumSummary } from "@/library/AlbumGrid";
 import { DetailFrame } from "@/library/DetailFrame";
 import { useFavoriteIds } from "@/library/favorites";
@@ -37,9 +38,12 @@ import { useListSelection, type ListSelection } from "@/selection/useListSelecti
 import { ArtistStatsBlock } from "@/stats/ArtistStatsBlock";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { useYtArtistSection } from "@/ytmusic/artistSection";
+import { useLoadedLibraryFinder, type FindInLibrary } from "@/ytmusic/libraryFinder";
+import { useHeldSongs, useSongsInPlace, type PlacedSongs } from "@/ytmusic/songsInPlace";
 import { YT_ARTIST_NOTE, YtReleaseTile } from "@/ytmusic/YtArtistSection";
 import { YtLookupFooter } from "@/ytmusic/YtLookupFooter";
 import { YtSongRow } from "@/ytmusic/YtSongRow";
+import { openYtSongActions } from "@/ytmusic/YtSongActions";
 
 /** A cover on one of the page's album shelves: a Library album, or a release only YouTube Music has. */
 type AlbumCell =
@@ -52,8 +56,6 @@ type PageSong =
   | { readonly kind: "yt"; readonly song: NativeYtSong };
 
 type Item = ArtistPageItem<AlbumCell, PageSong>;
-
-const SECTION_HEAD = CELL * 6;
 
 /** Height of an album shelf's row, the gap under it included. */
 const SHELF_ROW = albumRowHeight(COVER_ROW_TILE);
@@ -72,7 +74,11 @@ const libraryCell = (album: AlbumRow): AlbumCell => ({ kind: "library", album })
 const cellKey = (cell: AlbumCell): string =>
   cell.kind === "library" ? `album-${cell.album.id}` : `yt-${cell.album.browseId}`;
 
-const artistItems = (detail: ArtistDetail, songs: readonly SongRow[], yt: YtAdditions): Item[] =>
+/** A song YouTube Music added: streamed, or the Library's file once its download finished. */
+const placedSong = (row: PlacedSongs["songs"][number]): PageSong =>
+  row.source === "library" ? { kind: "library", song: row.track } : { kind: "yt", song: row.song };
+
+const artistItems = (detail: ArtistDetail, songs: readonly PageSong[], yt: YtAdditions): Item[] =>
   artistPageItems(
     [
       // YouTube Music's releases the Library lacks follow the Library's own, on one shelf.
@@ -89,10 +95,7 @@ const artistItems = (detail: ArtistDetail, songs: readonly SongRow[], yt: YtAddi
       },
       { label: "Appears on", covers: detail.appearsOn.map(libraryCell) },
     ],
-    [
-      ...songs.map((song): PageSong => ({ kind: "library", song })),
-      ...yt.songs.map((song): PageSong => ({ kind: "yt", song })),
-    ],
+    songs,
   );
 
 const itemKey = (item: Item): string => {
@@ -110,19 +113,20 @@ const itemKey = (item: Item): string => {
 
 const albumItem = (album: AlbumRow): MixedItem => ({ kind: "album", item: album });
 const trackItem = (song: SongRow): MixedItem => ({ kind: "track", item: { song } });
+const ytTrackItem = (ytSong: NativeYtSong): MixedItem => ({ kind: "track", item: { ytSong } });
 
 /**
  * What can be checked on the page, in page order: the albums (their shelf,
  * then Appears on), then the songs. Albums and songs check together.
  */
-const selectableItems = (detail: ArtistDetail, songs: readonly SongRow[]): MixedItem[] => [
+const selectableItems = (detail: ArtistDetail, songs: readonly PageSong[]): MixedItem[] => [
   ...detail.albums.map(albumItem),
   ...detail.appearsOn.map(albumItem),
-  ...songs.map(trackItem),
+  ...songs.map((song) => (song.kind === "library" ? trackItem(song.song) : ytTrackItem(song.song))),
 ];
 
 const selectableKey = (mixed: MixedItem): string =>
-  mixed.kind === "album" ? `album-${mixed.item.id}` : `track-${mixed.item.song.id}`;
+  mixed.kind === "album" ? `album-${mixed.item.id}` : `track-${trackItemKey(mixed.item)}`;
 
 /** The page's selection as the album tiles see it. */
 const albumSelectionOf = (page: ListSelection<MixedItem>): ListSelection<AlbumRow> => ({
@@ -179,8 +183,6 @@ function AlbumShelfRow({
   );
 }
 
-const ignore = (): void => undefined;
-
 /** The artist page's head: their image as a large circle, then their name. */
 function ArtistHead({ artist }: { artist: ArtistRow }) {
   const { width } = useWindowDimensions();
@@ -232,6 +234,8 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
     () => [...detail.albums, ...detail.appearsOn],
     [detail.albums, detail.appearsOn],
   );
+  // The artist's songs YouTube Music added that the page has shown keep their rows this visit.
+  const holding = useHeldSongs();
   // Asked on Show on YouTube Music, or on its own when opened integrated (from a streamed
   // song's artist); nothing shows until the page is read.
   const yt = useYtArtistSection(
@@ -239,6 +243,7 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
     detail.artist.id,
     libraryAlbums,
     openedIntegrated,
+    holding.held,
   );
   const ytView = loaded ? yt.view : null;
   const ytShelves = loaded ? yt.shelves : null;
@@ -252,22 +257,46 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
         .map((release) => release.album) ?? [];
     return { albums: missing("albums"), singles: missing("singles"), songs: ytView.songs };
   }, [ytView, ytShelves]);
+  // A finished download keeps its row, now the Library's file, until the page is opened again,
+  // and the Library's songs above leave that file out. The page's own songs are looked in
+  // first, so whichever of them and the shared finder follows the download first, it shows once.
+  const sharedFind = useLoadedLibraryFinder();
+  const find = useMemo((): FindInLibrary | null => {
+    if (sharedFind === null) return null;
+    const own = libraryFinder(songs);
+    return (song) => own(song) ?? sharedFind(song);
+  }, [songs, sharedFind]);
+  const placed = useSongsInPlace(holding, additions.songs, find);
+  const librarySongs = useMemo(
+    () => (placed.tracks.size === 0 ? songs : songs.filter((song) => !placed.tracks.has(song.id))),
+    [songs, placed.tracks],
+  );
   // The page's songs in page order: the Library's, then every song of the artist YouTube Music
   // adds, in its order.
   const mixed = useMemo(
     (): MixedSong<YtSong, SongRow>[] => [
-      ...songs.map((track) => ({ source: "library" as const, track })),
-      ...additions.songs.map((song) => ({ source: "stream" as const, song })),
+      ...librarySongs.map((track) => ({ source: "library" as const, track })),
+      ...placed.songs,
     ],
-    [songs, additions.songs],
+    [librarySongs, placed.songs],
+  );
+  const pageSongs = useMemo(
+    (): PageSong[] => [
+      ...librarySongs.map((song): PageSong => ({ kind: "library", song })),
+      ...placed.songs.map(placedSong),
+    ],
+    [librarySongs, placed.songs],
   );
   // Play, Shuffle and rows play this list by one rule (`playPage`): with YouTube Music's songs
   // on the page (an integrated view) the mixed list, the Library's files and the artist's songs
   // streamed, and the Library's rows are marked downloaded; otherwise the Library's songs alone.
   const downloaded = additions.songs.length > 0;
-  const items = useMemo(() => artistItems(detail, songs, additions), [detail, songs, additions]);
+  const items = useMemo(
+    () => artistItems(detail, pageSongs, additions),
+    [detail, pageSongs, additions],
+  );
   // Albums and songs select together; the bar acts on them in page order.
-  const selectable = useMemo(() => selectableItems(detail, songs), [detail, songs]);
+  const selectable = useMemo(() => selectableItems(detail, pageSongs), [detail, pageSongs]);
   const page = useListSelection({ items: selectable, keyOf: selectableKey, target: mixedTarget });
   const albumSelection = useMemo(() => albumSelectionOf(page), [page]);
   const { selection } = page;
@@ -284,11 +313,7 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
     ({ item }: { item: Item }) => {
       switch (item.type) {
         case "section":
-          return (
-            <View className="justify-end" style={{ height: SECTION_HEAD, paddingBottom: CELL }}>
-              <CatalogLine>{item.label}</CatalogLine>
-            </View>
-          );
+          return <SectionHead label={item.label} />;
         case "shelf":
           // Keyed by shelf, so a recycled row doesn't keep another shelf's scroll position.
           return (
@@ -306,8 +331,12 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
               <YtSongRow
                 song={song}
                 playing={ytTrackId(song.videoId) === currentId}
-                onPress={page.selecting ? ignore : () => void playPage(mixed, item.index, context)}
-                onLongPress={page.selecting ? ignore : undefined}
+                {...selectableRow(
+                  ytTrackItem(song),
+                  page,
+                  () => void playPage(mixed, item.index, context),
+                  (options) => openYtSongActions(song, options),
+                )}
               />
             );
           }

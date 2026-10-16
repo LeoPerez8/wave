@@ -57,6 +57,7 @@ class SoulseekClient(
   @Volatile private var on = switch.load() ?: (credentials != null)
   private val token = AtomicInteger(java.security.SecureRandom().nextInt(Int.MAX_VALUE / 2 - 1) + 1)
   private val peers = ConcurrentHashMap<String, Socket>()
+  private val peerLocks = ConcurrentHashMap<String, Any>()
   /**
    * Peer connections run on bounded threads. A popular search brings thousands of connection
    * requests in seconds; they get their own slots, so they can never take the ones a download
@@ -295,7 +296,13 @@ class SoulseekClient(
     }
   }
 
-  private fun peer(user: String): Socket {
+  /**
+   * Several songs download at once, so two can want the same peer together: one connects while the
+   * other waits for it and shares its connection (each address lookup would void the one before).
+   */
+  private fun peer(user: String): Socket = synchronized(peerLocks.computeIfAbsent(user) { Any() }) { connectPeer(user) }
+
+  private fun connectPeer(user: String): Socket {
     peers[user]?.takeUnless { it.isClosed }?.let { it.soTimeout = 180_000; return it }
     val future = CompletableFuture<InetSocketAddress>()
     addressRequests.put(user, future)?.completeExceptionally(SoulseekException(SoulseekFailure.PEER))

@@ -10,7 +10,7 @@ import { cachedTrackLyrics, readTrackLyrics } from "@/playback/trackLyrics";
  */
 export const useLyrics = (path: string | null): Lyrics | null => {
   const [read, setRead] = useState<{ path: string; lyrics: Lyrics } | null>(null);
-  // Lyrics Wave wrote into this file (Find Lyrics and Genre) are read again at once.
+  // Lyrics Wave wrote into this file (Fix Song) are read again at once.
   const edits = useSyncExternalStore(lyricsEdits.subscribe, () => {
     const edit = lyricsEdits.get();
     return edit.path === path ? edit.count : 0;

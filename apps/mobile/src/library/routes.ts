@@ -27,8 +27,8 @@ interface DetailRows {
 let opening: { readonly screen: DetailScreen; readonly row: { readonly id: number } } | undefined;
 
 /**
- * Opens a detail screen (ids are DB integer ids): inside the shortcut tab when
- * opened from it, on the Library stack otherwise (Core's `detailPath`). Given
+ * Opens a detail screen (ids are DB integer ids): inside the section tab it's
+ * opened from, on the Library stack otherwise (Core's `detailPath`). Given
  * the row the tapped list shows ([known]), the screen draws its header from it
  * on its first frame instead of waiting for its whole query (`useKnownRow`).
  */

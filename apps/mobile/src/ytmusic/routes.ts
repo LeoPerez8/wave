@@ -1,7 +1,7 @@
 import { router, type Href } from "expo-router";
 import { useState } from "react";
 
-/** What a Discover cover knew about the album or playlist it opens, for that screen's first frame. */
+/** What the opener knew about the album or playlist it opens, for that screen's first frame. */
 export interface YtListHead {
   readonly title: string;
   /** Who made it: the artists, or the playlist's maker. */
@@ -23,11 +23,23 @@ const open = (screen: YtListScreen, id: string, head: YtListHead): void => {
 export const openYtAlbum = (browseId: string, head: YtListHead): void =>
   open("yt-album", browseId, head);
 
-/** Opens a YT Music playlist's songs, on the Library stack. */
-export const openYtPlaylist = (playlistId: string, head: YtListHead): void =>
-  open("yt-playlist", playlistId, head);
+/**
+ * The browse id of the YT Music album page at [pathname], or null when it
+ * isn't one, so a YT Music song's Go to Album leaves it out (Core's
+ * `ytSongActions`).
+ */
+export const ytAlbumPageHere = (pathname: string): string | null => {
+  const prefix = "/library/yt-album/";
+  if (!pathname.startsWith(prefix)) return null;
+  const segment = pathname.slice(prefix.length);
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+};
 
-/** What the tapped cover knew about [id], read once as its screen mounts. */
+/** What the opener knew about [id], read once as its screen mounts. */
 export const useYtListHead = (screen: YtListScreen, id: string): YtListHead | undefined => {
   const [head] = useState(() =>
     opening?.screen === screen && opening.id === id ? opening.head : undefined,
@@ -72,5 +84,6 @@ export const ytArtistPageHere = (
   return name === undefined || name === "" ? null : name;
 };
 
-/** Discover, on the Library stack. */
-export const openDiscover = (): void => router.push("/library/discover" as Href);
+/** One of Home's Discover mixes ([id]: Core's `DiscoverMix` id), on the Library stack. */
+export const openDiscoverMix = (id: string): void =>
+  router.push(`/library/discover-mix/${encodeURIComponent(id)}` as Href);

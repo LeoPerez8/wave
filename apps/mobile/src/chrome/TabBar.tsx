@@ -1,27 +1,22 @@
-import { IconHome, IconSearch, IconStack2 } from "@tabler/icons-react-native";
 import type { TabBarTab } from "@wave/core";
 import { useTabTrigger } from "expo-router/ui";
-import type { ComponentType } from "react";
 import { Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { grid } from "@/catalog/grid";
-import { findSection } from "@/catalog/sections";
 import { Glass } from "@/glass/Glass";
 import { Press } from "@/motion/Press";
 import { requestSearchFocus } from "@/search/focusRequest";
-import { useShortcutTab } from "@/settings/shortcutTab";
+import { useTabBar } from "@/settings/tabBar";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { BACKDROP, chrome } from "./chrome";
 import { OnFloatingChrome } from "./onFloatingChrome";
-
-type IconProps = { size?: number; color?: string; strokeWidth?: number };
+import { openTabBarEditor } from "./TabBarEditor";
+import { tabLook } from "./tabs";
 
 type TabProps = {
   name: TabBarTab;
-  label: string;
-  icon: ComponentType<IconProps>;
   /** Show the label under the icon (the Search pill is icon-only). */
   showLabel?: boolean;
   /** Runs before switching to this tab. */
@@ -30,24 +25,29 @@ type TabProps = {
   onTap?: () => void;
 };
 
-/** One tab inside a pill: teal when it's the current tab, graphite otherwise. */
-function Tab({ name, label, icon: Icon, showLabel = true, onSwitch, onTap }: TabProps) {
+/**
+ * One tab inside a pill: teal when it's the current tab, graphite otherwise.
+ * A long press opens the tab bar's editor.
+ */
+function Tab({ name, showLabel = true, onSwitch, onTap }: TabProps) {
   const { triggerProps } = useTabTrigger({ name });
   const accent = useThemeColor("accent");
   const secondary = useThemeColor("secondary");
+  const { label, icon: Icon } = tabLook(name);
   const focused = triggerProps.isFocused;
   const color = focused ? accent : secondary;
   return (
     <Press
       accessibilityRole="tab"
       accessibilityLabel={label}
+      accessibilityHint="Long press to edit the tab bar"
       accessibilityState={{ selected: focused }}
       onPress={(event) => {
         if (!focused) onSwitch(name);
         onTap?.();
         triggerProps.onPress?.(event);
       }}
-      onLongPress={triggerProps.onLongPress}
+      onLongPress={openTabBarEditor}
       haptic="selection"
       depth={0.1}
       className="flex-1 items-center justify-center"
@@ -55,7 +55,7 @@ function Tab({ name, label, icon: Icon, showLabel = true, onSwitch, onTap }: Tab
     >
       <Icon size={24} color={color} strokeWidth={1.5} />
       {showLabel && (
-        <Text className="font-sans text-caption font-semibold" style={{ color }}>
+        <Text numberOfLines={1} className="font-sans text-caption font-semibold" style={{ color }}>
           {label}
         </Text>
       )}
@@ -66,14 +66,14 @@ function Tab({ name, label, icon: Icon, showLabel = true, onSwitch, onTap }: Tab
 const RADIUS = chrome.tabBar / 2;
 
 /**
- * The floating glass tab bar: Home, Library and the shortcut tab chosen in
- * Settings (if any) share one pill, and Search sits beside it in a pill of its
- * own. Tapping Search brings the keyboard up.
+ * The floating glass tab bar the owner arranges: Home and the tabs after it
+ * share one pill, and Search, when it's on, sits beside it in a pill of its
+ * own. Tapping Search brings the keyboard up; a long press on any tab opens
+ * the bar's editor.
  */
 export function TabBar({ onTabTap }: { onTabTap: (to: TabBarTab) => void }) {
   const insets = useSafeAreaInsets();
-  const slug = useShortcutTab();
-  const shortcut = slug === null ? undefined : findSection(slug);
+  const bar = useTabBar();
   return (
     <OnFloatingChrome value>
       <View
@@ -89,23 +89,16 @@ export function TabBar({ onTabTap }: { onTabTap: (to: TabBarTab) => void }) {
       >
         <View className="flex-1 flex-row">
           <Glass backdropId={BACKDROP.tabs} cornerRadius={RADIUS} />
-          <Tab name="index" label="Home" icon={IconHome} onSwitch={onTabTap} />
-          <Tab name="library" label="Library" icon={IconStack2} onSwitch={onTabTap} />
-          {shortcut !== undefined && (
-            <Tab name="shortcut" label={shortcut.label} icon={shortcut.icon} onSwitch={onTabTap} />
+          {bar.map((tab) =>
+            tab === "search" ? null : <Tab key={tab} name={tab} onSwitch={onTabTap} />,
           )}
         </View>
-        <View className="flex-row" style={{ width: chrome.tabBar }}>
-          <Glass backdropId={BACKDROP.tabs} cornerRadius={RADIUS} />
-          <Tab
-            name="search"
-            label="Search"
-            icon={IconSearch}
-            showLabel={false}
-            onSwitch={onTabTap}
-            onTap={requestSearchFocus}
-          />
-        </View>
+        {bar.includes("search") && (
+          <View className="flex-row" style={{ width: chrome.tabBar }}>
+            <Glass backdropId={BACKDROP.tabs} cornerRadius={RADIUS} />
+            <Tab name="search" showLabel={false} onSwitch={onTabTap} onTap={requestSearchFocus} />
+          </View>
+        )}
       </View>
     </OnFloatingChrome>
   );

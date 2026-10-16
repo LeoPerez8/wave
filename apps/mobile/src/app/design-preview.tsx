@@ -23,6 +23,7 @@ import { PlaylistsButtons, PlaylistsHeader } from "@/library/PlaylistsList";
 import { SortButton } from "@/library/SongSortButton";
 import { ListIntroLayout, songCount } from "@/library/TrackList";
 import { Press } from "@/motion/Press";
+import { SearchFieldStates } from "@/preview/SearchFieldStates";
 import {
   type Control,
   openAlbumCard,
@@ -51,10 +52,11 @@ const SHELVES: readonly { readonly shelf: Shelf; readonly label: string }[] = [
   { shelf: "albums", label: "Albums" },
   { shelf: "songs", label: "Songs" },
   { shelf: "playlists", label: "Playlists" },
+  { shelf: "search", label: "Search" },
 ];
 
 /**
- * The Library's components on synthetic data. Developer-only; see Settings.
+ * The Library's components, and Search's field, on synthetic data. Developer-only; see Settings › Developer.
  * `wave://design-preview?state=<name>` opens it at one of `PREVIEW_STATES`.
  */
 export default function DesignPreviewScreen() {
@@ -85,7 +87,7 @@ function DesignPreview({ opening }: { opening: PreviewState | undefined }) {
         open={() => {
           if (opened.current) return;
           opened.current = true;
-          opening.open();
+          opening.open?.();
         }}
       >
         {node}
@@ -149,7 +151,9 @@ function DesignPreview({ opening }: { opening: PreviewState | undefined }) {
         </View>
       </View>
 
-      {view === "playlists" ? (
+      {view === "search" ? (
+        <SearchFieldStates />
+      ) : view === "playlists" ? (
         // Library › Playlists: its count, Import Playlists and New Playlist, then the playlists.
         <ScrollView
           contentContainerStyle={{

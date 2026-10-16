@@ -13,6 +13,7 @@ import {
   type QueueCommand,
   type QueueContext,
   type RepeatMode,
+  type ShuffleKind,
   type SleepTimerChoice,
   type YtSong,
   ytTrackId,
@@ -21,6 +22,7 @@ import * as Effect from "effect/Effect";
 
 import { songHasFile, type PlayableSongRow, type SongRow } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
+import { setShuffleKind } from "@/settings/shuffleKind";
 import { ytMusicEnabled } from "@/settings/ytMusic";
 import { downloadMissingSongs } from "@/ytmusic/YtDownloads";
 import type { YtMusic } from "@/ytmusic/YtMusic";
@@ -221,8 +223,8 @@ const playListed = async (
 };
 
 /**
- * Plays a list that mixes the Library's songs and YT Music's (Discover,
- * Search, an artist's or album's page) from `startIndex` (or shuffled),
+ * Plays a list that mixes the Library's songs and YT Music's (a Discover
+ * mix, Search, an artist's or album's page) from `startIndex` (or shuffled),
  * queueing the rest: the Library's files, the others streamed. Missing songs
  * are left out, and a tapped one downloads instead.
  */
@@ -283,7 +285,7 @@ export const addYtToQueue = (songs: readonly YtSong[]): Promise<void> =>
   dispatchWithYt({ type: "addToQueue", trackIds: ytTrackIds(songs) }, songs, undefined);
 
 /**
- * Plays Discover's [songs] next, or adds them to the end of the queue: the
+ * Plays a mixed list's [songs] next, or adds them to the end of the queue: the
  * Library's file for the songs it has, the others streamed. Missing songs
  * are left out.
  */
@@ -330,6 +332,15 @@ export const addToQueue = (songs: readonly SongRow[]): Promise<void> =>
 export const setShuffle = (on: boolean): Promise<void> => dispatch({ type: "setShuffle", on });
 
 export const toggleShuffle = (): Promise<void> => setShuffle(!queueState.get().shuffle);
+
+/**
+ * A kind of shuffle picked on the shuffle card: saved for every shuffle from
+ * now on, and shuffle turns on with Up Next shuffled that way.
+ */
+export const chooseShuffleKind = (kind: ShuffleKind): Promise<void> => {
+  setShuffleKind(kind);
+  return dispatch({ type: "reshuffle" });
+};
 
 export const setRepeat = (mode: RepeatMode): Promise<void> => dispatch({ type: "setRepeat", mode });
 

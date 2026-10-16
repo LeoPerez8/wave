@@ -10,9 +10,9 @@ import {
 describe("libraryLookupProgress", () => {
   test("says how far the run is, N of M, for Settings and the notification", () => {
     assert.deepEqual(libraryLookupProgress(3, 120), {
-      title: "Finding lyrics and genre…",
+      title: "Fixing songs…",
       detail: "3 of 120",
-      line: "Finding lyrics and genre… 3 of 120",
+      line: "Fixing songs… 3 of 120",
     });
   });
 
@@ -22,21 +22,29 @@ describe("libraryLookupProgress", () => {
 
   test("has no count before the songs are known", () => {
     assert.deepEqual(libraryLookupProgress(0, 0), {
-      title: "Finding lyrics and genre…",
+      title: "Fixing songs…",
       detail: null,
-      line: "Finding lyrics and genre…",
+      line: "Fixing songs…",
     });
   });
 });
 
 describe("the summary kept until it's seen", () => {
   const summary = {
-    title: "Lyrics and genre found",
-    message: "12 updated · 3 not found · 1 failed",
+    title: "Songs fixed",
+    message: "12 fixed · 3 not found · 1 failed",
+    toast: "Fixed 12 songs · 3 not found · 1 failed",
   };
 
   test("reads back what was written", () => {
     assert.deepEqual(readLibraryLookupSummary(writeLibraryLookupSummary(summary)), summary);
+  });
+
+  test("toasts the title of a summary kept before summaries had a toast", () => {
+    assert.deepEqual(
+      readLibraryLookupSummary('{"title":"Songs fixed","message":"12 fixed · 3 not found"}'),
+      { title: "Songs fixed", message: "12 fixed · 3 not found", toast: "Songs fixed" },
+    );
   });
 
   test("is none when nothing is kept", () => {
@@ -46,7 +54,7 @@ describe("the summary kept until it's seen", () => {
   test("is none when what is kept isn't a summary", () => {
     assert.equal(readLibraryLookupSummary("not json"), null);
     assert.equal(readLibraryLookupSummary("null"), null);
-    assert.equal(readLibraryLookupSummary('{"title":"Lyrics and genre found"}'), null);
+    assert.equal(readLibraryLookupSummary('{"title":"Songs fixed"}'), null);
     assert.equal(readLibraryLookupSummary('{"title":1,"message":"x"}'), null);
   });
 });

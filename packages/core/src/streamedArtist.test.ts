@@ -83,7 +83,7 @@ describe("streamedArtistLink", () => {
       kind: "open",
       target: { kind: "yt", name: "Justice" },
     });
-    assert.deepEqual(streamedArtistLink(["Beatles"], context({ here: "/shortcut/artist/2" })), {
+    assert.deepEqual(streamedArtistLink(["Beatles"], context({ here: "/playlists/artist/2" })), {
       kind: "open",
       target: { kind: "library", artist: LIBRARY[0] },
     });

@@ -1,5 +1,6 @@
 import {
   EMPTY_QUEUE,
+  REAL_SHUFFLE,
   applyPlayerSync,
   extrapolatePosition,
   keptPlayingEntry,
@@ -7,12 +8,16 @@ import {
   planPlayerSync,
   queueSourceAfter,
   reduceQueue,
+  shuffledTrackIds,
+  shufflesQueue,
+  statsWindow,
   type PlayerList,
   type PlaySource,
   type QueueCommand,
   type QueueEntry,
   type QueueState,
   type RepeatMode,
+  type Shuffle,
   type SyncStep,
 } from "@wave/core";
 import * as Context from "effect/Context";
@@ -21,7 +26,9 @@ import * as Layer from "effect/Layer";
 import * as Semaphore from "effect/Semaphore";
 
 import { makeExternalStore } from "@/lib/externalStore";
+import { LibraryStore } from "@/library/LibraryStore";
 import type { NativeSyncStep, PlayerItem } from "@/native/wavePlayer";
+import { shuffleKind } from "@/settings/shuffleKind";
 
 import { Player, PlayerError, playbackState } from "./Player";
 import { learnQueueTracks, queueTracks, type QueueTrack } from "./queueTracks";
@@ -151,6 +158,7 @@ export const layer = Layer.effect(
   Queue,
   Effect.gen(function* () {
     const player = yield* Player;
+    const store = yield* LibraryStore;
     // Every queue change, from the UI or the player, runs one at a time in this lane.
     const lane = yield* Semaphore.make(1);
     // What the native player holds, as far as JS knows. Only the lane edits the
@@ -219,12 +227,34 @@ export const layer = Layer.effect(
         appliedRepeat = state.repeat;
       });
 
+    /**
+     * The kind of shuffle [command] uses on [state] (Core's `shufflesQueue`):
+     * the chosen one, with the all-time counted plays of the songs it orders
+     * (`shuffledTrackIds`) for Smart Shuffle, read only when the command
+     * shuffles. Plays that can't be read count as none.
+     */
+    const shuffleFor = (state: QueueState, command: QueueCommand) =>
+      Effect.gen(function* () {
+        if (shuffleKind() === "real" || !shufflesQueue(state, command)) return REAL_SHUFFLE;
+        const totals = yield* store
+          .trackPlayTotals(statsWindow("all", Date.now()), shuffledTrackIds(state, command))
+          .pipe(Effect.orElseSucceed(() => []));
+        const plays = new Map(totals.map((total) => [String(total.id), total.countedPlays]));
+        return { kind: "smart", plays } satisfies Shuffle;
+      });
+
+    /** [command] applied to [state], shuffling the way the owner chose. */
+    const reduce = (state: QueueState, command: QueueCommand) =>
+      Effect.map(shuffleFor(state, command), (shuffle) =>
+        reduceQueue(state, command, Math.random, shuffle),
+      );
+
     const run = (command: QueueCommand, added: readonly QueueTrack[]) =>
       Effect.gen(function* () {
         learnTracks(command, added);
         if (command.type === "playerMoved") native = { ...native, currentKey: command.key };
         const before = queueState.get();
-        const { state, playback } = reduceQueue(before, command);
+        const { state, playback } = yield* reduce(before, command);
         if (state === before && playback === "keep") return;
         queueState.set(state);
         if (state !== before) queueChanged();
@@ -259,7 +289,7 @@ export const layer = Layer.effect(
       lane.withPermit(
         Effect.gen(function* () {
           learnTracks(command, added);
-          const { state } = reduceQueue(queueState.get(), command);
+          const { state } = yield* reduce(queueState.get(), command);
           const items = yield* Effect.forEach(state.entries, itemFor);
           queueSource.update((source) => queueSourceAfter(source, command, "auto"));
           queueState.set(state);
@@ -335,7 +365,8 @@ export const layer = Layer.effect(
         Effect.runFork(lane.withPermit(restore));
         return;
       }
-      if (event.reason !== "auto" && event.reason !== "seek") return;
+      if (event.reason !== "auto" && event.reason !== "seek" && event.reason !== "crossfade")
+        return;
       Effect.runFork(
         dispatch({ type: "playerMoved", key: event.itemId }).pipe(
           Effect.catch((error) => Effect.sync(() => reportError(error))),

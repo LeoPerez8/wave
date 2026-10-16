@@ -10,7 +10,7 @@ import { FavoritesList } from "./FavoritesList";
 import { PlaylistsList } from "./PlaylistsList";
 import { SongsList } from "./SongsList";
 
-/** A Library section's list, on its own screen or as the shortcut tab. */
+/** A Library section's list, on its own screen or as a tab. */
 export function SectionList({ section }: { section: LibrarySection | undefined }) {
   switch (section?.slug) {
     case "songs":
