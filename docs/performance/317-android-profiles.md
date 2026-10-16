@@ -223,10 +223,14 @@ JS-only changes don't need a refresh unless they change which native code those 
 
 - Everything on the phone: generation, the sideload states, launch and navigation timings.
   **Pending.**
-- No Gradle build ran for this branch: another agent's Gradle daemon was busy, and the
-  one-build-at-a-time rule applies. That profileinstaller 1.4.1 resolves and that AGP packages
-  `app/src/main/baselineProfiles/` is still to be seen in a build. CI's full build and its new
-  check-apk step will show it.
+- The packaging path was checked with a local release build (R8 on, arm64) and stand-in profiles,
+  not generated ones: six hand-written rules for `MainActivity`, `MainApplication`,
+  `WaveNativeModule` and `WaveNativePackage`, three of them in the startup profile. The release
+  classpath resolved `profileinstaller:1.4.1` and nothing older. `check-apk` reported
+  318 classes and 650 methods, against 291 and 637 before, with Wave's own classes up from 1
+  to 6. All 4 stand-in classes R8 kept were in the shipped profile, and both kept startup
+  classes were in classes.dex. The stand-ins weren't committed. This shows that the plugin, AGP
+  and R8 carry a checked-in profile into the APK. It says nothing about speed.
 - `pm dump-profiles` output was read from what Macrobenchmark parses, not yet seen from One UI.
   If it holds lines the parser rejects, `generate` drops them. Check the counts in
   `profiles.json` against `profile device` on the first run.
