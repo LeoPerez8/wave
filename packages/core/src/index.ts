@@ -504,6 +504,16 @@ export type { PlayerErrorCode, RestorableTracks } from "./ytQueue.ts";
 export { settleBestQuality } from "./bestQuality.ts";
 export type { BestQualityState, BestQualityStep } from "./bestQuality.ts";
 export {
+  downloadFailureAnswer,
+  downloadFailureCause,
+  downloadStorageFull,
+} from "./downloadFailure.ts";
+export type {
+  DownloadDecision,
+  DownloadFailureAnswer,
+  DownloadFailureHeld,
+} from "./downloadFailure.ts";
+export {
   downloadFailurePlan,
   downloadFallback,
   downloadSource,
@@ -703,9 +713,7 @@ export type {
   StreamedPlaylistEntry,
 } from "./playlistEntries.ts";
 export {
-  linkImportSummary,
   linkImportView,
-  planLinkImport,
   playlistImportSources,
   recognisePlaylistLink,
   sharedTextImport,
@@ -714,12 +722,10 @@ export {
 } from "./playlistLinks.ts";
 export type {
   ImportNotice,
-  LinkImportPlan,
   LinkImportRead,
   LinkImportView,
   LinkReadFailure,
   LinkedPlaylist,
-  NotFoundSong,
   ReadPlaylist,
   PlaylistImportSource,
   PlaylistLink,
@@ -727,19 +733,40 @@ export type {
   PlaylistLinkProblem,
   SharedTextImport,
 } from "./playlistLinks.ts";
+export { spotifySearchQuery, spotifyYtMatch } from "./spotifyImport.ts";
+export type { YtSongSearch } from "./spotifyImport.ts";
 export {
   SPOTIFY_SEARCHES_AT_ONCE,
-  findSpotifySongs,
-  planSpotifyImport,
-  spotifySearchQuery,
-  spotifyYtMatch,
-} from "./spotifyImport.ts";
+  importAdded,
+  importAdditions,
+  importSearchAnswered,
+  importTurn,
+  nextImportStep,
+  planLinkImport,
+  playlistImportProgress,
+  playlistImportView,
+  queuePlaylistImport,
+  readPlaylistImports,
+  retryPlaylistImport,
+  startPlaylistImport,
+  updatePlaylistImport,
+  withoutPlaylistImport,
+  writePlaylistImports,
+} from "./playlistImport.ts";
 export type {
-  SpotifyFind,
-  SpotifyFindFailure,
-  SpotifyFinding,
-  YtSongSearch,
-} from "./spotifyImport.ts";
+  ImportAdditions,
+  ImportFind,
+  ImportService,
+  ImportState,
+  ImportStep,
+  ImportStopReason,
+  LinkImportPlan,
+  LinkedSource,
+  PlaylistImport,
+  PlaylistImportProgress,
+  PlaylistImportView,
+  PlaylistImports,
+} from "./playlistImport.ts";
 export {
   SPOTIFY_SONG_CAP,
   readSpotifyPlaylist,

@@ -97,6 +97,12 @@ export interface YtDownloadJournalJob<S extends YtSong = YtSong> {
   readonly reason?: YtDownloadFailure;
   /** The file was published but the Library couldn't import it. */
   readonly importFailure?: YtDownloadFailure;
+  /**
+   * What last went wrong, as "Class: message" (`downloadFailureCause`, or the
+   * native exception): kept through a fallback and a retry's attempts, and
+   * cleared when the user retries. Absent for a failure decided on.
+   */
+  readonly cause?: string;
   /** The Library imported the file. */
   readonly acknowledged?: boolean;
   readonly saved?: { readonly path: string };
