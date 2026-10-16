@@ -32,9 +32,7 @@ function QueuedDownloadRow({
           accessible
           accessibilityLabel={[song.title, artist, line].filter(Boolean).join(", ")}
         >
-          <Text numberOfLines={1} className="font-sans text-body font-medium text-foreground">
-            {song.title}
-          </Text>
+          <Text className="font-sans text-body font-medium text-foreground">{song.title}</Text>
           <Text numberOfLines={1} className="font-sans text-body text-secondary">
             {artist}
           </Text>
