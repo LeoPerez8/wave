@@ -5,6 +5,7 @@ import { beforeEach, describe, test } from "node:test";
 import {
   normalizeTrack,
   orderKeyBetween,
+  type PlayContext,
   type PlaylistSong,
   type UnavailableSong,
   type YtAlbumSong,
@@ -14,6 +15,7 @@ import { eq, sql } from "drizzle-orm";
 import type { IndexedTrack } from "../LibraryStore.ts";
 import { libraryCounts, sectionSongCounts } from "./counts.ts";
 import { creditSplits } from "./credits.ts";
+import { recordPlay } from "./playHistory.ts";
 import {
   addToPlaylist,
   appendPlaylistSongs,
@@ -29,6 +31,7 @@ import {
   selectPlaylistEntries,
   selectPlaylistEntriesRevision,
   selectPlaylists,
+  selectPlaylistsLastPlayed,
   selectPlaylistTotals,
   selectTrackPaths,
 } from "./playlists.ts";
@@ -770,6 +773,52 @@ describe("playlists made and renamed here", () => {
     assert.deepEqual(
       selectChangesSince(db, 999).playlists.map((row) => [row.name, row.changedAt]),
       [["Late Drive", 1_001]],
+    );
+  });
+});
+
+/** Plays started from playlist [id]. */
+const fromPlaylist = (id: number): PlayContext => ({ kind: "playlist", id: String(id) });
+
+describe("sorting the Playlists list", () => {
+  test("each playlist is listed with when it was made", () => {
+    const made = createPlaylist(db, "Mix", [], 4_000);
+    assert.deepEqual(
+      selectPlaylists(db).map((row) => [row.name, row.createdAt]),
+      [
+        ["Drive", 0],
+        ["Mix", 4_000],
+      ],
+    );
+    assert.equal(selectPlaylist(db, made.playlistId)?.playlist.createdAt, 4_000);
+  });
+
+  test("a playlist last played when the latest song played from it started", () => {
+    const other = newPlaylist("Other");
+    newPlaylist("Never played");
+    const play = (title: string, startedAt: number, context: PlayContext | null) =>
+      recordPlay(db, {
+        trackId: String(ids[title]),
+        context,
+        startedAt,
+        listenedMs: 1_000,
+        durationMs: 180_000,
+        endReason: "skipped",
+        counted: false,
+        source: "phone",
+      });
+    play("Airbag", 1_000, fromPlaylist(playlistId));
+    play("Creep", 5_000, fromPlaylist(playlistId));
+    play("Bloom", 3_000, fromPlaylist(other));
+    // Played from elsewhere: an album, Play Next.
+    play("Bloom", 9_000, { kind: "album", id: String(playlistId) });
+    play("Creep", 9_500, null);
+    assert.deepEqual(
+      selectPlaylistsLastPlayed(db),
+      new Map([
+        [playlistId, 5_000],
+        [other, 3_000],
+      ]),
     );
   });
 });

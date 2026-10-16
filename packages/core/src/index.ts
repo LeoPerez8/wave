@@ -89,8 +89,14 @@ export { contrastRatio, paletteGradient } from "./palette.ts";
 export type { ArtworkPalette, Gradient, GradientTheme } from "./palette.ts";
 export { settleSheet } from "./sheet.ts";
 export type { SheetDrag, SheetState } from "./sheet.ts";
-export { reorderScrollSpeed, reorderShift, reorderTarget } from "./reorder.ts";
-export type { ReorderDrag, ReorderEdge, ReorderRow } from "./reorder.ts";
+export {
+  reorderGridShift,
+  reorderGridTarget,
+  reorderScrollSpeed,
+  reorderShift,
+  reorderTarget,
+} from "./reorder.ts";
+export type { ReorderDrag, ReorderEdge, ReorderGridDrag, ReorderRow } from "./reorder.ts";
 export {
   RECENT_SEARCHES,
   createSearchIndex,
@@ -255,6 +261,20 @@ export {
   storedPlaylistLayout,
 } from "./playlistLayout.ts";
 export type { PlaylistLayout } from "./playlistLayout.ts";
+export {
+  PLAYLIST_SORTS,
+  choosePlaylistSort,
+  movePlaylist,
+  parsePlaylistOrder,
+  sortPlaylists,
+  storedPlaylistOrder,
+} from "./playlistSort.ts";
+export type {
+  PlaylistOrder,
+  PlaylistOrdering,
+  PlaylistSort,
+  SortablePlaylist,
+} from "./playlistSort.ts";
 export { TAB_PATH, detailPath, inLibraryStack, isDetailPath, tabOfPath } from "./navigation.ts";
 export type { DetailScreen } from "./navigation.ts";
 export { planAlert } from "./alert.ts";
@@ -1063,3 +1083,13 @@ export { createPagedRows, PAGED_ROWS_LIMITS } from "./pagedRows.ts";
 export type { PagedRows, PagedRowsLimits, PagedRowsStats } from "./pagedRows.ts";
 export { recentlyPlayedAlbums } from "./recentlyPlayed.ts";
 export type { LatestPlayedSong } from "./recentlyPlayed.ts";
+export {
+  APP_LOG_LIMITS,
+  describeLogArgs,
+  formatLogEntry,
+  logFileName,
+  logHeader,
+  redactSecrets,
+  trimLog,
+} from "./appLog.ts";
+export type { LogDevice, LogEntry, LogLevel, LogLimits, LogTrim } from "./appLog.ts";
