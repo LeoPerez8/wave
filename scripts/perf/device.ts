@@ -156,7 +156,10 @@ export const parseGfxinfo = (text: string): { summary: GfxSummary; frames: GfxFr
   };
 };
 
-/** `dumpsys meminfo <package>`, in KB. Fields Android didn't print are left out. */
+/**
+ * `dumpsys meminfo <package>`: memory in KB, and the counts of the process's
+ * objects (its Objects section). Fields Android didn't print are left out.
+ */
 export interface Meminfo {
   readonly totalPssKb?: number;
   readonly totalRssKb?: number;
@@ -168,6 +171,15 @@ export interface Meminfo {
   readonly graphicsKb?: number;
   readonly privateOtherKb?: number;
   readonly systemKb?: number;
+  /** Android views alive in the process: the mounted screens' native views, hidden ones too. */
+  readonly views?: number;
+  readonly viewRoots?: number;
+  readonly activities?: number;
+  readonly appContexts?: number;
+  readonly localBinders?: number;
+  readonly proxyBinders?: number;
+  /** Binder death listeners the process holds: a count that grows with leaked registrations. */
+  readonly deathRecipients?: number;
 }
 
 export const parseMeminfo = (text: string): Meminfo => {
@@ -183,6 +195,13 @@ export const parseMeminfo = (text: string): Meminfo => {
     ["graphicsKb", summary, /^\s*Graphics:\s+(\d+)/m],
     ["privateOtherKb", summary, /^\s*Private Other:\s+(\d+)/m],
     ["systemKb", summary, /^\s*System:\s+(\d+)/m],
+    ["views", text, /\bViews:\s+(\d+)/],
+    ["viewRoots", text, /\bViewRootImpl:\s+(\d+)/],
+    ["activities", text, /\bActivities:\s+(\d+)/],
+    ["appContexts", text, /\bAppContexts:\s+(\d+)/],
+    ["localBinders", text, /\bLocal Binders:\s+(\d+)/],
+    ["proxyBinders", text, /\bProxy Binders:\s+(\d+)/],
+    ["deathRecipients", text, /\bDeath Recipients:\s+(\d+)/],
   ];
   const meminfo: Record<string, number> = {};
   for (const [key, source, pattern] of fields) {
@@ -263,7 +282,9 @@ export const parseDensity = (text: string): number | null =>
 
 /** What the runner taps, found in a `uiautomator dump`. */
 export type Target =
-  { readonly desc: string } | { readonly descPrefix: string } | { readonly text: string };
+  | { readonly desc: string }
+  | { readonly descPrefix: string }
+  | { readonly text: string };
 
 const decode = (value: string): string =>
   value

@@ -93,6 +93,18 @@ export interface RunOptions {
   readonly now: () => Date;
 }
 
+/**
+ * The measured iterations after which memory is read, [samples] of them spread
+ * evenly from 0 (before the first) to [iterations] (after the last). Fewer when
+ * there are fewer iterations than samples.
+ */
+const memorySampleIterations = (samples: number | undefined, iterations: number): Set<number> =>
+  samples === undefined || samples < 2
+    ? new Set([iterations])
+    : new Set(
+        Array.from({ length: samples }, (_, k) => Math.round((k * iterations) / (samples - 1))),
+      );
+
 /** Thrown when a scenario can't go on; the runner records it and moves to the next. */
 class ScenarioError extends Error {}
 
@@ -458,6 +470,8 @@ export const runPerf = async (
       ...(Object.keys(backgroundWork).length > 0 ? { backgroundWork } : {}),
       // Subscribers to the playback stores and the sheet when the step's flush was written.
       ...(Object.keys(listeners).length > 0 ? { listeners } : {}),
+      // Hermes's used heap in bytes at the step's flush, when it reports it (#318's growth check).
+      ...(typeof meta["js.heapUsed"] === "number" ? { jsHeapUsed: meta["js.heapUsed"] } : {}),
     };
     write(record);
     log(
@@ -518,7 +532,22 @@ export const runPerf = async (
         );
       if (scenario.coldEachIteration !== true) await start();
       const iterations = options.iterations ?? scenario.iterations;
+      const sampled = memorySampleIterations(scenario.memorySamples, iterations);
+      const sampleMemory = async (iteration: number | null): Promise<void> => {
+        await device.sleep(options.memoryIdleMs);
+        write({
+          type: "memory",
+          run,
+          scenario: scenario.name,
+          variant,
+          ...(iteration === null ? {} : { iteration }),
+          ...parseMeminfo(await shell(`dumpsys meminfo ${pkg}`)),
+        });
+      };
       for (let i = 1; i <= scenario.warmup + iterations; i++) {
+        const measured = i - scenario.warmup;
+        // The first sample comes before the first measured iteration, after the warm-up.
+        if (measured === 1 && sampled.has(0)) await sampleMemory(0);
         const recorded = i > scenario.warmup;
         if (scenario.coldEachIteration === true) await start();
         if (i === scenario.warmup + 1) trace = await startTrace(traceName);
@@ -533,15 +562,10 @@ export const runPerf = async (
         }
         for (const action of scenario.teardown ?? []) await unmeasured(action);
         if (scenario.coldEachIteration !== true) await ensureForeground();
+        if (measured > 0 && measured < iterations && sampled.has(measured))
+          await sampleMemory(measured);
       }
-      await device.sleep(options.memoryIdleMs);
-      write({
-        type: "memory",
-        run,
-        scenario: scenario.name,
-        variant,
-        ...parseMeminfo(await shell(`dumpsys meminfo ${pkg}`)),
-      });
+      await sampleMemory(scenario.memorySamples === undefined ? null : iterations);
     } catch (error) {
       if (!(error instanceof ScenarioError)) throw error;
       write({ type: "error", run, scenario: scenario.name, variant, message: error.message });

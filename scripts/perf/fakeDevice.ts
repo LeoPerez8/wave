@@ -195,6 +195,12 @@ export class FakeDevice implements Device {
       "libraryQueries.paused": this.importing ? this.flushes * 4 : 0,
       "libraryQueries.discarded": 0,
       "libraryQueries.evicted": this.flushes,
+      // Hermes's used heap, and the playback stores' subscribers (apps/mobile/src/perf/PerfProbe.tsx).
+      "js.heapUsed": 48_000_000 + this.flushes * 1_000,
+      "listeners.playback": 6,
+      "listeners.queue": 3,
+      "listeners.queueTracks": 2,
+      "listeners.nowPlaying": 4,
       // Search's index counters (apps/mobile/src/search/searchIndex.ts), since launch.
       "search.entries": 13_000,
       "search.prepared": 13_000,
@@ -639,7 +645,7 @@ export class FakeDevice implements Device {
       /^dumpsys meminfo \S+$/,
       () =>
         this.running
-          ? " App Summary\n           Java Heap:    20480                          40960\n         Native Heap:    61100                          62000\n            Graphics:    50000                          50000\n           TOTAL PSS:   245678            TOTAL RSS:   312345       TOTAL SWAP PSS:     1234\n"
+          ? " App Summary\n           Java Heap:    20480                          40960\n         Native Heap:    61100                          62000\n            Graphics:    50000                          50000\n           TOTAL PSS:   245678            TOTAL RSS:   312345       TOTAL SWAP PSS:     1234\n\n Objects\n               Views:      542         ViewRootImpl:        2\n         AppContexts:        7           Activities:        1\n       Local Binders:       36        Proxy Binders:       52\n    Death Recipients:        2             WebViews:        0\n"
           : "No process found for: dev.leoperez.wave\n",
     ],
     [/^perfetto --txt -c - -o \S+ --background$/, () => "4321\n"],

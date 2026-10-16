@@ -99,6 +99,12 @@ export interface Scenario {
   readonly glass?: boolean;
   /** Not part of `all` (it takes minutes): run it by name. */
   readonly byName?: boolean;
+  /**
+   * Retained memory read this many times, spread over the iterations: once
+   * before the first measured one, the last after the final one (#318's
+   * growth check). Unset: once, at the end.
+   */
+  readonly memorySamples?: number;
 }
 
 /** Longer than Wave's 60 s rescan interval (`RESCAN_ON_RETURN_AFTER_MS` in library/runtime.ts). */
@@ -454,6 +460,56 @@ export const SCENARIOS: readonly Scenario[] = [
     iterations: 1,
     warmup: 0,
     needsImportLink: true,
+  },
+  {
+    name: "soak-routes",
+    summary:
+      "Long cycling for memory growth (#318): each cycle visits every tab, Library › Albums and Songs and back, and Home › Settings and back. Retained memory is read six times over the cycles.",
+    steps: ({ tabs }) => {
+      const others = tabs.filter((label) => label !== "Home" && label !== "Library");
+      return [
+        tabStep("tab", tab("Library")),
+        ...pushPop({ text: "Albums" }).map((step) => ({
+          ...step,
+          measure: `${step.measure}-albums`,
+        })),
+        {
+          measure: "push-songs",
+          action: { kind: "tap", target: { text: "Songs" } },
+          expect: { mark: "songs.rows" },
+        },
+        { measure: "pop-songs", action: { kind: "tap", target: { desc: "Back" } }, expect: route },
+        ...others.map((label) => tabStep("tab", tab(label))),
+        tabStep("tab", tab("Home")),
+        ...pushPop({ desc: "Settings" }).map((step) => ({
+          ...step,
+          measure: `${step.measure}-settings`,
+        })),
+      ];
+    },
+    iterations: 20,
+    warmup: 1,
+    byName: true,
+    memorySamples: 6,
+  },
+  {
+    name: "soak-player",
+    summary:
+      "Long cycling for memory growth (#318): each cycle opens Now Playing, switches to its Queue and back, and closes it. Retained memory is read six times over the cycles.",
+    steps: () => [
+      OPEN_NOW_PLAYING,
+      {
+        measure: "queue-open",
+        action: { kind: "tap", target: { desc: "Queue" } },
+        expect: { mark: "visible", detail: "queue" },
+      },
+      { measure: "queue-close", action: { kind: "tap", target: { desc: "Queue" } } },
+      CLOSE_NOW_PLAYING,
+    ],
+    iterations: 30,
+    warmup: 1,
+    byName: true,
+    memorySamples: 6,
   },
   {
     name: "scroll-home",
