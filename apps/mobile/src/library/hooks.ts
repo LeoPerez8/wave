@@ -144,6 +144,34 @@ const NO_MISSING_SONGS: readonly MissingTrack[] = [];
 export const useMissingSongs = (): readonly MissingTrack[] =>
   useLibraryQuery(listMissingSongs, NO_MISSING_SONGS);
 
+interface AlbumsMissingSongs {
+  /** The albums read, as `albumIds.join(",")`. */
+  readonly key: string;
+  readonly songs: readonly (readonly number[])[];
+}
+
+const NO_ALBUMS_MISSING_SONGS: AlbumsMissingSongs = { key: "", songs: [] };
+
+/**
+ * Each album of [albumIds]'s missing songs, as Track ids in album order; none
+ * until they're read (other albums' answer is never passed off as theirs).
+ */
+export const useAlbumsMissingSongs = (
+  albumIds: readonly number[],
+): readonly (readonly number[])[] => {
+  // Keyed by the ids, not the array: the same albums in a new array ask nothing again.
+  const key = albumIds.join(",");
+  const query = useMemo(() => {
+    const ids = key === "" ? [] : key.split(",").map(Number);
+    // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+    return LibraryStore.use((store) => store.albumsMissingSongs(ids)).pipe(
+      Effect.map((songs): AlbumsMissingSongs => ({ key, songs })),
+    );
+  }, [key]);
+  const read = useLibraryQuery(query, NO_ALBUMS_MISSING_SONGS);
+  return read.key === key ? read.songs : NO_ALBUMS_MISSING_SONGS.songs;
+};
+
 export const useSongs = (): readonly SongRow[] => useLibraryQuery(listSongs, NO_SONGS);
 
 /** Number of tracks in the library, or null before the first count arrives. */

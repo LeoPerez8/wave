@@ -24,11 +24,14 @@ export { resolveSkipSwipe } from "./swipe.ts";
 export type { SkipDirection, SkipSwipe } from "./swipe.ts";
 export {
   EMPTY_QUEUE,
+  REAL_SHUFFLE,
   RESTART_THRESHOLD_MS,
   currentEntry,
   nextRepeatMode,
   parseQueueState,
+  readShuffleKind,
   reduceQueue,
+  shufflesQueue,
   upNext,
   upNextMove,
   withPendingMoves,
@@ -43,6 +46,8 @@ export type {
   QueueResult,
   QueueState,
   RepeatMode,
+  Shuffle,
+  ShuffleKind,
 } from "./queue.ts";
 export { applyPlayerSync, planPlayerSync } from "./playerSync.ts";
 export type { PlayerList, QueueList, SyncStep } from "./playerSync.ts";
@@ -312,6 +317,7 @@ export type {
   ItemAction,
   ItemActionEntry,
   YtSongActionEntry,
+  YtSongActionOptions,
   ItemKind,
 } from "./itemActions.ts";
 export { concentricRadius } from "./corners.ts";
@@ -833,6 +839,7 @@ export {
   missingSongVideo,
   missingSongYtSong,
   missingSongsDownload,
+  missingSongsDownloadActions,
 } from "./missingSongDownload.ts";
 export type {
   MissingSongJob,
