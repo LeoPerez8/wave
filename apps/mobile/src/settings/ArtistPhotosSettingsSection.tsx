@@ -1,8 +1,8 @@
-import { Switch, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
-import { grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
+import { SettingsSwitch } from "@/components/SettingsSwitch";
 import { TextButton } from "@/components/TextButton";
 import { useArtistPhotoCount } from "@/library/artistPhotos";
 import {
@@ -11,7 +11,6 @@ import {
   stopArtistPhotoDownloads,
 } from "@/library/runtime";
 import { confirmAction, showError } from "@/overlay/alert";
-import { useThemeColor } from "@/theme/useThemeColor";
 
 import { setArtistPhotosEnabled, useArtistPhotosEnabled } from "./artistPhotos";
 
@@ -33,30 +32,16 @@ const confirmClear = async (count: number): Promise<void> => {
     );
 };
 
-/** Settings › Artist photos: downloading artist photos online, and clearing them. */
+/** Settings › Lyrics and tags › Artist photos: downloading artist photos online, and clearing them. */
 export function ArtistPhotosSettingsSection() {
   const enabled = useArtistPhotosEnabled();
   const count = useArtistPhotoCount();
-  const accent = useThemeColor("accent");
-  const fill = useThemeColor("fill");
-  const surface = useThemeColor("surface");
 
   return (
-    <>
-      <CatalogLine className="mb-2 mt-12">Artist photos</CatalogLine>
+    <View>
+      <CatalogLine className="mb-2">Artist photos</CatalogLine>
       <Hairline />
-      <View className="flex-row items-center" style={{ minHeight: grid.row }}>
-        <Text className="flex-1 font-sans text-title3 font-normal text-foreground">
-          Download artist photos
-        </Text>
-        <Switch
-          accessibilityLabel="Download artist photos"
-          value={enabled}
-          onValueChange={setDownloads}
-          trackColor={{ false: fill, true: accent }}
-          thumbColor={surface}
-        />
-      </View>
+      <SettingsSwitch label="Download artist photos" value={enabled} onValueChange={setDownloads} />
       <Hairline />
       <Text className="mt-2 font-sans text-footnote text-secondary">
         Wave looks up a photo of each artist on Deezer, which means sending artist names to it, and
@@ -71,6 +56,6 @@ export function ArtistPhotosSettingsSection() {
           onPress={() => void confirmClear(count)}
         />
       </View>
-    </>
+    </View>
   );
 }

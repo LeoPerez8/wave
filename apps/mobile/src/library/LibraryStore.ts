@@ -100,7 +100,14 @@ import {
 } from "./db/tracks";
 import { creditedPlayTotals, songListening, songsCrediting, trackPlayTotals } from "./db/stats";
 import { keyRecordings, stampPreference } from "./db/sync";
-import { filesGone, leaveFiles, removeSongs, selectMissingSongs, signOut } from "./db/missingSongs";
+import {
+  filesGone,
+  leaveFiles,
+  removeSongs,
+  selectAlbumsMissingSongs,
+  selectMissingSongs,
+  signOut,
+} from "./db/missingSongs";
 import { saveYtArtist, selectYtArtist } from "./db/ytArtists";
 import type { KnownFile } from "./NativeScanner";
 
@@ -482,6 +489,10 @@ export class LibraryStore extends Context.Service<
     readonly missingSongs: (
       trackIds?: readonly number[],
     ) => Effect.Effect<readonly MissingTrack[], LibraryStoreError>;
+    /** Each album of [albumIds]'s missing songs, as Track ids in album order. */
+    readonly albumsMissingSongs: (
+      albumIds: readonly number[],
+    ) => Effect.Effect<readonly (readonly number[])[], LibraryStoreError>;
     /** Excludes [path] and drops the exclusions in [drop] (see Core's `planExclusion`). */
     readonly addExcludedFolder: (
       path: string,
@@ -969,6 +980,8 @@ const make = Effect.gen(function* () {
       attempt("remove songs from the library", () => removeSongs(db, splits, trackIds, Date.now())),
     missingSongs: (trackIds) =>
       attempt("read missing songs", () => selectMissingSongs(db, trackIds)),
+    albumsMissingSongs: (albumIds) =>
+      attempt("read albums' missing songs", () => selectAlbumsMissingSongs(db, albumIds)),
 
     addExcludedFolder: (path, drop) =>
       attempt("exclude a folder", () =>

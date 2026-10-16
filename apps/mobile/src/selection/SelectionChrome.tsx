@@ -64,6 +64,8 @@ const ICONS: { readonly [A in ItemAction]: ComponentType<IconProps> } = {
   download: IconDownload,
   cancelDownload: IconX,
   retryDownload: IconRefresh,
+  downloadMissingSongs: IconDownload,
+  retryFailed: IconRefresh,
 };
 
 /**

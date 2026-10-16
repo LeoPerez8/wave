@@ -14,6 +14,7 @@ import {
   type ActionSubject,
   type ItemAction,
   type ItemActionEntry,
+  type YtSongActionOptions,
 } from "./index.ts";
 
 const names = (entries: readonly ItemActionEntry[]): string[] =>
@@ -286,6 +287,84 @@ describe("itemActions", () => {
       ),
       ["playNext", "addToQueue", "addToPlaylist", "goToArtist", "select"],
     );
+  });
+
+  test("an album with missing songs offers Download Missing Songs after Add to Playlist", () => {
+    const menu = itemActions({
+      kind: "album",
+      items: [{ artistIds: [3], missingSongs: [null, null] }],
+      selectable: true,
+      here: "/",
+    });
+    assert.deepEqual(names(menu), [
+      "playNext",
+      "addToQueue",
+      "addToPlaylist",
+      "downloadMissingSongs",
+      "goToArtist",
+      "select",
+    ]);
+    assert.equal(ITEM_ACTION_LABELS.downloadMissingSongs, "Download Missing Songs");
+  });
+
+  test("an album's missing songs on their way offer Cancel Download, and Retry Failed once the rest has ended", () => {
+    const album = (missingSongs: ActionSubject["items"][number]["missingSongs"]) =>
+      names(itemActions({ kind: "album", items: [{ missingSongs }], here: "/" })).slice(3);
+    const failed = { kind: "failed", reason: "notFound" } as const;
+    // All of them asked for: nothing left to download.
+    assert.deepEqual(album([{ kind: "queued" }, { kind: "downloading", received: 1, total: 2 }]), [
+      "cancelDownload",
+    ]);
+    // One still to ask for, one failed while another downloads: no Retry Failed yet.
+    assert.deepEqual(album([null, failed, { kind: "queued" }]), [
+      "downloadMissingSongs",
+      "cancelDownload",
+    ]);
+    assert.deepEqual(album([failed, { kind: "saving" }]), []);
+    assert.deepEqual(album([failed, failed]), ["retryFailed"]);
+    assert.deepEqual(album([null, failed]), ["downloadMissingSongs", "retryFailed"]);
+    assert.equal(ITEM_ACTION_LABELS.retryFailed, "Retry Failed");
+    assert.equal(ITEM_ACTION_LABELS.cancelDownload, "Cancel Download");
+  });
+
+  test("an album with no missing songs offers no download entries", () => {
+    for (const missingSongs of [undefined, []]) {
+      assert.deepEqual(
+        names(itemActions({ kind: "album", items: [{ artistIds: [3], missingSongs }], here: "/" })),
+        ["playNext", "addToQueue", "addToPlaylist", "goToArtist"],
+      );
+    }
+  });
+
+  test("selected albums holding missing songs offer Download on the bar, for all of theirs", () => {
+    const bar = itemActions({
+      kind: "album",
+      items: [
+        { missingSongs: [] },
+        { missingSongs: [{ kind: "queued" }] },
+        { missingSongs: [null] },
+      ],
+      surface: "selection",
+      here: "/library/albums",
+    });
+    assert.deepEqual(names(bar), [
+      "playNext",
+      "addToQueue",
+      "addToPlaylist",
+      "downloadMissingSongs",
+      "cancelDownload",
+    ]);
+    assert.equal(actionBarLabel("downloadMissingSongs"), "Download");
+    // On a crowded bar it keeps a button of its own.
+    assert.ok(names(splitActionBar(bar, 4).bar).includes("downloadMissingSongs"));
+    // Their songs all on their way: nothing to download.
+    const asked = itemActions({
+      kind: "album",
+      items: [{ missingSongs: [{ kind: "queued" }] }, { missingSongs: [{ kind: "saving" }] }],
+      surface: "selection",
+      here: "/library/albums",
+    });
+    assert.ok(!names(asked).includes("downloadMissingSongs"));
   });
 
   test("selected artists or genres: the bar offers their menu's entries, but Select", () => {
@@ -623,5 +702,44 @@ describe("ytSongActions", () => {
       ytSongActions(artists, { inPlaylist: true }).map((entry) => entry.action),
       ["playNext", "addToQueue", "addToPlaylist", "removeFromPlaylist", "goToArtist"],
     );
+  });
+
+  test("a song with a YT Music album offers Go to Album, before Go to Artist, leading to it", () => {
+    const artists = { kind: "open", target: { kind: "yt", name: "Justice" } } as const;
+    assert.deepEqual(ytSongActions(artists, { album: "MPREb_cross", ytMusic: true }), [
+      { action: "playNext" },
+      { action: "addToQueue" },
+      { action: "addToPlaylist" },
+      { action: "goToAlbum", album: "MPREb_cross" },
+      { action: "goToArtist", artists },
+    ]);
+  });
+
+  test("on its album's own page there's no Go to Album; another album's page offers it", () => {
+    const actions = (ytAlbumHere: string) =>
+      ytSongActions(undefined, { album: "MPREb_cross", ytAlbumHere, ytMusic: true }).map(
+        (entry) => entry.action,
+      );
+    assert.deepEqual(actions("MPREb_cross"), ["playNext", "addToQueue", "addToPlaylist"]);
+    assert.deepEqual(actions("MPREb_other"), [
+      "playNext",
+      "addToQueue",
+      "addToPlaylist",
+      "goToAlbum",
+    ]);
+  });
+
+  test("a song without an album, or with YT Music off (a playlist's entry), has no Go to Album", () => {
+    const actions = (options: YtSongActionOptions) =>
+      ytSongActions(undefined, options).map((entry) => entry.action);
+    const queue = ["playNext", "addToQueue", "addToPlaylist"];
+    assert.deepEqual(actions({ album: null, ytMusic: true }), queue);
+    assert.deepEqual(actions({ album: "", ytMusic: true }), queue);
+    assert.deepEqual(actions({ ytMusic: true }), queue);
+    assert.deepEqual(actions({ album: "MPREb_cross", ytMusic: false }), queue);
+    assert.deepEqual(actions({ album: "MPREb_cross", inPlaylist: true }), [
+      ...queue,
+      "removeFromPlaylist",
+    ]);
   });
 });

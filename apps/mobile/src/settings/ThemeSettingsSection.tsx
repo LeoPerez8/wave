@@ -48,15 +48,15 @@ function Swatch({ swatch, group }: { swatch: ThemeSwatchOption; group: keyof The
   );
 }
 
-/** Settings › Theme: background (per scheme), primary and secondary colours from swatches. */
+/** Settings › Appearance › Theme: background (per scheme), primary and secondary colours from swatches. */
 export function ThemeSettingsSection() {
   const choice = useThemeChoice();
   const scheme = useColorScheme() === "dark" ? "dark" : "light";
   const rows = themeSwatchRows(choice, scheme);
 
   return (
-    <>
-      <CatalogLine className="mb-2 mt-12">Theme</CatalogLine>
+    <View>
+      <CatalogLine className="mb-2">Theme</CatalogLine>
       <Hairline />
       {rows.map((row) => {
         const chosen = row.swatches.find((swatch) => swatch.selected);
@@ -96,6 +96,6 @@ export function ThemeSettingsSection() {
           onPress={() => void resetTheme(confirmAction)}
         />
       </View>
-    </>
+    </View>
   );
 }
