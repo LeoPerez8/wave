@@ -123,6 +123,25 @@ describe("placeOverlayCard next to an anchor", () => {
     assert.deepEqual([cramped.side, cramped.top, cramped.maxHeight], ["above", 56, 811]);
   });
 
+  test("with larger text a menu needs more room beside its anchor before it covers it", () => {
+    // The same tall tile: 159 dp below it, 236 dp above. Its heading and entries take
+    // twice the room at twice the text size, so 160 dp of them becomes 320.
+    const rect = { top: 300, bottom: 700, left: 0, right: 412 };
+    const anchor = { rect, gap: 8, minHeight: 160 };
+    const usual = placeOverlayCard({ ...phone, cardHeight: 600, anchor, textScale: 1 });
+    assert.deepEqual([usual.side, usual.top, usual.maxHeight], ["above", 56, 236]);
+    const large = placeOverlayCard({ ...phone, cardHeight: 600, anchor, textScale: 2 });
+    assert.deepEqual([large.side, large.top, large.maxHeight], ["above", 56, 811]);
+    // Smaller text never lets the menu shrink below the anchor's least height.
+    const small = placeOverlayCard({
+      ...phone,
+      cardHeight: 600,
+      anchor: { ...anchor, minHeight: 240 },
+      textScale: 0.85,
+    });
+    assert.equal(small.maxHeight, 811);
+  });
+
   test("a row half under the tab bar still gets a menu clear of it, above the row", () => {
     const frame = placeOverlayCard({
       ...phone,
