@@ -17,7 +17,12 @@ import { rise, riseReduced } from "@/motion/entry";
 import { clearRecentSearches, rememberSearch, useRecentSearches } from "@/search/recentSearches";
 import type { SongRow } from "@/library/LibraryStore";
 import type { NativeYtSong } from "@/native/waveYtMusic";
-import type { ActionItems } from "@/playback/actionTargets";
+import {
+  listedTrackItem,
+  trackItemKey,
+  tracksTarget,
+  type TrackItem,
+} from "@/playback/actionTargets";
 import {
   noLibraryResultsRow,
   RESULT_LIMIT,
@@ -34,19 +39,10 @@ import { useListSelection } from "@/selection/useListSelection";
 import { useHeldSongs, useSongsInPlace } from "@/ytmusic/songsInPlace";
 
 const NO_KINDS: ReadonlySet<SearchKind> = new Set();
-const NO_SONGS: readonly SongRow[] = [];
 const NO_YT_SONGS: readonly NativeYtSong[] = [];
 const NO_TRACKS: ReadonlySet<number> = new Set();
 
 const trackId = (song: SongRow): number => song.id;
-
-const songKey = (song: SongRow): string => String(song.id);
-
-/** The actions in selection mode act on the checked songs. */
-const tracksOf = (songs: readonly SongRow[]): ActionItems => ({
-  kind: "track",
-  items: songs.map((song) => ({ song })),
-});
 
 function RecentSearches({ onPick }: { onPick: (query: string) => void }) {
   const recent = useRecentSearches();
@@ -174,19 +170,21 @@ export default function SearchScreen() {
   // so a new query (or none matching) keeps it: checked songs that drop out of
   // the results stay checked, found again among every song shown since.
   const songs = useMemo(
-    () =>
-      results === null
-        ? NO_SONGS
-        : [
-            ...songResults(results),
-            ...placed.songs.flatMap((row) => (row.source === "library" ? [row.track] : [])),
-          ],
+    (): TrackItem[] => [
+      ...(results === null ? [] : songResults(results).map((song) => ({ song }))),
+      ...placed.songs.map(listedTrackItem),
+    ],
     [results, placed.songs],
   );
-  const [seen] = useState(() => new Map<string, SongRow>());
-  for (const song of songs) seen.set(songKey(song), song);
+  const [seen] = useState(() => new Map<string, TrackItem>());
+  for (const song of songs) seen.set(trackItemKey(song), song);
   const lookup = useCallback((key: string) => seen.get(key), [seen]);
-  const selection = useListSelection({ items: songs, keyOf: songKey, target: tracksOf, lookup });
+  const selection = useListSelection({
+    items: songs,
+    keyOf: trackItemKey,
+    target: tracksTarget,
+    lookup,
+  });
 
   const changeQuery = useCallback((text: string) => {
     setQuery(text);

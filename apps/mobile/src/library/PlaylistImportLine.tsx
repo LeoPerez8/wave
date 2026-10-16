@@ -1,4 +1,5 @@
 import { playlistImportView, type ImportNotice, type PlaylistImportView } from "@wave/core";
+import { useEffect, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 
 import { CELL } from "@/catalog/grid";
@@ -9,11 +10,30 @@ import {
   cancelPlaylistImport,
   tryPlaylistImportAgain,
   usePlaylistImports,
+  useSpotifySearches,
 } from "./playlistImports";
 
-/** What [playlistId]'s page shows of its link import (Core's `playlistImportView`); null with none. */
-export const usePlaylistImportView = (playlistId: number): PlaylistImportView | null =>
-  playlistImportView(usePlaylistImports(), playlistId);
+/** How often the time left is worked out again, as it changes even while the import waits. */
+const TICK_MS = 5000;
+
+/**
+ * What [playlistId]'s page shows of its link import (Core's
+ * `playlistImportView`), the time left ticking while it imports; null with none.
+ */
+export const usePlaylistImportView = (playlistId: number): PlaylistImportView | null => {
+  const imports = usePlaylistImports();
+  const searches = useSpotifySearches();
+  const [now, setNow] = useState(Date.now);
+  const importing = imports.some(
+    (job) => job.playlistId === playlistId && job.state.kind === "importing",
+  );
+  useEffect(() => {
+    if (!importing) return undefined;
+    const tick = setInterval(() => setNow(Date.now()), TICK_MS);
+    return () => clearInterval(tick);
+  }, [importing]);
+  return playlistImportView(imports, playlistId, now, searches);
+};
 
 /**
  * The playlist page's import line, under its length: how far the import has

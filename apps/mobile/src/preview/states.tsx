@@ -28,7 +28,7 @@ import {
 } from "./syntheticLibrary";
 
 /** The Design preview's shelves. */
-export type Shelf = "albums" | "songs" | "playlists";
+export type Shelf = "albums" | "songs" | "playlists" | "search";
 
 /** A control on a shelf that opens a card: the Songs' Sort, the Playlists' Import and New. */
 export type Control = "sort" | PlaylistsControl;
@@ -40,10 +40,13 @@ export type Control = "sort" | PlaylistsControl;
 export interface PreviewState extends DesignPreviewState {
   /** The shelf it shows. */
   readonly shelf: Shelf;
-  /** What on that shelf opens the card: an item (its index) or a control. */
-  readonly from: number | Control;
+  /**
+   * What on that shelf opens the card: an item (its index) or a control. A
+   * state that only shows its shelf opens no card, and has neither.
+   */
+  readonly from?: number | Control;
   /** Opens the card, as a press on [from] would: [from] is the pressed one. */
-  readonly open: () => void;
+  readonly open?: () => void;
 }
 
 /** Where the long-titled song sits in the synthetic Songs. */
@@ -51,7 +54,7 @@ const LONG_TITLE = SYNTHETIC_TRACKS.findIndex(({ track }) => track.id === LONG_T
 
 /**
  * Every state, by name: the one list of them. Add one here: a name, a line on
- * what it shows, the shelf, what opens the card, and how to open it.
+ * what it shows, the shelf, and, when it opens a card, what opens it and how.
  */
 export const PREVIEW_STATES: readonly PreviewState[] = [
   {
@@ -99,6 +102,12 @@ export const PREVIEW_STATES: readonly PreviewState[] = [
     shelf: "playlists",
     from: "newPlaylist",
     open: () => openNewPlaylistPrompt(),
+  },
+  {
+    name: "search-field",
+    shows:
+      "Search's field empty, filled, and focused with a query too long for it: the keyboard up.",
+    shelf: "search",
   },
 ];
 

@@ -29,6 +29,7 @@ const everyChoice = (): ThemeChoice[] =>
     THEME_SWATCHES.dark.flatMap((dark) =>
       THEME_SWATCHES.primary.flatMap((primary) =>
         THEME_SWATCHES.secondary.map((secondary) => ({
+          ...DEFAULT_THEME_CHOICE,
           light: light.id,
           dark: dark.id,
           primary: primary.id,
@@ -84,6 +85,20 @@ describe("launchTheme", () => {
       const { light, dark } = launchTheme(choice);
       assert.deepEqual(splash(choice), { light, dark });
     }
+  });
+
+  test("a custom colour opens on the splash of the preset closest to it", () => {
+    const custom = choose({ light: "sand", primary: "custom", customPrimary: "#0d2350" });
+    assert.equal(
+      launchTheme(custom).splashTheme,
+      launchTheme({ ...custom, primary: "blue" }).splashTheme,
+    );
+    // What's saved is still what the app draws.
+    assert.equal(launchTheme(custom).light.primary, themeFor(custom).light.accent);
+  });
+
+  test("a kept custom colour that isn't chosen leaves the shipped splash", () => {
+    assert.equal(launchTheme(choose({ customSecondary: "#ff00aa" })).splashTheme, null);
   });
 
   test("carries each mode's ground, primary and secondary as the app draws them", () => {

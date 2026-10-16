@@ -30,6 +30,7 @@ import { useOverlayFlow } from "@/overlay/flow";
 import { followUp, openOverlay } from "@/overlay/overlay";
 import { useSlideToChoose } from "@/overlay/useSlideToChoose";
 import { addYtToQueue, playYtNext } from "@/playback/actions";
+import type { MenuOptions } from "@/playback/ActionsMenu";
 import { showError } from "@/overlay/alert";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
@@ -39,7 +40,7 @@ import { libraryArtistsRead, useStreamedArtistLink } from "./streamedArtist";
 import { cancelYtDownload, downloadYtSong, useYtDownloadStatus } from "./YtDownloads";
 
 /** Where the menu was opened: a playlist's entry offers Remove from Playlist. */
-export interface YtSongMenuOptions {
+export interface YtSongMenuOptions extends MenuOptions {
   readonly playlistItem?: PlaylistPlace | undefined;
 }
 
@@ -60,7 +61,12 @@ export const openYtSongActions = (song: NativeYtSong, options: YtSongMenuOptions
         label: song.title,
         anchor,
         render: (close) => (
-          <YtSongActionsMenu song={song} playlistItem={options.playlistItem} close={close} />
+          <YtSongActionsMenu
+            song={song}
+            playlistItem={options.playlistItem}
+            onSelect={options.onSelect}
+            close={close}
+          />
         ),
       });
     }),
@@ -71,7 +77,8 @@ export const openYtSongActions = (song: NativeYtSong, options: YtSongMenuOptions
 type Entry =
   | {
       readonly kind: "queue";
-      readonly action: "playNext" | "addToQueue" | "addToPlaylist" | "removeFromPlaylist";
+      readonly action:
+        "playNext" | "addToQueue" | "addToPlaylist" | "removeFromPlaylist" | "select";
     }
   | { readonly kind: "album"; readonly action: "goToAlbum"; readonly album: string }
   | {
@@ -107,11 +114,17 @@ const playlistSong = (song: NativeYtSong, find: FindInLibrary): PlaylistSong => 
   return track === null ? { source: "stream", song } : { source: "library", trackId: track.id };
 };
 
+/** Where the menu acts: the Library finder, and what its list gave it (`YtSongMenuOptions`). */
+interface MenuPlace {
+  readonly find: FindInLibrary;
+  readonly playlistItem: PlaylistPlace | undefined;
+  readonly onSelect: (() => void) | undefined;
+}
+
 const run = (
   entry: Entry,
   song: NativeYtSong,
-  find: FindInLibrary,
-  playlistItem: PlaylistPlace | undefined,
+  { find, playlistItem, onSelect }: MenuPlace,
 ): void => {
   if (entry.kind === "album") {
     // The page heads with what the song knows of its album until the page is read.
@@ -148,6 +161,9 @@ const run = (
     case "cancelDownload":
       cancelYtDownload(song.videoId);
       return;
+    case "select":
+      onSelect?.();
+      return;
   }
 };
 
@@ -158,10 +174,12 @@ const run = (
 function YtSongActionsMenu({
   song,
   playlistItem,
+  onSelect,
   close,
 }: {
   song: NativeYtSong;
   playlistItem: PlaylistPlace | undefined;
+  onSelect: (() => void) | undefined;
   close: () => void;
 }) {
   const status = useYtDownloadStatus(song.videoId);
@@ -183,6 +201,7 @@ function YtSongActionsMenu({
       album: song.albumId,
       ytAlbumHere,
       ytMusic,
+      selectable: onSelect !== undefined,
     }),
     ...ytDownloadActions(status, { inLibrary }).map((action): Entry => ({
       kind: "download",
@@ -193,7 +212,7 @@ function YtSongActionsMenu({
     const entry = entries[index];
     if (entry === undefined) return;
     close();
-    run(entry, song, find, playlistItem);
+    run(entry, song, { find, playlistItem, onSelect });
   };
   const { underFinger, trackEntry, trackList } = useSlideToChoose(choose);
   const flow = useOverlayFlow();
