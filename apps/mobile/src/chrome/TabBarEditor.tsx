@@ -20,18 +20,21 @@ const PLACE = "the tab bar";
 const title = (tab: TabBarTab): string => tabLook(tab).label;
 
 /**
- * The tab bar's editor, opened by a long press on the bar: Home first (it
- * can't move or go), the tabs after it (drag to reorder, a button removes
- * one), Search last while it's on, then the tabs off the bar (a button adds
- * one, until five fit). Done hands the bar to [done]; until then the bar
- * stays as it was.
+ * The tab bar's editor: Home first (it can't move or go), the tabs after it
+ * (drag to reorder, a button removes one), Search last while it's on, then
+ * the tabs off the bar (a button adds one, until five fit). The caller keeps
+ * [bar] and applies each [edit]; given [onDone] it's the card's, with Done,
+ * and without it Settings › Layout › Tab bar's page.
  */
-function TabBarEditor({ initial, done }: { initial: TabBar; done: (bar: TabBar) => void }) {
-  const [bar, setBar] = useState(initial);
-  const edit = useCallback(
-    (change: TabBarEdit) => setBar((current) => editTabBar(current, change)),
-    [],
-  );
+export function TabBarEditor({
+  bar,
+  edit,
+  onDone,
+}: {
+  bar: TabBar;
+  edit: (change: TabBarEdit) => void;
+  onDone?: (() => void) | undefined;
+}) {
   const search = bar.includes("search");
   const middle = movableTabs(bar);
   return (
@@ -57,9 +60,23 @@ function TabBarEditor({ initial, done }: { initial: TabBar; done: (bar: TabBar) 
         ) : undefined
       }
       note="Home stays first, and Search keeps its own pill at the end. Up to five tabs fit."
-      onDone={() => done(bar)}
+      onDone={onDone}
     />
   );
+}
+
+/**
+ * The tab bar's editor in the card a long press on the bar opens: the edits
+ * stay in the card until Done hands the bar to [done]; until then the bar
+ * stays as it was.
+ */
+function TabBarEditorCard({ initial, done }: { initial: TabBar; done: (bar: TabBar) => void }) {
+  const [bar, setBar] = useState(initial);
+  const edit = useCallback(
+    (change: TabBarEdit) => setBar((current) => editTabBar(current, change)),
+    [],
+  );
+  return <TabBarEditor bar={bar} edit={edit} onDone={() => done(bar)} />;
 }
 
 /**
@@ -72,7 +89,7 @@ export const openTabBarEditor = (): void => {
     label: "Edit tab bar",
     anchor: pressedRect(),
     render: (close) => (
-      <TabBarEditor
+      <TabBarEditorCard
         initial={getTabBar()}
         done={(bar) => {
           close();

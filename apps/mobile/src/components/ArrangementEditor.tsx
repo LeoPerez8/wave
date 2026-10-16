@@ -305,14 +305,23 @@ export type ArrangementEditorProps<Id extends string> = {
   last?: ReactNode;
   /** A line under the lists, e.g. what can't be changed. */
   note?: string;
-  onDone: () => void;
+  /**
+   * The card's Done, which hands the arrangement back. Without it the editor
+   * is a Settings page's content: it fills the page, within the page's
+   * margins, and the caller saves each `edit` as it comes.
+   */
+  onDone?: (() => void) | undefined;
 };
+
+/** A Settings page's room around its content (`SettingsPageScreen`'s). */
+const PAGE_CONTENT = { paddingHorizontal: grid.margin, paddingBottom: CELL * 6 } as const;
 
 /**
  * An editor for an ordered set of items (Home's sections, the tab bar's
- * tabs), in a card: the items shown (drag a handle to reorder, a button
- * removes one), then those not shown (a button adds one). The caller keeps
- * the arrangement and applies each `edit`; Done hands it back.
+ * tabs), in a card or on a Settings page: the items shown (drag a handle to
+ * reorder, a button removes one), then those not shown (a button adds one).
+ * The caller keeps the arrangement and applies each `edit`; in a card, Done
+ * hands it back. It scrolls, except while a row is dragged.
  */
 export function ArrangementEditor<Id extends string>({
   shown,
@@ -384,7 +393,12 @@ export function ArrangementEditor<Id extends string>({
   return (
     <>
       <View style={{ flexShrink: 1 }}>
-        <ScrollView bounces={false} overScrollMode="never" scrollEnabled={drag === null}>
+        <ScrollView
+          bounces={false}
+          overScrollMode="never"
+          scrollEnabled={drag === null}
+          contentContainerStyle={onDone === undefined ? PAGE_CONTENT : undefined}
+        >
           {first}
           {shown.map((id, index) => (
             <ShownRow
@@ -431,9 +445,11 @@ export function ArrangementEditor<Id extends string>({
           )}
         </ScrollView>
       </View>
-      <View className="flex-row justify-end" style={{ paddingTop: CELL }}>
-        <TextButton label="Done" onPress={onDone} />
-      </View>
+      {onDone !== undefined && (
+        <View className="flex-row justify-end" style={{ paddingTop: CELL }}>
+          <TextButton label="Done" onPress={onDone} />
+        </View>
+      )}
     </>
   );
 }

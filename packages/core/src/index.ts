@@ -236,8 +236,18 @@ export {
   tabsOffBar,
 } from "./tabBar.ts";
 export type { TabBar, TabBarEdit, TabBarTab } from "./tabBar.ts";
-export { SETTINGS_PAGES, accountsSummary, downloadsSummary } from "./settingsPages.ts";
-export type { SettingsPage, SettingsPageEntry } from "./settingsPages.ts";
+export {
+  LAYOUT_PAGES,
+  SETTINGS_PAGES,
+  accountsSummary,
+  downloadsSummary,
+} from "./settingsPages.ts";
+export type {
+  LayoutPage,
+  LayoutPageEntry,
+  SettingsPage,
+  SettingsPageEntry,
+} from "./settingsPages.ts";
 export {
   PLAYLIST_LAYOUTS,
   parsePlaylistLayout,

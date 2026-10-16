@@ -78,6 +78,7 @@ export const useSettingsSummaries = (): Record<SettingsPage, string | null> => {
         ? null
         : counted(roots.length, "music folder"),
     appearance: null,
+    layout: null,
     playback: null,
     lyricsAndTags:
       lookup.status === "running" ? libraryLookupProgress(lookup.done, lookup.total).line : null,
