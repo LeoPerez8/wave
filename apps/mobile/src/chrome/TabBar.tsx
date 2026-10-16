@@ -16,13 +16,17 @@ import { BACKDROP, chrome } from "./chrome";
 import { OnFloatingChrome } from "./onFloatingChrome";
 import { openTabBarEditor } from "./TabBarEditor";
 import { tabLook } from "./tabs";
+import type { SwitchTab } from "./tabSwitches";
+
+/** A tab tapped, with its trigger's switch. */
+type TabTap = (to: TabBarTab, switchTab: SwitchTab) => void;
 
 type TabProps = {
   name: TabBarTab;
   /** Show the label under the icon (the Search pill is icon-only). */
   showLabel?: boolean;
-  /** Runs before switching to this tab. */
-  onSwitch: (to: TabBarTab) => void;
+  /** Asked to switch to this tab on every tap; it decides whether to (`useTabSwitches`). */
+  onSwitch: TabTap;
   /** Runs on every tap, the current tab included. */
   onTap?: () => void;
 };
@@ -32,7 +36,7 @@ type TabProps = {
  * A long press opens the tab bar's editor.
  */
 function Tab({ name, showLabel = true, onSwitch, onTap }: TabProps) {
-  const { triggerProps } = useTabTrigger({ name });
+  const { triggerProps, switchTab } = useTabTrigger({ name });
   const accent = useThemeColor("accent");
   const secondary = useThemeColor("secondary");
   const { label, icon: Icon } = tabLook(name);
@@ -44,10 +48,9 @@ function Tab({ name, showLabel = true, onSwitch, onTap }: TabProps) {
       accessibilityLabel={label}
       accessibilityHint="Long press to edit the tab bar"
       accessibilityState={{ selected: focused }}
-      onPress={(event) => {
-        if (!focused) onSwitch(name);
+      onPress={() => {
         onTap?.();
-        triggerProps.onPress?.(event);
+        onSwitch(name, switchTab);
       }}
       onLongPress={openTabBarEditor}
       haptic="selection"
@@ -73,8 +76,9 @@ const RADIUS = chrome.tabBar / 2;
  * own. Tapping Search brings the keyboard up; a long press on any tab opens
  * the bar's editor. Memoized: the tabs layout renders on navigation, and the
  * bar needn't (its tabs follow the focused one themselves; pass a stable `onTabTap`).
+ * Every tap goes to `onTabTap`, which switches (`useTabSwitches`).
  */
-export const TabBar = memo(function TabBar({ onTabTap }: { onTabTap: (to: TabBarTab) => void }) {
+export const TabBar = memo(function TabBar({ onTabTap }: { onTabTap: TabTap }) {
   useRenderCount("TabBar");
   const insets = useSafeAreaInsets();
   const bar = useTabBar();

@@ -46,6 +46,8 @@ export interface Step {
   readonly anchor?: "first" | "last";
   /** How long the step's window stays open; the run's window when unset. */
   readonly windowMs?: number;
+  /** Marks timed from the touch besides the response (`phasesMs`). */
+  readonly phases?: readonly string[];
 }
 
 /** What the scenarios read from the fixture (scripts/perf/fixture.json). */
@@ -109,8 +111,26 @@ const HANDLE: Point = { x: 48, y: 0 };
 const THREE_ROWS_DOWN: Point = { x: 48, y: 3 * 56 };
 
 /** Ten tab changes away from Home and back, cycling through [tabs]. */
+const tabCycleLabels = (tabs: readonly string[], count: number): string[] =>
+  Array.from({ length: count }, (_, i) => tabs[(i + 1) % tabs.length] ?? "Home");
 const tabCycle = (tabs: readonly string[], count: number): Target[] =>
-  Array.from({ length: count }, (_, i) => tab(tabs[(i + 1) % tabs.length] ?? "Home"));
+  tabCycleLabels(tabs, count).map(tab);
+
+/**
+ * What a tab switch's time goes to (#304), besides the route mark: React done
+ * with the switch (`tab.commit`, detail `<tab> first|warm`) and the shown tab
+ * laid out (`tab.layout`; none when showing it changes no layout). The frames
+ * after them are native work: attaching the tab's views, layout and drawing.
+ */
+const TAB_PHASES = ["tab.commit", "tab.layout"] as const;
+
+/** A tab tap, measured to its route mark and its phases. */
+const tabStep = (measure: string, target: Target): Step => ({
+  measure,
+  action: { kind: "tap", target },
+  expect: route,
+  phases: TAB_PHASES,
+});
 
 export const SCENARIOS: readonly Scenario[] = [
   {
@@ -129,29 +149,38 @@ export const SCENARIOS: readonly Scenario[] = [
     warmup: 1,
   },
   {
+    name: "tab-first",
+    summary: "The first visit to each of the fixture's tabs after a launch: the tab is built.",
+    coldEachIteration: true,
+    steps: ({ tabs }) => tabs.slice(1).map((label) => tabStep("first", tab(label))),
+    iterations: 5,
+    warmup: 1,
+  },
+  {
     name: "tab-switch",
-    summary: "Ten tab changes across the fixture's tabs, one tap at a time.",
-    steps: ({ tabs }) =>
-      tabCycle(tabs, 10).map((target) => ({
-        measure: "tab",
-        action: { kind: "tap", target },
-        expect: route,
-      })),
+    summary: "Ten tab changes across the fixture's tabs, one tap at a time: warm visits.",
+    steps: ({ tabs }) => tabCycle(tabs, 10).map((target) => tabStep("tab", target)),
     iterations: 3,
     warmup: 1,
   },
   {
     name: "rapid-tabs",
-    summary: "Ten tab taps back to back; latencies count from the last tap.",
-    steps: ({ tabs }) => [
-      {
-        measure: "burst",
-        action: { kind: "taps", targets: tabCycle(tabs, 10) },
-        expect: route,
-        anchor: "last",
-        windowMs: 4_000,
-      },
-    ],
+    summary:
+      "Ten tab taps back to back; latencies count from the last tap to the tabs settling on it.",
+    steps: ({ tabs }) => {
+      const labels = tabCycleLabels(tabs, 10);
+      return [
+        {
+          measure: "burst",
+          action: { kind: "taps", targets: labels.map(tab) },
+          // `tab.settled` (detail: the tab's label) comes once no switch is on its way
+          // and the tab on screen is the one tapped last.
+          expect: { mark: "tab.settled", detail: labels[labels.length - 1] ?? "Home" },
+          anchor: "last",
+          windowMs: 4_000,
+        },
+      ];
+    },
     iterations: 5,
     warmup: 1,
   },
