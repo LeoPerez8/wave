@@ -3,11 +3,14 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
-    # Pushing v<version> on main publishes that version's release (docs/spec.md, Releases).
+    # A push to main or ti whose app version isn't tagged yet publishes that version's
+    # release and creates its tag (docs/spec.md, Releases). Stable versions belong to main,
+    # <version>-ti ones to ti. Pushing v<version> by hand publishes it too.
+    branches: [main, ti]
     tags: ["v*"]
 
 permissions:
+  actions: read
   contents: write
   pull-requests: write
 
@@ -18,9 +21,10 @@ concurrency:
 env:
   PR_NUMBER: ${{ github.event.pull_request.number }}
   IS_SAME_REPO_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
-  # A release tag's run. Releases are always full builds: steps that skip or shortcut the
-  # APK build must not apply when this is 'true'.
+  # A hand-pushed release tag's run. Stable releases build fully; ti prereleases may reuse
+  # a compatible native APK. Branch pushes release through the Checks job's release_tag.
   IS_RELEASE: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+  IS_TI: ${{ github.ref == 'refs/heads/ti' || (startsWith(github.ref, 'refs/tags/v') && endsWith(github.ref, '-ti')) || github.event.pull_request.base.ref == 'ti' }}
 
 jobs:
   # What the change touches, by the rule in scripts/ci/changes.ts. Jobs that only
@@ -71,12 +75,15 @@ jobs:
             "Nothing they test changed (wave-native, the app config, config plugins, the lockfile or CI), so they didn't run."
 
   # The patch notes a release cut from this commit gets (scripts/ci/patch-notes.sh),
-  # shown in the run's summary. A release tag's run publishes them.
+  # shown in the run's summary. A run that releases publishes them.
   notes:
     name: Patch notes
     runs-on: ubuntu-latest
     outputs:
       notes: ${{ steps.notes.outputs.notes }}
+      # 'success' when they were built. A branch push only learns in Checks whether it
+      # releases, so the release job checks this instead of this job failing.
+      outcome: ${{ steps.notes.outcome }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -107,6 +114,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       sha: ${{ steps.autofix.outputs.sha || github.event.pull_request.head.sha || github.sha }}
+      # The versioned release this push publishes (scripts/ci/release-tag.ts), or empty.
+      release_tag: ${{ steps.release.outputs.tag }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -135,6 +144,13 @@ jobs:
       - name: Check release tag
         if: env.IS_RELEASE == 'true'
         run: scripts/ci/step.sh "Check release tag" scripts/ci/check-release-tag.sh "$GITHUB_REF_NAME"
+
+      # A push to main or ti releases its app version when v<version> isn't tagged yet and
+      # the version belongs to that branch. The log says why when it doesn't.
+      - name: Decide the release
+        id: release
+        if: github.event_name == 'push'
+        run: scripts/ci/release-tag.sh
 
       # On PRs, by the rule in scripts/ci/changes.ts: the packages the PR changed and their
       # dependents, or all of them. Pushes to main and release tags always check every package.
@@ -220,6 +236,8 @@ jobs:
   android:
     name: Android APK
     needs: [changes, checks, notes]
+    outputs:
+      artifact: ${{ steps.apk.outputs.name }}
     # Only PRs can skip: on main and release tags every area counts as changed.
     # Only a release needs the patch notes, so elsewhere a failed notes job doesn't stop the
     # APK. A job-level `if` can't read `env`, so the release test is IS_RELEASE spelled out.
@@ -265,7 +283,7 @@ jobs:
           EXPO_NO_GIT_STATUS: "1"
         run: ../../scripts/ci/step.sh "Prebuild" pnpm exec expo prebuild --platform android --no-install
 
-      # Main saves Metro's cache, PRs only read it. Metro only adds entries, so the key starts
+      # Main and ti save Metro's cache; PRs and tags only read it. The key starts
       # over when dependencies change. The path is uniwind's cache store (os.tmpdir()), which
       # replaces Expo's in metro.config.js.
       - name: Restore Metro's cache
@@ -293,13 +311,33 @@ jobs:
         with:
           path: ${{ env.KEPT_APK }}
           key: ${{ steps.key.outputs.key }}
-          # Only PRs repack; elsewhere it's enough to know whether to keep this build.
-          lookup-only: ${{ github.event_name != 'pull_request' }}
+          lookup-only: ${{ github.event_name != 'pull_request' && env.IS_TI != 'true' }}
 
-      # Sets APK_BUILD (full or repack) and APK_BUILD_REASON. Main and release tags build in full.
+      # A tag cannot read ti's branch-scoped cache. Restore an exact-key full build
+      # from a successful push on ti, validated by kept-apk.ts before downloading it.
+      - name: Find a kept ti APK artifact
+        id: kept_artifact
+        if: env.IS_TI == 'true' && steps.kept.outputs.cache-hit != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NATIVE_KEY: ${{ steps.key.outputs.key }}
+        run: node scripts/ci/kept-apk.ts "$NATIVE_KEY" | tee -a "$GITHUB_OUTPUT"
+
+      - name: Restore the kept ti APK artifact
+        id: kept_download
+        if: steps.kept_artifact.outputs.runId != ''
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.kept_artifact.outputs.runId }}
+          name: kept-${{ steps.key.outputs.key }}
+          path: ${{ env.KEPT_APK }}
+
+      # Main and stable tags stay full builds. TI pushes and tags may repack.
       - name: Plan the APK build
         env:
-          KEPT: ${{ steps.kept.outputs.cache-hit }}
+          KEPT: ${{ steps.kept.outputs.cache-hit == 'true' || steps.kept_download.outcome == 'success' }}
         run: node scripts/ci/repack.ts plan | tee -a "$GITHUB_ENV"
 
       - name: Repack the kept APK
@@ -316,8 +354,10 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v5
         if: env.APK_BUILD == 'full'
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/ti' }}
 
-      # Each main commit saves its compiled objects; PRs only restore them. Prefer
+      # Main and ti save their compiled objects; PRs and tags only restore them. Prefer
       # the same lockfile's latest entry, then seed new dependencies from an older one.
       - name: Restore ccache
         id: ccache
@@ -334,16 +374,8 @@ jobs:
         if: env.APK_BUILD == 'full'
         run: scripts/ci/ccache.sh setup
 
-      # The native-tests job runs these beside this one; a release also runs them here first,
-      # so a tag whose tests fail never publishes.
-      # AGP 9 only creates unit-test tasks for the tested build type (debug) in libraries.
-      - name: Native unit tests
-        if: env.IS_RELEASE == 'true'
-        working-directory: apps/mobile/android
-        run: ../../../scripts/ci/step.sh "Native unit tests" ./gradlew :wave-native:testDebugUnitTest --no-daemon --console=plain
-
       - name: Save Metro's cache
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/ti'
         uses: actions/cache/save@v4
         with:
           path: /tmp/metro-cache
@@ -363,7 +395,7 @@ jobs:
         run: scripts/ci/ccache.sh stats
 
       - name: Save ccache
-        if: github.ref == 'refs/heads/main' && steps.ccache.outputs.cache-hit != 'true'
+        if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/ti') && steps.ccache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: ~/.cache/ccache
@@ -371,7 +403,7 @@ jobs:
 
       # Full PR builds may keep their own native APK too. GitHub scopes these cache entries
       # to that PR, so another PR can only read builds saved on its base or the default branch.
-      # Gradle and Metro cache writes above stay limited to main.
+      # Gradle and Metro cache writes above stay limited to main and ti.
       - name: Keep the full build for JS-only PRs
         if: env.APK_BUILD == 'full' && steps.kept.outputs.cache-hit != 'true'
         run: |
@@ -385,6 +417,15 @@ jobs:
         with:
           path: ${{ env.KEPT_APK }}
           key: ${{ steps.key.outputs.key }}
+
+      - name: Keep ti's full APK for version tags
+        if: github.ref == 'refs/heads/ti' && env.APK_BUILD == 'full'
+        uses: actions/upload-artifact@v4
+        with:
+          name: kept-${{ steps.key.outputs.key }}
+          path: ${{ env.KEPT_APK }}
+          include-hidden-files: true
+          retention-days: 30
 
       - name: Collect APK
         id: apk
@@ -413,25 +454,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if [ -n "$PR_NUMBER" ]; then tag="pr-$PR_NUMBER"; asset="wave-pr-$PR_NUMBER.apk"; title="PR #$PR_NUMBER build";
+          elif [ "$GITHUB_REF" = "refs/heads/ti" ]; then tag="ti-latest"; asset="wave-ti.apk"; title="Latest ti test build";
           else tag="latest"; asset="wave-latest.apk"; title="Latest main build"; fi
           cp "${{ steps.apk.outputs.path }}" "$RUNNER_TEMP/$asset"
           gh release view "$tag" > /dev/null 2>&1 || \
-            gh release create "$tag" --prerelease --target "$HEAD_SHA" --title "$title" \
+            gh release create "$tag" --prerelease --latest=false --target "$HEAD_SHA" --title "$title" \
               --notes "Sideloadable APK, rebuilt on every push. Not for distribution."
           gh release upload "$tag" "$RUNNER_TEMP/$asset" --clobber
           echo "url=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${tag}/${asset}" >> "$GITHUB_OUTPUT"
-
-      - name: Publish the release
-        if: env.IS_RELEASE == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PATCH_NOTES: ${{ needs.notes.outputs.notes }}
-        run: |
-          if [ -n "$PATCH_NOTES" ]; then
-            export RELEASE_NOTES_FILE="$RUNNER_TEMP/patch-notes.md"
-            printf '%s\n' "$PATCH_NOTES" > "$RELEASE_NOTES_FILE"
-          fi
-          scripts/ci/publish-release.sh "${{ steps.apk.outputs.path }}"
 
       - name: Report
         if: always() && env.IS_SAME_REPO_PR == 'true' && job.status != 'cancelled'
@@ -445,3 +475,45 @@ jobs:
             extra="$extra"$'\n\n'"📱 **[Download APK](${{ steps.publish.outputs.url }})** (built from \`${HEAD_SHA:0:7}\`)"
           fi
           scripts/ci/report.sh "${{ job.status }}" "Android APK" "$extra"
+
+  # Publishes the release the Checks job decided on: a hand-pushed tag, or a branch push
+  # whose version isn't tagged yet, which creates v<version> on this run's commit. A tag
+  # created with the workflow's token doesn't start another run.
+  release:
+    name: Publish versioned release
+    needs: [checks, android, native-tests, notes]
+    # Test releases can repack without Gradle, but neither channel publishes before
+    # the native tests pass. The stable path keeps its full APK build policy.
+    if: needs.checks.outputs.release_tag != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the patch notes
+        env:
+          NOTES_OUTCOME: ${{ needs.notes.outputs.outcome }}
+        run: |
+          if [ "$NOTES_OUTCOME" != "success" ]; then
+            echo "::error::The Patch notes job failed, so nothing is published. Re-run the failed jobs."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: scripts/ci
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.android.outputs.artifact }}
+          path: ${{ runner.temp }}/release
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.checks.outputs.release_tag }}
+          PATCH_NOTES: ${{ needs.notes.outputs.notes }}
+          APK_NAME: ${{ needs.android.outputs.artifact }}
+        run: |
+          if [ -n "$PATCH_NOTES" ]; then
+            export RELEASE_NOTES_FILE="$RUNNER_TEMP/patch-notes.md"
+            printf '%s\n' "$PATCH_NOTES" > "$RELEASE_NOTES_FILE"
+          fi
+          scripts/ci/publish-release.sh "$RUNNER_TEMP/release/$APK_NAME"

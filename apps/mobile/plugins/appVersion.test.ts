@@ -2,12 +2,18 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { releaseTagProblem, versionCode } from "./appVersion.ts";
+import { releaseBranch, releaseTagProblem, versionCode } from "./appVersion.ts";
 
 describe("versionCode", () => {
   test("is major × 10000 + minor × 100 + patch", () => {
     assert.equal(versionCode("0.5.0"), 500);
     assert.equal(versionCode("1.2.3"), 10203);
+  });
+
+  test("a ti version keeps its numeric versionCode for updates to stable", () => {
+    assert.equal(versionCode("0.5.1-ti"), 501);
+    assert.equal(versionCode("0.5.1-ti"), versionCode("0.5.1"));
+    assert.ok(versionCode("0.5.1-ti") > versionCode("0.5.0"));
   });
 
   test("rejects a version it can't number without colliding", () => {
@@ -21,6 +27,9 @@ describe("versionCode", () => {
 describe("releaseTagProblem", () => {
   test("a tag naming the app's version is fine", () => {
     assert.equal(releaseTagProblem("v0.5.0", "0.5.0"), undefined);
+    assert.equal(releaseTagProblem("v0.5.1-ti", "0.5.1-ti"), undefined);
+    assert.ok(releaseTagProblem("v0.5.1", "0.5.1-ti"));
+    assert.ok(releaseTagProblem("v0.5.1-ti", "0.5.1"));
   });
 
   test("a tag naming another version says which version the app is at", () => {
@@ -34,4 +43,9 @@ describe("releaseTagProblem", () => {
       );
     }
   });
+});
+
+test("stable releases belong to main and ti prereleases belong to ti", () => {
+  assert.equal(releaseBranch("0.5.1"), "main");
+  assert.equal(releaseBranch("0.5.1-ti"), "ti");
 });
