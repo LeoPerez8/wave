@@ -13,6 +13,12 @@ export interface BackgroundWorkLimits {
   /** Work never waits longer than this from when it asked, however long the owner interacts. */
   readonly maxWaitMs: number;
   /**
+   * A touch a native scroll or gesture took over counts as held this long,
+   * then as lifted: its lift is never heard, and a scroll's fling runs on
+   * after it.
+   */
+  readonly takeoverMs: number;
+  /**
    * Startup work waits at most this long, from when it was first asked, for
    * a screen to show content: a safety net for a launch whose screen reads
    * nothing, not the usual start.
@@ -23,6 +29,7 @@ export interface BackgroundWorkLimits {
 export const BACKGROUND_WORK_LIMITS: BackgroundWorkLimits = {
   quietMs: 400,
   maxWaitMs: 2000,
+  takeoverMs: 3000,
   contentCapMs: 3000,
 };
 
@@ -54,8 +61,13 @@ export interface BackgroundWork {
   readonly whenFree: (run: () => void) => () => void;
   /** A finger went down. */
   readonly touchStarted: () => void;
-  /** The fingers lifted (or the touch was cancelled). */
+  /** The fingers lifted. */
   readonly touchEnded: () => void;
+  /**
+   * A native scroll or gesture took the touch over: the finger may still be
+   * down, and its lift won't be heard. Counts as held for `takeoverMs`.
+   */
+  readonly touchTakenOver: () => void;
   /** Wave came back to the foreground: work waits as after a touch, for the owner's first tap. */
   readonly resumed: () => void;
   /**
@@ -82,6 +94,7 @@ export const createBackgroundWork = ({
   const limits = { ...BACKGROUND_WORK_LIMITS, ...given };
   const waiters: Waiter[] = [];
   let held = false;
+  /** When the owner last touched, or, after a takeover, when the finger presumably lifts. */
   let interactedAt = -Infinity;
   let cancelTimer: (() => void) | null = null;
   let slices = 0;
@@ -103,20 +116,28 @@ export const createBackgroundWork = ({
     cancelTimer = schedule(Math.max(0, dueAt(first) - now()), pump);
   };
 
-  /** Runs the first waiter when it's due; one per turn, so each turn re-checks for a touch. */
+  /**
+   * Runs the first waiter when it's due; one per turn, so each turn re-checks
+   * for a touch. The next turn is set even when the waiter throws.
+   */
   const pump = (): void => {
     cancelTimer = null;
     const first = waiters[0];
     if (first === undefined) return;
     const time = now();
-    if (dueAt(first) <= time) {
-      waiters.shift();
-      slices += 1;
-      longestWaitMs = Math.max(longestWaitMs, time - first.askedAt);
-      if (quietAt() > time) forcedSlices += 1;
-      first.run();
+    if (dueAt(first) > time) {
+      arm();
+      return;
     }
-    arm();
+    waiters.shift();
+    slices += 1;
+    longestWaitMs = Math.max(longestWaitMs, time - first.askedAt);
+    if (quietAt() > time) forcedSlices += 1;
+    try {
+      first.run();
+    } finally {
+      arm();
+    }
   };
 
   const whenFree = (run: () => void): (() => void) => {
@@ -163,8 +184,8 @@ export const createBackgroundWork = ({
     cancelCap ??= schedule(limits.contentCapMs, () => letGo(true));
   };
 
-  const interacted = (): void => {
-    interactedAt = now();
+  const interacted = (at = now()): void => {
+    interactedAt = at;
     arm();
   };
 
@@ -178,7 +199,11 @@ export const createBackgroundWork = ({
       held = false;
       interacted();
     },
-    resumed: interacted,
+    touchTakenOver: () => {
+      held = false;
+      interacted(now() + limits.takeoverMs);
+    },
+    resumed: () => interacted(),
     afterContent,
     contentShown: () => letGo(false),
     stats: () => ({

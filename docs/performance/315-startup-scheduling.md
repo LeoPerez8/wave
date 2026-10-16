@@ -37,6 +37,16 @@ Now:
   touch: the rescan on return and sync's database steps wait 400 ms for the first tap back. The
   root view feeds touches in every build (`onTouchStart`/`onTouchEnd`/`onTouchCancel`). Leaving
   the foreground clears a touch whose end went unheard.
+- **A touch a scroll or gesture takes over is still held.** React Native cancels the root's touch
+  when a native scroll view or a gesture handler takes it over, with the finger still down, and
+  sends nothing more for it (`JSTouchDispatcher` ignores the rest of the gesture; gesture
+  handler cancels JS responders when a handler activates). So `onTouchCancel` is a takeover, not
+  a lift: Core holds work for `takeoverMs` (3 s, a drag plus its fling) and then the quiet time,
+  unless the next touch ends first. `maxWaitMs` still bounds each slice. A gesture-handler tap
+  (the toast, a settings slider) also arrives as a takeover, so it holds work up to 3.4 s
+  instead of 0.4 s.
+- **A slice that throws doesn't stall the queue.** The next turn is set even when a slice or a
+  startup piece throws; the error still surfaces.
 - **Bounded batches at the JavaScript boundary.** A scanner batch is saved in slices of 100 files
   (`scanSaveSlices`, each move with its file, the batch's artwork with the first), one
   transaction per free turn. Sync waits for a turn before each synchronous step: joining, each
@@ -108,15 +118,15 @@ node scripts/perf/perf.ts compare perf-results/315-before-*.jsonl perf-results/3
 - Peak and retained memory: the runner's memory record after each scenario. Slicing doesn't hold
   more files. Batches the scanner sends while a slice waits queue in JavaScript, which the device
   run should check with a full scan (a new folder).
-- Also check on the first run: the root view's `onTouchEnd` fires for touches gesture handler or
-  a scroll view takes (`backgroundWork.forcedSlices` stays near 0 when idle). If it doesn't, work
-  still runs, at most 2 s late per slice.
+- Also check on the first run: a scroll or drag holds slices until a few seconds after it ends
+  (`backgroundWork.forcedSlices` stays near 0 when idle). Pending: whether 3 s covers a fling on
+  the phone.
 
 ## Behavior kept
 
-- Core: `backgroundWork.test.ts` (12: idle work on the next turn; touch, quiet time, restart;
-  no starvation; one slice per turn; return to the foreground; cancel; startup order; content
-  cap; stats), `writePacing.test.ts` (3), `scanReconcile.test.ts` (+7: slices, moves with their
+- Core: `backgroundWork.test.ts` (16: idle work on the next turn; touch, quiet time, restart;
+  no starvation; one slice per turn; a taken-over touch held, then let go, then ended by the next
+  touch; a throwing slice; return to the foreground; cancel; startup order; content cap; stats), `writePacing.test.ts` (3), `scanReconcile.test.ts` (+7: slices, moves with their
   file, empty batch; scan end with and without saves, changed entries, files gone). All 1,895
   Core tests pass.
 - App: `syncCycle.test.ts` (+2: database steps wait for turns and the sync finishes; a sign-out
