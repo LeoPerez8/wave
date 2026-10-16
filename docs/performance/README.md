@@ -42,7 +42,11 @@ node scripts/perf/perf.ts run --dry-run             # the whole pipeline on a si
 - `--apk <file>`: installs the APK first (`adb install -r`) and records its SHA-256.
 - `--commit <sha>`: the APK's commit when it can't say itself. A perf build reports its own.
 - `--compile <filter>`: sets the ART compiler filter first (`cmd package compile -m <filter> -f`),
-  e.g. `speed-profile` or `verify`. #317 uses this.
+  e.g. `speed-profile` or `verify`. `--compile baseline` clears what the phone learned, has
+  profileinstaller install the profile the APK ships, then compiles `speed-profile`: the state a
+  fresh sideload reaches once the phone's idle compile has run. The run records profileinstaller's
+  result and the profile's size (`artProfile`). Use it whenever before and after ship different
+  profiles (#317).
 - `--import-link <url>`: overrides the fixture's playlist link.
 - `--artist <name>`: overrides the fixture's artist (`push-artist`).
 - `--meta key=value`: records a value as given. On a plain APK, pass the Library's size this way
@@ -122,6 +126,7 @@ launch, the share and the import's idle window have no touch.
 | Scenario           | Steps (measure)                                                                      | Response mark             | Iterations |
 | ------------------ | ------------------------------------------------------------------------------------ | ------------------------- | ---------: |
 | `startup`          | cold launch (`cold`)                                                                 | (am start -W)             |          5 |
+| `warm-start`       | Home, then Wave's launcher intent with its process alive (`warm`)                    | (am start -W)             |          5 |
 | `tab-switch`       | ten tab taps cycling through `tabs` (`tab`)                                          | `route`                   |          3 |
 | `rapid-tabs`       | ten tab taps back to back, measured from the last (`burst`)                          | `route`                   |          5 |
 | `push-settings`    | Home › Settings (`push`), Back (`pop`)                                               | `route`                   |         10 |
@@ -308,6 +313,12 @@ In the Wave process:
 To find a step's touch in the trace, look up its `touchAt` (CLOCK_MONOTONIC ms) in the results.
 Perfetto shows boot time by default, which runs ahead of the monotonic clock by the time the phone
 spent in deep sleep. Line them up on the `deliverInputEvent` slice for that tap.
+
+## ART profiles
+
+`perf.ts profile` generates Wave's Baseline and Startup Profiles on the phone, checks that an APK
+ships them, and reads what ART holds for Wave. See
+[317-android-profiles.md](317-android-profiles.md) for the commands and when to refresh them.
 
 ## Validating the runner without a phone
 

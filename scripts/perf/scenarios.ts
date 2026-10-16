@@ -14,6 +14,8 @@ export type Action =
   | { readonly kind: "share" }
   /** A cold launch, timed by `am start -W`. */
   | { readonly kind: "launch" }
+  /** Home, then Wave again from its launcher intent while its process lives: a warm launch. */
+  | { readonly kind: "resume" }
   /** Nothing: a window that watches the app on its own (an import filling). */
   | { readonly kind: "idle" }
   /**
@@ -118,6 +120,13 @@ export const SCENARIOS: readonly Scenario[] = [
     steps: () => [{ measure: "cold", action: { kind: "launch" } }],
     iterations: 5,
     warmup: 0,
+  },
+  {
+    name: "warm-start",
+    summary: "Home, then Wave again with its process alive: am start -W times of a warm launch.",
+    steps: () => [{ measure: "warm", action: { kind: "resume" } }],
+    iterations: 5,
+    warmup: 1,
   },
   {
     name: "tab-switch",

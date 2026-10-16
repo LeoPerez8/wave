@@ -24,6 +24,7 @@ import {
   type AmStart,
   type Target,
 } from "./device.ts";
+import { compileWithBaseline, readProfileState } from "./profileDevice.ts";
 import { stepMetrics, type StepRecord } from "./metrics.ts";
 import {
   findScenario,
@@ -70,7 +71,10 @@ export interface RunOptions {
   readonly apkFile: { readonly path: string; readonly sha256: string } | null;
   /** Values recorded as given (`--meta key=value`): Library size on a non-perf build, notes. */
   readonly manual: Readonly<Record<string, string>>;
-  /** Puts this ART compiler filter on the APK before running (`cmd package compile -m`). */
+  /**
+   * Puts this ART compiler filter on the APK before running (`cmd package compile -m`), or,
+   * for `baseline`, compiles it with only the profile the APK ships (#317).
+   */
   readonly compile: string | null;
   /** Records a Perfetto trace of each scenario into this folder. */
   readonly perfetto: { readonly dir: string; readonly config: string } | null;
@@ -231,6 +235,7 @@ export const runPerf = async (
           options.importLink,
         )} ${pkg}`;
       case "launch":
+      case "resume":
       case "idle":
         return null;
     }
@@ -332,6 +337,17 @@ export const runPerf = async (
     let launched: AmStart | null = null;
     if (step.action.kind === "launch") {
       launched = await launch();
+    } else if (step.action.kind === "resume") {
+      await shell("input keyevent 3");
+      await device.sleep(options.settleMs);
+      await shell("logcat -c");
+      launched = parseAmStart(
+        await shell(
+          `am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p ${pkg}`,
+        ),
+      );
+      if (launched.status !== "ok")
+        throw new ScenarioError(`Couldn't bring ${pkg} back (${launched.status ?? "no status"}).`);
     } else {
       await device.sleep(options.settleMs);
       await shell("logcat -c");
@@ -483,7 +499,20 @@ export const runPerf = async (
   // The run
 
   await shell("input keyevent KEYCODE_WAKEUP");
-  if (options.compile !== null) await shell(`cmd package compile -m ${options.compile} -f ${pkg}`);
+  let artProfile: { install: string; classes: number; methods: number } | null = null;
+  if (options.compile === "baseline") {
+    const { install } = await compileWithBaseline(device, pkg);
+    const { profile } = await readProfileState(device, pkg);
+    artProfile = {
+      install,
+      classes: profile?.classes.size ?? 0,
+      methods: profile?.methods.size ?? 0,
+    };
+    log(
+      `profileinstaller: ${install}; ART's profile: ${artProfile.classes} classes, ${artProfile.methods} methods`,
+    );
+  } else if (options.compile !== null)
+    await shell(`cmd package compile -m ${options.compile} -f ${pkg}`);
   const meta = await metadata();
   write({
     type: "run",
@@ -507,6 +536,7 @@ export const runPerf = async (
       artist: options.config.artist,
     },
     ...meta,
+    ...(options.compile === "baseline" ? { artProfile } : {}),
   });
   log(
     `${meta.device.model ?? "?"} (Android ${meta.device.android ?? "?"}), Wave ${
