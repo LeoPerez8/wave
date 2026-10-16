@@ -399,11 +399,41 @@ describe("itemActions", () => {
 
   test("a playlist can be renamed and deleted, one at a time", () => {
     const one = names(itemActions({ kind: "playlist", items: [{}], here: "/" }));
-    assert.deepEqual(one.slice(-2), ["renamePlaylist", "deletePlaylist"]);
+    assert.ok(one.includes("renamePlaylist"));
+    assert.equal(one.at(-1), "deletePlaylist");
     const two = names(
       itemActions({ kind: "playlist", items: [{}, {}], here: "/", surface: "selection" }),
     );
     assert.ok(!two.includes("renamePlaylist"));
+  });
+
+  test("a playlist's menu changes its image, and removes it once it has one", () => {
+    const menu = (hasImage?: boolean) =>
+      names(itemActions({ kind: "playlist", items: [{ hasImage }], here: "/" })).slice(-4);
+    assert.deepEqual(menu(), ["addToPlaylist", "renamePlaylist", "changeImage", "deletePlaylist"]);
+    assert.deepEqual(menu(true), [
+      "renamePlaylist",
+      "changeImage",
+      "removeImage",
+      "deletePlaylist",
+    ]);
+    assert.equal(ITEM_ACTION_LABELS.changeImage, "Change Image");
+    assert.equal(ITEM_ACTION_LABELS.removeImage, "Remove Image");
+    assert.ok(!isDestructiveAction("removeImage"));
+    assert.ok(!confirmsFirst("removeImage"));
+  });
+
+  test("selecting a playlist doesn't offer its image entries: they're the menu's", () => {
+    const bar = names(
+      itemActions({
+        kind: "playlist",
+        items: [{ hasImage: true }],
+        here: "/library/playlists",
+        surface: "selection",
+      }),
+    );
+    assert.ok(!bar.includes("changeImage"));
+    assert.ok(!bar.includes("removeImage"));
   });
 
   test("selected playlists: queue them, add them to a playlist, Rename and Delete Playlist only for one", () => {

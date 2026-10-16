@@ -95,6 +95,7 @@ export {
   moveItem,
   nextPlaylistName,
   planPlaylistAdd,
+  playlistArtwork,
   playlistMosaic,
   playlistRemovals,
 } from "./playlists.ts";
