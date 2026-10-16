@@ -34,14 +34,22 @@ import expo.modules.kotlin.views.ExpoView
  * references the node, and the RenderThread syncs the node's new recording with
  * whatever frame the window is drawing anyway (a scroll, an image loading). So
  * an idle screen renders no frames, and a scroll costs one re-record per frame.
+ * A glass that isn't shown skips its recording. With [coalesce] (a glass probe,
+ * issue #316), the glass over one backdrop share one recording ([SharedBackdrop]).
  */
 class WaveGlassView(context: Context, appContext: AppContext) : ExpoView(context, appContext) {
   private val density = resources.displayMetrics.density
 
+  /** Null draws the tint and rim alone, recording nothing (the glass probe's `off`). */
   var backdropNativeId: String? = null
     set(value) {
       field = value
       backdrop = null
+      releaseShared()
+      if (value == null) {
+        node.discardDisplayList()
+        invalidate()
+      }
     }
   var blurRadiusDp = 24f
     set(value) {
@@ -52,6 +60,16 @@ class WaveGlassView(context: Context, appContext: AppContext) : ExpoView(context
     set(value) {
       field = value
       effectDirty = true
+    }
+
+  /** Share one backdrop recording with the other glass over it ([SharedBackdrop]). */
+  var coalesce = false
+    set(value) {
+      if (field == value) return
+      field = value
+      releaseShared()
+      node.discardDisplayList()
+      invalidate()
     }
   var cornerRadiusDp = 32f
     set(value) {
@@ -80,10 +98,22 @@ class WaveGlassView(context: Context, appContext: AppContext) : ExpoView(context
   private val ownLocation = IntArray(2)
   private val backdropLocation = IntArray(2)
 
+  /** The coalesced recording this view draws, and where it last drew it from. */
+  private var shared: SharedBackdrop? = null
+  private var sharedDx = 0
+  private var sharedDy = 0
+  private var sharedWidth = -1
+  private var sharedHeight = -1
+
   private val preDrawListener = ViewTreeObserver.OnPreDrawListener {
-    val hadContent = node.hasDisplayList()
-    // Only the first recording needs a redraw of this view, to put the node in its display list.
-    if (recordBackdrop() && !hadContent) invalidate()
+    // A glass that isn't shown (it or an ancestor not VISIBLE) draws nothing this frame, so
+    // its recording would go unused. Shown again, the next pre-draw records before it draws.
+    if (isShown) {
+      val hadContent = node.hasDisplayList()
+      val recorded = if (coalesce) recordShared() else recordBackdrop()
+      // Only the first recording needs a redraw of this view, to put the node in its display list.
+      if (recorded && !hadContent) invalidate()
+    }
     true
   }
 
@@ -99,6 +129,7 @@ class WaveGlassView(context: Context, appContext: AppContext) : ExpoView(context
   override fun onDetachedFromWindow() {
     viewTreeObserver.removeOnPreDrawListener(preDrawListener)
     backdrop = null
+    releaseShared()
     super.onDetachedFromWindow()
   }
 
@@ -167,6 +198,55 @@ class WaveGlassView(context: Context, appContext: AppContext) : ExpoView(context
       node.endRecording()
     }
     return true
+  }
+
+  /**
+   * The coalesced path: brings the shared recording up to date (at most once a
+   * frame across the glass over the backdrop), then re-records this view's node,
+   * which only offsets and references the shared one, when the offset or size
+   * moved. Draws the same pixels as [recordBackdrop].
+   */
+  private fun recordShared(): Boolean {
+    val target = findBackdrop() ?: return false
+    if (width == 0 || height == 0) return false
+    val current = shared
+    val backdropRecording =
+      if (current != null && current.target === target) {
+        current
+      } else {
+        releaseShared()
+        SharedBackdrop.acquire(target).also { shared = it }
+      }
+    if (!backdropRecording.update()) return false
+    getLocationInWindow(ownLocation)
+    target.getLocationInWindow(backdropLocation)
+    val dx = backdropLocation[0] - ownLocation[0]
+    val dy = backdropLocation[1] - ownLocation[1]
+    if (effectDirty) updateEffect()
+    val moved = dx != sharedDx || dy != sharedDy || width != sharedWidth || height != sharedHeight
+    if (node.hasDisplayList() && !moved) return true
+    node.setPosition(0, 0, width, height)
+    val canvas = node.beginRecording(width, height)
+    try {
+      canvas.translate(dx.toFloat(), dy.toFloat())
+      canvas.drawRenderNode(backdropRecording.node)
+    } finally {
+      node.endRecording()
+    }
+    sharedDx = dx
+    sharedDy = dy
+    sharedWidth = width
+    sharedHeight = height
+    return true
+  }
+
+  private fun releaseShared() {
+    val current = shared ?: return
+    shared = null
+    current.release()
+    // The next coalesced recording starts over, whichever backdrop it draws.
+    sharedWidth = -1
+    sharedHeight = -1
   }
 
   private fun updateEffect() {

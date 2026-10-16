@@ -4,17 +4,26 @@
  * Durations are formatted the way Apple Music does: `m:ss` below an hour and
  * `h:mm:ss` from an hour up. Values are truncated to whole seconds, so a track
  * never shows more elapsed time than it has actually played.
+ *
+ * The scrubber's labels also format on the UI thread while a finger drags it,
+ * so these are worklets (the "worklet" directive is a plain string elsewhere).
  */
 
 const MS_PER_SECOND = 1000;
 
-const toWholeSeconds = (ms: number): number =>
-  Number.isFinite(ms) && ms > 0 ? Math.floor(ms / MS_PER_SECOND) : 0;
+const toWholeSeconds = (ms: number): number => {
+  "worklet";
+  return Number.isFinite(ms) && ms > 0 ? Math.floor(ms / MS_PER_SECOND) : 0;
+};
 
-const pad2 = (n: number): string => String(n).padStart(2, "0");
+const pad2 = (n: number): string => {
+  "worklet";
+  return String(n).padStart(2, "0");
+};
 
 /** Formats a duration in milliseconds, e.g. `3:07` or `1:02:03`. Invalid or negative input is `0:00`. */
 export const formatDuration = (ms: number): string => {
+  "worklet";
   const total = toWholeSeconds(ms);
   const hours = Math.floor(total / 3600);
   const minutes = Math.floor((total % 3600) / 60);
@@ -29,6 +38,7 @@ export const formatDuration = (ms: number): string => {
  * always add up to the formatted duration.
  */
 export const formatRemaining = (positionMs: number, durationMs: number): string => {
+  "worklet";
   const remaining = Math.max(0, toWholeSeconds(durationMs) - toWholeSeconds(positionMs));
   return `-${formatDuration(remaining * MS_PER_SECOND)}`;
 };

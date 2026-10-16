@@ -1,7 +1,14 @@
 import { IconSearch } from "@tabler/icons-react-native";
 import { heldTracks, inLibraryUnlessHeld, type SearchKind, ytSectionView } from "@wave/core";
-import { useFocusEffect } from "expo-router";
-import { type ComponentRef, useCallback, useDeferredValue, useMemo, useRef, useState } from "react";
+import {
+  type ComponentRef,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ScrollView, Text, TextInput, View } from "react-native";
 import Animated, { LayoutAnimationConfig, useReducedMotion } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -14,7 +21,7 @@ import { useChromeInset } from "@/chrome/chrome";
 import { EmptyState } from "@/components/EmptyState";
 import { TextButton } from "@/components/TextButton";
 import { rise, riseReduced } from "@/motion/entry";
-import { useRenderCount } from "@/perf/perf";
+import { perfMark, useRenderCount } from "@/perf/perf";
 import { clearRecentSearches, rememberSearch, useRecentSearches } from "@/search/recentSearches";
 import type { SongRow } from "@/library/LibraryStore";
 import type { NativeYtSong } from "@/native/waveYtMusic";
@@ -32,7 +39,7 @@ import {
   ytFooterRows,
 } from "@/search/rows";
 import { useYtMusicSection } from "@/search/ytMusicSearch";
-import { onSearchFocusRequest, takeSearchFocusRequest } from "@/search/focusRequest";
+import { useSearchFieldFocus } from "@/search/fieldFocus";
 import { SearchField } from "@/search/SearchField";
 import { useSearchIndex } from "@/search/searchIndex";
 import { SearchResultsList } from "@/search/SearchResultsList";
@@ -89,32 +96,12 @@ export default function SearchScreen() {
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<ReadonlySet<SearchKind>>(NO_KINDS);
-  const [focused, setFocused] = useState(false);
   const field = useRef<ComponentRef<typeof TextInput>>(null);
   const reduceMotion = useReducedMotion();
+  // The tab's tap raises the keyboard; the Library is read only once it has.
+  const focus = useSearchFieldFocus(field);
 
-  useFocusEffect(
-    useCallback(() => {
-      setFocused(true);
-      let frame = 0;
-      // A frame later, so the field is attached when the tap is what mounts it.
-      const focusField = () => {
-        if (!takeSearchFocusRequest()) return;
-        cancelAnimationFrame(frame);
-        frame = requestAnimationFrame(() => field.current?.focus());
-      };
-      focusField();
-      const stop = onSearchFocusRequest(focusField);
-      return () => {
-        setFocused(false);
-        stop();
-        cancelAnimationFrame(frame);
-        field.current?.blur();
-      };
-    }, []),
-  );
-
-  const library = useSearchIndex(focused || query !== "");
+  const library = useSearchIndex(focus.libraryWanted || query !== "");
   const index = library?.index ?? null;
   // The field updates on every keystroke; results follow as soon as they're ready.
   const deferredQuery = useDeferredValue(query);
@@ -189,6 +176,7 @@ export default function SearchScreen() {
   });
 
   const changeQuery = useCallback((text: string) => {
+    perfMark("search.typed", text);
     setQuery(text);
     if (text.trim() === "") setExpanded(NO_KINDS);
   }, []);
@@ -201,6 +189,13 @@ export default function SearchScreen() {
     (kind: SearchKind) => setExpanded((kinds) => new Set(kinds).add(kind)),
     [],
   );
+
+  // The release runner's typing response: the results for what was typed, on screen.
+  useEffect(() => {
+    if (results === null || deferredQuery !== query) return undefined;
+    const frame = requestAnimationFrame(() => perfMark("search.results", deferredQuery));
+    return () => cancelAnimationFrame(frame);
+  }, [results, deferredQuery, query]);
 
   // What's shown; a change of it rises in. Results and no results count as
   // one, so refining a query never animates or remounts the list.
@@ -217,7 +212,14 @@ export default function SearchScreen() {
         >
           Search
         </Text>
-        <SearchField ref={field} value={query} onChange={changeQuery} onSubmit={remember} />
+        <SearchField
+          ref={field}
+          value={query}
+          onChange={changeQuery}
+          onSubmit={remember}
+          onLayout={focus.onLayout}
+          onFocusChange={focus.onFocusChange}
+        />
       </View>
       {/* Only a change of kind rises in; the screen's first content doesn't. */}
       <LayoutAnimationConfig skipEntering>

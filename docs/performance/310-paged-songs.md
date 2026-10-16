@@ -177,8 +177,10 @@ timings, frame or memory numbers, before or after. To take them, with a Library 
    navigation control. Compare `push-tracklist/idle/push`: first frame, response (`songs.rows`),
    frames, and the flush's JS heap. The after build's flush meta also has `songPages` (reads, rows
    read, stale rows, rows held).
-3. Scrolling: fling through Songs and drag the spine on both builds with `gfxinfo` framestats.
-   The runner has no scroll step yet. Check how often placeholders show during a spine drag.
+3. Scrolling: `--scenario scroll-songs` (flings up and down on Library › Songs, from the
+   integration branch's glass scenarios) on both builds; compare frame totals and the histogram.
+   The runner has no spine-drag step: drag the spine by hand and check how often placeholders
+   show.
 4. Retained memory: `dumpsys meminfo` after opening Songs and going back, both builds.
 
 Other lists (an artist's or a genre's songs, Favorites, playlists) still read full rows. Measure

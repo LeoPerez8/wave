@@ -37,6 +37,15 @@ export interface RunRecord {
   };
   readonly animationScales: Readonly<Record<string, string | null>>;
   readonly compilation: { readonly status: string; readonly reason: string | null } | null;
+  /**
+   * With `--compile baseline` (#317): profileinstaller's result and the size of the profile the
+   * APK was compiled with.
+   */
+  readonly artProfile?: {
+    readonly install: string;
+    readonly classes: number;
+    readonly methods: number;
+  } | null;
   readonly perfBuild: boolean;
   readonly library: Readonly<
     Record<
@@ -65,6 +74,8 @@ export type MeasuredStep = StepRecord & {
    * entries, retained, consumers.
    */
   readonly libraryQueries?: Readonly<Record<string, unknown>>;
+  /** Search's index counters at the step's flush, since launch (Core's `SearchCatalogStats`). */
+  readonly search?: Readonly<Record<string, unknown>>;
 };
 
 export type MemoryRecord = Meminfo & {
@@ -114,9 +125,23 @@ const grew = (label: string, before: number | null, after: number | null): strin
     ? []
     : [`${label}: ${before}, then ${after}.`];
 
+/** The glass a perf build drew with: its probe (#316) and the owner's glass settings. */
+const glassOf = (run: RunRecord): { probe: string | null; settings: string | null } => {
+  const meta = run.app ?? {};
+  const probe = meta["glass.probe"];
+  const settings = ["blur", "refraction", "tint", "rim"]
+    .filter((key) => meta[`glass.${key}`] !== undefined)
+    .map((key) => `${key} ${String(meta[`glass.${key}`])}`);
+  return {
+    probe: typeof probe === "string" ? probe : null,
+    settings: settings.length === 0 ? null : settings.join(", "),
+  };
+};
+
 /**
  * What makes [before] and [after] not like for like: another phone, refresh rate,
- * compiler filter, animation scales, Library size, build kind. Empty when they compare.
+ * compiler filter, animation scales, Library size, build kind, glass. Empty when
+ * they compare. A glass probe comparison is meant to differ in the probe alone.
  */
 export const comparability = (before: RunRecord, after: RunRecord): string[] => [
   ...(before.device.model === after.device.model
@@ -134,6 +159,8 @@ export const comparability = (before: RunRecord, after: RunRecord): string[] => 
   ...grew("Playlist entries", before.library.playlistItems, after.library.playlistItems),
   ...grew("Play history", before.library.playEvents, after.library.playEvents),
   ...differs("Perf build", before.perfBuild ? "yes" : "no", after.perfBuild ? "yes" : "no"),
+  ...differs("Glass probe", glassOf(before).probe, glassOf(after).probe),
+  ...differs("Glass settings", glassOf(before).settings, glassOf(after).settings),
   ...(before.dryRun || after.dryRun
     ? ["A dry run's numbers are simulated: don't compare them."]
     : []),

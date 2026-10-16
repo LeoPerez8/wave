@@ -250,6 +250,19 @@ const NO_PLAYLISTS: readonly PlaylistRow[] = [];
 export const usePlaylists = (): readonly PlaylistRow[] =>
   useLibraryQuery(listPlaylists, knownPlaylists() ?? NO_PLAYLISTS);
 
+/**
+ * The Library's lists as shared queries, for what reads them as they are
+ * (Search's index): the same reads as the Library's tabs, so a screen showing
+ * one shares it.
+ */
+export const libraryListQueries = {
+  songs: listSongs,
+  albums: listAlbums,
+  artists: listArtists,
+  genres: listGenres,
+  playlists: listPlaylists,
+} as const;
+
 /** A playlist screen's data (see `useDetail`), refreshed as soon as it is edited. */
 export const usePlaylist = (id: number): PlaylistDetail | null | undefined => {
   const query = useMemo(
