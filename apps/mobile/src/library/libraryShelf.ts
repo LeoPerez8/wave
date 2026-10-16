@@ -8,6 +8,7 @@ import {
 import type { TitleLongPress } from "@/components/TitleLongPress";
 import { persistedSetting } from "@/lib/persistedSetting";
 import { openTitleChoices } from "@/overlay/titleChoices";
+import type { ChoiceSetting } from "@/settings/ChoiceRow";
 
 const libraryShelf = persistedSetting<LibraryShelf>({
   key: "settings.libraryShelf",
@@ -18,7 +19,15 @@ const libraryShelf = persistedSetting<LibraryShelf>({
 /** The shelf under the Library's rows (Recently added until changed); re-renders when it changes. */
 export const useLibraryShelf = libraryShelf.useValue;
 
-const SHELF_CHOICES = LIBRARY_SHELF_CHOICES.map(({ shelf, label }) => ({ value: shelf, label }));
+/**
+ * The shelves, offered by the title's long press and by Settings › Layout ›
+ * Library alike.
+ */
+export const libraryShelfChoice: ChoiceSetting<LibraryShelf> = {
+  label: "Shelf under the Library",
+  choices: LIBRARY_SHELF_CHOICES.map(({ shelf, label }) => ({ value: shelf, label })),
+  setting: libraryShelf,
+};
 
 /**
  * The Library title's long press: a card of the shelves Home's catalogue
@@ -29,8 +38,8 @@ export const libraryShelfTitleLongPress: TitleLongPress = {
   label: "Choose the Library's shelf",
   open: () =>
     openTitleChoices({
-      label: "Shelf under the Library",
-      choices: SHELF_CHOICES,
+      label: libraryShelfChoice.label,
+      choices: libraryShelfChoice.choices,
       current: libraryShelf.get(),
       choose: libraryShelf.set,
     }),

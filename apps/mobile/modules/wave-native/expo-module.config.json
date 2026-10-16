@@ -9,7 +9,8 @@
       "expo.modules.wavenative.soulseek.SoulseekModule",
       "expo.modules.wavenative.account.WaveAccountModule",
       "expo.modules.wavenative.lookup.LibraryLookupModule",
-      "expo.modules.wavenative.imports.PlaylistImportModule"
+      "expo.modules.wavenative.imports.PlaylistImportModule",
+      "expo.modules.wavenative.log.AppLogModule"
     ]
   }
 }

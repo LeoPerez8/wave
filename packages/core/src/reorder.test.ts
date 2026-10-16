@@ -35,6 +35,37 @@ describe("reorderTarget", () => {
   });
 });
 
+describe("reorderTarget among rows of their own heights", () => {
+  // An editor under large text: a 60 dp row, then rows that wrap onto two lines.
+  const rowHeights = [60, 100, 60, 140, 60];
+  const count = rowHeights.length;
+
+  test("a row dragged down takes the next row's place once its bottom passes that row's middle", () => {
+    // Row 0's bottom starts at 60; row 1's middle is at 110.
+    assert.equal(reorderTarget({ from: 0, distance: 49, rowHeight: rowHeights, count }), 0);
+    assert.equal(reorderTarget({ from: 0, distance: 50, rowHeight: rowHeights, count }), 1);
+  });
+
+  test("a taller row takes more travel to pass than a short one", () => {
+    // From row 2 (bottom at 220): row 3's middle is at 290, row 4's at 390.
+    assert.equal(reorderTarget({ from: 2, distance: 69, rowHeight: rowHeights, count }), 2);
+    assert.equal(reorderTarget({ from: 2, distance: 70, rowHeight: rowHeights, count }), 3);
+    assert.equal(reorderTarget({ from: 2, distance: 170, rowHeight: rowHeights, count }), 4);
+  });
+
+  test("a row dragged up takes a row's place once its top passes that row's middle", () => {
+    // Row 4's top starts at 360: row 3's middle is at 290, row 1's at 110.
+    assert.equal(reorderTarget({ from: 4, distance: -69, rowHeight: rowHeights, count }), 4);
+    assert.equal(reorderTarget({ from: 4, distance: -71, rowHeight: rowHeights, count }), 3);
+    assert.equal(reorderTarget({ from: 4, distance: -251, rowHeight: rowHeights, count }), 1);
+  });
+
+  test("a row dragged past either end of the list lands there", () => {
+    assert.equal(reorderTarget({ from: 2, distance: -1000, rowHeight: rowHeights, count }), 0);
+    assert.equal(reorderTarget({ from: 2, distance: 1000, rowHeight: rowHeights, count }), 4);
+  });
+});
+
 describe("reorderShift", () => {
   test("dragging row 1 down to 3 moves rows 2 and 3 up one place, and no others", () => {
     const shifts = [0, 1, 2, 3, 4].map((index) => reorderShift({ index, from: 1, to: 3 }));

@@ -59,7 +59,8 @@ const MAX_WIDTH = CELL * 56;
 
 /**
  * The shortest an anchored card (a menu) shrinks to stay beside its row: a
- * few entries (or a heading and a couple). With less room it covers the row instead.
+ * few entries (or a heading and a couple) at the default text size; Core
+ * scales it with larger text. With less room it covers the row instead.
  */
 const MIN_ANCHORED_HEIGHT = CELL * 20;
 
@@ -164,6 +165,8 @@ function OverlayCard({ entry, frontmost }: { entry: OverlayEntry; frontmost: boo
       : { anchor: { rect: anchor, gap: CELL, minHeight: MIN_ANCHORED_HEIGHT }, chromeBottom }),
     align: entry.request.align,
     keyboard: keyboard.keyboard,
+    // Large system text draws a menu's heading and entries taller: it needs more room by its row.
+    textScale: window.fontScale,
   });
 
   // Only as the card opens: a card someone types into above it may bring the keyboard back.

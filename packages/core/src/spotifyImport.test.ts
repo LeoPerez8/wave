@@ -39,6 +39,7 @@ describe("linkImportView for Spotify", () => {
       spotify("Touch"),
     ],
     truncated: false,
+    total: 3,
   };
   const library = [
     { id: 7, title: "Get Lucky", artist: "Daft Punk feat. Pharrell Williams", durationMs: 369_500 },
@@ -58,10 +59,43 @@ describe("linkImportView for Spotify", () => {
       name: "Daft Punk Essentials",
       artworkUrl: "https://i.scdn.co/image/essentials",
       line: "3 songs · 1 in your Library",
+      source: null,
       note: null,
       canImport: true,
       retry: false,
     });
+  });
+
+  test("songs listed twice (re-releases under another Spotify id) show Spotify's count and go in once", () => {
+    const prayer = spotify("Livin' On A Prayer", {
+      artists: ["Bon Jovi"],
+      album: "Slippery When Wet",
+      durationMs: 249_000,
+    });
+    const spirit = spotify("Smells Like Teen Spirit", {
+      artists: ["Nirvana"],
+      album: "Nevermind",
+      durationMs: 301_000,
+    });
+    const once = read({ ...source, songs: [...source.songs, prayer, prayer], total: 5 });
+    assert.equal(linkImportView(once).line, "4 songs · 1 in your Library");
+    assert.equal(linkImportView(once).source, "5 songs on Spotify · 1 listed twice goes in once");
+    const twice = read({
+      ...source,
+      songs: [prayer, spirit, ...source.songs, spirit, prayer],
+      total: 7,
+    });
+    assert.equal(linkImportView(twice).source, "7 songs on Spotify · 2 listed twice go in once");
+  });
+
+  test("items that aren't songs, such as podcast episodes, are counted too", () => {
+    const view = linkImportView(read({ ...source, total: 5 }));
+    assert.equal(view.source, "5 songs on Spotify · 2 aren't songs");
+    assert.equal(
+      linkImportView(read({ ...source, songs: [...source.songs, spotify("Touch")], total: 5 }))
+        .source,
+      "5 songs on Spotify · 1 listed twice goes in once · 1 isn't a song",
+    );
   });
 
   test("a playlist only partly read says so", () => {

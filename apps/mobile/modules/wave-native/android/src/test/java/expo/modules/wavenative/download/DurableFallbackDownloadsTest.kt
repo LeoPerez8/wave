@@ -260,6 +260,61 @@ class DurableFallbackDownloadsTest {
     }
   }
 
+  @Test fun youtubeAudioOfAnotherLengthFailsWithItsOwnCauseNotSoulseeks() {
+    withFolder { folder ->
+      val owner = DurableDownloads(File(folder, "jobs"))
+      owner.enqueue(song, null, emptyMap(), "soulseek")
+      prepareSoulseek(owner, File(folder, "Recording.mp3"), File(folder, "Recording.m4a"))
+      val transport = transfer { _, candidate, source ->
+        if (candidate["source"] != "youtube") throw DurableFailure("unavailable", java.io.IOException("The peer is unavailable. Retry the download"))
+        source.parentFile.mkdirs(); source.writeBytes(SERVED); youtubeAudio(source)
+      }
+      repeat(2) { owner.advance(transport, Untouched) }
+      assertNull(owner.snapshot().single()["cause"])
+      answer(owner, "confirm", mapOf("acceptable" to false, "cause" to "YouTube's audio is 0:30 long, but the song is 0:12"))
+      val failed = owner.snapshot().single()
+      assertEquals("ytUnavailable", failed["reason"])
+      assertEquals("YouTube's audio is 0:30 long, but the song is 0:12", failed["cause"])
+    }
+  }
+
+  @Test fun aYoutubeRejectionWithoutACauseLeavesNoneOfSoulseeks() {
+    withFolder { folder ->
+      val owner = DurableDownloads(File(folder, "jobs"))
+      owner.enqueue(song, null, emptyMap(), "soulseek")
+      prepareSoulseek(owner, File(folder, "Recording.mp3"), File(folder, "Recording.m4a"))
+      val transport = transfer { _, candidate, source ->
+        if (candidate["source"] != "youtube") throw DurableFailure("unavailable", java.io.IOException("The peer is unavailable. Retry the download"))
+        source.parentFile.mkdirs(); source.writeBytes(SERVED); youtubeAudio(source)
+      }
+      repeat(2) { owner.advance(transport, Untouched) }
+      answer(owner, "confirm", mapOf("acceptable" to false))
+      val failed = owner.snapshot().single()
+      assertEquals("ytUnavailable", failed["reason"])
+      assertNull(failed["cause"])
+    }
+  }
+
+  @Test fun soulseeksFailureLeftStandingKeepsSoulseeksCause() {
+    withFolder { folder ->
+      val owner = DurableDownloads(File(folder, "jobs"))
+      owner.enqueue(song, null, emptyMap(), "soulseek")
+      prepareSoulseek(owner, File(folder, "Recording.mp3"), File(folder, "Recording.m4a"))
+      val off = transfer { _, candidate, _ ->
+        if (candidate["source"] == "youtube") throw DurableFailure("noSource", java.io.IOException("YT Music is off"))
+        throw DurableFailure("unavailable", java.io.IOException("The peer is unavailable. Retry the download"))
+      }
+      repeat(2) { owner.advance(off, Untouched) }
+      val failed = owner.snapshot().single()
+      assertEquals("unavailable", failed["reason"])
+      assertEquals("java.io.IOException: The peer is unavailable. Retry the download", failed["cause"])
+      // Retry starts from Soulseek with nothing of the last attempt's failure.
+      owner.enqueue(song, null, emptyMap(), "soulseek")
+      assertNull(owner.snapshot().single()["cause"])
+      assertNull(owner.snapshot().single()["fellBackCause"])
+    }
+  }
+
   private val GoodSoulseek = transfer { _, _, source ->
     source.parentFile.mkdirs(); source.writeText("complete validated audio")
     mapOf("durationMs" to 12_000L, "receivedTags" to emptyMap<String, Any?>())

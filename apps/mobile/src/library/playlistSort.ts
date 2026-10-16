@@ -2,7 +2,7 @@ import { PLAYLIST_SORTS, choosePlaylistSort, sortPlaylists, type PlaylistSort } 
 import * as Effect from "effect/Effect";
 import { useEffect, useMemo } from "react";
 
-import { titleChoiceGroup, type CardGroup, type TitleChoice } from "@/overlay/titleChoices";
+import type { ChoiceSetting } from "@/settings/ChoiceRow";
 
 import { usePlaylists } from "./hooks";
 import { LibraryStore, type PlaylistRow } from "./LibraryStore";
@@ -12,11 +12,6 @@ import { libraryQuery, useLibraryQuery } from "./sharedQueries";
 
 /** How the Playlists list is sorted (by name until changed); re-renders when it changes. */
 export const usePlaylistSort = (): PlaylistSort => playlistOrder.useValue().sort;
-
-/** The sorts as the Sort by group offers them. */
-const PLAYLIST_SORT_CHOICES: readonly TitleChoice<PlaylistSort>[] = PLAYLIST_SORTS.map(
-  ({ sort, label }) => ({ value: sort, label }),
-);
 
 /** Re-read after plays, which move playlists under Recently Played, and playlist edits. */
 const readLastPlayed = libraryQuery(
@@ -67,13 +62,16 @@ const pickPlaylistSort = (sort: PlaylistSort): void => {
 };
 
 /**
- * The Sort by group, the current sort checked: under the layouts on the
- * Playlists title's card, and for any other place that offers the sorts.
+ * The sorts under Sort by, offered by the Playlists title's long press (under
+ * the layouts) and by Settings › Layout › Playlists alike. Picking one runs
+ * `pickPlaylistSort`.
  */
-export const playlistSortGroup = (): CardGroup =>
-  titleChoiceGroup({
-    heading: "Sort by",
-    choices: PLAYLIST_SORT_CHOICES,
-    current: playlistOrder.get().sort,
-    choose: pickPlaylistSort,
-  });
+export const playlistSortChoice: ChoiceSetting<PlaylistSort> = {
+  label: "Sort by",
+  choices: PLAYLIST_SORTS.map(({ sort, label }) => ({ value: sort, label })),
+  setting: {
+    get: () => playlistOrder.get().sort,
+    set: pickPlaylistSort,
+    useValue: usePlaylistSort,
+  },
+};
