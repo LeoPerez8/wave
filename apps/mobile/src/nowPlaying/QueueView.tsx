@@ -10,7 +10,7 @@ import {
   type QueueEntry,
   type RepeatMode,
 } from "@wave/core";
-import { useCallback, useMemo, useState, type ComponentType } from "react";
+import { memo, useCallback, useMemo, useState, type ComponentType } from "react";
 import { Text, View } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import Animated from "react-native-reanimated";
@@ -162,7 +162,19 @@ type RowProps = {
   count: number;
 };
 
-function UpNextRow({ entry, index, track, lifted, drag, count }: RowProps) {
+/**
+ * Memoized: Legend List renders every visible row again when the queue's
+ * tracks change (a batch of covers landing), and only the rows whose track
+ * changed need to.
+ */
+const UpNextRow = memo(function UpNextRow({
+  entry,
+  index,
+  track,
+  lifted,
+  drag,
+  count,
+}: RowProps) {
   useRenderCount("UpNextRow");
   const secondary = useThemeColor("secondary");
   const key = entry.key;
@@ -220,7 +232,7 @@ function UpNextRow({ entry, index, track, lifted, drag, count }: RowProps) {
       </View>
     </Animated.View>
   );
-}
+});
 
 /**
  * Up Next: tap a row to play it, X to remove it, and drag its handle to move
@@ -289,7 +301,9 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
     <View
       className="flex-1 overflow-hidden"
       onLayout={(event) => {
-        height.set(event.nativeEvent.layout.height);
+        // Hidden behind another view, the list may be laid out empty: keep its last height.
+        const measured = event.nativeEvent.layout.height;
+        if (measured > 0) height.set(measured);
       }}
     >
       <LegendList
