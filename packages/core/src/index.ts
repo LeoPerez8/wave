@@ -813,9 +813,13 @@ export type {
   HeldPlaylistTrack,
   PlaylistEntryLink,
   PlaylistEntryLinks,
+  PlaylistItem,
   PlaylistPlay,
   PlaylistSong,
   StreamedPlaylistEntry,
+  UnavailableEntry,
+  UnavailableReason,
+  UnavailableSong,
 } from "./playlistEntries.ts";
 export {
   linkImportView,

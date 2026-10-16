@@ -11,17 +11,61 @@ import { planPlaylistAdd, type PlaylistAdd } from "./playlists.ts";
 import type { MixedSong, YtAlbumSong } from "./ytDiscover.ts";
 import { libraryFinder, ytTrackId, type LibrarySongKey, type YtSong } from "./ytMusic.ts";
 
-/** A song a playlist holds, or is given: a Library track, or a YT Music song streamed. */
+/**
+ * Why an imported song is unavailable: no match on YouTube Music or in the
+ * Library, or a Spotify local file without an artist, never searched.
+ */
+export type UnavailableReason = "notFound" | "localFile";
+
+/**
+ * A song an import couldn't find, as its source listed it: it keeps its place
+ * in the playlist, but doesn't play.
+ */
+export interface UnavailableSong {
+  readonly title: string;
+  readonly artists: readonly string[];
+  readonly album: string | null;
+  readonly durationMs: number | null;
+  /** The source's cover (Spotify's album cover), when it gave one. */
+  readonly artworkUrl: string | null;
+  readonly reason: UnavailableReason;
+}
+
+/** A playlist's unavailable entry: a song an import couldn't find, kept in its place. */
+export interface UnavailableEntry {
+  readonly source: "unavailable";
+  readonly song: UnavailableSong;
+}
+
+/**
+ * A song a playlist holds, or is given: a Library track, a YT Music song
+ * streamed, or a song an import couldn't find (unavailable).
+ */
 export type PlaylistSong<S extends YtSong = YtSong> =
   | { readonly source: "library"; readonly trackId: number }
-  | { readonly source: "stream"; readonly song: S };
+  | { readonly source: "stream"; readonly song: S }
+  | UnavailableEntry;
+
+/** A playlist's entry as its page lists it: a Library track, a YT Music song, or an unavailable song. */
+export type PlaylistItem<S extends YtSong = YtSong, L = unknown> = MixedSong<S, L> | UnavailableEntry;
 
 /**
  * What tells a playlist's songs apart: the id the song goes by in the queue
- * (a Library id, or `yt:` and its video id), so the two kinds never meet.
+ * (a Library id, or `yt:` and its video id), so the two kinds never meet. An
+ * unavailable song, which has no id, goes by what its source listed.
  */
-export const playlistSongKey = (song: PlaylistSong): string =>
-  song.source === "library" ? String(song.trackId) : ytTrackId(song.song.videoId);
+export const playlistSongKey = (song: PlaylistSong): string => {
+  switch (song.source) {
+    case "library":
+      return String(song.trackId);
+    case "stream":
+      return ytTrackId(song.song.videoId);
+    case "unavailable": {
+      const { title, artists, album, durationMs } = song.song;
+      return `unavailable:${JSON.stringify([title, artists, album, durationMs])}`;
+    }
+  }
+};
 
 /**
  * What adding [incoming] to a playlist holding [existing] does: they go at the

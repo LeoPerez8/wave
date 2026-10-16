@@ -14,6 +14,8 @@ export interface SpotifySong {
   /** Its album, when Spotify gives it (`fetchPlaylist` does, the embed page doesn't). */
   readonly album: string | null;
   readonly durationMs: number | null;
+  /** Its album's cover, when Spotify gives one (`fetchPlaylist` does for a song on Spotify). */
+  readonly artworkUrl?: string | null;
 }
 
 /** One page of `fetchPlaylist`'s answer. */
