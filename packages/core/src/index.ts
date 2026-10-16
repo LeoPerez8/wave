@@ -62,7 +62,7 @@ export type {
   Shuffle,
   ShuffleKind,
 } from "./queue.ts";
-export { applyPlayerSync, planPlayerSync } from "./playerSync.ts";
+export { applyPlayerSync, keysToLoad, planPlayerSync } from "./playerSync.ts";
 export type { PlayerList, QueueList, SyncStep } from "./playerSync.ts";
 export { alphabetIndex, artistAlbums, indexLetter } from "./browse.ts";
 export type { ArtistAlbum, IndexEntry } from "./browse.ts";
@@ -958,10 +958,4 @@ export { NO_HELD_SONGS, heldTracks, inLibraryUnlessHeld, songsInPlace } from "./
 export type { HeldSongs, SongsInPlace } from "./songsInPlace.ts";
 
 export { PERF_FLUSH_QUIET_MS, PERF_LOG_TAG, createPerfRecorder, parsePerfLog } from "./perfLog.ts";
-export type {
-  PerfEntry,
-  PerfFlush,
-  PerfMeta,
-  PerfRecorder,
-  PerfTiming,
-} from "./perfLog.ts";
+export type { PerfEntry, PerfFlush, PerfMeta, PerfRecorder, PerfTiming } from "./perfLog.ts";

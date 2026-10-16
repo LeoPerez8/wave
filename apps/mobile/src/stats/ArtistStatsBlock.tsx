@@ -1,10 +1,11 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { Text, View } from "react-native";
 
 import { CELL } from "@/catalog/grid";
 import { TitledSection } from "@/catalog/TitledSection";
 import { TotalsLine } from "@/catalog/TotalsLine";
 import type { SongRow } from "@/library/LibraryStore";
+import { perfMark, useRenderCount } from "@/perf/perf";
 
 import { useArtistStats } from "./hooks";
 import { RankedSongs } from "./StatsViews";
@@ -24,8 +25,17 @@ export function ArtistStatsBlock({
   /** The artist's songs on the page; the block is read again when they change. */
   songs: readonly SongRow[];
 }) {
+  useRenderCount("ArtistStatsBlock");
   const stats = useArtistStats(artistId, songs);
   const context = useMemo(() => ({ kind: "stats", id: `artist-${artistId}` }), [artistId]);
+  // The page's response in the release runner's push-artist scenario: the block on screen.
+  useEffect(() => {
+    if (stats === undefined) return;
+    const frame = requestAnimationFrame(() =>
+      perfMark("artist.stats", stats.played ? "played" : "not played"),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [stats]);
   if (stats === undefined) return null;
   return (
     <View>
