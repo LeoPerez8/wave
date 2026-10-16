@@ -56,6 +56,11 @@ export interface ActionItem {
   /** Where a missing song's download is (`ytDownloadStatus`); null or undefined when never asked for. */
   readonly download?: YtDownloadStatus | null | undefined;
   /**
+   * A song Fix Song can do something for: it lacks lyrics, a track number, a
+   * year or a genre (`canFixSong`).
+   */
+  readonly fixable?: boolean | undefined;
+  /**
    * An album's missing songs, each as where its download is (null when never
    * asked for): the album offers to download them.
    */
@@ -70,7 +75,7 @@ export interface ActionSubject {
   readonly surface?: ActionSurface | undefined;
   /** The menu was opened from a list that can select: it offers Select. */
   readonly selectable?: boolean | undefined;
-  /** Settings allows looking songs up online: songs offer Find Lyrics and Genre. */
+  /** Settings allows looking songs up online: songs missing something offer Fix Song. */
   readonly onlineLookups?: boolean | undefined;
   /** The current route, so Go to doesn't lead to the page you're on. */
   readonly here: string;
@@ -88,7 +93,8 @@ export type ItemAction =
   | "renamePlaylist"
   | "deletePlaylist"
   | "deletePlaylists"
-  | "findLyricsAndGenre"
+  | "fixSong"
+  | "fixSongs"
   | "select"
   | "delete"
   | "removeFromLibrary"
@@ -125,7 +131,8 @@ export const ITEM_ACTION_LABELS: { readonly [A in ItemAction]: string } = {
   renamePlaylist: "Rename Playlist",
   deletePlaylist: "Delete Playlist",
   deletePlaylists: "Delete Playlists",
-  findLyricsAndGenre: "Find Lyrics and Genre",
+  fixSong: "Fix Song",
+  fixSongs: "Fix Songs",
   select: "Select",
   delete: "Delete",
   removeFromLibrary: "Remove from Library",
@@ -232,9 +239,15 @@ export const itemActions = (subject: ActionSubject): ItemActionEntry[] => {
         ? [{ action: "renamePlaylist" } as const, { action: "deletePlaylist" } as const]
         : [{ action: "deletePlaylists" } as const]),
     );
-  // Looks the songs up online and writes what it finds into their files.
-  if (kind === "track" && subject.onlineLookups === true && missing === 0)
-    entries.push({ action: "findLyricsAndGenre" });
+  // Looks up online what the songs lack and writes it into their files; it
+  // works on the checked songs missing something, so one of them is enough.
+  if (
+    kind === "track" &&
+    subject.onlineLookups === true &&
+    missing === 0 &&
+    items.some((item) => item.fixable === true)
+  )
+    entries.push({ action: items.length === 1 ? "fixSong" : "fixSongs" });
   if (surface === "menu" && subject.selectable === true) entries.push({ action: "select" });
   // Last, and destructive (after asking): deletes the songs' files from the
   // phone, or takes missing songs out of the Library.
