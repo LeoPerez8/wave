@@ -15,7 +15,7 @@ describe("The synthetic library's long-titled song", () => {
       ["album-41-3"],
     );
     assert.deepEqual(
-      ids((track) => track.state === "missing"),
+      ids((track) => track.state === "fileNotFound"),
       ["album-27-7"],
     );
     const favorites = ids((track) => track.favorite);
