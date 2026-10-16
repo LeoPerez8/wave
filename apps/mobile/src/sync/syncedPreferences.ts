@@ -12,6 +12,7 @@ import "@/settings/glass";
 import "@/settings/longPressDelay";
 import "@/settings/lyricsAndGenre";
 import "@/settings/shortcutTab";
+import "@/settings/shuffleKind";
 import "@/settings/tapAnimation";
 import "@/settings/theme";
 import "@/settings/ytMusic";

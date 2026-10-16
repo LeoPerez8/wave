@@ -6,6 +6,10 @@
  * whenever the items still meet that condition.
  */
 
+import {
+  missingSongsDownloadActions,
+  type MissingSongsDownloadAction,
+} from "./missingSongDownload.ts";
 import { isDetailPath } from "./navigation.ts";
 import {
   libraryArtistKey,
@@ -67,6 +71,11 @@ export interface ActionItem {
   readonly artistNames?: readonly string[] | undefined;
   /** A streamed song the Library has a file of since it was listed: nothing left to download. */
   readonly downloaded?: boolean | undefined;
+  /**
+   * An album's missing songs, each as where its download is (null when never
+   * asked for): the album offers to download them.
+   */
+  readonly missingSongs?: readonly (YtDownloadStatus | null)[] | undefined;
 }
 
 /** A Library artist, as streamed songs' artists resolve to them. */
@@ -119,7 +128,9 @@ export type ItemAction =
   | "removeFromLibrary"
   | "download"
   | "cancelDownload"
-  | "retryDownload";
+  | "retryDownload"
+  | "downloadMissingSongs"
+  | "retryFailed";
 
 /**
  * Where a link to an item's artists leads (Go to Artist, Now Playing's artist
@@ -161,6 +172,8 @@ export const ITEM_ACTION_LABELS: { readonly [A in ItemAction]: string } = {
   delete: "Delete",
   removeFromLibrary: "Remove from Library",
   ...YT_DOWNLOAD_ACTION_LABELS,
+  downloadMissingSongs: "Download Missing Songs",
+  retryFailed: "Retry Failed",
 };
 
 /** Entries that delete something for good, shown in the destructive colour. */
@@ -242,6 +255,16 @@ const streamedGoToArtist = <A extends LibraryArtistRef>(
     : { action: "goToArtist", streamedArtists: link };
 };
 
+/** An album's download entries, by what each stands for in Settings' Download All. */
+const ALBUM_DOWNLOAD_ACTIONS: {
+  readonly [A in MissingSongsDownloadAction]:
+    "downloadMissingSongs" | "retryFailed" | "cancelDownload";
+} = {
+  downloadAll: "downloadMissingSongs",
+  retryFailed: "retryFailed",
+  cancel: "cancelDownload",
+};
+
 /** The entries to offer on [subject]'s items, in order. */
 export const itemActions = <A extends LibraryArtistRef = LibraryArtistRef>(
   subject: ActionSubject<A>,
@@ -267,6 +290,13 @@ export const itemActions = <A extends LibraryArtistRef = LibraryArtistRef>(
       : []),
     { action: "addToPlaylist" },
   ];
+  // Albums' missing songs download as Settings' Download All does them, only theirs.
+  if (kind === "album")
+    entries.push(
+      ...missingSongsDownloadActions(items.flatMap((item) => item.missingSongs ?? [])).map(
+        (action) => ({ action: ALBUM_DOWNLOAD_ACTIONS[action] }),
+      ),
+    );
   if (kind === "track") {
     if (streamed === 0)
       entries.push({ action: items.every((item) => item.favorite) ? "unfavorite" : "favorite" });
@@ -356,8 +386,9 @@ export const ytSongActions = <A>(
 ];
 
 /**
- * What items are mostly selected for, and Delete and Remove from Library
- * (songs): always a button of their own on the bar, never behind More.
+ * What items are mostly selected for, Delete and Remove from Library
+ * (songs), and Download Missing Songs (albums): always a button of their own
+ * on the bar, never behind More.
  */
 const KEPT_ON_BAR: ReadonlySet<ItemAction> = new Set<ItemAction>([
   "playNext",
@@ -368,6 +399,7 @@ const KEPT_ON_BAR: ReadonlySet<ItemAction> = new Set<ItemAction>([
   "removeFromPlaylist",
   "delete",
   "removeFromLibrary",
+  "downloadMissingSongs",
 ]);
 
 /**
@@ -378,6 +410,7 @@ const KEPT_ON_BAR: ReadonlySet<ItemAction> = new Set<ItemAction>([
 const BAR_LABELS: { readonly [A in ItemAction]?: string } = {
   unfavorite: "Un­favorite",
   removeFromPlaylist: "Remove",
+  downloadMissingSongs: "Download",
 };
 
 /** A bar button's caption for [action]. */

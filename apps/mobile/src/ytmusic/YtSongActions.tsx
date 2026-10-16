@@ -71,7 +71,7 @@ export const openYtSongActions = (song: NativeYtSong, options: YtSongMenuOptions
 type Entry =
   | {
       readonly kind: "queue";
-      readonly action: "playNext" | "addToQueue" | "addToPlaylist" | "removeFromPlaylist";
+      readonly action: "playNext" | "addToQueue" | "addToPlaylist" | "removeFromPlaylist" | "select";
     }
   | { readonly kind: "album"; readonly action: "goToAlbum"; readonly album: string }
   | {
