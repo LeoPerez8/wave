@@ -24,8 +24,11 @@ export type SyncStep =
   | { readonly type: "clear" }
   /** Load a new list and start at `index` (the playing item changes). */
   | { readonly type: "replace"; readonly keys: readonly string[]; readonly index: number }
-  /** Move to the already-loaded item with this key. */
-  | { readonly type: "seek"; readonly key: string }
+  /**
+   * Move to the already-loaded item with this key. `index` is where the player
+   * holds it, so the player can go straight there; it checks the key first.
+   */
+  | { readonly type: "seek"; readonly key: string; readonly index: number }
   /** Remove `removeCount` items at `at`, then insert `insertKeys` there. */
   | {
       readonly type: "edit";
@@ -63,12 +66,29 @@ export const planPlayerSync = (player: PlayerList, queue: QueueList): SyncStep[]
   const anchor = player.keys.indexOf(currentKey);
   if (anchor < 0) return [{ type: "replace", keys: [...queue.keys], index: queue.index }];
   const steps: SyncStep[] = [];
-  if (player.currentKey !== currentKey) steps.push({ type: "seek", key: currentKey });
+  if (player.currentKey !== currentKey)
+    steps.push({ type: "seek", key: currentKey, index: anchor });
   const after = diff(player.keys.slice(anchor + 1), queue.keys.slice(queue.index + 1), anchor + 1);
   if (after !== null) steps.push(after);
   const before = diff(player.keys.slice(0, anchor), queue.keys.slice(0, queue.index), 0);
   if (before !== null) steps.push(before);
   return steps;
+};
+
+/**
+ * The keys the steps put into the player that it doesn't hold yet: the items
+ * the app has to send along. A skip or a removal needs none, and the player's
+ * list is only looked through when a step inserts something.
+ */
+export const keysToLoad = (player: PlayerList, steps: readonly SyncStep[]): string[] => {
+  const inserted: string[] = [];
+  for (const step of steps) {
+    if (step.type === "replace") inserted.push(...step.keys);
+    else if (step.type === "edit") inserted.push(...step.insertKeys);
+  }
+  if (inserted.length === 0) return [];
+  const loaded = new Set(player.keys);
+  return inserted.filter((key) => !loaded.has(key));
 };
 
 /** What the player holds after the steps; the app's mirror of the native list. */
