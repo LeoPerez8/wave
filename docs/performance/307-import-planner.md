@@ -149,10 +149,12 @@ the effort's shared notes, under `307/`.
 
 ## Not measured: Android
 
-**Pending.** No phone was attached, and the #302 release runner isn't on the integration branch
-yet. The desktop numbers above show the work removed, not its share of the stalls reported on the
-phone. Run the release runner during a large Spotify import (for example 5,000 songs, with the
-playlist page open) before and after this change, and record the results here.
+**Pending.** No phone was attached. The desktop numbers above show the work removed, not its share
+of the stalls reported on the phone. Run the release runner ([README](README.md)) with a large
+Spotify playlist (for example 5,000 songs) as the fixture's `importLink`, before and after this
+change, and record the results here:
+`node scripts/perf/perf.ts run --variant import --scenario import,push-tracklist,now-playing`.
+The `import/import/during-import` window covers the import filling on its own.
 
 What the app still does once per answer, unchanged by this ticket:
 
