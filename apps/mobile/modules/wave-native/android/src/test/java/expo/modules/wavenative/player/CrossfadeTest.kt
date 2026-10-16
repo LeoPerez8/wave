@@ -151,6 +151,33 @@ class CrossfadeTest {
   }
 
   @Test
+  fun anOutgoingCopyThatStallsOrFailsIsDroppedSoonAfterTheOverlap() {
+    val service = Service()
+    val crossfade = crossfade(service)
+    crossfade.playTo(service, 172_000)
+    crossfade.playTo(service, 175_000)
+    val outgoing = service.tail!!
+    // It stops moving 1 s into the fade (an error, or a stream that stalls), never ending.
+    outgoing.positionMs = 176_000
+    outgoing.sounding = false
+
+    service.main.positionMs = 5000
+    crossfade.tick()
+    assertEquals(0, service.fadesEnded)
+
+    service.main.positionMs = 7000
+    crossfade.tick()
+    assertNull(service.tail)
+    assertEquals(1, service.fadesEnded)
+    assertEquals(1f, service.main.level)
+
+    // The next song ending on its own fades as usual.
+    crossfade.playTo(service, 172_000)
+    crossfade.playTo(service, 175_000)
+    assertEquals(2, service.advanced)
+  }
+
+  @Test
   fun aManualChangeBeforeTheOverlapDropsTheOutgoingCopy() {
     val service = Service()
     val crossfade = crossfade(service)

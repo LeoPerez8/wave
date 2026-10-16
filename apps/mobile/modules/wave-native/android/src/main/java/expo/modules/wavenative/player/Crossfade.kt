@@ -168,15 +168,18 @@ class Crossfade(private val host: CrossfadeHost) {
   }
 
   private fun fading(current: Fading): Long? {
+    val main = host.main
     current.tail?.let { tail ->
       val leftMs = current.endMs - tail.positionMs
-      if (tail.ended || leftMs <= 0) {
+      // A tail that failed or stalled never gets there: the session's player,
+      // as far into the next song as the overlap is long, says it should have.
+      val overdue = main.positionMs >= current.overlapMs + OVERDUE_MS
+      if (tail.ended || leftMs <= 0 || overdue) {
         endTail(current)
       } else {
         tail.setVolume(gain(leftMs.toFloat() / current.overlapMs))
       }
     }
-    val main = host.main
     if (current.tail == null && main.positionMs >= current.overlapMs) {
       main.setVolume(1f)
       phase = Idle
@@ -210,6 +213,9 @@ class Crossfade(private val host: CrossfadeHost) {
 
     /** Roughly how long a player takes to start sounding; the tail opens this far ahead. */
     const val START_LEAD_MS = 150L
+
+    /** How long past the overlap a tail still not done is given before it's closed. */
+    const val OVERDUE_MS = 1000L
 
     /** Close enough for the handoff to go unheard. */
     const val IN_STEP_MS = 20L

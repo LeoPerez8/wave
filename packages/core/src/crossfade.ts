@@ -1,10 +1,9 @@
 /**
  * Crossfade (Settings › Playback): how long a song ending on its own overlaps
- * the next one, both fading. The playback service plays the overlap; this is
- * the rule for when there is one.
+ * the next one, both fading. The playback service plays the overlap and
+ * decides which song changes get one; this is the setting and its length.
  */
 
-import type { SleepTimer } from "./sleepTimer.ts";
 import { snapSliderValue } from "./slider.ts";
 
 /** The Crossfade slider, in seconds. Zero, the default, keeps playback gapless. */
@@ -20,23 +19,10 @@ export const readCrossfade = (stored: string | null): number => {
 };
 
 /**
- * How the player moves to another song: `natural` when the song ends on its
- * own, `repeat` when repeat one starts it over, `next`, `previous` and
- * `select` (picking a song) when the owner moves it.
+ * The overlap, in ms, for songs ending on their own with the setting at
+ * `seconds`; 0 switches at once (gapless). The playback service decides which
+ * changes fade: only a song ending on its own into another, never with repeat
+ * one or an end-of-song sleep timer, and skip, previous or picking a song
+ * switch at once.
  */
-export type CrossfadeTransition = "natural" | "repeat" | "next" | "previous" | "select";
-
-/**
- * The overlap, in ms, a transition plays with the setting at `seconds`; 0
- * switches at once (gapless). Only a song ending on its own into another
- * fades, and not while an end-of-song sleep timer runs: it stops after the
- * song, with nothing of the next one.
- */
-export const crossfadeDuration = (
-  seconds: number,
-  transition: CrossfadeTransition,
-  timer: SleepTimer | null,
-): number => {
-  if (transition !== "natural" || timer?.type === "endOfTrack") return 0;
-  return snapCrossfade(seconds) * 1000;
-};
+export const crossfadeDuration = (seconds: number): number => snapCrossfade(seconds) * 1000;

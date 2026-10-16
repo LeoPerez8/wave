@@ -903,13 +903,7 @@ export type {
   HomeSection,
   HomeSectionId,
 } from "./homeSections.ts";
-export {
-  CROSSFADE,
-  crossfadeDuration,
-  readCrossfade,
-  snapCrossfade,
-  type CrossfadeTransition,
-} from "./crossfade.ts";
+export { CROSSFADE, crossfadeDuration, readCrossfade, snapCrossfade } from "./crossfade.ts";
 export {
   DISCOVER_MIX_COUNT,
   discoverMix,
