@@ -24,7 +24,7 @@ export type ResultSong = MixedSong<NativeYtSong, SongRow>;
  * A song YT Music found, in its place among them (Core's `songsInPlace`):
  * streamed, or the Library's file once its download finished.
  */
-export type PlacedYtSong = DiscoverSong<NativeYtSong, SongRow>;
+type PlacedYtSong = DiscoverSong<NativeYtSong, SongRow>;
 
 /** YT Music's songs in their places, and the row each plays from (Core's `songsInPlace`). */
 export type PlacedYtSongs = Pick<SongsInPlace<NativeYtSong, SongRow, number>, "songs" | "rowOf">;
