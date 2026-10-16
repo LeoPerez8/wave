@@ -5,7 +5,15 @@
  */
 
 import type { ThemeColors } from "./theme.ts";
-import { THEME_SWATCHES, isDefaultThemeChoice, themeFor, type ThemeChoice } from "./themeChoice.ts";
+import {
+  DEFAULT_THEME_CHOICE,
+  THEME_SWATCHES,
+  isDefaultThemeChoice,
+  presetThemeChoice,
+  themeFor,
+  type ThemeChoice,
+  type ThemeGroup,
+} from "./themeChoice.ts";
 
 /** One mode's launch colours, as the app draws them. */
 export interface LaunchColors {
@@ -46,18 +54,27 @@ const launchColors = (scheme: ThemeColors): LaunchColors => ({
   secondary: scheme.highlight,
 });
 
-/** The launch theme for a theme choice. */
+/** The style for a choice's splash, which ships per preset only. */
+const splashThemeFor = (choice: ThemeChoice): string | null => {
+  // A chosen custom colour shows as the preset closest to it; a kept one that isn't chosen doesn't count.
+  const preset = { ...presetThemeChoice(choice), customPrimary: null, customSecondary: null };
+  return isDefaultThemeChoice(preset) ? null : splashThemeName(preset);
+};
+
+/**
+ * The launch theme for a theme choice. The colours are what the app draws; a
+ * custom colour opens on the splash of the preset closest to it.
+ */
 export const launchTheme = (choice: ThemeChoice): LaunchTheme => {
   const theme = themeFor(choice);
   return {
-    splashTheme: isDefaultThemeChoice(choice) ? null : splashThemeName(choice),
+    splashTheme: splashThemeFor(choice),
     light: launchColors(theme.light),
     dark: launchColors(theme.dark),
   };
 };
 
-const ids = (group: keyof ThemeChoice): string[] =>
-  THEME_SWATCHES[group].map((swatch) => swatch.id);
+const ids = (group: ThemeGroup): string[] => THEME_SWATCHES[group].map((swatch) => swatch.id);
 
 /**
  * One splash style per choice Settings › Theme can make, bar the shipped one
@@ -68,7 +85,7 @@ export const LAUNCH_SPLASH_THEMES: readonly LaunchSplashTheme[] = ids("light").f
   ids("dark").flatMap((dark) =>
     ids("primary").flatMap((primary) =>
       ids("secondary").flatMap((secondary) => {
-        const choice = { light, dark, primary, secondary };
+        const choice = { ...DEFAULT_THEME_CHOICE, light, dark, primary, secondary };
         const { splashTheme, ...colors } = launchTheme(choice);
         return splashTheme === null ? [] : [{ name: splashTheme, choice, ...colors }];
       }),

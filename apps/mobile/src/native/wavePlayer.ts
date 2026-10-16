@@ -44,7 +44,7 @@ export interface ItemTransitionEvent {
    * Played through, repeated, skipped or seeked to (notification, Bluetooth),
    * the item list changed, or Wave's own queue sync moved it.
    */
-  readonly reason: "auto" | "repeat" | "seek" | "playlist" | "sync";
+  readonly reason: "auto" | "repeat" | "seek" | "playlist" | "sync" | "crossfade";
 }
 
 /**
@@ -142,7 +142,14 @@ export interface AutoLyricsEvent {
   readonly carConnected: boolean;
 }
 
+/** The song fading out in a crossfade went silent, or was cut off by a skip. */
+export interface CrossfadeEndedEvent {
+  /** Wall-clock ms. */
+  readonly at: number;
+}
+
 type WavePlayerEvents = {
+  onCrossfade: (event: CrossfadeEndedEvent) => void;
   onPlaybackState: (state: NativePlayerState) => void;
   onPosition: (position: PlayerPosition) => void;
   onItemTransition: (event: ItemTransitionEvent) => void;
@@ -154,6 +161,12 @@ type WavePlayerEvents = {
 };
 
 declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
+  /**
+   * The overlap for songs ending on their own, in ms (Core's
+   * `crossfadeDuration`; 0 is off). Kept natively, so the service fades while
+   * JS is suspended too.
+   */
+  setCrossfadeDuration(durationMs: number): Promise<void>;
   /** Edits the item list per the plan; `items` holds only the keys new to the player. */
   applySync(steps: readonly NativeSyncStep[], items: readonly PlayerItem[]): Promise<void>;
   setRepeatMode(mode: RepeatMode): Promise<void>;

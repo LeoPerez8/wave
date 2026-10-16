@@ -25,22 +25,14 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import Animated, {
-  Easing,
-  useAnimatedStyle,
-  useReducedMotion,
-  useSharedValue,
-  withTiming,
-} from "react-native-reanimated";
+import Animated, { useAnimatedStyle, useReducedMotion } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
-import { scheduleOnRN } from "react-native-worklets";
 
 import { CELL, grid } from "@/catalog/grid";
 import { OnOverlayCard } from "@/catalog/Hairline";
 import { BACKDROP, useFloatingChromeHeight } from "@/chrome/chrome";
 import { Glass } from "@/glass/Glass";
-import { useTapAnimationMs } from "@/settings/tapAnimation";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import {
@@ -53,6 +45,8 @@ import {
 import { CardHeadingContext } from "./CardHeading";
 import { OverlayFlowContext } from "./flow";
 import { useKeyboardHeight } from "./keyboard";
+import { ToastHost } from "./ToastHost";
+import { useEnterAndLeave } from "./useEnterAndLeave";
 
 /** Rounded corners of a dialog card. */
 export const OVERLAY_RADIUS = CELL * 3;
@@ -72,8 +66,6 @@ const MIN_ANCHORED_HEIGHT = CELL * 20;
 /** How much smaller a card starts before it grows into place. */
 const ENTER_SCALE = 0.94;
 
-const EASE = Easing.out(Easing.exp);
-
 /** The veil behind a card: the theme's scrim colour at a quarter strength. */
 const SCRIM_OPACITY = 0.25;
 
@@ -88,9 +80,9 @@ const ORIGIN_TINT_OPACITY = 0.16;
 const ORIGIN_RADIUS = CELL;
 
 /**
- * Hosts Wave's glass dialogs. Wrap the app's navigator with it: the navigator
- * becomes the backdrop the cards' glass shows through, and the cards float
- * above it in the same window. Android Back dismisses the top card.
+ * Hosts Wave's glass dialogs and its toast. Wrap the app's navigator with it:
+ * the navigator becomes the backdrop the glass shows through, and the cards
+ * and toast float above it in the same window. Android Back dismisses the top card.
  */
 export function OverlayHost({ children }: { children: ReactNode }) {
   const entries = useOverlayEntries();
@@ -123,6 +115,7 @@ export function OverlayHost({ children }: { children: ReactNode }) {
       {entries.map((entry) => (
         <OverlayCard key={entry.id} entry={entry} frontmost={entry === frontmost} />
       ))}
+      <ToastHost />
     </>
   );
 }
@@ -134,14 +127,12 @@ function OverlayCard({ entry, frontmost }: { entry: OverlayEntry; frontmost: boo
   const keyboardHeight = useKeyboardHeight();
   // A card without a text field closes the keyboard (one tap then runs an entry).
   const keyboard = cardKeyboard({ align: entry.request.align, keyboard: keyboardHeight });
-  const ms = useTapAnimationMs();
   const scrim = useThemeColor("scrim");
   const accent = useThemeColor("accent");
   const reduceMotion = useReducedMotion();
   const card = useRef<ComponentRef<typeof View>>(null);
   const layer = useRef<ComponentRef<typeof View>>(null);
   const [cardHeight, setCardHeight] = useState<number | null>(null);
-  const progress = useSharedValue(0);
   const measured = cardHeight !== null;
   const anchor = entry.request.anchor;
   const chromeBottom = useFloatingChromeHeight();
@@ -203,22 +194,12 @@ function OverlayCard({ entry, frontmost }: { entry: OverlayEntry; frontmost: boo
   }, [settledHeading]);
 
   // Fade in once the card knows its size (so it appears where it settles), out when closing.
-  // A layout effect, so the entrance starts with the frame the card is first drawn in.
-  useLayoutEffect(() => {
-    if (!measured) return;
-    const target = entry.closing ? 0 : 1;
-    const remove = () => removeOverlay(entry.id);
-    if (ms === 0) {
-      progress.set(target);
-      if (entry.closing) remove();
-      return;
-    }
-    progress.set(
-      withTiming(target, { duration: ms, easing: EASE }, (finished) => {
-        if (finished && target === 0) scheduleOnRN(remove);
-      }),
-    );
-  }, [measured, entry.closing, entry.id, ms, progress]);
+  const progress = useEnterAndLeave({
+    id: entry.id,
+    ready: measured,
+    leaving: entry.closing,
+    remove: removeOverlay,
+  });
 
   // A card closed before it measured never showed; drop it straight away.
   useEffect(() => {

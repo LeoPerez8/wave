@@ -23,6 +23,9 @@ import type { NativeYtSong } from "@/native/waveYtMusic";
 import { openTrackActions } from "@/playback/ActionsMenu";
 import { playDiscoverSongs } from "@/playback/actions";
 import { useCurrentTrackId } from "@/playback/hooks";
+import { listedTrackItem, type TrackItem } from "@/playback/actionTargets";
+import { selectableRow } from "@/selection/selectableRow";
+import type { ListSelection } from "@/selection/useListSelection";
 
 import { openYtAlbum, openYtPlaylist } from "./routes";
 import { openYtAlbumActions } from "./YtAlbumActions";
@@ -62,31 +65,33 @@ export const runDiscoverAction = (
   }
 };
 
-/** A song's long-press menu: the Library track's when it plays the file, else a YT Music song's. */
-const openSongActions = (song: Song): void =>
-  song.source === "library" ? openTrackActions(song.track) : openYtSongActions(song.song);
-
 /**
  * A Discover song as a Songs-list row: the Library track (its star, its
- * menu) when the Library has it, else the YT Music song, streamed.
+ * menu) when the Library has it, else the YT Music song, streamed. In a list
+ * that can select ([selection]), either kind checks.
  */
 export function DiscoverSongRow({
   song,
   onPress,
   trackNumber,
+  selection,
 }: {
   song: Song;
   onPress: () => void;
   /** Leads with this number instead of the cover (an album's tracklist). */
   trackNumber?: number | undefined;
+  selection?: ListSelection<TrackItem> | undefined;
 }) {
   const currentId = useCurrentTrackId();
   const favorites = useFavoriteIds();
   const playing = discoverTrackId(song) === currentId;
+  const row = selectableRow(listedTrackItem(song), selection, onPress, (options) =>
+    song.source === "library"
+      ? openTrackActions(song.track, options)
+      : openYtSongActions(song.song, options),
+  );
   if (song.source === "stream")
-    return (
-      <YtSongRow song={song.song} playing={playing} onPress={onPress} trackNumber={trackNumber} />
-    );
+    return <YtSongRow song={song.song} playing={playing} trackNumber={trackNumber} {...row} />;
   return (
     <TrackRow
       track={{ ...toTrackSummary(song.track), trackNumber }}
@@ -94,11 +99,14 @@ export function DiscoverSongRow({
       favorite={favorites.has(song.track.id)}
       leading={trackNumber === undefined ? "artwork" : "number"}
       downloaded
-      onPress={onPress}
-      onLongPress={() => openSongActions(song)}
+      {...row}
     />
   );
 }
+
+/** A song's long-press menu: the Library track's when it plays the file, else a YT Music song's. */
+const openSongActions = (song: Song): void =>
+  song.source === "library" ? openTrackActions(song.track) : openYtSongActions(song.song);
 
 /** Song shelves show this many rows per column, the next column peeking in. */
 const ROWS_PER_COLUMN = 4;

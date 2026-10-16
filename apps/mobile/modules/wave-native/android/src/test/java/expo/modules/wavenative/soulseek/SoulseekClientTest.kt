@@ -256,6 +256,65 @@ class SoulseekClientTest {
     }
   }
 
+  /** Songs download several at once, so two of an album can come from the same peer together. */
+  @Test fun `two recordings from the same peer asked for at once share its connection`() {
+    ServerSocket(0).use { server ->
+      ServerSocket(0).use { peer ->
+        val requested = CopyOnWriteArrayList<String>()
+        val done = CompletableFuture<Unit>()
+        thread {
+          try {
+            server.accept().use { socket ->
+              login(socket)
+              val lookup = SoulseekWire.read(socket.getInputStream())
+              assertEquals(3, lookup.code)
+              // Long enough for the second song to ask for the peer too.
+              Thread.sleep(300)
+              SoulseekWire.write(socket.getOutputStream(), 3) { string("fixture-peer"); uint(LOCALHOST); uint(peer.localPort.toLong()) }
+              peer.accept().use { connection ->
+                assertEquals(1, SoulseekWire.read(connection.getInputStream(), true).code)
+                // Each song sends its queue request (43) and place inquiry (51); the two songs'
+                // messages may interleave.
+                val asked = mutableListOf<Int>()
+                repeat(4) {
+                  val message = SoulseekWire.read(connection.getInputStream())
+                  asked += message.code
+                  if (message.code == 43) {
+                    val filename = SoulseekWire.reader(message.payload).string()
+                    requested += filename
+                    SoulseekWire.write(connection.getOutputStream(), 44) { string(filename); uint(requested.size.toLong()) }
+                  }
+                }
+                assertEquals(listOf(43, 43, 51, 51), asked.sorted())
+                done.get(10, TimeUnit.SECONDS)
+              }
+            }
+          } catch (e: Throwable) { done.completeExceptionally(e) }
+        }
+        val client = SoulseekClient(MemoryCredentials(), "127.0.0.1", server.localPort, switch = MemorySwitch())
+        val parts = (1..2).map { Files.createTempFile("wave-soulseek", ".mp3").toFile() }
+        try {
+          client.connect("wave-fixture", "fixture-secret")
+          val queued = (1..2).map { CompletableFuture<Long>() }
+          val failures = CopyOnWriteArrayList<Throwable>()
+          val giveUp = java.util.concurrent.atomic.AtomicBoolean()
+          val downloads = (1..2).map { n ->
+            thread {
+              val candidate = SoulseekCandidate("fixture-peer", "Music\\Fixture Artist\\Song $n.mp3", 100_000, 320, 1500, false, 100000, 3)
+              try { client.download("song-$n", candidate, parts[n - 1], 1500, onQueued = { queued[n - 1].complete(it) }, isCancelled = { giveUp.get() }) }
+              catch (e: SoulseekException) { if (e.failure != SoulseekFailure.CANCELLED) failures += e }
+            }
+          }
+          try {
+            for (place in queued) place.get(5, TimeUnit.SECONDS)
+            assertEquals(setOf("Music\\Fixture Artist\\Song 1.mp3", "Music\\Fixture Artist\\Song 2.mp3"), requested.toSet())
+          } finally { giveUp.set(true); downloads.forEach { it.join(5_000) }; done.complete(Unit) }
+          assertEquals(emptyList<Throwable>(), failures.toList())
+        } finally { client.close(); parts.forEach { it.delete() } }
+      }
+    }
+  }
+
   /**
    * Peers are served on plain threads, where anything uncaught closes Wave. #119's crash was an
    * Error (NoClassDefFoundError), not an Exception, so receiving has to contain both.

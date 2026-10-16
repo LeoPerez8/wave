@@ -669,6 +669,47 @@ export const describeTagLookups = (
   };
 };
 
+/** What one song's Fix Song came to, as a toast says it. */
+const toastAboutSong = (title: string, outcome: SongTagOutcome): string => {
+  switch (outcome.kind) {
+    case "updated":
+      return outcome.written.lyrics === "sidecar"
+        ? `Fixed “${title}” · lyrics saved as .lrc`
+        : `Fixed “${title}”`;
+    case "notFound":
+      return `Nothing found for “${title}”`;
+    case "failed":
+      return FAILURES[outcome.reason](title).title;
+  }
+};
+
+/**
+ * The one line a toast says after Fix Song on [results], taking the same
+ * [stop] and [skipped] as `describeTagLookups`: what one song came to, or for
+ * a run the counts that aren't zero ("Fixed 3 songs · 1 not found"). The
+ * details (which songs got an .lrc file) are `describeTagLookups`'s.
+ */
+export const tagLookupsToast = (
+  results: readonly { readonly title: string; readonly outcome: SongTagOutcome }[],
+  stop?: TagLookupStop,
+  skipped = 0,
+): string => {
+  if (results.length === 0 && stop === undefined && skipped > 0) return "Nothing to fix";
+  const only = results.length === 1 && stop === undefined && skipped === 0 ? results[0] : undefined;
+  if (only !== undefined) return toastAboutSong(only.title, only.outcome);
+  const tally = { updated: 0, notFound: 0, failed: 0 };
+  for (const { outcome } of results) tally[outcome.kind] += 1;
+  const parts = [tally.updated === 0 ? "Nothing fixed" : `Fixed ${songs(tally.updated)}`];
+  if (tally.notFound > 0) parts.push(`${count(tally.notFound)} not found`);
+  if (tally.failed > 0) parts.push(`${count(tally.failed)} failed`);
+  if (skipped > 0) parts.push(`${count(skipped)} already complete`);
+  if (stop !== undefined)
+    parts.push(
+      `${count(stop.left)} not looked up${stop.stopped === "unreachable" ? " (offline)" : ""}`,
+    );
+  return parts.join(" · ");
+};
+
 /** Whether [rank] comes before [other], comparing field by field (lower is better). */
 const isBetter = (rank: readonly number[], other: readonly number[]): boolean => {
   for (let i = 0; i < rank.length; i += 1) {

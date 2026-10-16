@@ -41,6 +41,19 @@ class PlayerEventsTest {
   }
 
   @Test
+  fun theMoveAsACrossfadeStartsIsNamedCrossfade() {
+    assertEquals(
+      "crossfade",
+      PlayerEvents.transitionReason(Player.MEDIA_ITEM_TRANSITION_REASON_SEEK, crossfade = true),
+    )
+    // Anything else moving the player at that moment is what it is.
+    assertEquals(
+      "auto",
+      PlayerEvents.transitionReason(Player.MEDIA_ITEM_TRANSITION_REASON_AUTO, crossfade = true),
+    )
+  }
+
+  @Test
   fun seeksWithinTheCurrentItemAreReportedAsSeeks() {
     // "Previous" after three seconds, from the notification or a headset, seeks to 0 in place.
     assertTrue(PlayerEvents.isSeekWithinItem(Player.DISCONTINUITY_REASON_SEEK, "k1", "k1"))
