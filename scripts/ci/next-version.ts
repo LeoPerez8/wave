@@ -36,8 +36,7 @@ export type NextVersion = { version?: string; reason: string };
  * patch notes count them) comes from a `feat/` branch, named for the log. Patch otherwise.
  */
 export type Bump =
-  | { size: "patch" }
-  | { size: "minor"; pr: { readonly number: number; readonly branch: string } };
+  { size: "patch" } | { size: "minor"; pr: { readonly number: number; readonly branch: string } };
 
 /** The bump the PRs merged in a release's commits make, counted as its patch notes list them. */
 export const bumpFor = (release: Pick<PatchNotesInput, "commits" | "pullRequests">): Bump => {
