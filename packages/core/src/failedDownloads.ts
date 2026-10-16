@@ -1,6 +1,7 @@
 /**
- * Settings › Downloads: the songs whose download failed, each with why and
- * Retry, and Retry All and Clear All above them. The native journal keeps a
+ * Settings › Downloads: the songs whose download failed, each with why, Retry
+ * and a trash button that clears it alone, and Retry All and Clear All above
+ * them. The native journal keeps a
  * failure until it's retried or cleared; one the song settled another way (it
  * downloaded under another video, a scan found a missing song's file) leaves
  * the list on its own, and the app has the journal forget it

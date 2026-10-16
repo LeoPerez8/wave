@@ -666,6 +666,8 @@ export type {
 } from "./ytSongsDownload.ts";
 export { failedDownloads, settledDownloadFailures } from "./failedDownloads.ts";
 export { ytDownloadsToForget } from "./forgottenDownloads.ts";
+export { queuedDownloads, queuedDownloadsSummary } from "./queuedDownloads.ts";
+export type { QueuedDownload } from "./queuedDownloads.ts";
 export type {
   FailedDownload,
   FailedDownloadRetry,
