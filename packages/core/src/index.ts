@@ -623,6 +623,7 @@ export {
   downloadFallback,
   downloadSource,
   ytAudioMatches,
+  ytAudioRejection,
 } from "./downloadSource.ts";
 export type {
   DownloadFailurePlan,

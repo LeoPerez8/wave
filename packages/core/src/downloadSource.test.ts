@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { downloadFailurePlan, downloadFallback, downloadSource, ytAudioMatches } from "./index.ts";
+import {
+  downloadFailurePlan,
+  downloadFallback,
+  downloadSource,
+  ytAudioMatches,
+  ytAudioRejection,
+} from "./index.ts";
 import type { DownloadFailurePlan, YtDownloadFailure } from "./index.ts";
 
 /** What the journal does with a transfer that fails with [failure]. */
@@ -186,5 +192,29 @@ describe("ytAudioMatches", () => {
     assert.equal(ytAudioMatches({ durationMs: null }, 180_000), true);
     assert.equal(ytAudioMatches({ durationMs: null }, 0), false);
     assert.equal(ytAudioMatches(song, 0), false);
+  });
+});
+
+describe("ytAudioRejection", () => {
+  test("audio of another length is turned down with both lengths, so the row says why", () => {
+    const song = { durationMs: 225_000 };
+    assert.equal(
+      ytAudioRejection(song, 242_400),
+      "YouTube's audio is 4:02 long, but the song is 3:45",
+    );
+    assert.equal(
+      ytAudioRejection(song, 30_000),
+      "YouTube's audio is 0:30 long, but the song is 3:45",
+    );
+  });
+
+  test("audio that is the song isn't turned down", () => {
+    assert.equal(ytAudioRejection({ durationMs: 225_000 }, 226_000), null);
+    assert.equal(ytAudioRejection({ durationMs: null }, 180_000), null);
+  });
+
+  test("audio without a length is turned down as that", () => {
+    assert.equal(ytAudioRejection({ durationMs: 225_000 }, 0), "YouTube's audio has no length");
+    assert.equal(ytAudioRejection({ durationMs: null }, 0), "YouTube's audio has no length");
   });
 });
