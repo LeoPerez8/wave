@@ -22,6 +22,12 @@ import {
   type YtSongSearch,
 } from "./spotifyImport.ts";
 import type { SpotifyPlaylist, SpotifySong } from "./spotifyPlaylist.ts";
+import {
+  spotifySearchAllowedAt,
+  spotifySearchAsked,
+  spotifySearchesDoneAt,
+  type SpotifySearchPacing,
+} from "./spotifySearchPacing.ts";
 import type { YtAlbumSong } from "./ytDiscover.ts";
 import { joinArtists, libraryFinder, type LibrarySongKey, type YtSong } from "./ytMusic.ts";
 
@@ -209,11 +215,22 @@ export const importAdded = <S extends YtSong>(
 export const SPOTIFY_SEARCHES_AT_ONCE = 4;
 
 /**
- * The pauses before asking again once YouTube Music refuses a search; the
- * same search refused once more after the last, the import stops. While
- * refusing, YouTube Music answered every search by the third try.
+ * The pauses before asking again once YouTube Music refuses a search, about
+ * 34 minutes in all; the same search refused once more after the last, the
+ * import stops. While refusing, YouTube Music answered most searches by the
+ * third try, and refused a few for over half an hour.
  */
-const RETRY_PAUSES_MS = [2000, 5000, 10_000, 20_000] as const;
+const RETRY_PAUSES_MS = [
+  2000,
+  5000,
+  10_000,
+  20_000,
+  60_000,
+  2 * 60_000,
+  5 * 60_000,
+  10 * 60_000,
+  15 * 60_000,
+] as const;
 
 /** What the app does next for an import. */
 export type ImportStep =
@@ -239,33 +256,48 @@ const nextQuery = <S extends YtSong>(job: PlaylistImport<S>): string | null => {
 };
 
 /**
- * What the app does next for [job] at [now] (ms), and the import once it's
- * done. The songs still to be found are searched in the source's order, one
- * Songs search per song (its title and artists, `spotifySearchQuery`; a song
- * listed twice is searched once), at most `SPOTIFY_SEARCHES_AT_ONCE` at once,
- * none while paused after a refusal. This is the one place deciding whether
- * a search may be asked now.
+ * What the app does next for [job] at [now] (ms), given the searches Spotify
+ * imports asked lately ([searches]), and both once it's done. The songs still
+ * to be found are searched in the source's order, one Songs search per song
+ * (its title and artists, `spotifySearchQuery`; a song listed twice is
+ * searched once), at most `SPOTIFY_SEARCHES_AT_ONCE` at once and
+ * `SPOTIFY_SEARCH_BUDGET` in any `SPOTIFY_SEARCH_WINDOW_MS`, none while
+ * paused after a refusal. The Library's songs are never searched, so they
+ * spend none of that. This is the one place deciding whether a search may be
+ * asked now.
  */
 export const nextImportStep = <S extends YtSong>(
   job: PlaylistImport<S>,
   now: number,
-): { readonly job: PlaylistImport<S>; readonly step: ImportStep } => {
-  if (job.state.kind !== "importing") return { job, step: { kind: "none" } };
+  searches: SpotifySearchPacing,
+): {
+  readonly job: PlaylistImport<S>;
+  readonly step: ImportStep;
+  readonly searches: SpotifySearchPacing;
+} => {
+  const as = (step: ImportStep) => ({ job, step, searches });
+  if (job.state.kind !== "importing") return as({ kind: "none" });
   const waiting =
     job.asking.length > 0 ? ({ kind: "answers" } as const) : ({ kind: "none" } as const);
-  if (job.asking.length >= SPOTIFY_SEARCHES_AT_ONCE) return { job, step: waiting };
+  if (job.asking.length >= SPOTIFY_SEARCHES_AT_ONCE) return as(waiting);
   const query = nextQuery(job);
-  if (query === null) return { job, step: waiting };
-  if (now < job.pausedUntil) return { job, step: { kind: "wait", untilMs: job.pausedUntil } };
-  return { job: { ...job, asking: [...job.asking, query] }, step: { kind: "search", query } };
+  if (query === null) return as(waiting);
+  const from = Math.max(job.pausedUntil, spotifySearchAllowedAt(searches, now));
+  if (now < from) return as({ kind: "wait", untilMs: from });
+  return {
+    job: { ...job, asking: [...job.asking, query] },
+    step: { kind: "search", query },
+    searches: spotifySearchAsked(searches, now),
+  };
 };
 
 /**
  * The import once YouTube Music answered [query] at [now] (ms). Found, each
  * song searched by it is settled: the result that is its recording
  * (`spotifyYtMatch`), or not found. Refused, the import pauses 2, 5, 10 and
- * then 20 seconds before asking again; the same search refused a fifth
- * time, it stops. Offline, or with YT Music turned off, it stops at once.
+ * 20 seconds, then 1, 2, 5, 10 and 15 minutes, before asking it again, ahead
+ * of the songs after it; the same search refused a tenth time, it stops.
+ * Offline, or with YT Music turned off, it stops at once.
  */
 export const importSearchAnswered = <S extends YtSong>(
   job: PlaylistImport<S>,
@@ -517,10 +549,52 @@ export interface PlaylistImportView {
   readonly notFound: ImportNotice | null;
 }
 
-/** What [playlistId]'s page shows of its import; null with none. */
+/** The searches [job] still has to ask (not those asked and unanswered): one per query. */
+const searchesLeft = <S extends YtSong>(job: PlaylistImport<S>): number => {
+  const queries = new Set<string>();
+  for (let index = job.added; index < job.finds.length; index += 1) {
+    const song = job.songs[index];
+    if (job.finds[index] === null && song !== undefined) queries.add(spotifySearchQuery(song));
+  }
+  for (const query of job.asking) queries.delete(query);
+  return queries.size;
+};
+
+/** "less than a minute left", "about 25 min left", "about 2 h 18 min left". */
+const timeLeftLine = (ms: number): string => {
+  const minutes = Math.round(ms / 60_000);
+  if (minutes < 1) return "less than a minute left";
+  const hours = Math.floor(minutes / 60);
+  return hours === 0 ? `about ${minutes} min left` : `about ${hours} h ${minutes % 60} min left`;
+};
+
+/**
+ * About how long [job]'s searches still take at [now], given the searches
+ * Spotify imports asked lately ([searches]): at about 6 a second, within
+ * `SPOTIFY_SEARCH_BUDGET` in any `SPOTIFY_SEARCH_WINDOW_MS`, after any pause
+ * for a refusal. Null when none is left to ask.
+ */
+const timeLeft = <S extends YtSong>(
+  job: PlaylistImport<S>,
+  now: number,
+  searches: SpotifySearchPacing,
+): number | null => {
+  const left = searchesLeft(job);
+  if (left === 0) return null;
+  return spotifySearchesDoneAt(searches, Math.max(now, job.pausedUntil), left) - now;
+};
+
+/**
+ * What [playlistId]'s page shows of its import at [now] (ms), given the
+ * searches Spotify imports asked lately ([searches]); null with none. The
+ * import going on says how far it got and, while it has searches to ask,
+ * about how long they take.
+ */
 export const playlistImportView = <S extends YtSong>(
   imports: PlaylistImports<S>,
   playlistId: number,
+  now: number,
+  searches: SpotifySearchPacing,
 ): PlaylistImportView | null => {
   const job = imports.find((queued) => queued.playlistId === playlistId);
   if (job === undefined) return null;
@@ -532,10 +606,12 @@ export const playlistImportView = <S extends YtSong>(
     notFound: null,
   });
   switch (job.state.kind) {
-    case "importing":
-      return importTurn(imports) === job
-        ? shown(`Importing ${settledCount(job).toLocaleString("en")} of ${counted(total, "song")}`)
-        : shown(`Waiting to import ${counted(total, "song")}`);
+    case "importing": {
+      if (importTurn(imports) !== job) return shown(`Waiting to import ${counted(total, "song")}`);
+      const progress = `Importing ${settledCount(job).toLocaleString("en")} of ${counted(total, "song")}`;
+      const left = timeLeft(job, now, searches);
+      return shown(left === null ? progress : `${progress} · ${timeLeftLine(left)}`);
+    }
     case "stopped":
       return shown(STOPPED_LINES[job.state.reason], true);
     case "done": {
