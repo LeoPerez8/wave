@@ -6,7 +6,9 @@
  * runs under plain Node tests.
  */
 import {
+  createQueueCoverBatcher,
   libraryTrackIds,
+  withQueueCovers,
   parseTrackId,
   ytSongArtist,
   ytTrackId,
@@ -106,32 +108,44 @@ export const learnQueueTracks = (
 export const YT_COVERS_AT_ONCE = 2;
 
 /**
- * Caches [songs]' covers after their play has started, a few at a time, each
- * filling in its queued track as it lands (Up Next's thumbnail, Now Playing's
- * tint). A song that has left the queue meanwhile stays out of it; a cover
- * that can't be cached leaves YouTube's. [cacheArtwork] is YT Music's, passed
- * in so this stays free of Expo.
+ * Caches [songs]' covers after their play has started, a few at a time,
+ * filling in their queued tracks (Up Next's thumbnails, Now Playing's tint).
+ * Covers landing close together fill in together, in one change of the
+ * queue's tracks (Core's `createQueueCoverBatcher`); the [playing] song's
+ * fills in at once. A song that has left the queue isn't cached, and one that
+ * leaves while its cover is cached stays out of it; a cover that can't be
+ * cached leaves YouTube's. [cacheArtwork] is YT Music's, passed in so this
+ * stays free of Expo.
  */
 export const cacheYtCoversLater = <E, R>(
   songs: readonly YtSong[],
   cacheArtwork: (url: string) => Effect.Effect<CachedArtwork, E, R>,
+  playing: (trackId: string) => boolean = () => false,
 ): Effect.Effect<void, never, R> =>
-  Effect.forEach(
-    songs,
-    (song) =>
-      song.artworkUrl === null
-        ? Effect.void
-        : cacheArtwork(song.artworkUrl).pipe(
-            Effect.tap((artwork) =>
-              Effect.sync(() => {
-                const track = toYtQueueTrack(song, artwork);
-                if (queueTracks.get().has(track.id)) learnQueueTracks([track]);
-              }),
-            ),
-            Effect.ignore,
+  Effect.suspend(() => {
+    const batcher = createQueueCoverBatcher({
+      schedule: (ms, run) => {
+        const timer = setTimeout(run, ms);
+        return () => clearTimeout(timer);
+      },
+      playing,
+      apply: (covers) => queueTracks.set(withQueueCovers(queueTracks.get(), covers)),
+    });
+    return Effect.forEach(
+      songs,
+      (song) => {
+        const id = ytTrackId(song.videoId);
+        if (song.artworkUrl === null || !queueTracks.get().has(id)) return Effect.void;
+        return cacheArtwork(song.artworkUrl).pipe(
+          Effect.tap(({ path, thumbPath, palette }) =>
+            Effect.sync(() => batcher.add(id, { artworkPath: path, thumbPath, palette })),
           ),
-    { concurrency: YT_COVERS_AT_ONCE, discard: true },
-  );
+          Effect.ignore,
+        );
+      },
+      { concurrency: YT_COVERS_AT_ONCE, discard: true },
+    ).pipe(Effect.ensuring(Effect.sync(batcher.flush)));
+  });
 
 /** Ids looked up in the library and not failed, so they aren't asked for again. */
 const requested = new Set<string>();

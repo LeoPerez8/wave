@@ -1,9 +1,10 @@
-import { queuedYtTracks, type QueueEntry, type YtSong } from "@wave/core";
+import { currentEntry, queuedYtTracks, type QueueEntry, type YtSong } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { Storage } from "expo-sqlite/kv-store";
 
 import { YtMusic } from "@/ytmusic/YtMusic";
 
+import { queueState } from "./Queue";
 import { cacheYtCoversLater, queueTracks, toYtQueueTrack, type QueueTrack } from "./queueTracks";
 
 /**
@@ -43,8 +44,12 @@ export const cacheYtCoversInBackground = (
   Effect.gen(function* () {
     if (songs.every((song) => song.artworkUrl === null)) return;
     const ytMusic = yield* YtMusic;
-    yield* Effect.forkDetach(cacheYtCoversLater(songs, ytMusic.cacheArtwork));
+    yield* Effect.forkDetach(cacheYtCoversLater(songs, ytMusic.cacheArtwork, isPlaying));
   });
+
+/** Whether [trackId] is the queue's current entry's: its cover tints Now Playing straight away. */
+const isPlaying = (trackId: string): boolean =>
+  currentEntry(queueState.get())?.trackId === trackId;
 
 /** The YT Music songs' details saved with the last queue; none when nothing readable is. */
 export const savedYtQueueTracks = (): readonly QueueTrack[] => {
