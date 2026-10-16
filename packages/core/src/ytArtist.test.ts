@@ -754,6 +754,7 @@ describe("a Library album's YT Music songs", () => {
       name?: string;
       artistId?: number;
       integrated?: boolean;
+      keepTracklist?: boolean;
       releasePage?: YtReleaseLoad | undefined;
     } = {},
   ) => {
@@ -767,6 +768,7 @@ describe("a Library album's YT Music songs", () => {
       enabled: context.enabled ?? true,
       now: context.now ?? NOW,
       integrated: context.integrated ?? true,
+      keepTracklist: context.keepTracklist,
       releasePage: (release) => {
         asked.push(release.browseId);
         return "releasePage" in context ? context.releasePage : { status: "loaded", songs };
@@ -823,6 +825,15 @@ describe("a Library album's YT Music songs", () => {
     assert.equal(shown?.tracks, null);
     assert.equal(shown?.note, null);
     assert.equal(shown?.button, false);
+  });
+
+  test("the last download finishing while the tracklist shows keeps it, rows in place, for the visit", () => {
+    const { shown } = albumView(restored(found(NOW)), {
+      releasePage: { status: "loaded", songs: [song("mine-1"), song("mine-3")] },
+      keepTracklist: true,
+    });
+    assert.deepEqual(shape(shown?.tracks ?? []), ["1:#1", "2:#3"]);
+    assert.equal(shown?.note, null);
   });
 
   test("a release page that can't be read is a quiet line with the button to read it again", () => {

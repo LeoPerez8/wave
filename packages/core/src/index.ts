@@ -22,6 +22,8 @@ export { describeFolder, filesLeavingWithRoot, isWithin, planAddRoot } from "./s
 export type { AddRootPlan, FolderLabel, ScanRootState } from "./scanRoots.ts";
 export { resolveSkipSwipe } from "./swipe.ts";
 export type { SkipDirection, SkipSwipe } from "./swipe.ts";
+export { toastDuration, toastSwipeDismisses } from "./toast.ts";
+export type { ToastSwipe } from "./toast.ts";
 export {
   EMPTY_QUEUE,
   REAL_SHUFFLE,
@@ -121,6 +123,7 @@ export type { SleepTimer, SleepTimerChoice, SleepTimerClock } from "./sleepTimer
 export {
   COUNTED_PLAY_MS,
   EMPTY_PLAY_TRACKER,
+  fadingPlaySoFar,
   isCountedPlay,
   keptPlayingEntry,
   playSoFar,
@@ -457,6 +460,7 @@ export {
   deezerTrackCandidates,
   deezerTrackSearchUrl,
   describeTagLookups,
+  tagLookupsToast,
   canFixSong,
   deezerFollowUps,
   fixLookups,
@@ -918,6 +922,13 @@ export type {
   HomeSectionId,
 } from "./homeSections.ts";
 export {
+  CROSSFADE,
+  crossfadeDuration,
+  readCrossfade,
+  snapCrossfade,
+  type CrossfadeTransition,
+} from "./crossfade.ts";
+export {
   DISCOVER_MIX_COUNT,
   discoverMix,
   discoverMixCaption,
@@ -951,3 +962,6 @@ export type { SpotifySearchPacing } from "./spotifySearchPacing.ts";
 
 export { LIBRARY_SHELF_CHOICES, parseLibraryShelf, storedLibraryShelf } from "./libraryShelf.ts";
 export type { LibraryShelf } from "./libraryShelf.ts";
+
+export { NO_HELD_SONGS, heldTracks, inLibraryUnlessHeld, songsInPlace } from "./songsInPlace.ts";
+export type { HeldSongs, SongsInPlace } from "./songsInPlace.ts";

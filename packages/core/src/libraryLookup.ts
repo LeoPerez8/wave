@@ -20,15 +20,19 @@ export const libraryLookupProgress = (done: number, total: number): LibraryLooku
   return { title: TITLE, detail, line: `${TITLE} ${detail}` };
 };
 
-/** How a run went, as its end message says it (Core's `describeTagLookups`). */
+/**
+ * How a run went: in full for its notification (Core's `describeTagLookups`),
+ * and as the one line Wave's toast says (`tagLookupsToast`).
+ */
 export interface LibraryLookupSummary {
   readonly title: string;
   readonly message: string;
+  readonly toast: string;
 }
 
 /** [summary] as stored until the owner has seen it. */
 export const writeLibraryLookupSummary = (summary: LibraryLookupSummary): string =>
-  JSON.stringify({ title: summary.title, message: summary.message });
+  JSON.stringify({ title: summary.title, message: summary.message, toast: summary.toast });
 
 /** The summary kept in [stored], or null when nothing (or nothing readable) is kept. */
 export const readLibraryLookupSummary = (stored: string | null): LibraryLookupSummary | null => {
@@ -40,6 +44,8 @@ export const readLibraryLookupSummary = (stored: string | null): LibraryLookupSu
     return null;
   }
   if (typeof value !== "object" || value === null) return null;
-  const { title, message } = value as Record<string, unknown>;
-  return typeof title === "string" && typeof message === "string" ? { title, message } : null;
+  const { title, message, toast } = value as Record<string, unknown>;
+  if (typeof title !== "string" || typeof message !== "string") return null;
+  // One kept by a Wave from before the toast says its title.
+  return { title, message, toast: typeof toast === "string" ? toast : title };
 };

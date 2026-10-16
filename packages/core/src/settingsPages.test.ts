@@ -27,6 +27,7 @@ describe("Settings pages", () => {
       [
         ["Library", "/settings/library"],
         ["Appearance", "/settings/appearance"],
+        ["Playback", "/settings/playback"],
         ["Lyrics and tags", "/settings/lyrics-and-tags"],
         ["Downloads", "/settings/downloads"],
         ["Accounts", "/settings/accounts"],
