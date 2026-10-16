@@ -767,11 +767,7 @@ export type {
   PlaylistImportView,
   PlaylistImports,
 } from "./playlistImport.ts";
-export {
-  readSpotifyPlaylist,
-  spotifyEmbed,
-  spotifyPlaylistPage,
-} from "./spotifyPlaylist.ts";
+export { readSpotifyPlaylist, spotifyEmbed, spotifyPlaylistPage } from "./spotifyPlaylist.ts";
 export type {
   SpotifyAnswer,
   SpotifyEmbed,
@@ -895,5 +891,10 @@ export type {
   HomeSectionId,
 } from "./homeSections.ts";
 
-export { nextSpotifySearch } from "./spotifySearchPacing.ts";
+export {
+  SPOTIFY_SEARCH_BUDGET,
+  SPOTIFY_SEARCH_WINDOW_MS,
+  readSpotifySearchPacing,
+  writeSpotifySearchPacing,
+} from "./spotifySearchPacing.ts";
 export type { SpotifySearchPacing } from "./spotifySearchPacing.ts";

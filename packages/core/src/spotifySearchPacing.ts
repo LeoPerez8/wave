@@ -1,25 +1,84 @@
-/** Shared YouTube Music search allowance for Spotify imports, including retries and app restarts. */
+/**
+ * How fast a Spotify import may search YouTube Music (docs/spec.md,
+ * "Importing playlists from a link"): an allowance of searches in any 15
+ * minutes, shared by the imports in turn and kept while Wave is closed.
+ */
+
+/** The YouTube Music searches Spotify imports asked lately, retries included. */
 export interface SpotifySearchPacing {
+  /** When each was asked (ms), oldest first; only the last `SPOTIFY_SEARCH_BUDGET` matter. */
   readonly searchesAt: readonly number[];
 }
 
-/** Half a second between requests avoids spending the window's budget in one burst. */
-const SEARCH_GAP_MS = 500;
-/** Below the measured refusals near 2,300 searches in fifteen minutes (#241). */
-const SEARCH_WINDOW_MS = 15 * 60_000;
-const SEARCH_BUDGET = 1200;
+/**
+ * At most this many searches in any `SPOTIFY_SEARCH_WINDOW_MS`. YouTube Music
+ * began refusing some after about 2,300 searches in 15 minutes (measured
+ * 2026-10-14), and 1,000 at a time never drew a refusal.
+ */
+export const SPOTIFY_SEARCH_BUDGET = 1000;
+export const SPOTIFY_SEARCH_WINDOW_MS = 15 * 60_000;
 
-/** Reserve an allowance only for a search the app is about to send, never for a Library match. */
-export const nextSpotifySearch = (
+/** The searches still in the window at [now], oldest first. */
+const recent = (pacing: SpotifySearchPacing, now: number): readonly number[] =>
+  pacing.searchesAt.filter((at) => at > now - SPOTIFY_SEARCH_WINDOW_MS);
+
+/** When the next search may be asked (ms): [now], or once the window's oldest search leaves it. */
+export const spotifySearchAllowedAt = (pacing: SpotifySearchPacing, now: number): number => {
+  const inWindow = recent(pacing, now);
+  const oldest = inWindow[inWindow.length - SPOTIFY_SEARCH_BUDGET];
+  return oldest === undefined ? now : oldest + SPOTIFY_SEARCH_WINDOW_MS;
+};
+
+/** [pacing] once a search is asked at [now]. */
+export const spotifySearchAsked = (
   pacing: SpotifySearchPacing,
   now: number,
-): { readonly kind: "search"; readonly pacing: SpotifySearchPacing } | { readonly kind: "wait"; readonly untilMs: number } => {
-  const searchesAt = pacing.searchesAt.filter((at) => at > now - SEARCH_WINDOW_MS);
-  const last = searchesAt.at(-1);
-  const budgetAt = searchesAt.length >= SEARCH_BUDGET
-    ? (searchesAt[searchesAt.length - SEARCH_BUDGET] ?? now) + SEARCH_WINDOW_MS
-    : now;
-  const untilMs = Math.max(budgetAt, last === undefined ? now : last + SEARCH_GAP_MS);
-  if (now < untilMs) return { kind: "wait", untilMs };
-  return { kind: "search", pacing: { searchesAt: [...searchesAt, now] } };
+): SpotifySearchPacing => ({
+  searchesAt: [...recent(pacing, now), now].slice(-SPOTIFY_SEARCH_BUDGET),
+});
+
+/** [pacing] as kept until Wave starts again (`readSpotifySearchPacing`). */
+export const writeSpotifySearchPacing = (pacing: SpotifySearchPacing): string =>
+  JSON.stringify({ searchesAt: pacing.searchesAt.slice(-SPOTIFY_SEARCH_BUDGET) });
+
+/** The searches kept as [stored] (`writeSpotifySearchPacing`); none when nothing readable is kept. */
+export const readSpotifySearchPacing = (stored: string | null): SpotifySearchPacing => {
+  if (stored === null) return { searchesAt: [] };
+  try {
+    const value: unknown = JSON.parse(stored);
+    const searchesAt =
+      typeof value === "object" && value !== null && "searchesAt" in value
+        ? value.searchesAt
+        : null;
+    if (!Array.isArray(searchesAt)) return { searchesAt: [] };
+    const times = searchesAt.filter((at): at is number => Number.isFinite(at));
+    // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
+    return { searchesAt: times.sort((a, b) => a - b).slice(-SPOTIFY_SEARCH_BUDGET) };
+  } catch {
+    return { searchesAt: [] };
+  }
+};
+
+/** About how long one search takes, four at once: 495 took 85 seconds (measured 2026-10-14). */
+const SEARCH_MS = 170;
+
+/**
+ * About when [count] more searches will have been asked, the first no
+ * sooner than [from] (ms), at about 6 a second and within the allowance
+ * (given the searches [pacing] holds).
+ */
+export const spotifySearchesDoneAt = (
+  pacing: SpotifySearchPacing,
+  from: number,
+  count: number,
+): number => {
+  const times = [...recent(pacing, from)];
+  let at = from;
+  for (let search = 0; search < count; search += 1) {
+    const oldest = times[times.length - SPOTIFY_SEARCH_BUDGET];
+    if (oldest !== undefined) at = Math.max(at, oldest + SPOTIFY_SEARCH_WINDOW_MS);
+    times.push(at);
+    at += SEARCH_MS;
+  }
+  return at;
 };
