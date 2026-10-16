@@ -895,3 +895,5 @@ export type {
   HomeSection,
   HomeSectionId,
 } from "./homeSections.ts";
+export { LIBRARY_SHELF_CHOICES, parseLibraryShelf, storedLibraryShelf } from "./libraryShelf.ts";
+export type { LibraryShelf } from "./libraryShelf.ts";
