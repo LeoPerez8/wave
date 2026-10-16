@@ -18,12 +18,14 @@ import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.provider.Settings
+import androidx.core.view.WindowInsetsControllerCompat
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.events.OnActivityResultPayload
 import expo.modules.kotlin.exception.Exceptions
 import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import expo.modules.wavenative.appearance.AppearanceMode
 import expo.modules.wavenative.artwork.AndroidArtworkProcessor
 import expo.modules.wavenative.artwork.ArtistPhotoStore
 import expo.modules.wavenative.artwork.ArtworkInfo
@@ -64,7 +66,7 @@ import java.util.concurrent.atomic.AtomicInteger
 /**
  * Wave's native side: all-files access, the folder, playlist file and playlist image pickers, the library scanner,
  * lyrics, writing found lyrics and genre into files, deleting songs' files, saving artist photos,
- * the launch theme, the launcher icon, reading the clipboard and text shared to Wave. Scans run one at a time on a background thread and
+ * the launch theme, the appearance (light, dark or system), the launcher icon, reading the clipboard and text shared to Wave. Scans run one at a time on a background thread and
  * stream results to JS as events:
  * `onScanProgress`, `onScanMissing`, `onScanBatch`, `onScanComplete` and
  * `onScanError`, each carrying the `scanId` returned by `startScan`.
@@ -327,6 +329,23 @@ class WaveNativeModule : Module() {
       LaunchThemeStore.save(context, launch)
       appContext.currentActivity?.let { LaunchThemeStore.applySplash(it, launch) }
     }
+
+    /** Keeps Wave in Settings › Appearance's scheme (`system`, `light` or `dark`), across restarts too. */
+    AsyncFunction("setAppearance") { appearance: String ->
+      if (!AppearanceMode.apply(context, appearance)) {
+        throw IllegalArgumentException("Unknown appearance: $appearance")
+      }
+    }
+
+    /**
+     * Dark or light navigation-bar buttons for the scheme Wave shows. Android
+     * picks them as the activity starts; this follows a switch made while Wave
+     * is open, in Settings or by Android under System.
+     */
+    AsyncFunction("setNavigationBarScheme") { dark: Boolean ->
+      val window = appContext.currentActivity?.window ?: return@AsyncFunction
+      WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightNavigationBars = !dark
+    }.runOnQueue(Queues.MAIN)
 
     // JS may have saved the launch theme without an activity (Android Auto starts it headless).
     OnActivityEntersForeground {

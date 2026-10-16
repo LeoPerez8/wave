@@ -1,5 +1,5 @@
 import "../../global.css";
-// Lays the chosen theme colours over global.css's before anything renders.
+// Lays the chosen theme colours over global.css's, in the chosen appearance, before anything renders.
 // oxlint-disable-next-line import/no-unassigned-import
 import "@/settings/theme";
 
@@ -19,11 +19,14 @@ import { useOpenSharedText } from "@/library/sharedText";
 import { startInitialScan } from "@/library/runtime";
 import { NowPlayingSheet, UnderNowPlaying } from "@/nowPlaying/NowPlayingSheet";
 import { startServices } from "@/services";
+import { useNavigationBarScheme } from "@/settings/appearance";
 import { startSync } from "@/sync/startSync";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 export default function RootLayout() {
   const background = useThemeColor("background");
+  // The status bar follows `useColorScheme` (style "auto"); the navigation bar follows here.
+  useNavigationBarScheme();
   const { granted } = useAllFilesAccess();
   // Lets library screens open inside the tab they were opened from.
   useTrackCurrentPath();

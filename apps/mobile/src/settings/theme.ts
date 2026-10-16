@@ -1,14 +1,16 @@
 import {
   DEFAULT_THEME_CHOICE,
+  appearanceAccent,
   chooseCustomInk,
   launcherIconSwitch,
   launchTheme,
   readThemeChoice,
   themeFor,
+  type Appearance,
   type InkGroup,
   type LauncherIconSwitch,
-  type ThemeChoice,
   type Theme,
+  type ThemeChoice,
   type ThemeColors,
   type ThemeGroup,
 } from "@wave/core";
@@ -18,11 +20,20 @@ import { persistedSetting, sameFields } from "@/lib/persistedSetting";
 import { WaveNative } from "@/native/waveNative";
 import { WavePlayer } from "@/native/wavePlayer";
 
+import { followAppearance, getAppearance } from "./appearance";
 import { LAUNCHER, showLauncherIconFor } from "./launcherIcon";
 
 /** The colours as CSS variables (`--color-<token>`), the names global.css declares. */
 const cssVariables = (colors: ThemeColors): Record<string, string> =>
   Object.fromEntries(Object.entries(colors).map(([token, value]) => [`--color-${token}`, value]));
+
+/** The media notification takes the primary in the scheme Wave shows (Settings › Appearance). */
+const colourNotification = (theme: Theme, appearance: Appearance): void => {
+  const accent = appearanceAccent(theme, appearance);
+  WavePlayer.setNotificationAccent(accent.light, accent.dark).catch((error: unknown) =>
+    console.warn("[wave] Couldn't colour the notification", error),
+  );
+};
 
 /**
  * Lays a theme over global.css's defaults. Every className and
@@ -43,9 +54,7 @@ const recolour = (theme: Theme): void => {
 const apply = (choice: ThemeChoice): void => {
   const theme = themeFor(choice);
   recolour(theme);
-  WavePlayer.setNotificationAccent(theme.light.accent, theme.dark.accent).catch((error: unknown) =>
-    console.warn("[wave] Couldn't colour the notification", error),
-  );
+  colourNotification(theme, getAppearance());
   showLauncherIconFor(choice);
   WaveNative.setLaunchTheme(launchTheme(choice)).catch((error: unknown) =>
     console.warn("[wave] Saving the launch theme failed", error),
@@ -63,6 +72,8 @@ const theme = persistedSetting<ThemeChoice>({
 
 // Applied on import (the root layout imports this first), before anything renders.
 theme.get();
+
+followAppearance((appearance) => colourNotification(themeFor(theme.get()), appearance));
 
 /** Asks the person to agree to a change (`confirmAction`); resolves whether they did. */
 export type Confirm = (warning: NonNullable<LauncherIconSwitch["warning"]>) => Promise<boolean>;

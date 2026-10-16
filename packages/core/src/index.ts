@@ -221,6 +221,8 @@ export { TAB_PATH, detailPath, inLibraryStack, isDetailPath, tabOfPath } from ".
 export type { DetailScreen } from "./navigation.ts";
 export { planAlert } from "./alert.ts";
 export type { AlertButton, AlertChoice, AlertPlan, AlertSpec } from "./alert.ts";
+export { APPEARANCES, appearanceAccent, readAppearance, storedAppearance } from "./appearance.ts";
+export type { Appearance } from "./appearance.ts";
 export { DEFAULT_THEME, NIGHT_SLATE, TONES, themeContrastIssues } from "./theme.ts";
 export { hexToHsv, hsvToHex, parseHexColour, withOpacity } from "./colour.ts";
 export type { Hsv } from "./colour.ts";
