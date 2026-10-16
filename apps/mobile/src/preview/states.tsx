@@ -1,10 +1,12 @@
 import {
+  ANCHOR_UNMEASURED,
   defaultSongSort,
   playlistImportSources,
   songSortsFor,
+  watchAnchor,
   type DesignPreviewState,
 } from "@wave/core";
-import { useRef, type ComponentRef, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, type ComponentRef, type ReactNode } from "react";
 import { View } from "react-native";
 
 import type { AlbumSummary } from "@/catalog/AlbumTile";
@@ -15,6 +17,8 @@ import type { PlaylistsControl } from "@/library/PlaylistsList";
 import { openSortMenu } from "@/library/SongSortButton";
 import { measureRect } from "@/motion/measureRect";
 import { runPressedAt } from "@/motion/pressedRect";
+import { HandOverPress, type PressHandle } from "@/motion/pressHandle";
+import { dismissOverlaysFrom } from "@/overlay/overlay";
 import { ItemMenuCard, openItemCard } from "@/playback/ActionsMenu";
 import type { ActionItems } from "@/playback/actionTargets";
 import { actionEntries, usePlannedActions } from "@/playback/itemActions";
@@ -52,6 +56,12 @@ export interface PreviewState extends DesignPreviewState {
 /** Where the long-titled song sits in the synthetic Songs. */
 const LONG_TITLE = SYNTHETIC_TRACKS.findIndex(({ track }) => track.id === LONG_TITLE_TRACK_ID);
 
+/** The first plain song: not the playing one, not a missing one, not a favorite, a short title. */
+const PLAIN = SYNTHETIC_TRACKS.findIndex(
+  ({ track, state, favorite }) =>
+    state === undefined && !favorite && track.id !== LONG_TITLE_TRACK_ID,
+);
+
 /**
  * Every state, by name: the one list of them. Add one here: a name, a line on
  * what it shows, the shelf, and, when it opens a card, what opens it and how.
@@ -61,9 +71,8 @@ export const PREVIEW_STATES: readonly PreviewState[] = [
     name: "song-card-open",
     shows: "A song's card open over its row, as a long press opens it: the row highlighted.",
     shelf: "songs",
-    // A plain row: not the playing one, not a missing one, not a favorite.
-    from: 3,
-    open: () => openSongCard(SYNTHETIC_TRACKS[3] as SyntheticTrack),
+    from: PLAIN,
+    open: () => openSongCard(SYNTHETIC_TRACKS[PLAIN] as SyntheticTrack),
   },
   {
     name: "song-card-open-long-title",
@@ -216,28 +225,117 @@ const albumRow = (album: AlbumSummary): AlbumRow => ({
   artworkPath: null,
 });
 
+// ---------------------------------------------------------------------------
+// Visits: every time the Design preview opens (from a link, again from the
+// same link, or from Settings) is a visit, and shows its state afresh.
+
+/** A visit to the Design preview. */
+export interface PreviewVisit {
+  /** No later visit has started: its state may still open its card. */
+  readonly current: () => boolean;
+  /** Closes the card its state opened, unless a later visit has started. */
+  readonly leave: () => void;
+}
+
+/** How many visits have started; the last is the one on screen. */
+let visits = 0;
+/** The key of the `Press` the current visit's state opened its card from. */
+let openedFrom: number | undefined;
+
+const closeStateCard = (): void => {
+  if (openedFrom !== undefined) dismissOverlaysFrom(openedFrom);
+  openedFrom = undefined;
+};
+
 /**
- * Wraps what a state opens its card from. Once it is laid out, opens [open]
- * there, measured as a press measures its row or button, so the overlay
- * floats the card next to it and highlights it. Opens once.
+ * Starts a visit: closes the card the last visit's state opened, so no state
+ * opens over another's (or stays open under a preview with none), and a
+ * state still waiting to open for an earlier visit no longer will.
+ */
+export const visitDesignPreview = (): PreviewVisit => {
+  closeStateCard();
+  const visit = ++visits;
+  return {
+    current: () => visit === visits,
+    leave: () => {
+      if (visit === visits) closeStateCard();
+    },
+  };
+};
+
+/** Measures of a state's anchor in a row at one rect that make it still. */
+const STILL_FOR = 3;
+/** Between measures, in ms. */
+const MEASURE_EVERY_MS = 50;
+/** Measures after which the card opens anyway (2 s). */
+const GIVE_UP_AFTER = 40;
+
+/**
+ * Wraps what a state opens its card from (a row, tile or button: one `Press`).
+ * Once it is laid out and sits still, its screen done sliding in, opens [open]
+ * as that `Press`'s long press would: measured where it sits and known by its
+ * key, so the overlay floats the card next to it, highlights it and calls it
+ * selected. Opens once, for the visit that is [current].
  */
 export function StateAnchor({
   open,
+  current,
   children,
 }: {
-  open: (() => void) | undefined;
+  open: () => void;
+  current: () => boolean;
   children: ReactNode;
 }) {
   const view = useRef<ComponentRef<typeof View>>(null);
-  const opened = useRef(false);
-  const onLayout = () => {
-    if (open === undefined || opened.current) return;
-    opened.current = true;
-    void measureRect(view.current).then((rect) => runPressedAt(rect, open));
-  };
+  const press = useRef<PressHandle | undefined>(undefined);
+  const handOver = useCallback((handle: PressHandle) => {
+    press.current = handle;
+    return () => {
+      if (press.current === handle) press.current = undefined;
+    };
+  }, []);
+  const latest = useRef({ open, current });
+  useEffect(() => {
+    latest.current = { open, current };
+  });
+
+  useEffect(() => {
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let watch = ANCHOR_UNMEASURED;
+    const openNow = (): void => {
+      if (latest.current.current()) latest.current.open();
+    };
+    const measure = (): void => {
+      void measureRect(view.current).then((measured) => {
+        if (stopped || !latest.current.current()) return;
+        const step = watchAnchor(watch, measured, {
+          stillFor: STILL_FOR,
+          giveUpAfter: GIVE_UP_AFTER,
+        });
+        if (!step.open) {
+          watch = step.watch;
+          timer = setTimeout(measure, MEASURE_EVERY_MS);
+          return;
+        }
+        const handle = press.current;
+        openedFrom = handle?.key ?? 0;
+        if (handle === undefined) runPressedAt(step.rect, openNow);
+        else void handle.run(openNow);
+      });
+    };
+    timer = setTimeout(measure, MEASURE_EVERY_MS);
+    return () => {
+      stopped = true;
+      if (timer !== undefined) clearTimeout(timer);
+    };
+  }, []);
+
   return (
-    <View ref={view} collapsable={false} onLayout={onLayout}>
-      {children}
-    </View>
+    <HandOverPress value={handOver}>
+      <View ref={view} collapsable={false}>
+        {children}
+      </View>
+    </HandOverPress>
   );
 }

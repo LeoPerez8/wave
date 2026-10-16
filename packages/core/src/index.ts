@@ -14,8 +14,18 @@ export type { LibraryTrack, RawTrack } from "./library.ts";
 export { creditSplitter, respreadDeletedSongs, splitCredit } from "./credits.ts";
 export type { PrunedArtist } from "./credits.ts";
 export { formatDuration, formatRemaining } from "./time.ts";
-export { designPreviewState } from "./designPreview.ts";
-export type { DesignPreviewState } from "./designPreview.ts";
+export {
+  ANCHOR_UNMEASURED,
+  designPreviewState,
+  isDesignPreviewLink,
+  watchAnchor,
+} from "./designPreview.ts";
+export type {
+  AnchorStep,
+  AnchorWatch,
+  AnchorWatchOptions,
+  DesignPreviewState,
+} from "./designPreview.ts";
 export { trackRowTrailing } from "./trackRowTrailing.ts";
 export type { TrackRowTrailingInput } from "./trackRowTrailing.ts";
 export { describeFolder, filesLeavingWithRoot, isWithin, planAddRoot } from "./scanRoots.ts";
