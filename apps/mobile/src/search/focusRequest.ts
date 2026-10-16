@@ -1,28 +1,36 @@
 /**
  * Tapping the Search tab asks for the search field, so the keyboard comes up
  * without a second tap. The request waits for the screen when the tap is what
- * brings it up, and reaches it straight away when it's already showing.
- * Arriving any other way (Back from a result) doesn't ask.
+ * brings it up, and reaches it straight away when it's already mounted.
+ * Arriving any other way (Back from a result) doesn't ask. How long a request
+ * may wait, and how the field is focused, is Core's `stepSearchFocus`.
  */
-/** How long a request waits for the screen. */
-const WAITS_MS = 1000;
 
+/** When the last request not yet taken was made (`performance.now()`), or null. */
 let requestedAt: number | null = null;
-const listeners = new Set<() => void>();
+const listeners = new Set<(at: number) => void>();
 
 export function requestSearchFocus(): void {
-  requestedAt = Date.now();
-  for (const listener of listeners) listener();
-}
-
-/** Whether a request is waiting; reading it answers it. */
-export function takeSearchFocusRequest(): boolean {
-  const requested = requestedAt !== null && Date.now() - requestedAt < WAITS_MS;
+  const at = performance.now();
+  if (listeners.size === 0) {
+    requestedAt = at;
+    return;
+  }
   requestedAt = null;
-  return requested;
+  for (const listener of listeners) listener(at);
 }
 
-export function onSearchFocusRequest(listener: () => void): () => void {
+/** When a request no screen has taken yet was made, or null; reading it takes it. */
+export function takeSearchFocusRequest(): number | null {
+  const at = requestedAt;
+  requestedAt = null;
+  return at;
+}
+
+/** Calls [listener] with each request's time while subscribed; returns how to stop. */
+export function onSearchFocusRequest(listener: (at: number) => void): () => void {
   listeners.add(listener);
-  return () => listeners.delete(listener);
+  return () => {
+    listeners.delete(listener);
+  };
 }

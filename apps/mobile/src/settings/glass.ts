@@ -23,5 +23,8 @@ export const setGlassSetting = <K extends keyof GlassSettings>(
 /** Puts the glass back as it was before it could be tuned. */
 export const resetGlassSettings = (): void => glass.set(DEFAULT_GLASS_SETTINGS);
 
+/** The glass settings now, outside React (the perf build's run metadata). */
+export const currentGlassSettings = glass.get;
+
 /** The persisted glass settings; re-renders when Settings changes them. */
 export const useGlassSettings = glass.useValue;

@@ -129,8 +129,8 @@ imported playlist between runs.
 - Tombstones: untouched. Nothing deletes or skips them beyond what `live` did.
 - `selectPlaylistCovers` and `selectPlaylistTotals` keep their results and signatures. They now also
   take a list of ids.
-- Tests: `node --test` in `packages/core` (1,793 pass), the app's tests (305 pass), the runner's
-  (48 pass). The app, Core and `scripts/perf` typecheck.
+- Tests: `node --test` in `packages/core` (1,852 pass), the app's tests (312 pass), the runner's
+  (97 pass), after merging `perf/301-performance` at 8454ac9. The app, Core and `scripts/perf` typecheck.
 
 ## Not measured, and limits
 
@@ -143,9 +143,10 @@ imported playlist between runs.
 - The page's entries still come from one ordered read of the whole playlist (ids and stamps) plus
   its Library songs (`playlistTracks`), every 1.5 s while in sight. Paging the page's list is
   #310's kind of work.
+- Search (#306, merged in after this was measured) reads its playlists source through the shared
+  `playlists` query, the same read as Library › Playlists, so a batch costs it that read (now the
+  cached one) and an update of that one source, not a rebuild.
 - Not changed, still per batch or per change:
-  - Search's index follows `playlistsVersion`, so while Search is in focus during an import it
-    rebuilds every 3 s, re-reading every Library source. That's #306's per-source refresh.
   - `WaveSync.changed` follows every playlist change (3 s debounce).
   - The imports' persistence is a 1 s debounce, re-armed for every answer (#307 note, for #315).
 - `linkPlaylistEntries` (a download landing, a scan's end) still decodes every stored YT Music

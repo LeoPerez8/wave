@@ -25,6 +25,10 @@ type Props = {
   onSubmit: () => void;
   /** Focus it on mount (the Design preview's focused state). */
   autoFocus?: boolean;
+  /** The field was laid out: it is in the window, and can take the focus. */
+  onLayout?: () => void;
+  /** The field took or lost the focus. */
+  onFocusChange?: (focused: boolean) => void;
 };
 
 /**
@@ -34,7 +38,15 @@ type Props = {
  * button's cell is kept at the end even when there is nothing to clear, so the
  * query never reflows as it appears.
  */
-export function SearchField({ ref, value, onChange, onSubmit, autoFocus = false }: Props) {
+export function SearchField({
+  ref,
+  value,
+  onChange,
+  onSubmit,
+  autoFocus = false,
+  onLayout,
+  onFocusChange,
+}: Props) {
   const secondary = useThemeColor("secondary");
   const accent = useThemeColor("accent");
   const [focused, setFocused] = useState(false);
@@ -51,8 +63,15 @@ export function SearchField({ ref, value, onChange, onSubmit, autoFocus = false 
           value={value}
           onChangeText={onChange}
           onSubmitEditing={onSubmit}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
+          onLayout={onLayout}
+          onFocus={() => {
+            setFocused(true);
+            onFocusChange?.(true);
+          }}
+          onBlur={() => {
+            setFocused(false);
+            onFocusChange?.(false);
+          }}
           autoFocus={autoFocus}
           placeholder="Songs, albums, artists, genres"
           placeholderTextColor={secondary}

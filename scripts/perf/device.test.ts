@@ -5,12 +5,14 @@ import {
   findNode,
   parseAmStart,
   parseCompilation,
+  parseDensity,
   parseGetprop,
   parseGfxinfo,
   parseMeminfo,
   parsePackage,
   parseRefreshRate,
   parseThermalStatus,
+  parseWmSize,
 } from "./device.ts";
 
 // Shapes as Android 14 prints them; trimmed to what the runner reads plus some noise.
@@ -120,8 +122,40 @@ describe("parseGfxinfo", () => {
       completedMs: 81_000_106,
       deadlineMs: 81_000_116.666666,
       intervalMs: 8.333333,
+      parts: { traversalMs: 0.5, drawMs: 1, syncMs: 0.4, issueMs: 1.5, gpuMs: 1 },
     });
     assert.equal(frames[2]?.window, "dev.leoperez.wave/PopupWindow:1a2b");
+  });
+
+  it("splits each frame into the UI thread's, the RenderThread's and the GPU's parts", () => {
+    // The second frame: the RenderThread spent 16.5 ms issuing draw commands (blur, layers).
+    const { frames } = parseGfxinfo(GFXINFO);
+    assert.deepEqual(frames[1]?.parts, {
+      traversalMs: 0.5,
+      drawMs: 1,
+      syncMs: 0.4,
+      issueMs: 16.5,
+      gpuMs: 2,
+    });
+  });
+
+  it("leaves out a part whose timestamps Android didn't fill in", () => {
+    const header =
+      "Flags,IntendedVsync,PerformTraversalsStart,DrawStart,SyncQueued,SyncStart,IssueDrawCommandsStart,SwapBuffers,FrameCompleted,GpuCompleted,";
+    const row = "0,1000000000,1001000000,1002000000,1003000000,0,0,1006000000,1007000000,0,";
+    const { frames } = parseGfxinfo(`	main (visibility=0)
+---PROFILEDATA---
+${header}
+${row}
+---PROFILEDATA---
+`);
+    assert.deepEqual(frames[0]?.parts, {
+      traversalMs: 1,
+      drawMs: 1,
+      syncMs: null,
+      issueMs: null,
+      gpuMs: null,
+    });
   });
 
   it("finds nothing in an app that hasn't drawn", () => {
@@ -249,6 +283,31 @@ describe("parseRefreshRate", () => {
   it("falls back to the logical display's rate", () => {
     assert.equal(parseRefreshRate("    mRefreshRate=60.000004\n"), 60);
     assert.equal(parseRefreshRate("nothing here"), null);
+  });
+});
+
+describe("parseWmSize", () => {
+  it("reads the screen's size in pixels", () => {
+    assert.deepEqual(parseWmSize("Physical size: 1440x3120\n"), { width: 1440, height: 3120 });
+  });
+
+  it("prefers the size set over the physical one, as the screen draws at it", () => {
+    assert.deepEqual(parseWmSize("Physical size: 1440x3120\nOverride size: 1080x2340\n"), {
+      width: 1080,
+      height: 2340,
+    });
+  });
+
+  it("is null when wm says nothing it can read", () => {
+    assert.equal(parseWmSize(""), null);
+  });
+});
+
+describe("parseDensity", () => {
+  it("reads the density the screen is drawn at, the user's override first", () => {
+    assert.equal(parseDensity("Physical density: 600\nOverride density: 450\n"), 450);
+    assert.equal(parseDensity("Physical density: 480\n"), 480);
+    assert.equal(parseDensity("nothing here"), null);
   });
 });
 
