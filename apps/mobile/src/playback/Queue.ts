@@ -8,6 +8,7 @@ import {
   planPlayerSync,
   queueSourceAfter,
   reduceQueue,
+  shuffledTrackIds,
   shufflesQueue,
   statsWindow,
   type PlayerList,
@@ -228,15 +229,15 @@ export const layer = Layer.effect(
 
     /**
      * The kind of shuffle [command] uses on [state] (Core's `shufflesQueue`):
-     * the chosen one, with every song's all-time counted plays for Smart
-     * Shuffle, read only when the command shuffles. Plays that can't be read
-     * count as none.
+     * the chosen one, with the all-time counted plays of the songs it orders
+     * (`shuffledTrackIds`) for Smart Shuffle, read only when the command
+     * shuffles. Plays that can't be read count as none.
      */
     const shuffleFor = (state: QueueState, command: QueueCommand) =>
       Effect.gen(function* () {
         if (shuffleKind() === "real" || !shufflesQueue(state, command)) return REAL_SHUFFLE;
         const totals = yield* store
-          .trackPlayTotals(statsWindow("all", Date.now()))
+          .trackPlayTotals(statsWindow("all", Date.now()), shuffledTrackIds(state, command))
           .pipe(Effect.orElseSucceed(() => []));
         const plays = new Map(totals.map((total) => [String(total.id), total.countedPlays]));
         return { kind: "smart", plays } satisfies Shuffle;

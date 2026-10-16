@@ -75,7 +75,8 @@ class DurableDownloads(
       }
       policy = saved.map("libraryPolicy").toMutableMap()
       // Imported and cancelled jobs have nothing left to show; a failure keeps Retry until it's
-      // retried or cleared (Settings › Downloads cancels it).
+      // retried or cleared (Settings › Downloads cancels it). The app cancels one that settled
+      // another way (the song reached the Library) at launch, so failures don't pile up here.
       jobs.values.removeAll { it["phase"] == "cancelled" || it["acknowledged"] == true }
       // A socket cannot survive process recreation. Counts and absolute deadlines do: a peer keeps
       // what was left of its turn. YouTube's stream starts over from byte 0 at an address resolved

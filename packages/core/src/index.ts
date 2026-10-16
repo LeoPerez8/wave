@@ -33,6 +33,7 @@ export {
   parseQueueState,
   readShuffleKind,
   reduceQueue,
+  shuffledTrackIds,
   shufflesQueue,
   upNext,
   upNextMove,
@@ -584,7 +585,7 @@ export type {
   YtSongsDownloadAction,
   YtSongsDownloadRequest,
 } from "./ytSongsDownload.ts";
-export { failedDownloads } from "./failedDownloads.ts";
+export { failedDownloads, settledDownloadFailures } from "./failedDownloads.ts";
 export type {
   FailedDownload,
   FailedDownloadRetry,

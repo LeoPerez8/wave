@@ -3,7 +3,8 @@
  * Retry, and Retry All and Clear All above them. The native journal keeps a
  * failure until it's retried or cleared; one the song settled another way (it
  * downloaded under another video, a scan found a missing song's file) leaves
- * the list on its own.
+ * the list on its own, and the app has the journal forget it
+ * (`settledDownloadFailures`).
  */
 
 import { missingSongTrackId } from "./missingSongDownload.ts";
@@ -79,14 +80,24 @@ const settled = <S extends YtSong>(
   return [job.song, ...(job.aliases ?? [])].some(inLibrary);
 };
 
+/** [job]'s failure, or null while it hasn't failed. */
+const failureOf = <S extends YtSong>(job: YtDownloadJournalJob<S>) => {
+  const status = ytDownloadsFromJournal([job]).jobs[0]?.status;
+  return status?.kind === "failed" ? status : null;
+};
+
+/** Every video asked for on [job]: cancelling each lets the journal end a shared job. */
+const videosOf = <S extends YtSong>(job: YtDownloadJournalJob<S>): string[] =>
+  [job.song, ...(job.aliases ?? [])].map((song) => song.videoId);
+
 /** The songs whose download failed and haven't settled since, in the order they were asked for. */
 export const failedDownloads = <S extends YtSong>(
   jobs: readonly YtDownloadJournalJob<S>[],
   input: FailedDownloadsInput<S>,
 ): FailedDownload<S>[] =>
   jobs.flatMap((job) => {
-    const status = ytDownloadsFromJournal([job]).jobs[0]?.status;
-    if (status?.kind !== "failed" || settled(job, input)) return [];
+    const status = failureOf(job);
+    if (status === null || settled(job, input)) return [];
     const trackId = missingSongTrackId(job.id);
     return [
       {
@@ -99,7 +110,18 @@ export const failedDownloads = <S extends YtSong>(
             : causeLine(job.cause),
         retry:
           trackId === null ? { kind: "song", song: job.song } : { kind: "missingSong", trackId },
-        clear: [job.song, ...(job.aliases ?? [])].map((song) => song.videoId),
+        clear: videosOf(job),
       },
     ];
   });
+
+/**
+ * The videos to cancel so the journal forgets the failures that settled
+ * another way: the ones `failedDownloads` no longer lists, which the journal
+ * would otherwise keep (and rewrite on every change) for good.
+ */
+export const settledDownloadFailures = <S extends YtSong>(
+  jobs: readonly YtDownloadJournalJob<S>[],
+  input: FailedDownloadsInput<S>,
+): string[] =>
+  jobs.flatMap((job) => (failureOf(job) !== null && settled(job, input) ? videosOf(job) : []));

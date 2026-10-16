@@ -618,9 +618,13 @@ export class LibraryStore extends Context.Service<
     readonly home: (scope?: TrackScope) => Effect.Effect<HomeSections, LibraryStoreError>;
     /** The play recorded last, to pick back up when JS restarts while the player kept going. */
     readonly latestPlay: Effect.Effect<RecordedPlay | null, LibraryStoreError>;
-    /** Each track's counted plays within [window] (tracks still in the library), in no order. */
+    /**
+     * Each track's counted plays within [window] (tracks still in the library),
+     * in no order; with [trackIds], only those tracks'.
+     */
     readonly trackPlayTotals: (
       window: StatsWindow,
+      trackIds?: readonly number[],
     ) => Effect.Effect<readonly PlayTotals[], LibraryStoreError>;
     /**
      * Counted plays within [window] per album and credited artist (deleted
@@ -1126,7 +1130,8 @@ const make = Effect.gen(function* () {
 
     latestPlay: attempt("read the latest play", () => latestPlay(db)),
 
-    trackPlayTotals: (window) => attempt("sum up song plays", () => trackPlayTotals(db, window)),
+    trackPlayTotals: (window, trackIds) =>
+      attempt("sum up song plays", () => trackPlayTotals(db, window, trackIds)),
 
     creditedPlayTotals: (window) =>
       attempt("sum up album and artist plays", () => creditedPlayTotals(db, window)),
