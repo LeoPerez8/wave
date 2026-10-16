@@ -1,6 +1,7 @@
 import {
-  createSearchIndex,
+  createSearchCatalog,
   libraryArtistFinder,
+  libraryFinder,
   libraryReleaseFinder,
   type SearchIndex,
   type YtArtistAlbum,
@@ -8,21 +9,13 @@ import {
   type YtSearchLibrary,
   type YtSong,
 } from "@wave/core";
-import * as Effect from "effect/Effect";
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
 
-import { libraryVersion } from "@/library/LibraryScan";
-import {
-  LibraryStore,
-  type AlbumRow,
-  type ArtistRow,
-  type GenreRow,
-  type PlaylistRow,
-  type SongRow,
-} from "@/library/LibraryStore";
-import { usePlaylistsVersion } from "@/library/playlists";
-import { appRuntime } from "@/library/runtime";
-import { useLoadedLibraryFinder, type FindInLibrary } from "@/ytmusic/libraryFinder";
+import { libraryListQueries } from "@/library/hooks";
+import type { AlbumRow, ArtistRow, GenreRow, PlaylistRow, SongRow } from "@/library/LibraryStore";
+import { useLibraryQuery } from "@/library/sharedQueries";
+import { perfMark, registerPerfMeta } from "@/perf/perf";
+import type { FindInLibrary } from "@/ytmusic/libraryFinder";
 
 /** Something search found, with the row the screens need to show and open it. */
 export type SearchHit =
@@ -42,26 +35,6 @@ export type SearchHit =
   | { readonly kind: "playlist"; readonly name: string; readonly playlist: PlaylistRow }
   | { readonly kind: "genre"; readonly name: string; readonly genre: GenreRow };
 
-interface Sources {
-  readonly songs: readonly SongRow[];
-  readonly albums: readonly AlbumRow[];
-  readonly artists: readonly ArtistRow[];
-  readonly genres: readonly GenreRow[];
-  readonly playlists: readonly PlaylistRow[];
-}
-
-const loadSources: Effect.Effect<Sources, unknown, LibraryStore> = Effect.gen(function* () {
-  const store = yield* LibraryStore;
-  const [songs, albums, artists, genres, playlists] = yield* Effect.all([
-    store.listSongs,
-    store.listAlbums,
-    store.listArtists,
-    store.listGenres,
-    store.listPlaylists,
-  ]);
-  return { songs, albums, artists, genres, playlists };
-});
-
 /** A Library song as search finds it. */
 export const songHit = (song: SongRow): SearchHit => ({
   kind: "song",
@@ -70,20 +43,72 @@ export const songHit = (song: SongRow): SearchHit => ({
   song,
 });
 
-const toEntries = (sources: Sources): SearchHit[] => {
-  const entries: SearchHit[] = [];
-  for (const artist of sources.artists) entries.push({ kind: "artist", name: artist.name, artist });
-  for (const album of sources.albums)
-    entries.push({ kind: "album", name: album.title, also: [album.albumArtist], album });
-  for (const song of sources.songs) entries.push(songHit(song));
-  for (const playlist of sources.playlists)
-    entries.push({ kind: "playlist", name: playlist.name, playlist });
-  for (const genre of sources.genres) entries.push({ kind: "genre", name: genre.name, genre });
-  return entries;
+const artistHit = (artist: ArtistRow): SearchHit => ({ kind: "artist", name: artist.name, artist });
+const albumHit = (album: AlbumRow): SearchHit => ({
+  kind: "album",
+  name: album.title,
+  also: [album.albumArtist],
+  album,
+});
+const playlistHit = (playlist: PlaylistRow): SearchHit => ({
+  kind: "playlist",
+  name: playlist.name,
+  playlist,
+});
+const genreHit = (genre: GenreRow): SearchHit => ({ kind: "genre", name: genre.name, genre });
+
+/**
+ * One catalog for the app, so the index outlives the screen: each source is
+ * prepared once per read of it (Core's `createSearchCatalog`), and a change
+ * reaching one source (a playlist edit, an import filling a playlist)
+ * prepares that source again, not the whole Library.
+ */
+const catalog = createSearchCatalog<
+  "artists" | "albums" | "songs" | "playlists" | "genres",
+  SearchHit
+>(["artists", "albums", "songs", "playlists", "genres"]);
+
+/** Entries prepared per step, and how long a run of steps may hold the JS thread. */
+const STEP_ENTRIES = 250;
+const SLICE_MS = 6;
+
+const listeners = new Set<() => void>();
+let shownIndex: SearchIndex<SearchHit> | null = null;
+let scheduled = false;
+
+/**
+ * Prepares what changed a slice at a time, each slice a separate task, so a
+ * touch or a keystroke waiting on the JS thread goes in between.
+ */
+const prepareSlice = (): void => {
+  scheduled = false;
+  const started = performance.now();
+  let more = true;
+  while (more && performance.now() - started < SLICE_MS) more = catalog.work(STEP_ENTRIES);
+  const index = catalog.index();
+  if (index !== shownIndex) {
+    shownIndex = index;
+    perfMark("search.index", String(catalog.stats().entries));
+    for (const listener of listeners) listener();
+  }
+  if (more) schedulePreparing();
 };
 
-/** During a scan the library changes every batch; the index catches up at most this often. */
-const REFRESH_MS = 3000;
+const schedulePreparing = (): void => {
+  if (scheduled) return;
+  scheduled = true;
+  setTimeout(prepareSlice, 0);
+};
+
+const subscribeIndex = (listener: () => void): (() => void) => {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+};
+const currentIndex = (): SearchIndex<SearchHit> | null => shownIndex;
+
+registerPerfMeta("search", () => ({ ...catalog.stats() }));
 
 /**
  * What Search looks things up in: the library's index, and what the library
@@ -96,80 +121,76 @@ export interface LibrarySearch {
   readonly find: FindInLibrary;
 }
 
-/** Whether the library has a YT Music artist or album (Core's `libraryArtistFinder`, `libraryReleaseFinder`). */
-interface LibraryReleases {
-  readonly hasArtist: (artist: YtArtistCandidate) => boolean;
-  readonly hasAlbum: (album: YtArtistAlbum) => boolean;
-}
+/** Built on first use: most searches never ask YT Music. */
+const lazily = <A>(build: () => A): (() => A) => {
+  let built: { readonly value: A } | null = null;
+  return () => (built ??= { value: build() }).value;
+};
 
-const releasesOf = (sources: Sources): LibraryReleases => {
-  const artistNamed = libraryArtistFinder(sources.artists);
-  const albumOf = libraryReleaseFinder(artistNamed, sources.albums);
+/** Whether the library has a YT Music song (Core's `libraryFinder`), built on first use. */
+const finderOf = (songs: readonly SongRow[]): FindInLibrary => {
+  const finder = lazily(() => libraryFinder(songs));
+  return (song) => finder()(song);
+};
+
+/** Whether the library has a YT Music artist or album (Core's `libraryArtistFinder`, `libraryReleaseFinder`). */
+const releasesOf = (
+  artists: readonly ArtistRow[],
+  albums: readonly AlbumRow[],
+): Pick<YtSearchLibrary<YtSong>, "hasArtist" | "hasAlbum"> => {
+  const artistNamed = lazily(() => libraryArtistFinder(artists));
+  const albumOf = lazily(() => libraryReleaseFinder(artistNamed(), albums));
   return {
-    hasArtist: (artist) => artistNamed(artist.name) !== null,
-    hasAlbum: (album) => albumOf(album) !== null,
+    hasArtist: (artist: YtArtistCandidate) => artistNamed()(artist.name) !== null,
+    hasAlbum: (album: YtArtistAlbum) => albumOf()(album) !== null,
   };
 };
 
 /**
  * The search index over the whole library, or null until it's first built.
- * It loads and builds only while `active` (the Search screen is in focus),
- * and rebuilds after the library changes, so typing only ever runs the
- * (prepared, narrowing) search itself.
+ *
+ * - Its five sources are the Library's shared queries (the Library tabs'
+ *   reads): asked only once [active] (Search wants them; the screen keeps
+ *   asking for as long as it is mounted), re-read only when a Library change
+ *   reaches them (a scan or an edit for every source, a playlist edit for
+ *   the playlists alone), and while Search is out of sight only for edits.
+ * - The index is prepared in short slices between other work, and source by
+ *   source: a changed source alone is prepared again.
+ * - Typing only ever runs the (prepared, narrowing) search itself.
  */
 export const useSearchIndex = (active: boolean): LibrarySearch | null => {
-  // Both only ever go up, so their sum changes whenever either does.
-  const version =
-    useSyncExternalStore(libraryVersion.subscribe, libraryVersion.get) + usePlaylistsVersion();
-  const [built, setBuilt] = useState<{
-    readonly version: number;
-    readonly index: SearchIndex<SearchHit>;
-    readonly releases: LibraryReleases;
-  } | null>(null);
-  // Whether a YT Music song is in the Library: the finder the YT Music pages share.
-  const find = useLoadedLibraryFinder(active);
-  const inLibrary = useMemo(
-    () => (find === null ? null : (song: YtSong) => find(song) !== null),
-    [find],
+  const queries = active ? libraryListQueries : null;
+  const songs = useLibraryQuery(queries?.songs ?? null, null);
+  const albums = useLibraryQuery(queries?.albums ?? null, null);
+  const artists = useLibraryQuery(queries?.artists ?? null, null);
+  const genres = useLibraryQuery(queries?.genres ?? null, null);
+  const playlists = useLibraryQuery(queries?.playlists ?? null, null);
+
+  useEffect(() => {
+    if (songs !== null) catalog.update("songs", songs, songHit);
+    if (albums !== null) catalog.update("albums", albums, albumHit);
+    if (artists !== null) catalog.update("artists", artists, artistHit);
+    if (genres !== null) catalog.update("genres", genres, genreHit);
+    if (playlists !== null) catalog.update("playlists", playlists, playlistHit);
+    schedulePreparing();
+  }, [songs, albums, artists, genres, playlists]);
+
+  const index = useSyncExternalStore(subscribeIndex, currentIndex);
+  const find = useMemo(() => (songs === null ? null : finderOf(songs)), [songs]);
+  const releases = useMemo(
+    () => (artists === null || albums === null ? null : releasesOf(artists, albums)),
+    [artists, albums],
   );
-  const loading = useRef(false);
-  const lastBuild = useRef(0);
-  const mounted = useRef(true);
-
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!active || loading.current || built?.version === version) return undefined;
-    const wait = built === null ? 0 : Math.max(0, lastBuild.current + REFRESH_MS - Date.now());
-    const timer = setTimeout(() => {
-      loading.current = true;
-      appRuntime
-        .runPromise(loadSources)
-        .then((sources) => {
-          lastBuild.current = Date.now();
-          const index = createSearchIndex(toEntries(sources));
-          if (mounted.current) setBuilt({ version, index, releases: releasesOf(sources) });
-        })
-        .catch(() => {
-          // Keep the last index; store errors surface elsewhere (scan banner).
-        })
-        .finally(() => {
-          loading.current = false;
-        });
-    }, wait);
-    return () => clearTimeout(timer);
-  }, [active, built, version]);
 
   return useMemo(
     () =>
-      built === null || find === null || inLibrary === null
+      index === null || find === null || releases === null
         ? null
-        : { index: built.index, library: { hasSong: inLibrary, ...built.releases }, find },
-    [built, inLibrary, find],
+        : {
+            index,
+            library: { hasSong: (song: YtSong) => find(song) !== null, ...releases },
+            find,
+          },
+    [index, find, releases],
   );
 };
