@@ -39,13 +39,19 @@ export interface SearchResults<E extends SearchEntry> {
   readonly groups: readonly SearchGroup<E>[];
 }
 
-export interface SearchOptions {
+export interface SearchOptions<E extends SearchEntry = SearchEntry> {
   /** The most matches to return per type (all of them by default). */
   readonly limit?: number | undefined;
+  /**
+   * Entries this search leaves out, as if the index didn't have them: they're
+   * neither results nor counted, and don't make the top result or order the
+   * groups.
+   */
+  readonly skip?: ((entry: E) => boolean) | undefined;
 }
 
 export interface SearchIndex<E extends SearchEntry> {
-  readonly search: (query: string, options?: SearchOptions) => SearchResults<E>;
+  readonly search: (query: string, options?: SearchOptions<E>) => SearchResults<E>;
 }
 
 const APOSTROPHES = /['’ʼ`´]/g;
@@ -232,6 +238,7 @@ export const createSearchIndex = <E extends SearchEntry>(entries: readonly E[]):
         wordStarts: words.map((word) => ` ${word}`),
       };
       const limit = Math.max(1, options.limit ?? Number.POSITIVE_INFINITY);
+      const { skip } = options;
 
       const candidates = candidatesFor(normalized);
       const matches: Indexed<E>[] = [];
@@ -240,6 +247,7 @@ export const createSearchIndex = <E extends SearchEntry>(entries: readonly E[]):
         const tier = tierOf(item, query);
         if (tier === null) continue;
         matches.push(item);
+        if (skip?.(item.entry) === true) continue;
         let ranking = byKind.get(item.entry.kind);
         if (ranking === undefined) {
           ranking = { hits: [], total: 0 };

@@ -48,7 +48,8 @@ export interface YtAlbumSection {
  * page only, not every song of theirs: saved, it doesn't stand on their
  * artist page, and it never replaces an answer that does), finds its release
  * among their releases and reads it, its songs joining the album's
- * [tracks]. Otherwise nothing is asked.
+ * [tracks]. Otherwise nothing is asked. With [keepTracklist] (the page showed
+ * the joined tracklist this visit), it stays once every song is downloaded.
  */
 export const useYtAlbumSection = (
   name: string,
@@ -56,6 +57,7 @@ export const useYtAlbumSection = (
   album: LibraryAlbumKey,
   tracks: readonly SongRow[],
   openedIntegrated: boolean,
+  keepTracklist: boolean,
 ): YtAlbumSection => {
   const { state, enabled, openedAt, show: askArtist } = useYtArtistAnswer(name, RELEASES_ONLY);
   const find = useLoadedLibraryFinder();
@@ -84,6 +86,7 @@ export const useYtAlbumSection = (
           now: openedAt,
           integrated,
           releasePage,
+          keepTracklist,
         });
 
   // The artist is asked for on its own once; after a failure it waits for the button.

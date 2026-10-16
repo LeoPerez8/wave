@@ -22,7 +22,7 @@ import {
 } from "@/library/LibraryStore";
 import { usePlaylistsVersion } from "@/library/playlists";
 import { appRuntime } from "@/library/runtime";
-import { useLoadedLibraryFinder } from "@/ytmusic/libraryFinder";
+import { useLoadedLibraryFinder, type FindInLibrary } from "@/ytmusic/libraryFinder";
 
 /** Something search found, with the row the screens need to show and open it. */
 export type SearchHit =
@@ -62,13 +62,20 @@ const loadSources: Effect.Effect<Sources, unknown, LibraryStore> = Effect.gen(fu
   return { songs, albums, artists, genres, playlists };
 });
 
+/** A Library song as search finds it. */
+export const songHit = (song: SongRow): SearchHit => ({
+  kind: "song",
+  name: song.title,
+  also: [song.artist, song.album],
+  song,
+});
+
 const toEntries = (sources: Sources): SearchHit[] => {
   const entries: SearchHit[] = [];
   for (const artist of sources.artists) entries.push({ kind: "artist", name: artist.name, artist });
   for (const album of sources.albums)
     entries.push({ kind: "album", name: album.title, also: [album.albumArtist], album });
-  for (const song of sources.songs)
-    entries.push({ kind: "song", name: song.title, also: [song.artist, song.album], song });
+  for (const song of sources.songs) entries.push(songHit(song));
   for (const playlist of sources.playlists)
     entries.push({ kind: "playlist", name: playlist.name, playlist });
   for (const genre of sources.genres) entries.push({ kind: "genre", name: genre.name, genre });
@@ -85,6 +92,8 @@ const REFRESH_MS = 3000;
 export interface LibrarySearch {
   readonly index: SearchIndex<SearchHit>;
   readonly library: YtSearchLibrary<YtSong>;
+  /** The Library song a YT Music song already is: it follows a download at once. */
+  readonly find: FindInLibrary;
 }
 
 /** Whether the library has a YT Music artist or album (Core's `libraryArtistFinder`, `libraryReleaseFinder`). */
@@ -158,9 +167,9 @@ export const useSearchIndex = (active: boolean): LibrarySearch | null => {
 
   return useMemo(
     () =>
-      built === null || inLibrary === null
+      built === null || find === null || inLibrary === null
         ? null
-        : { index: built.index, library: { hasSong: inLibrary, ...built.releases } },
-    [built, inLibrary],
+        : { index: built.index, library: { hasSong: inLibrary, ...built.releases }, find },
+    [built, inLibrary, find],
   );
 };

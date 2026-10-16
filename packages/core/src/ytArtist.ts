@@ -645,6 +645,12 @@ export interface YtLibraryAlbumContext<S extends YtSong, L> {
    * Music was tapped. Otherwise it shows the Library's tracks and the button.
    */
   readonly integrated: boolean;
+  /**
+   * Whether the page has shown the tracklist during this visit: it stays when
+   * the last download finishes, every row in its place, instead of the album
+   * showing as it is (that waits for the page to be opened again).
+   */
+  readonly keepTracklist?: boolean | undefined;
   /** How far [release]'s page has been read; undefined when it hasn't been asked for. */
   readonly releasePage: (release: YtArtistAlbum) => YtReleaseLoad<S> | undefined;
 }
@@ -695,7 +701,7 @@ export const ytLibraryAlbumView = <S extends YtSong, L extends LibraryAlbumTrack
   const tracks = ytAlbumTracklist(page.songs, context.tracks, context.elsewhere);
   const streams = tracks.some((entry) => entry.source === "stream");
   return {
-    tracks: streams ? tracks : null,
+    tracks: streams || context.keepTracklist === true ? tracks : null,
     songs: page.songs,
     note: null,
     button: false,

@@ -9,7 +9,7 @@ import {
   type YtSong,
 } from "@wave/core";
 import { useLocalSearchParams, usePathname } from "expo-router";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { Text, useWindowDimensions, View } from "react-native";
 
 import { Artwork } from "@/catalog/Artwork";
@@ -29,6 +29,7 @@ import { useAlbum, useLinkRows } from "@/library/hooks";
 import type { AlbumRow, AlbumTrackRow, SongRow } from "@/library/LibraryStore";
 import { parseId, useKnownRow, useOpenedIntegrated } from "@/library/routes";
 import { songCount, toTrackSummary } from "@/library/TrackList";
+import { useVisitState } from "@/lib/useVisitState";
 import { useListScrollable } from "@/motion/heldTouch";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import type { ActionItems } from "@/playback/actionTargets";
@@ -244,16 +245,24 @@ function AlbumTracks({ shown, openedIntegrated }: { shown: Shown; openedIntegrat
     undefined,
     shown.album.albumArtistIds[0] ?? shown.album.albumArtistId,
   );
+  // Once the page shows the tracklist with YouTube Music's songs, it keeps it for the visit:
+  // the last download finishing leaves every row where it was.
+  const [keepTracklist, keep] = useVisitState(false);
   const yt = useYtAlbumSection(
     artist?.name ?? "",
     artist?.id ?? 0,
     shown.album,
     tracks,
     openedIntegrated,
+    keepTracklist,
   );
   // Nothing is joined until the tracks and the artist are read.
   const ytView = shown.tracks === undefined || artist === null ? null : yt.view;
   const entries = ytView?.tracks ?? null;
+  const joined = entries !== null;
+  useEffect(() => {
+    if (joined) keep(true);
+  }, [joined, keep]);
   const mixed = useMemo(() => (entries === null ? null : mixedSongs(entries)), [entries]);
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
