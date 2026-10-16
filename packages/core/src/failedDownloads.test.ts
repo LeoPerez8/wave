@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { failedDownloads, settledDownloadFailures } from "./index.ts";
+import {
+  failedDownloads,
+  settledDownloadFailures,
+  ytDownloadActions,
+  ytDownloadStatus,
+  ytDownloadsFromJournal,
+} from "./index.ts";
 import type { YtDownloadJournalJob, YtSong } from "./index.ts";
 
 const song = (videoId: string): YtSong => ({
@@ -90,6 +96,27 @@ describe("Settings › Downloads: the songs whose download failed", () => {
     assert.deepEqual(shared?.clear, ["a", "a2", "a3"]);
     assert.deepEqual(missing?.retry, { kind: "missingSong", trackId: 7 });
     assert.deepEqual(missing?.clear, ["missing:7"]);
+  });
+
+  test("clearing one row lets go of its job alone: the rest stay, and its song offers Download again", () => {
+    const jobs = [job("a"), job("b", { aliases: [song("b2")] }), job("c")];
+    const [, cleared] = failedDownloads(jobs, nothingInLibrary);
+    assert.deepEqual(cleared?.clear, ["b", "b2"]);
+    // The journal cancels a job once every video asked for on it has let go.
+    const after = jobs.map((each) =>
+      each.id === "b" ? { ...each, phase: "cancelled" as const } : each,
+    );
+    assert.deepEqual(
+      failedDownloads(after, nothingInLibrary).map((failed) => failed.id),
+      ["a", "c"],
+    );
+    for (const videoId of ["b", "b2"])
+      assert.deepEqual(
+        ytDownloadActions(ytDownloadStatus(ytDownloadsFromJournal(after), videoId), {
+          inLibrary: false,
+        }),
+        ["download"],
+      );
   });
 
   test("the recorded cause shows under a line that doesn't say what to do, without package names", () => {

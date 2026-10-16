@@ -1115,8 +1115,8 @@ export const retryFailedDownloads = (failed: readonly FailedDownload<NativeYtSon
 };
 
 /**
- * Settings › Downloads' Clear All: [failed] leave the list and the journal. Every video asked
- * for on a job lets go of it, so a shared job ends too.
+ * Settings › Downloads' Clear All and each row's trash button: [failed] leave the list and the
+ * journal. Every video asked for on a job lets go of it, so a shared job ends too.
  */
 export const clearFailedDownloads = (failed: readonly FailedDownload<NativeYtSong>[]): void => {
   requests = requests
