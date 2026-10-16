@@ -3,7 +3,7 @@
  * or on the whole Library from Settings, in the background (a foreground
  * service, `WaveLibraryLookup`) with progress and Cancel in Settings and in a
  * notification. Each works only on the songs missing something (Core's
- * `songsToFix`) and ends with Core's summary (`describeTagLookups`).
+ * `songsToFix`) and ends with a toast of Core's summary (`tagLookupsToast`).
  */
 import {
   describeTagLookups,
@@ -13,6 +13,7 @@ import {
   type LibraryLookupSummary,
   songsToFix,
   type SongTagOutcome,
+  tagLookupsToast,
   type TagLookupStop,
 } from "@wave/core";
 import * as Cause from "effect/Cause";
@@ -25,7 +26,7 @@ import { askForNotifications } from "@/lib/askForNotifications";
 import { makeExternalStore } from "@/lib/externalStore";
 import { persistedSetting } from "@/lib/persistedSetting";
 import { WaveLibraryLookup } from "@/native/waveLibraryLookup";
-import { showMessage } from "@/overlay/alert";
+import { showToast } from "@/overlay/toast";
 
 import { LibraryStore, type LibraryLookupSong } from "./LibraryStore";
 import { fixEachSong, LookupsOff, type TaggableSong } from "./lyricsAndGenre";
@@ -60,10 +61,10 @@ const run = async <S extends TaggableSong>(
   return { stop: undefined, error };
 };
 
-const failedSummary = (error: unknown): LibraryLookupSummary => ({
-  title: "Couldn't fix songs",
-  message: error instanceof Error ? error.message : String(error),
-});
+const failedSummary = (error: unknown): LibraryLookupSummary => {
+  const message = error instanceof Error ? error.message : String(error);
+  return { title: "Couldn't fix songs", message, toast: `Couldn't fix songs: ${message}` };
+};
 
 /**
  * How a run ended: why it stopped early, what failed it, and how many songs
@@ -76,27 +77,29 @@ interface RunOutcome {
 }
 
 /**
- * How a run went, as its end message says it: Core's summary, or what went
- * wrong when the run failed before anything was looked up.
+ * How a run went, in full and as its toast says it: Core's summary, or what
+ * went wrong when the run failed before anything was looked up.
  */
 const summarize = (results: readonly Result[], outcome: RunOutcome): LibraryLookupSummary =>
   outcome.error !== undefined && results.length === 0
     ? failedSummary(outcome.error)
-    : describeTagLookups(results, outcome.stop, outcome.skipped);
+    : {
+        ...describeTagLookups(results, outcome.stop, outcome.skipped),
+        toast: tagLookupsToast(results, outcome.stop, outcome.skipped),
+      };
 
 /**
  * Fix Song on songs from a long-press menu or the selection bar: those
  * missing something are looked up one after another in the background, what
- * they lack is written, and a message says how it went (Core's
- * `describeTagLookups`, counting the songs skipped as having everything).
+ * they lack is written, and a toast says how it went (Core's
+ * `tagLookupsToast`, counting the songs skipped as having everything).
  */
 export const fixSongs = async (songs: readonly TaggableSong[]): Promise<void> => {
   const { fix, skipped } = songsToFix(songs);
   if (fix.length === 0) return;
   const results: Result[] = [];
   const outcome = await run(fix, results, () => {});
-  const { title, message } = summarize(results, { ...outcome, skipped });
-  await showMessage(title, message);
+  await showToast(summarize(results, { ...outcome, skipped }).toast);
 };
 
 /** The Library-wide run, for Settings: its progress while it runs. */
@@ -195,19 +198,20 @@ export const cancelLibraryLookup = (): void => {
 let showingSummary = false;
 
 /**
- * Shows the last Library-wide run's summary when the owner hasn't seen it yet
- * and Wave is on screen; once it's dismissed, its notification goes too.
+ * Shows the last Library-wide run's summary as a toast when the owner hasn't
+ * seen it yet and Wave is on screen; once the toast has gone, its
+ * notification goes too.
  */
 const showUnseenLibraryLookupSummary = async (): Promise<void> => {
   const summary = unseenSummary.get();
   if (summary === null || showingSummary || AppState.currentState !== "active") return;
   showingSummary = true;
   try {
-    await showMessage(summary.title, summary.message);
+    await showToast(summary.toast);
   } finally {
     showingSummary = false;
   }
-  // A run that ended while this summary was open shows its own next.
+  // A run that ended while this summary showed shows its own next.
   if (unseenSummary.get() !== summary) return showUnseenLibraryLookupSummary();
   unseenSummary.set(null);
   WaveLibraryLookup.dismissSummary();
