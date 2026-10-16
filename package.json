@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "pnpm --filter @wave/mobile start",
     "android": "pnpm --filter @wave/mobile android",
-    "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck && tsc -p scripts/ci",
+    "test": "pnpm -r test && node --test \"scripts/ci/*.test.ts\"",
     "test:core": "pnpm --filter @wave/core test",
     "lint": "oxlint",
     "fmt": "prettier --write .",
@@ -21,10 +21,12 @@
     "test:react-doctor": "node --test scripts/ci/react-doctor-report.test.mjs"
   },
   "devDependencies": {
+    "@types/node": "catalog:",
     "fallow": "3.33.1",
     "oxlint": "^1.0.0",
     "prettier": "3.9.10",
-    "react-doctor": "0.9.18"
+    "react-doctor": "0.9.18",
+    "typescript": "catalog:"
   },
   "engines": {
     "node": ">=22.18"
