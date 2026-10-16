@@ -66,6 +66,13 @@ const SEARCH_MS = 170;
  * About when [count] more searches will have been asked, the first no
  * sooner than [from] (ms), at about 6 a second and within the allowance
  * (given the searches [pacing] holds).
+ *
+ * Each search is asked as soon as both allow: a search after the one before,
+ * and a window after the one an allowance before it. Once more than an
+ * allowance of searches in a row each waited exactly that window, every
+ * later one does too (the allowance's searches take less than a window), so
+ * the rest repeat the last allowance's times a window later each time: the
+ * work stays within a few allowances however many searches are left.
  */
 export const spotifySearchesDoneAt = (
   pacing: SpotifySearchPacing,
@@ -74,10 +81,19 @@ export const spotifySearchesDoneAt = (
 ): number => {
   const times = [...recent(pacing, from)];
   let at = from;
+  /** How many searches in a row, up to the last, each came a window after the one an allowance before it. */
+  let steady = 0;
   for (let search = 0; search < count; search += 1) {
     const oldest = times[times.length - SPOTIFY_SEARCH_BUDGET];
     if (oldest !== undefined) at = Math.max(at, oldest + SPOTIFY_SEARCH_WINDOW_MS);
+    steady = oldest !== undefined && at === oldest + SPOTIFY_SEARCH_WINDOW_MS ? steady + 1 : 0;
     times.push(at);
+    if (steady > SPOTIFY_SEARCH_BUDGET) {
+      const left = count - search - 1;
+      const windows = Math.ceil(left / SPOTIFY_SEARCH_BUDGET);
+      const repeated = times[times.length - 1 + left - windows * SPOTIFY_SEARCH_BUDGET] ?? at;
+      return repeated + windows * SPOTIFY_SEARCH_WINDOW_MS + SEARCH_MS;
+    }
     at += SEARCH_MS;
   }
   return at;
