@@ -1,17 +1,14 @@
 import {
   entryDivider,
-  findSpotifySongs,
-  linkImportSummary,
   linkImportView,
   planLinkImport,
-  planSpotifyImport,
   playlistImportSources,
   readSpotifyPlaylist,
   recognisePlaylistLink,
   sharedTextImport,
   spotifyShortLinkTarget,
   YT_MUSIC_OFF_NOTICE,
-  type ImportNotice,
+  type LinkedSource,
   type LinkImportPlan,
   type LinkImportRead,
   type LinkReadFailure,
@@ -19,11 +16,10 @@ import {
   type PlaylistLink,
   type SpotifyReadFailure,
   type SpotifyTransport,
-  type YtSongSearch,
 } from "@wave/core";
 import * as Result from "effect/Result";
 import { useEffect, useState } from "react";
-import { ScrollView, Text, TextInput, View } from "react-native";
+import { Text, TextInput, View } from "react-native";
 
 import { Artwork } from "@/catalog/Artwork";
 import { CatalogLine } from "@/catalog/CatalogLine";
@@ -44,6 +40,7 @@ import { askYtMusic } from "@/ytmusic/askYtMusic";
 
 import { importPlaylists, saveImportedPlaylist, type ImportedPlaylist } from "./importPlaylists";
 import { LibraryStore } from "./LibraryStore";
+import { startLinkImport } from "./playlistImports";
 import { openPlaylist } from "./routes";
 import { appRuntime } from "./runtime";
 
@@ -69,14 +66,6 @@ const spotifyTransport =
     return { status: response.status, body: await response.text() };
   };
 
-/** One YT Music Songs search, as Core's `findSpotifySongs` asks: the title and artists only. */
-const searchYtSongs = async (query: string): Promise<YtSongSearch<NativeYtSong>> => {
-  const answer = await askYtMusic((ytMusic) => ytMusic.searchSongs(query));
-  return Result.isFailure(answer)
-    ? { ok: false, reason: answer.failure.reason }
-    : { ok: true, songs: answer.success.songs };
-};
-
 /**
  * The playlist a Spotify short link names, followed over the network (Core's
  * `spotifyShortLinkTarget`); a failure to show when it names none.
@@ -101,65 +90,44 @@ const SPOTIFY_FAILURES: Record<SpotifyReadFailure, LinkReadFailure> = {
 };
 
 /**
- * Reads a Spotify playlist (Core's `readSpotifyPlaylist`), then finds its
- * songs in the Library and on YouTube Music (`findSpotifySongs`), telling
- * [update] how far finding has got, and plans the import (`planSpotifyImport`).
- * Sends Spotify the playlist id, and YouTube Music one search per song the
- * Library doesn't have.
- */
-const readSpotifyImport = async (
-  playlistId: string,
-  update: (read: LinkRead) => void,
-  signal: AbortSignal,
-): Promise<LinkRead> => {
-  const read = await readSpotifyPlaylist(playlistId, spotifyTransport(signal), signal);
-  if (!read.ok) return { status: "failed", reason: SPOTIFY_FAILURES[read.reason] };
-  const { playlist } = read;
-  const total = playlist.songs.length;
-  update({ status: "finding", playlist, done: 0, total });
-  const finding = await findSpotifySongs({
-    songs: playlist.songs,
-    library: await listLibrary(),
-    search: searchYtSongs,
-    onProgress: (done) => update({ status: "finding", playlist, done, total }),
-    signal,
-  });
-  if (!finding.ok) {
-    const { reason } = finding;
-    return {
-      status: "failed",
-      reason: reason === "offline" || reason === "disabled" ? reason : "searchFailed",
-    };
-  }
-  return { status: "read", playlist, plan: planSpotifyImport(playlist, finding.found) };
-};
-
-/**
- * Reads the playlist [link] names and plans its import against the Library.
- * A YouTube Music playlist is read whole (Core's `planLinkImport`), sending
- * YouTube Music the playlist id. A Spotify playlist is read from Spotify and
- * its songs found one by one, [update] hearing the progress; a short link is
- * followed first. Once [signal] is aborted nothing more is requested. Never
- * rejects: a failed read is `{ status: "failed" }`.
+ * Reads the playlist [link] names and plans its import against the Library
+ * (Core's `planLinkImport`): a YouTube Music playlist is read whole, sending
+ * YouTube Music the playlist id; a Spotify playlist is read from Spotify
+ * (`readSpotifyPlaylist`), sending it the playlist id, a short link followed
+ * first. Its songs are searched on YouTube Music only once imported. Once
+ * [signal] is aborted nothing more is requested. Never rejects: a failed
+ * read is `{ status: "failed" }`.
  */
 export const readLinkImport = async (
   link: PlaylistLink,
-  update: (read: LinkRead) => void,
   signal: AbortSignal,
 ): Promise<LinkRead> => {
   try {
     if (link.service === "spotifyShort") {
       const followed = await followShortLink(link.url, signal);
       if (typeof followed === "string") return { status: "failed", reason: followed };
-      return await readLinkImport(followed, update, signal);
+      return await readLinkImport(followed, signal);
     }
-    if (link.service === "spotify") return await readSpotifyImport(link.playlistId, update, signal);
+    if (link.service === "spotify") {
+      const read = await readSpotifyPlaylist(link.playlistId, spotifyTransport(signal), signal);
+      if (!read.ok) return { status: "failed", reason: SPOTIFY_FAILURES[read.reason] };
+      // Typed whole, not narrowed to Spotify's side, so the plan's songs are YT Music's as the app reads them.
+      const source = {
+        service: "spotify" as const,
+        playlist: read.playlist,
+      } as LinkedSource<NativeYtSong>;
+      return {
+        status: "read",
+        playlist: read.playlist,
+        plan: planLinkImport(source, await listLibrary()),
+      };
+    }
     const answer = await askYtMusic((ytMusic) => ytMusic.playlist(link.playlistId));
     if (Result.isFailure(answer)) return { status: "failed", reason: answer.failure.reason };
     return {
       status: "read",
       playlist: answer.success,
-      plan: planLinkImport(answer.success, await listLibrary()),
+      plan: planLinkImport({ service: "ytMusic", playlist: answer.success }, await listLibrary()),
     };
   } catch {
     return { status: "failed", reason: "failed" };
@@ -167,17 +135,16 @@ export const readLinkImport = async (
 };
 
 /**
- * Makes the planned playlist (Replace or Keep Both when its name is taken,
- * as the M3U import asks), opens it, and names the songs left out because
- * they weren't found (Core's `linkImportSummary`).
+ * Makes the planned playlist at once, empty (Replace or Keep Both when its
+ * name is taken, as the M3U import asks), opens it, and starts filling it in
+ * the background (`startLinkImport`).
  */
 export const saveLinkImport = async (
   plan: LinkImportPlan<NativeYtSong>,
 ): Promise<ImportedPlaylist> => {
-  const saved = await saveImportedPlaylist(plan.name, plan.songs);
+  const saved = await saveImportedPlaylist(plan.name, []);
+  startLinkImport(plan, saved);
   openPlaylist(saved.playlistId);
-  const summary = linkImportSummary({ ...plan, name: saved.name });
-  if (summary !== null) void showSummary(summary);
   return saved;
 };
 
@@ -387,9 +354,8 @@ const openImportCard = (link: PlaylistLink): void => {
 
 /**
  * Reads [link] as it opens (again on Try Again) and shows Core's
- * `linkImportView` of it, a Spotify playlist's finding progress included.
- * Closing the card (Cancel) or Try Again stops the read: nothing more is
- * requested.
+ * `linkImportView` of it. Closing the card (Cancel) or Try Again stops the
+ * read: nothing more is requested.
  */
 function ImportCard({ link, close }: { link: PlaylistLink; close: () => void }) {
   const [attempt, setAttempt] = useState(0);
@@ -398,10 +364,9 @@ function ImportCard({ link, close }: { link: PlaylistLink; close: () => void }) 
 
   useEffect(() => {
     const controller = new AbortController();
-    const show = (read: LinkRead) => {
+    void readLinkImport(link, controller.signal).then((read) => {
       if (!controller.signal.aborted) setAnswer({ attempt, read });
-    };
-    void readLinkImport(link, show, controller.signal).then(show);
+    });
     return () => controller.abort();
   }, [link, attempt]);
 
@@ -447,33 +412,6 @@ function ImportCard({ link, close }: { link: PlaylistLink; close: () => void }) 
         <TextButton label="Cancel" onPress={close} />
         {view.retry && <TextButton label="Try Again" onPress={() => setAttempt((n) => n + 1)} />}
         {view.canImport && <TextButton label="Import" onPress={importIt} />}
-      </View>
-    </>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Summary: the songs left out
-
-/** Shows Core's `linkImportSummary`: the songs not found, scrolling when they don't fit. */
-const showSummary = (summary: ImportNotice): Promise<void> =>
-  presentOverlay<void>({
-    label: summary.title,
-    dismissed: undefined,
-    render: (finish) => <SummaryCard summary={summary} finish={() => finish(undefined)} />,
-  });
-
-function SummaryCard({ summary, finish }: { summary: ImportNotice; finish: () => void }) {
-  return (
-    <>
-      <View style={{ gap: CELL, paddingTop: CELL, paddingBottom: CELL * 2, flexShrink: 1 }}>
-        <Text className="font-sans text-title3 font-normal text-foreground">{summary.title}</Text>
-        <ScrollView bounces={false} overScrollMode="never" style={{ flexGrow: 0 }}>
-          <Text className="font-sans text-subheadline text-secondary">{summary.message}</Text>
-        </ScrollView>
-      </View>
-      <View className="flex-row items-center justify-end">
-        <TextButton label="OK" onPress={finish} />
       </View>
     </>
   );

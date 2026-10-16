@@ -1,11 +1,11 @@
 import { ytAccountView, type YtAccount, type YtAccountNote } from "@wave/core";
-import { Switch, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
+import { SettingsSwitch } from "@/components/SettingsSwitch";
 import { TextButton } from "@/components/TextButton";
-import { useThemeColor } from "@/theme/useThemeColor";
 
 import { AccountPhoto } from "./AccountPhoto";
 import { useYtAccount } from "./ytAccount";
@@ -13,7 +13,7 @@ import { setYtMusicEnabled, useYtMusicEnabled } from "./ytMusic";
 
 const NOTES: Record<YtAccountNote, string> = {
   optional:
-    "Signing in is optional. Signed in, Search, playback and Discover use your " +
+    "Signing in is optional. Signed in, Search, playback and Discover mixes use your " +
     "account. The session stays on this phone. With Download in best quality off, or when Soulseek " +
     "can't deliver a song, downloads come from YouTube Music: AAC at 256 kbps with Premium, " +
     "about 128 kbps without.",
@@ -56,37 +56,23 @@ function AccountRow({ account, onSignOut }: { account: YtAccount; onSignOut: () 
         <TextButton label="Sign Out" onPress={onSignOut} />
       </View>
       <Text className="font-sans text-footnote text-secondary">
-        Search, playback and Discover use this account. Signing out forgets it on this phone.
+        Search, playback and Discover mixes use this account. Signing out forgets it on this phone.
       </Text>
     </>
   );
 }
 
-/** Settings › YT Music: whether Search also looks on YouTube Music, and the account it uses. */
+/** Settings › Accounts › YT Music: whether Search also looks on YouTube Music, and the account it uses. */
 export function YtMusicSettingsSection() {
   const enabled = useYtMusicEnabled();
   const account = useYtAccount();
   const view = ytAccountView(account.state, enabled);
-  const accent = useThemeColor("accent");
-  const fill = useThemeColor("fill");
-  const surface = useThemeColor("surface");
 
   return (
-    <>
-      <CatalogLine className="mb-2 mt-12">YT Music</CatalogLine>
+    <View>
+      <CatalogLine className="mb-2">YT Music</CatalogLine>
       <Hairline />
-      <View className="flex-row items-center" style={{ minHeight: grid.row }}>
-        <Text className="flex-1 font-sans text-title3 font-normal text-foreground">
-          Use YT Music
-        </Text>
-        <Switch
-          accessibilityLabel="Use YT Music"
-          value={enabled}
-          onValueChange={setYtMusicEnabled}
-          trackColor={{ false: fill, true: accent }}
-          thumbColor={surface}
-        />
-      </View>
+      <SettingsSwitch label="Use YT Music" value={enabled} onValueChange={setYtMusicEnabled} />
       <Hairline />
       <Text className="mt-2 font-sans text-footnote text-secondary">
         Search also finds songs on YouTube Music, which means sending what you type to YouTube.
@@ -118,6 +104,6 @@ export function YtMusicSettingsSection() {
           )}
         </View>
       )}
-    </>
+    </View>
   );
 }

@@ -24,13 +24,16 @@ import { useThemeColor } from "@/theme/useThemeColor";
 
 import { usePlaylists } from "./hooks";
 import type { PlaylistRow } from "./LibraryStore";
+import { cancelPlaylistImport } from "./playlistImports";
 import {
   addToPlaylist,
   createPlaylist,
   currentPlaylists,
   deletePlaylist,
   knownPlaylists,
+  pickPlaylistImage,
   playlistNames,
+  removePlaylistImage,
   renamePlaylist,
 } from "./playlists";
 
@@ -289,6 +292,14 @@ const renameNamedPlaylist = async (playlist: NamedPlaylist): Promise<void> => {
   await renamePlaylist(playlist.id, name).catch(failed("rename the playlist"));
 };
 
+/** Change Image: Android's photo picker, then the picked photo, square, in place of the mosaic. */
+export const changePlaylistImageFlow = (playlist: NamedPlaylist): Promise<void> =>
+  pickPlaylistImage(playlist.id).then(() => {}, failed("change the image"));
+
+/** Remove Image: the playlist's mosaic shows again. */
+export const removePlaylistImageFlow = (playlist: NamedPlaylist): Promise<void> =>
+  removePlaylistImage(playlist.id).catch(failed("remove the image"));
+
 /**
  * Asks once before deleting [playlists] ("Delete 3 playlists?"). `onConfirm`
  * runs once confirmed, before they go (the selection bar ends selection mode
@@ -310,7 +321,10 @@ export const confirmDeletePlaylists = (
     if (!confirmed) return;
     onConfirm?.();
     try {
-      for (const playlist of playlists) await deletePlaylist(playlist.id);
+      for (const playlist of playlists) {
+        cancelPlaylistImport(playlist.id);
+        await deletePlaylist(playlist.id);
+      }
       onDeleted?.();
     } catch {
       failed(playlists.length === 1 ? "delete the playlist" : "delete the playlists")();

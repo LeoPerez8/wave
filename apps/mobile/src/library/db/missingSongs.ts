@@ -7,6 +7,7 @@
  * so the store tests run it against a real SQLite (`testDatabase.ts`).
  */
 import {
+  compareAlbumTracks,
   missingSongYtSong,
   planMissingSongs,
   signOutPlan,
@@ -133,6 +134,37 @@ export const selectMissingSongs = (
       durationMs: row.durationMs,
       videoId: row.videoId,
     }));
+};
+
+/**
+ * The missing songs of each album of [albumIds], as their Track ids in album
+ * order (Core's `compareAlbumTracks`): what an album's Download Missing Songs
+ * asks for. An album with every file has none.
+ */
+export const selectAlbumsMissingSongs = (
+  db: LibraryDatabase,
+  albumIds: readonly number[],
+): number[][] => {
+  const { tracks } = schema;
+  const rows = chunks(albumIds).flatMap((some) =>
+    db
+      .select({
+        id: tracks.id,
+        albumId: tracks.albumId,
+        discNumber: tracks.discNumber,
+        trackNumber: tracks.trackNumber,
+        titleSort: tracks.titleSort,
+        path: tracks.path,
+      })
+      .from(tracks)
+      .where(and(isNull(tracks.path), inArray(tracks.albumId, some)))
+      .all(),
+  );
+  // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
+  rows.sort(compareAlbumTracks);
+  return albumIds.map((albumId) =>
+    rows.flatMap((row) => (row.albumId === albumId ? [row.id] : [])),
+  );
 };
 
 /**

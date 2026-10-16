@@ -8,6 +8,7 @@ import type * as Scope from "effect/Scope";
 import { makeExternalStore } from "@/lib/externalStore";
 import {
   WavePlayer,
+  type CrossfadeEndedEvent,
   type ItemTransitionEvent,
   type NativeItemIds,
   type NativePlayerState,
@@ -88,6 +89,10 @@ export class Player extends Context.Service<
     /** Calls `listener` for every seek within the current item while the scope lives. */
     readonly onSeek: (
       listener: (event: SeekEvent) => void,
+    ) => Effect.Effect<void, never, Scope.Scope>;
+    /** Calls `listener` each time a crossfade's outgoing song goes silent, while the scope lives. */
+    readonly onCrossfade: (
+      listener: (event: CrossfadeEndedEvent) => void,
     ) => Effect.Effect<void, never, Scope.Scope>;
     readonly play: Effect.Effect<void, PlayerError>;
     readonly pause: Effect.Effect<void, PlayerError>;
@@ -173,6 +178,13 @@ export const layer = Layer.effect(
         Effect.asVoid(
           Effect.acquireRelease(
             Effect.sync(() => WavePlayer.addListener("onSeek", listener)),
+            (subscription) => Effect.sync(() => subscription.remove()),
+          ),
+        ),
+      onCrossfade: (listener) =>
+        Effect.asVoid(
+          Effect.acquireRelease(
+            Effect.sync(() => WavePlayer.addListener("onCrossfade", listener)),
             (subscription) => Effect.sync(() => subscription.remove()),
           ),
         ),

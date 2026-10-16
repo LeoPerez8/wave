@@ -7,6 +7,8 @@
  * entries. The app pushes the resulting ordered list to the native player.
  */
 
+import { libraryTrackIds } from "./ytQueue.ts";
+
 export type RepeatMode = "off" | "all" | "one";
 
 /** Where the context entries came from, e.g. `{ kind: "album", id: "12" }`. */
@@ -52,6 +54,12 @@ export type QueueCommand =
   /** The native player moved to this entry on its own: auto-advance, notification or Bluetooth. */
   | { readonly type: "playerMoved"; readonly key: string }
   | { readonly type: "setShuffle"; readonly on: boolean }
+  /**
+   * Shuffles again by the kind of shuffle given (a kind chosen on the shuffle
+   * card), turning shuffle on if it's off: Up Next reorders as turning
+   * shuffle on would.
+   */
+  | { readonly type: "reshuffle" }
   | { readonly type: "setRepeat"; readonly mode: RepeatMode }
   | { readonly type: "playNext"; readonly trackIds: readonly string[] }
   | { readonly type: "addToQueue"; readonly trackIds: readonly string[] }
@@ -112,10 +120,19 @@ const play = (
   state: QueueState,
   command: Extract<QueueCommand, { type: "play" }>,
   random: () => number,
+  kind: Shuffle,
 ): QueueResult => {
   const { entries, nextKey } = makeEntries(command.trackIds, state.nextKey, (i) => i);
   if (entries.length === 0) return result({ ...EMPTY_QUEUE, repeat: state.repeat, nextKey });
   const shuffle = command.shuffle ?? state.shuffle;
+  // Smart Shuffle with no song tapped (a Shuffle button) orders the whole list, first song included.
+  if (shuffle && command.startIndex === undefined && kind.kind === "smart") {
+    const order = shuffleEntries(entries, random, kind);
+    return result(
+      { ...state, context: command.context, entries: order, index: 0, shuffle: true, nextKey },
+      "play",
+    );
+  }
   const startIndex = command.startIndex ?? (shuffle ? Math.floor(random() * entries.length) : 0);
   const index = Math.max(0, Math.min(Math.trunc(startIndex), entries.length - 1));
   const started: QueueState = {
@@ -126,10 +143,10 @@ const play = (
     shuffle: false,
     nextKey,
   };
-  return result(shuffle ? shuffleOn(started, random) : started, "play");
+  return result(shuffle ? shuffleOn(started, random, kind) : started, "play");
 };
 
-/** A shuffled copy (Fisher–Yates). */
+/** A shuffled copy (Fisher–Yates): every order equally likely. */
 const shuffled = <A>(items: readonly A[], random: () => number): A[] => {
   const copy = [...items];
   for (let i = copy.length - 1; i > 0; i -= 1) {
@@ -138,6 +155,98 @@ const shuffled = <A>(items: readonly A[], random: () => number): A[] => {
   }
   return copy;
 };
+
+/**
+ * Smart Shuffle's order: the entries ranked by their track's counted plays,
+ * the top half of the played ones (most played) spread evenly among the rest
+ * (less played, never-played songs included), each side in random order. The
+ * most played land at evenly spaced places from a random offset, so in every
+ * stretch from the start each side holds its share, give or take one song.
+ */
+const smartShuffled = (
+  entries: readonly QueueEntry[],
+  random: () => number,
+  plays: ReadonlyMap<string, number>,
+): QueueEntry[] => {
+  const playsOf = (entry: QueueEntry): number => plays.get(entry.trackId) ?? 0;
+  // Shuffled first, so songs with as many plays as each other split at random.
+  const ranked = shuffled(entries, random)
+    .map((entry, order) => ({ entry, order }))
+    // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
+    .sort((a, b) => playsOf(b.entry) - playsOf(a.entry) || a.order - b.order)
+    .map(({ entry }) => entry);
+  const played = ranked.filter((entry) => playsOf(entry) > 0).length;
+  const mostCount = Math.min(played, Math.floor(ranked.length / 2));
+  const most = shuffled(ranked.slice(0, mostCount), random);
+  const less = shuffled(ranked.slice(mostCount), random);
+  if (most.length === 0) return less;
+  const offset = random();
+  const places = new Set(
+    most.map((_, i) => Math.floor(((i + offset) * ranked.length) / most.length)),
+  );
+  let nextMost = 0;
+  let nextLess = 0;
+  return ranked.map((_, at) => (places.has(at) ? most[nextMost++]! : less[nextLess++]!));
+};
+
+/**
+ * Which kind of shuffle reorders the queue when shuffle turns on:
+ * - `real`: every order is as likely (Fisher–Yates).
+ * - `smart`: the most played songs (by all-time counted [plays], per track id;
+ *   a track missing from it has never been played) interleaved with the less
+ *   played ones, so neither side bunches up.
+ */
+export type Shuffle =
+  | { readonly kind: "real" }
+  | { readonly kind: "smart"; readonly plays: ReadonlyMap<string, number> };
+
+export const REAL_SHUFFLE: Shuffle = { kind: "real" };
+
+/** The kind of shuffle the owner chose on the shuffle card. */
+export type ShuffleKind = Shuffle["kind"];
+
+/** The saved shuffle kind (what `ShuffleKind` stores as); Real Shuffle unless Smart was chosen. */
+export const readShuffleKind = (stored: string | null): ShuffleKind =>
+  stored === "smart" ? "smart" : "real";
+
+/**
+ * Whether [command] shuffles [state]'s queue, and so uses the kind of shuffle
+ * `reduceQueue` is given: the app reads play counts for Smart Shuffle only then.
+ */
+export const shufflesQueue = (state: QueueState, command: QueueCommand): boolean => {
+  switch (command.type) {
+    case "play":
+      return command.shuffle ?? state.shuffle;
+    case "setShuffle":
+      return command.on && !state.shuffle;
+    case "reshuffle":
+      return true;
+    default:
+      return false;
+  }
+};
+
+/**
+ * The Library tracks [command] orders when it shuffles [state]'s queue, each
+ * once: a play's songs, or the queue's. Smart Shuffle needs their plays and no
+ * others; a command that doesn't shuffle needs none.
+ */
+export const shuffledTrackIds = (state: QueueState, command: QueueCommand): number[] => {
+  if (!shufflesQueue(state, command)) return [];
+  return libraryTrackIds(
+    command.type === "play" ? command.trackIds : state.entries.map((entry) => entry.trackId),
+  );
+};
+
+/** [entries] in the order [shuffle] gives them. */
+const shuffleEntries = (
+  entries: readonly QueueEntry[],
+  random: () => number,
+  shuffle: Shuffle,
+): QueueEntry[] =>
+  shuffle.kind === "smart"
+    ? smartShuffled(entries, random, shuffle.plays)
+    : shuffled(entries, random);
 
 /** Queued entries after the current one; they stay next whenever the order changes. */
 const upcomingQueued = (state: QueueState): QueueEntry[] =>
@@ -148,13 +257,13 @@ const upcomingQueued = (state: QueueState): QueueEntry[] =>
  * other context entry (played or not) is shuffled after them. Lined-up entries
  * that already played are dropped.
  */
-const shuffleOn = (state: QueueState, random: () => number): QueueState => {
+const shuffleOn = (state: QueueState, random: () => number, shuffle: Shuffle): QueueState => {
   const current = currentEntry(state);
   if (current === null) return { ...state, shuffle: true };
   const others = state.entries.filter((entry) => entry !== current && !isQueued(entry));
   return {
     ...state,
-    entries: [current, ...upcomingQueued(state), ...shuffled(others, random)],
+    entries: [current, ...upcomingQueued(state), ...shuffleEntries(others, random, shuffle)],
     index: 0,
     shuffle: true,
   };
@@ -192,9 +301,14 @@ const shuffleOff = (state: QueueState): QueueState => {
   };
 };
 
-const setShuffle = (state: QueueState, on: boolean, random: () => number): QueueResult => {
+const setShuffle = (
+  state: QueueState,
+  on: boolean,
+  random: () => number,
+  shuffle: Shuffle,
+): QueueResult => {
   if (on === state.shuffle) return result(state);
-  return result(on ? shuffleOn(state, random) : shuffleOff(state));
+  return result(on ? shuffleOn(state, random, shuffle) : shuffleOff(state));
 };
 
 /** Moves to the next entry; past the end it stops. */
@@ -350,17 +464,23 @@ const removeTracks = (state: QueueState, trackIds: readonly string[]): QueueResu
   return result({ ...state, entries, index: entries.length - 1 }, "stop");
 };
 
-/** Applies one command. `random` returns numbers in [0, 1); pass a seeded one in tests. */
+/**
+ * Applies one command. `random` returns numbers in [0, 1); pass a seeded one
+ * in tests. [shuffle] is the kind of shuffle a command that shuffles uses.
+ */
 export const reduceQueue = (
   state: QueueState,
   command: QueueCommand,
   random: () => number = Math.random,
+  shuffle: Shuffle = REAL_SHUFFLE,
 ): QueueResult => {
   switch (command.type) {
     case "play":
-      return play(state, command, random);
+      return play(state, command, random, shuffle);
     case "setShuffle":
-      return setShuffle(state, command.on, random);
+      return setShuffle(state, command.on, random, shuffle);
+    case "reshuffle":
+      return result(shuffleOn(state, random, shuffle));
     case "next":
       return advance(state);
     case "trackEnded":

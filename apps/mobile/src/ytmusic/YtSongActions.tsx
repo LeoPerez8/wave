@@ -9,7 +9,9 @@ import {
   type PlaylistSong,
   type StreamedArtistLink,
   type YtDownloadAction,
+  type YtSongActionOptions,
 } from "@wave/core";
+import { usePathname } from "expo-router";
 import { useState } from "react";
 import { Text, View } from "react-native";
 
@@ -28,22 +30,24 @@ import { useOverlayFlow } from "@/overlay/flow";
 import { followUp, openOverlay } from "@/overlay/overlay";
 import { useSlideToChoose } from "@/overlay/useSlideToChoose";
 import { addYtToQueue, playYtNext } from "@/playback/actions";
+import type { MenuOptions } from "@/playback/ActionsMenu";
 import { showError } from "@/overlay/alert";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
 import { useLibraryFinder, useLoadedInLibrary, type FindInLibrary } from "./libraryFinder";
+import { openYtAlbum, ytAlbumPageHere } from "./routes";
 import { libraryArtistsRead, useStreamedArtistLink } from "./streamedArtist";
 import { cancelYtDownload, downloadYtSong, useYtDownloadStatus } from "./YtDownloads";
 
 /** Where the menu was opened: a playlist's entry offers Remove from Playlist. */
-export interface YtSongMenuOptions {
+export interface YtSongMenuOptions extends MenuOptions {
   readonly playlistItem?: PlaylistPlace | undefined;
 }
 
 /**
  * Opens a YT Music song's long-press menu next to its row: Play Next, Add to
- * Queue, Add to Playlist (Remove from Playlist for a playlist's entry) and Go
- * to Artist (Core's `ytSongActions`), then Download, or Cancel Download /
+ * Queue, Add to Playlist (Remove from Playlist for a playlist's entry), Go to
+ * Album and Go to Artist (Core's `ytSongActions`), then Download, or Cancel Download /
  * Retry Download while one is on its way or has failed. It opens once the
  * Library's artists are read, so Go to Artist is there from its first frame
  * (or, the read failing or slow, not at all: the menu never grows).
@@ -57,19 +61,26 @@ export const openYtSongActions = (song: NativeYtSong, options: YtSongMenuOptions
         label: song.title,
         anchor,
         render: (close) => (
-          <YtSongActionsMenu song={song} playlistItem={options.playlistItem} close={close} />
+          <YtSongActionsMenu
+            song={song}
+            playlistItem={options.playlistItem}
+            onSelect={options.onSelect}
+            close={close}
+          />
         ),
       });
     }),
   );
 };
 
-/** One entry: joining the queue or a playlist, going to the artist, or a download entry. */
+/** One entry: joining the queue or a playlist, going to the album or artist, or a download entry. */
 type Entry =
   | {
       readonly kind: "queue";
-      readonly action: "playNext" | "addToQueue" | "addToPlaylist" | "removeFromPlaylist";
+      readonly action:
+        "playNext" | "addToQueue" | "addToPlaylist" | "removeFromPlaylist" | "select";
     }
+  | { readonly kind: "album"; readonly action: "goToAlbum"; readonly album: string }
   | {
       readonly kind: "artist";
       readonly action: "goToArtist";
@@ -79,13 +90,18 @@ type Entry =
 
 const songEntries = (
   artists: StreamedArtistLink<ArtistRow> | undefined,
-  inPlaylist: boolean,
+  options: YtSongActionOptions,
 ): Entry[] =>
-  ytSongActions(artists, { inPlaylist }).map((entry): Entry =>
-    entry.action === "goToArtist"
-      ? { kind: "artist", ...entry }
-      : { kind: "queue", action: entry.action },
-  );
+  ytSongActions(artists, options).map((entry): Entry => {
+    switch (entry.action) {
+      case "goToAlbum":
+        return { kind: "album", ...entry };
+      case "goToArtist":
+        return { kind: "artist", ...entry };
+      default:
+        return { kind: "queue", action: entry.action };
+    }
+  });
 
 const label = (entry: Entry): string =>
   entry.kind === "download"
@@ -98,12 +114,23 @@ const playlistSong = (song: NativeYtSong, find: FindInLibrary): PlaylistSong => 
   return track === null ? { source: "stream", song } : { source: "library", trackId: track.id };
 };
 
+/** Where the menu acts: the Library finder, and what its list gave it (`YtSongMenuOptions`). */
+interface MenuPlace {
+  readonly find: FindInLibrary;
+  readonly playlistItem: PlaylistPlace | undefined;
+  readonly onSelect: (() => void) | undefined;
+}
+
 const run = (
   entry: Entry,
   song: NativeYtSong,
-  find: FindInLibrary,
-  playlistItem: PlaylistPlace | undefined,
+  { find, playlistItem, onSelect }: MenuPlace,
 ): void => {
+  if (entry.kind === "album") {
+    // The page heads with what the song knows of its album until the page is read.
+    openYtAlbum(entry.album, { title: song.album ?? "", line: "", artworkUrl: song.artworkUrl });
+    return;
+  }
   if (entry.kind === "artist") {
     followStreamedArtistLink(entry.artists);
     return;
@@ -134,6 +161,9 @@ const run = (
     case "cancelDownload":
       cancelYtDownload(song.videoId);
       return;
+    case "select":
+      onSelect?.();
+      return;
   }
 };
 
@@ -144,10 +174,12 @@ const run = (
 function YtSongActionsMenu({
   song,
   playlistItem,
+  onSelect,
   close,
 }: {
   song: NativeYtSong;
   playlistItem: PlaylistPlace | undefined;
+  onSelect: (() => void) | undefined;
   close: () => void;
 }) {
   const status = useYtDownloadStatus(song.videoId);
@@ -159,8 +191,18 @@ function YtSongActionsMenu({
   // Kept as the menu opened with it, so Go to Artist never appears while it's shown.
   const link = useStreamedArtistLink(song.artists);
   const [artists] = useState(link);
+  // A playlist's entry opens this menu with YT Music off too: then nothing is asked of YouTube.
+  const ytMusic = useYtMusicEnabled();
+  // Go to Album leaves out the YT Music album page you're on.
+  const ytAlbumHere = ytAlbumPageHere(usePathname());
   const entries: Entry[] = [
-    ...songEntries(artists, playlistItem !== undefined),
+    ...songEntries(artists, {
+      inPlaylist: playlistItem !== undefined,
+      album: song.albumId,
+      ytAlbumHere,
+      ytMusic,
+      selectable: onSelect !== undefined,
+    }),
     ...ytDownloadActions(status, { inLibrary }).map((action): Entry => ({
       kind: "download",
       action,
@@ -170,12 +212,10 @@ function YtSongActionsMenu({
     const entry = entries[index];
     if (entry === undefined) return;
     close();
-    run(entry, song, find, playlistItem);
+    run(entry, song, { find, playlistItem, onSelect });
   };
   const { underFinger, trackEntry, trackList } = useSlideToChoose(choose);
   const flow = useOverlayFlow();
-  // A playlist's entry opens this menu with YT Music off too: then nothing is asked of YouTube.
-  const ytMusic = useYtMusicEnabled();
 
   return (
     <>

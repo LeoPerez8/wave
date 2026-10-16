@@ -161,7 +161,7 @@ class DurableFallbackDownloadsTest {
       owner.advance(GoodSoulseek, Untouched)
       answer(owner, "confirm", mapOf("acceptable" to true))
       owner.advance(GoodSoulseek, object : DurablePublication {
-        override fun tag(source: File, tags: Map<String, Any?>) = throw java.io.IOException("Disk full")
+        override fun tag(source: File, tags: Map<String, Any?>) = throw java.io.IOException("write failed: ENOSPC (No space left on device)")
         override fun index(file: File): Map<String, Any?> = error("No publication expected")
       })
       assertEquals("storage", owner.snapshot().single()["reason"])

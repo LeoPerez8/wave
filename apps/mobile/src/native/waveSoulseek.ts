@@ -1,4 +1,5 @@
 import type {
+  DownloadFailurePlan,
   DownloadSource,
   SoulseekCandidate,
   SoulseekReceivedTags,
@@ -29,6 +30,10 @@ export interface NativeDownloadJob extends YtDownloadJournalJob<NativeYtSong> {
    * song's, `missing:<id>`), once its prepare answer or fallback named it.
    */
   readonly video?: string;
+  /** What the journal does when the job's source fails, as the last prepare answer planned it. */
+  readonly failurePlan?: DownloadFailurePlan;
+  /** YouTube Music's fallback for a Soulseek job, as the last prepare answer planned it. */
+  readonly fallback?: unknown;
 }
 
 /** A decision the journal leased to JS; answered with `submitDecision` before [leaseUntil]. */

@@ -5,8 +5,8 @@ import { useYtListHead } from "@/ytmusic/routes";
 import { useYtListPage, YtSongList } from "@/ytmusic/YtSongList";
 
 /**
- * A YT Music album opened from Discover (its `MPREb_…` page, read as a
- * download reads it): cover, title, artists, Play / Shuffle / Download (the
+ * A YT Music album opened from Search, an artist page or a song's menu (its
+ * `MPREb_…` page, read as a download reads it): cover, title, artists, Play / Shuffle / Download (the
  * whole album, with its progress in the head) and its songs by number.
  */
 export default function YtAlbumScreen() {

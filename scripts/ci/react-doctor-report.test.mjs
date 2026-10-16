@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { test } from "node:test";
 
@@ -32,6 +32,65 @@ function check(report, mode = "baseline") {
 test("a comparison with no changed React source passes without scanning a project", () => {
   const result = check(emptyComparison);
   assert.equal(result.status, 0, result.stderr);
+});
+
+// A repository whose last commit changes the given files under apps/mobile.
+function repository(changed) {
+  const root = mkdtempSync(join(tmpdir(), "wave-doctor-repo-"));
+  const git = (...args) => {
+    const result = spawnSync("git", ["-C", root, ...args], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout.trim();
+  };
+  const write = (file, text) => {
+    mkdirSync(dirname(join(root, file)), { recursive: true });
+    writeFileSync(join(root, file), text);
+  };
+  git("init", "-q");
+  git("config", "user.email", "ci@example.com");
+  git("config", "user.name", "CI");
+  write("apps/mobile/src/App.tsx", "export {};\n");
+  git("add", "-A");
+  git("commit", "-q", "-m", "base");
+  const base = git("rev-parse", "HEAD");
+  for (const file of changed) write(`apps/mobile/${file}`, `// ${file}\n`);
+  git("add", "-A");
+  git("commit", "-q", "-m", "change");
+  return { root, base, directory: join(root, "apps/mobile") };
+}
+
+test("a comparison whose changes hold no React source passes without scanning a project", () => {
+  const { root, base, directory } = repository([
+    "modules/native/Downloads.kt",
+    "modules/native/DownloadsTest.kt",
+  ]);
+  try {
+    const result = check({
+      ...emptyComparison,
+      directory,
+      baseline: { ...emptyComparison.baseline, baseRef: base },
+      diff: { changedFileCount: 2 },
+    });
+    assert.equal(result.status, 0, result.stderr);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a comparison that scanned no project while React source changed is rejected", () => {
+  const { root, base, directory } = repository(["modules/native/Downloads.kt", "src/Screen.tsx"]);
+  try {
+    const result = check({
+      ...emptyComparison,
+      directory,
+      baseline: { ...emptyComparison.baseline, baseRef: base },
+      diff: { changedFileCount: 2 },
+    });
+    assert.equal(result.status, 1, result.stderr);
+    assert.match(result.stderr, /did not complete a valid baseline mobile scan/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 const completeComparison = {

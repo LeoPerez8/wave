@@ -160,14 +160,6 @@ export type SpotifyRead =
   | { readonly ok: true; readonly playlist: SpotifyPlaylist }
   | { readonly ok: false; readonly reason: SpotifyReadFailure };
 
-/**
- * The most songs read from one playlist. Each song the Library lacks costs a
- * YouTube Music search, and YouTube Music began refusing some after about
- * 2,300 searches in 15 minutes (measured 2026-10-14), so one import stays
- * well below that.
- */
-export const SPOTIFY_SONG_CAP = 1000;
-
 /** Songs asked for per `fetchPlaylist` call: 1,000 works, 5,000 times out. */
 const PAGE_SIZE = 500;
 
@@ -213,7 +205,7 @@ const parsed = (body: string): unknown => {
   }
 };
 
-/** Every song through `fetchPlaylist`, up to the cap; null when any page fails. */
+/** Every song through `fetchPlaylist`; null when any page fails. */
 const readPages = async (
   playlistId: string,
   token: string,
@@ -239,13 +231,13 @@ const readPages = async (
     songs.push(...page.songs);
     if (page.items === 0) break;
     offset += page.items;
-  } while (offset < total && songs.length < SPOTIFY_SONG_CAP);
+  } while (offset < total);
   if (first === null) return null;
   return {
     title: first.title,
     artworkUrl: first.artworkUrl,
-    songs: songs.slice(0, SPOTIFY_SONG_CAP),
-    truncated: offset < total || songs.length > SPOTIFY_SONG_CAP,
+    songs,
+    truncated: offset < total,
   };
 };
 
@@ -253,7 +245,7 @@ const readPages = async (
  * Reads the public playlist [playlistId] through [send]: the embed page
  * (`open.spotify.com/embed/playlist/<id>`), which says whether the playlist
  * is there and gives an anonymous token, then every song with that token
- * through `fetchPlaylist`, 500 a page, up to `SPOTIFY_SONG_CAP`. When
+ * through `fetchPlaylist`, 500 a page, with no song limit. When
  * `fetchPlaylist` fails (its query id changed, the token is refused, Spotify
  * throttles), the embed page's first 100 songs stand in. Spotify is sent the
  * playlist id, the page asked for and the token it gave, nothing else. Once

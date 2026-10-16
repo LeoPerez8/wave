@@ -22,13 +22,19 @@ export { describeFolder, filesLeavingWithRoot, isWithin, planAddRoot } from "./s
 export type { AddRootPlan, FolderLabel, ScanRootState } from "./scanRoots.ts";
 export { resolveSkipSwipe } from "./swipe.ts";
 export type { SkipDirection, SkipSwipe } from "./swipe.ts";
+export { toastDuration, toastSwipeDismisses } from "./toast.ts";
+export type { ToastSwipe } from "./toast.ts";
 export {
   EMPTY_QUEUE,
+  REAL_SHUFFLE,
   RESTART_THRESHOLD_MS,
   currentEntry,
   nextRepeatMode,
   parseQueueState,
+  readShuffleKind,
   reduceQueue,
+  shuffledTrackIds,
+  shufflesQueue,
   upNext,
   upNextMove,
   withPendingMoves,
@@ -43,6 +49,8 @@ export type {
   QueueResult,
   QueueState,
   RepeatMode,
+  Shuffle,
+  ShuffleKind,
 } from "./queue.ts";
 export { applyPlayerSync, planPlayerSync } from "./playerSync.ts";
 export type { PlayerList, QueueList, SyncStep } from "./playerSync.ts";
@@ -88,6 +96,7 @@ export {
   moveItem,
   nextPlaylistName,
   planPlaylistAdd,
+  playlistArtwork,
   playlistMosaic,
   playlistRemovals,
 } from "./playlists.ts";
@@ -115,6 +124,7 @@ export type { SleepTimer, SleepTimerChoice, SleepTimerClock } from "./sleepTimer
 export {
   COUNTED_PLAY_MS,
   EMPTY_PLAY_TRACKER,
+  fadingPlaySoFar,
   isCountedPlay,
   keptPlayingEntry,
   playSoFar,
@@ -191,23 +201,47 @@ export type { CardKeyboard, OverlayAlign, OverlayFlow } from "./overlay.ts";
 export { moveSlide, slideEntry, slideTicks, startSlide } from "./slideToChoose.ts";
 export type { MenuSlide, SlidePoint } from "./slideToChoose.ts";
 export {
-  SHORTCUT_TAB_CHOICES,
-  parseShortcutTab,
-  storedShortcutTab,
-  tabBarTabs,
-} from "./shortcutTab.ts";
-export type { TabBarTab } from "./shortcutTab.ts";
+  editTabBar,
+  movableTabs,
+  parseTabBar,
+  storedTabBar,
+  tabBarFull,
+  tabsOffBar,
+} from "./tabBar.ts";
+export type { TabBar, TabBarEdit, TabBarTab } from "./tabBar.ts";
+export { SETTINGS_PAGES, accountsSummary, downloadsSummary } from "./settingsPages.ts";
+export type { SettingsPage, SettingsPageEntry } from "./settingsPages.ts";
+export {
+  PLAYLIST_LAYOUTS,
+  parsePlaylistLayout,
+  playlistLayoutRows,
+  storedPlaylistLayout,
+} from "./playlistLayout.ts";
+export type { PlaylistLayout } from "./playlistLayout.ts";
 export { TAB_PATH, detailPath, inLibraryStack, isDetailPath, tabOfPath } from "./navigation.ts";
 export type { DetailScreen } from "./navigation.ts";
 export { planAlert } from "./alert.ts";
 export type { AlertButton, AlertChoice, AlertPlan, AlertSpec } from "./alert.ts";
+export { APPEARANCES, appearanceAccent, readAppearance, storedAppearance } from "./appearance.ts";
+export type { Appearance } from "./appearance.ts";
 export { DEFAULT_THEME, NIGHT_SLATE, TONES, themeContrastIssues } from "./theme.ts";
-export { withOpacity } from "./colour.ts";
+export { hexToHsv, hsvToHex, parseHexColour, withOpacity } from "./colour.ts";
+export type { Hsv } from "./colour.ts";
+export {
+  colourPickerLayout,
+  colourPickerMarkers,
+  colourPickerTarget,
+  pickColour,
+} from "./colourPicker.ts";
+export type { ColourPickerLayout, ColourPickerTarget } from "./colourPicker.ts";
 export { overlayDivider } from "./overlayDivider.ts";
 export type { ContrastIssue, Theme, ThemeColors } from "./theme.ts";
 export {
+  CUSTOM_INK,
   DEFAULT_THEME_CHOICE,
   THEME_SWATCHES,
+  chooseCustomInk,
+  customInkPreview,
   isDefaultThemeChoice,
   readThemeChoice,
   themeFor,
@@ -215,9 +249,13 @@ export {
 } from "./themeChoice.ts";
 export type {
   BackgroundSwatch,
+  CustomInkPreview,
+  CustomSwatchOption,
+  InkGroup,
   InkSwatch,
   Scheme,
   ThemeChoice,
+  ThemeGroup,
   ThemeSwatchOption,
   ThemeSwatchRow,
 } from "./themeChoice.ts";
@@ -304,7 +342,10 @@ export type {
   ArtistLink,
   ItemAction,
   ItemActionEntry,
+  LibraryArtistRef,
+  StreamedArtists,
   YtSongActionEntry,
+  YtSongActionOptions,
   ItemKind,
 } from "./itemActions.ts";
 export { concentricRadius } from "./corners.ts";
@@ -422,9 +463,10 @@ export {
   deezerTrackCandidates,
   deezerTrackSearchUrl,
   describeTagLookups,
-  lacksTrackNumber,
-  libraryLookupSongs,
-  libraryTagsToWrite,
+  tagLookupsToast,
+  canFixSong,
+  deezerFollowUps,
+  fixLookups,
   lookupsUnreachable,
   lrclibCandidates,
   lrclibSearchUrl,
@@ -434,7 +476,7 @@ export {
   settledTags,
   songLookup,
   songTagOutcome,
-  tagsToWrite,
+  songsToFix,
 } from "./lyricsAndGenre.ts";
 export type {
   DeezerAlbum,
@@ -489,6 +531,16 @@ export type { PlayerErrorCode, RestorableTracks } from "./ytQueue.ts";
 export { settleBestQuality } from "./bestQuality.ts";
 export type { BestQualityState, BestQualityStep } from "./bestQuality.ts";
 export {
+  downloadFailureAnswer,
+  downloadFailureCause,
+  downloadStorageFull,
+} from "./downloadFailure.ts";
+export type {
+  DownloadDecision,
+  DownloadFailureAnswer,
+  DownloadFailureHeld,
+} from "./downloadFailure.ts";
+export {
   downloadFailurePlan,
   downloadFallback,
   downloadSource,
@@ -533,6 +585,12 @@ export type {
   YtSongsDownloadAction,
   YtSongsDownloadRequest,
 } from "./ytSongsDownload.ts";
+export { failedDownloads, settledDownloadFailures } from "./failedDownloads.ts";
+export type {
+  FailedDownload,
+  FailedDownloadRetry,
+  FailedDownloadsInput,
+} from "./failedDownloads.ts";
 export {
   YT_DOWNLOADS_NONE,
   YT_DOWNLOAD_ACTION_LABELS,
@@ -553,32 +611,12 @@ export type {
   YtDownloadStatus,
   YtDownloads,
 } from "./ytDownloads.ts";
-export {
-  DISCOVER_START,
-  discoverItemAction,
-  discoverShouldAsk,
-  discoverTileCaption,
-  discoverSongs,
-  discoverTrackId,
-  discoverView,
-  stepDiscover,
-  ytAlbumSongs,
-} from "./ytDiscover.ts";
+export { discoverSongs, discoverTrackId, ytAlbumSongs } from "./ytDiscover.ts";
 export type {
-  DiscoverAction,
-  DiscoverContext,
-  DiscoverEvent,
-  DiscoverItem,
-  DiscoverShelf,
   DiscoverSong,
   MixedSong,
-  DiscoverTileCaption,
-  DiscoverState,
-  DiscoverView,
   YtAlbumPageTrack,
   YtAlbumSong,
-  YtHome,
-  YtShelf,
   YtShelfItem,
 } from "./ytDiscover.ts";
 export {
@@ -688,9 +726,7 @@ export type {
   StreamedPlaylistEntry,
 } from "./playlistEntries.ts";
 export {
-  linkImportSummary,
   linkImportView,
-  planLinkImport,
   playlistImportSources,
   recognisePlaylistLink,
   sharedTextImport,
@@ -699,12 +735,10 @@ export {
 } from "./playlistLinks.ts";
 export type {
   ImportNotice,
-  LinkImportPlan,
   LinkImportRead,
   LinkImportView,
   LinkReadFailure,
   LinkedPlaylist,
-  NotFoundSong,
   ReadPlaylist,
   PlaylistImportSource,
   PlaylistLink,
@@ -712,25 +746,41 @@ export type {
   PlaylistLinkProblem,
   SharedTextImport,
 } from "./playlistLinks.ts";
+export { spotifySearchQuery, spotifyYtMatch } from "./spotifyImport.ts";
+export type { YtSongSearch } from "./spotifyImport.ts";
 export {
   SPOTIFY_SEARCHES_AT_ONCE,
-  findSpotifySongs,
-  planSpotifyImport,
-  spotifySearchQuery,
-  spotifyYtMatch,
-} from "./spotifyImport.ts";
+  importAdded,
+  importAdditions,
+  importSearchAnswered,
+  importTurn,
+  nextImportStep,
+  planLinkImport,
+  playlistImportProgress,
+  playlistImportView,
+  queuePlaylistImport,
+  readPlaylistImports,
+  retryPlaylistImport,
+  startPlaylistImport,
+  updatePlaylistImport,
+  withoutPlaylistImport,
+  writePlaylistImports,
+} from "./playlistImport.ts";
 export type {
-  SpotifyFind,
-  SpotifyFindFailure,
-  SpotifyFinding,
-  YtSongSearch,
-} from "./spotifyImport.ts";
-export {
-  SPOTIFY_SONG_CAP,
-  readSpotifyPlaylist,
-  spotifyEmbed,
-  spotifyPlaylistPage,
-} from "./spotifyPlaylist.ts";
+  ImportAdditions,
+  ImportFind,
+  ImportService,
+  ImportState,
+  ImportStep,
+  ImportStopReason,
+  LinkImportPlan,
+  LinkedSource,
+  PlaylistImport,
+  PlaylistImportProgress,
+  PlaylistImportView,
+  PlaylistImports,
+} from "./playlistImport.ts";
+export { readSpotifyPlaylist, spotifyEmbed, spotifyPlaylistPage } from "./spotifyPlaylist.ts";
 export type {
   SpotifyAnswer,
   SpotifyEmbed,
@@ -826,6 +876,7 @@ export {
   missingSongVideo,
   missingSongYtSong,
   missingSongsDownload,
+  missingSongsDownloadActions,
 } from "./missingSongDownload.ts";
 export type {
   MissingSongJob,
@@ -836,3 +887,58 @@ export type {
   MissingSongsDownloadAction,
   MissingTrack,
 } from "./missingSongDownload.ts";
+export {
+  HOME_SECTIONS,
+  editHomeArrangement,
+  hiddenHomeSections,
+  homeItems,
+  homeSectionNote,
+  homeSectionTitle,
+  parseHomeArrangement,
+  storedHomeArrangement,
+} from "./homeSections.ts";
+export type {
+  HomeArrangement,
+  HomeArrangementEdit,
+  HomeItem,
+  HomeSection,
+  HomeSectionId,
+} from "./homeSections.ts";
+export { CROSSFADE, crossfadeDuration, readCrossfade, snapCrossfade } from "./crossfade.ts";
+export {
+  DISCOVER_MIX_COUNT,
+  discoverMix,
+  discoverMixCaption,
+  discoverMixReadsMore,
+  discoverMixSeeds,
+  discoverMixSongs,
+  discoverMixesDue,
+  discoverSeedQuery,
+  discoverSeedVideo,
+  parseDiscoverMixes,
+  playedFinder,
+  storedDiscoverMixes,
+} from "./discoverMixes.ts";
+export type {
+  DiscoverMix,
+  DiscoverMixFilter,
+  DiscoverMixSeed,
+  DiscoverMixes,
+  DiscoverRadioSong,
+  DiscoverSeedArtist,
+  DiscoverSeedSong,
+} from "./discoverMixes.ts";
+
+export {
+  SPOTIFY_SEARCH_BUDGET,
+  SPOTIFY_SEARCH_WINDOW_MS,
+  readSpotifySearchPacing,
+  writeSpotifySearchPacing,
+} from "./spotifySearchPacing.ts";
+export type { SpotifySearchPacing } from "./spotifySearchPacing.ts";
+
+export { LIBRARY_SHELF_CHOICES, parseLibraryShelf, storedLibraryShelf } from "./libraryShelf.ts";
+export type { LibraryShelf } from "./libraryShelf.ts";
+
+export { NO_HELD_SONGS, heldTracks, inLibraryUnlessHeld, songsInPlace } from "./songsInPlace.ts";
+export type { HeldSongs, SongsInPlace } from "./songsInPlace.ts";

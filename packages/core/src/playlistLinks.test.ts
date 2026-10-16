@@ -43,7 +43,11 @@ const playlist = (songs: readonly YtAlbumSong[], fields = {}) => ({
 /** The card's input once [songs] have been read. */
 const read = (songs: readonly YtAlbumSong[], fields = {}) => {
   const source = playlist(songs, fields);
-  return { status: "read", playlist: source, plan: planLinkImport(source, library) } as const;
+  return {
+    status: "read",
+    playlist: source,
+    plan: planLinkImport({ service: "ytMusic", playlist: source }, library),
+  } as const;
 };
 
 describe("playlistImportSources", () => {
@@ -126,55 +130,28 @@ describe("linkImportView", () => {
 });
 
 describe("planLinkImport", () => {
+  const plan = (songs: readonly YtAlbumSong[], fields = {}) =>
+    planLinkImport({ service: "ytMusic", playlist: playlist(songs, fields) }, library);
+
   test("songs the Library has are its tracks, the rest stream, in the playlist's order", () => {
     const stays = yt("s1", "Stress");
-    const plan = planLinkImport(
-      playlist([
-        yt("g1", "Genesis", { durationMs: 235_000 }),
-        stays,
-        yt("p1", "Phantom", { artists: ["Justice", "Daft Punk"], durationMs: 262_000 }),
-      ]),
-      library,
-    );
-    assert.deepEqual(plan.songs, [
-      { source: "library", trackId: 11 },
-      { source: "stream", song: stays },
-      { source: "library", trackId: 12 },
+    const planned = plan([
+      yt("g1", "Genesis", { durationMs: 235_000 }),
+      stays,
+      yt("p1", "Phantom", { artists: ["Justice", "Daft Punk"], durationMs: 262_000 }),
     ]);
-    assert.equal(plan.inLibrary, 2);
-  });
-
-  test("a playlist of only Library songs makes an ordinary playlist", () => {
-    const plan = planLinkImport(playlist([yt("p1", "Phantom"), yt("g1", "Genesis")]), library);
-    assert.deepEqual(plan.songs, [
-      { source: "library", trackId: 12 },
-      { source: "library", trackId: 11 },
+    assert.deepEqual(planned.finds, [
+      { kind: "library", trackId: 11 },
+      { kind: "ytMusic", song: stays },
+      { kind: "library", trackId: 12 },
     ]);
-  });
-
-  test("a song that comes twice, or two that are one Library song, goes in once", () => {
-    const stays = yt("s1", "Stress");
-    const plan = planLinkImport(
-      playlist([yt("g1", "Genesis"), stays, yt("g2", "Genesis (Remastered)"), stays]),
-      library,
-    );
-    assert.deepEqual(plan.songs, [
-      { source: "library", trackId: 11 },
-      { source: "stream", song: stays },
-    ]);
-    assert.equal(plan.inLibrary, 1);
+    assert.equal(planned.inLibrary, 2);
   });
 
   test("the playlist is named after the source, as a playlist name can be", () => {
-    assert.equal(
-      planLinkImport(playlist([], { title: "  Night   Drive " }), library).name,
-      "Night Drive",
-    );
-    assert.equal(planLinkImport(playlist([], { title: " " }), library).name, "Imported Playlist");
-    assert.equal(
-      planLinkImport(playlist([], { title: "x".repeat(140) }), library).name,
-      "x".repeat(PLAYLIST_NAME_MAX),
-    );
+    assert.equal(plan([], { title: "  Night   Drive " }).name, "Night Drive");
+    assert.equal(plan([], { title: " " }).name, "Imported Playlist");
+    assert.equal(plan([], { title: "x".repeat(140) }).name, "x".repeat(PLAYLIST_NAME_MAX));
   });
 });
 

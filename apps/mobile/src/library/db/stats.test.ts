@@ -111,6 +111,27 @@ describe("Per-track play totals", () => {
     assert.equal(totals?.latestPlayAt, 2_000);
   });
 
+  test("with track ids, only those tracks' totals, however many are asked for", () => {
+    const blue = addTrack(db, { title: "Blue in Green" });
+    const so = addTrack(db, { title: "So What" });
+    const other = addTrack(db, { title: "Not asked" });
+    for (const track of [blue, blue, so, other]) recordPlay(db, play(track, 1_000));
+    const totals = (ids: readonly number[]) =>
+      byId(trackPlayTotals(db, { from: null, to: 10_000 }, ids)).map((row) => [
+        row.id,
+        row.countedPlays,
+      ]);
+
+    assert.deepEqual(totals([blue, so]), [
+      [blue, 2],
+      [so, 1],
+    ]);
+    assert.deepEqual(totals([]), []);
+    // More ids than one statement binds.
+    const many = [...Array.from({ length: 1_200 }, (_, i) => 1_000_000 + i), other];
+    assert.deepEqual(totals(many), [[other, 1]]);
+  });
+
   test("an empty window has no totals", () => {
     const track = addTrack(db, { title: "Long ago" });
     recordPlay(db, play(track, 1_000));
