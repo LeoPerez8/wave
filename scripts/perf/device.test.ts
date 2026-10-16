@@ -205,6 +205,35 @@ Uptime: 81234567 Realtime: 91234567
     });
   });
 
+  it("counts the process's views, activities and binders", () => {
+    const text = `** MEMINFO in pid 4242 [dev.leoperez.wave] **
+           TOTAL PSS:   245678            TOTAL RSS:   312345       TOTAL SWAP PSS:     1234
+
+ Objects
+               Views:      542         ViewRootImpl:        2
+         AppContexts:        7           Activities:        1
+              Assets:       26        AssetManagers:        0
+       Local Binders:       36        Proxy Binders:       52
+       Parcel memory:       18         Parcel count:       74
+    Death Recipients:        2             WebViews:        0
+
+ SQL
+         MEMORY_USED:      812
+`;
+    assert.deepEqual(parseMeminfo(text), {
+      totalPssKb: 245_678,
+      totalRssKb: 312_345,
+      swapPssKb: 1_234,
+      views: 542,
+      viewRoots: 2,
+      activities: 1,
+      appContexts: 7,
+      localBinders: 36,
+      proxyBinders: 52,
+      deathRecipients: 2,
+    });
+  });
+
   it("is empty when the app isn't running", () => {
     assert.deepEqual(parseMeminfo("No process found for: dev.leoperez.wave"), {});
   });
