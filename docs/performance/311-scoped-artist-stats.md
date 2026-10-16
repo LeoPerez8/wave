@@ -107,7 +107,8 @@ tests: dropping kept credits of deleted songs, and widening the ranking window p
 `artistStats` is unchanged apart from its input docs: it still filters by artist, so it accepts
 either input.
 
-Full suites: apps/mobile 285 tests, Core 1,758 tests, `scripts/perf` 46 tests, all passing.
+Full suites after merging `perf/301-performance` (with #303 and #314): apps/mobile 286 tests,
+Core 1,763 tests, `scripts/perf` 46 tests, all passing.
 
 ## Release runner: `push-artist`
 

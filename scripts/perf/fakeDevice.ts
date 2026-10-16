@@ -206,6 +206,10 @@ export class FakeDevice implements Device {
       this.recorder?.render("UpNextList");
       this.advance(90);
       if (this.queue) this.respond("visible", "queue");
+    } else if (label === "Next track") {
+      this.render(this.clock, 12);
+      this.advance(30);
+      this.respond("queue.synced", "seek 2000");
     } else if (label === "Import") {
       this.importCard = false;
       this.importing = true;
@@ -254,7 +258,12 @@ export class FakeDevice implements Device {
         mini,
         ...tabs,
       ];
-    return [{ desc: "Settings", bounds: [1260, 180, 1400, 320] }, mini, ...tabs];
+    return [
+      { desc: "Settings", bounds: [1260, 180, 1400, 320] },
+      { desc: "Next track", bounds: [1260, 2720, 1380, 2840] },
+      mini,
+      ...tabs,
+    ];
   }
 
   private uiDump(): string {

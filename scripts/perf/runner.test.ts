@@ -85,6 +85,7 @@ describe("runPerf on the simulated phone", () => {
       "now-playing/idle/close",
       "queue/idle/open",
       "queue/idle/close",
+      "skip/idle/next",
       "search-first-tap/idle/first-tap",
     ]);
     const expecting = steps.filter((step) => step.expectMissing !== null);

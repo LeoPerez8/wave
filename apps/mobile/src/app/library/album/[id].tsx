@@ -8,7 +8,7 @@ import {
   type YtLibraryAlbumNote,
   type YtSong,
 } from "@wave/core";
-import { useLocalSearchParams, usePathname } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo } from "react";
 import { Text, useWindowDimensions, View } from "react-native";
 
@@ -130,8 +130,10 @@ function AlbumHead({
   );
   const play = usePlayPage(songs, context);
   const download = useYtAlbumDownloadButton(ytSongs);
-  // Several album artists: the line opens Go to Artist's choice (Core's `artistLink`).
-  const artistTo = artistLink(album.albumArtistIds, usePathname());
+  // Several album artists: the line opens Go to Artist's choice (Core's `artistLink`). The
+  // head is on the album's page, where no artist is left out; it doesn't follow the route,
+  // which would render it on every navigation while the album stays in a stack.
+  const artistTo = artistLink(album.albumArtistIds, "");
   // Read ahead, so the artist's screen opens header-first.
   const { artist } = useLinkRows(
     undefined,

@@ -14,7 +14,7 @@ import { useAllFilesAccess } from "@/library/hooks";
 import { resumePlaylistImports } from "@/library/playlistImports";
 import { primePlaylists } from "@/library/playlists";
 import { OverlayHost } from "@/overlay/OverlayHost";
-import { useTrackCurrentPath } from "@/library/routes";
+import { FollowCurrentRoute } from "@/library/routes";
 import { useOpenSharedText } from "@/library/sharedText";
 import { startInitialScan } from "@/library/runtime";
 import { NowPlayingSheet, UnderNowPlaying } from "@/nowPlaying/NowPlayingSheet";
@@ -31,8 +31,6 @@ export default function RootLayout() {
   // The status bar follows `useColorScheme` (style "auto"); the navigation bar follows here.
   useNavigationBarScheme();
   const { granted } = useAllFilesAccess();
-  // Lets library screens open inside the tab they were opened from.
-  useTrackCurrentPath();
   // A playlist link shared from YT Music or a browser opens its import card, once Wave can
   // read the Library (the import matches against it).
   useOpenSharedText(granted);
@@ -64,6 +62,9 @@ export default function RootLayout() {
       onTouchStart={PERF_ENABLED ? perfTouch : undefined}
     >
       {PERF_ENABLED ? <PerfProbe /> : null}
+      {/* Lets library screens open inside the tab they were opened from. The root itself
+          doesn't follow the route: that would render it and Now Playing on every navigation. */}
+      <FollowCurrentRoute />
       <SafeAreaProvider>
         <StatusBar style="auto" />
         <OverlayHost>
