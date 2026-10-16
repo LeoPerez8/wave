@@ -93,7 +93,7 @@ and `SongsList` at 0 when their screen isn't the one changing; `TabsLayout` unch
 - Now Playing's links: the artist link and its read-ahead use the path while shown, as before.
   A streamed song's menu (`YtSongActions`) follows the route as before (active by default).
 - Tests: `apps/mobile` 282/282 (`node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test
-  'src/**/*.test.ts' 'plugins/**/*.test.ts'`), Core 1,758/1,758, `scripts/perf` 45/45;
+'src/**/*.test.ts' 'plugins/**/*.test.ts'`), Core 1,758/1,758, `scripts/perf` 45/45;
   `tsc --noEmit -p apps/mobile` clean.
 - On the phone (pending): open a detail screen from Home, a section tab and the Library stack (it
   must open in the tab it was opened from); the artist link in Now Playing on and off an artist's

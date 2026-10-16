@@ -71,7 +71,7 @@ const leaveLibrary = (ids: readonly number[]) =>
     const store = yield* LibraryStore;
     const queue = yield* Queue;
     // Playlist items and stars go with the tracks (foreign keys); history doesn't.
-    yield* store.removeSongs(ids).pipe(Effect.ensuring(Effect.sync(libraryEdited)));
+    yield* store.removeSongs(ids).pipe(Effect.ensuring(Effect.sync(() => libraryEdited(ids))));
     forgetFavorites(ids);
     yield* queue.dispatch({ type: "removeTracks", trackIds: ids.map(String) });
   });

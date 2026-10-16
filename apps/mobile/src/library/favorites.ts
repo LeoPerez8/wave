@@ -3,6 +3,7 @@ import { useEffect, useSyncExternalStore } from "react";
 
 import { makeExternalStore } from "@/lib/externalStore";
 
+import { publishLibraryChange } from "./libraryChanges";
 import { LibraryStore } from "./LibraryStore";
 import { appRuntime } from "./runtime";
 
@@ -17,7 +18,7 @@ interface FavoritesState {
   readonly loaded: boolean;
   /** Bumped when a star is toggled, and when its write settles. */
   readonly edits: number;
-  /** Bumped once a toggle is saved; the Favorites list re-reads on it. */
+  /** Bumped once a toggle is saved; sync follows it (`onFavoritesSaved`). */
   readonly saved: number;
 }
 
@@ -72,6 +73,7 @@ const showStars = (stars: ReadonlyMap<number, FavoriteStar>, saved: boolean): vo
       saved: saved ? state.saved + 1 : state.saved,
     };
   });
+  if (saved) publishLibraryChange({ kind: "favorites", ids: [...stars.keys()] });
 };
 
 /**
@@ -124,6 +126,7 @@ export const forgetFavorites = (trackIds: readonly number[]): void => {
     edits: state.edits + 1,
     saved: state.saved + 1,
   }));
+  publishLibraryChange({ kind: "favorites", ids: trackIds });
 };
 
 export const isFavorite = (trackId: number | string): boolean =>
@@ -171,6 +174,7 @@ export const reloadFavorites = (): void => {
         edits: state.edits + 1,
         saved: state.saved + 1,
       }));
+      publishLibraryChange({ kind: "favorites" });
     })
     .catch(() => {});
 };
@@ -184,7 +188,3 @@ export const onFavoritesSaved = (listener: () => void): (() => void) => {
     listener();
   });
 };
-
-/** Changes whenever a star has been saved (re-run queries over favorites on it). */
-export const useFavoritesSaved = (): number =>
-  useSyncExternalStore(favorites.subscribe, () => favorites.get().saved);

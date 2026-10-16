@@ -62,7 +62,7 @@ export type {
   Shuffle,
   ShuffleKind,
 } from "./queue.ts";
-export { applyPlayerSync, planPlayerSync } from "./playerSync.ts";
+export { applyPlayerSync, keysToLoad, planPlayerSync } from "./playerSync.ts";
 export type { PlayerList, QueueList, SyncStep } from "./playerSync.ts";
 export { alphabetIndex, artistAlbums, indexLetter } from "./browse.ts";
 export type { ArtistAlbum, IndexEntry } from "./browse.ts";
@@ -82,8 +82,8 @@ export { contrastRatio, paletteGradient } from "./palette.ts";
 export type { ArtworkPalette, Gradient, GradientTheme } from "./palette.ts";
 export { settleSheet } from "./sheet.ts";
 export type { SheetDrag, SheetState } from "./sheet.ts";
-export { reorderShift, reorderTarget } from "./reorder.ts";
-export type { ReorderDrag, ReorderRow } from "./reorder.ts";
+export { reorderScrollSpeed, reorderShift, reorderTarget } from "./reorder.ts";
+export type { ReorderDrag, ReorderEdge, ReorderRow } from "./reorder.ts";
 export {
   RECENT_SEARCHES,
   createSearchIndex,
@@ -404,6 +404,22 @@ export { startTabSwitch, stepTabSwitch } from "./tabSwitch.ts";
 export type { TabSwitch, TabSwitchEvent, TabSwitchStep } from "./tabSwitch.ts";
 export { describeTabScreens, keepTabs, parseTabScreens } from "./tabScreens.ts";
 export type { TabScreens } from "./tabScreens.ts";
+export {
+  LIBRARY_QUERY_LIMITS,
+  createLibraryQueries,
+  libraryChangeAffects,
+} from "./libraryQueries.ts";
+export type {
+  LibraryChange,
+  LibraryDataKind,
+  LibraryQueries,
+  LibraryQueryConsumer,
+  LibraryQueryLimits,
+  LibraryQueryOutcome,
+  LibraryQueryResult,
+  LibraryQueryStats,
+  LibraryReads,
+} from "./libraryQueries.ts";
 export { stepNowPlayingSheet } from "./sheetLifecycle.ts";
 export { MORE_FROM_ARTIST } from "./queue.ts";
 export { artistRanking } from "./moreFromArtist.ts";

@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CELL, grid } from "@/catalog/grid";
 import { IconButton } from "@/components/IconButton";
+import { CoveredByNowPlaying } from "@/lib/screenSight";
 import { Press } from "@/motion/Press";
 import { addScreenBackHandler } from "@/overlay/back";
 import { useRenderCount } from "@/perf/perf";
@@ -69,7 +70,10 @@ function ViewToggle({
 
 const close = (): void => closeNowPlaying();
 
-/** Wraps the screens under Now Playing: screen readers skip them while it is up. */
+/**
+ * Wraps the screens under Now Playing: screen readers skip them while it is
+ * up, and their shared Library queries pause (`CoveredByNowPlaying`).
+ */
 export function UnderNowPlaying({ children }: { children: ReactNode }) {
   const shown = useNowPlayingShown();
   return (
@@ -78,7 +82,7 @@ export function UnderNowPlaying({ children }: { children: ReactNode }) {
       style={{ flex: 1 }}
       importantForAccessibility={shown ? "no-hide-descendants" : "auto"}
     >
-      {children}
+      <CoveredByNowPlaying.Provider value>{children}</CoveredByNowPlaying.Provider>
     </View>
   );
 }

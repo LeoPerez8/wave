@@ -15,9 +15,16 @@ export interface ArtistStatsInput {
    * the listening counts for them, so "X of N songs" counts both over one set.
    */
   readonly songIds: readonly number[];
-  /** Every played song's all-time listening (the store's `songListening`). */
+  /**
+   * The all-time listening of at least every played song whose credit names
+   * the artist, deleted songs included (the store reads just those); other
+   * artists' songs are left out.
+   */
   readonly listening: readonly SongListening[];
-  /** Each song's all-time counted plays (the store's `trackPlayTotals` for all time). */
+  /**
+   * The all-time counted plays of at least every song in [songIds] that has
+   * one (the store reads just those); other songs are left out.
+   */
   readonly songPlays: readonly PlayTotals[];
   readonly now: number;
 }

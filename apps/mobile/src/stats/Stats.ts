@@ -105,13 +105,9 @@ export const layer = Layer.effect(
       artist: (artistId) => {
         const now = Date.now();
         return Effect.flatMap(
-          Effect.all([
-            store.songListening,
-            store.trackPlayTotals(statsWindow("all", now)),
-            store.songsCrediting(artistId),
-          ]),
-          ([listening, songPlays, songIds]): Effect.Effect<ArtistStats, LibraryStoreError> => {
-            const stats = artistStats({ artistId, songIds, listening, songPlays, now });
+          store.artistPlays(artistId, now),
+          (plays): Effect.Effect<ArtistStats, LibraryStoreError> => {
+            const stats = artistStats({ artistId, now, ...plays });
             if (!stats.played) return Effect.succeed(stats);
             return Effect.map(withRows(stats.mostPlayed, store.songsByIds), (mostPlayed) => ({
               ...stats,

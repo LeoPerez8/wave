@@ -14,6 +14,7 @@ import {
   findNode,
   parseAmStart,
   parseCompilation,
+  parseDensity,
   parseGetprop,
   parseGfxinfo,
   parseMeminfo,
@@ -23,6 +24,7 @@ import {
   type AmStart,
   type Target,
 } from "./device.ts";
+import { compileWithBaseline, readProfileState } from "./profileDevice.ts";
 import { stepMetrics, type StepRecord } from "./metrics.ts";
 import {
   findScenario,
@@ -69,7 +71,10 @@ export interface RunOptions {
   readonly apkFile: { readonly path: string; readonly sha256: string } | null;
   /** Values recorded as given (`--meta key=value`): Library size on a non-perf build, notes. */
   readonly manual: Readonly<Record<string, string>>;
-  /** Puts this ART compiler filter on the APK before running (`cmd package compile -m`). */
+  /**
+   * Puts this ART compiler filter on the APK before running (`cmd package compile -m`), or,
+   * for `baseline`, compiles it with only the profile the APK ships (#317).
+   */
   readonly compile: string | null;
   /** Records a Perfetto trace of each scenario into this folder. */
   readonly perfetto: { readonly dir: string; readonly config: string } | null;
@@ -94,7 +99,8 @@ const tapCommand = ({ x, y }: { x: number; y: number }): string => `input tap ${
 
 const ms = (value: number | null): string => (value === null ? "-" : `${value} ms`);
 
-const touches = (action: Action): boolean => action.kind === "tap" || action.kind === "taps";
+const touches = (action: Action): boolean =>
+  action.kind === "tap" || action.kind === "taps" || action.kind === "drag";
 
 /** Several flushes as one: their entries in order, their renders added up, the last meta. */
 const merge = (flushes: readonly PerfFlush[]): PerfFlush | null => {
@@ -193,11 +199,29 @@ export const runPerf = async (
     throw new ScenarioError(`Couldn't find ${key} on screen.`);
   };
 
+  let pxPerDp: number | null = null;
+  /** Pixels per dp on the phone, read once. */
+  const density = async (): Promise<number> => {
+    if (pxPerDp === null) {
+      const dpi = parseDensity(await shell("wm density"));
+      if (dpi === null) throw new ScenarioError("Couldn't read the screen density (wm density).");
+      pxPerDp = dpi / 160;
+    }
+    return pxPerDp;
+  };
+
   /** Finds the targets [action] taps before any window opens, so finding them is never measured. */
   const prepare = async (action: Action): Promise<string | null> => {
     switch (action.kind) {
       case "tap":
         return tapCommand(await resolve(action.target));
+      case "drag": {
+        const centre = await resolve(action.target);
+        const scale = await density();
+        const at = ({ x, y }: { x: number; y: number }): string =>
+          `${Math.round(centre.x + x * scale)} ${Math.round(centre.y + y * scale)}`;
+        return `input swipe ${at(action.from)} ${at(action.to)} ${action.durationMs}`;
+      }
       case "taps": {
         const commands: string[] = [];
         for (const target of action.targets) commands.push(tapCommand(await resolve(target)));
@@ -211,6 +235,7 @@ export const runPerf = async (
           options.importLink,
         )} ${pkg}`;
       case "launch":
+      case "resume":
       case "idle":
         return null;
     }
@@ -312,6 +337,17 @@ export const runPerf = async (
     let launched: AmStart | null = null;
     if (step.action.kind === "launch") {
       launched = await launch();
+    } else if (step.action.kind === "resume") {
+      await shell("input keyevent 3");
+      await device.sleep(options.settleMs);
+      await shell("logcat -c");
+      launched = parseAmStart(
+        await shell(
+          `am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p ${pkg}`,
+        ),
+      );
+      if (launched.status !== "ok")
+        throw new ScenarioError(`Couldn't bring ${pkg} back (${launched.status ?? "no status"}).`);
     } else {
       await device.sleep(options.settleMs);
       await shell("logcat -c");
@@ -333,6 +369,11 @@ export const runPerf = async (
     });
     const meta = perf?.meta ?? {};
     const importRunning = meta["import.running"];
+    const libraryQueries = Object.fromEntries(
+      Object.entries(meta)
+        .filter(([key]) => key.startsWith("libraryQueries."))
+        .map(([key, value]) => [key.slice("libraryQueries.".length), value]),
+    );
     const record: StepRecord & Record<string, unknown> = {
       type: "step",
       run,
@@ -360,6 +401,8 @@ export const runPerf = async (
             },
           }
         : {}),
+      // Counters since launch: compare a step's with the one before it for its reads.
+      ...(Object.keys(libraryQueries).length > 0 ? { libraryQueries } : {}),
     };
     write(record);
     log(
@@ -414,6 +457,10 @@ export const runPerf = async (
         throw new ScenarioError(
           "The fixture has no importLink (scripts/perf/fixture.json or --import-link).",
         );
+      if (scenario.needsArtist === true && options.config.artist === null)
+        throw new ScenarioError(
+          "The fixture has no artist (scripts/perf/fixture.json or --artist).",
+        );
       if (scenario.coldEachIteration !== true) await start();
       const iterations = options.iterations ?? scenario.iterations;
       for (let i = 1; i <= scenario.warmup + iterations; i++) {
@@ -453,7 +500,20 @@ export const runPerf = async (
   // The run
 
   await shell("input keyevent KEYCODE_WAKEUP");
-  if (options.compile !== null) await shell(`cmd package compile -m ${options.compile} -f ${pkg}`);
+  let artProfile: { install: string; classes: number; methods: number } | null = null;
+  if (options.compile === "baseline") {
+    const { install } = await compileWithBaseline(device, pkg);
+    const { profile } = await readProfileState(device, pkg);
+    artProfile = {
+      install,
+      classes: profile?.classes.size ?? 0,
+      methods: profile?.methods.size ?? 0,
+    };
+    log(
+      `profileinstaller: ${install}; ART's profile: ${artProfile.classes} classes, ${artProfile.methods} methods`,
+    );
+  } else if (options.compile !== null)
+    await shell(`cmd package compile -m ${options.compile} -f ${pkg}`);
   const meta = await metadata();
   write({
     type: "run",
@@ -474,8 +534,10 @@ export const runPerf = async (
       compile: options.compile,
       perfetto: options.perfetto !== null,
       tabs: options.config.tabs,
+      artist: options.config.artist,
     },
     ...meta,
+    ...(options.compile === "baseline" ? { artProfile } : {}),
   });
   log(
     `${meta.device.model ?? "?"} (Android ${meta.device.android ?? "?"}), Wave ${

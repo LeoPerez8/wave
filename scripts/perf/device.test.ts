@@ -5,6 +5,7 @@ import {
   findNode,
   parseAmStart,
   parseCompilation,
+  parseDensity,
   parseGetprop,
   parseGfxinfo,
   parseMeminfo,
@@ -249,6 +250,14 @@ describe("parseRefreshRate", () => {
   it("falls back to the logical display's rate", () => {
     assert.equal(parseRefreshRate("    mRefreshRate=60.000004\n"), 60);
     assert.equal(parseRefreshRate("nothing here"), null);
+  });
+});
+
+describe("parseDensity", () => {
+  it("reads the density the screen is drawn at, the user's override first", () => {
+    assert.equal(parseDensity("Physical density: 600\nOverride density: 450\n"), 450);
+    assert.equal(parseDensity("Physical density: 480\n"), 480);
+    assert.equal(parseDensity("nothing here"), null);
   });
 });
 

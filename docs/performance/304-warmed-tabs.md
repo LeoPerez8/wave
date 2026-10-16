@@ -130,7 +130,8 @@ What each choice is expected to show, to check against the numbers rather than a
 - Tests: Core `tabSwitch.test.ts` (11) and `tabScreens.test.ts` (12): coalescing, settling on the
   last tap, no duplicate switch, the lost-switch bound, when a tab enters, retention, the choice
   parser. `scripts/perf` tests cover phases, the `tab-first` scenario and `rapid-tabs` settling
-  on the simulated phone. App 282/282, Core 1,781/1,781, `scripts/perf` 50/50; `tsc` clean for
+  on the simulated phone. After merging `perf/301-performance` at a57e84d: app 293/293, Core 1,827/1,827,
+  `scripts/perf` 77/77; `tsc` clean for
   `apps/mobile`, `packages/core` and `scripts/perf`.
 - The default render is expo-router's (same `Screen` props and styles) apart from tabs that left
   the bar, which are unmounted when hidden. Navigation state is held by the router, not by the

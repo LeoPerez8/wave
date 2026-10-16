@@ -14,8 +14,27 @@ export type Action =
   | { readonly kind: "share" }
   /** A cold launch, timed by `am start -W`. */
   | { readonly kind: "launch" }
+  /** Home, then Wave again from its launcher intent while its process lives: a warm launch. */
+  | { readonly kind: "resume" }
   /** Nothing: a window that watches the app on its own (an import filling). */
-  | { readonly kind: "idle" };
+  | { readonly kind: "idle" }
+  /**
+   * A finger dragged in a straight line (`input swipe`), [from] and [to] in dp
+   * from [target]'s centre, taking [durationMs].
+   */
+  | {
+      readonly kind: "drag";
+      readonly target: Target;
+      readonly from: Point;
+      readonly to: Point;
+      readonly durationMs: number;
+    };
+
+/** A position in dp; x grows right, y down. */
+export interface Point {
+  readonly x: number;
+  readonly y: number;
+}
 
 export interface Step {
   /** What the step measures, the third part of its summary key ("tab", "push", "pop"…). */
@@ -35,6 +54,11 @@ export interface Step {
 export interface ScenarioConfig {
   /** The tab bar's tabs to cycle through, by label, Home first; Search stays out of it. */
   readonly tabs: readonly string[];
+  /**
+   * The artist push-artist opens, by name as Library › Artists shows it on its
+   * first screen; null when the fixture names none.
+   */
+  readonly artist: string | null;
 }
 
 export interface Scenario {
@@ -52,6 +76,8 @@ export interface Scenario {
   readonly warmup: number;
   /** Needs the fixture's playlist link. */
   readonly needsImportLink?: boolean;
+  /** Needs the fixture's artist. */
+  readonly needsArtist?: boolean;
 }
 
 const tab = (label: string): Target => ({ desc: label });
@@ -65,6 +91,24 @@ const pushPop = (target: Target): readonly Step[] => [
   { measure: "push", action: { kind: "tap", target }, expect: route },
   { measure: "pop", action: { kind: "tap", target: { desc: "Back" } }, expect: route },
 ];
+
+const drag = (target: Target, from: Point, to: Point, durationMs: number): Action => ({
+  kind: "drag",
+  target,
+  from,
+  to,
+  durationMs,
+});
+
+const SCRUBBER: Target = { desc: "Playback position" };
+/**
+ * Up Next's handles are hidden from accessibility, so drags start from the
+ * first row's Remove button: the handle is the next 48 dp cell to its right.
+ */
+const FIRST_REMOVE: Target = { descPrefix: "Remove " };
+const HANDLE: Point = { x: 48, y: 0 };
+/** Up Next rows are 56 dp tall. */
+const THREE_ROWS_DOWN: Point = { x: 48, y: 3 * 56 };
 
 /** Ten tab changes away from Home and back, cycling through [tabs]. */
 const tabCycleLabels = (tabs: readonly string[], count: number): string[] =>
@@ -96,6 +140,13 @@ export const SCENARIOS: readonly Scenario[] = [
     steps: () => [{ measure: "cold", action: { kind: "launch" } }],
     iterations: 5,
     warmup: 0,
+  },
+  {
+    name: "warm-start",
+    summary: "Home, then Wave again with its process alive: am start -W times of a warm launch.",
+    steps: () => [{ measure: "warm", action: { kind: "resume" } }],
+    iterations: 5,
+    warmup: 1,
   },
   {
     name: "tab-first",
@@ -157,6 +208,26 @@ export const SCENARIOS: readonly Scenario[] = [
     warmup: 1,
   },
   {
+    name: "push-artist",
+    summary:
+      "Library › Artists › the fixture's artist, until its page's stats block is on screen, and back.",
+    setup: [
+      { kind: "tap", target: tab("Library") },
+      { kind: "tap", target: { text: "Artists" } },
+    ],
+    steps: ({ artist }) => [
+      {
+        measure: "push",
+        action: { kind: "tap", target: { text: artist ?? "" } },
+        expect: { mark: "artist.stats" },
+      },
+      { measure: "pop", action: { kind: "tap", target: { desc: "Back" } }, expect: route },
+    ],
+    iterations: 10,
+    warmup: 1,
+    needsArtist: true,
+  },
+  {
     name: "push-empty",
     summary:
       "Control: Settings › Developer (one row) and back, navigation with next to no content.",
@@ -194,6 +265,47 @@ export const SCENARIOS: readonly Scenario[] = [
         expect: { mark: "visible", detail: "queue" },
       },
       { measure: "close", action: { kind: "tap", target: { desc: "Queue" } } },
+    ],
+    iterations: 10,
+    warmup: 1,
+  },
+  {
+    name: "skip",
+    summary:
+      "The mini player's Next track, until the player holds the next entry (#314). Load the queue length under test first.",
+    steps: () => [
+      {
+        measure: "next",
+        action: { kind: "tap", target: { desc: "Next track" } },
+        expect: { mark: "queue.synced" },
+      },
+    ],
+    iterations: 10,
+    warmup: 1,
+  },
+  {
+    name: "scrub",
+    summary:
+      "Now Playing's scrubber dragged forward 240 dp and back, a second each; each drag seeks where it lets go.",
+    setup: [{ kind: "tap", target: { descPrefix: "Now playing:" } }],
+    steps: () => [
+      { measure: "forward", action: drag(SCRUBBER, { x: -120, y: 0 }, { x: 120, y: 0 }, 1_000) },
+      { measure: "back", action: drag(SCRUBBER, { x: 120, y: 0 }, { x: -120, y: 0 }, 1_000) },
+    ],
+    iterations: 10,
+    warmup: 1,
+  },
+  {
+    name: "queue-drag",
+    summary:
+      "The first Up Next row dragged three rows down by its handle, then back up: the order ends as it began. Needs four songs up next.",
+    setup: [
+      { kind: "tap", target: { descPrefix: "Now playing:" } },
+      { kind: "tap", target: { desc: "Queue" } },
+    ],
+    steps: () => [
+      { measure: "down", action: drag(FIRST_REMOVE, HANDLE, THREE_ROWS_DOWN, 800) },
+      { measure: "up", action: drag(FIRST_REMOVE, THREE_ROWS_DOWN, HANDLE, 800) },
     ],
     iterations: 10,
     warmup: 1,

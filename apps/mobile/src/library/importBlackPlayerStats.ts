@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 
 import { WaveNative } from "@/native/waveNative";
 import { showError } from "@/overlay/alert";
-import { playHistoryVersion } from "@/playback/PlayHistory";
+import { playHistoryChanged } from "@/playback/PlayHistory";
 
 import { showImportSummary } from "./importPlaylists";
 import { LibraryStore } from "./LibraryStore";
@@ -33,7 +33,7 @@ export const importBlackPlayerStats = async (): Promise<void> => {
       // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
       await appRuntime.runPromise(LibraryStore.use((store) => store.saveImportedPlays(plan.plays)));
       // Stats, Home and the artist pages read the history again.
-      playHistoryVersion.update((version) => version + 1);
+      playHistoryChanged();
     }
     await showImportSummary(summarizeBlackPlayerImport(plan));
   } catch (error) {
