@@ -34,7 +34,8 @@ node scripts/perf/perf.ts run --dry-run             # the whole pipeline on a si
 
 `pnpm perf <command>` does the same. `run` options:
 
-- `--scenario all|<a>,<b>`: `all` is every scenario except `import` (see Variants).
+- `--scenario all|glass|<a>,<b>`: `all` is every scenario except `import` (see Variants) and the
+  glass scenarios; `glass` is the glass scenarios. Groups mix with names: `glass,tab-switch`.
 - `--variant idle|import|idle,import`.
 - `--iterations <n>`: overrides each scenario's count. Use it for quick checks, not for results.
 - `--label <name>`: names the run and its file, `perf-results/<label>-<time>.jsonl`. `--out` sets
@@ -47,6 +48,10 @@ node scripts/perf/perf.ts run --dry-run             # the whole pipeline on a si
 - `--artist <name>`: overrides the fixture's artist (`push-artist`).
 - `--meta key=value`: records a value as given. On a plain APK, pass the Library's size this way
   (`--meta library.tracks=12000 --meta library.playEvents=54000`).
+- `--glass <probe>`: launches Wave with a glass probe (perf builds only; #316): `live`,
+  `coalesced`, `blur`, `record` or `off`. Each drops glass layers so runs differ by one cost; see
+  `perf.ts scenarios` and `docs/performance/316-glass-frame-budget.md`. The run stops before
+  measuring when the app reports a different probe than asked.
 - `--perfetto`: records a Perfetto trace per scenario under `perf-results/traces/`.
 - `--serial <serial>`: picks the phone when more than one is attached.
 - `--dry-run`: uses the simulated phone in `scripts/perf/fakeDevice.ts`.
@@ -129,6 +134,14 @@ launch, the share and the import's idle window have no touch.
 | `skip`             | the mini player's Next track (`next`)                                               | `queue.synced`            |         10 |
 | `search-first-tap` | the first Search tap after a fresh launch (`first-tap`)                             | `keyboard.show`           |          5 |
 | `import`           | share the link (`card`), tap Import (`start`), 10 s of the import (`during-import`) | `import.running`          |          1 |
+| `scroll-home`      | glass: a fling up (`fling-up`) and back down (`fling-down`) on Home                 | -                         |         10 |
+| `scroll-songs`     | glass: the same on Library › Songs, under the mini player                           | -                         |         10 |
+| `idle-home`        | glass: 5 s of Home untouched (`idle`); any frame is idle rendering                  | -                         |          5 |
+
+The glass scenarios (`--scenario glass`) aren't part of `all`. A fling is `input swipe` from 70%
+to 30% of the screen's height (or back) in 120 ms, at the screen's centre, clear of the chrome. A
+fling renders more frames than gfxinfo keeps, so its first frame and settle stay empty; its frame
+totals, histogram and frame parts are what it measures. `idle-home` needs the mini player paused.
 
 `skip` measures how long a skip takes to reach the player, so it depends on the queue's length:
 load the queue under test before the run (a short album, or the whole Library as Songs) and leave
@@ -169,6 +182,7 @@ timestamps all use Android's CLOCK_MONOTONIC.
 | `burstMs`      | First to last frame of that burst. The only latency a plain APK gives.                                                                           |         no         |
 | `inputToJsMs`  | Touch to JavaScript's touch handler: input delayed by a busy JS thread.                                                                          |        yes         |
 | `frames`       | Frames rendered in the window, deadline misses, jank counters (slow UI thread, high input latency), the frame-time histogram.                    |         no         |
+| `phases`       | The kept frames split into parts (mean, p90, max ms): pre-draw and layout, draw (UI thread), sync, issue (RenderThread), GPU after the swap.     |         no         |
 | `renders`      | Renders per instrumented component in the step.                                                                                                  |        yes         |
 | `longTasks`    | Long tasks React Native reported in the step, when it reports them.                                                                              |        yes         |
 | `launch`       | `am start -W`: `TotalTime`, `WaitTime`, launch state. A perf build adds React Native's startup timings.                                          |         no         |
@@ -267,6 +281,20 @@ A new scenario goes in `SCENARIOS` (`scripts/perf/scenarios.ts`). Then make the 
 
 ## Attributing a stall
 
+`summary` prints a second table, where the kept frames' time went, from gfxinfo's framestats
+timestamps (the FrameInfo that `FrameMetrics` also reports, so no in-app meter is needed):
+
+| Part                | From → to                                | Holds                                                 |
+| ------------------- | ---------------------------------------- | ----------------------------------------------------- |
+| Pre-draw and layout | `PerformTraversalsStart` → `DrawStart`   | measure, layout, pre-draw listeners (glass recording) |
+| Draw                | `DrawStart` → `SyncQueued`               | the UI thread recording display lists                 |
+| Sync                | `SyncStart` → `IssueDrawCommandsStart`   | the RenderThread syncing the tree, preparing layers   |
+| Issue               | `IssueDrawCommandsStart` → `SwapBuffers` | the RenderThread drawing, offscreen layers (blur) too |
+| GPU after swap      | `SwapBuffers` → `GpuCompleted`           | GPU work still running once the RenderThread was done |
+
+Summaries pool each part's mean over every kept frame and report the median step's p90; `compare`
+lines up both. Parts come from the last 120 frames of each window, like `firstFrameMs`.
+
 `run --perfetto` records one trace per scenario: scheduling, CPU frequency, atrace for the app and
 the framework (input, view, gfx, am, wm, binder), SurfaceFlinger's frame timeline, process memory
 and Wave's logcat lines (`scripts/perf/perfetto.pbtx`). Open the trace at https://ui.perfetto.dev.
@@ -299,6 +327,8 @@ Things only a phone can confirm, to check on the first device run:
 - `touchAt` is set on each step. If not, the root view's `onTouchStart` isn't seeing touches, and
   every step waits out its flush timeout.
 - gfxinfo's `framestats` columns and the `dumpsys` shapes match the parsers on One UI.
+- A fling (`input swipe`) scrolls the list and its touch reaches `onTouchStart` (`touchAt` set);
+  `--glass` shows the asked probe in the run's `Glass:` line.
 - `uiautomator dump` finds each target. Labels: the tab labels, `Settings`, `Back`, `Albums`,
   `Songs`, `Artists`, the fixture's artist, `Developer`, `Now playing: …`, `Close Now Playing`,
   `Queue`, `Next track`, `Import`.
