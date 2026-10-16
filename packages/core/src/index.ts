@@ -219,12 +219,23 @@ export type { DetailScreen } from "./navigation.ts";
 export { planAlert } from "./alert.ts";
 export type { AlertButton, AlertChoice, AlertPlan, AlertSpec } from "./alert.ts";
 export { DEFAULT_THEME, NIGHT_SLATE, TONES, themeContrastIssues } from "./theme.ts";
-export { withOpacity } from "./colour.ts";
+export { hexToHsv, hsvToHex, parseHexColour, withOpacity } from "./colour.ts";
+export type { Hsv } from "./colour.ts";
+export {
+  colourPickerLayout,
+  colourPickerMarkers,
+  colourPickerTarget,
+  pickColour,
+} from "./colourPicker.ts";
+export type { ColourPickerLayout, ColourPickerTarget } from "./colourPicker.ts";
 export { overlayDivider } from "./overlayDivider.ts";
 export type { ContrastIssue, Theme, ThemeColors } from "./theme.ts";
 export {
+  CUSTOM_INK,
   DEFAULT_THEME_CHOICE,
   THEME_SWATCHES,
+  chooseCustomInk,
+  customInkPreview,
   isDefaultThemeChoice,
   readThemeChoice,
   themeFor,
@@ -232,9 +243,13 @@ export {
 } from "./themeChoice.ts";
 export type {
   BackgroundSwatch,
+  CustomInkPreview,
+  CustomSwatchOption,
+  InkGroup,
   InkSwatch,
   Scheme,
   ThemeChoice,
+  ThemeGroup,
   ThemeSwatchOption,
   ThemeSwatchRow,
 } from "./themeChoice.ts";
