@@ -55,11 +55,14 @@ describe("glassLayers", () => {
 
 describe("readGlassProbe", () => {
   test("reads every probe by name", () => {
-    assert.deepEqual(
-      ["live", "coalesced", "blur", "record", "off"].map(readGlassProbe),
-      ["live", "coalesced", "blur", "record", "off"],
-    );
-    assert.deepEqual([...GLASS_PROBES].sort(), ["blur", "coalesced", "live", "off", "record"]);
+    assert.deepEqual(["live", "coalesced", "blur", "record", "off"].map(readGlassProbe), [
+      "live",
+      "coalesced",
+      "blur",
+      "record",
+      "off",
+    ]);
+    assert.deepEqual(GLASS_PROBES.toSorted(), ["blur", "coalesced", "live", "off", "record"]);
   });
 
   test("no probe or an unknown one is null, so the caller falls back to the shipped glass", () => {

@@ -84,22 +84,21 @@ describe("comparability", () => {
   });
 });
 
-describe("comparability of the glass", () => {
-  const glass = (probe: string, blur = 24): RunRecord => ({
-    ...RUN,
-    app: {
-      "glass.probe": probe,
-      "glass.blur": blur,
-      "glass.refraction": 12,
-      "glass.tint": 72,
-      "glass.rim": true,
-    },
-  });
+/** A perf build's run that drew its glass with [probe] and a blur of [blur]. */
+const glass = (probe: string, blur = 24): RunRecord => ({
+  ...RUN,
+  app: {
+    "glass.probe": probe,
+    "glass.blur": blur,
+    "glass.refraction": 12,
+    "glass.tint": 72,
+    "glass.rim": true,
+  },
+});
 
+describe("comparability of the glass", () => {
   it("says which glass probe each side drew, so a probe comparison reads as one", () => {
-    assert.deepEqual(comparability(glass("live"), glass("off")), [
-      "Glass probe: live, then off.",
-    ]);
+    assert.deepEqual(comparability(glass("live"), glass("off")), ["Glass probe: live, then off."]);
   });
 
   it("warns when the owner's glass settings differ between the runs", () => {

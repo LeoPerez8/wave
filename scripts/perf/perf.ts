@@ -32,13 +32,7 @@ import {
 } from "./metrics.ts";
 import { comparability, readResults, type Results } from "./results.ts";
 import { runPerf, type Device } from "./runner.ts";
-import {
-  ALL_SCENARIOS,
-  GLASS_SCENARIOS,
-  SCENARIOS,
-  VARIANTS,
-  type Variant,
-} from "./scenarios.ts";
+import { ALL_SCENARIOS, GLASS_SCENARIOS, SCENARIOS, VARIANTS, type Variant } from "./scenarios.ts";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 const root = join(here, "..", "..");
@@ -222,11 +216,12 @@ const commands: Record<string, () => Promise<void>> = {
 
   run: async () => {
     const scenarios =
-      values.scenario === "all"
-        ? ALL_SCENARIOS
-        : values.scenario === "glass"
-          ? GLASS_SCENARIOS
-          : values.scenario.split(",");
+      // `all` and `glass` name their groups and mix with single scenarios: `glass,tab-switch`.
+      values.scenario
+        .split(",")
+        .flatMap((name) =>
+          name === "all" ? ALL_SCENARIOS : name === "glass" ? GLASS_SCENARIOS : [name],
+        );
     const glass = values.glass === undefined ? null : readGlassProbe(values.glass);
     if (values.glass !== undefined && glass === null)
       fail(`No glass probe named ${values.glass}. Probes: ${GLASS_PROBES.join(", ")}.`);

@@ -308,31 +308,31 @@ export class FakeDevice implements Device {
     for (const ms of sorted)
       histogram.set(Math.round(ms), (histogram.get(Math.round(ms)) ?? 0) + 1);
     const rows = kept.map((frame) => {
-      const at = (ms: number): number => ns(frame.start + ms);
+      const after = (ms: number): number => ns(frame.start + ms);
       // Pre-draw and layout 0.5 ms, draw 1 ms, sync 0.4 ms, then the RenderThread draws until
       // 1 ms before the frame completes, and the GPU finishes with it.
       return [
         0,
         1,
-        at(0),
-        at(0),
+        after(0),
+        after(0),
         0,
-        at(0.5),
-        at(0.5),
-        at(0.5),
-        at(1),
-        at(2 * INTERVAL),
+        after(0.5),
+        after(0.5),
+        after(0.5),
+        after(1),
+        after(2 * INTERVAL),
         ns(INTERVAL),
-        at(0),
-        at(2),
-        at(2.1),
-        at(2.5),
-        at(frame.ms - 1),
-        at(frame.ms),
+        after(0),
+        after(2),
+        after(2.1),
+        after(2.5),
+        after(frame.ms - 1),
+        after(frame.ms),
         0,
         0,
-        at(frame.ms),
-        at(frame.ms),
+        after(frame.ms),
+        after(frame.ms),
         0,
         0,
         "",

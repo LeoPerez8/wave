@@ -26,7 +26,8 @@ export const GLASS_PROBE_EXTRA = "wave.perf.glass";
 /** What each probe keeps, for the runner's help. */
 export const GLASS_PROBE_SUMMARY: Readonly<Record<GlassProbe, string>> = {
   live: "the glass as shipped: backdrop recorded every frame, blur, refraction",
-  coalesced: "looks like live; one shared backdrop recording, redone only when the backdrop changed",
+  coalesced:
+    "looks like live; one shared backdrop recording, redone only when the backdrop changed",
   blur: "backdrop and blur, no refraction",
   record: "backdrop drawn unblurred, no blur or refraction",
   off: "tint and rim only, no backdrop: the screen's own cost",

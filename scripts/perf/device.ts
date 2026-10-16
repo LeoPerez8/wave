@@ -259,7 +259,9 @@ export const parseWmSize = (text: string): { width: number; height: number } | n
 
 /** What the runner taps, found in a `uiautomator dump`. */
 export type Target =
-  { readonly desc: string } | { readonly descPrefix: string } | { readonly text: string };
+  | { readonly desc: string }
+  | { readonly descPrefix: string }
+  | { readonly text: string };
 
 const decode = (value: string): string =>
   value

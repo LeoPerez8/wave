@@ -278,7 +278,10 @@ describe("summarize, frame parts", () => {
       summarize([record("idle-home", "idle", null, {}, [split(0, 2, 5), split(10, 2, 5)])]),
     );
     assert.match(table, /^\| Scenario step \| Frames \| Pre-draw and layout ms \|/m);
-    assert.match(table, /^\| idle-home\/idle\/idle \| 2 \| 2 \/ 2 \| 1 \/ 1 \| 0\.5 \/ 0\.5 \| 5 \/ 5 \| 1 \/ 1 \|$/m);
+    assert.match(
+      table,
+      /^\| idle-home\/idle\/idle \| 2 \| 2 \/ 2 \| 1 \/ 1 \| 0\.5 \/ 0\.5 \| 5 \/ 5 \| 1 \/ 1 \|$/m,
+    );
   });
 
   it("compares each part's mean and 90th percentile", () => {
