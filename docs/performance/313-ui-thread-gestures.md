@@ -34,7 +34,8 @@ Builds:
 
 - **Before**: commit d2997e2. It has the runner changes and the counters on the old gestures, and
   nothing else of this ticket.
-- **After**: the branch head.
+- **After**: commit f5a44e5, this ticket's change on the same base. The branch head also merges
+  other #301 tickets (#303, #311, #314), which would muddle the comparison.
 
 ```sh
 node scripts/perf/perf.ts run --scenario scrub,queue-drag --variant idle,import --label 313-before
