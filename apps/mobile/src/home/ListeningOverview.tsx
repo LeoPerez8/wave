@@ -6,7 +6,7 @@ import { TotalsLine } from "@/catalog/TotalsLine";
 import { useListeningOverview } from "@/library/hooks";
 
 /**
- * Home's last section: the library's songs, albums and artists, then all-time
+ * Home's Listening overview (last by default): the library's songs, albums and artists, then all-time
  * listening (minutes listened, songs listened, plays), as Core sums them up.
  */
 export function ListeningOverview() {
