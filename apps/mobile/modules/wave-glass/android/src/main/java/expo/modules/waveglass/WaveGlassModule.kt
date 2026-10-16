@@ -29,6 +29,12 @@ class WaveGlassModule : Module() {
     Function("startFrameStats") { startFrameStats() }
     Function("stopFrameStats") { stopFrameStats() }
 
+    // The glass probe the release runner launched Wave with (`am start --es`, issue #316).
+    // Only a perf build's JS asks; null without a probe or before the activity is known.
+    Function("perfGlassProbe") {
+      appContext.currentActivity?.intent?.getStringExtra(GLASS_PROBE_EXTRA)
+    }
+
     OnDestroy { stopFrameStats() }
 
     View(WaveGlassView::class) {
@@ -40,6 +46,7 @@ class WaveGlassModule : Module() {
         view.tintColor = color?.toArgb() ?: Color.TRANSPARENT
       }
       Prop("rim") { view: WaveGlassView, enabled: Boolean -> view.rimEnabled = enabled }
+      Prop("coalesce") { view: WaveGlassView, enabled: Boolean -> view.coalesce = enabled }
     }
 
     View(WaveUnderlineView::class) {
@@ -104,5 +111,10 @@ class WaveGlassModule : Module() {
     metricsThread = null
     this.window = null
     this.listener = null
+  }
+
+  private companion object {
+    /** Core's `GLASS_PROBE_EXTRA`. */
+    const val GLASS_PROBE_EXTRA = "wave.perf.glass"
   }
 }

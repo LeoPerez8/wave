@@ -21,13 +21,15 @@ type WaveGlassEvents = { onFrameStats: (stats: FrameStats) => void };
 declare class WaveGlassModule extends NativeModule<WaveGlassEvents> {
   startFrameStats(): void;
   stopFrameStats(): void;
+  /** The launch intent's glass probe (Core `GLASS_PROBE_EXTRA`); null without one. Perf builds only. */
+  perfGlassProbe(): string | null;
 }
 
 export const WaveGlass = requireNativeModule<WaveGlassModule>("WaveGlass");
 
 export interface NativeGlassViewProps extends ViewProps {
-  /** `nativeID` of the view whose content shows through the glass. */
-  readonly backdropNativeId: string;
+  /** `nativeID` of the view whose content shows through the glass; null draws the tint and rim alone. */
+  readonly backdropNativeId: string | null;
   /** Gaussian blur radius, in dp. */
   readonly blurRadius: number;
   /** Edge refraction displacement in dp; 0 turns the AGSL shader off (blur + tint + rim fallback). */
@@ -35,6 +37,12 @@ export interface NativeGlassViewProps extends ViewProps {
   readonly cornerRadius: number;
   readonly tintColor: ColorValue;
   readonly rim: boolean;
+  /**
+   * Share one backdrop recording with the other glass views over the same
+   * backdrop, re-recorded only when the backdrop changed (the glass probe's
+   * `coalesced`, #316). Off by default: unmeasured on a phone yet.
+   */
+  readonly coalesce?: boolean;
 }
 
 export const NativeGlassView: ComponentType<NativeGlassViewProps> =
