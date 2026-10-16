@@ -121,8 +121,13 @@ launch, the share and the import's idle window have no touch.
 | `push-empty`       | Settings › Developer, one row: the empty-screen control (`push`, `pop`)             | `route`                   |         10 |
 | `now-playing`      | mini player (`open`), Close Now Playing (`close`)                                   | `nowPlaying.shown/hidden` |         10 |
 | `queue`            | Queue in Now Playing (`open`), Queue again (`close`)                                | `visible` queue           |         10 |
+| `skip`             | the mini player's Next track (`next`)                                               | `queue.synced`            |         10 |
 | `search-first-tap` | the first Search tap after a fresh launch (`first-tap`)                             | `keyboard.show`           |          5 |
 | `import`           | share the link (`card`), tap Import (`start`), 10 s of the import (`during-import`) | `import.running`          |          1 |
+
+`skip` measures how long a skip takes to reach the player, so it depends on the queue's length:
+load the queue under test before the run (a short album, or the whole Library as Songs) and leave
+it paused. Each iteration moves one entry on, so start far enough from the end.
 
 `push-empty` is the control: navigation with next to nothing to render. If it's as slow as
 `push-settings`, the cost is in navigation itself, not in what the screen shows.
@@ -242,6 +247,8 @@ ticket needs evidence, and give a new response mark a scenario step's `expect` i
 - `nowPlaying.shown`, `nowPlaying.hidden`;
 - `visible` "queue" (Up Next mounted);
 - `import.running` (songs in the import), `import.idle`;
+- `queue.synced` (the plan's step types and the queue's length, e.g. `seek 4210`), each time the
+  player took a queue change;
 - touches with their native timestamp, from the root view's `onTouchStart`.
 
 Render counts are in RootLayout, TabsLayout, LibraryLayout, TabBar, MiniPlayer, NowPlayingSheet,
@@ -286,7 +293,7 @@ Things only a phone can confirm, to check on the first device run:
   every step waits out its flush timeout.
 - gfxinfo's `framestats` columns and the `dumpsys` shapes match the parsers on One UI.
 - `uiautomator dump` finds each target. Labels: the tab labels, `Settings`, `Back`, `Albums`,
-  `Songs`, `Developer`, `Now playing: …`, `Close Now Playing`, `Queue`, `Import`.
+  `Songs`, `Developer`, `Now playing: …`, `Close Now Playing`, `Queue`, `Next track`, `Import`.
 
 ## A ticket's performance doc
 

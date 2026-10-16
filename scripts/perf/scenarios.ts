@@ -170,6 +170,20 @@ export const SCENARIOS: readonly Scenario[] = [
     warmup: 1,
   },
   {
+    name: "skip",
+    summary:
+      "The mini player's Next track, until the player holds the next entry (#314). Load the queue length under test first.",
+    steps: () => [
+      {
+        measure: "next",
+        action: { kind: "tap", target: { desc: "Next track" } },
+        expect: { mark: "queue.synced" },
+      },
+    ],
+    iterations: 10,
+    warmup: 1,
+  },
+  {
     name: "search-first-tap",
     summary: "The first Search tap after a launch, until the keyboard is up.",
     coldEachIteration: true,

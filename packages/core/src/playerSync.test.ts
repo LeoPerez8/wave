@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { applyPlayerSync, planPlayerSync } from "./index.ts";
+import { applyPlayerSync, keysToLoad, planPlayerSync } from "./index.ts";
 import type { PlayerList, SyncStep } from "./index.ts";
 
 const list = (keys: string, currentKey: string | null = null): PlayerList => ({
@@ -48,10 +48,15 @@ describe("planPlayerSync", () => {
     assert.deepEqual(planPlayerSync(list("1 2 3", "2"), queue("1 2 3", 1)), []);
   });
 
-  test("seeks when only the current entry changed", () => {
+  test("seeks when only the current entry changed, saying where the player holds it", () => {
     assert.deepEqual(planPlayerSync(list("1 2 3", "1"), queue("1 2 3", 2)), [
-      { type: "seek", key: "3" },
+      { type: "seek", key: "3", index: 2 },
     ]);
+  });
+
+  test("seeks to where the entry is loaded before the edits that follow move it", () => {
+    const steps = planPlayerSync(list("1 2 3 4", "1"), queue("2 3 4 1", 2));
+    assert.deepEqual(steps[0], { type: "seek", key: "4", index: 3 });
   });
 
   test("inserts lined-up entries without touching the playing item", () => {
@@ -87,5 +92,34 @@ describe("planPlayerSync", () => {
     const target = [...keys.slice(0, 5000), "10001", ...keys.slice(5000)];
     const steps = planPlayerSync(player, { keys: target, index: 4999 });
     assert.deepEqual(steps, [{ type: "edit", at: 5000, removeCount: 0, insertKeys: ["10001"] }]);
+  });
+});
+
+describe("keysToLoad", () => {
+  test("is empty for a skip, without looking through the player's list", () => {
+    const player = {
+      get keys(): readonly string[] {
+        throw new Error("read the whole list");
+      },
+      currentKey: "1",
+    };
+    assert.deepEqual(keysToLoad(player, [{ type: "seek", key: "3", index: 2 }]), []);
+    assert.deepEqual(keysToLoad(player, [{ type: "clear" }]), []);
+  });
+
+  test("names only the inserted keys the player doesn't hold yet", () => {
+    const player = list("1 2 3 4", "1");
+    const steps = planPlayerSync(player, queue("2 9 3 4 1 8", 4));
+    assert.deepEqual(keysToLoad(player, steps).toSorted(), ["8", "9"]);
+  });
+
+  test("names the new keys of a replaced list", () => {
+    const player = list("1 2", "1");
+    assert.deepEqual(keysToLoad(player, planPlayerSync(player, queue("5 2 6", 0))), ["5", "6"]);
+  });
+
+  test("is empty for an edit that only removes", () => {
+    const player = list("1 2 3", "2");
+    assert.deepEqual(keysToLoad(player, planPlayerSync(player, queue("2", 0))), []);
   });
 });
