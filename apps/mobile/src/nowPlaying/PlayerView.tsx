@@ -1,7 +1,7 @@
 import { IconMusic, IconStar, IconStarFilled } from "@tabler/icons-react-native";
 import { artistLink, parseTrackId } from "@wave/core";
 import { Image } from "expo-image";
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Text, View } from "react-native";
 import Animated, {
   useAnimatedStyle,
@@ -44,10 +44,20 @@ function NowPlayingArtwork({ uri, playing }: { uri: string | null; playing: bool
   const fill = useThemeColor("fill");
   const tertiary = useThemeColor("tertiary");
   const scale = useSharedValue(playing ? 1 : PAUSED_SCALE);
+  // Whether the artwork has been in sight since it last came back: a play or
+  // pause while the player was hidden doesn't spring once it shows again.
+  const inSight = useRef(false);
+  useLayoutEffect(
+    () => () => {
+      inSight.current = false;
+    },
+    [],
+  );
 
   useEffect(() => {
     const to = playing ? 1 : PAUSED_SCALE;
-    scale.set(reduceMotion ? to : withSpring(to, SPRING));
+    scale.set(reduceMotion || !inSight.current ? to : withSpring(to, SPRING));
+    inSight.current = true;
   }, [playing, reduceMotion, scale]);
 
   const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.get() }] }));
@@ -58,6 +68,8 @@ function NowPlayingArtwork({ uri, playing }: { uri: string | null; playing: bool
       className="flex-1 items-center justify-center"
       onLayout={(event) => {
         const { width, height } = event.nativeEvent.layout;
+        // Hidden behind the Queue or Lyrics, the view may be laid out empty: keep the last size.
+        if (width === 0 || height === 0) return;
         lastBox = { width, height };
         setBox(lastBox);
       }}

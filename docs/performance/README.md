@@ -130,29 +130,31 @@ launch, the share, the import's idle window and typed keys have no touch. A typi
 from the app's mark for the first key instead (its `from` mark), so its latencies start when
 JavaScript saw that key, not when it was pressed.
 
-| Scenario           | Steps (measure)                                                                              | Response mark             | Iterations |
-| ------------------ | -------------------------------------------------------------------------------------------- | ------------------------- | ---------: |
-| `startup`          | cold launch (`cold`)                                                                         | (am start -W)             |          5 |
-| `warm-start`       | Home, then Wave's launcher intent with its process alive (`warm`)                            | (am start -W)             |          5 |
-| `tab-first`        | after a fresh launch, the first visit to each of `tabs` but Home (`first`)                   | `route`                   |          5 |
-| `tab-switch`       | ten tab taps cycling through `tabs` (`tab`): warm visits                                     | `route`                   |          3 |
-| `rapid-tabs`       | ten tab taps back to back, measured from the last (`burst`)                                  | `tab.settled` (last tab)  |          5 |
-| `push-settings`    | Home › Settings (`push`), Back (`pop`)                                                       | `route`                   |         10 |
-| `push-library`     | Library › Albums (`push`), Back (`pop`)                                                      | `route`                   |         10 |
-| `push-tracklist`   | Library › Songs, the whole Library as a Track list, to its first rows (`push`), Back (`pop`) | `songs.rows`, `route`     |         10 |
-| `push-artist`      | Library › Artists › the fixture's artist, to its stats block (`push`), Back (`pop`)          | `artist.stats`, `route`   |         10 |
-| `push-empty`       | Settings › Developer, one row: the empty-screen control (`push`, `pop`)                      | `route`                   |         10 |
-| `now-playing`      | mini player (`open`), Close Now Playing (`close`)                                            | `nowPlaying.shown/hidden` |         10 |
-| `queue`            | Queue in Now Playing (`open`), Queue again (`close`)                                         | `visible` queue           |         10 |
-| `skip`             | the mini player's Next track (`next`)                                                        | `queue.synced`            |         10 |
-| `scrub`            | Now Playing's scrubber dragged 240 dp forward (`forward`), then back (`back`)                | (none)                    |         10 |
-| `queue-drag`       | The first Up Next row dragged three rows down by its handle (`down`), then up (`up`)         | (none)                    |         10 |
-| `search-first-tap` | the first Search tap after a fresh launch (`first-tap`)                                      | `keyboard.show`           |          5 |
-| `search-typing`    | after a Search tap, types `love` (`type`), from `search.typed`; Clear search after           | `search.results` love     |         10 |
-| `import`           | share the link (`card`), tap Import (`start`), 10 s of the import (`during-import`)          | `import.running`          |          1 |
-| `scroll-home`      | glass: a fling up (`fling-up`) and back down (`fling-down`) on Home                          | -                         |         10 |
-| `scroll-songs`     | glass: the same on Library › Songs, under the mini player                                    | -                         |         10 |
-| `idle-home`        | glass: 5 s of Home untouched (`idle`); any frame is idle rendering                           | -                         |          5 |
+| Scenario            | Steps (measure)                                                                              | Response mark             | Iterations |
+| ------------------- | -------------------------------------------------------------------------------------------- | ------------------------- | ---------: |
+| `startup`           | cold launch (`cold`)                                                                         | (am start -W)             |          5 |
+| `warm-start`        | Home, then Wave's launcher intent with its process alive (`warm`)                            | (am start -W)             |          5 |
+| `tab-first`         | after a fresh launch, the first visit to each of `tabs` but Home (`first`)                   | `route`                   |          5 |
+| `tab-switch`        | ten tab taps cycling through `tabs` (`tab`): warm visits                                     | `route`                   |          3 |
+| `rapid-tabs`        | ten tab taps back to back, measured from the last (`burst`)                                  | `tab.settled` (last tab)  |          5 |
+| `push-settings`     | Home › Settings (`push`), Back (`pop`)                                                       | `route`                   |         10 |
+| `push-library`      | Library › Albums (`push`), Back (`pop`)                                                      | `route`                   |         10 |
+| `push-tracklist`    | Library › Songs, the whole Library as a Track list, to its first rows (`push`), Back (`pop`) | `songs.rows`, `route`     |         10 |
+| `push-artist`       | Library › Artists › the fixture's artist, to its stats block (`push`), Back (`pop`)          | `artist.stats`, `route`   |         10 |
+| `push-empty`        | Settings › Developer, one row: the empty-screen control (`push`, `pop`)                      | `route`                   |         10 |
+| `now-playing`       | mini player (`open`), Close Now Playing (`close`)                                            | `nowPlaying.shown/hidden` |         10 |
+| `now-playing-first` | the first mini player tap after a fresh launch (`open`)                                      | `nowPlaying.shown`        |          5 |
+| `queue`             | Queue in Now Playing (`open`), Queue again (`close`)                                         | `visible` queue           |         10 |
+| `queue-first`       | the first Queue tap after a fresh launch, Now Playing already open (`open`)                  | `visible` queue           |          5 |
+| `skip`              | the mini player's Next track (`next`)                                                        | `queue.synced`            |         10 |
+| `scrub`             | Now Playing's scrubber dragged 240 dp forward (`forward`), then back (`back`)                | (none)                    |         10 |
+| `queue-drag`        | The first Up Next row dragged three rows down by its handle (`down`), then up (`up`)         | (none)                    |         10 |
+| `search-first-tap`  | the first Search tap after a fresh launch (`first-tap`)                                      | `keyboard.show`           |          5 |
+| `search-typing`     | after a Search tap, types `love` (`type`), from `search.typed`; Clear search after           | `search.results` love     |         10 |
+| `import`            | share the link (`card`), tap Import (`start`), 10 s of the import (`during-import`)          | `import.running`          |          1 |
+| `scroll-home`       | glass: a fling up (`fling-up`) and back down (`fling-down`) on Home                          | -                         |         10 |
+| `scroll-songs`      | glass: the same on Library › Songs, under the mini player                                    | -                         |         10 |
+| `idle-home`         | glass: 5 s of Home untouched (`idle`); any frame is idle rendering                           | -                         |          5 |
 
 The glass scenarios (`--scenario glass`) aren't part of `all`. A fling is `input swipe` from 70%
 to 30% of the screen's height (or back) in 120 ms, at the screen's centre, clear of the chrome. A
@@ -264,7 +266,9 @@ measured. Records, in order:
 - `step`, one per measured step: `scenario`, `variant`, `measure`, `iteration`, `index`, the
   metrics above, `touchAt`, `expectMissing`, `framesCovered`, `finalRoute`, `flushComplete`, and
   `launch` and `appStartup` for a cold launch, `importProgress` while an import runs, and
-  `libraryQueries` on a perf build (the shared Library queries' counters since launch, below).
+  `libraryQueries` on a perf build (the shared Library queries' counters since launch, below),
+  and `listeners` (subscribers to the playback stores and the sheet at the step's flush: `playback`,
+  `queue`, `queueTracks`, `nowPlaying`).
 - `memory`, one per scenario: `scenario`, `variant` and the `dumpsys meminfo` fields in KB.
 - `trace`, one per scenario with `--perfetto`: the local `.pftrace` path.
 - `error`: a scenario that couldn't go on (target not found, Wave not in front, no import link) and
@@ -299,6 +303,11 @@ ticket needs evidence, and give a new response mark a scenario step's `expect` i
   query), on the frame after the results for what was typed are on screen;
 - `search.index` (entries), each time Search's index is put together;
 - `nowPlaying.shown`, `nowPlaying.hidden`;
+- the sheet's phases (#305): `nowPlaying.step` (the event: `tap`, `dragBegin`, `release`, `close`,
+  `closed`), `nowPlaying.spring` (handed to the UI thread: `rise`, `open`, `closed`),
+  `nowPlaying.notified` (its phase listeners done) and `nowPlaying.motion` (the sheet left its
+  resting place on the UI thread; marked when JavaScript hears of it, with how much later that was
+  in ms as the detail). The `now-playing` steps time them as `phasesMs`;
 - `visible` "queue" (Up Next mounted);
 - `import.running` (songs in the import), `import.idle`;
 - `tab.commit` (`<tab> first|warm`), in the layout effect of the commit that shows a tab: React

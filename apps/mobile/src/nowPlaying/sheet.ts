@@ -5,6 +5,7 @@ import { makeMutable, withSpring } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 
 import { makeExternalStore } from "@/lib/externalStore";
+import { perfMark } from "@/perf/perf";
 
 /**
  * Now Playing is a sheet that stays mounted over the app (src/nowPlaying/
@@ -47,6 +48,9 @@ export const onNowPlayingHidden = (listener: () => void): (() => void) => {
   return () => hiddenListeners.delete(listener);
 };
 
+/** How many listeners follow the sheet's phase and its hiding (a perf build reports it). */
+export const nowPlayingListenerCount = (): number => phase.listenerCount() + hiddenListeners.size;
+
 const runAfterClose = (): void => {
   const then = afterClose;
   afterClose = null;
@@ -55,9 +59,15 @@ const runAfterClose = (): void => {
 
 const springDone = (): void => step({ type: "closed" });
 
+/**
+ * Takes the sheet through [event]. The spring is handed to the UI thread
+ * first, then the phase's listeners hear of it (they re-render the sheet and
+ * the chrome, pause the screens under it): however long they take, the sheet
+ * is already moving.
+ */
 const step = (event: SheetEvent, velocity = 0): void => {
   const next = stepNowPlayingSheet(phase.get(), event);
-  phase.set(next.phase);
+  perfMark("nowPlaying.step", event.type);
   switch (next.spring) {
     case "rise":
       sheetOffset.set(sheetHeight.get());
@@ -76,6 +86,9 @@ const step = (event: SheetEvent, velocity = 0): void => {
     case null:
       break;
   }
+  if (next.spring !== null) perfMark("nowPlaying.spring", next.spring);
+  phase.set(next.phase);
+  perfMark("nowPlaying.notified");
   if (next.hidden) {
     for (const listener of hiddenListeners) listener();
     runAfterClose();

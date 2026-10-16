@@ -86,8 +86,10 @@ describe("runPerf on the simulated phone", () => {
       "push-empty/idle/pop",
       "now-playing/idle/open",
       "now-playing/idle/close",
+      "now-playing-first/idle/open",
       "queue/idle/open",
       "queue/idle/close",
+      "queue-first/idle/open",
       "skip/idle/next",
       "scrub/idle/forward",
       "scrub/idle/back",
@@ -109,6 +111,13 @@ describe("runPerf on the simulated phone", () => {
       assert.ok(step.frames.total > 0);
     }
     assert.equal(memory.length, ALL_SCENARIOS.length);
+    for (const step of steps.filter((measured) => measured.scenario.startsWith("now-playing"))) {
+      const phases = step.phasesMs ?? {};
+      for (const [mark, ms] of Object.entries(phases)) {
+        assert.ok((ms ?? -1) > 0, `${step.scenario} ${step.measure} has no ${mark}`);
+      }
+      assert.equal(Object.keys(phases).length, 4);
+    }
   });
 
   it("times a tab's commit and layout apart from its frames, on first and warm visits", async () => {

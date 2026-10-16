@@ -1,12 +1,51 @@
 import { usePathname } from "expo-router";
 import { useEffect } from "react";
 import { Keyboard } from "react-native";
+import { useAnimatedReaction } from "react-native-reanimated";
+import { scheduleOnRN } from "react-native-worklets";
 
 import { LibraryStore } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
-import { onNowPlayingShownChange } from "@/nowPlaying/sheet";
+import {
+  nowPlayingListenerCount,
+  onNowPlayingShownChange,
+  sheetHeight,
+  sheetOffset,
+} from "@/nowPlaying/sheet";
+import { playbackState } from "@/playback/Player";
+import { queueState } from "@/playback/Queue";
+import { queueTracks } from "@/playback/queueTracks";
 
 import { perfMark, perfTiming, registerPerfMeta, startPerfFlushes } from "./perf";
+
+/** Subscribers to the stores Now Playing and its Queue follow, for each flush's metadata. */
+const listenerCounts = () => ({
+  playback: playbackState.listenerCount(),
+  queue: queueState.listenerCount(),
+  queueTracks: queueTracks.listenerCount(),
+  nowPlaying: nowPlayingListenerCount(),
+});
+
+/**
+ * Marks `nowPlaying.motion` when the sheet leaves a resting place (open or
+ * gone). The UI thread sees the move; the mark lands when JavaScript gets
+ * to it, and its detail says how much later that was, in ms (`Date.now`
+ * on both threads).
+ */
+const markMotion = (movedAt: number): void =>
+  perfMark("nowPlaying.motion", String(Math.max(0, Date.now() - movedAt)));
+
+const useSheetMotionMark = (): void => {
+  useAnimatedReaction(
+    () => sheetOffset.get(),
+    (now, before) => {
+      if (before === null || now === before) return;
+      const leftBottom = before >= sheetHeight.get() - 0.5 && now < before;
+      const leftTop = before <= 0.5 && now > before;
+      if (leftBottom || leftTop) scheduleOnRN(markMotion, Date.now());
+    },
+  );
+};
 
 /** The Library's size, for each flush's metadata. */
 // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
@@ -68,10 +107,13 @@ const observeTimings = (): (() => void) => {
  * What a perf build marks for the whole app, mounted once by the root layout
  * (only in perf builds): each route on the first frame it shows (`route`), the
  * keyboard (`keyboard.show`, `keyboard.hide`), Now Playing (`nowPlaying.shown`,
- * `nowPlaying.hidden`), platform long tasks and event timings, and the Library's
- * size with the first flush. It also starts the flushes.
+ * `nowPlaying.hidden`, `nowPlaying.motion`; `sheet.ts` marks its steps),
+ * platform long tasks and event timings, the Library's size with the first
+ * flush and the playback stores' listener counts with each. It also starts the
+ * flushes.
  */
 export function PerfProbe() {
+  useSheetMotionMark();
   const pathname = usePathname();
   useEffect(() => {
     requestAnimationFrame(() => perfMark("route", pathname));
@@ -83,6 +125,7 @@ export function PerfProbe() {
       async () => ({ ...(await appRuntime.runPromise(measureLibrary)) }),
       true,
     );
+    registerPerfMeta("listeners", listenerCounts);
     const show = Keyboard.addListener("keyboardDidShow", () => perfMark("keyboard.show"));
     const hide = Keyboard.addListener("keyboardDidHide", () => perfMark("keyboard.hide"));
     let shown: boolean | null = null;

@@ -105,6 +105,22 @@ const rest = (aside: SharedValue<Aside>, lifted: SharedValue<string | null>): vo
   lifted.set(null);
 };
 
+/** Drops a live drag on the spot, with no move and no settling: the list went out of sight. */
+const cancelDrag = (
+  session: SharedValue<Session | null>,
+  aside: SharedValue<Aside>,
+  lifted: SharedValue<string | null>,
+  waiting: SharedValue<string | null>,
+  translation: SharedValue<number>,
+): void => {
+  "worklet";
+  waiting.set(null);
+  if (session.get() === null) return;
+  session.set(null);
+  translation.set(0);
+  rest(aside, lifted);
+};
+
 /** The dragged row, for the lifted copy and the rows' looks (a re-render on start and on landing). */
 export type Drag = { readonly key: string };
 
@@ -341,6 +357,17 @@ export function useUpNextDrag({
   useLayoutEffect(() => {
     if (drag !== null && !entries.some((entry) => entry.key === drag.key)) abandon(drag.key);
   }, [drag, entries, abandon]);
+
+  // The Queue went out of sight under a drag (the player view or a closing
+  // sheet took over; hidden, its effects and gestures are torn down): the drag
+  // ends where it began, with no move, and the list shows again at rest.
+  useLayoutEffect(
+    () => () => {
+      scheduleOnUI(cancelDrag, session, aside, lifted, waiting, translation);
+      setDrag(null);
+    },
+    [session, aside, lifted, waiting, translation],
+  );
 
   const trackOffset = useCallback((offset: SharedValue<number>) => {
     const tracked = rows.current;

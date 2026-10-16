@@ -221,6 +221,18 @@ export class FakeDevice implements Device {
     this.framesSinceReset += count;
   }
 
+  /** The sheet's trace for [event]: its step, spring, phase listeners and first motion. */
+  private sheetStep(event: string, spring: string): void {
+    this.advance(4);
+    this.respond("nowPlaying.step", event);
+    this.advance(1);
+    this.respond("nowPlaying.spring", spring);
+    this.advance(2);
+    this.respond("nowPlaying.notified");
+    this.advance(9);
+    this.respond("nowPlaying.motion", "3");
+  }
+
   /** A mark at the simulated clock's time, as the app's `perfMark`. */
   private respond(name: string, detail?: string): void {
     this.recorder?.mark(name, detail);
@@ -288,11 +300,13 @@ export class FakeDevice implements Device {
     else if (label.startsWith("Now playing:")) {
       this.ran(NOW_PLAYING_RULES);
       this.nowPlaying = true;
+      this.sheetStep("tap", "rise");
       this.render(this.clock, 40);
       this.advance(16);
       this.respond("nowPlaying.shown");
     } else if (label === "Close Now Playing") {
       this.nowPlaying = this.queue = false;
+      this.sheetStep("close", "closed");
       this.render(this.clock, 40);
       this.advance(16);
       this.respond("nowPlaying.hidden");
