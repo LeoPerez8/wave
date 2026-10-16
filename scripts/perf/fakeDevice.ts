@@ -45,6 +45,8 @@ export class FakeDevice implements Device {
   private running = false;
   private recorder: PerfRecorder | null = null;
   private routes: string[] = ["/"];
+  /** The tabs visited since the launch: a first visit builds the tab. */
+  private visited = new Set<string>(["Home"]);
   private nowPlaying = false;
   private queue = false;
   private keyboard = false;
@@ -121,6 +123,7 @@ export class FakeDevice implements Device {
   private launch(): string {
     this.running = true;
     this.routes = ["/"];
+    this.visited = new Set(["Home"]);
     this.nowPlaying = this.queue = this.keyboard = this.importCard = false;
     this.frames = [];
     this.framesSinceReset = 0;
@@ -164,10 +167,17 @@ export class FakeDevice implements Device {
     const label = node.desc ?? node.text ?? "";
     const tabRoute = TAB_ROUTES[label];
     if (tabRoute !== undefined && node.desc !== undefined) {
+      const first = !this.visited.has(label);
+      this.visited.add(label);
       this.routes = [tabRoute];
+      this.advance(first ? 60 : 20);
+      this.respond("tab.commit", `${label} ${first ? "first" : "warm"}`);
       this.render(this.clock, 30);
-      this.advance(100);
+      this.advance(10);
+      this.respond("tab.layout", label);
+      this.advance(70);
       this.respond("route", tabRoute);
+      this.respond("tab.settled", label);
       if (label === "Search") {
         this.advance(180);
         this.keyboard = true;

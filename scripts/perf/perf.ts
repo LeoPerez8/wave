@@ -17,7 +17,13 @@ import { parseArgs } from "node:util";
 import { adbDevice, installApk, listDevices } from "./adb.ts";
 import { parsePackage, parseRefreshRate, parseThermalStatus } from "./device.ts";
 import { FakeDevice } from "./fakeDevice.ts";
-import { compareSummaries, formatComparison, formatSummary, summarize } from "./metrics.ts";
+import {
+  compareSummaries,
+  formatComparison,
+  formatPhases,
+  formatSummary,
+  summarize,
+} from "./metrics.ts";
 import { comparability, readResults, type Results } from "./results.ts";
 import { runPerf, type Device } from "./runner.ts";
 import { ALL_SCENARIOS, SCENARIOS, VARIANTS, type Variant } from "./scenarios.ts";
@@ -260,7 +266,10 @@ const commands: Record<string, () => Promise<void>> = {
 
 const printSummary = (results: Results): void => {
   console.log(`${describeRun(results)}\n`);
-  console.log(formatSummary(summarize(results.steps)));
+  const rows = summarize(results.steps);
+  console.log(formatSummary(rows));
+  const phases = formatPhases(rows);
+  if (phases !== "") console.log(`\n${phases}`);
   const launches = results.steps.flatMap((step) =>
     step.launch?.totalTimeMs == null ? [] : [step.launch.totalTimeMs],
   );

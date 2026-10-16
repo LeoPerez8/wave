@@ -329,6 +329,7 @@ export const runPerf = async (
       flush: perf,
       expect: step.expect,
       ...(step.anchor === undefined ? {} : { anchor: step.anchor }),
+      ...(step.phases === undefined ? {} : { phases: step.phases }),
     });
     const meta = perf?.meta ?? {};
     const importRunning = meta["import.running"];

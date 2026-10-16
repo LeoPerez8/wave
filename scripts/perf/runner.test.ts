@@ -69,6 +69,7 @@ describe("runPerf on the simulated phone", () => {
     const keys = summarize(steps).map((row) => row.key);
     assert.deepEqual(keys, [
       "startup/idle/cold",
+      "tab-first/idle/first",
       "tab-switch/idle/tab",
       "rapid-tabs/idle/burst",
       "push-settings/idle/push",
@@ -96,6 +97,22 @@ describe("runPerf on the simulated phone", () => {
       assert.ok(step.frames.total > 0);
     }
     assert.equal(memory.length, ALL_SCENARIOS.length);
+  });
+
+  it("times a tab's commit and layout apart from its frames, on first and warm visits", async () => {
+    const { out } = await runPerf(
+      new FakeDevice(),
+      options("tabs", { scenarios: ["tab-first", "tab-switch", "rapid-tabs"] }),
+    );
+    const { steps } = readResults(readFileSync(out, "utf8"));
+    for (const step of steps.filter((tab) => tab.scenario !== "rapid-tabs")) {
+      assert.ok((step.phasesMs?.["tab.commit"] ?? -1) > 0, `${step.scenario} has no commit`);
+      assert.ok((step.phasesMs?.["tab.layout"] ?? -1) > 0, `${step.scenario} has no layout`);
+    }
+    // A burst counts from its last tap to the tabs settling on the tab it tapped.
+    const bursts = steps.filter((step) => step.scenario === "rapid-tabs");
+    assert.ok(bursts.length > 0);
+    for (const step of bursts) assert.equal(step.expectMissing, false);
   });
 
   it("times cold launches", async () => {
