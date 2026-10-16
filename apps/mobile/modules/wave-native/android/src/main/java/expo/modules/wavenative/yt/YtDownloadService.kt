@@ -80,7 +80,7 @@ class YtDownloadService : Service() {
     wakeLock?.acquire(LOCK_MS)
     val current = downloads.jobs.current()
     // Android drops notifications posted too often; only post what changed.
-    val shown = listOf(current?.get("id"), current?.get("phase"), current?.get("queuePosition"), percent(current), downloads.jobs.pendingCount())
+    val shown = listOf(current?.get("id"), current?.get("phase"), current?.get("queuePosition"), percent(current), downloads.jobs.counts())
     if (shown == lastShown) return
     lastShown = shown
     getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification(current))
@@ -108,9 +108,9 @@ class YtDownloadService : Service() {
     val queued = current?.get("queuePosition") != null || current?.get("phase") in waiting
     builder.setContentTitle(if (saving) "Saving to the Library" else if (queued) "Waiting to download" else "Downloading")
       .setContentText(song?.get("title") as? String ?: "A YT Music song")
-    // An album's download (or several songs asked for) counts down the songs left.
-    val left = downloads.jobs.pendingCount()
-    if (left > 1) builder.setSubText("$left songs left")
+    // Several songs (an album, or songs asked for one after another): how many download now and how many are left.
+    val (running, left) = downloads.jobs.counts()
+    if (running + left > 1) builder.setSubText(listOfNotNull("$running downloading".takeIf { running > 0 }, "$left left".takeIf { left > 0 }).joinToString(" · "))
     val percent = percent(current)
     if (percent != null && !saving && !queued) builder.setProgress(100, percent, false) else builder.setProgress(0, 0, true)
     if (current != null && !saving) {
