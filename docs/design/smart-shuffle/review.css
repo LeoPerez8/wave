@@ -124,6 +124,26 @@ h1 {
   gap: 16px;
   margin-top: 24px;
 }
+.spark-comparison {
+  margin-top: 24px;
+}
+.comparison-note {
+  color: var(--secondary);
+  font-size: 11px;
+  text-align: right;
+}
+.spark-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 14px;
+}
+.spark-button {
+  min-width: 0;
+}
+.spark-button .size-row {
+  margin-top: 0;
+}
 .option {
   min-width: 0;
 }
@@ -336,6 +356,9 @@ footer {
   }
   .option-button {
     padding: 14px 12px 18px;
+  }
+  .spark-options {
+    gap: 12px;
   }
   .option-name {
     font-size: 15px;

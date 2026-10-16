@@ -12,6 +12,8 @@ python -m http.server 4173 --bind 127.0.0.1 --directory docs/design/smart-shuffl
 
 Open <http://127.0.0.1:4173>. Select a drawing to preview the Queue's 20 px control and a page's 24 px action. Each option also appears at 32 px and enlarged. Switch themes and tap the preview controls to compare on and off states. The selection and theme are shareable URL parameters, for example `?variant=3&theme=dark`.
 
+The original spark (0°) and rotated spark (45°) stay side by side above the four directions, including in narrow previews. Click either to see that orientation in the controls and change option 3's SVG download. Its angle is also shareable, for example `?variant=3&theme=dark&rotation=0`.
+
 1. **Quiet brain.** An outline and central division; no arrows or interior marks.
 2. **Guided brain.** A smaller brain with arrows outside its outline.
 3. **Single spark.** Shuffle with a spark replacing one arrowhead, rotated 45 degrees in the owner's first refinement.
