@@ -8,6 +8,8 @@ import {
   THEME_SWATCHES,
   contrastRatio,
   isDefaultThemeChoice,
+  chooseCustomInk,
+  customInkPreview,
   readThemeChoice,
   themeContrastIssues,
   themeFor,
@@ -41,7 +43,7 @@ describe("themeFor", () => {
               primary: primary.id,
               secondary: secondary.id,
             };
-            const theme = themeFor(choice);
+            const theme = themeFor(choose(choice));
             for (const scheme of ["light", "dark"] as const)
               for (const issue of themeContrastIssues(theme[scheme]))
                 failures.push(
@@ -124,8 +126,24 @@ describe("readThemeChoice", () => {
   });
 
   test("reads back a stored choice", () => {
-    const stored = { light: "sage", dark: "black", primary: "violet", secondary: "gold" };
+    const stored = {
+      light: "sage",
+      dark: "black",
+      primary: "violet",
+      secondary: "gold",
+      customPrimary: "#3a7bd5",
+      customSecondary: null,
+    };
     assert.deepEqual(readThemeChoice(JSON.stringify(stored)), stored);
+  });
+
+  test("a choice stored before custom colours existed reads back with none", () => {
+    const stored = { light: "sage", dark: "black", primary: "violet", secondary: "gold" };
+    assert.deepEqual(readThemeChoice(JSON.stringify(stored)), {
+      ...stored,
+      customPrimary: null,
+      customSecondary: null,
+    });
   });
 
   test("unknown swatches and unreadable JSON fall back to the default, group by group", () => {
@@ -187,5 +205,117 @@ describe("isDefaultThemeChoice", () => {
     assert.equal(isDefaultThemeChoice(readThemeChoice(null)), true);
     assert.equal(isDefaultThemeChoice(choose({ secondary: "gold" })), false);
     assert.equal(isDefaultThemeChoice(choose({ dark: "slate" })), false);
+  });
+
+  test("a kept custom colour leaves Reset on, so Reset clears it", () => {
+    assert.equal(isDefaultThemeChoice(choose({ customPrimary: "#2456a8" })), false);
+  });
+});
+
+describe("custom primary and secondary", () => {
+  test("a stored custom colour is read back as lowercase hex and chosen", () => {
+    const stored = JSON.stringify({
+      ...DEFAULT_THEME_CHOICE,
+      primary: "custom",
+      customPrimary: "#3A7BD5",
+    });
+    const choice = readThemeChoice(stored);
+    assert.equal(choice.primary, "custom");
+    assert.equal(choice.customPrimary, "#3a7bd5");
+    assert.equal(choice.customSecondary, null);
+  });
+
+  test("a custom choice without a readable colour falls back to the default preset", () => {
+    for (const customSecondary of [undefined, "orange", "#12345", 42]) {
+      const choice = readThemeChoice(
+        JSON.stringify({ ...DEFAULT_THEME_CHOICE, secondary: "custom", customSecondary }),
+      );
+      assert.equal(choice.secondary, "ember", String(customSecondary));
+      assert.equal(choice.customSecondary, null);
+    }
+  });
+
+  test("a custom colour applies to both schemes, as it is when it reads", () => {
+    const theme = themeFor(choose({ primary: "custom", customPrimary: "#2456a8" }));
+    assert.equal(theme.light.accent, "#2456a8");
+    // Too deep for a black ground: brightened until it reads, as a preset would be.
+    assert.notEqual(theme.dark.accent, "#2456a8");
+    assert.ok(brighter(theme.dark.accent, "#2456a8"));
+  });
+
+  test("a kept custom colour doesn't apply while a preset is chosen", () => {
+    assert.deepEqual(
+      themeFor(choose({ secondary: "gold", customSecondary: "#ff00ff" })),
+      themeFor(choose({ secondary: "gold" })),
+    );
+  });
+
+  test("picking a custom colour keeps it as hex and chooses it", () => {
+    const choice = chooseCustomInk(choose({ primary: "rose" }), "primary", "F0A");
+    assert.deepEqual(choice, choose({ primary: "custom", customPrimary: "#ff00aa" }));
+    assert.equal(chooseCustomInk(choice, "primary", "not a colour"), choice);
+  });
+
+  test("the picker shows the colour that will apply in each mode", () => {
+    // Pale yellow can't read on a light ground, so light mode gets a deepened tone.
+    const { light, dark } = customInkPreview(choose({ dark: "navy" }), "secondary", "#fff3a0");
+    assert.deepEqual(dark, { colour: "#fff3a0", ground: "#0a0f1f", adjusted: false });
+    assert.equal(light.ground, DEFAULT_THEME.light.background);
+    assert.equal(light.adjusted, true);
+    assert.notEqual(light.colour, "#fff3a0");
+    assert.ok(contrastRatio(light.colour, DEFAULT_THEME.light.background) >= 4.5);
+    assert.ok(contrastRatio(light.colour, DEFAULT_THEME.light.surface) >= 4.5);
+  });
+
+  test("Primary and Secondary end with a custom swatch, empty until a colour is picked", () => {
+    const rows = themeSwatchRows(DEFAULT_THEME_CHOICE, "light");
+    assert.deepEqual(
+      rows.map((row) => row.custom),
+      [
+        null,
+        null,
+        ...[1, 2].map(() => ({ picked: null, colour: null, selected: false, mark: null })),
+      ],
+    );
+  });
+
+  test("the custom swatch shows its colour as it applies, marked while chosen", () => {
+    const rows = themeSwatchRows(
+      choose({ secondary: "custom", customSecondary: "#fff3a0", customPrimary: "#2456a8" }),
+      "dark",
+    );
+    const [, , primary, secondary] = rows;
+    assert.equal(secondary?.custom?.colour, "#fff3a0");
+    assert.equal(primary?.custom?.picked, "#2456a8");
+    assert.equal(secondary?.custom?.selected, true);
+    assert.equal(secondary?.custom?.mark, "#000000");
+    assert.deepEqual(
+      secondary?.swatches.filter((s) => s.selected),
+      [],
+    );
+    // Kept but not chosen; brightened for the dark ground like the rest of the row.
+    assert.equal(primary?.custom?.selected, false);
+    assert.ok(primary?.custom?.colour && brighter(primary.custom.colour, "#2456a8"));
+  });
+
+  test("custom colours at the extremes still meet WCAG AA in both schemes", () => {
+    const failures: string[] = [];
+    for (const light of THEME_SWATCHES.light)
+      for (const dark of THEME_SWATCHES.dark)
+        for (const hex of ["#ffffff", "#000000", "#ffff00", "#0000ff", "#808080", "#ff0000"]) {
+          const choice = choose({
+            light: light.id,
+            dark: dark.id,
+            primary: "custom",
+            customPrimary: hex,
+            secondary: "custom",
+            customSecondary: hex,
+          });
+          const theme = themeFor(choice);
+          for (const scheme of ["light", "dark"] as const)
+            for (const issue of themeContrastIssues(theme[scheme]))
+              failures.push(`${scheme} ${light.id}/${dark.id} ${hex}: ${issue.ink} on ${issue.on}`);
+        }
+    assert.deepEqual(failures, []);
   });
 });

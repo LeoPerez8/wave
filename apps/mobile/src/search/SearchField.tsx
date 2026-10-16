@@ -1,10 +1,21 @@
 import { IconSearch, IconX } from "@tabler/icons-react-native";
-import type { ComponentRef, Ref } from "react";
-import { TextInput, View } from "react-native";
+import { type ComponentRef, type Ref, useState } from "react";
+import { StyleSheet, TextInput, View } from "react-native";
 
-import { CELL } from "@/catalog/grid";
+import { CELL, grid } from "@/catalog/grid";
 import { Press } from "@/motion/Press";
 import { useThemeColor } from "@/theme/useThemeColor";
+
+/** The drawn glyphs: Wave's 24dp line icons. */
+const GLYPH = CELL * 3;
+/** The clear button's touch target. */
+const TARGET = CELL * 6;
+/**
+ * How far the clear button's target reaches past the field's trailing edge, so
+ * its glyph sits on the margin as the search glyph does on the other side (as
+ * Back's sits on the margin of a pushed screen).
+ */
+const OVERHANG = (TARGET - GLYPH) / 2;
 
 type Props = {
   ref?: Ref<ComponentRef<typeof TextInput>>;
@@ -12,52 +23,65 @@ type Props = {
   onChange: (text: string) => void;
   /** The keyboard's search key. */
   onSubmit: () => void;
+  /** Focus it on mount (the Design preview's focused state). */
+  autoFocus?: boolean;
 };
 
 /**
- * The search field: a square field-tone well with the search glyph, the query
- * in Body ink, and a clear button once there is something to clear.
+ * The search field, set like the app's other text fields: flat on the ground,
+ * a row tall, over a hairline that turns teal while it has the keyboard. The
+ * search glyph leads in a 32dp cell, the query reads in Body ink, and a clear
+ * button's cell is kept at the end even when there is nothing to clear, so the
+ * query never reflows as it appears.
  */
-export function SearchField({ ref, value, onChange, onSubmit }: Props) {
+export function SearchField({ ref, value, onChange, onSubmit, autoFocus = false }: Props) {
   const secondary = useThemeColor("secondary");
   const accent = useThemeColor("accent");
+  const [focused, setFocused] = useState(false);
   return (
-    <View
-      className="flex-row items-center bg-fill"
-      style={{ height: CELL * 6, paddingLeft: CELL * 1.5, gap: CELL }}
-    >
-      <IconSearch size={20} color={secondary} strokeWidth={1.5} />
-      <TextInput
-        ref={ref}
-        className="flex-1 font-sans text-body text-foreground"
-        style={{ height: CELL * 6, paddingVertical: 0 }}
-        value={value}
-        onChangeText={onChange}
-        onSubmitEditing={onSubmit}
-        placeholder="Songs, albums, artists, genres"
-        placeholderTextColor={secondary}
-        selectionColor={accent}
-        cursorColor={accent}
-        returnKeyType="search"
-        autoCapitalize="none"
-        autoCorrect={false}
-        accessibilityLabel="Search your library"
+    <View>
+      <View className="flex-row items-center" style={{ height: grid.row }}>
+        <View style={{ width: grid.stateCell }}>
+          <IconSearch size={GLYPH} color={secondary} strokeWidth={1.5} />
+        </View>
+        <TextInput
+          ref={ref}
+          className="flex-1 font-sans text-body text-foreground"
+          style={{ height: grid.row, padding: 0 }}
+          value={value}
+          onChangeText={onChange}
+          onSubmitEditing={onSubmit}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          autoFocus={autoFocus}
+          placeholder="Songs, albums, artists, genres"
+          placeholderTextColor={secondary}
+          selectionColor={accent}
+          cursorColor={accent}
+          returnKeyType="search"
+          autoCapitalize="none"
+          autoCorrect={false}
+          accessibilityLabel="Search your library"
+        />
+        <View style={{ width: TARGET, height: TARGET, marginRight: -OVERHANG }}>
+          {value.length > 0 && (
+            <Press
+              accessibilityRole="button"
+              accessibilityLabel="Clear search"
+              onPress={() => onChange("")}
+              haptic="selection"
+              depth={0.1}
+              className="flex-1 items-center justify-center"
+            >
+              <IconX size={GLYPH} color={secondary} strokeWidth={1.5} />
+            </Press>
+          )}
+        </View>
+      </View>
+      <View
+        className={focused ? "bg-accent" : "bg-separator"}
+        style={{ height: StyleSheet.hairlineWidth }}
       />
-      {value.length > 0 ? (
-        <Press
-          accessibilityRole="button"
-          accessibilityLabel="Clear search"
-          onPress={() => onChange("")}
-          haptic="selection"
-          depth={0.1}
-          className="items-center justify-center"
-          style={{ width: CELL * 6, height: CELL * 6 }}
-        >
-          <IconX size={20} color={secondary} strokeWidth={1.5} />
-        </Press>
-      ) : (
-        <View style={{ width: CELL * 0.5 }} />
-      )}
     </View>
   );
 }

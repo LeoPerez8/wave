@@ -309,6 +309,10 @@ A YT Music song's long-press menu is the track menu's card (quiet entries under 
 
 A square cover at the computed tile width, then 12dp, then the caption: artist as a catalog line, the title in Body 500 with two lines always reserved, then the furniture line in Footnote graphite ("1975 · 9 · 41 min", tabular). Covers without art show a field square with a thin music note in pewter.
 
+### Text Field
+
+Set like a row, flat on the ground or the card: no box, no fill, no radius. The input is Body ink (Title3 for a playlist's name) with the placeholder in graphite and a teal cursor, a row tall (56dp), over a hairline. The Search tab's field (`src/search/SearchField.tsx`) leads with the search glyph (24dp, graphite) in a 32dp cell, and keeps a 48dp cell at the end for the clear X (24dp, graphite, "Clear search"), reserved while the field is empty so the query never reflows; the X's target reaches 12dp into the margin, so both glyphs sit on the margins. Its hairline turns teal while it has the keyboard. The Design preview's Search shelf shows it empty, filled and focused (`wave://design-preview?state=search-field`).
+
 ### Catalog Line
 
 Small tracked caps (Label) in graphite by default, with teal and ember tones available. One line, truncating. Used as section heads and cover captions.
@@ -318,8 +322,8 @@ Small tracked caps (Label) in graphite by default, with teal and ember tones ava
 - **Tab screens** open on a light large title at top-left, with at most one trailing icon button on the title line.
 - **Pushed screens** show a Back icon button aligned so its glyph sits on the 24dp margin, then the title in Title type. System and predictive Back both work.
 - **In-screen switches** (Albums / Songs) are text tabs in Body: selected is 600 ink with a 2dp teal underline, unselected is 400 graphite; each tab is at least 48dp tall.
-- **Tab bar** floats a cell above the system inset with 24dp side margins: Home and Library share one 64dp glass pill (24dp line icon over a Caption 600 label, teal when current, graphite otherwise), joined by the shortcut tab (a Library section chosen in Settings, with its section's icon) when there is one, and Search sits beside it, a cell apart, in its own 64dp round glass pill with the icon only. Tabs press with `selection` haptics.
-- **Shortcut tab:** what it opens (an artist, an album…) is pushed inside the tab, under the tab bar, and stays open while another tab is showing; the same screens opened from the Library are pushed over the tabs.
+- **Tab bar** floats a cell above the system inset with 24dp side margins: Home and the tabs the owner put after it (Library, Library sections with their section's icon) share one 64dp glass pill (24dp line icon over a one-line Caption 600 label, teal when current, graphite otherwise), and Search, when it's on, sits beside it, a cell apart, in its own 64dp round glass pill with the icon only. Up to five tabs. Tabs press with `selection` haptics; a long press on any of them opens the bar's editor, the same card as Home's editor with Home pinned on top and Search pinned at the bottom.
+- **Section tabs:** what one opens (an artist, an album…) is pushed inside the tab, under the tab bar, and stays open while another tab is showing; the same screens opened from the Library are pushed over the tabs.
 - **Mini player** floats a cell above the tab bar (or above the system inset on pushed Library screens) in a 56dp glass pill with the same side margins: a 40dp thumbnail whose corners are concentric with the pill (Core's `concentricRadius` works the radius out from the pill's height, radius and the thumbnail's 12dp inset; the no-artwork placeholder has the same corners), title (Body 500) over artist (Body 400 graphite), then play/pause and next as icon buttons. Tap it, or swipe it up, to open Now Playing. Swipe left for the next track, right for the previous one: the content follows the finger and fades, and a skip leaves the way it was pushed with a light `impact` haptic; a short slow drag springs back. Screen readers get "Next track" / "Previous track" actions instead of the swipe.
 
 ### Now Playing

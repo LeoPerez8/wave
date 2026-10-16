@@ -1,4 +1,4 @@
-import { type TabBarTab, tabBarTabs } from "@wave/core";
+import type { TabBarTab } from "@wave/core";
 import { useCallback, useLayoutEffect, useRef } from "react";
 import {
   useAnimatedStyle,
@@ -8,7 +8,7 @@ import {
 } from "react-native-reanimated";
 
 import { ENTRY } from "@/motion/entry";
-import { useShortcutTab } from "@/settings/shortcutTab";
+import { useTabBar } from "@/settings/tabBar";
 
 /**
  * The style for the view holding the tab screens: after a tapped switch the
@@ -18,7 +18,7 @@ import { useShortcutTab } from "@/settings/shortcutTab";
  */
 export function useTabEntry(tab: TabBarTab | null) {
   const reduceMotion = useReducedMotion();
-  const shortcut = useShortcutTab();
+  const bar = useTabBar();
   const progress = useSharedValue(1);
   const side = useSharedValue(0);
   const previous = useRef(tab);
@@ -31,13 +31,12 @@ export function useTabEntry(tab: TabBarTab | null) {
     const wasTapped = tab !== null && tapped.current === tab;
     tapped.current = null;
     if (!wasTapped || from === null) return;
-    const order = tabBarTabs(shortcut);
-    side.set(reduceMotion ? 0 : Math.sign(order.indexOf(tab) - order.indexOf(from)));
+    side.set(reduceMotion ? 0 : Math.sign(bar.indexOf(tab) - bar.indexOf(from)));
     progress.set(0);
     progress.set(
       withTiming(1, { duration: reduceMotion ? ENTRY.fadeMs : ENTRY.slideMs, easing: ENTRY.ease }),
     );
-  }, [tab, shortcut, reduceMotion, progress, side]);
+  }, [tab, bar, reduceMotion, progress, side]);
 
   const noteTap = useCallback((to: TabBarTab) => {
     tapped.current = to;
