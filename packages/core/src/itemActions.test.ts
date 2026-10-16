@@ -134,17 +134,36 @@ describe("itemActions", () => {
     ]);
   });
 
-  test("songs offer Find Lyrics and Genre while online lookups are on, before Select and Delete", () => {
-    const menu = itemActions(tracks([song()], { selectable: true, onlineLookups: true }));
-    assert.deepEqual(names(menu).slice(-3), ["findLyricsAndGenre", "select", "delete"]);
-    assert.equal(ITEM_ACTION_LABELS.findLyricsAndGenre, "Find Lyrics and Genre");
-    const bar = itemActions(
-      tracks([song(), song()], { surface: "selection", onlineLookups: true }),
-    );
-    assert.ok(names(bar).includes("findLyricsAndGenre"));
-    assert.ok(!names(itemActions(tracks([song()]))).includes("findLyricsAndGenre"));
+  test("a song missing something offers Fix Song while online lookups are on, before Select and Delete", () => {
+    const fixable = { ...song(), fixable: true };
+    const menu = itemActions(tracks([fixable], { selectable: true, onlineLookups: true }));
+    assert.deepEqual(names(menu).slice(-3), ["fixSong", "select", "delete"]);
+    assert.equal(ITEM_ACTION_LABELS.fixSong, "Fix Song");
+    assert.ok(!names(itemActions(tracks([fixable]))).includes("fixSong"));
     const album = itemActions({ kind: "album", items: [{}], here: "/", onlineLookups: true });
-    assert.ok(!names(album).includes("findLyricsAndGenre"));
+    assert.ok(!names(album).includes("fixSong"));
+  });
+
+  test("a song with lyrics, a track number, a year and a genre doesn't offer Fix Song", () => {
+    const menu = itemActions(tracks([{ ...song(), fixable: false }], { onlineLookups: true }));
+    assert.ok(!names(menu).includes("fixSong"));
+  });
+
+  test("selection offers Fix Songs when any checked song is missing something", () => {
+    const bar = (fixable: readonly boolean[]) =>
+      names(
+        itemActions(
+          tracks(
+            fixable.map((each) => ({ ...song(), fixable: each })),
+            { surface: "selection", onlineLookups: true },
+          ),
+        ),
+      );
+    assert.ok(bar([false, true, false]).includes("fixSongs"));
+    assert.equal(ITEM_ACTION_LABELS.fixSongs, "Fix Songs");
+    assert.ok(!bar([false, false]).some((action) => action.startsWith("fix")));
+    // One checked song is Fix Song, as in its menu.
+    assert.ok(bar([true]).includes("fixSong"));
   });
 
   test("a starred song offers Remove from Favorites instead", () => {
@@ -380,11 +399,41 @@ describe("itemActions", () => {
 
   test("a playlist can be renamed and deleted, one at a time", () => {
     const one = names(itemActions({ kind: "playlist", items: [{}], here: "/" }));
-    assert.deepEqual(one.slice(-2), ["renamePlaylist", "deletePlaylist"]);
+    assert.ok(one.includes("renamePlaylist"));
+    assert.equal(one.at(-1), "deletePlaylist");
     const two = names(
       itemActions({ kind: "playlist", items: [{}, {}], here: "/", surface: "selection" }),
     );
     assert.ok(!two.includes("renamePlaylist"));
+  });
+
+  test("a playlist's menu changes its image, and removes it once it has one", () => {
+    const menu = (hasImage?: boolean) =>
+      names(itemActions({ kind: "playlist", items: [{ hasImage }], here: "/" })).slice(-4);
+    assert.deepEqual(menu(), ["addToPlaylist", "renamePlaylist", "changeImage", "deletePlaylist"]);
+    assert.deepEqual(menu(true), [
+      "renamePlaylist",
+      "changeImage",
+      "removeImage",
+      "deletePlaylist",
+    ]);
+    assert.equal(ITEM_ACTION_LABELS.changeImage, "Change Image");
+    assert.equal(ITEM_ACTION_LABELS.removeImage, "Remove Image");
+    assert.ok(!isDestructiveAction("removeImage"));
+    assert.ok(!confirmsFirst("removeImage"));
+  });
+
+  test("selecting a playlist doesn't offer its image entries: they're the menu's", () => {
+    const bar = names(
+      itemActions({
+        kind: "playlist",
+        items: [{ hasImage: true }],
+        here: "/library/playlists",
+        surface: "selection",
+      }),
+    );
+    assert.ok(!bar.includes("changeImage"));
+    assert.ok(!bar.includes("removeImage"));
   });
 
   test("selected playlists: queue them, add them to a playlist, Rename and Delete Playlist only for one", () => {
