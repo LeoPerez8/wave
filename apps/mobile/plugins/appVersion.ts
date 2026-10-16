@@ -1,5 +1,6 @@
-// Wave's version lives in app.config.ts. Android's versionCode is derived from
-// it, and a release tag must name it (docs/spec.md, Releases).
+// Wave's version lives in the `version` field of apps/mobile/package.json, which
+// app.config.ts reads. Android's versionCode is derived from it, and a release tag must
+// name it (docs/spec.md, Releases).
 
 const VERSION = /^(\d+)\.(\d{1,2})\.(\d{1,2})(?:-ti)?$/;
 
@@ -28,7 +29,7 @@ export const releaseBranch = (version: string): "main" | "ti" =>
 export const releaseTagProblem = (tag: string, version: string): string | undefined => {
   if (tag === `v${version}`) return undefined;
   return (
-    `The tag ${tag} doesn't match the app's version, ${version} (apps/mobile/app.config.ts). ` +
+    `The tag ${tag} doesn't match the app's version, ${version} (apps/mobile/package.json). ` +
     "Bump the version in a PR first, then tag its merge commit v<version>; " +
     `or tag v${version} to release ${version}.`
   );

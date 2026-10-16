@@ -1,5 +1,7 @@
 import type { ExpoConfig } from "expo/config";
 
+import packageJson from "./package.json" with { type: "json" };
+
 import { versionCode } from "./plugins/appVersion.ts";
 import { withArtProfiles } from "./plugins/withArtProfiles.ts";
 import { withGradleBuildCache } from "./plugins/withGradleBuildCache.ts";
@@ -12,10 +14,10 @@ import { withShareShortcut } from "./plugins/withShareShortcut.ts";
 // natively at prebuild time, so text renders in Inter from the first frame.
 const inter = (file: string): string => `./node_modules/@expo-google-fonts/inter/${file}`;
 
-// Wave's version, kept here and nowhere else: Android's versionCode follows from it, and
-// merging a new version into main (or a -ti one into ti) publishes its release (docs/spec.md,
-// Releases).
-const version = "0.5.3";
+// Wave's version lives in package.json's `version` and nowhere else: Android's versionCode
+// follows from it, and merging a new version into main (or a -ti one into ti) publishes its
+// release (docs/spec.md, Releases).
+const { version } = packageJson;
 
 const config: ExpoConfig = {
   name: "Wave",

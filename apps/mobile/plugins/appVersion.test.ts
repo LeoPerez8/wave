@@ -36,7 +36,7 @@ describe("releaseTagProblem", () => {
     for (const tag of ["v0.5.1", "v0.4.0", "0.5.0", "v0.5.0-rc1", "v0.5"]) {
       assert.equal(
         releaseTagProblem(tag, "0.5.0"),
-        `The tag ${tag} doesn't match the app's version, 0.5.0 (apps/mobile/app.config.ts). ` +
+        `The tag ${tag} doesn't match the app's version, 0.5.0 (apps/mobile/package.json). ` +
           "Bump the version in a PR first, then tag its merge commit v<version>; " +
           "or tag v0.5.0 to release 0.5.0.",
         tag,
