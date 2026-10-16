@@ -1,0 +1,10 @@
+{
+  "package": "dev.leoperez.wave",
+  "tabs": ["Home", "Library", "Playlists"],
+  "importLink": null,
+  "settleMs": 1200,
+  "windowMs": 2500,
+  "launchSettleMs": 6000,
+  "memoryIdleMs": 5000,
+  "flushTimeoutMs": 4000
+}

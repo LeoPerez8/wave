@@ -56,3 +56,7 @@ apps/mobile/ios/
 
 # Impeccable review captures (local evidence, not source)
 apps/mobile/.impeccable/review/
+
+# Release performance runner output (scripts/perf): results and Perfetto traces.
+# A run worth keeping is copied into docs/performance/results/.
+/perf-results/

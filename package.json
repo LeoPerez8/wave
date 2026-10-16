@@ -6,8 +6,9 @@
   "scripts": {
     "dev": "pnpm --filter @wave/mobile start",
     "android": "pnpm --filter @wave/mobile android",
-    "typecheck": "pnpm -r typecheck && tsc -p scripts/ci",
-    "test": "pnpm -r test && node --test \"scripts/ci/*.test.ts\"",
+    "typecheck": "pnpm -r typecheck && tsc -p scripts/ci && tsc -p scripts/perf",
+    "test": "pnpm -r test && node --test \"scripts/ci/*.test.ts\" \"scripts/perf/*.test.ts\"",
+    "perf": "node scripts/perf/perf.ts",
     "test:core": "pnpm --filter @wave/core test",
     "lint": "oxlint",
     "fmt": "prettier --write .",
