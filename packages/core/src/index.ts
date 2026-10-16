@@ -930,3 +930,6 @@ export type { SpotifySearchPacing } from "./spotifySearchPacing.ts";
 
 export { LIBRARY_SHELF_CHOICES, parseLibraryShelf, storedLibraryShelf } from "./libraryShelf.ts";
 export type { LibraryShelf } from "./libraryShelf.ts";
+
+export { NO_HELD_SONGS, heldTracks, inLibraryUnlessHeld, songsInPlace } from "./songsInPlace.ts";
+export type { HeldSongs, SongsInPlace } from "./songsInPlace.ts";

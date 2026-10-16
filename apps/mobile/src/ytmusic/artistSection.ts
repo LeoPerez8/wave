@@ -1,6 +1,7 @@
 import {
   YT_ARTIST_SECTION_START,
   identityKey,
+  inLibraryUnlessHeld,
   libraryAlbumFinder,
   pickYtArtist,
   stepYtArtistSection,
@@ -11,6 +12,7 @@ import {
   ytArtistSectionAsks,
   ytArtistSectionView,
   ytArtistShelves,
+  type HeldSongs,
   type YtArtistSaved,
   type YtArtistSection,
   type YtArtistSectionEvent,
@@ -257,13 +259,16 @@ export interface YtArtistSectionShown {
  * integrated ([openedIntegrated], from a streamed song's artist): then, with
  * nothing standing for the artist, it asks once on its own (Core's
  * `ytArtistSectionAsks`). [artistId] and the page's Library [albums] tell
- * which of the artist's releases the Library already has.
+ * which of the artist's releases the Library already has. The songs the page
+ * [held] in place this visit stay among the section's, downloaded or not
+ * (Core's `inLibraryUnlessHeld`).
  */
 export const useYtArtistSection = (
   name: string,
   artistId: number,
   albums: readonly AlbumRow[],
   openedIntegrated: boolean,
+  held: HeldSongs<NativeYtSong>,
 ): YtArtistSectionShown => {
   const { state, enabled, openedAt, show } = useYtArtistAnswer(name, { allSongs: true });
   const asks = ytArtistSectionAsks(state, {
@@ -293,9 +298,9 @@ export const useYtArtistSection = (
             enabled,
             now: openedAt,
             integrated: openedIntegrated,
-            inLibrary: (song) => find(song) !== null,
+            inLibrary: inLibraryUnlessHeld(held, (song) => find(song) !== null),
           }),
-    [find, state, name, enabled, openedAt, openedIntegrated],
+    [find, state, name, enabled, openedAt, openedIntegrated, held],
   );
   const shelves = useMemo(
     () => ytArtistShelves(state, { name, enabled, now: openedAt, libraryAlbum: findAlbum }),

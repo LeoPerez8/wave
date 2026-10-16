@@ -1,5 +1,5 @@
 import { IconSearch } from "@tabler/icons-react-native";
-import { type SearchKind, ytSectionView } from "@wave/core";
+import { heldTracks, inLibraryUnlessHeld, type SearchKind, ytSectionView } from "@wave/core";
 import { useFocusEffect } from "expo-router";
 import { type ComponentRef, useCallback, useDeferredValue, useMemo, useRef, useState } from "react";
 import { ScrollView, Text, TextInput, View } from "react-native";
@@ -15,7 +15,14 @@ import { EmptyState } from "@/components/EmptyState";
 import { TextButton } from "@/components/TextButton";
 import { rise, riseReduced } from "@/motion/entry";
 import { clearRecentSearches, rememberSearch, useRecentSearches } from "@/search/recentSearches";
-import { trackItemKey, tracksTarget, type TrackItem } from "@/playback/actionTargets";
+import type { SongRow } from "@/library/LibraryStore";
+import type { NativeYtSong } from "@/native/waveYtMusic";
+import {
+  listedTrackItem,
+  trackItemKey,
+  tracksTarget,
+  type TrackItem,
+} from "@/playback/actionTargets";
 import {
   noLibraryResultsRow,
   RESULT_LIMIT,
@@ -29,8 +36,13 @@ import { SearchField } from "@/search/SearchField";
 import { useSearchIndex } from "@/search/searchIndex";
 import { SearchResultsList } from "@/search/SearchResultsList";
 import { useListSelection } from "@/selection/useListSelection";
+import { useHeldSongs, useSongsInPlace } from "@/ytmusic/songsInPlace";
 
 const NO_KINDS: ReadonlySet<SearchKind> = new Set();
+const NO_YT_SONGS: readonly NativeYtSong[] = [];
+const NO_TRACKS: ReadonlySet<number> = new Set();
+
+const trackId = (song: SongRow): number => song.id;
 
 function RecentSearches({ onPick }: { onPick: (query: string) => void }) {
   const recent = useRecentSearches();
@@ -104,9 +116,26 @@ export default function SearchScreen() {
   const index = library?.index ?? null;
   // The field updates on every keystroke; results follow as soon as they're ready.
   const deferredQuery = useDeferredValue(query);
+  // YT Music's songs shown for this query keep their rows while their downloads finish, until
+  // the query changes or the tab is left (`useSongsInPlace`). The Library's results leave
+  // those files out, so they show once, and neither take the top result nor end YT Music's
+  // results the Library had nothing for.
+  const find = library?.find ?? null;
+  const holding = useHeldSongs(deferredQuery);
+  const downloads = useMemo(
+    () => (find === null ? NO_TRACKS : heldTracks(holding.held, find, trackId)),
+    [holding.held, find],
+  );
   const results = useMemo(
-    () => index?.search(deferredQuery, { limit: RESULT_LIMIT }) ?? null,
-    [index, deferredQuery],
+    () =>
+      index?.search(deferredQuery, {
+        limit: RESULT_LIMIT,
+        skip:
+          downloads.size === 0
+            ? undefined
+            : (hit) => hit.kind === "song" && downloads.has(hit.song.id),
+      }) ?? null,
+    [index, deferredQuery, downloads],
   );
   const libraryEmpty = results !== null && results.groups.length === 0;
   // YT Music is asked on Search YouTube Music, or on its own when the library
@@ -116,9 +145,16 @@ export default function SearchScreen() {
   const [ytSection, askYt] = useYtMusicSection(deferredQuery, !libraryEmpty);
   const inLibrary = library?.library;
   const ytView = useMemo(
-    () => (inLibrary === undefined ? null : ytSectionView(ytSection, inLibrary)),
-    [ytSection, inLibrary],
+    () =>
+      inLibrary === undefined
+        ? null
+        : ytSectionView(ytSection, {
+            ...inLibrary,
+            hasSong: inLibraryUnlessHeld(holding.held, inLibrary.hasSong),
+          }),
+    [ytSection, inLibrary, holding.held],
   );
+  const placed = useSongsInPlace(holding, ytView?.songs ?? NO_YT_SONGS, find);
   const rows = useMemo(() => {
     if (results === null) return [];
     const ytFound =
@@ -126,9 +162,9 @@ export default function SearchScreen() {
     const ours =
       libraryEmpty && ytFound === 0
         ? [noLibraryResultsRow(deferredQuery)]
-        : resultRows(results, expanded, ytView);
+        : resultRows(results, expanded, ytView, placed.songs);
     return [...ours, ...ytFooterRows(ytView)];
-  }, [results, libraryEmpty, deferredQuery, expanded, ytView]);
+  }, [results, libraryEmpty, deferredQuery, expanded, ytView, placed.songs]);
 
   // Song results can be selected. The selection lives here, not in the list,
   // so a new query (or none matching) keeps it: checked songs that drop out of
@@ -136,9 +172,9 @@ export default function SearchScreen() {
   const songs = useMemo(
     (): TrackItem[] => [
       ...(results === null ? [] : songResults(results).map((song) => ({ song }))),
-      ...(ytView?.songs ?? []).map((ytSong) => ({ ytSong })),
+      ...placed.songs.map(listedTrackItem),
     ],
-    [results, ytView],
+    [results, placed.songs],
   );
   const [seen] = useState(() => new Map<string, TrackItem>());
   for (const song of songs) seen.set(trackItemKey(song), song);

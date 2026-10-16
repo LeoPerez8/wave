@@ -1,4 +1,5 @@
 import type {
+  DiscoverSong,
   MixedSong,
   SearchGroup,
   SearchKind,
@@ -13,10 +14,16 @@ import type {
 import type { SongRow } from "@/library/LibraryStore";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 
-import type { SearchHit } from "./searchIndex";
+import { songHit, type SearchHit } from "./searchIndex";
 
 /** A song result: the Library's, or one YT Music found that the Library lacks. */
 export type ResultSong = MixedSong<NativeYtSong, SongRow>;
+
+/**
+ * A song YT Music found, in its place among them (Core's `songsInPlace`):
+ * streamed, or the Library's file once its download finished.
+ */
+export type PlacedYtSong = DiscoverSong<NativeYtSong, SongRow>;
 
 /** One row of the results list: a section head, a result, or a group's "Show all". */
 export type ResultRow =
@@ -116,7 +123,6 @@ const songsOf = (hits: readonly SearchHit[]): SongRow[] =>
 export const songResults = (results: SearchResults<SearchHit>): SongRow[] =>
   songsOf(results.groups.find((group) => group.kind === "song")?.items ?? []);
 
-const NO_YT_SONGS: readonly NativeYtSong[] = [];
 const NO_YT_ARTISTS: readonly YtArtistCandidate[] = [];
 const NO_YT_ALBUMS: readonly YtArtistAlbum[] = [];
 
@@ -129,6 +135,8 @@ const ytArtistRow = (artist: YtArtistCandidate, top: boolean): ResultRow => ({
   artist,
   top,
 });
+const streamed = (song: NativeYtSong): PlacedYtSong => ({ source: "stream", song });
+
 const ytAlbumRow = (album: YtArtistAlbum, top: boolean): ResultRow => ({
   type: "ytAlbum",
   key: `${top ? "top:" : ""}yt-album:${album.browseId}`,
@@ -143,23 +151,25 @@ const ytAlbumRow = (album: YtArtistAlbum, top: boolean): ResultRow => ({
  * albums YT Music found that the Library lacks ([yt], Core's `ytSectionView`)
  * follow the Library's in the Songs, Artists and Albums groups, making the
  * group when the Library has nothing of its kind; groups count them too. The
- * top result is the Library's best match, else YT Music's best.
+ * top result is the Library's best match, else YT Music's best. [placed] are
+ * YT Music's songs kept in place for the visit: one whose download finished
+ * shows as the Library's song in its row (and [results] leave it out).
  */
 export const resultRows = (
   results: SearchResults<SearchHit>,
   expanded: ReadonlySet<SearchKind>,
   yt: YtSectionView<NativeYtSong> | null = null,
+  placed: readonly PlacedYtSong[] = yt?.songs.map(streamed) ?? [],
 ): ResultRow[] => {
   const rows: ResultRow[] = [];
-  const ytSongs = yt?.songs ?? NO_YT_SONGS;
   const ytArtists = yt?.artists ?? NO_YT_ARTISTS;
   const ytAlbums = yt?.albums ?? NO_YT_ALBUMS;
   const library = songResults(results);
   const songs: ResultSong[] = [
     ...library.map((track) => ({ source: "library" as const, track })),
-    ...ytSongs.map((song) => ({ source: "stream" as const, song })),
+    ...placed,
   ];
-  const downloaded = ytSongs.length > 0;
+  const downloaded = placed.length > 0;
   const ytSongRow = (song: NativeYtSong, index: number, top: boolean): ResultRow => ({
     type: "ytSong",
     key: `${top ? "top:" : ""}yt:${song.videoId}`,
@@ -168,14 +178,28 @@ export const resultRows = (
     index: library.length + index,
     top,
   });
+  const hitRow = (hit: SearchHit, top: boolean): ResultRow => ({
+    type: "hit",
+    key: `${top ? "top:" : ""}${hitKey(hit)}`,
+    hit,
+    top,
+    songs,
+    downloaded,
+  });
+  const placedRow = (row: PlacedYtSong, index: number, top: boolean): ResultRow =>
+    row.source === "library" ? hitRow(songHit(row.track), top) : ytSongRow(row.song, index, top);
   const ytTopRow = (top: YtSearchTop<NativeYtSong>): ResultRow => {
     switch (top.kind) {
       case "artist":
         return ytArtistRow(top.artist, true);
       case "album":
         return ytAlbumRow(top.album, true);
-      case "song":
-        return ytSongRow(top.song, ytSongs.indexOf(top.song), true);
+      case "song": {
+        const index = placed.findIndex((row) => row.song === top.song);
+        return index === -1
+          ? ytSongRow(top.song, index, true)
+          : placedRow(placed[index]!, index, true);
+      }
     }
   };
   const ytRows = (kind: SearchKind): ResultRow[] => {
@@ -185,19 +209,11 @@ export const resultRows = (
       case "album":
         return ytAlbums.map((album) => ytAlbumRow(album, false));
       case "song":
-        return ytSongs.map((song, index) => ytSongRow(song, index, false));
+        return placed.map((row, index) => placedRow(row, index, false));
       default:
         return [];
     }
   };
-  const hitRow = (hit: SearchHit, top: boolean): ResultRow => ({
-    type: "hit",
-    key: `${top ? "top:" : ""}${hitKey(hit)}`,
-    hit,
-    top,
-    songs,
-    downloaded,
-  });
   const ytTop = yt?.top ?? null;
   if (results.top !== null) {
     rows.push(
