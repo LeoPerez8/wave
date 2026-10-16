@@ -28,7 +28,7 @@ import {
   soulseekReceivedMatches,
   soulseekRecording,
   ytAlbumDownload,
-  ytAudioMatches,
+  ytAudioRejection,
   ytDownloadDestination,
   ytDownloadLookup,
   ytDownloadSharedJob,
@@ -500,11 +500,12 @@ const answer = (claim: NativeDownloadDecision) =>
         if (claim.audio === undefined) return yield* new DownloadFailed({ reason: "failed" });
         if (!("receivedTags" in claim.audio)) {
           // YouTube's M4A arrived complete; it's the song when it plays as long.
+          // A rejection says so as its cause, which the failed download's row shows.
           const { durationMs } = claim.audio;
-          const acceptable = ytAudioMatches(claim.song, durationMs);
-          if (!acceptable)
-            console.warn("[wave] YouTube's audio isn't the song's length", { durationMs });
-          return { receiptId: claim.receiptId, acceptable };
+          const rejection = ytAudioRejection(claim.song, durationMs);
+          if (rejection === null) return { receiptId: claim.receiptId, acceptable: true };
+          console.warn("[wave] YouTube's audio isn't the song's length", { durationMs });
+          return { receiptId: claim.receiptId, acceptable: false, cause: rejection };
         }
         const { receivedTags, durationMs } = claim.audio;
         const acceptable = soulseekReceivedMatches(claim.song, receivedTags, durationMs);
