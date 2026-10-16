@@ -332,6 +332,13 @@ export const addTrack = (db: TestDatabase, track: FixtureTrack): number => {
   return id;
 };
 
+/** Rows numbered 0 to [n] - 1 (`x` of table `n`), for bulk inserts. */
+const count = (n: number): string =>
+  `WITH RECURSIVE n(x) AS (VALUES(0) UNION ALL SELECT x + 1 FROM n WHERE x < ${n - 1})`;
+
+/** A name's first letter for row [x], spread over the alphabet. */
+const letter = (x: string): string => `char(97 + (${x}) % 26)`;
+
 /**
  * Grows the Library fast, for benchmarks and scale tests: [tracks] songs by
  * [artists] artists on [albums] albums (each with a cover), titles spread over
@@ -348,11 +355,10 @@ export const addLibrary = (
     artworkHash: "library-seed",
     genre: "Library genre",
   });
-  const firstArtist = db.get<{ n: number }>(sql`SELECT coalesce(max(id), 0) + 1 AS n FROM artists`).n;
+  const firstArtist = db.get<{ n: number }>(
+    sql`SELECT coalesce(max(id), 0) + 1 AS n FROM artists`,
+  ).n;
   const firstAlbum = db.get<{ n: number }>(sql`SELECT coalesce(max(id), 0) + 1 AS n FROM albums`).n;
-  const count = (n: number) => `WITH RECURSIVE n(x) AS (VALUES(0) UNION ALL SELECT x + 1 FROM n WHERE x < ${n - 1})`;
-  // A name's first letter, spread over the alphabet.
-  const letter = (x: string) => `char(97 + (${x}) % 26)`;
   db.run(
     sql.raw(`${count(options.artists)} INSERT INTO artists (key, name, sort)
       SELECT 'library-artist-' || x, upper(${letter("x * 7")}) || 'rtist ' || x,

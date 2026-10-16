@@ -49,8 +49,6 @@ export interface PagedRows<K, R> {
   /** Calls [listener] whenever rows arrive; returns how to stop. */
   readonly subscribe: (listener: () => void) => () => void;
   readonly stats: () => PagedRowsStats;
-  /** The list went away: reads still under way are ignored. */
-  readonly dispose: () => void;
 }
 
 /** A key's row, and which order it was read for. */
@@ -80,7 +78,6 @@ export const createPagedRows = <K, R>(options: {
   const reading = new Map<K, number>();
   // Until the list says what it shows, the top of it.
   let view = { start: 0, end: pageSize };
-  let disposed = false;
   const listeners = new Set<() => void>();
   const counts = { reads: 0, rowsRead: 0, staleRows: 0 };
 
@@ -98,7 +95,6 @@ export const createPagedRows = <K, R>(options: {
   const settled =
     (asked: readonly K[], askedOrder: number) =>
     (rows: readonly R[] | null): void => {
-      if (disposed) return;
       for (const key of asked) if (reading.get(key) === askedOrder) reading.delete(key);
       if (rows !== null) {
         counts.rowsRead += rows.length;
@@ -118,7 +114,7 @@ export const createPagedRows = <K, R>(options: {
 
   /** Reads the pages near the screen that aren't read for this order nor being read. */
   const load = (): void => {
-    if (disposed || keys.length === 0) return;
+    if (keys.length === 0) return;
     for (const page of pages(ahead)) {
       const wanted = keys
         .slice(page * pageSize, (page + 1) * pageSize)
@@ -162,11 +158,5 @@ export const createPagedRows = <K, R>(options: {
       };
     },
     stats: () => ({ ...counts, held: held.size }),
-    dispose: () => {
-      disposed = true;
-      listeners.clear();
-      held.clear();
-      reading.clear();
-    },
   };
 };

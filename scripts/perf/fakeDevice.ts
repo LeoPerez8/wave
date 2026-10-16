@@ -199,8 +199,7 @@ export class FakeDevice implements Device {
       this.render(this.clock, 8);
       this.advance(40);
       this.respond("songs.rows", "page");
-    }
-    else if (label === "Artists") this.navigate("/library/artists");
+    } else if (label === "Artists") this.navigate("/library/artists");
     else if (label === this.artist && this.route === "/library/artists") {
       this.navigate("/library/artist/1");
       // The stats block reads the artist's plays after the page commits.

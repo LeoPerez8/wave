@@ -220,13 +220,15 @@ const BY_ALBUM_TRACKS: readonly SongOrderTerm[] = [
 ];
 
 /** Each sort's primary field and its ties, as `ORDERS` compares them. */
-const ORDER_TERMS: Record<LibrarySongSort["key"], readonly [SongOrderField, readonly SongOrderTerm[]]> =
-  {
-    title: ["titleSort", BY_TITLE],
-    artist: ["artistSort", [ascending("albumSort"), ...BY_ALBUM_TRACKS]],
-    album: ["albumSort", BY_ALBUM_TRACKS],
-    added: ["addedAt", BY_TITLE],
-  };
+const ORDER_TERMS: Record<
+  LibrarySongSort["key"],
+  readonly [SongOrderField, readonly SongOrderTerm[]]
+> = {
+  title: ["titleSort", BY_TITLE],
+  artist: ["artistSort", [ascending("albumSort"), ...BY_ALBUM_TRACKS]],
+  album: ["albumSort", BY_ALBUM_TRACKS],
+  added: ["addedAt", BY_TITLE],
+};
 
 /**
  * [sort] as the database runs it: the order `sortSongs` gives, as `ORDER BY`

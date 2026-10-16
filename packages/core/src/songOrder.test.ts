@@ -68,8 +68,8 @@ describe("songOrderTerms", () => {
     const songs = library();
     for (const sort of SONG_SORTS) {
       const expected = sortSongs(songs, sort).map((song) => song.id);
-      // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy
-      const actual = [...songs].reverse().sort(orderBy(songOrderTerms(sort)));
+      // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh reversed copy
+      const actual = songs.toReversed().sort(orderBy(songOrderTerms(sort)));
       assert.deepEqual(
         actual.map((song) => song.id),
         expected,

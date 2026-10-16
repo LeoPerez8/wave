@@ -153,14 +153,11 @@ describe("createPagedRows", () => {
     assert.deepEqual(reads[1]!.keys, range(1, 10));
   });
 
-  test("an empty list reads nothing; a list gone ignores reads still under way", () => {
-    const { rows, reads, answer, changes } = setUp();
+  test("an empty list reads nothing", () => {
+    const { rows, reads } = setUp();
     rows.setOrder([]);
+    rows.view(0, 10);
     assert.equal(reads.length, 0);
-    rows.setOrder(range(1, 5));
-    rows.dispose();
-    answer(0);
-    assert.equal(changes(), 0);
     assert.equal(rows.row(0), undefined);
   });
 });

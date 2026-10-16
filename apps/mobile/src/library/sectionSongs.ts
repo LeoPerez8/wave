@@ -27,6 +27,10 @@ const playlistLibrarySongs = (entries: readonly PlaylistEntryRow[]): SongRow[] =
 export const playlistEntries = (id: number): Promise<readonly PlaylistEntryRow[]> =>
   run((store) => store.getPlaylist(id)).then((detail) => detail?.items ?? []);
 
+/** The full rows of the Library songs [ids], missing songs included, in that order; ids gone left out. */
+export const songsWithIds = (ids: readonly number[]): Promise<readonly SongRow[]> =>
+  run((store) => store.songsWithIds(ids));
+
 /** A section's items in its order, each with its songs as its own screen lists them. */
 const collection = <D>(
   list: Query<readonly { readonly id: number }[]>,

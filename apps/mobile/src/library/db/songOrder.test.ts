@@ -64,7 +64,10 @@ describe("selectSongOrder", () => {
       assert.deepEqual(order.spine, spineEntries(songSpineKeys(sorted, sort) ?? []), label);
       assert.deepEqual(
         [...order.missing].toSorted((a, b) => a - b),
-        songs.filter((song) => song.path === null).map((song) => song.id).toSorted((a, b) => a - b),
+        songs
+          .filter((song) => song.path === null)
+          .map((song) => song.id)
+          .toSorted((a, b) => a - b),
         label,
       );
     }
