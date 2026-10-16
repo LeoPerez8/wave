@@ -12,7 +12,8 @@ import { withShareShortcut } from "./plugins/withShareShortcut.ts";
 const inter = (file: string): string => `./node_modules/@expo-google-fonts/inter/${file}`;
 
 // Wave's version, kept here and nowhere else: Android's versionCode follows from it, and
-// pushing the tag v<version> publishes the release (docs/spec.md, Releases).
+// merging a new version into main (or a -ti one into ti) publishes its release (docs/spec.md,
+// Releases).
 const version = "0.5.3-ti";
 
 const config: ExpoConfig = {
