@@ -31,10 +31,10 @@ import * as NativeScanner from "./NativeScanner";
 
 /** Every app service, built once and shared by the whole app. */
 const services = Layer.mergeAll(
-  LibraryStore.layer,
   NativeScanner.layer,
+  // The queue reads play counts for Smart Shuffle.
   Queue.layer.pipe(Layer.provideMerge(Player.layer)),
-);
+).pipe(Layer.provideMerge(LibraryStore.layer));
 
 export const appLayer = Layer.mergeAll(
   PlaybackPersistence.layer,

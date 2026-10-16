@@ -23,6 +23,22 @@ const open = (screen: YtListScreen, id: string, head: YtListHead): void => {
 export const openYtAlbum = (browseId: string, head: YtListHead): void =>
   open("yt-album", browseId, head);
 
+/**
+ * The browse id of the YT Music album page at [pathname], or null when it
+ * isn't one, so a YT Music song's Go to Album leaves it out (Core's
+ * `ytSongActions`).
+ */
+export const ytAlbumPageHere = (pathname: string): string | null => {
+  const prefix = "/library/yt-album/";
+  if (!pathname.startsWith(prefix)) return null;
+  const segment = pathname.slice(prefix.length);
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+};
+
 /** Opens a YT Music playlist's songs, on the Library stack. */
 export const openYtPlaylist = (playlistId: string, head: YtListHead): void =>
   open("yt-playlist", playlistId, head);

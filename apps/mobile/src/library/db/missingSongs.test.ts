@@ -9,7 +9,7 @@ import { selectArtistDetail, selectArtistSongs, selectArtists } from "./artists.
 import { libraryCounts } from "./counts.ts";
 import { selectGenreSongs } from "./genres.ts";
 import { homeSections, listFavorites, setFavorites } from "./playHistory.ts";
-import { selectMissingSongs } from "./missingSongs.ts";
+import { selectAlbumsMissingSongs, selectMissingSongs } from "./missingSongs.ts";
 import { createPlaylist, selectPlaylist, selectPlaylistEntries } from "./playlists.ts";
 import * as schema from "./schema.ts";
 import { selectPlayableSongs } from "./tracks.ts";
@@ -183,5 +183,26 @@ describe("what downloading missing songs reads", () => {
 
   test("one of them by its Track, and none for a song with a file", () => {
     assert.deepEqual(titles(selectMissingSongs(db, [lucky, airbag])), ["Lucky"]);
+  });
+
+  test("each album's missing songs, in album order; none for an album that has every file", () => {
+    const paranoid = addMissingSong(db, {
+      title: "Paranoid Android",
+      album: "OK Computer",
+      artist: "Radiohead",
+      trackNumber: 2,
+    });
+    db.update(schema.tracks).set({ trackNumber: 11 }).where(eq(schema.tracks.id, lucky)).run();
+    const pablo = addTrack(db, { title: "Creep", album: "Pablo Honey", artist: "Radiohead" });
+    const albumOf = (trackId: number) =>
+      db
+        .select({ albumId: schema.tracks.albumId })
+        .from(schema.tracks)
+        .where(eq(schema.tracks.id, trackId))
+        .get()?.albumId ?? -1;
+    assert.deepEqual(
+      selectAlbumsMissingSongs(db, [albumOf(airbag), albumOf(pablo), albumOf(everything)]),
+      [[paranoid, lucky], [], [everything]],
+    );
   });
 });

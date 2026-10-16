@@ -24,11 +24,14 @@ export { resolveSkipSwipe } from "./swipe.ts";
 export type { SkipDirection, SkipSwipe } from "./swipe.ts";
 export {
   EMPTY_QUEUE,
+  REAL_SHUFFLE,
   RESTART_THRESHOLD_MS,
   currentEntry,
   nextRepeatMode,
   parseQueueState,
+  readShuffleKind,
   reduceQueue,
+  shufflesQueue,
   upNext,
   upNextMove,
   withPendingMoves,
@@ -43,6 +46,8 @@ export type {
   QueueResult,
   QueueState,
   RepeatMode,
+  Shuffle,
+  ShuffleKind,
 } from "./queue.ts";
 export { applyPlayerSync, planPlayerSync } from "./playerSync.ts";
 export type { PlayerList, QueueList, SyncStep } from "./playerSync.ts";
@@ -199,6 +204,13 @@ export {
 export type { TabBarTab } from "./shortcutTab.ts";
 export { SETTINGS_PAGES, accountsSummary } from "./settingsPages.ts";
 export type { SettingsPage, SettingsPageEntry } from "./settingsPages.ts";
+export {
+  PLAYLIST_LAYOUTS,
+  parsePlaylistLayout,
+  playlistLayoutRows,
+  storedPlaylistLayout,
+} from "./playlistLayout.ts";
+export type { PlaylistLayout } from "./playlistLayout.ts";
 export { TAB_PATH, detailPath, inLibraryStack, isDetailPath, tabOfPath } from "./navigation.ts";
 export type { DetailScreen } from "./navigation.ts";
 export { planAlert } from "./alert.ts";
@@ -307,6 +319,7 @@ export type {
   ItemAction,
   ItemActionEntry,
   YtSongActionEntry,
+  YtSongActionOptions,
   ItemKind,
 } from "./itemActions.ts";
 export { concentricRadius } from "./corners.ts";
@@ -828,6 +841,7 @@ export {
   missingSongVideo,
   missingSongYtSong,
   missingSongsDownload,
+  missingSongsDownloadActions,
 } from "./missingSongDownload.ts";
 export type {
   MissingSongJob,
