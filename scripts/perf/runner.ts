@@ -14,6 +14,7 @@ import {
   findNode,
   parseAmStart,
   parseCompilation,
+  parseDensity,
   parseGetprop,
   parseGfxinfo,
   parseMeminfo,
@@ -94,7 +95,8 @@ const tapCommand = ({ x, y }: { x: number; y: number }): string => `input tap ${
 
 const ms = (value: number | null): string => (value === null ? "-" : `${value} ms`);
 
-const touches = (action: Action): boolean => action.kind === "tap" || action.kind === "taps";
+const touches = (action: Action): boolean =>
+  action.kind === "tap" || action.kind === "taps" || action.kind === "drag";
 
 /** Several flushes as one: their entries in order, their renders added up, the last meta. */
 const merge = (flushes: readonly PerfFlush[]): PerfFlush | null => {
@@ -193,11 +195,29 @@ export const runPerf = async (
     throw new ScenarioError(`Couldn't find ${key} on screen.`);
   };
 
+  let pxPerDp: number | null = null;
+  /** Pixels per dp on the phone, read once. */
+  const density = async (): Promise<number> => {
+    if (pxPerDp === null) {
+      const dpi = parseDensity(await shell("wm density"));
+      if (dpi === null) throw new ScenarioError("Couldn't read the screen density (wm density).");
+      pxPerDp = dpi / 160;
+    }
+    return pxPerDp;
+  };
+
   /** Finds the targets [action] taps before any window opens, so finding them is never measured. */
   const prepare = async (action: Action): Promise<string | null> => {
     switch (action.kind) {
       case "tap":
         return tapCommand(await resolve(action.target));
+      case "drag": {
+        const centre = await resolve(action.target);
+        const scale = await density();
+        const at = ({ x, y }: { x: number; y: number }): string =>
+          `${Math.round(centre.x + x * scale)} ${Math.round(centre.y + y * scale)}`;
+        return `input swipe ${at(action.from)} ${at(action.to)} ${action.durationMs}`;
+      }
       case "taps": {
         const commands: string[] = [];
         for (const target of action.targets) commands.push(tapCommand(await resolve(target)));

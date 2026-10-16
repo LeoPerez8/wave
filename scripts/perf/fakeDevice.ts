@@ -231,6 +231,14 @@ export class FakeDevice implements Device {
     }
   }
 
+  /** A finger dragged for [durationMs]: the app draws a frame per refresh while it moves. */
+  private swipe(durationMs: number): void {
+    this.recorder?.touch(this.clock - 4);
+    this.render(this.clock + 8, Math.round(durationMs / INTERVAL));
+    this.recorder?.render("js:drag.end");
+    this.advance(durationMs);
+  }
+
   private back(): void {
     if (this.keyboard) this.keyboard = false;
     else if (this.nowPlaying) this.nowPlaying = this.queue = false;
@@ -244,6 +252,9 @@ export class FakeDevice implements Device {
     if (this.nowPlaying)
       return [
         { desc: "Close Now Playing", bounds: [640, 120, 800, 260] },
+        ...(this.queue
+          ? [{ desc: "Remove Airbag from Up Next", bounds: [1128, 828, 1272, 972] } as Node]
+          : [{ desc: "Playback position", bounds: [96, 2200, 1344, 2296] } as Node]),
         { desc: "Queue", bounds: [1100, 2800, 1240, 2940] },
       ];
     const route = this.route;
@@ -388,6 +399,8 @@ export class FakeDevice implements Device {
       },
     ],
     [/^input keyevent 4$/, () => (this.back(), "")],
+    [/^input swipe -?\d+ -?\d+ -?\d+ -?\d+ (\d+)$/, (match) => (this.swipe(Number(match[1])), "")],
+    [/^wm density$/, () => "Physical density: 480\n"],
     [
       /^dumpsys meminfo \S+$/,
       () =>
