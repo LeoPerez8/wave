@@ -92,21 +92,20 @@ const readMix = (seed: DiscoverMixSeed, filter: Filter) =>
     if (start === null) return null;
     const mixFilter = { ...filter, seedVideo: start.video };
     let page = yield* ytMusic.radio(start.seed);
-    const pages = [page.songs];
+    let pages = 1;
+    // Kept page by page, so each song is looked at once.
+    let kept = discoverMixSongs([page.songs], mixFilter);
     while (
       page.continuation !== null &&
-      discoverMixReadsMore({
-        pages: pages.length,
-        kept: discoverMixSongs(pages, mixFilter).length,
-        more: true,
-      })
+      discoverMixReadsMore({ pages, kept: kept.length, more: true })
     ) {
       const next = yield* Effect.result(ytMusic.radioMore(page.continuation));
       if (Result.isFailure(next)) break;
       page = next.success;
-      pages.push(page.songs);
+      pages += 1;
+      kept = discoverMixSongs([page.songs], mixFilter, kept);
     }
-    return discoverMix(seed, discoverMixSongs(pages, mixFilter));
+    return discoverMix(seed, kept);
   });
 
 /**

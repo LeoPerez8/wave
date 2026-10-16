@@ -34,6 +34,11 @@ export interface SongsInPlace<S extends YtSong, L, K> {
   /** The Library's tracks those rows play: the list's Library part leaves them out. */
   readonly tracks: ReadonlySet<K>;
   /**
+   * Each of [streamed]'s row in [songs], by video id: a song shown once as
+   * an earlier row's Library file plays from that row.
+   */
+  readonly rowOf: ReadonlyMap<string, number>;
+  /**
    * What the list holds from now on: [held] with every song shown here. It's
    * [held] itself when nothing new showed, so a caller can keep it as state.
    */
@@ -54,7 +59,8 @@ export const songsInPlace = <S extends YtSong, L, K>(
   keyOf: (track: L) => K,
 ): SongsInPlace<S, L, K> => {
   const songs: DiscoverSong<S, L>[] = [];
-  const tracks = new Set<K>();
+  const rowByTrack = new Map<K, number>();
+  const rowOf = new Map<string, number>();
   let next: Map<string, S> | null = null;
   for (const song of streamed) {
     if (!held.has(song.videoId)) {
@@ -63,15 +69,21 @@ export const songsInPlace = <S extends YtSong, L, K>(
     }
     const track = find(song);
     if (track === null) {
+      rowOf.set(song.videoId, songs.length);
       songs.push({ source: "stream", song });
       continue;
     }
     const key = keyOf(track);
-    if (tracks.has(key)) continue;
-    tracks.add(key);
+    const row = rowByTrack.get(key);
+    if (row !== undefined) {
+      rowOf.set(song.videoId, row);
+      continue;
+    }
+    rowByTrack.set(key, songs.length);
+    rowOf.set(song.videoId, songs.length);
     songs.push({ source: "library", song, track });
   }
-  return { songs, tracks, held: next ?? held };
+  return { songs, tracks: new Set(rowByTrack.keys()), rowOf, held: next ?? held };
 };
 
 /**

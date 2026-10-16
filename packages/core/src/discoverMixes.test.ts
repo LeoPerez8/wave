@@ -107,6 +107,52 @@ describe("Discover mixes' seeds", () => {
     );
   });
 
+  test("are still six when an artist added for want of songs takes one of the songs", () => {
+    assert.deepEqual(
+      seedNames(
+        discoverMixSeeds({
+          artists: [
+            seedArtist(1, "Air"),
+            seedArtist(2, "Moby"),
+            seedArtist(3, "Daft Punk"),
+            seedArtist(4, "Justice"),
+            seedArtist(5, "Phoenix"),
+            seedArtist(6, "Cassius"),
+          ],
+          songs: [seedSong(10, "D.A.N.C.E.", "Justice", [4]), seedSong(11, "1901", "Phoenix", [5])],
+        }),
+      ),
+      [
+        "artist: Air",
+        "artist: Moby",
+        "artist: Daft Punk",
+        "artist: Justice",
+        "artist: Phoenix",
+        "artist: Cassius",
+      ],
+    );
+  });
+
+  test("short of six either way, are as many as fewer artists make", () => {
+    assert.deepEqual(
+      seedNames(
+        discoverMixSeeds({
+          artists: [
+            seedArtist(1, "Air"),
+            seedArtist(2, "Moby"),
+            seedArtist(3, "Daft Punk"),
+            seedArtist(4, "Justice"),
+          ],
+          songs: [
+            seedSong(10, "D.A.N.C.E.", "Justice", [4]),
+            seedSong(11, "Genesis", "Justice", [4]),
+          ],
+        }),
+      ),
+      ["artist: Air", "song: D.A.N.C.E.", "artist: Moby", "song: Genesis", "artist: Daft Punk"],
+    );
+  });
+
   test("leave out names that aren't an artist's, and each song seeds one mix", () => {
     assert.deepEqual(
       seedNames(
@@ -271,6 +317,34 @@ describe("A mix's songs", () => {
       { ...nothing, taken: new Set(["b"]) },
     );
     assert.deepEqual(ids(songs), ["a", "d"]);
+  });
+
+  test("read a page at a time, go on from those kept, asking about each new song once", () => {
+    const asked: string[] = [];
+    const filter = {
+      ...nothing,
+      inLibrary: (song: { videoId: string }) => {
+        asked.push(song.videoId);
+        return false;
+      },
+    };
+    const first = discoverMixSongs([[yt("a", "Angel", ["Massive Attack"])]], filter);
+    const second = discoverMixSongs(
+      [
+        [
+          yt("a", "Angel", ["Massive Attack"]),
+          yt("c", "angel", ["MASSIVE ATTACK"]),
+          yt("d", "Protection", ["Massive Attack"]),
+        ],
+      ],
+      filter,
+      first,
+    );
+    assert.deepEqual(ids(second), ["a", "d"]);
+    assert.deepEqual(asked, ["a", "d"]);
+    const full = Array.from({ length: 49 }, (_, n) => yt(`v${n}`, `Song ${n}`, ["X"]));
+    const more = [yt("w", "One More", ["X"]), yt("z", "Too Many", ["X"])];
+    assert.equal(discoverMixSongs([more], nothing, [...first, ...full]).length, 50);
   });
 
   test("are fifty at most", () => {

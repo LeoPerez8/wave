@@ -102,6 +102,37 @@ describe("a YouTube Music playlist import", () => {
       { source: "library", trackId: 2 },
       { source: "stream", song: yt("b", "Within") },
     ]);
+    assert.equal(plan.songs.length, 2, "the card counts each song once");
+    assert.equal(plan.inLibrary, 1);
+  });
+});
+
+describe("a Spotify playlist listing a song more than once", () => {
+  test("counts it once, and imports it once", () => {
+    const plan = planLinkImport(
+      spotifyPlaylist([
+        spotify("Touch", { durationMs: 498_000 }),
+        spotify("Within", { durationMs: 228_000 }),
+        spotify("Touch", { durationMs: 498_000 }),
+        spotify("Within", { durationMs: 228_000 }),
+        spotify("Within", { durationMs: 228_000 }),
+        spotify("Untitled", { artists: [] }),
+        spotify("Untitled", { artists: [] }),
+        spotify("Within (Live)", { durationMs: 228_000 }),
+      ]),
+      library,
+    );
+    assert.deepEqual(
+      plan.songs.map((song) => song.title),
+      ["Touch", "Within", "Untitled", "Within (Live)"],
+    );
+    assert.equal(plan.inLibrary, 1);
+    assert.deepEqual(plan.finds, [
+      { kind: "library", trackId: 2 },
+      null,
+      { kind: "notFound" },
+      null,
+    ]);
   });
 });
 
@@ -179,8 +210,8 @@ describe("a Spotify playlist import", () => {
     ]);
     assert.equal(
       job.added,
-      5,
-      "the song without an artist and Within's second listing are settled too",
+      4,
+      "the song without an artist is settled too (Within's second listing was left out)",
     );
 
     assert.deepEqual(askAll(job).asked, ["Fragments of Time Daft Punk"]);

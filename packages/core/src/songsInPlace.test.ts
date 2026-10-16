@@ -114,6 +114,15 @@ describe("songsInPlace", () => {
         ["b", "stream"],
       ],
     );
+    assert.deepEqual(
+      [...placed.rowOf],
+      [
+        ["a", 0],
+        ["b", 1],
+        ["c", 0],
+      ],
+      "the second plays from the first's row",
+    );
   });
 });
 
