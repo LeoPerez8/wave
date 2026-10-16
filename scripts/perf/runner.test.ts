@@ -8,7 +8,7 @@ import { FakeDevice } from "./fakeDevice.ts";
 import { summarize, type StepRecord } from "./metrics.ts";
 import { readResults } from "./results.ts";
 import { runPerf, type RunOptions } from "./runner.ts";
-import { ALL_SCENARIOS } from "./scenarios.ts";
+import { ALL_SCENARIOS, GLASS_SCENARIOS } from "./scenarios.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "wave-perf-"));
 after(() => rmSync(dir, { recursive: true, force: true }));
@@ -31,6 +31,7 @@ const options = (name: string, overrides: Partial<RunOptions> = {}): RunOptions 
   apkFile: null,
   manual: {},
   compile: null,
+  glass: null,
   perfetto: null,
   out: join(dir, `${name}.jsonl`),
   dryRun: true,
@@ -69,6 +70,8 @@ describe("runPerf on the simulated phone", () => {
     const keys = summarize(steps).map((row) => row.key);
     assert.deepEqual(keys, [
       "startup/idle/cold",
+      "warm-start/idle/warm",
+      "tab-first/idle/first",
       "tab-switch/idle/tab",
       "rapid-tabs/idle/burst",
       "push-settings/idle/push",
@@ -93,6 +96,7 @@ describe("runPerf on the simulated phone", () => {
       "queue-drag/idle/down",
       "queue-drag/idle/up",
       "search-first-tap/idle/first-tap",
+      "search-typing/idle/type",
     ]);
     const expecting = steps.filter((step) => step.expectMissing !== null);
     assert.ok(expecting.length > 0);
@@ -100,17 +104,47 @@ describe("runPerf on the simulated phone", () => {
       assert.equal(step.expectMissing, false, `${step.scenario} ${step.measure} lost its mark`);
       assert.ok((step.responseMs ?? -1) > 0, `${step.scenario} ${step.measure} has no response`);
     }
-    for (const step of steps.filter((measured) => measured.scenario !== "startup")) {
+    // Launches have no touch to count a first frame from.
+    const launches = new Set(["startup", "warm-start"]);
+    for (const step of steps.filter((measured) => !launches.has(measured.scenario))) {
       assert.ok(step.firstFrameMs !== null, `${step.scenario} ${step.measure} has no first frame`);
       assert.ok(step.frames.total > 0);
     }
     assert.equal(memory.length, ALL_SCENARIOS.length);
     for (const step of steps.filter((measured) => measured.scenario.startsWith("now-playing"))) {
-      for (const [mark, ms] of Object.entries(step.traceMs)) {
+      const phases = step.phasesMs ?? {};
+      for (const [mark, ms] of Object.entries(phases)) {
         assert.ok((ms ?? -1) > 0, `${step.scenario} ${step.measure} has no ${mark}`);
       }
-      assert.equal(Object.keys(step.traceMs).length, 4);
+      assert.equal(Object.keys(phases).length, 4);
     }
+  });
+
+  it("times a tab's commit and layout apart from its frames, on first and warm visits", async () => {
+    const { out } = await runPerf(
+      new FakeDevice(),
+      options("tabs", { scenarios: ["tab-first", "tab-switch", "rapid-tabs"] }),
+    );
+    const { steps } = readResults(readFileSync(out, "utf8"));
+    for (const step of steps.filter((tab) => tab.scenario !== "rapid-tabs")) {
+      assert.ok((step.phasesMs?.["tab.commit"] ?? -1) > 0, `${step.scenario} has no commit`);
+      assert.ok((step.phasesMs?.["tab.layout"] ?? -1) > 0, `${step.scenario} has no layout`);
+    }
+    // A burst counts from its last tap to the tabs settling on the tab it tapped.
+    const bursts = steps.filter((step) => step.scenario === "rapid-tabs");
+    assert.ok(bursts.length > 0);
+    for (const step of bursts) assert.equal(step.expectMissing, false);
+  });
+
+  it("compiles with only the APK's shipped profile first when asked for the baseline state", async () => {
+    const { out } = await runPerf(
+      new FakeDevice({ savedProfile: ["Lcom/example/Learned;"] }),
+      options("baseline", { scenarios: ["startup"], compile: "baseline" }),
+    );
+    const { run } = readResults(readFileSync(out, "utf8"));
+    assert.deepEqual(run?.compilation, { status: "speed-profile", reason: "cmdline" });
+    // The simulated APK ships two rules (one class, one method); what the phone learned is gone.
+    assert.deepEqual(run?.artProfile, { install: "INSTALL_SUCCESS", classes: 1, methods: 1 });
   });
 
   it("drags in dp from its target, at the phone's density", async () => {
@@ -137,6 +171,16 @@ describe("runPerf on the simulated phone", () => {
       launch?: { totalTimeMs: number };
     })[];
     assert.equal(launch?.launch?.totalTimeMs, 742);
+  });
+
+  it("times warm launches back from the home screen, the process still alive", async () => {
+    const { out } = await runPerf(new FakeDevice(), options("warm", { scenarios: ["warm-start"] }));
+    const { steps, errors } = readResults(readFileSync(out, "utf8"));
+    assert.deepEqual(errors, []);
+    const launches = (steps as (StepRecord & { launch?: { launchState: string } })[]).map(
+      (step) => step.launch?.launchState,
+    );
+    assert.deepEqual(launches, ["HOT", "HOT"]);
   });
 
   it("runs the import first in the import variant, and every step reports its progress", async () => {
@@ -167,6 +211,19 @@ describe("runPerf on the simulated phone", () => {
     assert.ok(queries.length > 0);
     assert.ok(queries.every((counters) => typeof counters?.["reads"] === "number"));
     assert.ok(queries.every((counters) => typeof counters?.["paused"] === "number"));
+  });
+
+  it("records Search's index counters with each step of a perf build", async () => {
+    const { out } = await runPerf(
+      new FakeDevice(),
+      options("search", { scenarios: ["search-typing"] }),
+    );
+    const { steps } = readResults(readFileSync(out, "utf8"));
+    const search = (steps as (StepRecord & { search?: Record<string, unknown> })[]).map(
+      (step) => step.search,
+    );
+    assert.ok(search.length > 0);
+    assert.ok(search.every((counters) => typeof counters?.["prepared"] === "number"));
   });
 
   it("records a scenario it can't run and goes on", async () => {
@@ -208,6 +265,68 @@ describe("runPerf on the simulated phone", () => {
       assert.equal(step.responseMs, null);
       assert.ok(step.burstMs !== null);
     }
+  });
+
+  it("measures flings under the glass and an idle screen (the glass scenarios)", async () => {
+    const device = new FakeDevice();
+    const { out } = await runPerf(device, options("glass", { scenarios: GLASS_SCENARIOS }));
+    const { steps, errors } = readResults(readFileSync(out, "utf8"));
+    assert.deepEqual(errors, []);
+    assert.deepEqual(
+      summarize(steps).map((row) => row.key),
+      [
+        "scroll-home/idle/fling-up",
+        "scroll-home/idle/fling-down",
+        "scroll-songs/idle/fling-up",
+        "scroll-songs/idle/fling-down",
+        "idle-home/idle/idle",
+      ],
+    );
+    // A fling is a swipe across the middle of the screen, clear of the chrome at the bottom.
+    assert.ok(device.commands.includes("input swipe 720 2184 720 936 120"));
+    assert.ok(device.commands.includes("input swipe 720 936 720 2184 120"));
+    for (const step of steps.filter((one) => one.measure.startsWith("fling"))) {
+      assert.ok(step.touchAt !== null, "a fling is measured from its touch");
+      assert.ok(step.frames.total > 120, "a fling renders more frames than gfxinfo keeps");
+      assert.ok(step.frameParts.issueMs.frames > 0, "and splits the kept ones into their parts");
+    }
+    const idle = steps.filter((one) => one.scenario === "idle-home");
+    assert.ok(idle.length > 0);
+    for (const step of idle) assert.equal(step.frames.total, 0, "an idle screen draws nothing");
+  });
+
+  it("launches every time with the glass probe asked for, and records it", async () => {
+    const device = new FakeDevice();
+    const { out } = await runPerf(
+      device,
+      options("probe", { scenarios: ["push-settings"], glass: "off" }),
+    );
+    const { run } = readResults(readFileSync(out, "utf8"));
+    assert.equal(run?.runner.glass, "off");
+    assert.equal(run?.app?.["glass.probe"], "off");
+    const launches = device.commands.filter((command) => command.startsWith("am start -W"));
+    assert.ok(launches.length > 1);
+    for (const launch of launches) assert.match(launch, / --es wave\.perf\.glass off\b/);
+  });
+
+  it("stops before measuring when the app didn't take the glass probe", async () => {
+    await assert.rejects(
+      runPerf(
+        new FakeDevice({ ignoresGlassProbe: true }),
+        options("probe-ignored", { scenarios: ["push-settings"], glass: "off" }),
+      ),
+      /glass probe "off".*live/,
+    );
+  });
+
+  it("refuses a glass probe on an APK that isn't a perf build", async () => {
+    await assert.rejects(
+      runPerf(
+        new FakeDevice({ perfBuild: false }),
+        options("probe-plain", { scenarios: ["push-settings"], glass: "blur" }),
+      ),
+      /perf build/,
+    );
   });
 
   it("captures a Perfetto trace per scenario when asked", async () => {

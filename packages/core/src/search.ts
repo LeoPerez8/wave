@@ -81,8 +81,12 @@ const Tier = {
 
 type Tier = (typeof Tier)[keyof typeof Tier];
 
-interface Indexed<E> {
+/** An entry prepared for matching. */
+export interface Indexed<E> {
   readonly entry: E;
+  /** Which part of the index it comes from (a catalog's source), for ties. */
+  readonly group: number;
+  /** Its place in its part, for ties. */
   readonly order: number;
   /** Normalized name. */
   readonly name: string;
@@ -150,10 +154,11 @@ const compareHits = <E extends SearchEntry>(a: Hit<E>, b: Hit<E>): number =>
   KIND_ORDER[a.item.entry.kind] - KIND_ORDER[b.item.entry.kind] ||
   a.item.name.length - b.item.name.length ||
   compareStrings(a.item.name, b.item.name) ||
+  a.item.group - b.item.group ||
   a.item.order - b.item.order;
 
 /** Normalizes repeated text (artist and album names) once per index build. */
-const memoize = (normalize: (text: string) => string): ((text: string) => string) => {
+export const memoize = (normalize: (text: string) => string): ((text: string) => string) => {
   const cache = new Map<string, string>();
   return (text) => {
     let normalized = cache.get(text);
@@ -192,27 +197,47 @@ const NOTHING: SearchResults<never> = { top: null, groups: [] };
 const RECENT_QUERIES = 16;
 
 /**
+ * Prepares [entry] for matching: its texts normalized once, so each search
+ * only compares prepared text. [normalize] is shared across a build, so
+ * repeated artist and album names are normalized once.
+ */
+export const prepareSearchEntry = <E extends SearchEntry>(
+  entry: E,
+  group: number,
+  order: number,
+  normalize: (text: string) => string,
+): Indexed<E> => {
+  const name = normalize(entry.name);
+  let allWords = ` ${name}`;
+  for (const text of entry.also ?? []) allWords += ` ${normalize(text)}`;
+  return {
+    entry,
+    group,
+    order,
+    name,
+    bare: name.replace(LEADING_ARTICLE, ""),
+    compact: name.replaceAll(" ", ""),
+    nameWords: ` ${name}`,
+    allWords,
+  };
+};
+
+/**
  * Indexes entries for searching. Build the index once per library change;
  * each search then only compares prepared text, and a query typed onwards
  * from the previous one only re-checks the previous matches.
  */
 export const createSearchIndex = <E extends SearchEntry>(entries: readonly E[]): SearchIndex<E> => {
   const normalize = memoize(normalizeSearchText);
-  const indexed = entries.map((entry, order): Indexed<E> => {
-    const name = normalize(entry.name);
-    let allWords = ` ${name}`;
-    for (const text of entry.also ?? []) allWords += ` ${normalize(text)}`;
-    return {
-      entry,
-      order,
-      name,
-      bare: name.replace(LEADING_ARTICLE, ""),
-      compact: name.replaceAll(" ", ""),
-      nameWords: ` ${name}`,
-      allWords,
-    };
-  });
+  return searchIndexOver(
+    entries.map((entry, order) => prepareSearchEntry(entry, 0, order, normalize)),
+  );
+};
 
+/** A search index over entries already prepared (`prepareSearchEntry`). */
+export const searchIndexOver = <E extends SearchEntry>(
+  indexed: readonly Indexed<E>[],
+): SearchIndex<E> => {
   // The matches of recent queries, newest last. Typing onwards narrows the
   // latest; deleting back falls back to an earlier, shorter one.
   const recent: { readonly text: string; readonly matches: readonly Indexed<E>[] }[] = [];

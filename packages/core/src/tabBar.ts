@@ -16,7 +16,7 @@ export type TabBar = readonly TabBarTab[];
 const TABS: readonly TabBarTab[] = ["index", "library", ...LIBRARY_SECTION_SLUGS, "search"];
 
 /** The most tabs the bar holds, Home and Search included. */
-const MAX_TABS = 5;
+export const MAX_TABS = 5;
 
 const isTab = (value: string): value is TabBarTab => TABS.some((tab) => tab === value);
 

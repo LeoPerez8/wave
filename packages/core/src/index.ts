@@ -98,6 +98,16 @@ export type {
   SearchOptions,
   SearchResults,
 } from "./search.ts";
+export { createSearchCatalog } from "./searchCatalog.ts";
+export type { SearchCatalog, SearchCatalogStats } from "./searchCatalog.ts";
+export { SEARCH_FOCUS_LIMITS, startSearchFocus, stepSearchFocus } from "./searchFocus.ts";
+export type {
+  SearchFocusCommand,
+  SearchFocusEvent,
+  SearchFocusLimits,
+  SearchFocusState,
+  SearchFocusStep,
+} from "./searchFocus.ts";
 export {
   PLAYLIST_NAME_MAX,
   checkPlaylistName,
@@ -297,6 +307,14 @@ export {
   readGlassSettings,
 } from "./glassSettings.ts";
 export type { GlassSettings } from "./glassSettings.ts";
+export {
+  GLASS_PROBES,
+  GLASS_PROBE_EXTRA,
+  GLASS_PROBE_SUMMARY,
+  glassLayers,
+  readGlassProbe,
+} from "./glassProbe.ts";
+export type { GlassLayers, GlassProbe } from "./glassProbe.ts";
 export { counted, listeningOverview, listeningTotals } from "./listening.ts";
 export type {
   LibraryTotals,
@@ -400,6 +418,10 @@ export type {
 } from "./artistPhoto.ts";
 export { focusedVersion, startFocusedVersion } from "./focusedVersion.ts";
 export type { FocusedVersion, FocusedVersionEvent } from "./focusedVersion.ts";
+export { startTabSwitch, stepTabSwitch } from "./tabSwitch.ts";
+export type { TabSwitch, TabSwitchEvent, TabSwitchStep } from "./tabSwitch.ts";
+export { describeTabScreens, keepTabs, parseTabScreens } from "./tabScreens.ts";
+export type { TabScreens } from "./tabScreens.ts";
 export {
   LIBRARY_QUERY_LIMITS,
   createLibraryQueries,

@@ -8,12 +8,20 @@ export type Action =
   | { readonly kind: "tap"; readonly target: Target }
   /** Back-to-back taps, no wait between them (rapid tab taps). */
   | { readonly kind: "taps"; readonly targets: readonly Target[] }
+  /**
+   * A quick swipe (`input swipe`) across the middle of the screen, clear of the
+   * floating chrome, that lets the list fling on: "up" moves the finger up, so
+   * the content scrolls on towards its end.
+   */
+  | { readonly kind: "fling"; readonly direction: "up" | "down" }
   /** The system back key. It has no touch to measure from, so only setup and teardown use it. */
   | { readonly kind: "back" }
   /** Shares the fixture's playlist link to Wave, as a share sheet would. */
   | { readonly kind: "share" }
   /** A cold launch, timed by `am start -W`. */
   | { readonly kind: "launch" }
+  /** Home, then Wave again from its launcher intent while its process lives: a warm launch. */
+  | { readonly kind: "resume" }
   /** Nothing: a window that watches the app on its own (an import filling). */
   | { readonly kind: "idle" }
   /**
@@ -26,7 +34,12 @@ export type Action =
       readonly from: Point;
       readonly to: Point;
       readonly durationMs: number;
-    };
+    }
+  /**
+   * Types [text] into the focused field (`input text`): key events, so no touch
+   * to measure from; the step names the mark it measures from instead.
+   */
+  | { readonly kind: "type"; readonly text: string };
 
 /** A position in dp; x grows right, y down. */
 export interface Point {
@@ -42,10 +55,12 @@ export interface Step {
   readonly expect?: Expect;
   /** Which touch latencies count from; "last" for a burst of taps. */
   readonly anchor?: "first" | "last";
+  /** For an action with no touch (typing): the mark latencies count from, its first occurrence. */
+  readonly from?: Expect;
   /** How long the step's window stays open; the run's window when unset. */
   readonly windowMs?: number;
-  /** Marks timed from the touch besides the response, recorded as `traceMs`. */
-  readonly trace?: readonly string[];
+  /** Marks timed from the touch besides the response (`phasesMs`). */
+  readonly phases?: readonly string[];
 }
 
 /** What the scenarios read from the fixture (scripts/perf/fixture.json). */
@@ -76,18 +91,23 @@ export interface Scenario {
   readonly needsImportLink?: boolean;
   /** Needs the fixture's artist. */
   readonly needsArtist?: boolean;
+  /** Part of the glass comparison (#316), run with `--scenario glass`, not with `all`. */
+  readonly glass?: boolean;
 }
 
 const tab = (label: string): Target => ({ desc: label });
+
+/** What search-typing types: four keystrokes, each narrowing the last one's results. */
+const SEARCH_TYPED = "love";
 const route: Expect = { mark: "route" };
 
 /**
- * The Now Playing sheet's trace (#305): the step JavaScript took for the
+ * The Now Playing sheet's phases (#305): the step JavaScript took for the
  * touch, its spring assigned, its phase listeners done, and its first motion
  * on the UI thread (as JavaScript heard of it; the mark's detail says how
  * late, in ms).
  */
-const SHEET_TRACE = [
+const SHEET_PHASES = [
   "nowPlaying.step",
   "nowPlaying.spring",
   "nowPlaying.notified",
@@ -98,14 +118,14 @@ const OPEN_NOW_PLAYING: Step = {
   measure: "open",
   action: { kind: "tap", target: { descPrefix: "Now playing:" } },
   expect: { mark: "nowPlaying.shown" },
-  trace: SHEET_TRACE,
+  phases: SHEET_PHASES,
 };
 
 const CLOSE_NOW_PLAYING: Step = {
   measure: "close",
   action: { kind: "tap", target: { desc: "Close Now Playing" } },
   expect: { mark: "nowPlaying.hidden" },
-  trace: SHEET_TRACE,
+  phases: SHEET_PHASES,
 };
 
 /**
@@ -115,6 +135,12 @@ const CLOSE_NOW_PLAYING: Step = {
 const pushPop = (target: Target): readonly Step[] => [
   { measure: "push", action: { kind: "tap", target }, expect: route },
   { measure: "pop", action: { kind: "tap", target: { desc: "Back" } }, expect: route },
+];
+
+/** A fling on towards the content's end, then one back: the content scrolls under the glass. */
+const flings: readonly Step[] = [
+  { measure: "fling-up", action: { kind: "fling", direction: "up" } },
+  { measure: "fling-down", action: { kind: "fling", direction: "down" } },
 ];
 
 const drag = (target: Target, from: Point, to: Point, durationMs: number): Action => ({
@@ -136,8 +162,26 @@ const HANDLE: Point = { x: 48, y: 0 };
 const THREE_ROWS_DOWN: Point = { x: 48, y: 3 * 56 };
 
 /** Ten tab changes away from Home and back, cycling through [tabs]. */
+const tabCycleLabels = (tabs: readonly string[], count: number): string[] =>
+  Array.from({ length: count }, (_, i) => tabs[(i + 1) % tabs.length] ?? "Home");
 const tabCycle = (tabs: readonly string[], count: number): Target[] =>
-  Array.from({ length: count }, (_, i) => tab(tabs[(i + 1) % tabs.length] ?? "Home"));
+  tabCycleLabels(tabs, count).map(tab);
+
+/**
+ * What a tab switch's time goes to (#304), besides the route mark: React done
+ * with the switch (`tab.commit`, detail `<tab> first|warm`) and the shown tab
+ * laid out (`tab.layout`; none when showing it changes no layout). The frames
+ * after them are native work: attaching the tab's views, layout and drawing.
+ */
+const TAB_PHASES = ["tab.commit", "tab.layout"] as const;
+
+/** A tab tap, measured to its route mark and its phases. */
+const tabStep = (measure: string, target: Target): Step => ({
+  measure,
+  action: { kind: "tap", target },
+  expect: route,
+  phases: TAB_PHASES,
+});
 
 export const SCENARIOS: readonly Scenario[] = [
   {
@@ -149,29 +193,45 @@ export const SCENARIOS: readonly Scenario[] = [
     warmup: 0,
   },
   {
+    name: "warm-start",
+    summary: "Home, then Wave again with its process alive: am start -W times of a warm launch.",
+    steps: () => [{ measure: "warm", action: { kind: "resume" } }],
+    iterations: 5,
+    warmup: 1,
+  },
+  {
+    name: "tab-first",
+    summary: "The first visit to each of the fixture's tabs after a launch: the tab is built.",
+    coldEachIteration: true,
+    steps: ({ tabs }) => tabs.slice(1).map((label) => tabStep("first", tab(label))),
+    iterations: 5,
+    warmup: 1,
+  },
+  {
     name: "tab-switch",
-    summary: "Ten tab changes across the fixture's tabs, one tap at a time.",
-    steps: ({ tabs }) =>
-      tabCycle(tabs, 10).map((target) => ({
-        measure: "tab",
-        action: { kind: "tap", target },
-        expect: route,
-      })),
+    summary: "Ten tab changes across the fixture's tabs, one tap at a time: warm visits.",
+    steps: ({ tabs }) => tabCycle(tabs, 10).map((target) => tabStep("tab", target)),
     iterations: 3,
     warmup: 1,
   },
   {
     name: "rapid-tabs",
-    summary: "Ten tab taps back to back; latencies count from the last tap.",
-    steps: ({ tabs }) => [
-      {
-        measure: "burst",
-        action: { kind: "taps", targets: tabCycle(tabs, 10) },
-        expect: route,
-        anchor: "last",
-        windowMs: 4_000,
-      },
-    ],
+    summary:
+      "Ten tab taps back to back; latencies count from the last tap to the tabs settling on it.",
+    steps: ({ tabs }) => {
+      const labels = tabCycleLabels(tabs, 10);
+      return [
+        {
+          measure: "burst",
+          action: { kind: "taps", targets: labels.map(tab) },
+          // `tab.settled` (detail: the tab's label) comes once no switch is on its way
+          // and the tab on screen is the one tapped last.
+          expect: { mark: "tab.settled", detail: labels[labels.length - 1] ?? "Home" },
+          anchor: "last",
+          windowMs: 4_000,
+        },
+      ];
+    },
     iterations: 5,
     warmup: 1,
   },
@@ -329,6 +389,22 @@ export const SCENARIOS: readonly Scenario[] = [
     warmup: 1,
   },
   {
+    name: "search-typing",
+    summary: `Types "${SEARCH_TYPED}" into Search, until its results are on screen; then clears the field.`,
+    setup: [{ kind: "tap", target: tab("Search") }],
+    steps: () => [
+      {
+        measure: "type",
+        action: { kind: "type", text: SEARCH_TYPED },
+        from: { mark: "search.typed" },
+        expect: { mark: "search.results", detail: SEARCH_TYPED },
+      },
+    ],
+    teardown: [{ kind: "tap", target: { desc: "Clear search" } }],
+    iterations: 10,
+    warmup: 2,
+  },
+  {
     name: "import",
     summary:
       "Share the fixture playlist link, tap Import, then watch ten seconds of the import filling.",
@@ -345,12 +421,48 @@ export const SCENARIOS: readonly Scenario[] = [
     warmup: 0,
     needsImportLink: true,
   },
+  {
+    name: "scroll-home",
+    summary:
+      "Glass: flings on Home, its content scrolling under the tab bar, the Search pill and the mini player.",
+    steps: () => flings,
+    iterations: 10,
+    warmup: 1,
+    glass: true,
+  },
+  {
+    name: "scroll-songs",
+    summary:
+      "Glass: flings on Library › Songs, the whole Library as a Track list scrolling under the mini player.",
+    setup: [
+      { kind: "tap", target: tab("Library") },
+      { kind: "tap", target: { text: "Songs" } },
+    ],
+    steps: () => flings,
+    iterations: 10,
+    warmup: 1,
+    glass: true,
+  },
+  {
+    name: "idle-home",
+    summary:
+      "Glass: five seconds of Home with nothing touched; with the mini player paused, any frame is idle rendering.",
+    steps: () => [{ measure: "idle", action: { kind: "idle" }, windowMs: 5_000 }],
+    iterations: 5,
+    warmup: 1,
+    glass: true,
+  },
 ];
 
 /** The scenarios a full baseline runs, in order (`--scenario all`). */
-export const ALL_SCENARIOS: readonly string[] = SCENARIOS.map((scenario) => scenario.name).filter(
-  (name) => name !== "import",
-);
+export const ALL_SCENARIOS: readonly string[] = SCENARIOS.filter(
+  (scenario) => scenario.name !== "import" && scenario.glass !== true,
+).map((scenario) => scenario.name);
+
+/** The glass comparison's scenarios (`--scenario glass`), run once per glass probe. */
+export const GLASS_SCENARIOS: readonly string[] = SCENARIOS.filter(
+  (scenario) => scenario.glass === true,
+).map((scenario) => scenario.name);
 
 export const VARIANTS = ["idle", "import"] as const;
 export type Variant = (typeof VARIANTS)[number];

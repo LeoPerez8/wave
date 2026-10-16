@@ -8,7 +8,7 @@ Ticket: #305 (parent #301). Branch `feat/305-now-playing-warm`, based on `perf/3
 **On the phone (all pending, see the end).** The runner gained what the ticket asks to compare:
 
 - `now-playing` (warm open and close) and the new `now-playing-first` (the first open after a
-  launch). Both trace the sheet from the touch (`traceMs`): `nowPlaying.step` (JavaScript took the
+  launch). Both time the sheet's phases from the touch (`phasesMs`): `nowPlaying.step` (JavaScript took the
   tap), `nowPlaying.spring` (the spring handed to the UI thread), `nowPlaying.notified` (the
   phase listeners done) and `nowPlaying.motion` (the sheet's first move on the UI thread, marked
   when JavaScript hears of it, with the delay as its detail).
@@ -31,6 +31,9 @@ Builds:
 - **Before**: 0ca3fd5. It has the trace marks, listener counts and new scenarios, and the cover
   coalescing (f6f23ec), but the old spring order and the old view mounting.
 - **After**: 5e2fd10 (spring first, warm views, Queue scroll reset).
+- Run both with the runner at the branch head: this ticket's own `traceMs` became #304's
+  `phasesMs` when `perf/301-performance` was merged in, and the app's marks are the same in both
+  builds.
 
 **On the desktop:** a replay of YT Music covers landing in the queue, the audit's replay
 (`notes/audit-20261016/measure.mjs`) turned into `apps/mobile/bench/queueCovers.ts`:
@@ -123,8 +126,8 @@ player's subscriptions while hidden.
     track at once). Full suite: 1,811 pass.
   - App: `queueTracks.test.ts` gained one change for 50 covers, the playing song's cover first,
     and no caching after the song left. Full suite: 289 pass.
-  - Runner: traced marks timed, summed and compared; the new scenarios on the simulated phone. 51
-    pass.
+  - Runner: the sheet's phases on every `now-playing*` step and the new scenarios, on the
+    simulated phone. 96 pass after the merge.
   - Typecheck: app, Core, `scripts/perf`.
 - **Worklets:** `upNextDrag.ts` 25 worklet hashes (24 + `cancelDrag`), `PerfProbe.tsx` 2, through
   the app's Babel preset (`notes/313/workletize.cjs`).
