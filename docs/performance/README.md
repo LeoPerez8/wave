@@ -119,23 +119,25 @@ aren't recorded. Every measured navigation step is a tap, so it has a touch to m
 pops tap the header's Back button, and Now Playing closes with its Close button. Only the cold
 launch, the share and the import's idle window have no touch.
 
-| Scenario           | Steps (measure)                                                                      | Response mark             | Iterations |
-| ------------------ | ------------------------------------------------------------------------------------ | ------------------------- | ---------: |
-| `startup`          | cold launch (`cold`)                                                                 | (am start -W)             |          5 |
-| `tab-switch`       | ten tab taps cycling through `tabs` (`tab`)                                          | `route`                   |          3 |
-| `rapid-tabs`       | ten tab taps back to back, measured from the last (`burst`)                          | `route`                   |          5 |
-| `push-settings`    | Home › Settings (`push`), Back (`pop`)                                               | `route`                   |         10 |
-| `push-library`     | Library › Albums (`push`), Back (`pop`)                                              | `route`                   |         10 |
-| `push-tracklist`   | Library › Songs, the whole Library as a Track list (`push`), Back (`pop`)            | `route`                   |         10 |
-| `push-artist`      | Library › Artists › the fixture's artist, to its stats block (`push`), Back (`pop`)  | `artist.stats`, `route`   |         10 |
-| `push-empty`       | Settings › Developer, one row: the empty-screen control (`push`, `pop`)              | `route`                   |         10 |
-| `now-playing`      | mini player (`open`), Close Now Playing (`close`)                                    | `nowPlaying.shown/hidden` |         10 |
-| `queue`            | Queue in Now Playing (`open`), Queue again (`close`)                                 | `visible` queue           |         10 |
-| `skip`             | the mini player's Next track (`next`)                                                | `queue.synced`            |         10 |
-| `scrub`            | Now Playing's scrubber dragged 240 dp forward (`forward`), then back (`back`)        | (none)                    |         10 |
-| `queue-drag`       | The first Up Next row dragged three rows down by its handle (`down`), then up (`up`) | (none)                    |         10 |
-| `search-first-tap` | the first Search tap after a fresh launch (`first-tap`)                              | `keyboard.show`           |          5 |
-| `import`           | share the link (`card`), tap Import (`start`), 10 s of the import (`during-import`)  | `import.running`          |          1 |
+| Scenario            | Steps (measure)                                                                      | Response mark             | Iterations |
+| ------------------- | ------------------------------------------------------------------------------------ | ------------------------- | ---------: |
+| `startup`           | cold launch (`cold`)                                                                 | (am start -W)             |          5 |
+| `tab-switch`        | ten tab taps cycling through `tabs` (`tab`)                                          | `route`                   |          3 |
+| `rapid-tabs`        | ten tab taps back to back, measured from the last (`burst`)                          | `route`                   |          5 |
+| `push-settings`     | Home › Settings (`push`), Back (`pop`)                                               | `route`                   |         10 |
+| `push-library`      | Library › Albums (`push`), Back (`pop`)                                              | `route`                   |         10 |
+| `push-tracklist`    | Library › Songs, the whole Library as a Track list (`push`), Back (`pop`)            | `route`                   |         10 |
+| `push-artist`       | Library › Artists › the fixture's artist, to its stats block (`push`), Back (`pop`)  | `artist.stats`, `route`   |         10 |
+| `push-empty`        | Settings › Developer, one row: the empty-screen control (`push`, `pop`)              | `route`                   |         10 |
+| `now-playing`       | mini player (`open`), Close Now Playing (`close`)                                    | `nowPlaying.shown/hidden` |         10 |
+| `now-playing-first` | the first mini player tap after a fresh launch (`open`)                              | `nowPlaying.shown`        |          5 |
+| `queue`             | Queue in Now Playing (`open`), Queue again (`close`)                                 | `visible` queue           |         10 |
+| `queue-first`       | the first Queue tap after a fresh launch, Now Playing already open (`open`)          | `visible` queue           |          5 |
+| `skip`              | the mini player's Next track (`next`)                                                | `queue.synced`            |         10 |
+| `scrub`             | Now Playing's scrubber dragged 240 dp forward (`forward`), then back (`back`)        | (none)                    |         10 |
+| `queue-drag`        | The first Up Next row dragged three rows down by its handle (`down`), then up (`up`) | (none)                    |         10 |
+| `search-first-tap`  | the first Search tap after a fresh launch (`first-tap`)                              | `keyboard.show`           |          5 |
+| `import`            | share the link (`card`), tap Import (`start`), 10 s of the import (`during-import`)  | `import.running`          |          1 |
 
 `skip` measures how long a skip takes to reach the player, so it depends on the queue's length:
 load the queue under test before the run (a short album, or the whole Library as Songs) and leave
@@ -175,18 +177,19 @@ position. Then, for each step:
 Times line up because `performance.now()`, a touch's native timestamp and gfxinfo's frame
 timestamps all use Android's CLOCK_MONOTONIC.
 
-| Metric         | Meaning                                                                                                                                          | Needs a perf build |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | :----------------: |
-| `firstFrameMs` | Touch to the first frame that finished rendering after it: the **first visible response**. The frame reaches the screen about one refresh later. |        yes         |
-| `responseMs`   | Touch to the step's response mark: **navigation latency** (`route`), **keyboard latency** (`keyboard.show`), Now Playing or Queue shown.         |        yes         |
-| `settleMs`     | Touch to the last frame before 250 ms without frames: when the transition finished.                                                              |        yes         |
-| `burstMs`      | First to last frame of that burst. The only latency a plain APK gives.                                                                           |         no         |
-| `inputToJsMs`  | Touch to JavaScript's touch handler: input delayed by a busy JS thread.                                                                          |        yes         |
-| `frames`       | Frames rendered in the window, deadline misses, jank counters (slow UI thread, high input latency), the frame-time histogram.                    |         no         |
-| `renders`      | Renders per instrumented component in the step.                                                                                                  |        yes         |
-| `longTasks`    | Long tasks React Native reported in the step, when it reports them.                                                                              |        yes         |
-| `launch`       | `am start -W`: `TotalTime`, `WaitTime`, launch state. A perf build adds React Native's startup timings.                                          |         no         |
-| memory         | `dumpsys meminfo` after each scenario plus `memoryIdleMs` idle: PSS, RSS, Java and native heap, graphics.                                        |         no         |
+| Metric         | Meaning                                                                                                                                                | Needs a perf build |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | :----------------: |
+| `firstFrameMs` | Touch to the first frame that finished rendering after it: the **first visible response**. The frame reaches the screen about one refresh later.       |        yes         |
+| `responseMs`   | Touch to the step's response mark: **navigation latency** (`route`), **keyboard latency** (`keyboard.show`), Now Playing or Queue shown.               |        yes         |
+| `settleMs`     | Touch to the last frame before 250 ms without frames: when the transition finished.                                                                    |        yes         |
+| `burstMs`      | First to last frame of that burst. The only latency a plain APK gives.                                                                                 |         no         |
+| `inputToJsMs`  | Touch to JavaScript's touch handler: input delayed by a busy JS thread.                                                                                |        yes         |
+| `frames`       | Frames rendered in the window, deadline misses, jank counters (slow UI thread, high input latency), the frame-time histogram.                          |         no         |
+| `renders`      | Renders per instrumented component in the step.                                                                                                        |        yes         |
+| `longTasks`    | Long tasks React Native reported in the step, when it reports them.                                                                                    |        yes         |
+| `traceMs`      | Touch to each of the step's `trace` marks (its first occurrence after the touch), e.g. the Now Playing sheet's phases. Summed up and compared by name. |        yes         |
+| `launch`       | `am start -W`: `TotalTime`, `WaitTime`, launch state. A perf build adds React Native's startup timings.                                                |         no         |
+| memory         | `dumpsys meminfo` after each scenario plus `memoryIdleMs` idle: PSS, RSS, Java and native heap, graphics.                                              |         no         |
 
 `summary` reports each latency as median / 90th percentile, the frames' pooled 50th, 90th and
 99th percentiles and the share that missed their deadline. `Missing` counts steps whose response
@@ -235,7 +238,9 @@ measured. Records, in order:
 - `step`, one per measured step: `scenario`, `variant`, `measure`, `iteration`, `index`, the
   metrics above, `touchAt`, `expectMissing`, `framesCovered`, `finalRoute`, `flushComplete`, and
   `launch` and `appStartup` for a cold launch, `importProgress` while an import runs, and
-  `libraryQueries` on a perf build (the shared Library queries' counters since launch, below).
+  `libraryQueries` on a perf build (the shared Library queries' counters since launch, below),
+  and `listeners` (subscribers to the playback stores and the sheet at the step's flush: `playback`,
+  `queue`, `queueTracks`, `nowPlaying`).
 - `memory`, one per scenario: `scenario`, `variant` and the `dumpsys meminfo` fields in KB.
 - `trace`, one per scenario with `--perfetto`: the local `.pftrace` path.
 - `error`: a scenario that couldn't go on (target not found, Wave not in front, no import link) and
@@ -266,6 +271,11 @@ ticket needs evidence, and give a new response mark a scenario step's `expect` i
 - `route` (pathname), each time the route changes, on the next frame;
 - `keyboard.show`, `keyboard.hide`;
 - `nowPlaying.shown`, `nowPlaying.hidden`;
+- the sheet's trace (#305): `nowPlaying.step` (the event: `tap`, `dragBegin`, `release`, `close`,
+  `closed`), `nowPlaying.spring` (handed to the UI thread: `rise`, `open`, `closed`),
+  `nowPlaying.notified` (its phase listeners done) and `nowPlaying.motion` (the sheet left its
+  resting place on the UI thread; marked when JavaScript hears of it, with how much later that was
+  in ms as the detail). The `now-playing` steps time them as `traceMs`;
 - `visible` "queue" (Up Next mounted);
 - `import.running` (songs in the import), `import.idle`;
 - `queue.synced` (the plan's step types and the queue's length, e.g. `seek 4210`), each time the
