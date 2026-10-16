@@ -87,8 +87,11 @@ sideload reaches (below).
   the profile ART holds for Wave. `--install` first puts the phone in the comparable state (next
   item).
 - **`perf.ts run --compile baseline`** clears the profile, has profileinstaller install the
-  APK's own (it fails unless the result is `INSTALL_SUCCESS`), and compiles `speed-profile`. The
-  run records the profile's size as `artProfile`.
+  APK's own, and compiles `speed-profile`. The run records profileinstaller's result and the
+  profile's size as `artProfile`. When the install fails, the APK is compiled with no profile,
+  which is also what its sideload gets: a main APK on Android 15+ records
+  `UNSUPPORTED_ART_VERSION` and 0 rules. Check `artProfile` in both runs before reading a
+  comparison.
 - **The `warm-start` scenario**: Home, then Wave's launcher intent while its process lives,
   timed by `am start -W`. The summary reports cold and warm medians apart.
 - **`perf.ts profile status`**: when the profiles were generated, and the native changes since.

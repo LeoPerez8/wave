@@ -109,7 +109,7 @@ describe("runPerf on the simulated phone", () => {
     const { run } = readResults(readFileSync(out, "utf8"));
     assert.deepEqual(run?.compilation, { status: "speed-profile", reason: "cmdline" });
     // The simulated APK ships two rules (one class, one method); what the phone learned is gone.
-    assert.deepEqual(run?.artProfile, { classes: 1, methods: 1 });
+    assert.deepEqual(run?.artProfile, { install: "INSTALL_SUCCESS", classes: 1, methods: 1 });
   });
 
   it("times cold launches", async () => {

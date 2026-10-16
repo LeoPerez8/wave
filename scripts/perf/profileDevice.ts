@@ -78,10 +78,12 @@ export const readProfileState = async (
 };
 
 /**
- * Puts [pkg] in the state a sideloaded install reaches once profileinstaller has written the
- * APK's profile and the phone's idle compile has run: a cleared profile, then only the shipped
- * one, compiled `speed-profile`. Before and after runs both use it, so they compare the
- * shipped profiles and nothing the phone learned since.
+ * Puts [pkg] in the state a sideloaded install reaches once profileinstaller has run and the
+ * phone's idle compile has followed: a cleared profile, then only the shipped one, compiled
+ * `speed-profile`. Before and after runs both use it, so they compare the shipped profiles and
+ * nothing the phone learned since. When profileinstaller can't install the profile
+ * ([install] says why, e.g. UNSUPPORTED_ART_VERSION from 1.3.1 on Android 15+), the APK is
+ * compiled with no profile, which is what its sideload gets too.
  */
 export const compileWithBaseline = async (
   device: Device,
@@ -90,8 +92,6 @@ export const compileWithBaseline = async (
   await device.shell(`am force-stop ${pkg}`);
   await device.shell(`cmd package compile --reset ${pkg}`);
   const install = await profileInstaller(device, pkg, "INSTALL_PROFILE");
-  if (install !== "INSTALL_SUCCESS")
-    throw new Error(`profileinstaller didn't install the APK's profile: ${install}.`);
   await device.shell(`am force-stop ${pkg}`);
   await device.shell(`cmd package compile -m speed-profile -f ${pkg}`);
   return { install };

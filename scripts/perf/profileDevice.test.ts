@@ -75,8 +75,12 @@ describe("compileWithBaseline", () => {
     assert.doesNotMatch(text, /Stale/);
   });
 
-  it("fails when profileinstaller can't install the profile", async () => {
-    const phone = new FakeDevice({ installResult: 3 });
-    await assert.rejects(compileWithBaseline(phone, PKG), /UNSUPPORTED_ART_VERSION/);
+  // profileinstaller 1.3.1 on Android 15+: what a sideload of such an APK gets is no profile.
+  it("says when profileinstaller can't install the profile, and compiles with none", async () => {
+    const phone = new FakeDevice({ installResult: 3, savedProfile: ["Lcom/example/Stale;"] });
+    const result = await compileWithBaseline(phone, PKG);
+    assert.equal(result.install, "UNSUPPORTED_ART_VERSION");
+    const state = await readProfileState(phone, PKG);
+    assert.equal(state.profile, null);
   });
 });

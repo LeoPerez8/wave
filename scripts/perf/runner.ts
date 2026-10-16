@@ -468,12 +468,18 @@ export const runPerf = async (
   // The run
 
   await shell("input keyevent KEYCODE_WAKEUP");
-  let artProfile: { classes: number; methods: number } | null = null;
+  let artProfile: { install: string; classes: number; methods: number } | null = null;
   if (options.compile === "baseline") {
-    await compileWithBaseline(device, pkg);
+    const { install } = await compileWithBaseline(device, pkg);
     const { profile } = await readProfileState(device, pkg);
-    artProfile =
-      profile === null ? null : { classes: profile.classes.size, methods: profile.methods.size };
+    artProfile = {
+      install,
+      classes: profile?.classes.size ?? 0,
+      methods: profile?.methods.size ?? 0,
+    };
+    log(
+      `profileinstaller: ${install}; ART's profile: ${artProfile.classes} classes, ${artProfile.methods} methods`,
+    );
   } else if (options.compile !== null)
     await shell(`cmd package compile -m ${options.compile} -f ${pkg}`);
   const meta = await metadata();

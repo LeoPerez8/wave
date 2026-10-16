@@ -283,7 +283,7 @@ const profileCommands: Record<string, () => Promise<void>> = {
     const pkg = fixture.package;
     if (values.install) {
       const { install } = await compileWithBaseline(device, pkg);
-      console.log(`profileinstaller: ${install}; compiled speed-profile with the APK's profile`);
+      console.log(`profileinstaller: ${install}; compiled speed-profile`);
     }
     const { compilation, profile } = await readProfileState(device, pkg);
     console.log(

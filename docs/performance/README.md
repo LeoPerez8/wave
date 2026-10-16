@@ -44,8 +44,9 @@ node scripts/perf/perf.ts run --dry-run             # the whole pipeline on a si
 - `--compile <filter>`: sets the ART compiler filter first (`cmd package compile -m <filter> -f`),
   e.g. `speed-profile` or `verify`. `--compile baseline` clears what the phone learned, has
   profileinstaller install the profile the APK ships, then compiles `speed-profile`: the state a
-  fresh sideload reaches once the phone's idle compile has run. The run records that profile's
-  size (`artProfile`). Use it whenever before and after ship different profiles (#317).
+  fresh sideload reaches once the phone's idle compile has run. The run records profileinstaller's
+  result and the profile's size (`artProfile`). Use it whenever before and after ship different
+  profiles (#317).
 - `--import-link <url>`: overrides the fixture's playlist link.
 - `--meta key=value`: records a value as given. On a plain APK, pass the Library's size this way
   (`--meta library.tracks=12000 --meta library.playEvents=54000`).
