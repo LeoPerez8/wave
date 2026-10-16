@@ -6,7 +6,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { changes } from "./changes.ts";
+import { reachesUsers } from "./changes.ts";
 
 export type MergedPr = {
   number: number;
@@ -78,11 +78,7 @@ const closedIssues = (pr: MergedPr) => [
 // Users see what changes the APK or the sync service. A PR that changes only CI, docs or
 // specs (by the change rule) isn't news to them. `files` is null when GitHub couldn't list
 // them all.
-const isListed = (pr: MergedPr) => {
-  if (pr.files === null) return true;
-  const touched = changes(pr.files);
-  return touched.app || touched.core || touched.sync || touched.workspace;
-};
+const isListed = (pr: MergedPr) => pr.files === null || reachesUsers(pr.files);
 
 // A title is plain text with `code` in it: Markdown would drop "<version>" as an HTML
 // tag and let brackets end the link early.
