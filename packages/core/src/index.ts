@@ -202,6 +202,8 @@ export {
   tabBarTabs,
 } from "./shortcutTab.ts";
 export type { TabBarTab } from "./shortcutTab.ts";
+export { SETTINGS_PAGES, accountsSummary } from "./settingsPages.ts";
+export type { SettingsPage, SettingsPageEntry } from "./settingsPages.ts";
 export {
   PLAYLIST_LAYOUTS,
   parsePlaylistLayout,
