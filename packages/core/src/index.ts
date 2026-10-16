@@ -196,12 +196,14 @@ export type { CardKeyboard, OverlayAlign, OverlayFlow } from "./overlay.ts";
 export { moveSlide, slideEntry, slideTicks, startSlide } from "./slideToChoose.ts";
 export type { MenuSlide, SlidePoint } from "./slideToChoose.ts";
 export {
-  SHORTCUT_TAB_CHOICES,
-  parseShortcutTab,
-  storedShortcutTab,
-  tabBarTabs,
-} from "./shortcutTab.ts";
-export type { TabBarTab } from "./shortcutTab.ts";
+  editTabBar,
+  movableTabs,
+  parseTabBar,
+  storedTabBar,
+  tabBarFull,
+  tabsOffBar,
+} from "./tabBar.ts";
+export type { TabBar, TabBarEdit, TabBarTab } from "./tabBar.ts";
 export { SETTINGS_PAGES, accountsSummary } from "./settingsPages.ts";
 export type { SettingsPage, SettingsPageEntry } from "./settingsPages.ts";
 export {
