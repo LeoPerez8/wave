@@ -893,6 +893,27 @@ const entriesTotals = (entries: readonly PlaylistEntry[]): PlaylistTotals => {
 const livePlaylist = eq(schema.playlists.deleted, false);
 
 /**
+ * When a song last started playing from each playlist (a play whose context
+ * is the playlist), by playlist id, for sorting the Playlists list by Recently
+ * Played (Core's `sortPlaylists`). Playlists never played from aren't in it.
+ */
+export const selectPlaylistsLastPlayed = (db: LibraryDatabase): Map<number, number> => {
+  const { playEvents } = schema;
+  const rows = db
+    .select({ id: playEvents.contextId, at: sql<number>`max(${playEvents.startedAt})` })
+    .from(playEvents)
+    .where(and(eq(playEvents.contextType, "playlist"), isNotNull(playEvents.contextId)))
+    .groupBy(playEvents.contextId)
+    .all();
+  const lastPlayed = new Map<number, number>();
+  for (const { id, at } of rows) {
+    const playlistId = Number(id);
+    if (Number.isSafeInteger(playlistId)) lastPlayed.set(playlistId, at);
+  }
+  return lastPlayed;
+};
+
+/**
  * Every playlist by name, with its artwork (its own image or its mosaic) and
  * totals; deleted ones (tombstones) aren't listed. Only the playlists that
  * changed since the last read have their mosaic and totals worked out again
@@ -902,7 +923,12 @@ export const selectPlaylists = (db: LibraryDatabase): PlaylistRow[] => {
   const { playlists } = schema;
   countListRead();
   const rows = db
-    .select({ id: playlists.id, name: playlists.name, ...imageColumns })
+    .select({
+      id: playlists.id,
+      name: playlists.name,
+      createdAt: playlists.createdAt,
+      ...imageColumns,
+    })
     .from(playlists)
     .where(livePlaylist)
     .all();
@@ -932,7 +958,12 @@ export const selectPlaylist = (
   const { playlists } = schema;
   countPageRead(id);
   const row = db
-    .select({ id: playlists.id, name: playlists.name, ...imageColumns })
+    .select({
+      id: playlists.id,
+      name: playlists.name,
+      createdAt: playlists.createdAt,
+      ...imageColumns,
+    })
     .from(playlists)
     .where(and(eq(playlists.id, id), livePlaylist))
     .get();

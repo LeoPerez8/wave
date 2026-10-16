@@ -95,6 +95,7 @@ import {
   selectPlaylistEntries,
   selectPlaylistEntriesRevision,
   selectPlaylists,
+  selectPlaylistsLastPlayed,
   selectTrackPaths,
   type PlaylistEntry,
 } from "./db/playlists";
@@ -344,6 +345,8 @@ export interface PlaylistRow {
   readonly name: string;
   /** Core sort key of the name. */
   readonly sort: string;
+  /** When it was made, in ms since the epoch (Recently Added). */
+  readonly createdAt: number;
   readonly trackCount: number;
   readonly durationMs: number;
   /**
@@ -572,6 +575,8 @@ export class LibraryStore extends Context.Service<
     readonly clearRecentSearches: Effect.Effect<void, LibraryStoreError>;
     /** Every playlist by name, with its mosaic. */
     readonly listPlaylists: Effect.Effect<readonly PlaylistRow[], LibraryStoreError>;
+    /** When a song last played from each playlist, by playlist id (never played: absent). */
+    readonly playlistsLastPlayed: Effect.Effect<ReadonlyMap<number, number>, LibraryStoreError>;
     /** A playlist with its YT Music entries and its Library songs in [scope]. */
     readonly getPlaylist: (
       id: number,
@@ -1125,6 +1130,10 @@ const make = Effect.gen(function* () {
     }),
 
     listPlaylists: attempt("list playlists", () => selectPlaylists(db)),
+
+    playlistsLastPlayed: attempt("read when playlists last played", () =>
+      selectPlaylistsLastPlayed(db),
+    ),
 
     getPlaylist: (id, scope) => attempt("open the playlist", () => selectPlaylist(db, id, scope)),
 

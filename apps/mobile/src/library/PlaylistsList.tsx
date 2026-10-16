@@ -3,7 +3,7 @@ import { IconPlaylist } from "@tabler/icons-react-native";
 import { counted, playlistLayoutRows, type PlaylistLayout } from "@wave/core";
 import { useScrollToTop } from "expo-router";
 import { useCallback, useMemo, useRef, type ReactNode } from "react";
-import { useWindowDimensions, View } from "react-native";
+import { useWindowDimensions, View, type AccessibilityActionEvent } from "react-native";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
@@ -18,12 +18,14 @@ import type { ActionItems } from "@/playback/actionTargets";
 import { selectableRow } from "@/selection/selectableRow";
 import { useListSelection, type ListSelection } from "@/selection/useListSelection";
 
-import { usePlaylists } from "./hooks";
+import { ArrangeablePlaylists, TILE_GRIP_INSET } from "./ArrangeablePlaylists";
 import { openPlaylistImport } from "./importPlaylistLink";
 import type { PlaylistRow } from "./LibraryStore";
 import { usePlaylistLayout } from "./playlistLayout";
+import { moveShownPlaylist } from "./playlistOrder";
 import { emptyPlaylistRow } from "./playlists";
 import { newPlaylist } from "./PlaylistSheets";
+import { usePlaylistSort, useSortedPlaylists } from "./playlistSort";
 import { openPlaylist } from "./routes";
 import { songCount } from "./TrackList";
 import { useListScrollable } from "@/motion/heldTouch";
@@ -61,50 +63,114 @@ const playlistPress = (playlist: PlaylistRow, selection: ListSelection<PlaylistR
   );
 
 /**
- * A row of playlists as [layout] shows them: one row with a small mosaic
- * (list), two tiles with their counts (grid), or one full-width card (large).
- * While selecting, each shows a check.
+ * Move up and Move down for screen readers, on the playlist at [index] of
+ * [ids] (the list's order on screen): they arrange the list by hand, so under
+ * another sort they switch it to Custom from the order shown. None while
+ * selecting.
+ */
+const moveActions = (index: number, ids: readonly number[], selecting: boolean) => {
+  if (selecting) return {};
+  return {
+    accessibilityActions: [
+      ...(index > 0 ? [{ name: "moveUp", label: "Move up" }] : []),
+      ...(index < ids.length - 1 ? [{ name: "moveDown", label: "Move down" }] : []),
+    ],
+    onAccessibilityAction: (event: AccessibilityActionEvent) => {
+      const action = event.nativeEvent.actionName;
+      if (action === "moveUp") moveShownPlaylist(ids, index, index - 1);
+      else if (action === "moveDown") moveShownPlaylist(ids, index, index + 1);
+    },
+  };
+};
+
+/**
+ * One playlist as [layout] shows it: a row with a small mosaic (list), a tile
+ * with its count (grid), or a full-width card (large). While selecting, it
+ * shows a check. [arranging]: a handle sits over the end of a tile's name.
+ */
+function PlaylistView({
+  playlist,
+  index,
+  ids,
+  layout,
+  tile,
+  selection,
+  arranging = false,
+}: {
+  playlist: PlaylistRow;
+  /** Its place in the list: an index of [ids], the order on screen. */
+  index: number;
+  ids: readonly number[];
+  layout: PlaylistLayout;
+  /** The cover's side for this layout's tiles. */
+  tile: number;
+  selection: ListSelection<PlaylistRow>;
+  arranging?: boolean;
+}) {
+  const press = playlistPress(playlist, selection);
+  const moves = moveActions(index, ids, selection.selecting);
+  if (layout === "list") {
+    return (
+      <PlaylistEntry
+        name={playlist.name}
+        detail={songCount(playlist.trackCount)}
+        paths={playlist.thumbPaths}
+        {...press}
+        {...moves}
+      />
+    );
+  }
+  return (
+    <PlaylistTile
+      name={playlist.name}
+      detail={layout === "grid" ? songCount(playlist.trackCount) : undefined}
+      accessibilityDetail={songCount(playlist.trackCount)}
+      paths={playlist.thumbPaths}
+      size={tile}
+      nameInset={arranging ? TILE_GRIP_INSET : undefined}
+      {...press}
+      {...moves}
+    />
+  );
+}
+
+/**
+ * A row of playlists as [layout] lays them out: one row (list), two tiles
+ * (grid) or one full-width card (large), the first at [first] in the list.
  */
 function PlaylistsRow({
   row,
+  first,
+  ids,
   layout,
   tile,
   selection,
 }: {
   row: readonly PlaylistRow[];
+  first: number;
+  ids: readonly number[];
   layout: PlaylistLayout;
-  /** The cover's side for this layout's tiles. */
   tile: number;
   selection: ListSelection<PlaylistRow>;
 }) {
-  if (layout === "list") {
-    return row.map((playlist) => (
-      <PlaylistEntry
-        key={playlist.id}
-        name={playlist.name}
-        detail={songCount(playlist.trackCount)}
-        paths={playlist.thumbPaths}
-        {...playlistPress(playlist, selection)}
-      />
-    ));
-  }
-  const withDetail = layout === "grid";
+  const views = row.map((playlist, index) => (
+    <PlaylistView
+      key={playlist.id}
+      playlist={playlist}
+      index={first + index}
+      ids={ids}
+      layout={layout}
+      tile={tile}
+      selection={selection}
+    />
+  ));
+  if (layout === "list") return views;
   return (
     <View
       className="flex-row"
-      style={{ gap: grid.gutter, height: playlistTileRowHeight(tile, withDetail) }}
+      style={{ gap: grid.gutter, height: playlistTileRowHeight(tile, layout === "grid") }}
     >
-      {row.map((playlist) => (
-        <PlaylistTile
-          key={playlist.id}
-          name={playlist.name}
-          detail={withDetail ? songCount(playlist.trackCount) : undefined}
-          accessibilityDetail={songCount(playlist.trackCount)}
-          paths={playlist.thumbPaths}
-          size={tile}
-          {...playlistPress(playlist, selection)}
-        />
-      ))}
+      {views}
     </View>
   );
 }
@@ -122,27 +188,55 @@ const rowHeight = (layout: PlaylistLayout, tile: number): number =>
 
 /**
  * The Playlists list (Library › Playlists and the Playlists tab): every
- * playlist by name, in the layout picked from the title's long press, with
- * Import Playlists and New Playlist above them.
+ * playlist in the order picked under Sort by (Custom: arranged by dragging
+ * their handles), in the layout picked from the title's long press, with
+ * Import Playlists and New Playlist above them whatever the order.
  */
 export function PlaylistsList({ empty }: { empty: string }) {
   useRenderCount("PlaylistsList");
   const scrollable = useListScrollable();
-  const playlists = usePlaylists();
+  const playlists = useSortedPlaylists();
   const layout = usePlaylistLayout();
+  const sort = usePlaylistSort();
   const tile = useTileSize(layout);
   const bottomInset = useChromeInset();
   const list = useRef<LegendListRef>(null);
   useScrollToTop(list);
   const selection = useListSelection({ items: playlists, keyOf, target: playlistsOf });
+  const ids = useMemo(() => playlists.map((playlist) => playlist.id), [playlists]);
   const rows = useMemo(() => playlistLayoutRows(playlists, layout), [playlists, layout]);
+  const perRow = layout === "grid" ? 2 : 1;
   const height = rowHeight(layout, tile);
-  const rowState = useMemo(() => ({ layout, tile, selection }), [layout, tile, selection]);
+  const rowState = useMemo(
+    () => ({ layout, tile, selection, ids }),
+    [layout, tile, selection, ids],
+  );
   const renderRow = useCallback(
-    ({ item }: { item: readonly PlaylistRow[] }) => (
-      <PlaylistsRow row={item} layout={layout} tile={tile} selection={selection} />
+    ({ item, index }: { item: readonly PlaylistRow[]; index: number }) => (
+      <PlaylistsRow
+        row={item}
+        first={index * perRow}
+        ids={ids}
+        layout={layout}
+        tile={tile}
+        selection={selection}
+      />
     ),
-    [layout, tile, selection],
+    [ids, perRow, layout, tile, selection],
+  );
+  const renderArranged = useCallback(
+    (playlist: PlaylistRow, index: number) => (
+      <PlaylistView
+        playlist={playlist}
+        index={index}
+        ids={ids}
+        layout={layout}
+        tile={tile}
+        selection={selection}
+        arranging
+      />
+    ),
+    [ids, layout, tile, selection],
   );
 
   if (playlists.length === 0) {
@@ -155,6 +249,28 @@ export function PlaylistsList({ empty }: { empty: string }) {
           action={<PlaylistsActions />}
         />
       </View>
+    );
+  }
+
+  const header = (
+    <PlaylistsHeader count={playlists.length}>
+      <PlaylistsActions />
+    </PlaylistsHeader>
+  );
+
+  if (sort === "custom") {
+    return (
+      <ArrangeablePlaylists
+        // A new layout lays the list out afresh: its cells change size and shape.
+        key={layout}
+        playlists={playlists}
+        layout={layout}
+        tile={tile}
+        rowHeight={height}
+        selecting={selection.selecting}
+        header={header}
+        renderPlaylist={renderArranged}
+      />
     );
   }
 
@@ -173,11 +289,7 @@ export function PlaylistsList({ empty }: { empty: string }) {
       getFixedItemSize={() => height}
       recycleItems
       contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottomInset }}
-      ListHeaderComponent={
-        <PlaylistsHeader count={playlists.length}>
-          <PlaylistsActions />
-        </PlaylistsHeader>
-      }
+      ListHeaderComponent={header}
     />
   );
 }
