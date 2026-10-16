@@ -5,7 +5,7 @@
  */
 
 import { readStoredRecord } from "./storedJson.ts";
-import { luminance, mix, toOklch, withLuminance } from "./colour.ts";
+import { luminance, mix, parseHexColour, toOklch, withLuminance } from "./colour.ts";
 import { contrastRatio } from "./palette.ts";
 import {
   CONTRAST_REQUIREMENTS,
@@ -83,35 +83,66 @@ export const THEME_SWATCHES: {
   ],
 };
 
-/** The chosen swatch id of each group. */
+/** A row of Settings › Theme. */
+export type ThemeGroup = "light" | "dark" | "primary" | "secondary";
+
+/** The rows that also take a custom colour. */
+export type InkGroup = "primary" | "secondary";
+
+/** The id a primary or secondary takes while its custom colour applies. */
+export const CUSTOM_INK = "custom";
+
+/**
+ * The chosen swatch id of each group, and the custom primary and secondary
+ * (`#rrggbb`, or null when none was picked). A custom colour is kept while a
+ * preset is chosen, so its swatch can be picked again.
+ */
 export interface ThemeChoice {
   readonly light: string;
   readonly dark: string;
+  /** A primary preset's id, or `CUSTOM_INK` for `customPrimary`. */
   readonly primary: string;
+  /** A secondary preset's id, or `CUSTOM_INK` for `customSecondary`. */
   readonly secondary: string;
+  readonly customPrimary: string | null;
+  readonly customSecondary: string | null;
 }
 
-type Group = keyof ThemeChoice;
+const GROUPS: readonly ThemeGroup[] = ["light", "dark", "primary", "secondary"];
 
-const GROUPS: readonly Group[] = ["light", "dark", "primary", "secondary"];
+/** Where each ink group keeps its custom colour. */
+const CUSTOM_FIELD = { primary: "customPrimary", secondary: "customSecondary" } as const;
 
-const defaultId = (group: Group): string => THEME_SWATCHES[group][0]?.id ?? "";
+const defaultId = (group: ThemeGroup): string => THEME_SWATCHES[group][0]?.id ?? "";
 
 export const DEFAULT_THEME_CHOICE: ThemeChoice = {
   light: defaultId("light"),
   dark: defaultId("dark"),
   primary: defaultId("primary"),
   secondary: defaultId("secondary"),
+  customPrimary: null,
+  customSecondary: null,
 };
 
-const has = (group: Group, id: unknown): id is string =>
+const has = (group: ThemeGroup, id: unknown): id is string =>
   THEME_SWATCHES[group].some((swatch) => swatch.id === id);
+
+const isInk = (group: ThemeGroup): group is InkGroup =>
+  group === "primary" || group === "secondary";
 
 /** The theme choice from its stored JSON; anything missing or unknown is its default. */
 export const readThemeChoice = (stored: string | null): ThemeChoice => {
   const record = readStoredRecord(stored);
-  const pick = (group: Group): string => {
+  const hex = (group: InkGroup): string | null => {
+    const value = record[CUSTOM_FIELD[group]];
+    return typeof value === "string" ? parseHexColour(value) : null;
+  };
+  const customPrimary = hex("primary");
+  const customSecondary = hex("secondary");
+  const custom = { primary: customPrimary, secondary: customSecondary };
+  const pick = (group: ThemeGroup): string => {
     const id = record[group];
+    if (isInk(group) && id === CUSTOM_INK && custom[group] !== null) return CUSTOM_INK;
     return has(group, id) ? id : DEFAULT_THEME_CHOICE[group];
   };
   return {
@@ -119,18 +150,57 @@ export const readThemeChoice = (stored: string | null): ThemeChoice => {
     dark: pick("dark"),
     primary: pick("primary"),
     secondary: pick("secondary"),
+    customPrimary,
+    customSecondary,
   };
 };
 
-/** Whether `choice` is the shipped theme (nothing to reset). */
+/** Whether `choice` is the shipped theme with no custom colour kept (nothing to reset). */
 export const isDefaultThemeChoice = (choice: ThemeChoice): boolean =>
-  GROUPS.every((group) => choice[group] === DEFAULT_THEME_CHOICE[group]);
+  GROUPS.every((group) => choice[group] === DEFAULT_THEME_CHOICE[group]) &&
+  choice.customPrimary === null &&
+  choice.customSecondary === null;
 
-const background = (scheme: Scheme, id: string): string =>
+/**
+ * How close two colours look, in OKLCH. Hue counts in full; lightness and
+ * chroma count for half, so a colour deeper, paler or more vivid than every
+ * preset still lands on the preset of its hue.
+ */
+const distance = (a: string, b: string): number => {
+  const [x, y] = [toOklch(a), toOklch(b)];
+  const hue = 2 * Math.sqrt(x.c * y.c) * Math.sin((x.h - y.h) / 2);
+  return Math.hypot(0.5 * (x.l - y.l), 0.5 * (x.c - y.c), hue);
+};
+
+/** The preset of `group` closest to `hex`, by either of its tones. */
+const nearestPreset = (group: InkGroup, hex: string): string => {
+  let best = DEFAULT_THEME_CHOICE[group];
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const swatch of THEME_SWATCHES[group]) {
+    const d = Math.min(distance(hex, swatch.light), distance(hex, swatch.dark));
+    if (d < bestDistance) [best, bestDistance] = [swatch.id, d];
+  }
+  return best;
+};
+
+/**
+ * `choice` with each chosen custom colour swapped for the preset closest to
+ * it, for what Android can only ship per preset: the launcher icon and the
+ * launch splash.
+ */
+export const presetThemeChoice = (choice: ThemeChoice): ThemeChoice => {
+  const preset = (group: InkGroup): string => {
+    const custom = choice[CUSTOM_FIELD[group]];
+    return choice[group] === CUSTOM_INK && custom !== null
+      ? nearestPreset(group, custom)
+      : choice[group];
+  };
+  return { ...choice, primary: preset("primary"), secondary: preset("secondary") };
+};
+
+const background =(scheme: Scheme, id: string): string =>
   THEME_SWATCHES[scheme].find((swatch) => swatch.id === id)?.colour ??
   DEFAULT_THEME[scheme].background;
-
-type InkGroup = "primary" | "secondary";
 
 /** The token each ink group colours. */
 const INK_TOKEN = { primary: "accent", secondary: "highlight" } as const satisfies Record<
@@ -140,9 +210,13 @@ const INK_TOKEN = { primary: "accent", secondary: "highlight" } as const satisfi
 
 type Mutable<T> = { -readonly [K in keyof T]: T[K] };
 
-const ink = (group: InkGroup, id: string, scheme: Scheme): string => {
+/** The ink a group asks for before readability: its custom colour, or its preset's tone for `scheme`. */
+const ink = (choice: ThemeChoice, group: InkGroup, scheme: Scheme): string => {
+  const custom = choice[CUSTOM_FIELD[group]];
+  if (choice[group] === CUSTOM_INK && custom !== null) return custom;
   const swatch =
-    THEME_SWATCHES[group].find((candidate) => candidate.id === id) ?? THEME_SWATCHES[group][0];
+    THEME_SWATCHES[group].find((candidate) => candidate.id === choice[group]) ??
+    THEME_SWATCHES[group][0];
   return swatch?.[scheme] ?? DEFAULT_THEME[scheme][INK_TOKEN[group]];
 };
 
@@ -256,14 +330,52 @@ export const themeFor = (choice: ThemeChoice): Theme => {
     deriveScheme(
       name,
       background(name, choice[name]),
-      ink("primary", choice.primary, name),
-      ink("secondary", choice.secondary, name),
+      ink(choice, "primary", name),
+      ink(choice, "secondary", name),
     );
   return { light: scheme("light"), dark: scheme("dark") };
 };
 
 const markOn = (colour: string): string =>
   contrastRatio(BLACK, colour) >= contrastRatio(WHITE, colour) ? BLACK : WHITE;
+
+/**
+ * `choice` with `hex` (`#rrggbb` or `#rgb`, as `parseHexColour` reads it) as
+ * the group's custom colour, chosen. Unchanged when `hex` isn't a colour.
+ */
+export const chooseCustomInk = (choice: ThemeChoice, group: InkGroup, hex: string): ThemeChoice => {
+  const colour = parseHexColour(hex);
+  if (colour === null) return choice;
+  return { ...choice, [group]: CUSTOM_INK, [CUSTOM_FIELD[group]]: colour };
+};
+
+/** A custom colour as it would apply in one mode. */
+export interface CustomInkPreview {
+  /** The colour that applies, readability adjustments included. */
+  readonly colour: string;
+  /** The mode's background, the colour it has to read on. */
+  readonly ground: string;
+  /** Whether `colour` was deepened or brightened from the pick to read. */
+  readonly adjusted: boolean;
+}
+
+/**
+ * What a custom colour would apply as in each mode, so the picker shows that
+ * rather than the raw pick. A colour that isn't one previews the current theme.
+ */
+export const customInkPreview = (
+  choice: ThemeChoice,
+  group: InkGroup,
+  hex: string,
+): { readonly light: CustomInkPreview; readonly dark: CustomInkPreview } => {
+  const theme = themeFor(chooseCustomInk(choice, group, hex));
+  const pick = parseHexColour(hex);
+  const preview = (scheme: Scheme): CustomInkPreview => {
+    const colour = theme[scheme][INK_TOKEN[group]];
+    return { colour, ground: theme[scheme].background, adjusted: pick !== null && colour !== pick };
+  };
+  return { light: preview("light"), dark: preview("dark") };
+};
 
 /** A swatch as Settings shows it: the colour it gives, and whether it's chosen. */
 export interface ThemeSwatchOption {
@@ -275,24 +387,43 @@ export interface ThemeSwatchOption {
   readonly mark: string;
 }
 
-export interface ThemeSwatchRow {
-  readonly group: Group;
-  readonly swatches: readonly ThemeSwatchOption[];
+/** The custom swatch that ends the Primary and Secondary rows. */
+export interface CustomSwatchOption {
+  /** The kept custom colour as it would apply in the scheme; null until one is picked. */
+  readonly colour: string | null;
+  readonly selected: boolean;
+  /** The check mark's colour on `colour`; null with no colour. */
+  readonly mark: string | null;
 }
+
+export interface ThemeSwatchRow {
+  readonly group: ThemeGroup;
+  readonly swatches: readonly ThemeSwatchOption[];
+  /** The custom swatch; null for the background rows. */
+  readonly custom: CustomSwatchOption | null;
+}
+
+const customSwatch = (choice: ThemeChoice, group: InkGroup, scheme: Scheme): CustomSwatchOption => {
+  const kept = choice[CUSTOM_FIELD[group]];
+  const colour = kept === null ? null : customInkPreview(choice, group, kept)[scheme].colour;
+  return {
+    colour,
+    selected: choice[group] === CUSTOM_INK,
+    mark: colour === null ? null : markOn(colour),
+  };
+};
 
 /**
  * The four swatch rows for Settings. Primary and secondary swatches show the
- * colour they'd actually take in `scheme`, readability adjustments included.
+ * colour they'd actually take in `scheme`, readability adjustments included,
+ * and end with the custom swatch.
  */
 export const themeSwatchRows = (choice: ThemeChoice, scheme: Scheme): readonly ThemeSwatchRow[] =>
   GROUPS.map((group) => ({
     group,
     swatches: THEME_SWATCHES[group].map((swatch) => {
       const theme = themeFor({ ...choice, [group]: swatch.id });
-      const colour =
-        group === "light" || group === "dark"
-          ? theme[group].background
-          : theme[scheme][INK_TOKEN[group]];
+      const colour = isInk(group) ? theme[scheme][INK_TOKEN[group]] : theme[group].background;
       return {
         id: swatch.id,
         label: swatch.label,
@@ -301,4 +432,5 @@ export const themeSwatchRows = (choice: ThemeChoice, scheme: Scheme): readonly T
         mark: markOn(colour),
       };
     }),
+    custom: isInk(group) ? customSwatch(choice, group, scheme) : null,
   }));

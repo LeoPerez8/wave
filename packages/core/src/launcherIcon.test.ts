@@ -49,6 +49,26 @@ describe("launcherIconFor", () => {
     assert.equal(ids.size, THEME_SWATCHES.primary.length * THEME_SWATCHES.secondary.length);
     assert.equal(LAUNCHER_ICONS.length, ids.size);
   });
+
+  test("a custom colour shows the icon of the preset closest to it", () => {
+    const icon = (customPrimary: string, customSecondary: string) => {
+      const { primary, secondary } = launcherIconFor(
+        choose({ primary: "custom", customPrimary, secondary: "custom", customSecondary }),
+      );
+      return `${primary}_${secondary}`;
+    };
+    // A preset's own tones, light or dark.
+    assert.equal(icon("#1f5fb8", "#e8c454"), "blue_gold");
+    assert.equal(icon("#a99af0", "#1b6a93"), "violet_sky");
+    // Deeper, paler or brighter than any preset, the hue decides.
+    assert.equal(icon("#0d2350", "#ff6a4d"), "blue_coral");
+    assert.equal(icon("#ffc4da", "#d400b4"), "rose_magenta");
+    assert.equal(icon("#00ff00", "#ffee00"), "green_lemon");
+  });
+
+  test("a kept custom colour doesn't change the icon while a preset is chosen", () => {
+    assert.equal(launcherIconFor(choose({ customPrimary: "#ff00aa" })).id, "teal_ember");
+  });
 });
 
 /** The points of an `M x y C … x y …` path, control points included (they bound the curve). */
