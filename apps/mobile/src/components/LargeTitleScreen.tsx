@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { grid } from "@/catalog/grid";
 import { useChromeInset } from "@/chrome/chrome";
 import { useListScrollable } from "@/motion/heldTouch";
+import { useRenderCount } from "@/perf/perf";
 
 import { TitlePress, type TitleLongPress } from "./TitleLongPress";
 
@@ -73,6 +74,7 @@ export function LargeTitleScreen({
   children,
   refreshControl,
 }: Props) {
+  useRenderCount("LargeTitleScreen");
   const scrollable = useListScrollable();
   const top = useLargeTitleTop();
   const bottom = useChromeInset();

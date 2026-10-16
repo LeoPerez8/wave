@@ -19,7 +19,7 @@ const options = (name: string, overrides: Partial<RunOptions> = {}): RunOptions 
   scenarios: ALL_SCENARIOS,
   variants: ["idle"],
   iterations: 2,
-  config: { tabs: ["Home", "Library", "Playlists"] },
+  config: { tabs: ["Home", "Library", "Playlists"], artist: "Radiohead" },
   importLink: "https://music.youtube.com/playlist?list=PLdryrun",
   settleMs: 1_200,
   windowMs: 2_500,
@@ -77,12 +77,15 @@ describe("runPerf on the simulated phone", () => {
       "push-library/idle/pop",
       "push-tracklist/idle/push",
       "push-tracklist/idle/pop",
+      "push-artist/idle/push",
+      "push-artist/idle/pop",
       "push-empty/idle/push",
       "push-empty/idle/pop",
       "now-playing/idle/open",
       "now-playing/idle/close",
       "queue/idle/open",
       "queue/idle/close",
+      "skip/idle/next",
       "search-first-tap/idle/first-tap",
     ]);
     const expecting = steps.filter((step) => step.expectMissing !== null);
@@ -148,6 +151,20 @@ describe("runPerf on the simulated phone", () => {
     const { errors, steps } = readResults(readFileSync(out, "utf8"));
     assert.equal(errors[0]?.scenario, "import");
     assert.match(errors[0]?.message ?? "", /importLink/);
+    assert.ok(steps.some((step) => step.scenario === "push-settings"));
+  });
+
+  it("records push-artist as one it can't run when the fixture names no artist", async () => {
+    const { out } = await runPerf(
+      new FakeDevice(),
+      options("no-artist", {
+        config: { tabs: ["Home", "Library", "Playlists"], artist: null },
+        scenarios: ["push-artist", "push-settings"],
+      }),
+    );
+    const { errors, steps } = readResults(readFileSync(out, "utf8"));
+    assert.equal(errors[0]?.scenario, "push-artist");
+    assert.match(errors[0]?.message ?? "", /artist/);
     assert.ok(steps.some((step) => step.scenario === "push-settings"));
   });
 

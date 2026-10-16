@@ -5,7 +5,7 @@ import {
 } from "@tabler/icons-react-native";
 import { concentricRadius, resolveSkipSwipe, type SkipDirection } from "@wave/core";
 import * as Haptics from "expo-haptics";
-import { useRef, useSyncExternalStore } from "react";
+import { memo, useRef, useSyncExternalStore } from "react";
 import { Text, View } from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 import Animated, {
@@ -73,9 +73,10 @@ type Props = {
  * The floating glass mini player: artwork, title and artist, play/pause and
  * next. Swipe it left for the next track and right for the previous one; tap
  * it for Now Playing. It floats above the tab bar, or above the system inset
- * on screens without one.
+ * on screens without one. Memoized: the layouts holding it render on
+ * navigation, and it needn't (pass a stable `onOpen`).
  */
-export function MiniPlayer({ backdropId, onOpen }: Props) {
+export const MiniPlayer = memo(function MiniPlayer({ backdropId, onOpen }: Props) {
   useRenderCount("MiniPlayer");
   const item = usePlaybackField("item");
   const playing = usePlaybackField("playWhenReady");
@@ -221,4 +222,4 @@ export function MiniPlayer({ backdropId, onOpen }: Props) {
       </GestureDetector>
     </OnFloatingChrome>
   );
-}
+});

@@ -4,6 +4,7 @@ import {
   applyPlayerSync,
   extrapolatePosition,
   keptPlayingEntry,
+  keysToLoad,
   parseQueueState,
   planPlayerSync,
   queueSourceAfter,
@@ -28,6 +29,7 @@ import * as Semaphore from "effect/Semaphore";
 import { makeExternalStore } from "@/lib/externalStore";
 import { LibraryStore } from "@/library/LibraryStore";
 import type { NativeSyncStep, PlayerItem } from "@/native/wavePlayer";
+import { perfMark } from "@/perf/perf";
 import { shuffleKind } from "@/settings/shuffleKind";
 
 import { Player, PlayerError, playbackState } from "./Player";
@@ -114,7 +116,7 @@ const toNative = (step: SyncStep): NativeSyncStep => {
     case "replace":
       return { type: "replace", keys: step.keys, index: step.index };
     case "seek":
-      return { type: "seek", key: step.key };
+      return { type: "seek", key: step.key, index: step.index };
     case "edit":
       return { type: "edit", at: step.at, removeCount: step.removeCount, keys: step.insertKeys };
   }
@@ -195,13 +197,22 @@ export const layer = Layer.effect(
           index: state.index,
         });
         if (steps.length === 0) return;
-        const loaded = new Set(native.keys);
-        const items = yield* Effect.forEach(
-          state.entries.filter((entry) => !loaded.has(entry.key)),
-          itemFor,
-        );
+        // A skip sends no items, so it doesn't look through the whole queue.
+        const toLoad = new Set(keysToLoad(native, steps));
+        const items =
+          toLoad.size === 0
+            ? []
+            : yield* Effect.forEach(
+                state.entries.filter((entry) => toLoad.has(entry.key)),
+                itemFor,
+              );
         yield* player.applySync(steps.map(toNative), items);
         native = applyPlayerSync(native, steps);
+        // The `skip` perf scenario's response: what the plan did, on how long a queue.
+        perfMark(
+          "queue.synced",
+          `${steps.map((step) => step.type).join("+")} ${state.entries.length}`,
+        );
       });
 
     const readNative = Effect.gen(function* () {

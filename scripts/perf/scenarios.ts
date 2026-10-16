@@ -33,6 +33,11 @@ export interface Step {
 export interface ScenarioConfig {
   /** The tab bar's tabs to cycle through, by label, Home first; Search stays out of it. */
   readonly tabs: readonly string[];
+  /**
+   * The artist push-artist opens, by name as Library › Artists shows it on its
+   * first screen; null when the fixture names none.
+   */
+  readonly artist: string | null;
 }
 
 export interface Scenario {
@@ -50,6 +55,8 @@ export interface Scenario {
   readonly warmup: number;
   /** Needs the fixture's playlist link. */
   readonly needsImportLink?: boolean;
+  /** Needs the fixture's artist. */
+  readonly needsArtist?: boolean;
 }
 
 const tab = (label: string): Target => ({ desc: label });
@@ -128,6 +135,26 @@ export const SCENARIOS: readonly Scenario[] = [
     warmup: 1,
   },
   {
+    name: "push-artist",
+    summary:
+      "Library › Artists › the fixture's artist, until its page's stats block is on screen, and back.",
+    setup: [
+      { kind: "tap", target: tab("Library") },
+      { kind: "tap", target: { text: "Artists" } },
+    ],
+    steps: ({ artist }) => [
+      {
+        measure: "push",
+        action: { kind: "tap", target: { text: artist ?? "" } },
+        expect: { mark: "artist.stats" },
+      },
+      { measure: "pop", action: { kind: "tap", target: { desc: "Back" } }, expect: route },
+    ],
+    iterations: 10,
+    warmup: 1,
+    needsArtist: true,
+  },
+  {
     name: "push-empty",
     summary:
       "Control: Settings › Developer (one row) and back, navigation with next to no content.",
@@ -165,6 +192,20 @@ export const SCENARIOS: readonly Scenario[] = [
         expect: { mark: "visible", detail: "queue" },
       },
       { measure: "close", action: { kind: "tap", target: { desc: "Queue" } } },
+    ],
+    iterations: 10,
+    warmup: 1,
+  },
+  {
+    name: "skip",
+    summary:
+      "The mini player's Next track, until the player holds the next entry (#314). Load the queue length under test first.",
+    steps: () => [
+      {
+        measure: "next",
+        action: { kind: "tap", target: { desc: "Next track" } },
+        expect: { mark: "queue.synced" },
+      },
     ],
     iterations: 10,
     warmup: 1,

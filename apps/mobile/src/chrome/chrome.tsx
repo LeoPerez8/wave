@@ -32,11 +32,16 @@ export const BACKDROP = {
   root: "wave-backdrop-root",
 } as const;
 
-const ChromeContext = createContext<{ readonly tabBar: boolean }>({ tabBar: false });
+/** Whether the floating tab bar is under the screen. */
+const ChromeContext = createContext(false);
 
-/** Tells the screens inside whether the floating tab bar is under them. */
+/**
+ * Tells the screens inside whether the floating tab bar is under them. The
+ * value is a boolean, so it only changes when that does: every list on every
+ * warmed tab reads it (`useChromeInset`), and a new value renders them all.
+ */
 export function ChromeProvider({ tabBar, children }: { tabBar: boolean; children: ReactNode }) {
-  return <ChromeContext value={{ tabBar }}>{children}</ChromeContext>;
+  return <ChromeContext value={tabBar}>{children}</ChromeContext>;
 }
 
 /** Whether a track is loaded, so the mini player is showing. Ignores position ticks. */
@@ -46,7 +51,7 @@ export const useHasNowPlaying = (): boolean =>
 /** Distance from the bottom of the screen to the top of the tab bar, or to the inset without one. */
 export const useTabBarTop = (): number => {
   const insets = useSafeAreaInsets();
-  const { tabBar } = useContext(ChromeContext);
+  const tabBar = useContext(ChromeContext);
   return insets.bottom + chrome.gap + (tabBar ? chrome.tabBar + chrome.gap : 0);
 };
 
