@@ -13,7 +13,7 @@ import { Text, useWindowDimensions, View } from "react-native";
 
 import { ArtistImage } from "@/catalog/ArtistImage";
 import { AlbumTile } from "@/catalog/AlbumTile";
-import { CatalogLine, SECTION_HEAD, SectionHead } from "@/catalog/CatalogLine";
+import { SECTION_HEAD, SectionHead } from "@/catalog/CatalogLine";
 import { COVER_ROW_TILE, CoverRow } from "@/catalog/CoverRow";
 import { CELL, grid } from "@/catalog/grid";
 import { TrackRow } from "@/catalog/TrackRow";
