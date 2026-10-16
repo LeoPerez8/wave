@@ -418,11 +418,7 @@ export type {
 } from "./libraryQueries.ts";
 export { stepNowPlayingSheet } from "./sheetLifecycle.ts";
 export { QUEUE_COVER_FLUSH_MS, createQueueCoverBatcher, withQueueCovers } from "./queueCovers.ts";
-export type {
-  QueueCover,
-  QueueCoverBatcher,
-  QueueCoverBatcherOptions,
-} from "./queueCovers.ts";
+export type { QueueCover, QueueCoverBatcher, QueueCoverBatcherOptions } from "./queueCovers.ts";
 export { MORE_FROM_ARTIST } from "./queue.ts";
 export { artistRanking } from "./moreFromArtist.ts";
 export type { ArtistRankingInput, ArtistRankingSong } from "./moreFromArtist.ts";

@@ -26,12 +26,9 @@ import { pathToFileURL } from "node:url";
 type Module = typeof import("../src/playback/queueTracks.ts");
 
 const target = process.argv[2];
-const { cacheYtCoversLater, learnQueueTracks, queueTracks, toYtQueueTrack }: Module =
-  await import(
-    target === undefined
-      ? "../src/playback/queueTracks.ts"
-      : pathToFileURL(target).href
-  );
+const { cacheYtCoversLater, learnQueueTracks, queueTracks, toYtQueueTrack }: Module = await import(
+  target === undefined ? "../src/playback/queueTracks.ts" : pathToFileURL(target).href
+);
 
 const songsOf = (size: number): YtSong[] =>
   Array.from({ length: size }, (_, i) => ({

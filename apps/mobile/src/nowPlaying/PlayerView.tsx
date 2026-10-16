@@ -1,14 +1,7 @@
 import { IconMusic, IconStar, IconStarFilled } from "@tabler/icons-react-native";
 import { artistLink, parseTrackId } from "@wave/core";
 import { Image } from "expo-image";
-import {
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Text, View } from "react-native";
 import Animated, {
   useAnimatedStyle,

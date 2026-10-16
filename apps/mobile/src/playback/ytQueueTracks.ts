@@ -48,8 +48,7 @@ export const cacheYtCoversInBackground = (
   });
 
 /** Whether [trackId] is the queue's current entry's: its cover tints Now Playing straight away. */
-const isPlaying = (trackId: string): boolean =>
-  currentEntry(queueState.get())?.trackId === trackId;
+const isPlaying = (trackId: string): boolean => currentEntry(queueState.get())?.trackId === trackId;
 
 /** The YT Music songs' details saved with the last queue; none when nothing readable is. */
 export const savedYtQueueTracks = (): readonly QueueTrack[] => {

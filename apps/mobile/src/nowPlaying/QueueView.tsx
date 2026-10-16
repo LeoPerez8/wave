@@ -10,7 +10,15 @@ import {
   type QueueEntry,
   type RepeatMode,
 } from "@wave/core";
-import { memo, useCallback, useMemo, useState, type ComponentType } from "react";
+import {
+  memo,
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentType,
+} from "react";
 import { Text, View } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import Animated from "react-native-reanimated";
@@ -167,14 +175,7 @@ type RowProps = {
  * tracks change (a batch of covers landing), and only the rows whose track
  * changed need to.
  */
-const UpNextRow = memo(function UpNextRow({
-  entry,
-  index,
-  track,
-  lifted,
-  drag,
-  count,
-}: RowProps) {
+const UpNextRow = memo(function UpNextRow({ entry, index, track, lifted, drag, count }: RowProps) {
   useRenderCount("UpNextRow");
   const secondary = useThemeColor("secondary");
   const key = entry.key;
@@ -264,6 +265,15 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
     bottomInset,
     onMove,
   });
+
+  // The Queue stays mounted between showings (NowPlayingSheet's `QueuePane`) and
+  // keeps its place, except that a new play's Up Next starts from the top.
+  const context = useRef(queue.context);
+  useLayoutEffect(() => {
+    if (context.current === queue.context) return;
+    context.current = queue.context;
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
+  }, [queue.context, scrollRef]);
 
   const renderItem = useCallback(
     ({ item, index }: { item: QueueEntry; index: number }) => (
