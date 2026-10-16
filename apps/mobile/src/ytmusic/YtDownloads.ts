@@ -21,13 +21,14 @@ import {
   missingSongTrackId,
   missingSongVideo,
   missingSongsDownload,
+  queuedDownloads,
   settledDownloadFailures,
   soulseekCandidates,
   soulseekQuery,
   soulseekReceivedMatches,
   soulseekRecording,
   ytAlbumDownload,
-  ytAudioMatches,
+  ytAudioRejection,
   ytDownloadDestination,
   ytDownloadLookup,
   ytDownloadSharedJob,
@@ -46,6 +47,7 @@ import {
   type MissingSongsDownloadAction,
   type MissingTrack,
   type MixedSong,
+  type QueuedDownload,
   type SoulseekCandidate,
   type YtAlbumDownload,
   type YtAlbumDownloadAction,
@@ -498,11 +500,12 @@ const answer = (claim: NativeDownloadDecision) =>
         if (claim.audio === undefined) return yield* new DownloadFailed({ reason: "failed" });
         if (!("receivedTags" in claim.audio)) {
           // YouTube's M4A arrived complete; it's the song when it plays as long.
+          // A rejection says so as its cause, which the failed download's row shows.
           const { durationMs } = claim.audio;
-          const acceptable = ytAudioMatches(claim.song, durationMs);
-          if (!acceptable)
-            console.warn("[wave] YouTube's audio isn't the song's length", { durationMs });
-          return { receiptId: claim.receiptId, acceptable };
+          const rejection = ytAudioRejection(claim.song, durationMs);
+          if (rejection === null) return { receiptId: claim.receiptId, acceptable: true };
+          console.warn("[wave] YouTube's audio isn't the song's length", { durationMs });
+          return { receiptId: claim.receiptId, acceptable: false, cause: rejection };
         }
         const { receivedTags, durationMs } = claim.audio;
         const acceptable = soulseekReceivedMatches(claim.song, receivedTags, durationMs);
@@ -1023,6 +1026,29 @@ export const useMissingSongsDownload = (): MissingSongsDownload<MissingSongJob> 
   const jobs = useSyncExternalStore(journal.subscribe, journal.get);
   const songs = useMemo(() => missing.map(missingSongJob), [missing]);
   return useMemo(() => missingSongsDownload(songs, jobs), [songs, jobs]);
+};
+
+/**
+ * Settings › Downloads' songs on their way (Core's `queuedDownloads`), following the journal: the
+ * ones downloading first, then the waiting ones in queue order, each with its progress line.
+ */
+export const useQueuedDownloads = (): readonly QueuedDownload<NativeYtSong>[] => {
+  const jobs = useSyncExternalStore(journal.subscribe, journal.get);
+  return useMemo(() => queuedDownloads(jobs), [jobs]);
+};
+
+/**
+ * Settings › Downloads' Cancel on a song on its way: as its menu's Cancel Download, and every
+ * video asked for on the job lets go of it, so a shared job ends too.
+ */
+export const cancelQueuedDownload = ({ cancel }: QueuedDownload<NativeYtSong>): void => {
+  if (cancel === null) return;
+  requests = requests
+    .then(async () => {
+      for (const videoId of cancel) await WaveSoulseek.cancelJob(videoId);
+      await refresh();
+    })
+    .catch(() => undefined);
 };
 
 /**

@@ -6,6 +6,7 @@ import {
   SETTINGS_PAGES,
   accountsSummary,
   downloadsSummary,
+  queuedDownloads,
   type WaveSession,
   type YtSession,
 } from "./index.ts";
@@ -90,5 +91,29 @@ describe("the Downloads row's line", () => {
     assert.equal(downloadsSummary(0), null);
     assert.equal(downloadsSummary(1), "1 song failed");
     assert.equal(downloadsSummary(1200), "1,200 songs failed");
+  });
+
+  test("says how many songs are on their way while any are, ahead of the failures", () => {
+    const job = (videoId: string, phase: "queued" | "transferring") => ({
+      id: videoId,
+      song: {
+        videoId,
+        title: videoId,
+        artists: [],
+        album: null,
+        durationMs: null,
+        artworkUrl: null,
+        explicit: false,
+      },
+      phase,
+    });
+    const queued = queuedDownloads([
+      job("a", "transferring"),
+      job("b", "transferring"),
+      ...["c", "d", "e", "f", "g"].map((id) => job(id, "queued")),
+    ]);
+    assert.equal(downloadsSummary(0, queued), "2 downloading · 5 waiting");
+    assert.equal(downloadsSummary(3, queued), "2 downloading · 5 waiting · 3 songs failed");
+    assert.equal(downloadsSummary(1, []), "1 song failed");
   });
 });
