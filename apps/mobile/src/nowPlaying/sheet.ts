@@ -59,12 +59,15 @@ const runAfterClose = (): void => {
 
 const springDone = (): void => step({ type: "closed" });
 
+/**
+ * Takes the sheet through [event]. The spring is handed to the UI thread
+ * first, then the phase's listeners hear of it (they re-render the sheet and
+ * the chrome, pause the screens under it): however long they take, the sheet
+ * is already moving.
+ */
 const step = (event: SheetEvent, velocity = 0): void => {
   const next = stepNowPlayingSheet(phase.get(), event);
   perfMark("nowPlaying.step", event.type);
-  phase.set(next.phase);
-  perfMark("nowPlaying.notified");
-  if (next.spring !== null) perfMark("nowPlaying.spring", next.spring);
   switch (next.spring) {
     case "rise":
       sheetOffset.set(sheetHeight.get());
@@ -83,6 +86,9 @@ const step = (event: SheetEvent, velocity = 0): void => {
     case null:
       break;
   }
+  if (next.spring !== null) perfMark("nowPlaying.spring", next.spring);
+  phase.set(next.phase);
+  perfMark("nowPlaying.notified");
   if (next.hidden) {
     for (const listener of hiddenListeners) listener();
     runAfterClose();
