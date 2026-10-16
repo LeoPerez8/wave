@@ -10,6 +10,12 @@ Pick tickets whose blockers are closed.
 - One PR per ticket, branch `feat/<issue>-<slug>` (`fix/<issue>-<slug>` for a bug fix), PR body
   says `Closes #<issue>`. The PR title is the release's patch-note line: one line a user
   understands, saying what changed for them.
+- Day-to-day test builds target `ti`. Its version in `apps/mobile/app.config.ts` ends in
+  `-ti` (for example `0.5.1-ti`). Merging a version bump publishes it: the push to `ti`
+  tags `v0.5.1-ti` and publishes the prerelease, so don't tag by hand. Compatible ti pushes
+  and tags repack a kept APK. A new Android version, native input or Metro resource first
+  needs a full build. Stable versions have no suffix, release from `main` the same way, and
+  always build fully. See `docs/spec.md`, Build and CI.
 - Decision-heavy logic (queue, counted plays, search, sorting, scan reconciliation, LRC,
   sleep timer) goes in `packages/core`, which must keep **zero runtime dependencies** and
   use only erasable TypeScript syntax with `.ts` import extensions. Test it through its

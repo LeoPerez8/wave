@@ -55,11 +55,11 @@ describe("planApkBuild", () => {
     assert.equal(planApkBuild({ ...pr, kept: false }).build, "full");
   });
 
-  it("always builds a release tag in full", () => {
+  it("always builds a stable release tag in full", () => {
     const tag = { event: "push", ref: "refs/tags/v0.5.0", release: true, kept: true };
     assert.deepEqual(planApkBuild(tag), {
       build: "full",
-      reason: "Release tags always build in full.",
+      reason: "Stable release tags always build in full.",
     });
   });
 
@@ -71,7 +71,21 @@ describe("planApkBuild", () => {
     });
   });
 
-  it("only repacks pull requests", () => {
+  for (const ref of ["refs/heads/ti", "refs/tags/v0.5.1-ti"]) {
+    it(`repacks a compatible ti build on ${ref}`, () => {
+      const run = { event: "push", ref, release: ref.startsWith("refs/tags/"), kept: true };
+      assert.equal(planApkBuild(run).build, "repack");
+      assert.equal(planApkBuild({ ...run, kept: false }).build, "full");
+    });
+  }
+
+  it("doesn't let an unrelated tag or branch use ti's fast path", () => {
+    for (const ref of ["refs/heads/experiment", "refs/tags/v0.5.1-beta", "refs/tags/ti"]) {
+      assert.equal(planApkBuild({ ...pr, event: "push", ref }).build, "full");
+    }
+  });
+
+  it("doesn't repack unrelated manual runs", () => {
     const other = { event: "workflow_dispatch", ref: "refs/heads/x", release: false, kept: true };
     assert.equal(planApkBuild(other).build, "full");
   });
