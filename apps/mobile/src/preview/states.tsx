@@ -301,13 +301,16 @@ export function StateAnchor({
 
   useEffect(() => {
     let stopped = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
+    let measuring = false;
     let watch = ANCHOR_UNMEASURED;
     const openNow = (): void => {
-      if (latest.current.current()) latest.current.open();
+      if (!stopped && latest.current.current()) latest.current.open();
     };
     const measure = (): void => {
+      if (measuring || stopped || !latest.current.current()) return;
+      measuring = true;
       void measureRect(view.current).then((measured) => {
+        measuring = false;
         if (stopped || !latest.current.current()) return;
         const step = watchAnchor(watch, measured, {
           stillFor: STILL_FOR,
@@ -315,19 +318,19 @@ export function StateAnchor({
         });
         if (!step.open) {
           watch = step.watch;
-          timer = setTimeout(measure, MEASURE_EVERY_MS);
           return;
         }
+        clearInterval(timer);
         const handle = press.current;
         openedFrom = handle?.key ?? 0;
         if (handle === undefined) runPressedAt(step.rect, openNow);
         else void handle.run(openNow);
       });
     };
-    timer = setTimeout(measure, MEASURE_EVERY_MS);
+    const timer = setInterval(measure, MEASURE_EVERY_MS);
     return () => {
       stopped = true;
-      if (timer !== undefined) clearTimeout(timer);
+      clearInterval(timer);
     };
   }, []);
 
