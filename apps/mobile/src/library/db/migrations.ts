@@ -655,6 +655,13 @@ CREATE TABLE \`sync_removals\` (
 );
 `;
 
+// A playlist's own image, shown in place of its mosaic. It stays on this phone.
+const mPlaylistImages = `
+ALTER TABLE \`playlists\` ADD \`image_path\` text;
+--> statement-breakpoint
+ALTER TABLE \`playlists\` ADD \`image_thumb_path\` text;
+`;
+
 export default {
   journal: {
     entries: [
@@ -679,6 +686,7 @@ export default {
       { idx: 18, when: 1_793_361_600_000, tag: "0018_sync_identity", breakpoints: true },
       { idx: 19, when: 1_793_448_000_000, tag: "0019_sync_state", breakpoints: true },
       { idx: 20, when: 1_793_534_400_000, tag: "0020_sync_removals", breakpoints: true },
+      { idx: 21, when: 1_793_620_800_000, tag: "0021_playlist_images", breakpoints: true },
     ],
   },
   migrations: {
@@ -703,5 +711,6 @@ export default {
     m0018: mSyncIdentity,
     m0019: mSyncState,
     m0020: mSyncRemovals,
+    m0021: mPlaylistImages,
   },
 };
