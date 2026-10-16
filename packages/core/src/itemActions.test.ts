@@ -235,7 +235,7 @@ describe("itemActions", () => {
   });
 
   test("an album page's selection bar: Go to Artist when the songs share one, never Go to Album", () => {
-    for (const here of ["/library/album/4", "/shortcut/album/4"]) {
+    for (const here of ["/library/album/4", "/albums/album/4"]) {
       const shared = names(
         itemActions(
           tracks([song({ albumId: 4, artistId: 9 }), song({ albumId: 4, artistId: 9 })], {
@@ -492,7 +492,7 @@ describe("Go to Artist on a collaboration", () => {
   });
 
   test("on one of their pages the other is left, so Go to Artist opens them straight away", () => {
-    for (const here of ["/library/artist/7", "/shortcut/artist/7"]) {
+    for (const here of ["/library/artist/7", "/artists/artist/7"]) {
       assert.deepEqual(goTo(tracks([{ albumId: 1, artistIds: [7, 8] }], { here })), {
         action: "goToArtist",
         artists: { kind: "open", artistId: 8 },
@@ -556,7 +556,7 @@ describe("artistLink", () => {
 
   test("leaves out the artist page you're on, and leads nowhere when that was the only one", () => {
     assert.deepEqual(artistLink([5, 6], "/library/artist/5"), { kind: "open", artistId: 6 });
-    assert.equal(artistLink([5], "/shortcut/artist/5"), undefined);
+    assert.equal(artistLink([5], "/artists/artist/5"), undefined);
     assert.equal(artistLink([], "/library/songs"), undefined);
   });
 });
