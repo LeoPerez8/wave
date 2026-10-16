@@ -89,7 +89,7 @@ describe("itemActions", () => {
     assert.ok(names(splitActionBar(bar, 2).bar).includes("removeFromLibrary"));
   });
 
-  test("a missing song on its way offers Cancel Download; one that failed, Retry Download and Cancel Download", () => {
+  test("a missing song on its way offers Cancel Download; one that failed, Retry Download alone", () => {
     const menu = (download: NonNullable<ActionSubject["items"][number]["download"]>) =>
       names(itemActions(tracks([{ ...song(), missing: true, download }]))).slice(0, 2);
     assert.deepEqual(menu({ kind: "queued" }), ["cancelDownload", "addToPlaylist"]);
@@ -99,7 +99,7 @@ describe("itemActions", () => {
     ]);
     assert.deepEqual(menu({ kind: "failed", reason: "notFound" }), [
       "retryDownload",
-      "cancelDownload",
+      "addToPlaylist",
     ]);
     // Too late to cancel while the file is saved.
     assert.deepEqual(menu({ kind: "saving" }), ["addToPlaylist", "favorite"]);

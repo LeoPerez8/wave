@@ -205,7 +205,7 @@ export {
   tabsOffBar,
 } from "./tabBar.ts";
 export type { TabBar, TabBarEdit, TabBarTab } from "./tabBar.ts";
-export { SETTINGS_PAGES, accountsSummary } from "./settingsPages.ts";
+export { SETTINGS_PAGES, accountsSummary, downloadsSummary } from "./settingsPages.ts";
 export type { SettingsPage, SettingsPageEntry } from "./settingsPages.ts";
 export {
   PLAYLIST_LAYOUTS,
@@ -578,6 +578,12 @@ export type {
   YtSongsDownloadAction,
   YtSongsDownloadRequest,
 } from "./ytSongsDownload.ts";
+export { failedDownloads } from "./failedDownloads.ts";
+export type {
+  FailedDownload,
+  FailedDownloadRetry,
+  FailedDownloadsInput,
+} from "./failedDownloads.ts";
 export {
   YT_DOWNLOADS_NONE,
   YT_DOWNLOAD_ACTION_LABELS,

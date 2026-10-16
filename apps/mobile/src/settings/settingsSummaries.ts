@@ -1,6 +1,7 @@
 import {
   accountsSummary,
   counted,
+  downloadsSummary,
   libraryLookupProgress,
   type SettingsPage,
   type WaveSession,
@@ -15,6 +16,7 @@ import { useScanRoots, useScanState } from "@/library/hooks";
 import { WaveAccount } from "@/native/waveAccount";
 import { WaveYtMusic } from "@/native/waveYtMusic";
 import { askYtMusic } from "@/ytmusic/askYtMusic";
+import { useFailedDownloads } from "@/ytmusic/YtDownloads";
 
 /**
  * The accounts this phone is signed into (Core's `accountsSummary`), from the
@@ -58,14 +60,16 @@ const useAccountsSummary = (): string | null => {
 
 /**
  * Each Settings row's line on its page, live: a rescan or the whole-Library
- * lookup while it runs, how many music folders there are, the accounts signed
- * into. Null leaves a row with its title alone.
+ * lookup while it runs, how many music folders there are, how many songs'
+ * downloads failed, the accounts signed into. Null leaves a row with its title
+ * alone.
  */
 export const useSettingsSummaries = (): Record<SettingsPage, string | null> => {
   const roots = useScanRoots();
   const scanning = useScanState().status === "scanning";
   const lookup = useLibraryLookup();
   const accounts = useAccountsSummary();
+  const failedDownloads = useFailedDownloads().length;
   return {
     library: scanning
       ? "Scanning…"
@@ -75,7 +79,7 @@ export const useSettingsSummaries = (): Record<SettingsPage, string | null> => {
     appearance: null,
     lyricsAndTags:
       lookup.status === "running" ? libraryLookupProgress(lookup.done, lookup.total).line : null,
-    downloads: null,
+    downloads: downloadsSummary(failedDownloads),
     accounts,
     developer: null,
   };
