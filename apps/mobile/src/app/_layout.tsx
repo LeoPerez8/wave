@@ -10,7 +10,7 @@ import type { GestureResponderEvent } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
-import { afterFirstContent, touchEnded, touchStarted } from "@/lib/backgroundWork";
+import { afterFirstContent, touchEnded, touchStarted, touchTakenOver } from "@/lib/backgroundWork";
 import { followLibraryLookupSummary } from "@/library/findLyricsAndGenre";
 import { useAllFilesAccess } from "@/library/hooks";
 import { resumePlaylistImports } from "@/library/playlistImports";
@@ -76,7 +76,7 @@ export default function RootLayout() {
       style={{ flex: 1, backgroundColor: background }}
       onTouchStart={onRootTouchStart}
       onTouchEnd={touchEnded}
-      onTouchCancel={touchEnded}
+      onTouchCancel={touchTakenOver}
     >
       {PERF_ENABLED ? <PerfProbe /> : null}
       {/* Lets library screens open inside the tab they were opened from. The root itself

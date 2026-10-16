@@ -130,6 +130,53 @@ describe("search catalog", () => {
     assert.deepEqual(names(catalog.index()!.search("joga")), ["Joga"]);
   });
 
+  test("once its sources go unfollowed, no index until every source is given again and prepared", () => {
+    const catalog = filled();
+    finish(catalog);
+    catalog.unfollowed();
+    assert.equal(catalog.index(), null);
+
+    // The Library lost a song while nothing followed it: the old index must not find it.
+    const songs = SONGS.slice(1);
+    catalog.update("artists", ARTISTS, artistOf);
+    catalog.update("songs", songs, songOf);
+    catalog.update("playlists", PLAYLISTS, playlistOf);
+    assert.equal(catalog.work(1), true);
+    assert.equal(catalog.index(), null);
+    finish(catalog);
+    assert.deepEqual(names(catalog.index()!.search("halo")), []);
+    assert.deepEqual(names(catalog.index()!.search("hyper")), ["Hyperballad"]);
+  });
+
+  test("once unfollowed, sources given again unchanged bring the same index back without preparing", () => {
+    const catalog = filled();
+    finish(catalog);
+    const index = catalog.index();
+    const prepared = catalog.stats().prepared;
+    catalog.unfollowed();
+    catalog.update("artists", ARTISTS, artistOf);
+    catalog.update("songs", SONGS, songOf);
+    assert.equal(catalog.index(), null);
+    catalog.update("playlists", PLAYLISTS, playlistOf);
+    assert.equal(catalog.work(1000), false);
+    assert.equal(catalog.index(), index);
+    assert.equal(catalog.stats().prepared, prepared);
+  });
+
+  test("once unfollowed, rows still being prepared from before don't count as given again", () => {
+    const catalog = filled();
+    finish(catalog);
+    catalog.update("songs", [{ name: "Joga", by: "Björk" }], songOf);
+    catalog.unfollowed();
+    finish(catalog);
+    assert.equal(catalog.index(), null);
+    catalog.update("artists", ARTISTS, artistOf);
+    catalog.update("songs", SONGS, songOf);
+    catalog.update("playlists", PLAYLISTS, playlistOf);
+    finish(catalog);
+    assert.deepEqual(names(catalog.index()!.search("halo")), ["Halo"]);
+  });
+
   test("an empty source is ready at once", () => {
     const catalog = createSearchCatalog<(typeof SOURCES)[number], Hit>(SOURCES);
     catalog.update("artists", [], artistOf);

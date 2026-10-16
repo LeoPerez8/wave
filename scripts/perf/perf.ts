@@ -44,6 +44,7 @@ import {
   formatSummary,
   summarize,
 } from "./metrics.ts";
+import { compareMemory, formatGrowth, formatMemoryComparison, memoryGrowth } from "./memory.ts";
 import { compileWithBaseline, generateProfiles, readProfileState } from "./profileDevice.ts";
 import { comparability, readResults, type Results } from "./results.ts";
 import { runPerf, type Device } from "./runner.ts";
@@ -358,7 +359,11 @@ const commands: Record<string, () => Promise<void>> = {
     for (const scenario of SCENARIOS)
       console.log(`${scenario.name.padEnd(18)} ${scenario.iterations}x  ${scenario.summary}`);
     console.log(
-      `\nall = ${ALL_SCENARIOS.join(", ")}\nglass = ${GLASS_SCENARIOS.join(", ")}\nvariants: ${VARIANTS.join(", ")} (import runs "import" first)`,
+      `\nall = ${ALL_SCENARIOS.join(", ")}\nglass = ${GLASS_SCENARIOS.join(", ")}\nby name only: ${SCENARIOS.filter(
+        (scenario) => scenario.byName === true,
+      )
+        .map((scenario) => scenario.name)
+        .join(", ")}\nvariants: ${VARIANTS.join(", ")} (import runs "import" first)`,
     );
     console.log("\nglass probes (--glass, perf builds only):");
     for (const probe of GLASS_PROBES)
@@ -504,6 +509,17 @@ const commands: Record<string, () => Promise<void>> = {
     console.log(
       `\n${formatComparison(compareSummaries(summarize(before.steps), summarize(after.steps)))}`,
     );
+    const memory = compareMemory(before.memory, after.memory);
+    if (memory.length > 0)
+      console.log(`\nRetained memory at each scenario's end:\n\n${formatMemoryComparison(memory)}`);
+    for (const [label, results] of [
+      ["before", before],
+      ["after", after],
+    ] as const) {
+      const growth = memoryGrowth(results);
+      if (growth.length > 0)
+        console.log(`\nGrowth over the soak cycles, ${label}:\n\n${formatGrowth(growth)}`);
+    }
   },
 };
 
@@ -533,11 +549,20 @@ const printSummary = (results: Results): void => {
     console.log("| --- | --- | ---: | ---: | ---: | ---: | ---: |");
     for (const memory of results.memory)
       console.log(
-        `| ${memory.scenario} | ${memory.variant} | ${mb(memory.totalPssKb)} | ${mb(memory.totalRssKb)} | ${mb(
+        `| ${memory.scenario}${
+          memory.iteration === undefined ? "" : ` (after ${memory.iteration})`
+        } | ${memory.variant} | ${mb(memory.totalPssKb)} | ${mb(memory.totalRssKb)} | ${mb(
           memory.javaHeapKb,
         )} | ${mb(memory.nativeHeapKb)} | ${mb(memory.graphicsKb)} |`,
       );
   }
+  const growth = memoryGrowth(results);
+  if (growth.length > 0)
+    console.log(
+      `\nGrowth over the soak cycles (the second half is what the later cycles added):\n\n${formatGrowth(
+        growth,
+      )}`,
+    );
   for (const error of results.errors)
     console.log(`\nNot measured: ${error.scenario} (${error.variant}): ${error.message}`);
 };

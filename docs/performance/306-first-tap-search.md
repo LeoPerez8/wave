@@ -47,12 +47,23 @@ Now:
   changed source is prepared again alone. Preparation runs in steps of 250 entries, at most 6 ms
   of steps per JavaScript task (`setTimeout(0)` between tasks), so touches and keystrokes go in
   between. Searches use the last complete index while a source is prepared again. The catalog
-  lives in the module, so the index outlives the screen. `createSearchIndex` itself is unchanged.
+  lives in the module, so the index outlives the screen. Once Search stops asking (it leaves, or
+  the keyboard goes down with nothing typed), nothing follows the Library, so the catalog is
+  marked `unfollowed`: when Search asks again there is no index until every source is read and
+  prepared again. Sources read again unchanged (the registry kept them) bring the old index back
+  without preparing. Without this, a remount showed the old index while a fresh songs read was
+  prepared, finding songs deleted meanwhile (review finding 9). `createSearchIndex` itself is unchanged.
   It is now the catalog's single-source case, and the catalog's results equal it over the
   concatenated sources (tested).
-- **No second song read.** The YT Music "already in your Library" finder (`libraryFinder`) and the
-  artist and album finders are built from Search's own sources, lazily, on the first YT Music
-  lookup. The index no longer waits for them.
+- **No second song read.** The YT Music "already in your Library" finder is the app's shared one
+  (`useLoadedLibraryFinder`), now built over the shared `songs` query's rows
+  (`apps/mobile/src/ytmusic/finderCache.ts`): one read and one finder for Search, the Songs tab
+  and every YT Music list. It used to read every song again per `libraryVersion` bump (each scan
+  batch, in or out of sight) while any YT Music list was mounted (review finding 8). Only
+  `currentLibraryFinder` (a Discover mix's menu, settled before it opens) still reads the songs
+  itself, once per Library version, as rows a screen showed may predate a change. The artist and
+  album finders are built from Search's own sources, lazily, on the first YT Music lookup. The
+  index no longer waits for them.
 - Matching, ranking, grouping, recent searches, the YT Music section and downloads held in place
   are unchanged.
 
@@ -134,7 +145,7 @@ checked on the simulated one (`run --dry-run`, numbers made up, not recorded).
   source alone, the last index while preparing, the newest rows win mid-preparation, empty
   sources, 50,000 songs in short steps). `search.test.ts` unchanged and passing.
 - App tests: `node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test 'src/**/*.test.ts'
-'plugins/**/*.test.ts'` in `apps/mobile` (293 pass). The React hooks have no render tests (none
+  'plugins/**/*.test.ts'` in `apps/mobile` (293 pass). The React hooks have no render tests (none
   exist in the app). Their decisions are Core's.
 - Runner tests: `node --test scripts/perf/*.test.ts` (79 pass), including the typing step's mark
   anchor and the per-step `search` counters.

@@ -16,16 +16,19 @@ import { BACKDROP, chrome } from "./chrome";
 import { OnFloatingChrome } from "./onFloatingChrome";
 import { openTabBarEditor } from "./TabBarEditor";
 import { tabLook } from "./tabs";
-import type { SwitchTab } from "./tabSwitches";
+import type { TappedTrigger } from "./tabSwitches";
 
-/** A tab tapped, with its trigger's switch. */
-type TabTap = (to: TabBarTab, switchTab: SwitchTab) => void;
+/** A tab tapped, with its trigger. */
+type TabTap = (to: TabBarTab, trigger: TappedTrigger) => void;
 
 type TabProps = {
   name: TabBarTab;
   /** Show the label under the icon (the Search pill is icon-only). */
   showLabel?: boolean;
-  /** Asked to switch to this tab on every tap; it decides whether to (`useTabSwitches`). */
+  /**
+   * Gets every tap on this tab; it decides whether to switch, or re-tap the
+   * tab on screen (`useTabSwitches`).
+   */
   onSwitch: TabTap;
   /** Runs on every tap, the current tab included. */
   onTap?: () => void;
@@ -48,9 +51,9 @@ function Tab({ name, showLabel = true, onSwitch, onTap }: TabProps) {
       accessibilityLabel={label}
       accessibilityHint="Long press to edit the tab bar"
       accessibilityState={{ selected: focused }}
-      onPress={() => {
+      onPress={(event) => {
         onTap?.();
-        onSwitch(name, switchTab);
+        onSwitch(name, { switchTab, press: () => triggerProps.onPress?.(event) });
       }}
       onLongPress={openTabBarEditor}
       haptic="selection"
@@ -76,7 +79,7 @@ const RADIUS = chrome.tabBar / 2;
  * own. Tapping Search brings the keyboard up; a long press on any tab opens
  * the bar's editor. Memoized: the tabs layout renders on navigation, and the
  * bar needn't (its tabs follow the focused one themselves; pass a stable `onTabTap`).
- * Every tap goes to `onTabTap`, which switches (`useTabSwitches`).
+ * Every tap goes to `onTabTap`, which switches or re-taps (`useTabSwitches`).
  */
 export const TabBar = memo(function TabBar({ onTabTap }: { onTabTap: TabTap }) {
   useRenderCount("TabBar");
