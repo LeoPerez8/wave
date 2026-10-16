@@ -11,7 +11,7 @@ import { Hairline } from "@/catalog/Hairline";
 import { TitledSection } from "@/catalog/TitledSection";
 import type { HomeSections, MostPlayedRow } from "@/library/db/playHistory";
 import { openStats, openStatsSeeAll } from "@/library/routes";
-import { useTopAlbums, useTopArtists } from "@/stats/hooks";
+import { useAllTimeTopAlbums, useAllTimeTopArtists } from "@/stats/hooks";
 import type { Ranked } from "@/stats/Stats";
 import { playCount } from "@/stats/StatsViews";
 import { openDiscoverMix } from "@/ytmusic/routes";
@@ -48,7 +48,7 @@ type SectionProps = {
 
 function MostPlayedAlbums({ title }: SectionProps) {
   // Stats' all-time rankings, so the order matches Library › Stats.
-  const albums = withPlays(useTopAlbums("all"));
+  const albums = withPlays(useAllTimeTopAlbums());
   if (albums.length === 0) return null;
   return (
     <TitledSection
@@ -93,7 +93,7 @@ function DiscoverMixes({ title }: SectionProps) {
 }
 
 function MostPlayedArtists({ title }: SectionProps) {
-  const artists = withPlays(useTopArtists("all", MOST_PLAYED_ARTISTS));
+  const artists = withPlays(useAllTimeTopArtists(MOST_PLAYED_ARTISTS));
   if (artists.length === 0) return null;
   return (
     <TitledSection

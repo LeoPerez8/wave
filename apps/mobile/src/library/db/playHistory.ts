@@ -278,10 +278,30 @@ export const setFavorites = (
   });
 };
 
-/** The Home tab's sections, of the Tracks in [scope] (Android Auto's Home: those with a file). */
-export const homeSections = (db: LibraryDatabase, scope: TrackScope = "library"): HomeSections => ({
-  recentlyAdded: recentlyAddedAlbums(db, scope),
+/** Home's sections that follow plays: they change as songs are played, nothing else does. */
+export type HomePlays = Pick<HomeSections, "recentlyPlayed" | "mostPlayed">;
+
+/** Recently Added, which only songs entering or leaving the library change. */
+export const homeAdded = (
+  db: LibraryDatabase,
+  scope: TrackScope = "library",
+): Pick<HomeSections, "recentlyAdded"> => ({ recentlyAdded: recentlyAddedAlbums(db, scope) });
+
+/** Recently Played and Most Played, read from the play totals (`play_totals`). */
+export const homePlays = (db: LibraryDatabase, scope: TrackScope = "library"): HomePlays => ({
   recentlyPlayed: recentlyPlayedShelf(db, scope),
   mostPlayed: mostPlayedSongs(db, scope),
-  favorites: recentFavorites(db, scope),
+});
+
+/** Favorites, which stars change. */
+export const homeFavorites = (
+  db: LibraryDatabase,
+  scope: TrackScope = "library",
+): Pick<HomeSections, "favorites"> => ({ favorites: recentFavorites(db, scope) });
+
+/** The Home tab's sections, of the Tracks in [scope] (Android Auto's Home: those with a file). */
+export const homeSections = (db: LibraryDatabase, scope: TrackScope = "library"): HomeSections => ({
+  ...homeAdded(db, scope),
+  ...homePlays(db, scope),
+  ...homeFavorites(db, scope),
 });

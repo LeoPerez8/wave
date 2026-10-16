@@ -1,14 +1,21 @@
-import { STATS_TOP, type StatsPeriod } from "@wave/core";
+import { STATS_TOP, type LibraryReads, type StatsPeriod } from "@wave/core";
 import type * as Effect from "effect/Effect";
 import { useFocusEffect } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
-import type { AlbumRow, ArtistRow, LibraryStoreError, SongRow } from "@/library/LibraryStore";
+import { libraryQuery, useLibraryQuery } from "@/library/hooks";
+import {
+  LibraryStore,
+  type AlbumRow,
+  type ArtistRow,
+  type LibraryStoreError,
+  type SongRow,
+} from "@/library/LibraryStore";
 import { useFocusedVersion } from "@/lib/useFocusedVersion";
 import { appRuntime } from "@/library/runtime";
 import { playHistoryVersion } from "@/playback/PlayHistory";
 
-import { Stats, type ArtistStats, type Ranked } from "./Stats";
+import { Stats, topAlbums, topArtists, type ArtistStats, type Ranked } from "./Stats";
 
 /**
  * What `read` gives from Stats, or undefined while it first loads. Re-read
@@ -97,3 +104,47 @@ export const useTopArtists = (
   period: StatsPeriod,
   limit: number = STATS_TOP,
 ): readonly Ranked<ArtistRow>[] | undefined => useRanking(period, limit, readTopArtists);
+
+/** What an all-time ranking reads: plays, and the songs they credit. */
+const PLAYED: LibraryReads = { tracks: true, plays: true };
+
+/**
+ * Home's Most played albums: the `limit` albums played most of all time, as
+ * Stats ranks them, or undefined while it first loads. One read for every
+ * screen showing it; plays re-read it at most every 1.5 s while it's in
+ * sight, and once when a screen showing it comes back.
+ */
+export const useAllTimeTopAlbums = (
+  limit: number = STATS_TOP,
+): readonly Ranked<AlbumRow>[] | undefined =>
+  useLibraryQuery<readonly Ranked<AlbumRow>[] | undefined>(
+    useMemo(
+      () =>
+        libraryQuery(
+          `topAlbums:all:${limit}`,
+          PLAYED,
+          // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+          LibraryStore.use((store) => topAlbums(store, "all", limit)),
+        ),
+      [limit],
+    ),
+    undefined,
+  );
+
+/** Home's Most played artists: the `limit` artists played most of all time, read as `useAllTimeTopAlbums`. */
+export const useAllTimeTopArtists = (
+  limit: number = STATS_TOP,
+): readonly Ranked<ArtistRow>[] | undefined =>
+  useLibraryQuery<readonly Ranked<ArtistRow>[] | undefined>(
+    useMemo(
+      () =>
+        libraryQuery(
+          `topArtists:all:${limit}`,
+          PLAYED,
+          // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+          LibraryStore.use((store) => topArtists(store, "all", limit)),
+        ),
+      [limit],
+    ),
+    undefined,
+  );

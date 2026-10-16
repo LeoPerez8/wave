@@ -153,7 +153,12 @@ describe("summedListeningTotals", () => {
 
   test("with nothing played, every total is zero and nothing was last played", () => {
     assert.deepEqual(
-      summedListeningTotals({ listenedMs: 0, countedPlays: 0, songsListened: 0, lastPlayedAt: null }),
+      summedListeningTotals({
+        listenedMs: 0,
+        countedPlays: 0,
+        songsListened: 0,
+        lastPlayedAt: null,
+      }),
       { minutesListened: 0, songsListened: 0, plays: 0, lastPlayedAt: null },
     );
   });

@@ -65,7 +65,10 @@ describe("Listening sums", () => {
     const gone = addTrack(db, { title: "Gone" });
     playThrough(db, play(often, 1_000));
     playThrough(db, play(often, 2_000, { listenedMs: 20_000, endReason: "skipped" }));
-    playThrough(db, play(skipped, 3_000, { listenedMs: 10_000, endReason: "skipped", counted: false }));
+    playThrough(
+      db,
+      play(skipped, 3_000, { listenedMs: 10_000, endReason: "skipped", counted: false }),
+    );
     playThrough(db, play(gone, 4_000, { listenedMs: 120_000 }));
     deleteTracksById(db, [gone]);
 
@@ -90,7 +93,7 @@ describe("Listening sums", () => {
 });
 
 /** The Library's tracks by recording key, as a pull turns the account's songs into them. */
-const trackIds = (db: TestDatabase): Map<string, number> =>
+const trackIds = (): Map<string, number> =>
   new Map(
     db
       .select({ key: schema.tracks.recordingKey, id: schema.tracks.id })
@@ -114,8 +117,8 @@ const pulledPlay = (id: string, songId: string, startedAt: number): SyncPlayRow 
   importedFrom: null,
 });
 
-const pull = (db: TestDatabase, plays: readonly SyncPlayRow[]): void => {
-  applyPulledPage(db, { ...EMPTY_SYNC_TABLES, plays, cursor: "c", more: false }, trackIds(db), 0);
+const pull = (plays: readonly SyncPlayRow[]): void => {
+  applyPulledPage(db, { ...EMPTY_SYNC_TABLES, plays, cursor: "c", more: false }, trackIds(), 0);
 };
 
 describe("Play totals", () => {
@@ -138,8 +141,8 @@ describe("Play totals", () => {
       { trackId: first, startedAt: 500 },
       { trackId: third, startedAt: 600 },
     ]);
-    const keys = [...trackIds(db).keys()];
-    pull(db, [pulledPlay("p1", keys[1]!, 3_000), pulledPlay("p2", "not-here-yet", 4_000)]);
+    const keys = [...trackIds().keys()];
+    pull([pulledPlay("p1", keys[1]!, 3_000), pulledPlay("p2", "not-here-yet", 4_000)]);
     // Edits no writer makes today: moved to another song, uncounted, started earlier, deleted.
     const { playEvents } = schema;
     db.update(playEvents).set({ trackId: third }).where(eq(playEvents.startedAt, 3_000)).run();
@@ -154,17 +157,17 @@ describe("Play totals", () => {
 
   test("count a play pulled again once, and a waiting play once it is applied", () => {
     addTrack(db, { title: "Song" });
-    const key = [...trackIds(db).keys()][0]!;
-    pull(db, [pulledPlay("p1", key, 1_000), pulledPlay("p2", key, 2_000)]);
-    pull(db, [pulledPlay("p1", key, 1_000), pulledPlay("p2", key, 2_000)]);
-    pull(db, [pulledPlay("p3", "not-here-yet", 3_000)]);
+    const key = [...trackIds().keys()][0]!;
+    pull([pulledPlay("p1", key, 1_000), pulledPlay("p2", key, 2_000)]);
+    pull([pulledPlay("p1", key, 1_000), pulledPlay("p2", key, 2_000)]);
+    pull([pulledPlay("p3", "not-here-yet", 3_000)]);
     addTrack(db, { title: "Later" });
     db.update(schema.tracks)
       .set({ recordingKey: "not-here-yet" })
       .where(eq(schema.tracks.title, "Later"))
       .run();
-    applyPending(db, trackIds(db));
-    applyPending(db, trackIds(db));
+    applyPending(db, trackIds());
+    applyPending(db, trackIds());
 
     assert.equal(listeningSums(db).countedPlays, 3);
     assert.deepEqual(playTotalsDrift(db), []);
@@ -224,7 +227,7 @@ const NOW = 1_000_000;
  * BlackPlayer's plays, songs deleted after their plays, and a play stamped
  * after now.
  */
-const seedHistory = (db: TestDatabase): number[] => {
+const seedHistory = (): number[] => {
   const songs = Array.from({ length: 60 }, (_, i) =>
     addTrack(db, {
       title: `Song ${i}`,
@@ -260,11 +263,12 @@ const seedHistory = (db: TestDatabase): number[] => {
 /** Credited totals in one order, to compare reads that return them in none. */
 const byCredit = (rows: readonly CreditedPlayTotals[]) =>
   rows.toSorted(
-    (a, b) => a.albumId - b.albumId || a.artistId - b.artistId || Number(a.primary) - Number(b.primary),
+    (a, b) =>
+      a.albumId - b.albumId || a.artistId - b.artistId || Number(a.primary) - Number(b.primary),
   );
 
 /** Home's Most Played from the whole history: every counted play of each song in [scope]. */
-const mostPlayedFromHistory = (db: TestDatabase, scope: "library" | "files") => {
+const mostPlayedFromHistory = (scope: "library" | "files") => {
   const inScope = new Set(
     db
       .select({ id: schema.tracks.id, path: schema.tracks.path })
@@ -281,7 +285,7 @@ const mostPlayedFromHistory = (db: TestDatabase, scope: "library" | "files") => 
 };
 
 /** Home's Recently Played from the whole history: albums of the songs in the library by their latest play. */
-const recentlyPlayedFromHistory = (db: TestDatabase) => {
+const recentlyPlayedFromHistory = () => {
   const albumOf = new Map(
     db
       .select({ id: schema.tracks.id, albumId: schema.tracks.albumId })
@@ -303,20 +307,20 @@ const recentlyPlayedFromHistory = (db: TestDatabase) => {
 
 describe("Home's all-time reads", () => {
   test("agree with the whole history", () => {
-    seedHistory(db);
+    seedHistory();
 
     const home = homeSections(db);
     assert.deepEqual(
       home.mostPlayed.map((song) => [song.id, song.playCount]),
-      mostPlayedFromHistory(db, "library"),
+      mostPlayedFromHistory("library"),
     );
     assert.deepEqual(
       homeSections(db, "files").mostPlayed.map((song) => [song.id, song.playCount]),
-      mostPlayedFromHistory(db, "files"),
+      mostPlayedFromHistory("files"),
     );
     assert.deepEqual(
       home.recentlyPlayed.map((album) => album.id),
-      recentlyPlayedFromHistory(db),
+      recentlyPlayedFromHistory(),
     );
     assert.deepEqual(
       byCredit(creditedPlayTotals(db, statsWindow("all", NOW))),
@@ -326,10 +330,10 @@ describe("Home's all-time reads", () => {
   });
 
   test("read the totals, never the play history", () => {
-    seedHistory(db);
+    seedHistory();
 
     for (const read of [
-      () => homeSections(db),
+      (): unknown => homeSections(db),
       () => homeSections(db, "files"),
       () => listeningSums(db),
       () => creditedPlayTotals(db, statsWindow("all", NOW)),
@@ -345,7 +349,7 @@ describe("Home's all-time reads", () => {
   });
 
   test("walk the totals in order for Most Played and Recently Played, stopping early", () => {
-    seedHistory(db);
+    seedHistory();
 
     const plans = traceQueries(db, () => homeSections(db))
       .queries.filter((query) => query.sql.includes("play_totals"))

@@ -85,6 +85,34 @@ const rank = <A extends { readonly id: number }>(
 ): Effect.Effect<readonly Ranked<A>[], LibraryStoreError> =>
   withRows(rankPlays(totals, limit), rows);
 
+type Store = LibraryStore["Service"];
+
+/**
+ * The `limit` albums played most in `period` (rolling, ending now), the top
+ * one first, read from [store]: what Stats ranks, and Home's Most played
+ * albums for all time.
+ */
+export const topAlbums = (
+  store: Store,
+  period: StatsPeriod,
+  limit: number,
+): Effect.Effect<readonly Ranked<AlbumRow>[], LibraryStoreError> =>
+  Effect.flatMap(
+    Effect.suspend(() => store.creditedPlayTotals(statsWindow(period, Date.now()))),
+    (credits) => rank(albumPlayTotals(credits), limit, store.albumsByIds),
+  );
+
+/** The `limit` artists played most in `period`, credited by track artist, as `topAlbums` reads them. */
+export const topArtists = (
+  store: Store,
+  period: StatsPeriod,
+  limit: number,
+): Effect.Effect<readonly Ranked<ArtistRow>[], LibraryStoreError> =>
+  Effect.flatMap(
+    Effect.suspend(() => store.creditedPlayTotals(statsWindow(period, Date.now()))),
+    (credits) => rank(artistPlayTotals(credits), limit, store.artistsByIds),
+  );
+
 export const layer = Layer.effect(
   Stats,
   Effect.gen(function* () {
@@ -94,14 +122,8 @@ export const layer = Layer.effect(
         Effect.flatMap(store.trackPlayTotals(statsWindow(period, Date.now())), (totals) =>
           rank(totals, limit, store.songsByIds),
         ),
-      topAlbums: (period, limit) =>
-        Effect.flatMap(store.creditedPlayTotals(statsWindow(period, Date.now())), (credits) =>
-          rank(albumPlayTotals(credits), limit, store.albumsByIds),
-        ),
-      topArtists: (period, limit) =>
-        Effect.flatMap(store.creditedPlayTotals(statsWindow(period, Date.now())), (credits) =>
-          rank(artistPlayTotals(credits), limit, store.artistsByIds),
-        ),
+      topAlbums: (period, limit) => topAlbums(store, period, limit),
+      topArtists: (period, limit) => topArtists(store, period, limit),
       artist: (artistId) => {
         const now = Date.now();
         return Effect.flatMap(
