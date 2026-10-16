@@ -49,10 +49,7 @@ export const appLayer = Layer.mergeAll(
 export const appRuntime = ManagedRuntime.make(appLayer);
 
 export type AppServices =
-  | LibraryStore.LibraryStore
-  | NativeScanner.NativeScanner
-  | Player.Player
-  | Queue.Queue;
+  LibraryStore.LibraryStore | NativeScanner.NativeScanner | Player.Player | Queue.Queue;
 
 /** The scan running now, so a second request (pull to refresh) waits for it instead. */
 let currentScan: Promise<void> | null = null;
