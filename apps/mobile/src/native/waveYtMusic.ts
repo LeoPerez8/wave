@@ -1,4 +1,5 @@
 import type {
+  DiscoverRadioSong,
   YtArtistAlbum,
   YtArtistCandidate,
   YtArtistPage,
@@ -47,6 +48,15 @@ export interface NativeYtSearchPage {
   readonly continuation: string | null;
 }
 
+/** A song of YouTube Music's radio, which plays music videos too (Core's `DiscoverRadioSong`). */
+export interface NativeYtRadioSong extends NativeYtSong, DiscoverRadioSong {}
+
+/** A page of a radio, in the order it plays, and the token for the next. */
+export interface NativeYtRadioPage {
+  readonly songs: readonly NativeYtRadioSong[];
+  readonly continuation: string | null;
+}
+
 /**
  * The codes a YT Music request rejects with: no network, YouTube answered
  * with an error or something unreadable, or YT Music is off in Settings.
@@ -80,6 +90,12 @@ declare class WaveYtMusicModule extends NativeModule<WaveYtMusicEvents> {
   playlist(playlistId: string): Promise<NativeYtPlaylistPage>;
   /** The playlist page a first page's (or a later page's) [continuation] leads to. */
   playlistMore(continuation: string): Promise<NativeYtPlaylistMore>;
+  /** The first page of the radio YouTube Music plays after the song [videoId] (it first). */
+  songRadio(videoId: string): Promise<NativeYtRadioPage>;
+  /** The first page of the radio of the artist whose page is [browseId] (`UC…`). */
+  artistRadio(browseId: string): Promise<NativeYtRadioPage>;
+  /** The radio page a radio page's [continuation] leads to. */
+  radioMore(continuation: string): Promise<NativeYtRadioPage>;
   /**
    * Caches a YT Music song's cover from [url] beside the Library's artwork, so
    * the player, the notification and Auto show it as they do a Library

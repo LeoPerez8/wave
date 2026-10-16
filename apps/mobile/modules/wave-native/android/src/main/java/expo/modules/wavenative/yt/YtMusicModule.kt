@@ -112,6 +112,25 @@ class YtMusicModule : Module() {
       coded { YtPages(client).playlistMore(continuation).toMap() }
     }
 
+    /**
+     * The first page of a song's radio: `{ songs, continuation }`, each song
+     * with `video` (a music video rather than a song), or an `ERR_YT_*`
+     * rejection. Needs no sign-in.
+     */
+    AsyncFunction("songRadio") Coroutine { videoId: String ->
+      coded { YtPages(client).songRadio(videoId).toMap() }
+    }
+
+    /** The first page of an artist's radio, from their page (`UC…`), as [songRadio]. */
+    AsyncFunction("artistRadio") Coroutine { browseId: String ->
+      coded { YtPages(client).artistRadio(browseId).toMap() }
+    }
+
+    /** The radio page a `continuation` leads to, as [songRadio]. */
+    AsyncFunction("radioMore") Coroutine { continuation: String ->
+      coded { YtPages(client).radioMore(continuation).toMap() }
+    }
+
     /** The saved session, without asking YouTube. */
     AsyncFunction("session") Coroutine { ->
       withContext(Dispatchers.IO) { client.session.state.toMap() }

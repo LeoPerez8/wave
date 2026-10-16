@@ -20,6 +20,7 @@ const SHELVES: readonly HomeSectionId[] = [
   "recently-played",
   "most-played-albums",
   "most-played-artists",
+  "discover-mixes",
   "favorites",
 ];
 

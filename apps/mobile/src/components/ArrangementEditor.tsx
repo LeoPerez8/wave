@@ -62,11 +62,19 @@ function RowButton({
   );
 }
 
-function RowLabel({ title }: { title: string }) {
+/** An item's title, and under it [detail] when there is one ("Needs YT Music"). */
+function RowLabel({ title, detail = null }: { title: string; detail?: string | null }) {
   return (
-    <Text numberOfLines={1} className="flex-1 font-sans text-body text-foreground">
-      {title}
-    </Text>
+    <View className="flex-1">
+      <Text numberOfLines={1} className="font-sans text-body text-foreground">
+        {title}
+      </Text>
+      {detail !== null && (
+        <Text numberOfLines={1} className="font-sans text-footnote text-secondary">
+          {detail}
+        </Text>
+      )}
+    </View>
   );
 }
 
@@ -112,6 +120,7 @@ type Drag = { readonly from: number; readonly to: number };
 type ShownRowProps<Id> = {
   id: Id;
   title: string;
+  detail: string | null;
   place: string;
   index: number;
   count: number;
@@ -133,6 +142,7 @@ type ShownRowProps<Id> = {
 function ShownRow<Id>({
   id,
   title,
+  detail,
   place,
   index,
   count,
@@ -201,7 +211,7 @@ function ShownRow<Id>({
         onAccessibilityAction={onAccessibilityAction}
         className="flex-1 flex-row items-center"
       >
-        <RowLabel title={title} />
+        <RowLabel title={title} detail={detail} />
         <RowButton
           icon={IconMinus}
           label={`Remove ${title} from ${place}`}
@@ -227,6 +237,7 @@ function ShownRow<Id>({
 function HiddenRow<Id>({
   id,
   title,
+  detail,
   place,
   divider,
   canAdd,
@@ -234,6 +245,7 @@ function HiddenRow<Id>({
 }: {
   id: Id;
   title: string;
+  detail: string | null;
   place: string;
   divider: boolean;
   canAdd: boolean;
@@ -242,7 +254,7 @@ function HiddenRow<Id>({
   return (
     <View style={{ height: ROW }}>
       <View className="flex-1 flex-row items-center">
-        <RowLabel title={title} />
+        <RowLabel title={title} detail={detail} />
         <View style={{ marginRight: -CELL * 1.5 }}>
           <RowButton
             icon={IconPlus}
@@ -263,6 +275,8 @@ export type ArrangementEditorProps<Id extends string> = {
   /** The items not shown, in the order they're offered. */
   hidden: readonly Id[];
   title: (id: Id) => string;
+  /** A line under an item's title, or null for none: what it needs that's off. */
+  detail?: (id: Id) => string | null;
   /** Where the items show, for buttons' labels: "Home", "the tab bar". */
   place: string;
   /** The heading over the items not shown, e.g. "Not on Home". */
@@ -289,6 +303,7 @@ export function ArrangementEditor<Id extends string>({
   shown,
   hidden,
   title,
+  detail = () => null,
   place,
   hiddenHeading,
   edit,
@@ -347,6 +362,7 @@ export function ArrangementEditor<Id extends string>({
               key={id}
               id={id}
               title={title(id)}
+              detail={detail(id)}
               place={place}
               index={index}
               count={count}
@@ -373,6 +389,7 @@ export function ArrangementEditor<Id extends string>({
               key={id}
               id={id}
               title={title(id)}
+              detail={detail(id)}
               place={place}
               divider={index < hidden.length - 1}
               canAdd={canAdd}

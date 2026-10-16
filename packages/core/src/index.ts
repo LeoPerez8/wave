@@ -909,6 +909,7 @@ export {
   editHomeArrangement,
   hiddenHomeSections,
   homeItems,
+  homeSectionNote,
   homeSectionTitle,
   parseHomeArrangement,
   storedHomeArrangement,
@@ -927,6 +928,29 @@ export {
   snapCrossfade,
   type CrossfadeTransition,
 } from "./crossfade.ts";
+export {
+  DISCOVER_MIX_COUNT,
+  discoverMix,
+  discoverMixCaption,
+  discoverMixReadsMore,
+  discoverMixSeeds,
+  discoverMixSongs,
+  discoverMixesDue,
+  discoverSeedQuery,
+  discoverSeedVideo,
+  parseDiscoverMixes,
+  playedFinder,
+  storedDiscoverMixes,
+} from "./discoverMixes.ts";
+export type {
+  DiscoverMix,
+  DiscoverMixFilter,
+  DiscoverMixSeed,
+  DiscoverMixes,
+  DiscoverRadioSong,
+  DiscoverSeedArtist,
+  DiscoverSeedSong,
+} from "./discoverMixes.ts";
 
 export {
   SPOTIFY_SEARCH_BUDGET,
