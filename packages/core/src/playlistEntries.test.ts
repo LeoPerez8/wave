@@ -5,11 +5,20 @@ import {
   planPlaylistSongs,
   playlistEntryLinks,
   playlistPlayback,
+  readPlaylistEntrySong,
   readPlaylistYtSong,
+  UNAVAILABLE_ENTRY_ACTION_LABELS,
+  playlistSongsLine,
+  unavailableEntryActions,
+  unavailableEntryView,
+  unavailableSearchQuery,
+  writePlaylistEntrySong,
   writePlaylistYtSong,
   ytDownloadTags,
   type MixedSong,
   type PlaylistSong,
+  type UnavailableEntry,
+  type UnavailableSong,
   type YtAlbumSong,
 } from "./index.ts";
 
@@ -27,6 +36,18 @@ const yt = (videoId: string, fields: Partial<YtAlbumSong> = {}): YtAlbumSong => 
 
 const library = (trackId: number): PlaylistSong => ({ source: "library", trackId });
 const stream = (song: YtAlbumSong): PlaylistSong<YtAlbumSong> => ({ source: "stream", song });
+const unavailable = (title: string, fields: Partial<UnavailableSong> = {}): UnavailableEntry => ({
+  source: "unavailable",
+  song: {
+    title,
+    artists: ["Daft Punk"],
+    album: "Random Access Memories",
+    durationMs: 228_000,
+    artworkUrl: null,
+    reason: "notFound",
+    ...fields,
+  },
+});
 
 describe("planPlaylistSongs", () => {
   test("Library songs and YT Music songs go at the end, in the order given", () => {
@@ -81,6 +102,41 @@ describe("writePlaylistYtSong / readPlaylistYtSong", () => {
   });
 });
 
+describe("writePlaylistEntrySong / readPlaylistEntrySong", () => {
+  test("a YT Music entry and an unavailable one each read back as what they are", () => {
+    const missing = unavailable("Fragments of Time", { artworkUrl: "https://i.scdn.co/image/f" });
+    const streamed = { source: "stream", song: yt("a") } as const;
+    assert.deepEqual(readPlaylistEntrySong(writePlaylistEntrySong(streamed)), streamed);
+    assert.deepEqual(readPlaylistEntrySong(writePlaylistEntrySong(missing)), missing);
+  });
+
+  test("an unavailable song keeps what its source listed, unknowns included", () => {
+    const missing = unavailable("Untitled", {
+      artists: [],
+      album: null,
+      durationMs: null,
+      reason: "localFile",
+    });
+    assert.deepEqual(readPlaylistEntrySong(writePlaylistEntrySong(missing)), missing);
+  });
+
+  test("a version of Wave that reads only YT Music entries reads an unavailable one as nothing", () => {
+    assert.equal(readPlaylistYtSong(writePlaylistEntrySong(unavailable("Within"))), null);
+  });
+
+  test("what isn't a song reads as nothing", () => {
+    assert.equal(readPlaylistEntrySong("not json"), null);
+    assert.equal(
+      readPlaylistEntrySong(JSON.stringify({ unavailable: "notFound", artists: [] })),
+      null,
+    );
+    assert.equal(
+      readPlaylistEntrySong(JSON.stringify({ ...unavailable("Within").song, unavailable: "gone" })),
+      null,
+    );
+  });
+});
+
 describe("playlistPlayback", () => {
   type Track = { readonly id: number };
   const own = (id: number): MixedSong<YtAlbumSong, Track> => ({ source: "library", track: { id } });
@@ -121,6 +177,36 @@ describe("playlistPlayback", () => {
 
   test("with only YT Music entries and YT Music off, there's nothing to play", () => {
     assert.equal(playlistPlayback([streamed("a")], { ytMusic: false }), null);
+  });
+
+  test("unavailable entries are skipped, by Play, Shuffle and a tap alike", () => {
+    const listed = [own(1), unavailable("Within"), streamed("a"), unavailable("Untitled"), own(2)];
+    const playing = [own(1), streamed("a"), own(2)];
+    assert.deepEqual(playlistPlayback(listed, { ytMusic: true }), {
+      playback: { kind: "mixed", songs: playing },
+      startIndex: undefined,
+    });
+    assert.deepEqual(playlistPlayback(listed, { ytMusic: true, startIndex: 4 }), {
+      playback: { kind: "mixed", songs: playing },
+      startIndex: 2,
+    });
+    assert.deepEqual(playlistPlayback(listed, { ytMusic: false, startIndex: 4 }), {
+      playback: { kind: "library", tracks: [{ id: 1 }, { id: 2 }] },
+      startIndex: 1,
+    });
+  });
+
+  test("a tapped unavailable entry doesn't play, nor does a playlist of nothing else", () => {
+    const listed = [own(1), unavailable("Within")];
+    assert.equal(playlistPlayback(listed, { ytMusic: true, startIndex: 1 }), null);
+    assert.equal(playlistPlayback([unavailable("Within")], { ytMusic: true }), null);
+  });
+
+  test("Library songs and unavailable entries play as Library songs alone", () => {
+    assert.deepEqual(playlistPlayback([unavailable("Within"), own(1)], { ytMusic: true }), {
+      playback: { kind: "library", tracks: [{ id: 1 }] },
+      startIndex: undefined,
+    });
   });
 
   test("a playlist of Library songs alone plays as it always has", () => {
@@ -224,8 +310,84 @@ describe("playlistEntryLinks", () => {
     );
   });
 
+  test("an unavailable entry the Library now has becomes that Library song in its place", () => {
+    const entries = [
+      { itemId: 10, playlistId: 1, song: unavailable("Within").song },
+      { itemId: 11, playlistId: 1, song: unavailable("Untitled", { artists: [] }).song },
+    ];
+    const songs = [
+      track(1, "Within", "Daft Punk", 229_000),
+      track(2, "Untitled", "Daft Punk", 228_000),
+    ];
+    assert.deepEqual(
+      playlistEntryLinks(entries, songs, []),
+      linked({ itemId: 10, trackId: 1 }),
+      "a local file without an artist isn't matched",
+    );
+  });
+
+  test("an unavailable entry whose song its playlist holds already is removed, not doubled", () => {
+    const entries = [
+      { itemId: 10, playlistId: 1, song: unavailable("Within").song },
+      { itemId: 11, playlistId: 2, song: unavailable("Within").song },
+      {
+        itemId: 12,
+        playlistId: 2,
+        song: yt("w", { title: "Within", artists: ["Daft Punk"], durationMs: 228_000 }),
+      },
+    ];
+    const songs = [track(1, "Within", "Daft Punk", 228_000)];
+    assert.deepEqual(playlistEntryLinks(entries, songs, [{ playlistId: 1, trackId: 1 }]), {
+      links: [{ itemId: 11, trackId: 1 }],
+      drops: [10, 12],
+    });
+  });
+
   test("nothing to link when there are no entries or no new songs", () => {
     assert.deepEqual(playlistEntryLinks([], [track(1, "Genesis", "Justice")], []), linked());
     assert.deepEqual(playlistEntryLinks([entry(10, yt("a"))], [], []), linked());
+  });
+});
+
+describe("an unavailable entry", () => {
+  test("says why it's unavailable, on its row and when tapped", () => {
+    assert.deepEqual(unavailableEntryView(unavailable("Within").song), {
+      line: "Not found on YouTube Music",
+      notice: "Wave couldn't find this song on YouTube Music or in your Library.",
+    });
+    assert.deepEqual(unavailableEntryView(unavailable("Untitled", { reason: "localFile" }).song), {
+      line: "Local file on Spotify",
+      notice: "This song is a local file on Spotify, so Wave couldn't look for it.",
+    });
+  });
+
+  test("its menu offers Remove from Playlist and Search, while Search is on the tab bar", () => {
+    assert.deepEqual(unavailableEntryActions({ search: true }), ["removeFromPlaylist", "search"]);
+    assert.deepEqual(unavailableEntryActions({ search: false }), ["removeFromPlaylist"]);
+    assert.deepEqual(UNAVAILABLE_ENTRY_ACTION_LABELS, {
+      removeFromPlaylist: "Remove from Playlist",
+      search: "Search",
+    });
+  });
+
+  test("Search looks for its title and main artist", () => {
+    const song = unavailable("Instant Crush", {
+      artists: ["Daft Punk", "Julian Casablancas"],
+    }).song;
+    assert.equal(unavailableSearchQuery(song), "Instant Crush Daft Punk");
+    const credited = unavailable("Touch", { artists: ["Daft Punk feat. Paul Williams"] }).song;
+    assert.equal(unavailableSearchQuery(credited), "Touch Daft Punk");
+    assert.equal(unavailableSearchQuery(unavailable("Untitled", { artists: [] }).song), "Untitled");
+  });
+});
+
+describe("playlistSongsLine", () => {
+  test("counts every entry, and says how many can't play", () => {
+    assert.equal(playlistSongsLine(2451, 3), "2,451 songs · 3 unavailable");
+    assert.equal(playlistSongsLine(1, 1), "1 song · 1 unavailable");
+  });
+
+  test("a playlist with every song available says only its count", () => {
+    assert.equal(playlistSongsLine(24, 0), "24 songs");
   });
 });

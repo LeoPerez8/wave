@@ -11,7 +11,7 @@ import {
   type RowWindow,
 } from "@wave/core";
 import * as Haptics from "expo-haptics";
-import { useCallback, useLayoutEffect, useRef, useState, type ReactElement } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import {
   Text,
   ToastAndroid,
@@ -42,12 +42,18 @@ import { useChromeInset } from "@/chrome/chrome";
 import { playPlaylist } from "@/playback/actions";
 import { useCurrentTrackId } from "@/playback/hooks";
 import { openTrackActions } from "@/playback/ActionsMenu";
-import type { ActionItems } from "@/playback/actionTargets";
+import type { ActionItems, TrackItem } from "@/playback/actionTargets";
 import { selectableRow } from "@/selection/selectableRow";
 import { useListSelection } from "@/selection/useListSelection";
 import { useThemeColor } from "@/theme/useThemeColor";
 import { YtSongRow } from "@/ytmusic/YtSongRow";
 import { openYtSongActions } from "@/ytmusic/YtSongActions";
+
+import {
+  explainUnavailable,
+  openUnavailableEntryActions,
+  UnavailableSongRow,
+} from "./UnavailableEntry";
 
 import { useFavoriteIds } from "./favorites";
 import type { PlaylistEntryRow } from "./LibraryStore";
@@ -104,10 +110,11 @@ type RowProps = {
 };
 
 /**
- * A playlist entry: a Library song's track row, or a YT Music entry's stream
- * row with the YT Music song's menu, that swipes left to remove, with a grip
- * on the right to drag it elsewhere. Screen readers get Move up / Move down /
- * Remove. While selecting, a YT Music entry can't be checked and is dimmed.
+ * A playlist entry: a Library song's track row, a YT Music entry's stream
+ * row with the YT Music song's menu, or an unavailable entry's dimmed row,
+ * that swipes left to remove, with a grip on the right to drag it elsewhere.
+ * Screen readers get Move up / Move down / Remove. While selecting, an
+ * unavailable entry can't be checked.
  */
 function PlaylistItem({
   item,
@@ -282,11 +289,20 @@ function PlaylistItem({
                 accessibilityActions={accessibilityActions}
                 onAccessibilityAction={onAccessibilityAction}
               />
-            ) : (
+            ) : item.source === "stream" ? (
               <YtSongRow
                 song={item.song}
                 checked={checked}
                 playing={playing}
+                onPress={onPress}
+                onLongPress={onLongPress}
+                accessibilityActions={accessibilityActions}
+                onAccessibilityAction={onAccessibilityAction}
+              />
+            ) : (
+              <UnavailableSongRow
+                song={item.song}
+                checked={checked}
                 onPress={onPress}
                 onLongPress={onLongPress}
                 accessibilityActions={accessibilityActions}
@@ -327,13 +343,24 @@ const NO_ITEMS: readonly PlaylistEntryRow[] = [];
 /** Each entry is its own selection item, so a song in the playlist twice is checked per copy. */
 const entryKey = (item: PlaylistEntryRow): string => String(item.itemId);
 
-/** The id the entry's song goes by in the queue, to show it playing. */
-const queueId = (item: PlaylistEntryRow): string =>
-  item.source === "library" ? String(item.track.id) : ytTrackId(item.song.videoId);
+/** The id the entry's song goes by in the queue, to show it playing; null for one that never plays. */
+const queueId = (item: PlaylistEntryRow): string | null =>
+  item.source === "library"
+    ? String(item.track.id)
+    : item.source === "stream"
+      ? ytTrackId(item.song.videoId)
+      : null;
+
+/** Whether the entry can be checked: an unavailable entry has nothing the selection bar acts on. */
+const checkable = (item: PlaylistEntryRow): boolean => item.source !== "unavailable";
+
+/** While selecting, an unavailable entry's row does nothing. */
+const INERT_ROW = { checked: undefined, onPress: () => undefined, onLongPress: () => undefined };
 
 /**
- * Plays the playlist from [startIndex] (or from the top, or shuffled): a YT
- * Music entry tapped with YT Music off says why it doesn't play.
+ * Plays the playlist from [startIndex] (or from the top, or shuffled),
+ * skipping its unavailable entries (Core's `playlistPlayback`): one tapped
+ * says why it doesn't play, as does a YT Music entry tapped with YT Music off.
  */
 export const playPlaylistEntries = (
   entries: readonly PlaylistEntryRow[],
@@ -341,6 +368,11 @@ export const playPlaylistEntries = (
   context: QueueContext,
   options: { readonly shuffle?: boolean } = {},
 ): void => {
+  const tapped = startIndex === undefined ? undefined : entries[startIndex];
+  if (tapped?.source === "unavailable") {
+    explainUnavailable(tapped.song);
+    return;
+  }
   void playPlaylist(entries, startIndex, context, options).then((played) => {
     if (!played) ToastAndroid.show("YT Music is off in Settings", ToastAndroid.SHORT);
   });
@@ -381,16 +413,19 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
   const tracksOf = useCallback(
     (selected: readonly PlaylistEntryRow[]): ActionItems => ({
       kind: "track",
-      items: selected.map((item) =>
+      items: selected.flatMap((item): TrackItem[] =>
         item.source === "library"
-          ? { song: item.track, playlistItem: placeOf(item) }
-          : { ytSong: item.song, playlistItem: placeOf(item) },
+          ? [{ song: item.track, playlistItem: placeOf(item) }]
+          : item.source === "stream"
+            ? [{ ytSong: item.song, playlistItem: placeOf(item) }]
+            : [],
       ),
     }),
     [placeOf],
   );
+  const selectable = useMemo(() => order.filter(checkable), [order]);
   const listSelection = useListSelection({
-    items: order,
+    items: selectable,
     keyOf: entryKey,
     target: tracksOf,
   });
@@ -534,11 +569,15 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
     const item = order[index];
     if (item === undefined) return null;
     const play = () => playPlaylistEntries(order, index, context);
-    const row = selectableRow(item, listSelection, play, (options) => {
-      const menu = { ...options, playlistItem: placeOf(item) };
-      if (item.source === "library") openTrackActions(item.track, menu);
-      else openYtSongActions(item.song, menu);
-    });
+    const row =
+      item.source === "unavailable" && listSelection.selecting
+        ? INERT_ROW
+        : selectableRow(item, listSelection, play, (options) => {
+            const menu = { ...options, playlistItem: placeOf(item) };
+            if (item.source === "library") openTrackActions(item.track, menu);
+            else if (item.source === "stream") openYtSongActions(item.song, menu);
+            else openUnavailableEntryActions(item.song, placeOf(item));
+          });
     return (
       <PlaylistItem
         key={item.itemId}
@@ -546,7 +585,7 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
         index={index}
         count={order.length}
         drag={drag}
-        playing={queueId(item) === currentId}
+        playing={queueId(item) !== null && queueId(item) === currentId}
         favorite={item.source === "library" && favorites.has(item.track.id)}
         downloaded={mixed}
         selecting={listSelection.selecting}
