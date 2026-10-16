@@ -274,14 +274,6 @@ describe("hidden screens", () => {
     answer("albums", "a1");
     assert.equal(told, 1);
   });
-
-  test("refresh re-reads at once even without a change", () => {
-    const { queries, answer, readsOf } = setup();
-    const songs = queries.attach("songs", SONGS, { visible: true, onChange: () => {} });
-    answer("songs", "s1");
-    songs.refresh();
-    assert.equal(readsOf("songs"), 1);
-  });
 });
 
 describe("stale reads", () => {
@@ -314,9 +306,9 @@ describe("stale reads", () => {
 
   test("a failed read keeps the last result", () => {
     const { queries, answer, reads } = setup();
-    const songs = queries.attach("songs", SONGS, { visible: true, onChange: () => {} });
+    queries.attach("songs", SONGS, { visible: true, onChange: () => {} });
     answer("songs", "s1");
-    songs.refresh();
+    queries.change({ kind: "tracks" });
     reads.shift()!.settle({ ok: false });
     assert.equal(queries.current("songs")?.value, "s1");
     assert.equal(reads.length, 0, "not retried until something changes");

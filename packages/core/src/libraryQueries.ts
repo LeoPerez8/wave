@@ -76,7 +76,8 @@ export const LIBRARY_QUERY_LIMITS: LibraryQueryLimits = {
 
 /** How a read ended: its result, or a failure (the last result stands). */
 export type LibraryQueryOutcome<V> =
-  { readonly ok: true; readonly value: V } | { readonly ok: false };
+  | { readonly ok: true; readonly value: V }
+  | { readonly ok: false };
 
 /** A query's result, boxed so a result that is itself `undefined` still reads as one. */
 export interface LibraryQueryResult<V> {
@@ -89,8 +90,6 @@ export interface LibraryQueryConsumer {
   readonly show: () => void;
   /** The screen went out of sight (another tab, a pushed screen, Now Playing over it). */
   readonly hide: () => void;
-  /** Re-reads now, whatever the query's reads say (an edit the registry wasn't told of). */
-  readonly refresh: () => void;
   /** The screen no longer shows the query. Call once. */
   readonly detach: () => void;
 }
@@ -348,10 +347,6 @@ export const createLibraryQueries = <V>(options: {
         },
         hide: () => {
           consumer.visible = false;
-        },
-        refresh: () => {
-          invalidate(owner, true);
-          plan(owner);
         },
         detach: () => {
           if (!owner.consumers.delete(consumer)) return;
