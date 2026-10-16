@@ -118,6 +118,13 @@ export const playlistMosaic = <A>(covers: readonly (A | null)[]): readonly A[] =
   return distinct.slice(0, 1);
 };
 
+/**
+ * What a playlist's artwork shows: the image the owner gave it, alone, or
+ * else its mosaic (`playlistMosaic`) of its songs' [covers].
+ */
+export const playlistArtwork = <A>(image: A | null, covers: readonly (A | null)[]): readonly A[] =>
+  image === null ? playlistMosaic(covers) : [image];
+
 /** One entry of a playlist: a song's place there (the same song may have several). */
 export interface PlaylistPlace {
   readonly playlistId: number;

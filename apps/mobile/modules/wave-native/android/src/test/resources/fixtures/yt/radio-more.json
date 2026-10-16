@@ -1,0 +1,204 @@
+{
+ "contents": {
+  "singleColumnMusicWatchNextResultsRenderer": {
+   "tabbedRenderer": {
+    "watchNextTabbedResultsRenderer": {
+     "tabs": [
+      {
+       "tabRenderer": {
+        "title": "Up next",
+        "content": {
+         "musicQueueRenderer": {
+          "hack": true
+         }
+        },
+        "trackingParams": "CKYHEJ-0BRgAIhMIn8PZ3ca9lwMV7lC4BB2N6C3h"
+       }
+      }
+     ]
+    }
+   }
+  }
+ },
+ "continuationContents": {
+  "playlistPanelContinuation": {
+   "contents": [
+    {
+     "playlistPanelVideoRenderer": {
+      "title": {
+       "runs": [
+        {
+         "text": "Smooth Criminal"
+        }
+       ]
+      },
+      "longBylineText": {
+       "runs": [
+        {
+         "text": "Michael Jackson",
+         "navigationEndpoint": {
+          "browseEndpoint": {
+           "browseId": "UCoIOOL7QKuBhQHVKL8y7BEQ",
+           "browseEndpointContextSupportedConfigs": {
+            "browseEndpointContextMusicConfig": {
+             "pageType": "MUSIC_PAGE_TYPE_ARTIST"
+            }
+           }
+          }
+         }
+        },
+        {
+         "text": " • "
+        },
+        {
+         "text": "Bad (25th Anniversary)",
+         "navigationEndpoint": {
+          "browseEndpoint": {
+           "browseId": "MPREb_0AFJs8nNJS8",
+           "browseEndpointContextSupportedConfigs": {
+            "browseEndpointContextMusicConfig": {
+             "pageType": "MUSIC_PAGE_TYPE_ALBUM"
+            }
+           }
+          }
+         }
+        },
+        {
+         "text": " • "
+        },
+        {
+         "text": "1987"
+        }
+       ]
+      },
+      "thumbnail": {
+       "thumbnails": [
+        {
+         "url": "https://yt3.googleusercontent.com/4IhR8db0ePRchdQgUzYcjxTgjBBn16vYi1bOVgf0Z0-tfjBN62-FSn6wtrxDm4eg-jQh9JVvHPyWUAvs=w302-h302-l90-rj",
+         "width": 302,
+         "height": 302
+        },
+        {
+         "url": "https://yt3.googleusercontent.com/4IhR8db0ePRchdQgUzYcjxTgjBBn16vYi1bOVgf0Z0-tfjBN62-FSn6wtrxDm4eg-jQh9JVvHPyWUAvs=w544-h544-l90-rj",
+         "width": 544,
+         "height": 544
+        }
+       ]
+      },
+      "lengthText": {
+       "runs": [
+        {
+         "text": "4:18"
+        }
+       ]
+      },
+      "navigationEndpoint": {
+       "watchEndpoint": {
+        "videoId": "XzNWRmqibNE",
+        "playlistId": "RDAMVMlYBUbBu4W08",
+        "watchEndpointMusicSupportedConfigs": {
+         "watchEndpointMusicConfig": {
+          "hasPersistentPlaylistPanel": true,
+          "musicVideoType": "MUSIC_VIDEO_TYPE_ATV"
+         }
+        }
+       }
+      },
+      "videoId": "XzNWRmqibNE"
+     }
+    },
+    {
+     "playlistPanelVideoRenderer": {
+      "title": {
+       "runs": [
+        {
+         "text": "Don't You Want Me"
+        }
+       ]
+      },
+      "longBylineText": {
+       "runs": [
+        {
+         "text": "The Human League",
+         "navigationEndpoint": {
+          "browseEndpoint": {
+           "browseId": "UCrg2H-AeXXcZg_TZ8QBRTKw",
+           "browseEndpointContextSupportedConfigs": {
+            "browseEndpointContextMusicConfig": {
+             "pageType": "MUSIC_PAGE_TYPE_ARTIST"
+            }
+           }
+          }
+         }
+        },
+        {
+         "text": " • "
+        },
+        {
+         "text": "Dare!",
+         "navigationEndpoint": {
+          "browseEndpoint": {
+           "browseId": "MPREb_VI5b2xRmBXd",
+           "browseEndpointContextSupportedConfigs": {
+            "browseEndpointContextMusicConfig": {
+             "pageType": "MUSIC_PAGE_TYPE_ALBUM"
+            }
+           }
+          }
+         }
+        },
+        {
+         "text": " • "
+        },
+        {
+         "text": "1981"
+        }
+       ]
+      },
+      "thumbnail": {
+       "thumbnails": [
+        {
+         "url": "https://yt3.googleusercontent.com/Nu6o4yjDnu8AuavMm5Zh63atN6rf7E9wSZ9i9XrOTlAg-wneYom7on3wpdyZOnqKzwglmkNd1WHOu0yu=w302-h302-l90-rj",
+         "width": 302,
+         "height": 302
+        },
+        {
+         "url": "https://yt3.googleusercontent.com/Nu6o4yjDnu8AuavMm5Zh63atN6rf7E9wSZ9i9XrOTlAg-wneYom7on3wpdyZOnqKzwglmkNd1WHOu0yu=w544-h544-l90-rj",
+         "width": 544,
+         "height": 544
+        }
+       ]
+      },
+      "lengthText": {
+       "runs": [
+        {
+         "text": "3:57"
+        }
+       ]
+      },
+      "navigationEndpoint": {
+       "watchEndpoint": {
+        "videoId": "UscEO2ITyug",
+        "playlistId": "RDAMVMlYBUbBu4W08",
+        "watchEndpointMusicSupportedConfigs": {
+         "watchEndpointMusicConfig": {
+          "hasPersistentPlaylistPanel": true,
+          "musicVideoType": "MUSIC_VIDEO_TYPE_ATV"
+         }
+        }
+       }
+      },
+      "videoId": "UscEO2ITyug"
+     }
+    }
+   ],
+   "continuations": [
+    {
+     "nextRadioContinuationData": {
+      "continuation": "CGMSPhILX1BFMVl3R2tDaVEiEVJEQU1WTWxZQlViQnU0VzA4MgR3QUVCOGLQAQH6ARA4QjNCNkRENjNFQTBEMUNDGAo%3D"
+     }
+    }
+   ]
+  }
+ }
+}

@@ -7,6 +7,8 @@
  * entries. The app pushes the resulting ordered list to the native player.
  */
 
+import { libraryTrackIds } from "./ytQueue.ts";
+
 export type RepeatMode = "off" | "all" | "one";
 
 /** Where the context entries came from, e.g. `{ kind: "album", id: "12" }`. */
@@ -222,6 +224,18 @@ export const shufflesQueue = (state: QueueState, command: QueueCommand): boolean
     default:
       return false;
   }
+};
+
+/**
+ * The Library tracks [command] orders when it shuffles [state]'s queue, each
+ * once: a play's songs, or the queue's. Smart Shuffle needs their plays and no
+ * others; a command that doesn't shuffle needs none.
+ */
+export const shuffledTrackIds = (state: QueueState, command: QueueCommand): number[] => {
+  if (!shufflesQueue(state, command)) return [];
+  return libraryTrackIds(
+    command.type === "play" ? command.trackIds : state.entries.map((entry) => entry.trackId),
+  );
 };
 
 /** [entries] in the order [shuffle] gives them. */

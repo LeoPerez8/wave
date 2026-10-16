@@ -35,9 +35,11 @@ import { songCount } from "@/library/TrackList";
 import { useListScrollable } from "@/motion/heldTouch";
 import type { NativeYtPlaylist, NativeYtSong } from "@/native/waveYtMusic";
 import { playDiscoverSongs } from "@/playback/actions";
+import { listedTrackItem, trackItemKey, tracksTarget } from "@/playback/actionTargets";
+import { useListSelection } from "@/selection/useListSelection";
 
 import { askYtMusic } from "./askYtMusic";
-import { DiscoverSongRow } from "./DiscoverShelves";
+import { DiscoverSongRow } from "./DiscoverSongRow";
 import { useLibraryFinder, useLoadedInLibrary } from "./libraryFinder";
 import type { YtListHead, YtListScreen } from "./routes";
 import {
@@ -286,7 +288,7 @@ function Head({
 const keyOf = (song: Song, index: number): string => `${index}-${song.song.videoId}`;
 
 /**
- * A YT Music album or playlist opened from Discover: its cover, title, maker
+ * A YT Music album, playlist or Discover mix: its cover, title, maker
  * and furniture, Play / Shuffle, then its songs. Songs the Library has play
  * its files; the rest stream. Offline, or when YouTube fails, a quiet empty
  * state takes the songs' place. A playlist's songs show page by page, with a
@@ -315,6 +317,12 @@ export function YtSongList({
   const page = load.status === "loaded" ? load.page : null;
   const download = useYtAlbumDownloadButton(albumDownload && page !== null ? page.songs : NO_SONGS);
   const songs = useMemo(() => (page === null ? [] : discoverSongs(page.songs, find)), [page, find]);
+  const selectable = useMemo(() => songs.map(listedTrackItem), [songs]);
+  const selection = useListSelection({
+    items: selectable,
+    keyOf: trackItemKey,
+    target: tracksTarget,
+  });
   const play = useCallback(
     (startIndex: number | undefined, shuffle = false) =>
       void playDiscoverSongs(songs, startIndex, context, { shuffle }),
@@ -333,11 +341,12 @@ export function YtSongList({
     ({ item, index }: { item: Song; index: number }) => (
       <DiscoverSongRow
         song={item}
+        selection={selection}
         trackNumber={numbered ? index + 1 : undefined}
         onPress={() => play(index)}
       />
     ),
-    [numbered, play],
+    [numbered, play, selection],
   );
 
   return (
@@ -349,6 +358,7 @@ export function YtSongList({
         data={songs}
         keyExtractor={keyOf}
         renderItem={renderItem}
+        extraData={selection.selection}
         getFixedItemSize={() => grid.row}
         estimatedItemSize={grid.row}
         recycleItems

@@ -1,4 +1,5 @@
 import { IconStack2 } from "@tabler/icons-react-native";
+import type { HomeSectionId } from "@wave/core";
 import { router } from "expo-router";
 
 import { EntryRow } from "@/catalog/EntryRow";
@@ -8,24 +9,40 @@ import { EmptyState } from "@/components/EmptyState";
 import { LargeTitleScreen } from "@/components/LargeTitleScreen";
 import { ScanProgressBanner } from "@/components/ScanProgressBanner";
 import { TextButton } from "@/components/TextButton";
+import { HomeSection } from "@/home/HomeSection";
 import { folderPhrase } from "@/library/folderPhrase";
-import { useLibraryCounts, useScanRoots, useScanState, useTrackCount } from "@/library/hooks";
+import {
+  useHome,
+  useLibraryCounts,
+  useScanRoots,
+  useScanState,
+  useTrackCount,
+} from "@/library/hooks";
+import { libraryShelfTitleLongPress, useLibraryShelf } from "@/library/libraryShelf";
 import { promptForMusicFolder } from "@/library/promptForMusicFolder";
 import { RescanRefreshControl } from "@/library/RescanRefreshControl";
 import { openLibrarySectionActions } from "@/playback/ActionsMenu";
-import { useYtMusicEnabled } from "@/settings/ytMusic";
-import { openDiscover } from "@/ytmusic/routes";
+
+/** The shelf under the Library's rows: Home's section [id] with Home's data, nothing while it's empty. */
+function LibraryShelfSection({ id }: { id: HomeSectionId }) {
+  const home = useHome();
+  return home === undefined ? null : <HomeSection id={id} home={home} />;
+}
 
 export default function LibraryScreen() {
   const scan = useScanState();
   const trackCount = useTrackCount();
   const roots = useScanRoots();
   const counts = useLibraryCounts();
-  const ytMusic = useYtMusicEnabled();
+  const shelf = useLibraryShelf();
   const empty = scan.status === "done" && trackCount === 0;
 
   return (
-    <LargeTitleScreen title="Library" refreshControl={<RescanRefreshControl />}>
+    <LargeTitleScreen
+      title="Library"
+      titleLongPress={libraryShelfTitleLongPress}
+      refreshControl={<RescanRefreshControl />}
+    >
       <ScanProgressBanner />
       {empty && (
         <EmptyState
@@ -47,8 +64,8 @@ export default function LibraryScreen() {
           onLongPress={() => openLibrarySectionActions(section)}
         />
       ))}
-      {/* YouTube Music's recommendations; gone while YT Music is off. */}
-      {ytMusic && <EntryRow label="Discover" onPress={openDiscover} />}
+      {/* The shelf picked from a long press on the title; None draws nothing and reads nothing. */}
+      {shelf !== "none" && <LibraryShelfSection id={shelf} />}
     </LargeTitleScreen>
   );
 }

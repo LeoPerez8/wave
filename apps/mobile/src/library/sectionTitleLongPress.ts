@@ -5,7 +5,7 @@ import { playlistLayoutTitleLongPress } from "./playlistLayout";
 
 /**
  * What a long press on a Library section's title opens, where it opens
- * anything (Playlists: its layouts), on its own screen and as the shortcut tab.
+ * anything (Playlists: its layouts), on its own screen and as a tab.
  */
 export const sectionTitleLongPress = (
   section: LibrarySection | undefined,

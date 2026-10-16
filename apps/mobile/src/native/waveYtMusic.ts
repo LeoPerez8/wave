@@ -1,4 +1,5 @@
 import type {
+  DiscoverRadioSong,
   YtArtistAlbum,
   YtArtistCandidate,
   YtArtistPage,
@@ -6,7 +7,6 @@ import type {
   YtPlaylistFirstPage,
   YtPlaylistPage,
   YtSession,
-  YtShelf,
   YtSong,
 } from "@wave/core";
 import { NativeModule, requireNativeModule } from "expo";
@@ -18,9 +18,6 @@ export interface NativeYtSong extends YtSong {
   /** The album's YT Music browse id (`MPREb_…`), for its tracklist and year. */
   readonly albumId: string | null;
 }
-
-/** A home shelf as the native parser reads it (Core's `YtShelf`). */
-export type NativeYtShelf = YtShelf<NativeYtSong>;
 
 /**
  * An artist page as the native parser reads it: top songs, albums, singles and
@@ -44,6 +41,15 @@ export type NativeYtPlaylist = YtPlaylist<NativeYtSong>;
 /** One page of song results; [continuation] asks for the next one. */
 export interface NativeYtSearchPage {
   readonly songs: readonly NativeYtSong[];
+  readonly continuation: string | null;
+}
+
+/** A song of YouTube Music's radio, which plays music videos too (Core's `DiscoverRadioSong`). */
+export interface NativeYtRadioSong extends NativeYtSong, DiscoverRadioSong {}
+
+/** A page of a radio, in the order it plays, and the token for the next. */
+export interface NativeYtRadioPage {
+  readonly songs: readonly NativeYtRadioSong[];
   readonly continuation: string | null;
 }
 
@@ -74,12 +80,16 @@ declare class WaveYtMusicModule extends NativeModule<WaveYtMusicEvents> {
   searchAlbums(query: string): Promise<readonly YtArtistAlbum[]>;
   /** The artist page [browseId] (`UC…`): their top songs, albums, singles and songs playlist. */
   artist(browseId: string): Promise<NativeYtArtistPage>;
-  /** The session's account's recommendations: YouTube Music's home shelves (songs, albums, playlists). */
-  home(): Promise<readonly NativeYtShelf[]>;
   /** The playlist [playlistId] (without `VL`): its head and its first page of songs. */
   playlist(playlistId: string): Promise<NativeYtPlaylistPage>;
   /** The playlist page a first page's (or a later page's) [continuation] leads to. */
   playlistMore(continuation: string): Promise<NativeYtPlaylistMore>;
+  /** The first page of the radio YouTube Music plays after the song [videoId] (it first). */
+  songRadio(videoId: string): Promise<NativeYtRadioPage>;
+  /** The first page of the radio of the artist whose page is [browseId] (`UC…`). */
+  artistRadio(browseId: string): Promise<NativeYtRadioPage>;
+  /** The radio page a radio page's [continuation] leads to. */
+  radioMore(continuation: string): Promise<NativeYtRadioPage>;
   /**
    * Caches a YT Music song's cover from [url] beside the Library's artwork, so
    * the player, the notification and Auto show it as they do a Library

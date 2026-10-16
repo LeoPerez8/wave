@@ -54,6 +54,7 @@ import {
   homeSections,
   latestPlay,
   listFavorites,
+  playedRecordingKeys,
   recordPlay,
   selectFavoriteTrackIds,
   setFavorites,
@@ -63,6 +64,12 @@ import {
   type HomeSections,
   type RecordedPlay,
 } from "./db/playHistory";
+import {
+  removePlaylistImage,
+  setPlaylistImage,
+  takeDeletedPlaylistImages,
+  type PlaylistImageFiles,
+} from "./db/playlistImages";
 import {
   addToPlaylist,
   createPlaylist,
@@ -155,7 +162,7 @@ export interface ScanRootSummary extends ScanRoot {
   readonly trackCount: number;
 }
 
-/** A song as the whole-Library lyrics and genre run sees it (Core's `libraryLookupSongs`). */
+/** A song as Fix Songs on the whole Library sees it (Core's `songsToFix`). */
 export interface LibraryLookupSong {
   readonly path: string;
   readonly title: string;
@@ -198,8 +205,12 @@ export interface SongRow {
   /** Orders the album's tracks, and so sorts by artist and by album. */
   readonly discNumber: number | null;
   readonly trackNumber: number | null;
-  /** Find Lyrics and Genre fills it in when it's missing. */
+  /** Fix Song fills it in when it's missing, as the track number, genre and lyrics. */
   readonly year: number | null;
+  /** Null for a song without a genre tag. */
+  readonly genre: string | null;
+  /** Lyrics in the file's tags or in a sidecar `.lrc`. */
+  readonly hasLyrics: boolean;
 }
 
 /** A song that can play: one with a file (the queue's, Android Auto's). */
@@ -315,10 +326,16 @@ export interface PlaylistRow {
   readonly sort: string;
   readonly trackCount: number;
   readonly durationMs: number;
-  /** Thumbnails of its mosaic (Core's `playlistMosaic`): none, one or four. */
+  /**
+   * Thumbnails of its artwork (Core's `playlistArtwork`): its own image alone,
+   * else its mosaic (none, one or four covers). Every place that shows a
+   * playlist's artwork reads these.
+   */
   readonly thumbPaths: readonly string[];
-  /** Full-size covers of the same mosaic, for the playlist screen's header. */
+  /** Full-size versions of the same, for the playlist screen's header. */
   readonly artworkPaths: readonly string[];
+  /** Whether the owner gave it its own image (its menu then offers Remove Image). */
+  readonly hasImage: boolean;
 }
 
 /**
@@ -526,6 +543,20 @@ export class LibraryStore extends Context.Service<
     ) => Effect.Effect<PlaylistAddResult, LibraryStoreError>;
     readonly renamePlaylist: (id: number, name: string) => Effect.Effect<void, LibraryStoreError>;
     readonly deletePlaylist: (id: number) => Effect.Effect<void, LibraryStoreError>;
+    /**
+     * Gives a playlist its own image (it stays on this phone); returns the
+     * files nothing shows any more: its old image's, or [files] when it's gone.
+     */
+    readonly setPlaylistImage: (
+      id: number,
+      files: PlaylistImageFiles,
+    ) => Effect.Effect<readonly string[], LibraryStoreError>;
+    /** Brings a playlist's mosaic back; returns its image's files to delete. */
+    readonly removePlaylistImage: (
+      id: number,
+    ) => Effect.Effect<readonly string[], LibraryStoreError>;
+    /** Deleted playlists' image files, returned once to delete. */
+    readonly takeDeletedPlaylistImages: Effect.Effect<readonly string[], LibraryStoreError>;
     /** Appends the songs the playlist doesn't have yet (Core's `planPlaylistSongs`). */
     readonly addToPlaylist: (
       id: number,
@@ -560,6 +591,8 @@ export class LibraryStore extends Context.Service<
     readonly saveImportedPlays: (
       plays: readonly BlackPlayerPlay<number>[],
     ) => Effect.Effect<void, LibraryStoreError>;
+    /** The recording key of every song ever played (Core's `recordingKey`), files gone or not. */
+    readonly playedRecordingKeys: Effect.Effect<readonly string[], LibraryStoreError>;
     /** The ids of every starred track. */
     readonly favoriteTrackIds: Effect.Effect<readonly number[], LibraryStoreError>;
     /** Stars (or unstars) the tracks; those starred already keep when they were starred. */
@@ -570,7 +603,10 @@ export class LibraryStore extends Context.Service<
     /** Starred tracks, most recently starred first, for Library › Favorites. */
     readonly listFavorites: Effect.Effect<readonly FavoriteRow[], LibraryStoreError>;
     /** Records a play as it starts (Core's `PlayEvent`); returns its id, to update it as it goes on. */
-    readonly recordPlay: (play: PlayEvent) => Effect.Effect<number, LibraryStoreError>;
+    readonly recordPlay: (
+      play: PlayEvent,
+      overlapping?: boolean,
+    ) => Effect.Effect<number, LibraryStoreError>;
     /** Brings a recorded play up to date: listened time, how it ended (so far), counted. */
     readonly updatePlay: (id: number, play: PlayEvent) => Effect.Effect<void, LibraryStoreError>;
     /** Records how a play ended; it no longer changes, so it can go to the Wave account. */
@@ -582,9 +618,13 @@ export class LibraryStore extends Context.Service<
     readonly home: (scope?: TrackScope) => Effect.Effect<HomeSections, LibraryStoreError>;
     /** The play recorded last, to pick back up when JS restarts while the player kept going. */
     readonly latestPlay: Effect.Effect<RecordedPlay | null, LibraryStoreError>;
-    /** Each track's counted plays within [window] (tracks still in the library), in no order. */
+    /**
+     * Each track's counted plays within [window] (tracks still in the library),
+     * in no order; with [trackIds], only those tracks'.
+     */
     readonly trackPlayTotals: (
       window: StatsWindow,
+      trackIds?: readonly number[],
     ) => Effect.Effect<readonly PlayTotals[], LibraryStoreError>;
     /**
      * Counted plays within [window] per album and credited artist (deleted
@@ -1032,6 +1072,16 @@ const make = Effect.gen(function* () {
     deletePlaylist: (id) =>
       attempt("delete the playlist", () => deletePlaylist(db, id, Date.now())),
 
+    setPlaylistImage: (id, files) =>
+      attempt("change the playlist's image", () => setPlaylistImage(db, id, files)),
+
+    removePlaylistImage: (id) =>
+      attempt("remove the playlist's image", () => removePlaylistImage(db, id)),
+
+    takeDeletedPlaylistImages: attempt("tidy deleted playlists' images", () =>
+      takeDeletedPlaylistImages(db),
+    ),
+
     addToPlaylist: (id, songs) =>
       attempt("add to the playlist", () => addToPlaylist(db, id, songs, Date.now())),
 
@@ -1059,6 +1109,8 @@ const make = Effect.gen(function* () {
     saveImportedPlays: (plays) =>
       attempt("save the imported plays", () => saveImportedPlays(db, plays)),
 
+    playedRecordingKeys: attempt("read the songs played", () => playedRecordingKeys(db)),
+
     favoriteTrackIds: attempt("read favorites", () => selectFavoriteTrackIds(db)),
 
     setFavorites: (trackIds, on) =>
@@ -1068,7 +1120,8 @@ const make = Effect.gen(function* () {
 
     listFavorites: attempt("list favorites", () => listFavorites(db)),
 
-    recordPlay: (play) => attempt("record the play", () => recordPlay(db, play)),
+    recordPlay: (play, overlapping) =>
+      attempt("record the play", () => recordPlay(db, play, overlapping)),
 
     updatePlay: (id, play) => attempt("update the play", () => updatePlay(db, id, play)),
     endPlay: (id, play) => attempt("end the play", () => endPlay(db, id, play)),
@@ -1077,7 +1130,8 @@ const make = Effect.gen(function* () {
 
     latestPlay: attempt("read the latest play", () => latestPlay(db)),
 
-    trackPlayTotals: (window) => attempt("sum up song plays", () => trackPlayTotals(db, window)),
+    trackPlayTotals: (window, trackIds) =>
+      attempt("sum up song plays", () => trackPlayTotals(db, window, trackIds)),
 
     creditedPlayTotals: (window) =>
       attempt("sum up album and artist plays", () => creditedPlayTotals(db, window)),

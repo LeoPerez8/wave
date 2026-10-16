@@ -73,19 +73,29 @@ export const useAllFilesAccess = (): {
 
 const REQUERY_INTERVAL_MS = 1500;
 
+const idle = () => () => {};
+const noVersion = () => 0;
+
 /**
  * Runs a store query and re-runs it when scan batches land, at most every
- * 1.5 s so a large first scan doesn't re-query on every batch.
+ * 1.5 s so a large first scan doesn't re-query on every batch. A null query
+ * asks nothing and follows nothing: [initial] stands.
  */
 const useLibraryQuery = <A>(
-  query: Effect.Effect<A, LibraryStoreError, LibraryStore>,
+  query: Effect.Effect<A, LibraryStoreError, LibraryStore> | null,
   initial: A,
   /** Changes when the owner edits what the query reads (a playlist, a star): re-run at once. */
   queryEdits = 0,
 ): A => {
   const [value, setValue] = useState(initial);
-  const version = useSyncExternalStore(libraryVersion.subscribe, libraryVersion.get);
-  const edits = queryEdits + useSyncExternalStore(libraryEdits.subscribe, libraryEdits.get);
+  const asks = query !== null;
+  const version = useSyncExternalStore(
+    asks ? libraryVersion.subscribe : idle,
+    asks ? libraryVersion.get : noVersion,
+  );
+  const edits =
+    queryEdits +
+    useSyncExternalStore(asks ? libraryEdits.subscribe : idle, asks ? libraryEdits.get : noVersion);
   const lastRun = useRef(0);
   const lastEdits = useRef(edits);
   const mounted = useRef(true);
@@ -98,6 +108,7 @@ const useLibraryQuery = <A>(
   }, []);
 
   useEffect(() => {
+    if (query === null) return undefined;
     const run = () => {
       lastRun.current = Date.now();
       appRuntime
@@ -121,7 +132,7 @@ const useLibraryQuery = <A>(
     return () => clearTimeout(timer);
   }, [query, version, edits]);
 
-  return value;
+  return asks ? value : initial;
 };
 
 const listSongs = Effect.gen(function* () {
@@ -144,6 +155,10 @@ const NO_MISSING_SONGS: readonly MissingTrack[] = [];
 export const useMissingSongs = (): readonly MissingTrack[] =>
   useLibraryQuery(listMissingSongs, NO_MISSING_SONGS);
 
+/** The missing songs, or null until they're first read: none read isn't none missing. */
+export const useLoadedMissingSongs = (): readonly MissingTrack[] | null =>
+  useLibraryQuery<readonly MissingTrack[] | null>(listMissingSongs, null);
+
 interface AlbumsMissingSongs {
   /** The albums read, as `albumIds.join(",")`. */
   readonly key: string;
@@ -155,6 +170,7 @@ const NO_ALBUMS_MISSING_SONGS: AlbumsMissingSongs = { key: "", songs: [] };
 /**
  * Each album of [albumIds]'s missing songs, as Track ids in album order; none
  * until they're read (other albums' answer is never passed off as theirs).
+ * No albums ask the Library nothing.
  */
 export const useAlbumsMissingSongs = (
   albumIds: readonly number[],
@@ -162,7 +178,8 @@ export const useAlbumsMissingSongs = (
   // Keyed by the ids, not the array: the same albums in a new array ask nothing again.
   const key = albumIds.join(",");
   const query = useMemo(() => {
-    const ids = key === "" ? [] : key.split(",").map(Number);
+    if (key === "") return null;
+    const ids = key.split(",").map(Number);
     // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
     return LibraryStore.use((store) => store.albumsMissingSongs(ids)).pipe(
       Effect.map((songs): AlbumsMissingSongs => ({ key, songs })),

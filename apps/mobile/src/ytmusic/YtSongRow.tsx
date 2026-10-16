@@ -23,6 +23,7 @@ import { openYtSongActions } from "./YtSongActions";
 export function YtSongRow({
   song,
   playing,
+  checked,
   onPress,
   onLongPress = () => openYtSongActions(song),
   trackNumber,
@@ -32,6 +33,7 @@ export function YtSongRow({
 }: {
   song: NativeYtSong;
   playing: boolean;
+  checked?: boolean | undefined;
   onPress: () => void;
   onLongPress?: (() => void) | undefined;
   /** Leads with this number instead of the cover (an album's tracklist). */
@@ -58,6 +60,7 @@ export function YtSongRow({
         artworkUri: ytMusic ? (song.artworkUrl ?? undefined) : undefined,
       }}
       state={playing ? "playing" : undefined}
+      checked={checked}
       leading={trackNumber === undefined ? "artwork" : "number"}
       progress={ytDownloadProgress(download)}
       onPress={onPress}

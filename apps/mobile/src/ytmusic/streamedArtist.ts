@@ -1,4 +1,9 @@
-import { libraryArtistFinder, streamedArtistLink, type StreamedArtistLink } from "@wave/core";
+import {
+  libraryArtistFinder,
+  streamedArtistLink,
+  type StreamedArtistLink,
+  type StreamedArtistContext,
+} from "@wave/core";
 import { useGlobalSearchParams, usePathname } from "expo-router";
 import { useMemo, useSyncExternalStore } from "react";
 
@@ -59,6 +64,18 @@ export const useStreamedArtistLink = (
   artists: readonly string[] | null,
   active = true,
 ): StreamedArtistLink<ArtistRow> | undefined => {
+  const context = useStreamedArtistContext(active);
+  return useMemo(
+    () =>
+      artists === null || context === undefined ? undefined : streamedArtistLink(artists, context),
+    [artists, context],
+  );
+};
+
+/** Shared artist resolution for a streamed song's menu and mixed selection. */
+export const useStreamedArtistContext = (
+  active = true,
+): StreamedArtistContext<ArtistRow> | undefined => {
   const libraryArtist = useSyncExternalStore(
     active ? sharedArtists.subscribe : idle,
     sharedArtists.get,
@@ -69,10 +86,7 @@ export const useStreamedArtistLink = (
   // On a YouTube Music artist page, the link leaves that artist out.
   const ytArtistHere = ytArtistPageHere(here, params);
   return useMemo(
-    () =>
-      artists === null || libraryArtist === null
-        ? undefined
-        : streamedArtistLink(artists, { libraryArtist, enabled, here, ytArtistHere }),
-    [artists, libraryArtist, enabled, here, ytArtistHere],
+    () => (libraryArtist === null ? undefined : { libraryArtist, enabled, here, ytArtistHere }),
+    [libraryArtist, enabled, here, ytArtistHere],
   );
 };

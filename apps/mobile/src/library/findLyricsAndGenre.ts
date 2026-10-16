@@ -1,8 +1,9 @@
 /**
- * Find Lyrics and Genre as the owner starts it: on songs from a menu or the
- * selection bar, or on the whole Library from Settings, in the background (a
- * foreground service, `WaveLibraryLookup`) with progress and Cancel in
- * Settings and in a notification. Each ends with Core's summary (`describeTagLookups`).
+ * Fix Song as the owner starts it: on songs from a menu or the selection bar,
+ * or on the whole Library from Settings, in the background (a foreground
+ * service, `WaveLibraryLookup`) with progress and Cancel in Settings and in a
+ * notification. Each works only on the songs missing something (Core's
+ * `songsToFix`) and ends with a toast of Core's summary (`tagLookupsToast`).
  */
 import {
   describeTagLookups,
@@ -10,9 +11,9 @@ import {
   readLibraryLookupSummary,
   writeLibraryLookupSummary,
   type LibraryLookupSummary,
-  libraryLookupSongs,
-  libraryTagsToWrite,
+  songsToFix,
   type SongTagOutcome,
+  tagLookupsToast,
   type TagLookupStop,
 } from "@wave/core";
 import * as Cause from "effect/Cause";
@@ -25,39 +26,26 @@ import { askForNotifications } from "@/lib/askForNotifications";
 import { makeExternalStore } from "@/lib/externalStore";
 import { persistedSetting } from "@/lib/persistedSetting";
 import { WaveLibraryLookup } from "@/native/waveLibraryLookup";
-import { showMessage } from "@/overlay/alert";
+import { showToast } from "@/overlay/toast";
 
 import { LibraryStore, type LibraryLookupSong } from "./LibraryStore";
-import {
-  type ChooseTags,
-  findLyricsAndGenreForSongs,
-  LookupsOff,
-  type TaggableSong,
-} from "./lyricsAndGenre";
+import { fixEachSong, LookupsOff, type TaggableSong } from "./lyricsAndGenre";
 import { appRuntime } from "./runtime";
 
 type Result = { readonly title: string; readonly outcome: SongTagOutcome };
 
-/**
- * Runs [songs] through the lookup, writing what [choose] keeps of each one's
- * finds and collecting results; resolves how the run ended.
- */
+/** Runs Fix Song on [songs], collecting results; resolves how the run ended. */
 const run = async <S extends TaggableSong>(
   songs: readonly S[],
   results: Result[],
   onResult: () => void,
   signal?: AbortSignal,
-  choose?: ChooseTags<S>,
 ): Promise<{ readonly stop: TagLookupStop | undefined; readonly error: unknown }> => {
   const exit = await appRuntime.runPromiseExit(
-    findLyricsAndGenreForSongs(
-      songs,
-      (song, outcome) => {
-        results.push({ title: song.title, outcome });
-        onResult();
-      },
-      choose,
-    ),
+    fixEachSong(songs, (song, outcome) => {
+      results.push({ title: song.title, outcome });
+      onResult();
+    }),
     signal === undefined ? undefined : { signal },
   );
   const left = songs.length - results.length;
@@ -73,14 +61,14 @@ const run = async <S extends TaggableSong>(
   return { stop: undefined, error };
 };
 
-const failedSummary = (error: unknown): LibraryLookupSummary => ({
-  title: "Couldn't find lyrics and genre",
-  message: error instanceof Error ? error.message : String(error),
-});
+const failedSummary = (error: unknown): LibraryLookupSummary => {
+  const message = error instanceof Error ? error.message : String(error);
+  return { title: "Couldn't fix songs", message, toast: `Couldn't fix songs: ${message}` };
+};
 
 /**
- * How a run ended: why it stopped early, what failed it, and (the whole-Library
- * run) how many songs it skipped as already having everything a lookup finds.
+ * How a run ended: why it stopped early, what failed it, and how many songs
+ * it skipped as already having everything a lookup finds.
  */
 interface RunOutcome {
   readonly stop: TagLookupStop | undefined;
@@ -89,24 +77,29 @@ interface RunOutcome {
 }
 
 /**
- * How a run went, as its end message says it: Core's summary, or what went
- * wrong when the run failed before anything was looked up.
+ * How a run went, in full and as its toast says it: Core's summary, or what
+ * went wrong when the run failed before anything was looked up.
  */
 const summarize = (results: readonly Result[], outcome: RunOutcome): LibraryLookupSummary =>
   outcome.error !== undefined && results.length === 0
     ? failedSummary(outcome.error)
-    : describeTagLookups(results, outcome.stop, outcome.skipped);
+    : {
+        ...describeTagLookups(results, outcome.stop, outcome.skipped),
+        toast: tagLookupsToast(results, outcome.stop, outcome.skipped),
+      };
 
 /**
- * Find Lyrics and Genre on songs from a long-press menu or the selection bar:
- * looks them up one after another in the background, writes what is found
- * and says how it went.
+ * Fix Song on songs from a long-press menu or the selection bar: those
+ * missing something are looked up one after another in the background, what
+ * they lack is written, and a toast says how it went (Core's
+ * `tagLookupsToast`, counting the songs skipped as having everything).
  */
-export const findLyricsAndGenreFor = async (songs: readonly TaggableSong[]): Promise<void> => {
-  if (songs.length === 0) return;
+export const fixSongs = async (songs: readonly TaggableSong[]): Promise<void> => {
+  const { fix, skipped } = songsToFix(songs);
+  if (fix.length === 0) return;
   const results: Result[] = [];
-  const { title, message } = summarize(results, await run(songs, results, () => {}));
-  await showMessage(title, message);
+  const outcome = await run(fix, results, () => {});
+  await showToast(summarize(results, { ...outcome, skipped }).toast);
 };
 
 /** The Library-wide run, for Settings: its progress while it runs. */
@@ -142,11 +135,9 @@ const showProgress = (done: number, total: number): void => {
 };
 
 /**
- * Finds lyrics and genre for [songs] (the caller picks them from the Library),
- * showing progress over them as it goes; [signal] cancels. A song picked only
- * for lacking a track number or year is just filled in (Core's
- * `libraryTagsToWrite`). Resolves the end summary, which counts [skipped]
- * songs the caller left out as already done.
+ * Fix Song on [songs] (the caller picks them from the Library), showing
+ * progress over them as it goes; [signal] cancels. Resolves the end summary,
+ * which counts [skipped] songs the caller left out as already having everything.
  */
 const lookUpLibrary = async (
   songs: readonly LibraryLookupSong[],
@@ -157,19 +148,13 @@ const lookUpLibrary = async (
   showProgress(0, songs.length);
   const outcome = signal.aborted
     ? { stop: { stopped: "cancelled", left: songs.length } as const, error: undefined }
-    : await run(
-        songs,
-        results,
-        () => showProgress(results.length, songs.length),
-        signal,
-        libraryTagsToWrite,
-      );
+    : await run(songs, results, () => showProgress(results.length, songs.length), signal);
   return summarize(results, { ...outcome, skipped });
 };
 
 /**
- * Finds lyrics and genre for the songs in the Library missing lyrics, a genre,
- * a track number or a year (Core's `libraryLookupSongs`) in the background: a
+ * Fix Song on the songs in the Library missing lyrics, a genre, a track
+ * number or a year (Core's `songsToFix`) in the background: a
  * foreground service with a progress notification and Cancel keeps it going
  * with Wave in the background and the screen off. Settings follows it with
  * `useLibraryLookup`; `cancelLibraryLookup` stops it. Ends with the updated /
@@ -187,7 +172,7 @@ export const startLibraryLookup = async (): Promise<void> => {
   try {
     const { title, detail } = libraryLookupProgress(0, 0);
     WaveLibraryLookup.start(title, detail);
-    const { lookUp: songs, skipped } = libraryLookupSongs(
+    const { fix: songs, skipped } = songsToFix(
       await appRuntime.runPromise(
         Effect.gen(function* () {
           return yield* (yield* LibraryStore).listLibraryLookupSongs;
@@ -213,19 +198,20 @@ export const cancelLibraryLookup = (): void => {
 let showingSummary = false;
 
 /**
- * Shows the last Library-wide run's summary when the owner hasn't seen it yet
- * and Wave is on screen; once it's dismissed, its notification goes too.
+ * Shows the last Library-wide run's summary as a toast when the owner hasn't
+ * seen it yet and Wave is on screen; once the toast has gone, its
+ * notification goes too.
  */
 const showUnseenLibraryLookupSummary = async (): Promise<void> => {
   const summary = unseenSummary.get();
   if (summary === null || showingSummary || AppState.currentState !== "active") return;
   showingSummary = true;
   try {
-    await showMessage(summary.title, summary.message);
+    await showToast(summary.toast);
   } finally {
     showingSummary = false;
   }
-  // A run that ended while this summary was open shows its own next.
+  // A run that ended while this summary showed shows its own next.
   if (unseenSummary.get() !== summary) return showUnseenLibraryLookupSummary();
   unseenSummary.set(null);
   WaveLibraryLookup.dismissSummary();

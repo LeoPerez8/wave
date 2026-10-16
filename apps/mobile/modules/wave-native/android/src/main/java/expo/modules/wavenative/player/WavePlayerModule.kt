@@ -5,6 +5,7 @@ import android.content.Context
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -94,9 +95,11 @@ private class ControllerPlaylist(private val player: Player) : PlaylistEditor<Me
 /**
  * Drives [PlaybackService] through a MediaController. JS owns the order (Core's
  * queue engine) and keeps the item list in step with `applySync`; the player
- * plays it gaplessly and reports `onPlaybackState` (on any change),
- * `onPosition` (every 500 ms while playing), `onItemTransition`, `onSeek` and
- * `onPlayerError`. The controller is only touched on the main thread.
+ * plays it gaplessly (or with a crossfade, [Crossfade]) and reports
+ * `onPlaybackState` (on any change), `onPosition` (every 500 ms while
+ * playing), `onItemTransition`, `onSeek`, `onCrossfade` (the song fading out
+ * went silent) and `onPlayerError`. The controller is only touched on the
+ * main thread.
  */
 class WavePlayerModule : Module() {
   private val main = Handler(Looper.getMainLooper())
@@ -128,11 +131,16 @@ class WavePlayerModule : Module() {
     }
 
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+      val crossfade = CrossfadeLink.handoff.take(mediaItem?.mediaId, SystemClock.elapsedRealtime())
       sendEvent(
         "onItemTransition",
         mapOf(
           "itemId" to mediaItem?.mediaId,
-          "reason" to PlayerEvents.transitionReason(reason, duringSync = syncing),
+          "reason" to PlayerEvents.transitionReason(
+            reason,
+            duringSync = syncing,
+            crossfade = crossfade,
+          ),
         ),
       )
     }
@@ -177,6 +185,7 @@ class WavePlayerModule : Module() {
       "onItemTransition",
       "onSeek",
       "onPlayerError",
+      "onCrossfade",
       "onSleepTimer",
       "onAutoRequest",
       "onAutoLyrics",
@@ -186,7 +195,19 @@ class WavePlayerModule : Module() {
       ResumeStore.init(context)
       main.post(::connect)
       main.post(::followAutoLyrics)
+      main.post(::followCrossfade)
     }
+
+    /**
+     * The overlap for songs ending on their own, in ms (Core's
+     * `crossfadeDuration`; 0 is off). Kept natively, so the service fades
+     * without JS too.
+     */
+    AsyncFunction("setCrossfadeDuration") { durationMs: Double, promise: Promise ->
+      CrossfadeLink.init(context)
+      CrossfadeLink.setOverlap(durationMs.toLong())
+      promise.resolve(null)
+    }.runOnQueue(Queues.MAIN)
 
     /**
      * Applies Core's sync plan. Items already loaded are reused by key, so JS
@@ -361,6 +382,7 @@ class WavePlayerModule : Module() {
       main.post {
         stopAutoLyrics?.invoke()
         stopAutoLyrics = null
+        if (CrossfadeLink.onFadeEnded === fadeEnded) CrossfadeLink.onFadeEnded = null
         main.removeCallbacks(positionTicker)
         controller?.removeListener(listener)
         controllerFuture?.let(MediaController::releaseFuture)
@@ -368,6 +390,17 @@ class WavePlayerModule : Module() {
         controllerFuture = null
       }
     }
+  }
+
+  private val fadeEnded: (Long) -> Unit = { at -> sendEvent("onCrossfade", mapOf("at" to at.toDouble())) }
+
+  /**
+   * Reports the end of each crossfade's fade to JS. A handoff from before this
+   * module was made went unreported, so it isn't taken for a later one.
+   */
+  private fun followCrossfade() {
+    CrossfadeLink.handoff.clear()
+    CrossfadeLink.onFadeEnded = fadeEnded
   }
 
   /** Stops reporting [AutoLyrics.state]; null while not following it. */

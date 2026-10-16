@@ -114,6 +114,49 @@ export const withOpacity = (colour: string, opacity: number): string => {
   return `${colour.slice(0, 7)}${alpha.toString(16).padStart(2, "0")}`;
 };
 
+/**
+ * A colour typed or stored as hex (`#rrggbb` or `#rgb`, the `#` optional, any
+ * case, spaces around ignored) as lowercase `#rrggbb`; null if it isn't one.
+ */
+export const parseHexColour = (text: string): string | null => {
+  const digits = /^#?([\da-f]{3}|[\da-f]{6})$/i.exec(text.trim())?.[1]?.toLowerCase();
+  if (digits === undefined) return null;
+  return `#${digits.length === 3 ? [...digits].map((d) => d + d).join("") : digits}`;
+};
+
+/** Hue in degrees (0–360), saturation and value 0–1: the colour picker's axes. */
+export interface Hsv {
+  readonly h: number;
+  readonly s: number;
+  readonly v: number;
+}
+
+/** An HSV colour as `#rrggbb`; out-of-range values are clamped, hue wraps. */
+export const hsvToHex = ({ h, s, v }: Hsv): string => {
+  const hue = (((h % 360) + 360) % 360) / 60;
+  const sat = Math.min(1, Math.max(0, s));
+  const value = Math.min(1, Math.max(0, v));
+  const channel = (n: number): number => {
+    const k = (n + hue) % 6;
+    return value - value * sat * Math.max(0, Math.min(k, 4 - k, 1));
+  };
+  return toHex([channel(5), channel(3), channel(1)]);
+};
+
+/** A `#rrggbb` colour as HSV; a grey has hue 0. */
+export const hexToHsv = (hex: string): Hsv => {
+  const [r, g, b] = parseHex(hex);
+  const max = Math.max(r, g, b);
+  const range = max - Math.min(r, g, b);
+  let h = 0;
+  if (range > 0) {
+    if (max === r) h = ((g - b) / range + 6) % 6;
+    else if (max === g) h = (b - r) / range + 2;
+    else h = (r - g) / range + 4;
+  }
+  return { h: h * 60, s: max === 0 ? 0 : range / max, v: max };
+};
+
 /** `from` moved `amount` (0–1) of the way to `to`, in sRGB. */
 export const mix = (from: string, to: string, amount: number): string => {
   const [r1, g1, b1] = parseHex(from);
