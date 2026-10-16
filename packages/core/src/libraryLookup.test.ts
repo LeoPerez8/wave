@@ -33,10 +33,18 @@ describe("the summary kept until it's seen", () => {
   const summary = {
     title: "Songs fixed",
     message: "12 fixed · 3 not found · 1 failed",
+    toast: "Fixed 12 songs · 3 not found · 1 failed",
   };
 
   test("reads back what was written", () => {
     assert.deepEqual(readLibraryLookupSummary(writeLibraryLookupSummary(summary)), summary);
+  });
+
+  test("toasts the title of a summary kept before summaries had a toast", () => {
+    assert.deepEqual(
+      readLibraryLookupSummary('{"title":"Songs fixed","message":"12 fixed · 3 not found"}'),
+      { title: "Songs fixed", message: "12 fixed · 3 not found", toast: "Songs fixed" },
+    );
   });
 
   test("is none when nothing is kept", () => {

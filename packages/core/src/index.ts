@@ -22,6 +22,8 @@ export { describeFolder, filesLeavingWithRoot, isWithin, planAddRoot } from "./s
 export type { AddRootPlan, FolderLabel, ScanRootState } from "./scanRoots.ts";
 export { resolveSkipSwipe } from "./swipe.ts";
 export type { SkipDirection, SkipSwipe } from "./swipe.ts";
+export { toastDuration, toastSwipeDismisses } from "./toast.ts";
+export type { ToastSwipe } from "./toast.ts";
 export {
   EMPTY_QUEUE,
   REAL_SHUFFLE,
@@ -437,6 +439,7 @@ export {
   deezerTrackCandidates,
   deezerTrackSearchUrl,
   describeTagLookups,
+  tagLookupsToast,
   canFixSong,
   deezerFollowUps,
   fixLookups,

@@ -153,7 +153,7 @@ The world rejects the category default it was chosen against: bold large titles,
 - Light large titles; one size per list, rank by weight and tint.
 - Small tracked-caps catalog lines for section heads and cover captions.
 - Teal for active, ember for favorite and now playing; nothing else is coloured, save the red on a Delete or Remove button.
-- Flat: no shadows, no gradients (the Now Playing ground is the one exception). Glass only on what floats: the chrome (tab bar, Search pill, mini player) and dialog and menu cards.
+- Flat: no shadows, no gradients (the Now Playing ground is the one exception). Glass only on what floats: the chrome (tab bar, Search pill, mini player), dialog and menu cards, and the toast.
 - Every press sinks and dims for a duration the owner sets in Settings.
 
 ## Colors
@@ -246,15 +246,15 @@ The A–Z spine sits 24dp in from the right edge, not on it, to stay clear of An
 
 ## Elevation & Depth
 
-The world is flat. There are no shadows, no elevation and no gradients (save the Now Playing ground, below); depth comes from the tone ramp (field squares and hairlines a step off the ground) and from artwork itself. Three things float: the spine's letter plate (a field square in the `fill` tone beside the finger, with no shadow), the floating chrome at the bottom, and dialogs and menus; the last two are glass.
+The world is flat. There are no shadows, no elevation and no gradients (save the Now Playing ground, below); depth comes from the tone ramp (field squares and hairlines a step off the ground) and from artwork itself. Four things float: the spine's letter plate (a field square in the `fill` tone beside the finger, with no shadow), the floating chrome at the bottom, dialogs and menus, and the toast; the last three are glass.
 
-**Glass** (the floating chrome, dialogs and menus): a live blur of the content underneath, a slight lens-like refraction at the rounded edge with a specular rim lit from the top left, and the `surface` tone laid over it so text stays legible. It is native (`modules/wave-glass`, RenderEffect + AGSL on the RenderThread) and sized for 120 Hz; blur, refraction, tint and rim are tuned in Settings › Glass (defaults in Core `GLASS_SETTINGS`), and refraction 0 is the blur + tint + rim fallback. See `docs/glass-spike.md`. Below Android 12 (no RenderEffect) glass is an opaque `surface`.
+**Glass** (the floating chrome, dialogs and menus, the toast): a live blur of the content underneath, a slight lens-like refraction at the rounded edge with a specular rim lit from the top left, and the `surface` tone laid over it so text stays legible. It is native (`modules/wave-glass`, RenderEffect + AGSL on the RenderThread) and sized for 120 Hz; blur, refraction, tint and rim are tuned in Settings › Glass (defaults in Core `GLASS_SETTINGS`), and refraction 0 is the blur + tint + rim fallback. See `docs/glass-spike.md`. Below Android 12 (no RenderEffect) glass is an opaque `surface`.
 
 **Dialogs and menus** float as glass cards over the app: rounded (24dp), sized to their content, centred a margin clear of the system bars (a card with a text field, like the playlist name prompt, sits a margin below the status bar instead, and any card stays clear of the keyboard; a long-press menu opens next to its row or tile instead: below it, or above when there is no room, clear of the floating chrome too), over the app dimmed lightly (the scheme's darkest tone at 25%). They fade and grow in over the tap duration (fade only with reduce motion, instant at 0). They are drawn at the app root by `src/overlay/OverlayHost.tsx` rather than in a `Modal` (a separate window the blur can't see through). Back or a tap outside closes them, and screen readers move into the card. A long-press menu keeps the finger that opened it: slide onto an entry and lift to run it (`src/overlay/useSlideToChoose.ts`, hit-testing in Core's `slideEntry`); lists hold still while that finger is down (`useListScrollable`). What a card was opened from stays clear of the veil, washed with the accent at 16%, so a menu opened from a row, tile or button has no heading and starts at its entries (a Library entry's menu keeps its heading, the only place that counts its songs); one opened with nothing highlighted starts with its item (artwork, title, subtitle) over a divider (`src/overlay/CardHeading.tsx`, Core's `cardShowsHeading`).
 
 ### Named Rules
 
-**The Flat Field Rule.** Surfaces never cast shadows. Separate things with a ramp step or a hairline. Glass belongs to what floats (tab bar, Search pill, mini player, dialog and menu cards); content surfaces stay flat.
+**The Flat Field Rule.** Surfaces never cast shadows. Separate things with a ramp step or a hairline. Glass belongs to what floats (tab bar, Search pill, mini player, dialog and menu cards, the toast); content surfaces stay flat.
 
 ## Shapes
 
@@ -286,6 +286,10 @@ Every tappable element is built on one press primitive, so the whole world feels
 A glass dialog card (`src/overlay/alert.tsx`, opened from anywhere with `showMessage` / `confirmAction`): the title in Title3 ink, the message below in Subheadline graphite, then the buttons as text buttons right-aligned along the bottom. A message has a single OK; a confirmation has Cancel then the action, which is red when it deletes or removes. Back or a tap outside does what Cancel or OK does. A confirmation may rename Cancel when dismissing it does something gentler than nothing: an imported playlist whose name is taken asks Keep Both / Replace (red). Screen readers hear the title and message as it opens. There are no system alerts.
 
 Import Playlists ends on a summary card of the same make (`src/library/importPlaylists.tsx`): the title, then one section per picked file (its name in Body 500 ink, what it became in Subheadline graphite, then each entry left out in Footnote graphite), scrolling when long, and OK.
+
+### Toast
+
+A result that needs no answer, like how Fix Song went ("Fixed 3 songs · 1 not found"), is a toast rather than a dialog (`src/overlay/ToastHost.tsx`, shown from anywhere with `showToast`): the line in Subheadline 500 ink, centred, up to three lines, on a glass pill sized to it (fully round on one line, 24dp corners on more), centred a cell above the mini player, or above whatever floating chrome the screen has. No veil and no buttons. It rises and fades in over the tap duration (fade only with reduce motion, instant at 0) and leaves on its own after four seconds, longer for a long line up to eight (Core's `toastDuration`), longer still when Android's accessibility timeout asks. A tap sends it away sooner, and so does a swipe sideways or down with the mini player's thresholds (Core's `toastSwipeDismisses`); a short drag springs back, and a toast held under a finger waits for it to lift. Screen readers hear the line as it shows. A newer toast takes the place of the one showing. Some places still use Android's own toast.
 
 ### Artist Choice
 
@@ -419,5 +423,5 @@ A 40dp line icon in pewter, an Entry-type title in ink, a Subheadline message in
 - **Don't** use bold large titles; titles are weight 300.
 - **Don't** add icons or chevrons to Library entry rows.
 - **Don't** set text in `tertiary`.
-- **Don't** add shadows, gradients or blur; separate with a ramp step or a hairline. Glass is for the floating chrome and dialog cards only, and the artwork gradient for the Now Playing ground only.
+- **Don't** add shadows, gradients or blur; separate with a ramp step or a hairline. Glass is for the floating chrome, dialog cards and the toast only, and the artwork gradient for the Now Playing ground only.
 - **Don't** introduce a third accent colour. The destructive red is for Delete and Remove buttons only.

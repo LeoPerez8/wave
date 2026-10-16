@@ -53,6 +53,7 @@ import {
 import { CardHeadingContext } from "./CardHeading";
 import { OverlayFlowContext } from "./flow";
 import { useKeyboardHeight } from "./keyboard";
+import { ToastHost } from "./ToastHost";
 
 /** Rounded corners of a dialog card. */
 export const OVERLAY_RADIUS = CELL * 3;
@@ -88,9 +89,9 @@ const ORIGIN_TINT_OPACITY = 0.16;
 const ORIGIN_RADIUS = CELL;
 
 /**
- * Hosts Wave's glass dialogs. Wrap the app's navigator with it: the navigator
- * becomes the backdrop the cards' glass shows through, and the cards float
- * above it in the same window. Android Back dismisses the top card.
+ * Hosts Wave's glass dialogs and its toast. Wrap the app's navigator with it:
+ * the navigator becomes the backdrop the glass shows through, and the cards
+ * and toast float above it in the same window. Android Back dismisses the top card.
  */
 export function OverlayHost({ children }: { children: ReactNode }) {
   const entries = useOverlayEntries();
@@ -123,6 +124,7 @@ export function OverlayHost({ children }: { children: ReactNode }) {
       {entries.map((entry) => (
         <OverlayCard key={entry.id} entry={entry} frontmost={entry === frontmost} />
       ))}
+      <ToastHost />
     </>
   );
 }
