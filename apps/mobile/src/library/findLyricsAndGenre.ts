@@ -19,8 +19,9 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import { useSyncExternalStore } from "react";
-import { AppState, PermissionsAndroid, Platform } from "react-native";
+import { AppState } from "react-native";
 
+import { askForNotifications } from "@/lib/askForNotifications";
 import { makeExternalStore } from "@/lib/externalStore";
 import { persistedSetting } from "@/lib/persistedSetting";
 import { WaveLibraryLookup } from "@/native/waveLibraryLookup";
@@ -128,16 +129,6 @@ const showProgress = (done: number, total: number): void => {
   libraryLookup.set({ status: "running", done, total });
   const { title, detail } = libraryLookupProgress(done, total);
   WaveLibraryLookup.progress(title, detail, done, total);
-};
-
-let askedForNotifications = false;
-/** Android 13+ hides the run's notification unless Wave may post notifications. */
-const askForNotifications = (): void => {
-  if (askedForNotifications || Platform.OS !== "android" || Number(Platform.Version) < 33) return;
-  askedForNotifications = true;
-  void PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS).catch(
-    () => undefined,
-  );
 };
 
 /**

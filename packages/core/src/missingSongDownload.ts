@@ -243,6 +243,26 @@ const onItsWay = (status: YtDownloadStatus | null): boolean =>
 const cancellable = (status: YtDownloadStatus | null): boolean =>
   status?.kind === "queued" || status?.kind === "downloading";
 
+/**
+ * What downloading missing songs offers, from where each one's download is
+ * ([statuses], null for a song never asked for): Download All while some
+ * aren't on their way and haven't failed, Retry Failed once the failures are
+ * all that's left of the batch, Cancel while some are still cancellable. An
+ * album's menu offers the same (Core's `itemActions`).
+ */
+export const missingSongsDownloadActions = (
+  statuses: readonly (YtDownloadStatus | null)[],
+): MissingSongsDownloadAction[] => {
+  const downloading = statuses.some(onItsWay);
+  const actions: MissingSongsDownloadAction[] = [];
+  if (statuses.some((status) => !onItsWay(status) && status?.kind !== "failed"))
+    actions.push("downloadAll");
+  if (!downloading && statuses.some((status) => status?.kind === "failed"))
+    actions.push("retryFailed");
+  if (statuses.some(cancellable)) actions.push("cancel");
+  return actions;
+};
+
 const counted = (count: number, one: string, many: string): string =>
   `${count.toLocaleString("en")} ${count === 1 ? one : many}`;
 
@@ -276,10 +296,7 @@ export const missingSongsDownload = <S extends YtSong>(
   const batch = statuses.filter((status) => status !== null);
   const downloading = batch.some(onItsWay);
   const saved = batch.filter((status) => status.kind === "done").length + landed;
-  const actions: MissingSongsDownloadAction[] = [];
-  if (toDownload.length > 0) actions.push("downloadAll");
-  if (toRetry.length > 0 && !downloading) actions.push("retryFailed");
-  if (toCancel.length > 0) actions.push("cancel");
+  const actions = missingSongsDownloadActions(statuses);
   const notFound = downloading
     ? []
     : missing.filter((_, index) => {

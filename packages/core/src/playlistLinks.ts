@@ -5,9 +5,8 @@
  */
 
 import { counted } from "./listening.ts";
-import { importedPlaylistName } from "./m3u.ts";
-import { planPlaylistSongs, type PlaylistSong } from "./playlistEntries.ts";
-import { libraryFinder, type LibrarySongKey, type YtSong } from "./ytMusic.ts";
+import type { LinkImportPlan } from "./playlistImport.ts";
+import type { YtSong } from "./ytMusic.ts";
 import type { YtQuietReason } from "./ytSearch.ts";
 
 /** Where Library › Playlists › Import takes a playlist from. */
@@ -262,63 +261,9 @@ export interface ReadPlaylist {
   readonly truncated: boolean;
 }
 
-/** A song the import leaves out because it wasn't found, as the summary names it. */
-export interface NotFoundSong {
-  readonly title: string;
-  /** Its artists as one credit. */
-  readonly artist: string;
-}
-
-/** What importing a linked playlist makes. */
-export interface LinkImportPlan<S extends YtSong> {
-  /** The playlist's name, the source's title as a playlist name can be (before any clash). */
-  readonly name: string;
-  /** What the playlist holds, in the source's order: the Library's songs as its tracks, the rest streamed. */
-  readonly songs: readonly PlaylistSong<S>[];
-  /** How many of [songs] are the Library's. */
-  readonly inLibrary: number;
-  /** The source's songs found neither in the Library nor on YouTube Music (a Spotify import's), in its order. */
-  readonly notFound: readonly NotFoundSong[];
-}
-
-/**
- * What importing [playlist] makes, given the Library: each song the Library
- * already has (Core's `libraryFinder`) as its track, the rest as YT Music
- * entries, in the playlist's order. A song that comes again goes in once, at
- * its first place, as a playlist takes songs (`planPlaylistSongs`).
- */
-export const planLinkImport = <
-  S extends YtSong,
-  L extends LibrarySongKey & { readonly id: number },
->(
-  playlist: LinkedPlaylist<S>,
-  library: readonly L[],
-): LinkImportPlan<S> => {
-  const find = libraryFinder(library);
-  const given = playlist.songs.map((song): PlaylistSong<S> => {
-    const track = find(song);
-    return track === null ? { source: "stream", song } : { source: "library", trackId: track.id };
-  });
-  const songs = planPlaylistSongs([], given).add;
-  return {
-    name: importedPlaylistName(playlist.title),
-    songs,
-    inLibrary: songs.filter((song) => song.source === "library").length,
-    notFound: [],
-  };
-};
-
 /** Where reading a linked playlist has got to. */
 export type LinkImportRead<S extends YtSong> =
   | { readonly status: "reading" }
-  /** Read, its songs being found in the Library and on YouTube Music (a Spotify import). */
-  | {
-      readonly status: "finding";
-      readonly playlist: ReadPlaylist;
-      /** How many of its songs are settled, found or not. */
-      readonly done: number;
-      readonly total: number;
-    }
   | {
       readonly status: "read";
       readonly playlist: ReadPlaylist;
@@ -336,15 +281,7 @@ export type LinkImportRead<S extends YtSong> =
  * that isn't the playlist), or a short link that led to a song or another page.
  */
 export type LinkReadFailure =
-  | YtQuietReason
-  | "disabled"
-  | "missing"
-  | "unreachable"
-  | "spotifyFailed"
-  | "song"
-  | "notPlaylist"
-  /** YouTube Music kept refusing the searches that find a Spotify playlist's songs. */
-  | "searchFailed";
+  YtQuietReason | "disabled" | "missing" | "unreachable" | "spotifyFailed" | "song" | "notPlaylist";
 
 const FAILURES: Record<LinkReadFailure, { readonly line: string; readonly retry: boolean }> = {
   offline: { line: "You're offline. Try again when you're back online.", retry: true },
@@ -366,7 +303,6 @@ const FAILURES: Record<LinkReadFailure, { readonly line: string; readonly retry:
   },
   song: { line: REASONS.song, retry: false },
   notPlaylist: { line: REASONS.notPlaylist, retry: false },
-  searchFailed: { line: "YouTube Music stopped answering while finding the songs.", retry: true },
 };
 
 /** What the import card shows. */
@@ -376,7 +312,7 @@ export interface LinkImportView {
   readonly artworkUrl: string | null;
   /** Its songs and how many the Library has, or what stands in for them. */
   readonly line: string;
-  /** A second, quieter line: how many songs weren't found, and that only part of the playlist was read. */
+  /** A second, quieter line: that only part of the playlist was read. */
   readonly note: string | null;
   /** Whether Import is offered. */
   readonly canImport: boolean;
@@ -394,67 +330,34 @@ const message = (line: string): LinkImportView => ({
   retry: false,
 });
 
-/** "1 song wasn't found." / "3 songs weren't found." */
-const notFoundLine = (count: number): string =>
-  `${counted(count, "song")} ${count === 1 ? "wasn't" : "weren't"} found`;
-
-/** The import card for a linked playlist being read, its songs found, read, or not read. */
+/**
+ * The import card for a linked playlist being read, read, or not read. Once
+ * read it counts the songs and how many the Library has; the rest are found
+ * after Import, as the playlist fills in (`PlaylistImport`).
+ */
 export const linkImportView = <S extends YtSong>(read: LinkImportRead<S>): LinkImportView => {
   if (read.status === "reading") return message("Reading the playlist…");
   if (read.status === "failed") {
     const { line, retry } = FAILURES[read.reason];
     return { ...message(line), retry };
   }
-  if (read.status === "finding") {
-    return {
-      ...message(
-        `Finding songs… ${read.done.toLocaleString("en")} of ${read.total.toLocaleString("en")}`,
-      ),
-      name: importedPlaylistName(read.playlist.title),
-      artworkUrl: read.playlist.artworkUrl,
-    };
-  }
   const { playlist, plan } = read;
   const head = { name: plan.name, artworkUrl: playlist.artworkUrl };
   const total = plan.songs.length;
-  if (total === 0) {
-    const none =
-      plan.notFound.length > 0 ? "None of its songs were found." : "It has no songs to import.";
-    return { ...message(none), ...head };
-  }
+  if (total === 0) return { ...message("It has no songs to import."), ...head };
   const had =
     plan.inLibrary === 0
       ? "none"
       : plan.inLibrary === total
         ? "all"
         : plan.inLibrary.toLocaleString("en");
-  const notes = [
-    plan.notFound.length > 0 ? `${notFoundLine(plan.notFound.length)}.` : null,
-    playlist.truncated
-      ? `It goes on past ${counted(playlist.songs.length, "song")}. Only those are imported.`
-      : null,
-  ].filter((note) => note !== null);
   return {
     ...head,
     line: `${counted(total, "song")} · ${had} in your Library`,
-    note: notes.length === 0 ? null : notes.join(" "),
+    note: playlist.truncated
+      ? `It goes on past ${counted(playlist.songs.length, "song")}. Only those are imported.`
+      : null,
     canImport: true,
     retry: false,
-  };
-};
-
-/**
- * What's said once a playlist is imported without some of its songs: how
- * many weren't found, and each by title and artist, in the source's order.
- * Null when every song was found.
- */
-export const linkImportSummary = <S extends YtSong>(
-  plan: LinkImportPlan<S>,
-): ImportNotice | null => {
-  if (plan.notFound.length === 0) return null;
-  const songs = plan.notFound.map((song) => `${song.title} · ${song.artist}`).join("\n");
-  return {
-    title: notFoundLine(plan.notFound.length),
-    message: `${plan.name} was imported without them:\n\n${songs}`,
   };
 };

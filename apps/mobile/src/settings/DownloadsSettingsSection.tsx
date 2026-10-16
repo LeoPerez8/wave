@@ -1,12 +1,10 @@
 import * as Effect from "effect/Effect";
 import { useEffect, useState } from "react";
-import { Switch, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
-import { CatalogLine } from "@/catalog/CatalogLine";
-import { grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
+import { SettingsSwitch } from "@/components/SettingsSwitch";
 import { WaveSoulseek, soulseekErrorCode, type SoulseekSession } from "@/native/waveSoulseek";
-import { useThemeColor } from "@/theme/useThemeColor";
 
 import { setBestQuality } from "./bestQuality";
 
@@ -36,9 +34,6 @@ export function DownloadsSettingsSection() {
   const [asked, setAsked] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
-  const accent = useThemeColor("accent");
-  const fill = useThemeColor("fill");
-  const surface = useThemeColor("surface");
 
   useEffect(() => {
     let current = true;
@@ -85,22 +80,14 @@ export function DownloadsSettingsSection() {
   };
 
   return (
-    <>
-      <CatalogLine className="mb-2 mt-12">Downloads</CatalogLine>
+    <View>
       <Hairline />
-      <View className="flex-row items-center" style={{ minHeight: grid.row }}>
-        <Text className="flex-1 font-sans text-title3 font-normal text-foreground">
-          Download in best quality
-        </Text>
-        <Switch
-          accessibilityLabel="Download in best quality"
-          value={asked ?? session.status !== "off"}
-          disabled={busy}
-          onValueChange={change}
-          trackColor={{ false: fill, true: accent }}
-          thumbColor={surface}
-        />
-      </View>
+      <SettingsSwitch
+        label="Download in best quality"
+        value={asked ?? session.status !== "off"}
+        disabled={busy}
+        onValueChange={change}
+      />
       <Hairline />
       <Text className="mt-2 font-sans text-footnote text-secondary">
         Best quality is MP3 320 kbps from other people's shared music. It's slower than YouTube
@@ -115,6 +102,6 @@ export function DownloadsSettingsSection() {
           {message}
         </Text>
       )}
-    </>
+    </View>
   );
 }

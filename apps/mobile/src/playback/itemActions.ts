@@ -12,13 +12,14 @@ import {
 } from "@wave/core";
 import * as Haptics from "expo-haptics";
 import { router, usePathname } from "expo-router";
+import { useMemo } from "react";
 
 import { followArtistLink } from "@/library/ArtistChoice";
 import { confirmDeleteSongs, confirmRemoveSongs } from "@/library/deleteSongs";
 import { songHasFile } from "@/library/LibraryStore";
 import { setFavorites, useFavoriteIds } from "@/library/favorites";
 import { fixSongs } from "@/library/findLyricsAndGenre";
-import { useLinkRows } from "@/library/hooks";
+import { useAlbumsMissingSongs, useLinkRows } from "@/library/hooks";
 import {
   confirmDeletePlaylists,
   openAddToPlaylist,
@@ -32,7 +33,9 @@ import { ytMusicEnabled } from "@/settings/ytMusic";
 import {
   cancelMissingSongDownload,
   downloadMissingSongs,
+  runMissingSongsDownloadAction,
   useMissingSongDownloadStatus,
+  useMissingSongDownloadStatuses,
 } from "@/ytmusic/YtDownloads";
 
 import {
@@ -75,30 +78,64 @@ const onlyMissingSong = (target: ActionItems): number | null => {
   return only === undefined || songHasFile(only.song) ? null : only.song.id;
 };
 
+interface PlanOptions {
+  readonly surface: ActionSurface;
+  readonly selectable: boolean;
+}
+
 /**
- * The entries Core's `itemActions` offers for [target] on [surface], here and
- * with the Settings as they are; [favorites] says which tracks are starred,
- * and a missing song's download is followed as it goes.
- * The Design preview plans its menus with it too, from synthetic items.
+ * The entries for [target] (`usePlannedActions`), and its albums' missing
+ * songs as Track ids, all albums' in one list: what their download entries
+ * act on.
  */
-export function usePlannedActions(
+function usePlan(
   target: ActionItems,
   favorites: ReadonlySet<number>,
-  { surface, selectable }: { readonly surface: ActionSurface; readonly selectable: boolean },
-): readonly ItemActionEntry[] {
+  { surface, selectable }: PlanOptions,
+): { readonly planned: readonly ItemActionEntry[]; readonly missingSongs: readonly number[] } {
   const here = usePathname();
   const onlineLookups = useLyricsAndGenreLookupsEnabled();
   const download = useMissingSongDownloadStatus(onlyMissingSong(target));
+  const perAlbum = useAlbumsMissingSongs(
+    target.kind === "album" ? target.items.map((album) => album.id) : [],
+  );
+  const missingSongs = useMemo(() => perAlbum.flat(), [perAlbum]);
+  const statuses = useMissingSongDownloadStatuses(missingSongs);
+  // Each album's share of [statuses], in the albums' order.
+  const albumStatuses = (index: number) => {
+    const start = perAlbum.slice(0, index).reduce((sum, ids) => sum + ids.length, 0);
+    return statuses.slice(start, start + (perAlbum[index]?.length ?? 0));
+  };
   const facts = targetFacts(target, favorites);
-  return itemActions({
+  const planned = itemActions({
     kind: target.kind,
-    items: facts.map((item) => (item.missing === true ? { ...item, download } : item)),
+    items: facts.map((item, index) =>
+      item.missing === true
+        ? { ...item, download }
+        : target.kind === "album"
+          ? { ...item, missingSongs: albumStatuses(index) }
+          : item,
+    ),
     surface,
     selectable,
     onlineLookups,
     here,
   });
+  return { planned, missingSongs };
 }
+
+/**
+ * The entries Core's `itemActions` offers for [target] on [surface], here and
+ * with the Settings as they are; [favorites] says which tracks are starred,
+ * and the downloads of a missing song, or of an album's missing songs, are
+ * followed as they go.
+ * The Design preview plans its menus with it too, from synthetic items.
+ */
+export const usePlannedActions = (
+  target: ActionItems,
+  favorites: ReadonlySet<number>,
+  options: PlanOptions,
+): readonly ItemActionEntry[] => usePlan(target, favorites, options).planned;
 
 /**
  * [planned] as entries: each labelled, deleting ones in the destructive
@@ -177,7 +214,8 @@ export function useItemActions(
       ? (targetHeading(target, undefined)?.title ?? targetCount(target))
       : targetCount(target);
 
-  const planned = usePlannedActions(target, favorites, {
+  // [missingSongs]: the albums' missing songs, which their download entries act on.
+  const { planned, missingSongs } = usePlan(target, favorites, {
     surface,
     selectable: onSelect !== undefined,
   });
@@ -255,8 +293,14 @@ export function useItemActions(
         return run(() => downloadMissingSongs(tracks.map(({ song }) => song.id)));
       case "cancelDownload":
         return run(() => {
+          if (target.kind === "album") runMissingSongsDownloadAction("cancel", missingSongs);
           for (const { song } of tracks) cancelMissingSongDownload(song.id);
         });
+      // An album's missing songs, as Settings' Download All does them.
+      case "downloadMissingSongs":
+        return run(() => runMissingSongsDownloadAction("downloadAll", missingSongs));
+      case "retryFailed":
+        return run(() => runMissingSongsDownloadAction("retryFailed", missingSongs));
       case "removeFromLibrary": {
         const songs = tracks.map(({ song }) => song);
         return asking(entry.action, (onConfirm) => {
