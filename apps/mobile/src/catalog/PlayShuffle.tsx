@@ -1,8 +1,9 @@
-import { IconArrowsShuffle, IconPlayerPlay } from "@tabler/icons-react-native";
+import { IconPlayerPlay } from "@tabler/icons-react-native";
 import type { ComponentType, ReactNode } from "react";
 import { Text, View } from "react-native";
 
 import { Press } from "@/motion/Press";
+import { useShuffleControl } from "@/nowPlaying/ShuffleMenu";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { CELL } from "./grid";
@@ -14,17 +15,23 @@ export function ListAction({
   icon: Icon,
   label,
   onPress,
+  onLongPress,
+  accessibilityHint,
 }: {
   icon: ComponentType<IconProps>;
   label: string;
   onPress: () => void;
+  onLongPress?: () => void;
+  accessibilityHint?: string;
 }) {
   const accent = useThemeColor("accent");
   return (
     <Press
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityHint={accessibilityHint}
       onPress={onPress}
+      onLongPress={onLongPress}
       haptic="impact"
       className="flex-row items-center"
       style={{ minHeight: 48, gap: CELL }}
@@ -48,10 +55,11 @@ type Props = {
  * button), the last ones wrap onto a second line.
  */
 export function PlayShuffle({ onPlay, onShuffle, children }: Props) {
+  const shuffle = useShuffleControl();
   return (
     <View className="flex-row flex-wrap" style={{ columnGap: CELL * 4, flexShrink: 1 }}>
       <ListAction icon={IconPlayerPlay} label="Play" onPress={onPlay} />
-      <ListAction icon={IconArrowsShuffle} label="Shuffle" onPress={onShuffle} />
+      <ListAction {...shuffle} onPress={onShuffle} />
       {children}
     </View>
   );
