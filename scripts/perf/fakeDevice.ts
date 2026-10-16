@@ -36,6 +36,8 @@ export interface FakeDeviceOptions {
   readonly tabs?: readonly string[];
   /** The artist on the simulated Library › Artists list. */
   readonly artist?: string;
+  /** Draws its glass as shipped whatever probe the launch asks for (a build without #316). */
+  readonly ignoresGlassProbe?: boolean;
 }
 
 export class FakeDevice implements Device {
@@ -45,6 +47,8 @@ export class FakeDevice implements Device {
   private readonly perfBuild: boolean;
   private readonly tabs: readonly string[];
   private readonly artist: string;
+  private readonly ignoresGlassProbe: boolean;
+  private glassProbe = "live";
   private running = false;
   private recorder: PerfRecorder | null = null;
   private routes: string[] = ["/"];
@@ -62,6 +66,7 @@ export class FakeDevice implements Device {
     this.perfBuild = options.perfBuild ?? true;
     this.tabs = options.tabs ?? ["Home", "Library", "Playlists", "Search"];
     this.artist = options.artist ?? "Radiohead";
+    this.ignoresGlassProbe = options.ignoresGlassProbe ?? false;
   }
 
   async sleep(ms: number): Promise<void> {
@@ -108,6 +113,11 @@ export class FakeDevice implements Device {
       "library.playlistItems": 6_000,
       "library.largestPlaylist": 2_500,
       "library.playEvents": 54_321,
+      "glass.probe": this.glassProbe,
+      "glass.blur": 24,
+      "glass.refraction": 12,
+      "glass.tint": 72,
+      "glass.rim": true,
       ...(this.importing
         ? { "import.running": true, "import.done": 120, "import.total": 2_000 }
         : {}),
@@ -122,7 +132,9 @@ export class FakeDevice implements Device {
     return this.routes[this.routes.length - 1] ?? "/";
   }
 
-  private launch(): string {
+  private launch(command: string): string {
+    const probe = / --es wave\.perf\.glass (\S+)/.exec(command)?.[1];
+    this.glassProbe = this.ignoresGlassProbe || probe === undefined ? "live" : probe;
     this.running = true;
     this.routes = ["/"];
     this.nowPlaying = this.queue = this.keyboard = this.importCard = false;
@@ -219,6 +231,13 @@ export class FakeDevice implements Device {
     }
   }
 
+  /** A fling: the list scrolls under the glass for about 1.5 s, more frames than gfxinfo keeps. */
+  private fling(_direction: "up" | "down"): void {
+    this.recorder?.touch(this.clock - 4);
+    this.render(this.clock + 8, 180);
+    this.advance(120);
+  }
+
   private back(): void {
     if (this.keyboard) this.keyboard = false;
     else if (this.nowPlaying) this.nowPlaying = this.queue = false;
@@ -288,12 +307,37 @@ export class FakeDevice implements Device {
     const histogram = new Map<number, number>();
     for (const ms of sorted)
       histogram.set(Math.round(ms), (histogram.get(Math.round(ms)) ?? 0) + 1);
-    const rows = kept.map(
-      (frame) =>
-        `0,1,${ns(frame.start)},${ns(frame.start)},0,${ns(frame.start + 0.5)},0,0,0,${ns(
-          frame.start + 2 * INTERVAL,
-        )},${ns(INTERVAL)},${ns(frame.start)},0,0,0,0,${ns(frame.start + frame.ms)},0,0,0,0,0,0,`,
-    );
+    const rows = kept.map((frame) => {
+      const at = (ms: number): number => ns(frame.start + ms);
+      // Pre-draw and layout 0.5 ms, draw 1 ms, sync 0.4 ms, then the RenderThread draws until
+      // 1 ms before the frame completes, and the GPU finishes with it.
+      return [
+        0,
+        1,
+        at(0),
+        at(0),
+        0,
+        at(0.5),
+        at(0.5),
+        at(0.5),
+        at(1),
+        at(2 * INTERVAL),
+        ns(INTERVAL),
+        at(0),
+        at(2),
+        at(2.1),
+        at(2.5),
+        at(frame.ms - 1),
+        at(frame.ms),
+        0,
+        0,
+        at(frame.ms),
+        at(frame.ms),
+        0,
+        0,
+        "",
+      ].join(",");
+    });
     return [
       "** Graphics info for pid 4242 [dev.leoperez.wave] **",
       `Total frames rendered: ${this.framesSinceReset}`,
@@ -343,7 +387,15 @@ export class FakeDevice implements Device {
     ],
     [/^dumpsys thermalservice$/, () => "Thermal Status: 0\n"],
     [/^am force-stop \S+$/, () => ((this.running = false), (this.recorder = null), "")],
-    [/^am start -W -S -a android\.intent\.action\.MAIN/, () => this.launch()],
+    [/^am start -W -S -a android\.intent\.action\.MAIN/, (match) => this.launch(match.input)],
+    [/^wm size$/, () => "Physical size: 1440x3120\n"],
+    [
+      /^input swipe \d+ (\d+) \d+ (\d+) \d+$/,
+      (match) => {
+        this.fling(Number(match[1]) > Number(match[2]) ? "up" : "down");
+        return "";
+      },
+    ],
     [
       /^am start -a android\.intent\.action\.SEND .* \S+$/,
       () => {

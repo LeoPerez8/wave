@@ -6,8 +6,10 @@ import { appendFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
 import {
+  GLASS_PROBE_EXTRA,
   PERF_FLUSH_QUIET_MS,
   parsePerfLog,
+  type GlassProbe,
   type PerfFlush,
 } from "../../packages/core/src/index.ts";
 import {
@@ -20,6 +22,7 @@ import {
   parsePackage,
   parseRefreshRate,
   parseThermalStatus,
+  parseWmSize,
   type AmStart,
   type Target,
 } from "./device.ts";
@@ -71,6 +74,11 @@ export interface RunOptions {
   readonly manual: Readonly<Record<string, string>>;
   /** Puts this ART compiler filter on the APK before running (`cmd package compile -m`). */
   readonly compile: string | null;
+  /**
+   * Launches Wave with this glass probe (#316), so its glass drops the layers the
+   * probe names. Needs a perf build, which reports the probe it applied.
+   */
+  readonly glass: GlassProbe | null;
   /** Records a Perfetto trace of each scenario into this folder. */
   readonly perfetto: { readonly dir: string; readonly config: string } | null;
   readonly out: string;
@@ -94,7 +102,11 @@ const tapCommand = ({ x, y }: { x: number; y: number }): string => `input tap ${
 
 const ms = (value: number | null): string => (value === null ? "-" : `${value} ms`);
 
-const touches = (action: Action): boolean => action.kind === "tap" || action.kind === "taps";
+const touches = (action: Action): boolean =>
+  action.kind === "tap" || action.kind === "taps" || action.kind === "swipe";
+
+/** A swipe this quick lets the list fling on after the finger lifts. */
+const FLING_MS = 120;
 
 /** Several flushes as one: their entries in order, their renders added up, the last meta. */
 const merge = (flushes: readonly PerfFlush[]): PerfFlush | null => {
@@ -126,6 +138,7 @@ export const runPerf = async (
     appendFileSync(options.out, `${JSON.stringify(record)}\n`);
   const shell = (command: string, input?: string): Promise<string> => device.shell(command, input);
   const targets = new Map<string, { x: number; y: number }>();
+  let screen: { width: number; height: number } | null = null;
   // Until the first launch shows whether the app writes a perf log.
   let perfBuild = false;
 
@@ -159,7 +172,8 @@ export const runPerf = async (
     await shell("logcat -c");
     const result = parseAmStart(
       await shell(
-        `am start -W -S -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p ${pkg}`,
+        `am start -W -S -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p ${pkg}` +
+          (options.glass === null ? "" : ` --es ${GLASS_PROBE_EXTRA} ${options.glass}`),
       ),
     );
     if (result.status !== "ok")
@@ -203,6 +217,14 @@ export const runPerf = async (
         for (const target of action.targets) commands.push(tapCommand(await resolve(target)));
         return commands.join("; ");
       }
+      case "swipe": {
+        screen ??= parseWmSize(await shell("wm size"));
+        if (screen === null) throw new ScenarioError("Couldn't read the screen's size (wm size).");
+        const x = Math.round(screen.width / 2);
+        const [low, high] = [Math.round(screen.height * 0.7), Math.round(screen.height * 0.3)];
+        const [from, to] = action.direction === "up" ? [low, high] : [high, low];
+        return `input swipe ${x} ${from} ${x} ${to} ${FLING_MS}`;
+      }
       case "back":
         return "input keyevent 4";
       case "share":
@@ -241,6 +263,19 @@ export const runPerf = async (
     await launch();
     const app = (await collect(false, options.launchSettleMs + flushWait))?.meta ?? null;
     perfBuild = app !== null;
+    if (options.glass !== null) {
+      if (!perfBuild)
+        throw new Error(
+          `--glass ${options.glass} needs a perf build: only a perf build reads the glass probe.`,
+        );
+      const applied = app?.["glass.probe"];
+      if (applied !== options.glass)
+        throw new Error(
+          `Asked for the glass probe "${options.glass}", but Wave drew its glass as "${String(
+            applied ?? "unknown",
+          )}". The run wouldn't compare: check that the build has the probe (#316).`,
+        );
+    }
     const fromApp = (key: string): number | null => {
       const value = app?.[key];
       return typeof value === "number" ? value : null;
@@ -475,6 +510,7 @@ export const runPerf = async (
       windowMs: options.windowMs,
       launchSettleMs: options.launchSettleMs,
       compile: options.compile,
+      glass: options.glass,
       perfetto: options.perfetto !== null,
       tabs: options.config.tabs,
       artist: options.config.artist,

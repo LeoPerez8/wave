@@ -8,6 +8,11 @@ export type Action =
   | { readonly kind: "tap"; readonly target: Target }
   /** Back-to-back taps, no wait between them (rapid tab taps). */
   | { readonly kind: "taps"; readonly targets: readonly Target[] }
+  /**
+   * A fling across the middle of the screen, clear of the floating chrome: "up"
+   * moves the finger up, so the content scrolls on towards its end.
+   */
+  | { readonly kind: "swipe"; readonly direction: "up" | "down" }
   /** The system back key. It has no touch to measure from, so only setup and teardown use it. */
   | { readonly kind: "back" }
   /** Shares the fixture's playlist link to Wave, as a share sheet would. */
@@ -57,6 +62,8 @@ export interface Scenario {
   readonly needsImportLink?: boolean;
   /** Needs the fixture's artist. */
   readonly needsArtist?: boolean;
+  /** Part of the glass comparison (#316), run with `--scenario glass`, not with `all`. */
+  readonly glass?: boolean;
 }
 
 const tab = (label: string): Target => ({ desc: label });
@@ -69,6 +76,12 @@ const route: Expect = { mark: "route" };
 const pushPop = (target: Target): readonly Step[] => [
   { measure: "push", action: { kind: "tap", target }, expect: route },
   { measure: "pop", action: { kind: "tap", target: { desc: "Back" } }, expect: route },
+];
+
+/** A fling on towards the content's end, then one back: the content scrolls under the glass. */
+const flings: readonly Step[] = [
+  { measure: "fling-up", action: { kind: "swipe", direction: "up" } },
+  { measure: "fling-down", action: { kind: "swipe", direction: "down" } },
 ];
 
 /** Ten tab changes away from Home and back, cycling through [tabs]. */
@@ -242,12 +255,48 @@ export const SCENARIOS: readonly Scenario[] = [
     warmup: 0,
     needsImportLink: true,
   },
+  {
+    name: "scroll-home",
+    summary:
+      "Glass: flings on Home, its content scrolling under the tab bar, the Search pill and the mini player.",
+    steps: () => flings,
+    iterations: 10,
+    warmup: 1,
+    glass: true,
+  },
+  {
+    name: "scroll-songs",
+    summary:
+      "Glass: flings on Library › Songs, the whole Library as a Track list scrolling under the mini player.",
+    setup: [
+      { kind: "tap", target: tab("Library") },
+      { kind: "tap", target: { text: "Songs" } },
+    ],
+    steps: () => flings,
+    iterations: 10,
+    warmup: 1,
+    glass: true,
+  },
+  {
+    name: "idle-home",
+    summary:
+      "Glass: five seconds of Home with nothing touched; with the mini player paused, any frame is idle rendering.",
+    steps: () => [{ measure: "idle", action: { kind: "idle" }, windowMs: 5_000 }],
+    iterations: 5,
+    warmup: 1,
+    glass: true,
+  },
 ];
 
 /** The scenarios a full baseline runs, in order (`--scenario all`). */
-export const ALL_SCENARIOS: readonly string[] = SCENARIOS.map((scenario) => scenario.name).filter(
-  (name) => name !== "import",
-);
+export const ALL_SCENARIOS: readonly string[] = SCENARIOS.filter(
+  (scenario) => scenario.name !== "import" && scenario.glass !== true,
+).map((scenario) => scenario.name);
+
+/** The glass comparison's scenarios (`--scenario glass`), run once per glass probe. */
+export const GLASS_SCENARIOS: readonly string[] = SCENARIOS.filter(
+  (scenario) => scenario.glass === true,
+).map((scenario) => scenario.name);
 
 export const VARIANTS = ["idle", "import"] as const;
 export type Variant = (typeof VARIANTS)[number];

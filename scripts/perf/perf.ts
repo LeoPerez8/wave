@@ -3,8 +3,9 @@
 //   node scripts/perf/perf.ts doctor [--serial <s>] [--dry-run]
 //   node scripts/perf/perf.ts run [--scenario all|<a,b>] [--variant idle|import|idle,import]
 //        [--label <l>] [--iterations <n>] [--commit <sha>] [--apk <file>] [--import-link <url>]
-//        [--artist <name>] [--compile <filter>] [--perfetto] [--meta key=value]... [--out <file>] [--serial <s>]
-//        [--dry-run]
+//        [--artist <name>] [--compile <filter>] [--glass <probe>] [--perfetto] [--meta key=value]...
+//        [--out <file>] [--serial <s>] [--dry-run]
+//        (--scenario glass runs the glass comparison's scenarios; --glass needs a perf build)
 //   node scripts/perf/perf.ts summary <results.jsonl>
 //   node scripts/perf/perf.ts compare <before.jsonl> <after.jsonl>
 import { execFileSync } from "node:child_process";
@@ -14,13 +15,30 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
+import {
+  GLASS_PROBES,
+  GLASS_PROBE_SUMMARY,
+  readGlassProbe,
+} from "../../packages/core/src/index.ts";
 import { adbDevice, installApk, listDevices } from "./adb.ts";
 import { parsePackage, parseRefreshRate, parseThermalStatus } from "./device.ts";
 import { FakeDevice } from "./fakeDevice.ts";
-import { compareSummaries, formatComparison, formatSummary, summarize } from "./metrics.ts";
+import {
+  compareSummaries,
+  formatComparison,
+  formatPhases,
+  formatSummary,
+  summarize,
+} from "./metrics.ts";
 import { comparability, readResults, type Results } from "./results.ts";
 import { runPerf, type Device } from "./runner.ts";
-import { ALL_SCENARIOS, SCENARIOS, VARIANTS, type Variant } from "./scenarios.ts";
+import {
+  ALL_SCENARIOS,
+  GLASS_SCENARIOS,
+  SCENARIOS,
+  VARIANTS,
+  type Variant,
+} from "./scenarios.ts";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 const root = join(here, "..", "..");
@@ -53,6 +71,7 @@ const { values, positionals } = parseArgs({
     "import-link": { type: "string" },
     artist: { type: "string" },
     compile: { type: "string" },
+    glass: { type: "string" },
     perfetto: { type: "boolean", default: false },
     meta: { type: "string", multiple: true, default: [] },
     out: { type: "string" },
@@ -119,6 +138,13 @@ const describeRun = (results: Results): string => {
     `Library: ${library.tracks ?? "?"} songs, ${library.playlists ?? "?"} playlists (${library.playlistItems ?? "?"} entries, largest ${
       library.largestPlaylist ?? "?"
     }), ${library.playEvents ?? "?"} plays`,
+    ...(typeof run.app?.["glass.probe"] === "string"
+      ? [
+          `Glass: probe ${run.app["glass.probe"]}, blur ${String(run.app["glass.blur"])}, refraction ${String(
+            run.app["glass.refraction"],
+          )}, tint ${String(run.app["glass.tint"])}, rim ${String(run.app["glass.rim"])}`,
+        ]
+      : []),
   ].join("\n");
 };
 
@@ -140,8 +166,11 @@ const commands: Record<string, () => Promise<void>> = {
     for (const scenario of SCENARIOS)
       console.log(`${scenario.name.padEnd(18)} ${scenario.iterations}x  ${scenario.summary}`);
     console.log(
-      `\nall = ${ALL_SCENARIOS.join(", ")}\nvariants: ${VARIANTS.join(", ")} (import runs "import" first)`,
+      `\nall = ${ALL_SCENARIOS.join(", ")}\nglass = ${GLASS_SCENARIOS.join(", ")}\nvariants: ${VARIANTS.join(", ")} (import runs "import" first)`,
     );
+    console.log("\nglass probes (--glass, perf builds only):");
+    for (const probe of GLASS_PROBES)
+      console.log(`  ${probe.padEnd(10)} ${GLASS_PROBE_SUMMARY[probe]}`);
   },
 
   doctor: async () => {
@@ -192,7 +221,15 @@ const commands: Record<string, () => Promise<void>> = {
   },
 
   run: async () => {
-    const scenarios = values.scenario === "all" ? ALL_SCENARIOS : values.scenario.split(",");
+    const scenarios =
+      values.scenario === "all"
+        ? ALL_SCENARIOS
+        : values.scenario === "glass"
+          ? GLASS_SCENARIOS
+          : values.scenario.split(",");
+    const glass = values.glass === undefined ? null : readGlassProbe(values.glass);
+    if (values.glass !== undefined && glass === null)
+      fail(`No glass probe named ${values.glass}. Probes: ${GLASS_PROBES.join(", ")}.`);
     for (const name of scenarios)
       if (!SCENARIOS.some((scenario) => scenario.name === name))
         fail(`No scenario named ${name}. See: perf.ts scenarios`);
@@ -240,6 +277,7 @@ const commands: Record<string, () => Promise<void>> = {
       apkFile,
       manual,
       compile: values.compile ?? null,
+      glass,
       perfetto: values.perfetto
         ? {
             dir: join(root, "perf-results", "traces"),
@@ -272,7 +310,9 @@ const commands: Record<string, () => Promise<void>> = {
 
 const printSummary = (results: Results): void => {
   console.log(`${describeRun(results)}\n`);
-  console.log(formatSummary(summarize(results.steps)));
+  const rows = summarize(results.steps);
+  console.log(formatSummary(rows));
+  console.log(`\nWhere the kept frames' time went (mean / p90 ms):\n\n${formatPhases(rows)}`);
   const launches = results.steps.flatMap((step) =>
     step.launch?.totalTimeMs == null ? [] : [step.launch.totalTimeMs],
   );

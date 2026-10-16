@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import type { PerfEntry, PerfFlush } from "../../packages/core/src/index.ts";
-import type { GfxFrame, GfxSummary } from "./device.ts";
+import type { FramePhases, GfxFrame, GfxSummary } from "./device.ts";
 import {
   compareSummaries,
   formatComparison,
+  formatPhases,
   formatSummary,
   stepMetrics,
   summarize,
@@ -19,6 +20,7 @@ const frame = (
   start: number,
   ms: number,
   deadlineMs: number | null = start + 2 * INTERVAL,
+  phases: Partial<FramePhases> = {},
 ): GfxFrame => ({
   window: "main",
   flags: 0,
@@ -27,7 +29,12 @@ const frame = (
   completedMs: start + ms,
   deadlineMs,
   intervalMs: INTERVAL,
+  phases: { traversalMs: null, drawMs: null, syncMs: null, issueMs: null, gpuMs: null, ...phases },
 });
+
+/** A frame whose RenderThread spent [issueMs] drawing and whose pre-draw took [traversalMs]. */
+const split = (start: number, traversalMs: number, issueMs: number): GfxFrame =>
+  frame(start, 6, start + 2 * INTERVAL, { traversalMs, drawMs: 1, syncMs: 0.5, issueMs, gpuMs: 1 });
 
 const SUMMARY: GfxSummary = {
   totalFrames: 4,
@@ -173,6 +180,27 @@ describe("stepMetrics", () => {
     assert.equal(metrics.firstFrameMs, null);
     assert.equal(metrics.framesCovered, false);
   });
+
+  it("splits the step's kept frames into their parts: mean, 90th percentile and max", () => {
+    const metrics = stepMetrics({
+      frames: [split(0, 1, 4), split(10, 1, 4), split(20, 3, 10), split(30, 1, 4)],
+      summary: SUMMARY,
+      flush: null,
+      expect: undefined,
+    });
+    assert.deepEqual(metrics.phases.issueMs, { frames: 4, meanMs: 5.5, p90Ms: 10, maxMs: 10 });
+    assert.deepEqual(metrics.phases.traversalMs, { frames: 4, meanMs: 1.5, p90Ms: 3, maxMs: 3 });
+  });
+
+  it("leaves a part empty when no kept frame had its timestamps", () => {
+    const metrics = stepMetrics({
+      frames: [frame(0, 6)],
+      summary: SUMMARY,
+      flush: null,
+      expect: undefined,
+    });
+    assert.deepEqual(metrics.phases.gpuMs, { frames: 0, meanMs: null, p90Ms: null, maxMs: null });
+  });
 });
 
 const record = (
@@ -180,8 +208,9 @@ const record = (
   measure: string,
   responseMs: number | null,
   extra: Partial<StepRecord> = {},
+  frames: readonly GfxFrame[] = [],
 ): StepRecord => {
-  const base = stepMetrics({ frames: [], summary: SUMMARY, flush: null, expect: undefined });
+  const base = stepMetrics({ frames, summary: SUMMARY, flush: null, expect: undefined });
   return {
     type: "step",
     run: "r",
@@ -225,6 +254,50 @@ describe("summarize", () => {
     ]);
     assert.deepEqual(rows[0]?.rendersPerStep, { MiniPlayer: 0.5, TabBar: 3 });
     assert.equal(rows[0]?.missing, 1);
+  });
+});
+
+describe("summarize, frame parts", () => {
+  it("pools each part's mean over every kept frame and takes the median step's 90th percentile", () => {
+    const [row] = summarize([
+      record("scroll-home", "fling-up", null, {}, [
+        split(0, 1, 4),
+        split(10, 1, 4),
+        split(20, 3, 10),
+        split(30, 1, 4),
+      ]),
+      record("scroll-home", "fling-up", null, {}, [split(0, 1, 2), split(10, 1, 2)]),
+    ]);
+    // (4 + 4 + 10 + 4 + 2 + 2) / 6 frames; the steps' p90s were 10 and 2.
+    assert.deepEqual(row?.phases.issueMs, { frames: 6, meanMs: 4.33, p90Ms: 6 });
+    assert.deepEqual(row?.phases.gpuMs, { frames: 6, meanMs: 1, p90Ms: 1 });
+  });
+
+  it("prints the parts as a table, mean / p90 per part", () => {
+    const table = formatPhases(
+      summarize([record("idle-home", "idle", null, {}, [split(0, 2, 5), split(10, 2, 5)])]),
+    );
+    assert.match(table, /^\| Scenario step \| Frames \| Pre-draw and layout ms \|/m);
+    assert.match(table, /^\| idle-home\/idle\/idle \| 2 \| 2 \/ 2 \| 1 \/ 1 \| 0\.5 \/ 0\.5 \| 5 \/ 5 \| 1 \/ 1 \|$/m);
+  });
+
+  it("compares each part's mean and 90th percentile", () => {
+    const rows = compareSummaries(
+      summarize([record("scroll-home", "fling-up", null, {}, [split(0, 1, 8)])]),
+      summarize([record("scroll-home", "fling-up", null, {}, [split(0, 1, 2)])]),
+    );
+    assert.deepEqual(
+      rows.find((row) => row.metric === "issueMs mean"),
+      {
+        key: "scroll-home/idle/fling-up",
+        metric: "issueMs mean",
+        before: 8,
+        after: 2,
+        change: -6,
+        changePercent: -75,
+      },
+    );
+    assert.ok(rows.some((row) => row.metric === "traversalMs p90"));
   });
 });
 
