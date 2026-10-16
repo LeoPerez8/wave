@@ -74,8 +74,7 @@ export const launchTheme = (choice: ThemeChoice): LaunchTheme => {
   };
 };
 
-const ids = (group: ThemeGroup): string[] =>
-  THEME_SWATCHES[group].map((swatch) => swatch.id);
+const ids = (group: ThemeGroup): string[] => THEME_SWATCHES[group].map((swatch) => swatch.id);
 
 /**
  * One splash style per choice Settings › Theme can make, bar the shipped one

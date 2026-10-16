@@ -198,7 +198,7 @@ export const presetThemeChoice = (choice: ThemeChoice): ThemeChoice => {
   return { ...choice, primary: preset("primary"), secondary: preset("secondary") };
 };
 
-const background =(scheme: Scheme, id: string): string =>
+const background = (scheme: Scheme, id: string): string =>
   THEME_SWATCHES[scheme].find((swatch) => swatch.id === id)?.colour ??
   DEFAULT_THEME[scheme].background;
 
@@ -389,6 +389,8 @@ export interface ThemeSwatchOption {
 
 /** The custom swatch that ends the Primary and Secondary rows. */
 export interface CustomSwatchOption {
+  /** The kept custom colour as picked, where the picker opens; null until one is picked. */
+  readonly picked: string | null;
   /** The kept custom colour as it would apply in the scheme; null until one is picked. */
   readonly colour: string | null;
   readonly selected: boolean;
@@ -407,6 +409,7 @@ const customSwatch = (choice: ThemeChoice, group: InkGroup, scheme: Scheme): Cus
   const kept = choice[CUSTOM_FIELD[group]];
   const colour = kept === null ? null : customInkPreview(choice, group, kept)[scheme].colour;
   return {
+    picked: kept,
     colour,
     selected: choice[group] === CUSTOM_INK,
     mark: colour === null ? null : markOn(colour),

@@ -258,11 +258,7 @@ describe("custom primary and secondary", () => {
 
   test("the picker shows the colour that will apply in each mode", () => {
     // Pale yellow can't read on a light ground, so light mode gets a deepened tone.
-    const { light, dark } = customInkPreview(
-      choose({ dark: "navy" }),
-      "secondary",
-      "#fff3a0",
-    );
+    const { light, dark } = customInkPreview(choose({ dark: "navy" }), "secondary", "#fff3a0");
     assert.deepEqual(dark, { colour: "#fff3a0", ground: "#0a0f1f", adjusted: false });
     assert.equal(light.ground, DEFAULT_THEME.light.background);
     assert.equal(light.adjusted, true);
@@ -275,7 +271,11 @@ describe("custom primary and secondary", () => {
     const rows = themeSwatchRows(DEFAULT_THEME_CHOICE, "light");
     assert.deepEqual(
       rows.map((row) => row.custom),
-      [null, null, { colour: null, selected: false, mark: null }, { colour: null, selected: false, mark: null }],
+      [
+        null,
+        null,
+        ...[1, 2].map(() => ({ picked: null, colour: null, selected: false, mark: null })),
+      ],
     );
   });
 
@@ -286,9 +286,13 @@ describe("custom primary and secondary", () => {
     );
     const [, , primary, secondary] = rows;
     assert.equal(secondary?.custom?.colour, "#fff3a0");
+    assert.equal(primary?.custom?.picked, "#2456a8");
     assert.equal(secondary?.custom?.selected, true);
     assert.equal(secondary?.custom?.mark, "#000000");
-    assert.deepEqual(secondary?.swatches.filter((s) => s.selected), []);
+    assert.deepEqual(
+      secondary?.swatches.filter((s) => s.selected),
+      [],
+    );
     // Kept but not chosen; brightened for the dark ground like the rest of the row.
     assert.equal(primary?.custom?.selected, false);
     assert.ok(primary?.custom?.colour && brighter(primary.custom.colour, "#2456a8"));

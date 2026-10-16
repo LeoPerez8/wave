@@ -89,7 +89,10 @@ describe("launchTheme", () => {
 
   test("a custom colour opens on the splash of the preset closest to it", () => {
     const custom = choose({ light: "sand", primary: "custom", customPrimary: "#0d2350" });
-    assert.equal(launchTheme(custom).splashTheme, launchTheme({ ...custom, primary: "blue" }).splashTheme);
+    assert.equal(
+      launchTheme(custom).splashTheme,
+      launchTheme({ ...custom, primary: "blue" }).splashTheme,
+    );
     // What's saved is still what the app draws.
     assert.equal(launchTheme(custom).light.primary, themeFor(custom).light.accent);
   });

@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { colourPickerLayout, colourPickerMarkers, colourPickerTarget, pickColour } from "./index.ts";
+import {
+  colourPickerLayout,
+  colourPickerMarkers,
+  colourPickerTarget,
+  pickColour,
+} from "./index.ts";
 
 const layout = colourPickerLayout(200);
 const { centre, ringRadius, square } = layout;
@@ -45,10 +50,15 @@ describe("pickColour", () => {
     assert.deepEqual(pickColour(layout, "ring", centre, centre + 10, hsv), { ...hsv, h: 90 });
   });
 
+  const at = (x: number, y: number) => pickColour(layout, "square", x, y, hsv);
+
   test("in the square, saturation grows to the right and brightness upward", () => {
-    const at = (x: number, y: number) => pickColour(layout, "square", x, y, hsv);
     assert.deepEqual(at(square.left, square.top), { h: 200, s: 0, v: 1 });
-    assert.deepEqual(at(square.left + square.side, square.top + square.side), { h: 200, s: 1, v: 0 });
+    assert.deepEqual(at(square.left + square.side, square.top + square.side), {
+      h: 200,
+      s: 1,
+      v: 0,
+    });
     near(at(centre, centre).s, 0.5);
     near(at(centre, centre).v, 0.5);
   });
