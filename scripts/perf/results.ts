@@ -85,6 +85,10 @@ export type MeasuredStep = StepRecord & {
    * `.affected` (the playlists imports fill) and `.unrelated` (the others).
    */
   readonly playlistWork?: Readonly<Record<string, unknown>>;
+  /** Subscribers to the playback stores and the sheet at the step's flush. */
+  readonly listeners?: Readonly<Record<string, unknown>>;
+  /** Hermes's used heap in bytes at the step's flush, when it reports it. */
+  readonly jsHeapUsed?: number;
 };
 
 export type MemoryRecord = Meminfo & {
@@ -92,6 +96,11 @@ export type MemoryRecord = Meminfo & {
   readonly run: string;
   readonly scenario: string;
   readonly variant: string;
+  /**
+   * The measured iterations done when it was read, for a scenario that reads
+   * memory over its iterations (`memorySamples`); 0 is before the first.
+   */
+  readonly iteration?: number;
 };
 
 export interface ErrorRecord {

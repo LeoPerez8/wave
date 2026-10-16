@@ -211,6 +211,68 @@ describe("runPerf on the simulated phone", () => {
     assert.equal(ALL_SCENARIOS.includes("rescan-return"), false);
   });
 
+  it("cycles the player and Queue at length, sampling retained memory as it goes (#318)", async () => {
+    const { out } = await runPerf(
+      new FakeDevice(),
+      options("soak-player", { scenarios: ["soak-player"], iterations: 10 }),
+    );
+    const { steps, memory, errors } = readResults(readFileSync(out, "utf8"));
+    assert.deepEqual(errors, []);
+    assert.deepEqual(
+      summarize(steps).map((row) => row.key),
+      [
+        "soak-player/idle/open",
+        "soak-player/idle/queue-open",
+        "soak-player/idle/queue-close",
+        "soak-player/idle/close",
+      ],
+    );
+    for (const step of steps.filter((one) => one.expectMissing !== null))
+      assert.equal(step.expectMissing, false, `${step.measure} lost its mark`);
+    // Before the first measured cycle, then spread over the cycles, the last one included.
+    assert.deepEqual(
+      memory.map((sample) => sample.iteration),
+      [0, 2, 4, 6, 8, 10],
+    );
+    for (const sample of memory) {
+      assert.equal(sample.scenario, "soak-player");
+      assert.ok((sample.javaHeapKb ?? 0) > 0);
+      assert.ok((sample.views ?? 0) > 0);
+    }
+    // The JavaScript heap and the playback stores' listeners, at each step's flush.
+    assert.ok(steps.every((step) => typeof step.jsHeapUsed === "number"));
+    assert.ok(steps.every((step) => typeof step.listeners?.["playback"] === "number"));
+    assert.equal(ALL_SCENARIOS.includes("soak-player"), false);
+  });
+
+  it("cycles tabs and pushed routes at length, sampling retained memory as it goes (#318)", async () => {
+    const { out } = await runPerf(
+      new FakeDevice(),
+      options("soak-routes", { scenarios: ["soak-routes"], iterations: 5 }),
+    );
+    const { steps, memory, errors } = readResults(readFileSync(out, "utf8"));
+    assert.deepEqual(errors, []);
+    assert.deepEqual(
+      summarize(steps).map((row) => row.key),
+      [
+        "soak-routes/idle/tab",
+        "soak-routes/idle/push-albums",
+        "soak-routes/idle/pop-albums",
+        "soak-routes/idle/push-songs",
+        "soak-routes/idle/pop-songs",
+        "soak-routes/idle/push-settings",
+        "soak-routes/idle/pop-settings",
+      ],
+    );
+    for (const step of steps.filter((one) => one.expectMissing !== null))
+      assert.equal(step.expectMissing, false, `${step.measure} lost its mark`);
+    assert.deepEqual(
+      memory.map((sample) => sample.iteration),
+      [0, 1, 2, 3, 4, 5],
+    );
+    assert.equal(ALL_SCENARIOS.includes("soak-routes"), false);
+  });
+
   it("runs the import first in the import variant, and every step reports its progress", async () => {
     const { out } = await runPerf(
       new FakeDevice(),
