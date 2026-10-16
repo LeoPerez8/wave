@@ -1,8 +1,9 @@
 import {
   listeningOverview,
-  listeningTotals,
+  summedListeningTotals,
   type LibraryReads,
   type ListeningOverview,
+  type ListeningSums,
   type MissingTrack,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
@@ -13,7 +14,7 @@ import { WaveNative } from "@/native/waveNative";
 
 import type { LibraryCounts } from "./db/counts";
 import type { LinkRows } from "./db/links";
-import type { HomeSections } from "./db/playHistory";
+import type { HomePlays, HomeSections } from "./db/playHistory";
 import { scanState, type ScanState } from "./LibraryScan";
 import {
   LibraryStore,
@@ -280,32 +281,66 @@ const listFavorites = storeQuery(
 export const useFavoriteSongs = (): readonly FavoriteRow[] | undefined =>
   useLibraryQuery<readonly FavoriteRow[] | undefined>(listFavorites, undefined);
 
-const readHome = storeQuery("home", { tracks: true, favorites: true, plays: true }, (store) =>
-  store.home(),
+// Home's sections by what they read, so a play doesn't re-read Recently Added
+// or Favorites, and a star doesn't re-read what plays change.
+const readHomeAdded = storeQuery("home:added", TRACKS, (store) => store.homeAdded);
+const readHomePlays = storeQuery<HomePlays | undefined>(
+  "home:plays",
+  { tracks: true, plays: true },
+  (store) => store.homePlays,
+);
+const readHomeFavorites = storeQuery(
+  "home:favorites",
+  { tracks: true, favorites: true },
+  (store) => store.homeFavorites,
 );
 
 /**
- * The Home tab's sections, or undefined while loading. Re-read as soon as a
- * star is saved, and as soon as a play starts or ends while Home is in sight
- * (plays while it's hidden are read when it comes back). Home and Library's
- * shelf share one read.
+ * The Home tab's sections, or undefined while loading. Each part is re-read
+ * only for what changes it: songs added or removed, stars (at once), plays
+ * (at most every 1.5 s while Home is in sight; plays while it's hidden are
+ * read once when it comes back). Home and Library's shelf share the reads.
  */
-export const useHome = (): HomeSections | undefined =>
-  useLibraryQuery<HomeSections | undefined>(readHome, undefined);
+export const useHome = (): HomeSections | undefined => {
+  const added = useLibraryQuery<Pick<HomeSections, "recentlyAdded"> | undefined>(
+    readHomeAdded,
+    undefined,
+  );
+  const plays = useLibraryQuery(readHomePlays, undefined);
+  const favorites = useLibraryQuery<Pick<HomeSections, "favorites"> | undefined>(
+    readHomeFavorites,
+    undefined,
+  );
+  return useMemo(
+    () =>
+      added === undefined || plays === undefined || favorites === undefined
+        ? undefined
+        : { ...added, ...plays, ...favorites },
+    [added, plays, favorites],
+  );
+};
 
-const readListeningOverview = storeQuery(
-  "listeningOverview",
+const readListeningSums = storeQuery(
+  "listeningSums",
   { tracks: true, plays: true },
-  (store) =>
-    Effect.map(Effect.all([store.countLibrary, store.songListening]), ([counts, songs]) =>
-      listeningOverview(counts, listeningTotals(songs)),
-    ),
+  (store) => store.listeningSums,
 );
 
 /**
  * Home's listening overview (library and all-time listening totals), or
- * undefined while loading. Re-read after scan batches, and as soon as a play
- * starts or ends while Home is in sight (else when it comes back).
+ * undefined while loading. The library totals are Library's counts; the
+ * listening totals one row of the all-time play totals, re-read after plays
+ * (at most every 1.5 s while Home is in sight, else when it comes back) and
+ * scan batches.
  */
-export const useListeningOverview = (): ListeningOverview | undefined =>
-  useLibraryQuery<ListeningOverview | undefined>(readListeningOverview, undefined);
+export const useListeningOverview = (): ListeningOverview | undefined => {
+  const counts = useLibraryCounts();
+  const sums = useLibraryQuery<ListeningSums | undefined>(readListeningSums, undefined);
+  return useMemo(
+    () =>
+      counts === undefined || sums === undefined
+        ? undefined
+        : listeningOverview(counts, summedListeningTotals(sums)),
+    [counts, sums],
+  );
+};
