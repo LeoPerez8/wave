@@ -85,34 +85,6 @@ const rank = <A extends { readonly id: number }>(
 ): Effect.Effect<readonly Ranked<A>[], LibraryStoreError> =>
   withRows(rankPlays(totals, limit), rows);
 
-type Store = LibraryStore["Service"];
-
-/**
- * The `limit` albums played most in `period` (rolling, ending now), the top
- * one first, read from [store]: what Stats ranks, and Home's Most played
- * albums for all time.
- */
-export const topAlbums = (
-  store: Store,
-  period: StatsPeriod,
-  limit: number,
-): Effect.Effect<readonly Ranked<AlbumRow>[], LibraryStoreError> =>
-  Effect.flatMap(
-    Effect.suspend(() => store.creditedPlayTotals(statsWindow(period, Date.now()))),
-    (credits) => rank(albumPlayTotals(credits), limit, store.albumsByIds),
-  );
-
-/** The `limit` artists played most in `period`, credited by track artist, as `topAlbums` reads them. */
-export const topArtists = (
-  store: Store,
-  period: StatsPeriod,
-  limit: number,
-): Effect.Effect<readonly Ranked<ArtistRow>[], LibraryStoreError> =>
-  Effect.flatMap(
-    Effect.suspend(() => store.creditedPlayTotals(statsWindow(period, Date.now()))),
-    (credits) => rank(artistPlayTotals(credits), limit, store.artistsByIds),
-  );
-
 /** The albums and the artists played most in a period, ranked from one read. */
 export interface TopAlbumsAndArtists {
   readonly albums: readonly Ranked<AlbumRow>[];
@@ -121,11 +93,11 @@ export interface TopAlbumsAndArtists {
 
 /**
  * The top [albumLimit] albums and [artistLimit] artists of `period`, as
- * `topAlbums` and `topArtists` rank them, from one read of the credited
- * totals: Home's Most played albums and artists, which show together.
+ * Stats' `topAlbums` and `topArtists` rank them, from one read of the
+ * credited totals: Home's Most played albums and artists, which show together.
  */
 export const topAlbumsAndArtists = (
-  store: Store,
+  store: LibraryStore["Service"],
   period: StatsPeriod,
   albumLimit: number,
   artistLimit: number,
@@ -148,8 +120,14 @@ export const layer = Layer.effect(
         Effect.flatMap(store.trackPlayTotals(statsWindow(period, Date.now())), (totals) =>
           rank(totals, limit, store.songsByIds),
         ),
-      topAlbums: (period, limit) => topAlbums(store, period, limit),
-      topArtists: (period, limit) => topArtists(store, period, limit),
+      topAlbums: (period, limit) =>
+        Effect.flatMap(store.creditedPlayTotals(statsWindow(period, Date.now())), (credits) =>
+          rank(albumPlayTotals(credits), limit, store.albumsByIds),
+        ),
+      topArtists: (period, limit) =>
+        Effect.flatMap(store.creditedPlayTotals(statsWindow(period, Date.now())), (credits) =>
+          rank(artistPlayTotals(credits), limit, store.artistsByIds),
+        ),
       artist: (artistId) => {
         const now = Date.now();
         return Effect.flatMap(
