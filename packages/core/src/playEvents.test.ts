@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 
 import {
   EMPTY_PLAY_TRACKER,
+  fadingPlaySoFar,
   isCountedPlay,
   keptPlayingEntry,
   playSoFar,
@@ -80,65 +81,6 @@ const run = (
 };
 
 describe("trackPlays", () => {
-  test("crossfade opens the next play while the outgoing play ends only at the fade's end", () => {
-    const overlap = run([
-      playing(1000, "1", "a"),
-      { type: "crossfade", phase: "start", at: 176_000 },
-      moved(176_000, "2", "crossfade"),
-      playing(176_000, "2", "b"),
-    ]);
-    assert.equal(overlap.started.length, 2);
-    assert.equal(overlap.ended.length, 0);
-    const completed = run([
-      { type: "crossfade", phase: "end", at: 181_000, reason: "completed" },
-    ], overlap.state);
-    assert.equal(completed.ended[0]?.trackId, "a");
-    assert.equal(completed.ended[0]?.listenedMs, 180_000);
-    assert.equal(completed.ended[0]?.endReason, "completed");
-    assert.equal(playSoFar(completed.state, 181_000)?.trackId, "b");
-  });
-
-  test("pausing an overlap excludes paused time from both songs", () => {
-    const { ended, state } = run([
-      playing(1000, "1", "a"),
-      { type: "crossfade", phase: "start", at: 176_000 },
-      playing(176_000, "2", "b"),
-      { type: "crossfade", phase: "playing", at: 178_000, playing: false },
-      paused(178_000, "2", "b"),
-      { type: "crossfade", phase: "playing", at: 188_000, playing: true },
-      playing(188_000, "2", "b"),
-      { type: "crossfade", phase: "end", at: 191_000, reason: "completed" },
-    ]);
-    assert.equal(ended[0]?.listenedMs, 180_000);
-    assert.equal(playSoFar(state, 191_000)?.listenedMs, 5000);
-  });
-
-  test("a manual change during an overlap ends the outgoing song as skipped", () => {
-    const { ended } = run([
-      playing(1000, "1", "a"),
-      { type: "crossfade", phase: "start", at: 176_000 },
-      playing(176_000, "2", "b"),
-      { type: "crossfade", phase: "end", at: 178_000, reason: "skipped" },
-      moved(178_000, "3", "seek"),
-      playing(178_000, "3", "c"),
-    ]);
-    assert.deepEqual(ended.map((play) => [play.trackId, play.endReason, play.listenedMs]), [
-      ["a", "skipped", 177_000], ["b", "skipped", 2000],
-    ]);
-  });
-
-  test("a repeated short song has two plays during its overlap and counts the completed one", () => {
-    const { ended, started } = run([
-      playing(1000, "1", "a", { durationMs: 10_000 }),
-      { type: "crossfade", phase: "start", at: 6000 },
-      playing(6000, "1", "a", { durationMs: 10_000 }),
-      { type: "crossfade", phase: "end", at: 11_000, reason: "completed" },
-    ]);
-    assert.equal(started.length, 2);
-    assert.equal(ended[0]?.counted, true);
-    assert.equal(ended[0]?.listenedMs, 10_000);
-  });
-
   test("a track played through ends as a completed, counted play", () => {
     const { ended } = run([
       playing(1_000, "1", "a"),
@@ -574,5 +516,87 @@ describe("isCountedPlay", () => {
 
   test("never counts a play that wasn't listened to", () => {
     assert.equal(counted(0, 10_000, "completed"), false);
+  });
+});
+
+const fadeEnded = (at: number): PlaybackSignal => ({ type: "fadeEnded", at });
+
+describe("trackPlays with crossfade", () => {
+  /** Song "a" (entry 1) plays from 1 s; at 176 s it starts fading into "b" (entry 2). */
+  const overlap: readonly PlaybackSignal[] = [
+    playing(1000, "1", "a"),
+    moved(176_000, "2", "crossfade"),
+    playing(176_000, "2", "b"),
+  ];
+  test("the next song's play starts with the overlap, and the outgoing one ends when its fade does", () => {
+    const during = run(overlap);
+    assert.deepEqual(
+      during.started.map((play) => play.trackId),
+      ["a", "b"],
+    );
+    assert.deepEqual(during.ended, []);
+
+    const after = run([fadeEnded(181_000)], during.state);
+    assert.deepEqual(
+      after.ended.map((play) => [play.trackId, play.endReason, play.listenedMs, play.counted]),
+      [["a", "completed", 180_000, true]],
+    );
+    assert.equal(playSoFar(after.state, 181_000)?.trackId, "b");
+  });
+
+  test("the outgoing song's progress is kept until its fade ends", () => {
+    const { state } = run(overlap);
+    const fading = fadingPlaySoFar(state, 178_000);
+    assert.equal(fading?.trackId, "a");
+    assert.equal(fading?.listenedMs, 177_000);
+    assert.equal(fadingPlaySoFar(run([fadeEnded(181_000)], state).state, 182_000), null);
+  });
+
+  test("pausing during the overlap pauses both songs' listening time", () => {
+    const { ended, state } = run([
+      ...overlap,
+      paused(178_000, "2", "b"),
+      playing(188_000, "2", "b"),
+      fadeEnded(191_000),
+    ]);
+    assert.equal(ended[0]?.listenedMs, 180_000);
+    assert.equal(playSoFar(state, 191_000)?.listenedMs, 5000);
+  });
+
+  test("skipping during the overlap ends both: the outgoing song completed, the next one skipped", () => {
+    const { ended } = run([...overlap, moved(178_000, "3", "seek"), playing(178_000, "3", "c")]);
+    assert.deepEqual(
+      ended.map((play) => [play.trackId, play.endReason, play.listenedMs]),
+      [
+        ["a", "completed", 177_000],
+        ["b", "skipped", 2000],
+      ],
+    );
+  });
+
+  test("playback going away during the overlap cuts both songs short", () => {
+    const { ended, state } = run([...overlap, { ...paused(178_000, "2", "b"), status: "idle" }]);
+    assert.deepEqual(
+      ended.map((play) => [play.trackId, play.endReason]),
+      [
+        ["a", "interrupted"],
+        ["b", "interrupted"],
+      ],
+    );
+    assert.equal(fadingPlaySoFar(state, 179_000), null);
+  });
+
+  test("a streamed song fading into a Library song opens only the Library song's play", () => {
+    const { started, ended } = run([
+      playing(1000, "1", "yt:abc"),
+      moved(176_000, "2", "crossfade"),
+      playing(176_000, "2", "b"),
+      fadeEnded(181_000),
+    ]);
+    assert.deepEqual(
+      started.map((play) => play.trackId),
+      ["b"],
+    );
+    assert.deepEqual(ended, []);
   });
 });

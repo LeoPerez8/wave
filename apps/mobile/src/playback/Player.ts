@@ -1,4 +1,4 @@
-import { playerErrorNotice, type PlaybackSignal, type PlaySource, type RepeatMode, type SleepTimer } from "@wave/core";
+import { playerErrorNotice, type PlaySource, type RepeatMode, type SleepTimer } from "@wave/core";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -8,6 +8,7 @@ import type * as Scope from "effect/Scope";
 import { makeExternalStore } from "@/lib/externalStore";
 import {
   WavePlayer,
+  type CrossfadeEndedEvent,
   type ItemTransitionEvent,
   type NativeItemIds,
   type NativePlayerState,
@@ -89,8 +90,9 @@ export class Player extends Context.Service<
     readonly onSeek: (
       listener: (event: SeekEvent) => void,
     ) => Effect.Effect<void, never, Scope.Scope>;
+    /** Calls `listener` each time a crossfade's outgoing song goes silent, while the scope lives. */
     readonly onCrossfade: (
-      listener: (event: Extract<PlaybackSignal, { type: "crossfade" }>) => void,
+      listener: (event: CrossfadeEndedEvent) => void,
     ) => Effect.Effect<void, never, Scope.Scope>;
     readonly play: Effect.Effect<void, PlayerError>;
     readonly pause: Effect.Effect<void, PlayerError>;

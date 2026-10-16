@@ -48,6 +48,9 @@ const write = <A>(effect: Effect.Effect<A, unknown>): A | null => {
   return Exit.isSuccess(exit) ? exit.value : null;
 };
 
+/** A play's row, by its song and start: during a crossfade two plays are on record at once. */
+const identity = (play: PlayEvent): string => `${play.trackId}:${play.startedAt}`;
+
 /**
  * Records a play event for every time a track starts playing. Core's
  * `trackPlays` follows the player (state, item transitions, seeks) and says
@@ -55,6 +58,8 @@ const write = <A>(effect: Effect.Effect<A, unknown>): A | null => {
  * date (on pause, every 15 s, on leaving the app), so one cut short by Wave's
  * process dying is still on record, as interrupted (or stopped, if paused).
  * When JS restarts while the player kept going, the play on record goes on.
+ * During a crossfade the outgoing song's play goes on, alongside the next
+ * one's, until its fade ends.
  */
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
@@ -63,7 +68,6 @@ export const layer = Layer.effectDiscard(
 
     let tracker = EMPTY_PLAY_TRACKER;
     const rowIds = new Map<string, number>();
-    const identity = (play: PlayEvent): string => `${play.trackId}:${play.startedAt}`;
     let lastSave = 0;
     let wasPlaying = false;
     // Whether the player keeping a play going through a JS restart was checked for.
@@ -83,7 +87,7 @@ export const layer = Layer.effectDiscard(
       tracker = result.state;
       for (const step of result.steps) {
         if (step.type === "started") {
-          const rowId = write(store.recordPlay(step.play, tracker.fading != null));
+          const rowId = write(store.recordPlay(step.play, tracker.fading !== null));
           if (rowId !== null) rowIds.set(identity(step.play), rowId);
           lastSave = Date.now();
         } else {
@@ -145,10 +149,7 @@ export const layer = Layer.effectDiscard(
         toMs: event.toMs,
       }),
     );
-    yield* player.onCrossfade((event) => {
-      feed(event);
-      saveProgress();
-    });
+    yield* player.onCrossfade((event) => feed({ type: "fadeEnded", at: event.at }));
 
     yield* Effect.acquireRelease(
       Effect.sync(() => {

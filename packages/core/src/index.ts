@@ -120,6 +120,7 @@ export type { SleepTimer, SleepTimerChoice, SleepTimerClock } from "./sleepTimer
 export {
   COUNTED_PLAY_MS,
   EMPTY_PLAY_TRACKER,
+  fadingPlaySoFar,
   isCountedPlay,
   keptPlayingEntry,
   playSoFar,
@@ -895,5 +896,10 @@ export type {
   HomeSection,
   HomeSectionId,
 } from "./homeSections.ts";
-export { CROSSFADE, crossfadeDuration } from "./crossfade.ts";
-export { fadingPlaySoFar } from "./playEvents.ts";
+export {
+  CROSSFADE,
+  crossfadeDuration,
+  readCrossfade,
+  snapCrossfade,
+  type CrossfadeTransition,
+} from "./crossfade.ts";

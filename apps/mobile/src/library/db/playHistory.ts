@@ -49,13 +49,15 @@ const progress = (play: PlayEvent) => ({
 
 /**
  * Records a play as it starts, with its song's recording key, as the play
- * going on now (`ongoing`: the one before, if it never ended, is over);
+ * going on now (`ongoing`: the one before, if it never ended, is over, unless
+ * it's [overlapping], still fading out in a crossfade and ended on its own);
  * returns its row id, to update it as it goes on.
  */
 export const recordPlay = (db: LibraryDatabase, play: PlayEvent, overlapping = false): number =>
   db.transaction((tx) => {
     const { playEvents } = schema;
-    if (!overlapping) tx.update(playEvents).set({ ongoing: false }).where(eq(playEvents.ongoing, true)).run();
+    if (!overlapping)
+      tx.update(playEvents).set({ ongoing: false }).where(eq(playEvents.ongoing, true)).run();
     return tx
       .insert(playEvents)
       .values({

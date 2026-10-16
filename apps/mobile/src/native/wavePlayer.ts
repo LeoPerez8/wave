@@ -1,4 +1,4 @@
-import type { AutoLyricsFrame, PlaybackSignal, PlaySource, RepeatMode, SleepTimer } from "@wave/core";
+import type { AutoLyricsFrame, PlaySource, RepeatMode, SleepTimer } from "@wave/core";
 import { NativeModule, requireNativeModule } from "expo";
 
 /** One track handed to the native player (`modules/wave-native`, `WavePlayerModule`). */
@@ -142,8 +142,14 @@ export interface AutoLyricsEvent {
   readonly carConnected: boolean;
 }
 
+/** The song fading out in a crossfade went silent, or was cut off by a skip. */
+export interface CrossfadeEndedEvent {
+  /** Wall-clock ms. */
+  readonly at: number;
+}
+
 type WavePlayerEvents = {
-  onCrossfade: (event: Extract<PlaybackSignal, { type: "crossfade" }>) => void;
+  onCrossfade: (event: CrossfadeEndedEvent) => void;
   onPlaybackState: (state: NativePlayerState) => void;
   onPosition: (position: PlayerPosition) => void;
   onItemTransition: (event: ItemTransitionEvent) => void;
@@ -155,7 +161,11 @@ type WavePlayerEvents = {
 };
 
 declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
-  /** Core's permitted natural overlap; runs in the service while JS is suspended. */
+  /**
+   * The overlap for songs ending on their own, in ms (Core's
+   * `crossfadeDuration`; 0 is off). Kept natively, so the service fades while
+   * JS is suspended too.
+   */
   setCrossfadeDuration(durationMs: number): Promise<void>;
   /** Edits the item list per the plan; `items` holds only the keys new to the player. */
   applySync(steps: readonly NativeSyncStep[], items: readonly PlayerItem[]): Promise<void>;
