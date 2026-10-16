@@ -323,8 +323,8 @@ export const playPlaylist = async (
   const files = leaveOutMissing(entries, listedStart, notMissing, (entry) =>
     entry.source === "library" ? entry.track : null,
   );
-  // A missing song tapped, or nothing but missing songs: YT Music isn't why.
-  if (files === null) return true;
+  // A missing song tapped, or nothing but missing songs and unavailable entries: YT Music isn't why.
+  if (files === null || files.songs.every((entry) => entry.source === "unavailable")) return true;
   const play = playlistPlayback(files.songs, {
     ytMusic: ytMusicEnabled(),
     startIndex: files.startIndex,
