@@ -48,6 +48,7 @@ node scripts/perf/perf.ts run --dry-run             # the whole pipeline on a si
   result and the profile's size (`artProfile`). Use it whenever before and after ship different
   profiles (#317).
 - `--import-link <url>`: overrides the fixture's playlist link.
+- `--artist <name>`: overrides the fixture's artist (`push-artist`).
 - `--meta key=value`: records a value as given. On a plain APK, pass the Library's size this way
   (`--meta library.tracks=12000 --meta library.playEvents=54000`).
 - `--perfetto`: records a Perfetto trace per scenario under `perf-results/traces/`.
@@ -75,6 +76,11 @@ EXPO_PUBLIC_WAVE_PERF=1 EXPO_PUBLIC_WAVE_COMMIT=$(git rev-parse --short HEAD) \
   ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a
 ```
 
+For a **stall build**, add `EXPO_PUBLIC_WAVE_PERF_STALL_MS=<ms>`: every touch then blocks the
+JavaScript thread that long (a busy loop in the root view's touch handler), a controlled stand-in
+for an import's work. What still moves in the window is what doesn't wait for JavaScript. The
+run's `app` metadata records it as `stallMs` (0 in a plain perf build).
+
 Delete Metro's cache too (`$TMPDIR/metro-cache`) when switching between perf and plain builds. The
 run's first line says whether the app on the phone is a perf build. A perf build has the same
 version, package and signature as the release it's built from, so it installs over it in place.
@@ -89,6 +95,9 @@ version, package and signature as the release it's built from, so it installs ov
 - `importLink`: a public playlist link for the large import, shared to Wave as a share sheet would.
   **Not set yet.** Pick a YouTube Music or Spotify playlist of at least 2,000 songs and commit its
   link here. The import variant can't run without it.
+- `artist`: the artist `push-artist` opens, by name as Library › Artists shows it. **Not set
+  yet.** Pick an artist with a long play history that shows on the list's first screen without
+  scrolling, and commit the name here. `push-artist` can't run without it. `--artist` overrides it.
 - `settleMs`, `windowMs`, `launchSettleMs`, `memoryIdleMs`, `flushTimeoutMs`: timing (below).
 
 The phone, for runs that compare:
@@ -114,23 +123,38 @@ aren't recorded. Every measured navigation step is a tap, so it has a touch to m
 pops tap the header's Back button, and Now Playing closes with its Close button. Only the cold
 launch, the share and the import's idle window have no touch.
 
-| Scenario           | Steps (measure)                                                                     | Response mark             | Iterations |
-| ------------------ | ----------------------------------------------------------------------------------- | ------------------------- | ---------: |
-| `startup`          | cold launch (`cold`)                                                                | (am start -W)             |          5 |
-| `warm-start`       | Home, then Wave's launcher intent with its process alive (`warm`)                   | (am start -W)             |          5 |
-| `tab-switch`       | ten tab taps cycling through `tabs` (`tab`)                                         | `route`                   |          3 |
-| `rapid-tabs`       | ten tab taps back to back, measured from the last (`burst`)                         | `route`                   |          5 |
-| `push-settings`    | Home › Settings (`push`), Back (`pop`)                                              | `route`                   |         10 |
-| `push-library`     | Library › Albums (`push`), Back (`pop`)                                             | `route`                   |         10 |
-| `push-tracklist`   | Library › Songs, the whole Library as a Track list (`push`), Back (`pop`)           | `route`                   |         10 |
-| `push-empty`       | Settings › Developer, one row: the empty-screen control (`push`, `pop`)             | `route`                   |         10 |
-| `now-playing`      | mini player (`open`), Close Now Playing (`close`)                                   | `nowPlaying.shown/hidden` |         10 |
-| `queue`            | Queue in Now Playing (`open`), Queue again (`close`)                                | `visible` queue           |         10 |
-| `search-first-tap` | the first Search tap after a fresh launch (`first-tap`)                             | `keyboard.show`           |          5 |
-| `import`           | share the link (`card`), tap Import (`start`), 10 s of the import (`during-import`) | `import.running`          |          1 |
+| Scenario           | Steps (measure)                                                                      | Response mark             | Iterations |
+| ------------------ | ------------------------------------------------------------------------------------ | ------------------------- | ---------: |
+| `startup`          | cold launch (`cold`)                                                                 | (am start -W)             |          5 |
+| `warm-start`       | Home, then Wave's launcher intent with its process alive (`warm`)                    | (am start -W)             |          5 |
+| `tab-switch`       | ten tab taps cycling through `tabs` (`tab`)                                          | `route`                   |          3 |
+| `rapid-tabs`       | ten tab taps back to back, measured from the last (`burst`)                          | `route`                   |          5 |
+| `push-settings`    | Home › Settings (`push`), Back (`pop`)                                               | `route`                   |         10 |
+| `push-library`     | Library › Albums (`push`), Back (`pop`)                                              | `route`                   |         10 |
+| `push-tracklist`   | Library › Songs, the whole Library as a Track list (`push`), Back (`pop`)            | `route`                   |         10 |
+| `push-artist`      | Library › Artists › the fixture's artist, to its stats block (`push`), Back (`pop`)  | `artist.stats`, `route`   |         10 |
+| `push-empty`       | Settings › Developer, one row: the empty-screen control (`push`, `pop`)              | `route`                   |         10 |
+| `now-playing`      | mini player (`open`), Close Now Playing (`close`)                                    | `nowPlaying.shown/hidden` |         10 |
+| `queue`            | Queue in Now Playing (`open`), Queue again (`close`)                                 | `visible` queue           |         10 |
+| `skip`             | the mini player's Next track (`next`)                                                | `queue.synced`            |         10 |
+| `scrub`            | Now Playing's scrubber dragged 240 dp forward (`forward`), then back (`back`)        | (none)                    |         10 |
+| `queue-drag`       | The first Up Next row dragged three rows down by its handle (`down`), then up (`up`) | (none)                    |         10 |
+| `search-first-tap` | the first Search tap after a fresh launch (`first-tap`)                              | `keyboard.show`           |          5 |
+| `import`           | share the link (`card`), tap Import (`start`), 10 s of the import (`during-import`)  | `import.running`          |          1 |
+
+`skip` measures how long a skip takes to reach the player, so it depends on the queue's length:
+load the queue under test before the run (a short album, or the whole Library as Songs) and leave
+it paused. Each iteration moves one entry on, so start far enough from the end.
 
 `push-empty` is the control: navigation with next to nothing to render. If it's as slow as
 `push-settings`, the cost is in navigation itself, not in what the screen shows.
+
+`scrub` and `queue-drag` are drags (`input swipe`), given in dp from a target's centre and turned
+into pixels at the phone's density (`wm density`). Each scrub seeks where it lets go. The queue
+drag starts at the first row's handle (48 dp right of its Remove button: the handles are hidden
+from accessibility) and needs four songs up next; the second drag puts the row back. A drag has
+no response mark: compare its frames, first frame and settle, and the renders and `js:` counts
+(below).
 
 ### Variants
 
@@ -215,7 +239,8 @@ measured. Records, in order:
     build's first flush metadata); `manual` (`--meta`).
 - `step`, one per measured step: `scenario`, `variant`, `measure`, `iteration`, `index`, the
   metrics above, `touchAt`, `expectMissing`, `framesCovered`, `finalRoute`, `flushComplete`, and
-  `launch` and `appStartup` for a cold launch, `importProgress` while an import runs.
+  `launch` and `appStartup` for a cold launch, `importProgress` while an import runs, and
+  `libraryQueries` on a perf build (the shared Library queries' counters since launch, below).
 - `memory`, one per scenario: `scenario`, `variant` and the `dumpsys meminfo` fields in KB.
 - `trace`, one per scenario with `--perfetto`: the local `.pftrace` path.
 - `error`: a scenario that couldn't go on (target not found, Wave not in front, no import link) and
@@ -229,9 +254,10 @@ measured. Records, in order:
 `apps/mobile/src/perf/perf.ts`:
 
 ```ts
-import { perfMark, registerPerfMeta, usePerfVisible, useRenderCount } from "@/perf/perf";
+import { perfCount, perfMark, registerPerfMeta, usePerfVisible, useRenderCount } from "@/perf/perf";
 
 useRenderCount("UpNextList"); // first line of a component: counts its renders
+perfCount("scrub.release"); // counts a call a gesture made to JavaScript, reported as renders of `js:scrub.release`
 usePerfVisible("queue"); // marks `visible` "queue" on the first frame after mount
 perfMark("import.running", String(total)); // a timing mark, name `area.event`, optional detail
 registerPerfMeta("import", () => ({ done, total })); // reported with each flush
@@ -247,10 +273,22 @@ ticket needs evidence, and give a new response mark a scenario step's `expect` i
 - `nowPlaying.shown`, `nowPlaying.hidden`;
 - `visible` "queue" (Up Next mounted);
 - `import.running` (songs in the import), `import.idle`;
+- `queue.synced` (the plan's step types and the queue's length, e.g. `seek 4210`), each time the
+  player took a queue change;
+- `artist.stats` ("played" or "not played"), on the frame after an artist page's stats block
+  shows what it read (again after each re-read);
 - touches with their native timestamp, from the root view's `onTouchStart`.
 
+Each flush also reports the shared Library queries' counters since launch, as `libraryQueries.*`
+(Core's `LibraryQueryStats`, #309): `reads` started, `shared` (a screen served from a current
+result or a read under way), `paused` (changes a hidden screen waited out), `discarded` (results an
+edit overtook), `evicted`, and `entries`, `retained`, `consumers` at the flush. The runner copies
+them to each step as `libraryQueries`; a step's reads are its `reads` minus the previous step's.
+
 Render counts are in RootLayout, TabsLayout, LibraryLayout, TabBar, MiniPlayer, NowPlayingSheet,
-UpNextList, HomeScreen, LibraryScreen, SearchScreen, SettingsScreen, SongsList and TrackList.
+PlayerView, UpNextList, UpNextRow, Scrubber, HomeScreen, LibraryScreen, SearchScreen,
+SettingsScreen, LargeTitleScreen (Home's and Library's), SongsList, TrackList and ArtistStatsBlock.
+Gesture calls to JavaScript are counted as `js:scrub.*` and `js:upNext.*` (#313).
 
 A new scenario goes in `SCENARIOS` (`scripts/perf/scenarios.ts`). Then make the simulated phone in
 `fakeDevice.ts` answer it, so `--dry-run` and the tests cover it.
@@ -296,7 +334,8 @@ Things only a phone can confirm, to check on the first device run:
   every step waits out its flush timeout.
 - gfxinfo's `framestats` columns and the `dumpsys` shapes match the parsers on One UI.
 - `uiautomator dump` finds each target. Labels: the tab labels, `Settings`, `Back`, `Albums`,
-  `Songs`, `Developer`, `Now playing: …`, `Close Now Playing`, `Queue`, `Import`.
+  `Songs`, `Artists`, the fixture's artist, `Developer`, `Now playing: …`, `Close Now Playing`,
+  `Queue`, `Next track`, `Import`.
 
 ## A ticket's performance doc
 

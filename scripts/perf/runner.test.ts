@@ -19,7 +19,7 @@ const options = (name: string, overrides: Partial<RunOptions> = {}): RunOptions 
   scenarios: ALL_SCENARIOS,
   variants: ["idle"],
   iterations: 2,
-  config: { tabs: ["Home", "Library", "Playlists"] },
+  config: { tabs: ["Home", "Library", "Playlists"], artist: "Radiohead" },
   importLink: "https://music.youtube.com/playlist?list=PLdryrun",
   settleMs: 1_200,
   windowMs: 2_500,
@@ -78,12 +78,19 @@ describe("runPerf on the simulated phone", () => {
       "push-library/idle/pop",
       "push-tracklist/idle/push",
       "push-tracklist/idle/pop",
+      "push-artist/idle/push",
+      "push-artist/idle/pop",
       "push-empty/idle/push",
       "push-empty/idle/pop",
       "now-playing/idle/open",
       "now-playing/idle/close",
       "queue/idle/open",
       "queue/idle/close",
+      "skip/idle/next",
+      "scrub/idle/forward",
+      "scrub/idle/back",
+      "queue-drag/idle/down",
+      "queue-drag/idle/up",
       "search-first-tap/idle/first-tap",
     ]);
     const expecting = steps.filter((step) => step.expectMissing !== null);
@@ -110,6 +117,24 @@ describe("runPerf on the simulated phone", () => {
     assert.deepEqual(run?.compilation, { status: "speed-profile", reason: "cmdline" });
     // The simulated APK ships two rules (one class, one method); what the phone learned is gone.
     assert.deepEqual(run?.artProfile, { install: "INSTALL_SUCCESS", classes: 1, methods: 1 });
+  });
+
+  it("drags in dp from its target, at the phone's density", async () => {
+    const device = new FakeDevice();
+    await runPerf(device, options("drag", { scenarios: ["scrub", "queue-drag"], iterations: 1 }));
+    const swipes = device.commands.filter((command) => command.startsWith("input swipe"));
+    // The simulated phone draws 3 px a dp. Its scrubber is centred at (720, 2248), and
+    // the first Up Next row's Remove button at (1200, 900), with the handle 48 dp right of it.
+    // A warm-up iteration, then the measured one, for each scenario.
+    assert.equal(swipes.length, 8);
+    assert.deepEqual(swipes.slice(0, 2), [
+      "input swipe 360 2248 1080 2248 1000",
+      "input swipe 1080 2248 360 2248 1000",
+    ]);
+    assert.deepEqual(swipes.slice(-2), [
+      "input swipe 1344 900 1344 1404 800",
+      "input swipe 1344 1404 1344 900 800",
+    ]);
   });
 
   it("times cold launches", async () => {
@@ -146,6 +171,20 @@ describe("runPerf on the simulated phone", () => {
     assert.ok(pushes.every((step) => step.importProgress?.running === true));
   });
 
+  it("records the shared Library queries' counters with each step of a perf build", async () => {
+    const { out } = await runPerf(
+      new FakeDevice(),
+      options("queries", { scenarios: ["push-settings"] }),
+    );
+    const { steps } = readResults(readFileSync(out, "utf8"));
+    const queries = (steps as (StepRecord & { libraryQueries?: Record<string, unknown> })[]).map(
+      (step) => step.libraryQueries,
+    );
+    assert.ok(queries.length > 0);
+    assert.ok(queries.every((counters) => typeof counters?.["reads"] === "number"));
+    assert.ok(queries.every((counters) => typeof counters?.["paused"] === "number"));
+  });
+
   it("records a scenario it can't run and goes on", async () => {
     const { out } = await runPerf(
       new FakeDevice(),
@@ -158,6 +197,20 @@ describe("runPerf on the simulated phone", () => {
     const { errors, steps } = readResults(readFileSync(out, "utf8"));
     assert.equal(errors[0]?.scenario, "import");
     assert.match(errors[0]?.message ?? "", /importLink/);
+    assert.ok(steps.some((step) => step.scenario === "push-settings"));
+  });
+
+  it("records push-artist as one it can't run when the fixture names no artist", async () => {
+    const { out } = await runPerf(
+      new FakeDevice(),
+      options("no-artist", {
+        config: { tabs: ["Home", "Library", "Playlists"], artist: null },
+        scenarios: ["push-artist", "push-settings"],
+      }),
+    );
+    const { errors, steps } = readResults(readFileSync(out, "utf8"));
+    assert.equal(errors[0]?.scenario, "push-artist");
+    assert.match(errors[0]?.message ?? "", /artist/);
     assert.ok(steps.some((step) => step.scenario === "push-settings"));
   });
 

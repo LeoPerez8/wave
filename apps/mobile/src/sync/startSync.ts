@@ -3,7 +3,7 @@ import { onFavoritesSaved, reloadFavorites } from "@/library/favorites";
 import { onPlaylistsEdited, playlistsChanged } from "@/library/playlists";
 import { appRuntime } from "@/library/runtime";
 import { WaveSoulseek } from "@/native/waveSoulseek";
-import { playHistoryVersion } from "@/playback/PlayHistory";
+import { playHistoryChanged, playHistoryVersion } from "@/playback/PlayHistory";
 import { followPulledBestQuality } from "@/settings/bestQuality";
 
 import type { SyncedChanges } from "./syncCycle";
@@ -24,7 +24,7 @@ const showPulled = (changes: SyncedChanges): void => {
   if (changes.library) libraryEdited();
   if (changes.playlists) playlistsChanged();
   if (changes.favorites) reloadFavorites();
-  if (changes.plays) playHistoryVersion.update((version) => version + 1);
+  if (changes.plays) playHistoryChanged();
 };
 
 /**

@@ -71,12 +71,21 @@ object QueueSnapshot {
   @Volatile var resumed = false
 }
 
-/** The controller's item list, edited in place so the playing item keeps playing. */
+/**
+ * The controller's item list, edited in place so the playing item keeps
+ * playing. Reads go to the controller's current timeline each time: nothing is
+ * cached between syncs, so changes made elsewhere (Android Auto, playback
+ * resumption) are never missed. Main thread only, like the controller.
+ */
 private class ControllerPlaylist(private val player: Player) : PlaylistEditor<MediaItem> {
-  override val keys: List<String>
-    get() = (0 until player.mediaItemCount).map { player.getMediaItemAt(it).mediaId }
+  override val size: Int
+    get() = player.mediaItemCount
   override val currentKey: String?
     get() = player.currentMediaItem?.mediaId
+
+  override fun keyAt(index: Int): String = player.getMediaItemAt(index).mediaId
+
+  override fun itemAt(index: Int): MediaItem = player.getMediaItemAt(index)
 
   override fun clear() = player.clearMediaItems()
 
@@ -211,19 +220,17 @@ class WavePlayerModule : Module() {
 
     /**
      * Applies Core's sync plan. Items already loaded are reused by key, so JS
-     * only sends [items] for keys new to the player.
+     * only sends [items] for keys new to the player; [QueueSync] reads loaded
+     * ones only when a step re-inserts them, so a skip doesn't walk the list.
      */
     AsyncFunction("applySync") { steps: List<SyncStepRecord>, items: List<PlayerItem>, promise: Promise ->
       withController(promise) { player ->
-        val loaded = (0 until player.mediaItemCount)
-          .map { player.getMediaItemAt(it) }
-          .associateBy { it.mediaId }
         val incoming = items.associate { it.id to toMediaItem(it) }
         syncing = true
         QueueSnapshot.resumed = false
         try {
           val plan = steps.map { SyncStep.of(it.type, it.at, it.removeCount, it.keys, it.index, it.key) }
-          QueueSync.apply(plan, ControllerPlaylist(player)) { key -> incoming[key] ?: loaded[key] }
+          QueueSync.apply(plan, ControllerPlaylist(player), incoming)
           if (player.playbackState == Player.STATE_IDLE && player.mediaItemCount > 0) player.prepare()
           promise.resolve(null)
         } catch (error: IllegalArgumentException) {

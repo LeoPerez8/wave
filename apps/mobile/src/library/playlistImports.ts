@@ -159,7 +159,8 @@ const give = async (
   { songs, through }: ImportAdditions<YtAlbumSong>,
 ): Promise<void> => {
   try {
-    if (songs.length > 0) await addToPlaylist(playlistId, songs);
+    // Additions as the import fills: screens take them at their own pace, hidden ones on return.
+    if (songs.length > 0) await addToPlaylist(playlistId, songs, { burst: true });
   } catch (error) {
     const kept = (await currentPlaylists().catch(() => [])).some(({ id }) => id === playlistId);
     setImports(withoutPlaylistImport(imports.get(), playlistId));

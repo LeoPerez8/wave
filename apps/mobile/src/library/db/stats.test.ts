@@ -1,5 +1,12 @@
 /// <reference types="node" />
-import { albumPlayTotals, artistPlayTotals, artistStats, type PlayEvent } from "@wave/core";
+import {
+  albumPlayTotals,
+  artistPlayTotals,
+  artistStats,
+  statsWindow,
+  type PlayEvent,
+  type SongListening,
+} from "@wave/core";
 import { eq, sql } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { beforeEach, describe, test } from "node:test";
@@ -8,8 +15,20 @@ import { creditSplits, relinkCredits } from "./credits.ts";
 import { recordPlay } from "./playHistory.ts";
 import { removeTracks } from "./save.ts";
 import * as schema from "./schema.ts";
-import { creditedPlayTotals, songListening, songsCrediting, trackPlayTotals } from "./stats.ts";
-import { addTrack, openTestDatabase, type TestDatabase } from "./testDatabase.ts";
+import {
+  artistPlays,
+  creditedPlayTotals,
+  songListening,
+  songsCrediting,
+  trackPlayTotals,
+} from "./stats.ts";
+import {
+  addHistory,
+  addTrack,
+  openTestDatabase,
+  traceQueries,
+  type TestDatabase,
+} from "./testDatabase.ts";
 import { deleteTracks } from "./tracks.ts";
 
 /** A counted play of `trackId` that started at `startedAt`. */
@@ -371,8 +390,7 @@ describe("Per-album, per-track-artist play totals", () => {
   });
 });
 
-const byTrack = (rows: ReturnType<typeof songListening>) =>
-  rows.toSorted((a, b) => a.trackId - b.trackId);
+const byTrack = (rows: readonly SongListening[]) => rows.toSorted((a, b) => a.trackId - b.trackId);
 
 describe("Per-song listening over all time", () => {
   test("sum every play's time, the counted plays and the latest play, with the song's artists", () => {
@@ -491,13 +509,7 @@ describe("Artist page stats", () => {
 
     const miles = creditOf(so).artistId;
     const all = { from: null, to: 10_000 };
-    const stats = artistStats({
-      artistId: miles,
-      songIds: songsCrediting(db, miles),
-      listening: songListening(db),
-      songPlays: trackPlayTotals(db, all),
-      now: 10_000,
-    });
+    const stats = artistStats({ artistId: miles, now: 10_000, ...artistPlays(db, miles, 10_000) });
     const inStats = artistPlayTotals(creditedPlayTotals(db, all)).find((a) => a.id === miles);
 
     // The deleted song's play still counts, on the page as in Stats.
@@ -536,13 +548,8 @@ describe("Artist page stats", () => {
     deleteSongs(gone);
     const all = { from: null, to: 10_000 };
     const page = (name: string) => {
-      const stats = artistStats({
-        artistId: artistNamed(name),
-        songIds: songsCrediting(db, artistNamed(name)),
-        listening: songListening(db),
-        songPlays: trackPlayTotals(db, all),
-        now: 10_000,
-      });
+      const artistId = artistNamed(name);
+      const stats = artistStats({ artistId, now: 10_000, ...artistPlays(db, artistId, 10_000) });
       return stats.played
         ? [stats.plays, stats.songsListened, stats.mostPlayed.map((song) => song.id)]
         : [];
@@ -559,5 +566,157 @@ describe("Artist page stats", () => {
       ["doja cat", 3],
       ["sza", 1],
     ]);
+  });
+});
+
+/** The id of the song titled `title`. */
+const songTitled = (title: string): number => {
+  const track = db.select().from(schema.tracks).where(eq(schema.tracks.title, title)).get();
+  if (track === undefined) throw new Error(`no song ${title}`);
+  return track.id;
+};
+
+const everyArtist = () => db.select({ id: schema.artists.id }).from(schema.artists).all();
+
+/** The plan steps that read a whole table the history or the credits live in. */
+const wholeTableReads = (plan: readonly string[]) =>
+  plan.filter((step) =>
+    /^SCAN (play_events|tracks|track_artists|deleted_track_artists)\b/.test(step),
+  );
+
+describe("One artist's plays", () => {
+  const now = 100_000;
+
+  /** The stats block as the page read it before: from the whole history. */
+  const fromWholeHistory = (artistId: number) =>
+    artistStats({
+      artistId,
+      songIds: songsCrediting(db, artistId),
+      listening: songListening(db),
+      songPlays: trackPlayTotals(db, statsWindow("all", now)),
+      now,
+    });
+
+  /** The stats block from the artist's own plays. */
+  const fromArtistPlays = (artistId: number) =>
+    artistStats({ artistId, now, ...artistPlays(db, artistId, now) });
+
+  /**
+   * Collaborations, compilations, songs deleted with and without their kept
+   * credits, skips, ties, a play stamped after `now` and an unplayed artist.
+   */
+  const seedLibrary = () => {
+    addCredited(
+      { title: "So What", artist: "Miles Davis", album: "Kind of Blue" },
+      { title: "Blue in Green", artist: "Miles Davis", album: "Kind of Blue" },
+      {
+        title: "Milestones",
+        artist: "Miles Davis",
+        album: "Jazz Hits",
+        albumArtist: "Various Artists",
+      },
+      { title: "Freddie Freeloader", artist: "Miles Davis", album: "Kind of Blue" },
+      { title: "All Blues", artist: "Miles Davis", album: "Kind of Blue" },
+      {
+        title: "motive",
+        artist: "Ariana Grande, Doja Cat",
+        album: "Positions",
+        albumArtist: "Ariana Grande",
+      },
+      { title: "34+35", artist: "Ariana Grande", album: "Positions" },
+      { title: "boyfriend", artist: "Ariana Grande · Social House", album: "boyfriend" },
+      { title: "Early", artist: "Miles Davis", album: "Birth of the Cool" },
+      {
+        title: "Naima",
+        artist: "John Coltrane",
+        album: "Jazz Hits",
+        albumArtist: "Various Artists",
+      },
+      { title: "Only skipped", artist: "Cannonball Adderley", album: "Somethin' Else" },
+      { title: "Never played", artist: "Bill Evans", album: "Portrait in Jazz" },
+    );
+    const plays: [string, number, Partial<PlayEvent>?][] = [
+      ["So What", 1_000],
+      ["So What", 2_000],
+      ["So What", 3_000, skip],
+      // Milestones and Freddie tie on plays and time; Freddie was played last.
+      ["Milestones", 4_000],
+      ["Freddie Freeloader", 5_000],
+      // All Blues ties with Milestones on everything up to now but the title.
+      ["All Blues", 4_000],
+      // Stamped after now: listening counts it, the ranking's window doesn't.
+      ["All Blues", now + 5_000],
+      ["motive", 6_000],
+      ["motive", 7_000],
+      ["34+35", 8_000, skip],
+      ["boyfriend", 9_000],
+      ["Early", 10_000],
+      ["Naima", 11_000],
+      ["Only skipped", 12_000, skip],
+    ];
+    for (const [title, startedAt, overrides] of plays) {
+      recordPlay(db, play(songTitled(title), startedAt, overrides));
+    }
+    // Deleted with its credits kept, and as before Wave kept them.
+    deleteSongs(songTitled("boyfriend"));
+    db.delete(schema.tracks)
+      .where(eq(schema.tracks.id, songTitled("Early")))
+      .run();
+  };
+
+  test("read the same stats block as the whole history, for every artist", () => {
+    seedLibrary();
+
+    for (const { id } of everyArtist()) {
+      assert.deepEqual(fromArtistPlays(id), fromWholeHistory(id), `artist ${id}`);
+    }
+  });
+
+  test("hold the listening of exactly the songs whose credit names the artist", () => {
+    seedLibrary();
+
+    for (const { id } of everyArtist()) {
+      assert.deepEqual(
+        byTrack(artistPlays(db, id, now).listening),
+        byTrack(songListening(db).filter((song) => song.artistIds.includes(id))),
+        `artist ${id}`,
+      );
+    }
+  });
+
+  test("find the artist's songs and their plays through indexes, never reading a whole table", () => {
+    seedLibrary();
+    const { queries } = traceQueries(db, () => artistPlays(db, artistNamed("Miles Davis"), now));
+
+    for (const query of queries) assert.deepEqual(wholeTableReads(query.plan), [], query.sql);
+    const plans = queries.flatMap((query) => query.plan);
+    for (const index of [
+      "track_artists_artist_idx",
+      "deleted_track_artists_artist_idx",
+      "play_events_track_idx",
+    ]) {
+      assert.ok(
+        plans.some((step) => step.startsWith("SEARCH") && step.includes(index)),
+        `${index} in ${plans.join("; ")}`,
+      );
+    }
+  });
+
+  test("read the same rows however much of the history is other artists'", () => {
+    seedLibrary();
+    const miles = artistNamed("Miles Davis");
+    const read = () => traceQueries(db, () => artistPlays(db, miles, now));
+    const before = read();
+
+    addHistory(db, { artist: "Herbie Hancock", tracks: 2_000, plays: 30_000 });
+    addHistory(db, { artist: "Wayne Shorter", tracks: 500, plays: 10_000 });
+    const after = read();
+
+    assert.deepEqual(after.result, before.result);
+    assert.deepEqual(
+      after.queries.map((query) => query.rows),
+      before.queries.map((query) => query.rows),
+    );
+    assert.equal(after.queries.length, 3);
   });
 });

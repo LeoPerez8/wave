@@ -14,6 +14,7 @@ import {
   findNode,
   parseAmStart,
   parseCompilation,
+  parseDensity,
   parseGetprop,
   parseGfxinfo,
   parseMeminfo,
@@ -98,7 +99,8 @@ const tapCommand = ({ x, y }: { x: number; y: number }): string => `input tap ${
 
 const ms = (value: number | null): string => (value === null ? "-" : `${value} ms`);
 
-const touches = (action: Action): boolean => action.kind === "tap" || action.kind === "taps";
+const touches = (action: Action): boolean =>
+  action.kind === "tap" || action.kind === "taps" || action.kind === "drag";
 
 /** Several flushes as one: their entries in order, their renders added up, the last meta. */
 const merge = (flushes: readonly PerfFlush[]): PerfFlush | null => {
@@ -197,11 +199,29 @@ export const runPerf = async (
     throw new ScenarioError(`Couldn't find ${key} on screen.`);
   };
 
+  let pxPerDp: number | null = null;
+  /** Pixels per dp on the phone, read once. */
+  const density = async (): Promise<number> => {
+    if (pxPerDp === null) {
+      const dpi = parseDensity(await shell("wm density"));
+      if (dpi === null) throw new ScenarioError("Couldn't read the screen density (wm density).");
+      pxPerDp = dpi / 160;
+    }
+    return pxPerDp;
+  };
+
   /** Finds the targets [action] taps before any window opens, so finding them is never measured. */
   const prepare = async (action: Action): Promise<string | null> => {
     switch (action.kind) {
       case "tap":
         return tapCommand(await resolve(action.target));
+      case "drag": {
+        const centre = await resolve(action.target);
+        const scale = await density();
+        const at = ({ x, y }: { x: number; y: number }): string =>
+          `${Math.round(centre.x + x * scale)} ${Math.round(centre.y + y * scale)}`;
+        return `input swipe ${at(action.from)} ${at(action.to)} ${action.durationMs}`;
+      }
       case "taps": {
         const commands: string[] = [];
         for (const target of action.targets) commands.push(tapCommand(await resolve(target)));
@@ -348,6 +368,11 @@ export const runPerf = async (
     });
     const meta = perf?.meta ?? {};
     const importRunning = meta["import.running"];
+    const libraryQueries = Object.fromEntries(
+      Object.entries(meta)
+        .filter(([key]) => key.startsWith("libraryQueries."))
+        .map(([key, value]) => [key.slice("libraryQueries.".length), value]),
+    );
     const record: StepRecord & Record<string, unknown> = {
       type: "step",
       run,
@@ -375,6 +400,8 @@ export const runPerf = async (
             },
           }
         : {}),
+      // Counters since launch: compare a step's with the one before it for its reads.
+      ...(Object.keys(libraryQueries).length > 0 ? { libraryQueries } : {}),
     };
     write(record);
     log(
@@ -428,6 +455,10 @@ export const runPerf = async (
       if (scenario.needsImportLink === true && options.importLink === null)
         throw new ScenarioError(
           "The fixture has no importLink (scripts/perf/fixture.json or --import-link).",
+        );
+      if (scenario.needsArtist === true && options.config.artist === null)
+        throw new ScenarioError(
+          "The fixture has no artist (scripts/perf/fixture.json or --artist).",
         );
       if (scenario.coldEachIteration !== true) await start();
       const iterations = options.iterations ?? scenario.iterations;
@@ -502,6 +533,7 @@ export const runPerf = async (
       compile: options.compile,
       perfetto: options.perfetto !== null,
       tabs: options.config.tabs,
+      artist: options.config.artist,
     },
     ...meta,
     ...(options.compile === "baseline" ? { artProfile } : {}),

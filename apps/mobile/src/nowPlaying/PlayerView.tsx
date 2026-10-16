@@ -1,7 +1,6 @@
 import { IconMusic, IconStar, IconStarFilled } from "@tabler/icons-react-native";
 import { artistLink, parseTrackId } from "@wave/core";
 import { Image } from "expo-image";
-import { usePathname } from "expo-router";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { Text, View } from "react-native";
 import Animated, {
@@ -16,8 +15,9 @@ import { followArtistLink, followStreamedArtistLink } from "@/library/ArtistChoi
 import { toggleFavorite, useIsFavorite } from "@/library/favorites";
 import { useLinkRows } from "@/library/hooks";
 import type { TrackDetails } from "@/library/LibraryStore";
-import { openAlbum } from "@/library/routes";
+import { openAlbum, useCurrentPath } from "@/library/routes";
 import { Press } from "@/motion/Press";
+import { useRenderCount } from "@/perf/perf";
 import { useCurrentTrackId } from "@/playback/hooks";
 import { playbackState, type PlaybackState } from "@/playback/Player";
 import { queueTracks, type QueueTrack } from "@/playback/queueTracks";
@@ -170,6 +170,7 @@ type Props = {
  * page, else the YouTube Music artist page) while YT Music is on.
  */
 export function PlayerView({ item, details, playing }: Props) {
+  useRenderCount("PlayerView");
   const title = item.title ?? "Unknown title";
   const artist = details?.artist ?? item.artist ?? "Unknown Artist";
   const album = details?.album ?? item.album ?? "Unknown Album";
@@ -179,7 +180,8 @@ export function PlayerView({ item, details, playing }: Props) {
   const shown = useNowPlayingShown();
   // One artist opens straight away, several open the choice Go to Artist
   // offers; on an artist's page, they're left out (Core's `artistLink`).
-  const here = usePathname();
+  // Followed only while shown: navigation under a closed Now Playing doesn't render it.
+  const here = useCurrentPath(shown);
   const artistTo = details === null ? undefined : artistLink(details.artistIds, here);
   const links = useLinkRows(
     shown ? details?.albumId : undefined,

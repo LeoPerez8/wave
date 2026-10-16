@@ -40,6 +40,8 @@ export interface FakeDeviceOptions {
   readonly savedProfile?: readonly string[];
   /** What profileinstaller answers an install with (ProfileInstaller's result codes). */
   readonly installResult?: number;
+  /** The artist on the simulated Library › Artists list. */
+  readonly artist?: string;
 }
 
 // The simulated app's code, as ART profile rules: what a launch runs, what its screens run.
@@ -69,8 +71,11 @@ export class FakeDevice implements Device {
   readonly serial = "DRYRUN0001";
   readonly commands: string[] = [];
   private clock = 81_000_000;
+  /** Flushes so far, which the made-up counters grow with. */
+  private flushes = 0;
   private readonly perfBuild: boolean;
   private readonly tabs: readonly string[];
+  private readonly artist: string;
   private running = false;
   private recorder: PerfRecorder | null = null;
   private routes: string[] = ["/"];
@@ -97,6 +102,7 @@ export class FakeDevice implements Device {
     this.sdk = options.sdk ?? 36;
     this.installResult = options.installResult ?? 1;
     this.savedRules = new Set(options.savedProfile ?? []);
+    this.artist = options.artist ?? "Radiohead";
   }
 
   async sleep(ms: number): Promise<void> {
@@ -146,7 +152,17 @@ export class FakeDevice implements Device {
       ...(this.importing
         ? { "import.running": true, "import.done": 120, "import.total": 2_000 }
         : {}),
+      // The shared Library queries' counters (apps/mobile/src/library/sharedQueries.ts), since launch.
+      "libraryQueries.entries": 9,
+      "libraryQueries.retained": 1,
+      "libraryQueries.consumers": 14,
+      "libraryQueries.reads": 20 + this.flushes * 3,
+      "libraryQueries.shared": 5 + this.flushes,
+      "libraryQueries.paused": this.importing ? this.flushes * 4 : 0,
+      "libraryQueries.discarded": 0,
+      "libraryQueries.evicted": this.flushes,
     };
+    this.flushes++;
     this.logcat.push(...this.recorder.drain(meta));
   }
 
@@ -220,7 +236,15 @@ export class FakeDevice implements Device {
     else if (label === "Developer") this.navigate("/settings/developer");
     else if (label === "Albums") this.navigate("/library/albums");
     else if (label === "Songs") this.navigate("/library/songs");
-    else if (label === "Back") this.navigate(null);
+    else if (label === "Artists") this.navigate("/library/artists");
+    else if (label === this.artist && this.route === "/library/artists") {
+      this.navigate("/library/artist/1");
+      // The stats block reads the artist's plays after the page commits.
+      this.recorder?.render("ArtistStatsBlock");
+      this.render(this.clock, 6);
+      this.advance(30);
+      this.respond("artist.stats", "played");
+    } else if (label === "Back") this.navigate(null);
     else if (label.startsWith("Now playing:")) {
       this.ran(NOW_PLAYING_RULES);
       this.nowPlaying = true;
@@ -238,6 +262,10 @@ export class FakeDevice implements Device {
       this.recorder?.render("UpNextList");
       this.advance(90);
       if (this.queue) this.respond("visible", "queue");
+    } else if (label === "Next track") {
+      this.render(this.clock, 12);
+      this.advance(30);
+      this.respond("queue.synced", "seek 2000");
     } else if (label === "Import") {
       this.importCard = false;
       this.importing = true;
@@ -270,6 +298,15 @@ export class FakeDevice implements Device {
     }
   }
 
+  /** A finger dragged for [durationMs]: the app draws a frame per refresh while it moves. */
+  private swipe(durationMs: number): void {
+    this.ran(SCROLL_RULES);
+    this.recorder?.touch(this.clock - 4);
+    this.render(this.clock + 8, Math.round(durationMs / INTERVAL));
+    this.recorder?.render("js:drag.end");
+    this.advance(durationMs);
+  }
+
   private back(): void {
     if (this.keyboard) this.keyboard = false;
     else if (this.nowPlaying) this.nowPlaying = this.queue = false;
@@ -283,6 +320,9 @@ export class FakeDevice implements Device {
     if (this.nowPlaying)
       return [
         { desc: "Close Now Playing", bounds: [640, 120, 800, 260] },
+        ...(this.queue
+          ? [{ desc: "Remove Airbag from Up Next", bounds: [1128, 828, 1272, 972] } as Node]
+          : [{ desc: "Playback position", bounds: [96, 2200, 1344, 2296] } as Node]),
         { desc: "Queue", bounds: [1100, 2800, 1240, 2940] },
       ];
     const route = this.route;
@@ -291,6 +331,9 @@ export class FakeDevice implements Device {
         { desc: "Back", bounds: [40, 140, 180, 280] },
         ...(route === "/settings"
           ? [{ text: "Developer", bounds: [80, 1500, 600, 1600] } as Node]
+          : []),
+        ...(route === "/library/artists"
+          ? [{ text: this.artist, bounds: [80, 700, 900, 800] } as Node]
           : []),
       ];
     const tabs = this.tabs.map((label, i): Node => ({
@@ -302,10 +345,16 @@ export class FakeDevice implements Device {
       return [
         { text: "Albums", bounds: [80, 700, 600, 800] },
         { text: "Songs", bounds: [80, 900, 600, 1000] },
+        { text: "Artists", bounds: [80, 1100, 600, 1200] },
         mini,
         ...tabs,
       ];
-    return [{ desc: "Settings", bounds: [1260, 180, 1400, 320] }, mini, ...tabs];
+    return [
+      { desc: "Settings", bounds: [1260, 180, 1400, 320] },
+      { desc: "Next track", bounds: [1260, 2720, 1380, 2840] },
+      mini,
+      ...tabs,
+    ];
   }
 
   private uiDump(): string {
@@ -389,7 +438,6 @@ export class FakeDevice implements Device {
       () => [...this.savedRules].map((rule) => `${rule}\n`).join(""),
     ],
     [/^wm size$/, () => "Physical size: 1440x3120\n"],
-    [/^input swipe \d+ \d+ \d+ \d+ \d+$/, () => (this.ran(SCROLL_RULES), "")],
     [
       /^getprop$/,
       () =>
@@ -463,6 +511,8 @@ export class FakeDevice implements Device {
       },
     ],
     [/^input keyevent 4$/, () => (this.back(), "")],
+    [/^input swipe -?\d+ -?\d+ -?\d+ -?\d+ (\d+)$/, (match) => (this.swipe(Number(match[1])), "")],
+    [/^wm density$/, () => "Physical density: 480\n"],
     [
       /^dumpsys meminfo \S+$/,
       () =>
