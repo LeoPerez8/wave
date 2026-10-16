@@ -197,6 +197,13 @@ export {
   tabBarTabs,
 } from "./shortcutTab.ts";
 export type { TabBarTab } from "./shortcutTab.ts";
+export {
+  PLAYLIST_LAYOUTS,
+  parsePlaylistLayout,
+  playlistLayoutRows,
+  storedPlaylistLayout,
+} from "./playlistLayout.ts";
+export type { PlaylistLayout } from "./playlistLayout.ts";
 export { TAB_PATH, detailPath, inLibraryStack, isDetailPath, tabOfPath } from "./navigation.ts";
 export type { DetailScreen } from "./navigation.ts";
 export { planAlert } from "./alert.ts";

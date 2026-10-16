@@ -4,6 +4,7 @@ import { View } from "react-native";
 import { findSection } from "@/catalog/sections";
 import { LargeTitle, useLargeTitleTop } from "@/components/LargeTitleScreen";
 import { SectionList } from "@/library/SectionList";
+import { sectionTitleLongPress } from "@/library/sectionTitleLongPress";
 import { useShortcutTab } from "@/settings/shortcutTab";
 
 /**
@@ -19,7 +20,7 @@ export default function ShortcutScreen() {
   if (section === undefined) return <Redirect href="/library" />;
   return (
     <View className="flex-1 bg-background" style={{ paddingTop: top }}>
-      <LargeTitle title={section.label} />
+      <LargeTitle title={section.label} titleLongPress={sectionTitleLongPress(section)} />
       <SectionList key={section.slug} section={section} />
     </View>
   );
