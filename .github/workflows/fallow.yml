@@ -3,7 +3,7 @@ name: Fallow
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, ti]
 
 permissions:
   contents: read

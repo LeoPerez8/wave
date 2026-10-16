@@ -17,8 +17,16 @@ since="${PATCH_NOTES_SINCE:-}"
 if [ -z "$since" ]; then
   # The newest version tag in <ref>'s history, leaving out <ref>'s own tag.
   own="$(git tag --points-at "$head" --list 'v[0-9]*')"
-  since="$(git tag --merged "$head" --list 'v[0-9]*' --sort=-v:refname \
-    | { grep -vxF -e "$own" || true; } | head -n 1)"
+  versions="$(git tag --merged "$head" --list 'v[0-9]*' --sort=-v:refname \
+    | { grep -vxF -e "$own" || true; })"
+  if [ "${IS_TI:-false}" = "true" ]; then
+    since="$(printf '%s\n' "$versions" | { grep -E '^v[0-9]+\.[0-9]+\.[0-9]+-ti$' || true; } | head -n 1)"
+  fi
+  # The first ti release starts at the last stable version; stable notes never
+  # treat a ti prerelease as their previous stable version.
+  if [ -z "$since" ]; then
+    since="$(printf '%s\n' "$versions" | { grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true; } | head -n 1)"
+  fi
 fi
 if [ -z "$since" ]; then
   cat "$here/../../docs/first-release-notes.md"
