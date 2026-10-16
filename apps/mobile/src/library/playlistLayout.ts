@@ -7,8 +7,10 @@ import {
 
 import type { TitleLongPress } from "@/components/TitleLongPress";
 import { persistedSetting } from "@/lib/persistedSetting";
-import { openTitleChoices } from "@/overlay/titleChoices";
+import { openTitleChoiceGroups, titleChoiceGroup } from "@/overlay/titleChoices";
 import type { ChoiceSetting } from "@/settings/ChoiceRow";
+
+import { playlistSortChoice } from "./playlistSort";
 
 const playlistLayout = persistedSetting<PlaylistLayout>({
   key: "settings.playlistLayout",
@@ -30,17 +32,28 @@ export const playlistLayoutChoice: ChoiceSetting<PlaylistLayout> = {
 };
 
 /**
- * The Playlists title's long press: a card of the layouts, the current one
- * checked. Picking one switches every Playlists list at once and keeps it
- * across restarts.
+ * The Playlists title's long press: a card of the layouts, then Sort by's
+ * sorts, the current ones checked. Picking one switches every Playlists list
+ * at once and keeps it across restarts.
  */
 export const playlistLayoutTitleLongPress: TitleLongPress = {
   label: "Choose how playlists show",
   open: () =>
-    openTitleChoices({
-      label: playlistLayoutChoice.label,
-      choices: playlistLayoutChoice.choices,
-      current: playlistLayout.get(),
-      choose: playlistLayout.set,
+    openTitleChoiceGroups({
+      label: "Show and sort playlists",
+      groups: [
+        // No heading: the highlighted title says what the card is about.
+        titleChoiceGroup({
+          choices: playlistLayoutChoice.choices,
+          current: playlistLayout.get(),
+          choose: playlistLayout.set,
+        }),
+        titleChoiceGroup({
+          heading: playlistSortChoice.label,
+          choices: playlistSortChoice.choices,
+          current: playlistSortChoice.setting.get(),
+          choose: playlistSortChoice.setting.set,
+        }),
+      ],
     }),
 };
