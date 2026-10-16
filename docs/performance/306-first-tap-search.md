@@ -145,7 +145,7 @@ checked on the simulated one (`run --dry-run`, numbers made up, not recorded).
   source alone, the last index while preparing, the newest rows win mid-preparation, empty
   sources, 50,000 songs in short steps). `search.test.ts` unchanged and passing.
 - App tests: `node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test 'src/**/*.test.ts'
-  'plugins/**/*.test.ts'` in `apps/mobile` (293 pass). The React hooks have no render tests (none
+'plugins/**/*.test.ts'` in `apps/mobile` (293 pass). The React hooks have no render tests (none
   exist in the app). Their decisions are Core's.
 - Runner tests: `node --test scripts/perf/*.test.ts` (79 pass), including the typing step's mark
   anchor and the per-step `search` counters.
