@@ -52,10 +52,10 @@ const progress = (play: PlayEvent) => ({
  * going on now (`ongoing`: the one before, if it never ended, is over);
  * returns its row id, to update it as it goes on.
  */
-export const recordPlay = (db: LibraryDatabase, play: PlayEvent): number =>
+export const recordPlay = (db: LibraryDatabase, play: PlayEvent, overlapping = false): number =>
   db.transaction((tx) => {
     const { playEvents } = schema;
-    tx.update(playEvents).set({ ongoing: false }).where(eq(playEvents.ongoing, true)).run();
+    if (!overlapping) tx.update(playEvents).set({ ongoing: false }).where(eq(playEvents.ongoing, true)).run();
     return tx
       .insert(playEvents)
       .values({

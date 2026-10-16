@@ -80,6 +80,65 @@ const run = (
 };
 
 describe("trackPlays", () => {
+  test("crossfade opens the next play while the outgoing play ends only at the fade's end", () => {
+    const overlap = run([
+      playing(1000, "1", "a"),
+      { type: "crossfade", phase: "start", at: 176_000 },
+      moved(176_000, "2", "crossfade"),
+      playing(176_000, "2", "b"),
+    ]);
+    assert.equal(overlap.started.length, 2);
+    assert.equal(overlap.ended.length, 0);
+    const completed = run([
+      { type: "crossfade", phase: "end", at: 181_000, reason: "completed" },
+    ], overlap.state);
+    assert.equal(completed.ended[0]?.trackId, "a");
+    assert.equal(completed.ended[0]?.listenedMs, 180_000);
+    assert.equal(completed.ended[0]?.endReason, "completed");
+    assert.equal(playSoFar(completed.state, 181_000)?.trackId, "b");
+  });
+
+  test("pausing an overlap excludes paused time from both songs", () => {
+    const { ended, state } = run([
+      playing(1000, "1", "a"),
+      { type: "crossfade", phase: "start", at: 176_000 },
+      playing(176_000, "2", "b"),
+      { type: "crossfade", phase: "playing", at: 178_000, playing: false },
+      paused(178_000, "2", "b"),
+      { type: "crossfade", phase: "playing", at: 188_000, playing: true },
+      playing(188_000, "2", "b"),
+      { type: "crossfade", phase: "end", at: 191_000, reason: "completed" },
+    ]);
+    assert.equal(ended[0]?.listenedMs, 180_000);
+    assert.equal(playSoFar(state, 191_000)?.listenedMs, 5000);
+  });
+
+  test("a manual change during an overlap ends the outgoing song as skipped", () => {
+    const { ended } = run([
+      playing(1000, "1", "a"),
+      { type: "crossfade", phase: "start", at: 176_000 },
+      playing(176_000, "2", "b"),
+      { type: "crossfade", phase: "end", at: 178_000, reason: "skipped" },
+      moved(178_000, "3", "seek"),
+      playing(178_000, "3", "c"),
+    ]);
+    assert.deepEqual(ended.map((play) => [play.trackId, play.endReason, play.listenedMs]), [
+      ["a", "skipped", 177_000], ["b", "skipped", 2000],
+    ]);
+  });
+
+  test("a repeated short song has two plays during its overlap and counts the completed one", () => {
+    const { ended, started } = run([
+      playing(1000, "1", "a", { durationMs: 10_000 }),
+      { type: "crossfade", phase: "start", at: 6000 },
+      playing(6000, "1", "a", { durationMs: 10_000 }),
+      { type: "crossfade", phase: "end", at: 11_000, reason: "completed" },
+    ]);
+    assert.equal(started.length, 2);
+    assert.equal(ended[0]?.counted, true);
+    assert.equal(ended[0]?.listenedMs, 10_000);
+  });
+
   test("a track played through ends as a completed, counted play", () => {
     const { ended } = run([
       playing(1_000, "1", "a"),

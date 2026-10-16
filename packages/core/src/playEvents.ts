@@ -97,6 +97,9 @@ export interface PlayTrack {
  *   notification or a headset), or next past the end of the queue.
  */
 export type PlaybackSignal =
+  | { readonly type: "crossfade"; readonly phase: "start"; readonly at: number }
+  | { readonly type: "crossfade"; readonly phase: "playing"; readonly at: number; readonly playing: boolean }
+  | { readonly type: "crossfade"; readonly phase: "end"; readonly at: number; readonly reason: PlayEndReason }
   | {
       readonly type: "state";
       readonly at: number;
@@ -111,7 +114,7 @@ export type PlaybackSignal =
       readonly type: "transition";
       readonly at: number;
       readonly key: string | null;
-      readonly reason: "auto" | "repeat" | "seek" | "playlist" | "sync";
+      readonly reason: "auto" | "repeat" | "seek" | "playlist" | "sync" | "crossfade";
     }
   | {
       readonly type: "seek";
@@ -144,6 +147,8 @@ interface OpenPlay extends PlayTrack {
 
 export interface PlayTrackerState {
   readonly play: OpenPlay | null;
+  /** The previous song is still audible during an overlap. */
+  readonly fading?: OpenPlay | null;
 }
 
 export const EMPTY_PLAY_TRACKER: PlayTrackerState = { play: null };
@@ -200,6 +205,10 @@ const cutShort = (play: OpenPlay): PlayEndReason =>
  */
 export const playSoFar = (state: PlayTrackerState, at: number): PlayEvent | null =>
   state.play === null ? null : toEvent(state.play, at, cutShort(state.play));
+
+/** The outgoing play's progress, saved separately until its fade ends. */
+export const fadingPlaySoFar = (state: PlayTrackerState, at: number): PlayEvent | null =>
+  state.fading == null ? null : toEvent(state.fading, at, cutShort(state.fading));
 
 const sameContext = (a: PlayContext | null, b: PlayContext | null): boolean =>
   a === null || b === null ? a === b : a.kind === b.kind && a.id === b.id;
@@ -260,7 +269,7 @@ const setPlaying = (play: OpenPlay, playing: boolean, at: number): OpenPlay => {
  * Follows the player and reports each play as it starts and ends. Pure: feed
  * it every signal in order and record the steps it returns.
  */
-export const trackPlays = (state: PlayTrackerState, signal: PlaybackSignal): PlayTrackerResult => {
+const trackCurrentPlay = (state: PlayTrackerState, signal: Exclude<PlaybackSignal, { type: "crossfade" }>): PlayTrackerResult => {
   const { play } = state;
   const end = (ending: OpenPlay, reason: PlayEndReason): PlayTrackerResult => ({
     state: EMPTY_PLAY_TRACKER,
@@ -270,6 +279,7 @@ export const trackPlays = (state: PlayTrackerState, signal: PlaybackSignal): Pla
 
   switch (signal.type) {
     case "transition": {
+      if (signal.reason === "crossfade") return unchanged;
       if (play === null) return unchanged;
       const playedThrough = signal.reason === "auto" || signal.reason === "repeat";
       return end(play, playedThrough ? "completed" : "skipped");
@@ -304,4 +314,25 @@ export const trackPlays = (state: PlayTrackerState, signal: PlaybackSignal): Pla
       };
     }
   }
+};
+
+/** Follows the audible plays, including the outgoing song during a crossfade. */
+export const trackPlays = (state: PlayTrackerState, signal: PlaybackSignal): PlayTrackerResult => {
+  if (signal.type === "crossfade") {
+    switch (signal.phase) {
+      case "start":
+        return { state: { play: null, fading: state.play }, steps: [] };
+      case "playing":
+        return state.fading == null ? { state, steps: [] } : {
+          state: { ...state, fading: setPlaying(state.fading, signal.playing, signal.at) }, steps: [],
+        };
+      case "end":
+        return {
+          state: { play: state.play },
+          steps: state.fading == null ? [] : [{ type: "ended", play: toEvent(state.fading, signal.at, signal.reason) }],
+        };
+    }
+  }
+  const result = trackCurrentPlay(state, signal);
+  return state.fading == null ? result : { ...result, state: { ...result.state, fading: state.fading } };
 };

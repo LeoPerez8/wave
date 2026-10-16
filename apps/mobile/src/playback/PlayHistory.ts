@@ -1,10 +1,12 @@
 import {
   EMPTY_PLAY_TRACKER,
+  fadingPlaySoFar,
   playSoFar,
   resumePlay,
   trackPlays,
   type PlaybackSignal,
   type PlayTrack,
+  type PlayEvent,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -60,16 +62,20 @@ export const layer = Layer.effectDiscard(
     const player = yield* Player;
 
     let tracker = EMPTY_PLAY_TRACKER;
-    let rowId: number | null = null;
+    const rowIds = new Map<string, number>();
+    const identity = (play: PlayEvent): string => `${play.trackId}:${play.startedAt}`;
     let lastSave = 0;
     let wasPlaying = false;
     // Whether the player keeping a play going through a JS restart was checked for.
     let resumeChecked = false;
 
     const saveProgress = (): void => {
-      const play = playSoFar(tracker, Date.now());
       lastSave = Date.now();
-      if (rowId !== null && play !== null) write(store.updatePlay(rowId, play));
+      for (const play of [playSoFar(tracker, lastSave), fadingPlaySoFar(tracker, lastSave)]) {
+        if (play === null) continue;
+        const rowId = rowIds.get(identity(play));
+        if (rowId !== undefined) write(store.updatePlay(rowId, play));
+      }
     };
 
     const feed = (signal: PlaybackSignal): void => {
@@ -77,11 +83,13 @@ export const layer = Layer.effectDiscard(
       tracker = result.state;
       for (const step of result.steps) {
         if (step.type === "started") {
-          rowId = write(store.recordPlay(step.play));
+          const rowId = write(store.recordPlay(step.play, tracker.fading != null));
+          if (rowId !== null) rowIds.set(identity(step.play), rowId);
           lastSave = Date.now();
         } else {
-          if (rowId !== null) write(store.endPlay(rowId, step.play));
-          rowId = null;
+          const rowId = rowIds.get(identity(step.play));
+          if (rowId !== undefined) write(store.endPlay(rowId, step.play));
+          rowIds.delete(identity(step.play));
         }
         playHistoryVersion.update((version) => version + 1);
       }
@@ -99,7 +107,7 @@ export const layer = Layer.effectDiscard(
       const resumed = latest === null ? null : resumePlay(latest.play, signal);
       if (latest === null || resumed === null) return;
       tracker = resumed;
-      rowId = latest.id;
+      rowIds.set(identity(latest.play), latest.id);
       lastSave = Date.now();
     };
 
@@ -137,6 +145,10 @@ export const layer = Layer.effectDiscard(
         toMs: event.toMs,
       }),
     );
+    yield* player.onCrossfade((event) => {
+      feed(event);
+      saveProgress();
+    });
 
     yield* Effect.acquireRelease(
       Effect.sync(() => {

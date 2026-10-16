@@ -868,3 +868,5 @@ export type {
   HomeSection,
   HomeSectionId,
 } from "./homeSections.ts";
+export { CROSSFADE, crossfadeDuration } from "./crossfade.ts";
+export { fadingPlaySoFar } from "./playEvents.ts";

@@ -10,7 +10,7 @@ import type { YtSession } from "./ytAccount.ts";
 
 /** Each Settings page, by id. */
 export type SettingsPage =
-  "library" | "appearance" | "lyricsAndTags" | "downloads" | "accounts" | "developer";
+  "library" | "appearance" | "playback" | "lyricsAndTags" | "downloads" | "accounts" | "developer";
 
 export interface SettingsPageEntry {
   readonly page: SettingsPage;
@@ -24,6 +24,7 @@ export interface SettingsPageEntry {
 export const SETTINGS_PAGES: readonly SettingsPageEntry[] = [
   { page: "library", title: "Library", route: "/settings/library" },
   { page: "appearance", title: "Appearance", route: "/settings/appearance" },
+  { page: "playback", title: "Playback", route: "/settings/playback" },
   { page: "lyricsAndTags", title: "Lyrics and tags", route: "/settings/lyrics-and-tags" },
   { page: "downloads", title: "Downloads", route: "/settings/downloads" },
   { page: "accounts", title: "Accounts", route: "/settings/accounts" },

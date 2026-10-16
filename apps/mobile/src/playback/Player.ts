@@ -1,4 +1,4 @@
-import { playerErrorNotice, type PlaySource, type RepeatMode, type SleepTimer } from "@wave/core";
+import { playerErrorNotice, type PlaybackSignal, type PlaySource, type RepeatMode, type SleepTimer } from "@wave/core";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -89,6 +89,9 @@ export class Player extends Context.Service<
     readonly onSeek: (
       listener: (event: SeekEvent) => void,
     ) => Effect.Effect<void, never, Scope.Scope>;
+    readonly onCrossfade: (
+      listener: (event: Extract<PlaybackSignal, { type: "crossfade" }>) => void,
+    ) => Effect.Effect<void, never, Scope.Scope>;
     readonly play: Effect.Effect<void, PlayerError>;
     readonly pause: Effect.Effect<void, PlayerError>;
     readonly seekTo: (positionMs: number) => Effect.Effect<void, PlayerError>;
@@ -173,6 +176,13 @@ export const layer = Layer.effect(
         Effect.asVoid(
           Effect.acquireRelease(
             Effect.sync(() => WavePlayer.addListener("onSeek", listener)),
+            (subscription) => Effect.sync(() => subscription.remove()),
+          ),
+        ),
+      onCrossfade: (listener) =>
+        Effect.asVoid(
+          Effect.acquireRelease(
+            Effect.sync(() => WavePlayer.addListener("onCrossfade", listener)),
             (subscription) => Effect.sync(() => subscription.remove()),
           ),
         ),

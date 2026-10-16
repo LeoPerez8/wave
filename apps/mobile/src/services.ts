@@ -8,6 +8,7 @@ import { LibraryStore } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import type { AutoRequest } from "@/native/wavePlayer";
 import { connectPlayer } from "@/playback/actions";
+import { applyCrossfade } from "@/settings/crossfade";
 import { WaveSync } from "@/sync/WaveSync";
 import { startDownloads } from "@/ytmusic/YtDownloads";
 
@@ -64,6 +65,7 @@ export const startServices = (by: ServicesStarter): void => {
   startedBy = by;
   console.log(`[wave] services started by the ${by}`);
   connectPlayer();
+  applyCrossfade();
   onSyncedSettingChange(stampPreference);
   startAutoResponder(answerAuto);
   startAutoLyrics();
