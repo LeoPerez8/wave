@@ -7,6 +7,11 @@ import {
   playlistPlayback,
   readPlaylistEntrySong,
   readPlaylistYtSong,
+  UNAVAILABLE_ENTRY_ACTION_LABELS,
+  playlistSongsLine,
+  unavailableEntryActions,
+  unavailableEntryView,
+  unavailableSearchQuery,
   writePlaylistEntrySong,
   writePlaylistYtSong,
   ytDownloadTags,
@@ -334,5 +339,46 @@ describe("playlistEntryLinks", () => {
   test("nothing to link when there are no entries or no new songs", () => {
     assert.deepEqual(playlistEntryLinks([], [track(1, "Genesis", "Justice")], []), linked());
     assert.deepEqual(playlistEntryLinks([entry(10, yt("a"))], [], []), linked());
+  });
+});
+
+describe("an unavailable entry", () => {
+  test("says why it's unavailable, on its row and when tapped", () => {
+    assert.deepEqual(unavailableEntryView(unavailable("Within").song), {
+      line: "Not found on YouTube Music",
+      notice: "Wave couldn't find this song on YouTube Music or in your Library.",
+    });
+    assert.deepEqual(unavailableEntryView(unavailable("Untitled", { reason: "localFile" }).song), {
+      line: "Local file on Spotify",
+      notice: "This song is a local file on Spotify, so Wave couldn't look for it.",
+    });
+  });
+
+  test("its menu offers Remove from Playlist and Search, while Search is on the tab bar", () => {
+    assert.deepEqual(unavailableEntryActions({ search: true }), ["removeFromPlaylist", "search"]);
+    assert.deepEqual(unavailableEntryActions({ search: false }), ["removeFromPlaylist"]);
+    assert.deepEqual(UNAVAILABLE_ENTRY_ACTION_LABELS, {
+      removeFromPlaylist: "Remove from Playlist",
+      search: "Search",
+    });
+  });
+
+  test("Search looks for its title and main artist", () => {
+    const song = unavailable("Instant Crush", { artists: ["Daft Punk", "Julian Casablancas"] }).song;
+    assert.equal(unavailableSearchQuery(song), "Instant Crush Daft Punk");
+    const credited = unavailable("Touch", { artists: ["Daft Punk feat. Paul Williams"] }).song;
+    assert.equal(unavailableSearchQuery(credited), "Touch Daft Punk");
+    assert.equal(unavailableSearchQuery(unavailable("Untitled", { artists: [] }).song), "Untitled");
+  });
+});
+
+describe("playlistSongsLine", () => {
+  test("counts every entry, and says how many can't play", () => {
+    assert.equal(playlistSongsLine(2451, 3), "2,451 songs · 3 unavailable");
+    assert.equal(playlistSongsLine(1, 1), "1 song · 1 unavailable");
+  });
+
+  test("a playlist with every song available says only its count", () => {
+    assert.equal(playlistSongsLine(24, 0), "24 songs");
   });
 });

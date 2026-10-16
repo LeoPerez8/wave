@@ -6,6 +6,8 @@
  * the same recording.
  */
 
+import { splitCredit } from "./credits.ts";
+import { counted } from "./listening.ts";
 import { pagePlayback, skipMissingSongs, type PagePlayback } from "./pagePlayback.ts";
 import { planPlaylistAdd, type PlaylistAdd } from "./playlists.ts";
 import type { MixedSong, YtAlbumSong } from "./ytDiscover.ts";
@@ -294,3 +296,63 @@ export const readPlaylistEntrySong = (
     },
   };
 };
+
+// ---------------------------------------------------------------------------
+// How an unavailable entry shows
+
+/** What an unavailable entry's row says under its title, and what a tap on it says. */
+export interface UnavailableEntryView {
+  readonly line: string;
+  readonly notice: string;
+}
+
+const UNAVAILABLE_VIEWS: { readonly [R in UnavailableReason]: UnavailableEntryView } = {
+  notFound: {
+    line: "Not found on YouTube Music",
+    notice: "Wave couldn't find this song on YouTube Music or in your Library.",
+  },
+  localFile: {
+    line: "Local file on Spotify",
+    notice: "This song is a local file on Spotify, so Wave couldn't look for it.",
+  },
+};
+
+/** Why [song] is unavailable: its row's second line, and what tapping it says instead of playing. */
+export const unavailableEntryView = (song: UnavailableSong): UnavailableEntryView =>
+  UNAVAILABLE_VIEWS[song.reason];
+
+/** What an unavailable entry's menu offers. */
+export type UnavailableEntryAction = "removeFromPlaylist" | "search";
+
+export const UNAVAILABLE_ENTRY_ACTION_LABELS: {
+  readonly [A in UnavailableEntryAction]: string;
+} = {
+  removeFromPlaylist: "Remove from Playlist",
+  search: "Search",
+};
+
+/**
+ * An unavailable entry's menu: Remove from Playlist, and Search, which opens
+ * Search with the song's title and main artist (`unavailableSearchQuery`),
+ * while [search] (the Search tab is on the tab bar).
+ */
+export const unavailableEntryActions = ({
+  search,
+}: {
+  readonly search: boolean;
+}): UnavailableEntryAction[] => ["removeFromPlaylist", ...(search ? (["search"] as const) : [])];
+
+/** What Search looks for from an unavailable entry: its title and main artist (the first its credits name). */
+export const unavailableSearchQuery = (song: UnavailableSong): string => {
+  const main = song.artists.flatMap((credit) => splitCredit(credit))[0];
+  return main === undefined ? song.title : `${song.title} ${main}`;
+};
+
+/**
+ * A playlist's count: every entry, and how many of them can't play
+ * ("2,451 songs · 3 unavailable"); with none unavailable, the count alone.
+ */
+export const playlistSongsLine = (count: number, unavailable: number): string =>
+  unavailable === 0
+    ? counted(count, "song")
+    : `${counted(count, "song")} · ${unavailable.toLocaleString("en")} unavailable`;

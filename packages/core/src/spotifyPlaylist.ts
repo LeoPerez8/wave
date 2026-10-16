@@ -74,7 +74,8 @@ const pageSong = (item: unknown): SpotifySong | null => {
   if (kind === "Track") {
     const title = nonEmpty(text(at(data, "name")));
     if (title === null) return null;
-    return {
+    const artworkUrl = firstImage(at(data, "albumOfTrack", "coverArt", "sources"));
+    const song: SpotifySong = {
       title,
       artists: array(at(data, "artists", "items"))
         .map((artist) => nonEmpty(text(at(artist, "profile", "name"))))
@@ -82,6 +83,7 @@ const pageSong = (item: unknown): SpotifySong | null => {
       album: nonEmpty(text(at(data, "albumOfTrack", "name"))),
       durationMs: positive(at(data, "trackDuration", "totalMilliseconds")),
     };
+    return artworkUrl === null ? song : { ...song, artworkUrl };
   }
   if (kind === "LocalTrack") {
     const title = nonEmpty(text(at(data, "name")));
