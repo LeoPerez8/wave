@@ -5,6 +5,9 @@
   // plugins discover app routes, config plugins, package exports, and tests.
   // These maintenance CLIs are invoked directly, outside package scripts.
   "entry": [
+    // The standalone design review HTML loads these browser assets directly.
+    "docs/design/smart-shuffle/review.js",
+    "docs/design/smart-shuffle/review.css",
     "apps/mobile/scripts/check-release-tag.ts",
     "scripts/ci/step-durations-cli.ts",
     "scripts/ci/kept-apk.ts",

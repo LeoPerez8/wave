@@ -136,6 +136,16 @@ export const dismissOverlay = (entry: OverlayEntry): void => {
   entry.request.onDismiss?.();
 };
 
+/**
+ * Dismisses every card the `Press` known as `key` opened (and its follow-ups).
+ * The Design preview closes its state's card with it.
+ */
+export const dismissOverlaysFrom = (key: number): void => {
+  for (const entry of entries.get()) {
+    if (entry.origin?.key === key) dismissOverlay(entry);
+  }
+};
+
 /** Called by the host once a closing card has faded out. */
 export const removeOverlay = (id: number): void =>
   entries.update((list) => list.filter((entry) => entry.id !== id));

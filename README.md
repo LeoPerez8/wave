@@ -75,12 +75,22 @@ the project's lint rules and native import exceptions.
 
 ## Agent skills
 
-This repo is set up for [Matt Pocock's skills](https://github.com/mattpocock/skills) (MIT),
-installed as a Claude Code plugin rather than vendored:
+Two skill packs are installed as Claude Code plugins (managed, not vendored — they update
+when upstream ships). `.claude/settings.json` registers both marketplaces and enables the
+plugins, so Claude Code offers to install them when you trust this folder.
+
+| Plugin              | Source                                                          | Use it for                                                                                                |
+| ------------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `mattpocock-skills` | [mattpocock/skills](https://github.com/mattpocock/skills) (MIT) | Engineering flow: `/grill-me`, `/to-spec`, `/to-tickets`, `/tdd`, `/code-review`, `/diagnosing-bugs` …    |
+| `impeccable`        | [pbakaus/impeccable](https://github.com/pbakaus/impeccable)     | Design quality: `/impeccable critique`, `/impeccable audit`, `/impeccable polish` and anti-pattern checks |
+
+Manual install, if needed:
 
 ```bash
 claude plugin marketplace add mattpocock/skills
 claude plugin install mattpocock-skills@mattpocock
+claude plugin marketplace add pbakaus/impeccable
+claude plugin install impeccable@impeccable
 ```
 
 Issues live on GitHub; ready tickets carry the `ready-for-agent` label; docs live in `docs/`.
