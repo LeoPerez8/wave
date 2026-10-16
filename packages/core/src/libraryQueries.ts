@@ -76,8 +76,7 @@ export const LIBRARY_QUERY_LIMITS: LibraryQueryLimits = {
 
 /** How a read ended: its result, or a failure (the last result stands). */
 export type LibraryQueryOutcome<V> =
-  | { readonly ok: true; readonly value: V }
-  | { readonly ok: false };
+  { readonly ok: true; readonly value: V } | { readonly ok: false };
 
 /** A query's result, boxed so a result that is itself `undefined` still reads as one. */
 export interface LibraryQueryResult<V> {
