@@ -105,6 +105,18 @@ export const exportAppLog = async (): Promise<void> => {
   await WaveAppLog.share(logHeader(device, now), logFileName(device.appVersion, now));
 };
 
+/**
+ * Tells native code the route showing, so a freeze of the main or JS thread
+ * says what was on screen (modules/wave-native, `log/NativeLog.kt`).
+ */
+export const noteScreen = (path: string): void => {
+  try {
+    WaveAppLog?.setScreen(path);
+  } catch {
+    // An older build without it: freezes are logged without the screen.
+  }
+};
+
 /** An error React reported (`isComponentError`): an uncaught one ends the process. */
 const isComponentError = (value: unknown): boolean =>
   value instanceof Error && (value as { isComponentError?: unknown }).isComponentError === true;

@@ -13,7 +13,7 @@ import java.io.RandomAccessFile
  * `<ISO-8601 UTC time with ms> <I|W|E|F> <tag>: <message>\n`, a message of
  * several lines (a stack) going on the lines after, each indented by two spaces,
  * so only an entry's first line starts with a time. Native code writing here must
- * keep that shape and leave out secrets (Core's `redactSecrets`).
+ * keep that shape and leave out secrets (Core's `redactSecrets`): [WaveLog] does.
  *
  * Every access holds one lock, so an append from any thread never interleaves
  * with another or with a trim. Only JS trims (Core's `trimLog` decides how many

@@ -11,6 +11,7 @@ import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.ReactContext
 import com.facebook.react.jstasks.HeadlessJsTaskConfig
 import com.facebook.react.jstasks.HeadlessJsTaskContext
+import expo.modules.wavenative.log.WaveLog
 
 /**
  * Keeps Wave's React Native runtime running for Android Auto, with or without
@@ -49,7 +50,7 @@ object JsRuntime {
     check(Looper.myLooper() == Looper.getMainLooper()) { "JsRuntime is main-thread only" }
     owners.acquire(owner)
     val host = (context.applicationContext as? ReactApplication)?.reactHost ?: run {
-      Log.w(LOG_TAG, "No ReactHost: can't start JS for Auto")
+      WaveLog.w(LOG_TAG, "No ReactHost: can't start JS for Auto")
       return
     }
     val current = host.currentReactContext

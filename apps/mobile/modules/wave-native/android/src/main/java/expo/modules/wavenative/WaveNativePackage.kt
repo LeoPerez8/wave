@@ -1,17 +1,30 @@
 package expo.modules.wavenative
 
 import android.app.Activity
+import android.app.Application
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import expo.modules.core.interfaces.ApplicationLifecycleListener
 import expo.modules.core.interfaces.Package
 import expo.modules.core.interfaces.ReactActivityLifecycleListener
 import expo.modules.wavenative.launch.LaunchSplashExit
+import expo.modules.wavenative.log.NativeLog
 import expo.modules.wavenative.share.ShareShortcut
 import expo.modules.wavenative.share.SharedTextInbox
 
-/** Hooks Wave's own handling into the main activity's lifecycle. */
+/** Hooks Wave's own handling into the application's and the main activity's lifecycle. */
 class WaveNativePackage : Package {
+  override fun createApplicationLifecycleListeners(
+    context: Context,
+  ): List<ApplicationLifecycleListener> = listOf(
+    object : ApplicationLifecycleListener {
+      // Early in every process start (the app, Android Auto, a download worker), before JS runs:
+      // native warnings, crashes and freezes go in the app log from here on.
+      override fun onCreate(application: Application) = NativeLog.start(application)
+    },
+  )
+
   override fun createReactActivityLifecycleListeners(
     activityContext: Context,
   ): List<ReactActivityLifecycleListener> = listOf(
