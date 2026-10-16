@@ -2,11 +2,8 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
-  SPOTIFY_SEARCHES_AT_ONCE,
-  findSpotifySongs,
-  linkImportSummary,
   linkImportView,
-  planSpotifyImport,
+  planLinkImport,
   spotifySearchQuery,
   spotifyYtMatch,
   type SpotifySong,
@@ -32,278 +29,46 @@ const yt = (videoId: string, title: string, fields: Partial<YtSong> = {}): YtSon
   ...fields,
 });
 
-/** YouTube Music as a fake: [answers] by query, every query asked, and how many ran at once. */
-const youTube = (answers: Record<string, readonly YtSong[]> = {}) => {
-  const asked: string[] = [];
-  let running = 0;
-  let most = 0;
-  const search = async (query: string) => {
-    asked.push(query);
-    running += 1;
-    most = Math.max(most, running);
-    await Promise.resolve();
-    running -= 1;
-    return { ok: true as const, songs: answers[query] ?? [] };
+describe("linkImportView for Spotify", () => {
+  const source = {
+    title: "  Daft   Punk Essentials ",
+    artworkUrl: "https://i.scdn.co/image/essentials",
+    songs: [
+      spotify("Instant Crush"),
+      spotify("Get Lucky", { artists: ["Daft Punk", "Pharrell Williams"] }),
+      spotify("Touch"),
+    ],
+    truncated: false,
   };
-  return { asked, search, most: () => most };
-};
-
-const noWait = async () => {};
-
-/** A Spotify playlist of [songs] as read. */
-const essentials = (songs: readonly SpotifySong[], fields = {}) => ({
-  title: "  Daft   Punk Essentials ",
-  artworkUrl: "https://i.scdn.co/image/essentials",
-  songs,
-  truncated: false,
-  ...fields,
-});
-
-describe("findSpotifySongs", () => {
   const library = [
     { id: 7, title: "Get Lucky", artist: "Daft Punk feat. Pharrell Williams", durationMs: 369_500 },
   ];
-  const lucky = spotify("Get Lucky", { artists: ["Daft Punk", "Pharrell Williams"] });
-  const crush = spotify("Instant Crush", { durationMs: 337_000 });
-  const touch = spotify("Touch", { durationMs: 498_000 });
-  const crushOnYt = yt("crush", "Instant Crush", { durationMs: 337_000 });
+  const read = (playlist: typeof source) =>
+    ({
+      status: "read",
+      playlist,
+      plan: planLinkImport<YtSong, (typeof library)[number]>(
+        { service: "spotify", playlist },
+        library,
+      ),
+    }) as const;
 
-  test("finds each song in the Library first, then on YouTube Music, in the playlist's order", async () => {
-    const fake = youTube({ "Instant Crush Daft Punk": [crushOnYt] });
-    const found = await findSpotifySongs({
-      songs: [crush, lucky, touch],
-      library,
-      search: fake.search,
-      wait: noWait,
-    });
-    assert.deepEqual(found, {
-      ok: true,
-      found: [
-        { kind: "ytMusic", song: crushOnYt },
-        { kind: "library", trackId: 7 },
-        { kind: "notFound" },
-      ],
-    });
-    assert.deepEqual(fake.asked, ["Instant Crush Daft Punk", "Touch Daft Punk"]);
-  });
-
-  test("a song listed twice is searched once, and a song without an artist isn't searched", async () => {
-    const fake = youTube({ "Instant Crush Daft Punk": [crushOnYt] });
-    const found = await findSpotifySongs({
-      songs: [crush, spotify("Local file", { artists: [] }), crush],
-      library: [],
-      search: fake.search,
-      wait: noWait,
-    });
-    assert.deepEqual(fake.asked, ["Instant Crush Daft Punk"]);
-    assert.ok(found.ok);
-    assert.deepEqual(
-      found.found.map((find) => find.kind),
-      ["ytMusic", "notFound", "ytMusic"],
-    );
-  });
-
-  test("reports progress: the Library's songs at once, then each song as it's found or not", async () => {
-    const progress: [number, number][] = [];
-    await findSpotifySongs({
-      songs: [crush, lucky, touch],
-      library,
-      search: youTube().search,
-      wait: noWait,
-      onProgress: (done, total) => progress.push([done, total]),
-    });
-    assert.deepEqual(progress, [
-      [1, 3],
-      [2, 3],
-      [3, 3],
-    ]);
-  });
-
-  test(`asks YouTube Music at most ${SPOTIFY_SEARCHES_AT_ONCE} searches at once`, async () => {
-    const fake = youTube();
-    await findSpotifySongs({
-      songs: Array.from({ length: 20 }, (_, n) => spotify(`Song ${n}`)),
-      library: [],
-      search: fake.search,
-      wait: noWait,
-    });
-    assert.equal(fake.asked.length, 20);
-    assert.equal(fake.most(), SPOTIFY_SEARCHES_AT_ONCE);
-  });
-
-  test("once cancelled, it asks nothing more", async () => {
-    const controller = new AbortController();
-    const asked: string[] = [];
-    const found = await findSpotifySongs({
-      songs: Array.from({ length: 20 }, (_, n) => spotify(`Song ${n}`)),
-      library: [],
-      search: async (query) => {
-        asked.push(query);
-        controller.abort();
-        return { ok: true, songs: [] };
-      },
-      wait: noWait,
-      signal: controller.signal,
-    });
-    assert.deepEqual(found, { ok: false, reason: "cancelled" });
-    assert.ok(asked.length <= SPOTIFY_SEARCHES_AT_ONCE, `asked ${asked.length}`);
-  });
-
-  test("a search YouTube Music refuses is asked again after a pause", async () => {
-    const pauses: number[] = [];
-    let tries = 0;
-    const found = await findSpotifySongs({
-      songs: [crush],
-      library: [],
-      search: async () => {
-        tries += 1;
-        return tries < 3 ? { ok: false, reason: "failed" } : { ok: true, songs: [crushOnYt] };
-      },
-      wait: async (ms) => {
-        pauses.push(ms);
-      },
-    });
-    assert.deepEqual(found, { ok: true, found: [{ kind: "ytMusic", song: crushOnYt }] });
-    assert.deepEqual(pauses, [2000, 5000]);
-  });
-
-  test("a search refused again and again stops the finding, and nothing more is asked", async () => {
-    const asked: string[] = [];
-    const pauses: number[] = [];
-    const found = await findSpotifySongs({
-      songs: Array.from({ length: 40 }, (_, n) => spotify(`Song ${n}`)),
-      library: [],
-      search: async (query) => {
-        asked.push(query);
-        return { ok: false, reason: "failed" };
-      },
-      wait: async (ms) => {
-        pauses.push(ms);
-      },
-    });
-    assert.deepEqual(found, { ok: false, reason: "failed" });
-    assert.deepEqual([...new Set(pauses)], [2000, 5000, 10_000, 20_000]);
-    // Each of the first searches is tried five times; no new song is searched after.
-    assert.ok(asked.length <= SPOTIFY_SEARCHES_AT_ONCE * 5, `asked ${asked.length}`);
-  });
-
-  test("offline, or with YT Music turned off, it stops at once", async () => {
-    for (const reason of ["offline", "disabled"] as const) {
-      let tries = 0;
-      const found = await findSpotifySongs({
-        songs: [crush],
-        library: [],
-        search: async () => {
-          tries += 1;
-          return { ok: false, reason };
-        },
-        wait: noWait,
-      });
-      assert.deepEqual(found, { ok: false, reason });
-      assert.equal(tries, 1);
-    }
-  });
-});
-
-describe("planSpotifyImport", () => {
-  const crush = yt("crush", "Instant Crush");
-  const touch = yt("touch", "Touch");
-
-  test("the playlist keeps Spotify's order, Library songs as its tracks, without the songs not found", () => {
-    const plan = planSpotifyImport(
-      essentials([
-        spotify("Instant Crush"),
-        spotify("Get Lucky"),
-        spotify("Doin' it Right", { artists: ["Daft Punk", "Panda Bear"] }),
-        spotify("Touch"),
-      ]),
-      [
-        { kind: "ytMusic", song: crush },
-        { kind: "library", trackId: 7 },
-        { kind: "notFound" },
-        { kind: "ytMusic", song: touch },
-      ],
-    );
-    assert.deepEqual(plan, {
+  test("before any song is searched, the card counts the songs and those the Library has", () => {
+    assert.deepEqual(linkImportView(read(source)), {
       name: "Daft Punk Essentials",
-      songs: [
-        { source: "stream", song: crush },
-        { source: "library", trackId: 7 },
-        { source: "stream", song: touch },
-      ],
-      inLibrary: 1,
-      notFound: [{ title: "Doin' it Right", artist: "Daft Punk & Panda Bear" }],
+      artworkUrl: "https://i.scdn.co/image/essentials",
+      line: "3 songs · 1 in your Library",
+      note: null,
+      canImport: true,
+      retry: false,
     });
   });
 
-  test("two Spotify songs found as one goes in once", () => {
-    const plan = planSpotifyImport(
-      essentials([spotify("Instant Crush"), spotify("Instant Crush")]),
-      [
-        { kind: "ytMusic", song: crush },
-        { kind: "ytMusic", song: crush },
-      ],
-    );
-    assert.deepEqual(plan.songs, [{ source: "stream", song: crush }]);
-  });
-});
-
-describe("linkImportView for Spotify", () => {
-  const source = {
-    title: "Daft Punk Essentials",
-    artworkUrl: "https://i.scdn.co/image/essentials",
-    songs: [spotify("Instant Crush"), spotify("Get Lucky"), spotify("Touch")],
-    truncated: false,
-  };
-
-  test("while songs are found, the card shows the playlist and how far finding has got", () => {
-    assert.deepEqual(
-      linkImportView({ status: "finding", playlist: source, done: 12, total: 250 }),
-      {
-        name: "Daft Punk Essentials",
-        artworkUrl: "https://i.scdn.co/image/essentials",
-        line: "Finding songs… 12 of 250",
-        note: null,
-        canImport: false,
-        retry: false,
-      },
-    );
-  });
-
-  test("once found, it counts the songs found, those the Library has and those not found", () => {
-    const plan = planSpotifyImport(source, [
-      { kind: "ytMusic", song: yt("crush", "Instant Crush") },
-      { kind: "library", trackId: 7 },
-      { kind: "notFound" },
-    ]);
-    const view = linkImportView({ status: "read", playlist: source, plan });
-    assert.equal(view.line, "2 songs · 1 in your Library");
-    assert.equal(view.note, "1 song wasn't found.");
-    assert.equal(view.canImport, true);
-  });
-
-  test("a playlist only partly read says so beside the songs not found", () => {
-    const cut = { ...source, truncated: true };
-    const plan = planSpotifyImport(cut, [
-      { kind: "notFound" },
-      { kind: "library", trackId: 7 },
-      { kind: "notFound" },
-    ]);
+  test("a playlist only partly read says so", () => {
     assert.equal(
-      linkImportView({ status: "read", playlist: cut, plan }).note,
-      "2 songs weren't found. It goes on past 3 songs. Only those are imported.",
+      linkImportView(read({ ...source, truncated: true })).note,
+      "It goes on past 3 songs. Only those are imported.",
     );
-  });
-
-  test("with no song found, there's nothing to import", () => {
-    const plan = planSpotifyImport(source, [
-      { kind: "notFound" },
-      { kind: "notFound" },
-      { kind: "notFound" },
-    ]);
-    const view = linkImportView({ status: "read", playlist: source, plan });
-    assert.equal(view.line, "None of its songs were found.");
-    assert.equal(view.canImport, false);
   });
 
   test("Spotify's failures say what happened", () => {
@@ -313,37 +78,11 @@ describe("linkImportView for Spotify", () => {
       ["spotifyFailed", "Couldn't read this playlist. Spotify didn't answer as expected.", true],
       ["song", "This is a link to a song, not a playlist.", false],
       ["notPlaylist", "This link isn't to a playlist.", false],
-      ["searchFailed", "YouTube Music stopped answering while finding the songs.", true],
     ] as const;
     for (const [reason, line, retry] of cases) {
       const view = linkImportView({ status: "failed", reason });
       assert.deepEqual([view.line, view.retry, view.canImport], [line, retry, false], reason);
     }
-  });
-});
-
-describe("linkImportSummary", () => {
-  test("after Import, lists the songs not found by title and artist", () => {
-    assert.deepEqual(
-      linkImportSummary({
-        name: "Daft Punk Essentials",
-        songs: [],
-        inLibrary: 0,
-        notFound: [
-          { title: "Doin' it Right", artist: "Daft Punk & Panda Bear" },
-          { title: "Touch", artist: "Daft Punk" },
-        ],
-      }),
-      {
-        title: "2 songs weren't found",
-        message:
-          "Daft Punk Essentials was imported without them:\n\nDoin' it Right · Daft Punk & Panda Bear\nTouch · Daft Punk",
-      },
-    );
-  });
-
-  test("with every song found there's nothing to say", () => {
-    assert.equal(linkImportSummary({ name: "Drive", songs: [], inLibrary: 0, notFound: [] }), null);
   });
 });
 
