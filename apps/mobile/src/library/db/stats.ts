@@ -115,17 +115,20 @@ export const creditedPlayTotals = (
   db
     .all<Omit<CreditedPlayTotals, "primary"> & { primary: number }>(
       sql`WITH plays AS (${window.from === null ? playsUpTo(window.to) : playsIn(window)}),
-      credited AS (${CREDITED_ARTISTS})
+      credited AS (${CREDITED_ARTISTS}),
+      -- Each song's first credited position, once (as a correlated subquery
+      -- per row it cost ten times the rest at 10,000 songs on 1,000 albums).
+      firsts AS (SELECT track_id, min(position) AS position FROM credited GROUP BY track_id)
       SELECT albums.id AS "albumId", albums.title_sort AS "albumSort",
         artists.id AS "artistId", artists.sort AS "artistSort",
-        credited.position = (SELECT min(first.position) FROM credited AS first
-          WHERE first.track_id = plays.track_id) AS "primary",
+        credited.position = firsts.position AS "primary",
         sum(plays.plays) AS "countedPlays", sum(plays.listened) AS "listenedMs",
         max(plays.latest) AS "latestPlayAt"
       FROM plays
       LEFT JOIN tracks ON tracks.id = plays.track_id
       JOIN albums ON albums.id = coalesce(tracks.album_id, plays.album_id)
       JOIN credited ON credited.track_id = plays.track_id
+      JOIN firsts ON firsts.track_id = plays.track_id
       JOIN artists ON artists.id = credited.artist_id
       GROUP BY albums.id, artists.id, "primary"`,
     )
