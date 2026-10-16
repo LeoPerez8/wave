@@ -36,6 +36,11 @@ class SoulseekModule : Module() {
       }
     }
     AsyncFunction("jobsSnapshot") Coroutine { -> withContext(Dispatchers.IO) { downloads.jobs.snapshot() } }
+    AsyncFunction("forgetCompletedJob") Coroutine { id: String, generation: Double ->
+      withContext(Dispatchers.IO) {
+        downloads.jobs.forgetCompleted(id, generation.toLong()).also { if (it) downloads.changed() }
+      }
+    }
     AsyncFunction("resumeJobs") Coroutine { -> withContext(Dispatchers.IO) { downloads.requestService() } }
     AsyncFunction("claimDecision") Coroutine { id: String -> withContext(Dispatchers.IO) { downloads.jobs.claim(id) } }
     // The payload comes as JSON: Expo can't convert a null inside a nested object (a tag or a
