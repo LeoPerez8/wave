@@ -6,6 +6,7 @@ import { CELL, grid } from "@/catalog/grid";
 import { Mosaic } from "@/catalog/Mosaic";
 import { PlayShuffle } from "@/catalog/PlayShuffle";
 import { IconButton } from "@/components/IconButton";
+import { useRenderCount } from "@/perf/perf";
 import { openPlaylistActions } from "@/playback/ActionsMenu";
 import { DetailFrame } from "@/library/DetailFrame";
 import { usePlaylist } from "@/library/hooks";
@@ -123,6 +124,7 @@ function NoSongs({ playlistId }: { playlistId: number }) {
  * songs follow once read.
  */
 export default function PlaylistScreen() {
+  useRenderCount("PlaylistScreen");
   const { id } = useLocalSearchParams<{ id: string }>();
   const playlistId = parseId(id);
   const detail = usePlaylist(playlistId);

@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  IMPORT_PROGRESS_SHOWN_EVERY_MS,
   SPOTIFY_SEARCHES_AT_ONCE,
   importAdded,
   importAdditions,
+  importProgressOnly,
   importSearchAnswered,
   importTurn,
   nextImportStep,
@@ -775,5 +777,52 @@ describe("a Spotify import as its answers arrive, in any order", () => {
     assert.equal(playlistImportView(imports, 7, 0, NONE), null);
     assert.equal(importTurn(imports)?.playlistId, 8);
     assert.equal(playlistImportProgress(imports)?.detail, "1 of 6 songs");
+  });
+});
+
+describe("what the page and the notification show as an import goes on", () => {
+  const songs = [spotify("Within"), spotify("Instant Crush"), spotify("Touch")];
+  const start = (playlistId = 7) =>
+    startPlaylistImport(planLinkImport(spotifyPlaylist(songs), library), {
+      playlistId,
+      name: "Late Night",
+    });
+
+  test("answers and songs given are progress, shown at a pace", () => {
+    const { job } = askAll(start());
+    const found = importSearchAnswered(
+      job,
+      "Within Daft Punk",
+      { ok: true, songs: [yt("w", "Within", { durationMs: 369_000 })] },
+      0,
+    );
+    assert.equal(importProgressOnly([job], [found]), true);
+    const { job: given } = handOver(found);
+    assert.equal(given.added, 1);
+    assert.equal(importProgressOnly([found], [given]), true);
+    assert.ok(IMPORT_PROGRESS_SHOWN_EVERY_MS > 0);
+  });
+
+  test("an import queued, cancelled, stopped, done or tried again shows at once", () => {
+    const { job } = askAll(start());
+    const other = start(8);
+    assert.equal(importProgressOnly([job], queuePlaylistImport([job], other)), false);
+    assert.equal(importProgressOnly([job, other], withoutPlaylistImport([job, other], 7)), false);
+    const stopped = importSearchAnswered(
+      job,
+      "Within Daft Punk",
+      { ok: false, reason: "offline" },
+      0,
+    );
+    assert.equal(stopped.state.kind, "stopped");
+    assert.equal(importProgressOnly([job], [stopped]), false);
+    assert.equal(importProgressOnly([stopped], retryPlaylistImport([stopped], 7)), false);
+    let done = job;
+    for (const query of ["Within Daft Punk", "Instant Crush Daft Punk", "Touch Daft Punk"]) {
+      done = importSearchAnswered(done, query, { ok: true, songs: [] }, 0);
+    }
+    done = handOver(done).job;
+    assert.equal(done.state.kind, "done");
+    assert.equal(importProgressOnly([job], [done]), false);
   });
 });
