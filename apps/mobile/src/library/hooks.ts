@@ -33,7 +33,7 @@ import {
 import { knownPlaylists, listPlaylistsRemembered } from "./playlists";
 import { libraryQuery, useLibraryQuery, type LibraryQuery } from "./sharedQueries";
 
-export { libraryQuery, useLibraryQuery, type LibraryQuery } from "./sharedQueries";
+export { libraryQuery, useLibraryQuery } from "./sharedQueries";
 
 export const useScanState = (): ScanState =>
   useSyncExternalStore(scanState.subscribe, scanState.get);
