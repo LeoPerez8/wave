@@ -14,6 +14,7 @@ describe("Library shelf", () => {
       { shelf: "recently-played", label: "Recently played" },
       { shelf: "most-played-albums", label: "Most played albums" },
       { shelf: "most-played-artists", label: "Most played artists" },
+      { shelf: "discover-mixes", label: "Discover mixes" },
       { shelf: "favorites", label: "Favorites" },
       { shelf: "none", label: "None" },
     ]);

@@ -1,6 +1,7 @@
 import {
   editHomeArrangement,
   hiddenHomeSections,
+  homeSectionNote,
   homeSectionTitle,
   type HomeArrangement,
   type HomeArrangementEdit,
@@ -8,12 +9,14 @@ import {
 import { useCallback, useState } from "react";
 
 import { ArrangementEditor } from "@/components/ArrangementEditor";
+import { useYtMusicEnabled } from "@/settings/ytMusic";
 
 /**
  * Home's editor, opened by a long press on Home's title: the sections Home
  * shows (drag a handle to reorder, a button removes one), then those it
- * doesn't (a button adds one at the bottom). Done hands the arrangement to
- * [done]; until then Home stays as it was.
+ * doesn't (a button adds one at the bottom). A section that needs something
+ * that's off says so under its title ("Needs YT Music"). Done hands the
+ * arrangement to [done]; until then Home stays as it was.
  */
 export function HomeEditor({
   initial,
@@ -23,6 +26,7 @@ export function HomeEditor({
   done: (arrangement: HomeArrangement) => void;
 }) {
   const [arrangement, setArrangement] = useState(initial);
+  const ytMusic = useYtMusicEnabled();
   const edit = useCallback(
     (change: HomeArrangementEdit) =>
       setArrangement((current) => editHomeArrangement(current, change)),
@@ -33,6 +37,7 @@ export function HomeEditor({
       shown={arrangement}
       hidden={hiddenHomeSections(arrangement)}
       title={homeSectionTitle}
+      detail={(id) => homeSectionNote(id, { ytMusic })}
       place="Home"
       hiddenHeading="Not on Home"
       edit={edit}

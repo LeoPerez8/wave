@@ -54,6 +54,7 @@ import {
   homeSections,
   latestPlay,
   listFavorites,
+  playedRecordingKeys,
   recordPlay,
   selectFavoriteTrackIds,
   setFavorites,
@@ -590,6 +591,8 @@ export class LibraryStore extends Context.Service<
     readonly saveImportedPlays: (
       plays: readonly BlackPlayerPlay<number>[],
     ) => Effect.Effect<void, LibraryStoreError>;
+    /** The recording key of every song ever played (Core's `recordingKey`), files gone or not. */
+    readonly playedRecordingKeys: Effect.Effect<readonly string[], LibraryStoreError>;
     /** The ids of every starred track. */
     readonly favoriteTrackIds: Effect.Effect<readonly number[], LibraryStoreError>;
     /** Stars (or unstars) the tracks; those starred already keep when they were starred. */
@@ -1101,6 +1104,8 @@ const make = Effect.gen(function* () {
 
     saveImportedPlays: (plays) =>
       attempt("save the imported plays", () => saveImportedPlays(db, plays)),
+
+    playedRecordingKeys: attempt("read the songs played", () => playedRecordingKeys(db)),
 
     favoriteTrackIds: attempt("read favorites", () => selectFavoriteTrackIds(db)),
 

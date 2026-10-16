@@ -20,6 +20,7 @@ import {
   ytErrorCode,
   type NativeYtArtistPage,
   type NativeYtPlaylist,
+  type NativeYtRadioPage,
   type NativeYtSearchPage,
   type NativeYtSong,
 } from "@/native/waveYtMusic";
@@ -73,6 +74,15 @@ export class YtMusic extends Context.Service<
       playlistId: string,
       options?: YtPlaylistReadOptions<NativeYtSong>,
     ) => Effect.Effect<NativeYtPlaylist, YtMusicError>;
+    /**
+     * The first page of a radio: the song [videoId]'s, or the artist's whose
+     * page is [browseId]. Needs no sign-in.
+     */
+    readonly radio: (
+      seed: { readonly videoId: string } | { readonly browseId: string },
+    ) => Effect.Effect<NativeYtRadioPage, YtMusicError>;
+    /** The radio page a radio page's [continuation] leads to. */
+    readonly radioMore: (continuation: string) => Effect.Effect<NativeYtRadioPage, YtMusicError>;
     /** Caches a song's cover from [url] beside the Library's artwork, with its palette. */
     readonly cacheArtwork: (url: string) => Effect.Effect<IndexedArtwork, YtMusicError>;
     /** The saved YouTube session (whose account, never its cookie), without asking YouTube. */
@@ -115,6 +125,16 @@ export const layer = Layer.succeed(YtMusic, {
         ),
       catch: fromNative,
     }),
+  radio: (seed) =>
+    Effect.tryPromise({
+      try: () =>
+        "videoId" in seed
+          ? WaveYtMusic.songRadio(seed.videoId)
+          : WaveYtMusic.artistRadio(seed.browseId),
+      catch: fromNative,
+    }),
+  radioMore: (continuation) =>
+    Effect.tryPromise({ try: () => WaveYtMusic.radioMore(continuation), catch: fromNative }),
   cacheArtwork: (url) =>
     Effect.tryPromise({ try: () => WaveYtMusic.cacheArtwork(url), catch: fromNative }).pipe(
       Effect.map(toIndexedArtwork),

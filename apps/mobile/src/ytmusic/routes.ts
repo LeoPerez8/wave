@@ -88,5 +88,9 @@ export const ytArtistPageHere = (
   return name === undefined || name === "" ? null : name;
 };
 
+/** One of Home's Discover mixes ([id]: Core's `DiscoverMix` id), on the Library stack. */
+export const openDiscoverMix = (id: string): void =>
+  router.push(`/library/discover-mix/${encodeURIComponent(id)}` as Href);
+
 /** Discover, on the Library stack. */
 export const openDiscover = (): void => router.push("/library/discover" as Href);
