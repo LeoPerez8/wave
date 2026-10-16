@@ -662,6 +662,91 @@ ALTER TABLE \`playlists\` ADD \`image_path\` text;
 ALTER TABLE \`playlists\` ADD \`image_thumb_path\` text;
 `;
 
+// Each played track's all-time listening (\`play_totals\`), summed from the
+// history once, then kept by triggers as plays are written: an insert or a
+// play that only grows (listened longer, counted now, an album kept) adds its
+// difference; any other edit, or a deletion, sums the tracks it touched again.
+// Edits that don't change what is summed (pushed, sync ids, ongoing) fire nothing.
+const mPlayTotals = `
+CREATE TABLE \`play_totals\` (
+	\`track_id\` integer PRIMARY KEY NOT NULL,
+	\`plays\` integer NOT NULL,
+	\`counted_plays\` integer NOT NULL,
+	\`listened_ms\` integer NOT NULL,
+	\`counted_listened_ms\` integer NOT NULL,
+	\`last_played_at\` integer NOT NULL,
+	\`last_counted_at\` integer,
+	\`album_id\` integer
+);
+--> statement-breakpoint
+CREATE INDEX \`play_totals_counted_idx\` ON \`play_totals\` (\`counted_plays\`,\`last_counted_at\`);
+--> statement-breakpoint
+CREATE INDEX \`play_totals_last_played_idx\` ON \`play_totals\` (\`last_played_at\`);
+--> statement-breakpoint
+INSERT INTO \`play_totals\` (\`track_id\`, \`plays\`, \`counted_plays\`, \`listened_ms\`, \`counted_listened_ms\`, \`last_played_at\`, \`last_counted_at\`, \`album_id\`)
+	SELECT \`track_id\`, count(*), sum(CASE WHEN \`counted\` THEN 1 ELSE 0 END), sum(\`listened_ms\`),
+		sum(CASE WHEN \`counted\` THEN \`listened_ms\` ELSE 0 END), max(\`started_at\`),
+		max(CASE WHEN \`counted\` THEN \`started_at\` END), max(CASE WHEN \`counted\` THEN \`album_id\` END)
+	FROM \`play_events\` GROUP BY \`track_id\`;
+--> statement-breakpoint
+CREATE TRIGGER \`play_totals_insert\` AFTER INSERT ON \`play_events\` BEGIN
+	INSERT INTO \`play_totals\` (\`track_id\`, \`plays\`, \`counted_plays\`, \`listened_ms\`, \`counted_listened_ms\`, \`last_played_at\`)
+		SELECT new.\`track_id\`, 0, 0, 0, 0, new.\`started_at\`
+		WHERE NOT EXISTS (SELECT 1 FROM \`play_totals\` WHERE \`track_id\` = new.\`track_id\`);
+	UPDATE \`play_totals\` SET
+		\`plays\` = \`plays\` + 1,
+		\`counted_plays\` = \`counted_plays\` + (CASE WHEN new.\`counted\` THEN 1 ELSE 0 END),
+		\`listened_ms\` = \`listened_ms\` + new.\`listened_ms\`,
+		\`counted_listened_ms\` = \`counted_listened_ms\` + (CASE WHEN new.\`counted\` THEN new.\`listened_ms\` ELSE 0 END),
+		\`last_played_at\` = max(\`last_played_at\`, new.\`started_at\`),
+		\`last_counted_at\` = CASE WHEN new.\`counted\`
+			THEN max(coalesce(\`last_counted_at\`, new.\`started_at\`), new.\`started_at\`) ELSE \`last_counted_at\` END,
+		\`album_id\` = CASE WHEN new.\`counted\` AND new.\`album_id\` IS NOT NULL
+			THEN max(coalesce(\`album_id\`, new.\`album_id\`), new.\`album_id\`) ELSE \`album_id\` END
+	WHERE \`track_id\` = new.\`track_id\`;
+END;
+--> statement-breakpoint
+CREATE TRIGGER \`play_totals_grow\` AFTER UPDATE OF \`track_id\`, \`started_at\`, \`listened_ms\`, \`counted\`, \`album_id\` ON \`play_events\`
+WHEN new.\`track_id\` = old.\`track_id\` AND new.\`started_at\` >= old.\`started_at\`
+	AND (new.\`counted\` OR NOT old.\`counted\`)
+	AND (NOT old.\`counted\` OR old.\`album_id\` IS NULL OR coalesce(new.\`album_id\` >= old.\`album_id\`, 0))
+BEGIN
+	UPDATE \`play_totals\` SET
+		\`counted_plays\` = \`counted_plays\` - (CASE WHEN old.\`counted\` THEN 1 ELSE 0 END) + (CASE WHEN new.\`counted\` THEN 1 ELSE 0 END),
+		\`listened_ms\` = \`listened_ms\` - old.\`listened_ms\` + new.\`listened_ms\`,
+		\`counted_listened_ms\` = \`counted_listened_ms\` - (CASE WHEN old.\`counted\` THEN old.\`listened_ms\` ELSE 0 END)
+			+ (CASE WHEN new.\`counted\` THEN new.\`listened_ms\` ELSE 0 END),
+		\`last_played_at\` = max(\`last_played_at\`, new.\`started_at\`),
+		\`last_counted_at\` = CASE WHEN new.\`counted\`
+			THEN max(coalesce(\`last_counted_at\`, new.\`started_at\`), new.\`started_at\`) ELSE \`last_counted_at\` END,
+		\`album_id\` = CASE WHEN new.\`counted\` AND new.\`album_id\` IS NOT NULL
+			THEN max(coalesce(\`album_id\`, new.\`album_id\`), new.\`album_id\`) ELSE \`album_id\` END
+	WHERE \`track_id\` = new.\`track_id\`;
+END;
+--> statement-breakpoint
+CREATE TRIGGER \`play_totals_change\` AFTER UPDATE OF \`track_id\`, \`started_at\`, \`listened_ms\`, \`counted\`, \`album_id\` ON \`play_events\`
+WHEN NOT (new.\`track_id\` = old.\`track_id\` AND new.\`started_at\` >= old.\`started_at\`
+	AND (new.\`counted\` OR NOT old.\`counted\`)
+	AND (NOT old.\`counted\` OR old.\`album_id\` IS NULL OR coalesce(new.\`album_id\` >= old.\`album_id\`, 0)))
+BEGIN
+	DELETE FROM \`play_totals\` WHERE \`track_id\` IN (old.\`track_id\`, new.\`track_id\`);
+	INSERT INTO \`play_totals\` (\`track_id\`, \`plays\`, \`counted_plays\`, \`listened_ms\`, \`counted_listened_ms\`, \`last_played_at\`, \`last_counted_at\`, \`album_id\`)
+	SELECT \`track_id\`, count(*), sum(CASE WHEN \`counted\` THEN 1 ELSE 0 END), sum(\`listened_ms\`),
+		sum(CASE WHEN \`counted\` THEN \`listened_ms\` ELSE 0 END), max(\`started_at\`),
+		max(CASE WHEN \`counted\` THEN \`started_at\` END), max(CASE WHEN \`counted\` THEN \`album_id\` END)
+	FROM \`play_events\` WHERE \`track_id\` IN (old.\`track_id\`, new.\`track_id\`) GROUP BY \`track_id\`;
+END;
+--> statement-breakpoint
+CREATE TRIGGER \`play_totals_delete\` AFTER DELETE ON \`play_events\` BEGIN
+	DELETE FROM \`play_totals\` WHERE \`track_id\` = old.\`track_id\`;
+	INSERT INTO \`play_totals\` (\`track_id\`, \`plays\`, \`counted_plays\`, \`listened_ms\`, \`counted_listened_ms\`, \`last_played_at\`, \`last_counted_at\`, \`album_id\`)
+	SELECT \`track_id\`, count(*), sum(CASE WHEN \`counted\` THEN 1 ELSE 0 END), sum(\`listened_ms\`),
+		sum(CASE WHEN \`counted\` THEN \`listened_ms\` ELSE 0 END), max(\`started_at\`),
+		max(CASE WHEN \`counted\` THEN \`started_at\` END), max(CASE WHEN \`counted\` THEN \`album_id\` END)
+	FROM \`play_events\` WHERE \`track_id\` = old.\`track_id\` GROUP BY \`track_id\`;
+END;
+`;
+
 export default {
   journal: {
     entries: [
@@ -687,6 +772,7 @@ export default {
       { idx: 19, when: 1_793_448_000_000, tag: "0019_sync_state", breakpoints: true },
       { idx: 20, when: 1_793_534_400_000, tag: "0020_sync_removals", breakpoints: true },
       { idx: 21, when: 1_793_620_800_000, tag: "0021_playlist_images", breakpoints: true },
+      { idx: 22, when: 1_793_707_200_000, tag: "0022_play_totals", breakpoints: true },
     ],
   },
   migrations: {
@@ -712,5 +798,6 @@ export default {
     m0019: mSyncState,
     m0020: mSyncRemovals,
     m0021: mPlaylistImages,
+    m0022: mPlayTotals,
   },
 };

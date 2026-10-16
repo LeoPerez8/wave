@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { counted, listeningOverview, listeningTotals, type SongListening } from "./index.ts";
+import {
+  counted,
+  listeningOverview,
+  listeningTotals,
+  summedListeningTotals,
+  type SongListening,
+} from "./index.ts";
 
 const MINUTE = 60_000;
 
@@ -111,6 +117,45 @@ describe("listeningTotals", () => {
       plays: 0,
       lastPlayedAt: null,
     });
+  });
+});
+
+describe("summedListeningTotals", () => {
+  test("reads the history the store summed already as the same totals, in whole minutes", () => {
+    assert.deepEqual(
+      summedListeningTotals({
+        listenedMs: 9 * MINUTE + 59_999,
+        countedPlays: 12_500,
+        songsListened: 2_400,
+        lastPlayedAt: 20_000,
+      }),
+      { minutesListened: 9, songsListened: 2_400, plays: 12_500, lastPlayedAt: 20_000 },
+    );
+  });
+
+  test("agrees with the songs' totals when their listening is summed", () => {
+    const songs = [
+      song(1, { countedPlays: 2, listenedMs: 7 * MINUTE + 30_000, lastPlayedAt: 3_000 }),
+      song(2, { countedPlays: 0, listenedMs: 40_000, lastPlayedAt: 9_000 }),
+      song(3, { inLibrary: false, countedPlays: 4, listenedMs: 12 * MINUTE }),
+    ];
+
+    assert.deepEqual(
+      summedListeningTotals({
+        listenedMs: 7 * MINUTE + 30_000 + 40_000 + 12 * MINUTE,
+        countedPlays: 6,
+        songsListened: 1,
+        lastPlayedAt: 9_000,
+      }),
+      listeningTotals(songs),
+    );
+  });
+
+  test("with nothing played, every total is zero and nothing was last played", () => {
+    assert.deepEqual(
+      summedListeningTotals({ listenedMs: 0, countedPlays: 0, songsListened: 0, lastPlayedAt: null }),
+      { minutesListened: 0, songsListened: 0, plays: 0, lastPlayedAt: null },
+    );
   });
 });
 

@@ -75,6 +75,34 @@ const CREDITED_ARTISTS = sql`
   SELECT track_id, artist_id, position FROM deleted_track_artists`;
 
 /**
+ * Each track's counted plays within `window` (`track_id`, `album_id` of a
+ * deleted track, `plays`, `listened`, `latest`), summed from the plays.
+ */
+const playsIn = (window: StatsWindow): SQL => sql`
+  SELECT play_events.track_id AS track_id, max(play_events.album_id) AS album_id,
+    ${sums.countedPlays} AS plays, ${sums.listenedMs} AS listened, ${sums.latestPlayAt} AS latest
+  FROM play_events WHERE ${countedIn(window)}
+  GROUP BY play_events.track_id`;
+
+/**
+ * `playsIn` for every counted play up to [to] (all time), from the totals
+ * `play_totals` keeps rather than the history: only a track with a counted
+ * play stamped after [to] (another phone's clock ahead) has its plays summed
+ * again, through the play events' track index.
+ */
+const playsUpTo = (to: number): SQL => sql`
+  SELECT track_id, album_id, counted_plays AS plays, counted_listened_ms AS listened,
+    last_counted_at AS latest
+  FROM play_totals WHERE counted_plays > 0 AND last_counted_at <= ${to}
+  UNION ALL
+  SELECT play_events.track_id, max(play_events.album_id), ${sums.countedPlays},
+    ${sums.listenedMs}, ${sums.latestPlayAt}
+  FROM play_totals CROSS JOIN play_events ON play_events.track_id = play_totals.track_id
+  WHERE play_totals.last_counted_at > ${to} AND play_events.counted
+    AND play_events.started_at <= ${to}
+  GROUP BY play_events.track_id`;
+
+/**
  * Counted plays within `window` per album and credited artist (a compilation
  * gives one row per artist on it, a collaboration one per artist it credits),
  * in no order. Deleted songs still count for their album and artists while
@@ -86,13 +114,8 @@ export const creditedPlayTotals = (
 ): CreditedPlayTotals[] =>
   db
     .all<Omit<CreditedPlayTotals, "primary"> & { primary: number }>(
-      sql`WITH plays AS (
-        SELECT play_events.track_id AS track_id, max(play_events.album_id) AS album_id,
-          ${sums.countedPlays} AS plays, ${sums.listenedMs} AS listened,
-          ${sums.latestPlayAt} AS latest
-        FROM play_events WHERE ${countedIn(window)}
-        GROUP BY play_events.track_id
-      ), credited AS (${CREDITED_ARTISTS})
+      sql`WITH plays AS (${window.from === null ? playsUpTo(window.to) : playsIn(window)}),
+      credited AS (${CREDITED_ARTISTS})
       SELECT albums.id AS "albumId", albums.title_sort AS "albumSort",
         artists.id AS "artistId", artists.sort AS "artistSort",
         credited.position = (SELECT min(first.position) FROM credited AS first

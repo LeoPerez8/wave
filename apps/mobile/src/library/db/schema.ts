@@ -578,3 +578,36 @@ export const playEvents = sqliteTable(
     index("play_events_pushed_idx").on(t.pushed),
   ],
 );
+
+/**
+ * Each played track's listening over its whole history, kept by SQLite
+ * triggers on `play_events` (migration `0022_play_totals`) as plays are
+ * recorded, brought up to date, imported, pulled or edited, so Home reads
+ * all-time totals without summing every play. One row per track with a play,
+ * however it left the library (no foreign key, as in `play_events`).
+ * `playTotalsDrift` compares it with the history; `rebuildPlayTotals` sums
+ * it again.
+ */
+export const playTotals = sqliteTable(
+  "play_totals",
+  {
+    trackId: integer("track_id").primaryKey(),
+    /** Every play event, counted or not. */
+    plays: integer("plays").notNull(),
+    countedPlays: integer("counted_plays").notNull(),
+    /** Time listened over every play, skipped and uncounted ones included. */
+    listenedMs: integer("listened_ms").notNull(),
+    /** Time listened over the counted plays (what Stats ranks by). */
+    countedListenedMs: integer("counted_listened_ms").notNull(),
+    /** When the latest play, counted or not, started. */
+    lastPlayedAt: integer("last_played_at").notNull(),
+    /** When the latest counted play started; null without one. */
+    lastCountedAt: integer("last_counted_at"),
+    /** The highest `play_events.album_id` of the counted plays: the album of a deleted track. */
+    albumId: integer("album_id"),
+  },
+  (t) => [
+    index("play_totals_counted_idx").on(t.countedPlays, t.lastCountedAt),
+    index("play_totals_last_played_idx").on(t.lastPlayedAt),
+  ],
+);
