@@ -806,7 +806,9 @@ export {
   playlistEntryLinks,
   playlistPlayback,
   playlistSongKey,
+  readPlaylistEntrySong,
   readPlaylistYtSong,
+  writePlaylistEntrySong,
   writePlaylistYtSong,
 } from "./playlistEntries.ts";
 export type {

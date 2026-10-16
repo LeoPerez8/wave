@@ -6,7 +6,7 @@
  * the same recording.
  */
 
-import { pagePlayback, type PagePlayback } from "./pagePlayback.ts";
+import { pagePlayback, skipMissingSongs, type PagePlayback } from "./pagePlayback.ts";
 import { planPlaylistAdd, type PlaylistAdd } from "./playlists.ts";
 import type { MixedSong, YtAlbumSong } from "./ytDiscover.ts";
 import { libraryFinder, ytTrackId, type LibrarySongKey, type YtSong } from "./ytMusic.ts";
@@ -97,19 +97,27 @@ export interface PlaylistPlay<S extends YtSong, L> {
   readonly startIndex: number | undefined;
 }
 
+/** Whether [entry] can play: anything but an unavailable song. */
+const playable = <S extends YtSong, L>(entry: PlaylistItem<S, L>): entry is MixedSong<S, L> =>
+  entry.source !== "unavailable";
+
 /**
  * What a playlist holding [entries] plays, from the entry at [startIndex] when
- * one was tapped. With YT Music on, a playlist with YT Music entries is an
- * integrated view: the whole list, the Library's files and the rest streamed
- * (Core's `pagePlayback`). With it off, the YT Music entries show but don't
- * play: Play plays the Library's songs, a tapped Library song plays them from
- * itself, and a tapped YT Music entry plays nothing (null), as does a
- * playlist with no Library songs.
+ * one was tapped. Unavailable entries never play: Play, Shuffle and a tap
+ * skip them, and a tapped one plays nothing (null). With YT Music on, a
+ * playlist with YT Music entries is an integrated view: the whole list, the
+ * Library's files and the rest streamed (Core's `pagePlayback`). With it off,
+ * the YT Music entries show but don't play: Play plays the Library's songs, a
+ * tapped Library song plays them from itself, and a tapped YT Music entry
+ * plays nothing (null), as does a playlist with no Library songs.
  */
 export const playlistPlayback = <S extends YtSong, L>(
-  entries: readonly MixedSong<S, L>[],
-  { ytMusic, startIndex }: { readonly ytMusic: boolean; readonly startIndex?: number | undefined },
+  listed: readonly PlaylistItem<S, L>[],
+  { ytMusic, startIndex: listedStart }: { readonly ytMusic: boolean; readonly startIndex?: number | undefined },
 ): PlaylistPlay<S, L> | null => {
+  const available = skipMissingSongs(listed, listedStart, playable);
+  if (available === null) return null;
+  const { songs: entries, startIndex } = available;
   if (ytMusic) return { playback: pagePlayback(entries), startIndex };
   const tapped = startIndex === undefined ? undefined : entries[startIndex];
   if (tapped !== undefined && tapped.source !== "library") return null;
@@ -124,11 +132,14 @@ export const playlistPlayback = <S extends YtSong, L>(
   };
 };
 
-/** A playlist's YT Music entry: its place, its playlist, and the song it streams. */
+/**
+ * A playlist's entry that isn't a Library track yet: its place, its
+ * playlist, and its song (a YT Music song it streams, or an unavailable one).
+ */
 export interface StreamedPlaylistEntry {
   readonly itemId: number;
   readonly playlistId: number;
-  readonly song: YtSong;
+  readonly song: Pick<YtSong, "title" | "artists" | "durationMs">;
 }
 
 /** A Library track a playlist holds. */
@@ -151,13 +162,13 @@ export interface PlaylistEntryLinks {
 }
 
 /**
- * The YT Music [entries] (of any playlists, each in playlist order) that the
+ * The YT Music and unavailable [entries] (of any playlists, each in playlist order) that the
  * Library songs in [library] (just downloaded or scanned) positively are, as
  * Search and Discover decide (Core's `libraryFinder`): each becomes that
  * Library song in its place. A playlist never holds a song twice
  * (`planPlaylistSongs`), so an entry whose song its playlist already holds
  * ([held], or an earlier entry just linked) is dropped instead. Entries
- * without a match stay streamed.
+ * without a match stay as they are.
  */
 export const playlistEntryLinks = (
   entries: readonly StreamedPlaylistEntry[],
@@ -229,5 +240,57 @@ export const readPlaylistYtSong = (stored: string): YtAlbumSong | null => {
     durationMs,
     artworkUrl,
     explicit: explicit === true,
+  };
+};
+
+const UNAVAILABLE_REASONS: readonly string[] = ["notFound", "localFile"] satisfies UnavailableReason[];
+
+/**
+ * What a playlist stores of a song that isn't a Library track (`yt_song`):
+ * a YT Music song (`writePlaylistYtSong`), or an unavailable one, marked by
+ * why, with what its source listed and no video id, so a version of Wave
+ * that reads only YT Music entries reads it as nothing.
+ */
+export const writePlaylistEntrySong = (
+  song: Exclude<PlaylistSong<YtSong & { readonly albumId?: string | null }>, { source: "library" }>,
+): string => {
+  if (song.source === "stream") return writePlaylistYtSong(song.song);
+  const { title, artists, album, durationMs, artworkUrl, reason } = song.song;
+  return JSON.stringify({ unavailable: reason, title, artists, album, durationMs, artworkUrl });
+};
+
+/** The song stored as [stored] (`writePlaylistEntrySong`), or null when nothing readable is. */
+export const readPlaylistEntrySong = (
+  stored: string,
+): { readonly source: "stream"; readonly song: YtAlbumSong } | UnavailableEntry | null => {
+  const song = readPlaylistYtSong(stored);
+  if (song !== null) return { source: "stream", song };
+  let value: unknown;
+  try {
+    value = JSON.parse(stored);
+  } catch {
+    return null;
+  }
+  if (typeof value !== "object" || value === null) return null;
+  const { unavailable, title, artists, album, durationMs, artworkUrl } = value as Record<
+    string,
+    unknown
+  >;
+  if (typeof unavailable !== "string" || !UNAVAILABLE_REASONS.includes(unavailable)) return null;
+  if (typeof title !== "string") return null;
+  if (!Array.isArray(artists) || !artists.every((artist) => typeof artist === "string"))
+    return null;
+  if (!stringOrNull(album) || !stringOrNull(artworkUrl)) return null;
+  if (durationMs !== null && typeof durationMs !== "number") return null;
+  return {
+    source: "unavailable",
+    song: {
+      title,
+      artists: artists as string[],
+      album,
+      durationMs,
+      artworkUrl,
+      reason: unavailable as UnavailableReason,
+    },
   };
 };

@@ -7,7 +7,7 @@ import {
   ytPlaylistDownloadButton,
   ytSongsDownload,
 } from "./index.ts";
-import type { MixedSong, YtDownloadJournalJob, YtSong } from "./index.ts";
+import type { PlaylistItem, YtDownloadJournalJob, YtSong } from "./index.ts";
 
 const song = (videoId: string, title = `Song ${videoId}`): YtSong => ({
   videoId,
@@ -81,9 +81,13 @@ describe("downloading a list of YT Music songs", () => {
   });
 });
 
-type Entry = MixedSong<YtSong, { readonly path: string }>;
+type Entry = PlaylistItem<YtSong, { readonly path: string }>;
 const stream = (videoId: string): Entry => ({ source: "stream", song: song(videoId) });
 const file = (path: string): Entry => ({ source: "library", track: { path } });
+const unavailable = (title: string): Entry => ({
+  source: "unavailable",
+  song: { title, artists: ["Artist"], album: null, durationMs: null, artworkUrl: null, reason: "notFound" },
+});
 
 describe("downloading a playlist's YT Music entries", () => {
   test("Download Playlist queues the YT Music entries in playlist order, past its Library songs", () => {
@@ -97,6 +101,24 @@ describe("downloading a playlist's YT Music entries", () => {
       view.toDownload.map(({ song: { videoId } }) => videoId),
       ["a", "b"],
     );
+  });
+
+  test("unavailable entries have nothing to download: a playlist of them and its Library songs offers no download", () => {
+    const playlist = [unavailable("Within"), stream("a"), unavailable("Untitled")];
+    const view = ytPlaylistDownload(playlist, {
+      inLibrary: nothingInLibrary,
+      jobs: [job("a", { phase: "failed", reason: "offline" })],
+    });
+    assert.deepEqual(view.actions, ["retryFailed"]);
+    assert.deepEqual(
+      view.toRetry.map(({ song: { videoId } }) => videoId),
+      ["a"],
+    );
+    const none = ytPlaylistDownload([file("/Music/x.mp3"), unavailable("Within")], {
+      inLibrary: nothingInLibrary,
+      jobs: [],
+    });
+    assert.deepEqual(none.actions, []);
   });
 
   test("a song saved this session has taken its entry's place, and still counts in the progress line", () => {

@@ -5,11 +5,15 @@ import {
   planPlaylistSongs,
   playlistEntryLinks,
   playlistPlayback,
+  readPlaylistEntrySong,
   readPlaylistYtSong,
+  writePlaylistEntrySong,
   writePlaylistYtSong,
   ytDownloadTags,
   type MixedSong,
   type PlaylistSong,
+  type UnavailableEntry,
+  type UnavailableSong,
   type YtAlbumSong,
 } from "./index.ts";
 
@@ -27,6 +31,18 @@ const yt = (videoId: string, fields: Partial<YtAlbumSong> = {}): YtAlbumSong => 
 
 const library = (trackId: number): PlaylistSong => ({ source: "library", trackId });
 const stream = (song: YtAlbumSong): PlaylistSong<YtAlbumSong> => ({ source: "stream", song });
+const unavailable = (title: string, fields: Partial<UnavailableSong> = {}): UnavailableEntry => ({
+  source: "unavailable",
+  song: {
+    title,
+    artists: ["Daft Punk"],
+    album: "Random Access Memories",
+    durationMs: 228_000,
+    artworkUrl: null,
+    reason: "notFound",
+    ...fields,
+  },
+});
 
 describe("planPlaylistSongs", () => {
   test("Library songs and YT Music songs go at the end, in the order given", () => {
@@ -81,6 +97,38 @@ describe("writePlaylistYtSong / readPlaylistYtSong", () => {
   });
 });
 
+describe("writePlaylistEntrySong / readPlaylistEntrySong", () => {
+  test("a YT Music entry and an unavailable one each read back as what they are", () => {
+    const missing = unavailable("Fragments of Time", { artworkUrl: "https://i.scdn.co/image/f" });
+    const streamed = { source: "stream", song: yt("a") } as const;
+    assert.deepEqual(readPlaylistEntrySong(writePlaylistEntrySong(streamed)), streamed);
+    assert.deepEqual(readPlaylistEntrySong(writePlaylistEntrySong(missing)), missing);
+  });
+
+  test("an unavailable song keeps what its source listed, unknowns included", () => {
+    const missing = unavailable("Untitled", {
+      artists: [],
+      album: null,
+      durationMs: null,
+      reason: "localFile",
+    });
+    assert.deepEqual(readPlaylistEntrySong(writePlaylistEntrySong(missing)), missing);
+  });
+
+  test("a version of Wave that reads only YT Music entries reads an unavailable one as nothing", () => {
+    assert.equal(readPlaylistYtSong(writePlaylistEntrySong(unavailable("Within"))), null);
+  });
+
+  test("what isn't a song reads as nothing", () => {
+    assert.equal(readPlaylistEntrySong("not json"), null);
+    assert.equal(readPlaylistEntrySong(JSON.stringify({ unavailable: "notFound", artists: [] })), null);
+    assert.equal(
+      readPlaylistEntrySong(JSON.stringify({ ...unavailable("Within").song, unavailable: "gone" })),
+      null,
+    );
+  });
+});
+
 describe("playlistPlayback", () => {
   type Track = { readonly id: number };
   const own = (id: number): MixedSong<YtAlbumSong, Track> => ({ source: "library", track: { id } });
@@ -121,6 +169,36 @@ describe("playlistPlayback", () => {
 
   test("with only YT Music entries and YT Music off, there's nothing to play", () => {
     assert.equal(playlistPlayback([streamed("a")], { ytMusic: false }), null);
+  });
+
+  test("unavailable entries are skipped, by Play, Shuffle and a tap alike", () => {
+    const listed = [own(1), unavailable("Within"), streamed("a"), unavailable("Untitled"), own(2)];
+    const playing = [own(1), streamed("a"), own(2)];
+    assert.deepEqual(playlistPlayback(listed, { ytMusic: true }), {
+      playback: { kind: "mixed", songs: playing },
+      startIndex: undefined,
+    });
+    assert.deepEqual(playlistPlayback(listed, { ytMusic: true, startIndex: 4 }), {
+      playback: { kind: "mixed", songs: playing },
+      startIndex: 2,
+    });
+    assert.deepEqual(playlistPlayback(listed, { ytMusic: false, startIndex: 4 }), {
+      playback: { kind: "library", tracks: [{ id: 1 }, { id: 2 }] },
+      startIndex: 1,
+    });
+  });
+
+  test("a tapped unavailable entry doesn't play, nor does a playlist of nothing else", () => {
+    const listed = [own(1), unavailable("Within")];
+    assert.equal(playlistPlayback(listed, { ytMusic: true, startIndex: 1 }), null);
+    assert.equal(playlistPlayback([unavailable("Within")], { ytMusic: true }), null);
+  });
+
+  test("Library songs and unavailable entries play as Library songs alone", () => {
+    assert.deepEqual(playlistPlayback([unavailable("Within"), own(1)], { ytMusic: true }), {
+      playback: { kind: "library", tracks: [{ id: 1 }] },
+      startIndex: undefined,
+    });
   });
 
   test("a playlist of Library songs alone plays as it always has", () => {
@@ -222,6 +300,35 @@ describe("playlistEntryLinks", () => {
       playlistEntryLinks([entry(10, song)], [downloaded], []),
       linked({ itemId: 10, trackId: 7 }),
     );
+  });
+
+  test("an unavailable entry the Library now has becomes that Library song in its place", () => {
+    const entries = [
+      { itemId: 10, playlistId: 1, song: unavailable("Within").song },
+      { itemId: 11, playlistId: 1, song: unavailable("Untitled", { artists: [] }).song },
+    ];
+    const songs = [
+      track(1, "Within", "Daft Punk", 229_000),
+      track(2, "Untitled", "Daft Punk", 228_000),
+    ];
+    assert.deepEqual(
+      playlistEntryLinks(entries, songs, []),
+      linked({ itemId: 10, trackId: 1 }),
+      "a local file without an artist isn't matched",
+    );
+  });
+
+  test("an unavailable entry whose song its playlist holds already is removed, not doubled", () => {
+    const entries = [
+      { itemId: 10, playlistId: 1, song: unavailable("Within").song },
+      { itemId: 11, playlistId: 2, song: unavailable("Within").song },
+      { itemId: 12, playlistId: 2, song: yt("w", { title: "Within", artists: ["Daft Punk"], durationMs: 228_000 }) },
+    ];
+    const songs = [track(1, "Within", "Daft Punk", 228_000)];
+    assert.deepEqual(playlistEntryLinks(entries, songs, [{ playlistId: 1, trackId: 1 }]), {
+      links: [{ itemId: 11, trackId: 1 }],
+      drops: [10, 12],
+    });
   });
 
   test("nothing to link when there are no entries or no new songs", () => {
