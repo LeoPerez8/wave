@@ -7,7 +7,6 @@ import type {
   YtPlaylistFirstPage,
   YtPlaylistPage,
   YtSession,
-  YtShelf,
   YtSong,
 } from "@wave/core";
 import { NativeModule, requireNativeModule } from "expo";
@@ -19,9 +18,6 @@ export interface NativeYtSong extends YtSong {
   /** The album's YT Music browse id (`MPREb_…`), for its tracklist and year. */
   readonly albumId: string | null;
 }
-
-/** A home shelf as the native parser reads it (Core's `YtShelf`). */
-export type NativeYtShelf = YtShelf<NativeYtSong>;
 
 /**
  * An artist page as the native parser reads it: top songs, albums, singles and
@@ -84,8 +80,6 @@ declare class WaveYtMusicModule extends NativeModule<WaveYtMusicEvents> {
   searchAlbums(query: string): Promise<readonly YtArtistAlbum[]>;
   /** The artist page [browseId] (`UC…`): their top songs, albums, singles and songs playlist. */
   artist(browseId: string): Promise<NativeYtArtistPage>;
-  /** The session's account's recommendations: YouTube Music's home shelves (songs, albums, playlists). */
-  home(): Promise<readonly NativeYtShelf[]>;
   /** The playlist [playlistId] (without `VL`): its head and its first page of songs. */
   playlist(playlistId: string): Promise<NativeYtPlaylistPage>;
   /** The playlist page a first page's (or a later page's) [continuation] leads to. */

@@ -38,7 +38,7 @@ export const useLoadedLibraryFinder = (active = true): FindInLibrary | null =>
   useSyncExternalStore(active ? sharedFinder.subscribe : idle, sharedFinder.get);
 
 /**
- * Finds the Library song a YT Music song already is, so Discover plays the
+ * Finds the Library song a YT Music song already is, so a YT Music list plays the
  * file instead of streaming it and a song's menu knows whether it's still in
  * the Library. Finds nothing until the Library is first read.
  */

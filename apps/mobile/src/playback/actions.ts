@@ -223,8 +223,8 @@ const playListed = async (
 };
 
 /**
- * Plays a list that mixes the Library's songs and YT Music's (Discover,
- * Search, an artist's or album's page) from `startIndex` (or shuffled),
+ * Plays a list that mixes the Library's songs and YT Music's (a Discover
+ * mix, Search, an artist's or album's page) from `startIndex` (or shuffled),
  * queueing the rest: the Library's files, the others streamed. Missing songs
  * are left out, and a tapped one downloads instead.
  */
@@ -285,7 +285,7 @@ export const addYtToQueue = (songs: readonly YtSong[]): Promise<void> =>
   dispatchWithYt({ type: "addToQueue", trackIds: ytTrackIds(songs) }, songs, undefined);
 
 /**
- * Plays Discover's [songs] next, or adds them to the end of the queue: the
+ * Plays a mixed list's [songs] next, or adds them to the end of the queue: the
  * Library's file for the songs it has, the others streamed. Missing songs
  * are left out.
  */

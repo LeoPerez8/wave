@@ -33,7 +33,7 @@ import { listedTrackItem, trackItemKey, tracksTarget } from "@/playback/actionTa
 import { useListSelection } from "@/selection/useListSelection";
 import { useThemeColor } from "@/theme/useThemeColor";
 import { useYtArtistPage } from "@/ytmusic/artistPage";
-import { DiscoverSongRow } from "@/ytmusic/DiscoverShelves";
+import { DiscoverSongRow } from "@/ytmusic/DiscoverSongRow";
 import { YT_ARTIST_NOTE, YtReleaseTile } from "@/ytmusic/YtArtistSection";
 import { YT_ARTIST_BY_NAME } from "@/ytmusic/routes";
 

@@ -10,7 +10,7 @@ export const COVER_ROW_TILE = CELL * 19;
 
 /**
  * A row that scrolls sideways, edge to edge, inside a screen that keeps the
- * side margin: Home's and Discover's shelves and an artist page's album
+ * side margin: Home's shelves and an artist page's album
  * shelves. Its tiles sit a gutter apart, the first one on the margin.
  */
 export function CoverRow({ children }: { children: ReactNode }) {

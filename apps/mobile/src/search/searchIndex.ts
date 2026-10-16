@@ -126,7 +126,7 @@ export const useSearchIndex = (active: boolean): LibrarySearch | null => {
     readonly index: SearchIndex<SearchHit>;
     readonly releases: LibraryReleases;
   } | null>(null);
-  // Whether a YT Music song is in the Library: the finder Discover shares.
+  // Whether a YT Music song is in the Library: the finder the YT Music pages share.
   const find = useLoadedLibraryFinder(active);
   const inLibrary = useMemo(
     () => (find === null ? null : (song: YtSong) => find(song) !== null),
