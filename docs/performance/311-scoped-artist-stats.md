@@ -40,13 +40,13 @@ same before and after and isn't counted here.
 `Stats.artist` read the whole history and then kept one artist's songs:
 
 1. `songListening`, statement 1: every credit link of every played song. Plan: `SCAN play_events
-   USING COVERING INDEX play_events_track_idx` for the `IN (SELECT track_id FROM play_events)`.
+USING COVERING INDEX play_events_track_idx` for the `IN (SELECT track_id FROM play_events)`.
 2. `songListening`, statement 2: every play event grouped by song. Plan: `SCAN play_events USING
-   INDEX play_events_track_idx`.
+INDEX play_events_track_idx`.
 3. `trackPlayTotals` for all time: every counted play up to now. Plan: `SEARCH play_events USING
-   INDEX play_events_started_at_idx (started_at<?)`, a range that covers the whole history.
+INDEX play_events_started_at_idx (started_at<?)`, a range that covers the whole history.
 4. `songsCrediting`: the artist's songs, `SEARCH track_artists USING INDEX
-   track_artists_artist_idx`.
+track_artists_artist_idx`.
 
 Core's `listeningTotals` then filtered every song's listening with `artistIds.includes`.
 
@@ -59,14 +59,14 @@ Core's `listeningTotals` then filtered every song's listening with `artistIds.in
    play events are reached from those songs through `play_events_track_idx`. The credits of the
    played songs come through each credit table's `(track_id, position)` primary key. Plan:
    `SEARCH track_artists USING INDEX track_artists_artist_idx`, `SEARCH deleted_track_artists
-   USING INDEX deleted_track_artists_artist_idx`, `SEARCH play_events USING INDEX
-   play_events_track_idx (track_id=?)`, `SEARCH track_artists USING INDEX
-   sqlite_autoindex_track_artists_1 (track_id=?)` (and the same for the deleted credits), `SEARCH
-   tracks USING INTEGER PRIMARY KEY`. The only `SCAN`s are over the statement's own small CTEs.
+USING INDEX deleted_track_artists_artist_idx`, `SEARCH play_events USING INDEX
+play_events_track_idx (track_id=?)`, `SEARCH track_artists USING INDEX
+sqlite_autoindex_track_artists_1 (track_id=?)` (and the same for the deleted credits), `SEARCH
+tracks USING INTEGER PRIMARY KEY`. The only `SCAN`s are over the statement's own small CTEs.
 2. `songsCrediting`, unchanged.
 3. `trackPlayTotals` for all time, but only for the artist's songs in the Library that have a
    counted play (one statement per 500 such songs). Plan: `SEARCH tracks USING INTEGER PRIMARY
-   KEY`, `SEARCH play_events USING INDEX play_events_track_idx (track_id=?)`.
+KEY`, `SEARCH play_events USING INDEX play_events_track_idx (track_id=?)`.
 
 | Other artists' history    | Read   | Statements | Rows returned | Median ms | CPU ms |
 | ------------------------- | ------ | ---------: | ------------: | --------: | -----: |

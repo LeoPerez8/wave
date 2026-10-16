@@ -1,6 +1,7 @@
 import {
   listeningOverview,
   listeningTotals,
+  type LibraryReads,
   type ListeningOverview,
   type MissingTrack,
 } from "@wave/core";
@@ -8,14 +9,12 @@ import * as Effect from "effect/Effect";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { AppState } from "react-native";
 
-import { useFocusedVersion } from "@/lib/useFocusedVersion";
 import { WaveNative } from "@/native/waveNative";
-import { playHistoryVersion } from "@/playback/PlayHistory";
 
 import type { LibraryCounts } from "./db/counts";
 import type { LinkRows } from "./db/links";
 import type { HomeSections } from "./db/playHistory";
-import { libraryEdits, libraryVersion, scanState, type ScanState } from "./LibraryScan";
+import { scanState, type ScanState } from "./LibraryScan";
 import {
   LibraryStore,
   type AlbumDetail,
@@ -31,9 +30,10 @@ import {
   type ScanRootSummary,
   type SongRow,
 } from "./LibraryStore";
-import { useFavoritesSaved } from "./favorites";
-import { knownPlaylists, listPlaylistsRemembered, usePlaylistsVersion } from "./playlists";
-import { appRuntime } from "./runtime";
+import { knownPlaylists, listPlaylistsRemembered } from "./playlists";
+import { libraryQuery, useLibraryQuery, type LibraryQuery } from "./sharedQueries";
+
+export { libraryQuery, useLibraryQuery, type LibraryQuery } from "./sharedQueries";
 
 export const useScanState = (): ScanState =>
   useSyncExternalStore(scanState.subscribe, scanState.get);
@@ -71,84 +71,19 @@ export const useAllFilesAccess = (): {
   return { granted, denied, request };
 };
 
-const REQUERY_INTERVAL_MS = 1500;
+/** A query over the tracks and what derives from them (albums, artists, genres, counts). */
+const TRACKS: LibraryReads = { tracks: true };
 
-const idle = () => () => {};
-const noVersion = () => 0;
+/** Declares a store read as a shared query. */
+const storeQuery = <A>(
+  key: string,
+  reads: LibraryReads,
+  read: (store: LibraryStore["Service"]) => Effect.Effect<A, LibraryStoreError>,
+): LibraryQuery<A> =>
+  // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+  libraryQuery(key, reads, LibraryStore.use(read));
 
-/**
- * Runs a store query and re-runs it when scan batches land, at most every
- * 1.5 s so a large first scan doesn't re-query on every batch. A null query
- * asks nothing and follows nothing: [initial] stands.
- */
-const useLibraryQuery = <A>(
-  query: Effect.Effect<A, LibraryStoreError, LibraryStore> | null,
-  initial: A,
-  /** Changes when the owner edits what the query reads (a playlist, a star): re-run at once. */
-  queryEdits = 0,
-): A => {
-  const [value, setValue] = useState(initial);
-  const asks = query !== null;
-  const version = useSyncExternalStore(
-    asks ? libraryVersion.subscribe : idle,
-    asks ? libraryVersion.get : noVersion,
-  );
-  const edits =
-    queryEdits +
-    useSyncExternalStore(asks ? libraryEdits.subscribe : idle, asks ? libraryEdits.get : noVersion);
-  const lastRun = useRef(0);
-  const lastEdits = useRef(edits);
-  const mounted = useRef(true);
-
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (query === null) return undefined;
-    const run = () => {
-      lastRun.current = Date.now();
-      appRuntime
-        .runPromise(query)
-        .then((result) => {
-          // A newer version may already be pending; this result is still the freshest one we have.
-          if (mounted.current) setValue(result);
-        })
-        .catch(() => {
-          // Keep showing the last good result; scan errors surface in the banner.
-        });
-    };
-    const edited = edits !== lastEdits.current;
-    lastEdits.current = edits;
-    const wait = edited ? 0 : lastRun.current + REQUERY_INTERVAL_MS - Date.now();
-    if (wait <= 0) {
-      run();
-      return undefined;
-    }
-    const timer = setTimeout(run, wait);
-    return () => clearTimeout(timer);
-  }, [query, version, edits]);
-
-  return asks ? value : initial;
-};
-
-const listSongs = Effect.gen(function* () {
-  const store = yield* LibraryStore;
-  return yield* store.listSongs;
-});
-
-const countTracks = Effect.gen(function* () {
-  const store = yield* LibraryStore;
-  return yield* store.countTracks;
-});
-
-const NO_SONGS: readonly SongRow[] = [];
-
-// oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
-const listMissingSongs = LibraryStore.use((store) => store.missingSongs());
+const listMissingSongs = storeQuery("missingSongs", TRACKS, (store) => store.missingSongs());
 const NO_MISSING_SONGS: readonly MissingTrack[] = [];
 
 /** The missing songs, by title: the Wave account's songs with no file on this phone. */
@@ -159,13 +94,7 @@ export const useMissingSongs = (): readonly MissingTrack[] =>
 export const useLoadedMissingSongs = (): readonly MissingTrack[] | null =>
   useLibraryQuery<readonly MissingTrack[] | null>(listMissingSongs, null);
 
-interface AlbumsMissingSongs {
-  /** The albums read, as `albumIds.join(",")`. */
-  readonly key: string;
-  readonly songs: readonly (readonly number[])[];
-}
-
-const NO_ALBUMS_MISSING_SONGS: AlbumsMissingSongs = { key: "", songs: [] };
+const NO_ALBUMS_MISSING_SONGS: readonly (readonly number[])[] = [];
 
 /**
  * Each album of [albumIds]'s missing songs, as Track ids in album order; none
@@ -180,65 +109,62 @@ export const useAlbumsMissingSongs = (
   const query = useMemo(() => {
     if (key === "") return null;
     const ids = key.split(",").map(Number);
-    // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
-    return LibraryStore.use((store) => store.albumsMissingSongs(ids)).pipe(
-      Effect.map((songs): AlbumsMissingSongs => ({ key, songs })),
+    return storeQuery(`albumsMissingSongs:${key}`, TRACKS, (store) =>
+      store.albumsMissingSongs(ids),
     );
   }, [key]);
-  const read = useLibraryQuery(query, NO_ALBUMS_MISSING_SONGS);
-  return read.key === key ? read.songs : NO_ALBUMS_MISSING_SONGS.songs;
+  return useLibraryQuery(query, NO_ALBUMS_MISSING_SONGS);
 };
+
+const listSongs = storeQuery("songs", TRACKS, (store) => store.listSongs);
+const countTracks = storeQuery("trackCount", TRACKS, (store) => store.countTracks);
+
+const NO_SONGS: readonly SongRow[] = [];
 
 export const useSongs = (): readonly SongRow[] => useLibraryQuery(listSongs, NO_SONGS);
 
 /** Number of tracks in the library, or null before the first count arrives. */
 export const useTrackCount = (): number | null => useLibraryQuery<number | null>(countTracks, null);
 
-// oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
-const countLibrary = LibraryStore.use((store) => store.countLibrary);
+/** What the Library entries count: songs, playlists and Favorites. */
+const COUNTED: LibraryReads = { tracks: true, playlists: true, favorites: true };
+
+const countLibrary = storeQuery("libraryCounts", COUNTED, (store) => store.countLibrary);
 
 /**
  * How many items each Library entry holds, or undefined before the first count
  * arrives. Re-counted as soon as a playlist is edited or a star is saved.
  */
 export const useLibraryCounts = (): LibraryCounts | undefined =>
-  useLibraryQuery<LibraryCounts | undefined>(
-    countLibrary,
-    undefined,
-    // Both only ever go up, so their sum changes whenever either does.
-    usePlaylistsVersion() + useFavoritesSaved(),
-  );
+  useLibraryQuery<LibraryCounts | undefined>(countLibrary, undefined);
 
-// oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
-const countSectionSongs = LibraryStore.use((store) => store.countSectionSongs);
+const countSectionSongs = storeQuery(
+  "sectionSongCounts",
+  COUNTED,
+  (store) => store.countSectionSongs,
+);
 
 /**
  * How many songs each Library entry's menu acts on, or undefined before the
  * first count arrives. Re-counted as `useLibraryCounts` is.
  */
 export const useSectionSongCounts = (): LibraryCounts | undefined =>
-  useLibraryQuery<LibraryCounts | undefined>(
-    countSectionSongs,
-    undefined,
-    usePlaylistsVersion() + useFavoritesSaved(),
-  );
+  useLibraryQuery<LibraryCounts | undefined>(countSectionSongs, undefined);
 
-const listRoots = Effect.gen(function* () {
-  const store = yield* LibraryStore;
-  return yield* store.listRoots;
-});
+const listRoots = storeQuery(
+  "scanRoots",
+  { folders: true, tracks: true },
+  (store) => store.listRoots,
+);
 
 const NO_ROOTS: readonly ScanRootSummary[] = [];
 
 /** The music folders Wave indexes, with their song counts. */
 export const useScanRoots = (): readonly ScanRootSummary[] => useLibraryQuery(listRoots, NO_ROOTS);
 
-// oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
-const listAlbums = LibraryStore.use((store) => store.listAlbums);
-// oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
-const listArtists = LibraryStore.use((store) => store.listArtists);
-// oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
-const listGenres = LibraryStore.use((store) => store.listGenres);
+const listAlbums = storeQuery("albums", TRACKS, (store) => store.listAlbums);
+const listArtists = storeQuery("artists", TRACKS, (store) => store.listArtists);
+const listGenres = storeQuery("genres", TRACKS, (store) => store.listGenres);
 
 const NO_ALBUMS: readonly AlbumRow[] = [];
 const NO_ARTISTS: readonly ArtistRow[] = [];
@@ -253,11 +179,14 @@ export const useGenres = (): readonly GenreRow[] => useLibraryQuery(listGenres, 
  * gone from the library (removed folder, deleted files).
  */
 const useDetail = <A>(
+  kind: string,
   id: number,
   get: (store: LibraryStore["Service"], id: number) => Effect.Effect<A | null, LibraryStoreError>,
 ): A | null | undefined => {
-  // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
-  const query = useMemo(() => LibraryStore.use((store) => get(store, id)), [get, id]);
+  const query = useMemo(
+    () => storeQuery(`${kind}:${id}`, TRACKS, (store) => get(store, id)),
+    [kind, get, id],
+  );
   return useLibraryQuery<A | null | undefined>(query, undefined);
 };
 
@@ -279,24 +208,27 @@ export const useLinkRows = (
   artistId: number | undefined,
 ): LinkRows => {
   const query = useMemo(
-    // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
-    () => LibraryStore.use((store) => store.linkRows({ albumId, artistId })),
+    () =>
+      storeQuery(`linkRows:${albumId}:${artistId}`, TRACKS, (store) =>
+        store.linkRows({ albumId, artistId }),
+      ),
     [albumId, artistId],
   );
-  const rows = useLibraryQuery(query, NO_LINKS);
-  // Until the new ids are read, the last result still names the old ones.
-  return {
-    album: rows.album !== null && rows.album.id === albumId ? rows.album : null,
-    artist: rows.artist !== null && rows.artist.id === artistId ? rows.artist : null,
-  };
+  return useLibraryQuery(query, NO_LINKS);
 };
 
-export const useAlbum = (id: number): AlbumDetail | null | undefined => useDetail(id, getAlbum);
-export const useArtist = (id: number): ArtistDetail | null | undefined => useDetail(id, getArtist);
-export const useGenre = (id: number): GenreDetail | null | undefined => useDetail(id, getGenre);
+export const useAlbum = (id: number): AlbumDetail | null | undefined =>
+  useDetail("album", id, getAlbum);
+export const useArtist = (id: number): ArtistDetail | null | undefined =>
+  useDetail("artist", id, getArtist);
+export const useGenre = (id: number): GenreDetail | null | undefined =>
+  useDetail("genre", id, getGenre);
 
-// oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
-const listExcludedFolders = LibraryStore.use((store) => store.excludedFolders);
+const listExcludedFolders = storeQuery(
+  "excludedFolders",
+  { folders: true },
+  (store) => store.excludedFolders,
+);
 
 const NO_EXCLUDED_FOLDERS: readonly string[] = [];
 
@@ -304,8 +236,10 @@ const NO_EXCLUDED_FOLDERS: readonly string[] = [];
 export const useExcludedFolders = (): readonly string[] =>
   useLibraryQuery(listExcludedFolders, NO_EXCLUDED_FOLDERS);
 
-// oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
-const listFavorites = LibraryStore.use((store) => store.listFavorites);
+/** Playlists show their songs' titles, lengths and covers, and link YT Music entries on scans. */
+const PLAYLISTS: LibraryReads = { playlists: true, tracks: true };
+
+const listPlaylists = libraryQuery("playlists", PLAYLISTS, listPlaylistsRemembered);
 
 const NO_PLAYLISTS: readonly PlaylistRow[] = [];
 
@@ -314,57 +248,56 @@ const NO_PLAYLISTS: readonly PlaylistRow[] = [];
  * the remembered list when it is up to date, so a card listing them opens full.
  */
 export const usePlaylists = (): readonly PlaylistRow[] =>
-  useLibraryQuery(listPlaylistsRemembered, knownPlaylists() ?? NO_PLAYLISTS, usePlaylistsVersion());
+  useLibraryQuery(listPlaylists, knownPlaylists() ?? NO_PLAYLISTS);
 
 /** A playlist screen's data (see `useDetail`), refreshed as soon as it is edited. */
 export const usePlaylist = (id: number): PlaylistDetail | null | undefined => {
-  // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
-  const query = useMemo(() => LibraryStore.use((store) => store.getPlaylist(id)), [id]);
-  return useLibraryQuery<PlaylistDetail | null | undefined>(
-    query,
-    undefined,
-    usePlaylistsVersion(),
+  const query = useMemo(
+    () =>
+      storeQuery(`playlist:${id}`, { playlists: [id], tracks: true }, (store) =>
+        store.getPlaylist(id),
+      ),
+    [id],
   );
+  return useLibraryQuery<PlaylistDetail | null | undefined>(query, undefined);
 };
+
+const listFavorites = storeQuery(
+  "favorites",
+  { favorites: true, tracks: true },
+  (store) => store.listFavorites,
+);
 
 /** Library › Favorites: starred songs, most recently starred first. */
 export const useFavoriteSongs = (): readonly FavoriteRow[] | undefined =>
-  useLibraryQuery<readonly FavoriteRow[] | undefined>(
-    listFavorites,
-    undefined,
-    useFavoritesSaved(),
-  );
+  useLibraryQuery<readonly FavoriteRow[] | undefined>(listFavorites, undefined);
 
-// oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
-const readHome = LibraryStore.use((store) => store.home());
+const readHome = storeQuery("home", { tracks: true, favorites: true, plays: true }, (store) =>
+  store.home(),
+);
 
 /**
  * The Home tab's sections, or undefined while loading. Re-read as soon as a
- * star is saved, and as soon as a play starts or ends while Home is focused
- * (plays while it's hidden are read when it comes back).
+ * star is saved, and as soon as a play starts or ends while Home is in sight
+ * (plays while it's hidden are read when it comes back). Home and Library's
+ * shelf share one read.
  */
-export const useHome = (): HomeSections | undefined => {
-  const plays = useFocusedVersion(playHistoryVersion);
-  return useLibraryQuery<HomeSections | undefined>(
-    readHome,
-    undefined,
-    plays + useFavoritesSaved(),
-  );
-};
+export const useHome = (): HomeSections | undefined =>
+  useLibraryQuery<HomeSections | undefined>(readHome, undefined);
 
-// oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
-const readListeningOverview = LibraryStore.use((store) =>
-  Effect.map(Effect.all([store.countLibrary, store.songListening]), ([counts, songs]) =>
-    listeningOverview(counts, listeningTotals(songs)),
-  ),
+const readListeningOverview = storeQuery(
+  "listeningOverview",
+  { tracks: true, plays: true },
+  (store) =>
+    Effect.map(Effect.all([store.countLibrary, store.songListening]), ([counts, songs]) =>
+      listeningOverview(counts, listeningTotals(songs)),
+    ),
 );
 
 /**
  * Home's listening overview (library and all-time listening totals), or
  * undefined while loading. Re-read after scan batches, and as soon as a play
- * starts or ends while Home is focused (else when it comes back).
+ * starts or ends while Home is in sight (else when it comes back).
  */
-export const useListeningOverview = (): ListeningOverview | undefined => {
-  const plays = useFocusedVersion(playHistoryVersion);
-  return useLibraryQuery<ListeningOverview | undefined>(readListeningOverview, undefined, plays);
-};
+export const useListeningOverview = (): ListeningOverview | undefined =>
+  useLibraryQuery<ListeningOverview | undefined>(readListeningOverview, undefined);

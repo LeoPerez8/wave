@@ -16,6 +16,7 @@ import {
   findNode,
   parseAmStart,
   parseCompilation,
+  parseDensity,
   parseGetprop,
   parseGfxinfo,
   parseMeminfo,
@@ -26,6 +27,7 @@ import {
   type AmStart,
   type Target,
 } from "./device.ts";
+import { compileWithBaseline, readProfileState } from "./profileDevice.ts";
 import { stepMetrics, type StepRecord } from "./metrics.ts";
 import {
   findScenario,
@@ -72,7 +74,10 @@ export interface RunOptions {
   readonly apkFile: { readonly path: string; readonly sha256: string } | null;
   /** Values recorded as given (`--meta key=value`): Library size on a non-perf build, notes. */
   readonly manual: Readonly<Record<string, string>>;
-  /** Puts this ART compiler filter on the APK before running (`cmd package compile -m`). */
+  /**
+   * Puts this ART compiler filter on the APK before running (`cmd package compile -m`), or,
+   * for `baseline`, compiles it with only the profile the APK ships (#317).
+   */
   readonly compile: string | null;
   /**
    * Launches Wave with this glass probe (#316), so its glass drops the layers the
@@ -103,7 +108,10 @@ const tapCommand = ({ x, y }: { x: number; y: number }): string => `input tap ${
 const ms = (value: number | null): string => (value === null ? "-" : `${value} ms`);
 
 const touches = (action: Action): boolean =>
-  action.kind === "tap" || action.kind === "taps" || action.kind === "swipe";
+  action.kind === "tap" ||
+  action.kind === "taps" ||
+  action.kind === "drag" ||
+  action.kind === "fling";
 
 /** A swipe this quick lets the list fling on after the finger lifts. */
 const FLING_MS = 120;
@@ -166,14 +174,16 @@ export const runPerf = async (
 
   const flushWait = PERF_FLUSH_QUIET_MS + options.flushTimeoutMs;
 
+  /** The glass probe on every launch intent, so a process started anew keeps it. */
+  const launchExtras = options.glass === null ? "" : ` --es ${GLASS_PROBE_EXTRA} ${options.glass}`;
+
   const launch = async (): Promise<AmStart> => {
     await shell(`am force-stop ${pkg}`);
     await device.sleep(options.settleMs);
     await shell("logcat -c");
     const result = parseAmStart(
       await shell(
-        `am start -W -S -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p ${pkg}` +
-          (options.glass === null ? "" : ` --es ${GLASS_PROBE_EXTRA} ${options.glass}`),
+        `am start -W -S -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p ${pkg}${launchExtras}`,
       ),
     );
     if (result.status !== "ok")
@@ -207,17 +217,35 @@ export const runPerf = async (
     throw new ScenarioError(`Couldn't find ${key} on screen.`);
   };
 
+  let pxPerDp: number | null = null;
+  /** Pixels per dp on the phone, read once. */
+  const density = async (): Promise<number> => {
+    if (pxPerDp === null) {
+      const dpi = parseDensity(await shell("wm density"));
+      if (dpi === null) throw new ScenarioError("Couldn't read the screen density (wm density).");
+      pxPerDp = dpi / 160;
+    }
+    return pxPerDp;
+  };
+
   /** Finds the targets [action] taps before any window opens, so finding them is never measured. */
   const prepare = async (action: Action): Promise<string | null> => {
     switch (action.kind) {
       case "tap":
         return tapCommand(await resolve(action.target));
+      case "drag": {
+        const centre = await resolve(action.target);
+        const scale = await density();
+        const at = ({ x, y }: { x: number; y: number }): string =>
+          `${Math.round(centre.x + x * scale)} ${Math.round(centre.y + y * scale)}`;
+        return `input swipe ${at(action.from)} ${at(action.to)} ${action.durationMs}`;
+      }
       case "taps": {
         const commands: string[] = [];
         for (const target of action.targets) commands.push(tapCommand(await resolve(target)));
         return commands.join("; ");
       }
-      case "swipe": {
+      case "fling": {
         screen ??= parseWmSize(await shell("wm size"));
         if (screen === null) throw new ScenarioError("Couldn't read the screen's size (wm size).");
         const x = Math.round(screen.width / 2);
@@ -233,6 +261,7 @@ export const runPerf = async (
           options.importLink,
         )} ${pkg}`;
       case "launch":
+      case "resume":
       case "idle":
         return null;
     }
@@ -347,6 +376,17 @@ export const runPerf = async (
     let launched: AmStart | null = null;
     if (step.action.kind === "launch") {
       launched = await launch();
+    } else if (step.action.kind === "resume") {
+      await shell("input keyevent 3");
+      await device.sleep(options.settleMs);
+      await shell("logcat -c");
+      launched = parseAmStart(
+        await shell(
+          `am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p ${pkg}${launchExtras}`,
+        ),
+      );
+      if (launched.status !== "ok")
+        throw new ScenarioError(`Couldn't bring ${pkg} back (${launched.status ?? "no status"}).`);
     } else {
       await device.sleep(options.settleMs);
       await shell("logcat -c");
@@ -364,9 +404,15 @@ export const runPerf = async (
       flush: perf,
       expect: step.expect,
       ...(step.anchor === undefined ? {} : { anchor: step.anchor }),
+      ...(step.phases === undefined ? {} : { phases: step.phases }),
     });
     const meta = perf?.meta ?? {};
     const importRunning = meta["import.running"];
+    const libraryQueries = Object.fromEntries(
+      Object.entries(meta)
+        .filter(([key]) => key.startsWith("libraryQueries."))
+        .map(([key, value]) => [key.slice("libraryQueries.".length), value]),
+    );
     const record: StepRecord & Record<string, unknown> = {
       type: "step",
       run,
@@ -394,6 +440,8 @@ export const runPerf = async (
             },
           }
         : {}),
+      // Counters since launch: compare a step's with the one before it for its reads.
+      ...(Object.keys(libraryQueries).length > 0 ? { libraryQueries } : {}),
     };
     write(record);
     log(
@@ -491,7 +539,20 @@ export const runPerf = async (
   // The run
 
   await shell("input keyevent KEYCODE_WAKEUP");
-  if (options.compile !== null) await shell(`cmd package compile -m ${options.compile} -f ${pkg}`);
+  let artProfile: { install: string; classes: number; methods: number } | null = null;
+  if (options.compile === "baseline") {
+    const { install } = await compileWithBaseline(device, pkg);
+    const { profile } = await readProfileState(device, pkg);
+    artProfile = {
+      install,
+      classes: profile?.classes.size ?? 0,
+      methods: profile?.methods.size ?? 0,
+    };
+    log(
+      `profileinstaller: ${install}; ART's profile: ${artProfile.classes} classes, ${artProfile.methods} methods`,
+    );
+  } else if (options.compile !== null)
+    await shell(`cmd package compile -m ${options.compile} -f ${pkg}`);
   const meta = await metadata();
   write({
     type: "run",
@@ -516,6 +577,7 @@ export const runPerf = async (
       artist: options.config.artist,
     },
     ...meta,
+    ...(options.compile === "baseline" ? { artProfile } : {}),
   });
   log(
     `${meta.device.model ?? "?"} (Android ${meta.device.android ?? "?"}), Wave ${

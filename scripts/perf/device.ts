@@ -32,7 +32,7 @@ export interface GfxFrame {
   readonly deadlineMs: number | null;
   readonly intervalMs: number | null;
   /** Where the frame's time went; a part is null when Android left its timestamps empty. */
-  readonly phases: FramePhases;
+  readonly parts: FrameParts;
 }
 
 /**
@@ -41,7 +41,7 @@ export interface GfxFrame {
  * in a pre-draw listener (`traversalMs`), its blur and refraction layers render
  * on the RenderThread (`issueMs`) and the GPU (`gpuMs`).
  */
-export interface FramePhases {
+export interface FrameParts {
   /** UI thread, PerformTraversalsStart to DrawStart: measure, layout and pre-draw listeners. */
   readonly traversalMs: number | null;
   /** UI thread, DrawStart to SyncQueued: recording the views' display lists. */
@@ -54,7 +54,7 @@ export interface FramePhases {
   readonly gpuMs: number | null;
 }
 
-export const FRAME_PHASES = ["traversalMs", "drawMs", "syncMs", "issueMs", "gpuMs"] as const;
+export const FRAME_PARTS = ["traversalMs", "drawMs", "syncMs", "issueMs", "gpuMs"] as const;
 
 const number = (text: string, pattern: RegExp): number | null => {
   const match = pattern.exec(text);
@@ -118,7 +118,7 @@ const parseFrames = (text: string): GfxFrame[] => {
         completedMs: completedNs / NS_PER_MS,
         deadlineMs: deadlineNs === null || deadlineNs === 0 ? null : deadlineNs / NS_PER_MS,
         intervalMs: intervalNs === null || intervalNs === 0 ? null : intervalNs / NS_PER_MS,
-        phases: {
+        parts: {
           traversalMs: span(traversal, draw),
           drawMs: span(draw, queued),
           syncMs: span(sync, issue),
@@ -256,6 +256,10 @@ export const parseWmSize = (text: string): { width: number; height: number } | n
     /^Override size: (\d+)x(\d+)/m.exec(text) ?? /^Physical size: (\d+)x(\d+)/m.exec(text);
   return match === null ? null : { width: Number(match[1]), height: Number(match[2]) };
 };
+
+/** `wm density`: the density the screen is drawn at (dpi; 160 is one px per dp). */
+export const parseDensity = (text: string): number | null =>
+  number(text, /^Override density: (\d+)/m) ?? number(text, /^Physical density: (\d+)/m);
 
 /** What the runner taps, found in a `uiautomator dump`. */
 export type Target =

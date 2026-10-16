@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import type { PerfEntry, PerfFlush } from "../../packages/core/src/index.ts";
-import type { FramePhases, GfxFrame, GfxSummary } from "./device.ts";
+import type { FrameParts, GfxFrame, GfxSummary } from "./device.ts";
 import {
   compareSummaries,
   formatComparison,
+  formatFrameParts,
   formatPhases,
   formatSummary,
   stepMetrics,
@@ -20,7 +21,7 @@ const frame = (
   start: number,
   ms: number,
   deadlineMs: number | null = start + 2 * INTERVAL,
-  phases: Partial<FramePhases> = {},
+  parts: Partial<FrameParts> = {},
 ): GfxFrame => ({
   window: "main",
   flags: 0,
@@ -29,7 +30,7 @@ const frame = (
   completedMs: start + ms,
   deadlineMs,
   intervalMs: INTERVAL,
-  phases: { traversalMs: null, drawMs: null, syncMs: null, issueMs: null, gpuMs: null, ...phases },
+  parts: { traversalMs: null, drawMs: null, syncMs: null, issueMs: null, gpuMs: null, ...parts },
 });
 
 /** A frame whose RenderThread spent [issueMs] drawing and whose pre-draw took [traversalMs]. */
@@ -155,6 +156,27 @@ describe("stepMetrics", () => {
     assert.equal(metrics.finalRoute, "/library");
   });
 
+  it("times each phase the step names, from the touch to the phase's first mark after it", () => {
+    const metrics = stepMetrics({
+      frames,
+      summary: SUMMARY,
+      flush: flush([
+        { kind: "mark", name: "tab.commit", detail: "library", at: 990 },
+        { kind: "touch", eventAt: 1_000, at: 1_010 },
+        { kind: "mark", name: "tab.commit", detail: "library", at: 1_040 },
+        { kind: "mark", name: "tab.layout", detail: "library", at: 1_065 },
+        { kind: "mark", name: "tab.commit", detail: "songs", at: 1_300 },
+      ]),
+      expect: undefined,
+      phases: ["tab.commit", "tab.layout", "tab.settled"],
+    });
+    assert.deepEqual(metrics.phasesMs, {
+      "tab.commit": 40,
+      "tab.layout": 65,
+      "tab.settled": null,
+    });
+  });
+
   it("without a perf build, keeps the frame burst and leaves the latencies out", () => {
     const metrics = stepMetrics({
       frames: frames.slice(1),
@@ -188,8 +210,13 @@ describe("stepMetrics", () => {
       flush: null,
       expect: undefined,
     });
-    assert.deepEqual(metrics.phases.issueMs, { frames: 4, meanMs: 5.5, p90Ms: 10, maxMs: 10 });
-    assert.deepEqual(metrics.phases.traversalMs, { frames: 4, meanMs: 1.5, p90Ms: 3, maxMs: 3 });
+    assert.deepEqual(metrics.frameParts.issueMs, { frames: 4, meanMs: 5.5, p90Ms: 10, maxMs: 10 });
+    assert.deepEqual(metrics.frameParts.traversalMs, {
+      frames: 4,
+      meanMs: 1.5,
+      p90Ms: 3,
+      maxMs: 3,
+    });
   });
 
   it("leaves a part empty when no kept frame had its timestamps", () => {
@@ -199,7 +226,12 @@ describe("stepMetrics", () => {
       flush: null,
       expect: undefined,
     });
-    assert.deepEqual(metrics.phases.gpuMs, { frames: 0, meanMs: null, p90Ms: null, maxMs: null });
+    assert.deepEqual(metrics.frameParts.gpuMs, {
+      frames: 0,
+      meanMs: null,
+      p90Ms: null,
+      maxMs: null,
+    });
   });
 });
 
@@ -255,6 +287,35 @@ describe("summarize", () => {
     assert.deepEqual(rows[0]?.rendersPerStep, { MiniPlayer: 0.5, TabBar: 3 });
     assert.equal(rows[0]?.missing, 1);
   });
+
+  it("gives each phase its own distribution, and none to steps from before phases", () => {
+    const old = record("tab-switch", "tab", 90);
+    delete (old as { phasesMs?: unknown }).phasesMs;
+    const [row] = summarize([
+      record("tab-switch", "tab", 100, { phasesMs: { "tab.commit": 30, "tab.layout": 50 } }),
+      record("tab-switch", "tab", 120, { phasesMs: { "tab.commit": 50, "tab.layout": null } }),
+      old,
+    ]);
+    assert.deepEqual(row?.phases, {
+      "tab.commit": { n: 2, median: 40, p90: 50, max: 50 },
+      "tab.layout": { n: 1, median: 50, p90: 50, max: 50 },
+    });
+  });
+});
+
+describe("formatPhases", () => {
+  it("prints each phase's median / p90 per scenario step, and nothing when no step has phases", () => {
+    const rows = summarize([
+      record("tab-switch", "tab", 100, { phasesMs: { "tab.commit": 30 } }),
+      record("push-settings", "push", 100),
+    ]);
+    assert.match(
+      formatPhases(rows),
+      /^\| tab-switch\/idle\/tab \| tab\.commit \| 30 \/ 30 \| 1 \|$/m,
+    );
+    assert.doesNotMatch(formatPhases(rows), /push-settings/);
+    assert.equal(formatPhases(summarize([record("a", "x", 1)])), "");
+  });
 });
 
 describe("summarize, frame parts", () => {
@@ -269,12 +330,12 @@ describe("summarize, frame parts", () => {
       record("scroll-home", "fling-up", null, {}, [split(0, 1, 2), split(10, 1, 2)]),
     ]);
     // (4 + 4 + 10 + 4 + 2 + 2) / 6 frames; the steps' p90s were 10 and 2.
-    assert.deepEqual(row?.phases.issueMs, { frames: 6, meanMs: 4.33, p90Ms: 6 });
-    assert.deepEqual(row?.phases.gpuMs, { frames: 6, meanMs: 1, p90Ms: 1 });
+    assert.deepEqual(row?.frameParts.issueMs, { frames: 6, meanMs: 4.33, p90Ms: 6 });
+    assert.deepEqual(row?.frameParts.gpuMs, { frames: 6, meanMs: 1, p90Ms: 1 });
   });
 
   it("prints the parts as a table, mean / p90 per part", () => {
-    const table = formatPhases(
+    const table = formatFrameParts(
       summarize([record("idle-home", "idle", null, {}, [split(0, 2, 5), split(10, 2, 5)])]),
     );
     assert.match(table, /^\| Scenario step \| Frames \| Pre-draw and layout ms \|/m);
@@ -337,6 +398,15 @@ describe("compareSummaries", () => {
       change: -105,
       changePercent: -50,
     });
+  });
+
+  it("lines up each phase's median and p90", () => {
+    const rows = compareSummaries(
+      summarize([record("a", "x", 1, { phasesMs: { "tab.commit": 80 } })]),
+      summarize([record("a", "x", 1, { phasesMs: { "tab.commit": 20 } })]),
+    );
+    const commit = rows.find((row) => row.metric === "tab.commit median");
+    assert.equal(commit?.change, -60);
   });
 
   it("leaves out scenarios only one side ran", () => {

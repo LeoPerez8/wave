@@ -9,18 +9,38 @@ export type Action =
   /** Back-to-back taps, no wait between them (rapid tab taps). */
   | { readonly kind: "taps"; readonly targets: readonly Target[] }
   /**
-   * A fling across the middle of the screen, clear of the floating chrome: "up"
-   * moves the finger up, so the content scrolls on towards its end.
+   * A quick swipe (`input swipe`) across the middle of the screen, clear of the
+   * floating chrome, that lets the list fling on: "up" moves the finger up, so
+   * the content scrolls on towards its end.
    */
-  | { readonly kind: "swipe"; readonly direction: "up" | "down" }
+  | { readonly kind: "fling"; readonly direction: "up" | "down" }
   /** The system back key. It has no touch to measure from, so only setup and teardown use it. */
   | { readonly kind: "back" }
   /** Shares the fixture's playlist link to Wave, as a share sheet would. */
   | { readonly kind: "share" }
   /** A cold launch, timed by `am start -W`. */
   | { readonly kind: "launch" }
+  /** Home, then Wave again from its launcher intent while its process lives: a warm launch. */
+  | { readonly kind: "resume" }
   /** Nothing: a window that watches the app on its own (an import filling). */
-  | { readonly kind: "idle" };
+  | { readonly kind: "idle" }
+  /**
+   * A finger dragged in a straight line (`input swipe`), [from] and [to] in dp
+   * from [target]'s centre, taking [durationMs].
+   */
+  | {
+      readonly kind: "drag";
+      readonly target: Target;
+      readonly from: Point;
+      readonly to: Point;
+      readonly durationMs: number;
+    };
+
+/** A position in dp; x grows right, y down. */
+export interface Point {
+  readonly x: number;
+  readonly y: number;
+}
 
 export interface Step {
   /** What the step measures, the third part of its summary key ("tab", "push", "pop"…). */
@@ -32,6 +52,8 @@ export interface Step {
   readonly anchor?: "first" | "last";
   /** How long the step's window stays open; the run's window when unset. */
   readonly windowMs?: number;
+  /** Marks timed from the touch besides the response (`phasesMs`). */
+  readonly phases?: readonly string[];
 }
 
 /** What the scenarios read from the fixture (scripts/perf/fixture.json). */
@@ -80,13 +102,49 @@ const pushPop = (target: Target): readonly Step[] => [
 
 /** A fling on towards the content's end, then one back: the content scrolls under the glass. */
 const flings: readonly Step[] = [
-  { measure: "fling-up", action: { kind: "swipe", direction: "up" } },
-  { measure: "fling-down", action: { kind: "swipe", direction: "down" } },
+  { measure: "fling-up", action: { kind: "fling", direction: "up" } },
+  { measure: "fling-down", action: { kind: "fling", direction: "down" } },
 ];
 
+const drag = (target: Target, from: Point, to: Point, durationMs: number): Action => ({
+  kind: "drag",
+  target,
+  from,
+  to,
+  durationMs,
+});
+
+const SCRUBBER: Target = { desc: "Playback position" };
+/**
+ * Up Next's handles are hidden from accessibility, so drags start from the
+ * first row's Remove button: the handle is the next 48 dp cell to its right.
+ */
+const FIRST_REMOVE: Target = { descPrefix: "Remove " };
+const HANDLE: Point = { x: 48, y: 0 };
+/** Up Next rows are 56 dp tall. */
+const THREE_ROWS_DOWN: Point = { x: 48, y: 3 * 56 };
+
 /** Ten tab changes away from Home and back, cycling through [tabs]. */
+const tabCycleLabels = (tabs: readonly string[], count: number): string[] =>
+  Array.from({ length: count }, (_, i) => tabs[(i + 1) % tabs.length] ?? "Home");
 const tabCycle = (tabs: readonly string[], count: number): Target[] =>
-  Array.from({ length: count }, (_, i) => tab(tabs[(i + 1) % tabs.length] ?? "Home"));
+  tabCycleLabels(tabs, count).map(tab);
+
+/**
+ * What a tab switch's time goes to (#304), besides the route mark: React done
+ * with the switch (`tab.commit`, detail `<tab> first|warm`) and the shown tab
+ * laid out (`tab.layout`; none when showing it changes no layout). The frames
+ * after them are native work: attaching the tab's views, layout and drawing.
+ */
+const TAB_PHASES = ["tab.commit", "tab.layout"] as const;
+
+/** A tab tap, measured to its route mark and its phases. */
+const tabStep = (measure: string, target: Target): Step => ({
+  measure,
+  action: { kind: "tap", target },
+  expect: route,
+  phases: TAB_PHASES,
+});
 
 export const SCENARIOS: readonly Scenario[] = [
   {
@@ -98,29 +156,45 @@ export const SCENARIOS: readonly Scenario[] = [
     warmup: 0,
   },
   {
+    name: "warm-start",
+    summary: "Home, then Wave again with its process alive: am start -W times of a warm launch.",
+    steps: () => [{ measure: "warm", action: { kind: "resume" } }],
+    iterations: 5,
+    warmup: 1,
+  },
+  {
+    name: "tab-first",
+    summary: "The first visit to each of the fixture's tabs after a launch: the tab is built.",
+    coldEachIteration: true,
+    steps: ({ tabs }) => tabs.slice(1).map((label) => tabStep("first", tab(label))),
+    iterations: 5,
+    warmup: 1,
+  },
+  {
     name: "tab-switch",
-    summary: "Ten tab changes across the fixture's tabs, one tap at a time.",
-    steps: ({ tabs }) =>
-      tabCycle(tabs, 10).map((target) => ({
-        measure: "tab",
-        action: { kind: "tap", target },
-        expect: route,
-      })),
+    summary: "Ten tab changes across the fixture's tabs, one tap at a time: warm visits.",
+    steps: ({ tabs }) => tabCycle(tabs, 10).map((target) => tabStep("tab", target)),
     iterations: 3,
     warmup: 1,
   },
   {
     name: "rapid-tabs",
-    summary: "Ten tab taps back to back; latencies count from the last tap.",
-    steps: ({ tabs }) => [
-      {
-        measure: "burst",
-        action: { kind: "taps", targets: tabCycle(tabs, 10) },
-        expect: route,
-        anchor: "last",
-        windowMs: 4_000,
-      },
-    ],
+    summary:
+      "Ten tab taps back to back; latencies count from the last tap to the tabs settling on it.",
+    steps: ({ tabs }) => {
+      const labels = tabCycleLabels(tabs, 10);
+      return [
+        {
+          measure: "burst",
+          action: { kind: "taps", targets: labels.map(tab) },
+          // `tab.settled` (detail: the tab's label) comes once no switch is on its way
+          // and the tab on screen is the one tapped last.
+          expect: { mark: "tab.settled", detail: labels[labels.length - 1] ?? "Home" },
+          anchor: "last",
+          windowMs: 4_000,
+        },
+      ];
+    },
     iterations: 5,
     warmup: 1,
   },
@@ -219,6 +293,33 @@ export const SCENARIOS: readonly Scenario[] = [
         action: { kind: "tap", target: { desc: "Next track" } },
         expect: { mark: "queue.synced" },
       },
+    ],
+    iterations: 10,
+    warmup: 1,
+  },
+  {
+    name: "scrub",
+    summary:
+      "Now Playing's scrubber dragged forward 240 dp and back, a second each; each drag seeks where it lets go.",
+    setup: [{ kind: "tap", target: { descPrefix: "Now playing:" } }],
+    steps: () => [
+      { measure: "forward", action: drag(SCRUBBER, { x: -120, y: 0 }, { x: 120, y: 0 }, 1_000) },
+      { measure: "back", action: drag(SCRUBBER, { x: 120, y: 0 }, { x: -120, y: 0 }, 1_000) },
+    ],
+    iterations: 10,
+    warmup: 1,
+  },
+  {
+    name: "queue-drag",
+    summary:
+      "The first Up Next row dragged three rows down by its handle, then back up: the order ends as it began. Needs four songs up next.",
+    setup: [
+      { kind: "tap", target: { descPrefix: "Now playing:" } },
+      { kind: "tap", target: { desc: "Queue" } },
+    ],
+    steps: () => [
+      { measure: "down", action: drag(FIRST_REMOVE, HANDLE, THREE_ROWS_DOWN, 800) },
+      { measure: "up", action: drag(FIRST_REMOVE, THREE_ROWS_DOWN, HANDLE, 800) },
     ],
     iterations: 10,
     warmup: 1,

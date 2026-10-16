@@ -37,6 +37,15 @@ export interface RunRecord {
   };
   readonly animationScales: Readonly<Record<string, string | null>>;
   readonly compilation: { readonly status: string; readonly reason: string | null } | null;
+  /**
+   * With `--compile baseline` (#317): profileinstaller's result and the size of the profile the
+   * APK was compiled with.
+   */
+  readonly artProfile?: {
+    readonly install: string;
+    readonly classes: number;
+    readonly methods: number;
+  } | null;
   readonly perfBuild: boolean;
   readonly library: Readonly<
     Record<
@@ -59,6 +68,12 @@ export type MeasuredStep = StepRecord & {
     readonly done: unknown;
     readonly total: unknown;
   };
+  /**
+   * The shared Library queries' counters at the step's flush, since launch
+   * (Core's `LibraryQueryStats`): reads, shared, paused, discarded, evicted,
+   * entries, retained, consumers.
+   */
+  readonly libraryQueries?: Readonly<Record<string, unknown>>;
 };
 
 export type MemoryRecord = Meminfo & {

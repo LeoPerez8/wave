@@ -82,8 +82,8 @@ export { contrastRatio, paletteGradient } from "./palette.ts";
 export type { ArtworkPalette, Gradient, GradientTheme } from "./palette.ts";
 export { settleSheet } from "./sheet.ts";
 export type { SheetDrag, SheetState } from "./sheet.ts";
-export { reorderShift, reorderTarget } from "./reorder.ts";
-export type { ReorderDrag, ReorderRow } from "./reorder.ts";
+export { reorderScrollSpeed, reorderShift, reorderTarget } from "./reorder.ts";
+export type { ReorderDrag, ReorderEdge, ReorderRow } from "./reorder.ts";
 export {
   RECENT_SEARCHES,
   createSearchIndex,
@@ -408,6 +408,26 @@ export type {
 } from "./artistPhoto.ts";
 export { focusedVersion, startFocusedVersion } from "./focusedVersion.ts";
 export type { FocusedVersion, FocusedVersionEvent } from "./focusedVersion.ts";
+export { startTabSwitch, stepTabSwitch } from "./tabSwitch.ts";
+export type { TabSwitch, TabSwitchEvent, TabSwitchStep } from "./tabSwitch.ts";
+export { describeTabScreens, keepTabs, parseTabScreens } from "./tabScreens.ts";
+export type { TabScreens } from "./tabScreens.ts";
+export {
+  LIBRARY_QUERY_LIMITS,
+  createLibraryQueries,
+  libraryChangeAffects,
+} from "./libraryQueries.ts";
+export type {
+  LibraryChange,
+  LibraryDataKind,
+  LibraryQueries,
+  LibraryQueryConsumer,
+  LibraryQueryLimits,
+  LibraryQueryOutcome,
+  LibraryQueryResult,
+  LibraryQueryStats,
+  LibraryReads,
+} from "./libraryQueries.ts";
 export { stepNowPlayingSheet } from "./sheetLifecycle.ts";
 export { MORE_FROM_ARTIST } from "./queue.ts";
 export { artistRanking } from "./moreFromArtist.ts";

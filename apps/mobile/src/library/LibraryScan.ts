@@ -4,6 +4,7 @@ import {
   planExclusion,
   reconcileScan,
   type IndexedFile,
+  type LibraryChange,
 } from "@wave/core";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -14,6 +15,7 @@ import { makeExternalStore } from "@/lib/externalStore";
 import { argbToHex, type NativeArtwork, type NativeScannedTrack } from "@/native/waveNative";
 
 import type { ArtworkPalette } from "./db/schema";
+import { publishLibraryChange } from "./libraryChanges";
 import { LibraryStore, type IndexedArtwork, type IndexedTrack } from "./LibraryStore";
 import { NativeScanner, type ScanEvent } from "./NativeScanner";
 
@@ -42,15 +44,25 @@ export const scanState = makeExternalStore<ScanState>({ status: "idle" });
 /** Bumped after every batch is committed, so lists know to re-query. */
 export const libraryVersion = makeExternalStore(0);
 
-const bumpLibraryVersion = (): void => libraryVersion.update((version) => version + 1);
+/** Bumps `libraryVersion` and announces [changes] to shared queries. */
+const bumpLibraryVersion = (...changes: readonly LibraryChange[]): void => {
+  libraryVersion.update((version) => version + 1);
+  for (const change of changes) publishLibraryChange(change);
+};
 
-/** Bumped when the owner changes the library (deletes songs): lists re-query at once. */
-export const libraryEdits = makeExternalStore(0);
+/** A scan batch (or the end of a scan that dropped nothing): readers take several at once (Core's `burst`). */
+const SCAN_BATCH: LibraryChange = { kind: "tracks", burst: true };
+const FOLDERS: LibraryChange = { kind: "folders" };
 
-/** The owner changed the library outside a scan: every list re-queries straight away. */
-export const libraryEdited = (): void => {
-  libraryEdits.update((edits) => edits + 1);
-  bumpLibraryVersion();
+/**
+ * The owner changed the library outside a scan (deleted songs, edited tags, a
+ * download landed, the Wave account sent changes): lists over tracks re-read
+ * straight away. [trackIds]: the tracks changed, when known.
+ */
+export const libraryEdited = (trackIds?: readonly number[]): void => {
+  bumpLibraryVersion(
+    trackIds === undefined ? { kind: "tracks" } : { kind: "tracks", ids: trackIds },
+  );
 };
 
 /** A track as the scanner read it, as the index stores it. */
@@ -157,7 +169,7 @@ const scanFolders = (roots: readonly string[]) =>
               indexed.delete(move.from);
               indexed.add(move.to.path);
             }
-            bumpLibraryVersion();
+            bumpLibraryVersion(SCAN_BATCH);
             return;
           }
           case "Complete":
@@ -183,7 +195,8 @@ const scanFolders = (roots: readonly string[]) =>
     // Also prunes albums and artists that changed tags left empty.
     yield* store.filesGone(missing.map((file) => file.path));
     yield* store.markScanned(roots, startedAt);
-    bumpLibraryVersion();
+    // Songs whose files are gone left the Library: every screen drops them now, hidden ones too.
+    bumpLibraryVersion(missing.length > 0 ? { kind: "tracks" } : SCAN_BATCH);
     scanState.set({ status: "done", filesFound: completed.filesFound });
   });
 
@@ -215,7 +228,8 @@ export const chooseFolder = Effect.gen(function* () {
   if (plan.kind === "covered") return plan satisfies FolderChoice;
   yield* store.addRoot(pick.path, plan.drop);
   yield* refreshDownloadPolicy;
-  bumpLibraryVersion();
+  // Its songs come with the scan the caller starts.
+  bumpLibraryVersion(FOLDERS);
   return { kind: "added", path: pick.path } satisfies FolderChoice;
 });
 
@@ -225,7 +239,8 @@ export const removeFolder = (path: string) =>
     const store = yield* LibraryStore;
     yield* store.removeRoot(path);
     yield* refreshDownloadPolicy;
-    bumpLibraryVersion();
+    // The songs only it covered went with it.
+    bumpLibraryVersion(FOLDERS, { kind: "tracks" });
   });
 
 export type ExclusionChoice =
@@ -250,7 +265,7 @@ export const chooseExcludedFolder = Effect.gen(function* () {
   if (plan.kind !== "add") return plan satisfies ExclusionChoice;
   yield* store.addExcludedFolder(pick.path, plan.drop);
   yield* refreshDownloadPolicy;
-  bumpLibraryVersion();
+  bumpLibraryVersion(FOLDERS);
   return { kind: "added", path: pick.path } satisfies ExclusionChoice;
 });
 
@@ -260,5 +275,5 @@ export const includeFolder = (path: string) =>
     const store = yield* LibraryStore;
     yield* store.removeExcludedFolder(path);
     yield* refreshDownloadPolicy;
-    bumpLibraryVersion();
+    bumpLibraryVersion(FOLDERS);
   });

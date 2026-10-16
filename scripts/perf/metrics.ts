@@ -2,12 +2,12 @@
 // sum up per scenario (summarize), and how two runs compare (compareSummaries).
 // docs/performance/README.md defines each metric.
 import type { PerfEntry, PerfFlush } from "../../packages/core/src/index.ts";
-import { FRAME_PHASES, type GfxFrame, type GfxSummary } from "./device.ts";
+import { FRAME_PARTS, type GfxFrame, type GfxSummary } from "./device.ts";
 
-type Phase = (typeof FRAME_PHASES)[number];
+type Part = (typeof FRAME_PARTS)[number];
 
-/** One part of the step's kept frames (`FramePhases`). */
-export interface PhaseStats {
+/** One part of the step's kept frames (`FrameParts`). */
+export interface PartStats {
   /** Kept frames that had this part's timestamps. */
   readonly frames: number;
   readonly meanMs: number | null;
@@ -63,10 +63,17 @@ export interface StepMetrics {
   /**
    * Where the kept frames' time went, part by part (UI thread pre-draw and layout,
    * UI thread draw, RenderThread sync and issue, GPU). Attributes glass cost.
+   * Results from before frame parts existed don't have it.
    */
-  readonly phases: Readonly<Record<Phase, PhaseStats>>;
+  readonly frameParts: Readonly<Record<Part, PartStats>>;
   readonly renders: Readonly<Record<string, number>>;
   readonly longTasks: { readonly count: number; readonly totalMs: number; readonly maxMs: number };
+  /**
+   * From the touch to the first mark of each phase the step names (React done
+   * with a tab, its layout...); null for a phase that didn't come. Results from
+   * before phases existed don't have it.
+   */
+  readonly phasesMs?: Readonly<Record<string, number | null>>;
 }
 
 const round = (value: number): number => Math.round(value * 100) / 100;
@@ -107,16 +114,16 @@ const frameStats = (summary: GfxSummary, frames: readonly GfxFrame[]): FrameStat
   };
 };
 
-const phaseStats = (frames: readonly GfxFrame[]): Record<Phase, PhaseStats> =>
+const partStats = (frames: readonly GfxFrame[]): Record<Part, PartStats> =>
   Object.fromEntries(
-    FRAME_PHASES.map((phase): [Phase, PhaseStats] => {
+    FRAME_PARTS.map((part): [Part, PartStats] => {
       const values = frames
-        .map((frame) => frame.phases[phase])
+        .map((frame) => frame.parts[part])
         .filter((value): value is number => value !== null)
         .toSorted((a, b) => a - b);
       const n = values.length;
       return [
-        phase,
+        part,
         n === 0
           ? { frames: 0, meanMs: null, p90Ms: null, maxMs: null }
           : {
@@ -127,7 +134,7 @@ const phaseStats = (frames: readonly GfxFrame[]): Record<Phase, PhaseStats> =>
             },
       ];
     }),
-  ) as Record<Phase, PhaseStats>;
+  ) as Record<Part, PartStats>;
 
 const touches = (entries: readonly PerfEntry[]) =>
   entries.filter((entry): entry is Extract<PerfEntry, { kind: "touch" }> => entry.kind === "touch");
@@ -143,6 +150,8 @@ export const stepMetrics = (step: {
   readonly expect: Expect | undefined;
   /** Which touch the latencies count from: the first (default) or the last (rapid taps). */
   readonly anchor?: "first" | "last";
+  /** Marks to time from the touch, each to its first occurrence after it. */
+  readonly phases?: readonly string[];
 }): StepMetrics => {
   const entries = step.flush?.entries ?? [];
   const stepTouches = touches(entries);
@@ -185,13 +194,26 @@ export const stepMetrics = (step: {
     framesCovered,
     finalRoute: routes[routes.length - 1]?.detail ?? null,
     frames: frameStats(step.summary, step.frames),
-    phases: phaseStats(step.frames),
+    frameParts: partStats(step.frames),
     renders: step.flush?.renders ?? {},
     longTasks: {
       count: longTasks.length,
       totalMs: round(longTasks.reduce((sum, task) => sum + task.duration, 0)),
       maxMs: longTasks.reduce((max, task) => Math.max(max, task.duration), 0),
     },
+    ...(step.phases === undefined
+      ? {}
+      : {
+          phasesMs: Object.fromEntries(
+            step.phases.map((phase) => {
+              const mark =
+                touchAt === null
+                  ? undefined
+                  : marks(entries).find((entry) => entry.at >= touchAt && entry.name === phase);
+              return [phase, sinceTouch(mark?.at ?? null, touchAt)];
+            }),
+          ),
+        }),
   };
 };
 
@@ -267,9 +289,9 @@ export interface SummaryRow {
    * Each frame part's mean over every kept frame of the group's steps, and the
    * median of the steps' 90th percentiles.
    */
-  readonly phases: Readonly<
+  readonly frameParts: Readonly<
     Record<
-      Phase,
+      Part,
       { readonly frames: number; readonly meanMs: number | null; readonly p90Ms: number | null }
     >
   >;
@@ -277,20 +299,22 @@ export interface SummaryRow {
   readonly longTasks: { readonly count: number; readonly totalMs: number };
   /** Steps whose expected mark never came. */
   readonly missing: number;
+  /** Each phase the steps timed (`phasesMs`), from the touch. */
+  readonly phases: Readonly<Record<string, Distribution>>;
 }
 
 /** [group]'s frame parts pooled; steps recorded before parts were measured count as none. */
-const pooledPhases = (group: readonly StepRecord[]): SummaryRow["phases"] =>
+const pooledParts = (group: readonly StepRecord[]): SummaryRow["frameParts"] =>
   Object.fromEntries(
-    FRAME_PHASES.map((phase) => {
+    FRAME_PARTS.map((part) => {
       const stats = group.flatMap((step) => {
-        const one = (step.phases as StepRecord["phases"] | undefined)?.[phase];
+        const one = (step.frameParts as StepRecord["frameParts"] | undefined)?.[part];
         return one === undefined || one.frames === 0 ? [] : [one];
       });
       const frames = stats.reduce((sum, one) => sum + one.frames, 0);
       const total = stats.reduce((sum, one) => sum + (one.meanMs ?? 0) * one.frames, 0);
       return [
-        phase,
+        part,
         {
           frames,
           meanMs: frames === 0 ? null : round(total / frames),
@@ -298,7 +322,7 @@ const pooledPhases = (group: readonly StepRecord[]): SummaryRow["phases"] =>
         },
       ];
     }),
-  ) as SummaryRow["phases"];
+  ) as SummaryRow["frameParts"];
 
 /** The run's steps summed up per scenario, variant and measure, in the order they first ran. */
 export const summarize = (steps: readonly StepRecord[]): SummaryRow[] => {
@@ -333,7 +357,7 @@ export const summarize = (steps: readonly StepRecord[]): SummaryRow[] => {
         p90Ms: histogramPercentile(histogram, binned, 0.9),
         p99Ms: histogramPercentile(histogram, binned, 0.99),
       },
-      phases: pooledPhases(group),
+      frameParts: pooledParts(group),
       rendersPerStep: Object.fromEntries(
         [...renders].map(([component, count]) => [component, round(count / group.length)]),
       ),
@@ -342,8 +366,37 @@ export const summarize = (steps: readonly StepRecord[]): SummaryRow[] => {
         totalMs: round(group.reduce((sum, step) => sum + step.longTasks.totalMs, 0)),
       },
       missing: group.filter((step) => step.expectMissing === true).length,
+      phases: Object.fromEntries(
+        [...new Set(group.flatMap((step) => Object.keys(step.phasesMs ?? {})))].map((phase) => [
+          phase,
+          distribution(
+            group
+              .filter((step) => step.phasesMs !== undefined)
+              .map((step) => step.phasesMs?.[phase] ?? null),
+          ),
+        ]),
+      ),
     };
   });
+};
+
+/**
+ * Each scenario step's phases as a Markdown table: median / p90 ms from the
+ * touch, and how many steps saw the phase. Empty when no step timed a phase.
+ */
+export const formatPhases = (rows: readonly SummaryRow[]): string => {
+  const lines = rows.flatMap((row) =>
+    Object.entries(row.phases).map(
+      ([phase, value]) => `| ${row.key} | ${phase} | ${pair(value)} | ${value.n} |`,
+    ),
+  );
+  return lines.length === 0
+    ? ""
+    : [
+        "| Scenario step | Phase | ms from the touch | Steps |",
+        "| --- | --- | ---: | ---: |",
+        ...lines,
+      ].join("\n");
 };
 
 const pair = (value: Distribution): string =>
@@ -377,7 +430,7 @@ export const formatSummary = (rows: readonly SummaryRow[]): string =>
     ),
   ].join("\n");
 
-const PHASE_HEADINGS: Readonly<Record<Phase, string>> = {
+const PART_HEADINGS: Readonly<Record<Part, string>> = {
   traversalMs: "Pre-draw and layout ms",
   drawMs: "Draw ms",
   syncMs: "Sync ms",
@@ -390,15 +443,15 @@ const PHASE_HEADINGS: Readonly<Record<Phase, string>> = {
  * ms over the kept frames. UI thread: pre-draw and layout, draw. RenderThread:
  * sync, issue. Then the GPU's time after the swap.
  */
-export const formatPhases = (rows: readonly SummaryRow[]): string =>
+export const formatFrameParts = (rows: readonly SummaryRow[]): string =>
   [
-    `| Scenario step | Frames | ${FRAME_PHASES.map((phase) => PHASE_HEADINGS[phase]).join(" | ")} |`,
-    `| --- | ---: |${FRAME_PHASES.map(() => " ---: |").join("")}`,
+    `| Scenario step | Frames | ${FRAME_PARTS.map((part) => PART_HEADINGS[part]).join(" | ")} |`,
+    `| --- | ---: |${FRAME_PARTS.map(() => " ---: |").join("")}`,
     ...rows.map(
       (row) =>
-        `| ${row.key} | ${Math.max(...FRAME_PHASES.map((phase) => row.phases[phase].frames))} | ${FRAME_PHASES.map(
-          (phase) => {
-            const { meanMs, p90Ms } = row.phases[phase];
+        `| ${row.key} | ${Math.max(...FRAME_PARTS.map((part) => row.frameParts[part].frames))} | ${FRAME_PARTS.map(
+          (part) => {
+            const { meanMs, p90Ms } = row.frameParts[part];
             return meanMs === null ? "-" : `${show(meanMs)} / ${show(p90Ms ?? meanMs)}`;
           },
         ).join(" | ")} |`,
@@ -424,9 +477,13 @@ const comparable = (row: SummaryRow): [string, number | null][] => [
   ["frames p99 ms", row.frames.p99Ms],
   ["deadline-miss rate", row.frames.missRate],
   ["long tasks", row.longTasks.count],
-  ...FRAME_PHASES.flatMap((phase): [string, number | null][] => [
-    [`${phase} mean`, row.phases[phase].meanMs],
-    [`${phase} p90`, row.phases[phase].p90Ms],
+  ...FRAME_PARTS.flatMap((part): [string, number | null][] => [
+    [`${part} mean`, row.frameParts[part].meanMs],
+    [`${part} p90`, row.frameParts[part].p90Ms],
+  ]),
+  ...Object.entries(row.phases).flatMap(([phase, value]): [string, number | null][] => [
+    [`${phase} median`, value.median],
+    [`${phase} p90`, value.p90],
   ]),
   ...Object.entries(row.rendersPerStep).map(([component, count]): [string, number | null] => [
     `renders ${component}`,

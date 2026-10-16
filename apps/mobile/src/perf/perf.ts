@@ -39,13 +39,45 @@ export const perfMark: (name: string, detail?: string) => void =
 export const useRenderCount: (component: string) => void =
   recorder === null ? noop : (component) => recorder.render(component);
 
+/**
+ * Counts a call a gesture made to JavaScript ([name] like `scrub.move`): how
+ * much the gesture asks of the JS thread. Reported with the render counts, as
+ * `js:<name>`.
+ */
+export const perfCount: (name: string) => void =
+  recorder === null ? noop : (name) => recorder.render(`js:${name}`);
+
 /** A platform timing (long task, event timing), from the observers `PerfProbe` starts. */
 export const perfTiming: (entry: PerfTiming) => void =
   recorder === null ? noop : (entry) => recorder.timing(entry);
 
-/** Records a touch with its native timestamp: the root view's `onTouchStart` in a perf build. */
+/**
+ * A controlled JavaScript stall, for checking what keeps moving while the JS
+ * thread is busy: a perf build bundled with `EXPO_PUBLIC_WAVE_PERF_STALL_MS`
+ * blocks the JS thread that long on every touch. 0 (no stall) otherwise.
+ */
+const STALL_MS = PERF_ENABLED
+  ? Math.max(0, Number(process.env.EXPO_PUBLIC_WAVE_PERF_STALL_MS ?? 0) || 0)
+  : 0;
+
+const stall = (): void => {
+  const until = performance.now() + STALL_MS;
+  while (performance.now() < until) {
+    // Busy on purpose: the stall stands in for an import's JavaScript work.
+  }
+};
+
+/**
+ * Records a touch with its native timestamp: the root view's `onTouchStart` in
+ * a perf build. A stall build then blocks the JS thread (`STALL_MS`).
+ */
 export const perfTouch: (event: GestureResponderEvent) => void =
-  recorder === null ? noop : (event) => recorder.touch(event.nativeEvent.timestamp);
+  recorder === null
+    ? noop
+    : (event) => {
+        recorder.touch(event.nativeEvent.timestamp);
+        if (STALL_MS > 0) stall();
+      };
 
 const useVisibleMark = (name: string): void => {
   useEffect(() => {
@@ -94,6 +126,7 @@ const collectMeta = async (): Promise<PerfMeta> => {
   const meta: Record<string, string | number | boolean | null> = {
     perfBuild: true,
     commit: COMMIT,
+    stallMs: STALL_MS,
     ...startupMeta(),
     ...heapMeta(),
   };

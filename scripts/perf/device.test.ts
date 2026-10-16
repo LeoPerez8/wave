@@ -5,6 +5,7 @@ import {
   findNode,
   parseAmStart,
   parseCompilation,
+  parseDensity,
   parseGetprop,
   parseGfxinfo,
   parseMeminfo,
@@ -121,7 +122,7 @@ describe("parseGfxinfo", () => {
       completedMs: 81_000_106,
       deadlineMs: 81_000_116.666666,
       intervalMs: 8.333333,
-      phases: { traversalMs: 0.5, drawMs: 1, syncMs: 0.4, issueMs: 1.5, gpuMs: 1 },
+      parts: { traversalMs: 0.5, drawMs: 1, syncMs: 0.4, issueMs: 1.5, gpuMs: 1 },
     });
     assert.equal(frames[2]?.window, "dev.leoperez.wave/PopupWindow:1a2b");
   });
@@ -129,7 +130,7 @@ describe("parseGfxinfo", () => {
   it("splits each frame into the UI thread's, the RenderThread's and the GPU's parts", () => {
     // The second frame: the RenderThread spent 16.5 ms issuing draw commands (blur, layers).
     const { frames } = parseGfxinfo(GFXINFO);
-    assert.deepEqual(frames[1]?.phases, {
+    assert.deepEqual(frames[1]?.parts, {
       traversalMs: 0.5,
       drawMs: 1,
       syncMs: 0.4,
@@ -148,7 +149,7 @@ ${header}
 ${row}
 ---PROFILEDATA---
 `);
-    assert.deepEqual(frames[0]?.phases, {
+    assert.deepEqual(frames[0]?.parts, {
       traversalMs: 1,
       drawMs: 1,
       syncMs: null,
@@ -299,6 +300,14 @@ describe("parseWmSize", () => {
 
   it("is null when wm says nothing it can read", () => {
     assert.equal(parseWmSize(""), null);
+  });
+});
+
+describe("parseDensity", () => {
+  it("reads the density the screen is drawn at, the user's override first", () => {
+    assert.equal(parseDensity("Physical density: 600\nOverride density: 450\n"), 450);
+    assert.equal(parseDensity("Physical density: 480\n"), 480);
+    assert.equal(parseDensity("nothing here"), null);
   });
 });
 
