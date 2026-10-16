@@ -114,21 +114,21 @@ aren't recorded. Every measured navigation step is a tap, so it has a touch to m
 pops tap the header's Back button, and Now Playing closes with its Close button. Only the cold
 launch, the share and the import's idle window have no touch.
 
-| Scenario           | Steps (measure)                                                                     | Response mark             | Iterations |
-| ------------------ | ----------------------------------------------------------------------------------- | ------------------------- | ---------: |
-| `startup`          | cold launch (`cold`)                                                                | (am start -W)             |          5 |
-| `tab-switch`       | ten tab taps cycling through `tabs` (`tab`)                                         | `route`                   |          3 |
-| `rapid-tabs`       | ten tab taps back to back, measured from the last (`burst`)                         | `route`                   |          5 |
-| `push-settings`    | Home › Settings (`push`), Back (`pop`)                                              | `route`                   |         10 |
-| `push-library`     | Library › Albums (`push`), Back (`pop`)                                             | `route`                   |         10 |
+| Scenario           | Steps (measure)                                                                              | Response mark             | Iterations |
+| ------------------ | -------------------------------------------------------------------------------------------- | ------------------------- | ---------: |
+| `startup`          | cold launch (`cold`)                                                                         | (am start -W)             |          5 |
+| `tab-switch`       | ten tab taps cycling through `tabs` (`tab`)                                                  | `route`                   |          3 |
+| `rapid-tabs`       | ten tab taps back to back, measured from the last (`burst`)                                  | `route`                   |          5 |
+| `push-settings`    | Home › Settings (`push`), Back (`pop`)                                                       | `route`                   |         10 |
+| `push-library`     | Library › Albums (`push`), Back (`pop`)                                                      | `route`                   |         10 |
 | `push-tracklist`   | Library › Songs, the whole Library as a Track list, to its first rows (`push`), Back (`pop`) | `songs.rows`, `route`     |         10 |
-| `push-artist`      | Library › Artists › the fixture's artist, to its stats block (`push`), Back (`pop`) | `artist.stats`, `route`   |         10 |
-| `push-empty`       | Settings › Developer, one row: the empty-screen control (`push`, `pop`)             | `route`                   |         10 |
-| `now-playing`      | mini player (`open`), Close Now Playing (`close`)                                   | `nowPlaying.shown/hidden` |         10 |
-| `queue`            | Queue in Now Playing (`open`), Queue again (`close`)                                | `visible` queue           |         10 |
-| `skip`             | the mini player's Next track (`next`)                                               | `queue.synced`            |         10 |
-| `search-first-tap` | the first Search tap after a fresh launch (`first-tap`)                             | `keyboard.show`           |          5 |
-| `import`           | share the link (`card`), tap Import (`start`), 10 s of the import (`during-import`) | `import.running`          |          1 |
+| `push-artist`      | Library › Artists › the fixture's artist, to its stats block (`push`), Back (`pop`)          | `artist.stats`, `route`   |         10 |
+| `push-empty`       | Settings › Developer, one row: the empty-screen control (`push`, `pop`)                      | `route`                   |         10 |
+| `now-playing`      | mini player (`open`), Close Now Playing (`close`)                                            | `nowPlaying.shown/hidden` |         10 |
+| `queue`            | Queue in Now Playing (`open`), Queue again (`close`)                                         | `visible` queue           |         10 |
+| `skip`             | the mini player's Next track (`next`)                                                        | `queue.synced`            |         10 |
+| `search-first-tap` | the first Search tap after a fresh launch (`first-tap`)                                      | `keyboard.show`           |          5 |
+| `import`           | share the link (`card`), tap Import (`start`), 10 s of the import (`during-import`)          | `import.running`          |          1 |
 
 `skip` measures how long a skip takes to reach the player, so it depends on the queue's length:
 load the queue under test before the run (a short album, or the whole Library as Songs) and leave
