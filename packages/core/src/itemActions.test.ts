@@ -134,17 +134,36 @@ describe("itemActions", () => {
     ]);
   });
 
-  test("songs offer Find Lyrics and Genre while online lookups are on, before Select and Delete", () => {
-    const menu = itemActions(tracks([song()], { selectable: true, onlineLookups: true }));
-    assert.deepEqual(names(menu).slice(-3), ["findLyricsAndGenre", "select", "delete"]);
-    assert.equal(ITEM_ACTION_LABELS.findLyricsAndGenre, "Find Lyrics and Genre");
-    const bar = itemActions(
-      tracks([song(), song()], { surface: "selection", onlineLookups: true }),
-    );
-    assert.ok(names(bar).includes("findLyricsAndGenre"));
-    assert.ok(!names(itemActions(tracks([song()]))).includes("findLyricsAndGenre"));
+  test("a song missing something offers Fix Song while online lookups are on, before Select and Delete", () => {
+    const fixable = { ...song(), fixable: true };
+    const menu = itemActions(tracks([fixable], { selectable: true, onlineLookups: true }));
+    assert.deepEqual(names(menu).slice(-3), ["fixSong", "select", "delete"]);
+    assert.equal(ITEM_ACTION_LABELS.fixSong, "Fix Song");
+    assert.ok(!names(itemActions(tracks([fixable]))).includes("fixSong"));
     const album = itemActions({ kind: "album", items: [{}], here: "/", onlineLookups: true });
-    assert.ok(!names(album).includes("findLyricsAndGenre"));
+    assert.ok(!names(album).includes("fixSong"));
+  });
+
+  test("a song with lyrics, a track number, a year and a genre doesn't offer Fix Song", () => {
+    const menu = itemActions(tracks([{ ...song(), fixable: false }], { onlineLookups: true }));
+    assert.ok(!names(menu).includes("fixSong"));
+  });
+
+  test("selection offers Fix Songs when any checked song is missing something", () => {
+    const bar = (fixable: readonly boolean[]) =>
+      names(
+        itemActions(
+          tracks(
+            fixable.map((each) => ({ ...song(), fixable: each })),
+            { surface: "selection", onlineLookups: true },
+          ),
+        ),
+      );
+    assert.ok(bar([false, true, false]).includes("fixSongs"));
+    assert.equal(ITEM_ACTION_LABELS.fixSongs, "Fix Songs");
+    assert.ok(!bar([false, false]).some((action) => action.startsWith("fix")));
+    // One checked song is Fix Song, as in its menu.
+    assert.ok(bar([true]).includes("fixSong"));
   });
 
   test("a starred song offers Remove from Favorites instead", () => {

@@ -18,7 +18,7 @@ import { followArtistLink } from "@/library/ArtistChoice";
 import { confirmDeleteSongs, confirmRemoveSongs } from "@/library/deleteSongs";
 import { songHasFile } from "@/library/LibraryStore";
 import { setFavorites, useFavoriteIds } from "@/library/favorites";
-import { findLyricsAndGenreFor } from "@/library/findLyricsAndGenre";
+import { fixSongs } from "@/library/findLyricsAndGenre";
 import { useAlbumsMissingSongs, useLinkRows } from "@/library/hooks";
 import {
   confirmDeletePlaylists,
@@ -165,7 +165,7 @@ export function useItemActions(
   const here = usePathname();
   const favorites = useFavoriteIds();
   const tracks = target.kind === "track" ? target.items : [];
-  // What acts on files (Delete, Find Lyrics and Genre) shows only when every song has one.
+  // What acts on files (Delete, Fix Song) shows only when every song has one.
   const withFiles = tracks.flatMap(({ song }) => (songHasFile(song) ? [song] : []));
 
   const run = (action: () => void) => () => {
@@ -278,8 +278,10 @@ export function useItemActions(
           void confirmDeletePlaylists(playlists, { onConfirm, onDeleted });
         });
       }
-      case "findLyricsAndGenre":
-        return run(() => void findLyricsAndGenreFor(withFiles));
+      case "fixSong":
+      case "fixSongs":
+        // Only the songs missing something are fixed (Core's `songsToFix`).
+        return run(() => void fixSongs(withFiles));
       case "select":
         return run(() => onSelect?.());
       case "delete":
