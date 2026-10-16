@@ -11,7 +11,14 @@ import type { YtSession } from "./ytAccount.ts";
 
 /** Each Settings page, by id. */
 export type SettingsPage =
-  "library" | "appearance" | "playback" | "lyricsAndTags" | "downloads" | "accounts" | "developer";
+  | "library"
+  | "appearance"
+  | "layout"
+  | "playback"
+  | "lyricsAndTags"
+  | "downloads"
+  | "accounts"
+  | "developer";
 
 export interface SettingsPageEntry {
   readonly page: SettingsPage;
@@ -25,11 +32,35 @@ export interface SettingsPageEntry {
 export const SETTINGS_PAGES: readonly SettingsPageEntry[] = [
   { page: "library", title: "Library", route: "/settings/library" },
   { page: "appearance", title: "Appearance", route: "/settings/appearance" },
+  { page: "layout", title: "Layout", route: "/settings/layout" },
   { page: "playback", title: "Playback", route: "/settings/playback" },
   { page: "lyricsAndTags", title: "Lyrics and tags", route: "/settings/lyrics-and-tags" },
   { page: "downloads", title: "Downloads", route: "/settings/downloads" },
   { page: "accounts", title: "Accounts", route: "/settings/accounts" },
   { page: "developer", title: "Developer", route: "/settings/developer" },
+];
+
+/**
+ * What Settings › Layout opens, by id: the options a long press opens on a
+ * screen's title (Home, the Library, Playlists) or on the tab bar, each as a
+ * page of its own.
+ */
+export type LayoutPage = "home" | "library" | "playlists" | "tabBar";
+
+export interface LayoutPageEntry {
+  readonly page: LayoutPage;
+  /** What its row on the Layout page and its own header say. */
+  readonly title: string;
+  /** Where its screen is (also `wave://settings/layout/<…>`). */
+  readonly route: `/settings/layout/${string}`;
+}
+
+/** Layout's pages, in the order its page lists them. */
+export const LAYOUT_PAGES: readonly LayoutPageEntry[] = [
+  { page: "home", title: "Home", route: "/settings/layout/home" },
+  { page: "library", title: "Library", route: "/settings/layout/library" },
+  { page: "playlists", title: "Playlists", route: "/settings/layout/playlists" },
+  { page: "tabBar", title: "Tab bar", route: "/settings/layout/tab-bar" },
 ];
 
 /**
