@@ -13,7 +13,7 @@ import { setYtMusicEnabled, useYtMusicEnabled } from "./ytMusic";
 
 const NOTES: Record<YtAccountNote, string> = {
   optional:
-    "Signing in is optional. Signed in, Search, playback and Discover use your " +
+    "Signing in is optional. Signed in, Search, playback and Discover mixes use your " +
     "account. The session stays on this phone. With Download in best quality off, or when Soulseek " +
     "can't deliver a song, downloads come from YouTube Music: AAC at 256 kbps with Premium, " +
     "about 128 kbps without.",
@@ -56,7 +56,7 @@ function AccountRow({ account, onSignOut }: { account: YtAccount; onSignOut: () 
         <TextButton label="Sign Out" onPress={onSignOut} />
       </View>
       <Text className="font-sans text-footnote text-secondary">
-        Search, playback and Discover use this account. Signing out forgets it on this phone.
+        Search, playback and Discover mixes use this account. Signing out forgets it on this phone.
       </Text>
     </>
   );

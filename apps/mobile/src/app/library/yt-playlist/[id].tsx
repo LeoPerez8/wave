@@ -5,7 +5,7 @@ import { useYtListHead } from "@/ytmusic/routes";
 import { useYtListPage, YtSongList } from "@/ytmusic/YtSongList";
 
 /**
- * A YT Music playlist opened from Discover: cover, title, who made it,
+ * A YT Music playlist: cover, title, who made it,
  * Play / Shuffle and its songs (up to 5,000), shown page by page as they load.
  */
 export default function YtPlaylistScreen() {

@@ -19,9 +19,8 @@ import kotlin.coroutines.resume
 /**
  * YT Music for JS (`WaveYtMusic`): the switch in Settings, song, artist and
  * album search (Search; the artist page's section finds artists too), the
- * artist page, the home's
- * recommendations and playlists (Discover), the account and caching a
- * played song's cover. (Album pages are `WaveYtDownloads.album`.) (Playing is the playback
+ * artist page, playlists, the account and caching a played song's cover.
+ * (Album pages are `WaveYtDownloads.album`.) (Playing is the playback
  * service's: it streams `yt:` queue items, see [YtDataSource].) Requests go
  * through the process-wide [YtClient]; failures reject with the codes of
  * [YtFailure]. Nothing returned carries cookies or stream addresses: the
@@ -85,15 +84,6 @@ class YtMusicModule : Module() {
      */
     AsyncFunction("artist") Coroutine { browseId: String ->
       coded { YtPages(client).artist(browseId).toMap() }
-    }
-
-    /**
-     * The account's recommendations, YouTube Music's home: `[{ title, items }]`,
-     * each item `{ kind: "song" | "album" | "playlist", … }`. Rejects with an
-     * `ERR_YT_*` code.
-     */
-    AsyncFunction("home") Coroutine { ->
-      coded { YtPages(client).home().map(YtShelf::toMap) }
     }
 
     /**

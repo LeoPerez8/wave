@@ -22,8 +22,6 @@ import { libraryShelfTitleLongPress, useLibraryShelf } from "@/library/librarySh
 import { promptForMusicFolder } from "@/library/promptForMusicFolder";
 import { RescanRefreshControl } from "@/library/RescanRefreshControl";
 import { openLibrarySectionActions } from "@/playback/ActionsMenu";
-import { useYtMusicEnabled } from "@/settings/ytMusic";
-import { openDiscover } from "@/ytmusic/routes";
 
 /** The shelf under the Library's rows: Home's section [id] with Home's data, nothing while it's empty. */
 function LibraryShelfSection({ id }: { id: HomeSectionId }) {
@@ -36,7 +34,6 @@ export default function LibraryScreen() {
   const trackCount = useTrackCount();
   const roots = useScanRoots();
   const counts = useLibraryCounts();
-  const ytMusic = useYtMusicEnabled();
   const shelf = useLibraryShelf();
   const empty = scan.status === "done" && trackCount === 0;
 
@@ -67,8 +64,6 @@ export default function LibraryScreen() {
           onLongPress={() => openLibrarySectionActions(section)}
         />
       ))}
-      {/* YouTube Music's recommendations; gone while YT Music is off. */}
-      {ytMusic && <EntryRow label="Discover" onPress={openDiscover} />}
       {/* The shelf picked from a long press on the title; None draws nothing and reads nothing. */}
       {shelf !== "none" && <LibraryShelfSection id={shelf} />}
     </LargeTitleScreen>

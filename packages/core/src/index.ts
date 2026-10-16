@@ -608,32 +608,12 @@ export type {
   YtDownloadStatus,
   YtDownloads,
 } from "./ytDownloads.ts";
-export {
-  DISCOVER_START,
-  discoverItemAction,
-  discoverShouldAsk,
-  discoverTileCaption,
-  discoverSongs,
-  discoverTrackId,
-  discoverView,
-  stepDiscover,
-  ytAlbumSongs,
-} from "./ytDiscover.ts";
+export { discoverSongs, discoverTrackId, ytAlbumSongs } from "./ytDiscover.ts";
 export type {
-  DiscoverAction,
-  DiscoverContext,
-  DiscoverEvent,
-  DiscoverItem,
-  DiscoverShelf,
   DiscoverSong,
   MixedSong,
-  DiscoverTileCaption,
-  DiscoverState,
-  DiscoverView,
   YtAlbumPageTrack,
   YtAlbumSong,
-  YtHome,
-  YtShelf,
   YtShelfItem,
 } from "./ytDiscover.ts";
 export {
