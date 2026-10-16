@@ -128,14 +128,19 @@ export const traceQueries = <A>(
 
 /**
  * Grows the library and its history fast, for benchmarks and scale tests:
- * [tracks] songs crediting a new artist [artist] (on one album), then [plays]
- * counted plays spread over them, one in ten of a song since deleted that
- * still credits the artist (`deleted_track_artists`). Written in bulk, so
- * hundreds of thousands of plays take a second.
+ * [tracks] songs crediting a new artist [artist] (on one album, or spread
+ * over [albums]), then [plays] counted plays spread over them, one in ten of a
+ * song since deleted that still credits the artist (`deleted_track_artists`).
+ * Written in bulk, so hundreds of thousands of plays take a second.
  */
 export const addHistory = (
   db: TestDatabase,
-  options: { readonly artist: string; readonly tracks: number; readonly plays: number },
+  options: {
+    readonly artist: string;
+    readonly tracks: number;
+    readonly plays: number;
+    readonly albums?: number;
+  },
 ): void => {
   const seed = addTrack(db, { title: `${options.artist} 1`, artist: options.artist });
   const { artistId } = db
@@ -164,6 +169,24 @@ export const addHistory = (
     sql`INSERT INTO track_artists (track_id, artist_id, position)
       SELECT id, ${artistId}, 0 FROM tracks WHERE id > ${seed} AND artist_id = ${artistId}`,
   );
+  const albums = options.albums ?? 1;
+  if (albums > 1) {
+    // Copies of the seed's album, keyed `<its key>-2` and up; the songs go round them.
+    const album = sql`(SELECT album_id FROM tracks WHERE id = ${seed})`;
+    db.run(
+      sql`WITH RECURSIVE n(x) AS (VALUES(2) UNION ALL SELECT x + 1 FROM n WHERE x < ${albums})
+        INSERT INTO albums (key, title, title_sort, album_artist_id, album_artist_credit)
+        SELECT seed.key || '-' || x, seed.title || ' ' || x, seed.title_sort || printf('%08d', x),
+          seed.album_artist_id, seed.album_artist_credit
+        FROM n, albums AS seed WHERE seed.id = ${album}`,
+    );
+    db.run(
+      sql`UPDATE tracks SET album_id = coalesce((SELECT albums.id FROM albums
+          WHERE albums.key = (SELECT key FROM albums WHERE id = ${album})
+            || '-' || ((tracks.id - ${seed}) % ${albums} + 1)), album_id)
+        WHERE id > ${seed} AND artist_id = ${artistId}`,
+    );
+  }
   // Deleted songs' ids: past every track id, as AUTOINCREMENT never reuses them.
   const deleted = 1_000_000_000 + seed * 1_000;
   db.run(

@@ -315,11 +315,12 @@ export {
   readGlassProbe,
 } from "./glassProbe.ts";
 export type { GlassLayers, GlassProbe } from "./glassProbe.ts";
-export { counted, listeningOverview, listeningTotals } from "./listening.ts";
+export { counted, listeningOverview, listeningTotals, summedListeningTotals } from "./listening.ts";
 export type {
   LibraryTotals,
   ListeningFilter,
   ListeningOverview,
+  ListeningSums,
   ListeningTotals,
   SongListening,
 } from "./listening.ts";
@@ -1014,3 +1015,5 @@ export { PERF_FLUSH_QUIET_MS, PERF_LOG_TAG, createPerfRecorder, parsePerfLog } f
 export type { PerfEntry, PerfFlush, PerfMeta, PerfRecorder, PerfTiming } from "./perfLog.ts";
 export { createPagedRows, PAGED_ROWS_LIMITS } from "./pagedRows.ts";
 export type { PagedRows, PagedRowsLimits, PagedRowsStats } from "./pagedRows.ts";
+export { recentlyPlayedAlbums } from "./recentlyPlayed.ts";
+export type { LatestPlayedSong } from "./recentlyPlayed.ts";

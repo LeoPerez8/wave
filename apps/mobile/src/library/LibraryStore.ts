@@ -12,7 +12,7 @@ import {
   type CreditedPlayTotals,
   type PlayEvent,
   type PlayTotals,
-  type SongListening,
+  type ListeningSums,
   type StatsWindow,
   type YtArtistSaved,
 } from "@wave/core";
@@ -58,6 +58,9 @@ import type { RowPage } from "./db/database";
 import migrations from "./db/migrations";
 import { selectLinkRows, type LinkIds, type LinkRows } from "./db/links";
 import {
+  homeAdded,
+  homeFavorites,
+  homePlays,
   homeSections,
   latestPlay,
   listFavorites,
@@ -68,9 +71,11 @@ import {
   updatePlay,
   endPlay,
   type FavoriteRow,
+  type HomePlays,
   type HomeSections,
   type RecordedPlay,
 } from "./db/playHistory";
+import { listeningSums } from "./db/playTotals";
 import {
   removePlaylistImage,
   setPlaylistImage,
@@ -106,13 +111,7 @@ import {
   type TrackScope,
   withFile,
 } from "./db/tracks";
-import {
-  artistPlays,
-  creditedPlayTotals,
-  songListening,
-  trackPlayTotals,
-  type ArtistPlays,
-} from "./db/stats";
+import { artistPlays, creditedPlayTotals, trackPlayTotals, type ArtistPlays } from "./db/stats";
 import { keyRecordings, stampPreference } from "./db/sync";
 import {
   filesGone,
@@ -655,6 +654,12 @@ export class LibraryStore extends Context.Service<
      * Favorites, of the songs in [scope] (Auto's: those with a file).
      */
     readonly home: (scope?: TrackScope) => Effect.Effect<HomeSections, LibraryStoreError>;
+    /** Home's Recently Added: only songs entering or leaving the library change it. */
+    readonly homeAdded: Effect.Effect<Pick<HomeSections, "recentlyAdded">, LibraryStoreError>;
+    /** Home's Recently Played and Most Played, from the all-time play totals (`play_totals`). */
+    readonly homePlays: Effect.Effect<HomePlays, LibraryStoreError>;
+    /** Home's Favorites: stars change it. */
+    readonly homeFavorites: Effect.Effect<Pick<HomeSections, "favorites">, LibraryStoreError>;
     /** The play recorded last, to pick back up when JS restarts while the player kept going. */
     readonly latestPlay: Effect.Effect<RecordedPlay | null, LibraryStoreError>;
     /**
@@ -684,11 +689,10 @@ export class LibraryStore extends Context.Service<
     /** The album and artist rows behind links to them, read ahead of a tap (`db/links.ts`). */
     readonly linkRows: (ids: LinkIds) => Effect.Effect<LinkRows, LibraryStoreError>;
     /**
-     * Each played song's all-time listening (every play's time, counted plays,
-     * latest play, the artists its credit names), in no order; Core's
-     * `listeningTotals` sums it.
+     * The whole history's listening summed in one row, from the all-time play
+     * totals (`play_totals`); Core's `summedListeningTotals` reads it.
      */
-    readonly songListening: Effect.Effect<readonly SongListening[], LibraryStoreError>;
+    readonly listeningSums: Effect.Effect<ListeningSums, LibraryStoreError>;
     /**
      * What [artistId]'s page needs for its stats block (Core's `artistStats`),
      * read from that artist's songs and their plays alone: the songs in the
@@ -1176,6 +1180,9 @@ const make = Effect.gen(function* () {
     endPlay: (id, play) => attempt("end the play", () => endPlay(db, id, play)),
 
     home: (scope) => attempt("read Home", () => homeSections(db, scope)),
+    homeAdded: attempt("read Recently Added", () => homeAdded(db)),
+    homePlays: attempt("read Home's plays", () => homePlays(db)),
+    homeFavorites: attempt("read Home's favorites", () => homeFavorites(db)),
 
     latestPlay: attempt("read the latest play", () => latestPlay(db)),
 
@@ -1195,7 +1202,7 @@ const make = Effect.gen(function* () {
 
     linkRows: (ids) => attempt("read linked rows", () => selectLinkRows(db, ids)),
 
-    songListening: attempt("sum up listening", () => songListening(db)),
+    listeningSums: attempt("sum up listening", () => listeningSums(db)),
 
     artistPlays: (artistId, now) =>
       attempt("sum up the artist's plays", () => artistPlays(db, artistId, now)),

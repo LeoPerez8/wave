@@ -45,6 +45,29 @@ export interface ListeningFilter {
 const MINUTE_MS = 60_000;
 
 /**
+ * Listening summed over many songs: what the store keeps summed for the
+ * whole history (Home's listening overview reads these rather than every
+ * song's listening), and what `listeningTotals` sums songs into.
+ */
+export interface ListeningSums {
+  /** Time listened over every play, skipped and uncounted ones included. */
+  readonly listenedMs: number;
+  readonly countedPlays: number;
+  /** Songs still in the library with at least one counted play. */
+  readonly songsListened: number;
+  /** When the latest play (counted or not) started; null when nothing was played. */
+  readonly lastPlayedAt: number | null;
+}
+
+/** All-time totals from listening summed already: the same totals `listeningTotals` gives for those songs. */
+export const summedListeningTotals = (sums: ListeningSums): ListeningTotals => ({
+  minutesListened: Math.floor(sums.listenedMs / MINUTE_MS),
+  songsListened: sums.songsListened,
+  plays: sums.countedPlays,
+  lastPlayedAt: sums.lastPlayedAt,
+});
+
+/**
  * Sums each song's listening into all-time totals. Unfiltered, the totals
  * cover the whole history: plays and minutes of songs since removed from the
  * library still count (they were listened to), but such songs aren't among
@@ -58,21 +81,16 @@ export const listeningTotals = (
 ): ListeningTotals => {
   let listenedMs = 0;
   let songsListened = 0;
-  let plays = 0;
+  let countedPlays = 0;
   let lastPlayedAt: number | null = null;
   for (const song of songs) {
     if (filter.artistId !== undefined && !song.artistIds.includes(filter.artistId)) continue;
     listenedMs += song.listenedMs;
-    plays += song.countedPlays;
+    countedPlays += song.countedPlays;
     if (song.inLibrary && song.countedPlays > 0) songsListened += 1;
     lastPlayedAt = Math.max(lastPlayedAt ?? song.lastPlayedAt, song.lastPlayedAt);
   }
-  return {
-    minutesListened: Math.floor(listenedMs / MINUTE_MS),
-    songsListened,
-    plays,
-    lastPlayedAt,
-  };
+  return summedListeningTotals({ listenedMs, countedPlays, songsListened, lastPlayedAt });
 };
 
 /** The library totals the overview shows, as Library's Songs, Albums and Artists count them. */

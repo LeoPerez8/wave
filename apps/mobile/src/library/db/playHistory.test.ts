@@ -298,6 +298,19 @@ describe("Most Played", () => {
       ["Second", "First"],
     );
   });
+
+  test("songs tied on plays and latest play come latest added first", () => {
+    // Plays imported or pulled from other phones can share their start times.
+    const first = addTrack(db, { title: "First" });
+    const second = addTrack(db, { title: "Second" });
+    const third = addTrack(db, { title: "Third" });
+    for (const song of [second, third, first]) recordPlay(db, play(song, 1_000));
+
+    assert.deepEqual(
+      homeSections(db).mostPlayed.map((row) => row.title),
+      ["Third", "Second", "First"],
+    );
+  });
 });
 
 describe("The latest play", () => {
