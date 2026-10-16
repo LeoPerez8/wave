@@ -420,6 +420,20 @@ describe("how long a Spotify import has left", () => {
     );
   });
 
+  test("a large import behind a window spent unevenly waits for each part of it in turn", () => {
+    // One search 15 minutes ago, the other 999 a second ago: the first goes once the
+    // oldest leaves the window, the next 999 not until the rest leave, then 1,000 a window.
+    const spent = { searchesAt: [0, ...Array.from({ length: 999 }, () => 898_000)] };
+    assert.equal(
+      importLine(startBig(many(2500)), 899_000, spent),
+      "Importing 0 of 2,500 songs · about 46 min left",
+    );
+    assert.equal(
+      importLine(startBig(many(5000)), 899_000, spent),
+      "Importing 0 of 5,000 songs · about 1 h 18 min left",
+    );
+  });
+
   test("a YouTube Music playlist import, or one waiting for its last answers, says no time", () => {
     const { job, searches } = askAll(startBig(many(3)), 0);
     assert.equal(importLine(job, 0, searches), "Importing 0 of 3 songs");
