@@ -422,6 +422,16 @@ export class FakeDevice implements Device {
     ],
     [/^am start -W -S -a android\.intent\.action\.MAIN/, () => this.launch()],
     [
+      /^am start -W -a android\.intent\.action\.MAIN/,
+      () => {
+        if (!this.running) return this.launch();
+        this.render(this.clock + 20, 20);
+        this.advance(180);
+        return "Starting: Intent { act=android.intent.action.MAIN }\nStatus: ok\nLaunchState: HOT\nActivity: dev.leoperez.wave/.MainActivity\nTotalTime: 164\nWaitTime: 170\nComplete\n";
+      },
+    ],
+    [/^input keyevent 3$/, () => ""],
+    [
       /^am start -a android\.intent\.action\.SEND .* \S+$/,
       () => {
         this.importCard = true;

@@ -69,6 +69,7 @@ describe("runPerf on the simulated phone", () => {
     const keys = summarize(steps).map((row) => row.key);
     assert.deepEqual(keys, [
       "startup/idle/cold",
+      "warm-start/idle/warm",
       "tab-switch/idle/tab",
       "rapid-tabs/idle/burst",
       "push-settings/idle/push",
@@ -91,7 +92,9 @@ describe("runPerf on the simulated phone", () => {
       assert.equal(step.expectMissing, false, `${step.scenario} ${step.measure} lost its mark`);
       assert.ok((step.responseMs ?? -1) > 0, `${step.scenario} ${step.measure} has no response`);
     }
-    for (const step of steps.filter((measured) => measured.scenario !== "startup")) {
+    // Launches have no touch to count a first frame from.
+    const launches = new Set(["startup", "warm-start"]);
+    for (const step of steps.filter((measured) => !launches.has(measured.scenario))) {
       assert.ok(step.firstFrameMs !== null, `${step.scenario} ${step.measure} has no first frame`);
       assert.ok(step.frames.total > 0);
     }
@@ -115,6 +118,16 @@ describe("runPerf on the simulated phone", () => {
       launch?: { totalTimeMs: number };
     })[];
     assert.equal(launch?.launch?.totalTimeMs, 742);
+  });
+
+  it("times warm launches back from the home screen, the process still alive", async () => {
+    const { out } = await runPerf(new FakeDevice(), options("warm", { scenarios: ["warm-start"] }));
+    const { steps, errors } = readResults(readFileSync(out, "utf8"));
+    assert.deepEqual(errors, []);
+    const launches = (steps as (StepRecord & { launch?: { launchState: string } })[]).map(
+      (step) => step.launch?.launchState,
+    );
+    assert.deepEqual(launches, ["HOT", "HOT"]);
   });
 
   it("runs the import first in the import variant, and every step reports its progress", async () => {

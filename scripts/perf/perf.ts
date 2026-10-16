@@ -464,13 +464,18 @@ const commands: Record<string, () => Promise<void>> = {
 const printSummary = (results: Results): void => {
   console.log(`${describeRun(results)}\n`);
   console.log(formatSummary(summarize(results.steps)));
-  const launches = results.steps.flatMap((step) =>
-    step.launch?.totalTimeMs == null ? [] : [step.launch.totalTimeMs],
-  );
-  if (launches.length > 0)
-    console.log(
-      `\nCold launch (am start -W TotalTime): median ${median(launches)} ms over ${launches.length}`,
+  for (const [measure, label] of [
+    ["cold", "Cold launch"],
+    ["warm", "Warm launch"],
+  ] as const) {
+    const launches = results.steps.flatMap((step) =>
+      step.measure !== measure || step.launch?.totalTimeMs == null ? [] : [step.launch.totalTimeMs],
     );
+    if (launches.length > 0)
+      console.log(
+        `\n${label} (am start -W TotalTime): median ${median(launches)} ms over ${launches.length}`,
+      );
+  }
   if (results.memory.length > 0) {
     console.log(
       "\n| Scenario | Variant | PSS MB | RSS MB | Java heap MB | Native heap MB | Graphics MB |",

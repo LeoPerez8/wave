@@ -215,6 +215,7 @@ export const runPerf = async (
           options.importLink,
         )} ${pkg}`;
       case "launch":
+      case "resume":
       case "idle":
         return null;
     }
@@ -316,6 +317,17 @@ export const runPerf = async (
     let launched: AmStart | null = null;
     if (step.action.kind === "launch") {
       launched = await launch();
+    } else if (step.action.kind === "resume") {
+      await shell("input keyevent 3");
+      await device.sleep(options.settleMs);
+      await shell("logcat -c");
+      launched = parseAmStart(
+        await shell(
+          `am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p ${pkg}`,
+        ),
+      );
+      if (launched.status !== "ok")
+        throw new ScenarioError(`Couldn't bring ${pkg} back (${launched.status ?? "no status"}).`);
     } else {
       await device.sleep(options.settleMs);
       await shell("logcat -c");
