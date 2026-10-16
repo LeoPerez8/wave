@@ -29,6 +29,8 @@ import { useListScrollable } from "@/motion/heldTouch";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { openAlbumActions } from "@/playback/ActionsMenu";
 import { playPage } from "@/playback/actions";
+import { listedTrackItem, trackItemKey, tracksTarget } from "@/playback/actionTargets";
+import { useListSelection } from "@/selection/useListSelection";
 import { useThemeColor } from "@/theme/useThemeColor";
 import { useYtArtistPage } from "@/ytmusic/artistPage";
 import { DiscoverSongRow } from "@/ytmusic/DiscoverShelves";
@@ -90,7 +92,7 @@ const itemKey = (item: Item): string => {
  * has is its album, opened integrated as the page always is; the others are
  * YouTube Music's.
  */
-function ReleaseRow({ covers }: { covers: readonly Cover[] }) {
+function ReleaseRow({ covers, selecting }: { covers: readonly Cover[]; selecting: boolean }) {
   return (
     <View style={{ height: SHELF_ROW }}>
       <CoverRow>
@@ -101,15 +103,15 @@ function ReleaseRow({ covers }: { covers: readonly Cover[] }) {
               album={album}
               kind={kind}
               size={COVER_ROW_TILE}
-              selecting={false}
+              selecting={selecting}
             />
           ) : (
             <AlbumTile
               key={`album-${library.id}`}
               album={toAlbumSummary(library)}
               size={COVER_ROW_TILE}
-              onPress={() => openAlbum(library.id, library, { integrated: true })}
-              onLongPress={() => openAlbumActions(library)}
+              onPress={() => { if (!selecting) openAlbum(library.id, library, { integrated: true }); }}
+              onLongPress={() => { if (!selecting) openAlbumActions(library); }}
             />
           ),
         )}
@@ -224,6 +226,8 @@ export default function YtArtistScreen() {
   const bottomInset = useChromeInset();
   const { view, retry } = useYtArtistPage(browseId, knownName);
   const songs = view?.songs ?? NO_SONGS;
+  const selectable = useMemo(() => songs.map(listedTrackItem), [songs]);
+  const selection = useListSelection({ items: selectable, keyOf: trackItemKey, target: tracksTarget });
   const items = useMemo(() => (view === null ? [] : pageItems(view.shelves, view.songs)), [view]);
   const contextId = browseId ?? `name:${knownName ?? ""}`;
   const context = useMemo(() => ({ kind: "ytArtist", id: contextId }) as const, [contextId]);
@@ -245,12 +249,12 @@ export default function YtArtistScreen() {
           );
         case "shelf":
           // Keyed by shelf, so a recycled row doesn't keep another shelf's scroll position.
-          return <ReleaseRow key={item.label} covers={item.covers} />;
+          return <ReleaseRow key={item.label} covers={item.covers} selecting={selection.selecting} />;
         case "song":
-          return <DiscoverSongRow song={item.song} onPress={() => play(item.index)} />;
+          return <DiscoverSongRow song={item.song} selection={selection} onPress={() => play(item.index)} />;
       }
     },
-    [play],
+    [play, selection],
   );
 
   return (
@@ -262,6 +266,7 @@ export default function YtArtistScreen() {
         data={items}
         keyExtractor={itemKey}
         renderItem={renderItem}
+        extraData={selection.selection}
         getItemType={(item) => item.type}
         getFixedItemSize={(item) =>
           item.type === "section" ? SECTION_HEAD : item.type === "shelf" ? SHELF_ROW : grid.row

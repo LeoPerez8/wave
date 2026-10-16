@@ -14,9 +14,9 @@ import * as Haptics from "expo-haptics";
 import { router, usePathname } from "expo-router";
 import { useMemo } from "react";
 
-import { followArtistLink } from "@/library/ArtistChoice";
+import { followArtistLink, followStreamedArtistLink } from "@/library/ArtistChoice";
 import { confirmDeleteSongs, confirmRemoveSongs } from "@/library/deleteSongs";
-import { songHasFile } from "@/library/LibraryStore";
+import { songHasFile, type ArtistRow } from "@/library/LibraryStore";
 import { setFavorites, useFavoriteIds } from "@/library/favorites";
 import { findLyricsAndGenreFor } from "@/library/findLyricsAndGenre";
 import { useAlbumsMissingSongs, useLinkRows } from "@/library/hooks";
@@ -36,7 +36,10 @@ import {
   runMissingSongsDownloadAction,
   useMissingSongDownloadStatus,
   useMissingSongDownloadStatuses,
+  downloadYtSong,
 } from "@/ytmusic/YtDownloads";
+import { useLibraryFinder } from "@/ytmusic/libraryFinder";
+import { useStreamedArtistContext } from "@/ytmusic/streamedArtist";
 
 import {
   targetCount,
@@ -45,6 +48,7 @@ import {
   targetHeading,
   toPlaylistSongs,
   type ActionItems,
+  isLibraryTrack,
 } from "./actionTargets";
 import { addToQueue, playNext, queueDiscoverSongs } from "./actions";
 
@@ -75,7 +79,7 @@ export interface ActionOptions {
 /** The one missing song [target] is, if it is one: its menu offers its download. */
 const onlyMissingSong = (target: ActionItems): number | null => {
   const only = target.kind === "track" && target.items.length === 1 ? target.items[0] : undefined;
-  return only === undefined || songHasFile(only.song) ? null : only.song.id;
+  return only === undefined || !isLibraryTrack(only) || songHasFile(only.song) ? null : only.song.id;
 };
 
 interface PlanOptions {
@@ -92,10 +96,15 @@ function usePlan(
   target: ActionItems,
   favorites: ReadonlySet<number>,
   { surface, selectable }: PlanOptions,
-): { readonly planned: readonly ItemActionEntry[]; readonly missingSongs: readonly number[] } {
+): { readonly planned: readonly ItemActionEntry<ArtistRow>[]; readonly missingSongs: readonly number[] } {
   const here = usePathname();
   const onlineLookups = useLyricsAndGenreLookupsEnabled();
   const download = useMissingSongDownloadStatus(onlyMissingSong(target));
+  const find = useLibraryFinder();
+  const hasStreams = target.kind === "track"
+    ? target.items.some((item) => !isLibraryTrack(item))
+    : target.kind === "mixed" && target.items.some((item) => item.kind === "track" && !isLibraryTrack(item.item));
+  const streamedArtists = useStreamedArtistContext(hasStreams);
   const perAlbum = useAlbumsMissingSongs(
     target.kind === "album" ? target.items.map((album) => album.id) : [],
   );
@@ -106,7 +115,13 @@ function usePlan(
     const start = perAlbum.slice(0, index).reduce((sum, ids) => sum + ids.length, 0);
     return statuses.slice(start, start + (perAlbum[index]?.length ?? 0));
   };
-  const facts = targetFacts(target, favorites);
+  const facts = targetFacts(target, favorites).map((item, index) => {
+    const track = target.kind === "track" ? target.items[index]
+      : target.kind === "mixed" && target.items[index]?.kind === "track" ? target.items[index].item : undefined;
+    return track !== undefined && "ytSong" in track
+      ? { ...item, downloaded: find(track.ytSong)?.path != null }
+      : item;
+  });
   const planned = itemActions({
     kind: target.kind,
     items: facts.map((item, index) =>
@@ -120,6 +135,7 @@ function usePlan(
     selectable,
     onlineLookups,
     here,
+    streamedArtists,
   });
   return { planned, missingSongs };
 }
@@ -135,16 +151,16 @@ export const usePlannedActions = (
   target: ActionItems,
   favorites: ReadonlySet<number>,
   options: PlanOptions,
-): readonly ItemActionEntry[] => usePlan(target, favorites, options).planned;
+): readonly ItemActionEntry<ArtistRow>[] => usePlan(target, favorites, options).planned;
 
 /**
  * [planned] as entries: each labelled, deleting ones in the destructive
  * colour, [press] giving what each does. The Design preview's entries only
  * close their card.
  */
-export const actionEntries = (
-  planned: readonly ItemActionEntry[],
-  press: (entry: ItemActionEntry) => () => void,
+export const actionEntries = <A extends { readonly id: number; readonly name: string }>(
+  planned: readonly ItemActionEntry<A>[],
+  press: (entry: ItemActionEntry<A>) => () => void,
 ): ActionEntry[] =>
   planned.map((entry) => ({
     action: entry.action,
@@ -164,9 +180,17 @@ export function useItemActions(
 ): readonly ActionEntry[] {
   const here = usePathname();
   const favorites = useFavoriteIds();
-  const tracks = target.kind === "track" ? target.items : [];
+  const allTracks = target.kind === "track" ? target.items : [];
+  const tracks = allTracks.filter(isLibraryTrack);
+  const find = useLibraryFinder();
   // What acts on files (Delete, Find Lyrics and Genre) shows only when every song has one.
   const withFiles = tracks.flatMap(({ song }) => (songHasFile(song) ? [song] : []));
+  // A song downloaded since it was checked uses its Library track now.
+  const entriesNow = () => targetEntries(target).then((entries) => entries.map((entry) => {
+    if (entry.source === "library") return entry;
+    const track = find(entry.song);
+    return track === null ? entry : { source: "library" as const, track };
+  }));
 
   const run = (action: () => void) => () => {
     finish();
@@ -189,7 +213,7 @@ export function useItemActions(
   // (Core's `playlistPlayback`); other items are the Library's songs.
   const queue = (where: "playNext" | "addToQueue") =>
     run(() => {
-      targetEntries(target)
+      entriesNow()
         .then((entries) => {
           const play = playlistPlayback(entries, { ytMusic: ytMusicEnabled() });
           if (play === null) return;
@@ -240,7 +264,7 @@ export function useItemActions(
         return run(() =>
           openAddToPlaylist({
             title: addTitle,
-            songs: () => targetEntries(target).then(toPlaylistSongs),
+            songs: () => entriesNow().then(toPlaylistSongs),
           }),
         );
       case "favorite":
@@ -249,7 +273,7 @@ export function useItemActions(
         return star(false);
       case "removeFromPlaylist":
         return run(() => {
-          const places = tracks.flatMap(({ playlistItem }) => playlistItem ?? []);
+          const places = allTracks.flatMap(({ playlistItem }) => playlistItem ?? []);
           for (const { playlistId, itemIds } of playlistRemovals(places)) {
             removePlaylistItems(playlistId, itemIds).catch((error: unknown) =>
               showError("Couldn't remove the songs", error),
@@ -262,7 +286,7 @@ export function useItemActions(
       }
       case "goToArtist": {
         // Several credited artists: a card to pick one from (`ArtistChoice`).
-        if (!("artists" in entry)) return run(() => undefined);
+        if ("streamedArtists" in entry) return run(() => followStreamedArtistLink(entry.streamedArtists));
         const { artists } = entry;
         return run(() => followArtistLink(artists, links.artist));
       }
@@ -289,7 +313,15 @@ export function useItemActions(
         });
       case "download":
       case "retryDownload":
-        return run(() => downloadMissingSongs(tracks.map(({ song }) => song.id)));
+        return run(() => {
+          downloadMissingSongs(tracks.filter(({ song }) => !songHasFile(song)).map(({ song }) => song.id));
+          for (const item of allTracks) {
+            if (isLibraryTrack(item)) continue;
+            const library = find(item.ytSong);
+            if (library === null) downloadYtSong(item.ytSong);
+            else if (!songHasFile(library)) downloadMissingSongs([library.id]);
+          }
+        });
       case "cancelDownload":
         return run(() => {
           if (target.kind === "album") runMissingSongsDownloadAction("cancel", missingSongs);

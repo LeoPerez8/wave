@@ -537,6 +537,14 @@ describe("itemActions on albums and songs checked together", () => {
     const entries = itemActions(mixed([{ albumId: 2, artistIds: [30] }, song({ albumId: 2 })]));
     assert.deepEqual(entries.at(-1), { action: "goToAlbum", albumId: 2 });
   });
+
+  test("a YT Music song checked beside an album offers only their shared actions", () => {
+    const entries = itemActions({
+      ...mixed([{ albumId: 2, artistIds: [10] }, { streamed: true, artistNames: ["Justice"] }]),
+      surface: "selection",
+    });
+    assert.deepEqual(names(entries), ["playNext", "addToQueue", "addToPlaylist"]);
+  });
 });
 
 /** A YT Music song, streamed, credited to [artistNames]. */

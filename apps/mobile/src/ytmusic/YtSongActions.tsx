@@ -30,6 +30,7 @@ import { useOverlayFlow } from "@/overlay/flow";
 import { followUp, openOverlay } from "@/overlay/overlay";
 import { useSlideToChoose } from "@/overlay/useSlideToChoose";
 import { addYtToQueue, playYtNext } from "@/playback/actions";
+import type { MenuOptions } from "@/playback/ActionsMenu";
 import { showError } from "@/overlay/alert";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
@@ -39,7 +40,7 @@ import { libraryArtistsRead, useStreamedArtistLink } from "./streamedArtist";
 import { cancelYtDownload, downloadYtSong, useYtDownloadStatus } from "./YtDownloads";
 
 /** Where the menu was opened: a playlist's entry offers Remove from Playlist. */
-export interface YtSongMenuOptions {
+export interface YtSongMenuOptions extends MenuOptions {
   readonly playlistItem?: PlaylistPlace | undefined;
 }
 
@@ -60,7 +61,7 @@ export const openYtSongActions = (song: NativeYtSong, options: YtSongMenuOptions
         label: song.title,
         anchor,
         render: (close) => (
-          <YtSongActionsMenu song={song} playlistItem={options.playlistItem} close={close} />
+          <YtSongActionsMenu song={song} playlistItem={options.playlistItem} onSelect={options.onSelect} close={close} />
         ),
       });
     }),
@@ -158,10 +159,12 @@ const run = (
 function YtSongActionsMenu({
   song,
   playlistItem,
+  onSelect,
   close,
 }: {
   song: NativeYtSong;
   playlistItem: PlaylistPlace | undefined;
+  onSelect: (() => void) | undefined;
   close: () => void;
 }) {
   const status = useYtDownloadStatus(song.videoId);
@@ -183,6 +186,7 @@ function YtSongActionsMenu({
       album: song.albumId,
       ytAlbumHere,
       ytMusic,
+      selectable: onSelect !== undefined,
     }),
     ...ytDownloadActions(status, { inLibrary }).map((action): Entry => ({
       kind: "download",
@@ -193,7 +197,8 @@ function YtSongActionsMenu({
     const entry = entries[index];
     if (entry === undefined) return;
     close();
-    run(entry, song, find, playlistItem);
+    if (entry.action === "select") onSelect?.();
+    else run(entry, song, find, playlistItem);
   };
   const { underFinger, trackEntry, trackList } = useSlideToChoose(choose);
   const flow = useOverlayFlow();

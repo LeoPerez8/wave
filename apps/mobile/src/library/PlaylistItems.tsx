@@ -11,7 +11,7 @@ import {
   type RowWindow,
 } from "@wave/core";
 import * as Haptics from "expo-haptics";
-import { useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from "react";
+import { useCallback, useLayoutEffect, useRef, useState, type ReactElement } from "react";
 import {
   Text,
   ToastAndroid,
@@ -56,8 +56,6 @@ import { toTrackSummary } from "./TrackList";
 import { useListScrollable } from "@/motion/heldTouch";
 
 const ROW = grid.row;
-/** A YT Music entry while selecting: it can't be checked. */
-const DIMMED = { opacity: 0.4 } as const;
 /** How close to the top or bottom of the list a dragged row starts scrolling it. */
 const SCROLL_ZONE = ROW;
 /** Fastest auto-scroll, in dp per frame, with the finger at the very edge. */
@@ -94,7 +92,7 @@ type RowProps = {
   downloaded: boolean;
   /** Whether the list is in selection mode: no dragging or swiping then. */
   selecting: boolean;
-  /** In selection mode, whether the row is checked; undefined otherwise (and for a YT Music entry). */
+  /** In selection mode, whether the row is checked; undefined otherwise. */
   checked: boolean | undefined;
   onPress: () => void;
   onLongPress: () => void;
@@ -270,7 +268,7 @@ function PlaylistItem({
       </Animated.View>
       <Animated.View className="flex-row items-center bg-background" style={contentStyle}>
         <GestureDetector gesture={swipe}>
-          <View className="flex-1" style={selecting && checked === undefined ? DIMMED : undefined}>
+          <View className="flex-1">
             {item.source === "library" ? (
               <TrackRow
                 track={toTrackSummary(item.track)}
@@ -287,6 +285,7 @@ function PlaylistItem({
             ) : (
               <YtSongRow
                 song={item.song}
+                checked={checked}
                 playing={playing}
                 onPress={onPress}
                 onLongPress={onLongPress}
@@ -323,9 +322,6 @@ type Props = {
   empty: ReactElement;
 };
 
-/** A playlist's Library song: what selection checks. */
-type LibraryEntry = Extract<PlaylistEntryRow, { readonly source: "library" }>;
-
 const NO_ITEMS: readonly PlaylistEntryRow[] = [];
 
 /** Each entry is its own selection item, so a song in the playlist twice is checked per copy. */
@@ -334,10 +330,6 @@ const entryKey = (item: PlaylistEntryRow): string => String(item.itemId);
 /** The id the entry's song goes by in the queue, to show it playing. */
 const queueId = (item: PlaylistEntryRow): string =>
   item.source === "library" ? String(item.track.id) : ytTrackId(item.song.videoId);
-
-const isLibrary = (item: PlaylistEntryRow): item is LibraryEntry => item.source === "library";
-
-const ignore = (): void => undefined;
 
 /**
  * Plays the playlist from [startIndex] (or from the top, or shuffled): a YT
@@ -360,7 +352,7 @@ export const playPlaylistEntries = (
  * drags it to a new place (scrolling the list near its edges), a left swipe
  * removes it, long-press opens its menu. The menu's Select starts selection
  * mode (check cells, taps toggle, no dragging or swiping), whose bar adds
- * Remove from Playlist; only the Library's songs can be checked.
+ * Remove from Playlist, for Library and YT Music songs alike.
  */
 export function PlaylistItems({ playlistId, items, header, empty }: Props) {
   const scrollable = useListScrollable();
@@ -386,16 +378,17 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
     }));
   // While YT Music entries are among them, the Library's songs carry the downloaded icon.
   const mixed = order.some((item) => item.source === "stream");
-  const libraryOrder = useMemo(() => order.filter(isLibrary), [order]);
   const tracksOf = useCallback(
-    (selected: readonly LibraryEntry[]): ActionItems => ({
+    (selected: readonly PlaylistEntryRow[]): ActionItems => ({
       kind: "track",
-      items: selected.map((item) => ({ song: item.track, playlistItem: placeOf(item) })),
+      items: selected.map((item) => item.source === "library"
+        ? { song: item.track, playlistItem: placeOf(item) }
+        : { ytSong: item.song, playlistItem: placeOf(item) }),
     }),
     [placeOf],
   );
   const listSelection = useListSelection({
-    items: libraryOrder,
+    items: order,
     keyOf: entryKey,
     target: tracksOf,
   });
@@ -539,19 +532,11 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
     const item = order[index];
     if (item === undefined) return null;
     const play = () => playPlaylistEntries(order, index, context);
-    const row =
-      item.source === "library"
-        ? selectableRow(item, listSelection, play, (options) =>
-            openTrackActions(item.track, { ...options, playlistItem: placeOf(item) }),
-          )
-        : listSelection.selecting
-          ? // A YT Music entry can't be checked: it holds still while selecting.
-            { checked: undefined, onPress: ignore, onLongPress: ignore }
-          : {
-              checked: undefined,
-              onPress: play,
-              onLongPress: () => openYtSongActions(item.song, { playlistItem: placeOf(item) }),
-            };
+    const row = selectableRow(item, listSelection, play, (options) => {
+      const menu = { ...options, playlistItem: placeOf(item) };
+      if (item.source === "library") openTrackActions(item.track, menu);
+      else openYtSongActions(item.song, menu);
+    });
     return (
       <PlaylistItem
         key={item.itemId}

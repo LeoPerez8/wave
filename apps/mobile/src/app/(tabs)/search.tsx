@@ -15,8 +15,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { TextButton } from "@/components/TextButton";
 import { rise, riseReduced } from "@/motion/entry";
 import { clearRecentSearches, rememberSearch, useRecentSearches } from "@/search/recentSearches";
-import type { SongRow } from "@/library/LibraryStore";
-import type { ActionItems } from "@/playback/actionTargets";
+import { trackItemKey, tracksTarget, type TrackItem } from "@/playback/actionTargets";
 import {
   noLibraryResultsRow,
   RESULT_LIMIT,
@@ -32,15 +31,6 @@ import { SearchResultsList } from "@/search/SearchResultsList";
 import { useListSelection } from "@/selection/useListSelection";
 
 const NO_KINDS: ReadonlySet<SearchKind> = new Set();
-const NO_SONGS: readonly SongRow[] = [];
-
-const songKey = (song: SongRow): string => String(song.id);
-
-/** The actions in selection mode act on the checked songs. */
-const tracksOf = (songs: readonly SongRow[]): ActionItems => ({
-  kind: "track",
-  items: songs.map((song) => ({ song })),
-});
 
 function RecentSearches({ onPick }: { onPick: (query: string) => void }) {
   const recent = useRecentSearches();
@@ -143,11 +133,14 @@ export default function SearchScreen() {
   // Song results can be selected. The selection lives here, not in the list,
   // so a new query (or none matching) keeps it: checked songs that drop out of
   // the results stay checked, found again among every song shown since.
-  const songs = useMemo(() => (results === null ? NO_SONGS : songResults(results)), [results]);
-  const [seen] = useState(() => new Map<string, SongRow>());
-  for (const song of songs) seen.set(songKey(song), song);
+  const songs = useMemo((): TrackItem[] => [
+    ...(results === null ? [] : songResults(results).map((song) => ({ song }))),
+    ...(ytView?.songs ?? []).map((ytSong) => ({ ytSong })),
+  ], [results, ytView]);
+  const [seen] = useState(() => new Map<string, TrackItem>());
+  for (const song of songs) seen.set(trackItemKey(song), song);
   const lookup = useCallback((key: string) => seen.get(key), [seen]);
-  const selection = useListSelection({ items: songs, keyOf: songKey, target: tracksOf, lookup });
+  const selection = useListSelection({ items: songs, keyOf: trackItemKey, target: tracksTarget, lookup });
 
   const changeQuery = useCallback((text: string) => {
     setQuery(text);

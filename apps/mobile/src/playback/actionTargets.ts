@@ -8,12 +8,13 @@ import {
   type MixedSong,
   type PlaylistPlace,
   type PlaylistSong,
-  type YtAlbumSong,
+  ytSongCredit,
 } from "@wave/core";
 
 import type { ArtistImageSource } from "@/catalog/ArtistImage";
 import type { LibrarySection } from "@/catalog/sections";
 import type { LibraryCounts } from "@/library/db/counts";
+import type { NativeYtSong } from "@/native/waveYtMusic";
 import type { AlbumRow, ArtistRow, GenreRow, PlaylistRow, SongRow } from "@/library/LibraryStore";
 import { itemSongs, librarySectionSongs, playlistEntries } from "@/library/sectionSongs";
 
@@ -27,11 +28,28 @@ import { itemSongs, librarySectionSongs, playlistEntries } from "@/library/secti
 export type { PlaylistPlace };
 
 /** A track as the actions see it: the song, and its place when shown in a playlist. */
-export interface TrackItem {
+export interface LibraryTrackItem {
   readonly song: SongRow;
   /** Set in a playlist: offers Remove from Playlist. */
   readonly playlistItem?: PlaylistPlace | undefined;
 }
+
+/** A checked song, either the Library's track or a YT Music song. */
+export type TrackItem = LibraryTrackItem | {
+  readonly ytSong: NativeYtSong;
+  readonly playlistItem?: PlaylistPlace | undefined;
+};
+
+export const isLibraryTrack = (item: TrackItem): item is LibraryTrackItem => "song" in item;
+
+/** A song as the selection actions take it. */
+export const listedTrackItem = (entry: MixedSong<NativeYtSong, SongRow>): TrackItem =>
+  entry.source === "library" ? { song: entry.track } : { ytSong: entry.song };
+
+export const trackItemKey = (item: TrackItem): string =>
+  isLibraryTrack(item) ? String(item.song.id) : `yt:${item.ytSong.videoId}`;
+
+export const tracksTarget = (items: readonly TrackItem[]): ActionItems => ({ kind: "track", items });
 
 /** An item of a page that shows several kinds together (an artist's albums and songs). */
 export type MixedItem =
@@ -81,19 +99,19 @@ const cover = (thumbPath: string | null): readonly string[] =>
 const NO_FACTS: ActionItem = {};
 
 const KIND_TRACK: KindInfo<TrackItem> = {
-  songs: ({ song }) => Promise.resolve([song]),
-  heading: ({ song }) => ({
-    title: song.title,
-    subtitle: song.artist,
-    covers: cover(song.thumbPath),
-  }),
-  facts: ({ song, playlistItem }, favorites) => ({
-    albumId: song.albumId,
-    artistIds: song.artistIds,
-    favorite: favorites.has(song.id),
-    inPlaylist: playlistItem !== undefined,
-    missing: song.path === null,
-  }),
+  songs: (item) => Promise.resolve(isLibraryTrack(item) ? [item.song] : []),
+  heading: (item) => isLibraryTrack(item)
+    ? { title: item.song.title, subtitle: item.song.artist, covers: cover(item.song.thumbPath) }
+    : { title: item.ytSong.title, subtitle: ytSongCredit(item.ytSong), covers: [] },
+  facts: (item, favorites) => isLibraryTrack(item)
+    ? {
+        albumId: item.song.albumId,
+        artistIds: item.song.artistIds,
+        favorite: favorites.has(item.song.id),
+        inPlaylist: item.playlistItem !== undefined,
+        missing: item.song.path === null,
+      }
+    : { streamed: true, artistNames: item.ytSong.artists ?? [], inPlaylist: item.playlistItem !== undefined },
   noun: "song",
 };
 
@@ -201,7 +219,7 @@ export const targetSongs = async (target: ActionItems): Promise<readonly SongRow
 };
 
 /** A song an action acts on: a Library song, or a playlist's YT Music entry, streamed. */
-export type TargetEntry = MixedSong<YtAlbumSong, SongRow>;
+export type TargetEntry = MixedSong<NativeYtSong, SongRow>;
 
 /**
  * What the queue and playlist actions act on, with playlists' YT Music
@@ -210,6 +228,16 @@ export type TargetEntry = MixedSong<YtAlbumSong, SongRow>;
  * `targetSongs` gives them.
  */
 export const targetEntries = async (target: ActionItems): Promise<readonly TargetEntry[]> => {
+  if (target.kind === "track")
+    return target.items.map((item) => isLibraryTrack(item)
+      ? { source: "library", track: item.song }
+      : { source: "stream", song: item.ytSong });
+  if (target.kind === "mixed") {
+    const lists = await Promise.all(target.items.map((item) => targetEntries(
+      item.kind === "track" ? { kind: "track", items: [item.item] } : { kind: "album", items: [item.item] },
+    )));
+    return groupSongs(lists, discoverTrackId);
+  }
   if (target.kind !== "playlist")
     return (await targetSongs(target)).map((track) => ({ source: "library", track }));
   const lists = await Promise.all(target.items.map((playlist) => playlistEntries(playlist.id)));

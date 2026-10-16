@@ -303,7 +303,8 @@ export const itemActions = <A extends LibraryArtistRef = LibraryArtistRef>(
     if (items.every((item) => item.inPlaylist)) entries.push({ action: "removeFromPlaylist" });
   }
   // In selection, Download fetches the checked songs that aren't the Library's files yet.
-  if (surface === "selection" && items.some(needsDownload)) entries.push({ action: "download" });
+  if (surface === "selection" && kind === "track" && items.some(needsDownload))
+    entries.push({ action: "download" });
   const albumId = shared(items.map((item) => item.albumId));
   if (albumId !== undefined && !isDetailPath(here, "album", albumId))
     entries.push({ action: "goToAlbum", albumId });
