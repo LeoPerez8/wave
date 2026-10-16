@@ -95,12 +95,23 @@ export const discoverMixSeeds = ({
     seen.add(key);
     return true;
   });
-  let chosen = named.slice(0, ARTIST_SEEDS);
-  let besides = songsBeside(songs, chosen);
-  if (besides.length < DISCOVER_MIX_COUNT - chosen.length) {
-    chosen = named.slice(0, DISCOVER_MIX_COUNT - besides.length);
-    besides = songsBeside(songs, chosen);
+  // One artist more at a time while short of six, as each may take songs crediting
+  // them out of the rest; still short with every artist, the most seeds found.
+  const seedsWith = (count: number) => {
+    const chosen = named.slice(0, count);
+    const besides = songsBeside(songs, chosen);
+    return { chosen, besides, count: chosen.length + besides.length };
+  };
+  let best = seedsWith(ARTIST_SEEDS);
+  for (
+    let count = ARTIST_SEEDS + 1;
+    best.count < DISCOVER_MIX_COUNT && count <= named.length;
+    count++
+  ) {
+    const more = seedsWith(count);
+    if (more.count > best.count) best = more;
   }
+  const { chosen, besides } = best;
   const picked = besides.slice(0, DISCOVER_MIX_COUNT - chosen.length);
   const seeds: DiscoverMixSeed[] = [];
   for (let turn = 0; turn < Math.max(chosen.length, picked.length); turn++) {
@@ -196,19 +207,25 @@ const RADIO_PAGES = 3;
  * A mix's songs from its seed's radio, as read so far ([pages], in order):
  * the songs, in the radio's order, the owner doesn't know yet. Music videos,
  * the seed, songs the Library has or the owner played, songs an earlier mix
- * has and a song the radio plays again are left out; 50 at most.
+ * has and a song the radio plays again are left out; 50 at most. Reading a
+ * page at a time, pass the songs kept from the pages before as [before]:
+ * they come first, and only the new pages' songs are looked at.
  */
 export const discoverMixSongs = <S extends DiscoverRadioSong>(
   pages: readonly (readonly S[])[],
   filter: DiscoverMixFilter<S>,
+  before: readonly S[] = [],
 ): S[] => {
+  const recordingOf = (song: S): string =>
+    `${normalizeSearchText(song.title)}${FIELD}${song.artists.map(normalizeSearchText).join(FIELD)}`;
   const videos = new Set(filter.taken);
   if (filter.seedVideo !== null) videos.add(filter.seedVideo);
-  const recordings = new Set<string>();
-  const kept: S[] = [];
+  for (const song of before) videos.add(song.videoId);
+  const recordings = new Set(before.map(recordingOf));
+  const kept: S[] = [...before];
   for (const song of pages.flat()) {
-    if (kept.length === MIX_MOST) break;
-    const recording = `${normalizeSearchText(song.title)}${FIELD}${song.artists.map(normalizeSearchText).join(FIELD)}`;
+    if (kept.length >= MIX_MOST) break;
+    const recording = recordingOf(song);
     if (song.video || videos.has(song.videoId) || recordings.has(recording)) continue;
     if (filter.inLibrary(song) || filter.played(song)) continue;
     videos.add(song.videoId);

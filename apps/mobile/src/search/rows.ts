@@ -4,6 +4,7 @@ import type {
   SearchGroup,
   SearchKind,
   SearchResults,
+  SongsInPlace,
   YtArtistAlbum,
   YtArtistCandidate,
   YtSearchTop,
@@ -24,6 +25,9 @@ export type ResultSong = MixedSong<NativeYtSong, SongRow>;
  * streamed, or the Library's file once its download finished.
  */
 export type PlacedYtSong = DiscoverSong<NativeYtSong, SongRow>;
+
+/** YT Music's songs in their places, and the row each plays from (Core's `songsInPlace`). */
+export type PlacedYtSongs = Pick<SongsInPlace<NativeYtSong, SongRow, number>, "songs" | "rowOf">;
 
 /** One row of the results list: a section head, a result, or a group's "Show all". */
 export type ResultRow =
@@ -153,13 +157,14 @@ const ytAlbumRow = (album: YtArtistAlbum, top: boolean): ResultRow => ({
  * group when the Library has nothing of its kind; groups count them too. The
  * top result is the Library's best match, else YT Music's best. [placed] are
  * YT Music's songs kept in place for the visit: one whose download finished
- * shows as the Library's song in its row (and [results] leave it out).
+ * shows as the Library's song in its row (and [results] leave it out), and
+ * one shown as an earlier row's Library file plays from that row.
  */
 export const resultRows = (
   results: SearchResults<SearchHit>,
   expanded: ReadonlySet<SearchKind>,
-  yt: YtSectionView<NativeYtSong> | null = null,
-  placed: readonly PlacedYtSong[] = yt?.songs.map(streamed) ?? [],
+  yt: YtSectionView<NativeYtSong> | null,
+  { songs: placed, rowOf }: PlacedYtSongs,
 ): ResultRow[] => {
   const rows: ResultRow[] = [];
   const ytArtists = yt?.artists ?? NO_YT_ARTISTS;
@@ -195,10 +200,19 @@ export const resultRows = (
       case "album":
         return ytAlbumRow(top.album, true);
       case "song": {
-        const index = placed.findIndex((row) => row.song === top.song);
-        return index === -1
-          ? ytSongRow(top.song, index, true)
-          : placedRow(placed[index]!, index, true);
+        const index = rowOf.get(top.song.videoId) ?? -1;
+        const row = placed[index];
+        if (row !== undefined) return placedRow(row, index, true);
+        // YT Music's best is one of the songs shown, so it has a row; if not, it plays alone.
+        const song = top.song;
+        return {
+          type: "ytSong",
+          key: `top:yt:${song.videoId}`,
+          song,
+          songs: [streamed(song)],
+          index: 0,
+          top: true,
+        };
       }
     }
   };

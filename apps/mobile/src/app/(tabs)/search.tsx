@@ -162,9 +162,9 @@ export default function SearchScreen() {
     const ours =
       libraryEmpty && ytFound === 0
         ? [noLibraryResultsRow(deferredQuery)]
-        : resultRows(results, expanded, ytView, placed.songs);
+        : resultRows(results, expanded, ytView, placed);
     return [...ours, ...ytFooterRows(ytView)];
-  }, [results, libraryEmpty, deferredQuery, expanded, ytView, placed.songs]);
+  }, [results, libraryEmpty, deferredQuery, expanded, ytView, placed]);
 
   // Song results can be selected. The selection lives here, not in the list,
   // so a new query (or none matching) keeps it: checked songs that drop out of

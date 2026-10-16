@@ -50,7 +50,7 @@ export interface LinkImportPlan<S extends YtSong> {
   /** The playlist's name, the source's title as a playlist name can be (before any clash). */
   readonly name: string;
   readonly service: ImportService;
-  /** The source's songs, in its order. */
+  /** The source's songs, in its order, each once. */
   readonly songs: readonly SpotifySong[];
   /** Where each of [songs] is found already (null: it's still to be searched). */
   readonly finds: readonly (ImportFind<S> | null)[];
@@ -65,7 +65,9 @@ const NOT_FOUND: ImportFind<never> = { kind: "notFound" };
  * already has (Core's `libraryFinder`) as its track. A YouTube Music
  * playlist's other songs stream as they are; a Spotify playlist's are each
  * searched on YouTube Music once the import runs, except a song with no
- * artist, which is never searched and isn't found.
+ * artist, which is never searched and isn't found. A song that comes again
+ * (the same Library track, the same video, or a Spotify song alike in every
+ * field) is left out after its first place, so the card counts it once.
  */
 export const planLinkImport = <
   S extends YtSong,
@@ -75,15 +77,27 @@ export const planLinkImport = <
   library: readonly L[],
 ): LinkImportPlan<S> => {
   const find = libraryFinder(library);
-  const songs: readonly SpotifySong[] = source.playlist.songs;
-  const finds = songs.map((song, index): ImportFind<S> | null => {
+  const listed: readonly SpotifySong[] = source.playlist.songs;
+  const seen = new Set<string>();
+  const songs: SpotifySong[] = [];
+  const finds: (ImportFind<S> | null)[] = [];
+  listed.forEach((song, index) => {
     const track = find(song);
-    if (track !== null) return { kind: "library", trackId: track.id };
-    if (source.service === "ytMusic") {
-      const stream = source.playlist.songs[index];
-      return stream === undefined ? NOT_FOUND : { kind: "ytMusic", song: stream };
-    }
-    return artistNames(song.artists).length === 0 ? NOT_FOUND : null;
+    const stream = source.service === "ytMusic" ? source.playlist.songs[index] : undefined;
+    const key =
+      track !== null
+        ? `library:${track.id}`
+        : stream !== undefined
+          ? `yt:${stream.videoId}`
+          : JSON.stringify([song.title, song.artists, song.album, song.durationMs]);
+    if (seen.has(key)) return;
+    seen.add(key);
+    songs.push(song);
+    if (track !== null) finds.push({ kind: "library", trackId: track.id });
+    else if (stream !== undefined) finds.push({ kind: "ytMusic", song: stream });
+    else if (source.service === "ytMusic" || artistNames(song.artists).length === 0)
+      finds.push(NOT_FOUND);
+    else finds.push(null);
   });
   return {
     name: importedPlaylistName(source.playlist.title),
