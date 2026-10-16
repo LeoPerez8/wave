@@ -10,6 +10,7 @@ import { LargeTitleScreen } from "@/components/LargeTitleScreen";
 import { useHomeArrangement, homeTitleLongPress } from "@/home/homeArrangement";
 import { HomeSection, SECTION_GAP } from "@/home/HomeSection";
 import { useHome } from "@/library/hooks";
+import { useRenderCount } from "@/perf/perf";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
 /** The first section sits a cell under the large title, not a section's gap. */
@@ -25,6 +26,7 @@ function HomeLine({ children, top }: { children: string; top: number }) {
 }
 
 export default function HomeScreen() {
+  useRenderCount("HomeScreen");
   const home = useHome();
   const arrangement = useHomeArrangement();
   const ytMusic = useYtMusicEnabled();

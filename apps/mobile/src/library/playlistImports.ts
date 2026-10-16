@@ -39,6 +39,7 @@ import { askForNotifications } from "@/lib/askForNotifications";
 import { persistedSetting } from "@/lib/persistedSetting";
 import { WavePlaylistImport } from "@/native/wavePlaylistImport";
 import { showError } from "@/overlay/alert";
+import { perfMark, registerPerfMeta } from "@/perf/perf";
 import { askYtMusic } from "@/ytmusic/askYtMusic";
 
 import { addToPlaylist, currentPlaylists } from "./playlists";
@@ -214,6 +215,7 @@ const runImports = async (): Promise<void> => {
   if (running || importTurn(imports.get()) === null) return;
   running = true;
   const first = playlistImportProgress(imports.get());
+  perfMark("import.running", String(first?.total ?? 0));
   WavePlaylistImport.start(first?.title ?? "Importing playlists", first?.detail ?? null);
   showProgress();
   try {
@@ -225,8 +227,15 @@ const runImports = async (): Promise<void> => {
   } finally {
     running = false;
     WavePlaylistImport.end();
+    perfMark("import.idle");
   }
 };
+
+// A perf build's runs record how far the import going on has got (docs/performance/README.md).
+registerPerfMeta("import", () => {
+  const progress = playlistImportProgress(imports.get());
+  return { running, done: progress?.done ?? null, total: progress?.total ?? null };
+});
 
 // ---------------------------------------------------------------------------
 // What the app asks

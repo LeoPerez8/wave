@@ -44,7 +44,13 @@ import {
   type ArtistPhotoRecord,
   type ArtistPhotoRow,
 } from "./db/artistPhotos";
-import { libraryCounts, sectionSongCounts, type LibraryCounts } from "./db/counts";
+import {
+  libraryCounts,
+  libraryScale,
+  sectionSongCounts,
+  type LibraryCounts,
+  type LibraryScale,
+} from "./db/counts";
 import { creditSplits, relinkCreditsIfUnlinked, type CreditSplits } from "./db/credits";
 import { selectGenreSongs } from "./db/genres";
 import type { RowPage } from "./db/database";
@@ -411,6 +417,8 @@ export class LibraryStore extends Context.Service<
     readonly countLibrary: Effect.Effect<LibraryCounts, LibraryStoreError>;
     /** How many songs each Library entry's menu acts on, for its heading. */
     readonly countSectionSongs: Effect.Effect<LibraryCounts, LibraryStoreError>;
+    /** How big the Library is, for a perf build's run metadata (docs/performance/README.md). */
+    readonly measureScale: Effect.Effect<LibraryScale, LibraryStoreError>;
     /** Every track ordered by title, for Library › Songs. */
     readonly listSongs: Effect.Effect<readonly SongRow[], LibraryStoreError>;
     /**
@@ -895,6 +903,7 @@ const make = Effect.gen(function* () {
 
     countLibrary: attempt("count the library", () => libraryCounts(db)),
     countSectionSongs: attempt("count the library's songs", () => sectionSongCounts(db)),
+    measureScale: attempt("measure the library", () => libraryScale(db)),
 
     listSongs: attempt("list songs", () =>
       trackQuery(db)

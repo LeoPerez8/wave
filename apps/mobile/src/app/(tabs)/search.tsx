@@ -14,6 +14,7 @@ import { useChromeInset } from "@/chrome/chrome";
 import { EmptyState } from "@/components/EmptyState";
 import { TextButton } from "@/components/TextButton";
 import { rise, riseReduced } from "@/motion/entry";
+import { useRenderCount } from "@/perf/perf";
 import { clearRecentSearches, rememberSearch, useRecentSearches } from "@/search/recentSearches";
 import type { SongRow } from "@/library/LibraryStore";
 import type { NativeYtSong } from "@/native/waveYtMusic";
@@ -84,6 +85,7 @@ function RecentSearches({ onPick }: { onPick: (query: string) => void }) {
  * Switching between recents and results rises the new content in.
  */
 export default function SearchScreen() {
+  useRenderCount("SearchScreen");
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<ReadonlySet<SearchKind>>(NO_KINDS);

@@ -9,6 +9,7 @@ import { CELL, grid } from "@/catalog/grid";
 import { IconButton } from "@/components/IconButton";
 import { Press } from "@/motion/Press";
 import { addScreenBackHandler } from "@/overlay/back";
+import { useRenderCount } from "@/perf/perf";
 import { useCurrentTrackId } from "@/playback/hooks";
 import { playbackState } from "@/playback/Player";
 import { useThemeColor } from "@/theme/useThemeColor";
@@ -93,6 +94,7 @@ export function UnderNowPlaying({ children }: { children: ReactNode }) {
  * spring and its first frame is already right.
  */
 export function NowPlayingSheet() {
+  useRenderCount("NowPlayingSheet");
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const shown = useNowPlayingShown();

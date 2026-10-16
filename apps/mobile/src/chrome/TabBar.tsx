@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { grid } from "@/catalog/grid";
 import { Glass } from "@/glass/Glass";
 import { Press } from "@/motion/Press";
+import { useRenderCount } from "@/perf/perf";
 import { requestSearchFocus } from "@/search/focusRequest";
 import { useTabBar } from "@/settings/tabBar";
 import { useThemeColor } from "@/theme/useThemeColor";
@@ -72,6 +73,7 @@ const RADIUS = chrome.tabBar / 2;
  * the bar's editor.
  */
 export function TabBar({ onTabTap }: { onTabTap: (to: TabBarTab) => void }) {
+  useRenderCount("TabBar");
   const insets = useSafeAreaInsets();
   const bar = useTabBar();
   return (

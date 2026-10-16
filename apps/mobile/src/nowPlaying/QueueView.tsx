@@ -38,6 +38,7 @@ import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { Press } from "@/motion/Press";
+import { usePerfVisible, useRenderCount } from "@/perf/perf";
 import {
   cycleRepeat,
   moveQueueEntry,
@@ -305,6 +306,8 @@ type Drag = {
  * shown (`withPendingMoves`) until the queue has it.
  */
 export function UpNextList({ bottomInset }: { bottomInset: number }) {
+  useRenderCount("UpNextList");
+  usePerfVisible("queue");
   const queue = useQueue();
   const [pending, setPending] = useState<readonly PendingMove[]>([]);
   const shown = useMemo(() => withPendingMoves(queue, pending), [queue, pending]);

@@ -956,3 +956,12 @@ export type { LibraryShelf } from "./libraryShelf.ts";
 
 export { NO_HELD_SONGS, heldTracks, inLibraryUnlessHeld, songsInPlace } from "./songsInPlace.ts";
 export type { HeldSongs, SongsInPlace } from "./songsInPlace.ts";
+
+export { PERF_FLUSH_QUIET_MS, PERF_LOG_TAG, createPerfRecorder, parsePerfLog } from "./perfLog.ts";
+export type {
+  PerfEntry,
+  PerfFlush,
+  PerfMeta,
+  PerfRecorder,
+  PerfTiming,
+} from "./perfLog.ts";
