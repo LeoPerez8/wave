@@ -174,7 +174,7 @@ timings, before or after. To take them:
 
 1. Build perf builds of 2a52cd7 (before) and this branch's head (after).
 2. With a long queue loaded and Home as the shown tab, run `node scripts/perf/perf.ts run
-   --scenario skip,tab-switch --label 312-before` on the first build and `--label 312-after` on the
+--scenario skip,tab-switch --label 312-before` on the first build and `--label 312-after` on the
    second, then `perf.ts compare`. Each skip ends a play and starts the next, so with Home in sight
    it is Home refreshing after plays. `tab-switch` covers coming back to Home. Compare the frames
    and the per-step `libraryQueries.reads`.
@@ -195,5 +195,5 @@ Limits and negative results:
   scoped. So does Android Auto's per-artist ranking (`Auto.ts`).
 - The overview's sums are one row but read every `play_totals` row (played songs, not plays).
 - `recordPlay` resets the previous play with `UPDATE play_events SET ongoing = false WHERE
-  ongoing = true`, and nothing indexes `ongoing`, so every play start scans the history. This was
+ongoing = true`, and nothing indexes `ongoing`, so every play start scans the history. This was
   there before #312 and is unchanged.
