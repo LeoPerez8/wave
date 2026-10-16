@@ -51,6 +51,8 @@ export interface StepMetrics {
   readonly frames: FrameStats;
   readonly renders: Readonly<Record<string, number>>;
   readonly longTasks: { readonly count: number; readonly totalMs: number; readonly maxMs: number };
+  /** From the touch to each traced mark's first occurrence after it; null when it never came. */
+  readonly traceMs: Readonly<Record<string, number | null>>;
 }
 
 const round = (value: number): number => Math.round(value * 100) / 100;
@@ -105,6 +107,8 @@ export const stepMetrics = (step: {
   readonly expect: Expect | undefined;
   /** Which touch the latencies count from: the first (default) or the last (rapid taps). */
   readonly anchor?: "first" | "last";
+  /** Marks to time from the touch besides the response (a sheet's phases). */
+  readonly trace?: readonly string[];
 }): StepMetrics => {
   const entries = step.flush?.entries ?? [];
   const stepTouches = touches(entries);
@@ -153,6 +157,15 @@ export const stepMetrics = (step: {
       totalMs: round(longTasks.reduce((sum, task) => sum + task.duration, 0)),
       maxMs: longTasks.reduce((max, task) => Math.max(max, task.duration), 0),
     },
+    traceMs: Object.fromEntries(
+      (step.trace ?? []).map((name) => {
+        const mark =
+          touchAt === null
+            ? undefined
+            : marks(entries).find((entry) => entry.at >= touchAt && entry.name === name);
+        return [name, sinceTouch(mark?.at ?? null, touchAt)];
+      }),
+    ),
   };
 };
 
@@ -225,6 +238,8 @@ export interface SummaryRow {
     readonly p99Ms: number | null;
   };
   readonly rendersPerStep: Readonly<Record<string, number>>;
+  /** Each traced mark's time from the touch. */
+  readonly trace: Readonly<Record<string, Distribution>>;
   readonly longTasks: { readonly count: number; readonly totalMs: number };
   /** Steps whose expected mark never came. */
   readonly missing: number;
@@ -246,6 +261,8 @@ export const summarize = (steps: readonly StepRecord[]): SummaryRow[] => {
       for (const [component, count] of Object.entries(step.renders))
         renders.set(component, (renders.get(component) ?? 0) + count);
     }
+    // Results written before traces existed have none.
+    const traced = [...new Set(group.flatMap((step) => Object.keys(step.traceMs ?? {})))];
     const binned = [...histogram.values()].reduce((sum, count) => sum + count, 0);
     const total = group.reduce((sum, step) => sum + step.frames.total, 0);
     const deadlineMissed = group.reduce((sum, step) => sum + step.frames.deadlineMissed, 0);
@@ -265,6 +282,12 @@ export const summarize = (steps: readonly StepRecord[]): SummaryRow[] => {
       },
       rendersPerStep: Object.fromEntries(
         [...renders].map(([component, count]) => [component, round(count / group.length)]),
+      ),
+      trace: Object.fromEntries(
+        traced.map((name) => [
+          name,
+          distribution(group.map((step) => step.traceMs?.[name] ?? null)),
+        ]),
       ),
       longTasks: {
         count: group.reduce((sum, step) => sum + step.longTasks.count, 0),
@@ -325,6 +348,10 @@ const comparable = (row: SummaryRow): [string, number | null][] => [
   ["frames p99 ms", row.frames.p99Ms],
   ["deadline-miss rate", row.frames.missRate],
   ["long tasks", row.longTasks.count],
+  ...Object.entries(row.trace ?? {}).flatMap(([name, value]): [string, number | null][] => [
+    [`${name} median`, value.median],
+    [`${name} p90`, value.p90],
+  ]),
   ...Object.entries(row.rendersPerStep).map(([component, count]): [string, number | null] => [
     `renders ${component}`,
     count,

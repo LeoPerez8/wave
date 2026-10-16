@@ -83,8 +83,10 @@ describe("runPerf on the simulated phone", () => {
       "push-empty/idle/pop",
       "now-playing/idle/open",
       "now-playing/idle/close",
+      "now-playing-first/idle/open",
       "queue/idle/open",
       "queue/idle/close",
+      "queue-first/idle/open",
       "skip/idle/next",
       "scrub/idle/forward",
       "scrub/idle/back",
@@ -103,6 +105,12 @@ describe("runPerf on the simulated phone", () => {
       assert.ok(step.frames.total > 0);
     }
     assert.equal(memory.length, ALL_SCENARIOS.length);
+    for (const step of steps.filter((measured) => measured.scenario.startsWith("now-playing"))) {
+      for (const [mark, ms] of Object.entries(step.traceMs)) {
+        assert.ok((ms ?? -1) > 0, `${step.scenario} ${step.measure} has no ${mark}`);
+      }
+      assert.equal(Object.keys(step.traceMs).length, 4);
+    }
   });
 
   it("drags in dp from its target, at the phone's density", async () => {

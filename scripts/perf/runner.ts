@@ -349,14 +349,18 @@ export const runPerf = async (
       flush: perf,
       expect: step.expect,
       ...(step.anchor === undefined ? {} : { anchor: step.anchor }),
+      ...(step.trace === undefined ? {} : { trace: step.trace }),
     });
     const meta = perf?.meta ?? {};
     const importRunning = meta["import.running"];
-    const libraryQueries = Object.fromEntries(
-      Object.entries(meta)
-        .filter(([key]) => key.startsWith("libraryQueries."))
-        .map(([key, value]) => [key.slice("libraryQueries.".length), value]),
-    );
+    const metaGroup = (prefix: string) =>
+      Object.fromEntries(
+        Object.entries(meta)
+          .filter(([key]) => key.startsWith(`${prefix}.`))
+          .map(([key, value]) => [key.slice(prefix.length + 1), value]),
+      );
+    const libraryQueries = metaGroup("libraryQueries");
+    const listeners = metaGroup("listeners");
     const record: StepRecord & Record<string, unknown> = {
       type: "step",
       run,
@@ -386,6 +390,8 @@ export const runPerf = async (
         : {}),
       // Counters since launch: compare a step's with the one before it for its reads.
       ...(Object.keys(libraryQueries).length > 0 ? { libraryQueries } : {}),
+      // Subscribers to the playback stores and the sheet when the step's flush was written.
+      ...(Object.keys(listeners).length > 0 ? { listeners } : {}),
     };
     write(record);
     log(

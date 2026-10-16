@@ -119,6 +119,28 @@ describe("stepMetrics", () => {
     assert.equal(metrics.responseMs, 180);
   });
 
+  it("times each traced mark's first occurrence after the touch", () => {
+    const metrics = stepMetrics({
+      frames,
+      summary: SUMMARY,
+      flush: flush([
+        { kind: "mark", name: "nowPlaying.spring", detail: "closed", at: 900 },
+        { kind: "touch", eventAt: 1_000, at: 1_030 },
+        { kind: "mark", name: "nowPlaying.step", detail: "tap", at: 1_032 },
+        { kind: "mark", name: "nowPlaying.notified", at: 1_040 },
+        { kind: "mark", name: "nowPlaying.spring", detail: "rise", at: 1_041 },
+        { kind: "mark", name: "nowPlaying.spring", detail: "open", at: 1_400 },
+      ]),
+      expect: undefined,
+      trace: ["nowPlaying.step", "nowPlaying.spring", "nowPlaying.motion"],
+    });
+    assert.deepEqual(metrics.traceMs, {
+      "nowPlaying.step": 32,
+      "nowPlaying.spring": 41,
+      "nowPlaying.motion": null,
+    });
+  });
+
   it("says when the expected mark never came", () => {
     const metrics = stepMetrics({
       frames,
@@ -225,6 +247,23 @@ describe("summarize", () => {
     ]);
     assert.deepEqual(rows[0]?.rendersPerStep, { MiniPlayer: 0.5, TabBar: 3 });
     assert.equal(rows[0]?.missing, 1);
+  });
+
+  it("sums up each traced mark, and compares it", () => {
+    const traced = (ms: number | null) =>
+      record("now-playing", "open", 100, { traceMs: { "nowPlaying.spring": ms } });
+    const before = summarize([traced(30), traced(50), traced(null)]);
+    assert.deepEqual(before[0]?.trace["nowPlaying.spring"], {
+      n: 2,
+      median: 40,
+      p90: 50,
+      max: 50,
+    });
+    const after = summarize([traced(4), traced(6)]);
+    const row = compareSummaries(before, after).find(
+      (r) => r.metric === "nowPlaying.spring median",
+    );
+    assert.equal(row?.change, -35);
   });
 });
 

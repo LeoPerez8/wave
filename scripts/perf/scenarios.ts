@@ -44,6 +44,8 @@ export interface Step {
   readonly anchor?: "first" | "last";
   /** How long the step's window stays open; the run's window when unset. */
   readonly windowMs?: number;
+  /** Marks timed from the touch besides the response, recorded as `traceMs`. */
+  readonly trace?: readonly string[];
 }
 
 /** What the scenarios read from the fixture (scripts/perf/fixture.json). */
@@ -78,6 +80,33 @@ export interface Scenario {
 
 const tab = (label: string): Target => ({ desc: label });
 const route: Expect = { mark: "route" };
+
+/**
+ * The Now Playing sheet's trace (#305): the step JavaScript took for the
+ * touch, its spring assigned, its phase listeners done, and its first motion
+ * on the UI thread (as JavaScript heard of it; the mark's detail says how
+ * late, in ms).
+ */
+const SHEET_TRACE = [
+  "nowPlaying.step",
+  "nowPlaying.spring",
+  "nowPlaying.notified",
+  "nowPlaying.motion",
+] as const;
+
+const OPEN_NOW_PLAYING: Step = {
+  measure: "open",
+  action: { kind: "tap", target: { descPrefix: "Now playing:" } },
+  expect: { mark: "nowPlaying.shown" },
+  trace: SHEET_TRACE,
+};
+
+const CLOSE_NOW_PLAYING: Step = {
+  measure: "close",
+  action: { kind: "tap", target: { desc: "Close Now Playing" } },
+  expect: { mark: "nowPlaying.hidden" },
+  trace: SHEET_TRACE,
+};
 
 /**
  * Push [target], then tap the header's Back: one measured step each. A tap, not
@@ -201,24 +230,21 @@ export const SCENARIOS: readonly Scenario[] = [
   {
     name: "now-playing",
     summary: "Mini player › Now Playing, then its Close button.",
-    steps: () => [
-      {
-        measure: "open",
-        action: { kind: "tap", target: { descPrefix: "Now playing:" } },
-        expect: { mark: "nowPlaying.shown" },
-      },
-      {
-        measure: "close",
-        action: { kind: "tap", target: { desc: "Close Now Playing" } },
-        expect: { mark: "nowPlaying.hidden" },
-      },
-    ],
+    steps: () => [OPEN_NOW_PLAYING, CLOSE_NOW_PLAYING],
     iterations: 10,
     warmup: 1,
   },
   {
+    name: "now-playing-first",
+    summary: "The first Mini player › Now Playing after a launch.",
+    coldEachIteration: true,
+    steps: () => [OPEN_NOW_PLAYING],
+    iterations: 5,
+    warmup: 1,
+  },
+  {
     name: "queue",
-    summary: "Now Playing › Queue and back to the player.",
+    summary: "Now Playing › Queue and back to the player (switching once the Queue is warm).",
     setup: [{ kind: "tap", target: { descPrefix: "Now playing:" } }],
     steps: () => [
       {
@@ -229,6 +255,21 @@ export const SCENARIOS: readonly Scenario[] = [
       { measure: "close", action: { kind: "tap", target: { desc: "Queue" } } },
     ],
     iterations: 10,
+    warmup: 1,
+  },
+  {
+    name: "queue-first",
+    summary: "The first Now Playing › Queue after a launch.",
+    coldEachIteration: true,
+    setup: [{ kind: "tap", target: { descPrefix: "Now playing:" } }],
+    steps: () => [
+      {
+        measure: "open",
+        action: { kind: "tap", target: { desc: "Queue" } },
+        expect: { mark: "visible", detail: "queue" },
+      },
+    ],
+    iterations: 5,
     warmup: 1,
   },
   {
