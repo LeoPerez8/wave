@@ -363,7 +363,7 @@ const commands: Record<string, () => Promise<void>> = {
         (scenario) => scenario.byName === true,
       )
         .map((scenario) => scenario.name)
-        .join(", ")}\nvariants:${VARIANTS.join(", ")} (import runs "import" first)`,
+        .join(", ")}\nvariants: ${VARIANTS.join(", ")} (import runs "import" first)`,
     );
     console.log("\nglass probes (--glass, perf builds only):");
     for (const probe of GLASS_PROBES)
