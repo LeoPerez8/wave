@@ -29,8 +29,10 @@ class AppLogModule : Module() {
 
     // The JS thread is watched for freezes while this runtime lives (NativeLog).
     OnCreate {
-      NativeLog.start(context)
-      (appContext.reactContext as? ReactContext)?.let { unwatchJs = NativeLog.watchJs(it) }
+      val react = appContext.reactContext ?: return@OnCreate
+      // Already started at Application.onCreate; this covers a host that didn't dispatch it.
+      NativeLog.start(react)
+      (react as? ReactContext)?.let { unwatchJs = NativeLog.watchJs(it) }
     }
 
     OnDestroy {

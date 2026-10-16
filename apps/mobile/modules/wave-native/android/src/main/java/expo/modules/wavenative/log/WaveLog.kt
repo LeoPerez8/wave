@@ -43,8 +43,8 @@ object WaveLog {
       when (level) {
         Level.INFO -> Log.i(tag, message, error)
         Level.WARN -> Log.w(tag, message, error)
-        Level.ERROR -> Log.e(tag, message, error)
-        Level.FATAL -> Log.wtf(tag, message, error)
+        // Not Log.wtf for a fatal one: Android may treat that as a failure of its own.
+        Level.ERROR, Level.FATAL -> Log.e(tag, message, error)
       }
     }
     val log = file ?: return
