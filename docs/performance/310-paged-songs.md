@@ -33,9 +33,10 @@ Now the screen reads:
      Until the rows are read, the list's selection target is `null` and the selection bar waits.
      It never acts on part of the selection.
 
-`listSongs`, `useSongs` and the shared `songs` query are unchanged. Search's index (#306) reads
-that query, and Library long-press queueing (`librarySectionSongs`) reads `listSongs`. Other
-lists (an artist's, a genre's, Favorites) still use `TrackList` with full rows.
+`listSongs` and the shared `songs` query are unchanged. Search's index (#306) reads that query
+(`libraryListQueries.songs`), and Library long-press queueing (`librarySectionSongs`) reads
+`listSongs`. `useSongs`, which only the Songs screen used, is gone. Other lists (an artist's, a
+genre's, Favorites) still use `TrackList` with full rows.
 
 ## Desktop benchmark
 
@@ -151,11 +152,11 @@ taken (#312 and #308 can use idx 22).
   order re-reads the pages on screen. A sort change shows the previous order until the new one
   is read, then reads its pages. Scan batches still don't carry Track ids (#309), so every change
   re-reads the whole order. It is cheap enough that per-id invalidation wasn't needed.
-- **Unchanged consumers**: `listSongs`, `useSongs` and `TrackList` are untouched.
+- **Unchanged consumers**: `listSongs`, the shared `songs` query and `TrackList` are untouched.
 
-Full suites at the head of this branch: Core 1,805 tests, apps/mobile 290 tests, `scripts/perf`
-47 tests, all passing. `tsc --noEmit` passes for Core and apps/mobile. `scripts/perf` can't be
-typechecked in this checkout (no `@types/node` at the root).
+Full suites after merging `perf/301-performance` (with #306): Core 1,864 tests, apps/mobile 297
+tests, `scripts/perf` 96 tests, all passing. `tsc --noEmit` passes for Core and apps/mobile.
+`scripts/perf` can't be typechecked in this checkout (no `@types/node` at the root).
 
 ## Release runner: `push-tracklist` waits for the first rows
 

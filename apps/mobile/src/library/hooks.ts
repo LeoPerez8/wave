@@ -28,7 +28,6 @@ import {
   type PlaylistDetail,
   type PlaylistRow,
   type ScanRootSummary,
-  type SongRow,
 } from "./LibraryStore";
 import { knownPlaylists, listPlaylistsRemembered } from "./playlists";
 import { libraryQuery, useLibraryQuery, type LibraryQuery } from "./sharedQueries";
@@ -118,10 +117,6 @@ export const useAlbumsMissingSongs = (
 
 const listSongs = storeQuery("songs", TRACKS, (store) => store.listSongs);
 const countTracks = storeQuery("trackCount", TRACKS, (store) => store.countTracks);
-
-const NO_SONGS: readonly SongRow[] = [];
-
-export const useSongs = (): readonly SongRow[] => useLibraryQuery(listSongs, NO_SONGS);
 
 /** Number of tracks in the library, or null before the first count arrives. */
 export const useTrackCount = (): number | null => useLibraryQuery<number | null>(countTracks, null);
