@@ -75,3 +75,62 @@ export const reorderScrollSpeed = ({
   if (bottomGap < edge) return maxSpeed * Math.min(1, (edge - bottomGap) / edge);
   return 0;
 };
+
+export interface ReorderGridDrag {
+  /** The dragged tile's index when the drag started. */
+  readonly from: number;
+  /** How far the tile has moved across and down (finger travel plus any auto-scroll), in dp. */
+  readonly dx: number;
+  readonly dy: number;
+  /** From one tile's left edge to the next one's, gutter included, in dp. */
+  readonly cellWidth: number;
+  /** From one row's top to the next one's, in dp. */
+  readonly cellHeight: number;
+  /** Tiles to a row, filled left to right then top down; 1 is a list. */
+  readonly columns: number;
+  /** Tiles in the grid. */
+  readonly count: number;
+}
+
+/**
+ * The index a dragged tile in a grid would take: another tile's place once
+ * its centre passes that tile's middle, across and down, kept inside the grid.
+ * With one column it is `reorderTarget`.
+ */
+export const reorderGridTarget = ({
+  from,
+  dx,
+  dy,
+  cellWidth,
+  cellHeight,
+  columns,
+  count,
+}: ReorderGridDrag): number => {
+  "worklet";
+  const rows = Math.ceil(count / columns);
+  const column = Math.max(0, Math.min(columns - 1, (from % columns) + Math.round(dx / cellWidth)));
+  const row = Math.max(
+    0,
+    Math.min(rows - 1, Math.floor(from / columns) + Math.round(dy / cellHeight)),
+  );
+  return Math.max(0, Math.min(count - 1, row * columns + column));
+};
+
+/**
+ * How many cells a tile steps across (`x`) and down (`y`) to make room for
+ * the dragged one: one place back or on, which wraps to the row above or
+ * below at a row's end. The dragged tile itself follows the finger: no step.
+ */
+export const reorderGridShift = ({
+  index,
+  from,
+  to,
+  columns,
+}: ReorderRow & { readonly columns: number }): { readonly x: number; readonly y: number } => {
+  "worklet";
+  const place = index + reorderShift({ index, from, to });
+  return {
+    x: (place % columns) - (index % columns),
+    y: Math.floor(place / columns) - Math.floor(index / columns),
+  };
+};
