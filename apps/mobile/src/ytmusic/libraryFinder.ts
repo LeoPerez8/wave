@@ -22,20 +22,44 @@ const listSongs = Effect.gen(function* () {
  * per `libraryVersion` (a download lands, a scan goes on), and only while a
  * screen uses it. Null until the Library is first read.
  */
-const sharedFinder = makeVersionedCache<FindInLibrary | null>({
+const sharedFinder = makeVersionedCache<{
+  readonly version: number;
+  readonly find: FindInLibrary;
+} | null>({
   version: libraryVersion,
   initial: null,
-  build: () => appRuntime.runPromise(listSongs).then((songs) => libraryFinder(songs)),
+  build: (version) =>
+    appRuntime.runPromise(listSongs).then((songs) => ({ version, find: libraryFinder(songs) })),
 });
 
+/** The shared finder at once when current, else after its local Library read catches up. */
+export const currentLibraryFinder = (): Promise<FindInLibrary> => {
+  let known = sharedFinder.get();
+  if (known?.version === libraryVersion.get()) return Promise.resolve(known.find);
+  return new Promise((resolve, reject) => {
+    const stop = sharedFinder.subscribe(() => {
+      const next = sharedFinder.get();
+      // A failed read tells subscribers but keeps the same cached value.
+      if (next === known) {
+        stop();
+        reject(new Error("Couldn't read the Library"));
+      } else if (next?.version === libraryVersion.get()) {
+        stop();
+        resolve(next.find);
+      } else known = next;
+    });
+  });
+};
+
 const idle = () => () => {};
+const knownFinder = (): FindInLibrary | null => sharedFinder.get()?.find ?? null;
 
 /**
  * The shared finder, or null until the Library is first read. It follows the
  * Library only while [active]; inactive, it reads what was last built.
  */
 export const useLoadedLibraryFinder = (active = true): FindInLibrary | null =>
-  useSyncExternalStore(active ? sharedFinder.subscribe : idle, sharedFinder.get);
+  useSyncExternalStore(active ? sharedFinder.subscribe : idle, knownFinder);
 
 /**
  * Finds the Library song a YT Music song already is, so a YT Music list plays the
