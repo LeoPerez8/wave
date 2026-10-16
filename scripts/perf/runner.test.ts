@@ -83,6 +83,10 @@ describe("runPerf on the simulated phone", () => {
       "now-playing/idle/close",
       "queue/idle/open",
       "queue/idle/close",
+      "scrub/idle/forward",
+      "scrub/idle/back",
+      "queue-drag/idle/down",
+      "queue-drag/idle/up",
       "search-first-tap/idle/first-tap",
     ]);
     const expecting = steps.filter((step) => step.expectMissing !== null);
@@ -96,6 +100,24 @@ describe("runPerf on the simulated phone", () => {
       assert.ok(step.frames.total > 0);
     }
     assert.equal(memory.length, ALL_SCENARIOS.length);
+  });
+
+  it("drags in dp from its target, at the phone's density", async () => {
+    const device = new FakeDevice();
+    await runPerf(device, options("drag", { scenarios: ["scrub", "queue-drag"], iterations: 1 }));
+    const swipes = device.commands.filter((command) => command.startsWith("input swipe"));
+    // The simulated phone draws 3 px a dp. Its scrubber is centred at (720, 2248), and
+    // the first Up Next row's Remove button at (1200, 900), with the handle 48 dp right of it.
+    // A warm-up iteration, then the measured one, for each scenario.
+    assert.equal(swipes.length, 8);
+    assert.deepEqual(swipes.slice(0, 2), [
+      "input swipe 360 2248 1080 2248 1000",
+      "input swipe 1080 2248 360 2248 1000",
+    ]);
+    assert.deepEqual(swipes.slice(-2), [
+      "input swipe 1344 900 1344 1404 800",
+      "input swipe 1344 1404 1344 900 800",
+    ]);
   });
 
   it("times cold launches", async () => {

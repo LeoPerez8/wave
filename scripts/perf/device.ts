@@ -204,6 +204,10 @@ export const parseGetprop = (text: string): Record<string, string> =>
 export const parseThermalStatus = (text: string): number | null =>
   number(text, /^Thermal Status: (\d+)/m);
 
+/** `wm density`: the density the screen is drawn at (dpi; 160 is one px per dp). */
+export const parseDensity = (text: string): number | null =>
+  number(text, /^Override density: (\d+)/m) ?? number(text, /^Physical density: (\d+)/m);
+
 /** What the runner taps, found in a `uiautomator dump`. */
 export type Target =
   | { readonly desc: string }

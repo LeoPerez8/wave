@@ -12,6 +12,7 @@ import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 import Svg, { Path } from "react-native-svg";
 
 import { CELL } from "@/catalog/grid";
+import { perfCount, useRenderCount } from "@/perf/perf";
 import { seekTo } from "@/playback/actions";
 import { useThemeColor } from "@/theme/useThemeColor";
 
@@ -35,6 +36,7 @@ const HEIGHT = AMPLITUDE * 2 + BAR_SCRUBBING;
  * the bar gets bolder and the track seeks when the finger lifts.
  */
 export function Scrubber() {
+  useRenderCount("Scrubber");
   const { positionMs, durationMs } = usePlayhead();
   const [width, setWidth] = useState(0);
   const [scrubMs, setScrubMs] = useState<number | null>(null);
@@ -52,9 +54,16 @@ export function Scrubber() {
         runOnJS: true,
         enabled,
         minDistance: 0,
-        onActivate: (event: { x: number }) => setScrubMs(at(event.x)),
-        onUpdate: (event: { x: number }) => setScrubMs(at(event.x)),
+        onActivate: (event: { x: number }) => {
+          perfCount("scrub.move");
+          setScrubMs(at(event.x));
+        },
+        onUpdate: (event: { x: number }) => {
+          perfCount("scrub.move");
+          setScrubMs(at(event.x));
+        },
         onDeactivate: (event: { x: number; canceled: boolean }) => {
+          perfCount("scrub.release");
           if (!event.canceled) {
             seekTo(at(event.x));
             void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);

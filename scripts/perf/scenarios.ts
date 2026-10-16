@@ -15,7 +15,24 @@ export type Action =
   /** A cold launch, timed by `am start -W`. */
   | { readonly kind: "launch" }
   /** Nothing: a window that watches the app on its own (an import filling). */
-  | { readonly kind: "idle" };
+  | { readonly kind: "idle" }
+  /**
+   * A finger dragged in a straight line (`input swipe`), [from] and [to] in dp
+   * from [target]'s centre, taking [durationMs].
+   */
+  | {
+      readonly kind: "drag";
+      readonly target: Target;
+      readonly from: Point;
+      readonly to: Point;
+      readonly durationMs: number;
+    };
+
+/** A position in dp; x grows right, y down. */
+export interface Point {
+  readonly x: number;
+  readonly y: number;
+}
 
 export interface Step {
   /** What the step measures, the third part of its summary key ("tab", "push", "pop"…). */
@@ -63,6 +80,24 @@ const pushPop = (target: Target): readonly Step[] => [
   { measure: "push", action: { kind: "tap", target }, expect: route },
   { measure: "pop", action: { kind: "tap", target: { desc: "Back" } }, expect: route },
 ];
+
+const drag = (target: Target, from: Point, to: Point, durationMs: number): Action => ({
+  kind: "drag",
+  target,
+  from,
+  to,
+  durationMs,
+});
+
+const SCRUBBER: Target = { desc: "Playback position" };
+/**
+ * Up Next's handles are hidden from accessibility, so drags start from the
+ * first row's Remove button: the handle is the next 48 dp cell to its right.
+ */
+const FIRST_REMOVE: Target = { descPrefix: "Remove " };
+const HANDLE: Point = { x: 48, y: 0 };
+/** Up Next rows are 56 dp tall. */
+const THREE_ROWS_DOWN: Point = { x: 48, y: 3 * 56 };
 
 /** Ten tab changes away from Home and back, cycling through [tabs]. */
 const tabCycle = (tabs: readonly string[], count: number): Target[] =>
@@ -165,6 +200,33 @@ export const SCENARIOS: readonly Scenario[] = [
         expect: { mark: "visible", detail: "queue" },
       },
       { measure: "close", action: { kind: "tap", target: { desc: "Queue" } } },
+    ],
+    iterations: 10,
+    warmup: 1,
+  },
+  {
+    name: "scrub",
+    summary:
+      "Now Playing's scrubber dragged forward 240 dp and back, a second each; each drag seeks where it lets go.",
+    setup: [{ kind: "tap", target: { descPrefix: "Now playing:" } }],
+    steps: () => [
+      { measure: "forward", action: drag(SCRUBBER, { x: -120, y: 0 }, { x: 120, y: 0 }, 1_000) },
+      { measure: "back", action: drag(SCRUBBER, { x: 120, y: 0 }, { x: -120, y: 0 }, 1_000) },
+    ],
+    iterations: 10,
+    warmup: 1,
+  },
+  {
+    name: "queue-drag",
+    summary:
+      "The first Up Next row dragged three rows down by its handle, then back up: the order ends as it began. Needs four songs up next.",
+    setup: [
+      { kind: "tap", target: { descPrefix: "Now playing:" } },
+      { kind: "tap", target: { desc: "Queue" } },
+    ],
+    steps: () => [
+      { measure: "down", action: drag(FIRST_REMOVE, HANDLE, THREE_ROWS_DOWN, 800) },
+      { measure: "up", action: drag(FIRST_REMOVE, THREE_ROWS_DOWN, HANDLE, 800) },
     ],
     iterations: 10,
     warmup: 1,

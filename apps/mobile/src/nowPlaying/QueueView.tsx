@@ -38,7 +38,7 @@ import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { Press } from "@/motion/Press";
-import { usePerfVisible, useRenderCount } from "@/perf/perf";
+import { perfCount, usePerfVisible, useRenderCount } from "@/perf/perf";
 import {
   cycleRepeat,
   moveQueueEntry,
@@ -200,6 +200,7 @@ type RowProps = {
 };
 
 function UpNextRow({ entry, index, track, lifted, drag, translation, count }: RowProps) {
+  useRenderCount("UpNextRow");
   const secondary = useThemeColor("secondary");
   const offset = useSharedValue(0);
   const { start, move, end, trackOffset } = drag;
@@ -442,6 +443,7 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
 
   const start = useCallback(
     (key: string, index: number) => {
+      perfCount("upNext.start");
       // A drop still settling lands now. Until its new order is rendered
       // [index] is stale, so the drag starts once it is.
       settling.current?.();
@@ -456,6 +458,7 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
 
   const move = useCallback(
     (dy: number) => {
+      perfCount("upNext.move");
       const current = live.current;
       if (current === null) return;
       current.translation = dy;
@@ -481,6 +484,7 @@ export function UpNextList({ bottomInset }: { bottomInset: number }) {
 
   const end = useCallback(
     (canceled: boolean) => {
+      perfCount("upNext.end");
       stopAutoscroll();
       // Let go before a deferred drag could start: it never does.
       deferredStart.current = null;

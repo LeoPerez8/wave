@@ -71,6 +71,11 @@ EXPO_PUBLIC_WAVE_PERF=1 EXPO_PUBLIC_WAVE_COMMIT=$(git rev-parse --short HEAD) \
   ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a
 ```
 
+For a **stall build**, add `EXPO_PUBLIC_WAVE_PERF_STALL_MS=<ms>`: every touch then blocks the
+JavaScript thread that long (a busy loop in the root view's touch handler), a controlled stand-in
+for an import's work. What still moves in the window is what doesn't wait for JavaScript. The
+run's `app` metadata records it as `stallMs` (0 in a plain perf build).
+
 Delete Metro's cache too (`$TMPDIR/metro-cache`) when switching between perf and plain builds. The
 run's first line says whether the app on the phone is a perf build. A perf build has the same
 version, package and signature as the release it's built from, so it installs over it in place.
@@ -110,22 +115,31 @@ aren't recorded. Every measured navigation step is a tap, so it has a touch to m
 pops tap the header's Back button, and Now Playing closes with its Close button. Only the cold
 launch, the share and the import's idle window have no touch.
 
-| Scenario           | Steps (measure)                                                                     | Response mark             | Iterations |
-| ------------------ | ----------------------------------------------------------------------------------- | ------------------------- | ---------: |
-| `startup`          | cold launch (`cold`)                                                                | (am start -W)             |          5 |
-| `tab-switch`       | ten tab taps cycling through `tabs` (`tab`)                                         | `route`                   |          3 |
-| `rapid-tabs`       | ten tab taps back to back, measured from the last (`burst`)                         | `route`                   |          5 |
-| `push-settings`    | Home › Settings (`push`), Back (`pop`)                                              | `route`                   |         10 |
-| `push-library`     | Library › Albums (`push`), Back (`pop`)                                             | `route`                   |         10 |
-| `push-tracklist`   | Library › Songs, the whole Library as a Track list (`push`), Back (`pop`)           | `route`                   |         10 |
-| `push-empty`       | Settings › Developer, one row: the empty-screen control (`push`, `pop`)             | `route`                   |         10 |
-| `now-playing`      | mini player (`open`), Close Now Playing (`close`)                                   | `nowPlaying.shown/hidden` |         10 |
-| `queue`            | Queue in Now Playing (`open`), Queue again (`close`)                                | `visible` queue           |         10 |
-| `search-first-tap` | the first Search tap after a fresh launch (`first-tap`)                             | `keyboard.show`           |          5 |
-| `import`           | share the link (`card`), tap Import (`start`), 10 s of the import (`during-import`) | `import.running`          |          1 |
+| Scenario           | Steps (measure)                                                                      | Response mark             | Iterations |
+| ------------------ | ------------------------------------------------------------------------------------ | ------------------------- | ---------: |
+| `startup`          | cold launch (`cold`)                                                                 | (am start -W)             |          5 |
+| `tab-switch`       | ten tab taps cycling through `tabs` (`tab`)                                          | `route`                   |          3 |
+| `rapid-tabs`       | ten tab taps back to back, measured from the last (`burst`)                          | `route`                   |          5 |
+| `push-settings`    | Home › Settings (`push`), Back (`pop`)                                               | `route`                   |         10 |
+| `push-library`     | Library › Albums (`push`), Back (`pop`)                                              | `route`                   |         10 |
+| `push-tracklist`   | Library › Songs, the whole Library as a Track list (`push`), Back (`pop`)            | `route`                   |         10 |
+| `push-empty`       | Settings › Developer, one row: the empty-screen control (`push`, `pop`)              | `route`                   |         10 |
+| `now-playing`      | mini player (`open`), Close Now Playing (`close`)                                    | `nowPlaying.shown/hidden` |         10 |
+| `queue`            | Queue in Now Playing (`open`), Queue again (`close`)                                 | `visible` queue           |         10 |
+| `scrub`            | Now Playing's scrubber dragged 240 dp forward (`forward`), then back (`back`)        | (none)                    |         10 |
+| `queue-drag`       | The first Up Next row dragged three rows down by its handle (`down`), then up (`up`) | (none)                    |         10 |
+| `search-first-tap` | the first Search tap after a fresh launch (`first-tap`)                              | `keyboard.show`           |          5 |
+| `import`           | share the link (`card`), tap Import (`start`), 10 s of the import (`during-import`)  | `import.running`          |          1 |
 
 `push-empty` is the control: navigation with next to nothing to render. If it's as slow as
 `push-settings`, the cost is in navigation itself, not in what the screen shows.
+
+`scrub` and `queue-drag` are drags (`input swipe`), given in dp from a target's centre and turned
+into pixels at the phone's density (`wm density`). Each scrub seeks where it lets go. The queue
+drag starts at the first row's handle (48 dp right of its Remove button: the handles are hidden
+from accessibility) and needs four songs up next; the second drag puts the row back. A drag has
+no response mark: compare its frames, first frame and settle, and the renders and `js:` counts
+(below).
 
 ### Variants
 
@@ -224,9 +238,10 @@ measured. Records, in order:
 `apps/mobile/src/perf/perf.ts`:
 
 ```ts
-import { perfMark, registerPerfMeta, usePerfVisible, useRenderCount } from "@/perf/perf";
+import { perfCount, perfMark, registerPerfMeta, usePerfVisible, useRenderCount } from "@/perf/perf";
 
 useRenderCount("UpNextList"); // first line of a component: counts its renders
+perfCount("scrub.release"); // counts a call a gesture made to JavaScript, reported as renders of `js:scrub.release`
 usePerfVisible("queue"); // marks `visible` "queue" on the first frame after mount
 perfMark("import.running", String(total)); // a timing mark, name `area.event`, optional detail
 registerPerfMeta("import", () => ({ done, total })); // reported with each flush
@@ -245,7 +260,8 @@ ticket needs evidence, and give a new response mark a scenario step's `expect` i
 - touches with their native timestamp, from the root view's `onTouchStart`.
 
 Render counts are in RootLayout, TabsLayout, LibraryLayout, TabBar, MiniPlayer, NowPlayingSheet,
-UpNextList, HomeScreen, LibraryScreen, SearchScreen, SettingsScreen, SongsList and TrackList.
+UpNextList, UpNextRow, Scrubber, HomeScreen, LibraryScreen, SearchScreen, SettingsScreen, SongsList
+and TrackList. Gesture calls to JavaScript are counted as `js:scrub.*` and `js:upNext.*` (#313).
 
 A new scenario goes in `SCENARIOS` (`scripts/perf/scenarios.ts`). Then make the simulated phone in
 `fakeDevice.ts` answer it, so `--dry-run` and the tests cover it.
