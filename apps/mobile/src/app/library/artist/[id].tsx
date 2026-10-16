@@ -13,7 +13,7 @@ import { Text, useWindowDimensions, View } from "react-native";
 
 import { ArtistImage } from "@/catalog/ArtistImage";
 import { AlbumTile } from "@/catalog/AlbumTile";
-import { CatalogLine } from "@/catalog/CatalogLine";
+import { CatalogLine, SECTION_HEAD, SectionHead } from "@/catalog/CatalogLine";
 import { COVER_ROW_TILE, CoverRow } from "@/catalog/CoverRow";
 import { CELL, grid } from "@/catalog/grid";
 import { TrackRow } from "@/catalog/TrackRow";
@@ -53,8 +53,6 @@ type PageSong =
   | { readonly kind: "yt"; readonly song: NativeYtSong };
 
 type Item = ArtistPageItem<AlbumCell, PageSong>;
-
-const SECTION_HEAD = CELL * 6;
 
 /** Height of an album shelf's row, the gap under it included. */
 const SHELF_ROW = albumRowHeight(COVER_ROW_TILE);
@@ -292,11 +290,7 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
     ({ item }: { item: Item }) => {
       switch (item.type) {
         case "section":
-          return (
-            <View className="justify-end" style={{ height: SECTION_HEAD, paddingBottom: CELL }}>
-              <CatalogLine>{item.label}</CatalogLine>
-            </View>
-          );
+          return <SectionHead label={item.label} />;
         case "shelf":
           // Keyed by shelf, so a recycled row doesn't keep another shelf's scroll position.
           return (

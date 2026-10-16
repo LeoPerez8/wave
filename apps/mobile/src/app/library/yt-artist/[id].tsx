@@ -15,7 +15,7 @@ import { useCallback, useMemo } from "react";
 import { Text, useWindowDimensions, View } from "react-native";
 
 import { AlbumTile } from "@/catalog/AlbumTile";
-import { CatalogLine } from "@/catalog/CatalogLine";
+import { CatalogLine, SECTION_HEAD, SectionHead } from "@/catalog/CatalogLine";
 import { COVER_ROW_TILE, CoverRow } from "@/catalog/CoverRow";
 import { CELL, grid } from "@/catalog/grid";
 import { PlayShuffle } from "@/catalog/PlayShuffle";
@@ -47,8 +47,6 @@ interface Cover {
 }
 
 type Item = ArtistPageItem<Cover, Song>;
-
-const SECTION_HEAD = CELL * 6;
 
 /** Height of a shelf's row, the gap under it included. */
 const SHELF_ROW = albumRowHeight(COVER_ROW_TILE);
@@ -250,11 +248,7 @@ export default function YtArtistScreen() {
     ({ item }: { item: Item }) => {
       switch (item.type) {
         case "section":
-          return (
-            <View className="justify-end" style={{ height: SECTION_HEAD, paddingBottom: CELL }}>
-              <CatalogLine>{item.label}</CatalogLine>
-            </View>
-          );
+          return <SectionHead label={item.label} />;
         case "shelf":
           // Keyed by shelf, so a recycled row doesn't keep another shelf's scroll position.
           return (

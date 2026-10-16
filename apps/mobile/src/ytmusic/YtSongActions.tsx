@@ -114,11 +114,17 @@ const playlistSong = (song: NativeYtSong, find: FindInLibrary): PlaylistSong => 
   return track === null ? { source: "stream", song } : { source: "library", trackId: track.id };
 };
 
+/** Where the menu acts: the Library finder, and what its list gave it (`YtSongMenuOptions`). */
+interface MenuPlace {
+  readonly find: FindInLibrary;
+  readonly playlistItem: PlaylistPlace | undefined;
+  readonly onSelect: (() => void) | undefined;
+}
+
 const run = (
   entry: Entry,
   song: NativeYtSong,
-  find: FindInLibrary,
-  playlistItem: PlaylistPlace | undefined,
+  { find, playlistItem, onSelect }: MenuPlace,
 ): void => {
   if (entry.kind === "album") {
     // The page heads with what the song knows of its album until the page is read.
@@ -154,6 +160,9 @@ const run = (
       return;
     case "cancelDownload":
       cancelYtDownload(song.videoId);
+      return;
+    case "select":
+      onSelect?.();
       return;
   }
 };
@@ -203,8 +212,7 @@ function YtSongActionsMenu({
     const entry = entries[index];
     if (entry === undefined) return;
     close();
-    if (entry.action === "select") onSelect?.();
-    else run(entry, song, find, playlistItem);
+    run(entry, song, { find, playlistItem, onSelect });
   };
   const { underFinger, trackEntry, trackList } = useSlideToChoose(choose);
   const flow = useOverlayFlow();

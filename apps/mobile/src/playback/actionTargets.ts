@@ -247,7 +247,7 @@ const songId = (song: SongRow): number => song.id;
  * (albums, artists…) expand by Core's `groupSongs`: a song two of them hold
  * comes once; checked tracks are taken as they are.
  */
-export const targetSongs = async (target: ActionItems): Promise<readonly SongRow[]> => {
+const targetSongs = async (target: ActionItems): Promise<readonly SongRow[]> => {
   const kind = kindInfo(target);
   const lists = await Promise.all(itemsOf(target).map((item) => kind.songs(item)));
   return target.kind === "track" ? lists.flat() : groupSongs(lists, songId);
