@@ -121,7 +121,7 @@ launch, the share and the import's idle window have no touch.
 | `rapid-tabs`       | ten tab taps back to back, measured from the last (`burst`)                         | `route`                   |          5 |
 | `push-settings`    | Home › Settings (`push`), Back (`pop`)                                              | `route`                   |         10 |
 | `push-library`     | Library › Albums (`push`), Back (`pop`)                                             | `route`                   |         10 |
-| `push-tracklist`   | Library › Songs, the whole Library as a Track list (`push`), Back (`pop`)           | `route`                   |         10 |
+| `push-tracklist`   | Library › Songs, the whole Library as a Track list, to its first rows (`push`), Back (`pop`) | `songs.rows`, `route`     |         10 |
 | `push-artist`      | Library › Artists › the fixture's artist, to its stats block (`push`), Back (`pop`) | `artist.stats`, `route`   |         10 |
 | `push-empty`       | Settings › Developer, one row: the empty-screen control (`push`, `pop`)             | `route`                   |         10 |
 | `now-playing`      | mini player (`open`), Close Now Playing (`close`)                                   | `nowPlaying.shown/hidden` |         10 |

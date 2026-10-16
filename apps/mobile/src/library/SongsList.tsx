@@ -1,4 +1,5 @@
 import { IconMusic } from "@tabler/icons-react-native";
+import { useEffect } from "react";
 import { View } from "react-native";
 
 import { grid } from "@/catalog/grid";
@@ -12,7 +13,7 @@ import { promptForMusicFolder } from "./promptForMusicFolder";
 import { SongSortButton } from "./SongSortButton";
 import { useSortedSongs } from "./songSort";
 import { ListIntro, songCount, TrackList } from "./TrackList";
-import { useRenderCount } from "@/perf/perf";
+import { perfMark, useRenderCount } from "@/perf/perf";
 
 /** Tapping a song plays the whole Songs list from it. */
 const SONGS_CONTEXT = { kind: "songs", id: null } as const;
@@ -27,6 +28,14 @@ export function SongsList() {
   const { sort, songs } = useSortedSongs("songs", library);
   const scan = useScanState();
   const roots = useScanRoots();
+  const shown = songs.length > 0;
+  // The response in the release runner's push-tracklist scenario: the first rows on screen.
+  useEffect(() => {
+    if (!shown) return;
+    // Once per visit: later reads of the songs aren't the screen opening.
+    const frame = requestAnimationFrame(() => perfMark("songs.rows", "all"));
+    return () => cancelAnimationFrame(frame);
+  }, [shown]);
 
   if (songs.length === 0) {
     return (
