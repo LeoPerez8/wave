@@ -31,8 +31,16 @@ interface DurablePublication {
  * What a failure leads to (trying again, the next peer, the end of the job, YouTube Music) is
  * Core's `downloadFailurePlan` for the job's source, which the prepare answer brings
  * (`failurePlan`). The journal only carries it out, with its own counts and deadlines.
+ *
+ * Every failure keeps what actually went wrong as the job's `cause` (an exception's class and
+ * message, or what JS reported with its answer) and writes it to [log]. The reason stays one of
+ * Core's failures; `storage` only for a real storage problem (`DownloadFiles.storageProblem`).
  */
-class DurableDownloads(private val journal: File, private val clock: () -> Long = System::currentTimeMillis) {
+class DurableDownloads(
+  private val journal: File,
+  private val clock: () -> Long = System::currentTimeMillis,
+  private val log: (String) -> Unit = {},
+) {
   private val jobs = LinkedHashMap<String, MutableMap<String, Any?>>()
   private var policy = mutableMapOf<String, Any?>("roots" to emptyList<String>(), "excluded" to emptyList<String>(), "revision" to 0L)
   @Volatile private var stopped = false
@@ -99,7 +107,7 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
       val deletedCompletion = existing["acknowledged"] == true && !(existing.map("saved")["path"] as? String)?.let { File(it).isFile }.orFalse()
       if (existing["phase"] == "failed" || existing["phase"] == "cancelled" || existing["importFailure"] != null || deletedCompletion) {
         existing["generation"] = existing.number("generation") + 1
-        existing.remove("token"); existing.remove("reason"); existing.remove("importFailure")
+        existing.remove("token"); existing.remove("reason"); existing.remove("importFailure"); existing.remove("cause")
         // Retry starts again from the source decided now, Soulseek first while it has an account.
         existing.remove("fallback"); existing.remove("fellBackFrom"); existing.remove("video")
         // Asked for again: it waits behind what's already queued.
@@ -110,7 +118,8 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
           for (key in listOf("saved", "acknowledged", "finalPath", "digest", "publishSource")) existing.remove(key)
         }
         if (existing["saved"] != null) existing["phase"] = "completed"
-        else if ((existing["finalPath"] as? String)?.let { File(it).isFile } == true) {
+        // Only while the file there is still this download's: one replaced since downloads again.
+        else if ((existing["finalPath"] as? String)?.let { File(it).isFile && digest(File(it)) == existing["digest"] } == true) {
           existing["phase"] = "awaitingPublication"; existing["publicationAttempts"] = 0L
         } else {
           cleanup(existing)
@@ -139,7 +148,8 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
     if (job["phase"] !in DECISIONS || job["token"] != null || job["acknowledged"] == true || job["importFailure"] != null || job.number("retryAt") > clock()) return null
     if (job.number("deadline") <= clock()) {
       // As in expire(): a published file is never a failed download, only one the Library didn't import.
-      if (job["phase"] == "completed") job["importFailure"] = "failed" else fail(job, "timedOut")
+      val cause = "Out of time before the ${DECISIONS[job["phase"]]} decision"
+      if (job["phase"] == "completed") importFailed(job, "failed", cause) else fail(job, "timedOut", cause)
       persist(); return null
     }
     job["decisionAttempts"] = job.number("decisionAttempts") + 1
@@ -154,16 +164,20 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
     if (job.number("generation") != generation || job["token"] != token || job.number("leaseUntil") < clock() || DECISIONS[job["phase"]] != decision) return false
     if (payload["failure"] != null) {
       val reason = payload["failure"] as String
+      // What JS saw go wrong; a failure it decided on (no folder, no source) comes without one.
+      val cause = payload["cause"] as? String
       if (decision == "prepare") keepPlans(job, payload)
       if (decision == "import" && reason != "noFolder") {
         job.remove("token")
         job["retryAt"] = clock() + 2_000L
-        if (job.number("decisionAttempts") >= MAX_DECISIONS) job["importFailure"] = reason
+        if (cause != null) recordCause(job, reason, cause)
+        if (job.number("decisionAttempts") >= MAX_DECISIONS) importFailed(job, reason, cause)
       } else if (decision == "prepare" && reason in plan(job).strings("retry") && job.number("decisionAttempts") < MAX_DECISIONS) {
         // Searching reconnects the saved session; a dropped connection gets a few spaced retries.
         job.remove("token")
         job["retryAt"] = clock() + 5_000L * job.number("decisionAttempts")
-      } else fail(job, reason)
+        if (cause != null) recordCause(job, reason, cause)
+      } else fail(job, reason, cause)
       persist(); return true
     }
     when (decision) {
@@ -282,15 +296,16 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
   }
 
   /** Called by Android's deadline thread, including the dataSync timeout callback. */
-  @Synchronized fun expire(transport: DurableTransfer, stopAll: Boolean = false) {
+  @Synchronized fun expire(transport: DurableTransfer, stopAll: Boolean = false, stopCause: String? = null) {
     for (job in jobs.values) {
       if (job["phase"] in TERMINAL || job["acknowledged"] == true || job["importFailure"] != null) continue
       // A queued job's time starts when the serial worker reaches it.
       if (job["phase"] == "queued") continue
       if (stopAll || job.number("deadline") <= clock()) {
-        if (job["phase"] == "completed") { job["importFailure"] = "failed"; job.remove("token") }
+        val cause = if (stopAll) stopCause ?: "Android stopped the download service" else "Out of time while ${job["phase"]}"
+        if (job["phase"] == "completed") { importFailed(job, "failed", cause); job.remove("token") }
         // Android stopping the work isn't the source's fault; running out of time is.
-        else fail(job, if (stopAll) "failed" else "timedOut")
+        else fail(job, if (stopAll) "failed" else "timedOut", cause)
         transport.cancel(job["id"] as String)
       } else if (job["phase"] == "transferring" && (job.number("attemptDeadline") <= clock() || (job["queuePosition"] != null && job.number("queueDeadline") <= clock()))) {
         transport.cancel(job["id"] as String)
@@ -299,7 +314,9 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
       } else if (job["token"] != null && job.number("leaseUntil") < clock()) {
         job.remove("token"); job["generation"] = job.number("generation") + 1
         if (job.number("decisionAttempts") >= MAX_DECISIONS) {
-          if (job["phase"] == "completed") job["importFailure"] = "storage" else fail(job, "failed")
+          // JS never answered (it went away, or answering threw): that isn't storage.
+          val cause = "No answer to the ${DECISIONS[job["phase"]]} decision after $MAX_DECISIONS leases"
+          if (job["phase"] == "completed") importFailed(job, "failed", cause) else fail(job, "failed", cause)
         }
       }
     }
@@ -367,6 +384,7 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
           if (job["finalPath"] == null) {
             val target = File(job["targetPath"] as String)
             target.parentFile.mkdirs()
+            if (!target.parentFile.isDirectory) throw DurableFailure("storage", java.io.IOException("Couldn't make the folder ${target.parentFile.path}"))
             // A changed root requires a new hidden file on the destination filesystem.
             if (source.parentFile.canonicalFile != target.parentFile.canonicalFile) {
               val local = DownloadFiles.partFileFor(target, "$id-$generation-publication")
@@ -374,16 +392,22 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
               FileInputStream(source).use { input -> FileOutputStream(local).use { out -> input.copyTo(out); out.fd.sync() } }
               source = local
             }
-            var targetName = target
-            var suffix = 2
-            while (targetName.exists()) targetName = File(target.parentFile, "${target.nameWithoutExtension} (${suffix++}).${target.extension}")
-            job["finalPath"] = targetName.path; job["digest"] = digest(source); job["publishSource"] = source.path
+            job["finalPath"] = DownloadFiles.freeName(target).path; job["digest"] = digest(source); job["publishSource"] = source.path
             persist()
           }
-          val final = File(job["finalPath"] as String)
+          var final = File(job["finalPath"] as String)
           if (!included(final)) { fail(job, "noFolder"); persist(); return }
-          if (!final.exists()) Files.move(File(job["publishSource"] as String).toPath(), final.toPath())
-          check(digest(final) == job["digest"]) { "Publication path belongs to another file" }
+          val publishSource = File(job["publishSource"] as String)
+          // Another file took the chosen name before this one was moved there: the next free one.
+          if (final.exists() && publishSource.isFile && digest(final) != job["digest"]) {
+            final = DownloadFiles.freeName(File(job["targetPath"] as String)); job["finalPath"] = final.path; persist()
+          }
+          if (!final.exists()) Files.move(publishSource.toPath(), final.toPath())
+          if (digest(final) != job["digest"]) {
+            // Wave's own copy is gone and another file holds its name: Retry downloads the song again.
+            for (key in listOf("finalPath", "digest", "publishSource")) job.remove(key)
+            fail(job, "failed", "Another file took ${final.path} before it was imported"); persist(); return
+          }
           // Keep the chosen path and proof until scanner/outbox persistence succeeds.
           job["saved"] = clean(publication.index(final)); transition(job, "completed"); cleanup(job); persist()
         }
@@ -391,16 +415,23 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
     } catch (error: Exception) {
       synchronized(this) {
         val job = held(id, generation, work["phase"] as String) ?: return
+        val cause = describe(error)
         if (work["phase"] == "publishing" && job["finalPath"] != null && File(job["finalPath"] as String).isFile && job.number("publicationAttempts") < 3) {
           job["publicationAttempts"] = job.number("publicationAttempts") + 1
+          recordCause(job, "publishing again", cause)
         } else if (work["phase"] == "transferring") {
           val reason = (error as? DurableFailure)?.reason ?: "unavailable"
           // The service stopping isn't the peer's fault: the next start retries the same peer.
           if (stopped) { cleanup(job); transition(job, "prepared"); job["attempts"] = maxOf(0L, job.number("attempts") - 1) }
-          else if (reason in plan(job).strings("retry") && job.number("attempts") < MAX_ATTEMPTS) { cleanup(job); transition(job, "prepared"); job["retryAt"] = clock() + RETRY_PAUSE_MS * job.number("attempts") }
-          else if (reason in plan(job).strings("retry") || reason in plan(job).strings("end")) fail(job, reason)
-          else nextCandidate(job)
-        } else fail(job, "storage")
+          else if (reason in plan(job).strings("retry") && job.number("attempts") < MAX_ATTEMPTS) { recordCause(job, reason, cause); cleanup(job); transition(job, "prepared"); job["retryAt"] = clock() + RETRY_PAUSE_MS * job.number("attempts") }
+          else if (reason in plan(job).strings("retry") || reason in plan(job).strings("end")) fail(job, reason, cause)
+          else { recordCause(job, reason, cause); nextCandidate(job) }
+        } else {
+          // Tagging or publication: storage only when storage is what failed.
+          val folder = (job["finalPath"] ?: job["targetPath"])?.let { File(it as String).parentFile }
+          val reason = (error as? DurableFailure)?.reason ?: if (DownloadFiles.storageProblem(error, folder)) "storage" else "failed"
+          fail(job, reason, cause)
+        }
         persist()
       }
     } finally { if (activeTransfer == id) activeTransfer = null }
@@ -476,12 +507,26 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
     return true
   }
 
-  /** Every way a job fails goes through here, which is where Soulseek's failures fall back. */
-  private fun fail(job: MutableMap<String, Any?>, reason: String) {
+  /**
+   * Every way a job fails goes through here, which is where Soulseek's failures fall back. A
+   * [cause] says what actually went wrong; it stays on the job (and in the log) through a fallback.
+   */
+  private fun fail(job: MutableMap<String, Any?>, reason: String, cause: String? = null) {
+    if (cause != null) recordCause(job, reason, cause)
     if (fallBack(job, reason)) return
     // YT Music was turned off before YouTube could take over: Soulseek's failure stands.
     job["reason"] = if (reason == "noSource") job["fellBackFrom"] as? String ?: reason else reason
     job["endedAt"] = clock(); transition(job, "failed"); job["generation"] = job.number("generation") + 1; cleanup(job)
+  }
+  /** A published file the Library couldn't import, with what went wrong. */
+  private fun importFailed(job: MutableMap<String, Any?>, reason: String, cause: String?) {
+    job["importFailure"] = reason
+    if (cause != null) recordCause(job, reason, cause)
+  }
+  /** Keeps [cause] as what last went wrong with [job], in the journal and the log. */
+  private fun recordCause(job: MutableMap<String, Any?>, reason: String, cause: String) {
+    job["cause"] = cause.take(MAX_CAUSE)
+    log("Download ${job["id"]} (${job["source"] ?: SOULSEEK}) ${job["phase"]}: $reason; ${job["cause"]}")
   }
   private fun cleanup(job: Map<String, Any?>) { for (key in listOf("sourcePath", "outputPath")) (job[key] as? String)?.let { if (it != job["finalPath"]) File(it).delete() } }
   private fun included(file: File): Boolean {
@@ -520,6 +565,8 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
     const val RETRY_PAUSE_MS = 2_000L
     const val MAX_DECISIONS = 3L
     const val FORGET_FAILED_MS = 24 * 60 * 60_000L
+    /** A cause is a line for the Downloads page and the log, not a stack trace. */
+    const val MAX_CAUSE = 1_000
     const val SOULSEEK = "soulseek"
     const val YOUTUBE = "youtube"
     /** What a job saves: Soulseek's original MP3 320, or YouTube's M4A as served. */
@@ -533,6 +580,17 @@ class DurableDownloads(private val journal: File, private val clock: () -> Long 
 }
 
 class DurableFailure(val reason: String, cause: Throwable? = null) : java.io.IOException(reason, cause)
+
+/**
+ * What went wrong, as `<exception class>: <message>`, then what caused it (`<-`). A
+ * [DurableFailure] only carries the reason it was given, so what it wraps describes it.
+ */
+fun describe(error: Throwable): String =
+  generateSequence(error) { it.cause?.takeIf { cause -> cause !== it } }
+    .filterNot { it is DurableFailure && it.cause != null }
+    .take(4)
+    .joinToString(" <- ") { if (it.message.isNullOrBlank()) it.javaClass.name else "${it.javaClass.name}: ${it.message}" }
+    .take(DurableDownloads.MAX_CAUSE)
 
 private fun Map<String, Any?>.number(key: String): Long = (get(key) as? Number)?.toLong() ?: 0L
 private fun Boolean?.orFalse(): Boolean = this ?: false

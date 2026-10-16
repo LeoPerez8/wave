@@ -4,6 +4,8 @@ import java.io.File
 import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
 import org.jaudiotagger.tag.images.ArtworkFactory
+import org.jaudiotagger.tag.mp4.Mp4Tag
+import org.jaudiotagger.tag.mp4.Mp4TagCreator
 
 /** The tags a YT Music download gets (Core's `ytDownloadTags`); null fields are left out. */
 data class DownloadTags(
@@ -41,6 +43,8 @@ data class DownloadTags(
 /**
  * Writes trusted download metadata and artwork with the existing format-aware
  * writer. Recording and audio validation must happen before peer tags are replaced.
+ * A fragmented M4A (what YouTube serves) is tagged by [FragmentedMp4], which
+ * jaudiotagger's MP4 writer can't do.
  */
 class DownloadTagWriter {
   init {
@@ -68,8 +72,13 @@ class DownloadTagWriter {
         },
       )
     }
-    audio.tag = tag
-    AudioFileIO.write(audio)
+    if (tag is Mp4Tag && FragmentedMp4.isFragmented(file)) {
+      val ilst = Mp4TagCreator().convertMetadata(tag)
+      FragmentedMp4.writeIlst(file, ByteArray(ilst.remaining()).also(ilst::get))
+    } else {
+      audio.tag = tag
+      AudioFileIO.write(audio)
+    }
   }
 
   private fun mimeTypeOf(image: ByteArray): String =

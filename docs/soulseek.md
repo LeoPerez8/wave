@@ -56,7 +56,7 @@ recording. Its provenance is reported as unknown.
 
 The existing download tag writer, hidden part file, atomic publication and
 single-file scanner remain the Library import path. Once a download is
-imported, Find Lyrics and Genre runs on it and writes the lyrics or genre the
+imported, Fix Song runs on it and writes the lyrics or genre the
 file still lacks (Core's `missingTags`); it never replaces ones it has. Downloading never calls a
 Library upload resolver: Wave advertises zero shared files, returns empty
 browse results, and refuses upload requests and unsolicited incoming files.

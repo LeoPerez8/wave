@@ -40,6 +40,8 @@ const song = (
   discNumber: null,
   trackNumber: null,
   year: null,
+  genre: null,
+  hasLyrics: false,
 });
 
 const ytSong = (videoId: string): YtSong => ({
