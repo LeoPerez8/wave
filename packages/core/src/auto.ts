@@ -274,7 +274,7 @@ export const AUTO_ROOT: AutoItem = folder({ type: "root" }, "Wave");
 export type AutoSource =
   /** Every album, in Library order. */
   | { readonly type: "albums" }
-  /** Every playlist, by name (Library order); `autoPlaylistItem` builds each. */
+  /** Every playlist, in the phone's Playlists order; `autoPlaylistItem` builds each. */
   | { readonly type: "playlists" }
   /** Every artist with songs, in Library order (leading articles and accents ignored). */
   | { readonly type: "artists" }

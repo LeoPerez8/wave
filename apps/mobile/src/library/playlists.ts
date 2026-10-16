@@ -128,6 +128,7 @@ export const emptyPlaylistRow = (id: number, name: string): PlaylistRow => ({
   id,
   name,
   sort: sortKey(name),
+  createdAt: Date.now(),
   trackCount: 0,
   durationMs: 0,
   thumbPaths: [],

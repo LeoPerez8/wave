@@ -43,7 +43,8 @@ const DEFAULT_PLAYLIST_ORDER: PlaylistOrder = { sort: "name", order: [] };
 export const parsePlaylistOrder = (stored: string | null): PlaylistOrder => {
   const record = readStoredRecord(stored);
   const sort =
-    PLAYLIST_SORTS.find(({ sort }) => sort === record.sort)?.sort ?? DEFAULT_PLAYLIST_ORDER.sort;
+    PLAYLIST_SORTS.find((choice) => choice.sort === record.sort)?.sort ??
+    DEFAULT_PLAYLIST_ORDER.sort;
   const order = Array.isArray(record.order)
     ? record.order.filter((id): id is number => Number.isSafeInteger(id))
     : [];
