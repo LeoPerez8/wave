@@ -113,8 +113,9 @@ launch, the share and the import's idle window have no touch.
 | Scenario           | Steps (measure)                                                                     | Response mark             | Iterations |
 | ------------------ | ----------------------------------------------------------------------------------- | ------------------------- | ---------: |
 | `startup`          | cold launch (`cold`)                                                                | (am start -W)             |          5 |
-| `tab-switch`       | ten tab taps cycling through `tabs` (`tab`)                                         | `route`                   |          3 |
-| `rapid-tabs`       | ten tab taps back to back, measured from the last (`burst`)                         | `route`                   |          5 |
+| `tab-first`        | after a fresh launch, the first visit to each of `tabs` but Home (`first`)          | `route`                   |          5 |
+| `tab-switch`       | ten tab taps cycling through `tabs` (`tab`): warm visits                            | `route`                   |          3 |
+| `rapid-tabs`       | ten tab taps back to back, measured from the last (`burst`)                         | `tab.settled` (last tab)  |          5 |
 | `push-settings`    | Home › Settings (`push`), Back (`pop`)                                              | `route`                   |         10 |
 | `push-library`     | Library › Albums (`push`), Back (`pop`)                                             | `route`                   |         10 |
 | `push-tracklist`   | Library › Songs, the whole Library as a Track list (`push`), Back (`pop`)           | `route`                   |         10 |
@@ -126,6 +127,10 @@ launch, the share and the import's idle window have no touch.
 
 `push-empty` is the control: navigation with next to nothing to render. If it's as slow as
 `push-settings`, the cost is in navigation itself, not in what the screen shows.
+
+`tab-first` and `tab-switch` compare a tab's first visit (built for it) with its warm visits
+(kept mounted). Both time the tab's phases (below). `rapid-tabs` counts from the last tap to
+`tab.settled` on the tab tapped last, so a burst that ends anywhere else counts as missing.
 
 ### Variants
 
@@ -151,23 +156,25 @@ position. Then, for each step:
 Times line up because `performance.now()`, a touch's native timestamp and gfxinfo's frame
 timestamps all use Android's CLOCK_MONOTONIC.
 
-| Metric         | Meaning                                                                                                                                          | Needs a perf build |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | :----------------: |
-| `firstFrameMs` | Touch to the first frame that finished rendering after it: the **first visible response**. The frame reaches the screen about one refresh later. |        yes         |
-| `responseMs`   | Touch to the step's response mark: **navigation latency** (`route`), **keyboard latency** (`keyboard.show`), Now Playing or Queue shown.         |        yes         |
-| `settleMs`     | Touch to the last frame before 250 ms without frames: when the transition finished.                                                              |        yes         |
-| `burstMs`      | First to last frame of that burst. The only latency a plain APK gives.                                                                           |         no         |
-| `inputToJsMs`  | Touch to JavaScript's touch handler: input delayed by a busy JS thread.                                                                          |        yes         |
-| `frames`       | Frames rendered in the window, deadline misses, jank counters (slow UI thread, high input latency), the frame-time histogram.                    |         no         |
-| `renders`      | Renders per instrumented component in the step.                                                                                                  |        yes         |
-| `longTasks`    | Long tasks React Native reported in the step, when it reports them.                                                                              |        yes         |
-| `launch`       | `am start -W`: `TotalTime`, `WaitTime`, launch state. A perf build adds React Native's startup timings.                                          |         no         |
-| memory         | `dumpsys meminfo` after each scenario plus `memoryIdleMs` idle: PSS, RSS, Java and native heap, graphics.                                        |         no         |
+| Metric         | Meaning                                                                                                                                           | Needs a perf build |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | :----------------: |
+| `firstFrameMs` | Touch to the first frame that finished rendering after it: the **first visible response**. The frame reaches the screen about one refresh later.  |        yes         |
+| `responseMs`   | Touch to the step's response mark: **navigation latency** (`route`), **keyboard latency** (`keyboard.show`), Now Playing or Queue shown.          |        yes         |
+| `settleMs`     | Touch to the last frame before 250 ms without frames: when the transition finished.                                                               |        yes         |
+| `burstMs`      | First to last frame of that burst. The only latency a plain APK gives.                                                                            |         no         |
+| `inputToJsMs`  | Touch to JavaScript's touch handler: input delayed by a busy JS thread.                                                                           |        yes         |
+| `frames`       | Frames rendered in the window, deadline misses, jank counters (slow UI thread, high input latency), the frame-time histogram.                     |         no         |
+| `renders`      | Renders per instrumented component in the step.                                                                                                   |        yes         |
+| `phasesMs`     | Touch to the first mark of each phase the step names (`phases` in `scenarios.ts`), e.g. a tab's `tab.commit` and `tab.layout`. Null if none came. |        yes         |
+| `longTasks`    | Long tasks React Native reported in the step, when it reports them.                                                                               |        yes         |
+| `launch`       | `am start -W`: `TotalTime`, `WaitTime`, launch state. A perf build adds React Native's startup timings.                                           |         no         |
+| memory         | `dumpsys meminfo` after each scenario plus `memoryIdleMs` idle: PSS, RSS, Java and native heap, graphics.                                         |         no         |
 
 `summary` reports each latency as median / 90th percentile, the frames' pooled 50th, 90th and
 99th percentiles and the share that missed their deadline. `Missing` counts steps whose response
 mark never came, which means the step didn't do what it should (a wrong target, an error on
-screen).
+screen). Steps with phases get a second table, each phase's median / p90 from the touch;
+`compare` lines up their medians and p90s too.
 
 Limits:
 
@@ -242,7 +249,14 @@ ticket needs evidence, and give a new response mark a scenario step's `expect` i
 - `nowPlaying.shown`, `nowPlaying.hidden`;
 - `visible` "queue" (Up Next mounted);
 - `import.running` (songs in the import), `import.idle`;
+- `tab.commit` (`<tab> first|warm`), in the layout effect of the commit that shows a tab: React
+  is done with the switch. `first` means the tab was built for it, `warm` that it was kept;
+- `tab.layout` (tab), when the shown tab's screen gets a new layout. None when showing it changes
+  no layout (`keep-layout`, #304);
+- `tab.settled` (the tab's label), when a tab shows with no tab switch left on its way;
 - touches with their native timestamp, from the root view's `onTouchStart`.
+
+The `tabs` metadata (first flush) names how hidden tabs are kept (`tabs.screens`, #304).
 
 Render counts are in RootLayout, TabsLayout, LibraryLayout, TabBar, MiniPlayer, NowPlayingSheet,
 PlayerView, UpNextList, HomeScreen, LibraryScreen, SearchScreen, SettingsScreen, LargeTitleScreen
