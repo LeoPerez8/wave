@@ -105,8 +105,35 @@ const byCredit = (rows: readonly CreditedPlayTotals[]) =>
   );
 
 const allTime = statsWindow("all", now);
-/** A window with a start reads the play events, as every window did before #312. */
-const wholeHistory = { from: Number.MIN_SAFE_INTEGER, to: now };
+
+/** c9fa645's `creditedPlayTotals` for all time: every counted play up to now, a correlated subquery per row. */
+const creditedBefore = (db: TestDatabase): CreditedPlayTotals[] =>
+  db
+    .all<Omit<CreditedPlayTotals, "primary"> & { primary: number }>(
+      sql`WITH plays AS (
+        SELECT play_events.track_id AS track_id, max(play_events.album_id) AS album_id,
+          count(*) AS plays, sum(play_events.listened_ms) AS listened,
+          max(play_events.started_at) AS latest
+        FROM play_events WHERE play_events.counted = 1 AND play_events.started_at <= ${now}
+        GROUP BY play_events.track_id
+      ), credited AS (
+        SELECT track_id, artist_id, position FROM track_artists
+        UNION ALL
+        SELECT track_id, artist_id, position FROM deleted_track_artists)
+      SELECT albums.id AS "albumId", albums.title_sort AS "albumSort",
+        artists.id AS "artistId", artists.sort AS "artistSort",
+        credited.position = (SELECT min(first.position) FROM credited AS first
+          WHERE first.track_id = plays.track_id) AS "primary",
+        sum(plays.plays) AS "countedPlays", sum(plays.listened) AS "listenedMs",
+        max(plays.latest) AS "latestPlayAt"
+      FROM plays
+      LEFT JOIN tracks ON tracks.id = plays.track_id
+      JOIN albums ON albums.id = coalesce(tracks.album_id, plays.album_id)
+      JOIN credited ON credited.track_id = plays.track_id
+      JOIN artists ON artists.id = credited.artist_id
+      GROUP BY albums.id, artists.id, "primary"`,
+    )
+    .map((row) => ({ ...row, primary: row.primary === 1 }));
 
 type Pair = {
   readonly before: (db: TestDatabase) => unknown;
@@ -129,7 +156,7 @@ const READS: Record<string, Pair> = {
   },
   /** What Most played albums and artists rank (before, each section read it; after, they share one read). */
   "all-time-credited": {
-    before: (db) => byCredit(creditedPlayTotals(db, wholeHistory)),
+    before: (db) => byCredit(creditedBefore(db)),
     after: (db) => byCredit(creditedPlayTotals(db, allTime)),
   },
   /**
