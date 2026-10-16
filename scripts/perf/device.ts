@@ -31,7 +31,30 @@ export interface GfxFrame {
   /** When the frame was due; null before Android 12. */
   readonly deadlineMs: number | null;
   readonly intervalMs: number | null;
+  /** Where the frame's time went; a part is null when Android left its timestamps empty. */
+  readonly parts: FrameParts;
 }
+
+/**
+ * A frame's parts, in ms, from gfxinfo's framestats timestamps (the same FrameInfo
+ * that FrameMetrics reports). Glass shows up in them: recording its backdrop runs
+ * in a pre-draw listener (`traversalMs`), its blur and refraction layers render
+ * on the RenderThread (`issueMs`) and the GPU (`gpuMs`).
+ */
+export interface FrameParts {
+  /** UI thread, PerformTraversalsStart to DrawStart: measure, layout and pre-draw listeners. */
+  readonly traversalMs: number | null;
+  /** UI thread, DrawStart to SyncQueued: recording the views' display lists. */
+  readonly drawMs: number | null;
+  /** RenderThread, SyncStart to IssueDrawCommandsStart: syncing the tree, preparing layers. */
+  readonly syncMs: number | null;
+  /** RenderThread, IssueDrawCommandsStart to SwapBuffers: drawing, offscreen layers included. */
+  readonly issueMs: number | null;
+  /** SwapBuffers to GpuCompleted: how long the GPU still worked after the RenderThread was done. */
+  readonly gpuMs: number | null;
+}
+
+export const FRAME_PARTS = ["traversalMs", "drawMs", "syncMs", "issueMs", "gpuMs"] as const;
 
 const number = (text: string, pattern: RegExp): number | null => {
   const match = pattern.exec(text);
@@ -58,6 +81,15 @@ const parseFrames = (text: string): GfxFrame[] => {
       "FrameDeadline",
       "FrameInterval",
     ].map(column);
+    const [traversal, draw, queued, sync, issue, swap, gpu] = [
+      "PerformTraversalsStart",
+      "DrawStart",
+      "SyncQueued",
+      "SyncStart",
+      "IssueDrawCommandsStart",
+      "SwapBuffers",
+      "GpuCompleted",
+    ].map(column);
     if (intended === undefined || completed === undefined || intended < 0 || completed < 0)
       continue;
     for (const line of lines.slice(1)) {
@@ -71,6 +103,13 @@ const parseFrames = (text: string): GfxFrame[] => {
       if (intendedNs === null || completedNs === null || completedNs === 0) continue;
       const deadlineNs = at(deadline);
       const intervalNs = at(interval);
+      /** [from] to [to] in ms; null when either timestamp is missing or they're out of order. */
+      const span = (from: number | undefined, to: number | undefined): number | null => {
+        const start = at(from);
+        const end = at(to);
+        if (start === null || end === null || start <= 0 || end <= 0 || end < start) return null;
+        return Math.round((end - start) / 10_000) / 100;
+      };
       frames.push({
         window,
         flags: at(flags) ?? 0,
@@ -79,6 +118,13 @@ const parseFrames = (text: string): GfxFrame[] => {
         completedMs: completedNs / NS_PER_MS,
         deadlineMs: deadlineNs === null || deadlineNs === 0 ? null : deadlineNs / NS_PER_MS,
         intervalMs: intervalNs === null || intervalNs === 0 ? null : intervalNs / NS_PER_MS,
+        parts: {
+          traversalMs: span(traversal, draw),
+          drawMs: span(draw, queued),
+          syncMs: span(sync, issue),
+          issueMs: span(issue, swap),
+          gpuMs: span(swap, gpu),
+        },
       });
     }
   }
@@ -204,13 +250,22 @@ export const parseGetprop = (text: string): Record<string, string> =>
 export const parseThermalStatus = (text: string): number | null =>
   number(text, /^Thermal Status: (\d+)/m);
 
+/** `wm size`: the screen's size in pixels, the override when one is set. */
+export const parseWmSize = (text: string): { width: number; height: number } | null => {
+  const match =
+    /^Override size: (\d+)x(\d+)/m.exec(text) ?? /^Physical size: (\d+)x(\d+)/m.exec(text);
+  return match === null ? null : { width: Number(match[1]), height: Number(match[2]) };
+};
+
 /** `wm density`: the density the screen is drawn at (dpi; 160 is one px per dp). */
 export const parseDensity = (text: string): number | null =>
   number(text, /^Override density: (\d+)/m) ?? number(text, /^Physical density: (\d+)/m);
 
 /** What the runner taps, found in a `uiautomator dump`. */
 export type Target =
-  { readonly desc: string } | { readonly descPrefix: string } | { readonly text: string };
+  | { readonly desc: string }
+  | { readonly descPrefix: string }
+  | { readonly text: string };
 
 const decode = (value: string): string =>
   value

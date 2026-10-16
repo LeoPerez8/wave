@@ -307,6 +307,14 @@ export {
   readGlassSettings,
 } from "./glassSettings.ts";
 export type { GlassSettings } from "./glassSettings.ts";
+export {
+  GLASS_PROBES,
+  GLASS_PROBE_EXTRA,
+  GLASS_PROBE_SUMMARY,
+  glassLayers,
+  readGlassProbe,
+} from "./glassProbe.ts";
+export type { GlassLayers, GlassProbe } from "./glassProbe.ts";
 export { counted, listeningOverview, listeningTotals } from "./listening.ts";
 export type {
   LibraryTotals,

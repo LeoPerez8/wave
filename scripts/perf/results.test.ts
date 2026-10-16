@@ -84,6 +84,34 @@ describe("comparability", () => {
   });
 });
 
+/** A perf build's run that drew its glass with [probe] and a blur of [blur]. */
+const glass = (probe: string, blur = 24): RunRecord => ({
+  ...RUN,
+  app: {
+    "glass.probe": probe,
+    "glass.blur": blur,
+    "glass.refraction": 12,
+    "glass.tint": 72,
+    "glass.rim": true,
+  },
+});
+
+describe("comparability of the glass", () => {
+  it("says which glass probe each side drew, so a probe comparison reads as one", () => {
+    assert.deepEqual(comparability(glass("live"), glass("off")), ["Glass probe: live, then off."]);
+  });
+
+  it("warns when the owner's glass settings differ between the runs", () => {
+    assert.deepEqual(comparability(glass("live"), glass("live", 40)), [
+      "Glass settings: blur 24, refraction 12, tint 72, rim true, then blur 40, refraction 12, tint 72, rim true.",
+    ]);
+  });
+
+  it("has nothing to say about builds that report no glass", () => {
+    assert.deepEqual(comparability(RUN, RUN), []);
+  });
+});
+
 describe("readResults", () => {
   it("sorts a file's records by type", () => {
     const text = [

@@ -2,7 +2,18 @@
 // sum up per scenario (summarize), and how two runs compare (compareSummaries).
 // docs/performance/README.md defines each metric.
 import type { PerfEntry, PerfFlush } from "../../packages/core/src/index.ts";
-import type { GfxFrame, GfxSummary } from "./device.ts";
+import { FRAME_PARTS, type GfxFrame, type GfxSummary } from "./device.ts";
+
+type Part = (typeof FRAME_PARTS)[number];
+
+/** One part of the step's kept frames (`FrameParts`). */
+export interface PartStats {
+  /** Kept frames that had this part's timestamps. */
+  readonly frames: number;
+  readonly meanMs: number | null;
+  readonly p90Ms: number | null;
+  readonly maxMs: number | null;
+}
 
 /** The mark a step waits for: its first occurrence after the touch is the response. */
 export interface Expect {
@@ -49,6 +60,12 @@ export interface StepMetrics {
   /** The last route marked in the step. */
   readonly finalRoute: string | null;
   readonly frames: FrameStats;
+  /**
+   * Where the kept frames' time went, part by part (UI thread pre-draw and layout,
+   * UI thread draw, RenderThread sync and issue, GPU). Attributes glass cost.
+   * Results from before frame parts existed don't have it.
+   */
+  readonly frameParts: Readonly<Record<Part, PartStats>>;
   readonly renders: Readonly<Record<string, number>>;
   readonly longTasks: { readonly count: number; readonly totalMs: number; readonly maxMs: number };
   /**
@@ -96,6 +113,28 @@ const frameStats = (summary: GfxSummary, frames: readonly GfxFrame[]): FrameStat
     histogram: summary.histogram,
   };
 };
+
+const partStats = (frames: readonly GfxFrame[]): Record<Part, PartStats> =>
+  Object.fromEntries(
+    FRAME_PARTS.map((part): [Part, PartStats] => {
+      const values = frames
+        .map((frame) => frame.parts[part])
+        .filter((value): value is number => value !== null)
+        .toSorted((a, b) => a - b);
+      const n = values.length;
+      return [
+        part,
+        n === 0
+          ? { frames: 0, meanMs: null, p90Ms: null, maxMs: null }
+          : {
+              frames: n,
+              meanMs: round(values.reduce((sum, value) => sum + value, 0) / n),
+              p90Ms: values[Math.ceil(0.9 * n) - 1] ?? null,
+              maxMs: values[n - 1] ?? null,
+            },
+      ];
+    }),
+  ) as Record<Part, PartStats>;
 
 const touches = (entries: readonly PerfEntry[]) =>
   entries.filter((entry): entry is Extract<PerfEntry, { kind: "touch" }> => entry.kind === "touch");
@@ -169,6 +208,7 @@ export const stepMetrics = (step: {
     framesCovered,
     finalRoute: routes[routes.length - 1]?.detail ?? null,
     frames: frameStats(step.summary, step.frames),
+    frameParts: partStats(step.frames),
     renders: step.flush?.renders ?? {},
     longTasks: {
       count: longTasks.length,
@@ -259,6 +299,16 @@ export interface SummaryRow {
     readonly p90Ms: number | null;
     readonly p99Ms: number | null;
   };
+  /**
+   * Each frame part's mean over every kept frame of the group's steps, and the
+   * median of the steps' 90th percentiles.
+   */
+  readonly frameParts: Readonly<
+    Record<
+      Part,
+      { readonly frames: number; readonly meanMs: number | null; readonly p90Ms: number | null }
+    >
+  >;
   readonly rendersPerStep: Readonly<Record<string, number>>;
   readonly longTasks: { readonly count: number; readonly totalMs: number };
   /** Steps whose expected mark never came. */
@@ -266,6 +316,27 @@ export interface SummaryRow {
   /** Each phase the steps timed (`phasesMs`), from the touch. */
   readonly phases: Readonly<Record<string, Distribution>>;
 }
+
+/** [group]'s frame parts pooled; steps recorded before parts were measured count as none. */
+const pooledParts = (group: readonly StepRecord[]): SummaryRow["frameParts"] =>
+  Object.fromEntries(
+    FRAME_PARTS.map((part) => {
+      const stats = group.flatMap((step) => {
+        const one = (step.frameParts as StepRecord["frameParts"] | undefined)?.[part];
+        return one === undefined || one.frames === 0 ? [] : [one];
+      });
+      const frames = stats.reduce((sum, one) => sum + one.frames, 0);
+      const total = stats.reduce((sum, one) => sum + (one.meanMs ?? 0) * one.frames, 0);
+      return [
+        part,
+        {
+          frames,
+          meanMs: frames === 0 ? null : round(total / frames),
+          p90Ms: distribution(stats.map((one) => one.p90Ms)).median,
+        },
+      ];
+    }),
+  ) as SummaryRow["frameParts"];
 
 /** The run's steps summed up per scenario, variant and measure, in the order they first ran. */
 export const summarize = (steps: readonly StepRecord[]): SummaryRow[] => {
@@ -300,6 +371,7 @@ export const summarize = (steps: readonly StepRecord[]): SummaryRow[] => {
         p90Ms: histogramPercentile(histogram, binned, 0.9),
         p99Ms: histogramPercentile(histogram, binned, 0.99),
       },
+      frameParts: pooledParts(group),
       rendersPerStep: Object.fromEntries(
         [...renders].map(([component, count]) => [component, round(count / group.length)]),
       ),
@@ -372,6 +444,34 @@ export const formatSummary = (rows: readonly SummaryRow[]): string =>
     ),
   ].join("\n");
 
+const PART_HEADINGS: Readonly<Record<Part, string>> = {
+  traversalMs: "Pre-draw and layout ms",
+  drawMs: "Draw ms",
+  syncMs: "Sync ms",
+  issueMs: "Issue ms",
+  gpuMs: "GPU after swap ms",
+};
+
+/**
+ * [rows]' frame parts as a Markdown table: each part's mean / median step p90 in
+ * ms over the kept frames. UI thread: pre-draw and layout, draw. RenderThread:
+ * sync, issue. Then the GPU's time after the swap.
+ */
+export const formatFrameParts = (rows: readonly SummaryRow[]): string =>
+  [
+    `| Scenario step | Frames | ${FRAME_PARTS.map((part) => PART_HEADINGS[part]).join(" | ")} |`,
+    `| --- | ---: |${FRAME_PARTS.map(() => " ---: |").join("")}`,
+    ...rows.map(
+      (row) =>
+        `| ${row.key} | ${Math.max(...FRAME_PARTS.map((part) => row.frameParts[part].frames))} | ${FRAME_PARTS.map(
+          (part) => {
+            const { meanMs, p90Ms } = row.frameParts[part];
+            return meanMs === null ? "-" : `${show(meanMs)} / ${show(p90Ms ?? meanMs)}`;
+          },
+        ).join(" | ")} |`,
+    ),
+  ].join("\n");
+
 export interface ComparisonRow {
   readonly key: string;
   readonly metric: string;
@@ -391,6 +491,10 @@ const comparable = (row: SummaryRow): [string, number | null][] => [
   ["frames p99 ms", row.frames.p99Ms],
   ["deadline-miss rate", row.frames.missRate],
   ["long tasks", row.longTasks.count],
+  ...FRAME_PARTS.flatMap((part): [string, number | null][] => [
+    [`${part} mean`, row.frameParts[part].meanMs],
+    [`${part} p90`, row.frameParts[part].p90Ms],
+  ]),
   ...Object.entries(row.phases).flatMap(([phase, value]): [string, number | null][] => [
     [`${phase} median`, value.median],
     [`${phase} p90`, value.p90],

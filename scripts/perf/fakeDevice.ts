@@ -21,6 +21,8 @@ interface Node {
 }
 
 const INTERVAL = 1000 / 120;
+/** A swipe quicker than this is a fling (the glass scenarios'); slower ones are drags. */
+const FLING_MS = 200;
 const ns = (ms: number): number => Math.round(ms * 1_000_000);
 const TAB_ROUTES: Readonly<Record<string, string>> = {
   Home: "/",
@@ -42,6 +44,8 @@ export interface FakeDeviceOptions {
   readonly installResult?: number;
   /** The artist on the simulated Library › Artists list. */
   readonly artist?: string;
+  /** Draws its glass as shipped whatever probe the launch asks for (a build without #316). */
+  readonly ignoresGlassProbe?: boolean;
 }
 
 // The simulated app's code, as ART profile rules: what a launch runs, what its screens run.
@@ -76,6 +80,8 @@ export class FakeDevice implements Device {
   private readonly perfBuild: boolean;
   private readonly tabs: readonly string[];
   private readonly artist: string;
+  private readonly ignoresGlassProbe: boolean;
+  private glassProbe = "live";
   private running = false;
   private recorder: PerfRecorder | null = null;
   private routes: string[] = ["/"];
@@ -107,6 +113,7 @@ export class FakeDevice implements Device {
     this.installResult = options.installResult ?? 1;
     this.savedRules = new Set(options.savedProfile ?? []);
     this.artist = options.artist ?? "Radiohead";
+    this.ignoresGlassProbe = options.ignoresGlassProbe ?? false;
   }
 
   async sleep(ms: number): Promise<void> {
@@ -153,6 +160,11 @@ export class FakeDevice implements Device {
       "library.playlistItems": 6_000,
       "library.largestPlaylist": 2_500,
       "library.playEvents": 54_321,
+      "glass.probe": this.glassProbe,
+      "glass.blur": 24,
+      "glass.refraction": 12,
+      "glass.tint": 72,
+      "glass.rim": true,
       ...(this.importing
         ? { "import.running": true, "import.done": 120, "import.total": 2_000 }
         : {}),
@@ -181,7 +193,9 @@ export class FakeDevice implements Device {
     return this.routes[this.routes.length - 1] ?? "/";
   }
 
-  private launch(): string {
+  private launch(command: string): string {
+    const probe = / --es wave\.perf\.glass (\S+)/.exec(command)?.[1];
+    this.glassProbe = this.ignoresGlassProbe || probe === undefined ? "live" : probe;
     this.running = true;
     this.ran(LAUNCH_RULES);
     // profileinstaller writes the APK's profile once the app has started, unless told to skip.
@@ -331,11 +345,14 @@ export class FakeDevice implements Device {
     }
   }
 
-  /** A finger dragged for [durationMs]: the app draws a frame per refresh while it moves. */
+  /**
+   * A finger dragged for [durationMs]: the app draws a frame per refresh while it moves. A
+   * quick one is a fling: the list scrolls on for about 1.5 s, more frames than gfxinfo keeps.
+   */
   private swipe(durationMs: number): void {
     this.ran(SCROLL_RULES);
     this.recorder?.touch(this.clock - 4);
-    this.render(this.clock + 8, Math.round(durationMs / INTERVAL));
+    this.render(this.clock + 8, durationMs < FLING_MS ? 180 : Math.round(durationMs / INTERVAL));
     this.recorder?.render("js:drag.end");
     this.advance(durationMs);
   }
@@ -420,12 +437,37 @@ export class FakeDevice implements Device {
     const histogram = new Map<number, number>();
     for (const ms of sorted)
       histogram.set(Math.round(ms), (histogram.get(Math.round(ms)) ?? 0) + 1);
-    const rows = kept.map(
-      (frame) =>
-        `0,1,${ns(frame.start)},${ns(frame.start)},0,${ns(frame.start + 0.5)},0,0,0,${ns(
-          frame.start + 2 * INTERVAL,
-        )},${ns(INTERVAL)},${ns(frame.start)},0,0,0,0,${ns(frame.start + frame.ms)},0,0,0,0,0,0,`,
-    );
+    const rows = kept.map((frame) => {
+      const after = (ms: number): number => ns(frame.start + ms);
+      // Pre-draw and layout 0.5 ms, draw 1 ms, sync 0.4 ms, then the RenderThread draws until
+      // 1 ms before the frame completes, and the GPU finishes with it.
+      return [
+        0,
+        1,
+        after(0),
+        after(0),
+        0,
+        after(0.5),
+        after(0.5),
+        after(0.5),
+        after(1),
+        after(2 * INTERVAL),
+        ns(INTERVAL),
+        after(0),
+        after(2),
+        after(2.1),
+        after(2.5),
+        after(frame.ms - 1),
+        after(frame.ms),
+        0,
+        0,
+        after(frame.ms),
+        after(frame.ms),
+        0,
+        0,
+        "",
+      ].join(",");
+    });
     return [
       "** Graphics info for pid 4242 [dev.leoperez.wave] **",
       `Total frames rendered: ${this.framesSinceReset}`,
@@ -509,11 +551,11 @@ export class FakeDevice implements Device {
         return "";
       },
     ],
-    [/^am start -W -S -a android\.intent\.action\.MAIN/, () => this.launch()],
+    [/^am start -W -S -a android\.intent\.action\.MAIN/, (match) => this.launch(match.input)],
     [
       /^am start -W -a android\.intent\.action\.MAIN/,
-      () => {
-        if (!this.running) return this.launch();
+      (match) => {
+        if (!this.running) return this.launch(match.input);
         this.render(this.clock + 20, 20);
         this.advance(180);
         return "Starting: Intent { act=android.intent.action.MAIN }\nStatus: ok\nLaunchState: HOT\nActivity: dev.leoperez.wave/.MainActivity\nTotalTime: 164\nWaitTime: 170\nComplete\n";

@@ -8,7 +8,7 @@ import { FakeDevice } from "./fakeDevice.ts";
 import { summarize, type StepRecord } from "./metrics.ts";
 import { readResults } from "./results.ts";
 import { runPerf, type RunOptions } from "./runner.ts";
-import { ALL_SCENARIOS } from "./scenarios.ts";
+import { ALL_SCENARIOS, GLASS_SCENARIOS } from "./scenarios.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "wave-perf-"));
 after(() => rmSync(dir, { recursive: true, force: true }));
@@ -31,6 +31,7 @@ const options = (name: string, overrides: Partial<RunOptions> = {}): RunOptions 
   apkFile: null,
   manual: {},
   compile: null,
+  glass: null,
   perfetto: null,
   out: join(dir, `${name}.jsonl`),
   dryRun: true,
@@ -255,6 +256,68 @@ describe("runPerf on the simulated phone", () => {
       assert.equal(step.responseMs, null);
       assert.ok(step.burstMs !== null);
     }
+  });
+
+  it("measures flings under the glass and an idle screen (the glass scenarios)", async () => {
+    const device = new FakeDevice();
+    const { out } = await runPerf(device, options("glass", { scenarios: GLASS_SCENARIOS }));
+    const { steps, errors } = readResults(readFileSync(out, "utf8"));
+    assert.deepEqual(errors, []);
+    assert.deepEqual(
+      summarize(steps).map((row) => row.key),
+      [
+        "scroll-home/idle/fling-up",
+        "scroll-home/idle/fling-down",
+        "scroll-songs/idle/fling-up",
+        "scroll-songs/idle/fling-down",
+        "idle-home/idle/idle",
+      ],
+    );
+    // A fling is a swipe across the middle of the screen, clear of the chrome at the bottom.
+    assert.ok(device.commands.includes("input swipe 720 2184 720 936 120"));
+    assert.ok(device.commands.includes("input swipe 720 936 720 2184 120"));
+    for (const step of steps.filter((one) => one.measure.startsWith("fling"))) {
+      assert.ok(step.touchAt !== null, "a fling is measured from its touch");
+      assert.ok(step.frames.total > 120, "a fling renders more frames than gfxinfo keeps");
+      assert.ok(step.frameParts.issueMs.frames > 0, "and splits the kept ones into their parts");
+    }
+    const idle = steps.filter((one) => one.scenario === "idle-home");
+    assert.ok(idle.length > 0);
+    for (const step of idle) assert.equal(step.frames.total, 0, "an idle screen draws nothing");
+  });
+
+  it("launches every time with the glass probe asked for, and records it", async () => {
+    const device = new FakeDevice();
+    const { out } = await runPerf(
+      device,
+      options("probe", { scenarios: ["push-settings"], glass: "off" }),
+    );
+    const { run } = readResults(readFileSync(out, "utf8"));
+    assert.equal(run?.runner.glass, "off");
+    assert.equal(run?.app?.["glass.probe"], "off");
+    const launches = device.commands.filter((command) => command.startsWith("am start -W"));
+    assert.ok(launches.length > 1);
+    for (const launch of launches) assert.match(launch, / --es wave\.perf\.glass off\b/);
+  });
+
+  it("stops before measuring when the app didn't take the glass probe", async () => {
+    await assert.rejects(
+      runPerf(
+        new FakeDevice({ ignoresGlassProbe: true }),
+        options("probe-ignored", { scenarios: ["push-settings"], glass: "off" }),
+      ),
+      /glass probe "off".*live/,
+    );
+  });
+
+  it("refuses a glass probe on an APK that isn't a perf build", async () => {
+    await assert.rejects(
+      runPerf(
+        new FakeDevice({ perfBuild: false }),
+        options("probe-plain", { scenarios: ["push-settings"], glass: "blur" }),
+      ),
+      /perf build/,
+    );
   });
 
   it("captures a Perfetto trace per scenario when asked", async () => {
