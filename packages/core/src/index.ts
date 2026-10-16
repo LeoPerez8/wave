@@ -400,6 +400,22 @@ export type {
 } from "./artistPhoto.ts";
 export { focusedVersion, startFocusedVersion } from "./focusedVersion.ts";
 export type { FocusedVersion, FocusedVersionEvent } from "./focusedVersion.ts";
+export {
+  LIBRARY_QUERY_LIMITS,
+  createLibraryQueries,
+  libraryChangeAffects,
+} from "./libraryQueries.ts";
+export type {
+  LibraryChange,
+  LibraryDataKind,
+  LibraryQueries,
+  LibraryQueryConsumer,
+  LibraryQueryLimits,
+  LibraryQueryOutcome,
+  LibraryQueryResult,
+  LibraryQueryStats,
+  LibraryReads,
+} from "./libraryQueries.ts";
 export { stepNowPlayingSheet } from "./sheetLifecycle.ts";
 export { MORE_FROM_ARTIST } from "./queue.ts";
 export { artistRanking } from "./moreFromArtist.ts";

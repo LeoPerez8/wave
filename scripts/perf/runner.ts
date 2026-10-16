@@ -332,6 +332,11 @@ export const runPerf = async (
     });
     const meta = perf?.meta ?? {};
     const importRunning = meta["import.running"];
+    const libraryQueries = Object.fromEntries(
+      Object.entries(meta)
+        .filter(([key]) => key.startsWith("libraryQueries."))
+        .map(([key, value]) => [key.slice("libraryQueries.".length), value]),
+    );
     const record: StepRecord & Record<string, unknown> = {
       type: "step",
       run,
@@ -359,6 +364,8 @@ export const runPerf = async (
             },
           }
         : {}),
+      // Counters since launch: compare a step's with the one before it for its reads.
+      ...(Object.keys(libraryQueries).length > 0 ? { libraryQueries } : {}),
     };
     write(record);
     log(

@@ -14,13 +14,30 @@ import * as Layer from "effect/Layer";
 import { AppState } from "react-native";
 
 import { makeExternalStore } from "@/lib/externalStore";
+import { publishLibraryChange } from "@/library/libraryChanges";
 import { LibraryStore } from "@/library/LibraryStore";
 
 import { Player, playbackState } from "./Player";
 import { keptPlayingKey, queueSource, queueState } from "./Queue";
 
-/** Bumped whenever a play starts or ends; Home re-reads on it while focused (`useFocusedVersion`). */
+/** Bumped whenever a play starts or ends; Stats re-read on it while focused (`useFocusedVersion`). */
 export const playHistoryVersion = makeExternalStore(0);
+
+/**
+ * The play history changed (a play started or ended, plays were imported or
+ * synced): bumps `playHistoryVersion` and tells shared queries over plays
+ * (Home). Plays only add to the history, so they're a burst: screens in
+ * sight re-read at most every 1.5 s, hidden ones (Home under Now Playing)
+ * when they come back. [trackIds]: the tracks played, when known.
+ */
+export const playHistoryChanged = (trackIds?: readonly number[]): void => {
+  playHistoryVersion.update((version) => version + 1);
+  publishLibraryChange({
+    kind: "plays",
+    ...(trackIds === undefined ? {} : { ids: trackIds }),
+    burst: true,
+  });
+};
 
 /** How often a play still going on is brought up to date, should Wave's process die. */
 const SAVE_INTERVAL_MS = 15_000;
@@ -95,7 +112,7 @@ export const layer = Layer.effectDiscard(
           if (rowId !== undefined) write(store.endPlay(rowId, step.play));
           rowIds.delete(identity(step.play));
         }
-        playHistoryVersion.update((version) => version + 1);
+        playHistoryChanged([Number(step.play.trackId)]);
       }
     };
 

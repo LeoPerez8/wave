@@ -42,6 +42,8 @@ export class FakeDevice implements Device {
   readonly serial = "DRYRUN0001";
   readonly commands: string[] = [];
   private clock = 81_000_000;
+  /** Flushes so far, which the made-up counters grow with. */
+  private flushes = 0;
   private readonly perfBuild: boolean;
   private readonly tabs: readonly string[];
   private readonly artist: string;
@@ -111,7 +113,17 @@ export class FakeDevice implements Device {
       ...(this.importing
         ? { "import.running": true, "import.done": 120, "import.total": 2_000 }
         : {}),
+      // The shared Library queries' counters (apps/mobile/src/library/sharedQueries.ts), since launch.
+      "libraryQueries.entries": 9,
+      "libraryQueries.retained": 1,
+      "libraryQueries.consumers": 14,
+      "libraryQueries.reads": 20 + this.flushes * 3,
+      "libraryQueries.shared": 5 + this.flushes,
+      "libraryQueries.paused": this.importing ? this.flushes * 4 : 0,
+      "libraryQueries.discarded": 0,
+      "libraryQueries.evicted": this.flushes,
     };
+    this.flushes++;
     this.logcat.push(...this.recorder.drain(meta));
   }
 

@@ -59,6 +59,12 @@ export type MeasuredStep = StepRecord & {
     readonly done: unknown;
     readonly total: unknown;
   };
+  /**
+   * The shared Library queries' counters at the step's flush, since launch
+   * (Core's `LibraryQueryStats`): reads, shared, paused, discarded, evicted,
+   * entries, retained, consumers.
+   */
+  readonly libraryQueries?: Readonly<Record<string, unknown>>;
 };
 
 export type MemoryRecord = Meminfo & {
