@@ -20,7 +20,7 @@ import expo.modules.wavenative.launcher.LauncherIconSwitcher
 import expo.modules.wavenative.player.JsRuntime
 
 /**
- * Keeps Wave running while Settings › Lyrics and genre's whole-Library run
+ * Keeps Wave running while Fix Songs runs on the whole Library (Settings)
  * goes on, with a notification showing its progress and a Cancel action (a
  * `dataSync` foreground service, like YT Music downloads'). The run itself is
  * JavaScript (`src/library/findLyricsAndGenre.ts`); it tells
@@ -110,7 +110,7 @@ class LibraryLookupService : Service() {
     const val NOTIFICATION_ID = 0x5760
     const val SUMMARY_ID = 0x5761
     const val ACTION_CANCEL = "expo.modules.wavenative.lookup.CANCEL"
-    const val DEFAULT_TITLE = "Finding lyrics and genre…"
+    const val DEFAULT_TITLE = "Fixing songs…"
     /** A safety net: the run releases it long before, when it ends. */
     const val WAKE_LOCK_MAX_MS = 12 * 60 * 60 * 1000L
   }
@@ -210,10 +210,10 @@ internal object LibraryLookupNotice {
   fun createChannel(context: Context) {
     val channel = NotificationChannel(
       LibraryLookupService.CHANNEL,
-      "Lyrics and genre",
+      "Fix Songs",
       NotificationManager.IMPORTANCE_LOW,
     ).apply {
-      description = "Finding lyrics and genre for the whole Library"
+      description = "Fixing songs in the whole Library"
       setShowBadge(false)
     }
     context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)

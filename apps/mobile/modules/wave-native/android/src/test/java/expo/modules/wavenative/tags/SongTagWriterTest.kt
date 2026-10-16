@@ -136,7 +136,7 @@ class SongTagWriterTest {
     assertNull(File(file.parentFile, "tagged.lrc").takeIf { it.exists() })
   }
 
-  /** A file it can't write throws (Find Lyrics and Genre counts it as failed) and is left as it was. */
+  /** A file it can't write throws (Fix Song counts it as failed) and is left as it was. */
   @Test
   fun aFileThatCantBeWrittenThrowsAndIsLeftAsItWas() {
     val file = copyOf("tagged.mp3")
