@@ -10,6 +10,10 @@
  *   for the whole Library.
  * - Searches use the last complete index while a source is prepared again,
  *   and there is no index until every source has been prepared once.
+ * - Once nothing follows the sources (`unfollowed`: the screen searching
+ *   them let go), they may change unseen: there is no index until every
+ *   source is given again and prepared, so a search never finds what the
+ *   Library has since lost. Rows given again unchanged need no preparing.
  *
  * The index finds what `createSearchIndex` over every source's entries, in
  * source order, finds.
@@ -45,8 +49,17 @@ export interface SearchCatalog<S extends string, E extends SearchEntry> {
    * whether there is more to prepare.
    */
   readonly work: (budget: number) => boolean;
-  /** The current index, or null until every source has been prepared once. The same object until a source changes. */
+  /**
+   * The current index, or null until every source has been prepared once
+   * (and, after `unfollowed`, until every source is given again and
+   * prepared). The same object until a source changes.
+   */
   readonly index: () => SearchIndex<E> | null;
+  /**
+   * Nothing follows the sources any more, so they may change unseen: no
+   * index until each is given again (`update`) and its rows are prepared.
+   */
+  readonly unfollowed: () => void;
   readonly stats: () => SearchCatalogStats;
 }
 
@@ -63,18 +76,22 @@ interface Source<E> {
   current: { readonly rows: readonly unknown[]; readonly entries: readonly Indexed<E>[] } | null;
   /** Rows being prepared, or null. */
   pending: Pending<E> | null;
+  /** The rows last given (`update`), or null when none were since `unfollowed`. */
+  given: readonly unknown[] | null;
 }
 
 export const createSearchCatalog = <S extends string, E extends SearchEntry>(
   sources: readonly S[],
 ): SearchCatalog<S, E> => {
   const bySource = new Map<S, Source<E>>(
-    sources.map((name, group) => [name, { group, current: null, pending: null }]),
+    sources.map((name, group) => [name, { group, current: null, pending: null, given: null }]),
   );
   let index: SearchIndex<E> | null = null;
   let entries = 0;
   let prepared = 0;
   let indexes = 0;
+  /** Since `unfollowed`, until every source given again is prepared. */
+  let waiting = false;
 
   const sourceOf = (name: S): Source<E> => {
     const source = bySource.get(name);
@@ -95,9 +112,17 @@ export const createSearchCatalog = <S extends string, E extends SearchEntry>(
     indexes++;
   };
 
+  /** Whether every source's prepared rows are the ones given since `unfollowed`. */
+  const caughtUp = (): boolean => {
+    for (const source of bySource.values())
+      if (source.given === null || source.current?.rows !== source.given) return false;
+    return true;
+  };
+
   return {
     update: (name, rows, entryOf) => {
       const source = sourceOf(name);
+      source.given = rows;
       if (source.pending?.rows === rows) return;
       // The prepared rows again (or back to them): nothing to prepare.
       if (source.current?.rows === rows) {
@@ -135,7 +160,14 @@ export const createSearchCatalog = <S extends string, E extends SearchEntry>(
       for (const source of bySource.values()) if (source.pending !== null) return true;
       return false;
     },
-    index: () => index,
+    index: () => {
+      if (waiting && caughtUp()) waiting = false;
+      return waiting ? null : index;
+    },
+    unfollowed: () => {
+      waiting = true;
+      for (const source of bySource.values()) source.given = null;
+    },
     stats: () => ({ entries, prepared, indexes }),
   };
 };

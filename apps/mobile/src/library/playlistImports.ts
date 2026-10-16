@@ -69,37 +69,6 @@ const imports = persistedSetting<PlaylistImports<YtAlbumSong>>({
 });
 
 /**
- * The imports as the playlist page and the notification show them: how far
- * they got at most once a second (Core's `importProgressOnly`), anything
- * else at once. Null until the imports first change.
- */
-const shown = makeExternalStore<PlaylistImports<YtAlbumSong> | null>(null);
-let showTimer: ReturnType<typeof setTimeout> | undefined;
-/** Progress notifications sent, for a perf build's runs. */
-let progressShown = 0;
-
-const shownImports = (): PlaylistImports<YtAlbumSong> => shown.get() ?? imports.get();
-
-/** Shows the imports as they are now: the page's line and the notification. */
-const show = (): void => {
-  clearTimeout(showTimer);
-  showTimer = undefined;
-  shown.set(imports.get());
-  showProgress();
-};
-
-/** The imports changed from [before]: shown at once, or with the next progress shown. */
-const follow = (before: PlaylistImports<YtAlbumSong>): void => {
-  if (shown.get() === null) shown.set(before);
-  if (!importProgressOnly(shownImports(), imports.get())) show();
-  else showTimer ??= setTimeout(show, IMPORT_PROGRESS_SHOWN_EVERY_MS);
-};
-
-/** The imports, for the playlist page; re-renders as they go on, progress at most once a second. */
-export const usePlaylistImports = (): PlaylistImports<YtAlbumSong> =>
-  useSyncExternalStore(shown.subscribe, shownImports);
-
-/**
  * The YouTube Music searches Spotify imports asked lately, which Core paces
  * (`nextImportStep`), kept so a restart doesn't start a fresh allowance.
  */
@@ -111,12 +80,63 @@ const spotifySearches = persistedSetting<SpotifySearchPacing>({
   persistMaxDelayMs: 1000,
 });
 
+/** The imports as shown, and the Spotify searches as they were then (the page's time left). */
+interface Shown {
+  readonly imports: PlaylistImports<YtAlbumSong>;
+  readonly searches: SpotifySearchPacing;
+}
+
+/**
+ * The imports as the playlist page and the notification show them: how far
+ * they got at most once a second (Core's `importProgressOnly`), anything
+ * else at once. Null until the imports first change.
+ */
+const shown = makeExternalStore<Shown | null>(null);
+let showTimer: ReturnType<typeof setTimeout> | undefined;
+/** Progress notifications sent, for a perf build's runs. */
+let progressShown = 0;
+
+/** What a page read before the imports first changed: the same object until then. */
+let unchanged: Shown | null = null;
+
+/**
+ * What's shown now, the same object until `shown` tells its subscribers it
+ * changed (`useSyncExternalStore`'s contract): the imports and the searches
+ * move together.
+ */
+const shownNow = (): Shown =>
+  shown.get() ?? (unchanged ??= { imports: imports.get(), searches: spotifySearches.get() });
+
+/** Shows the imports as they are now: the page's line and the notification. */
+const show = (): void => {
+  clearTimeout(showTimer);
+  showTimer = undefined;
+  const now = { imports: imports.get(), searches: spotifySearches.get() };
+  const last = shown.get();
+  if (last?.imports !== now.imports || last.searches !== now.searches) shown.set(now);
+  showProgress();
+};
+
+/** The imports changed from [before]: shown at once, or with the next progress shown. */
+const follow = (before: PlaylistImports<YtAlbumSong>): void => {
+  // What was shown before the first change (a page may have read it already).
+  if (shown.get() === null)
+    shown.set(unchanged ?? { imports: before, searches: spotifySearches.get() });
+  if (!importProgressOnly(shownNow().imports, imports.get())) show();
+  else showTimer ??= setTimeout(show, IMPORT_PROGRESS_SHOWN_EVERY_MS);
+};
+
+/** The imports, for the playlist page; re-renders as they go on, progress at most once a second. */
+export const usePlaylistImports = (): PlaylistImports<YtAlbumSong> =>
+  useSyncExternalStore(shown.subscribe, shownNow).imports;
+
 /**
  * The searches Spotify imports asked lately, for the playlist page's time
- * left: read as the imports are shown (`usePlaylistImports`), not per search.
+ * left: as they were when the imports were last shown (`usePlaylistImports`),
+ * not per search, so the time left agrees with the progress shown.
  */
 export const useSpotifySearches = (): SpotifySearchPacing =>
-  useSyncExternalStore(shown.subscribe, spotifySearches.get);
+  useSyncExternalStore(shown.subscribe, shownNow).searches;
 
 /** While the playlist is given found songs: at most once a second, so its page doesn't redraw for each. */
 const GIVE_EVERY_MS = 1000;

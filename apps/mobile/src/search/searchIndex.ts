@@ -1,7 +1,6 @@
 import {
   createSearchCatalog,
   libraryArtistFinder,
-  libraryFinder,
   libraryReleaseFinder,
   type SearchIndex,
   type YtArtistAlbum,
@@ -15,7 +14,7 @@ import { libraryListQueries } from "@/library/hooks";
 import type { AlbumRow, ArtistRow, GenreRow, PlaylistRow, SongRow } from "@/library/LibraryStore";
 import { useLibraryQuery } from "@/library/sharedQueries";
 import { perfMark, registerPerfMeta } from "@/perf/perf";
-import type { FindInLibrary } from "@/ytmusic/libraryFinder";
+import { useLoadedLibraryFinder, type FindInLibrary } from "@/ytmusic/libraryFinder";
 
 /** Something search found, with the row the screens need to show and open it. */
 export type SearchHit =
@@ -85,13 +84,17 @@ const prepareSlice = (): void => {
   const started = performance.now();
   let more = true;
   while (more && performance.now() - started < SLICE_MS) more = catalog.work(STEP_ENTRIES);
-  const index = catalog.index();
-  if (index !== shownIndex) {
-    shownIndex = index;
-    perfMark("search.index", String(catalog.stats().entries));
-    for (const listener of listeners) listener();
-  }
+  showIndex();
   if (more) schedulePreparing();
+};
+
+/** Shows the catalog's index as it is now, telling the screen when it changed. */
+const showIndex = (): void => {
+  const index = catalog.index();
+  if (index === shownIndex) return;
+  shownIndex = index;
+  if (index !== null) perfMark("search.index", String(catalog.stats().entries));
+  for (const listener of listeners) listener();
 };
 
 const schedulePreparing = (): void => {
@@ -127,12 +130,6 @@ const lazily = <A>(build: () => A): (() => A) => {
   return () => (built ??= { value: build() }).value;
 };
 
-/** Whether the library has a YT Music song (Core's `libraryFinder`), built on first use. */
-const finderOf = (songs: readonly SongRow[]): FindInLibrary => {
-  const finder = lazily(() => libraryFinder(songs));
-  return (song) => finder()(song);
-};
-
 /** Whether the library has a YT Music artist or album (Core's `libraryArtistFinder`, `libraryReleaseFinder`). */
 const releasesOf = (
   artists: readonly ArtistRow[],
@@ -147,7 +144,8 @@ const releasesOf = (
 };
 
 /**
- * The search index over the whole library, or null until it's first built.
+ * The search index over the whole library, or null until it's built over
+ * what the Library holds now.
  *
  * - Its five sources are the Library's shared queries (the Library tabs'
  *   reads): asked only once [active] (Search wants them; the screen keeps
@@ -155,7 +153,12 @@ const releasesOf = (
  *   reaches them (a scan or an edit for every source, a playlist edit for
  *   the playlists alone), and while Search is out of sight only for edits.
  * - The index is prepared in short slices between other work, and source by
- *   source: a changed source alone is prepared again.
+ *   source: a changed source alone is prepared again. While it is, searches
+ *   use the last index; but once Search stops asking, nothing follows the
+ *   Library, so when it asks again there is no index until every source is
+ *   read and prepared again (the same rows again need no preparing).
+ * - Whether a YT Music song is in the Library is the shared finder
+ *   (`useLoadedLibraryFinder`), over the same songs read.
  * - Typing only ever runs the (prepared, narrowing) search itself.
  */
 export const useSearchIndex = (active: boolean): LibrarySearch | null => {
@@ -167,6 +170,14 @@ export const useSearchIndex = (active: boolean): LibrarySearch | null => {
   const playlists = useLibraryQuery(queries?.playlists ?? null, null);
 
   useEffect(() => {
+    if (!active) return undefined;
+    return () => {
+      catalog.unfollowed();
+      showIndex();
+    };
+  }, [active]);
+
+  useEffect(() => {
     if (songs !== null) catalog.update("songs", songs, songHit);
     if (albums !== null) catalog.update("albums", albums, albumHit);
     if (artists !== null) catalog.update("artists", artists, artistHit);
@@ -176,7 +187,7 @@ export const useSearchIndex = (active: boolean): LibrarySearch | null => {
   }, [songs, albums, artists, genres, playlists]);
 
   const index = useSyncExternalStore(subscribeIndex, currentIndex);
-  const find = useMemo(() => (songs === null ? null : finderOf(songs)), [songs]);
+  const find = useLoadedLibraryFinder(active);
   const releases = useMemo(
     () => (artists === null || albums === null ? null : releasesOf(artists, albums)),
     [artists, albums],
