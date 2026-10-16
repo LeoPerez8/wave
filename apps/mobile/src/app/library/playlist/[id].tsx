@@ -10,6 +10,7 @@ import { openPlaylistActions } from "@/playback/ActionsMenu";
 import { DetailFrame } from "@/library/DetailFrame";
 import { usePlaylist } from "@/library/hooks";
 import { LibraryStore, type PlaylistEntryRow, type PlaylistRow } from "@/library/LibraryStore";
+import { PlaylistImportLine, usePlaylistImportView } from "@/library/PlaylistImportLine";
 import { PlaylistItems, playPlaylistEntries } from "@/library/PlaylistItems";
 import { parseId, useKnownRow } from "@/library/routes";
 import { appRuntime } from "@/library/runtime";
@@ -76,6 +77,7 @@ function PlaylistHead({ shown }: { shown: Shown }) {
             {download.progress}
           </Text>
         )}
+        <PlaylistImportLine playlistId={playlist.id} />
       </View>
       <View className="flex-row items-center justify-between">
         {count > 0 ? (
@@ -99,12 +101,16 @@ function PlaylistHead({ shown }: { shown: Shown }) {
   );
 }
 
-function NoSongs() {
+function NoSongs({ playlistId }: { playlistId: number }) {
+  // While an import fills it, its songs are on their way.
+  const importing = usePlaylistImportView(playlistId)?.canCancel === true;
   return (
     <View style={{ paddingTop: CELL * 3, gap: CELL / 2 }}>
       <Text className="font-sans text-title3 font-normal text-foreground">No songs yet</Text>
       <Text className="font-sans text-subheadline text-secondary">
-        Long-press a song, an album or an artist and choose Add to Playlist.
+        {importing
+          ? "Songs appear here as they're found."
+          : "Long-press a song, an album or an artist and choose Add to Playlist."}
       </Text>
     </View>
   );
@@ -130,7 +136,7 @@ export default function PlaylistScreen() {
           playlistId={playlist.id}
           items={items}
           header={<PlaylistHead shown={{ playlist, items }} />}
-          empty={<NoSongs />}
+          empty={<NoSongs playlistId={playlist.id} />}
         />
       )}
     </DetailFrame>

@@ -54,7 +54,7 @@ const SHELVES: readonly { readonly shelf: Shelf; readonly label: string }[] = [
 ];
 
 /**
- * The Library's components on synthetic data. Developer-only; see Settings.
+ * The Library's components on synthetic data. Developer-only; see Settings › Developer.
  * `wave://design-preview?state=<name>` opens it at one of `PREVIEW_STATES`.
  */
 export default function DesignPreviewScreen() {
