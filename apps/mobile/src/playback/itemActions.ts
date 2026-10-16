@@ -21,8 +21,10 @@ import { setFavorites, useFavoriteIds } from "@/library/favorites";
 import { fixSongs } from "@/library/findLyricsAndGenre";
 import { useAlbumsMissingSongs, useLinkRows } from "@/library/hooks";
 import {
+  changePlaylistImageFlow,
   confirmDeletePlaylists,
   openAddToPlaylist,
+  removePlaylistImageFlow,
   renamePlaylistFlow,
 } from "@/library/PlaylistSheets";
 import { removePlaylistItems } from "@/library/playlists";
@@ -267,6 +269,10 @@ export function useItemActions(
       }
       case "renamePlaylist":
         return run(() => playlist !== undefined && void renamePlaylistFlow(playlist));
+      case "changeImage":
+        return run(() => playlist !== undefined && void changePlaylistImageFlow(playlist));
+      case "removeImage":
+        return run(() => playlist !== undefined && void removePlaylistImageFlow(playlist));
       case "deletePlaylist":
       case "deletePlaylists": {
         const playlists = target.kind === "playlist" ? target.items : [];
