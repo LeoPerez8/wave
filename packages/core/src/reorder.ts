@@ -1,6 +1,6 @@
 /**
- * Drag-to-reorder in a list of fixed-height rows (Up Next, playlist items):
- * where a dragged row would land if it were dropped now.
+ * Drag-to-reorder in a list of rows (Up Next, playlist items, the arrangement
+ * editors): where a dragged row would land if it were dropped now.
  *
  * Up Next runs these on the UI thread, inside Reanimated worklets, so a drag
  * keeps following the finger while JavaScript is busy: each starts with the
@@ -12,18 +12,44 @@ export interface ReorderDrag {
   readonly from: number;
   /** How far the row has moved through the list (finger travel plus any auto-scroll), in dp; negative is up. */
   readonly distance: number;
-  readonly rowHeight: number;
+  /**
+   * One height for every row, or each row's own in list order (rows that
+   * grow with large text), in dp.
+   */
+  readonly rowHeight: number | readonly number[];
   /** Rows in the list. */
   readonly count: number;
 }
 
 /**
- * The index the dragged row would take: another row's place once its centre
- * passes that row's middle.
+ * The index the dragged row would take: another row's place once the dragged
+ * row's leading edge (its bottom going down, its top going up) passes that
+ * row's middle.
  */
 export const reorderTarget = ({ from, distance, rowHeight, count }: ReorderDrag): number => {
   "worklet";
-  return Math.max(0, Math.min(count - 1, from + Math.round(distance / rowHeight)));
+  if (typeof rowHeight === "number") {
+    return Math.max(0, Math.min(count - 1, from + Math.round(distance / rowHeight)));
+  }
+  let to = from;
+  // How far the dragged row's leading edge must travel to reach the next row's middle.
+  let passed = 0;
+  if (distance > 0) {
+    for (let index = from + 1; index < count; index++) {
+      const height = rowHeight[index] ?? 0;
+      if (distance < passed + height / 2) break;
+      to = index;
+      passed += height;
+    }
+  } else {
+    for (let index = from - 1; index >= 0; index--) {
+      const height = rowHeight[index] ?? 0;
+      if (-distance <= passed + height / 2) break;
+      to = index;
+      passed += height;
+    }
+  }
+  return to;
 };
 
 export interface ReorderRow {

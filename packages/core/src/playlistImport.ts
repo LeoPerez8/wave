@@ -14,7 +14,7 @@ import {
   writePlaylistYtSong,
   type PlaylistSong,
 } from "./playlistEntries.ts";
-import type { ImportNotice, LinkedPlaylist } from "./playlistLinks.ts";
+import type { LinkedPlaylist } from "./playlistLinks.ts";
 import {
   artistNames,
   spotifySearchQuery,
@@ -56,6 +56,28 @@ export interface LinkImportPlan<S extends YtSong> {
   readonly finds: readonly (ImportFind<S> | null)[];
   /** How many of [songs] the Library has. */
   readonly inLibrary: number;
+  /**
+   * How many songs the source lists, as it counts them (Spotify's own count,
+   * a YouTube Music playlist's rows); of a playlist only partly read, those
+   * read. [songs], [leftOut] and [notSongs] add up to it.
+   */
+  readonly sourceTotal: number;
+  /** The source's songs that don't go in, each with why, in the source's order. */
+  readonly leftOut: readonly LeftOutSong[];
+  /** How many items the source counts that aren't songs Wave can read (Spotify's podcast episodes). */
+  readonly notSongs: number;
+}
+
+/**
+ * Why one of the source's songs doesn't go in: it's listed twice (the same
+ * song as one before it, which goes in in its place).
+ */
+export type LeftOutReason = "listedTwice";
+
+/** One of the source's songs that doesn't go in, and why. */
+export interface LeftOutSong {
+  readonly song: SpotifySong;
+  readonly reason: LeftOutReason;
 }
 
 const NOT_FOUND: ImportFind<never> = { kind: "notFound" };
@@ -67,7 +89,8 @@ const NOT_FOUND: ImportFind<never> = { kind: "notFound" };
  * searched on YouTube Music once the import runs, except a song with no
  * artist, which is never searched and isn't found. A song that comes again
  * (the same Library track, the same video, or a Spotify song alike in every
- * field) is left out after its first place, so the card counts it once.
+ * field) is left out after its first place, as listed twice, so the card
+ * counts it once and says so.
  */
 export const planLinkImport = <
   S extends YtSong,
@@ -77,20 +100,27 @@ export const planLinkImport = <
   library: readonly L[],
 ): LinkImportPlan<S> => {
   const find = libraryFinder(library);
-  const listed: readonly SpotifySong[] = source.playlist.songs;
+  // A YouTube Music playlist's rows listing a video again come after the rest: each is left out.
+  const streams =
+    source.service === "ytMusic" ? [...source.playlist.songs, ...source.playlist.repeats] : null;
+  const listed: readonly SpotifySong[] = streams ?? source.playlist.songs;
   const seen = new Set<string>();
   const songs: SpotifySong[] = [];
   const finds: (ImportFind<S> | null)[] = [];
+  const leftOut: LeftOutSong[] = [];
   listed.forEach((song, index) => {
     const track = find(song);
-    const stream = source.service === "ytMusic" ? source.playlist.songs[index] : undefined;
+    const stream = streams?.[index];
     const key =
       track !== null
         ? `library:${track.id}`
         : stream !== undefined
           ? `yt:${stream.videoId}`
           : JSON.stringify([song.title, song.artists, song.album, song.durationMs]);
-    if (seen.has(key)) return;
+    if (seen.has(key)) {
+      leftOut.push({ song: listedSong(song), reason: "listedTwice" });
+      return;
+    }
     seen.add(key);
     songs.push(song);
     if (track !== null) finds.push({ kind: "library", trackId: track.id });
@@ -99,14 +129,30 @@ export const planLinkImport = <
       finds.push(NOT_FOUND);
     else finds.push(null);
   });
+  // Of a playlist only partly read, Spotify's count includes songs never read.
+  const notSongs =
+    source.service === "spotify" && !source.playlist.truncated
+      ? Math.max(0, source.playlist.total - listed.length)
+      : 0;
   return {
     name: importedPlaylistName(source.playlist.title),
     service: source.service,
     songs,
     finds,
     inLibrary: finds.filter((found) => found?.kind === "library").length,
+    sourceTotal: listed.length + notSongs,
+    leftOut,
+    notSongs,
   };
 };
+
+/** [song] as the source lists it: a YouTube Music song's own fields left behind. */
+const listedSong = ({ title, artists, album, durationMs }: SpotifySong): SpotifySong => ({
+  title,
+  artists,
+  album,
+  durationMs,
+});
 
 /** Where an import has got to. */
 export type ImportState =
@@ -131,6 +177,8 @@ export interface PlaylistImport<S extends YtSong> {
   readonly songs: readonly SpotifySong[];
   /** Where each of [songs] was found; null while it's still to be searched. */
   readonly finds: readonly (ImportFind<S> | null)[];
+  /** The source's songs left out before the import started (`LinkImportPlan`'s). */
+  readonly leftOut: readonly LeftOutSong[];
   /** How many of [songs], from the first, have been given to the playlist. */
   readonly added: number;
   readonly state: ImportState;
@@ -152,6 +200,7 @@ export const startPlaylistImport = <S extends YtSong>(
   service: plan.service,
   songs: plan.songs,
   finds: plan.finds,
+  leftOut: plan.leftOut,
   added: 0,
   state: { kind: "importing" },
   asking: [],
@@ -511,14 +560,36 @@ export const queuePlaylistImport = <S extends YtSong>(
   job: PlaylistImport<S>,
 ): PlaylistImports<S> => [...withoutPlaylistImport(imports, job.playlistId), job];
 
-const notFoundCount = <S extends YtSong>(job: PlaylistImport<S>): number => tallyOf(job).notFound;
+/**
+ * The songs [job] lists twice: those left out before it started, then those
+ * found as the same song as one before them, which go in once. In the
+ * source's order within each.
+ */
+const listedTwice = <S extends YtSong>(job: PlaylistImport<S>): SpotifySong[] => {
+  const { firstAt } = tallyOf(job);
+  const twice = job.leftOut
+    .filter((left) => left.reason === "listedTwice")
+    .map((left) => left.song);
+  job.finds.forEach((found, index) => {
+    const song = found === null || found === undefined ? null : playlistSong(found);
+    if (song === null) return;
+    const first = firstAt.get(playlistSongKey(song));
+    const listed = job.songs[index];
+    if (first !== undefined && first < index && listed !== undefined) twice.push(listed);
+  });
+  return twice;
+};
 
-/** The imports with [job] as it is now. Done with every song found, it's left out: there's nothing to show. */
+/** The songs [job] didn't find, in the source's order. */
+const notFoundSongs = <S extends YtSong>(job: PlaylistImport<S>): SpotifySong[] =>
+  job.songs.filter((_, index) => job.finds[index]?.kind === "notFound");
+
+/** The imports with [job] as it is now. Done with every song found once, it's left out: there's nothing to show. */
 export const updatePlaylistImport = <S extends YtSong>(
   imports: PlaylistImports<S>,
   job: PlaylistImport<S>,
 ): PlaylistImports<S> =>
-  job.state.kind === "done" && notFoundCount(job) === 0
+  job.state.kind === "done" && tallyOf(job).notFound === 0 && listedTwice(job).length === 0
     ? withoutPlaylistImport(imports, job.playlistId)
     : imports.map((queued) => (queued.playlistId === job.playlistId ? job : queued));
 
@@ -552,17 +623,13 @@ export const writePlaylistImports = <S extends YtSong & { readonly albumId?: str
       playlistId: job.playlistId,
       name: job.name,
       service: job.service,
-      songs: job.songs.map(({ title, artists, album, durationMs }) => ({
-        title,
-        artists,
-        album,
-        durationMs,
-      })),
+      songs: job.songs.map(listedSong),
       finds: job.finds.map((found) =>
         found?.kind === "ytMusic"
           ? { kind: "ytMusic", song: writePlaylistYtSong(found.song) }
           : found,
       ),
+      leftOut: job.leftOut.map(({ song, reason }) => ({ song: listedSong(song), reason })),
       added: job.added,
       state: job.state,
     })),
@@ -600,6 +667,15 @@ const readFind = (value: unknown): ImportFind<YtAlbumSong> | null | undefined =>
   return undefined;
 };
 
+const LEFT_OUT_REASONS: readonly string[] = ["listedTwice"] satisfies LeftOutReason[];
+
+/** A kept song left out; null when unreadable. */
+const readLeftOut = (value: unknown): LeftOutSong | null => {
+  if (!isFields(value) || !LEFT_OUT_REASONS.includes(String(value.reason))) return null;
+  const song = readSong(value.song);
+  return song === null ? null : { song, reason: value.reason as LeftOutReason };
+};
+
 const STOP_REASONS: readonly string[] = ["offline", "disabled", "searchFailed"];
 
 const readState = (value: unknown): ImportState | null => {
@@ -613,11 +689,14 @@ const readState = (value: unknown): ImportState | null => {
 
 const readImport = (value: unknown): PlaylistImport<YtAlbumSong> | null => {
   if (!isFields(value)) return null;
-  const { playlistId, name, service, songs, finds, added, state } = value;
+  // An import kept before songs left out were named has none.
+  const { playlistId, name, service, songs, finds, leftOut = [], added, state } = value;
   if (typeof playlistId !== "number" || typeof name !== "string") return null;
   if (service !== "ytMusic" && service !== "spotify") return null;
   if (!Array.isArray(songs) || !Array.isArray(finds) || songs.length !== finds.length) return null;
-  if (typeof added !== "number") return null;
+  if (typeof added !== "number" || !Array.isArray(leftOut)) return null;
+  const readLeftOuts = leftOut.map(readLeftOut);
+  if (readLeftOuts.some((left) => left === null)) return null;
   const readSongs = songs.map(readSong);
   const readFinds = finds.map(readFind);
   const keptState = readState(state);
@@ -631,6 +710,7 @@ const readImport = (value: unknown): PlaylistImport<YtAlbumSong> | null => {
     service,
     songs: readSongs as SpotifySong[],
     finds: readFinds as (ImportFind<YtAlbumSong> | null)[],
+    leftOut: readLeftOuts as LeftOutSong[],
     added: Math.min(Math.max(0, added), songs.length),
     state: keptState,
     asking: [],
@@ -673,19 +753,53 @@ const STOPPED_LINES: Record<ImportStopReason, string> = {
   searchFailed: "Import paused: YouTube Music stopped answering.",
 };
 
-/** "1 song wasn't found" / "3 songs weren't found". */
-const notFoundLine = (count: number): string =>
-  `${counted(count, "song")} ${count === 1 ? "wasn't" : "weren't"} found`;
+/** A song as the list of songs left out names it: "Title · Artist & Artist". */
+const songLine = (song: SpotifySong): string =>
+  `${song.title} · ${joinArtists(song.artists) || UNKNOWN_ARTIST}`;
 
-/** The songs [job] didn't find, by title and artist, as the playlist page lists them. */
-const notFoundNotice = <S extends YtSong>(job: PlaylistImport<S>): ImportNotice => {
-  const songs = job.songs
-    .filter((_, index) => job.finds[index]?.kind === "notFound")
-    .map((song) => `${song.title} · ${joinArtists(song.artists) || UNKNOWN_ARTIST}`)
-    .join("\n");
+/** The list of songs a done import left out, opened from its line. */
+export interface ImportLeftOut {
+  readonly title: string;
+  readonly message: string;
+  /** The songs by why they're left out, each by title and artist: not found, listed twice. */
+  readonly sections: readonly ImportLeftOutSection[];
+}
+
+export interface ImportLeftOutSection {
+  readonly heading: string;
+  readonly songs: readonly string[];
+}
+
+/**
+ * The songs [job] left out, by title and artist, under their headings: not
+ * found, then listed twice (which went in once). Null with none.
+ */
+const leftOutNotice = <S extends YtSong>(job: PlaylistImport<S>): ImportLeftOut | null => {
+  const notFound = notFoundSongs(job);
+  const twice = listedTwice(job);
+  if (notFound.length === 0 && twice.length === 0) return null;
+  const missing = `${counted(notFound.length, "song")} ${notFound.length === 1 ? "wasn't" : "weren't"} found`;
+  const sections: ImportLeftOutSection[] = [];
+  if (notFound.length > 0) sections.push({ heading: "Not found", songs: notFound.map(songLine) });
+  if (twice.length > 0) sections.push({ heading: "Listed twice", songs: twice.map(songLine) });
+  if (twice.length === 0) {
+    return {
+      title: missing,
+      message: `${job.name} was imported without ${notFound.length === 1 ? "it" : "them"}.`,
+      sections,
+    };
+  }
+  if (notFound.length === 0) {
+    return {
+      title: `${counted(twice.length, "song")} ${twice.length === 1 ? "was" : "were"} listed twice`,
+      message: `Each went into ${job.name} once.`,
+      sections,
+    };
+  }
   return {
-    title: notFoundLine(notFoundCount(job)),
-    message: `${job.name} was imported without them:\n\n${songs}`,
+    title: `${missing} · ${twice.length.toLocaleString("en")} listed twice`,
+    message: `${job.name} was imported without the songs not found. Each song listed twice went in once.`,
+    sections,
   };
 };
 
@@ -696,8 +810,8 @@ export interface PlaylistImportView {
   readonly canCancel: boolean;
   /** Try Again goes on from where a stopped import got to. */
   readonly canRetry: boolean;
-  /** Once done, the songs not found (the line opens them); the page can dismiss them. */
-  readonly notFound: ImportNotice | null;
+  /** Once done, the songs left out (the line opens them); the page can dismiss them. */
+  readonly leftOut: ImportLeftOut | null;
 }
 
 /** The searches [job] still has to ask (not those asked and unanswered): one per query. */
@@ -764,7 +878,7 @@ export const playlistImportView = <S extends YtSong>(
     line,
     canCancel: true,
     canRetry,
-    notFound: null,
+    leftOut: null,
   });
   switch (job.state.kind) {
     case "importing": {
@@ -776,8 +890,8 @@ export const playlistImportView = <S extends YtSong>(
     case "stopped":
       return shown(STOPPED_LINES[job.state.reason], true);
     case "done": {
-      const notFound = notFoundNotice(job);
-      return { line: notFound.title, canCancel: false, canRetry: false, notFound };
+      const leftOut = leftOutNotice(job);
+      return { line: leftOut?.title ?? "", canCancel: false, canRetry: false, leftOut };
     }
   }
 };

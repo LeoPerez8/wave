@@ -236,8 +236,18 @@ export {
   tabsOffBar,
 } from "./tabBar.ts";
 export type { TabBar, TabBarEdit, TabBarTab } from "./tabBar.ts";
-export { SETTINGS_PAGES, accountsSummary, downloadsSummary } from "./settingsPages.ts";
-export type { SettingsPage, SettingsPageEntry } from "./settingsPages.ts";
+export {
+  LAYOUT_PAGES,
+  SETTINGS_PAGES,
+  accountsSummary,
+  downloadsSummary,
+} from "./settingsPages.ts";
+export type {
+  LayoutPage,
+  LayoutPageEntry,
+  SettingsPage,
+  SettingsPageEntry,
+} from "./settingsPages.ts";
 export {
   PLAYLIST_LAYOUTS,
   parsePlaylistLayout,
@@ -623,6 +633,7 @@ export {
   downloadFallback,
   downloadSource,
   ytAudioMatches,
+  ytAudioRejection,
 } from "./downloadSource.ts";
 export type {
   DownloadFailurePlan,
@@ -665,6 +676,8 @@ export type {
 } from "./ytSongsDownload.ts";
 export { failedDownloads, settledDownloadFailures } from "./failedDownloads.ts";
 export { ytDownloadsToForget } from "./forgottenDownloads.ts";
+export { queuedDownloads, queuedDownloadsSummary } from "./queuedDownloads.ts";
+export type { QueuedDownload } from "./queuedDownloads.ts";
 export type {
   FailedDownload,
   FailedDownloadRetry,
@@ -850,10 +863,14 @@ export {
 export type {
   ImportAdditions,
   ImportFind,
+  ImportLeftOut,
+  ImportLeftOutSection,
   ImportService,
   ImportState,
   ImportStep,
   ImportStopReason,
+  LeftOutReason,
+  LeftOutSong,
   LinkImportPlan,
   LinkedSource,
   PlaylistImport,

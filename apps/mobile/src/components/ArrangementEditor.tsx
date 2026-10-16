@@ -62,21 +62,26 @@ function RowButton({
   );
 }
 
-/** An item's title, and under it [detail] when there is one ("Needs YT Music"). */
+/**
+ * An item's title, and under it [detail] when there is one ("Needs YT
+ * Music"). Large text wraps them and the row grows to fit.
+ */
 function RowLabel({ title, detail = null }: { title: string; detail?: string | null }) {
   return (
-    <View className="flex-1">
-      <Text numberOfLines={1} className="font-sans text-body text-foreground">
-        {title}
-      </Text>
-      {detail !== null && (
-        <Text numberOfLines={1} className="font-sans text-footnote text-secondary">
-          {detail}
-        </Text>
-      )}
+    <View className="flex-1" style={{ paddingVertical: CELL / 2 }}>
+      <Text className="font-sans text-body text-foreground">{title}</Text>
+      {detail !== null && <Text className="font-sans text-footnote text-secondary">{detail}</Text>}
     </View>
   );
 }
+
+/**
+ * A row's line: at least a row tall (its hairline included), taller where
+ * large text or a wrapping title needs it.
+ */
+const ROW_BOX = { minHeight: ROW } as const;
+/** The row's content fills it above the hairline, centred. */
+const ROW_LINE = { flexGrow: 1 } as const;
 
 /**
  * A row the owner can't drag, above or below those they can: Home on the tab
@@ -96,8 +101,8 @@ export function FixedRow({
   divider: boolean;
 }) {
   return (
-    <View style={{ height: ROW }}>
-      <View className="flex-1 flex-row items-center">
+    <View style={ROW_BOX}>
+      <View className="flex-row items-center" style={ROW_LINE}>
         <RowLabel title={title} />
         {onRemove !== undefined && (
           <View style={{ marginRight: -CELL * 1.5 }}>
@@ -114,8 +119,11 @@ export function FixedRow({
   );
 }
 
-/** The drag going on among the shown items: from where, to where it would land. */
-type Drag = { readonly from: number; readonly to: number };
+/**
+ * The drag going on among the shown items: from where, to where it would
+ * land, and the dragged row's height (how far the rows it passes step aside).
+ */
+type Drag = { readonly from: number; readonly to: number; readonly height: number };
 
 type ShownRowProps<Id> = {
   id: Id;
@@ -133,6 +141,8 @@ type ShownRowProps<Id> = {
   pickUp: (index: number) => void;
   dragTo: (travel: number) => void;
   drop: (canceled: boolean) => void;
+  /** Reports the row's laid-out height, which large text can grow. */
+  measure: (id: Id, height: number) => void;
 };
 
 /**
@@ -153,11 +163,12 @@ function ShownRow<Id>({
   pickUp,
   dragTo,
   drop,
+  measure,
 }: ShownRowProps<Id>) {
   const secondary = useThemeColor("secondary");
   const fill = useThemeColor("fill");
   const dragged = drag?.from === index;
-  const shift = drag === null || dragged ? 0 : reorderShift({ index, ...drag }) * ROW;
+  const shift = drag === null || dragged ? 0 : reorderShift({ index, ...drag }) * drag.height;
 
   const style = useAnimatedStyle(() => ({
     transform: [{ translateY: dragged ? travel.get() : shift }],
@@ -195,8 +206,10 @@ function ShownRow<Id>({
 
   return (
     <Animated.View
+      onLayout={(event) => measure(id, event.nativeEvent.layout.height)}
       style={[
-        { height: ROW, zIndex: dragged ? 1 : 0, backgroundColor: dragged ? fill : "transparent" },
+        ROW_BOX,
+        { zIndex: dragged ? 1 : 0, backgroundColor: dragged ? fill : "transparent" },
         style,
       ]}
     >
@@ -209,7 +222,8 @@ function ShownRow<Id>({
           { name: "remove", label: `Remove from ${place}` },
         ]}
         onAccessibilityAction={onAccessibilityAction}
-        className="flex-1 flex-row items-center"
+        className="flex-row items-center"
+        style={ROW_LINE}
       >
         <RowLabel title={title} detail={detail} />
         <RowButton
@@ -228,7 +242,8 @@ function ShownRow<Id>({
           </View>
         </GestureDetector>
       </View>
-      {!dragged && (divideLast || index < count - 1) && <Hairline />}
+      {/* Hidden rather than dropped while dragged, so the row keeps its height. */}
+      {(divideLast || index < count - 1) && <Hairline className={dragged ? "opacity-0" : ""} />}
     </Animated.View>
   );
 }
@@ -252,8 +267,8 @@ function HiddenRow<Id>({
   edit: (edit: ArrangementEdit<Id>) => void;
 }) {
   return (
-    <View style={{ height: ROW }}>
-      <View className="flex-1 flex-row items-center">
+    <View style={ROW_BOX}>
+      <View className="flex-row items-center" style={ROW_LINE}>
         <RowLabel title={title} detail={detail} />
         <View style={{ marginRight: -CELL * 1.5 }}>
           <RowButton
@@ -290,14 +305,23 @@ export type ArrangementEditorProps<Id extends string> = {
   last?: ReactNode;
   /** A line under the lists, e.g. what can't be changed. */
   note?: string;
-  onDone: () => void;
+  /**
+   * The card's Done, which hands the arrangement back. Without it the editor
+   * is a Settings page's content: it fills the page, within the page's
+   * margins, and the caller saves each `edit` as it comes.
+   */
+  onDone?: (() => void) | undefined;
 };
+
+/** A Settings page's room around its content (`SettingsPageScreen`'s). */
+const PAGE_CONTENT = { paddingHorizontal: grid.margin, paddingBottom: CELL * 6 } as const;
 
 /**
  * An editor for an ordered set of items (Home's sections, the tab bar's
- * tabs), in a card: the items shown (drag a handle to reorder, a button
- * removes one), then those not shown (a button adds one). The caller keeps
- * the arrangement and applies each `edit`; Done hands it back.
+ * tabs), in a card or on a Settings page: the items shown (drag a handle to
+ * reorder, a button removes one), then those not shown (a button adds one).
+ * The caller keeps the arrangement and applies each `edit`; in a card, Done
+ * hands it back. It scrolls, except while a row is dragged.
  */
 export function ArrangementEditor<Id extends string>({
   shown,
@@ -317,6 +341,15 @@ export function ArrangementEditor<Id extends string>({
   // The drag as the gesture's callbacks last left it, ahead of a render.
   const dragNow = useRef<Drag | null>(null);
   const travel = useSharedValue(0);
+  // Each shown row's laid-out height, by item: large text makes rows taller, and unequal.
+  const heights = useRef(new Map<Id, number>());
+  const measure = useCallback((id: Id, height: number) => {
+    heights.current.set(id, height);
+  }, []);
+  const rowHeight = useCallback(
+    (id: Id | undefined) => (id === undefined ? ROW : (heights.current.get(id) ?? ROW)),
+    [],
+  );
   const count = shown.length;
   const empty = count === 0 && first === undefined && last === undefined;
 
@@ -327,18 +360,23 @@ export function ArrangementEditor<Id extends string>({
   const pickUp = useCallback(
     (from: number) => {
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      follow({ from, to: from });
+      follow({ from, to: from, height: rowHeight(shown[from]) });
     },
-    [follow],
+    [follow, rowHeight, shown],
   );
   const dragTo = useCallback(
     (distance: number) => {
       const current = dragNow.current;
       if (current === null) return;
-      const to = reorderTarget({ from: current.from, distance, rowHeight: ROW, count });
+      const to = reorderTarget({
+        from: current.from,
+        distance,
+        rowHeight: shown.map(rowHeight),
+        count,
+      });
       if (to !== current.to) follow({ ...current, to });
     },
-    [count, follow],
+    [count, follow, rowHeight, shown],
   );
   const drop = useCallback(
     (canceled: boolean) => {
@@ -355,7 +393,12 @@ export function ArrangementEditor<Id extends string>({
   return (
     <>
       <View style={{ flexShrink: 1 }}>
-        <ScrollView bounces={false} overScrollMode="never" scrollEnabled={drag === null}>
+        <ScrollView
+          bounces={false}
+          overScrollMode="never"
+          scrollEnabled={drag === null}
+          contentContainerStyle={onDone === undefined ? PAGE_CONTENT : undefined}
+        >
           {first}
           {shown.map((id, index) => (
             <ShownRow
@@ -373,6 +416,7 @@ export function ArrangementEditor<Id extends string>({
               pickUp={pickUp}
               dragTo={dragTo}
               drop={drop}
+              measure={measure}
             />
           ))}
           {last}
@@ -401,9 +445,11 @@ export function ArrangementEditor<Id extends string>({
           )}
         </ScrollView>
       </View>
-      <View className="flex-row justify-end" style={{ paddingTop: CELL }}>
-        <TextButton label="Done" onPress={onDone} />
-      </View>
+      {onDone !== undefined && (
+        <View className="flex-row justify-end" style={{ paddingTop: CELL }}>
+          <TextButton label="Done" onPress={onDone} />
+        </View>
+      )}
     </>
   );
 }

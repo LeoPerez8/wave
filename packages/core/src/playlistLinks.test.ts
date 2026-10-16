@@ -36,6 +36,7 @@ const playlist = (songs: readonly YtAlbumSong[], fields = {}) => ({
   title: "Drive",
   artworkUrl: "https://lh3.googleusercontent.com/drive",
   songs,
+  repeats: [],
   truncated: false,
   ...fields,
 });
@@ -70,6 +71,7 @@ describe("linkImportView", () => {
         name: "Drive",
         artworkUrl: "https://lh3.googleusercontent.com/drive",
         line: "3 songs · 1 in your Library",
+        source: null,
         note: null,
         canImport: true,
         retry: false,
@@ -82,6 +84,7 @@ describe("linkImportView", () => {
       name: null,
       artworkUrl: null,
       line: "Reading the playlist…",
+      source: null,
       note: null,
       canImport: false,
       retry: false,
@@ -119,6 +122,13 @@ describe("linkImportView", () => {
       linkImportView(read([yt("s1", "Stress"), yt("w1", "Waters")])).line,
       "2 songs · none in your Library",
     );
+  });
+
+  test("a song listed twice shows the playlist's rows on YouTube Music, and goes in once", () => {
+    const stress = yt("s1", "Stress");
+    const view = linkImportView(read([stress, yt("w1", "Waters")], { repeats: [stress] }));
+    assert.equal(view.line, "2 songs · none in your Library");
+    assert.equal(view.source, "3 songs on YouTube Music · 1 listed twice goes in once");
   });
 
   test("a playlist longer than what's read says only its first songs come", () => {

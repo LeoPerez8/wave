@@ -1,6 +1,7 @@
 /**
- * Settings › Downloads: the songs whose download failed, each with why and
- * Retry, and Retry All and Clear All above them. The native journal keeps a
+ * Settings › Downloads: the songs whose download failed, each with why, Retry
+ * and a trash button that clears it alone, and Retry All and Clear All above
+ * them. The native journal keeps a
  * failure until it's retried or cleared; one the song settled another way (it
  * downloaded under another video, a scan found a missing song's file) leaves
  * the list on its own, and the app has the journal forget it
@@ -24,8 +25,9 @@ export interface FailedDownload<S extends YtSong = YtSong> {
   /** Why it failed, as the song's row says it elsewhere. */
   readonly line: string;
   /**
-   * What actually went wrong (the journal's `cause`), under a line that
-   * doesn't say what to do about it; null otherwise.
+   * What actually went wrong (the journal's `cause`, in its errors' own
+   * messages), under a line that doesn't say what to do about it; null
+   * otherwise.
    */
   readonly detail: string | null;
   /** What Retry asks for again: the song, or for a missing song its Track. */
@@ -60,15 +62,39 @@ const SELF_EXPLAINED: readonly YtDownloadFailure[] = [
   "noFolder",
 ];
 
-/** A JVM or JS class's package, at the start of each error in a cause chain. */
-const PACKAGE = /^(?:[a-z_$][\w$]*\.)+(?=[A-Z])/;
+/**
+ * The class (and code) an error in a cause chain starts with: a JVM or JS
+ * class, with or without its package, or the bare name a release build
+ * shortened it to (R8 turns `SoulseekException` into `bn5`).
+ */
+const CLASS = /^(?:[A-Za-z_$][\w$]*\.)*([A-Za-z_$][\w$]*)(?: \[[^\]]*\])?/;
 
-/** [cause] as a line under the failure: each error's class without its package. */
-const causeLine = (cause: string): string =>
-  cause
+/**
+ * One error of a cause chain in words: its message without the classes in
+ * front of it (an error wrapping another names it there too). One without a
+ * message is its class, unless a release build renamed it into nothing a
+ * person can read.
+ */
+const errorLine = (error: string): string | null => {
+  const named = CLASS.exec(error);
+  if (named?.[0] === error) return /^[A-Z]/.test(named[1] ?? "") ? (named[1] ?? null) : null;
+  let message = error;
+  for (let head = CLASS.exec(message); head !== null; head = CLASS.exec(message)) {
+    if (!message.startsWith(": ", head[0].length)) break;
+    message = message.slice(head[0].length + 2);
+  }
+  return message;
+};
+
+/** [cause] as a line under the failure, or null when none of it is in words. */
+const causeLine = (cause: string): string | null => {
+  const lines = cause
     .split(" <- ")
-    .map((error) => error.replace(PACKAGE, ""))
-    .join(" <- ");
+    .map(errorLine)
+    .filter((line): line is string => line !== null && line.length > 0)
+    .filter((line, index, all) => line !== all[index - 1]);
+  return lines.length === 0 ? null : lines.join(" <- ");
+};
 
 /** Whether [job]'s song came into the Library some other way since it failed. */
 const settled = <S extends YtSong>(

@@ -76,6 +76,7 @@ describe("readSpotifyPlaylist", () => {
     );
     assert.equal(read.playlist.songs[0]?.album, "After Hours");
     assert.equal(read.playlist.truncated, false);
+    assert.equal(read.playlist.total, 5, "Spotify's own count");
     assert.deepEqual(asked[0], {
       method: "GET",
       url: `https://open.spotify.com/embed/playlist/${ID}`,
@@ -135,6 +136,7 @@ describe("readSpotifyPlaylist", () => {
         ["Blinding Lights", "Believer", "EVERYTHING I OWN"],
       );
       assert.equal(read.playlist.truncated, false);
+      assert.equal(read.playlist.total, 3, "the embed page gives no count of its own");
     }
   });
 
