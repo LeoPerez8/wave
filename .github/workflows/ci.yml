@@ -386,6 +386,12 @@ jobs:
         working-directory: apps/mobile/android
         run: ../../../scripts/ci/step.sh "Gradle assembleRelease" ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --init-script ../../../scripts/ci/prebuilt-bundle.gradle --no-daemon --console=plain --profile --stacktrace
 
+      # The APK must ship an ART profile, and once apps/mobile/profiles/ has Wave's own, nearly
+      # all of it (#317). A repack keeps the kept build's dex and profile, so only full builds check.
+      - name: Check the APK's ART profile
+        if: env.APK_BUILD == 'full'
+        run: scripts/ci/step.sh "ART profile check" node scripts/perf/perf.ts profile check-apk apps/mobile/android/app/build/outputs/apk/release/app-release.apk --mapping apps/mobile/android/app/build/outputs/mapping/release/mapping.txt
+
       - name: CMake task times
         if: always() && env.APK_BUILD == 'full'
         run: scripts/ci/cmake-times.sh apps/mobile/android

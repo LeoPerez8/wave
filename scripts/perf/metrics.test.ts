@@ -6,6 +6,7 @@ import type { GfxFrame, GfxSummary } from "./device.ts";
 import {
   compareSummaries,
   formatComparison,
+  formatPhases,
   formatSummary,
   stepMetrics,
   summarize,
@@ -168,6 +169,27 @@ describe("stepMetrics", () => {
     assert.equal(metrics.finalRoute, "/library");
   });
 
+  it("times each phase the step names, from the touch to the phase's first mark after it", () => {
+    const metrics = stepMetrics({
+      frames,
+      summary: SUMMARY,
+      flush: flush([
+        { kind: "mark", name: "tab.commit", detail: "library", at: 990 },
+        { kind: "touch", eventAt: 1_000, at: 1_010 },
+        { kind: "mark", name: "tab.commit", detail: "library", at: 1_040 },
+        { kind: "mark", name: "tab.layout", detail: "library", at: 1_065 },
+        { kind: "mark", name: "tab.commit", detail: "songs", at: 1_300 },
+      ]),
+      expect: undefined,
+      phases: ["tab.commit", "tab.layout", "tab.settled"],
+    });
+    assert.deepEqual(metrics.phasesMs, {
+      "tab.commit": 40,
+      "tab.layout": 65,
+      "tab.settled": null,
+    });
+  });
+
   it("without a perf build, keeps the frame burst and leaves the latencies out", () => {
     const metrics = stepMetrics({
       frames: frames.slice(1),
@@ -246,6 +268,35 @@ describe("summarize", () => {
     assert.deepEqual(rows[0]?.rendersPerStep, { MiniPlayer: 0.5, TabBar: 3 });
     assert.equal(rows[0]?.missing, 1);
   });
+
+  it("gives each phase its own distribution, and none to steps from before phases", () => {
+    const old = record("tab-switch", "tab", 90);
+    delete (old as { phasesMs?: unknown }).phasesMs;
+    const [row] = summarize([
+      record("tab-switch", "tab", 100, { phasesMs: { "tab.commit": 30, "tab.layout": 50 } }),
+      record("tab-switch", "tab", 120, { phasesMs: { "tab.commit": 50, "tab.layout": null } }),
+      old,
+    ]);
+    assert.deepEqual(row?.phases, {
+      "tab.commit": { n: 2, median: 40, p90: 50, max: 50 },
+      "tab.layout": { n: 1, median: 50, p90: 50, max: 50 },
+    });
+  });
+});
+
+describe("formatPhases", () => {
+  it("prints each phase's median / p90 per scenario step, and nothing when no step has phases", () => {
+    const rows = summarize([
+      record("tab-switch", "tab", 100, { phasesMs: { "tab.commit": 30 } }),
+      record("push-settings", "push", 100),
+    ]);
+    assert.match(
+      formatPhases(rows),
+      /^\| tab-switch\/idle\/tab \| tab\.commit \| 30 \/ 30 \| 1 \|$/m,
+    );
+    assert.doesNotMatch(formatPhases(rows), /push-settings/);
+    assert.equal(formatPhases(summarize([record("a", "x", 1)])), "");
+  });
 });
 
 describe("formatSummary", () => {
@@ -281,6 +332,15 @@ describe("compareSummaries", () => {
       change: -105,
       changePercent: -50,
     });
+  });
+
+  it("lines up each phase's median and p90", () => {
+    const rows = compareSummaries(
+      summarize([record("a", "x", 1, { phasesMs: { "tab.commit": 80 } })]),
+      summarize([record("a", "x", 1, { phasesMs: { "tab.commit": 20 } })]),
+    );
+    const commit = rows.find((row) => row.metric === "tab.commit median");
+    assert.equal(commit?.change, -60);
   });
 
   it("leaves out scenarios only one side ran", () => {

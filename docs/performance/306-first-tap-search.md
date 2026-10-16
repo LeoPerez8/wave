@@ -58,7 +58,11 @@ Now:
 
 What wasn't changed: the reads are still synchronous SQLite on the JavaScript thread. Each one is
 its own task (the #309 registry), but the songs read is one task as long as the Library is big.
-Paging it is #310. #304 owns the tab layout; `TabBar` still calls `requestSearchFocus`.
+Paging it is #310. #304 owns the tab layout. `TabBar` still calls `requestSearchFocus` on every
+Search tap, before #304's `useTabSwitches` decides whether to switch. A tap whose switch is
+dropped in a rapid burst leaves a request that expires after 2 s if Search never shows. When
+#304's retention unmounts Search, the next visit takes the first-visit path. The index survives
+in the module, and the registry keeps the sources for 30 s.
 
 ## What was measured
 
@@ -123,16 +127,16 @@ checked on the simulated one (`run --dry-run`, numbers made up, not recorded).
 
 ## Behavior kept
 
-- Core tests: `node --test` in `packages/core` (1809 pass). New: `searchFocus.test.ts` (first and
+- Core tests: `node --test` in `packages/core` (1845 pass). New: `searchFocus.test.ts` (first and
   warm visits, retry bound, cancel on leaving, a late request dropped, rapid taps, nothing when
   already focused or arriving without a tap). `searchCatalog.test.ts` (no index until every source
   is ready, same results and order as one `createSearchIndex`, bounded steps, reuse, a changed
   source alone, the last index while preparing, the newest rows win mid-preparation, empty
   sources, 50,000 songs in short steps). `search.test.ts` unchanged and passing.
 - App tests: `node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test 'src/**/*.test.ts'
-  'plugins/**/*.test.ts'` in `apps/mobile` (286 pass). The React hooks have no render tests (none
+  'plugins/**/*.test.ts'` in `apps/mobile` (293 pass). The React hooks have no render tests (none
   exist in the app). Their decisions are Core's.
-- Runner tests: `node --test scripts/perf/*.test.ts` (49 pass), including the typing step's mark
+- Runner tests: `node --test scripts/perf/*.test.ts` (79 pass), including the typing step's mark
   anchor and the per-step `search` counters.
 - `tsc --noEmit` for `apps/mobile`, `packages/core` and `scripts/perf`.
 

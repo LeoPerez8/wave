@@ -51,6 +51,12 @@ export interface StepMetrics {
   readonly frames: FrameStats;
   readonly renders: Readonly<Record<string, number>>;
   readonly longTasks: { readonly count: number; readonly totalMs: number; readonly maxMs: number };
+  /**
+   * From the touch to the first mark of each phase the step names (React done
+   * with a tab, its layout...); null for a phase that didn't come. Results from
+   * before phases existed don't have it.
+   */
+  readonly phasesMs?: Readonly<Record<string, number | null>>;
 }
 
 const round = (value: number): number => Math.round(value * 100) / 100;
@@ -110,6 +116,8 @@ export const stepMetrics = (step: {
    * first occurrence in the step.
    */
   readonly from?: Expect | undefined;
+  /** Marks to time from the touch (or the `from` mark), each to its first occurrence after it. */
+  readonly phases?: readonly string[];
 }): StepMetrics => {
   const entries = step.flush?.entries ?? [];
   const stepTouches = touches(entries);
@@ -167,6 +175,19 @@ export const stepMetrics = (step: {
       totalMs: round(longTasks.reduce((sum, task) => sum + task.duration, 0)),
       maxMs: longTasks.reduce((max, task) => Math.max(max, task.duration), 0),
     },
+    ...(step.phases === undefined
+      ? {}
+      : {
+          phasesMs: Object.fromEntries(
+            step.phases.map((phase) => {
+              const mark =
+                anchorAt === null
+                  ? undefined
+                  : marks(entries).find((entry) => entry.at >= anchorAt && entry.name === phase);
+              return [phase, sinceTouch(mark?.at ?? null, anchorAt)];
+            }),
+          ),
+        }),
   };
 };
 
@@ -242,6 +263,8 @@ export interface SummaryRow {
   readonly longTasks: { readonly count: number; readonly totalMs: number };
   /** Steps whose expected mark never came. */
   readonly missing: number;
+  /** Each phase the steps timed (`phasesMs`), from the touch. */
+  readonly phases: Readonly<Record<string, Distribution>>;
 }
 
 /** The run's steps summed up per scenario, variant and measure, in the order they first ran. */
@@ -285,8 +308,37 @@ export const summarize = (steps: readonly StepRecord[]): SummaryRow[] => {
         totalMs: round(group.reduce((sum, step) => sum + step.longTasks.totalMs, 0)),
       },
       missing: group.filter((step) => step.expectMissing === true).length,
+      phases: Object.fromEntries(
+        [...new Set(group.flatMap((step) => Object.keys(step.phasesMs ?? {})))].map((phase) => [
+          phase,
+          distribution(
+            group
+              .filter((step) => step.phasesMs !== undefined)
+              .map((step) => step.phasesMs?.[phase] ?? null),
+          ),
+        ]),
+      ),
     };
   });
+};
+
+/**
+ * Each scenario step's phases as a Markdown table: median / p90 ms from the
+ * touch, and how many steps saw the phase. Empty when no step timed a phase.
+ */
+export const formatPhases = (rows: readonly SummaryRow[]): string => {
+  const lines = rows.flatMap((row) =>
+    Object.entries(row.phases).map(
+      ([phase, value]) => `| ${row.key} | ${phase} | ${pair(value)} | ${value.n} |`,
+    ),
+  );
+  return lines.length === 0
+    ? ""
+    : [
+        "| Scenario step | Phase | ms from the touch | Steps |",
+        "| --- | --- | ---: | ---: |",
+        ...lines,
+      ].join("\n");
 };
 
 const pair = (value: Distribution): string =>
@@ -339,6 +391,10 @@ const comparable = (row: SummaryRow): [string, number | null][] => [
   ["frames p99 ms", row.frames.p99Ms],
   ["deadline-miss rate", row.frames.missRate],
   ["long tasks", row.longTasks.count],
+  ...Object.entries(row.phases).flatMap(([phase, value]): [string, number | null][] => [
+    [`${phase} median`, value.median],
+    [`${phase} p90`, value.p90],
+  ]),
   ...Object.entries(row.rendersPerStep).map(([component, count]): [string, number | null] => [
     `renders ${component}`,
     count,

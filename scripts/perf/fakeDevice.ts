@@ -34,9 +34,38 @@ export interface FakeDeviceOptions {
   readonly perfBuild?: boolean;
   /** The tabs on the simulated tab bar, by label. */
   readonly tabs?: readonly string[];
+  /** The phone's API level. */
+  readonly sdk?: number;
+  /** Rules already in the app's saved ART profile. */
+  readonly savedProfile?: readonly string[];
+  /** What profileinstaller answers an install with (ProfileInstaller's result codes). */
+  readonly installResult?: number;
   /** The artist on the simulated Library › Artists list. */
   readonly artist?: string;
 }
+
+// The simulated app's code, as ART profile rules: what a launch runs, what its screens run.
+const LAUNCH_RULES = [
+  "HSPLdev/leoperez/wave/MainActivity;->onCreate(Landroid/os/Bundle;)V",
+  "Ldev/leoperez/wave/MainActivity;",
+  "HSPLcom/facebook/react/ReactInstanceManager;->createReactContext()V",
+  "Lcom/facebook/react/ReactInstanceManager;",
+];
+const SCROLL_RULES = [
+  "PLcom/facebook/react/views/scroll/ReactScrollView;->onTouchEvent(Landroid/view/MotionEvent;)Z",
+  "Lcom/facebook/react/views/scroll/ReactScrollView;",
+];
+const NOW_PLAYING_RULES = [
+  "HPLandroidx/media3/session/MediaController;->getCurrentPosition()J",
+  "Landroidx/media3/session/MediaController;",
+];
+/** The AndroidX library profile the simulated APK ships in assets/dexopt. */
+const APK_BASELINE = [
+  "HSPLandroidx/appcompat/app/AppCompatDelegate;-><clinit>()V",
+  "Landroidx/appcompat/app/AppCompatDelegate;",
+];
+const PROFILE_RESULT = (code: number): string =>
+  `Broadcasting: Intent { flg=0x400000 cmp=dev.leoperez.wave/androidx.profileinstaller.ProfileInstallReceiver }\nBroadcast completed: result=${code}\n`;
 
 export class FakeDevice implements Device {
   readonly serial = "DRYRUN0001";
@@ -50,6 +79,8 @@ export class FakeDevice implements Device {
   private running = false;
   private recorder: PerfRecorder | null = null;
   private routes: string[] = ["/"];
+  /** The tabs visited since the launch: a first visit builds the tab. */
+  private visited = new Set<string>(["Home"]);
   private nowPlaying = false;
   private queue = false;
   private keyboard = false;
@@ -61,10 +92,20 @@ export class FakeDevice implements Device {
   private framesSinceReset = 0;
   private logcat: string[] = [];
   private nextTick = 0;
+  private readonly sdk: number;
+  private readonly installResult: number;
+  /** ART's profile: what ran since the last save, and what is saved on disk. */
+  private pendingRules = new Set<string>();
+  private savedRules: Set<string>;
+  private skipFile = false;
+  private compilation = { status: "speed-profile", reason: "install-dm" };
 
   constructor(options: FakeDeviceOptions = {}) {
     this.perfBuild = options.perfBuild ?? true;
     this.tabs = options.tabs ?? ["Home", "Library", "Playlists", "Search"];
+    this.sdk = options.sdk ?? 36;
+    this.installResult = options.installResult ?? 1;
+    this.savedRules = new Set(options.savedProfile ?? []);
     this.artist = options.artist ?? "Radiohead";
   }
 
@@ -142,7 +183,12 @@ export class FakeDevice implements Device {
 
   private launch(): string {
     this.running = true;
+    this.ran(LAUNCH_RULES);
+    // profileinstaller writes the APK's profile once the app has started, unless told to skip.
+    if (!this.skipFile && this.installResult === 1)
+      for (const rule of APK_BASELINE) this.savedRules.add(rule);
     this.routes = ["/"];
+    this.visited = new Set(["Home"]);
     this.nowPlaying = this.queue = this.keyboard = this.importCard = false;
     this.searchQuery = "";
     this.frames = [];
@@ -187,10 +233,17 @@ export class FakeDevice implements Device {
     const label = node.desc ?? node.text ?? "";
     const tabRoute = TAB_ROUTES[label];
     if (tabRoute !== undefined && node.desc !== undefined) {
+      const first = !this.visited.has(label);
+      this.visited.add(label);
       this.routes = [tabRoute];
+      this.advance(first ? 60 : 20);
+      this.respond("tab.commit", `${label} ${first ? "first" : "warm"}`);
       this.render(this.clock, 30);
-      this.advance(100);
+      this.advance(10);
+      this.respond("tab.layout", label);
+      this.advance(70);
       this.respond("route", tabRoute);
+      this.respond("tab.settled", label);
       if (label === "Search") {
         this.advance(180);
         this.keyboard = true;
@@ -213,6 +266,7 @@ export class FakeDevice implements Device {
       this.respond("artist.stats", "played");
     } else if (label === "Back") this.navigate(null);
     else if (label.startsWith("Now playing:")) {
+      this.ran(NOW_PLAYING_RULES);
       this.nowPlaying = true;
       this.render(this.clock, 40);
       this.advance(16);
@@ -254,6 +308,38 @@ export class FakeDevice implements Device {
     }
   }
 
+  private ran(rules: readonly string[]): void {
+    for (const rule of rules) this.pendingRules.add(rule);
+  }
+
+  /** What profileinstaller's receiver does with a broadcast; answers its result code. */
+  private profileInstaller(action: string, extra: string | undefined): string {
+    switch (action) {
+      case "SAVE_PROFILE":
+        if (!this.running) return PROFILE_RESULT(13);
+        for (const rule of this.pendingRules) this.savedRules.add(rule);
+        this.pendingRules.clear();
+        return PROFILE_RESULT(12);
+      case "SKIP_FILE":
+        this.skipFile = extra === "WRITE_SKIP_FILE";
+        return PROFILE_RESULT(this.skipFile ? 10 : 11);
+      case "INSTALL_PROFILE":
+        if (this.installResult === 1) for (const rule of APK_BASELINE) this.savedRules.add(rule);
+        return PROFILE_RESULT(this.installResult);
+      default:
+        throw new Error(`Dry run: profileinstaller has no action ${action}.`);
+    }
+  }
+
+  /** A finger dragged for [durationMs]: the app draws a frame per refresh while it moves. */
+  private swipe(durationMs: number): void {
+    this.ran(SCROLL_RULES);
+    this.recorder?.touch(this.clock - 4);
+    this.render(this.clock + 8, Math.round(durationMs / INTERVAL));
+    this.recorder?.render("js:drag.end");
+    this.advance(durationMs);
+  }
+
   private back(): void {
     if (this.keyboard) this.keyboard = false;
     else if (this.nowPlaying) this.nowPlaying = this.queue = false;
@@ -267,6 +353,9 @@ export class FakeDevice implements Device {
     if (this.nowPlaying)
       return [
         { desc: "Close Now Playing", bounds: [640, 120, 800, 260] },
+        ...(this.queue
+          ? [{ desc: "Remove Airbag from Up Next", bounds: [1128, 828, 1272, 972] } as Node]
+          : [{ desc: "Playback position", bounds: [96, 2200, 1344, 2296] } as Node]),
         { desc: "Queue", bounds: [1100, 2800, 1240, 2940] },
       ];
     const route = this.route;
@@ -364,16 +453,41 @@ export class FakeDevice implements Device {
 
   private readonly answers: readonly [RegExp, (match: RegExpExecArray) => string][] = [
     [/^input keyevent KEYCODE_WAKEUP$/, () => ""],
-    [/^cmd package compile -m \S+ -f \S+$/, () => "Success\n"],
+    [
+      /^cmd package compile -m (\S+) -f \S+$/,
+      (match) => {
+        this.compilation = { status: match[1] ?? "?", reason: "cmdline" };
+        return "Success\n";
+      },
+    ],
+    [
+      /^cmd package compile --reset \S+$/,
+      () => {
+        this.savedRules.clear();
+        this.pendingRules.clear();
+        this.compilation = { status: "verify", reason: "install" };
+        return "Success\n";
+      },
+    ],
+    [
+      /^am broadcast -a androidx\.profileinstaller\.action\.(\w+)(?: -e EXTRA_SKIP_FILE_OPERATION (\w+))? --include-stopped-packages \S+\/androidx\.profileinstaller\.ProfileInstallReceiver$/,
+      (match) => this.profileInstaller(match[1] ?? "", match[2]),
+    ],
+    [/^pm dump-profiles --dump-classes-and-methods \S+$/, () => ""],
+    [
+      /^cat \/data\/misc\/profman\/\S+-primary\.prof\.txt$/,
+      () => [...this.savedRules].map((rule) => `${rule}\n`).join(""),
+    ],
+    [/^wm size$/, () => "Physical size: 1440x3120\n"],
     [
       /^getprop$/,
       () =>
-        "[ro.product.manufacturer]: [samsung]\n[ro.product.model]: [SM-DRYRUN]\n[ro.build.version.release]: [16]\n[ro.build.version.sdk]: [36]\n[ro.build.fingerprint]: [samsung/dryrun/dryrun:16/DRY/1:user/release-keys]\n",
+        `[ro.product.manufacturer]: [samsung]\n[ro.product.model]: [SM-DRYRUN]\n[ro.build.version.release]: [16]\n[ro.build.version.sdk]: [${this.sdk}]\n[ro.build.fingerprint]: [samsung/dryrun/dryrun:16/DRY/1:user/release-keys]\n`,
     ],
     [
       /^dumpsys package \S+$/,
       () =>
-        "  Package [dev.leoperez.wave] (1):\n    versionCode=503 minSdk=31 targetSdk=36\n    versionName=0.5.3-ti\n    lastUpdateTime=2026-10-16 09:00:00\nDexopt state:\n  [dev.leoperez.wave]\n    path: /data/app/base.apk\n      arm64: [status=speed-profile] [reason=install-dm]\n",
+        `  Package [dev.leoperez.wave] (1):\n    versionCode=503 minSdk=31 targetSdk=36\n    versionName=0.5.3-ti\n    lastUpdateTime=2026-10-16 09:00:00\nDexopt state:\n  [dev.leoperez.wave]\n    path: /data/app/base.apk\n      arm64: [status=${this.compilation.status}] [reason=${this.compilation.reason}]\n`,
     ],
     [
       /^dumpsys display$/,
@@ -385,8 +499,27 @@ export class FakeDevice implements Device {
       (match) => (match[2]?.includes("scale") ? "1.0\n" : "120.0\n"),
     ],
     [/^dumpsys thermalservice$/, () => "Thermal Status: 0\n"],
-    [/^am force-stop \S+$/, () => ((this.running = false), (this.recorder = null), "")],
+    [
+      /^am force-stop \S+$/,
+      () => {
+        // A killed app loses what ART hadn't saved yet.
+        this.pendingRules.clear();
+        this.running = false;
+        this.recorder = null;
+        return "";
+      },
+    ],
     [/^am start -W -S -a android\.intent\.action\.MAIN/, () => this.launch()],
+    [
+      /^am start -W -a android\.intent\.action\.MAIN/,
+      () => {
+        if (!this.running) return this.launch();
+        this.render(this.clock + 20, 20);
+        this.advance(180);
+        return "Starting: Intent { act=android.intent.action.MAIN }\nStatus: ok\nLaunchState: HOT\nActivity: dev.leoperez.wave/.MainActivity\nTotalTime: 164\nWaitTime: 170\nComplete\n";
+      },
+    ],
+    [/^input keyevent 3$/, () => ""],
     [
       /^am start -a android\.intent\.action\.SEND .* \S+$/,
       () => {
@@ -420,6 +553,8 @@ export class FakeDevice implements Device {
     ],
     [/^input keyevent 4$/, () => (this.back(), "")],
     [/^input text '([^']*)'$/, (match) => (this.type(match[1] ?? ""), "")],
+    [/^input swipe -?\d+ -?\d+ -?\d+ -?\d+ (\d+)$/, (match) => (this.swipe(Number(match[1])), "")],
+    [/^wm density$/, () => "Physical density: 480\n"],
     [
       /^dumpsys meminfo \S+$/,
       () =>

@@ -69,6 +69,8 @@ describe("runPerf on the simulated phone", () => {
     const keys = summarize(steps).map((row) => row.key);
     assert.deepEqual(keys, [
       "startup/idle/cold",
+      "warm-start/idle/warm",
+      "tab-first/idle/first",
       "tab-switch/idle/tab",
       "rapid-tabs/idle/burst",
       "push-settings/idle/push",
@@ -86,6 +88,10 @@ describe("runPerf on the simulated phone", () => {
       "queue/idle/open",
       "queue/idle/close",
       "skip/idle/next",
+      "scrub/idle/forward",
+      "scrub/idle/back",
+      "queue-drag/idle/down",
+      "queue-drag/idle/up",
       "search-first-tap/idle/first-tap",
       "search-typing/idle/type",
     ]);
@@ -95,11 +101,58 @@ describe("runPerf on the simulated phone", () => {
       assert.equal(step.expectMissing, false, `${step.scenario} ${step.measure} lost its mark`);
       assert.ok((step.responseMs ?? -1) > 0, `${step.scenario} ${step.measure} has no response`);
     }
-    for (const step of steps.filter((measured) => measured.scenario !== "startup")) {
+    // Launches have no touch to count a first frame from.
+    const launches = new Set(["startup", "warm-start"]);
+    for (const step of steps.filter((measured) => !launches.has(measured.scenario))) {
       assert.ok(step.firstFrameMs !== null, `${step.scenario} ${step.measure} has no first frame`);
       assert.ok(step.frames.total > 0);
     }
     assert.equal(memory.length, ALL_SCENARIOS.length);
+  });
+
+  it("times a tab's commit and layout apart from its frames, on first and warm visits", async () => {
+    const { out } = await runPerf(
+      new FakeDevice(),
+      options("tabs", { scenarios: ["tab-first", "tab-switch", "rapid-tabs"] }),
+    );
+    const { steps } = readResults(readFileSync(out, "utf8"));
+    for (const step of steps.filter((tab) => tab.scenario !== "rapid-tabs")) {
+      assert.ok((step.phasesMs?.["tab.commit"] ?? -1) > 0, `${step.scenario} has no commit`);
+      assert.ok((step.phasesMs?.["tab.layout"] ?? -1) > 0, `${step.scenario} has no layout`);
+    }
+    // A burst counts from its last tap to the tabs settling on the tab it tapped.
+    const bursts = steps.filter((step) => step.scenario === "rapid-tabs");
+    assert.ok(bursts.length > 0);
+    for (const step of bursts) assert.equal(step.expectMissing, false);
+  });
+
+  it("compiles with only the APK's shipped profile first when asked for the baseline state", async () => {
+    const { out } = await runPerf(
+      new FakeDevice({ savedProfile: ["Lcom/example/Learned;"] }),
+      options("baseline", { scenarios: ["startup"], compile: "baseline" }),
+    );
+    const { run } = readResults(readFileSync(out, "utf8"));
+    assert.deepEqual(run?.compilation, { status: "speed-profile", reason: "cmdline" });
+    // The simulated APK ships two rules (one class, one method); what the phone learned is gone.
+    assert.deepEqual(run?.artProfile, { install: "INSTALL_SUCCESS", classes: 1, methods: 1 });
+  });
+
+  it("drags in dp from its target, at the phone's density", async () => {
+    const device = new FakeDevice();
+    await runPerf(device, options("drag", { scenarios: ["scrub", "queue-drag"], iterations: 1 }));
+    const swipes = device.commands.filter((command) => command.startsWith("input swipe"));
+    // The simulated phone draws 3 px a dp. Its scrubber is centred at (720, 2248), and
+    // the first Up Next row's Remove button at (1200, 900), with the handle 48 dp right of it.
+    // A warm-up iteration, then the measured one, for each scenario.
+    assert.equal(swipes.length, 8);
+    assert.deepEqual(swipes.slice(0, 2), [
+      "input swipe 360 2248 1080 2248 1000",
+      "input swipe 1080 2248 360 2248 1000",
+    ]);
+    assert.deepEqual(swipes.slice(-2), [
+      "input swipe 1344 900 1344 1404 800",
+      "input swipe 1344 1404 1344 900 800",
+    ]);
   });
 
   it("times cold launches", async () => {
@@ -108,6 +161,16 @@ describe("runPerf on the simulated phone", () => {
       launch?: { totalTimeMs: number };
     })[];
     assert.equal(launch?.launch?.totalTimeMs, 742);
+  });
+
+  it("times warm launches back from the home screen, the process still alive", async () => {
+    const { out } = await runPerf(new FakeDevice(), options("warm", { scenarios: ["warm-start"] }));
+    const { steps, errors } = readResults(readFileSync(out, "utf8"));
+    assert.deepEqual(errors, []);
+    const launches = (steps as (StepRecord & { launch?: { launchState: string } })[]).map(
+      (step) => step.launch?.launchState,
+    );
+    assert.deepEqual(launches, ["HOT", "HOT"]);
   });
 
   it("runs the import first in the import variant, and every step reports its progress", async () => {

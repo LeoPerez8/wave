@@ -27,8 +27,9 @@ export interface ScrubTouch {
   readonly durationMs: number;
 }
 
-/** The position a finger on the scrubber points at. */
+/** The position a finger on the scrubber points at. Runs on the UI thread too (a worklet). */
 export const scrubPosition = ({ x, width, durationMs }: ScrubTouch): number => {
+  "worklet";
   if (width <= 0) return 0;
   return Math.min(1, Math.max(0, x / width)) * durationMs;
 };

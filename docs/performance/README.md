@@ -42,7 +42,11 @@ node scripts/perf/perf.ts run --dry-run             # the whole pipeline on a si
 - `--apk <file>`: installs the APK first (`adb install -r`) and records its SHA-256.
 - `--commit <sha>`: the APK's commit when it can't say itself. A perf build reports its own.
 - `--compile <filter>`: sets the ART compiler filter first (`cmd package compile -m <filter> -f`),
-  e.g. `speed-profile` or `verify`. #317 uses this.
+  e.g. `speed-profile` or `verify`. `--compile baseline` clears what the phone learned, has
+  profileinstaller install the profile the APK ships, then compiles `speed-profile`: the state a
+  fresh sideload reaches once the phone's idle compile has run. The run records profileinstaller's
+  result and the profile's size (`artProfile`). Use it whenever before and after ship different
+  profiles (#317).
 - `--import-link <url>`: overrides the fixture's playlist link.
 - `--artist <name>`: overrides the fixture's artist (`push-artist`).
 - `--meta key=value`: records a value as given. On a plain APK, pass the Library's size this way
@@ -71,6 +75,11 @@ rm -rf app/build/generated/assets/react      # Gradle doesn't see env changes: f
 EXPO_PUBLIC_WAVE_PERF=1 EXPO_PUBLIC_WAVE_COMMIT=$(git rev-parse --short HEAD) \
   ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a
 ```
+
+For a **stall build**, add `EXPO_PUBLIC_WAVE_PERF_STALL_MS=<ms>`: every touch then blocks the
+JavaScript thread that long (a busy loop in the root view's touch handler), a controlled stand-in
+for an import's work. What still moves in the window is what doesn't wait for JavaScript. The
+run's `app` metadata records it as `stallMs` (0 in a plain perf build).
 
 Delete Metro's cache too (`$TMPDIR/metro-cache`) when switching between perf and plain builds. The
 run's first line says whether the app on the phone is a perf build. A perf build has the same
@@ -116,22 +125,26 @@ launch, the share, the import's idle window and typed keys have no touch. A typi
 from the app's mark for the first key instead (its `from` mark), so its latencies start when
 JavaScript saw that key, not when it was pressed.
 
-| Scenario           | Steps (measure)                                                                     | Response mark             | Iterations |
-| ------------------ | ----------------------------------------------------------------------------------- | ------------------------- | ---------: |
-| `startup`          | cold launch (`cold`)                                                                | (am start -W)             |          5 |
-| `tab-switch`       | ten tab taps cycling through `tabs` (`tab`)                                         | `route`                   |          3 |
-| `rapid-tabs`       | ten tab taps back to back, measured from the last (`burst`)                         | `route`                   |          5 |
-| `push-settings`    | Home › Settings (`push`), Back (`pop`)                                              | `route`                   |         10 |
-| `push-library`     | Library › Albums (`push`), Back (`pop`)                                             | `route`                   |         10 |
-| `push-tracklist`   | Library › Songs, the whole Library as a Track list (`push`), Back (`pop`)           | `route`                   |         10 |
-| `push-artist`      | Library › Artists › the fixture's artist, to its stats block (`push`), Back (`pop`) | `artist.stats`, `route`   |         10 |
-| `push-empty`       | Settings › Developer, one row: the empty-screen control (`push`, `pop`)             | `route`                   |         10 |
-| `now-playing`      | mini player (`open`), Close Now Playing (`close`)                                   | `nowPlaying.shown/hidden` |         10 |
-| `queue`            | Queue in Now Playing (`open`), Queue again (`close`)                                | `visible` queue           |         10 |
-| `skip`             | the mini player's Next track (`next`)                                               | `queue.synced`            |         10 |
-| `search-first-tap` | the first Search tap after a fresh launch (`first-tap`)                             | `keyboard.show`           |          5 |
-| `search-typing`    | after a Search tap, types `love` (`type`), from `search.typed`; Clear search after  | `search.results` love     |         10 |
-| `import`           | share the link (`card`), tap Import (`start`), 10 s of the import (`during-import`) | `import.running`          |          1 |
+| Scenario           | Steps (measure)                                                                      | Response mark             | Iterations |
+| ------------------ | ------------------------------------------------------------------------------------ | ------------------------- | ---------: |
+| `startup`          | cold launch (`cold`)                                                                 | (am start -W)             |          5 |
+| `warm-start`       | Home, then Wave's launcher intent with its process alive (`warm`)                    | (am start -W)             |          5 |
+| `tab-first`        | after a fresh launch, the first visit to each of `tabs` but Home (`first`)           | `route`                   |          5 |
+| `tab-switch`       | ten tab taps cycling through `tabs` (`tab`): warm visits                             | `route`                   |          3 |
+| `rapid-tabs`       | ten tab taps back to back, measured from the last (`burst`)                          | `tab.settled` (last tab)  |          5 |
+| `push-settings`    | Home › Settings (`push`), Back (`pop`)                                               | `route`                   |         10 |
+| `push-library`     | Library › Albums (`push`), Back (`pop`)                                              | `route`                   |         10 |
+| `push-tracklist`   | Library › Songs, the whole Library as a Track list (`push`), Back (`pop`)            | `route`                   |         10 |
+| `push-artist`      | Library › Artists › the fixture's artist, to its stats block (`push`), Back (`pop`)  | `artist.stats`, `route`   |         10 |
+| `push-empty`       | Settings › Developer, one row: the empty-screen control (`push`, `pop`)              | `route`                   |         10 |
+| `now-playing`      | mini player (`open`), Close Now Playing (`close`)                                    | `nowPlaying.shown/hidden` |         10 |
+| `queue`            | Queue in Now Playing (`open`), Queue again (`close`)                                 | `visible` queue           |         10 |
+| `skip`             | the mini player's Next track (`next`)                                                | `queue.synced`            |         10 |
+| `scrub`            | Now Playing's scrubber dragged 240 dp forward (`forward`), then back (`back`)        | (none)                    |         10 |
+| `queue-drag`       | The first Up Next row dragged three rows down by its handle (`down`), then up (`up`) | (none)                    |         10 |
+| `search-first-tap` | the first Search tap after a fresh launch (`first-tap`)                              | `keyboard.show`           |          5 |
+| `search-typing`    | after a Search tap, types `love` (`type`), from `search.typed`; Clear search after   | `search.results` love     |         10 |
+| `import`           | share the link (`card`), tap Import (`start`), 10 s of the import (`during-import`)  | `import.running`          |          1 |
 
 `skip` measures how long a skip takes to reach the player, so it depends on the queue's length:
 load the queue under test before the run (a short album, or the whole Library as Songs) and leave
@@ -139,6 +152,17 @@ it paused. Each iteration moves one entry on, so start far enough from the end.
 
 `push-empty` is the control: navigation with next to nothing to render. If it's as slow as
 `push-settings`, the cost is in navigation itself, not in what the screen shows.
+
+`tab-first` and `tab-switch` compare a tab's first visit (built for it) with its warm visits
+(kept mounted). Both time the tab's phases (below). `rapid-tabs` counts from the last tap to
+`tab.settled` on the tab tapped last, so a burst that ends anywhere else counts as missing.
+
+`scrub` and `queue-drag` are drags (`input swipe`), given in dp from a target's centre and turned
+into pixels at the phone's density (`wm density`). Each scrub seeks where it lets go. The queue
+drag starts at the first row's handle (48 dp right of its Remove button: the handles are hidden
+from accessibility) and needs four songs up next; the second drag puts the row back. A drag has
+no response mark: compare its frames, first frame and settle, and the renders and `js:` counts
+(below).
 
 ### Variants
 
@@ -164,23 +188,25 @@ position. Then, for each step:
 Times line up because `performance.now()`, a touch's native timestamp and gfxinfo's frame
 timestamps all use Android's CLOCK_MONOTONIC.
 
-| Metric         | Meaning                                                                                                                                          | Needs a perf build |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | :----------------: |
-| `firstFrameMs` | Touch to the first frame that finished rendering after it: the **first visible response**. The frame reaches the screen about one refresh later. |        yes         |
-| `responseMs`   | Touch to the step's response mark: **navigation latency** (`route`), **keyboard latency** (`keyboard.show`), Now Playing or Queue shown.         |        yes         |
-| `settleMs`     | Touch to the last frame before 250 ms without frames: when the transition finished.                                                              |        yes         |
-| `burstMs`      | First to last frame of that burst. The only latency a plain APK gives.                                                                           |         no         |
-| `inputToJsMs`  | Touch to JavaScript's touch handler: input delayed by a busy JS thread.                                                                          |        yes         |
-| `frames`       | Frames rendered in the window, deadline misses, jank counters (slow UI thread, high input latency), the frame-time histogram.                    |         no         |
-| `renders`      | Renders per instrumented component in the step.                                                                                                  |        yes         |
-| `longTasks`    | Long tasks React Native reported in the step, when it reports them.                                                                              |        yes         |
-| `launch`       | `am start -W`: `TotalTime`, `WaitTime`, launch state. A perf build adds React Native's startup timings.                                          |         no         |
-| memory         | `dumpsys meminfo` after each scenario plus `memoryIdleMs` idle: PSS, RSS, Java and native heap, graphics.                                        |         no         |
+| Metric         | Meaning                                                                                                                                           | Needs a perf build |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | :----------------: |
+| `firstFrameMs` | Touch to the first frame that finished rendering after it: the **first visible response**. The frame reaches the screen about one refresh later.  |        yes         |
+| `responseMs`   | Touch to the step's response mark: **navigation latency** (`route`), **keyboard latency** (`keyboard.show`), Now Playing or Queue shown.          |        yes         |
+| `settleMs`     | Touch to the last frame before 250 ms without frames: when the transition finished.                                                               |        yes         |
+| `burstMs`      | First to last frame of that burst. The only latency a plain APK gives.                                                                            |         no         |
+| `inputToJsMs`  | Touch to JavaScript's touch handler: input delayed by a busy JS thread.                                                                           |        yes         |
+| `frames`       | Frames rendered in the window, deadline misses, jank counters (slow UI thread, high input latency), the frame-time histogram.                     |         no         |
+| `renders`      | Renders per instrumented component in the step.                                                                                                   |        yes         |
+| `phasesMs`     | Touch to the first mark of each phase the step names (`phases` in `scenarios.ts`), e.g. a tab's `tab.commit` and `tab.layout`. Null if none came. |        yes         |
+| `longTasks`    | Long tasks React Native reported in the step, when it reports them.                                                                               |        yes         |
+| `launch`       | `am start -W`: `TotalTime`, `WaitTime`, launch state. A perf build adds React Native's startup timings.                                           |         no         |
+| memory         | `dumpsys meminfo` after each scenario plus `memoryIdleMs` idle: PSS, RSS, Java and native heap, graphics.                                         |         no         |
 
 `summary` reports each latency as median / 90th percentile, the frames' pooled 50th, 90th and
 99th percentiles and the share that missed their deadline. `Missing` counts steps whose response
 mark never came, which means the step didn't do what it should (a wrong target, an error on
-screen).
+screen). Steps with phases get a second table, each phase's median / p90 from the touch;
+`compare` lines up their medians and p90s too.
 
 Limits:
 
@@ -238,9 +264,10 @@ measured. Records, in order:
 `apps/mobile/src/perf/perf.ts`:
 
 ```ts
-import { perfMark, registerPerfMeta, usePerfVisible, useRenderCount } from "@/perf/perf";
+import { perfCount, perfMark, registerPerfMeta, usePerfVisible, useRenderCount } from "@/perf/perf";
 
 useRenderCount("UpNextList"); // first line of a component: counts its renders
+perfCount("scrub.release"); // counts a call a gesture made to JavaScript, reported as renders of `js:scrub.release`
 usePerfVisible("queue"); // marks `visible` "queue" on the first frame after mount
 perfMark("import.running", String(total)); // a timing mark, name `area.event`, optional detail
 registerPerfMeta("import", () => ({ done, total })); // reported with each flush
@@ -260,6 +287,11 @@ ticket needs evidence, and give a new response mark a scenario step's `expect` i
 - `nowPlaying.shown`, `nowPlaying.hidden`;
 - `visible` "queue" (Up Next mounted);
 - `import.running` (songs in the import), `import.idle`;
+- `tab.commit` (`<tab> first|warm`), in the layout effect of the commit that shows a tab: React
+  is done with the switch. `first` means the tab was built for it, `warm` that it was kept;
+- `tab.layout` (tab), when the shown tab's screen gets a new layout. None when showing it changes
+  no layout (`keep-layout`, #304);
+- `tab.settled` (the tab's label), when a tab shows with no tab switch left on its way;
 - `queue.synced` (the plan's step types and the queue's length, e.g. `seek 4210`), each time the
   player took a queue change;
 - `artist.stats` ("played" or "not played"), on the frame after an artist page's stats block
@@ -275,9 +307,12 @@ Search's index counters (Core's `SearchCatalogStats`, #306) come the same way, a
 flush and `search` on each step: `entries` in the index, `prepared` (entries prepared since launch;
 a source given again unchanged prepares none) and `indexes` put together.
 
+The `tabs` metadata (first flush) names how hidden tabs are kept (`tabs.screens`, #304).
+
 Render counts are in RootLayout, TabsLayout, LibraryLayout, TabBar, MiniPlayer, NowPlayingSheet,
-PlayerView, UpNextList, HomeScreen, LibraryScreen, SearchScreen, SettingsScreen, LargeTitleScreen
-(Home's and Library's), SongsList, TrackList and ArtistStatsBlock.
+PlayerView, UpNextList, UpNextRow, Scrubber, HomeScreen, LibraryScreen, SearchScreen,
+SettingsScreen, LargeTitleScreen (Home's and Library's), SongsList, TrackList and ArtistStatsBlock.
+Gesture calls to JavaScript are counted as `js:scrub.*` and `js:upNext.*` (#313).
 
 A new scenario goes in `SCENARIOS` (`scripts/perf/scenarios.ts`). Then make the simulated phone in
 `fakeDevice.ts` answer it, so `--dry-run` and the tests cover it.
@@ -302,6 +337,12 @@ In the Wave process:
 To find a step's touch in the trace, look up its `touchAt` (CLOCK_MONOTONIC ms) in the results.
 Perfetto shows boot time by default, which runs ahead of the monotonic clock by the time the phone
 spent in deep sleep. Line them up on the `deliverInputEvent` slice for that tap.
+
+## ART profiles
+
+`perf.ts profile` generates Wave's Baseline and Startup Profiles on the phone, checks that an APK
+ships them, and reads what ART holds for Wave. See
+[317-android-profiles.md](317-android-profiles.md) for the commands and when to refresh them.
 
 ## Validating the runner without a phone
 
