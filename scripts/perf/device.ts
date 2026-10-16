@@ -206,9 +206,7 @@ export const parseThermalStatus = (text: string): number | null =>
 
 /** What the runner taps, found in a `uiautomator dump`. */
 export type Target =
-  | { readonly desc: string }
-  | { readonly descPrefix: string }
-  | { readonly text: string };
+  { readonly desc: string } | { readonly descPrefix: string } | { readonly text: string };
 
 const decode = (value: string): string =>
   value
