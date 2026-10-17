@@ -35,6 +35,12 @@ class FreezeWatchTest {
   @After
   fun stop() = WaveLog.writeTo(null)
 
+  /** The log once the entries queued so far are written. */
+  private fun logged(): String {
+    WaveLog.flush()
+    return file.read()
+  }
+
   /** The watched thread runs what was posted to it. */
   private fun threadRuns() {
     while (queue.isNotEmpty()) queue.removeFirst().run()
@@ -55,7 +61,7 @@ class FreezeWatchTest {
     js.tick()
     ticks(js, until = 20_000, responsive = true)
 
-    assertEquals("", file.read())
+    assertEquals("", logged())
   }
 
   @Test
@@ -69,7 +75,7 @@ class FreezeWatchTest {
     assertEquals(
       "2026-10-16T14:03:25.000Z W freeze: The JS thread has not responded for 3.0 s (screen: /library/artists)\n" +
         "2026-10-16T14:03:27.000Z W freeze: The JS thread responded again after 5.0 s (screen: /library/artists)\n",
-      file.read(),
+      logged(),
     )
   }
 
@@ -83,7 +89,7 @@ class FreezeWatchTest {
     assertEquals(
       "2026-10-16T14:03:25.000Z W freeze: The main thread has not responded for 3.0 s\n" +
         "  at expo.modules.wavenative.scan.LibraryScanner.scan(LibraryScanner.kt:88)\n",
-      file.read(),
+      logged(),
     )
   }
 
@@ -96,7 +102,7 @@ class FreezeWatchTest {
     ticks(js, until = 12_000, responsive = true)
     ticks(js, until = 18_000, responsive = false)
 
-    val lines = file.read().lines().filter { it.isNotEmpty() }
+    val lines = logged().lines().filter { it.isNotEmpty() }
     assertEquals(
       listOf(
         "2026-10-16T14:03:25.000Z W freeze: The JS thread has not responded for 3.0 s (screen: /library/artists)",
@@ -117,6 +123,6 @@ class FreezeWatchTest {
     threadRuns()
     ticks(js, until = 70_000, responsive = true)
 
-    assertEquals("", file.read())
+    assertEquals("", logged())
   }
 }

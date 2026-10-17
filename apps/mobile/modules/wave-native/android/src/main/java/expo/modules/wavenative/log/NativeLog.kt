@@ -1,8 +1,11 @@
 package expo.modules.wavenative.log
 
+import android.app.Activity
 import android.app.ActivityManager
+import android.app.Application
 import android.app.ApplicationExitInfo
 import android.content.Context
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.Process
@@ -10,7 +13,8 @@ import android.os.SystemClock
 import com.facebook.react.bridge.ReactContext
 import expo.modules.wavenative.log.SessionRecord.Exit
 import expo.modules.wavenative.log.SessionRecord.ExitReason
-import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import kotlin.system.exitProcess
 
 /**
@@ -18,8 +22,8 @@ import kotlin.system.exitProcess
  * Application.onCreate (`WaveNativePackage`), before any JS: [WaveLog] writes to
  * the file, an uncaught exception is written before the process dies, the
  * launch says how the previous session ended ([SessionRecord], Android's
- * `ApplicationExitInfo`), and a watchdog notes when the main thread or the JS
- * thread stops responding ([FreezeWatch]).
+ * `ApplicationExitInfo`), and, while Wave is on screen, a watchdog notes when
+ * the main thread or the JS thread stops responding ([FreezeWatchdog]).
  */
 object NativeLog {
   /** How long a thread may not respond before it's a freeze. */
@@ -35,7 +39,16 @@ object NativeLog {
   /** The screen showing (the JS route), for a freeze's entry. Set from JS. */
   @Volatile var screen: String? = null
 
-  private val watches = CopyOnWriteArrayList<FreezeWatch>()
+  /** Ticks on a thread of its own, created the first time Wave shows. */
+  private val ticker by lazy {
+    Executors.newSingleThreadScheduledExecutor { tick -> Thread(tick, "WaveFreezeWatch").apply { isDaemon = true } }
+  }
+
+  private val watchdog = FreezeWatchdog { tick ->
+    val ticking = ticker.scheduleWithFixedDelay(tick, TICK_MS, TICK_MS, TimeUnit.MILLISECONDS)
+    ({ ticking.cancel(false) })
+  }
+
   private var started = false
 
   @Synchronized
@@ -48,34 +61,34 @@ object NativeLog {
     catchUncaught(record)
     Thread({ record.reportPrevious(exits(app)) }, "WaveLogLaunch").start()
     val main = Handler(Looper.getMainLooper())
-    watch(FreezeWatch("main", FREEZE_MS, SystemClock::uptimeMillis, main::post, { screen }, ::mainThreadStack))
-    Thread(::watchdog, "WaveFreezeWatch").apply { isDaemon = true }.start()
+    watchdog.watch(FreezeWatch("main", FREEZE_MS, SystemClock::uptimeMillis, main::post, { screen }, ::mainThreadStack))
+    (app as? Application)?.registerActivityLifecycleCallbacks(OnScreen)
+    // Started late, by the JS module (a host that didn't dispatch Application.onCreate): Wave's activity already started.
+    if ((context as? ReactContext)?.hasCurrentActivity() == true) watchdog.activityStarted()
   }
 
   /** Watches the JS thread of [react] until the returned function is called. */
   fun watchJs(react: ReactContext): () -> Unit {
     // Until React Native has set up its JS queue, a ping isn't posted and the next tick tries again.
     val post = { ping: Runnable -> runCatching { react.runOnJSQueueThread(ping) }.getOrDefault(false) }
-    return watch(FreezeWatch("JS", FREEZE_MS, SystemClock::uptimeMillis, post, { screen }))
+    return watchdog.watch(FreezeWatch("JS", FREEZE_MS, SystemClock::uptimeMillis, post, { screen }))
   }
 
-  private fun watch(watch: FreezeWatch): () -> Unit {
-    watches.add(watch)
-    return { watches.remove(watch) }
-  }
+  /** Tells the watchdog when Wave's activities start and stop, so it runs only while Wave is on screen. */
+  private object OnScreen : Application.ActivityLifecycleCallbacks {
+    override fun onActivityStarted(activity: Activity) = watchdog.activityStarted()
 
-  private fun watchdog() {
-    while (true) {
-      try {
-        Thread.sleep(TICK_MS)
-        for (watch in watches) watch.tick()
-      } catch (_: InterruptedException) {
-        return
-      } catch (error: Exception) {
-        WaveLog.w(FreezeWatch.TAG, "The freeze watch failed", error)
-        return
-      }
-    }
+    override fun onActivityStopped(activity: Activity) = watchdog.activityStopped()
+
+    override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
+
+    override fun onActivityResumed(activity: Activity) = Unit
+
+    override fun onActivityPaused(activity: Activity) = Unit
+
+    override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
+
+    override fun onActivityDestroyed(activity: Activity) = Unit
   }
 
   private fun catchUncaught(record: SessionRecord) {

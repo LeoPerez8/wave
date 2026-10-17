@@ -85,46 +85,147 @@ const describeError = (error: Error, depth: number): string => {
   return `${withComponents}\nCaused by: ${described}`;
 };
 
-const toJson = (value: object): string => {
-  const seen = new WeakSet<object>();
-  try {
-    return (
-      JSON.stringify(value, (_, inner: unknown) => {
-        if (typeof inner === "bigint") return inner.toString();
-        if (typeof inner === "object" && inner !== null) {
-          if (seen.has(inner)) return "[circular]";
-          seen.add(inner);
-        }
-        return inner;
-      }) ?? String(value)
-    );
-  } catch {
-    return String(value);
+/** How deep an object's JSON goes; an object or array nested deeper shows as `{…}` or `[…]`. */
+const MAX_JSON_DEPTH = 8;
+
+/** JSON written up to `limit` characters; `full` once something didn't fit. */
+interface JsonOut {
+  text: string;
+  readonly limit: number;
+  full: boolean;
+}
+
+const put = (out: JsonOut, text: string): void => {
+  if (out.full) return;
+  const room = out.limit - out.text.length;
+  if (text.length > room) {
+    out.text += text.slice(0, room);
+    out.full = true;
+  } else {
+    out.text += text;
   }
 };
+
+/** What JSON.stringify writes for `value`: its `toJSON()`, a boxed primitive's value. */
+const jsonValue = (value: unknown, key: string): unknown => {
+  if (typeof value !== "object" || value === null) return value;
+  const toJSON: unknown = (value as { toJSON?: unknown }).toJSON;
+  if (typeof toJSON === "function") return jsonValue(toJSON.call(value, key), key);
+  if (value instanceof Number || value instanceof String || value instanceof Boolean) {
+    return value.valueOf();
+  }
+  return value;
+};
+
+/** What JSON.stringify leaves out of an object (and writes as `null` in an array). */
+const leftOut = (value: unknown): boolean =>
+  value === undefined || typeof value === "function" || typeof value === "symbol";
+
+/**
+ * Writes `value` (already through `jsonValue`) as JSON.stringify would, with a
+ * bigint as a string and an object inside itself as `"[circular]"`, and stops
+ * reading it once `out` is full.
+ */
+const putJson = (out: JsonOut, value: unknown, parents: object[]): void => {
+  if (out.full) return;
+  if (value === null || leftOut(value)) return put(out, "null");
+  if (typeof value === "string") return put(out, JSON.stringify(value.slice(0, out.limit)));
+  if (typeof value === "number") return put(out, Number.isFinite(value) ? String(value) : "null");
+  if (typeof value === "bigint") return put(out, `"${value.toString()}"`);
+  if (typeof value !== "object") return put(out, String(value));
+  if (parents.includes(value)) return put(out, '"[circular]"');
+  const isArray = Array.isArray(value);
+  if (parents.length >= MAX_JSON_DEPTH) return put(out, isArray ? "[…]" : "{…}");
+  parents.push(value);
+  if (isArray) {
+    put(out, "[");
+    for (let i = 0; i < value.length && !out.full; i++) {
+      if (i > 0) put(out, ",");
+      putJson(out, jsonValue(value[i], String(i)), parents);
+    }
+    put(out, "]");
+  } else {
+    put(out, "{");
+    let first = true;
+    for (const key in value) {
+      if (out.full) break;
+      if (!Object.prototype.hasOwnProperty.call(value, key)) continue;
+      const inner = jsonValue((value as Record<string, unknown>)[key], key);
+      if (leftOut(inner)) continue;
+      put(out, `${first ? "" : ","}${JSON.stringify(key)}:`);
+      first = false;
+      putJson(out, inner, parents);
+    }
+    put(out, "}");
+  }
+  parents.pop();
+};
+
+/**
+ * `value` as JSON, at most `limit` characters of it: it's read only as far as
+ * that, so a huge object costs no more than a small one. `complete` is false
+ * when it was cut.
+ */
+const toJson = (value: object, limit: number): { text: string; complete: boolean } => {
+  const out: JsonOut = { text: "", limit, full: false };
+  try {
+    const resolved = jsonValue(value, "");
+    if (leftOut(resolved)) return { text: String(value), complete: true };
+    putJson(out, resolved, []);
+    return { text: out.text, complete: !out.full };
+  } catch {
+    return { text: String(value), complete: true };
+  }
+};
+
+const isJsonObject = (value: unknown): value is object =>
+  typeof value === "object" && value !== null && !(value instanceof Error);
 
 const describeValue = (value: unknown): string => {
   if (typeof value === "string") return value;
   if (value instanceof Error) return describeError(value, 0);
-  if (typeof value === "object" && value !== null) return toJson(value);
+  if (isJsonObject(value)) return toJson(value, MAX_MESSAGE_CHARS + 1).text;
   if (typeof value === "function") return `[function ${value.name || "anonymous"}]`;
   return String(value);
 };
+
+const WAVE_PREFIX = "[wave] ";
 
 /**
  * The message for what a `console.warn` or `console.error` call was given:
  * each argument described (a string as is, an error by its stack and causes,
  * an object as JSON), joined by spaces, without Wave's `[wave] ` prefix, and
- * cut short past a few thousand characters.
+ * cut short past a few thousand characters. An object is read only as far as
+ * the message goes.
  */
 export const describeLogArgs = (args: readonly unknown[]): string => {
-  const message = args
-    .map(describeValue)
-    .join(" ")
-    .replace(/^\[wave\] /, "");
+  // Past this many characters, the message is cut wherever the prefix was.
+  const limit = MAX_MESSAGE_CHARS + WAVE_PREFIX.length + 1;
+  let message = "";
+  // Characters past the limit, when every one was counted.
+  let more = 0;
+  let uncounted = false;
+  const add = (text: string): void => {
+    const room = Math.max(0, limit - message.length);
+    message += text.length > room ? text.slice(0, room) : text;
+    more += Math.max(0, text.length - room);
+  };
+  args.forEach((arg, index) => {
+    if (index > 0) add(" ");
+    if (!isJsonObject(arg)) return add(describeValue(arg));
+    const room = limit - message.length;
+    if (room <= 0) {
+      uncounted = true;
+      return;
+    }
+    const json = toJson(arg, room);
+    add(json.text);
+    if (!json.complete) uncounted = true;
+  });
+  if (message.startsWith(WAVE_PREFIX)) message = message.slice(WAVE_PREFIX.length);
   if (message.length <= MAX_MESSAGE_CHARS) return message;
-  const more = message.length - MAX_MESSAGE_CHARS;
-  return `${message.slice(0, MAX_MESSAGE_CHARS)}… (${more} more characters)`;
+  const cut = uncounted ? "cut short" : `${message.length - MAX_MESSAGE_CHARS + more} more characters`;
+  return `${message.slice(0, MAX_MESSAGE_CHARS)}… (${cut})`;
 };
 
 /** How big the log may grow, and what trimming it brings it down to, in UTF-8 bytes. */

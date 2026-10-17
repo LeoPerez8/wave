@@ -23,11 +23,17 @@ class WaveLogTest {
   @After
   fun stop() = WaveLog.writeTo(null)
 
+  /** The log once the entries queued so far are written. */
+  private fun logged(): String {
+    WaveLog.flush()
+    return file.read()
+  }
+
   @Test
   fun aWarningGoesInTheLogUnderItsTag() {
     WaveLog.w("WaveDownloads", "A YouTube transfer failed (http 403)")
 
-    assertEquals("2026-10-16T14:03:22.415Z W WaveDownloads: A YouTube transfer failed (http 403)\n", file.read())
+    assertEquals("2026-10-16T14:03:22.415Z W WaveDownloads: A YouTube transfer failed (http 403)\n", logged())
   }
 
   @Test
@@ -40,6 +46,19 @@ class WaveLogTest {
       "2026-10-16T14:03:22.415Z I WaveAuto: Auto connected\n" +
         "2026-10-16T14:03:22.415Z E WaveResume: Couldn't read the resume snapshot\n" +
         "2026-10-16T14:03:22.415Z F crash: Wave stopped\n",
+      logged(),
+    )
+  }
+
+  @Test
+  fun aFatalEntryIsInTheFileWhenTheCallReturnsWithWhatCameBefore() {
+    WaveLog.w("WaveAuto", "Auto disconnected")
+
+    WaveLog.f("crash", "Uncaught exception in thread main")
+
+    assertEquals(
+      "2026-10-16T14:03:22.415Z W WaveAuto: Auto disconnected\n" +
+        "2026-10-16T14:03:22.415Z F crash: Uncaught exception in thread main\n",
       file.read(),
     )
   }
@@ -50,7 +69,7 @@ class WaveLogTest {
 
     WaveLog.w("WaveResume", "Couldn't save the resume snapshot", error)
 
-    val lines = file.read().trimEnd('\n').split("\n")
+    val lines = logged().trimEnd('\n').split("\n")
     assertEquals("2026-10-16T14:03:22.415Z W WaveResume: Couldn't save the resume snapshot", lines[0])
     assertEquals("  java.lang.IllegalStateException: disk full", lines[1])
     assertTrue(lines[2], lines[2].startsWith("  \tat expo.modules.wavenative.log.WaveLogTest."))
@@ -80,7 +99,7 @@ class WaveLogTest {
     )
     for ((message, secret) in secrets) {
       WaveLog.w("WaveYtPoToken", message)
-      val written = file.read()
+      val written = logged()
       assertFalse(written, written.contains(secret))
       assertTrue(written, written.contains("[redacted]"))
       file.dropHead(Long.MAX_VALUE)
@@ -94,7 +113,7 @@ class WaveLogTest {
 
     WaveLog.w("WaveDownloads", message)
 
-    assertEquals("2026-10-16T14:03:22.415Z W WaveDownloads: $message\n", file.read())
+    assertEquals("2026-10-16T14:03:22.415Z W WaveDownloads: $message\n", logged())
   }
 
   @Test
@@ -103,6 +122,6 @@ class WaveLogTest {
 
     WaveLog.w("WaveDownloads", "nobody hears this")
 
-    assertEquals("", file.read())
+    assertEquals("", logged())
   }
 }
