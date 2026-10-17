@@ -50,14 +50,20 @@ export interface YtPlaylistReadOptions<S extends YtSong> {
   readonly onPage?: (playlist: YtPlaylist<S>, done: boolean) => void;
   /** Once aborted, no more page is asked for and the read rejects. */
   readonly signal?: AbortSignal;
+  /**
+   * Reads past `YT_PLAYLIST_SONG_CAP` and `YT_PLAYLIST_PAGE_CAP` to the last
+   * page (Liked Songs). A token already followed, or a page of nothing but
+   * songs already read, still ends it, so pages that never end can't read forever.
+   */
+  readonly uncapped?: boolean;
 }
 
 /**
  * Reads a whole playlist: its first page ([first]), then each page its token
  * leads to ([more]) until the last, `YT_PLAYLIST_SONG_CAP` songs or
  * `YT_PLAYLIST_PAGE_CAP` pages, whichever comes first (`truncated` then says
- * so). A song listed twice is kept once, at its first place. A page that
- * fails rejects the whole read, so it never resolves with part of a playlist
+ * so), or, `uncapped`, until the last. A song listed twice is kept once, at
+ * its first place. A page that fails rejects the whole read, so it never resolves with part of a playlist
  * that looks complete; [onPage] has heard the pages before it.
  */
 export const readYtPlaylist = async <S extends YtSong>(
@@ -65,19 +71,25 @@ export const readYtPlaylist = async <S extends YtSong>(
   more: (continuation: string) => Promise<YtPlaylistPage<S>>,
   options: YtPlaylistReadOptions<S> = {},
 ): Promise<YtPlaylist<S>> => {
-  const { onPage, signal } = options;
+  const { onPage, signal, uncapped = false } = options;
+  const songCap = uncapped ? Infinity : YT_PLAYLIST_SONG_CAP;
   const head = await first();
   const songs = new Map<string, S>();
   const repeats: S[] = [];
+  const followed = new Set<string>();
   let page: YtPlaylistPage<S> = head;
   for (let pages = 1; ; pages++) {
+    const before = songs.size;
     for (const song of page.songs) {
       if (songs.has(song.videoId)) repeats.push(song);
       else songs.set(song.videoId, song);
     }
-    const full = songs.size >= YT_PLAYLIST_SONG_CAP || pages >= YT_PLAYLIST_PAGE_CAP;
+    const full = uncapped
+      ? (page.songs.length > 0 && songs.size === before) ||
+        (page.continuation !== null && followed.has(page.continuation))
+      : songs.size >= YT_PLAYLIST_SONG_CAP || pages >= YT_PLAYLIST_PAGE_CAP;
     const next = full ? null : page.continuation;
-    const kept = [...songs.values()].slice(0, YT_PLAYLIST_SONG_CAP);
+    const kept = [...songs.values()].slice(0, songCap);
     const keptIds = new Set(kept.map((song) => song.videoId));
     const playlist: YtPlaylist<S> = {
       title: head.title,
@@ -85,11 +97,12 @@ export const readYtPlaylist = async <S extends YtSong>(
       artworkUrl: head.artworkUrl,
       songs: kept,
       repeats: repeats.filter((song) => keptIds.has(song.videoId)),
-      truncated: songs.size > YT_PLAYLIST_SONG_CAP || (full && page.continuation !== null),
+      truncated: songs.size > songCap || (full && page.continuation !== null),
     };
     onPage?.(playlist, next === null);
     if (next === null) return playlist;
     if (signal?.aborted === true) throw new Error("The playlist read was cancelled");
+    followed.add(next);
     page = await more(next);
   }
 };

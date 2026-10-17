@@ -4,7 +4,7 @@
  * Core (`planYtLibraryImport`: Keep Both's name on a clash, without asking).
  * Wave then reads them one at a time, in the picker's order, and fills each
  * as a YouTube Music link import does (`readYtPlaylist`, `planLinkImport`,
- * `finishPlaylistImport`). Nothing is downloaded or searched; there's no
+ * `finishPlaylistImport`), Liked Songs whole and the others up to the cap. Nothing is downloaded or searched; there's no
  * notification and no service. The batch lives while Wave runs.
  *
  * Each playlist's origin (the YouTube Music playlist it came from) is kept
@@ -63,6 +63,8 @@ interface Queued {
   readonly source: string;
   readonly playlistId: number;
   readonly name: string;
+  /** Read past the song cap (Liked Songs). */
+  readonly uncapped: boolean;
 }
 
 /** The reads still to come, one after another across batches. */
@@ -75,7 +77,9 @@ let reading: Promise<void> = Promise.resolve();
  */
 const fill = async (queued: Queued): Promise<void> => {
   try {
-    const answer = await askYtMusic((ytMusic) => ytMusic.playlist(queued.source));
+    const answer = await askYtMusic((ytMusic) =>
+      ytMusic.playlist(queued.source, { uncapped: queued.uncapped }),
+    );
     if (Result.isFailure(answer)) {
       appLog(
         "warn",
@@ -122,7 +126,12 @@ export const importYtLibrary = async (picker: YtLibraryPicker): Promise<void> =>
       item.replaces === null
         ? await createPlaylist(item.name)
         : await emptyPlaylist(item.replaces, item.name);
-    queued.push({ source: item.playlistId, playlistId: made.playlistId, name: made.name });
+    queued.push({
+      source: item.playlistId,
+      playlistId: made.playlistId,
+      name: made.name,
+      uncapped: item.uncapped,
+    });
     origins.set(new Map(origins.get()).set(item.playlistId, made.playlistId));
   }
   reading = reading.then(async () => {

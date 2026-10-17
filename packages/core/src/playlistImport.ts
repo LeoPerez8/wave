@@ -61,6 +61,11 @@ export interface LinkImportPlan<S extends YtSong> {
   readonly leftOut: readonly LeftOutSong[];
   /** How many items the source counts that aren't songs Wave can read (Spotify's podcast episodes). */
   readonly notSongs: number;
+  /**
+   * Of a playlist that goes on past what was read (its read stopped at a
+   * cap), how many of its songs were read; null when it was read whole.
+   */
+  readonly cut: number | null;
 }
 
 /**
@@ -141,6 +146,7 @@ export const planLinkImport = <
     sourceTotal: listed.length + notSongs,
     leftOut,
     notSongs,
+    cut: source.playlist.truncated ? source.playlist.songs.length : null,
   };
 };
 
@@ -173,6 +179,8 @@ export interface PlaylistImport<S extends YtSong> {
   /** How many of [songs], from the first, have been given to the playlist. */
   readonly added: number;
   readonly state: ImportState;
+  /** The source goes on past [songs]: how many of its songs were read (`LinkImportPlan`'s). */
+  readonly cut: number | null;
 }
 
 /** The import of [plan] into the playlist it made, [playlistId], named [name]. Nothing is given to it yet. */
@@ -188,6 +196,7 @@ export const startPlaylistImport = <S extends YtSong>(
   leftOut: plan.leftOut,
   added: 0,
   state: { kind: "importing" },
+  cut: plan.cut,
 });
 
 /**
@@ -332,6 +341,7 @@ export const writePlaylistImports = <S extends YtSong & { readonly albumId?: str
       leftOut: job.leftOut.map(({ song, reason }) => ({ song: listedSong(song), reason })),
       added: job.added,
       state: job.state,
+      cut: job.cut,
     })),
   });
 
@@ -415,7 +425,7 @@ const passedOver = (
 const readImport = (value: unknown, older: boolean): PlaylistImport<YtAlbumSong> | null => {
   if (!isFields(value)) return null;
   // An import kept before songs left out were named has none.
-  const { playlistId, name, service, songs, finds, leftOut = [], added, state } = value;
+  const { playlistId, name, service, songs, finds, leftOut = [], added, state, cut } = value;
   if (typeof playlistId !== "number" || typeof name !== "string") return null;
   if (service !== "ytMusic" && service !== "spotify") return null;
   if (!Array.isArray(songs) || !Array.isArray(finds) || songs.length !== finds.length) return null;
@@ -444,6 +454,8 @@ const readImport = (value: unknown, older: boolean): PlaylistImport<YtAlbumSong>
     ],
     added: keptAdded,
     state: keptState,
+    // An import kept before a cut playlist said so says nothing of it.
+    cut: typeof cut === "number" ? cut : null,
   };
 };
 
@@ -472,6 +484,11 @@ export const readPlaylistImports = (stored: string | null): PlaylistImports<YtAl
 
 // ---------------------------------------------------------------------------
 // What the playlist page shows
+
+const SERVICE_NAMES: Record<ImportService, string> = {
+  ytMusic: "YouTube Music",
+  spotify: "Spotify",
+};
 
 /** A song as the list of songs left out names it: "Title · Artist & Artist". */
 const songLine = (song: SpotifySong): string =>
@@ -528,21 +545,27 @@ const leftOutNotice = <S extends YtSong>(job: PlaylistImport<S>): ImportLeftOut 
   };
 };
 
-/** Whether [job] is done with no song left out to show. */
+/** Whether [job] is done with no song left out and nothing cut to show. */
 const nothingToShow = <S extends YtSong>(job: PlaylistImport<S>): boolean =>
-  job.state.kind === "done" && leftOutNotice(job) === null;
+  job.state.kind === "done" && job.cut === null && leftOutNotice(job) === null;
 
-/** The import line on a playlist's page: the songs its import left out, which it opens. */
+/**
+ * The import line on a playlist's page: that only the source's first songs
+ * came, and the songs its import left out, which it opens. The page can
+ * dismiss it.
+ */
 export interface PlaylistImportView {
   readonly line: string;
-  /** The songs left out; the page can dismiss them. */
-  readonly leftOut: ImportLeftOut;
+  /** The songs left out; null when the line only says the source was cut. */
+  readonly leftOut: ImportLeftOut | null;
 }
 
 /**
- * What [playlistId]'s page shows of its import: once it's done, the songs it
- * left out ("2 songs were listed twice"); null with none, or while its songs
- * go in, which takes a moment and shows nothing.
+ * What [playlistId]'s page shows of its import once it's done: that only the
+ * source's first songs came ("Only its first 5,000 songs came from YouTube
+ * Music"), then the songs it left out ("2 songs were listed twice"); null
+ * with neither, or while its songs go in, which takes a moment and shows
+ * nothing.
  */
 export const playlistImportView = <S extends YtSong>(
   imports: PlaylistImports<S>,
@@ -551,16 +574,16 @@ export const playlistImportView = <S extends YtSong>(
   const job = imports.find((queued) => queued.playlistId === playlistId);
   if (job?.state.kind !== "done") return null;
   const leftOut = leftOutNotice(job);
-  return leftOut === null ? null : { line: leftOut.title, leftOut };
+  const cut =
+    job.cut === null
+      ? null
+      : `Only its first ${counted(job.cut, "song")} came from ${SERVICE_NAMES[job.service]}`;
+  const lines = [cut, leftOut?.title].filter((line) => line !== null && line !== undefined);
+  return lines.length === 0 ? null : { line: lines.join(" · "), leftOut };
 };
 
 // ---------------------------------------------------------------------------
 // The app log
-
-const SERVICE_NAMES: Record<ImportService, string> = {
-  ytMusic: "YouTube Music",
-  spotify: "Spotify",
-};
 
 /**
  * The app log's line for [job] once the playlist has its songs: the source,
