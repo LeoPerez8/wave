@@ -1,7 +1,8 @@
 /// <reference types="node" />
 // Fails a release before anything is built when its tag doesn't name the app's version.
 //   node scripts/check-release-tag.ts <tag> <app version>
-// CI passes the version `expo config` reads from app.config.ts (scripts/ci/check-release-tag.sh).
+// CI passes the version `expo config` reads from package.json through app.config.ts
+// (scripts/ci/check-release-tag.sh).
 import { releaseBranch, releaseTagProblem, versionCode } from "../plugins/appVersion.ts";
 
 const [tag = "", version = ""] = process.argv.slice(2);
