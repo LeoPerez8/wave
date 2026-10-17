@@ -1,7 +1,7 @@
 /**
  * Home's Discover mixes (docs/spec.md, "Discover mixes"): YouTube Music
- * radios of the owner's most played artists and songs, with every song the
- * owner already knows left out. Which seeds, which songs and when to build
+ * radios of the owner's most played artists and songs (the Library's when
+ * plays are short), with every song the owner already knows left out. Which seeds, which songs and when to build
  * again are Core's (`discoverMixSeeds`, `discoverMixSongs`,
  * `discoverMixesDue`); this asks YouTube Music and keeps the last mixes built,
  * so Home shows them at once.
@@ -111,21 +111,30 @@ const readMix = (seed: DiscoverMixSeed, filter: Filter) =>
 
 /**
  * Builds the mixes from the owner's all-time most played artists and songs,
- * one seed after another so no song is in two mixes. Null when there's
- * nothing to build from (no plays yet) or no seed made a usable mix: what
- * was saved stays, and a later visit can try again.
+ * and the Library's when plays are short, one seed after another so no song
+ * is in two mixes. Null when there's nothing to build from (an empty
+ * Library) or no seed made a usable mix: what was saved stays, and a later
+ * visit can try again.
  */
 const buildMixes = Effect.gen(function* () {
   const stats = yield* Stats;
   const store = yield* LibraryStore;
   const artists = yield* stats.topArtists("all", SEED_POOL);
   const songs = yield* stats.topSongs("all", SEED_POOL);
+  const librarySongs = yield* store.listSongs;
+  const libraryArtists = yield* store.listArtists;
   const seeds = discoverMixSeeds({
-    artists: artists.map((entry) => entry.item),
-    songs: songs.map((entry) => entry.item),
+    played: {
+      artists: artists.map((entry) => entry.item),
+      songs: songs.map((entry) => entry.item),
+    },
+    library: {
+      artists: libraryArtists.map((artist) => ({ ...artist, songCount: artist.trackCount })),
+      songs: librarySongs,
+    },
   });
   if (seeds.length === 0) return null;
-  const inLibrary = libraryFinder(yield* store.listSongs);
+  const inLibrary = libraryFinder(librarySongs);
   const played = playedFinder(yield* store.playedRecordingKeys);
   const taken = new Set<string>();
   const mixes: DiscoverMix[] = [];
@@ -138,7 +147,7 @@ const buildMixes = Effect.gen(function* () {
     mixes.push(mix.success);
     for (const song of mix.success.songs) taken.add(song.videoId);
   }
-  return discoverMixesBuilt(mixes, Date.now());
+  return discoverMixesBuilt(mixes, Date.now(), seeds);
 });
 
 /** A build going on, so Home coming back into focus meanwhile doesn't start another. */
@@ -147,9 +156,10 @@ let building = false;
 let failedAt: number | null = null;
 const RETRY_MS = 10 * 60 * 1000;
 
-const refresh = (): void => {
+/** Builds the mixes again when Core says they're due; [played]: the owner has counted plays. */
+const refresh = (played: boolean): void => {
   const now = Date.now();
-  if (building || !discoverMixesDue(saved.get()?.builtAt ?? null, now)) return;
+  if (building || !discoverMixesDue(saved.get(), { now, played })) return;
   if (failedAt !== null && now - failedAt < RETRY_MS) return;
   building = true;
   void appRuntime
@@ -168,15 +178,16 @@ const refresh = (): void => {
 /**
  * The mixes Home shows: the last ones built, or none while YT Music is off.
  * Each time Home comes into focus with YT Music on, they're built again if
- * they weren't today.
+ * they weren't today, and while it's in focus once [played] turns true (the
+ * first counted plays) if the last build had no seeds from plays.
  */
-export const useDiscoverMixes = (): readonly DiscoverMix[] => {
+export const useDiscoverMixes = (played: boolean): readonly DiscoverMix[] => {
   const enabled = useYtMusicEnabled();
   const mixes = saved.useValue();
   useFocusEffect(
     useCallback(() => {
-      if (enabled) refresh();
-    }, [enabled]),
+      if (enabled) refresh(played);
+    }, [enabled, played]),
   );
   return enabled && mixes !== null ? mixes.mixes : [];
 };

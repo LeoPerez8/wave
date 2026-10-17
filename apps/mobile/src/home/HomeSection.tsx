@@ -57,8 +57,8 @@ function MostPlayedAlbums({ title }: SectionProps) {
 }
 
 /** The mixes as covers, each opening its page; nothing until some are built, or with YT Music off. */
-function DiscoverMixes({ title }: SectionProps) {
-  const mixes = useDiscoverMixes();
+function DiscoverMixes({ home, title }: SectionProps) {
+  const mixes = useDiscoverMixes(home.mostPlayed.length > 0);
   if (mixes.length === 0) return null;
   return (
     <TitledSection title={title}>
