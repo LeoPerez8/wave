@@ -8,8 +8,10 @@
  * Nothing is downloaded or searched; there's no notification and no service.
  * The batch is kept on the phone (Core's `writeYtLibraryBatch`), so the
  * playlists not read when Android stopped Wave are read once it starts again,
- * in the same order. A read that fails leaves its playlist empty, with a line
- * and Try Again on its page. With Also add to Favorites on, Liked Songs'
+ * in the same order. Offline or with YT Music off the batch pauses, every
+ * playlist still waiting, and goes on when Wave starts again, comes back to
+ * the foreground or imports again. A read that fails otherwise leaves its
+ * playlist empty, with a line and Try Again on its page. With Also add to Favorites on, Liked Songs'
  * read stars its songs the Library has (Core's `ytLibraryFavorites`), kept
  * in the batch so a resumed read or Try Again still stars; the star syncs
  * like any other, and the import never takes one away.
@@ -19,6 +21,7 @@
  * one refreshes that playlist as Replace does. Deleting it forgets it.
  */
 import {
+  isYtLibraryReadQueued,
   liveYtLibraryOrigins,
   nextYtLibraryRead,
   planLinkImport,
@@ -30,6 +33,7 @@ import {
   writeYtLibraryBatch,
   writeYtLibraryOrigins,
   ytLibraryFavorites,
+  ytLibraryPauseLogLine,
   ytLibraryReadDone,
   ytLibraryReadFailed,
   ytLibraryReadLogLine,
@@ -41,6 +45,7 @@ import {
 } from "@wave/core";
 import * as Result from "effect/Result";
 import { useSyncExternalStore } from "react";
+import { AppState } from "react-native";
 
 import { makeExternalStore } from "@/lib/externalStore";
 import { persistedSetting } from "@/lib/persistedSetting";
@@ -83,7 +88,7 @@ export const forgetDeletedYtLibraryOrigins = async (): Promise<void> => {
 const batch = persistedSetting<YtLibraryBatch>({
   key: "ytLibraryBatch",
   read: readYtLibraryBatch,
-  write: (value) => (value.length === 0 ? null : writeYtLibraryBatch(value)),
+  write: writeYtLibraryBatch,
 });
 
 /** The batch, for a playlist page's line. */
@@ -102,33 +107,45 @@ let reading = false;
 /**
  * Reads [read]'s playlist and gives its Wave playlist the songs, as a link
  * import does (whose line goes to the app log), starring the Library's songs
- * when it was asked to. A failed read leaves the playlist empty, marks it
- * failed and says so in the log.
+ * when it was asked to. A read whose playlist was refreshed or deleted
+ * meanwhile gives its answer to nothing (Core's `isYtLibraryReadQueued`).
+ * Offline or with YT Music off, nothing changes and it resolves the reason:
+ * the batch pauses there. Any other failure leaves the playlist empty, marks
+ * it failed and says so in the log.
  */
-const fill = async (read: YtLibraryRead): Promise<void> => {
+const fill = async (read: YtLibraryRead): Promise<string | null> => {
   let reason: string;
   try {
     const answer = await askYtMusic((ytMusic) =>
       ytMusic.playlist(read.source, { uncapped: !read.capped }),
     );
     if (Result.isSuccess(answer)) {
+      if (!isYtLibraryReadQueued(batch.get(), read)) return null;
       const plan = planLinkImport(
         { service: "ytMusic", playlist: answer.success },
         await listLibrary(),
       );
       // Before it leaves the batch: Wave stopped in between stars again, which changes nothing.
       await setFavorites(ytLibraryFavorites(read, plan), true);
+      // Checked again with no wait before the link import starts: a refresh from here on
+      // empties the playlist and ends that import.
+      if (!isYtLibraryReadQueued(batch.get(), read)) return null;
       // Read: the link import, kept on its own, gives it its songs from here.
-      batch.set(ytLibraryReadDone(batch.get(), read.playlistId));
+      batch.set(ytLibraryReadDone(batch.get(), read));
       await startLinkImport(plan, { playlistId: read.playlistId, name: read.name });
-      return;
+      return null;
     }
     reason = answer.failure.reason;
   } catch (error) {
     reason = error instanceof Error ? error.message : String(error);
   }
-  appLog("warn", LOG_TAG, ytLibraryReadLogLine(read, reason));
-  batch.set(ytLibraryReadFailed(batch.get(), read.playlistId));
+  const failure = ytLibraryReadFailed(batch.get(), read, reason);
+  if (failure.pause) return reason;
+  if (isYtLibraryReadQueued(batch.get(), read)) {
+    appLog("warn", LOG_TAG, ytLibraryReadLogLine(read, reason));
+  }
+  batch.set(failure.batch);
+  return null;
 };
 
 /**
@@ -143,19 +160,29 @@ const prune = async (): Promise<void> => {
     before,
     playlists.map((playlist) => playlist.id),
   );
-  if (batch.get() === before && pruned.length !== before.length) batch.set(pruned);
+  if (batch.get() === before) batch.set(pruned);
 };
 
-/** Reads the waiting playlists one at a time, in order, until none is left. */
+/**
+ * Reads the waiting playlists one at a time, in order, until none is left,
+ * or until a read finds Wave offline or YT Music off: the batch then waits
+ * for its next turn (Wave starting again, coming back to the foreground, or
+ * another Import). The playlists deleted are dropped once, as it starts; one
+ * deleted while it runs is read, and its link import ends at once.
+ */
 const readBatch = async (): Promise<void> => {
-  if (reading) return;
+  if (reading || nextYtLibraryRead(batch.get()) === undefined) return;
   reading = true;
   try {
+    await prune();
     for (;;) {
-      await prune();
       const next = nextYtLibraryRead(batch.get());
       if (next === undefined) return;
-      await fill(next);
+      const pausedBy = await fill(next);
+      if (pausedBy !== null) {
+        appLog("info", LOG_TAG, ytLibraryPauseLogLine(next, pausedBy));
+        return;
+      }
     }
   } catch (error) {
     const why = error instanceof Error ? error.message : String(error);
@@ -186,6 +213,16 @@ const emptyPlaylist = async (
  * the playlists exist.
  */
 export const importYtLibrary = async (picker: YtLibraryPicker): Promise<void> => {
+  try {
+    await makeYtLibraryPlaylists(picker);
+  } finally {
+    // The playlists queued before one that couldn't be made are read all the same.
+    void readBatch();
+  }
+};
+
+/** Makes or empties each ticked row's playlist, in order, queuing each as it's made. */
+const makeYtLibraryPlaylists = async (picker: YtLibraryPicker): Promise<void> => {
   const items = planYtLibraryImport(picker, await currentPlaylists());
   for (const item of items) {
     const made =
@@ -205,15 +242,24 @@ export const importYtLibrary = async (picker: YtLibraryPicker): Promise<void> =>
     );
     origins.set(new Map(origins.get()).set(item.playlistId, made.playlistId));
   }
-  void readBatch();
 };
+
+/** Whether the batch goes on each time Wave comes back to the foreground. */
+let followingForeground = false;
 
 /**
  * Once Wave starts with all-files access: the playlists a batch hadn't read
- * when Android stopped Wave are read, in the same order. Safe to call
- * repeatedly.
+ * when Android stopped Wave, or when it paused offline or with YT Music off,
+ * are read, in the same order, and again each time Wave comes back to the
+ * foreground. Safe to call repeatedly.
  */
 export const resumeYtLibraryImport = (): void => {
+  if (!followingForeground) {
+    followingForeground = true;
+    AppState.addEventListener("change", (state) => {
+      if (state === "active") void readBatch();
+    });
+  }
   void readBatch();
 };
 
@@ -226,7 +272,9 @@ export const readYtLibraryPlaylistAgain = async (playlistId: number): Promise<vo
   if (view === null || readingAgain.get().has(playlistId)) return;
   readingAgain.set(new Set([...readingAgain.get(), playlistId]));
   try {
-    await fill(view.read);
+    // Offline or with YT Music off the line stays, and the log says why.
+    const pausedBy = await fill(view.read);
+    if (pausedBy !== null) appLog("warn", LOG_TAG, ytLibraryReadLogLine(view.read, pausedBy));
   } finally {
     readingAgain.set(new Set([...readingAgain.get()].filter((id) => id !== playlistId)));
   }

@@ -1194,12 +1194,15 @@ export type {
   YtLibraryRow,
 } from "./ytLibrary.ts";
 export {
+  isYtLibraryReadQueued,
   nextYtLibraryRead,
+  NO_YT_LIBRARY_READS,
   pruneYtLibraryBatch,
   queueYtLibraryReads,
   readYtLibraryBatch,
   writeYtLibraryBatch,
   ytLibraryFavorites,
+  ytLibraryPauseLogLine,
   ytLibraryReadDone,
   ytLibraryReadFailed,
   ytLibraryReadLogLine,
@@ -1208,6 +1211,7 @@ export {
 export type {
   YtLibraryBatch,
   YtLibraryRead,
+  YtLibraryReadFailure,
   YtLibraryReadState,
   YtLibraryReadView,
 } from "./ytLibraryBatch.ts";
