@@ -323,12 +323,10 @@ const storedUnavailableTitle = sql`CASE WHEN ${storedUnavailable}
   THEN json_extract(${schema.playlistItems.ytSong}, '$.title') END`;
 
 /** Whether the entry is an unsearched song, as Core's `writePlaylistEntrySong` marks it. */
-const storedUnsearched = sql`(CASE WHEN json_valid(${schema.playlistItems.ytSong})
-  THEN json_type(${schema.playlistItems.ytSong}, '$.unsearched') = 'true' END IS 1)`;
+const storedUnsearched = schema.unsearchedSongIn(schema.playlistItems.ytSong);
 
-/** A stored unsearched song's title, read by SQLite; null for any other entry. */
-const storedUnsearchedTitle = sql`CASE WHEN ${storedUnsearched}
-  THEN json_extract(${schema.playlistItems.ytSong}, '$.title') END`;
+/** A stored unsearched song's title, read by SQLite through its index; null for any other entry. */
+const storedUnsearchedTitle = schema.unsearchedTitleIn(schema.playlistItems.ytSong);
 
 /** [values] as one bound value that SQLite reads back as a list: `x IN ${jsonList(values)}`. */
 const jsonList = (values: readonly (string | number)[]) =>

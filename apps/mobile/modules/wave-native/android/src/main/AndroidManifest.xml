@@ -43,12 +43,6 @@
       android:exported="false"
       android:foregroundServiceType="dataSync" />
 
-    <!-- Keeps link imports filling their playlists in the background (PlaylistImportService). -->
-    <service
-      android:name="expo.modules.wavenative.imports.PlaylistImportService"
-      android:exported="false"
-      android:foregroundServiceType="dataSync" />
-
     <!--
       Media buttons with nothing playing resume the last queue (playback resumption,
       PlaybackService.onPlaybackResumption); Media3 requires it to be declared.

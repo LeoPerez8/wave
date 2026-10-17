@@ -734,6 +734,25 @@ describe("unsearched entries", () => {
     assert.equal(selectPlaylist(db, playlistId)?.playlist.unavailableCount, 1);
   });
 
+  test("settling a song finds the entries holding it through an index, never every playlist's entries", () => {
+    const other = newPlaylist("Imported");
+    appendPlaylistSongs(
+      db,
+      other,
+      Array.from({ length: 50 }, (_, at) => unsearched(`Song ${at}`)),
+      0,
+    );
+    appendPlaylistSongs(db, playlistId, [unsearched("Lucky")], 0);
+    const lucky = yt("lucky", { title: "Lucky" });
+    const { result, queries } = traceQueries(db, () =>
+      settleUnsearchedEntries(db, listedSong("Lucky"), stream(lucky), 1_000),
+    );
+    assert.deepEqual(result, { rewritten: 1, removed: 0, playlistIds: [playlistId] });
+    const plans = queries.map((query) => query.plan.join("; ")).join("; ");
+    assert.match(plans, /playlist_items_unsearched_title_idx/);
+    assert.doesNotMatch(plans, /SCAN playlist_items\b/);
+  });
+
   test("the background fill reads each playlist's unsearched songs, top to bottom", () => {
     const other = newPlaylist("Imported");
     const gone = newPlaylist("Gone");
@@ -1059,6 +1078,46 @@ describe("migration 0024", () => {
     assert.match(
       queries.map((query) => query.plan.join("; ")).join("; "),
       /play_events_context_idx/,
+    );
+  });
+});
+
+describe("migration 0025", () => {
+  test("unsearched entries from before the titles' index settle the same, through it", async () => {
+    const old = await openTestDatabase({ through: "0024_play_contexts" });
+    const lucky: UnsearchedSong = {
+      title: "Lucky",
+      artists: ["Radiohead"],
+      album: "OK Computer",
+      durationMs: 180_000,
+      artworkUrl: null,
+    };
+    const unsearched: PlaylistSong = { source: "unsearched", song: lucky };
+    const id = old
+      .insert(schema.playlists)
+      .values({ name: "Imported", createdAt: 0, updatedAt: 0, changedAt: 0 })
+      .returning()
+      .get().id;
+    appendPlaylistSongs(
+      old,
+      id,
+      [unsearched, { ...unsearched, song: { ...lucky, album: "Live" } }],
+      0,
+    );
+
+    await migrateTestDatabase(old);
+
+    const { result, queries } = traceQueries(old, () =>
+      settleUnsearchedEntries(old, lucky, stream(yt("lucky", { title: "Lucky" })), 1_000),
+    );
+    assert.deepEqual(result, { rewritten: 1, removed: 0, playlistIds: [id] });
+    assert.deepEqual(
+      selectPlaylistEntries(old, id).map((entry) => entry.source),
+      ["stream", "unsearched"],
+    );
+    assert.match(
+      queries.map((query) => query.plan.join("; ")).join("; "),
+      /playlist_items_unsearched_title_idx/,
     );
   });
 });
