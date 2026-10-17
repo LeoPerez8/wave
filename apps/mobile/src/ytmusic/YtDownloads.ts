@@ -11,6 +11,7 @@ import {
   downloadSource,
   downloadStorageFull,
   failedDownloads,
+  isUnsearchedSongJob,
   isWithin,
   libraryFinder,
   missingSongJob,
@@ -27,7 +28,11 @@ import {
   soulseekQuery,
   soulseekReceivedMatches,
   soulseekRecording,
+  settleUnsearched,
   spotifySearchQuery,
+  unsearchedDownload,
+  unsearchedJobSong,
+  unsearchedSearchQuery,
   ytAlbumDownload,
   ytAudioRejection,
   ytAudioTrack,
@@ -52,7 +57,9 @@ import {
   type PlaylistItem,
   type QueuedDownload,
   type SoulseekCandidate,
+  type UnsearchedSong,
   type YtAlbumDownload,
+  type YtAlbumSong,
   type YtAlbumDownloadAction,
   type YtPlaylistDownload,
   type YtPlaylistDownloadAction,
@@ -61,6 +68,7 @@ import {
   type YtDownloadTags,
   type YtDownloads,
   type YtSong,
+  type YtSongSearch,
 } from "@wave/core";
 import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
@@ -82,6 +90,7 @@ import { useLoadedMissingSongs, useMissingSongs } from "@/library/hooks";
 import { refreshDownloadPolicy } from "@/library/downloadPolicy";
 import { fillInLyricsAndGenre, lookUpLyricsAndGenre } from "@/library/lyricsAndGenre";
 import { appRuntime } from "@/library/runtime";
+import { settleUnsearchedSong } from "@/library/unsearchedEntries";
 import { makeExternalStore } from "@/lib/externalStore";
 import {
   WaveSoulseek,
@@ -291,6 +300,8 @@ const prepareFallback = (claim: NativeDownloadDecision) =>
     const { tags, targetPath } = claim;
     if (tags === undefined || targetPath === undefined)
       return yield* new DownloadFailed({ reason: "failed" });
+    const unsearched = unsearchedJobSong(claim.id, claim.song);
+    if (unsearched !== null) return yield* prepareUnsearchedFallback(claim, unsearched, targetPath);
     const video = yield* audioTrack(claim.song);
     return {
       source: "youtube",
@@ -298,6 +309,32 @@ const prepareFallback = (claim: NativeDownloadDecision) =>
       candidates: [],
       tags,
       targetPath,
+      failurePlan: downloadFailurePlan("youtube", { ytMusicOn: true }),
+    } satisfies PrepareAnswer;
+  });
+
+/**
+ * `prepareFallback` for unsearched song [song]: its YouTube Music search, now that Soulseek
+ * couldn't deliver it, settles it and names the video (`unsearchedVideo`), and the song is
+ * tagged as a YT Music song's download is, with the album page the video is filed under. The
+ * M4A keeps the place Soulseek's prepare planned ([plannedPath]) when the tags leave none.
+ */
+const prepareUnsearchedFallback = (
+  claim: NativeDownloadDecision,
+  song: UnsearchedSong,
+  plannedPath: string,
+) =>
+  Effect.gen(function* () {
+    const found = yield* unsearchedVideo(claim.id, song);
+    const tags = yield* metadata(found.song);
+    const { roots, excludedFolders } = yield* refreshDownloadPolicy;
+    const target = ytDownloadDestination(roots, excludedFolders, tags, "youtube");
+    return {
+      source: "youtube",
+      video: found.video,
+      candidates: [],
+      tags,
+      targetPath: target?.path ?? plannedPath,
       failurePlan: downloadFailurePlan("youtube", { ytMusicOn: true }),
     } satisfies PrepareAnswer;
   });
@@ -487,6 +524,103 @@ const prepareMissingSong = (trackId: number) =>
     );
   });
 
+/**
+ * The tags of a song downloaded without a YouTube Music video: what it keeps (an unsearched
+ * song's, what Spotify listed), filled in from the lookup Fix Song uses (Deezer, LRCLIB).
+ * Nothing is asked of YouTube Music: it has no video to read an album page by.
+ */
+const listingTags = (song: YtSong) =>
+  Effect.gen(function* () {
+    const lookup = ytDownloadLookup(song, null);
+    const found = lookup === null ? null : yield* optional(lookUpLyricsAndGenre(lookup));
+    return ytDownloadTags(song, null, found, null);
+  });
+
+/**
+ * Puts the YT Music song [found] for unsearched job [jobId] on that job (an alias), so the
+ * playlist entry it settles into shows the job's progress and isn't asked for again; a song
+ * another job already holds keeps that job.
+ */
+const shareUnsearchedJob = async (jobId: string, found: NativeYtSong): Promise<void> => {
+  const jobs = await WaveSoulseek.jobsSnapshot();
+  const held = jobs.some(
+    (job) =>
+      job.id === found.videoId || job.aliases?.some((alias) => alias.videoId === found.videoId),
+  );
+  if (!held) await WaveSoulseek.enqueueJob(found, soulseekRecording(found), jobId, null);
+  await refresh();
+};
+
+/**
+ * The YouTube Music video unsearched song [song] (job [jobId]) downloads: one Songs search for
+ * it, with downloads' turn in the search allowance, settles it as playing's does (Core's
+ * `settleUnsearched`, the app's `settleUnsearchedSong`), and Core's `unsearchedDownload` says
+ * what the download does with it. Found, the video is the search's result, the song's audio
+ * track, so no second search is made; it comes with the song to tag it as. Not found (the entry
+ * is unavailable now) or a failed search (it stays unsearched) fails the download.
+ */
+const unsearchedVideo = (jobId: string, song: UnsearchedSong) =>
+  Effect.gen(function* () {
+    const ytMusic = yield* YtMusic;
+    const query = unsearchedSearchQuery(song);
+    const answer = yield* withSearchTurn("download", query, ytMusic.searchSongs(query)).pipe(
+      Effect.map((page): YtSongSearch<YtAlbumSong> => ({ ok: true, songs: page.songs })),
+      Effect.catch((error) =>
+        Effect.succeed<YtSongSearch<YtAlbumSong>>({ ok: false, reason: error.reason }),
+      ),
+    );
+    const step = unsearchedDownload(song, settleUnsearched(song, answer));
+    // The job takes the song found before the entry becomes it, so it's never asked for twice.
+    if (step.kind === "download") yield* native(() => shareUnsearchedJob(jobId, step.found));
+    yield* Effect.tryPromise({
+      try: () => settleUnsearchedSong(song, answer),
+      catch: libraryFailure,
+    });
+    if (step.kind === "fail") return yield* new DownloadFailed({ reason: step.failure });
+    return { video: step.video, song: step.song };
+  });
+
+/**
+ * The journal's "prepare" decision for unsearched song [song] (job [claim]), which has no video:
+ * Core picks the source as for a song without one. From YouTube Music, its search settles it
+ * and names the video (`unsearchedVideo`), tagged as a YT Music song's download is, with what
+ * the entry kept. From Soulseek, by its title and artists, tagged from what the entry kept and
+ * the lookup, with no YouTube Music search; YouTube Music's fallback searches it only once
+ * Soulseek can't deliver (`prepareFallback`).
+ */
+const prepareUnsearchedSong = (claim: NativeDownloadDecision, song: UnsearchedSong) =>
+  Effect.gen(function* () {
+    const store = yield* LibraryStore;
+    const [roots, excludedFolders] = yield* Effect.all([
+      store.listRoots,
+      store.excludedFolders,
+    ]).pipe(Effect.mapError(libraryFailure));
+    if (roots.length === 0) return yield* new DownloadFailed({ reason: "noFolder" });
+    const ytMusicOn = ytMusicEnabled();
+    const source = currentSource(yield* native(() => WaveSoulseek.session()), ytMusicOn);
+    if (source === null) return yield* new DownloadFailed({ reason: "noSource" });
+    if (source === "youtube") {
+      const found = yield* unsearchedVideo(claim.id, song);
+      const tags = yield* metadata(found.song);
+      const target = ytDownloadDestination(roots, excludedFolders, tags, source);
+      if (target === null) return yield* new DownloadFailed({ reason: "noFolder" });
+      return {
+        source,
+        video: found.video,
+        candidates: [],
+        tags,
+        targetPath: target.path,
+        failurePlan: downloadFailurePlan(source, { ytMusicOn }),
+      } satisfies PrepareAnswer;
+    }
+    const [peers, tags] = yield* Effect.all([searchSoulseek(claim.song), listingTags(claim.song)], {
+      concurrency: "unbounded",
+    });
+    return yield* soulseekAnswer(claim.song, peers, tags, { roots, excludedFolders }, ytMusicOn, {
+      prepare: true,
+    });
+  });
+
 /** Recheck current folders both before publication and before recovered completion import. */
 export const downloadPathIncluded = (path: string) =>
   Effect.gen(function* () {
@@ -547,17 +681,19 @@ const publicationTarget = (claim: NativeDownloadDecision) =>
 
 /** What the log says about [claim]'s YouTube download once its [audio] is checked (Core's `ytDownloadReport`). */
 const youtubeReport = (claim: NativeDownloadDecision, audio: NativeYoutubeAudio): string => {
-  // A missing song's job has no video of its own: its length is its Track's.
+  // A missing song's job has no video of its own: its length is its Track's. Nor has an
+  // unsearched song's: its length is what Spotify listed.
   const missing = missingSongTrackId(claim.id) !== null;
+  const unsearched = isUnsearchedSongJob(claim.id);
   return ytDownloadReport({
-    song: missing ? null : claim.song.videoId,
+    song: missing || unsearched ? null : claim.song.videoId,
     requested: audio.requested ?? claim.video ?? claim.song.videoId,
     resolved: audio.resolved ?? null,
     client: audio.client ?? null,
     videoType: audio.videoType ?? null,
     announcedMs: audio.announcedMs ?? null,
     expectedMs: claim.song.durationMs,
-    expectedFrom: missing ? "library" : "ytMusic",
+    expectedFrom: missing ? "library" : unsearched ? "spotify" : "ytMusic",
     measuredMs: audio.durationMs,
   });
 };
@@ -571,9 +707,11 @@ const answer = (claim: NativeDownloadDecision) =>
         if (claim.fellBackFrom !== undefined && claim.source === "youtube")
           return yield* prepareFallback(claim);
         const trackId = missingSongTrackId(claim.id);
-        return trackId === null
+        if (trackId !== null) return yield* prepareMissingSong(trackId);
+        const unsearched = unsearchedJobSong(claim.id, claim.song);
+        return unsearched === null
           ? yield* prepareDownload(claim.song)
-          : yield* prepareMissingSong(trackId);
+          : yield* prepareUnsearchedSong(claim, unsearched);
       }
       case "confirm": {
         if (claim.audio === undefined) return yield* new DownloadFailed({ reason: "failed" });
@@ -601,13 +739,15 @@ const answer = (claim: NativeDownloadDecision) =>
       case "import": {
         if (claim.saved === undefined) return yield* new DownloadFailed({ reason: "failed" });
         yield* refreshDownloadPolicy;
-        // A missing song's job is named after its Track: its video is the one prepare named.
+        // A missing song's job is named after its Track, an unsearched song's after what Spotify
+        // listed: their video is the one prepare named.
         const fills = missingSongTrackId(claim.id);
+        const ownVideo = fills === null && !isUnsearchedSongJob(claim.id);
         // A job from before YouTube Music downloads is Soulseek's.
         const videoId =
           claim.source !== "youtube"
             ? null
-            : (claim.video ?? (fills === null ? claim.song.videoId : null));
+            : (claim.video ?? (ownVideo ? claim.song.videoId : null));
         return { path: yield* importDownload(claim.saved, videoId, fills) };
       }
     }
@@ -963,12 +1103,44 @@ export const useYtAlbumDownload = (
   return useMemo(() => ytAlbumDownload(songs, { inLibrary, jobs }), [songs, inLibrary, jobs]);
 };
 
-/** A playlist's entry: a Library song (its file), a YT Music song, or an unavailable song. */
+/**
+ * A playlist's entry: a Library song (its file), a YT Music song, an unsearched song, or an
+ * unavailable song.
+ */
 type PlaylistEntry = PlaylistItem<NativeYtSong, { readonly path: string | null }>;
 
-/** What a playlist's download entries act on: its YT Music entries' songs, in playlist order. */
-export const playlistYtSongs = (entries: readonly PlaylistEntry[]): NativeYtSong[] =>
-  entries.flatMap((entry) => (entry.source === "stream" ? [entry.song] : []));
+/**
+ * Download Playlist, Retry Failed and Cancel Playlist Download on the playlist holding
+ * [entries], decided on a fresh snapshot of the journal (Core's `ytPlaylistDownload`): its YT
+ * Music and unsearched entries join the queue in playlist order, an unsearched one as the job
+ * named after what Spotify listed, which searches it when it's prepared. Each goes through the
+ * single-song pipeline.
+ */
+export const runYtPlaylistDownloadAction = (
+  action: YtPlaylistDownloadAction,
+  entries: readonly PlaylistEntry[],
+  inLibrary: InLibrary,
+): void => {
+  if (action !== "cancelPlaylistDownload") {
+    askForNotifications();
+    startDownloads();
+  }
+  requests = requests
+    .then(async () => {
+      const jobs = await WaveSoulseek.jobsSnapshot();
+      const download = ytPlaylistDownload(entries, { inLibrary, jobs });
+      if (action === "cancelPlaylistDownload") {
+        for (const videoId of download.toCancel) await WaveSoulseek.cancelJob(videoId);
+      } else {
+        const source = await requestedSource();
+        const asked = action === "downloadPlaylist" ? download.toDownload : download.toRetry;
+        for (const { song, sharedJob } of asked)
+          await WaveSoulseek.enqueueJob(song, soulseekRecording(song), sharedJob, source);
+      }
+      await refresh();
+    })
+    .catch(() => undefined);
+};
 
 /**
  * Where a playlist's download stands (Core's `ytPlaylistDownload`), from its

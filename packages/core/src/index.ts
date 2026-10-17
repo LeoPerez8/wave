@@ -899,6 +899,17 @@ export type {
   UnsearchedSettles,
 } from "./unsearchedEntries.ts";
 export {
+  isUnsearchedSongJob,
+  unsearchedDownload,
+  unsearchedJobSong,
+  unsearchedSongJob,
+} from "./unsearchedDownload.ts";
+export type {
+  UnsearchedDownload,
+  UnsearchedSongJob,
+  UnsearchedSongJobId,
+} from "./unsearchedDownload.ts";
+export {
   FILL_LOOK_AGAIN_MS,
   FILL_PACE_MS,
   FILL_PAUSES_MS,

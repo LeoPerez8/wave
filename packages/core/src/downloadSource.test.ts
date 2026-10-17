@@ -290,4 +290,22 @@ describe("ytDownloadReport", () => {
         "YouTube says no length, the song has no length (its Library track), the file plays 253.1 s",
     );
   });
+
+  test("an unsearched song's length is what Spotify listed", () => {
+    assert.equal(
+      ytDownloadReport({
+        song: null,
+        requested: "uumR0WQrJjw",
+        resolved: "uumR0WQrJjw",
+        client: "WEB_REMIX",
+        videoType: "MUSIC_VIDEO_TYPE_ATV",
+        announcedMs: 498_000,
+        expectedMs: 498_000,
+        expectedFrom: "spotify",
+        measuredMs: 498_100,
+      }),
+      "YouTube download: asked for uumR0WQrJjw, served uumR0WQrJjw (ATV) by WEB_REMIX; " +
+        "YouTube says 498.0 s, the song is 498.0 s (Spotify's listing), the file plays 498.1 s",
+    );
+  });
 });

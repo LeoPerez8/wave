@@ -184,7 +184,7 @@ export const ytAudioTrack = (song: YtSong, results: readonly YtSong[] | null): s
 
 /** What the app log says about one YouTube download once its audio is checked (`ytDownloadReport`). */
 export interface YtDownloadReport {
-  /** The video the song is listed under; null for a missing song, which has none of its own. */
+  /** The video the song is listed under; null for a missing or unsearched song, which has none of its own. */
   readonly song: string | null;
   /** The video the download asked YouTube for (`ytAudioTrack`'s, or the song's). */
   readonly requested: string;
@@ -196,7 +196,7 @@ export interface YtDownloadReport {
   readonly announcedMs: number | null;
   /** The length the audio is checked against (`ytAudioMatches`), and where it came from. */
   readonly expectedMs: number | null;
-  readonly expectedFrom: "ytMusic" | "library";
+  readonly expectedFrom: "ytMusic" | "library" | "spotify";
   /** How long the downloaded file plays. */
   readonly measuredMs: number;
 }
@@ -204,6 +204,7 @@ export interface YtDownloadReport {
 const EXPECTED_FROM: Record<YtDownloadReport["expectedFrom"], string> = {
   ytMusic: "YT Music's listing",
   library: "its Library track",
+  spotify: "Spotify's listing",
 };
 
 const seconds = (ms: number): string => `${(ms / 1000).toFixed(1)} s`;

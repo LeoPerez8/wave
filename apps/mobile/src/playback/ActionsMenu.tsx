@@ -25,7 +25,7 @@ import { useOverlayFlow } from "@/overlay/flow";
 import { followUp, openOverlay } from "@/overlay/overlay";
 import { useSlideToChoose } from "@/overlay/useSlideToChoose";
 import { useLoadedInLibrary } from "@/ytmusic/libraryFinder";
-import { playlistYtSongs, runYtDownloadAction, useYtPlaylistDownload } from "@/ytmusic/YtDownloads";
+import { runYtPlaylistDownloadAction, useYtPlaylistDownload } from "@/ytmusic/YtDownloads";
 
 import { targetHeading, type ActionItems, type Heading, type PlaylistPlace } from "./actionTargets";
 import { useItemActions, type ActionEntry } from "./itemActions";
@@ -111,7 +111,7 @@ export const openTrackActionsById = (id: number, options: MenuOptions = {}): voi
 
 /**
  * Opens the menu for a playlist: queue it, add it to another, download its YT
- * Music entries (Core's `ytPlaylistDownload`), rename or delete it. Its
+ * Music and unsearched entries (Core's `ytPlaylistDownload`), rename or delete it. Its
  * entries are read first, so the card opens with every entry it will have.
  */
 export const openPlaylistActions = (playlist: PlaylistRow, options?: MenuOptions): void => {
@@ -163,7 +163,7 @@ interface MenuEntry {
 /**
  * A playlist's download entries (Core's `ytPlaylistDownload`): Download
  * Playlist, or Cancel Playlist Download while its songs are on their way,
- * then Retry Failed; none without YT Music entries.
+ * then Retry Failed; none without YT Music or unsearched entries.
  */
 function usePlaylistDownloadEntries(
   entries: readonly PlaylistEntryRow[],
@@ -176,7 +176,7 @@ function usePlaylistDownloadEntries(
     label: YT_PLAYLIST_DOWNLOAD_ACTION_LABELS[action],
     onPress: () => {
       close();
-      runYtDownloadAction(action, playlistYtSongs(entries), inLibrary);
+      runYtPlaylistDownloadAction(action, entries, inLibrary);
     },
     destructive: false,
   }));

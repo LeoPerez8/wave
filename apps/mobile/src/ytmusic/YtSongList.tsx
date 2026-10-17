@@ -46,8 +46,8 @@ import { DiscoverSongRow } from "./DiscoverSongRow";
 import { useLibraryFinder, useLoadedInLibrary } from "./libraryFinder";
 import type { YtListHead, YtListScreen } from "./routes";
 import {
-  playlistYtSongs,
   runYtDownloadAction,
+  runYtPlaylistDownloadAction,
   useYtAlbumDownload,
   useYtPlaylistDownload,
   type YtListDownloadAction,
@@ -218,7 +218,7 @@ export const useYtAlbumDownloadButton = (
 };
 
 /**
- * Downloading a playlist's YT Music entries, the playlist holding [entries]:
+ * Downloading a playlist's YT Music and unsearched entries, the playlist holding [entries]:
  * its progress line ("Downloading · 3 of 10") and its button, or null.
  */
 export const useYtPlaylistDownloadButton = (
@@ -234,7 +234,7 @@ export const useYtPlaylistDownloadButton = (
         ? null
         : {
             ...button,
-            onPress: () => runYtDownloadAction(button.action, playlistYtSongs(entries), inLibrary),
+            onPress: () => runYtPlaylistDownloadAction(button.action, entries, inLibrary),
           },
   };
 };
