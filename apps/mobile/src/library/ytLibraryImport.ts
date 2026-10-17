@@ -9,7 +9,10 @@
  * The batch is kept on the phone (Core's `writeYtLibraryBatch`), so the
  * playlists not read when Android stopped Wave are read once it starts again,
  * in the same order. A read that fails leaves its playlist empty, with a line
- * and Try Again on its page.
+ * and Try Again on its page. With Also add to Favorites on, Liked Songs'
+ * read stars its songs the Library has (Core's `ytLibraryFavorites`), kept
+ * in the batch so a resumed read or Try Again still stars; the star syncs
+ * like any other, and the import never takes one away.
  *
  * Each playlist's origin (the YouTube Music playlist it came from) is kept
  * on this phone, unsynced: the picker marks those rows Imported, and ticking
@@ -26,6 +29,7 @@ import {
   readYtLibraryOrigins,
   writeYtLibraryBatch,
   writeYtLibraryOrigins,
+  ytLibraryFavorites,
   ytLibraryReadDone,
   ytLibraryReadFailed,
   ytLibraryReadLogLine,
@@ -43,6 +47,7 @@ import { persistedSetting } from "@/lib/persistedSetting";
 import { appLog } from "@/log/appLog";
 import { askYtMusic } from "@/ytmusic/askYtMusic";
 
+import { setFavorites } from "./favorites";
 import { listLibrary } from "./importPlaylistLink";
 import { cancelPlaylistImport, startLinkImport } from "./playlistImports";
 import { createPlaylist, currentPlaylists, replacePlaylistSongs } from "./playlists";
@@ -96,8 +101,9 @@ let reading = false;
 
 /**
  * Reads [read]'s playlist and gives its Wave playlist the songs, as a link
- * import does (whose line goes to the app log). A failed read leaves the
- * playlist empty, marks it failed and says so in the log.
+ * import does (whose line goes to the app log), starring the Library's songs
+ * when it was asked to. A failed read leaves the playlist empty, marks it
+ * failed and says so in the log.
  */
 const fill = async (read: YtLibraryRead): Promise<void> => {
   let reason: string;
@@ -110,6 +116,8 @@ const fill = async (read: YtLibraryRead): Promise<void> => {
         { service: "ytMusic", playlist: answer.success },
         await listLibrary(),
       );
+      // Before it leaves the batch: Wave stopped in between stars again, which changes nothing.
+      await setFavorites(ytLibraryFavorites(read, plan), true);
       // Read: the link import, kept on its own, gives it its songs from here.
       batch.set(ytLibraryReadDone(batch.get(), read.playlistId));
       await startLinkImport(plan, { playlistId: read.playlistId, name: read.name });
@@ -191,6 +199,7 @@ export const importYtLibrary = async (picker: YtLibraryPicker): Promise<void> =>
           playlistId: made.playlistId,
           name: made.name,
           capped: !item.uncapped,
+          favorites: item.favorites,
         },
       ]),
     );
