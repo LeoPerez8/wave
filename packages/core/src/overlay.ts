@@ -158,9 +158,13 @@ const placeNextTo = (
   const width = Math.min(areaWidth - margin * 2, maxWidth);
   const highest = insets.top + margin;
   const lowest = window.height - insets.bottom - chromeBottom - margin;
-  const below = rect.bottom + gap;
+  // The card's edges beside the anchor, kept within the space it may use: an anchor on the
+  // floating chrome (a tab) leaves no more room above it than the chrome's top does, and a
+  // row scrolled up under the status bar no more below it than the bar's foot does.
+  const below = Math.max(rect.bottom + gap, highest);
+  const above = Math.min(rect.top - gap, lowest);
   const roomBelow = lowest - below;
-  const roomAbove = rect.top - gap - highest;
+  const roomAbove = above - highest;
   const side =
     cardHeight <= roomBelow || (cardHeight > roomAbove && roomBelow >= roomAbove)
       ? "below"
@@ -170,7 +174,7 @@ const placeNextTo = (
   const maxHeight = cardHeight <= room || room >= minHeight ? room : lowest - highest;
   const height = Math.min(cardHeight, maxHeight);
   const top = Math.min(
-    Math.max(side === "below" ? below : rect.top - gap - height, highest),
+    Math.max(side === "below" ? below : above - height, highest),
     lowest - height,
   );
   // Centred on the anchor where the card is narrower than the screen (tablets, landscape).
