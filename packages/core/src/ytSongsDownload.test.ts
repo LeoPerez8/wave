@@ -99,6 +99,46 @@ describe("downloading a playlist's YT Music entries", () => {
     );
   });
 
+  test("a playlist of thousands of YT Music entries is decided at once, before and after Download", () => {
+    // Different recordings: titles and artists vary, as an imported playlist's do.
+    const recording = (videoId: string, i: number, title: string): YtSong => ({
+      ...song(videoId, `${title} ${i} (Remastered 2011)`),
+      artists: [`Artist ${i % 400} feat. Guest ${i % 7}`],
+      durationMs: 180_000 + i * 50,
+    });
+    const songs = Array.from({ length: 2000 }, (_, i) => recording(`v${i}`, i, "Song"));
+    const playlist = songs.map((one): Entry => ({ source: "stream", song: one }));
+    const queued = (one: YtSong): YtDownloadJournalJob => ({
+      id: one.videoId,
+      song: one,
+      phase: "queued",
+    });
+    // Another list's downloads on their way, one of them the first entry's recording.
+    const journal = [
+      ...Array.from({ length: 2000 }, (_, i) => queued(recording(`o${i}`, i, "Other"))),
+      queued(recording("alt0", 0, "Song")),
+    ];
+
+    const started = performance.now();
+    const before = ytPlaylistDownload(playlist, { inLibrary: nothingInLibrary, jobs: journal });
+    const after = ytPlaylistDownload(playlist, {
+      inLibrary: nothingInLibrary,
+      jobs: [...journal, ...songs.map(queued)],
+    });
+    // Generous for CI; the playlist screen decides its Download button with it on every open.
+    assert.ok(performance.now() - started < 2000);
+
+    assert.equal(before.toDownload.length, 2000);
+    assert.deepEqual(
+      before.toDownload.flatMap(({ song: { videoId }, sharedJob }) =>
+        sharedJob === null ? [] : [[videoId, sharedJob]],
+      ),
+      [["v0", "alt0"]],
+    );
+    assert.equal(after.toDownload.length, 0);
+    assert.equal(after.toCancel.length, 2000);
+  });
+
   test("a song saved this session has taken its entry's place, and still counts in the progress line", () => {
     // "a" landed and its entry became the Library's song; "x" was always the Library's.
     const playlist = [file("/Music/A/a.mp3"), file("/Music/x.mp3"), stream("b"), stream("c")];
