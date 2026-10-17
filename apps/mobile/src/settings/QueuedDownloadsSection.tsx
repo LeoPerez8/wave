@@ -48,9 +48,9 @@ function QueuedDownloadRow({
 }
 
 /**
- * Settings › Downloads, above the failed songs: the songs on their way (Core's
- * `queuedDownloads`), the ones downloading first, then the waiting ones in queue order.
- * Nothing while none is.
+ * Settings › Downloads, above the failed songs: the Downloading section, the songs on their way
+ * (Core's `queuedDownloads`), the ones downloading first, then the waiting ones in queue order,
+ * under how many of each there are. Nothing while none is.
  */
 export function QueuedDownloadsSection() {
   const queued = useQueuedDownloads();
@@ -60,7 +60,8 @@ export function QueuedDownloadsSection() {
   if (summary === null) return null;
   return (
     <View>
-      <CatalogLine className="mb-2">{summary}</CatalogLine>
+      <CatalogLine className="mb-1">Downloading</CatalogLine>
+      <Text className="mb-2 font-sans text-footnote text-secondary">{summary}</Text>
       <Hairline />
       {queued.map((item) => (
         <QueuedDownloadRow key={item.id} queued={item} covers={covers} />

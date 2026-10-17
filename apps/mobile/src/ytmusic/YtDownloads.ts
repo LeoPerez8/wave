@@ -202,6 +202,11 @@ interface DownloadFallbackPlan {
   readonly source: "youtube";
   /** The video it downloads, for a job not named after one (a missing song's). */
   readonly video?: string;
+  /**
+   * YouTube's turn starts with a prepare decision (`prepareFallback`), which names the video it
+   * downloads: a song's audio track, looked up only once Soulseek has handed the job over.
+   */
+  readonly prepare?: true;
   readonly targetPath: string;
   readonly failurePlan: DownloadFailurePlan;
 }
@@ -264,16 +269,36 @@ export const prepareDownload = (song: NativeYtSong) =>
         failurePlan: downloadFailurePlan(source, { ytMusicOn }),
       } satisfies PrepareAnswer;
     }
-    // YouTube Music's fallback downloads the song's audio track too.
-    const [found, tags, video] = yield* Effect.all(
-      [
-        searchSoulseek(song),
-        metadata(song),
-        ytMusicOn ? audioTrack(song) : Effect.succeed(undefined),
-      ],
-      { concurrency: "unbounded" },
-    );
-    return yield* soulseekAnswer(song, found, tags, { roots, excludedFolders }, ytMusicOn, video);
+    // YouTube Music's fallback looks up the song's audio track once it starts (`prepareFallback`).
+    const [found, tags] = yield* Effect.all([searchSoulseek(song), metadata(song)], {
+      concurrency: "unbounded",
+    });
+    return yield* soulseekAnswer(song, found, tags, { roots, excludedFolders }, ytMusicOn, {
+      prepare: true,
+    });
+  });
+
+/**
+ * The journal's "prepare" decision for a Soulseek job it handed over to YouTube Music
+ * (`fellBackFrom`): the video it downloads, the song's audio track, now that YouTube's turn has
+ * come. The tags and the M4A's place are the ones Soulseek's prepare answer planned. With YT
+ * Music turned off since, there's no source, and Soulseek's failure stands.
+ */
+const prepareFallback = (claim: NativeDownloadDecision) =>
+  Effect.gen(function* () {
+    if (!ytMusicEnabled()) return yield* new DownloadFailed({ reason: "noSource" });
+    const { tags, targetPath } = claim;
+    if (tags === undefined || targetPath === undefined)
+      return yield* new DownloadFailed({ reason: "failed" });
+    const video = yield* audioTrack(claim.song);
+    return {
+      source: "youtube",
+      ...(video === undefined ? {} : { video }),
+      candidates: [],
+      tags,
+      targetPath,
+      failurePlan: downloadFailurePlan("youtube", { ytMusicOn: true }),
+    } satisfies PrepareAnswer;
   });
 
 /**
@@ -310,7 +335,8 @@ const searchSoulseek = (song: YtSong) => {
 /**
  * A Soulseek job's prepare answer from its search ([found]): the peers with [song]'s recording,
  * or Soulseek's failure, with YouTube Music's fallback while YT Music is on ([ytMusicOn]) and
- * its M4A has a place. A job not named after a video falls back only to the [video] named.
+ * its M4A has a place. A job not named after a video falls back only to the video [youtube]
+ * names; a song's fallback asks for its video when it starts (`prepare`).
  */
 const soulseekAnswer = (
   song: YtSong,
@@ -318,22 +344,20 @@ const soulseekAnswer = (
   tags: YtDownloadTags,
   { roots, excludedFolders }: DownloadFolders,
   ytMusicOn: boolean,
-  video?: string,
+  youtube: Pick<DownloadFallbackPlan, "video" | "prepare">,
 ) =>
   Effect.gen(function* () {
-    const youtube = ytMusicOn
-      ? ytDownloadDestination(roots, excludedFolders, tags, "youtube")
-      : null;
+    const m4a = ytMusicOn ? ytDownloadDestination(roots, excludedFolders, tags, "youtube") : null;
     // YouTube Music carries the job on only where its M4A has a place.
-    const failurePlan = downloadFailurePlan("soulseek", { ytMusicOn: youtube !== null });
+    const failurePlan = downloadFailurePlan("soulseek", { ytMusicOn: m4a !== null });
     const fallback: { readonly fallback?: DownloadFallbackPlan } =
-      youtube === null
+      m4a === null
         ? {}
         : {
             fallback: {
               source: "youtube",
-              ...(video === undefined ? {} : { video }),
-              targetPath: youtube.path,
+              ...youtube,
+              targetPath: m4a.path,
               failurePlan: downloadFailurePlan("youtube", { ytMusicOn }),
             },
           };
@@ -457,7 +481,7 @@ const prepareMissingSong = (trackId: number) =>
       tags,
       { roots, excludedFolders },
       ytMusicOn && video !== null,
-      video?.videoId,
+      video === null ? {} : { video: video.videoId },
     );
   });
 
@@ -541,6 +565,9 @@ const answer = (claim: NativeDownloadDecision) =>
   Effect.gen(function* () {
     switch (claim.decision) {
       case "prepare": {
+        // Soulseek handed the job over to YouTube Music, whose turn starts here.
+        if (claim.fellBackFrom !== undefined && claim.source === "youtube")
+          return yield* prepareFallback(claim);
         const trackId = missingSongTrackId(claim.id);
         return trackId === null
           ? yield* prepareDownload(claim.song)
