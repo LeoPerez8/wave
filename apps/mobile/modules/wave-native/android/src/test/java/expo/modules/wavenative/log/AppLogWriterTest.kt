@@ -83,10 +83,11 @@ class AppLogWriterTest {
     fileBusy.countDown()
     log.flush()
 
-    // The writer may have taken the first entry before the file was free; either way at most 4 got in.
-    val kept = written.filterNot { it.endsWith("dropped\n") }
+    // The writer may have taken an entry while the burst went on, making room for one more.
+    val kept = written.dropLast(1).map { it.trim().toInt() }
     assertTrue(written.toString(), kept.size in 3..4)
-    assertEquals(kept, (0 until kept.size).map { "$it\n" })
+    assertEquals(listOf(0, 1, 2), kept.take(3))
+    assertEquals(kept.sorted(), kept)
     assertEquals("${10 - kept.size} dropped\n", written.last())
   }
 
