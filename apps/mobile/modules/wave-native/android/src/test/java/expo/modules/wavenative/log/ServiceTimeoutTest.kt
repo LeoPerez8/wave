@@ -7,8 +7,8 @@ class ServiceTimeoutTest {
   @Test
   fun androidEndingAServiceOnItsTimeLimitSaysWhichAndHowLongItRan() {
     assertEquals(
-      "Android ended the playlist import service on its time limit after 6 h 2 min",
-      ServiceTimeout.line("the playlist import service", (6 * 60 + 2) * 60_000L + 30_000L),
+      "Android ended the lyrics and genre service on its time limit after 6 h 2 min",
+      ServiceTimeout.line("the lyrics and genre service", (6 * 60 + 2) * 60_000L + 30_000L),
     )
     assertEquals(
       "Android ended the downloads service on its time limit after 42 min 5 s",
