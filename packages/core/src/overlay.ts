@@ -42,6 +42,12 @@ export interface OverlayCardInput {
   readonly chromeBottom?: number | undefined;
   /** Open next to this (a menu next to its row) rather than centred. */
   readonly anchor?: OverlayAnchor | undefined;
+  /**
+   * The system text size against the default (Android's font scale): larger
+   * text makes a card's heading and entries taller, so an anchored card needs
+   * more room beside its anchor. 1 when absent.
+   */
+  readonly textScale?: number | undefined;
 }
 
 /** A rectangle in the app window, in dp. */
@@ -54,7 +60,8 @@ export interface OverlayAnchor {
   readonly gap: number;
   /**
    * The shortest the card gets to stay beside the anchor when it fits on
-   * neither side (its content scrolls), in dp. With less room than this on
+   * neither side (its content scrolls), in dp at the default text size; it
+   * grows in step with larger text (`textScale`). With less room than this on
    * both sides it covers the anchor instead. 0 when absent.
    */
   readonly minHeight?: number;
@@ -130,19 +137,34 @@ export const placeOverlayCard = (input: OverlayCardInput): OverlayCardFrame => {
  * Below the anchor, or above it when the card wouldn't fit below; always a
  * margin clear of the system bars and the floating chrome. Too tall for
  * either side, it shrinks into the roomier one (down to the anchor's
- * `minHeight`), so it never covers the anchor, nor the finger holding it.
+ * `minHeight`, scaled with the text), so it never covers the anchor, nor the
+ * finger holding it.
  */
 const placeNextTo = (
-  { window, insets, margin, maxWidth, cardHeight, chromeBottom = 0 }: OverlayCardInput,
-  { rect, gap, minHeight = 0 }: OverlayAnchor,
+  {
+    window,
+    insets,
+    margin,
+    maxWidth,
+    cardHeight,
+    chromeBottom = 0,
+    textScale = 1,
+  }: OverlayCardInput,
+  { rect, gap, minHeight: leastHeight = 0 }: OverlayAnchor,
 ): OverlayCardFrame => {
+  // A heading and a few entries, however large the text draws them (never smaller than usual).
+  const minHeight = leastHeight * Math.max(1, textScale);
   const areaWidth = window.width - insets.left - insets.right;
   const width = Math.min(areaWidth - margin * 2, maxWidth);
   const highest = insets.top + margin;
   const lowest = window.height - insets.bottom - chromeBottom - margin;
-  const below = rect.bottom + gap;
+  // The card's edges beside the anchor, kept within the space it may use: an anchor on the
+  // floating chrome (a tab) leaves no more room above it than the chrome's top does, and a
+  // row scrolled up under the status bar no more below it than the bar's foot does.
+  const below = Math.max(rect.bottom + gap, highest);
+  const above = Math.min(rect.top - gap, lowest);
   const roomBelow = lowest - below;
-  const roomAbove = rect.top - gap - highest;
+  const roomAbove = above - highest;
   const side =
     cardHeight <= roomBelow || (cardHeight > roomAbove && roomBelow >= roomAbove)
       ? "below"
@@ -152,7 +174,7 @@ const placeNextTo = (
   const maxHeight = cardHeight <= room || room >= minHeight ? room : lowest - highest;
   const height = Math.min(cardHeight, maxHeight);
   const top = Math.min(
-    Math.max(side === "below" ? below : rect.top - gap - height, highest),
+    Math.max(side === "below" ? below : above - height, highest),
     lowest - height,
   );
   // Centred on the anchor where the card is narrower than the screen (tablets, landscape).

@@ -1,5 +1,7 @@
 import { IconDots } from "@tabler/icons-react-native";
+import { playlistSongsLine } from "@wave/core";
 import { useLocalSearchParams } from "expo-router";
+import { useEffect } from "react";
 import { Text, useWindowDimensions, View } from "react-native";
 
 import { CELL, grid } from "@/catalog/grid";
@@ -8,15 +10,17 @@ import { PlayShuffle } from "@/catalog/PlayShuffle";
 import { IconButton } from "@/components/IconButton";
 import { useRenderCount } from "@/perf/perf";
 import { openPlaylistActions } from "@/playback/ActionsMenu";
+import { playlistOpened } from "@/library/backgroundFill";
 import { DetailFrame } from "@/library/DetailFrame";
 import { usePlaylist } from "@/library/hooks";
 import { LibraryStore, type PlaylistEntryRow, type PlaylistRow } from "@/library/LibraryStore";
-import { PlaylistImportLine, usePlaylistImportView } from "@/library/PlaylistImportLine";
+import { PlaylistImportLine } from "@/library/PlaylistImportLine";
 import { PlaylistItems, playPlaylistEntries } from "@/library/PlaylistItems";
 import { parseId, useKnownRow } from "@/library/routes";
 import { appRuntime } from "@/library/runtime";
 import { songCount } from "@/library/TrackList";
-import { ListDownloadAction, useYtPlaylistDownloadButton } from "@/ytmusic/YtSongList";
+import { UnavailableTryAgain } from "@/library/UnavailableEntry";
+import { listDownloadAction, useYtPlaylistDownloadButton } from "@/ytmusic/YtSongList";
 
 const NO_ENTRIES: readonly PlaylistEntryRow[] = [];
 
@@ -49,10 +53,22 @@ function PlaylistHead({ shown }: { shown: Shown }) {
   // Its YT Music entries download into the Library (Core's `ytPlaylistDownload`).
   const download = useYtPlaylistDownloadButton(items ?? NO_ENTRIES);
   const count = items?.length ?? playlist.trackCount;
+  // Every entry counts, and the line says how many can't play (Core's `playlistSongsLine`).
   const furniture =
     count === 0
       ? songCount(0)
-      : `${songCount(playlist.trackCount)} · ${Math.max(1, Math.round(playlist.durationMs / 60_000))} min`;
+      : `${playlistSongsLine(playlist.trackCount, playlist.unavailableCount)} · ${Math.max(1, Math.round(playlist.durationMs / 60_000))} min`;
+  const menu = (
+    // Its glyph sits on the right margin, like Back on the left.
+    <View style={{ marginRight: -12 }}>
+      <IconButton
+        icon={IconDots}
+        label="Playlist actions"
+        opensMenu
+        onPress={() => openPlaylistActions(playlist)}
+      />
+    </View>
+  );
   return (
     <View style={{ gap: CELL * 2, paddingBottom: CELL }}>
       <Mosaic paths={playlist.artworkPaths} size={width - grid.margin * 2} />
@@ -70,6 +86,7 @@ function PlaylistHead({ shown }: { shown: Shown }) {
         >
           {furniture}
         </Text>
+        <UnavailableTryAgain playlistId={playlist.id} items={items} />
         {download.progress !== null && (
           <Text
             className="font-sans text-footnote text-accent"
@@ -80,38 +97,26 @@ function PlaylistHead({ shown }: { shown: Shown }) {
         )}
         <PlaylistImportLine playlistId={playlist.id} />
       </View>
-      <View className="flex-row items-center justify-between">
-        {count > 0 ? (
-          <PlayShuffle onPlay={() => play(false)} onShuffle={() => play(true)}>
-            {download.button !== null && <ListDownloadAction download={download.button} />}
-          </PlayShuffle>
-        ) : (
-          <View />
-        )}
-        {/* Its glyph sits on the right margin, like Back on the left. */}
-        <View style={{ marginRight: -12 }}>
-          <IconButton
-            icon={IconDots}
-            label="Playlist actions"
-            opensMenu
-            onPress={() => openPlaylistActions(playlist)}
-          />
-        </View>
-      </View>
+      {count > 0 ? (
+        <PlayShuffle
+          onPlay={() => play(false)}
+          onShuffle={() => play(true)}
+          last={listDownloadAction(download.button)}
+          menu={menu}
+        />
+      ) : (
+        <View className="flex-row justify-end">{menu}</View>
+      )}
     </View>
   );
 }
 
-function NoSongs({ playlistId }: { playlistId: number }) {
-  // While an import fills it, its songs are on their way.
-  const importing = usePlaylistImportView(playlistId)?.canCancel === true;
+function NoSongs() {
   return (
     <View style={{ paddingTop: CELL * 3, gap: CELL / 2 }}>
       <Text className="font-sans text-title3 font-normal text-foreground">No songs yet</Text>
       <Text className="font-sans text-subheadline text-secondary">
-        {importing
-          ? "Songs appear here as they're found."
-          : "Long-press a song, an album or an artist and choose Add to Playlist."}
+        Long-press a song, an album or an artist and choose Add to Playlist.
       </Text>
     </View>
   );
@@ -129,6 +134,10 @@ export default function PlaylistScreen() {
   const playlistId = parseId(id);
   const detail = usePlaylist(playlistId);
   const known = useKnownRow("playlist", playlistId);
+  // The background fill goes on with the playlist opened last.
+  useEffect(() => {
+    if (playlistId >= 0) playlistOpened(playlistId);
+  }, [playlistId]);
   const shown: Shown | null | undefined =
     detail === undefined && known !== undefined ? { playlist: known, items: undefined } : detail;
   return (
@@ -138,7 +147,7 @@ export default function PlaylistScreen() {
           playlistId={playlist.id}
           items={items}
           header={<PlaylistHead shown={{ playlist, items }} />}
-          empty={<NoSongs playlistId={playlist.id} />}
+          empty={<NoSongs />}
         />
       )}
     </DetailFrame>

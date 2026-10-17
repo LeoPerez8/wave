@@ -27,20 +27,3 @@ export const parsePlaylistLayout = (stored: string | null): PlaylistLayout =>
 /** What to store for [layout]: null (nothing) for the default. */
 export const storedPlaylistLayout = (layout: PlaylistLayout): string | null =>
   layout === DEFAULT_PLAYLIST_LAYOUT ? null : layout;
-
-/** How many playlists sit side by side in a row of [layout]. */
-const PER_ROW: Record<PlaylistLayout, number> = { list: 1, grid: 2, large: 1 };
-
-/**
- * [playlists] as [layout] lays them out, a row at a time and in order: two to
- * a row in the grid (an odd one out alone on the last), one otherwise.
- */
-export const playlistLayoutRows = <P>(
-  playlists: readonly P[],
-  layout: PlaylistLayout,
-): (readonly P[])[] => {
-  const size = PER_ROW[layout];
-  const rows: (readonly P[])[] = [];
-  for (let i = 0; i < playlists.length; i += size) rows.push(playlists.slice(i, i + size));
-  return rows;
-};

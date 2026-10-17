@@ -42,7 +42,7 @@ export const HOME_SECTIONS: readonly HomeSection[] = [
   { id: "most-played", title: "Most played", fromPlays: true },
   { id: "most-played-albums", title: "Most played albums", fromPlays: true },
   { id: "most-played-artists", title: "Most played artists", fromPlays: true },
-  { id: "discover-mixes", title: "Discover mixes", fromPlays: true, needsYtMusic: true },
+  { id: "discover-mixes", title: "Discover mixes", fromPlays: false, needsYtMusic: true },
   { id: "favorites", title: "Favorites", fromPlays: false },
   { id: "stats", title: "Stats", fromPlays: false },
   { id: "listening-overview", title: "Listening overview", fromPlays: false },

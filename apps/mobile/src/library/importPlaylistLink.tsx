@@ -33,7 +33,7 @@ import { pressedRect } from "@/motion/pressedRect";
 import { showError, showMessage } from "@/overlay/alert";
 import { CardEntries } from "@/overlay/CardEntries";
 import { useOverlayFlow } from "@/overlay/flow";
-import { followUp, openOverlay, presentOverlay } from "@/overlay/overlay";
+import { dismissAllOverlays, followUp, openOverlay, presentOverlay } from "@/overlay/overlay";
 import { ytMusicEnabled } from "@/settings/ytMusic";
 import { useThemeColor } from "@/theme/useThemeColor";
 import { askYtMusic } from "@/ytmusic/askYtMusic";
@@ -135,9 +135,9 @@ export const readLinkImport = async (
 };
 
 /**
- * Makes the planned playlist at once, empty (Replace or Keep Both when its
- * name is taken, as the M3U import asks), opens it, and starts filling it in
- * the background (`startLinkImport`).
+ * Makes the planned playlist (Replace or Keep Both when its name is taken,
+ * as the M3U import asks), gives it every song at once (`startLinkImport`),
+ * and opens it.
  */
 export const saveLinkImport = async (
   plan: LinkImportPlan<NativeYtSong>,
@@ -173,9 +173,11 @@ export const openLinkImport = (text: string): void => {
  * Opens what [text] shared to Wave from another app names (Core's
  * `sharedTextImport`): the import card for its playlist, as From a Link opens
  * it, or a short message saying what Wave imports (or that YT Music is off).
- * Nothing is read for a message.
+ * Nothing is read for a message. The cards open before the share (a link
+ * card left open while the link was fetched from Spotify) are dismissed.
  */
 export const openSharedText = (text: string): void => {
+  dismissAllOverlays();
   const shared = sharedTextImport(text, { ytMusic: ytMusicEnabled() });
   if (shared.kind === "import") openImportCard(shared.link);
   else void showMessage(shared.title, shared.message);
@@ -402,6 +404,9 @@ function ImportCard({ link, close }: { link: PlaylistLink; close: () => void }) 
             >
               {view.line}
             </Text>
+            {view.source !== null && (
+              <Text className="font-sans text-footnote text-secondary">{view.source}</Text>
+            )}
           </View>
         </View>
         {view.note !== null && (

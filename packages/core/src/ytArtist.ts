@@ -107,6 +107,11 @@ export interface YtArtistPage<S extends YtSong = YtSong> {
   readonly allSongsCut?: boolean;
   readonly albums: readonly YtArtistAlbum[];
   readonly singles: readonly YtArtistAlbum[];
+  /**
+   * The artists the page lists as similar ("Fans might also like"), in its
+   * order, for Discover mixes. Pages saved before it was read have none.
+   */
+  readonly similar?: readonly YtArtistCandidate[];
 }
 
 /** How reading an artist's songs playlist (`readYtPlaylist`) went. */

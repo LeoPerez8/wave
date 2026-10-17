@@ -14,6 +14,9 @@ import {
   type PlayTotals,
   type ListeningSums,
   type StatsWindow,
+  type TryAgainAnswered,
+  type UnsearchedSong,
+  type YtAlbumSong,
   type YtArtistSaved,
 } from "@wave/core";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
@@ -95,8 +98,14 @@ import {
   selectPlaylistEntries,
   selectPlaylistEntriesRevision,
   selectPlaylists,
+  selectPlaylistsLastPlayed,
   selectTrackPaths,
+  selectUnsearchedEntries,
+  settleTryAgain,
+  settleUnsearchedEntries,
   type PlaylistEntry,
+  type PlaylistUnsearched,
+  type UnsearchedEntriesSettled,
 } from "./db/playlists";
 import { hasUnscannedRoot, pruneOrphans, saveBatch } from "./db/save";
 import * as schema from "./db/schema";
@@ -344,8 +353,12 @@ export interface PlaylistRow {
   readonly name: string;
   /** Core sort key of the name. */
   readonly sort: string;
+  /** When it was made, in ms since the epoch (Recently Added). */
+  readonly createdAt: number;
   readonly trackCount: number;
   readonly durationMs: number;
+  /** Its unavailable entries (songs an import couldn't find), counted in [trackCount] too. */
+  readonly unavailableCount: number;
   /**
    * Thumbnails of its artwork (Core's `playlistArtwork`): its own image alone,
    * else its mosaic (none, one or four covers). Every place that shows a
@@ -572,6 +585,10 @@ export class LibraryStore extends Context.Service<
     readonly clearRecentSearches: Effect.Effect<void, LibraryStoreError>;
     /** Every playlist by name, with its mosaic. */
     readonly listPlaylists: Effect.Effect<readonly PlaylistRow[], LibraryStoreError>;
+    /** When a song last played from each playlist, by playlist id (never played: absent). */
+    readonly playlistsLastPlayed: Effect.Effect<ReadonlyMap<number, number>, LibraryStoreError>;
+    /** Every playlist's unsearched songs, top to bottom, for the background fill. */
+    readonly unsearchedEntries: Effect.Effect<readonly PlaylistUnsearched[], LibraryStoreError>;
     /** A playlist with its YT Music entries and its Library songs in [scope]. */
     readonly getPlaylist: (
       id: number,
@@ -618,6 +635,24 @@ export class LibraryStore extends Context.Service<
       playlistId: number,
       itemIds: readonly number[],
     ) => Effect.Effect<void, LibraryStoreError>;
+    /**
+     * Settles what Try Again found of the playlist's unavailable entries: each
+     * found becomes its YT Music song in its place (Core's `tryAgainSettles`).
+     * Returns how many were found and how many searches failed.
+     */
+    readonly settleTryAgain: (
+      playlistId: number,
+      answered: readonly TryAgainAnswered<YtAlbumSong>[],
+    ) => Effect.Effect<{ readonly found: number; readonly failed: number }, LibraryStoreError>;
+    /**
+     * Settles the unsearched song [song] as [becomes] (found, a YT Music
+     * song; not found, unavailable) in every playlist holding it (Core's
+     * `unsearchedSettles`).
+     */
+    readonly settleUnsearched: (
+      song: UnsearchedSong,
+      becomes: PlaylistSong,
+    ) => Effect.Effect<UnsearchedEntriesSettled, LibraryStoreError>;
     /** Makes the playlist hold exactly [songs], in that order (an import's Replace). */
     readonly replacePlaylistSongs: (
       playlistId: number,
@@ -1126,6 +1161,14 @@ const make = Effect.gen(function* () {
 
     listPlaylists: attempt("list playlists", () => selectPlaylists(db)),
 
+    playlistsLastPlayed: attempt("read when playlists last played", () =>
+      selectPlaylistsLastPlayed(db),
+    ),
+
+    unsearchedEntries: attempt("read the playlists' unsearched songs", () =>
+      selectUnsearchedEntries(db),
+    ),
+
     getPlaylist: (id, scope) => attempt("open the playlist", () => selectPlaylist(db, id, scope)),
 
     createPlaylist: (name, songs) =>
@@ -1158,6 +1201,16 @@ const make = Effect.gen(function* () {
     removePlaylistItems: (playlistId, itemIds) =>
       attempt("remove from the playlist", () =>
         removePlaylistItems(db, playlistId, itemIds, Date.now()),
+      ),
+
+    settleTryAgain: (playlistId, answered) =>
+      attempt("save what Try Again found", () =>
+        settleTryAgain(db, playlistId, answered, Date.now()),
+      ),
+
+    settleUnsearched: (song, becomes) =>
+      attempt("save what the search found", () =>
+        settleUnsearchedEntries(db, song, becomes, Date.now()),
       ),
 
     replacePlaylistSongs: (playlistId, songs) =>

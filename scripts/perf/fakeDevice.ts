@@ -349,7 +349,7 @@ export class FakeDevice implements Device {
       this.importing = true;
       this.render(this.clock, 20);
       this.advance(40);
-      this.respond("import.running", "2000");
+      this.respond("import.done", "2000");
     }
   }
 

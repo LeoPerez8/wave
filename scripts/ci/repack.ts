@@ -27,14 +27,38 @@ const files = (
     return keep(path) ? [path] : [];
   });
 
-// One hash for a set of files, from their paths and contents.
-const digest = (dir: string, paths: readonly string[]) =>
+// One hash for a set of files, from their paths and contents (as `read` gives them).
+const digest = (
+  dir: string,
+  paths: readonly string[],
+  read = (path: string): string | Buffer => readFileSync(join(dir, path)),
+) =>
   sha256(
     [...paths]
       .sort()
-      .map((path) => `${path}\0${sha256(readFileSync(join(dir, path)))}\n`)
+      .map((path) => `${path}\0${sha256(read(path))}\n`)
       .join(""),
   );
+
+// The app's version leaves the key: ti releases a new one on every app push, and a repack
+// writes it into the APK (apk-version.ts). package.json holds it, and prebuild writes it into
+// app/build.gradle.
+const withoutVersion =
+  (dir: string) =>
+  (path: string): string | Buffer => {
+    const file = readFileSync(join(dir, path));
+    if (path === "app/build.gradle")
+      return file
+        .toString("utf8")
+        .replace(/^(\s*versionCode\s+)\d+(\s*)$/m, "$1$2")
+        .replace(/^(\s*versionName\s+)["'][^"']*["'](\s*)$/m, "$1$2");
+    if (path === "package.json") {
+      const packageJson = JSON.parse(file.toString("utf8"));
+      delete packageJson.version;
+      return JSON.stringify(packageJson);
+    }
+    return file;
+  };
 
 // Build output and tool state inside the generated project, not prebuild's output.
 const PROJECT_STATE = new Set(["build", ".gradle", ".cxx", ".kotlin"]);
@@ -52,7 +76,8 @@ const IMAGE = /\.(avif|bmp|gif|heic|heif|ico|jpe?g|ktx|png|psd|svg|tiff?|webp)$/
  * repack is only safe when they match the kept build's exactly.
  * The CI workflow and scripts are part of the recipe too: build flags and the bundle
  * handoff can change the native APK. Hashing all CI files conservatively rebuilds it
- * after a CI-only change; a TS/TSX-only app change still reuses the key.
+ * after a CI-only change; a TS/TSX-only app change still reuses the key. So does a new app
+ * version: a repack writes this run's into the APK.
  */
 export const apkCacheKey = ({
   fingerprint,
@@ -71,6 +96,7 @@ export const apkCacheKey = ({
       (name) => PROJECT_STATE.has(name),
       () => true,
     ),
+    withoutVersion(android),
   );
   const images = digest(
     appDir,
@@ -80,13 +106,14 @@ export const apkCacheKey = ({
       (path) => IMAGE.test(path),
     ),
   );
-  // Expo deliberately ignores fields such as the app version for OTA updates. APKs must
-  // invalidate on every app config and dependency declaration change, including those.
+  // Expo's fingerprint leaves out fields that don't change native code, like the app's name.
+  // APKs must invalidate on every app config and dependency declaration change but the version.
   const config = digest(
     appDir,
     readdirSync(appDir).filter((path) =>
       /^(package\.json|app\.json|app\.config\.[cm]?[jt]s)$/.test(path),
     ),
+    withoutVersion(appDir),
   );
   const repo = resolve(appDir, "../..");
   const recipe = digest(repo, [

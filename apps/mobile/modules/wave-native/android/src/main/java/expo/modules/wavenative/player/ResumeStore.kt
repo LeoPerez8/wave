@@ -1,12 +1,12 @@
 package expo.modules.wavenative.player
 
 import android.content.Context
-import android.util.Log
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.ListeningExecutorService
 import com.google.common.util.concurrent.MoreExecutors
+import expo.modules.wavenative.log.WaveLog
 import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
@@ -110,13 +110,13 @@ object ResumeStore {
         val temp = File(target.parentFile, "$FILE_NAME.tmp")
         temp.writeText(text)
         if (!temp.renameTo(target)) error("Couldn't replace $target")
-      }.onFailure { Log.w(TAG, "Couldn't save the resume snapshot", it) }
+      }.onFailure { WaveLog.w(TAG, "Couldn't save the resume snapshot", it) }
     }
   }
 
   private fun read(target: File): ResumeSnapshot? =
     runCatching { if (target.exists()) ResumeSnapshot.decode(target.readText()) else null }
-      .onFailure { Log.w(TAG, "Couldn't read the resume snapshot", it) }
+      .onFailure { WaveLog.w(TAG, "Couldn't read the resume snapshot", it) }
       .getOrNull()
 
   /** A player item (built by [PlayerMediaItems.build]) as the snapshot keeps it. */

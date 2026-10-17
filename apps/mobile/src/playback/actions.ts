@@ -1,17 +1,20 @@
 import {
-  discoverTrackId,
+  queueSongTrackId,
   type MixedSong,
   nextRepeatMode,
   pagePlayback,
   type PagePlayback,
   type PlayableSongs,
+  type PlaylistItem,
   playlistPlayback,
+  playlistUnplayableNotice,
   skipMissingSongs,
   tappedMissingSong,
   type UpNextMove,
   startSleepTimer,
   type QueueCommand,
   type QueueContext,
+  type QueueSong,
   type RepeatMode,
   type ShuffleKind,
   type SleepTimerChoice,
@@ -34,7 +37,7 @@ import type { YtMusic } from "@/ytmusic/YtMusic";
 
 import { Player, playbackState } from "./Player";
 import { Queue, currentPositionMs, queueState, toQueueTrack } from "./Queue";
-import { toYtQueueTrack, type QueueTrack } from "./queueTracks";
+import { toUnsearchedQueueTrack, toYtQueueTrack, type QueueTrack } from "./queueTracks";
 import { cacheYtCoversInBackground, ytQueueTrack } from "./ytQueueTracks";
 
 /** Shows a playback action's failure. */
@@ -66,14 +69,17 @@ export const connectPlayer = (): Promise<void> => run(Effect.asVoid(Queue));
 /** A song of a list that mixes the Library's songs and YT Music's. */
 type ListedSong = MixedSong<YtSong, SongRow>;
 
-/** A listed song that can play: a YT Music song, or a Library song with a file. */
-type PlayableListedSong = MixedSong<YtSong, PlayableSongRow>;
+/** A song that queues: a Library song, a YT Music song, or a playlist's unsearched song. */
+type QueuedSong = QueueSong<YtSong, SongRow>;
 
-const playable = (song: ListedSong): song is PlayableListedSong =>
-  song.source === "stream" || songHasFile(song.track);
+/** A song that can play: a YT Music or unsearched song, or a Library song with a file. */
+type PlayableListedSong = QueueSong<YtSong, PlayableSongRow>;
+
+const playable = (song: QueuedSong): song is PlayableListedSong =>
+  song.source !== "library" || songHasFile(song.track);
 
 /** The Library song a listed song is, if it is one. */
-const libraryTrack = (song: ListedSong): SongRow | null =>
+const libraryTrack = (song: QueuedSong): SongRow | null =>
   song.source === "library" ? song.track : null;
 
 /**
@@ -93,9 +99,23 @@ const leaveOutMissing = <T, P extends T>(
   return skipMissingSongs(songs, startIndex, hasFile);
 };
 
-/** The Library songs of a mixed list as the queue takes them. */
+/**
+ * The songs of a mixed list that aren't YT Music songs as the queue takes
+ * them: the Library's, and the unsearched ones (searched as they're about to
+ * play).
+ */
 const libraryQueueTracks = (songs: readonly PlayableListedSong[]): QueueTrack[] =>
-  songs.flatMap((song) => (song.source === "library" ? [toQueueTrack(song.track)] : []));
+  songs.flatMap((song) =>
+    song.source === "library"
+      ? [toQueueTrack(song.track)]
+      : song.source === "unsearched"
+        ? [toUnsearchedQueueTrack(song.song)]
+        : [],
+  );
+
+/** The YT Music songs of a mixed list. */
+const streamedSongs = (songs: readonly PlayableListedSong[]): YtSong[] =>
+  songs.flatMap((song) => (song.source === "stream" ? [song.song] : []));
 
 /** [songs] with the one playing now (a shuffled play's pick) first, so its cover is cached first. */
 const nowPlayingFirst = (songs: readonly YtSong[]): YtSong[] => {
@@ -162,13 +182,13 @@ const startMixed = (
   return dispatchWithYt(
     {
       type: "play",
-      trackIds: songs.map(discoverTrackId),
+      trackIds: songs.map(queueSongTrackId),
       startIndex,
       context,
       shuffle: options.shuffle,
     },
-    songs.flatMap((song) => (song.source === "library" ? [] : [song.song])),
-    start?.source === "library" ? undefined : start?.song,
+    streamedSongs(songs),
+    start?.source === "stream" ? start.song : undefined,
     libraryQueueTracks(songs),
   );
 };
@@ -295,30 +315,46 @@ export const playPage = (
     startPlayback(pagePlayback(play.songs), play.startIndex, context, options),
   );
 
+/** A playlist's entry: a listed song, or an unavailable song (Core's `PlaylistItem`). */
+type PlaylistListed = PlaylistItem<YtSong, SongRow>;
+
+/** A playlist's entry that isn't a missing song: Core's `playlistPlayback` skips the unavailable ones. */
+const notMissing = (
+  entry: PlaylistListed,
+): entry is PlayableListedSong | Extract<PlaylistListed, { source: "unavailable" }> =>
+  entry.source === "unavailable" || playable(entry);
+
 /**
  * Plays a playlist's [entries] from `startIndex` (or shuffled), by Core's
  * `playlistPlayback`: with YT Music on and YT Music entries among them, the
  * whole list (the Library's files, the rest streamed); with it off, the
- * Library's songs alone. Missing songs never play: a tapped one downloads
- * instead. Resolves false when
- * there's nothing to play because YT Music is off (a YT Music entry tapped).
+ * Library's songs alone. Unavailable entries never play (a tapped one is the
+ * caller's to explain). Missing songs never play: a tapped one downloads
+ * instead. Resolves to what to say when nothing plays: why, when every entry
+ * but the missing songs is unavailable (Core's `playlistUnplayableNotice`),
+ * or that YT Music is off (a YT Music entry tapped, or nothing else to play);
+ * null otherwise.
  */
 export const playPlaylist = async (
-  entries: readonly ListedSong[],
+  entries: readonly PlaylistListed[],
   listedStart: number | undefined,
   context: QueueContext,
   options: PlayOptions = {},
-): Promise<boolean> => {
-  const files = leaveOutMissing(entries, listedStart, playable, libraryTrack);
-  // A missing song tapped, or nothing but missing songs: YT Music isn't why.
-  if (files === null) return true;
+): Promise<string | null> => {
+  const files = leaveOutMissing(entries, listedStart, notMissing, (entry) =>
+    entry.source === "library" ? entry.track : null,
+  );
+  // A missing song tapped (it downloads), or nothing but missing songs.
+  if (files === null) return null;
+  const unplayable = playlistUnplayableNotice(files.songs);
+  if (unplayable !== null) return unplayable;
   const play = playlistPlayback(files.songs, {
     ytMusic: ytMusicEnabled(),
     startIndex: files.startIndex,
   });
-  if (play === null) return false;
+  if (play === null) return "YT Music is off in Settings";
   await startPlayback(play.playback, play.startIndex, context, options);
-  return true;
+  return null;
 };
 
 export const playYtNext = (songs: readonly YtSong[]): Promise<void> =>
@@ -333,13 +369,13 @@ export const addYtToQueue = (songs: readonly YtSong[]): Promise<void> =>
  * are left out.
  */
 export const queueDiscoverSongs = (
-  listed: readonly MixedSong<YtSong, SongRow>[],
+  listed: readonly QueuedSong[],
   where: "playNext" | "addToQueue",
 ): Promise<void> => {
   const songs = listed.filter(playable);
   return dispatchWithYt(
-    { type: where, trackIds: songs.map(discoverTrackId) },
-    songs.flatMap((song) => (song.source === "library" ? [] : [song.song])),
+    { type: where, trackIds: songs.map(queueSongTrackId) },
+    streamedSongs(songs),
     undefined,
     libraryQueueTracks(songs),
   );

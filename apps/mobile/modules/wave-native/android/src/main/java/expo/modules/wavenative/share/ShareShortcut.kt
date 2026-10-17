@@ -3,11 +3,11 @@ package expo.modules.wavenative.share
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import android.util.Log
 import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
 import expo.modules.wavenative.launcher.LauncherIconSwitcher
+import expo.modules.wavenative.log.WaveLog
 
 /**
  * The "Import to Wave" sharing shortcut (#205): a dynamic shortcut in the share target's
@@ -31,7 +31,7 @@ object ShareShortcut {
   fun publish(context: Context) {
     val app = context.applicationContext
     Thread({
-      runCatching { push(app) }.onFailure { Log.w("WaveShareShortcut", "Couldn't publish the share shortcut", it) }
+      runCatching { push(app) }.onFailure { WaveLog.w("WaveShareShortcut", "Couldn't publish the share shortcut", it) }
     }, "wave-share-shortcut").start()
   }
 

@@ -16,6 +16,7 @@ import {
   autoTrackItems,
   decodeAutoMediaId,
   encodeAutoMediaId,
+  unsearchedTrackId,
   type AutoNode,
   type AutoTrack,
   type MixedSong,
@@ -623,6 +624,23 @@ describe("Auto playlist playback", () => {
     assert.deepEqual(autoListPlay(shuffle, [streamed("a"), streamed("b")], false), {
       kind: "ytMusicOff",
     });
+  });
+
+  test("an unsearched entry plays in its place as a YT Music entry does, by its own id", () => {
+    const song = {
+      title: "Touch",
+      artists: ["Daft Punk"],
+      album: null,
+      durationMs: 498_000,
+      artworkUrl: null,
+    };
+    const listed = [own(1), { source: "unsearched", song } as const, own(2)];
+    const id = unsearchedTrackId(song);
+    const tapped = { type: "track", list: playlist, index: 1, trackId: id } as const;
+    const play = autoListPlay(tapped, listed, true);
+    assert.deepEqual(play.kind === "play" && play.start.trackIds, ["1", id, "2"]);
+    assert.deepEqual(play.kind === "play" && play.added, [id]);
+    assert.deepEqual(autoListPlay(tapped, listed, false), { kind: "ytMusicOff" });
   });
 
   test("a song no longer in the list, or an empty list, isn't found", () => {

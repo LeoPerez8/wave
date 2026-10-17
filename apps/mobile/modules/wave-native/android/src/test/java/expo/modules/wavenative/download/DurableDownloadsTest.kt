@@ -815,6 +815,33 @@ class DurableDownloadsTest {
     } finally { folder.deleteRecursively() }
   }
 
+  @Test fun aDecisionJsIsStillWorkingOnKeepsItsLeaseUntilTheJobsDeadline() {
+    val folder = Files.createTempDirectory("wave-renew").toFile()
+    try {
+      var now = 1_000L
+      val owner = DurableDownloads(File(folder, "jobs"), clock = { now })
+      owner.enqueue(mapOf("videoId" to "song", "title" to "Recording"), null)
+      owner.advance(NoTransfer, NoPublication)
+      val lease = owner.claim("song")!!
+      val generation = lease["generation"] as Long
+      val token = lease["token"] as String
+      // Waiting for the search allowance: JS renews the lease before it runs out, again and again.
+      repeat(10) {
+        now += DurableDownloads.LEASE_MS - 5_000
+        assertTrue(owner.renew("song", generation, token))
+        owner.advance(NoTransfer, NoPublication)
+      }
+      assertTrue(owner.submit("song", generation, token, "prepare", mapOf("failure" to "unavailable")))
+      // A lease already run out, or another token, isn't renewed.
+      owner.enqueue(mapOf("videoId" to "other", "title" to "Other"), null)
+      owner.advance(NoTransfer, NoPublication)
+      val other = owner.claim("other")!!
+      assertFalse(owner.renew("other", other["generation"] as Long, "not-the-token"))
+      now += DurableDownloads.LEASE_MS + 1
+      assertFalse(owner.renew("other", other["generation"] as Long, other["token"] as String))
+    } finally { folder.deleteRecursively() }
+  }
+
   @Test fun theNotificationCountsTheSongsLeftOfAnAlbum() {
     val folder = Files.createTempDirectory("wave-album").toFile()
     try {

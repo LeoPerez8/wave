@@ -37,6 +37,7 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import expo.modules.wavenative.artwork.ArtworkProvider
 import expo.modules.wavenative.launcher.LauncherIconSwitcher
+import expo.modules.wavenative.log.WaveLog
 import expo.modules.wavenative.yt.YtClient
 import expo.modules.wavenative.yt.YtDataSource
 import expo.modules.wavenative.yt.YtMedia
@@ -630,7 +631,7 @@ class PlaybackService : MediaLibraryService() {
           override fun onSuccess(result: T) = Unit
 
           override fun onFailure(error: Throwable) {
-            Log.w(JsRuntime.LOG_TAG, "Couldn't $what", error)
+            WaveLog.w(JsRuntime.LOG_TAG, "Couldn't $what", error)
             mediaSession.sendError(
               controller,
               SessionError(SessionError.ERROR_UNKNOWN, error.message ?: AutoBridge.STILL_LOADING),

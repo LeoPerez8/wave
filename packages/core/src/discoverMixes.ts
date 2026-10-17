@@ -1,30 +1,32 @@
 /**
  * Discover mixes (docs/spec.md, "Home"): a Home shelf of mixes made of songs
  * the owner doesn't know yet. Each mix starts from one of the owner's most
- * played artists or songs and keeps what YouTube Music's radio for it plays
+ * played artists or songs (or, while plays make too few, one of the
+ * Library's) and keeps what YouTube Music's radio for it plays
  * next, less what the Library has and what the owner has played. Core picks
  * the seeds, decides which radio songs a mix keeps and when the mixes are
  * built again; the native module reads the radio and the app saves the mixes.
  */
 
 import { splitCredit } from "./credits.ts";
+import { artistPhotoName } from "./artistPhoto.ts";
 import { identityKey } from "./library.ts";
 import { normalizeSearchText } from "./search.ts";
 import { readStoredRecord } from "./storedJson.ts";
-import { ytArtistQuery } from "./ytArtist.ts";
+import { libraryArtistFinder, ytArtistQuery } from "./ytArtist.ts";
 import type { YtAlbumSong } from "./ytDiscover.ts";
 import { libraryFinder, type YtSong } from "./ytMusic.ts";
 
 /** How many mixes Home shows at most. */
 export const DISCOVER_MIX_COUNT = 6;
 
-/** A Library artist as seeding sees it, among the most played. */
+/** A Library artist as seeding sees it. */
 export interface DiscoverSeedArtist {
   readonly id: number;
   readonly name: string;
 }
 
-/** A Library song as seeding sees it, among the most played. */
+/** A Library song as seeding sees it. */
 export interface DiscoverSeedSong {
   readonly id: number;
   readonly title: string;
@@ -35,92 +37,293 @@ export interface DiscoverSeedSong {
   readonly durationMs: number;
 }
 
-/** What a mix starts from: a most played artist, or a most played song. */
+/** A Library artist with how many of the Library's songs credit them. */
+export interface DiscoverLibraryArtist extends DiscoverSeedArtist {
+  readonly songCount: number;
+}
+
+/** A Library song with when it entered the Library (ms since the epoch). */
+export interface DiscoverLibrarySong extends DiscoverSeedSong {
+  readonly addedAt: number;
+}
+
+/**
+ * Where a seed comes from: the owner's plays, the Library when plays are
+ * short, or artists YouTube Music finds similar to the Library's.
+ */
+export type DiscoverSeedSource = "plays" | "library" | "similar";
+
+/** An artist YouTube Music lists as similar to a Library artist. */
+export interface DiscoverSimilarArtist {
+  readonly name: string;
+  /** Their YouTube Music page (`UC…`). */
+  readonly browseId: string;
+}
+
+/** The similar artists a Library artist's YouTube Music page lists ("Fans might also like"). */
+export interface DiscoverSimilarArtists {
+  /** The Library artist whose page it is (`discoverSimilarSource`). */
+  readonly of: string;
+  /** In the page's order; none when the page couldn't be read or lists none. */
+  readonly artists: readonly DiscoverSimilarArtist[];
+}
+
+/** What a mix starts from: an artist, or a song. */
 export type DiscoverMixSeed =
   | {
       readonly kind: "artist";
       /** Tells the mix apart from the others, and from itself on another day. */
       readonly id: string;
       readonly name: string;
+      readonly from: DiscoverSeedSource;
+      /** Their YouTube Music page, for a similar artist: their radio starts there. */
+      readonly browseId?: string;
     }
   | {
       readonly kind: "song";
       readonly id: string;
       /** The song's title. */
       readonly name: string;
+      readonly from: DiscoverSeedSource;
       readonly song: DiscoverSeedSong;
     };
 
+/** What the seeds are picked from, each source filling what the ones before left short. */
+export interface DiscoverSeedPools {
+  /** The owner's all-time most played artists and songs, most played first. */
+  readonly played: {
+    readonly artists: readonly DiscoverSeedArtist[];
+    readonly songs: readonly DiscoverSeedSong[];
+  };
+  /** The Library's artists and songs, in any order. */
+  readonly library?: {
+    readonly artists: readonly DiscoverLibraryArtist[];
+    readonly songs: readonly DiscoverLibrarySong[];
+  };
+  /**
+   * The similar artists read so far, page by page, in the order
+   * `discoverSimilarSource` asked for them. Used with [library] only.
+   */
+  readonly similar?: readonly DiscoverSimilarArtists[];
+}
+
 /** How many of the mixes start from artists when there are songs enough for the rest. */
 const ARTIST_SEEDS = 3;
+/** How many of the Library's artists with the most songs seeding looks at. */
+const LIBRARY_ARTISTS = 20;
+/** How many Library artists' pages are read for similar artists at most. */
+const SIMILAR_PAGES = 3;
 
 const songKey = (song: DiscoverSeedSong): string =>
   `${normalizeSearchText(song.title)}\u001f${normalizeSearchText(song.artist)}`;
 
-/** [songs] without any crediting one of [artists], each recording once, in their order. */
-const songsBeside = (
-  songs: readonly DiscoverSeedSong[],
-  artists: readonly DiscoverSeedArtist[],
-): DiscoverSeedSong[] => {
-  const taken = new Set(artists.map((artist) => artist.id));
-  const seen = new Set<string>();
-  return songs.filter((song) => {
-    if (song.artistIds.some((id) => taken.has(id))) return false;
-    const key = songKey(song);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-};
+/** A seed artist: a Library artist, or a similar one with their page. */
+interface SeedArtist extends DiscoverSeedArtist {
+  readonly browseId?: string;
+}
+
+/** Artists and songs, in the order seeding takes them: a source's, or the seeds picked. */
+interface SeedPool {
+  readonly artists: readonly SeedArtist[];
+  readonly songs: readonly DiscoverSeedSong[];
+}
 
 /**
- * The mixes' seeds, from the owner's most played [artists] and [songs] (most
- * played first): three artists and three songs, taking turns from the most
- * played artist, a song by none of the artists seeding a mix (their mix has
- * it already). With too few of either, the other makes up the six. Names
- * that aren't an artist's ("Various Artists") seed nothing.
+ * Up to [want] seeds from [pool] beside the seeds [taken] from the sources
+ * before: [target] artists and songs for the rest, each song by none of the
+ * seed artists, each artist on none of the seed songs, each artist and each
+ * recording once. Short of [want], one artist more at a time makes it up, as
+ * each may take songs crediting them out of the rest, the pool's own artists
+ * first and then the [similar] ones (vetted already); short with every
+ * artist, one fewer of the pool's own at a time, the similar ones staying
+ * (they take no songs); still short, the most seeds found.
  */
-export const discoverMixSeeds = ({
-  artists,
-  songs,
-}: {
-  readonly artists: readonly DiscoverSeedArtist[];
-  readonly songs: readonly DiscoverSeedSong[];
-}): DiscoverMixSeed[] => {
-  const seen = new Set<string>();
-  const named = artists.filter((artist) => {
-    if (ytArtistQuery(artist.name) === null) return false;
+const pickSeeds = (
+  pool: SeedPool,
+  taken: SeedPool,
+  want: number,
+  target: number,
+  similar: readonly SeedArtist[] = [],
+): SeedPool => {
+  const seen = new Set(taken.artists.map((artist) => identityKey(artist.name)));
+  const credited = new Set(taken.songs.flatMap((song) => song.artistIds));
+  const named = pool.artists.filter((artist) => {
+    if (ytArtistQuery(artist.name) === null || credited.has(artist.id)) return false;
     const key = identityKey(artist.name);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
-  // One artist more at a time while short of six, as each may take songs crediting
-  // them out of the rest; still short with every artist, the most seeds found.
-  const seedsWith = (count: number) => {
-    const chosen = named.slice(0, count);
-    const besides = songsBeside(songs, chosen);
-    return { chosen, besides, count: chosen.length + besides.length };
+  const seededRecordings = taken.songs.map(songKey);
+  const candidates = [...named, ...similar];
+  const seedsWith = (artists: readonly SeedArtist[]) => {
+    const by = new Set([...taken.artists, ...artists].map((artist) => artist.id));
+    const recordings = new Set(seededRecordings);
+    const songs: DiscoverSeedSong[] = [];
+    for (const song of pool.songs) {
+      if (artists.length + songs.length >= want) break;
+      if (song.artistIds.some((id) => by.has(id))) continue;
+      const key = songKey(song);
+      if (recordings.has(key)) continue;
+      recordings.add(key);
+      songs.push(song);
+    }
+    return { artists, songs, count: artists.length + songs.length };
   };
-  let best = seedsWith(ARTIST_SEEDS);
-  for (
-    let count = ARTIST_SEEDS + 1;
-    best.count < DISCOVER_MIX_COUNT && count <= named.length;
-    count++
-  ) {
-    const more = seedsWith(count);
+  const most = Math.min(candidates.length, want);
+  const start = Math.min(target, most);
+  let best = seedsWith(candidates.slice(0, start));
+  for (let count = start + 1; best.count < want && count <= most; count++) {
+    const more = seedsWith(candidates.slice(0, count));
     if (more.count > best.count) best = more;
   }
-  const { chosen, besides } = best;
-  const picked = besides.slice(0, DISCOVER_MIX_COUNT - chosen.length);
+  // Similar artists take no songs from the rest, so only the pool's own make way.
+  const similarKept = best.artists.slice(named.length);
+  for (let count = Math.min(start, named.length) - 1; best.count < want && count >= 0; count--) {
+    const fewer = seedsWith([...named.slice(0, count), ...similarKept]);
+    if (fewer.count > best.count) best = fewer;
+  }
+  return best;
+};
+
+const artistSeed = (artist: SeedArtist, from: DiscoverSeedSource): DiscoverMixSeed => ({
+  kind: "artist",
+  id: `artist:${identityKey(artist.name)}`,
+  name: artist.name,
+  from,
+  ...(artist.browseId === undefined ? {} : { browseId: artist.browseId }),
+});
+
+/**
+ * [picked] as seeds from [from], artists and songs taking turns from the
+ * first artist, then its similar artists (the ones with a page).
+ */
+const seedsOf = (picked: SeedPool, from: DiscoverSeedSource): DiscoverMixSeed[] => {
+  const own = picked.artists.filter((artist) => artist.browseId === undefined);
   const seeds: DiscoverMixSeed[] = [];
-  for (let turn = 0; turn < Math.max(chosen.length, picked.length); turn++) {
-    const artist = chosen[turn];
-    if (artist !== undefined)
-      seeds.push({ kind: "artist", id: `artist:${identityKey(artist.name)}`, name: artist.name });
-    const song = picked[turn];
+  for (let turn = 0; turn < Math.max(own.length, picked.songs.length); turn++) {
+    const artist = own[turn];
+    if (artist !== undefined) seeds.push(artistSeed(artist, from));
+    const song = picked.songs[turn];
     if (song !== undefined)
-      seeds.push({ kind: "song", id: `song:${song.id}`, name: song.title, song });
+      seeds.push({ kind: "song", id: `song:${song.id}`, name: song.title, from, song });
+  }
+  for (const artist of picked.artists)
+    if (artist.browseId !== undefined) seeds.push(artistSeed(artist, "similar"));
+  return seeds;
+};
+
+/**
+ * The similar artists of [similar] that may seed, in order: the pages take
+ * turns, each giving its next artist that the Library ([known]) doesn't
+ * have, whose name is an artist's and that no page gave before (by name or
+ * by page). Each gets an id no Library artist has.
+ */
+const similarPool = (
+  similar: readonly DiscoverSimilarArtists[],
+  known: readonly DiscoverSeedArtist[],
+): SeedArtist[] => {
+  const inLibrary = libraryArtistFinder(known);
+  const names = new Set<string>();
+  const pages = new Set<string>();
+  const usable = ({ name, browseId }: DiscoverSimilarArtist): boolean => {
+    if (ytArtistQuery(name) === null || inLibrary(name) !== null) return false;
+    const key = artistPhotoName(name);
+    if (names.has(key) || pages.has(browseId)) return false;
+    names.add(key);
+    pages.add(browseId);
+    return true;
+  };
+  const next = similar.map(() => 0);
+  const pool: SeedArtist[] = [];
+  for (let more = true; more;) {
+    more = false;
+    similar.forEach(({ artists }, page) => {
+      for (let at = next[page] ?? artists.length; at < artists.length; at++) {
+        const artist = artists[at];
+        if (artist === undefined || !usable(artist)) continue;
+        next[page] = at + 1;
+        pool.push({ id: -(pool.length + 1), name: artist.name, browseId: artist.browseId });
+        more = true;
+        return;
+      }
+      next[page] = artists.length;
+    });
+  }
+  return pool;
+};
+
+/** The Library as seeding takes it: its artists with the most songs, then its newest songs. */
+const libraryPool = (library: NonNullable<DiscoverSeedPools["library"]>): SeedPool => ({
+  artists: [...library.artists].sort((a, b) => b.songCount - a.songCount).slice(0, LIBRARY_ARTISTS),
+  songs: [...library.songs].sort((a, b) => b.addedAt - a.addedAt),
+});
+
+/**
+ * The mixes' seeds, six at most. First the owner's most played artists and
+ * songs: three artists and three songs, taking turns from the most played
+ * artist, a song by none of the artists seeding a mix (their mix has it
+ * already); with too few of either, the other makes up the six. When plays
+ * make fewer, the Library fills the rest after them under the same rules,
+ * with its artists with the most songs and its newest songs. When its
+ * artists are too few for that, artists similar to the Library's
+ * ([similar]) come after its own: ones the Library doesn't have, the pages
+ * taking turns. Names that aren't an artist's ("Various Artists") seed
+ * nothing.
+ */
+export const discoverMixSeeds = (pools: DiscoverSeedPools): DiscoverMixSeed[] =>
+  seedsFrom(pools, similarOf(pools));
+
+/**
+ * The Library artist whose YouTube Music page to read next for similar
+ * artists (to add to `DiscoverSeedPools.similar`), or null when the seeds
+ * have no room left for them or three pages have been read. The owner's most
+ * played artists come first, then the Library's with the most songs. A page
+ * that couldn't be read counts as read, with no artists.
+ */
+export const discoverSimilarSource = (pools: DiscoverSeedPools): DiscoverSeedArtist | null => {
+  const { played, library, similar = [] } = pools;
+  if (library === undefined || similar.length >= SIMILAR_PAGES) return null;
+  const known = similarOf(pools);
+  // As many stand-ins as there are mixes: seeds that take one have room for more.
+  const standIns = Array.from({ length: DISCOVER_MIX_COUNT }, (_, at) => ({
+    id: -(known.length + at + 1),
+    name: "",
+    browseId: "",
+  }));
+  const seeds = seedsFrom(pools, [...known, ...standIns]);
+  if (seeds.filter((seed) => seed.from === "similar").length <= known.length) return null;
+  const read = new Set(similar.map((page) => identityKey(page.of)));
+  for (const { id, name } of [...played.artists, ...libraryPool(library).artists]) {
+    if (ytArtistQuery(name) === null || read.has(identityKey(name))) continue;
+    return { id, name };
+  }
+  return null;
+};
+
+/** The similar artists of [pools] that may seed (`similarPool`). */
+const similarOf = ({ played, library, similar = [] }: DiscoverSeedPools): SeedArtist[] =>
+  library === undefined ? [] : similarPool(similar, [...played.artists, ...library.artists]);
+
+/** The seeds from [pools], with [similar] (vetted, in order) after the Library's artists. */
+const seedsFrom = (
+  { played, library }: DiscoverSeedPools,
+  similar: readonly SeedArtist[],
+): DiscoverMixSeed[] => {
+  const sources: [DiscoverSeedSource, SeedPool, readonly SeedArtist[]][] = [["plays", played, []]];
+  if (library !== undefined) sources.push(["library", libraryPool(library), similar]);
+  const seeds: DiscoverMixSeed[] = [];
+  let taken: SeedPool = { artists: [], songs: [] };
+  for (const [from, pool, extra] of sources) {
+    const want = DISCOVER_MIX_COUNT - seeds.length;
+    if (want === 0) break;
+    const target = Math.max(0, ARTIST_SEEDS - taken.artists.length);
+    const picked = pickSeeds(pool, taken, want, target, extra);
+    seeds.push(...seedsOf(picked, from));
+    taken = {
+      artists: [...taken.artists, ...picked.artists],
+      songs: [...taken.songs, ...picked.songs],
+    };
   }
   return seeds;
 };
@@ -306,14 +509,31 @@ export const discoverMixCaption = (
 export interface DiscoverMixes {
   /** When they were built (ms since the epoch). */
   readonly builtAt: number;
+  /** Whether any of the build's seeds came from plays (not every seed makes a mix). */
+  readonly playSeeds: boolean;
   readonly mixes: readonly DiscoverMix[];
 }
 
-/** Only a build with usable mixes replaces the cache and starts a new daily interval. */
+const built = (
+  mixes: readonly DiscoverMix[],
+  builtAt: number,
+  playSeeds: boolean,
+): DiscoverMixes | null => (mixes.length === 0 ? null : { builtAt, playSeeds, mixes });
+
+/**
+ * What a build from [seeds] that made [mixes] saves. Only a build with usable
+ * mixes replaces the cache and starts a new daily interval.
+ */
 export const discoverMixesBuilt = (
   mixes: readonly DiscoverMix[],
   builtAt: number,
-): DiscoverMixes | null => (mixes.length === 0 ? null : { builtAt, mixes });
+  seeds: readonly DiscoverMixSeed[],
+): DiscoverMixes | null =>
+  built(
+    mixes,
+    builtAt,
+    seeds.some((seed) => seed.from === "plays"),
+  );
 
 /** What to save for [mixes]. */
 export const storedDiscoverMixes = (mixes: DiscoverMixes): string => JSON.stringify(mixes);
@@ -357,26 +577,36 @@ const readMix = (value: unknown): DiscoverMix | null => {
 
 /**
  * The mixes [stored] holds, or null when nothing, or nothing readable, is
- * saved. A song or a mix that can't be read is left out.
+ * saved. A song or a mix that can't be read is left out. Mixes saved before
+ * seeds could come from the Library were built from plays.
  */
 export const parseDiscoverMixes = (stored: string | null): DiscoverMixes | null => {
-  const { builtAt, mixes } = readStoredRecord(stored);
+  const { builtAt, playSeeds, mixes } = readStoredRecord(stored);
   if (!isNumber(builtAt) || !Array.isArray(mixes)) return null;
-  return discoverMixesBuilt(
+  return built(
     mixes.flatMap((mix) => readMix(mix) ?? []),
     builtAt,
+    playSeeds !== false,
   );
 };
 
 const localDay = (ms: number): string => new Date(ms).toDateString();
 
 /**
- * Whether to build the mixes again at [now], given when they were last built
- * ([builtAt], null for never): once a day, from the next day on the phone's
- * calendar. Built later than now, the clock went back, so they're built again.
+ * Whether to build the mixes again at [now], given the last build ([last],
+ * null for never) and whether the owner has [played] anything (counted plays):
+ * once a day, from the next day on the phone's calendar, and as soon as there
+ * are plays when the last build had no seeds from plays. Built later than
+ * now, the clock went back, so they're built again.
  */
-export const discoverMixesDue = (builtAt: number | null, now: number): boolean =>
-  builtAt === null || builtAt > now || localDay(builtAt) !== localDay(now);
+export const discoverMixesDue = (
+  last: Pick<DiscoverMixes, "builtAt" | "playSeeds"> | null,
+  { now, played }: { readonly now: number; readonly played: boolean },
+): boolean =>
+  last === null ||
+  last.builtAt > now ||
+  localDay(last.builtAt) !== localDay(now) ||
+  (played && !last.playSeeds);
 
 /** What to search YouTube Music's songs for to find a song seed on it. */
 export const discoverSeedQuery = (song: DiscoverSeedSong): string => `${song.title} ${song.artist}`;

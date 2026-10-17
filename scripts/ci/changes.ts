@@ -65,6 +65,15 @@ export const changes = (paths: readonly string[]): Changes =>
     paths.some((path) => !path.endsWith(".md") && AREAS[area].some((entry) => covers(entry, path))),
   );
 
+/**
+ * Whether users can see a change: it changes the APK or the sync service. One that changes
+ * only CI, docs or specs (or other tooling) isn't in the patch notes and doesn't release.
+ */
+export const reachesUsers = (paths: readonly string[]): boolean => {
+  const touched = changes(paths);
+  return touched.app || touched.core || touched.sync || touched.workspace;
+};
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const result = process.argv.includes("--all")
     ? decide(() => true)

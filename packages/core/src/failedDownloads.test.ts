@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { failedDownloads, settledDownloadFailures } from "./index.ts";
+import {
+  failedDownloads,
+  settledDownloadFailures,
+  ytAudioRejection,
+  ytDownloadActions,
+  ytDownloadStatus,
+  ytDownloadsFromJournal,
+} from "./index.ts";
 import type { YtDownloadJournalJob, YtSong } from "./index.ts";
 
 const song = (videoId: string): YtSong => ({
@@ -92,15 +99,37 @@ describe("Settings › Downloads: the songs whose download failed", () => {
     assert.deepEqual(missing?.clear, ["missing:7"]);
   });
 
-  test("the recorded cause shows under a line that doesn't say what to do, without package names", () => {
+  test("clearing one row lets go of its job alone: the rest stay, and its song offers Download again", () => {
+    const jobs = [job("a"), job("b", { aliases: [song("b2")] }), job("c")];
+    const [, cleared] = failedDownloads(jobs, nothingInLibrary);
+    assert.deepEqual(cleared?.clear, ["b", "b2"]);
+    // The journal cancels a job once every video asked for on it has let go.
+    const after = jobs.map((each) =>
+      each.id === "b" ? { ...each, phase: "cancelled" as const } : each,
+    );
+    assert.deepEqual(
+      failedDownloads(after, nothingInLibrary).map((failed) => failed.id),
+      ["a", "c"],
+    );
+    for (const videoId of ["b", "b2"])
+      assert.deepEqual(
+        ytDownloadActions(ytDownloadStatus(ytDownloadsFromJournal(after), videoId), {
+          inLibrary: false,
+        }),
+        ["download"],
+      );
+  });
+
+  test("the recorded cause shows under a line that doesn't say what to do, in its own words", () => {
     const detail = (patch: Partial<YtDownloadJournalJob>) =>
       failedDownloads([job("a", patch)], nothingInLibrary)[0]?.detail;
+    // Each error says what went wrong in its message; a class name only stands in for a missing one.
     assert.equal(
       detail({
         reason: "failed",
         cause: "java.net.SocketException: Connection reset <- java.io.EOFException",
       }),
-      "SocketException: Connection reset <- EOFException",
+      "Connection reset <- EOFException",
     );
     assert.equal(
       detail({ reason: "timedOut", cause: "Out of time while transferring" }),
@@ -111,18 +140,65 @@ describe("Settings › Downloads: the songs whose download failed", () => {
         reason: "ytUnavailable",
         cause: "YtFailure [LOGIN_REQUIRED]: Sign in to confirm your age",
       }),
-      "YtFailure [LOGIN_REQUIRED]: Sign in to confirm your age",
+      "Sign in to confirm your age",
     );
     // A path in a message keeps its dots.
     assert.equal(
       detail({ reason: "storage", cause: "java.io.IOException: No space left for /Music/A.B.mp3" }),
-      "IOException: No space left for /Music/A.B.mp3",
+      "No space left for /Music/A.B.mp3",
+    );
+    // An error wrapping another names it in its message.
+    assert.equal(
+      detail({
+        reason: "failed",
+        cause: "java.io.IOException: java.net.SocketTimeoutException: timeout",
+      }),
+      "timeout",
     );
     // Lines that already say what to do, or no cause at all, stand alone.
     assert.equal(detail({ reason: "offline", cause: "java.net.UnknownHostException: host" }), null);
     assert.equal(detail({ reason: "noSource", cause: "java.io.IOException: x" }), null);
     assert.equal(detail({ reason: "account", cause: "java.io.IOException: x" }), null);
     assert.equal(detail({ reason: "failed" }), null);
+  });
+
+  test("a song that fell back from Soulseek shows why YouTube Music failed it, not Soulseek", () => {
+    // The journal sets Soulseek's cause aside when the job falls back; YouTube's
+    // length check records its own (`ytAudioRejection`).
+    const cause = ytAudioRejection({ durationMs: 225_000 }, 242_400);
+    assert.ok(cause !== null);
+    const [failed] = failedDownloads(
+      [job("a", { source: "youtube", reason: "ytUnavailable", cause })],
+      nothingInLibrary,
+    );
+    assert.equal(failed?.line, "This song is unavailable on YouTube Music");
+    assert.equal(failed?.detail, "YouTube's audio is 4:02 long, but the song is 3:45");
+    // A YouTube failure with no cause of its own has no second line.
+    const [bare] = failedDownloads(
+      [job("b", { source: "youtube", reason: "ytUnavailable" })],
+      nothingInLibrary,
+    );
+    assert.equal(bare?.detail, null);
+  });
+
+  test("a class name a release build shortened never shows: its message does", () => {
+    const detail = (cause: string) =>
+      failedDownloads([job("a", { reason: "unavailable", cause })], nothingInLibrary)[0]?.detail;
+    // R8 renames Wave's SoulseekException to a bare, unqualified name.
+    assert.equal(
+      detail("bn5: The peer is unavailable. Retry the download"),
+      "The peer is unavailable. Retry the download",
+    );
+    assert.equal(
+      detail("bn5: The peer queue took too long. Retry the download <- a.b: Read timed out"),
+      "The peer queue took too long. Retry the download <- Read timed out",
+    );
+    // One without a message says nothing; a cause of nothing else is no second line.
+    assert.equal(
+      detail("bn5: Soulseek sent an invalid response <- c4"),
+      "Soulseek sent an invalid response",
+    );
+    assert.equal(detail("bn5"), null);
   });
 });
 

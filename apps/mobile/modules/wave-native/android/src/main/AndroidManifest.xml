@@ -43,12 +43,6 @@
       android:exported="false"
       android:foregroundServiceType="dataSync" />
 
-    <!-- Keeps link imports filling their playlists in the background (PlaylistImportService). -->
-    <service
-      android:name="expo.modules.wavenative.imports.PlaylistImportService"
-      android:exported="false"
-      android:foregroundServiceType="dataSync" />
-
     <!--
       Media buttons with nothing playing resume the last queue (playback resumption,
       PlaybackService.onPlaybackResumption); Media3 requires it to be declared.
@@ -77,6 +71,17 @@
       android:name="expo.modules.wavenative.artwork.ArtworkProvider"
       android:authorities="${applicationId}.artwork"
       android:exported="true" />
+
+    <!-- Settings › Developer › Export Logs shares the app log as a file (AppLogFileProvider). -->
+    <provider
+      android:name="expo.modules.wavenative.log.AppLogFileProvider"
+      android:authorities="${applicationId}.logs"
+      android:exported="false"
+      android:grantUriPermissions="true">
+      <meta-data
+        android:name="android.support.FILE_PROVIDER_PATHS"
+        android:resource="@xml/wave_log_paths" />
+    </provider>
 
     <!-- Lists Wave as a media app in Android Auto. -->
     <meta-data

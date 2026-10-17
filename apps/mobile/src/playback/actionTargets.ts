@@ -2,13 +2,17 @@ import {
   canFixSong,
   commonKind,
   counted,
-  discoverTrackId,
   groupSongs,
+  joinArtists,
+  queueSongTrackId,
+  unsearchedTrackId,
   type ActionItem,
   type ItemKind,
   type MixedSong,
   type PlaylistPlace,
   type PlaylistSong,
+  type QueueSong,
+  type UnsearchedSong,
   ytSongCredit,
 } from "@wave/core";
 
@@ -43,18 +47,36 @@ export interface YtTrackItem {
   readonly playlistItem?: PlaylistPlace | undefined;
 }
 
-/** A song the actions act on: the Library's, or a YT Music song. */
-export type TrackItem = LibraryTrackItem | YtTrackItem;
+/**
+ * A playlist's unsearched entry as the actions see it: what Spotify listed,
+ * not searched yet. It acts as a YT Music entry does, searched as it's about
+ * to play.
+ */
+export interface UnsearchedTrackItem {
+  readonly unsearched: UnsearchedSong;
+  /** Set in a playlist: offers Remove from Playlist. */
+  readonly playlistItem?: PlaylistPlace | undefined;
+}
+
+/** A song the actions act on: the Library's, a YT Music song, or an unsearched one. */
+export type TrackItem = LibraryTrackItem | YtTrackItem | UnsearchedTrackItem;
 
 export const isLibraryTrack = (item: TrackItem): item is LibraryTrackItem => "song" in item;
+
+export const isUnsearchedTrack = (item: TrackItem): item is UnsearchedTrackItem =>
+  "unsearched" in item;
 
 /** A listed song (a Library track, or YT Music's, streamed) as the actions take it. */
 export const listedTrackItem = (entry: MixedSong<NativeYtSong, SongRow>): TrackItem =>
   entry.source === "library" ? { song: entry.track } : { ytSong: entry.song };
 
-/** A song's selection key: a Library song by its id, a YT Music song by its video. */
+/** A song's selection key: a Library song by its id, a YT Music song by its video, an unsearched one by its id. */
 export const trackItemKey = (item: TrackItem): string =>
-  isLibraryTrack(item) ? String(item.song.id) : `yt:${item.ytSong.videoId}`;
+  isLibraryTrack(item)
+    ? String(item.song.id)
+    : isUnsearchedTrack(item)
+      ? unsearchedTrackId(item.unsearched)
+      : `yt:${item.ytSong.videoId}`;
 
 /** The checked songs, as the selection bar acts on them. */
 export const tracksTarget = (items: readonly TrackItem[]): ActionItems => ({
@@ -130,7 +152,13 @@ const KIND_TRACK: KindInfo<TrackItem> = {
   heading: (item) =>
     isLibraryTrack(item)
       ? { title: item.song.title, subtitle: item.song.artist, covers: cover(item.song.thumbPath) }
-      : { title: item.ytSong.title, subtitle: ytSongCredit(item.ytSong), covers: [] },
+      : isUnsearchedTrack(item)
+        ? {
+            title: item.unsearched.title,
+            subtitle: joinArtists(item.unsearched.artists),
+            covers: [],
+          }
+        : { title: item.ytSong.title, subtitle: ytSongCredit(item.ytSong), covers: [] },
   facts: (item, favorites, find) =>
     isLibraryTrack(item)
       ? {
@@ -141,12 +169,19 @@ const KIND_TRACK: KindInfo<TrackItem> = {
           missing: item.song.path === null,
           fixable: canFixSong(item.song),
         }
-      : {
-          streamed: true,
-          artistNames: item.ytSong.artists ?? [],
-          inPlaylist: item.playlistItem !== undefined,
-          downloaded: find(item.ytSong)?.path != null,
-        },
+      : isUnsearchedTrack(item)
+        ? {
+            streamed: true,
+            unsearched: true,
+            artistNames: item.unsearched.artists,
+            inPlaylist: item.playlistItem !== undefined,
+          }
+        : {
+            streamed: true,
+            artistNames: item.ytSong.artists ?? [],
+            inPlaylist: item.playlistItem !== undefined,
+            downloaded: find(item.ytSong)?.path != null,
+          },
   noun: "song",
 };
 
@@ -253,21 +288,23 @@ const targetSongs = async (target: ActionItems): Promise<readonly SongRow[]> => 
   return target.kind === "track" ? lists.flat() : groupSongs(lists, songId);
 };
 
-/** A song an action acts on: a Library song, or a YT Music song, streamed. */
-export type TargetEntry = MixedSong<NativeYtSong, SongRow>;
+/** A song an action acts on: a Library song, a YT Music song, streamed, or an unsearched one. */
+export type TargetEntry = QueueSong<NativeYtSong, SongRow>;
 
 /**
- * What the queue and playlist actions act on, with YT Music songs in their
- * places: checked songs as they are, each playlist's entries in playlist
- * order (an entry two of them hold comes once), any other target's songs as
- * `targetSongs` gives them.
+ * What the queue and playlist actions act on, with YT Music and unsearched
+ * songs in their places: checked songs as they are, each playlist's entries
+ * in playlist order (an entry two of them hold comes once), any other
+ * target's songs as `targetSongs` gives them.
  */
 export const targetEntries = async (target: ActionItems): Promise<readonly TargetEntry[]> => {
   if (target.kind === "track")
     return target.items.map((item): TargetEntry =>
       isLibraryTrack(item)
         ? { source: "library", track: item.song }
-        : { source: "stream", song: item.ytSong },
+        : isUnsearchedTrack(item)
+          ? { source: "unsearched", song: item.unsearched }
+          : { source: "stream", song: item.ytSong },
     );
   // Albums and songs checked together: each item's entries, a song two of them hold once.
   if (target.kind === "mixed") {
@@ -280,29 +317,32 @@ export const targetEntries = async (target: ActionItems): Promise<readonly Targe
         ),
       ),
     );
-    return groupSongs(lists, discoverTrackId);
+    return groupSongs(lists, queueSongTrackId);
   }
   if (target.kind !== "playlist")
     return (await targetSongs(target)).map((track) => ({ source: "library", track }));
   const lists = await Promise.all(target.items.map((playlist) => playlistEntries(playlist.id)));
   return groupSongs(
     lists.map((entries) =>
-      entries.map((entry): TargetEntry =>
+      // An unavailable entry has nothing to queue or add.
+      entries.flatMap((entry): TargetEntry[] =>
         entry.source === "library"
-          ? { source: "library", track: entry.track }
-          : { source: "stream", song: entry.song },
+          ? [{ source: "library", track: entry.track }]
+          : entry.source === "stream"
+            ? [{ source: "stream", song: entry.song }]
+            : entry.source === "unsearched"
+              ? [{ source: "unsearched", song: entry.song }]
+              : [],
       ),
     ),
-    discoverTrackId,
+    queueSongTrackId,
   );
 };
 
-/** [entries] as songs a playlist takes (Core's `PlaylistSong`). */
+/** [entries] as songs a playlist takes (Core's `PlaylistSong`); an unsearched song stays unsearched. */
 export const toPlaylistSongs = (entries: readonly TargetEntry[]): PlaylistSong[] =>
   entries.map((entry) =>
-    entry.source === "library"
-      ? { source: "library", trackId: entry.track.id }
-      : { source: "stream", song: entry.song },
+    entry.source === "library" ? { source: "library", trackId: entry.track.id } : entry,
   );
 
 /** What Core's `itemActions` needs to know about each of [target]'s items. */

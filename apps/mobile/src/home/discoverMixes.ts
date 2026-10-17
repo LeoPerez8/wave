@@ -1,8 +1,10 @@
 /**
  * Home's Discover mixes (docs/spec.md, "Discover mixes"): YouTube Music
- * radios of the owner's most played artists and songs, with every song the
- * owner already knows left out. Which seeds, which songs and when to build
- * again are Core's (`discoverMixSeeds`, `discoverMixSongs`,
+ * radios of the owner's most played artists and songs (the Library's when
+ * plays are short, then artists similar to the Library's), with every song
+ * the owner already knows left out. Which seeds, which artist pages to read
+ * for similar artists, which songs and when to build again are Core's
+ * (`discoverMixSeeds`, `discoverSimilarSource`, `discoverMixSongs`,
  * `discoverMixesDue`); this asks YouTube Music and keeps the last mixes built,
  * so Home shows them at once.
  */
@@ -15,6 +17,7 @@ import {
   discoverMixesDue,
   discoverSeedQuery,
   discoverSeedVideo,
+  discoverSimilarSource,
   identityKey,
   libraryFinder,
   parseDiscoverMixes,
@@ -26,6 +29,8 @@ import {
   type DiscoverMixFilter,
   type DiscoverMixSeed,
   type DiscoverMixes,
+  type DiscoverSeedPools,
+  type DiscoverSimilarArtists,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
@@ -38,6 +43,7 @@ import { appRuntime } from "@/library/runtime";
 import type { NativeYtRadioSong } from "@/native/waveYtMusic";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 import { Stats } from "@/stats/Stats";
+import { withSearchTurn } from "@/ytmusic/searchAllowance";
 import { YtMusic } from "@/ytmusic/YtMusic";
 
 /** How many of the most played artists and songs the seeds are picked from. */
@@ -50,6 +56,13 @@ const saved = persistedSetting<DiscoverMixes | null>({
   write: (mixes) => (mixes === null ? null : storedDiscoverMixes(mixes)),
 });
 
+/** What was saved for a Library artist's YT Music section, or null. */
+const savedYtArtist = (name: string) =>
+  Effect.gen(function* () {
+    const store = yield* LibraryStore;
+    return yield* store.ytArtist(identityKey(name)).pipe(Effect.orElseSucceed(() => null));
+  });
+
 /**
  * The YT Music artist page a Library artist's mix starts from: the match
  * their artist page saved, or the one an Artists search finds. Null when
@@ -57,24 +70,60 @@ const saved = persistedSetting<DiscoverMixes | null>({
  */
 const artistPage = (name: string) =>
   Effect.gen(function* () {
-    const store = yield* LibraryStore;
     const ytMusic = yield* YtMusic;
-    const answer = yield* store.ytArtist(identityKey(name)).pipe(Effect.orElseSucceed(() => null));
-    const lookup = ytArtistLookup(name, answer);
+    const lookup = ytArtistLookup(name, yield* savedYtArtist(name));
     if (lookup === null) return null;
     if (lookup.kind === "page") return lookup.browseId;
-    return pickYtArtist(name, yield* ytMusic.searchArtists(lookup.query));
+    const { query } = lookup;
+    const artists = yield* withSearchTurn("discover", query, ytMusic.searchArtists(query));
+    return pickYtArtist(name, artists);
+  });
+
+/**
+ * The artists a Library artist's YT Music page lists as similar: the page
+ * their artist page saved when it has them, else the page read now. None
+ * when YouTube Music has no such artist; fails when it doesn't answer.
+ */
+const similarArtists = (name: string) =>
+  Effect.gen(function* () {
+    const answer = yield* savedYtArtist(name);
+    const listed = answer?.outcome === "found" ? answer.page.similar : undefined;
+    if (listed !== undefined) return listed;
+    const browseId = yield* artistPage(name);
+    if (browseId === null) return [];
+    const ytMusic = yield* YtMusic;
+    return (yield* ytMusic.artist(browseId)).similar ?? [];
+  });
+
+/**
+ * [pools] with the similar artists Core asks for (`discoverSimilarSource`),
+ * one Library artist's page at a time. A page that can't be read counts as
+ * one with no similar artists, so the other seeds stand as they are.
+ */
+const withSimilar = (pools: DiscoverSeedPools) =>
+  Effect.gen(function* () {
+    const similar: DiscoverSimilarArtists[] = [];
+    for (
+      let source = discoverSimilarSource(pools);
+      source !== null;
+      source = discoverSimilarSource({ ...pools, similar })
+    ) {
+      const artists = yield* similarArtists(source.name).pipe(Effect.orElseSucceed(() => []));
+      similar.push({ of: source.name, artists });
+    }
+    return { ...pools, similar };
   });
 
 /** Where [seed]'s radio starts, or null when YouTube Music doesn't have the artist or the song. */
 const radioStart = (seed: DiscoverMixSeed) =>
   Effect.gen(function* () {
     if (seed.kind === "artist") {
-      const browseId = yield* artistPage(seed.name);
+      const browseId = seed.browseId ?? (yield* artistPage(seed.name));
       return browseId === null ? null : { seed: { browseId }, video: null };
     }
     const ytMusic = yield* YtMusic;
-    const results = yield* ytMusic.searchSongs(discoverSeedQuery(seed.song));
+    const query = discoverSeedQuery(seed.song);
+    const results = yield* withSearchTurn("discover", query, ytMusic.searchSongs(query));
     const videoId = discoverSeedVideo(seed.song, results.songs);
     return videoId === null ? null : { seed: { videoId }, video: videoId };
   });
@@ -111,21 +160,33 @@ const readMix = (seed: DiscoverMixSeed, filter: Filter) =>
 
 /**
  * Builds the mixes from the owner's all-time most played artists and songs,
- * one seed after another so no song is in two mixes. Null when there's
- * nothing to build from (no plays yet) or no seed made a usable mix: what
- * was saved stays, and a later visit can try again.
+ * and the Library's when plays are short, then artists similar to the
+ * Library's when its artists are too few, one seed after another so no song
+ * is in two mixes. Null when there's nothing to build from (an empty
+ * Library) or no seed made a usable mix: what was saved stays, and a later
+ * visit can try again.
  */
 const buildMixes = Effect.gen(function* () {
   const stats = yield* Stats;
   const store = yield* LibraryStore;
   const artists = yield* stats.topArtists("all", SEED_POOL);
   const songs = yield* stats.topSongs("all", SEED_POOL);
-  const seeds = discoverMixSeeds({
-    artists: artists.map((entry) => entry.item),
-    songs: songs.map((entry) => entry.item),
-  });
+  const librarySongs = yield* store.listSongs;
+  const libraryArtists = yield* store.listArtists;
+  const seeds = discoverMixSeeds(
+    yield* withSimilar({
+      played: {
+        artists: artists.map((entry) => entry.item),
+        songs: songs.map((entry) => entry.item),
+      },
+      library: {
+        artists: libraryArtists.map((artist) => ({ ...artist, songCount: artist.trackCount })),
+        songs: librarySongs,
+      },
+    }),
+  );
   if (seeds.length === 0) return null;
-  const inLibrary = libraryFinder(yield* store.listSongs);
+  const inLibrary = libraryFinder(librarySongs);
   const played = playedFinder(yield* store.playedRecordingKeys);
   const taken = new Set<string>();
   const mixes: DiscoverMix[] = [];
@@ -138,7 +199,7 @@ const buildMixes = Effect.gen(function* () {
     mixes.push(mix.success);
     for (const song of mix.success.songs) taken.add(song.videoId);
   }
-  return discoverMixesBuilt(mixes, Date.now());
+  return discoverMixesBuilt(mixes, Date.now(), seeds);
 });
 
 /** A build going on, so Home coming back into focus meanwhile doesn't start another. */
@@ -147,9 +208,10 @@ let building = false;
 let failedAt: number | null = null;
 const RETRY_MS = 10 * 60 * 1000;
 
-const refresh = (): void => {
+/** Builds the mixes again when Core says they're due; [played]: the owner has counted plays. */
+const refresh = (played: boolean): void => {
   const now = Date.now();
-  if (building || !discoverMixesDue(saved.get()?.builtAt ?? null, now)) return;
+  if (building || !discoverMixesDue(saved.get(), { now, played })) return;
   if (failedAt !== null && now - failedAt < RETRY_MS) return;
   building = true;
   void appRuntime
@@ -168,15 +230,16 @@ const refresh = (): void => {
 /**
  * The mixes Home shows: the last ones built, or none while YT Music is off.
  * Each time Home comes into focus with YT Music on, they're built again if
- * they weren't today.
+ * they weren't today, and while it's in focus once [played] turns true (the
+ * first counted plays) if the last build had no seeds from plays.
  */
-export const useDiscoverMixes = (): readonly DiscoverMix[] => {
+export const useDiscoverMixes = (played: boolean): readonly DiscoverMix[] => {
   const enabled = useYtMusicEnabled();
   const mixes = saved.useValue();
   useFocusEffect(
     useCallback(() => {
-      if (enabled) refresh();
-    }, [enabled]),
+      if (enabled) refresh(played);
+    }, [enabled, played]),
   );
   return enabled && mixes !== null ? mixes.mixes : [];
 };

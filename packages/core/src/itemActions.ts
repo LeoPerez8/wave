@@ -74,6 +74,12 @@ export interface ActionItem {
   /** A streamed song the Library has a file of since it was listed: nothing left to download. */
   readonly downloaded?: boolean | undefined;
   /**
+   * A playlist's unsearched entry (a song a Spotify import listed, not
+   * searched yet), streamed as a YT Music entry is: it queues, joins
+   * playlists and downloads (its download searches it first).
+   */
+  readonly unsearched?: boolean | undefined;
+  /**
    * A song Fix Song can do something for: it lacks lyrics, a track number, a
    * year or a genre (`canFixSong`).
    */
@@ -203,7 +209,10 @@ export const confirmsFirst = (action: ItemAction): boolean =>
   action === "deletePlaylist" ||
   action === "deletePlaylists";
 
-/** A song with no file here yet (missing, or streamed): Download fetches it. */
+/**
+ * A song with no file here yet (missing, or streamed, an unsearched one
+ * included): Download fetches it.
+ */
 const needsDownload = (item: ActionItem): boolean =>
   item.missing === true || (item.streamed === true && item.downloaded !== true);
 

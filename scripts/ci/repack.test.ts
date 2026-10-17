@@ -126,6 +126,16 @@ describe("apkCacheKey", () => {
     assert.notEqual(key(dir, "f2"), key(dir, "f1"));
   });
 
+  // ti releases a new version on every app push, and a repack writes it into the APK.
+  it("doesn't change with the app's version", () => {
+    const at = (version: string, code: number) =>
+      app({
+        "package.json": `{"version":"${version}","dependencies":{"expo-constants":"~58.0.10"}}`,
+        "android/app/build.gradle": `android {\n    defaultConfig {\n        versionCode ${code}\n        versionName "${version}"\n    }\n}\nreact {}`,
+      });
+    assert.equal(key(at("0.5.5-ti", 505)), key(at("0.5.4-ti", 504)));
+  });
+
   it("changes when the app declares another native dependency version", () => {
     const changed = app({
       "package.json": '{"dependencies":{"expo-constants":"~58.0.11"}}',

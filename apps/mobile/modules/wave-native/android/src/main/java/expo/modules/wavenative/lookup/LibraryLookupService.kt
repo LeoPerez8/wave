@@ -17,6 +17,8 @@ import android.os.PowerManager
 import android.os.SystemClock
 import expo.modules.wavenative.R
 import expo.modules.wavenative.launcher.LauncherIconSwitcher
+import expo.modules.wavenative.log.ServiceTimeout
+import expo.modules.wavenative.log.WaveLog
 import expo.modules.wavenative.player.JsRuntime
 
 /**
@@ -28,11 +30,14 @@ import expo.modules.wavenative.player.JsRuntime
  */
 class LibraryLookupService : Service() {
   private var wakeLock: PowerManager.WakeLock? = null
+  /** When it started (elapsed realtime), for the log line if Android ends it on its time limit. */
+  private var startedAt = 0L
 
   override fun onBind(intent: Intent?): IBinder? = null
 
   override fun onCreate() {
     super.onCreate()
+    startedAt = SystemClock.elapsedRealtime()
     LibraryLookupNotice.createChannel(this)
     // The run goes on with the screen off: lookups wait on the network and on JS timers.
     wakeLock = getSystemService(PowerManager::class.java)
@@ -53,6 +58,7 @@ class LibraryLookupService : Service() {
 
   /** Android 15+ limits how long a data-sync service runs; the run carries on without it. */
   override fun onTimeout(startId: Int, fgsType: Int) {
+    WaveLog.w("WaveLookup", ServiceTimeout.line("the lyrics and genre service", SystemClock.elapsedRealtime() - startedAt))
     LibraryLookupNotice.detach(this)
     stopForeground(STOP_FOREGROUND_REMOVE)
     stopSelf()

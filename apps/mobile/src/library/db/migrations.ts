@@ -814,6 +814,21 @@ CREATE TRIGGER \`play_totals_delete\` AFTER DELETE ON \`play_events\` BEGIN
 END;
 `;
 
+// The plays by where they were played from, so when each playlist was last
+// played is read without going through the whole history.
+const mPlayContexts = `
+CREATE INDEX \`play_events_context_idx\` ON \`play_events\` (\`context_type\`,\`context_id\`,\`started_at\`);
+`;
+
+// The unsearched songs' titles (\`schema.ts\`'s \`unsearchedTitleIn\`, which
+// queries must write exactly so), so settling one finds the entries holding it
+// without reading every playlist's.
+const mUnsearchedTitles = `
+CREATE INDEX \`playlist_items_unsearched_title_idx\` ON \`playlist_items\` (CASE WHEN (CASE WHEN json_valid(\`yt_song\`)
+  THEN json_type(\`yt_song\`, '$.unsearched') = 'true' END IS 1)
+  THEN json_extract(\`yt_song\`, '$.title') END);
+`;
+
 export default {
   journal: {
     entries: [
@@ -841,6 +856,8 @@ export default {
       { idx: 21, when: 1_793_620_800_000, tag: "0021_playlist_images", breakpoints: true },
       { idx: 22, when: 1_793_707_200_000, tag: "0022_playlist_revisions", breakpoints: true },
       { idx: 23, when: 1_793_793_600_000, tag: "0023_play_totals", breakpoints: true },
+      { idx: 24, when: 1_793_880_000_000, tag: "0024_play_contexts", breakpoints: true },
+      { idx: 25, when: 1_793_966_400_000, tag: "0025_unsearched_titles", breakpoints: true },
     ],
   },
   migrations: {
@@ -868,5 +885,7 @@ export default {
     m0021: mPlaylistImages,
     m0022: mPlaylistRevisions,
     m0023: mPlayTotals,
+    m0024: mPlayContexts,
+    m0025: mUnsearchedTitles,
   },
 };

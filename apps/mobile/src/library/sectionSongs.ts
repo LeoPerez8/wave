@@ -7,6 +7,7 @@ import {
   type PlaylistEntryRow,
   type SongRow,
 } from "./LibraryStore";
+import { sortedPlaylists } from "./playlistOrder";
 import { appRuntime } from "./runtime";
 import { sortedForKind } from "./songSort";
 
@@ -65,7 +66,8 @@ const collections = {
     (genre) => sortedForKind("genre", genre.songs),
   ),
   playlists: collection(
-    (store) => store.listPlaylists,
+    // In the order the Playlists list shows them, the sort chosen there.
+    sortedPlaylists,
     (store, id) => store.getPlaylist(id),
     // Its Library songs; a playlist's own menu also takes its YT Music entries (`playlistEntries`).
     (playlist) => playlistLibrarySongs(playlist.items),

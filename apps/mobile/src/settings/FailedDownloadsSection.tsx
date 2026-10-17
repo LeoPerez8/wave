@@ -1,12 +1,14 @@
-import { downloadsSummary, ytSongArtist, type FailedDownload } from "@wave/core";
-import { Text, View } from "react-native";
+import { IconTrash } from "@tabler/icons-react-native";
+import { downloadsSummary, type FailedDownload } from "@wave/core";
+import { View } from "react-native";
 
-import { Artwork } from "@/catalog/Artwork";
 import { CatalogLine } from "@/catalog/CatalogLine";
-import { CELL, grid } from "@/catalog/grid";
+import { CELL } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
+import { IconButton } from "@/components/IconButton";
 import { TextButton } from "@/components/TextButton";
 import type { NativeYtSong } from "@/native/waveYtMusic";
+import { DownloadSongRow } from "@/settings/DownloadSongRow";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 import {
   clearFailedDownloads,
@@ -16,7 +18,8 @@ import {
 
 /**
  * One failed song: its artwork, title and artists, why it failed (with what actually went
- * wrong when that adds something), and Retry.
+ * wrong when that adds something), Retry, and a trash button that clears it alone as Clear All
+ * clears every song, without asking: its menu offers Download again.
  */
 function FailedDownloadRow({
   failed,
@@ -26,33 +29,15 @@ function FailedDownloadRow({
   covers: boolean;
 }) {
   const { song, line, detail } = failed;
-  const artist = ytSongArtist(song);
   return (
-    <View>
-      <View className="flex-row items-center py-2" style={{ minHeight: grid.row, gap: CELL * 1.5 }}>
-        <Artwork uri={covers ? (song.artworkUrl ?? undefined) : undefined} size={CELL * 5} />
-        <View
-          className="flex-1"
-          accessible
-          accessibilityLabel={[song.title, artist, line, detail].filter(Boolean).join(", ")}
-        >
-          <Text numberOfLines={1} className="font-sans text-body font-medium text-foreground">
-            {song.title}
-          </Text>
-          <Text numberOfLines={1} className="font-sans text-body text-secondary">
-            {artist}
-          </Text>
-          <Text className="font-sans text-footnote text-secondary">{line}</Text>
-          {detail !== null && (
-            <Text numberOfLines={3} className="font-sans text-footnote text-tertiary">
-              {detail}
-            </Text>
-          )}
-        </View>
-        <TextButton label="Retry" onPress={() => retryFailedDownloads([failed])} />
-      </View>
-      <Hairline />
-    </View>
+    <DownloadSongRow song={song} covers={covers} line={line} detail={detail}>
+      <TextButton label="Retry" onPress={() => retryFailedDownloads([failed])} />
+      <IconButton
+        icon={IconTrash}
+        label="Remove from failed downloads"
+        onPress={() => clearFailedDownloads([failed])}
+      />
+    </DownloadSongRow>
   );
 }
 

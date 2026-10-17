@@ -2,12 +2,13 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  YT_DOWNLOAD_BUTTON_LABELS,
   YT_PLAYLIST_DOWNLOAD_ACTION_LABELS,
   ytPlaylistDownload,
   ytPlaylistDownloadButton,
   ytSongsDownload,
 } from "./index.ts";
-import type { MixedSong, YtDownloadJournalJob, YtSong } from "./index.ts";
+import type { PlaylistItem, YtDownloadJournalJob, YtSong } from "./index.ts";
 
 const song = (videoId: string, title = `Song ${videoId}`): YtSong => ({
   videoId,
@@ -81,9 +82,20 @@ describe("downloading a list of YT Music songs", () => {
   });
 });
 
-type Entry = MixedSong<YtSong, { readonly path: string }>;
+type Entry = PlaylistItem<YtSong, { readonly path: string }>;
 const stream = (videoId: string): Entry => ({ source: "stream", song: song(videoId) });
 const file = (path: string): Entry => ({ source: "library", track: { path } });
+const unavailable = (title: string): Entry => ({
+  source: "unavailable",
+  song: {
+    title,
+    artists: ["Artist"],
+    album: null,
+    durationMs: null,
+    artworkUrl: null,
+    reason: "notFound",
+  },
+});
 
 describe("downloading a playlist's YT Music entries", () => {
   test("Download Playlist queues the YT Music entries in playlist order, past its Library songs", () => {
@@ -139,6 +151,24 @@ describe("downloading a playlist's YT Music entries", () => {
     assert.equal(after.toCancel.length, 2000);
   });
 
+  test("unavailable entries have nothing to download: a playlist of them and its Library songs offers no download", () => {
+    const playlist = [unavailable("Within"), stream("a"), unavailable("Untitled")];
+    const view = ytPlaylistDownload(playlist, {
+      inLibrary: nothingInLibrary,
+      jobs: [job("a", { phase: "failed", reason: "offline" })],
+    });
+    assert.deepEqual(view.actions, ["retryFailed"]);
+    assert.deepEqual(
+      view.toRetry.map(({ song: { videoId } }) => videoId),
+      ["a"],
+    );
+    const none = ytPlaylistDownload([file("/Music/x.mp3"), unavailable("Within")], {
+      inLibrary: nothingInLibrary,
+      jobs: [],
+    });
+    assert.deepEqual(none.actions, []);
+  });
+
   test("a song saved this session has taken its entry's place, and still counts in the progress line", () => {
     // "a" landed and its entry became the Library's song; "x" was always the Library's.
     const playlist = [file("/Music/A/a.mp3"), file("/Music/x.mp3"), stream("b"), stream("c")];
@@ -179,6 +209,10 @@ describe("downloading a playlist's YT Music entries", () => {
     });
   });
 
+  test("a page knows every label its button can say, to measure them ahead", () => {
+    assert.deepEqual(YT_DOWNLOAD_BUTTON_LABELS, ["Download", "Retry Failed", "Cancel"]);
+  });
+
   test("the playlist page's button cycles Download, Cancel, Retry Failed, then goes", () => {
     const playlist = [file("/Music/x.mp3"), stream("a"), stream("b")];
     const button = (jobs: YtDownloadJournalJob[], inLibrary = nothingInLibrary) =>
@@ -205,5 +239,91 @@ describe("downloading a playlist's YT Music entries", () => {
       ),
       null,
     );
+  });
+});
+
+const listed = (title: string) => ({
+  title,
+  artists: ["Daft Punk"],
+  album: "Random Access Memories",
+  durationMs: 498_000,
+  artworkUrl: "https://i.scdn.co/image/ram",
+});
+const unsearched = (title: string): Entry => ({ source: "unsearched", song: listed(title) });
+/** The jobs unsearched songs' downloads go by: what Spotify listed of each. */
+const touchJob = 'unsearched:["Touch",["Daft Punk"],"Random Access Memories",498000]';
+const motherboardJob = 'unsearched:["Motherboard",["Daft Punk"],"Random Access Memories",498000]';
+
+describe("downloading a playlist's unsearched entries", () => {
+  test("Download Playlist queues unsearched entries in playlist order, as songs with what Spotify listed", () => {
+    const playlist = [
+      stream("a"),
+      unsearched("Touch"),
+      file("/Music/x.mp3"),
+      unsearched("Motherboard"),
+    ];
+    const view = ytPlaylistDownload(playlist, { inLibrary: nothingInLibrary, jobs: [] });
+    assert.deepEqual(view.actions, ["downloadPlaylist"]);
+    assert.deepEqual(
+      view.toDownload.map(({ song: { videoId } }) => videoId),
+      ["a", touchJob, motherboardJob],
+    );
+    assert.deepEqual(view.toDownload[1]?.song, {
+      videoId: touchJob,
+      ...listed("Touch"),
+      explicit: false,
+      albumId: null,
+    });
+  });
+
+  test("not found, the entry is unavailable and its row failed: Retry Failed asks again only for failed rows", () => {
+    const touch = { ...listed("Touch"), reason: "notFound" as const };
+    const playlist: Entry[] = [
+      { source: "unavailable", song: touch },
+      // Unavailable since its import: never asked for, nothing to download.
+      unavailable("Within"),
+      stream("a"),
+      unsearched("Motherboard"),
+    ];
+    const view = ytPlaylistDownload(playlist, {
+      inLibrary: ({ videoId }) => videoId === "a",
+      jobs: [
+        job(touchJob, { phase: "failed", reason: "notFound" }),
+        job("a", saved("/Music/a.mp3")),
+        job(motherboardJob, { phase: "failed", reason: "offline" }),
+      ],
+    });
+    assert.deepEqual(view.actions, ["retryFailed"]);
+    assert.deepEqual(
+      view.toRetry.map(({ song: { videoId } }) => videoId),
+      [touchJob, motherboardJob],
+    );
+    assert.deepEqual(view.toDownload, []);
+  });
+
+  test("an unsearched entry on its way counts in the progress line as any song asked for", () => {
+    const playlist = [unsearched("Touch"), unsearched("Motherboard"), stream("a")];
+    const view = ytPlaylistDownload(playlist, {
+      inLibrary: nothingInLibrary,
+      jobs: [job(touchJob, { phase: "preparing" }), job(motherboardJob), job("a", saved("/a"))],
+    });
+    assert.equal(view.line, "Downloading · 1 of 3");
+    assert.deepEqual(view.toCancel, [touchJob, motherboardJob]);
+  });
+
+  test("found, the entry is the YT Music song its download shares: it isn't asked for twice", () => {
+    // The search found "touch": the entry is that YT Music song now, on the unsearched job.
+    const playlist = [stream("touch"), unsearched("Motherboard")];
+    const view = ytPlaylistDownload(playlist, {
+      inLibrary: nothingInLibrary,
+      jobs: [job(touchJob, { phase: "transferring", aliases: [song("touch")] })],
+    });
+    assert.deepEqual(
+      view.toDownload.map(({ song: { videoId } }) => videoId),
+      [motherboardJob],
+    );
+    // Cancel ends the job, not only the YT Music song's place on it.
+    assert.deepEqual(view.toCancel, ["touch", touchJob]);
+    assert.equal(view.line, "Downloading · 0 of 1");
   });
 });
