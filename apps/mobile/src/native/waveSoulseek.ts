@@ -96,6 +96,11 @@ declare class WaveSoulseekModule extends NativeModule<{
   forgetCompletedJob(id: string, generation: number): Promise<boolean>;
   resumeJobs(): Promise<void>;
   claimDecision(id: string): Promise<NativeDownloadDecision | null>;
+  /**
+   * Keeps a claimed decision's lease while JS still works on it (waiting for the search
+   * allowance, say), up to the job's deadline; false once it ran out or was claimed again.
+   */
+  renewDecision(id: string, generation: number, token: string): Promise<boolean>;
   submitDecision(
     id: string,
     generation: number,

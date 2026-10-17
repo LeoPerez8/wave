@@ -40,6 +40,7 @@ const ASKERS: Readonly<Record<SearchAsker, AskerTurn>> = {
 };
 
 /** The order askers are named in when several do something at once: by rank. */
+// oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
 const ASKER_ORDER = (Object.keys(ASKERS) as SearchAsker[]).sort(
   (a, b) => ASKERS[a].rank - ASKERS[b].rank,
 );
@@ -209,7 +210,7 @@ export const searchesDoneAt = (
 ): number => {
   const times = recent(searchesAt, from);
   let at = from;
-  /** How many searches in a row, up to the last, each came a window after the one an allowance before it. */
+  /** How many searches in a row, up to the last, came a window after the one an allowance before. */
   let steady = 0;
   for (let search = 0; search < count; search += 1) {
     const oldest = times[times.length - SEARCH_ALLOWANCE];
@@ -238,21 +239,25 @@ export const logDuration = (ms: number): string => {
   const seconds = Math.round(ms / 1000);
   if (seconds < 60) return `${seconds} s`;
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return seconds % 60 === 0 ? `${minutes} min` : `${minutes} min ${seconds % 60} s`;
+  if (minutes < 60)
+    return seconds % 60 === 0 ? `${minutes} min` : `${minutes} min ${seconds % 60} s`;
   const hours = Math.floor(minutes / 60);
   return minutes % 60 === 0 ? `${hours} h` : `${hours} h ${minutes % 60} min`;
 };
 
 /** "1,000 searches in the last 15 min". */
-const windowHeld = (held: number): string =>
-  `${held.toLocaleString("en")} ${held === 1 ? "search" : "searches"} in the last ${SEARCH_WINDOW_MS / 60_000} min`;
+const windowHeld = (held: number): string => {
+  const searches = `${held.toLocaleString("en")} ${held === 1 ? "search" : "searches"}`;
+  return `${searches} in the last ${SEARCH_WINDOW_MS / 60_000} min`;
+};
 
 /** The app log's line for [wait]: who waited, from when until when, and what the window held. */
 export const searchWaitLine = (wait: SearchWait): string => {
   const { name, most } = ASKERS[wait.asker];
   const who = name.charAt(0).toUpperCase() + name.slice(1);
   if (wait.kind === "started") {
-    const limit = most === SEARCH_ALLOWANCE ? "the most it allows" : `the most it lets ${name} take`;
+    const limit =
+      most === SEARCH_ALLOWANCE ? "the most it allows" : `the most it lets ${name} take`;
     return `${who} waits for the YouTube Music search allowance: ${windowHeld(wait.held)}, ${limit}; the next is free at ${clock(wait.freeAt)} UTC`;
   }
   return `${who} waited for the YouTube Music search allowance from ${clock(wait.since)} to ${clock(wait.at)} UTC (${logDuration(wait.at - wait.since)}, with ${windowHeld(wait.held)})`;

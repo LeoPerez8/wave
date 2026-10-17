@@ -38,6 +38,7 @@ import { appRuntime } from "@/library/runtime";
 import type { NativeYtRadioSong } from "@/native/waveYtMusic";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 import { Stats } from "@/stats/Stats";
+import { withSearchTurn } from "@/ytmusic/searchAllowance";
 import { YtMusic } from "@/ytmusic/YtMusic";
 
 /** How many of the most played artists and songs the seeds are picked from. */
@@ -63,7 +64,9 @@ const artistPage = (name: string) =>
     const lookup = ytArtistLookup(name, answer);
     if (lookup === null) return null;
     if (lookup.kind === "page") return lookup.browseId;
-    return pickYtArtist(name, yield* ytMusic.searchArtists(lookup.query));
+    const { query } = lookup;
+    const artists = yield* withSearchTurn("discover", query, ytMusic.searchArtists(query));
+    return pickYtArtist(name, artists);
   });
 
 /** Where [seed]'s radio starts, or null when YouTube Music doesn't have the artist or the song. */
@@ -74,7 +77,8 @@ const radioStart = (seed: DiscoverMixSeed) =>
       return browseId === null ? null : { seed: { browseId }, video: null };
     }
     const ytMusic = yield* YtMusic;
-    const results = yield* ytMusic.searchSongs(discoverSeedQuery(seed.song));
+    const query = discoverSeedQuery(seed.song);
+    const results = yield* withSearchTurn("discover", query, ytMusic.searchSongs(query));
     const videoId = discoverSeedVideo(seed.song, results.songs);
     return videoId === null ? null : { seed: { videoId }, video: videoId };
   });

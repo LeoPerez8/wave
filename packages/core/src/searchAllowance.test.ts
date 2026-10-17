@@ -24,7 +24,8 @@ const spent = (count: number, at = 0): SearchAllowance => ({
 describe("the YouTube Music search allowance", () => {
   test("a download waiting is served before the import, whoever asked first", () => {
     // One search asked at 0, the other 999 a second later: one is free again at the window's end.
-    let allowance = { ...NO_SEARCHES, searchesAt: [0, ...spent(SEARCH_ALLOWANCE - 1, 1000).searchesAt] };
+    const searchesAt = [0, ...spent(SEARCH_ALLOWANCE - 1, 1000).searchesAt];
+    let allowance: SearchAllowance = { ...NO_SEARCHES, searchesAt };
     allowance = searchTurnWanted(allowance, { id: 1, asker: "import" }, 2000);
     allowance = searchTurnWanted(allowance, { id: 2, asker: "download" }, 3000);
     const full = searchTurns(allowance, 4000);

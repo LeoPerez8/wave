@@ -448,7 +448,11 @@ const queriesByTurn = new Map<number, string>();
  * [searches], as the app does, and answers (not found) each whose turn
  * comes; how many went, and when the next may go once none can.
  */
-const runAt = <S extends YtSong>(job: PlaylistImport<S>, now: number, searches: SearchAllowance) => {
+const runAt = <S extends YtSong>(
+  job: PlaylistImport<S>,
+  now: number,
+  searches: SearchAllowance,
+) => {
   let current = job;
   let allowance = searches;
   let asked = 0;
@@ -462,7 +466,8 @@ const runAt = <S extends YtSong>(job: PlaylistImport<S>, now: number, searches: 
     }
     const turns = searchTurns(allowance, now);
     allowance = turns.allowance;
-    if (turns.go.length === 0) return { job: current, searches: allowance, asked, nextAt: turns.nextAt };
+    if (turns.go.length === 0)
+      return { job: current, searches: allowance, asked, nextAt: turns.nextAt };
     asked += turns.go.length;
     for (const id of turns.go) {
       const query = queriesByTurn.get(id) ?? "";
@@ -473,8 +478,11 @@ const runAt = <S extends YtSong>(job: PlaylistImport<S>, now: number, searches: 
 };
 
 /** Playlist 7's import line at [now]. */
-const importLine = (job: PlaylistImport<YtSong>, now: number, searches = NO_SEARCHES) =>
-  playlistImportView([job], 7, now, searches)?.line;
+const importLine = (
+  job: PlaylistImport<YtSong>,
+  now: number,
+  searches: Pick<SearchAllowance, "searchesAt"> = NO_SEARCHES,
+) => playlistImportView([job], 7, now, searches)?.line;
 
 describe("a large Spotify playlist's searches, within the shared search allowance", () => {
   test("the import keeps no pacing of its own: it asks its searches as fast as they're answered", () => {
@@ -580,7 +588,8 @@ describe("the app log of an import", () => {
   test("a stop, a Cancel and a Try Again say how far it got", () => {
     let { job } = askAll(startBig(songs));
     job = importSearchAnswered(job, "Song 0 Daft Punk", { ok: true, songs: [] }, 0);
-    const stopped = importSearchAnswered(job, "Song 1 Daft Punk", { ok: false, reason: "offline" }, 0);
+    const offline = { ok: false, reason: "offline" } as const;
+    const stopped = importSearchAnswered(job, "Song 1 Daft Punk", offline, 0);
     assert.equal(
       importLogLine(stopped, { kind: "stopped" }),
       'Import of "Big" stopped (offline): 1 found, 1 not found, 2 left',
@@ -600,7 +609,8 @@ describe("the app log of an import", () => {
     for (const query of asked) job = importSearchAnswered(job, query, { ok: true, songs: [] }, 0);
     job = handOver(job).job;
     assert.equal(job.state.kind, "done");
-    const run = { startedAt: 0, searches: 4, refusals: 1, waitedMs: 12 * 60_000 + 30_000, resumed: false };
+    const waitedMs = 12 * 60_000 + 30_000;
+    const run = { startedAt: 0, searches: 4, refusals: 1, waitedMs, resumed: false };
     assert.equal(
       importLogLine(job, { kind: "done", run, now: 27 * 60_000 + 4000 }),
       'Import of "Big" done: 1 found, 3 not found; 4 searches, 1 refused; 27 min 4 s in all, 12 min 30 s of it waiting for the search allowance',
@@ -782,7 +792,8 @@ describe("the songs an import left out, once done", () => {
     const handed = handOver(job);
     return { plan, job: handed.job, given: handed.songs };
   };
-  const leftOut = (job: PlaylistImport<YtSong>) => playlistImportView([job], 7, 0, NO_SEARCHES)?.leftOut;
+  const leftOut = (job: PlaylistImport<YtSong>) =>
+    playlistImportView([job], 7, 0, NO_SEARCHES)?.leftOut;
 
   test("lists the songs listed twice; the songs not found are in the playlist, unavailable", () => {
     const { job, given } = imported(songs);
@@ -1191,7 +1202,7 @@ describe("a Spotify import as its answers arrive, in any order", () => {
     assert.ok(read);
     assert.equal(read.added, 1);
     assert.equal(progress(read), "3 of 6 songs");
-    assert.equal(importLine(read, 0, NO_SEARCHES), "Importing 3 of 6 songs · less than a minute left");
+    assert.equal(importLine(read, 0), "Importing 3 of 6 songs · less than a minute left");
     const again = askAll(read);
     assert.deepEqual(again.asked, ["Two Daft Punk", "Five Daft Punk"]);
     job = importSearchAnswered(again.job, "Five Daft Punk", { ok: true, songs: [five] }, 0);

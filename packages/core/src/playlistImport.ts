@@ -1043,7 +1043,7 @@ const STOP_NAMES: Record<ImportStopReason, string> = {
   searchFailed: "YouTube Music stopped answering",
 };
 
-/** "1 found, 3 not found, 2 left": the songs found (the Library's too), not found, and still to settle. */
+/** "1 found, 3 not found, 2 left": the songs found (the Library's too), not found, and left. */
 const findsLine = <S extends YtSong>(job: PlaylistImport<S>, withLeft: boolean): string => {
   let found = 0;
   let notFound = 0;
