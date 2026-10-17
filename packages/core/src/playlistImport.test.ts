@@ -486,6 +486,41 @@ describe("an import of a playlist past the read's cap", () => {
     assert.deepEqual(withoutPlaylistImport(read, 7), []);
   });
 
+  test("kept, it holds only what its line shows, not the playlist's songs", () => {
+    const job = importCut(songs, [songs[1] as YtSong]);
+    const kept = writePlaylistImports(updatePlaylistImport(queuePlaylistImport([], job), job));
+    assert.ok(!kept.includes("Giorgio by Moroder"), "the songs that went in aren't kept");
+    assert.ok(!kept.includes("Touch"), "the songs that went in aren't kept");
+    const view = playlistImportView(readPlaylistImports(kept), 7);
+    assert.equal(
+      view?.line,
+      "Only its first 3 songs came from YouTube Music · 1 song was listed twice",
+    );
+    assert.deepEqual(view?.leftOut?.sections, [
+      { heading: "Listed twice", songs: ["Within · Daft Punk"] },
+    ]);
+  });
+
+  test("kept whole by an earlier build, it's kept again without the playlist's songs", () => {
+    const kept = writePlaylistImports([importCut(songs)]);
+    assert.ok(kept.includes("Giorgio by Moroder"), "the earlier build kept the songs");
+    const again = writePlaylistImports(readPlaylistImports(kept));
+    assert.ok(!again.includes("Giorgio by Moroder"));
+    assert.equal(
+      playlistImportView(readPlaylistImports(again), 7)?.line,
+      "Only its first 3 songs came from YouTube Music",
+    );
+  });
+
+  test("a done import whose songs go in as the same song keeps naming them", () => {
+    // Two rows that are both the Library's "Touch": the second goes in once, as listed twice.
+    const job = importCut([songs[2] as YtSong, yt("t2", "Touch", { durationMs: 498_000 })]);
+    const imports = updatePlaylistImport(queuePlaylistImport([], job), job);
+    const read = readPlaylistImports(writePlaylistImports(imports));
+    assert.deepEqual(playlistImportView(read, 7), playlistImportView([job], 7));
+    assert.equal(playlistImportView(read, 7)?.leftOut?.title, "1 song was listed twice");
+  });
+
   test("with songs listed twice it says both, and shows those", () => {
     const job = importCut(songs, [songs[1] as YtSong]);
     const view = playlistImportView([job], 7);
