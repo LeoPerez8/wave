@@ -7,7 +7,7 @@
  */
 
 /** Who asks an automatic YouTube Music search. */
-export type SearchAsker = "playing" | "download" | "import" | "discover";
+export type SearchAsker = "playing" | "download" | "tryAgain" | "import" | "discover";
 
 /**
  * At most this many searches in any `SEARCH_WINDOW_MS`. YouTube Music began
@@ -35,6 +35,8 @@ interface AskerTurn {
 const ASKERS: Readonly<Record<SearchAsker, AskerTurn>> = {
   playing: { rank: 0, most: SEARCH_ALLOWANCE, name: "the song about to play" },
   download: { rank: 1, most: SEARCH_ALLOWANCE, name: "a download" },
+  // A playlist's unavailable entries searched again: downloads' priority, named apart in the log.
+  tryAgain: { rank: 1, most: SEARCH_ALLOWANCE, name: "Try Again" },
   import: { rank: 2, most: SEARCH_ALLOWANCE, name: "the import" },
   discover: { rank: 2, most: SEARCH_ALLOWANCE, name: "a Discover mix" },
 };
