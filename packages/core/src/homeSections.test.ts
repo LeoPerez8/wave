@@ -203,10 +203,14 @@ describe("what Home lists", () => {
     );
   });
 
-  test("with YT Music on and nothing played, Discover mixes waits for a play like the others", () => {
+  test("with YT Music on and nothing played, Discover mixes doesn't wait for a play (the Library seeds it)", () => {
     assert.deepEqual(
       homeItems(["favorites", "discover-mixes"], { nothingPlayed: true, ytMusic: true }),
-      [{ section: "favorites" }, "play-hint", { section: "discover-mixes" }],
+      sections("favorites", "discover-mixes"),
+    );
+    assert.deepEqual(
+      homeItems(["discover-mixes", "most-played"], { nothingPlayed: true, ytMusic: true }),
+      [{ section: "discover-mixes" }, "play-hint", { section: "most-played" }],
     );
   });
 

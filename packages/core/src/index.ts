@@ -1058,9 +1058,13 @@ export type {
   DiscoverMixFilter,
   DiscoverMixSeed,
   DiscoverMixes,
+  DiscoverLibraryArtist,
+  DiscoverLibrarySong,
   DiscoverRadioSong,
   DiscoverSeedArtist,
+  DiscoverSeedPools,
   DiscoverSeedSong,
+  DiscoverSeedSource,
 } from "./discoverMixes.ts";
 export { discoverMixActions, discoverMixPlaylist } from "./discoverMixActions.ts";
 export type { DiscoverMixAction } from "./discoverMixActions.ts";
