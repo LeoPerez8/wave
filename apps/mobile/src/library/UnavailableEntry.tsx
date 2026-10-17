@@ -2,6 +2,7 @@ import {
   UNAVAILABLE_ENTRY_ACTION_LABELS,
   entryDivider,
   joinArtists,
+  tryAgainSearches,
   unavailableEntryActions,
   unavailableEntryView,
   unavailableSearchQuery,
@@ -9,13 +10,14 @@ import {
   type UnavailableEntryAction,
   type UnavailableSong,
 } from "@wave/core";
-import type { ComponentProps } from "react";
+import { useMemo, type ComponentProps } from "react";
 import { Text, ToastAndroid, View } from "react-native";
 
 import { Artwork } from "@/catalog/Artwork";
 import { EntryRow } from "@/catalog/EntryRow";
 import { CELL } from "@/catalog/grid";
 import { TrackRow } from "@/catalog/TrackRow";
+import { TextButton } from "@/components/TextButton";
 import { pressedRect } from "@/motion/pressedRect";
 import { CardEntries } from "@/overlay/CardEntries";
 import { CardHeading } from "@/overlay/CardHeading";
@@ -27,7 +29,9 @@ import { openSearch } from "@/search/queryRequest";
 import { useTabBar } from "@/settings/tabBar";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
+import type { PlaylistEntryRow } from "./LibraryStore";
 import { removePlaylistItems } from "./playlists";
+import { tryAgainUnavailable, useTryingAgain } from "./tryAgainUnavailable";
 
 /**
  * A playlist's unavailable entry (a song an import couldn't find) as a
@@ -161,5 +165,38 @@ function UnavailableEntryMenu({
         ))}
       </CardEntries>
     </>
+  );
+}
+
+/**
+ * Try Again under a playlist's count line, while YT Music is on and it has
+ * unavailable entries that can be searched again (Core's `tryAgainSearches`;
+ * never a local file with no artist): it searches them once more, and
+ * reads "Searching…", not tappable, until it ends.
+ */
+export function UnavailableTryAgain({
+  playlistId,
+  items,
+}: {
+  playlistId: number;
+  items: readonly PlaylistEntryRow[] | undefined;
+}) {
+  const ytMusic = useYtMusicEnabled();
+  const trying = useTryingAgain(playlistId);
+  const searchable = useMemo(
+    () => items !== undefined && tryAgainSearches(items).length > 0,
+    [items],
+  );
+  if (!ytMusic || !(searchable || trying)) return null;
+  return (
+    <View className="flex-row items-center">
+      <TextButton
+        label={trying ? "Searching…" : "Try Again"}
+        disabled={trying}
+        onPress={() => {
+          if (items !== undefined) tryAgainUnavailable(playlistId, items);
+        }}
+      />
+    </View>
   );
 }

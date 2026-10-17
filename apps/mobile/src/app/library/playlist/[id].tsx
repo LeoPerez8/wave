@@ -17,6 +17,7 @@ import { PlaylistItems, playPlaylistEntries } from "@/library/PlaylistItems";
 import { parseId, useKnownRow } from "@/library/routes";
 import { appRuntime } from "@/library/runtime";
 import { songCount } from "@/library/TrackList";
+import { UnavailableTryAgain } from "@/library/UnavailableEntry";
 import { listDownloadAction, useYtPlaylistDownloadButton } from "@/ytmusic/YtSongList";
 
 const NO_ENTRIES: readonly PlaylistEntryRow[] = [];
@@ -83,6 +84,7 @@ function PlaylistHead({ shown }: { shown: Shown }) {
         >
           {furniture}
         </Text>
+        <UnavailableTryAgain playlistId={playlist.id} items={items} />
         {download.progress !== null && (
           <Text
             className="font-sans text-footnote text-accent"

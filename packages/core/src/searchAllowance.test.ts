@@ -60,6 +60,21 @@ describe("the YouTube Music search allowance", () => {
     assert.equal(asked.length + allowance.waiting.length, id);
   });
 
+  test("Try Again has downloads' priority: before the import, and with downloads in the order they asked", () => {
+    let allowance = spent(SEARCH_ALLOWANCE - 2);
+    allowance = searchTurnWanted(allowance, { id: 1, asker: "import" }, 10);
+    allowance = searchTurnWanted(allowance, { id: 2, asker: "tryAgain" }, 20);
+    allowance = searchTurnWanted(allowance, { id: 3, asker: "download" }, 30);
+    allowance = searchTurnWanted(allowance, { id: 4, asker: "tryAgain" }, 40);
+    const turns = searchTurns(allowance, 50);
+    assert.deepEqual(turns.go, [2, 3]);
+    assert.deepEqual(
+      turns.allowance.waiting.map(({ id }) => id),
+      [1, 4],
+    );
+    assert.deepEqual(searchTurns(turns.allowance, SEARCH_WINDOW_MS).go, [4, 1]);
+  });
+
   test("a download never waits behind the import while the window has room", () => {
     let allowance = spent(SEARCH_ALLOWANCE - 1);
     allowance = searchTurnWanted(allowance, { id: 1, asker: "import" }, 10);
@@ -149,6 +164,18 @@ describe("the app log of the search allowance", () => {
       searchFailedLine("discover", "Daft Punk", "failed"),
       'A YouTube Music search for a Discover mix failed (failed): "Daft Punk"',
     );
+    assert.equal(
+      searchFailedLine("tryAgain", "Within Daft Punk", "failed"),
+      'A YouTube Music search for Try Again failed (failed): "Within Daft Punk"',
+    );
+  });
+
+  test("Try Again's wait names it", () => {
+    let allowance = spent(SEARCH_ALLOWANCE, ONE_PM - 60_000);
+    allowance = searchTurnWanted(allowance, { id: 1, asker: "tryAgain" }, ONE_PM);
+    assert.deepEqual(searchTurns(allowance, ONE_PM).waits.map(searchWaitLine), [
+      "Try Again waits for the YouTube Music search allowance: 1,000 searches in the last 15 min, the most it allows; the next is free at 13:14:00 UTC",
+    ]);
   });
 
   test("a search that goes at once writes nothing", () => {

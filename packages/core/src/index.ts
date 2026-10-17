@@ -874,6 +874,12 @@ export type {
   SharedTextImport,
 } from "./playlistLinks.ts";
 export { spotifySearchQuery, spotifyYtMatch } from "./spotifyImport.ts";
+export { tryAgainNotice, tryAgainSearches, tryAgainSettles } from "./tryAgainUnavailable.ts";
+export type {
+  TryAgainAnswered,
+  TryAgainSearch,
+  TryAgainSettled,
+} from "./tryAgainUnavailable.ts";
 export type { YtSongSearch } from "./spotifyImport.ts";
 export {
   IMPORT_PROGRESS_SHOWN_EVERY_MS,
