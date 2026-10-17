@@ -8,6 +8,7 @@
 
 import { counted } from "./listening.ts";
 import { importNameClash, importedPlaylistName, keepBothName } from "./m3u.ts";
+import { readStoredRecord } from "./storedJson.ts";
 import type { YtQuietReason } from "./ytSearch.ts";
 
 /**
@@ -37,29 +38,103 @@ export interface YtLibraryRow {
   readonly artworkUrl: string | null;
   /** "N songs", from the library page; null when it doesn't say. */
   readonly line: string | null;
+  /** Imported on this phone before (its origin is kept): the row says Imported. */
+  readonly imported: boolean;
   readonly ticked: boolean;
 }
+
+/**
+ * Where the playlists From YT Music made on this phone came from: each
+ * YouTube Music playlist id (without `VL`; `LM` for Liked Songs) and the Wave
+ * playlist its last import made or refreshed. Kept on this phone only.
+ */
+export type YtLibraryOrigins = ReadonlyMap<string, number>;
+
+const NO_ORIGINS: YtLibraryOrigins = new Map();
+
+/**
+ * The [origins] whose Wave playlist is still one of [playlists]: a playlist
+ * deleted, here or on another phone, forgets where it came from.
+ */
+export const liveYtLibraryOrigins = (
+  origins: YtLibraryOrigins,
+  playlists: readonly { readonly id: number }[],
+): YtLibraryOrigins => {
+  const ids = new Set(playlists.map((playlist) => playlist.id));
+  return new Map([...origins].filter(([, playlistId]) => ids.has(playlistId)));
+};
+
+const ORIGINS_VERSION = 1;
+
+/** [origins] as the key-value store keeps them (`readYtLibraryOrigins`). */
+export const writeYtLibraryOrigins = (origins: YtLibraryOrigins): string =>
+  JSON.stringify({ version: ORIGINS_VERSION, origins: Object.fromEntries(origins) });
+
+/**
+ * The origins kept as [stored] (`writeYtLibraryOrigins`). Nothing kept, or
+ * anything unreadable, is none; an entry kept wrong is dropped.
+ */
+export const readYtLibraryOrigins = (stored: string | null): YtLibraryOrigins => {
+  const { version, origins } = readStoredRecord(stored);
+  if (
+    version !== ORIGINS_VERSION ||
+    typeof origins !== "object" ||
+    origins === null ||
+    Array.isArray(origins)
+  ) {
+    return NO_ORIGINS;
+  }
+  return new Map(
+    Object.entries(origins).filter(
+      (entry): entry is [string, number] => Number.isSafeInteger(entry[1]) && entry[1] > 0,
+    ),
+  );
+};
 
 /** The From YT Music picker: its rows in the order they show. */
 export interface YtLibraryPicker {
   readonly rows: readonly YtLibraryRow[];
+  /** The origins it was opened with: the playlists an Imported row refreshes. */
+  readonly origins: YtLibraryOrigins;
 }
 
 /**
- * The picker for the account's library [playlists], in YouTube Music's order:
- * the account's own and saved playlists, every row ticked. What YouTube Music
- * generates is left out.
+ * [rows] as this phone's [origins] mark them: a row imported before says
+ * Imported and starts unticked, any other starts ticked. By source id alone,
+ * so it holds for every row the picker lists.
  */
-export const ytLibraryPicker = (playlists: readonly YtLibraryPlaylist[]): YtLibraryPicker => ({
-  rows: playlists
-    .filter((playlist) => playlist.kind !== "generated")
-    .map(({ playlistId, title, artworkUrl, songCount }) => ({
-      playlistId,
-      title,
-      artworkUrl,
-      line: songCount === null ? null : counted(songCount, "song"),
-      ticked: true,
-    })),
+const markImported = (
+  rows: readonly Omit<YtLibraryRow, "imported" | "ticked">[],
+  origins: YtLibraryOrigins,
+): readonly YtLibraryRow[] =>
+  rows.map((row) => {
+    const imported = origins.has(row.playlistId);
+    return { ...row, imported, ticked: !imported };
+  });
+
+/**
+ * The picker for the account's library [playlists], in YouTube Music's order:
+ * the account's own and saved playlists. What YouTube Music generates is left
+ * out. Every row starts ticked but those [origins] say were imported on this
+ * phone (`liveYtLibraryOrigins` first, so a deleted playlist's row is ticked
+ * again).
+ */
+export const ytLibraryPicker = (
+  playlists: readonly YtLibraryPlaylist[],
+  origins: YtLibraryOrigins = NO_ORIGINS,
+): YtLibraryPicker => ({
+  rows: markImported(
+    playlists
+      .filter((playlist) => playlist.kind !== "generated")
+      .map(({ playlistId, title, artworkUrl, songCount }) => ({
+        playlistId,
+        title,
+        artworkUrl,
+        line: songCount === null ? null : counted(songCount, "song"),
+      })),
+    origins,
+  ),
+  origins,
 });
 
 /** [picker] with the row for [playlistId] ticked if it wasn't, unticked if it was. */
@@ -96,28 +171,40 @@ export const pressYtLibrarySelectAll = (picker: YtLibraryPicker): YtLibraryPicke
   return { ...picker, rows: picker.rows.map((row) => ({ ...row, ticked: tick })) };
 };
 
-/** One playlist Import makes: the YouTube Music playlist it's read from, and its Wave name. */
+/** One playlist Import makes or refreshes: the YouTube Music playlist it's read from, and its Wave name. */
 export interface YtLibraryImportItem {
   /** Without `VL`. */
   readonly playlistId: string;
-  /** Its name in Wave, free of every other playlist's. */
+  /** Its name in Wave, free of every other playlist's (a refreshed one keeps its own). */
   readonly name: string;
+  /**
+   * The Wave playlist an earlier import of it made, emptied and filled again
+   * from the source (as Replace does); null to make a new one.
+   */
+  readonly replaces: number | null;
 }
 
 /**
- * The playlists Import makes from [picker], one per ticked row in its order,
- * each named as a link import names it (`importedPlaylistName`). A name one
- * of [playlists] (or an earlier one of these) has goes in under Keep Both's
- * name ("Name 2"), without asking.
+ * The playlists Import makes from [picker], one per ticked row in its order.
+ * A row imported before refreshes the playlist that import made, which keeps
+ * its name. Any other is named as a link import names it
+ * (`importedPlaylistName`), and a name one of [playlists] (or an earlier one
+ * of these) has goes in under Keep Both's name ("Name 2"), without asking.
  */
 export const planYtLibraryImport = (
   picker: YtLibraryPicker,
-  playlists: readonly { readonly name: string }[],
+  playlists: readonly { readonly id: number; readonly name: string }[],
 ): readonly YtLibraryImportItem[] => {
   const taken = playlists.map((playlist) => ({ name: playlist.name }));
   const items: YtLibraryImportItem[] = [];
   for (const row of picker.rows) {
     if (!row.ticked) continue;
+    const origin = picker.origins.get(row.playlistId);
+    const refreshed = playlists.find((playlist) => playlist.id === origin);
+    if (refreshed !== undefined) {
+      items.push({ playlistId: row.playlistId, name: refreshed.name, replaces: refreshed.id });
+      continue;
+    }
     const wanted = importedPlaylistName(row.title);
     const name =
       importNameClash(wanted, taken) === undefined
@@ -127,7 +214,7 @@ export const planYtLibraryImport = (
             taken.map((playlist) => playlist.name),
           );
     taken.push({ name });
-    items.push({ playlistId: row.playlistId, name });
+    items.push({ playlistId: row.playlistId, name, replaces: null });
   }
   return items;
 };

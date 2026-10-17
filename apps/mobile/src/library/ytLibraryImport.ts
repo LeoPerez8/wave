@@ -9,20 +9,28 @@
  * `writeYtLibraryBatch`), so the playlists not read when Android stopped
  * Wave are read once it starts again, in the same order. A read that fails
  * leaves its playlist empty, with a line and Try Again on its page.
+ *
+ * Each playlist's origin (the YouTube Music playlist it came from) is kept
+ * on this phone, unsynced: the picker marks those rows Imported, and ticking
+ * one refreshes that playlist as Replace does. Deleting it forgets it.
  */
 import {
+  liveYtLibraryOrigins,
   nextYtLibraryRead,
   planLinkImport,
   planYtLibraryImport,
   pruneYtLibraryBatch,
   queueYtLibraryReads,
   readYtLibraryBatch,
+  readYtLibraryOrigins,
   writeYtLibraryBatch,
+  writeYtLibraryOrigins,
   ytLibraryReadDone,
   ytLibraryReadFailed,
   ytLibraryReadLogLine,
   ytLibraryReadView,
   type YtLibraryBatch,
+  type YtLibraryOrigins,
   type YtLibraryPicker,
   type YtLibraryRead,
 } from "@wave/core";
@@ -35,10 +43,35 @@ import { appLog } from "@/log/appLog";
 import { askYtMusic } from "@/ytmusic/askYtMusic";
 
 import { listLibrary } from "./importPlaylistLink";
-import { startLinkImport } from "./playlistImports";
-import { createPlaylist, currentPlaylists } from "./playlists";
+import { cancelPlaylistImport, startLinkImport } from "./playlistImports";
+import { createPlaylist, currentPlaylists, replacePlaylistSongs } from "./playlists";
 
 const LOG_TAG = "WaveImport";
+
+/** Which YouTube Music playlist each playlist From YT Music made came from (this phone only). */
+const origins = persistedSetting<YtLibraryOrigins>({
+  key: "ytLibraryOrigins",
+  read: readYtLibraryOrigins,
+  write: (value) => (value.size === 0 ? null : writeYtLibraryOrigins(value)),
+});
+
+/**
+ * The origins of the playlists that still exist, for the picker; those of
+ * playlists deleted (here or on another phone) are forgotten. Should the
+ * playlists not read, the kept ones stand: Import checks them again.
+ */
+export const currentYtLibraryOrigins = async (): Promise<YtLibraryOrigins> => {
+  const playlists = await currentPlaylists().catch(() => null);
+  if (playlists === null) return origins.get();
+  const live = liveYtLibraryOrigins(origins.get(), playlists);
+  if (live.size !== origins.get().size) origins.set(live);
+  return live;
+};
+
+/** After a delete: the deleted playlists forget where they came from. */
+export const forgetDeletedYtLibraryOrigins = async (): Promise<void> => {
+  if (origins.get().size > 0) await currentYtLibraryOrigins();
+};
 
 /** The playlists still to be read, and those whose read failed; phone-local, never synced. */
 const batch = persistedSetting<YtLibraryBatch>({
@@ -123,24 +156,38 @@ const readBatch = async (): Promise<void> => {
 };
 
 /**
+ * The playlist an earlier import made, emptied for a fresh copy as Replace
+ * empties it. A link import still filling it would add its songs to the new
+ * ones, so it ends.
+ */
+const emptyPlaylist = async (
+  playlistId: number,
+  name: string,
+): Promise<{ readonly playlistId: number; readonly name: string }> => {
+  cancelPlaylistImport(playlistId);
+  await replacePlaylistSongs(playlistId, []);
+  return { playlistId, name };
+};
+
+/**
  * Import in the From YT Music picker: makes a playlist of each ticked row
- * now, in its order, each kept in the batch as it's made, then reads them in
- * the background. Resolves once the playlists exist.
+ * now, in its order, or empties the one an earlier import made, each kept in
+ * the batch as it's made, then reads them in the background. Resolves once
+ * the playlists exist.
  */
 export const importYtLibrary = async (picker: YtLibraryPicker): Promise<void> => {
   const items = planYtLibraryImport(picker, await currentPlaylists());
   for (const item of items) {
-    const created = await createPlaylist(item.name);
+    const made =
+      item.replaces === null
+        ? await createPlaylist(item.name)
+        : await emptyPlaylist(item.replaces, item.name);
     batch.set(
       queueYtLibraryReads(batch.get(), [
-        {
-          source: item.playlistId,
-          playlistId: created.playlistId,
-          name: created.name,
-          capped: true,
-        },
+        { source: item.playlistId, playlistId: made.playlistId, name: made.name, capped: true },
       ]),
     );
+    origins.set(new Map(origins.get()).set(item.playlistId, made.playlistId));
   }
   void readBatch();
 };

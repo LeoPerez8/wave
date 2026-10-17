@@ -1170,9 +1170,12 @@ export {
 } from "./appLog.ts";
 export type { LogDevice, LogEntry, LogLevel, LogLimits, LogTrim } from "./appLog.ts";
 export {
+  liveYtLibraryOrigins,
   planYtLibraryImport,
   pressYtLibrarySelectAll,
+  readYtLibraryOrigins,
   toggleYtLibraryRow,
+  writeYtLibraryOrigins,
   ytLibraryFailure,
   ytLibraryPicker,
   ytLibraryPickerView,
@@ -1181,6 +1184,7 @@ export type {
   YtLibraryFailure,
   YtLibraryFailureView,
   YtLibraryImportItem,
+  YtLibraryOrigins,
   YtLibraryPicker,
   YtLibraryPickerView,
   YtLibraryPlaylist,
