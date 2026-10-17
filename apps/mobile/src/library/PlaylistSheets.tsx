@@ -36,6 +36,7 @@ import {
   removePlaylistImage,
   renamePlaylist,
 } from "./playlists";
+import { forgetDeletedYtLibraryOrigins } from "./ytLibraryImport";
 
 const toast = (message: string): void => ToastAndroid.show(message, ToastAndroid.SHORT);
 
@@ -325,6 +326,7 @@ export const confirmDeletePlaylists = (
         cancelPlaylistImport(playlist.id);
         await deletePlaylist(playlist.id);
       }
+      await forgetDeletedYtLibraryOrigins();
       onDeleted?.();
     } catch {
       failed(playlists.length === 1 ? "delete the playlist" : "delete the playlists")();
