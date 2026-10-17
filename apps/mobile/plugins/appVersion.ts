@@ -30,7 +30,7 @@ export const releaseTagProblem = (tag: string, version: string): string | undefi
   if (tag === `v${version}`) return undefined;
   return (
     `The tag ${tag} doesn't match the app's version, ${version} (apps/mobile/package.json). ` +
-    "Bump the version in a PR first, then tag its merge commit v<version>; " +
-    `or tag v${version} to release ${version}.`
+    "Pushes to main and ti release their next version on their own; a tag by hand must " +
+    `name the version of the commit it tags: tag this one v${version}, or tag the "Release Wave <version>" commit you want.`
   );
 };

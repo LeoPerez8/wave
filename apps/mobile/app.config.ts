@@ -15,8 +15,8 @@ import { withShareShortcut } from "./plugins/withShareShortcut.ts";
 const inter = (file: string): string => `./node_modules/@expo-google-fonts/inter/${file}`;
 
 // Wave's version lives in package.json's `version` and nowhere else: Android's versionCode
-// follows from it, and merging a new version into main (or a -ti one into ti) publishes its
-// release (docs/spec.md, Releases).
+// follows from it. CI writes the next one there on every push to main or ti that changes the
+// app (ti's end in -ti) and releases it (docs/spec.md, Releases).
 const { version } = packageJson;
 
 const config: ExpoConfig = {
