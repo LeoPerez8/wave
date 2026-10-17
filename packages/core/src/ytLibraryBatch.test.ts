@@ -2,11 +2,14 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  isYtLibraryReadQueued,
   nextYtLibraryRead,
+  NO_YT_LIBRARY_READS,
   planLinkImport,
   pruneYtLibraryBatch,
   queueYtLibraryReads,
   ytLibraryFavorites,
+  ytLibraryPauseLogLine,
   ytLibraryReadDone,
   ytLibraryReadFailed,
   ytLibraryReadLogLine,
@@ -19,27 +22,56 @@ import {
 } from "./index.ts";
 
 /** Three playlists Import just made, in the picker's order. */
-const imported = queueYtLibraryReads(
-  [],
-  [
-    { source: "PLroad", playlistId: 41, name: "Road trip", capped: true, favorites: false },
-    { source: "PLgym", playlistId: 42, name: "Gym 2", capped: true, favorites: false },
-    {
-      source: "RDCLAK5uy_chill",
-      playlistId: 43,
-      name: "Chill Hits",
-      capped: true,
-      favorites: false,
-    },
-  ],
-);
+const imported = queueYtLibraryReads(NO_YT_LIBRARY_READS, [
+  { source: "PLroad", playlistId: 41, name: "Road trip", capped: true, favorites: false },
+  { source: "PLgym", playlistId: 42, name: "Gym 2", capped: true, favorites: false },
+  {
+    source: "RDCLAK5uy_chill",
+    playlistId: 43,
+    name: "Chill Hits",
+    capped: true,
+    favorites: false,
+  },
+]);
 
-const keptAndRead = (batch: YtLibraryBatch): YtLibraryBatch =>
-  readYtLibraryBatch(writeYtLibraryBatch(batch));
+/** [playlistId]'s read in [batch], as the batch or Try Again would start it. */
+const readOf = (batch: YtLibraryBatch, playlistId: number): YtLibraryRead => {
+  const read = batch.reads.find((queued) => queued.playlistId === playlistId);
+  assert.ok(read, `${playlistId} is in the batch`);
+  return read;
+};
+
+/** [batch] once [playlistId]'s read was done. */
+const readDone = (batch: YtLibraryBatch, playlistId: number): YtLibraryBatch =>
+  ytLibraryReadDone(batch, readOf(batch, playlistId));
+
+/** [batch] once [playlistId]'s read failed for a reason that doesn't pause it. */
+const readFailed = (batch: YtLibraryBatch, playlistId: number): YtLibraryBatch =>
+  ytLibraryReadFailed(batch, readOf(batch, playlistId), "failed").batch;
+
+const sources = (batch: YtLibraryBatch): readonly string[] =>
+  batch.reads.map((read) => read.source);
+
+const keptAndRead = (batch: YtLibraryBatch): YtLibraryBatch => {
+  const stored = writeYtLibraryBatch(batch);
+  assert.ok(stored !== null, "something is kept");
+  return readYtLibraryBatch(stored);
+};
+
+/** What the batch keeps of each playlist, without the token a read is told apart by. */
+const kept = (batch: YtLibraryBatch) =>
+  batch.reads.map(({ source, playlistId, name, capped, favorites, state }) => ({
+    source,
+    playlistId,
+    name,
+    capped,
+    favorites,
+    state,
+  }));
 
 describe("the batch as kept on the phone", () => {
   test("reads back as it was written: each playlist's source, Wave playlist, name and cap, waiting", () => {
-    assert.deepEqual(keptAndRead(imported), [
+    assert.deepEqual(kept(keptAndRead(imported)), [
       {
         source: "PLroad",
         playlistId: 41,
@@ -68,11 +100,10 @@ describe("the batch as kept on the phone", () => {
   });
 
   test("Liked Songs, read whole, is kept uncapped", () => {
-    const liked = queueYtLibraryReads(
-      [],
-      [{ source: "LM", playlistId: 40, name: "Liked Songs", capped: false, favorites: false }],
-    );
-    assert.deepEqual(keptAndRead(liked), [
+    const liked = queueYtLibraryReads(NO_YT_LIBRARY_READS, [
+      { source: "LM", playlistId: 40, name: "Liked Songs", capped: false, favorites: false },
+    ]);
+    assert.deepEqual(kept(keptAndRead(liked)), [
       {
         source: "LM",
         playlistId: 40,
@@ -85,16 +116,12 @@ describe("the batch as kept on the phone", () => {
   });
 
   test("Liked Songs with Also add to Favorites on is kept starring, so a resumed read or Try Again still stars", () => {
-    const liked = queueYtLibraryReads(
-      [],
-      [{ source: "LM", playlistId: 40, name: "Liked Songs", capped: false, favorites: true }],
-    );
-    const kept = keptAndRead(liked);
-    assert.equal(nextYtLibraryRead(kept)?.favorites, true);
-    assert.equal(
-      ytLibraryReadView(keptAndRead(ytLibraryReadFailed(kept, 40)), 40)?.read.favorites,
-      true,
-    );
+    const liked = queueYtLibraryReads(NO_YT_LIBRARY_READS, [
+      { source: "LM", playlistId: 40, name: "Liked Songs", capped: false, favorites: true },
+    ]);
+    const resumed = keptAndRead(liked);
+    assert.equal(nextYtLibraryRead(resumed)?.favorites, true);
+    assert.equal(ytLibraryReadView(keptAndRead(readFailed(resumed, 40)), 40)?.read.favorites, true);
   });
 
   test("a playlist kept without the Favorites choice stars nothing", () => {
@@ -104,12 +131,24 @@ describe("the batch as kept on the phone", () => {
         { source: "LM", playlistId: 40, name: "Liked Songs", capped: false, state: "waiting" },
       ],
     });
-    assert.equal(readYtLibraryBatch(stored)[0]?.favorites, false);
+    assert.equal(readYtLibraryBatch(stored).reads[0]?.favorites, false);
   });
 
   test("nothing kept, or nothing readable, is an empty batch", () => {
     for (const stored of [null, "", "not json", "[]", "{}", '{"version":1,"batch":{}}']) {
-      assert.deepEqual(readYtLibraryBatch(stored), [], String(stored));
+      assert.deepEqual(sources(readYtLibraryBatch(stored)), [], String(stored));
+    }
+  });
+
+  test("a batch kept by a Wave that keeps it another way is an empty batch", () => {
+    for (const version of [undefined, 0, 2, "1"]) {
+      const stored = JSON.stringify({
+        version,
+        batch: [
+          { source: "PLroad", playlistId: 41, name: "Road trip", capped: true, state: "waiting" },
+        ],
+      });
+      assert.deepEqual(sources(readYtLibraryBatch(stored)), [], String(version));
     }
   });
 
@@ -124,64 +163,55 @@ describe("the batch as kept on the phone", () => {
         { source: "PLgym", playlistId: 45, name: "Gym", capped: false, state: "failed" },
       ],
     });
-    assert.deepEqual(
-      readYtLibraryBatch(stored).map((read) => read.source),
-      ["PLroad", "PLgym"],
-    );
+    assert.deepEqual(sources(readYtLibraryBatch(stored)), ["PLroad", "PLgym"]);
   });
 });
 
 describe("resuming the batch", () => {
   test("reads the playlists in the picker's order, one at a time", () => {
     assert.equal(nextYtLibraryRead(imported)?.source, "PLroad");
-    const roadRead = ytLibraryReadDone(imported, 41);
+    const roadRead = readDone(imported, 41);
     assert.equal(nextYtLibraryRead(roadRead)?.source, "PLgym");
-    assert.equal(nextYtLibraryRead(ytLibraryReadDone(roadRead, 42))?.source, "RDCLAK5uy_chill");
+    assert.equal(nextYtLibraryRead(readDone(roadRead, 42))?.source, "RDCLAK5uy_chill");
   });
 
   test("stopped after the first playlist was read, Wave reads the ones left in the same order", () => {
-    const kept = keptAndRead(ytLibraryReadDone(imported, 41));
-    assert.deepEqual(
-      kept.map((read) => read.source),
-      ["PLgym", "RDCLAK5uy_chill"],
-    );
-    assert.equal(nextYtLibraryRead(kept)?.source, "PLgym");
+    const resumed = keptAndRead(readDone(imported, 41));
+    assert.deepEqual(sources(resumed), ["PLgym", "RDCLAK5uy_chill"]);
+    assert.equal(nextYtLibraryRead(resumed)?.source, "PLgym");
   });
 
   test("stopped partway through a read, Wave reads that playlist again first", () => {
-    const kept = keptAndRead(imported);
-    assert.equal(nextYtLibraryRead(kept)?.source, "PLroad");
+    assert.equal(nextYtLibraryRead(keptAndRead(imported))?.source, "PLroad");
   });
 
   test("a later Import's playlists wait after the ones left", () => {
-    const later = queueYtLibraryReads(ytLibraryReadDone(imported, 41), [
+    const later = queueYtLibraryReads(readDone(imported, 41), [
       { source: "PLnew", playlistId: 50, name: "New", capped: true, favorites: false },
     ]);
-    assert.deepEqual(
-      later.map((read) => read.source),
-      ["PLgym", "RDCLAK5uy_chill", "PLnew"],
-    );
+    assert.deepEqual(sources(later), ["PLgym", "RDCLAK5uy_chill", "PLnew"]);
   });
 
   test("with every playlist read there is nothing left, and nothing is kept", () => {
-    const done = [41, 42, 43].reduce(ytLibraryReadDone, imported);
+    const done = [41, 42, 43].reduce(readDone, imported);
     assert.equal(nextYtLibraryRead(done), undefined);
-    assert.deepEqual(done, []);
+    assert.equal(writeYtLibraryBatch(done), null);
   });
 });
 
 describe("a failed read", () => {
-  const gymFailed = ytLibraryReadFailed(ytLibraryReadDone(imported, 41), 42);
+  const gymFailed = readFailed(readDone(imported, 41), 42);
 
   test("the rest of the batch goes on", () => {
     assert.equal(nextYtLibraryRead(gymFailed)?.source, "RDCLAK5uy_chill");
-    assert.equal(nextYtLibraryRead(ytLibraryReadDone(gymFailed, 43)), undefined);
+    assert.equal(nextYtLibraryRead(readDone(gymFailed, 43)), undefined);
   });
 
   test("its playlist's page says so, with Try Again; the others' pages say nothing", () => {
-    assert.deepEqual(ytLibraryReadView(gymFailed, 42), {
-      line: "Couldn't read it from YouTube Music",
-      read: {
+    const view = ytLibraryReadView(gymFailed, 42);
+    assert.equal(view?.line, "Couldn't read it from YouTube Music");
+    assert.deepEqual(kept({ ...gymFailed, reads: view ? [view.read] : [] }), [
+      {
         source: "PLgym",
         playlistId: 42,
         name: "Gym 2",
@@ -189,54 +219,100 @@ describe("a failed read", () => {
         favorites: false,
         state: "failed",
       },
-    });
+    ]);
     assert.equal(ytLibraryReadView(gymFailed, 43), null, "waiting its turn");
     assert.equal(ytLibraryReadView(gymFailed, 41), null, "read");
   });
 
   test("is kept as failed while Wave is closed, and isn't read again on its own", () => {
-    const kept = keptAndRead(gymFailed);
-    assert.equal(ytLibraryReadView(kept, 42)?.line, "Couldn't read it from YouTube Music");
-    assert.equal(nextYtLibraryRead(ytLibraryReadDone(kept, 43)), undefined);
+    const resumed = keptAndRead(gymFailed);
+    assert.equal(ytLibraryReadView(resumed, 42)?.line, "Couldn't read it from YouTube Music");
+    assert.equal(nextYtLibraryRead(readDone(resumed, 43)), undefined);
   });
 
   test("once Try Again reads it, the line goes", () => {
-    assert.equal(ytLibraryReadView(ytLibraryReadDone(gymFailed, 42), 42), null);
+    assert.equal(ytLibraryReadView(readDone(gymFailed, 42), 42), null);
   });
 
   test("the app log says which playlist wasn't read and why, and that it stays empty", () => {
     const gym = ytLibraryReadView(gymFailed, 42)?.read;
     assert.ok(gym);
     assert.equal(
-      ytLibraryReadLogLine(gym, "offline"),
-      `Import of "Gym 2" from YouTube Music couldn't read the playlist (offline); it stays empty, with Try Again`,
+      ytLibraryReadLogLine(gym, "failed"),
+      `Import of "Gym 2" from YouTube Music couldn't read the playlist (failed); it stays empty, with Try Again`,
+    );
+  });
+});
+
+describe("a read offline, or with YT Music off", () => {
+  for (const reason of ["offline", "disabled"]) {
+    test(`(${reason}) pauses the batch, its playlist and the rest still waiting in order`, () => {
+      const { batch, pause } = ytLibraryReadFailed(imported, readOf(imported, 41), reason);
+      assert.equal(pause, true);
+      assert.deepEqual(
+        batch.reads.map((read) => [read.source, read.state]),
+        [
+          ["PLroad", "waiting"],
+          ["PLgym", "waiting"],
+          ["RDCLAK5uy_chill", "waiting"],
+        ],
+      );
+      assert.equal(ytLibraryReadView(batch, 41), null, "no line: it isn't failed");
+      assert.equal(nextYtLibraryRead(batch)?.source, "PLroad", "read first once it goes on");
+    });
+
+    test(`(${reason}) from Try Again leaves the line as it was`, () => {
+      const gymFailed = readFailed(imported, 42);
+      const gym = ytLibraryReadView(gymFailed, 42)?.read;
+      assert.ok(gym);
+      const { batch } = ytLibraryReadFailed(gymFailed, gym, reason);
+      assert.equal(ytLibraryReadView(batch, 42)?.line, "Couldn't read it from YouTube Music");
+    });
+  }
+
+  test("a refused read, or an answer Wave can't read, doesn't pause the batch", () => {
+    for (const reason of ["failed", "HTTP 500"]) {
+      assert.equal(ytLibraryReadFailed(imported, readOf(imported, 41), reason).pause, false);
+    }
+  });
+
+  test("the app log says the batch waits, and why", () => {
+    assert.equal(
+      ytLibraryPauseLogLine(readOf(imported, 42), "offline"),
+      `Import of "Gym 2" from YouTube Music waits (offline); the batch goes on when Wave starts again, comes back to the foreground or imports again`,
     );
   });
 });
 
 describe("a playlist deleted meanwhile", () => {
   test("leaves the batch, waiting or failed, and the others keep their order", () => {
-    const batch = ytLibraryReadFailed(imported, 41);
+    const batch = readFailed(imported, 41);
     assert.deepEqual(
-      pruneYtLibraryBatch(batch, [43, 41, 7]).map((read) => [read.source, read.state]),
+      pruneYtLibraryBatch(batch, [43, 41, 7]).reads.map((read) => [read.source, read.state]),
       [
         ["PLroad", "failed"],
         ["RDCLAK5uy_chill", "waiting"],
       ],
     );
-    assert.deepEqual(pruneYtLibraryBatch(batch, []), []);
+    assert.deepEqual(sources(pruneYtLibraryBatch(batch, [])), []);
+  });
+
+  test("a read that was running gives its answer to nothing", () => {
+    const road = readOf(imported, 41);
+    assert.equal(isYtLibraryReadQueued(imported, road), true);
+    assert.equal(isYtLibraryReadQueued(pruneYtLibraryBatch(imported, [42, 43]), road), false);
   });
 });
 
 describe("a playlist refreshed while still in the batch", () => {
   test("is read once, in the new Import's order, waiting again even if its read had failed", () => {
-    const gymFailed = ytLibraryReadFailed(imported, 42);
+    const gymFailed = readFailed(imported, 42);
     const refreshed = queueYtLibraryReads(gymFailed, [
       { source: "PLnew", playlistId: 50, name: "New", capped: true, favorites: false },
       { source: "PLgym", playlistId: 42, name: "Gym 2", capped: true, favorites: false },
     ]);
     assert.deepEqual(
-      refreshed.map((read) => [read.source, read.state]),
+      refreshed.reads.map((read) => [read.source, read.state]),
       [
         ["PLroad", "waiting"],
         ["RDCLAK5uy_chill", "waiting"],
@@ -245,6 +321,48 @@ describe("a playlist refreshed while still in the batch", () => {
       ],
     );
     assert.equal(ytLibraryReadView(refreshed, 42), null);
+  });
+});
+
+describe("a read still running when its playlist is refreshed", () => {
+  const liked = { source: "LM", playlistId: 40, name: "Liked Songs", capped: false };
+  const batch = queueYtLibraryReads(NO_YT_LIBRARY_READS, [{ ...liked, favorites: false }]);
+  /** Liked Songs' read, started before the refresh. */
+  const running = readOf(batch, 40);
+  /** Liked Songs imported again meanwhile, now with Also add to Favorites on. */
+  const refreshed = queueYtLibraryReads(batch, [{ ...liked, favorites: true }]);
+
+  test("gives its answer to nothing: the refresh's read fills the playlist", () => {
+    assert.equal(isYtLibraryReadQueued(refreshed, running), false);
+    assert.equal(isYtLibraryReadQueued(refreshed, readOf(refreshed, 40)), true);
+  });
+
+  test("done, leaves the refresh's read waiting, with its Favorites choice", () => {
+    const next = nextYtLibraryRead(ytLibraryReadDone(refreshed, running));
+    assert.equal(next?.playlistId, 40);
+    assert.equal(next?.favorites, true);
+  });
+
+  test("failed, leaves the refresh's read waiting, with no line on the page", () => {
+    const after = ytLibraryReadFailed(refreshed, running, "failed").batch;
+    assert.equal(nextYtLibraryRead(after)?.favorites, true);
+    assert.equal(ytLibraryReadView(after, 40), null);
+  });
+
+  test("Try Again's read of a failed playlist refreshed meanwhile gives its answer to nothing", () => {
+    const failed = readFailed(batch, 40);
+    const tryingAgain = ytLibraryReadView(failed, 40)?.read;
+    assert.ok(tryingAgain);
+    const again = queueYtLibraryReads(failed, [{ ...liked, favorites: true }]);
+    assert.equal(isYtLibraryReadQueued(again, tryingAgain), false);
+    assert.equal(nextYtLibraryRead(ytLibraryReadDone(again, tryingAgain))?.favorites, true);
+  });
+
+  test("read, then imported again: the new read is another one", () => {
+    const again = queueYtLibraryReads(ytLibraryReadDone(batch, running), [
+      { ...liked, favorites: false },
+    ]);
+    assert.equal(isYtLibraryReadQueued(again, running), false);
   });
 });
 
@@ -259,14 +377,13 @@ const likedSong = (videoId: string, title: string, durationMs: number): YtSong =
 });
 
 /** Liked Songs in the batch, with Also add to Favorites [favorites]. */
-const likedRead = (favorites: boolean): YtLibraryRead => ({
-  source: "LM",
-  playlistId: 40,
-  name: "Liked Songs",
-  capped: false,
-  favorites,
-  state: "waiting",
-});
+const likedRead = (favorites: boolean): YtLibraryRead =>
+  readOf(
+    queueYtLibraryReads(NO_YT_LIBRARY_READS, [
+      { source: "LM", playlistId: 40, name: "Liked Songs", capped: false, favorites },
+    ]),
+    40,
+  );
 
 describe("ytLibraryFavorites", () => {
   /** The Library when the liked songs are read. */
