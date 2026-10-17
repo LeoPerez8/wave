@@ -274,24 +274,22 @@ function PickerSheet({ onClosed }: { onClosed: () => void }) {
                 signIn={signInAgain}
               />
             )}
-            {read.status === "read" &&
-              (read.picker.rows.length === 0 ? (
-                <Message line="There are no playlists in your YouTube Music library." />
-              ) : (
-                <FlatList
-                  data={read.picker.rows}
-                  keyExtractor={(row) => row.playlistId}
-                  renderItem={({ item }) => (
-                    <PickerRow
-                      row={item}
-                      toggle={() =>
-                        setPicker((picker) => toggleYtLibraryRow(picker, item.playlistId))
-                      }
-                    />
-                  )}
-                  contentContainerStyle={{ paddingVertical: CELL }}
-                />
-              ))}
+            {read.status === "read" && (
+              // Never empty: Liked Songs is always listed.
+              <FlatList
+                data={read.picker.rows}
+                keyExtractor={(row) => row.playlistId}
+                renderItem={({ item }) => (
+                  <PickerRow
+                    row={item}
+                    toggle={() =>
+                      setPicker((picker) => toggleYtLibraryRow(picker, item.playlistId))
+                    }
+                  />
+                )}
+                contentContainerStyle={{ paddingVertical: CELL }}
+              />
+            )}
           </View>
 
           <Hairline />
@@ -337,19 +335,6 @@ function PickerRow({ row, toggle }: { row: YtLibraryRow; toggle: () => void }) {
         </View>
       </View>
     </Press>
-  );
-}
-
-function Message({ line }: { line: string }) {
-  return (
-    <View className="flex-1 items-center justify-center" style={{ padding: grid.margin }}>
-      <Text
-        accessibilityLiveRegion="polite"
-        className="text-center font-sans text-subheadline text-secondary"
-      >
-        {line}
-      </Text>
-    </View>
   );
 }
 

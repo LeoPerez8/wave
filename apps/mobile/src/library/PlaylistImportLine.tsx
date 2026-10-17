@@ -14,8 +14,9 @@ export const usePlaylistImportView = (playlistId: number): PlaylistImportView | 
 
 /**
  * The playlist page's import line, under its length, once the import is
- * done: how many songs were listed twice (or, of an import an older Wave
- * kept, weren't found), with Show (the list) and Dismiss.
+ * done: that only the source's first songs came, and how many songs were
+ * listed twice (or, of an import an older Wave kept, weren't found), with
+ * Show (the list, when there is one) and Dismiss.
  */
 export function PlaylistImportLine({ playlistId }: { playlistId: number }) {
   useRenderCount("PlaylistImportLine");
@@ -32,7 +33,9 @@ export function PlaylistImportLine({ playlistId }: { playlistId: number }) {
         {view.line}
       </Text>
       <View className="flex-row items-center" style={{ gap: CELL * 3 }}>
-        <TextButton label="Show" opensMenu onPress={() => void showLeftOut(leftOut)} />
+        {leftOut === null ? null : (
+          <TextButton label="Show" opensMenu onPress={() => void showLeftOut(leftOut)} />
+        )}
         <TextButton label="Dismiss" onPress={() => cancelPlaylistImport(playlistId)} />
       </View>
     </View>

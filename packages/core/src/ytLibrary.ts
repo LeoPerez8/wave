@@ -45,22 +45,46 @@ export interface YtLibraryPicker {
   readonly rows: readonly YtLibraryRow[];
 }
 
-/**
- * The picker for the account's library [playlists], in YouTube Music's order:
- * the account's own and saved playlists, every row ticked. What YouTube Music
- * generates is left out.
- */
-export const ytLibraryPicker = (playlists: readonly YtLibraryPlaylist[]): YtLibraryPicker => ({
-  rows: playlists
-    .filter((playlist) => playlist.kind !== "generated")
-    .map(({ playlistId, title, artworkUrl, songCount }) => ({
-      playlistId,
-      title,
-      artworkUrl,
-      line: songCount === null ? null : counted(songCount, "song"),
-      ticked: true,
-    })),
+/** YouTube Music's Liked music, read as a playlist with this id (the library page lists it as `VLLM`). */
+export const YT_LIKED_SONGS_ID = "LM";
+
+/** Liked Songs' name in the picker, and its playlist's in Wave. */
+const LIKED_SONGS = "Liked Songs";
+
+const pickerRow = (
+  { playlistId, artworkUrl, songCount }: Omit<YtLibraryPlaylist, "kind" | "title">,
+  title: string,
+): YtLibraryRow => ({
+  playlistId,
+  title,
+  artworkUrl,
+  line: songCount === null ? null : counted(songCount, "song"),
+  ticked: true,
 });
+
+/**
+ * The picker for the account's library [playlists]: Liked Songs first (its
+ * cover and count from the page's Liked Music, when it lists it), always
+ * listed, then the account's own and saved playlists in YouTube Music's
+ * order, every row ticked. What YouTube Music generates is left out.
+ */
+export const ytLibraryPicker = (playlists: readonly YtLibraryPlaylist[]): YtLibraryPicker => {
+  const liked = playlists.find((playlist) => playlist.playlistId === YT_LIKED_SONGS_ID) ?? {
+    playlistId: YT_LIKED_SONGS_ID,
+    artworkUrl: null,
+    songCount: null,
+  };
+  return {
+    rows: [
+      pickerRow(liked, LIKED_SONGS),
+      ...playlists
+        .filter(
+          (playlist) => playlist.kind !== "generated" && playlist.playlistId !== YT_LIKED_SONGS_ID,
+        )
+        .map((playlist) => pickerRow(playlist, playlist.title)),
+    ],
+  };
+};
 
 /** [picker] with the row for [playlistId] ticked if it wasn't, unticked if it was. */
 export const toggleYtLibraryRow = (
@@ -102,11 +126,17 @@ export interface YtLibraryImportItem {
   readonly playlistId: string;
   /** Its name in Wave, free of every other playlist's. */
   readonly name: string;
+  /**
+   * Read whole (`readYtPlaylist`'s `uncapped`): Liked Songs. The others stop
+   * at `YT_PLAYLIST_SONG_CAP`.
+   */
+  readonly uncapped: boolean;
 }
 
 /**
  * The playlists Import makes from [picker], one per ticked row in its order,
- * each named as a link import names it (`importedPlaylistName`). A name one
+ * each named as a link import names it (`importedPlaylistName`; Liked Songs
+ * is "Liked Songs"), Liked Songs read whole. A name one
  * of [playlists] (or an earlier one of these) has goes in under Keep Both's
  * name ("Name 2"), without asking.
  */
@@ -127,7 +157,11 @@ export const planYtLibraryImport = (
             taken.map((playlist) => playlist.name),
           );
     taken.push({ name });
-    items.push({ playlistId: row.playlistId, name });
+    items.push({
+      playlistId: row.playlistId,
+      name,
+      uncapped: row.playlistId === YT_LIKED_SONGS_ID,
+    });
   }
   return items;
 };

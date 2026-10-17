@@ -448,6 +448,63 @@ describe("an import going on when Spotify imports stopped searching", () => {
   });
 });
 
+/** Imports [listed], a playlist that goes on past them, into playlist 7. */
+const importCut = (listed: readonly YtSong[], repeats: readonly YtSong[] = []) => {
+  const source = ytPlaylist(listed, "Late Night", repeats);
+  const plan = planLinkImport(
+    { ...source, playlist: { ...source.playlist, truncated: true } },
+    library,
+  );
+  const job = startPlaylistImport(plan, { playlistId: 7, name: "Late Night" });
+  return finishPlaylistImport(job).job;
+};
+
+describe("an import of a playlist past the read's cap", () => {
+  const songs = [
+    yt("a", "Giorgio by Moroder", { durationMs: 544_000 }),
+    yt("b", "Within", { durationMs: 228_000 }),
+    yt("c", "Touch", { durationMs: 498_000 }),
+  ];
+
+  test("its page says only the first songs came, with nothing to show", () => {
+    const job = importCut(songs);
+    assert.deepEqual(playlistImportView([job], 7), {
+      line: "Only its first 3 songs came from YouTube Music",
+      leftOut: null,
+    });
+  });
+
+  test("it's kept until dismissed, and while Wave is closed", () => {
+    const job = importCut(songs);
+    const imports = updatePlaylistImport(queuePlaylistImport([], job), job);
+    assert.equal(imports.length, 1);
+    const read = readPlaylistImports(writePlaylistImports(imports));
+    assert.equal(
+      playlistImportView(read, 7)?.line,
+      "Only its first 3 songs came from YouTube Music",
+    );
+    assert.deepEqual(withoutPlaylistImport(read, 7), []);
+  });
+
+  test("with songs listed twice it says both, and shows those", () => {
+    const job = importCut(songs, [songs[1] as YtSong]);
+    const view = playlistImportView([job], 7);
+    assert.equal(
+      view?.line,
+      "Only its first 3 songs came from YouTube Music · 1 song was listed twice",
+    );
+    assert.equal(view?.leftOut?.title, "1 song was listed twice");
+  });
+
+  test("a playlist read whole says nothing of it", () => {
+    const plan = planLinkImport(ytPlaylist(songs), library);
+    const { job } = finishPlaylistImport(
+      startPlaylistImport(plan, { playlistId: 7, name: "Late Night" }),
+    );
+    assert.equal(playlistImportView([job], 7), null);
+  });
+});
+
 describe("an import kept by a Wave from before unavailable entries", () => {
   const songs = [
     spotify("Giorgio by Moroder", { durationMs: 544_000 }),
