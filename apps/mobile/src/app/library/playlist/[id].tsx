@@ -17,7 +17,7 @@ import { PlaylistItems, playPlaylistEntries } from "@/library/PlaylistItems";
 import { parseId, useKnownRow } from "@/library/routes";
 import { appRuntime } from "@/library/runtime";
 import { songCount } from "@/library/TrackList";
-import { ListDownloadAction, useYtPlaylistDownloadButton } from "@/ytmusic/YtSongList";
+import { listDownloadAction, useYtPlaylistDownloadButton } from "@/ytmusic/YtSongList";
 
 const NO_ENTRIES: readonly PlaylistEntryRow[] = [];
 
@@ -55,6 +55,17 @@ function PlaylistHead({ shown }: { shown: Shown }) {
     count === 0
       ? songCount(0)
       : `${playlistSongsLine(playlist.trackCount, playlist.unavailableCount)} · ${Math.max(1, Math.round(playlist.durationMs / 60_000))} min`;
+  const menu = (
+    // Its glyph sits on the right margin, like Back on the left.
+    <View style={{ marginRight: -12 }}>
+      <IconButton
+        icon={IconDots}
+        label="Playlist actions"
+        opensMenu
+        onPress={() => openPlaylistActions(playlist)}
+      />
+    </View>
+  );
   return (
     <View style={{ gap: CELL * 2, paddingBottom: CELL }}>
       <Mosaic paths={playlist.artworkPaths} size={width - grid.margin * 2} />
@@ -82,24 +93,16 @@ function PlaylistHead({ shown }: { shown: Shown }) {
         )}
         <PlaylistImportLine playlistId={playlist.id} />
       </View>
-      <View className="flex-row items-center justify-between">
-        {count > 0 ? (
-          <PlayShuffle onPlay={() => play(false)} onShuffle={() => play(true)}>
-            {download.button !== null && <ListDownloadAction download={download.button} />}
-          </PlayShuffle>
-        ) : (
-          <View />
-        )}
-        {/* Its glyph sits on the right margin, like Back on the left. */}
-        <View style={{ marginRight: -12 }}>
-          <IconButton
-            icon={IconDots}
-            label="Playlist actions"
-            opensMenu
-            onPress={() => openPlaylistActions(playlist)}
-          />
-        </View>
-      </View>
+      {count > 0 ? (
+        <PlayShuffle
+          onPlay={() => play(false)}
+          onShuffle={() => play(true)}
+          last={listDownloadAction(download.button)}
+          menu={menu}
+        />
+      ) : (
+        <View className="flex-row justify-end">{menu}</View>
+      )}
     </View>
   );
 }

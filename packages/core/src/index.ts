@@ -28,6 +28,8 @@ export type {
 } from "./designPreview.ts";
 export { trackRowTrailing } from "./trackRowTrailing.ts";
 export type { TrackRowTrailingInput } from "./trackRowTrailing.ts";
+export { lastListActionForm } from "./listActions.ts";
+export type { ListActionForm, ListActionsRoom } from "./listActions.ts";
 export { describeFolder, filesLeavingWithRoot, isWithin, planAddRoot } from "./scanRoots.ts";
 export type { AddRootPlan, FolderLabel, ScanRootState } from "./scanRoots.ts";
 export { resolveSkipSwipe } from "./swipe.ts";
@@ -675,6 +677,7 @@ export type {
 } from "./ytDownload.ts";
 export {
   YT_ALBUM_DOWNLOAD_ACTION_LABELS,
+  YT_DOWNLOAD_BUTTON_LABELS,
   YT_PLAYLIST_DOWNLOAD_ACTION_LABELS,
   ytAlbumDownload,
   ytAlbumDownloadButton,

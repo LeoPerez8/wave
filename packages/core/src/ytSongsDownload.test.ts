@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  YT_DOWNLOAD_BUTTON_LABELS,
   YT_PLAYLIST_DOWNLOAD_ACTION_LABELS,
   ytPlaylistDownload,
   ytPlaylistDownloadButton,
@@ -206,6 +207,10 @@ describe("downloading a playlist's YT Music entries", () => {
       retryFailed: "Retry Failed",
       cancelPlaylistDownload: "Cancel Playlist Download",
     });
+  });
+
+  test("a page knows every label its button can say, to measure them ahead", () => {
+    assert.deepEqual(YT_DOWNLOAD_BUTTON_LABELS, ["Download", "Retry Failed", "Cancel"]);
   });
 
   test("the playlist page's button cycles Download, Cancel, Retry Failed, then goes", () => {
