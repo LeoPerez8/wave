@@ -880,6 +880,7 @@ export {
   SPOTIFY_SEARCHES_AT_ONCE,
   importAdded,
   importAdditions,
+  importLogLine,
   importProgressOnly,
   importSearchAnswered,
   importTurn,
@@ -900,6 +901,8 @@ export type {
   ImportFind,
   ImportLeftOut,
   ImportLeftOutSection,
+  ImportLogEvent,
+  ImportRun,
   ImportService,
   ImportState,
   ImportStep,
@@ -1070,12 +1073,25 @@ export { discoverMixActions, discoverMixPlaylist } from "./discoverMixActions.ts
 export type { DiscoverMixAction } from "./discoverMixActions.ts";
 
 export {
-  SPOTIFY_SEARCH_BUDGET,
-  SPOTIFY_SEARCH_WINDOW_MS,
-  readSpotifySearchPacing,
-  writeSpotifySearchPacing,
-} from "./spotifySearchPacing.ts";
-export type { SpotifySearchPacing } from "./spotifySearchPacing.ts";
+  NO_SEARCHES,
+  SEARCH_ALLOWANCE,
+  SEARCH_WINDOW_MS,
+  readSearchAllowance,
+  writeSearchAllowance,
+  searchTurnWanted,
+  searchTurnWithdrawn,
+  searchTurns,
+  searchFailedLine,
+  searchWaitLine,
+} from "./searchAllowance.ts";
+export type {
+  SearchAllowance,
+  SearchAsker,
+  SearchFailure,
+  SearchTurns,
+  SearchWait,
+  SearchWaiting,
+} from "./searchAllowance.ts";
 
 export { LIBRARY_SHELF_CHOICES, parseLibraryShelf, storedLibraryShelf } from "./libraryShelf.ts";
 export type { LibraryShelf } from "./libraryShelf.ts";

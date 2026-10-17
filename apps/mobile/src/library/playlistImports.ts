@@ -3,16 +3,18 @@
  * link"): Import makes the playlist at once, and this fills it, one import
  * at a time, while Wave is open or in the background (a foreground service,
  * `WavePlaylistImport`, with progress and Cancel in a notification). Core
- * decides each step (`nextImportStep`, which also paces a Spotify import's
- * YouTube Music searches), what a search's answer settles
+ * decides each step (`nextImportStep`), what a search's answer settles
  * (`importSearchAnswered`) and what the playlist is given next
- * (`importAdditions`); the imports are kept, so they go on when Wave starts
- * again.
+ * (`importAdditions`); each search waits its turn in the allowance every
+ * automatic YouTube Music search shares (`searchTurn`). The imports are
+ * kept, so they go on when Wave starts again, and the app log notes each
+ * one's start, pauses, stop, Cancel, Try Again and end (`importLogLine`).
  */
 import {
   IMPORT_PROGRESS_SHOWN_EVERY_MS,
   importAdded,
   importAdditions,
+  importLogLine,
   importProgressOnly,
   importSearchAnswered,
   importTurn,
@@ -20,18 +22,18 @@ import {
   playlistImportProgress,
   queuePlaylistImport,
   readPlaylistImports,
-  readSpotifySearchPacing,
   retryPlaylistImport,
   startPlaylistImport,
   updatePlaylistImport,
   withoutPlaylistImport,
   writePlaylistImports,
-  writeSpotifySearchPacing,
   type ImportAdditions,
+  type ImportLogEvent,
+  type ImportRun,
   type LinkImportPlan,
   type PlaylistImport,
   type PlaylistImports,
-  type SpotifySearchPacing,
+  type SearchAllowance,
   type YtAlbumSong,
   type YtSongSearch,
 } from "@wave/core";
@@ -42,10 +44,17 @@ import { askForNotifications } from "@/lib/askForNotifications";
 import { freeTurn } from "@/lib/backgroundWork";
 import { makeExternalStore } from "@/lib/externalStore";
 import { persistedSetting } from "@/lib/persistedSetting";
+import { appLog } from "@/log/appLog";
 import { WavePlaylistImport } from "@/native/wavePlaylistImport";
 import { showError } from "@/overlay/alert";
 import { perfMark, registerPerfMeta } from "@/perf/perf";
 import { askYtMusic } from "@/ytmusic/askYtMusic";
+import {
+  logSearchFailure,
+  onSearchWait,
+  searchTurn,
+  searchesAsked,
+} from "@/ytmusic/searchAllowance";
 
 import { playlistWorkReport } from "./db/playlistWork";
 import { addToPlaylist, currentPlaylists } from "./playlists";
@@ -68,22 +77,10 @@ const imports = persistedSetting<PlaylistImports<YtAlbumSong>>({
   persistMaxDelayMs: 1000,
 });
 
-/**
- * The YouTube Music searches Spotify imports asked lately, which Core paces
- * (`nextImportStep`), kept so a restart doesn't start a fresh allowance.
- */
-const spotifySearches = persistedSetting<SpotifySearchPacing>({
-  key: "spotifySearches",
-  read: readSpotifySearchPacing,
-  write: (value) => (value.searchesAt.length === 0 ? null : writeSpotifySearchPacing(value)),
-  persistDelayMs: 1000,
-  persistMaxDelayMs: 1000,
-});
-
-/** The imports as shown, and the Spotify searches as they were then (the page's time left). */
+/** The imports as shown, and the searches asked lately as they were then (the page's time left). */
 interface Shown {
   readonly imports: PlaylistImports<YtAlbumSong>;
-  readonly searches: SpotifySearchPacing;
+  readonly searches: SearchAllowance;
 }
 
 /**
@@ -105,13 +102,13 @@ let unchanged: Shown | null = null;
  * move together.
  */
 const shownNow = (): Shown =>
-  shown.get() ?? (unchanged ??= { imports: imports.get(), searches: spotifySearches.get() });
+  shown.get() ?? (unchanged ??= { imports: imports.get(), searches: searchesAsked() });
 
 /** Shows the imports as they are now: the page's line and the notification. */
 const show = (): void => {
   clearTimeout(showTimer);
   showTimer = undefined;
-  const now = { imports: imports.get(), searches: spotifySearches.get() };
+  const now = { imports: imports.get(), searches: searchesAsked() };
   const last = shown.get();
   if (last?.imports !== now.imports || last.searches !== now.searches) shown.set(now);
   showProgress();
@@ -121,7 +118,7 @@ const show = (): void => {
 const follow = (before: PlaylistImports<YtAlbumSong>): void => {
   // What was shown before the first change (a page may have read it already).
   if (shown.get() === null)
-    shown.set(unchanged ?? { imports: before, searches: spotifySearches.get() });
+    shown.set(unchanged ?? { imports: before, searches: searchesAsked() });
   if (!importProgressOnly(shownNow().imports, imports.get())) show();
   else showTimer ??= setTimeout(show, IMPORT_PROGRESS_SHOWN_EVERY_MS);
 };
@@ -131,11 +128,11 @@ export const usePlaylistImports = (): PlaylistImports<YtAlbumSong> =>
   useSyncExternalStore(shown.subscribe, shownNow).imports;
 
 /**
- * The searches Spotify imports asked lately, for the playlist page's time
+ * The YouTube Music searches asked lately, for the playlist page's time
  * left: as they were when the imports were last shown (`usePlaylistImports`),
  * not per search, so the time left agrees with the progress shown.
  */
-export const useSpotifySearches = (): SpotifySearchPacing =>
+export const useSearchesAsked = (): SearchAllowance =>
   useSyncExternalStore(shown.subscribe, shownNow).searches;
 
 /** While the playlist is given found songs: at most once a second, so its page doesn't redraw for each. */
@@ -189,11 +186,70 @@ const setImports = (next: PlaylistImports<YtAlbumSong>): void => {
 /** [playlistId]'s import, changed by [change]; nothing when it's gone (cancelled meanwhile). */
 const updateImport = (playlistId: number, change: (job: Job) => Job): void => {
   const job = find(playlistId);
-  if (job !== undefined) setImports(updatePlaylistImport(imports.get(), change(job)));
+  if (job === undefined) return;
+  const changed = change(job);
+  setImports(updatePlaylistImport(imports.get(), changed));
+  noteChange(job, changed);
 };
 
 // ---------------------------------------------------------------------------
+// The app log
+
+const LOG_TAG = "WaveImport";
+
+/** Each import's run while Wave runs, for its last line: since it started, or went on after a restart. */
+const runs = new Map<number, ImportRun>();
+/** The imports started while Wave runs, so the others went on after a restart. */
+const startedHere = new Set<number>();
+
+const logImport = (job: Job, event: ImportLogEvent): void =>
+  appLog("info", LOG_TAG, importLogLine(job, event));
+
+/** Notes in the log what [before] becoming [after] did: a stop, or the end. */
+const noteChange = (before: Job, after: Job): void => {
+  const run = runs.get(after.playlistId);
+  // A stopped import keeps its run: Try Again goes on with it.
+  if (before.state.kind === "importing" && after.state.kind === "stopped") {
+    logImport(after, { kind: "stopped" });
+  } else if (before.state.kind === "importing" && after.state.kind === "done") {
+    if (run !== undefined) logImport(after, { kind: "done", run, now: Date.now() });
+    runs.delete(after.playlistId);
+  }
+};
+
+/** Counts into [playlistId]'s run. */
+const countRun = (playlistId: number, change: (run: ImportRun) => ImportRun): void => {
+  const run = runs.get(playlistId);
+  if (run !== undefined) runs.set(playlistId, change(run));
+};
+
+// The import going on adds up the time its searches waited for the allowance.
+onSearchWait((wait) => {
+  if (wait.asker !== "import" || wait.kind !== "ended") return;
+  const job = importTurn(imports.get());
+  const waited = wait.at - wait.since;
+  if (job !== null) countRun(job.playlistId, (run) => ({ ...run, waitedMs: run.waitedMs + waited }));
+});
+
+// ---------------------------------------------------------------------------
 // Running the imports
+
+/** Gives up an import's searches still waiting for their turn once it stops or is cancelled. */
+const turnsGivenUp = new Map<number, AbortController>();
+
+const importSignal = (playlistId: number): AbortSignal => {
+  let controller = turnsGivenUp.get(playlistId);
+  if (controller === undefined) {
+    controller = new AbortController();
+    turnsGivenUp.set(playlistId, controller);
+  }
+  return controller.signal;
+};
+
+const giveUpTurns = (playlistId: number): void => {
+  turnsGivenUp.get(playlistId)?.abort();
+  turnsGivenUp.delete(playlistId);
+};
 
 /** One YT Music Songs search: the song's title and artists only. Never rejects. */
 const searchYtSongs = async (query: string): Promise<YtSongSearch<YtAlbumSong>> => {
@@ -207,11 +263,29 @@ const searchYtSongs = async (query: string): Promise<YtSongSearch<YtAlbumSong>> 
   }
 };
 
-/** Asks [query] for [playlistId]'s import; its answer settles what it finds, whenever it comes. */
+/**
+ * Asks [query] for [playlistId]'s import once its turn in the search
+ * allowance comes; its answer settles what it finds, whenever it comes. A
+ * failure is logged, and a pause after a refusal too.
+ */
 const ask = (playlistId: number, query: string): void => {
-  void searchYtSongs(query).then((answer) => {
-    updateImport(playlistId, (job) => importSearchAnswered(job, query, answer, Date.now()));
-  });
+  void (async () => {
+    if (!(await searchTurn("import", importSignal(playlistId)))) return;
+    countRun(playlistId, (run) => ({ ...run, searches: run.searches + 1 }));
+    const answer = await searchYtSongs(query);
+    if (!answer.ok) {
+      logSearchFailure("import", query, answer.reason);
+      if (answer.reason === "failed")
+        countRun(playlistId, (run) => ({ ...run, refusals: run.refusals + 1 }));
+    }
+    const now = Date.now();
+    updateImport(playlistId, (job) => {
+      const answered = importSearchAnswered(job, query, answer, now);
+      if (answered.pausedUntil > job.pausedUntil && answered.state.kind === "importing")
+        logImport(answered, { kind: "paused", query, now });
+      return answered;
+    });
+  })();
 };
 
 /**
@@ -239,9 +313,16 @@ const runImport = async (playlistId: number): Promise<void> => {
   let givenAt = 0;
   /** A free turn was just taken for the next give: the import is read again first. */
   let turnTaken = false;
+  const first = find(playlistId);
+  if (first !== undefined && !runs.has(playlistId)) {
+    const resumed = !startedHere.has(playlistId);
+    runs.set(playlistId, { startedAt: Date.now(), searches: 0, refusals: 0, waitedMs: 0, resumed });
+    logImport(first, { kind: "started", resumed });
+  }
   for (;;) {
     const job = importTurn(imports.get());
     if (job === null || job.playlistId !== playlistId) {
+      giveUpTurns(playlistId);
       // Stopped: the songs found before it stopped still go in.
       const stopped = find(playlistId);
       if (stopped?.state.kind === "stopped") {
@@ -251,10 +332,9 @@ const runImport = async (playlistId: number): Promise<void> => {
       return;
     }
     const now = Date.now();
-    const { job: next, step, searches } = nextImportStep(job, now, spotifySearches.get());
+    const { job: next, step } = nextImportStep(job, now);
     if (step.kind === "search") {
       turnTaken = false;
-      spotifySearches.set(searches);
       setImports(updatePlaylistImport(imports.get(), next));
       ask(playlistId, step.query);
       continue;
@@ -331,6 +411,9 @@ export const startLinkImport = (
   { playlistId, name }: { readonly playlistId: number; readonly name: string },
 ): void => {
   askForNotifications();
+  giveUpTurns(playlistId);
+  runs.delete(playlistId);
+  startedHere.add(playlistId);
   setImports(queuePlaylistImport(imports.get(), startPlaylistImport(plan, { playlistId, name })));
   void runImports();
 };
@@ -341,11 +424,18 @@ export const startLinkImport = (
  * the playlist, and the next goes on. Also dismisses the songs not found.
  */
 export const cancelPlaylistImport = (playlistId: number): void => {
-  if (find(playlistId) !== undefined) setImports(withoutPlaylistImport(imports.get(), playlistId));
+  const job = find(playlistId);
+  if (job === undefined) return;
+  if (job.state.kind !== "done") logImport(job, { kind: "cancelled" });
+  giveUpTurns(playlistId);
+  runs.delete(playlistId);
+  setImports(withoutPlaylistImport(imports.get(), playlistId));
 };
 
 /** Try Again on a stopped import: it goes on from where it got to, after the others. */
 export const tryPlaylistImportAgain = (playlistId: number): void => {
+  const job = find(playlistId);
+  if (job?.state.kind === "stopped") logImport(job, { kind: "retried" });
   setImports(retryPlaylistImport(imports.get(), playlistId));
   void runImports();
 };

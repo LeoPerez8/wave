@@ -17,6 +17,8 @@ import android.os.PowerManager
 import android.os.SystemClock
 import expo.modules.wavenative.R
 import expo.modules.wavenative.launcher.LauncherIconSwitcher
+import expo.modules.wavenative.log.ServiceTimeout
+import expo.modules.wavenative.log.WaveLog
 import expo.modules.wavenative.player.JsRuntime
 
 /**
@@ -28,11 +30,14 @@ import expo.modules.wavenative.player.JsRuntime
  */
 class PlaylistImportService : Service() {
   private var wakeLock: PowerManager.WakeLock? = null
+  /** When it started (elapsed realtime), for the log line if Android ends it on its time limit. */
+  private var startedAt = 0L
 
   override fun onBind(intent: Intent?): IBinder? = null
 
   override fun onCreate() {
     super.onCreate()
+    startedAt = SystemClock.elapsedRealtime()
     PlaylistImportNotice.createChannel(this)
     // Imports go on with the screen off: searches wait on the network and on JS timers.
     wakeLock = getSystemService(PowerManager::class.java)
@@ -53,6 +58,7 @@ class PlaylistImportService : Service() {
 
   /** Android 15+ limits how long a data-sync service runs; the imports carry on without it. */
   override fun onTimeout(startId: Int, fgsType: Int) {
+    WaveLog.w("WavePlaylistImport", ServiceTimeout.line("the playlist import service", SystemClock.elapsedRealtime() - startedAt))
     PlaylistImportNotice.detach(this)
     stopForeground(STOP_FOREGROUND_REMOVE)
     stopSelf()

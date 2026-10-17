@@ -31,7 +31,9 @@ import {
   playlistImportProgress,
   playlistImportView,
   playlistSongKey,
-  readSpotifySearchPacing,
+  NO_SEARCHES,
+  searchTurnWanted,
+  searchTurns,
   startPlaylistImport,
   updatePlaylistImport,
   type PlaylistImport,
@@ -214,7 +216,9 @@ const run = (
   let job: PlaylistImport<YtSong> = startPlaylistImport(plan, { playlistId: 1, name: "Big" });
   if (wrap !== undefined) job = { ...job, songs: wrap(job.songs), finds: wrap(job.finds) };
   let imports: PlaylistImports<YtSong> = [job];
-  let pacing = readSpotifySearchPacing(null);
+  let allowance = NO_SEARCHES;
+  const turnQueries = new Map<number, string>();
+  let turnIds = 0;
   let now = 0;
   let givenAt = -Infinity;
   let answered = 0;
@@ -228,20 +232,35 @@ const run = (
     imports = core.updatePlaylistImport(imports, next);
     job = next;
     core.playlistImportProgress(imports);
-    core.playlistImportView(imports, 1, now, pacing);
+    core.playlistImportView(imports, 1, now, allowance);
+  };
+
+  /** As the app's search allowance: the searches whose turn came fly; when the next may go. */
+  const takeTurns = (): number | null => {
+    const turns = searchTurns(allowance, now);
+    allowance = turns.allowance;
+    for (const id of turns.go) {
+      // Most answers take under a second; one in 50 takes half a minute.
+      const latency = chance() < 0.02 ? 30_000 : 150 + Math.floor(chance() * 1200);
+      flying.push({ query: turnQueries.get(id) ?? "", at: now + latency });
+      turnQueries.delete(id);
+    }
+    return turns.nextAt;
   };
 
   for (;;) {
     if (job.state.kind !== "importing") break;
-    const { job: next, step, searches } = core.nextImportStep(job, now, pacing);
+    const { job: next, step } = core.nextImportStep(job, now);
     if (step.kind === "search") {
-      pacing = searches;
       set(next);
-      // Most answers take under a second; one in 50 takes half a minute.
-      const latency = chance() < 0.02 ? 30_000 : 150 + Math.floor(chance() * 1200);
-      flying.push({ query: step.query, at: now + latency });
+      turnIds += 1;
+      const id = turnIds;
+      turnQueries.set(id, step.query);
+      allowance = searchTurnWanted(allowance, { id, asker: "import" }, now);
+      takeTurns();
       continue;
     }
+    const turnAt = takeTurns();
     const additions = core.importAdditions(job);
     const toGive = additions.through > job.added;
     if (toGive && (step.kind === "none" || now - givenAt >= GIVE_EVERY_MS)) {
@@ -257,6 +276,7 @@ const run = (
       step.kind === "wait" ? step.untilMs : Infinity,
       toGive ? givenAt + GIVE_EVERY_MS : Infinity,
       arrival,
+      turnAt ?? Infinity,
     );
     now = Math.max(now, until);
     flying.sort((a, b) => a.at - b.at);

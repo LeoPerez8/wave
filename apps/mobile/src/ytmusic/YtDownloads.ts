@@ -102,6 +102,7 @@ import { ytMusicEnabled } from "@/settings/ytMusic";
 
 import { readYtAlbum } from "./albumPages";
 import { useLoadedLibraryFinder } from "./libraryFinder";
+import { withSearchTurn } from "./searchAllowance";
 import { YtMusic, type YtMusicError } from "./YtMusic";
 
 export class DownloadFailed extends Data.TaggedError("DownloadFailed")<{
@@ -310,9 +311,10 @@ const prepareFallback = (claim: NativeDownloadDecision) =>
 const audioTrack = (song: YtSong) =>
   Effect.gen(function* () {
     const ytMusic = yield* YtMusic;
-    const page = yield* ytMusic
-      .searchSongs(spotifySearchQuery(song))
-      .pipe(Effect.orElseSucceed(() => null));
+    const query = spotifySearchQuery(song);
+    const page = yield* withSearchTurn("download", query, ytMusic.searchSongs(query)).pipe(
+      Effect.orElseSucceed(() => null),
+    );
     return ytAudioTrack(song, page?.songs ?? null) ?? undefined;
   });
 
@@ -443,7 +445,7 @@ const prepareMissingSong = (trackId: number) =>
       ? Effect.succeed(null)
       : search === null
         ? withCover(missingSongVideo(job, null))
-        : ytMusic.searchSongs(search).pipe(
+        : withSearchTurn("download", search, ytMusic.searchSongs(search)).pipe(
             Effect.map((page) => missingSongVideo(job, page.songs)),
             Effect.mapError(searchFailure),
           );
@@ -652,15 +654,29 @@ const downloadedSong = ({ path, track }: NativeSavedDownload) => {
   };
 };
 
+/**
+ * How often a decision still being worked on renews its lease: well inside the journal's 45 s,
+ * so a prepare waiting for the YouTube Music search allowance keeps it.
+ */
+const RENEW_EVERY_MS = 20_000;
+
 const answering = new Set<string>();
-/** Claims and answers [id]'s pending decision; an unanswered lease expires natively and is offered again. */
+/**
+ * Claims and answers [id]'s pending decision, renewing its lease while the answer is worked
+ * out; an unanswered lease (JS gone) expires natively and is offered again.
+ */
 const answerJob = async (id: string): Promise<void> => {
   if (answering.has(id)) return;
   answering.add(id);
+  let renewing: ReturnType<typeof setInterval> | undefined;
   try {
     const claim = await WaveSoulseek.claimDecision(id);
     if (claim === null) return;
+    renewing = setInterval(() => {
+      WaveSoulseek.renewDecision(claim.id, claim.generation, claim.token).catch(() => {});
+    }, RENEW_EVERY_MS);
     const payload = await appRuntime.runPromise(answer(claim));
+    clearInterval(renewing);
     const accepted = await WaveSoulseek.submitDecision(
       claim.id,
       claim.generation,
@@ -673,6 +689,7 @@ const answerJob = async (id: string): Promise<void> => {
   } catch {
     // JS or the bridge went away mid-answer: the native lease expires and replays the decision.
   } finally {
+    clearInterval(renewing);
     answering.delete(id);
   }
 };

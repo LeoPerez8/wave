@@ -2,6 +2,7 @@ package expo.modules.wavenative.yt
 
 import android.content.Context
 import com.metrolist.innertubex.InnerTube
+import expo.modules.wavenative.log.WaveLog
 import expo.modules.wavenative.net.Connectivity
 import com.metrolist.innertubex.InnerTubeHttpException
 import com.metrolist.innertubex.models.YouTubeClient
@@ -87,17 +88,33 @@ class YtClient private constructor(private val context: Context) {
       prefs.edit().putBoolean(KEY_ENABLED, on).apply()
     }
 
-  /** Songs on YT Music for [query]: YouTube Music's "Songs" search, the first page. */
-  suspend fun searchSongs(query: String): YtSearchPage = request {
-    val response = innerTube.search(YouTubeClient.WEB_REMIX, query, params = FILTER_SONGS)
-    YtSearchParser.songs(response.bodyAsText())
+  /** Songs on YT Music for [query]: YouTube Music's "Songs" search, the first page. A failure is logged. */
+  suspend fun searchSongs(query: String): YtSearchPage = logged("Songs search \"$query\"") {
+    request {
+      val response = innerTube.search(YouTubeClient.WEB_REMIX, query, params = FILTER_SONGS)
+      YtSearchParser.songs(response.bodyAsText())
+    }
   }
 
-  /** Artists on YT Music named like [query]: YouTube Music's "Artists" search, the first page. */
-  suspend fun searchArtists(query: String): List<YtArtistCandidate> = request {
-    val response = innerTube.search(YouTubeClient.WEB_REMIX, query, params = FILTER_ARTISTS)
-    YtArtistParser.artists(response.bodyAsText())
+  /** Artists on YT Music named like [query]: YouTube Music's "Artists" search, the first page. A failure is logged. */
+  suspend fun searchArtists(query: String): List<YtArtistCandidate> = logged("Artists search \"$query\"") {
+    request {
+      val response = innerTube.search(YouTubeClient.WEB_REMIX, query, params = FILTER_ARTISTS)
+      YtArtistParser.artists(response.bodyAsText())
+    }
   }
+
+  /**
+   * Runs the search [what], writing its failure to the app log as native code saw it
+   * ([YtFailure.failedLine]) before it reaches JS: in the background too, however slow JS is.
+   */
+  private suspend fun <T> logged(what: String, search: suspend () -> T): T =
+    try {
+      search()
+    } catch (e: YtException) {
+      WaveLog.w(LOG_TAG, YtFailure.failedLine(what, e))
+      throw e
+    }
 
   /** Albums, singles and EPs on YT Music for [query]: YouTube Music's "Albums" search, the first page. */
   suspend fun searchAlbums(query: String): List<YtShelfItem.Album> = request {
@@ -182,6 +199,7 @@ class YtClient private constructor(private val context: Context) {
   internal fun online(): Boolean = connectivity.online()
 
   companion object {
+    private const val LOG_TAG = "WaveYtMusic"
     private const val PREFS = "wave_yt_music"
     private const val KEY_ENABLED = "enabled"
 

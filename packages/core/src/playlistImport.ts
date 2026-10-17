@@ -22,12 +22,7 @@ import {
   type YtSongSearch,
 } from "./spotifyImport.ts";
 import type { SpotifyPlaylist, SpotifySong } from "./spotifyPlaylist.ts";
-import {
-  spotifySearchAllowedAt,
-  spotifySearchAsked,
-  spotifySearchesDoneAt,
-  type SpotifySearchPacing,
-} from "./spotifySearchPacing.ts";
+import { logDuration, searchesDoneAt, type SearchAllowance } from "./searchAllowance.ts";
 import type { YtAlbumSong } from "./ytDiscover.ts";
 import { joinArtists, libraryFinder, type LibrarySongKey, type YtSong } from "./ytMusic.ts";
 
@@ -461,39 +456,31 @@ const nextQuery = <S extends YtSong>(job: PlaylistImport<S>): string | null => {
 };
 
 /**
- * What the app does next for [job] at [now] (ms), given the searches Spotify
- * imports asked lately ([searches]), and both once it's done. The songs still
- * to be found are searched in the source's order, one Songs search per song
- * (its title and artists, `spotifySearchQuery`; a song listed twice is
- * searched once), at most `SPOTIFY_SEARCHES_AT_ONCE` at once and
- * `SPOTIFY_SEARCH_BUDGET` in any `SPOTIFY_SEARCH_WINDOW_MS`, none while
- * paused after a refusal. The Library's songs are never searched, so they
- * spend none of that. This is the one place deciding whether a search may be
- * asked now.
+ * What the app does next for [job] at [now] (ms), and the import once it's
+ * done. The songs still to be found are searched in the source's order, one
+ * Songs search per song (its title and artists, `spotifySearchQuery`; a song
+ * listed twice is searched once), at most `SPOTIFY_SEARCHES_AT_ONCE` at once,
+ * none while paused after a refusal. Each search then waits its turn in the
+ * allowance every automatic search shares (`searchTurns`): the import keeps
+ * no pacing of its own. The Library's songs are never searched, so they
+ * spend none of it.
  */
 export const nextImportStep = <S extends YtSong>(
   job: PlaylistImport<S>,
   now: number,
-  searches: SpotifySearchPacing,
 ): {
   readonly job: PlaylistImport<S>;
   readonly step: ImportStep;
-  readonly searches: SpotifySearchPacing;
 } => {
-  const as = (step: ImportStep) => ({ job, step, searches });
+  const as = (step: ImportStep) => ({ job, step });
   if (job.state.kind !== "importing") return as({ kind: "none" });
   const waiting =
     job.asking.length > 0 ? ({ kind: "answers" } as const) : ({ kind: "none" } as const);
   if (job.asking.length >= SPOTIFY_SEARCHES_AT_ONCE) return as(waiting);
   const query = nextQuery(job);
   if (query === null) return as(waiting);
-  const from = Math.max(job.pausedUntil, spotifySearchAllowedAt(searches, now));
-  if (now < from) return as({ kind: "wait", untilMs: from });
-  return {
-    job: { ...job, asking: [...job.asking, query] },
-    step: { kind: "search", query },
-    searches: spotifySearchAsked(searches, now),
-  };
+  if (now < job.pausedUntil) return as({ kind: "wait", untilMs: job.pausedUntil });
+  return { job: { ...job, asking: [...job.asking, query] }, step: { kind: "search", query } };
 };
 
 /**
@@ -903,31 +890,31 @@ const timeLeftLine = (ms: number): string => {
 
 /**
  * About how long [job]'s searches still take at [now], given the searches
- * Spotify imports asked lately ([searches]): at about 6 a second, within
- * `SPOTIFY_SEARCH_BUDGET` in any `SPOTIFY_SEARCH_WINDOW_MS`, after any pause
- * for a refusal. Null when none is left to ask.
+ * asked lately ([searches], the shared allowance's): at about 6 a second,
+ * within `SEARCH_ALLOWANCE` in any `SEARCH_WINDOW_MS`, after any pause for a
+ * refusal. Null when none is left to ask.
  */
 const timeLeft = <S extends YtSong>(
   job: PlaylistImport<S>,
   now: number,
-  searches: SpotifySearchPacing,
+  searches: Pick<SearchAllowance, "searchesAt">,
 ): number | null => {
   const left = searchesLeft(job);
   if (left === 0) return null;
-  return spotifySearchesDoneAt(searches, Math.max(now, job.pausedUntil), left) - now;
+  return searchesDoneAt(searches.searchesAt, Math.max(now, job.pausedUntil), left) - now;
 };
 
 /**
  * What [playlistId]'s page shows of its import at [now] (ms), given the
- * searches Spotify imports asked lately ([searches]); null with none. The
- * import going on says how far it got and, while it has searches to ask,
- * about how long they take.
+ * searches asked lately ([searches], the shared allowance's); null with
+ * none. The import going on says how far it got and, while it has searches
+ * to ask, about how long they take.
  */
 export const playlistImportView = <S extends YtSong>(
   imports: PlaylistImports<S>,
   playlistId: number,
   now: number,
-  searches: SpotifySearchPacing,
+  searches: Pick<SearchAllowance, "searchesAt">,
 ): PlaylistImportView | null => {
   const job = imports.find((queued) => queued.playlistId === playlistId);
   if (job === undefined) return null;
@@ -1018,3 +1005,99 @@ export const importProgressOnly = <S extends YtSong>(
       sameState(other.state, job.state)
     );
   });
+
+// ---------------------------------------------------------------------------
+// The app log
+
+/** How long an import has run, for its last line: kept by the app while Wave runs. */
+export interface ImportRun {
+  /** When it started, or went on after a restart (ms). */
+  readonly startedAt: number;
+  /** The searches it asked, and how many of them YouTube Music refused. */
+  readonly searches: number;
+  readonly refusals: number;
+  /** How long its searches waited for the search allowance (ms). */
+  readonly waitedMs: number;
+  /** Whether it went on after a restart: the counts are since then. */
+  readonly resumed: boolean;
+}
+
+/** Something an import did that the app log notes. */
+export type ImportLogEvent =
+  | { readonly kind: "started"; readonly resumed: boolean }
+  /** Paused at [now] after YouTube Music refused [query] (`importSearchAnswered`). */
+  | { readonly kind: "paused"; readonly query: string; readonly now: number }
+  | { readonly kind: "stopped" }
+  | { readonly kind: "cancelled" }
+  | { readonly kind: "retried" }
+  | { readonly kind: "done"; readonly run: ImportRun; readonly now: number };
+
+const SERVICE_NAMES: Record<ImportService, string> = {
+  ytMusic: "YouTube Music",
+  spotify: "Spotify",
+};
+
+const STOP_NAMES: Record<ImportStopReason, string> = {
+  offline: "offline",
+  disabled: "YT Music off",
+  searchFailed: "YouTube Music stopped answering",
+};
+
+/** "1 found, 3 not found, 2 left": the songs found (the Library's too), not found, and left. */
+const findsLine = <S extends YtSong>(job: PlaylistImport<S>, withLeft: boolean): string => {
+  let found = 0;
+  let notFound = 0;
+  for (const find of job.finds) {
+    if (find === null) continue;
+    if (find.kind === "notFound") notFound += 1;
+    else found += 1;
+  }
+  const counts = `${found.toLocaleString("en")} found, ${notFound.toLocaleString("en")} not found`;
+  return withLeft ? `${counts}, ${tallyOf(job).open.toLocaleString("en")} left` : counts;
+};
+
+/** "3 searches needed", "no searches needed". */
+const searchesNeeded = <S extends YtSong>(job: PlaylistImport<S>): string => {
+  const left = searchesLeft(job);
+  return left === 0 ? "no searches needed" : `${counted(left, "search", "searches")} needed`;
+};
+
+/**
+ * The app log's line for [event] of [job]: a few per import, never one per
+ * search answered (docs/spec.md, "App log"). Song titles and artists may
+ * appear, as in any search; nothing else about the Library does.
+ */
+export const importLogLine = <S extends YtSong>(
+  job: PlaylistImport<S>,
+  event: ImportLogEvent,
+): string => {
+  const name = `Import of "${job.name}"`;
+  const total = job.songs.length;
+  const from = SERVICE_NAMES[job.service];
+  switch (event.kind) {
+    case "started":
+      return event.resumed
+        ? `${name} from ${from} goes on after a restart: ${settledCount(job).toLocaleString("en")} of ${counted(total, "song")} settled, ${searchesNeeded(job)}`
+        : `${name} from ${from} started: ${counted(total, "song")}, ${searchesNeeded(job)}`;
+    case "paused": {
+      const refusals = job.refused[event.query] ?? 0;
+      const pause = logDuration(Math.max(0, job.pausedUntil - event.now));
+      return `${name} pauses ${pause}: YouTube Music refused "${event.query}" ${counted(refusals, "time")} in a row`;
+    }
+    case "stopped":
+      return job.state.kind === "stopped"
+        ? `${name} stopped (${STOP_NAMES[job.state.reason]}): ${findsLine(job, true)}`
+        : `${name} stopped: ${findsLine(job, true)}`;
+    case "cancelled":
+      return `${name} cancelled: ${findsLine(job, true)}`;
+    case "retried":
+      return `${name} tried again: ${counted(tallyOf(job).open, "song")} left`;
+    case "done": {
+      const { run, now } = event;
+      const since = run.resumed ? " since Wave started again" : "";
+      const searches = counted(run.searches, "search", "searches");
+      const waited = `${logDuration(run.waitedMs)} of it waiting for the search allowance`;
+      return `${name} done: ${findsLine(job, false)}; ${searches}, ${run.refusals.toLocaleString("en")} refused; ${logDuration(now - run.startedAt)} in all${since}, ${waited}`;
+    }
+  }
+};
