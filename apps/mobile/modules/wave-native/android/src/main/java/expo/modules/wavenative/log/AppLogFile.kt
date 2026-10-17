@@ -16,7 +16,9 @@ import java.io.RandomAccessFile
  * keep that shape and leave out secrets (Core's `redactSecrets`): [WaveLog] does.
  *
  * Every access holds one lock, so an append from any thread never interleaves
- * with another or with a trim. Only JS trims (Core's `trimLog` decides how many
+ * with another or with a trim. Native code appends from one thread of its own
+ * ([AppLogWriter], through [WaveLog]), so no caller of [WaveLog] waits on that
+ * lock while JS reads or trims the log. Only JS trims (Core's `trimLog` decides how many
  * bytes go from the start), so the file may run past its cap until JS next writes.
  */
 class AppLogFile(val file: File) {

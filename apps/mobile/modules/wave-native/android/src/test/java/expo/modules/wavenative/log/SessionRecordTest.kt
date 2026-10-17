@@ -26,7 +26,7 @@ class SessionRecordTest {
   @After
   fun stop() = WaveLog.writeTo(null)
 
-  private fun entries(): List<String> = file.read().split(Regex("\n(?=\\d{4}-)")).map { it.trimEnd('\n') }.filter { it.isNotEmpty() }
+  private fun entries(): List<String> = WaveLog.flush().let { file.read() }.split(Regex("\n(?=\\d{4}-)")).map { it.trimEnd('\n') }.filter { it.isNotEmpty() }
 
   private fun nextLaunch(vararg exits: Exit) {
     file.dropHead(Long.MAX_VALUE)

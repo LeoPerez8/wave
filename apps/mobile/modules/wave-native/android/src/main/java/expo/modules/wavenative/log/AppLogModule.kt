@@ -87,6 +87,8 @@ class AppLogModule : Module() {
       val exports = File(context.cacheDir, AppLogFile.DIRECTORY)
       exports.listFiles()?.forEach { it.delete() }
       val export = File(exports, File(fileName).name)
+      // Native entries still on their way to the file go in the export too.
+      WaveLog.flush()
       log.exportTo(export, header)
       val uri = FileProvider.getUriForFile(context, "${context.packageName}.logs", export)
       val send = Intent(Intent.ACTION_SEND).apply {
