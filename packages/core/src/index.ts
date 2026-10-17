@@ -1063,6 +1063,27 @@ export { discoverMixActions, discoverMixPlaylist } from "./discoverMixActions.ts
 export type { DiscoverMixAction } from "./discoverMixActions.ts";
 
 export {
+  NO_SEARCHES,
+  SEARCH_ALLOWANCE,
+  SEARCH_WINDOW_MS,
+  readSearchAllowance,
+  writeSearchAllowance,
+  searchTurnWanted,
+  searchTurnWithdrawn,
+  searchTurns,
+  searchFailedLine,
+  searchWaitLine,
+} from "./searchAllowance.ts";
+export type {
+  SearchAllowance,
+  SearchAsker,
+  SearchFailure,
+  SearchTurns,
+  SearchWait,
+  SearchWaiting,
+} from "./searchAllowance.ts";
+
+export {
   SPOTIFY_SEARCH_BUDGET,
   SPOTIFY_SEARCH_WINDOW_MS,
   readSpotifySearchPacing,
