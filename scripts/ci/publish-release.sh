@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Publishes "Wave <version>" with wave-<version>.apk. Versions ending in -ti are
 # prereleases; stable versions become Latest.
-# The Checks job has already decided the tag (bump-version.sh on main and ti) and, for a
-# hand-pushed tag, made sure it is v<app version> (check-release-tag.sh).
+# The tag already exists: the Version job pushed it with the version bump on main and ti
+# (bump-version.sh), and a hand-pushed one passed check-release-tag.sh in Checks.
 #   scripts/ci/publish-release.sh <apk path>
 # Run from a checkout of the repo. Env: GH_TOKEN, RELEASE_TAG (default GITHUB_REF_NAME),
-# GITHUB_REF_TYPE, RELEASE_SHA (the commit a branch push tags: its version bump; default
+# GITHUB_REF_TYPE, RELEASE_SHA (the commit a branch push releases: its version bump; default
 # GITHUB_SHA), RELEASE_NOTES_FILE (optional: the patch notes).
 set -euo pipefail
 
@@ -25,9 +25,9 @@ fi
 flags=(--latest)
 if [[ "$version" == *-ti ]]; then flags=(--prerelease --latest=false); fi
 
-# A branch push creates the tag on the commit Checks handed on. If the tag already exists on
-# another commit (an earlier push with the same version got there first, or this is a re-run
-# of an older push), that release stays as it is and this run publishes nothing.
+# A branch push publishes the tag its version bump pushed, which sits on RELEASE_SHA. If the
+# tag is on another commit (someone moved it), that release stays as it is and this run
+# publishes nothing. A missing tag (one deleted since) is created on RELEASE_SHA.
 target=()
 if [ "${GITHUB_REF_TYPE:-tag}" = "branch" ]; then
   sha="${RELEASE_SHA:-${GITHUB_SHA:?}}"

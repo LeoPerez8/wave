@@ -4,11 +4,15 @@
 # since the branch's previous release (previous-tag.sh) and the PRs merged since then
 # (merged-prs.sh; one from a feat/ branch that no release shipped yet makes it a minor bump).
 # When the push releases, this writes the version into apps/mobile/package.json, commits that
-# alone as "Release Wave <version>" and pushes it to the branch with the workflow's token,
-# which doesn't start another run. If the branch moved on meanwhile, it starts over from its
-# new tip. A commit already tagged for its channel is released as it is.
+# alone as "Release Wave <version>" and pushes it to the branch together with its v<version>
+# tag, in one atomic push with the workflow's token, which doesn't start another run. The tag
+# takes the number as soon as it's picked, so the next bump on either branch counts past it
+# even before this run publishes the release (the workflow's Version job lets one bump run at
+# a time across main and ti). If the branch moved on or the tag was taken meanwhile, it starts
+# over from the new tip; any other rejected push fails. A tip already tagged for its channel
+# (a re-run after its bump was pushed) is released as it is, with nothing pushed.
 # Writes `tag=v<version>` (empty when nothing is released) and `sha=<commit>` (the commit the
-# rest of the run checks, builds and tags) to $GITHUB_OUTPUT.
+# rest of the run checks and builds, which the tag is on) to $GITHUB_OUTPUT.
 #   scripts/ci/bump-version.sh main|ti
 # Run from a checkout of that branch (HEAD on its tip). Env: GITHUB_OUTPUT, GH_TOKEN,
 # GITHUB_REPOSITORY.
@@ -74,35 +78,61 @@ for attempt in 1 2 3 4 5; do
     exit 0
   fi
 
-  # A version set by hand, or one an earlier run committed but didn't release, is on the
-  # branch already: the release goes on this commit.
+  tag="v$version"
+  if git tag --points-at HEAD --list "$tag" | grep -qxF "$tag"; then
+    echo "$branch's tip is already $tag: nothing to bump or push."
+    { echo "tag=$tag"; echo "sha=$(git rev-parse HEAD)"; } | tee -a "$out"
+    exit 0
+  fi
+
+  base="$(git rev-parse HEAD)"
   if [ "$current" = "$version" ]; then
+    # A version set by hand (a major bump), or one an earlier run committed without its tag,
+    # is on the branch already: the tag goes on this commit.
     echo "$package already says $version, so there's nothing to commit."
-    { echo "tag=v$version"; echo "sha=$(git rev-parse HEAD)"; } | tee -a "$out"
-    exit 0
+  else
+    node -e '
+      const fs = require("fs");
+      const [path, version] = process.argv.slice(1);
+      const text = fs.readFileSync(path, "utf8");
+      const updated = text.replace(/^(\s*"version":\s*)"[^"]*"/m, `$1"${version}"`);
+      if (updated === text) throw new Error(`No "version" field to update in ${path}.`);
+      fs.writeFileSync(path, updated);
+    ' "$package" "$version"
+    git add "$package"
+    git -c user.name="github-actions[bot]" \
+      -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+      commit -q -m "Release Wave $version"
+    git show --stat --oneline HEAD
   fi
 
-  node -e '
-    const fs = require("fs");
-    const [path, version] = process.argv.slice(1);
-    const text = fs.readFileSync(path, "utf8");
-    const updated = text.replace(/^(\s*"version":\s*)"[^"]*"/m, `$1"${version}"`);
-    if (updated === text) throw new Error(`No "version" field to update in ${path}.`);
-    fs.writeFileSync(path, updated);
-  ' "$package" "$version"
-  git add "$package"
-  git -c user.name="github-actions[bot]" \
-    -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-    commit -q -m "Release Wave $version"
-  git show --stat --oneline HEAD
-
-  if git push --quiet origin "HEAD:refs/heads/$branch"; then
-    { echo "tag=v$version"; echo "sha=$(git rev-parse HEAD)"; } | tee -a "$out"
+  git tag "$tag"
+  refs=("refs/tags/$tag")
+  if [ "$(git rev-parse HEAD)" != "$base" ]; then refs=("HEAD:refs/heads/$branch" "${refs[@]}"); fi
+  # The commit and its tag land together or not at all.
+  if git push --atomic --quiet origin "${refs[@]}" 2> "$tmp/push.txt"; then
+    { echo "tag=$tag"; echo "sha=$(git rev-parse HEAD)"; } | tee -a "$out"
     exit 0
   fi
-
-  echo "::warning::$branch moved on before the version bump was pushed (try $attempt of 5). Starting over from its new tip."
+  cat "$tmp/push.txt" >&2
+  git tag -d "$tag" > /dev/null
   fetch
+
+  # Starting over only helps when someone else's push got in first.
+  moved=false
+  if [ "$(git rev-parse "origin/$branch")" != "$base" ]; then moved=true; fi
+  taken=false
+  if git rev-parse --quiet --verify "refs/tags/$tag" > /dev/null; then taken=true; fi
+  if [ "$moved" = false ] && [ "$taken" = false ]; then
+    echo "::error::The push of $tag to $branch was rejected (git's error above), and neither $branch nor $tag changed meanwhile, so trying again wouldn't help."
+    exit 1
+  fi
+
+  if [ "$moved" = true ]; then
+    echo "::warning::$branch moved on before $tag was pushed (try $attempt of 5). Starting over from its new tip."
+  else
+    echo "::warning::$tag was taken before this run pushed it (try $attempt of 5). Starting over."
+  fi
   git reset --quiet --hard "origin/$branch"
 done
 
