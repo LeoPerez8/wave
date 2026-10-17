@@ -1058,6 +1058,7 @@ export {
   discoverMixesDue,
   discoverSeedQuery,
   discoverSeedVideo,
+  discoverSimilarSource,
   parseDiscoverMixes,
   playedFinder,
   storedDiscoverMixes,
@@ -1074,6 +1075,8 @@ export type {
   DiscoverSeedPools,
   DiscoverSeedSong,
   DiscoverSeedSource,
+  DiscoverSimilarArtist,
+  DiscoverSimilarArtists,
 } from "./discoverMixes.ts";
 export { discoverMixActions, discoverMixPlaylist } from "./discoverMixActions.ts";
 export type { DiscoverMixAction } from "./discoverMixActions.ts";
