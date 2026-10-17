@@ -28,6 +28,35 @@ export const libraryCounts = (db: LibraryDatabase): LibraryCounts =>
       (SELECT count(*) FROM favorites JOIN tracks ON tracks.id = favorites.track_id
         WHERE NOT favorites.deleted) AS "favorites"`);
 
+/** How big the Library is, as a performance run records it (docs/performance/README.md). */
+export interface LibraryScale {
+  readonly tracks: number;
+  /** Playlists the owner sees (not tombstones). */
+  readonly playlists: number;
+  /** Entries in those playlists, Library songs and YT Music songs alike. */
+  readonly playlistItems: number;
+  /** Entries in the biggest of them. */
+  readonly largestPlaylist: number;
+  /** Rows in the play history, imported plays included. */
+  readonly playEvents: number;
+}
+
+/** The Library's `LibraryScale`, for the perf build's run metadata. */
+export const libraryScale = (db: LibraryDatabase): LibraryScale =>
+  db.get<LibraryScale>(sql`
+    WITH sizes AS (
+      SELECT count(playlist_items.id) AS size FROM playlists
+      LEFT JOIN playlist_items
+        ON playlist_items.playlist_id = playlists.id AND NOT playlist_items.deleted
+      WHERE NOT playlists.deleted
+      GROUP BY playlists.id)
+    SELECT
+      (SELECT count(*) FROM tracks) AS "tracks",
+      (SELECT count(*) FROM sizes) AS "playlists",
+      (SELECT coalesce(sum(size), 0) FROM sizes) AS "playlistItems",
+      (SELECT coalesce(max(size), 0) FROM sizes) AS "largestPlaylist",
+      (SELECT count(*) FROM play_events) AS "playEvents"`);
+
 /**
  * Counts the songs each Library entry's menu queues (Core `sectionSongs`)
  * without loading them: every track for Songs, Albums and Artists (a song

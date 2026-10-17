@@ -85,6 +85,32 @@ const rank = <A extends { readonly id: number }>(
 ): Effect.Effect<readonly Ranked<A>[], LibraryStoreError> =>
   withRows(rankPlays(totals, limit), rows);
 
+/** The albums and the artists played most in a period, ranked from one read. */
+export interface TopAlbumsAndArtists {
+  readonly albums: readonly Ranked<AlbumRow>[];
+  readonly artists: readonly Ranked<ArtistRow>[];
+}
+
+/**
+ * The top [albumLimit] albums and [artistLimit] artists of `period`, as
+ * Stats' `topAlbums` and `topArtists` rank them, from one read of the
+ * credited totals: Home's Most played albums and artists, which show together.
+ */
+export const topAlbumsAndArtists = (
+  store: LibraryStore["Service"],
+  period: StatsPeriod,
+  albumLimit: number,
+  artistLimit: number,
+): Effect.Effect<TopAlbumsAndArtists, LibraryStoreError> =>
+  Effect.flatMap(
+    Effect.suspend(() => store.creditedPlayTotals(statsWindow(period, Date.now()))),
+    (credits) =>
+      Effect.all({
+        albums: rank(albumPlayTotals(credits), albumLimit, store.albumsByIds),
+        artists: rank(artistPlayTotals(credits), artistLimit, store.artistsByIds),
+      }),
+  );
+
 export const layer = Layer.effect(
   Stats,
   Effect.gen(function* () {
@@ -105,13 +131,9 @@ export const layer = Layer.effect(
       artist: (artistId) => {
         const now = Date.now();
         return Effect.flatMap(
-          Effect.all([
-            store.songListening,
-            store.trackPlayTotals(statsWindow("all", now)),
-            store.songsCrediting(artistId),
-          ]),
-          ([listening, songPlays, songIds]): Effect.Effect<ArtistStats, LibraryStoreError> => {
-            const stats = artistStats({ artistId, songIds, listening, songPlays, now });
+          store.artistPlays(artistId, now),
+          (plays): Effect.Effect<ArtistStats, LibraryStoreError> => {
+            const stats = artistStats({ artistId, now, ...plays });
             if (!stats.played) return Effect.succeed(stats);
             return Effect.map(withRows(stats.mostPlayed, store.songsByIds), (mostPlayed) => ({
               ...stats,

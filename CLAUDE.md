@@ -7,20 +7,32 @@ Pick tickets whose blockers are closed.
 ## Conventions
 
 - Everything in English: UI copy, code, docs, issues, PRs, commits.
-- One PR per ticket, branch `feat/<issue>-<slug>` (`fix/<issue>-<slug>` for a bug fix), PR body
-  says `Closes #<issue>`. The PR title is the release's patch-note line: one line a user
-  understands, saying what changed for them.
+- Start work from the latest `main`, on a branch `feat/<issue>-<slug>` (`fix/<issue>-<slug>`
+  for a bug fix), and land it on `ti` through a PR. A PR can carry several tickets; its body
+  has a `Closes #<issue>` line for each. The PR title is the release's patch-note line: one
+  line a user understands, saying what changed for them. Merge the PR without waiting for its
+  checks (wait only for CI's lockfile autofix when a `package.json` changed); the push run on
+  `ti` is the build that counts. GitHub only closes issues from merges into `main`, so close
+  each ticket by hand with a comment naming the PR.
 - Day-to-day test builds target `ti`. Its version in `apps/mobile/app.config.ts` ends in
-  `-ti` (for example `0.5.1-ti`); tag its merged version bump `v0.5.1-ti` to publish a
-  prerelease. Compatible ti pushes and tags repack a kept APK. A new Android version,
-  native input or Metro resource first needs a full build. Stable versions have no suffix,
-  are tagged on `main`, and always build fully. See `docs/spec.md`, Build and CI.
+  `-ti` (for example `0.5.1-ti`). Merging a version bump publishes it: the push to `ti`
+  tags `v0.5.1-ti` and publishes the prerelease, so don't tag by hand. Compatible ti pushes
+  and tags repack a kept APK. A new Android version, native input or Metro resource first
+  needs a full build. Stable versions have no suffix, release from `main` the same way, and
+  always build fully. See `docs/spec.md`, Build and CI.
 - Decision-heavy logic (queue, counted plays, search, sorting, scan reconciliation, LRC,
   sleep timer) goes in `packages/core`, which must keep **zero runtime dependencies** and
   use only erasable TypeScript syntax with `.ts` import extensions. Test it through its
   public API with `node:test`.
 - The app uses Effect for services, uniwind classes for styling (colour tokens in
   `apps/mobile/global.css`), and `useThemeColor` for native props that can't take a class.
+
+## Skills
+
+The `mattpocock-skills` and `impeccable` plugins are enabled in `.claude/settings.json`.
+Use the Matt Pocock flow for planning and engineering (grill → spec → tickets → TDD) and
+Impeccable to critique and polish UI work against the spec's Apple Music direction. If a
+session can't load plugins, read the skill files straight from their GitHub repos.
 
 ## Environment constraints
 

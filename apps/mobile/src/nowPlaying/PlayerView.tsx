@@ -1,8 +1,7 @@
 import { IconMusic, IconStar, IconStarFilled } from "@tabler/icons-react-native";
 import { artistLink, parseTrackId } from "@wave/core";
 import { Image } from "expo-image";
-import { usePathname } from "expo-router";
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Text, View } from "react-native";
 import Animated, {
   useAnimatedStyle,
@@ -16,8 +15,9 @@ import { followArtistLink, followStreamedArtistLink } from "@/library/ArtistChoi
 import { toggleFavorite, useIsFavorite } from "@/library/favorites";
 import { useLinkRows } from "@/library/hooks";
 import type { TrackDetails } from "@/library/LibraryStore";
-import { openAlbum } from "@/library/routes";
+import { openAlbum, useCurrentPath } from "@/library/routes";
 import { Press } from "@/motion/Press";
+import { useRenderCount } from "@/perf/perf";
 import { useCurrentTrackId } from "@/playback/hooks";
 import { playbackState, type PlaybackState } from "@/playback/Player";
 import { queueTracks, type QueueTrack } from "@/playback/queueTracks";
@@ -44,10 +44,20 @@ function NowPlayingArtwork({ uri, playing }: { uri: string | null; playing: bool
   const fill = useThemeColor("fill");
   const tertiary = useThemeColor("tertiary");
   const scale = useSharedValue(playing ? 1 : PAUSED_SCALE);
+  // Whether the artwork has been in sight since it last came back: a play or
+  // pause while the player was hidden doesn't spring once it shows again.
+  const inSight = useRef(false);
+  useLayoutEffect(
+    () => () => {
+      inSight.current = false;
+    },
+    [],
+  );
 
   useEffect(() => {
     const to = playing ? 1 : PAUSED_SCALE;
-    scale.set(reduceMotion ? to : withSpring(to, SPRING));
+    scale.set(reduceMotion || !inSight.current ? to : withSpring(to, SPRING));
+    inSight.current = true;
   }, [playing, reduceMotion, scale]);
 
   const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.get() }] }));
@@ -58,6 +68,8 @@ function NowPlayingArtwork({ uri, playing }: { uri: string | null; playing: bool
       className="flex-1 items-center justify-center"
       onLayout={(event) => {
         const { width, height } = event.nativeEvent.layout;
+        // Hidden behind the Queue or Lyrics, the view may be laid out empty: keep the last size.
+        if (width === 0 || height === 0) return;
         lastBox = { width, height };
         setBox(lastBox);
       }}
@@ -170,6 +182,7 @@ type Props = {
  * page, else the YouTube Music artist page) while YT Music is on.
  */
 export function PlayerView({ item, details, playing }: Props) {
+  useRenderCount("PlayerView");
   const title = item.title ?? "Unknown title";
   const artist = details?.artist ?? item.artist ?? "Unknown Artist";
   const album = details?.album ?? item.album ?? "Unknown Album";
@@ -179,7 +192,8 @@ export function PlayerView({ item, details, playing }: Props) {
   const shown = useNowPlayingShown();
   // One artist opens straight away, several open the choice Go to Artist
   // offers; on an artist's page, they're left out (Core's `artistLink`).
-  const here = usePathname();
+  // Followed only while shown: navigation under a closed Now Playing doesn't render it.
+  const here = useCurrentPath(shown);
   const artistTo = details === null ? undefined : artistLink(details.artistIds, here);
   const links = useLinkRows(
     shown ? details?.albumId : undefined,

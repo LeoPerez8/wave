@@ -32,6 +32,8 @@ Built-in plugins recognize Expo, Expo Router, React Native, package exports,
 package-script entry points, and Node tests. Core's public API comes from its
 `exports` map, while its internal modules remain checked. Maintenance commands run
 directly from the shell and their tests are declared as additional entry points.
+The Smart Shuffle design review's JavaScript and CSS are also entry points,
+loaded directly by its standalone HTML page rather than the mobile app.
 The Android WebView asset is loaded from Kotlin and is marked as dynamically loaded.
 
 The configuration excludes generated native projects, builds, dependencies, caches,

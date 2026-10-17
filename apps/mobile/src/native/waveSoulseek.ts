@@ -84,6 +84,8 @@ declare class WaveSoulseekModule extends NativeModule<{
     source: DownloadSource | null,
   ): Promise<string>;
   jobsSnapshot(): Promise<NativeDownloadJob[]>;
+  /** Forgets an imported job Core found absent from the Library, if it hasn't been retried since. */
+  forgetCompletedJob(id: string, generation: number): Promise<boolean>;
   resumeJobs(): Promise<void>;
   claimDecision(id: string): Promise<NativeDownloadDecision | null>;
   submitDecision(

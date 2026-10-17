@@ -167,6 +167,138 @@ const playlistSong = <S extends YtSong>(found: ImportFind<S>): PlaylistSong<S> |
       ? { source: "stream", song: found.song }
       : null;
 
+// ---------------------------------------------------------------------------
+// What an import's finds come to, kept up as answers arrive
+
+/** The search each of an import's songs is found by, and the songs each search finds. */
+interface SongSearches {
+  /** By song: its search (`spotifySearchQuery`). */
+  readonly queries: readonly string[];
+  /** By search: its songs, in the source's order. */
+  readonly songsBy: ReadonlyMap<string, readonly number[]>;
+}
+
+/** By an import's songs, which never change once it starts. */
+const songSearchesKept = new WeakMap<readonly SpotifySong[], SongSearches>();
+
+const songSearches = (songs: readonly SpotifySong[]): SongSearches => {
+  const kept = songSearchesKept.get(songs);
+  if (kept !== undefined) return kept;
+  const queries = songs.map(spotifySearchQuery);
+  const songsBy = new Map<string, number[]>();
+  queries.forEach((query, index) => {
+    const same = songsBy.get(query);
+    if (same === undefined) songsBy.set(query, [index]);
+    else same.push(index);
+  });
+  const made = { queries, songsBy };
+  songSearchesKept.set(songs, made);
+  return made;
+};
+
+/**
+ * What an import's finds come to: counted once when first asked for, then
+ * kept up as each answer settles its songs, so neither an answer nor a
+ * progress line reads every song again (#307). It belongs to one finds
+ * array: the answer that makes the next moves it there, and an earlier
+ * state of the import asked about later counts its own afresh.
+ */
+interface FindsTally {
+  readonly songs: readonly SpotifySong[];
+  /** How many songs are still to be found (null). */
+  open: number;
+  /** How many weren't found. */
+  notFound: number;
+  /** By search: how many of its songs are still to be found (none: left out). */
+  readonly openBy: Map<string, number>;
+  /** By the key a found song goes in by (`playlistSongKey`): the first song found as it. */
+  readonly firstAt: Map<string, number>;
+  /**
+   * Leads past settled songs: following it from a song reaches the first
+   * still to be found from there, or the end. Shortened as it's followed.
+   */
+  readonly ahead: Int32Array;
+}
+
+const tallies = new WeakMap<object, FindsTally>();
+
+/** Counts [found], song [index], as settled in [tally]. */
+const countSettled = <S extends YtSong>(
+  tally: FindsTally,
+  index: number,
+  found: ImportFind<S>,
+): void => {
+  const song = playlistSong(found);
+  if (song === null) {
+    tally.notFound += 1;
+    return;
+  }
+  const key = playlistSongKey(song);
+  const first = tally.firstAt.get(key);
+  if (first === undefined || index < first) tally.firstAt.set(key, index);
+};
+
+/** [job]'s tally: kept, or counted now. */
+const tallyOf = <S extends YtSong>(job: PlaylistImport<S>): FindsTally => {
+  const kept = tallies.get(job.finds);
+  if (kept !== undefined && kept.songs === job.songs) return kept;
+  const { queries } = songSearches(job.songs);
+  const { length } = job.finds;
+  const tally: FindsTally = {
+    songs: job.songs,
+    open: 0,
+    notFound: 0,
+    openBy: new Map(),
+    firstAt: new Map(),
+    ahead: new Int32Array(length + 1),
+  };
+  tally.ahead[length] = length;
+  for (let index = 0; index < length; index += 1) {
+    const found = job.finds[index];
+    tally.ahead[index] = found === null ? index : index + 1;
+    if (found === undefined) continue;
+    if (found !== null) {
+      countSettled(tally, index, found);
+      continue;
+    }
+    tally.open += 1;
+    const query = queries[index];
+    if (query !== undefined) tally.openBy.set(query, (tally.openBy.get(query) ?? 0) + 1);
+  }
+  tallies.set(job.finds, tally);
+  return tally;
+};
+
+/** The first song from [from] still to be found; the end when none is. */
+const firstOpen = (tally: FindsTally, from: number): number => {
+  const { ahead } = tally;
+  const end = ahead.length - 1;
+  if (from >= end) return end;
+  let open = from;
+  while (ahead[open] !== open) open = ahead[open] ?? end;
+  for (let index = from; index !== open;) {
+    const next = ahead[index] ?? end;
+    ahead[index] = open;
+    index = next;
+  }
+  return open;
+};
+
+/** Counts song [index], to be found by [query], as now [found], in [tally]. */
+const settle = <S extends YtSong>(
+  tally: FindsTally,
+  index: number,
+  query: string,
+  found: ImportFind<S>,
+): void => {
+  tally.open -= 1;
+  const left = (tally.openBy.get(query) ?? 1) - 1;
+  if (left === 0) tally.openBy.delete(query);
+  else tally.openBy.set(query, left);
+  tally.ahead[index] = index + 1;
+  countSettled(tally, index, found);
+};
+
 /** What the playlist is given next, and how far through the source's songs that takes it. */
 export interface ImportAdditions<S extends YtSong> {
   /** The songs to append, in the source's order. */
@@ -183,11 +315,7 @@ export interface ImportAdditions<S extends YtSong> {
  * removed meanwhile stays out. Songs not found are passed over.
  */
 export const importAdditions = <S extends YtSong>(job: PlaylistImport<S>): ImportAdditions<S> => {
-  const given = new Set<string>();
-  for (const found of job.finds.slice(0, job.added)) {
-    const song = found === null ? null : playlistSong(found);
-    if (song !== null) given.add(playlistSongKey(song));
-  }
+  const { firstAt } = tallyOf(job);
   const songs: PlaylistSong<S>[] = [];
   let through = job.added;
   for (; through < job.finds.length; through += 1) {
@@ -195,9 +323,9 @@ export const importAdditions = <S extends YtSong>(job: PlaylistImport<S>): Impor
     if (found === null || found === undefined) break;
     const song = playlistSong(found);
     if (song === null) continue;
-    const key = playlistSongKey(song);
-    if (given.has(key)) continue;
-    given.add(key);
+    // A song found as it earlier in the source went in before it (the songs since the last
+    // given are all settled), so this one is left out.
+    if ((firstAt.get(playlistSongKey(song)) ?? through) < through) continue;
     songs.push(song);
   }
   return { songs, through };
@@ -259,12 +387,13 @@ export type ImportStep =
 
 /** The first search still to ask: the next unsettled song's, in the source's order, not already asked. */
 const nextQuery = <S extends YtSong>(job: PlaylistImport<S>): string | null => {
+  const tally = tallyOf(job);
+  const { queries } = songSearches(job.songs);
   const asking = new Set(job.asking);
-  for (let index = job.added; index < job.finds.length; index += 1) {
-    const song = job.songs[index];
-    if (job.finds[index] !== null || song === undefined) continue;
-    const query = spotifySearchQuery(song);
-    if (!asking.has(query)) return query;
+  const end = job.finds.length;
+  for (let index = firstOpen(tally, job.added); index < end; index = firstOpen(tally, index + 1)) {
+    const query = queries[index];
+    if (query !== undefined && !asking.has(query)) return query;
   }
   return null;
 };
@@ -322,13 +451,22 @@ export const importSearchAnswered = <S extends YtSong>(
   const asking = job.asking.filter((asked) => asked !== query);
   const { [query]: refusals = 0, ...refused } = job.refused;
   if (answer.ok) {
-    const finds = job.finds.map((found, index): ImportFind<S> | null => {
+    // Only the songs this search finds are read, through the search's own list of them.
+    const tally = tallyOf(job);
+    const settled = (songSearches(job.songs).songsBy.get(query) ?? []).filter(
+      (index) => index >= job.added && index < job.finds.length && job.finds[index] === null,
+    );
+    if (settled.length === 0) return { ...job, asking, refused };
+    const finds = job.finds.slice();
+    tallies.delete(job.finds);
+    for (const index of settled) {
       const song = job.songs[index];
-      if (found !== null || song === undefined || index < job.added) return found;
-      if (spotifySearchQuery(song) !== query) return found;
-      const match = spotifyYtMatch(song, answer.songs);
-      return match === null ? NOT_FOUND : { kind: "ytMusic", song: match };
-    });
+      const match = song === undefined ? null : spotifyYtMatch(song, answer.songs);
+      const found: ImportFind<S> = match === null ? NOT_FOUND : { kind: "ytMusic", song: match };
+      finds[index] = found;
+      settle(tally, index, query, found);
+    }
+    tallies.set(finds, tally);
     return { ...job, finds, asking, refused };
   }
   const stop = (reason: ImportStopReason): PlaylistImport<S> => ({
@@ -373,8 +511,7 @@ export const queuePlaylistImport = <S extends YtSong>(
   job: PlaylistImport<S>,
 ): PlaylistImports<S> => [...withoutPlaylistImport(imports, job.playlistId), job];
 
-const notFoundCount = <S extends YtSong>(job: PlaylistImport<S>): number =>
-  job.finds.filter((found) => found?.kind === "notFound").length;
+const notFoundCount = <S extends YtSong>(job: PlaylistImport<S>): number => tallyOf(job).notFound;
 
 /** The imports with [job] as it is now. Done with every song found, it's left out: there's nothing to show. */
 export const updatePlaylistImport = <S extends YtSong>(
@@ -528,7 +665,7 @@ export const readPlaylistImports = (stored: string | null): PlaylistImports<YtAl
 
 /** How many of [job]'s songs are settled: found, in the Library, or not found. */
 const settledCount = <S extends YtSong>(job: PlaylistImport<S>): number =>
-  job.finds.filter((found) => found !== null).length;
+  job.finds.length - tallyOf(job).open;
 
 const STOPPED_LINES: Record<ImportStopReason, string> = {
   offline: "Import paused: you're offline.",
@@ -565,13 +702,23 @@ export interface PlaylistImportView {
 
 /** The searches [job] still has to ask (not those asked and unanswered): one per query. */
 const searchesLeft = <S extends YtSong>(job: PlaylistImport<S>): number => {
-  const queries = new Set<string>();
-  for (let index = job.added; index < job.finds.length; index += 1) {
-    const song = job.songs[index];
-    if (job.finds[index] === null && song !== undefined) queries.add(spotifySearchQuery(song));
+  const tally = tallyOf(job);
+  const { queries } = songSearches(job.songs);
+  // Songs still to be found before those given (none, as the app goes on) aren't searched.
+  const before = new Map<string, number>();
+  const given = Math.min(job.added, job.finds.length);
+  for (let index = firstOpen(tally, 0); index < given; index = firstOpen(tally, index + 1)) {
+    const query = queries[index];
+    if (query !== undefined) before.set(query, (before.get(query) ?? 0) + 1);
   }
-  for (const query of job.asking) queries.delete(query);
-  return queries.size;
+  const searched = (query: string): boolean => {
+    const open = tally.openBy.get(query);
+    return open !== undefined && before.get(query) !== open;
+  };
+  let left = tally.openBy.size;
+  for (const query of before.keys()) if (!searched(query)) left -= 1;
+  for (const query of new Set(job.asking)) if (searched(query)) left -= 1;
+  return left;
 };
 
 /** "less than a minute left", "about 25 min left", "about 2 h 18 min left". */
@@ -666,3 +813,35 @@ export const playlistImportProgress = <S extends YtSong>(
     total,
   };
 };
+
+/**
+ * How often the playlist page's import line and the notification follow an
+ * import's progress: each search answered would otherwise redraw them.
+ */
+export const IMPORT_PROGRESS_SHOWN_EVERY_MS = 1000;
+
+const sameState = (a: ImportState, b: ImportState): boolean =>
+  a.kind === b.kind && (a.kind !== "stopped" || b.kind !== "stopped" || a.reason === b.reason);
+
+/**
+ * Whether the imports [next] differ from those [shown] only in how far they
+ * got (songs found and given, searches asked, refused or paused): the page
+ * and the notification take that at most every
+ * `IMPORT_PROGRESS_SHOWN_EVERY_MS`. Anything else (an import queued,
+ * cancelled, stopped, done or tried again) shows at once.
+ */
+export const importProgressOnly = <S extends YtSong>(
+  shown: PlaylistImports<S>,
+  next: PlaylistImports<S>,
+): boolean =>
+  shown.length === next.length &&
+  shown.every((job, index) => {
+    const other = next[index];
+    return (
+      other !== undefined &&
+      other.playlistId === job.playlistId &&
+      other.name === job.name &&
+      other.songs === job.songs &&
+      sameState(other.state, job.state)
+    );
+  });

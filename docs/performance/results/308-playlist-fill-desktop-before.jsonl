@@ -1,0 +1,19 @@
+{"kind":"meta","note":"Desktop: Node + sql.js (WebAssembly SQLite), not phone timings.","node":"v24.19.0","platform":"win32-x64","runs":7,"libraryTracks":1500,"others":[{"streamed":2500,"library":0},{"streamed":2500,"library":0},{"streamed":500,"library":500},{"streamed":0,"library":50}],"batch":20}
+{"kind":"step","step":"append","fillingSize":500,"ms":3.16,"statements":7,"rowsReturned":1041,"decoded":468}
+{"kind":"step","step":"listAfterAppend","fillingSize":500,"ms":70.72,"statements":4,"rowsReturned":6158,"decoded":6130}
+{"kind":"step","step":"pageAfterAppend","fillingSize":500,"ms":13.07,"statements":6,"rowsReturned":1726,"decoded":1548}
+{"kind":"step","step":"listUnchanged","fillingSize":500,"ms":76.99,"statements":4,"rowsReturned":6428,"decoded":6400}
+{"kind":"step","step":"coversOfFilling","fillingSize":500,"ms":8.95,"statements":1,"rowsReturned":4,"decoded":0}
+{"kind":"step","step":"totalsOfFilling","fillingSize":500,"ms":2.11,"statements":2,"rowsReturned":901,"decoded":900}
+{"kind":"step","step":"append","fillingSize":1500,"ms":6.37,"statements":7,"rowsReturned":3037,"decoded":1368}
+{"kind":"step","step":"listAfterAppend","fillingSize":1500,"ms":85.67,"statements":4,"rowsReturned":7058,"decoded":7030}
+{"kind":"step","step":"pageAfterAppend","fillingSize":1500,"ms":29.01,"statements":6,"rowsReturned":3654,"decoded":3348}
+{"kind":"step","step":"listUnchanged","fillingSize":1500,"ms":108.37,"statements":4,"rowsReturned":7328,"decoded":7300}
+{"kind":"step","step":"coversOfFilling","fillingSize":1500,"ms":25.31,"statements":1,"rowsReturned":4,"decoded":0}
+{"kind":"step","step":"totalsOfFilling","fillingSize":1500,"ms":6.71,"statements":2,"rowsReturned":1801,"decoded":1800}
+{"kind":"step","step":"append","fillingSize":3012,"ms":11.34,"statements":7,"rowsReturned":6061,"decoded":2880}
+{"kind":"step","step":"listAfterAppend","fillingSize":3012,"ms":97.97,"statements":4,"rowsReturned":8570,"decoded":8542}
+{"kind":"step","step":"pageAfterAppend","fillingSize":3012,"ms":47.93,"statements":6,"rowsReturned":6678,"decoded":6372}
+{"kind":"step","step":"listUnchanged","fillingSize":3012,"ms":111.1,"statements":4,"rowsReturned":8840,"decoded":8812}
+{"kind":"step","step":"coversOfFilling","fillingSize":3012,"ms":30.42,"statements":1,"rowsReturned":4,"decoded":0}
+{"kind":"step","step":"totalsOfFilling","fillingSize":3012,"ms":6.92,"statements":2,"rowsReturned":3313,"decoded":3312}

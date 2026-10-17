@@ -21,10 +21,12 @@ import {
   selectPlaylist,
   selectPlaylistCovers,
   selectPlaylistEntries,
+  selectPlaylistEntriesRevision,
   selectPlaylists,
   selectPlaylistTotals,
   selectTrackPaths,
 } from "./playlists.ts";
+import { playlistWork, resetPlaylistWork } from "./playlistWork.ts";
 import { saveBatch } from "./save.ts";
 import * as schema from "./schema.ts";
 import { selectChangesSince, selectPhoneId } from "./sync.ts";
@@ -158,6 +160,65 @@ describe("appendPlaylistSongs", () => {
     const result = appendPlaylistSongs(db, playlistId, [stream(yt("a")), library("Creep")], 0);
     assert.deepEqual(result, { added: 0, alreadyIn: 2 });
   });
+
+  test("decodes only the stored songs the batch could repeat, not the whole playlist", () => {
+    appendPlaylistSongs(
+      db,
+      playlistId,
+      ["a", "b", "c", "d", "e"].map((id) => stream(yt(id))),
+      0,
+    );
+    resetPlaylistWork();
+    const result = appendPlaylistSongs(
+      db,
+      playlistId,
+      [stream(yt("c")), stream(yt("z")), library("Bloom"), library("Airbag")],
+      0,
+    );
+    assert.deepEqual(result, { added: 2, alreadyIn: 2 });
+    assert.equal(playlistWork().decoded.get(playlistId), 1);
+    assert.deepEqual(titles().slice(-2), ["yt:Song z", "Bloom"]);
+  });
+
+  test("a stored song that can't be read doesn't count as held", () => {
+    db.insert(schema.playlistItems)
+      .values({
+        playlistId,
+        ytSong: JSON.stringify({ videoId: "a", title: 7 }),
+        orderKey: "a9",
+        addedAt: 0,
+        changedAt: 0,
+      })
+      .run();
+    assert.deepEqual(appendPlaylistSongs(db, playlistId, [stream(yt("a"))], 0), {
+      added: 1,
+      alreadyIn: 0,
+    });
+  });
+
+  test("goes after the last entry, past entries two phones gave one key and removed ones", () => {
+    const tied = newPlaylist("Tied");
+    const entries: [string, string, string, boolean][] = [
+      ["s2", "Creep", "a8", false],
+      ["s1", "Airbag", "a8", false],
+      ["s3", "Daydreaming", "a9", true],
+    ];
+    for (const [syncId, title, orderKey, deleted] of entries) {
+      db.insert(schema.playlistItems)
+        .values({
+          playlistId: tied,
+          syncId,
+          trackId: ids[title] ?? -1,
+          orderKey,
+          deleted,
+          addedAt: 0,
+          changedAt: 0,
+        })
+        .run();
+    }
+    appendPlaylistSongs(db, tied, [library("Bloom"), library("Daydreaming")], 0);
+    assert.deepEqual(titlesOf(tied), ["Airbag", "Creep", "Bloom", "Daydreaming"]);
+  });
 });
 
 describe("removePlaylistItems", () => {
@@ -285,6 +346,20 @@ describe("linkPlaylistEntries", () => {
     linkPlaylistEntries(db, 0, [luckyId]);
     assert.deepEqual(titles(), ["Daydreaming", "Airbag", "Creep", "Airbag", "Lucky", "Bloom"]);
     assert.deepEqual(titlesOf(otherId), ["Lucky"]);
+  });
+
+  test("the entries' revision rises with any entry written, and not with the Library alone", () => {
+    const before = selectPlaylistEntriesRevision(db);
+    addTrack(db, { title: "Lucky", artist: "Radiohead" });
+    assert.equal(selectPlaylistEntriesRevision(db), before);
+    appendPlaylistSongs(db, playlistId, [stream(yt("a", { title: "Lucky" }))], 0);
+    const added = selectPlaylistEntriesRevision(db);
+    assert.ok(added > before);
+    // A link that changes nothing leaves it; one that links raises it.
+    linkPlaylistEntries(db, 0, []);
+    assert.equal(selectPlaylistEntriesRevision(db), added);
+    linkPlaylistEntries(db, 0);
+    assert.ok(selectPlaylistEntriesRevision(db) > added);
   });
 
   test("deleting the Library song then takes its entries out, as for any Library song", () => {

@@ -3,8 +3,10 @@ name: CI
 on:
   pull_request:
   push:
+    # A push to main or ti whose app version isn't tagged yet publishes that version's
+    # release and creates its tag (docs/spec.md, Releases). Stable versions belong to main,
+    # <version>-ti ones to ti. Pushing v<version> by hand publishes it too.
     branches: [main, ti]
-    # Stable tags belong to main; v<version>-ti tags publish ti prereleases.
     tags: ["v*"]
 
 permissions:
@@ -19,7 +21,8 @@ concurrency:
 env:
   PR_NUMBER: ${{ github.event.pull_request.number }}
   IS_SAME_REPO_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
-  # Stable releases build fully. TI prereleases may reuse a compatible native APK.
+  # A hand-pushed release tag's run. Stable releases build fully; ti prereleases may reuse
+  # a compatible native APK. Branch pushes release through the Checks job's release_tag.
   IS_RELEASE: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
   IS_TI: ${{ github.ref == 'refs/heads/ti' || (startsWith(github.ref, 'refs/tags/v') && endsWith(github.ref, '-ti')) || github.event.pull_request.base.ref == 'ti' }}
 
@@ -72,12 +75,15 @@ jobs:
             "Nothing they test changed (wave-native, the app config, config plugins, the lockfile or CI), so they didn't run."
 
   # The patch notes a release cut from this commit gets (scripts/ci/patch-notes.sh),
-  # shown in the run's summary. A release tag's run publishes them.
+  # shown in the run's summary. A run that releases publishes them.
   notes:
     name: Patch notes
     runs-on: ubuntu-latest
     outputs:
       notes: ${{ steps.notes.outputs.notes }}
+      # 'success' when they were built. A branch push only learns in Checks whether it
+      # releases, so the release job checks this instead of this job failing.
+      outcome: ${{ steps.notes.outcome }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -108,6 +114,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       sha: ${{ steps.autofix.outputs.sha || github.event.pull_request.head.sha || github.sha }}
+      # The versioned release this push publishes (scripts/ci/release-tag.ts), or empty.
+      release_tag: ${{ steps.release.outputs.tag }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -136,6 +144,13 @@ jobs:
       - name: Check release tag
         if: env.IS_RELEASE == 'true'
         run: scripts/ci/step.sh "Check release tag" scripts/ci/check-release-tag.sh "$GITHUB_REF_NAME"
+
+      # A push to main or ti releases its app version when v<version> isn't tagged yet and
+      # the version belongs to that branch. The log says why when it doesn't.
+      - name: Decide the release
+        id: release
+        if: github.event_name == 'push'
+        run: scripts/ci/release-tag.sh
 
       # On PRs, by the rule in scripts/ci/changes.ts: the packages the PR changed and their
       # dependents, or all of them. Pushes to main and release tags always check every package.
@@ -371,6 +386,12 @@ jobs:
         working-directory: apps/mobile/android
         run: ../../../scripts/ci/step.sh "Gradle assembleRelease" ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --init-script ../../../scripts/ci/prebuilt-bundle.gradle --no-daemon --console=plain --profile --stacktrace
 
+      # The APK must ship an ART profile, and once apps/mobile/profiles/ has Wave's own, nearly
+      # all of it (#317). A repack keeps the kept build's dex and profile, so only full builds check.
+      - name: Check the APK's ART profile
+        if: env.APK_BUILD == 'full'
+        run: scripts/ci/step.sh "ART profile check" node scripts/perf/perf.ts profile check-apk apps/mobile/android/app/build/outputs/apk/release/app-release.apk --mapping apps/mobile/android/app/build/outputs/mapping/release/mapping.txt
+
       - name: CMake task times
         if: always() && env.APK_BUILD == 'full'
         run: scripts/ci/cmake-times.sh apps/mobile/android
@@ -461,14 +482,26 @@ jobs:
           fi
           scripts/ci/report.sh "${{ job.status }}" "Android APK" "$extra"
 
+  # Publishes the release the Checks job decided on: a hand-pushed tag, or a branch push
+  # whose version isn't tagged yet, which creates v<version> on this run's commit. A tag
+  # created with the workflow's token doesn't start another run.
   release:
     name: Publish versioned release
-    needs: [android, native-tests, notes]
+    needs: [checks, android, native-tests, notes]
     # Test releases can repack without Gradle, but neither channel publishes before
     # the native tests pass. The stable path keeps its full APK build policy.
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: needs.checks.outputs.release_tag != ''
     runs-on: ubuntu-latest
     steps:
+      - name: Check the patch notes
+        env:
+          NOTES_OUTCOME: ${{ needs.notes.outputs.outcome }}
+        run: |
+          if [ "$NOTES_OUTCOME" != "success" ]; then
+            echo "::error::The Patch notes job failed, so nothing is published. Re-run the failed jobs."
+            exit 1
+          fi
+
       - uses: actions/checkout@v5
         with:
           sparse-checkout: scripts/ci
@@ -481,6 +514,7 @@ jobs:
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.checks.outputs.release_tag }}
           PATCH_NOTES: ${{ needs.notes.outputs.notes }}
           APK_NAME: ${{ needs.android.outputs.artifact }}
         run: |

@@ -6,10 +6,16 @@
  * counts for each of them. Grouping into albums and artists, ordering and the
  * cut-off are Core's (`albumPlayTotals`, `artistPlayTotals`, `rankPlays`); so
  * are the all-time listening totals (`listeningTotals`) summed from
- * `songListening`. Kept free of Expo so the store tests run them against a
- * real SQLite (`testDatabase.ts`).
+ * `songListening`, or from `artistPlays` for one artist's page. Kept free of
+ * Expo so the store tests run them against a real SQLite (`testDatabase.ts`).
  */
-import type { CreditedPlayTotals, PlayTotals, SongListening, StatsWindow } from "@wave/core";
+import type {
+  ArtistStatsInput,
+  CreditedPlayTotals,
+  PlayTotals,
+  SongListening,
+  StatsWindow,
+} from "@wave/core";
 import { and, eq, gte, inArray, lte, sql, type SQL } from "drizzle-orm";
 
 import { chunks } from "./chunks.ts";
@@ -69,6 +75,34 @@ const CREDITED_ARTISTS = sql`
   SELECT track_id, artist_id, position FROM deleted_track_artists`;
 
 /**
+ * Each track's counted plays within `window` (`track_id`, `album_id` of a
+ * deleted track, `plays`, `listened`, `latest`), summed from the plays.
+ */
+const playsIn = (window: StatsWindow): SQL => sql`
+  SELECT play_events.track_id AS track_id, max(play_events.album_id) AS album_id,
+    ${sums.countedPlays} AS plays, ${sums.listenedMs} AS listened, ${sums.latestPlayAt} AS latest
+  FROM play_events WHERE ${countedIn(window)}
+  GROUP BY play_events.track_id`;
+
+/**
+ * `playsIn` for every counted play up to [to] (all time), from the totals
+ * `play_totals` keeps rather than the history: only a track with a counted
+ * play stamped after [to] (another phone's clock ahead) has its plays summed
+ * again, through the play events' track index.
+ */
+const playsUpTo = (to: number): SQL => sql`
+  SELECT track_id, album_id, counted_plays AS plays, counted_listened_ms AS listened,
+    last_counted_at AS latest
+  FROM play_totals WHERE counted_plays > 0 AND last_counted_at <= ${to}
+  UNION ALL
+  SELECT play_events.track_id, max(play_events.album_id), ${sums.countedPlays},
+    ${sums.listenedMs}, ${sums.latestPlayAt}
+  FROM play_totals CROSS JOIN play_events ON play_events.track_id = play_totals.track_id
+  WHERE play_totals.last_counted_at > ${to} AND play_events.counted
+    AND play_events.started_at <= ${to}
+  GROUP BY play_events.track_id`;
+
+/**
  * Counted plays within `window` per album and credited artist (a compilation
  * gives one row per artist on it, a collaboration one per artist it credits),
  * in no order. Deleted songs still count for their album and artists while
@@ -80,23 +114,21 @@ export const creditedPlayTotals = (
 ): CreditedPlayTotals[] =>
   db
     .all<Omit<CreditedPlayTotals, "primary"> & { primary: number }>(
-      sql`WITH plays AS (
-        SELECT play_events.track_id AS track_id, max(play_events.album_id) AS album_id,
-          ${sums.countedPlays} AS plays, ${sums.listenedMs} AS listened,
-          ${sums.latestPlayAt} AS latest
-        FROM play_events WHERE ${countedIn(window)}
-        GROUP BY play_events.track_id
-      ), credited AS (${CREDITED_ARTISTS})
+      sql`WITH plays AS (${window.from === null ? playsUpTo(window.to) : playsIn(window)}),
+      credited AS (${CREDITED_ARTISTS}),
+      -- Each song's first credited position, once (as a correlated subquery
+      -- per row it cost ten times the rest at 10,000 songs on 1,000 albums).
+      firsts AS (SELECT track_id, min(position) AS position FROM credited GROUP BY track_id)
       SELECT albums.id AS "albumId", albums.title_sort AS "albumSort",
         artists.id AS "artistId", artists.sort AS "artistSort",
-        credited.position = (SELECT min(first.position) FROM credited AS first
-          WHERE first.track_id = plays.track_id) AS "primary",
+        credited.position = firsts.position AS "primary",
         sum(plays.plays) AS "countedPlays", sum(plays.listened) AS "listenedMs",
         max(plays.latest) AS "latestPlayAt"
       FROM plays
       LEFT JOIN tracks ON tracks.id = plays.track_id
       JOIN albums ON albums.id = coalesce(tracks.album_id, plays.album_id)
       JOIN credited ON credited.track_id = plays.track_id
+      JOIN firsts ON firsts.track_id = plays.track_id
       JOIN artists ON artists.id = credited.artist_id
       GROUP BY albums.id, artists.id, "primary"`,
     )
@@ -149,4 +181,80 @@ export const songsCrediting = (db: LibraryDatabase, artistId: number): number[] 
     .where(eq(trackArtists.artistId, artistId))
     .all()
     .map((row) => row.id);
+};
+
+/** What an artist page's stats block reads, beside the artist and the time (Core's `artistStats`). */
+export type ArtistPlays = Pick<ArtistStatsInput, "songIds" | "listening" | "songPlays">;
+
+/**
+ * The listening of the songs whose credit names [artistId], kept credits of
+ * deleted songs included: `songListening`'s rows for those songs. Reads
+ * only those songs' plays: the credits' artist indexes give the songs, the
+ * play events' track index their plays.
+ */
+const artistListening = (db: LibraryDatabase, artistId: number): SongListening[] => {
+  const songs = new Map<number, Omit<SongListening, "artistIds"> & { artistIds: number[] }>();
+  for (const { artistId: credited, ...song } of db.all<{
+    trackId: number;
+    inLibrary: number;
+    countedPlays: number;
+    listenedMs: number;
+    lastPlayedAt: number;
+    artistId: number;
+  }>(
+    sql`WITH songs AS (
+        SELECT track_id FROM track_artists WHERE artist_id = ${artistId}
+        UNION
+        SELECT track_id FROM deleted_track_artists WHERE artist_id = ${artistId}
+      ), played AS (
+        SELECT play_events.track_id AS track_id, sum(play_events.counted) AS counted_plays,
+          sum(play_events.listened_ms) AS listened_ms, max(play_events.started_at) AS last_played_at
+        FROM songs CROSS JOIN play_events ON play_events.track_id = songs.track_id
+        GROUP BY play_events.track_id
+      ), credited AS (
+        SELECT track_id, artist_id, position FROM track_artists
+        WHERE track_id IN (SELECT track_id FROM played)
+        UNION ALL
+        SELECT track_id, artist_id, position FROM deleted_track_artists
+        WHERE track_id IN (SELECT track_id FROM played)
+      )
+      SELECT played.track_id AS "trackId", tracks.id IS NOT NULL AS "inLibrary",
+        played.counted_plays AS "countedPlays", played.listened_ms AS "listenedMs",
+        played.last_played_at AS "lastPlayedAt", credited.artist_id AS "artistId"
+      FROM played
+      JOIN credited ON credited.track_id = played.track_id
+      LEFT JOIN tracks ON tracks.id = played.track_id
+      ORDER BY played.track_id, credited.position`,
+  )) {
+    const known = songs.get(song.trackId);
+    if (known === undefined) {
+      songs.set(song.trackId, { ...song, inLibrary: song.inLibrary === 1, artistIds: [credited] });
+    } else known.artistIds.push(credited);
+  }
+  return [...songs.values()];
+};
+
+/**
+ * What [artistId]'s page reads for its stats block, from that artist's songs
+ * alone, however long the rest of the history: the songs in the library whose
+ * credit names them (`songsCrediting`), those songs' listening over all time,
+ * deleted songs included (`songListening`'s rows for them), and the counted
+ * plays up to [now] of those still in the library that have one
+ * (`trackPlayTotals`).
+ */
+export const artistPlays = (db: LibraryDatabase, artistId: number, now: number): ArtistPlays => {
+  const listening = artistListening(db, artistId);
+  const played = listening.filter((song) => song.inLibrary && song.countedPlays > 0);
+  return {
+    songIds: songsCrediting(db, artistId),
+    listening,
+    songPlays:
+      played.length === 0
+        ? []
+        : trackPlayTotals(
+            db,
+            { from: null, to: now },
+            played.map((song) => song.trackId),
+          ),
+  };
 };

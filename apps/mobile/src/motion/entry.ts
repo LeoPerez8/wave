@@ -10,6 +10,12 @@ export const ENTRY = {
   /** A tab switch slides this far from the side of the tapped tab. */
   slide: 32,
   slideMs: 280,
+  /**
+   * The opacity a tapped tab starts from. Not 0: the tab's content is there
+   * from the first frame (at once for a kept tab), and fading it up from
+   * nothing hid it behind near-blank first frames on every switch.
+   */
+  tabOpacity: 0.5,
   /** Content that swaps in place rises this far. */
   rise: 8,
   riseMs: 220,

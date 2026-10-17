@@ -1,6 +1,7 @@
 import type { ExpoConfig } from "expo/config";
 
 import { versionCode } from "./plugins/appVersion.ts";
+import { withArtProfiles } from "./plugins/withArtProfiles.ts";
 import { withGradleBuildCache } from "./plugins/withGradleBuildCache.ts";
 import { withHermesFlags } from "./plugins/withHermesFlags.ts";
 import { withLauncherIcons } from "./plugins/withLauncherIcons.ts";
@@ -12,8 +13,9 @@ import { withShareShortcut } from "./plugins/withShareShortcut.ts";
 const inter = (file: string): string => `./node_modules/@expo-google-fonts/inter/${file}`;
 
 // Wave's version, kept here and nowhere else: Android's versionCode follows from it, and
-// pushing the tag v<version> publishes the release (docs/spec.md, Releases).
-const version = "0.5.3-ti";
+// merging a new version into main (or a -ti one into ti) publishes its release (docs/spec.md,
+// Releases).
+const version = "0.5.3";
 
 const config: ExpoConfig = {
   name: "Wave",
@@ -43,6 +45,9 @@ const config: ExpoConfig = {
   },
   experiments: {
     typedRoutes: true,
+    // React Compiler stays off until a phone run shows it helps (docs/performance/
+    // 303-contained-nav-renders.md). `WAVE_REACT_COMPILER=1` at bundle time builds the comparison.
+    ...(process.env.WAVE_REACT_COMPILER === "1" && { reactCompiler: true }),
   },
   // The Wave account (docs/spec.md, "Wave account and sync"): the sync service's URL and Wave's
   // web OAuth client id, the audience of the Google ID tokens it accepts. Neither is a secret.
@@ -106,6 +111,9 @@ const config: ExpoConfig = {
 // (Expo runs mods in reverse order) and can edit that splash's style. The sharing shortcut's
 // share target comes first so it runs last, once the launcher icons' aliases exist.
 // Gradle reuses cached outputs (#185), and Hermes skips the unused source map (#187).
-export default withHermesFlags(
-  withGradleBuildCache(withLaunchSplash(withLauncherIcons(withShareShortcut(config)))),
+// The APK ships Wave's own ART profiles from profiles/ (#317).
+export default withArtProfiles(
+  withHermesFlags(
+    withGradleBuildCache(withLaunchSplash(withLauncherIcons(withShareShortcut(config)))),
+  ),
 );

@@ -3,17 +3,22 @@ import {
   planAddRoot,
   planExclusion,
   reconcileScan,
+  scanEnd,
+  scanSaveSlices,
   type IndexedFile,
+  type LibraryChange,
 } from "@wave/core";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { refreshDownloadPolicy } from "./downloadPolicy";
 import * as Stream from "effect/Stream";
 
+import { freeTurnEffect } from "@/lib/backgroundWork";
 import { makeExternalStore } from "@/lib/externalStore";
 import { argbToHex, type NativeArtwork, type NativeScannedTrack } from "@/native/waveNative";
 
 import type { ArtworkPalette } from "./db/schema";
+import { publishLibraryChange } from "./libraryChanges";
 import { LibraryStore, type IndexedArtwork, type IndexedTrack } from "./LibraryStore";
 import { NativeScanner, type ScanEvent } from "./NativeScanner";
 
@@ -42,15 +47,33 @@ export const scanState = makeExternalStore<ScanState>({ status: "idle" });
 /** Bumped after every batch is committed, so lists know to re-query. */
 export const libraryVersion = makeExternalStore(0);
 
-const bumpLibraryVersion = (): void => libraryVersion.update((version) => version + 1);
+/** Bumps `libraryVersion` and announces [changes] to shared queries. */
+const bumpLibraryVersion = (...changes: readonly LibraryChange[]): void => {
+  libraryVersion.update((version) => version + 1);
+  for (const change of changes) publishLibraryChange(change);
+};
 
-/** Bumped when the owner changes the library (deletes songs): lists re-query at once. */
-export const libraryEdits = makeExternalStore(0);
+/** A scan batch (or the end of a scan that dropped nothing): readers take several at once (Core's `burst`). */
+const SCAN_BATCH: LibraryChange = { kind: "tracks", burst: true };
+const FOLDERS: LibraryChange = { kind: "folders" };
+/** A scan's link turned playlists' streamed entries into Library songs. */
+const ENTRIES_LINKED: LibraryChange = { kind: "playlists" };
 
-/** The owner changed the library outside a scan: every list re-queries straight away. */
-export const libraryEdited = (): void => {
-  libraryEdits.update((edits) => edits + 1);
-  bumpLibraryVersion();
+/**
+ * Playlists' entries' revision (`playlistEntriesRevision`) when a scan last
+ * linked them; null until the first scan of this process links.
+ */
+let linkedAtRevision: number | null = null;
+
+/**
+ * The owner changed the library outside a scan (deleted songs, edited tags, a
+ * download landed, the Wave account sent changes): lists over tracks re-read
+ * straight away. [trackIds]: the tracks changed, when known.
+ */
+export const libraryEdited = (trackIds?: readonly number[]): void => {
+  bumpLibraryVersion(
+    trackIds === undefined ? { kind: "tracks" } : { kind: "tracks", ids: trackIds },
+  );
 };
 
 /** A track as the scanner read it, as the index stores it. */
@@ -109,9 +132,13 @@ const scanFolders = (roots: readonly string[]) =>
     const excluded = yield* store.excludedFolders;
     const known = yield* store.knownFiles(roots);
     const kind = known.length === 0 ? "full" : "incremental";
+    // Music folders shows a folder no scan finished yet without its song count.
+    const firstScan = yield* store.hasUnscannedRoot(roots);
     const indexed = new Set(known.map((file) => file.path));
     // Indexed files the scan didn't find that no batch has matched yet.
     let missing: readonly IndexedFile[] = [];
+    /** Files this scan saved (new, changed, moved). */
+    let saved = 0;
     const startedAt = Date.now();
     scanState.set({
       status: "scanning",
@@ -145,19 +172,30 @@ const scanFolders = (roots: readonly string[]) =>
               isIndexed: (path) => indexed.has(path),
             });
             missing = changes.unmatched;
-            yield* store.saveBatch(
-              [...changes.added, ...changes.updated, ...changes.moved.map((move) => move.to)],
-              event.artwork.map(toIndexedArtwork),
-              changes.moved.map((move) => ({ from: move.from, to: move.to.path })),
-              // Linked once, against the whole Library, when the scan ends.
-              { linkEntries: false },
-            );
+            const artwork = event.artwork.map(toIndexedArtwork);
+            const slices = scanSaveSlices(changes);
+            // New artwork alone (files that were read but saved nothing) still gets saved.
+            const parts =
+              slices.length > 0 ? slices : artwork.length > 0 ? [{ tracks: [], moves: [] }] : [];
+            // Up to 500 files a batch: saved a slice per free turn, so a tap never waits on it.
+            for (const [index, slice] of parts.entries()) {
+              yield* freeTurnEffect;
+              yield* store.saveBatch(
+                slice.tracks,
+                // Before any file that shows it.
+                index === 0 ? artwork : [],
+                slice.moves,
+                // Linked once, against the whole Library, when the scan ends.
+                { linkEntries: false },
+              );
+              saved += slice.tracks.length;
+            }
             for (const track of changes.added) indexed.add(track.path);
             for (const move of changes.moved) {
               indexed.delete(move.from);
               indexed.add(move.to.path);
             }
-            bumpLibraryVersion();
+            if (slices.length > 0) bumpLibraryVersion(SCAN_BATCH);
             return;
           }
           case "Complete":
@@ -174,16 +212,41 @@ const scanFolders = (roots: readonly string[]) =>
       }),
     );
 
-    // Playlists' YT Music entries become the songs this scan (or one cut short) brought in.
-    yield* store.linkPlaylistEntries;
+    const finished = completed !== undefined && !completed.cancelled;
+    const end = scanEnd({
+      saved,
+      gone: finished ? missing.length : 0,
+      entriesChanged: (yield* store.playlistEntriesRevision) !== linkedAtRevision,
+      firstScan,
+    });
+    // Playlists' YT Music entries become the songs this scan (or one cut short) brought in,
+    // or the Library songs entries that came meanwhile (a sync, an import) are.
+    let linked = 0;
+    if (end.linkEntries) {
+      yield* freeTurnEffect;
+      linked = yield* store.linkPlaylistEntries;
+      linkedAtRevision = yield* store.playlistEntriesRevision;
+    }
     if (completed === undefined || completed.cancelled) {
+      if (linked > 0) bumpLibraryVersion(ENTRIES_LINKED);
       scanState.set({ status: "idle" });
       return;
     }
+    yield* freeTurnEffect;
     // Also prunes albums and artists that changed tags left empty.
     yield* store.filesGone(missing.map((file) => file.path));
     yield* store.markScanned(roots, startedAt);
-    bumpLibraryVersion();
+    // Songs whose files are gone left the Library: every screen drops them now, hidden ones too.
+    // A folder's first scan that found nothing has Music folders show it scanned ("0 songs").
+    // A rescan that changed nothing (the usual return to Wave) has nobody re-read anything.
+    if (end.announce === "removed") bumpLibraryVersion({ kind: "tracks" });
+    else if (end.announce === "added") bumpLibraryVersion(SCAN_BATCH);
+    else if (end.announce === "scanned" || linked > 0) {
+      bumpLibraryVersion(
+        ...(end.announce === "scanned" ? [FOLDERS] : []),
+        ...(linked > 0 ? [ENTRIES_LINKED] : []),
+      );
+    }
     scanState.set({ status: "done", filesFound: completed.filesFound });
   });
 
@@ -215,7 +278,8 @@ export const chooseFolder = Effect.gen(function* () {
   if (plan.kind === "covered") return plan satisfies FolderChoice;
   yield* store.addRoot(pick.path, plan.drop);
   yield* refreshDownloadPolicy;
-  bumpLibraryVersion();
+  // Its songs come with the scan the caller starts.
+  bumpLibraryVersion(FOLDERS);
   return { kind: "added", path: pick.path } satisfies FolderChoice;
 });
 
@@ -225,7 +289,8 @@ export const removeFolder = (path: string) =>
     const store = yield* LibraryStore;
     yield* store.removeRoot(path);
     yield* refreshDownloadPolicy;
-    bumpLibraryVersion();
+    // The songs only it covered went with it.
+    bumpLibraryVersion(FOLDERS, { kind: "tracks" });
   });
 
 export type ExclusionChoice =
@@ -250,7 +315,7 @@ export const chooseExcludedFolder = Effect.gen(function* () {
   if (plan.kind !== "add") return plan satisfies ExclusionChoice;
   yield* store.addExcludedFolder(pick.path, plan.drop);
   yield* refreshDownloadPolicy;
-  bumpLibraryVersion();
+  bumpLibraryVersion(FOLDERS);
   return { kind: "added", path: pick.path } satisfies ExclusionChoice;
 });
 
@@ -260,5 +325,5 @@ export const includeFolder = (path: string) =>
     const store = yield* LibraryStore;
     yield* store.removeExcludedFolder(path);
     yield* refreshDownloadPolicy;
-    bumpLibraryVersion();
+    bumpLibraryVersion(FOLDERS);
   });

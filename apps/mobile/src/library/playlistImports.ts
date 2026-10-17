@@ -10,8 +10,10 @@
  * again.
  */
 import {
+  IMPORT_PROGRESS_SHOWN_EVERY_MS,
   importAdded,
   importAdditions,
+  importProgressOnly,
   importSearchAnswered,
   importTurn,
   nextImportStep,
@@ -34,32 +36,37 @@ import {
   type YtSongSearch,
 } from "@wave/core";
 import * as Result from "effect/Result";
+import { useSyncExternalStore } from "react";
 
 import { askForNotifications } from "@/lib/askForNotifications";
+import { freeTurn } from "@/lib/backgroundWork";
+import { makeExternalStore } from "@/lib/externalStore";
 import { persistedSetting } from "@/lib/persistedSetting";
 import { WavePlaylistImport } from "@/native/wavePlaylistImport";
 import { showError } from "@/overlay/alert";
+import { perfMark, registerPerfMeta } from "@/perf/perf";
 import { askYtMusic } from "@/ytmusic/askYtMusic";
 
+import { playlistWorkReport } from "./db/playlistWork";
 import { addToPlaylist, currentPlaylists } from "./playlists";
 
 type Job = PlaylistImport<YtAlbumSong>;
 
 /**
  * The imports going on, waiting, stopped, or done with songs not found, kept
- * until Wave starts again. Written at most once a second: a song given the
- * playlist but not yet counted here isn't given twice, as a playlist doesn't
- * take a song it holds.
+ * until Wave starts again. Written once a second while answers come (a
+ * steady stream doesn't put the write off), and at once when Wave leaves the
+ * foreground, so a Wave killed mid-import goes on from at most a second
+ * back: a song given the playlist but not yet counted here isn't given
+ * twice, as a playlist doesn't take a song it holds.
  */
 const imports = persistedSetting<PlaylistImports<YtAlbumSong>>({
   key: "playlistImports",
   read: readPlaylistImports,
   write: (value) => (value.length === 0 ? null : writePlaylistImports(value)),
   persistDelayMs: 1000,
+  persistMaxDelayMs: 1000,
 });
-
-/** The imports, for the playlist page; re-renders as they go on. */
-export const usePlaylistImports = (): PlaylistImports<YtAlbumSong> => imports.useValue();
 
 /**
  * The YouTube Music searches Spotify imports asked lately, which Core paces
@@ -70,10 +77,66 @@ const spotifySearches = persistedSetting<SpotifySearchPacing>({
   read: readSpotifySearchPacing,
   write: (value) => (value.searchesAt.length === 0 ? null : writeSpotifySearchPacing(value)),
   persistDelayMs: 1000,
+  persistMaxDelayMs: 1000,
 });
 
-/** The searches Spotify imports asked lately, for the playlist page's time left. */
-export const useSpotifySearches = (): SpotifySearchPacing => spotifySearches.useValue();
+/** The imports as shown, and the Spotify searches as they were then (the page's time left). */
+interface Shown {
+  readonly imports: PlaylistImports<YtAlbumSong>;
+  readonly searches: SpotifySearchPacing;
+}
+
+/**
+ * The imports as the playlist page and the notification show them: how far
+ * they got at most once a second (Core's `importProgressOnly`), anything
+ * else at once. Null until the imports first change.
+ */
+const shown = makeExternalStore<Shown | null>(null);
+let showTimer: ReturnType<typeof setTimeout> | undefined;
+/** Progress notifications sent, for a perf build's runs. */
+let progressShown = 0;
+
+/** What a page read before the imports first changed: the same object until then. */
+let unchanged: Shown | null = null;
+
+/**
+ * What's shown now, the same object until `shown` tells its subscribers it
+ * changed (`useSyncExternalStore`'s contract): the imports and the searches
+ * move together.
+ */
+const shownNow = (): Shown =>
+  shown.get() ?? (unchanged ??= { imports: imports.get(), searches: spotifySearches.get() });
+
+/** Shows the imports as they are now: the page's line and the notification. */
+const show = (): void => {
+  clearTimeout(showTimer);
+  showTimer = undefined;
+  const now = { imports: imports.get(), searches: spotifySearches.get() };
+  const last = shown.get();
+  if (last?.imports !== now.imports || last.searches !== now.searches) shown.set(now);
+  showProgress();
+};
+
+/** The imports changed from [before]: shown at once, or with the next progress shown. */
+const follow = (before: PlaylistImports<YtAlbumSong>): void => {
+  // What was shown before the first change (a page may have read it already).
+  if (shown.get() === null)
+    shown.set(unchanged ?? { imports: before, searches: spotifySearches.get() });
+  if (!importProgressOnly(shownNow().imports, imports.get())) show();
+  else showTimer ??= setTimeout(show, IMPORT_PROGRESS_SHOWN_EVERY_MS);
+};
+
+/** The imports, for the playlist page; re-renders as they go on, progress at most once a second. */
+export const usePlaylistImports = (): PlaylistImports<YtAlbumSong> =>
+  useSyncExternalStore(shown.subscribe, shownNow).imports;
+
+/**
+ * The searches Spotify imports asked lately, for the playlist page's time
+ * left: as they were when the imports were last shown (`usePlaylistImports`),
+ * not per search, so the time left agrees with the progress shown.
+ */
+export const useSpotifySearches = (): SpotifySearchPacing =>
+  useSyncExternalStore(shown.subscribe, shownNow).searches;
 
 /** While the playlist is given found songs: at most once a second, so its page doesn't redraw for each. */
 const GIVE_EVERY_MS = 1000;
@@ -111,13 +174,15 @@ const find = (playlistId: number): Job | undefined =>
 const showProgress = (): void => {
   if (!running) return;
   const progress = playlistImportProgress(imports.get());
-  if (progress !== null)
-    WavePlaylistImport.progress(progress.title, progress.detail, progress.done, progress.total);
+  if (progress === null) return;
+  progressShown += 1;
+  WavePlaylistImport.progress(progress.title, progress.detail, progress.done, progress.total);
 };
 
 const setImports = (next: PlaylistImports<YtAlbumSong>): void => {
+  const before = imports.get();
   imports.set(next);
-  showProgress();
+  follow(before);
   wake();
 };
 
@@ -158,7 +223,8 @@ const give = async (
   { songs, through }: ImportAdditions<YtAlbumSong>,
 ): Promise<void> => {
   try {
-    if (songs.length > 0) await addToPlaylist(playlistId, songs);
+    // Additions as the import fills: screens take them at their own pace, hidden ones on return.
+    if (songs.length > 0) await addToPlaylist(playlistId, songs, { burst: true });
   } catch (error) {
     const kept = (await currentPlaylists().catch(() => [])).some(({ id }) => id === playlistId);
     setImports(withoutPlaylistImport(imports.get(), playlistId));
@@ -171,6 +237,8 @@ const give = async (
 /** Runs [playlistId]'s import while it's the one going on: cancelled, stopped or done, it returns. */
 const runImport = async (playlistId: number): Promise<void> => {
   let givenAt = 0;
+  /** A free turn was just taken for the next give: the import is read again first. */
+  let turnTaken = false;
   for (;;) {
     const job = importTurn(imports.get());
     if (job === null || job.playlistId !== playlistId) {
@@ -185,6 +253,7 @@ const runImport = async (playlistId: number): Promise<void> => {
     const now = Date.now();
     const { job: next, step, searches } = nextImportStep(job, now, spotifySearches.get());
     if (step.kind === "search") {
+      turnTaken = false;
       spotifySearches.set(searches);
       setImports(updatePlaylistImport(imports.get(), next));
       ask(playlistId, step.query);
@@ -193,11 +262,19 @@ const runImport = async (playlistId: number): Promise<void> => {
     const additions = importAdditions(job);
     const toGive = additions.through > job.added;
     if (toGive && (step.kind === "none" || now - givenAt >= GIVE_EVERY_MS)) {
+      // Writing to the playlist holds the JavaScript thread: not while the owner taps.
+      if (!turnTaken) {
+        await freeTurn();
+        turnTaken = true;
+        continue;
+      }
+      turnTaken = false;
       givenAt = now;
       await give(playlistId, additions);
       continue;
     }
     if (step.kind === "none") return;
+    turnTaken = false;
     const until = Math.min(
       step.kind === "wait" ? step.untilMs : Infinity,
       toGive ? givenAt + GIVE_EVERY_MS : Infinity,
@@ -214,6 +291,7 @@ const runImports = async (): Promise<void> => {
   if (running || importTurn(imports.get()) === null) return;
   running = true;
   const first = playlistImportProgress(imports.get());
+  perfMark("import.running", String(first?.total ?? 0));
   WavePlaylistImport.start(first?.title ?? "Importing playlists", first?.detail ?? null);
   showProgress();
   try {
@@ -225,8 +303,20 @@ const runImports = async (): Promise<void> => {
   } finally {
     running = false;
     WavePlaylistImport.end();
+    perfMark("import.idle");
   }
 };
+
+// A perf build's runs record how far the import going on has got (docs/performance/README.md).
+registerPerfMeta("import", () => {
+  const progress = playlistImportProgress(imports.get());
+  return { running, done: progress?.done ?? null, total: progress?.total ?? null, progressShown };
+});
+
+// And what the playlists cost meanwhile: the imports' own, and the others' (#308).
+registerPerfMeta("playlistWork", () =>
+  playlistWorkReport(imports.get().map((job) => job.playlistId)),
+);
 
 // ---------------------------------------------------------------------------
 // What the app asks

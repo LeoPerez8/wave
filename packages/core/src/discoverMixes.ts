@@ -309,6 +309,12 @@ export interface DiscoverMixes {
   readonly mixes: readonly DiscoverMix[];
 }
 
+/** Only a build with usable mixes replaces the cache and starts a new daily interval. */
+export const discoverMixesBuilt = (
+  mixes: readonly DiscoverMix[],
+  builtAt: number,
+): DiscoverMixes | null => (mixes.length === 0 ? null : { builtAt, mixes });
+
 /** What to save for [mixes]. */
 export const storedDiscoverMixes = (mixes: DiscoverMixes): string => JSON.stringify(mixes);
 
@@ -356,7 +362,10 @@ const readMix = (value: unknown): DiscoverMix | null => {
 export const parseDiscoverMixes = (stored: string | null): DiscoverMixes | null => {
   const { builtAt, mixes } = readStoredRecord(stored);
   if (!isNumber(builtAt) || !Array.isArray(mixes)) return null;
-  return { builtAt, mixes: mixes.flatMap((mix) => readMix(mix) ?? []) };
+  return discoverMixesBuilt(
+    mixes.flatMap((mix) => readMix(mix) ?? []),
+    builtAt,
+  );
 };
 
 const localDay = (ms: number): string => new Date(ms).toDateString();

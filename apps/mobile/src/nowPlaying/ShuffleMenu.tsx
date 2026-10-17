@@ -1,7 +1,9 @@
+import { IconArrowsShuffle } from "@tabler/icons-react-native";
 import { entryDivider, type ShuffleKind } from "@wave/core";
 import { View } from "react-native";
 
 import { EntryRow } from "@/catalog/EntryRow";
+import { SmartShuffleIcon } from "@/components/SmartShuffleIcon";
 import { pressedRect } from "@/motion/pressedRect";
 import { CardEntries } from "@/overlay/CardEntries";
 import { useOverlayFlow } from "@/overlay/flow";
@@ -16,8 +18,19 @@ const KINDS: readonly { readonly kind: ShuffleKind; readonly label: string }[] =
 ];
 
 /** What the shuffle button says while [kind] is chosen. */
-export const shuffleLabel = (kind: ShuffleKind): string =>
+const shuffleLabel = (kind: ShuffleKind): string =>
   kind === "smart" ? "Smart Shuffle" : "Shuffle";
+
+/** Every shuffle control follows the saved choice and opens the same card. */
+export const useShuffleControl = () => {
+  const kind = useShuffleKind();
+  return {
+    icon: kind === "smart" ? SmartShuffleIcon : IconArrowsShuffle,
+    label: shuffleLabel(kind),
+    onLongPress: openShuffleMenu,
+    accessibilityHint: "Long press to choose Real Shuffle or Smart Shuffle",
+  };
+};
 
 /**
  * The shuffle card: Real Shuffle and Smart Shuffle, the chosen one checked.
@@ -52,7 +65,7 @@ function ShuffleMenu({ close }: { close: () => void }) {
 }
 
 /** Opens the shuffle card next to the shuffle button whose long press calls it. */
-export const openShuffleMenu = (): void => {
+const openShuffleMenu = (): void => {
   openOverlay({
     label: "Shuffle",
     anchor: pressedRect(),

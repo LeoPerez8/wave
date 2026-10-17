@@ -3,8 +3,8 @@
  * database. Kept free of Expo so the store tests run them against a real
  * SQLite in plain Node (`testDatabase.ts`); `LibraryStore` calls them.
  */
-import type { PlayEvent } from "@wave/core";
-import { and, desc, eq, inArray, isNotNull, isNull, max, sql } from "drizzle-orm";
+import { recentlyPlayedAlbums, type PlayEvent } from "@wave/core";
+import { and, desc, eq, gt, inArray, isNotNull, isNull, max } from "drizzle-orm";
 
 import type { AlbumRow, SongRow } from "../LibraryStore.ts";
 import type { LibraryDatabase } from "./database.ts";
@@ -28,7 +28,7 @@ export interface HomeSections {
   readonly recentlyAdded: readonly AlbumRow[];
   /** Albums of the tracks played, the most recently played first. */
   readonly recentlyPlayed: readonly AlbumRow[];
-  /** Songs by counted plays (Core's rule), then by their latest counted play. */
+  /** Songs by counted plays (Core's rule), then by their latest counted play, then latest added. */
   readonly mostPlayed: readonly MostPlayedRow[];
   /** Starred songs, the most recently starred first. */
   readonly favorites: readonly SongRow[];
@@ -38,6 +38,8 @@ export interface HomeSections {
 const SHELF = 12;
 /** How many songs each Home list shows. */
 const LIST = 10;
+/** Recently Played reads this many songs per album it shows, then this many times more until settled. */
+const PAGE_GROWTH = 4;
 
 /** What can change about a play while it goes on. */
 const progress = (play: PlayEvent) => ({
@@ -148,33 +150,45 @@ const recentlyAddedAlbums = (db: LibraryDatabase, scope: TrackScope): AlbumRow[]
   return albumsInOrder(db, ids, scope);
 };
 
-const recentlyPlayedAlbums = (db: LibraryDatabase, scope: TrackScope): AlbumRow[] => {
-  const { playEvents, tracks } = schema;
-  const ids = db
-    .select({ id: tracks.albumId })
-    .from(playEvents)
-    .innerJoin(tracks, eq(playEvents.trackId, tracks.id))
-    .groupBy(tracks.albumId)
-    .orderBy(desc(max(playEvents.startedAt)))
-    .limit(SHELF)
-    .all()
-    .map((row) => row.id);
-  return albumsInOrder(db, ids, scope);
+/**
+ * Albums of the songs played, the latest played first (Core's
+ * `recentlyPlayedAlbums`): played songs read by their latest play through
+ * `play_totals`, a page at a time, until the page settles the shelf.
+ */
+const recentlyPlayedShelf = (db: LibraryDatabase, scope: TrackScope): AlbumRow[] => {
+  const { playTotals, tracks } = schema;
+  for (let page = SHELF * PAGE_GROWTH; ; page *= PAGE_GROWTH) {
+    const songs = db
+      .select({ albumId: tracks.albumId, lastPlayedAt: playTotals.lastPlayedAt })
+      .from(playTotals)
+      .innerJoin(tracks, eq(playTotals.trackId, tracks.id))
+      .orderBy(desc(playTotals.lastPlayedAt))
+      .limit(page)
+      .all();
+    const ids = recentlyPlayedAlbums(songs, SHELF, songs.length < page);
+    if (ids !== null) return albumsInOrder(db, ids, scope);
+  }
 };
 
+/**
+ * Songs by counted plays, then by their latest counted play, read in that
+ * order from `play_totals` until the list is full.
+ */
 const mostPlayedSongs = (db: LibraryDatabase, scope: TrackScope): MostPlayedRow[] => {
-  const { playEvents, tracks, artists, albums, artwork } = schema;
-  const playCount = sql<number>`count(*)`;
+  const { playTotals, tracks, artists, albums, artwork } = schema;
   return db
-    .select({ ...songColumns, playCount })
-    .from(playEvents)
-    .innerJoin(tracks, inScope(eq(playEvents.trackId, tracks.id), scope))
+    .select({ ...songColumns, playCount: playTotals.countedPlays })
+    .from(playTotals)
+    .innerJoin(tracks, inScope(eq(playTotals.trackId, tracks.id), scope))
     .innerJoin(artists, eq(tracks.artistId, artists.id))
     .innerJoin(albums, eq(tracks.albumId, albums.id))
     .leftJoin(artwork, eq(tracks.artworkHash, artwork.hash))
-    .where(eq(playEvents.counted, true))
-    .groupBy(tracks.id)
-    .orderBy(desc(playCount), desc(max(playEvents.startedAt)))
+    .where(gt(playTotals.countedPlays, 0))
+    .orderBy(
+      desc(playTotals.countedPlays),
+      desc(playTotals.lastCountedAt),
+      desc(playTotals.trackId),
+    )
     .limit(LIST)
     .all();
 };
@@ -268,10 +282,30 @@ export const setFavorites = (
   });
 };
 
+/** Home's sections that follow plays: they change as songs are played, nothing else does. */
+export type HomePlays = Pick<HomeSections, "recentlyPlayed" | "mostPlayed">;
+
+/** Recently Added, which only songs entering or leaving the library change. */
+export const homeAdded = (
+  db: LibraryDatabase,
+  scope: TrackScope = "library",
+): Pick<HomeSections, "recentlyAdded"> => ({ recentlyAdded: recentlyAddedAlbums(db, scope) });
+
+/** Recently Played and Most Played, read from the play totals (`play_totals`). */
+export const homePlays = (db: LibraryDatabase, scope: TrackScope = "library"): HomePlays => ({
+  recentlyPlayed: recentlyPlayedShelf(db, scope),
+  mostPlayed: mostPlayedSongs(db, scope),
+});
+
+/** Favorites, which stars change. */
+export const homeFavorites = (
+  db: LibraryDatabase,
+  scope: TrackScope = "library",
+): Pick<HomeSections, "favorites"> => ({ favorites: recentFavorites(db, scope) });
+
 /** The Home tab's sections, of the Tracks in [scope] (Android Auto's Home: those with a file). */
 export const homeSections = (db: LibraryDatabase, scope: TrackScope = "library"): HomeSections => ({
-  recentlyAdded: recentlyAddedAlbums(db, scope),
-  recentlyPlayed: recentlyPlayedAlbums(db, scope),
-  mostPlayed: mostPlayedSongs(db, scope),
-  favorites: recentFavorites(db, scope),
+  ...homeAdded(db, scope),
+  ...homePlays(db, scope),
+  ...homeFavorites(db, scope),
 });

@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Smart Shuffle · Wave design review</title>
+    <link rel="stylesheet" href="review.css" />
+    <script type="module" src="review.js"></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <p class="eyebrow">Wave / icon study 01</p>
+          <h1>Smart Shuffle</h1>
+          <p class="intro">
+            Selected: Single spark in its original orientation. Earlier studies remain below.
+          </p>
+        </div>
+        <button class="theme" type="button" aria-label="Switch to dark theme">Dark theme</button>
+      </header>
+
+      <section class="reference" aria-label="Existing icons">
+        <div>
+          <span class="icon" data-icon="reference-current"></span><span>Current Smart Shuffle</span>
+        </div>
+        <span class="reference-rule"></span>
+        <div><span class="icon" data-icon="reference-real"></span><span>Real Shuffle</span></div>
+        <span class="reference-note">24 px grid · 1.5 px stroke · round caps</span>
+      </section>
+
+      <section class="spark-comparison" aria-label="Compare spark rotations">
+        <div class="context-title">
+          <p class="eyebrow">Single spark comparison</p>
+          <p class="comparison-note">Same size, stroke and color</p>
+        </div>
+        <div class="spark-options"></div>
+      </section>
+
+      <section class="options" aria-label="Eight icon options"></section>
+
+      <section class="context" aria-label="Selected icon in context">
+        <div class="context-title">
+          <p class="eyebrow">In the app</p>
+          <p id="selection" aria-live="polite"></p>
+        </div>
+        <div class="contexts">
+          <div class="sample">
+            <p class="sample-title">Queue · 20 px</p>
+            <div class="queue-row">
+              <button
+                class="sample-control queue-control"
+                type="button"
+                role="switch"
+                aria-checked="true"
+                aria-label="Smart Shuffle preview"
+              >
+                <span class="icon selected-icon"></span><span>Smart Shuffle</span>
+              </button>
+              <span class="repeat"
+                ><svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="m17 2 4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4m14-1v2a3 3 0 0 1-3 3H3"
+                  /></svg
+                >Repeat</span
+              >
+            </div>
+          </div>
+          <div class="sample">
+            <p class="sample-title">Page action · 24 px</p>
+            <div class="page-row">
+              <span class="play"
+                ><svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="m7 4 14 8-14 8V4Z" /></svg
+                >Play</span
+              >
+              <button
+                class="sample-control page-control"
+                type="button"
+                role="switch"
+                aria-checked="true"
+                aria-label="Smart Shuffle page preview"
+              >
+                <span class="icon selected-icon"></span><span>Smart Shuffle</span>
+              </button>
+            </div>
+          </div>
+        </div>
+        <p class="context-note">
+          Tap either Smart Shuffle control to compare its on and off states.
+        </p>
+      </section>
+      <footer>
+        <span>Vector studies · no playback</span
+        ><span>Choose a direction, then refine the drawing.</span>
+      </footer>
+    </main>
+  </body>
+</html>

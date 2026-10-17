@@ -17,7 +17,7 @@ import type {
   PlaylistRow,
   SongRow,
 } from "@/library/LibraryStore";
-import { playlistEntries } from "@/library/sectionSongs";
+import { playlistEntries, songsWithIds } from "@/library/sectionSongs";
 import { pressedRect } from "@/motion/pressedRect";
 import { CardEntries } from "@/overlay/CardEntries";
 import { CardHeading } from "@/overlay/CardHeading";
@@ -31,6 +31,7 @@ import { targetHeading, type ActionItems, type Heading, type PlaylistPlace } fro
 import { useItemActions, type ActionEntry } from "./itemActions";
 
 const NO_ENTRIES: readonly PlaylistEntryRow[] = [];
+const NO_SONGS: readonly SongRow[] = [];
 const NO_DOWNLOADS: readonly MenuEntry[] = [];
 
 /** How a menu was opened. */
@@ -81,6 +82,18 @@ export const openTrackActions = (
   options: MenuOptions & { readonly playlistItem?: PlaylistPlace | undefined } = {},
 ): void =>
   openActions({ kind: "track", items: [{ song, playlistItem: options.playlistItem }] }, options);
+
+/**
+ * Opens the long-press menu for the Library song [id], reading its row first:
+ * a paged list (Library › Songs) holds only what its rows show.
+ */
+export const openTrackActionsById = (id: number, options: MenuOptions = {}): void => {
+  const anchor = pressedRect();
+  void followUp(async () => {
+    const [song] = await songsWithIds([id]).catch(() => NO_SONGS);
+    if (song !== undefined) openActions({ kind: "track", items: [{ song }] }, options, anchor);
+  });
+};
 
 /**
  * Opens the menu for a playlist: queue it, add it to another, download its YT

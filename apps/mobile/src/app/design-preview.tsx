@@ -1,6 +1,12 @@
-import { defaultSongSort, designPreviewState, type IndexEntry } from "@wave/core";
-import { useLocalSearchParams } from "expo-router";
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  defaultSongSort,
+  designPreviewState,
+  isDesignPreviewLink,
+  type IndexEntry,
+} from "@wave/core";
+import * as Linking from "expo-linking";
+import { useIsFocused, useLocalSearchParams } from "expo-router";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   FlatList,
   type NativeScrollEvent,
@@ -33,8 +39,10 @@ import {
   openSortCard,
   PREVIEW_STATES,
   type PreviewState,
+  type PreviewVisit,
   type Shelf,
   StateAnchor,
+  visitDesignPreview,
 } from "@/preview/states";
 import {
   letterIndex,
@@ -62,12 +70,30 @@ const SHELVES: readonly { readonly shelf: Shelf; readonly label: string }[] = [
 export default function DesignPreviewScreen() {
   const { state } = useLocalSearchParams<{ state?: string | string[] }>();
   const opening = designPreviewState(PREVIEW_STATES, state);
+  // A link that comes in while the preview is showing (the same one again,
+  // which leaves its params as they were, included) starts it over.
+  const [links, setLinks] = useState(0);
+  const focused = useIsFocused();
+  useEffect(() => {
+    if (!focused) return;
+    const subscription = Linking.addEventListener("url", ({ url }) => {
+      if (isDesignPreviewLink(url)) setLinks((count) => count + 1);
+    });
+    return () => subscription.remove();
+  }, [focused]);
   // A link naming another state starts the preview over, at that one.
-  return <DesignPreview key={opening?.name ?? ""} opening={opening} />;
+  return <DesignPreview key={`${opening?.name ?? ""}:${links}`} opening={opening} />;
 }
 
 function DesignPreview({ opening }: { opening: PreviewState | undefined }) {
   const [view, setView] = useState<Shelf>(opening?.shelf ?? "albums");
+  // This visit: it closes what the last one's state opened, and its own as it leaves.
+  const visit = useRef<PreviewVisit | undefined>(undefined);
+  useEffect(() => {
+    const started = visitDesignPreview();
+    visit.current = started;
+    return started.leave;
+  }, []);
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const reserved = grid.spineHit + grid.spineInset;
@@ -84,6 +110,7 @@ function DesignPreview({ opening }: { opening: PreviewState | undefined }) {
   const anchored = (from: number | Control, node: ReactNode): ReactNode =>
     opening?.shelf === view && opening.from === from ? (
       <StateAnchor
+        current={() => visit.current?.current() ?? false}
         open={() => {
           if (opened.current) return;
           opened.current = true;
@@ -131,7 +158,12 @@ function DesignPreview({ opening }: { opening: PreviewState | undefined }) {
               key={shelf}
               accessibilityRole="tab"
               accessibilityState={{ selected: view === shelf }}
-              onPress={() => setView(shelf)}
+              onPress={() => {
+                if (shelf === view) return;
+                // The shelf's list starts at its top; the spine reads its offset.
+                scrolled.current = 0;
+                setView(shelf);
+              }}
               haptic="selection"
               style={{ minHeight: 48, justifyContent: "center" }}
             >

@@ -164,6 +164,54 @@ class DurableDownloadsTest {
     } finally { folder.deleteRecursively() }
   }
 
+  @Test fun forgettingACompletedDownloadKeepsTheFileAndStartsAFreshJobWhenAskedAgain() {
+    val folder = Files.createTempDirectory("wave-forget-completed").toFile()
+    try {
+      val journal = File(folder, "jobs")
+      val owner = DurableDownloads(journal)
+      val target = File(folder, "Recording.mp3")
+      owner.enqueue(song, null)
+      owner.enqueue(song + ("videoId" to "alias"), "song")
+      complete(owner, target)
+      val generation = owner.snapshot().single()["generation"] as Long
+
+      assertTrue(owner.forgetCompleted("song", generation))
+      assertTrue(owner.snapshot().isEmpty())
+      assertTrue(DurableDownloads(journal).snapshot().isEmpty())
+      assertTrue(target.isFile)
+
+      owner.enqueue(song, null)
+      val fresh = owner.snapshot().single()
+      assertEquals("queued", fresh["phase"])
+      assertNull(fresh["saved"])
+      assertNull(fresh["acknowledged"])
+      assertTrue((fresh["aliases"] as? List<*>)?.isEmpty() != false)
+      assertEquals("queued", DurableDownloads(journal).snapshot().single()["phase"])
+    } finally { folder.deleteRecursively() }
+  }
+
+  @Test fun forgettingACompletedDownloadCannotRemoveItsRetryOrAnUnimportedFile() {
+    val folder = Files.createTempDirectory("wave-forget-stale").toFile()
+    try {
+      val owner = DurableDownloads(File(folder, "jobs"))
+      val target = File(folder, "Recording.mp3")
+      owner.enqueue(song, null)
+      assertFalse(owner.forgetCompleted("song", owner.snapshot().single()["generation"] as Long))
+      publish(owner, target)
+      assertFalse(owner.forgetCompleted("song", owner.snapshot().single()["generation"] as Long))
+      assertEquals("completed", owner.snapshot().single()["phase"])
+      answer(owner, "import", mapOf("path" to target.path))
+      val oldGeneration = owner.snapshot().single()["generation"] as Long
+      assertTrue(target.delete())
+      owner.enqueue(song, null)
+      assertFalse(owner.forgetCompleted("song", oldGeneration))
+      assertEquals("queued", owner.snapshot().single()["phase"])
+      complete(owner, target)
+      assertFalse(owner.forgetCompleted("song", oldGeneration))
+      assertTrue(owner.snapshot().single()["acknowledged"] as Boolean)
+    } finally { folder.deleteRecursively() }
+  }
+
   @Test fun queuedJobsGetTheirFullTimeOnceTheyStart() {
     val folder = Files.createTempDirectory("wave-serial").toFile()
     try {
