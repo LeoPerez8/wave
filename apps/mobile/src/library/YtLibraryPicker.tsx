@@ -41,7 +41,7 @@ import { showError, showMessage } from "@/overlay/alert";
 import { useThemeColor } from "@/theme/useThemeColor";
 import { askYtMusic } from "@/ytmusic/askYtMusic";
 
-import { importYtLibrary } from "./ytLibraryImport";
+import { currentYtLibraryOrigins, importYtLibrary } from "./ytLibraryImport";
 
 // ---------------------------------------------------------------------------
 // Entry
@@ -99,7 +99,7 @@ const readLibrary = async (): Promise<LibraryRead> => {
   const answer = await askYtMusic((ytMusic) => ytMusic.libraryPlaylists);
   return Result.isFailure(answer)
     ? { status: "failed", reason: answer.failure.reason }
-    : { status: "read", picker: ytLibraryPicker(answer.success) };
+    : { status: "read", picker: ytLibraryPicker(answer.success, await currentYtLibraryOrigins()) };
 };
 
 // ---------------------------------------------------------------------------
@@ -304,13 +304,19 @@ function PickerSheet({ onClosed }: { onClosed: () => void }) {
   );
 }
 
-/** A playlist the picker lists: its tick, cover, name and "N songs". A tap ticks or unticks it. */
+/**
+ * A playlist the picker lists: its tick, cover, name, "N songs" and, when
+ * imported on this phone before, Imported. A tap ticks or unticks it.
+ */
 function PickerRow({ row, toggle }: { row: YtLibraryRow; toggle: () => void }) {
+  const label = [row.title, row.line, row.imported ? "Imported" : null]
+    .filter((part) => part !== null)
+    .join(", ");
   return (
     <Press
       accessibilityRole="checkbox"
       accessibilityState={{ checked: row.ticked }}
-      accessibilityLabel={row.line === null ? row.title : `${row.title}, ${row.line}`}
+      accessibilityLabel={label}
       onPress={toggle}
       haptic="selection"
     >
@@ -335,6 +341,9 @@ function PickerRow({ row, toggle }: { row: YtLibraryRow; toggle: () => void }) {
             </Text>
           )}
         </View>
+        {row.imported && (
+          <Text className="font-sans text-subheadline text-secondary">Imported</Text>
+        )}
       </View>
     </Press>
   );
