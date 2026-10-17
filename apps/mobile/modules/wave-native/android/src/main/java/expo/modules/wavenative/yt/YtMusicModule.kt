@@ -103,6 +103,15 @@ class YtMusicModule : Module() {
     }
 
     /**
+     * The playlists in the signed-in account's library: `[{ playlistId,
+     * title, artworkUrl, songCount, kind }]`, every page read, or an
+     * `ERR_YT_*` rejection (`ERR_YT_SIGNED_OUT` without a session YouTube accepts).
+     */
+    AsyncFunction("libraryPlaylists") Coroutine { ->
+      coded { YtPages(client).libraryPlaylists().map(YtLibraryPlaylist::toMap) }
+    }
+
+    /**
      * The first page of a song's radio: `{ songs, continuation }`, each song
      * with `video` (a music video rather than a song), or an `ERR_YT_*`
      * rejection. Needs no sign-in.

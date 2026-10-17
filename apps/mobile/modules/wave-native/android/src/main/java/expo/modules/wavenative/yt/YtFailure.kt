@@ -8,13 +8,16 @@ import java.net.UnknownHostException
 
 /**
  * Why a YT Music request got no songs, as JS sees it (a rejection code): no
- * network, YouTube failed or answered with something unreadable, or YT Music
- * is off in Settings. JS shows the first two as a quiet line.
+ * network, YouTube failed or answered with something unreadable, YT Music
+ * is off in Settings, or a request that needs the account's session (the
+ * account's library) found none, or one YouTube no longer accepts. JS shows
+ * the first two as a quiet line.
  */
 enum class YtFailure(val code: String) {
   OFFLINE("ERR_YT_OFFLINE"),
   FAILED("ERR_YT_FAILED"),
-  DISABLED("ERR_YT_DISABLED");
+  DISABLED("ERR_YT_DISABLED"),
+  SIGNED_OUT("ERR_YT_SIGNED_OUT");
 
   companion object {
     /** What [error] means for the owner, given whether the phone was online ([expo.modules.wavenative.net.Connectivity.online]). */
@@ -46,6 +49,7 @@ enum class YtFailure(val code: String) {
         YtFailure.OFFLINE -> "no network"
         YtFailure.DISABLED -> "YT Music is off"
         YtFailure.FAILED -> "no cause given"
+        YtFailure.SIGNED_OUT -> "not signed in"
       }
       return listOfNotNull(root.javaClass.simpleName, root.message).joinToString(": ")
     }
@@ -58,6 +62,7 @@ private val YtFailure.logName: String
     YtFailure.OFFLINE -> "offline"
     YtFailure.FAILED -> "failed"
     YtFailure.DISABLED -> "YT Music off"
+    YtFailure.SIGNED_OUT -> "signed out"
   }
 
 /** A YT Music request that failed, carrying the code JS reads. */
