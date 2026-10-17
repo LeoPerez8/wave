@@ -835,6 +835,9 @@ export {
   unavailableEntryView,
   unavailableSearchQuery,
   readPlaylistYtSong,
+  isUnsearchedTrackId,
+  queueSongTrackId,
+  unsearchedTrackId,
   writePlaylistEntrySong,
   writePlaylistYtSong,
 } from "./playlistEntries.ts";
@@ -845,7 +848,11 @@ export type {
   PlaylistItem,
   PlaylistPlay,
   PlaylistSong,
+  QueueSong,
+  StoredPlaylistSong,
   StreamedPlaylistEntry,
+  UnsearchedEntry,
+  UnsearchedSong,
   UnavailableEntry,
   UnavailableEntryAction,
   UnavailableEntryView,
@@ -874,6 +881,12 @@ export type {
   SharedTextImport,
 } from "./playlistLinks.ts";
 export { spotifySearchQuery, spotifyYtMatch } from "./spotifyImport.ts";
+export { settleUnsearched, unsearchedSearchQuery, unsearchedSettles } from "./unsearchedEntries.ts";
+export type {
+  PlaylistEntryPlace,
+  UnsearchedSettlement,
+  UnsearchedSettles,
+} from "./unsearchedEntries.ts";
 export type { YtSongSearch } from "./spotifyImport.ts";
 export {
   IMPORT_PROGRESS_SHOWN_EVERY_MS,
