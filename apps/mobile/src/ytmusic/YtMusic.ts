@@ -2,6 +2,8 @@ import {
   readYtPlaylist,
   type YtArtistAlbum,
   type YtArtistCandidate,
+  type YtLibraryFailure,
+  type YtLibraryPlaylist,
   type YtPlaylistReadOptions,
   type YtQuietReason,
   type YtSession,
@@ -43,6 +45,19 @@ const fromNative = (error: unknown): YtMusicError => {
 };
 
 /**
+ * The account's library wasn't read: YT Music's reasons, or no session
+ * YouTube accepts (Core's `YtLibraryFailure`).
+ */
+export class YtLibraryError extends Data.TaggedError("YtLibraryError")<{
+  readonly reason: YtLibraryFailure;
+}> {}
+
+const libraryFailure = (error: unknown): YtLibraryError =>
+  new YtLibraryError({
+    reason: ytErrorCode(error) === "ERR_YT_SIGNED_OUT" ? "signedOut" : fromNative(error).reason,
+  });
+
+/**
  * YouTube Music as a typed service, over the native `WaveYtMusic` module.
  * Search, playback (#109), downloads (#110), artist, album and playlist pages and
  * Home's Discover mixes go through it.
@@ -72,6 +87,11 @@ export class YtMusic extends Context.Service<
       playlistId: string,
       options?: YtPlaylistReadOptions<NativeYtSong>,
     ) => Effect.Effect<NativeYtPlaylist, YtMusicError>;
+    /**
+     * The playlists in the signed-in account's library, in YouTube Music's
+     * order. Fails as `signedOut` without a session YouTube accepts.
+     */
+    readonly libraryPlaylists: Effect.Effect<readonly YtLibraryPlaylist[], YtLibraryError>;
     /**
      * The first page of a radio: the song [videoId]'s, or the artist's whose
      * page is [browseId]. Needs no sign-in.
@@ -120,6 +140,10 @@ export const layer = Layer.succeed(YtMusic, {
         ),
       catch: fromNative,
     }),
+  libraryPlaylists: Effect.tryPromise({
+    try: () => WaveYtMusic.libraryPlaylists(),
+    catch: libraryFailure,
+  }),
   radio: (seed) =>
     Effect.tryPromise({
       try: () =>

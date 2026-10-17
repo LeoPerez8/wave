@@ -177,7 +177,7 @@ describe("ytLibraryFailure", () => {
 
   test("an expired session says so and offers to sign in again", () => {
     assert.deepEqual(ytLibraryFailure("signedOut"), {
-      line: "Your YouTube Music session ended. Sign in again to see your playlists.",
+      line: "Your YouTube session ended. Sign in again to see your playlists.",
       action: "signIn",
     });
   });

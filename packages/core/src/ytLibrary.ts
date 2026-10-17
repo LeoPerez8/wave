@@ -153,7 +153,7 @@ const FAILURES: Record<YtLibraryFailure, YtLibraryFailureView> = {
     action: "tryAgain",
   },
   signedOut: {
-    line: "Your YouTube Music session ended. Sign in again to see your playlists.",
+    line: "Your YouTube session ended. Sign in again to see your playlists.",
     action: "signIn",
   },
   disabled: { line: "YT Music is off in Settings.", action: null },
