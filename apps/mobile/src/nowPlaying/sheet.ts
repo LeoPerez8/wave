@@ -5,6 +5,7 @@ import { makeMutable, withSpring } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 
 import { makeExternalStore } from "@/lib/externalStore";
+import { dismissAllOverlays } from "@/overlay/overlay";
 import { perfMark } from "@/perf/perf";
 
 /**
@@ -87,6 +88,8 @@ const step = (event: SheetEvent, velocity = 0): void => {
       break;
   }
   if (next.spring !== null) perfMark("nowPlaying.spring", next.spring);
+  // A card opened in Now Playing leaves with it rather than float over the app.
+  if (phase.get() === "open" && next.phase === "closing") dismissAllOverlays();
   phase.set(next.phase);
   perfMark("nowPlaying.notified");
   if (next.hidden) {

@@ -146,6 +146,16 @@ export const dismissOverlaysFrom = (key: number): void => {
   }
 };
 
+/**
+ * Dismisses every open card, topmost first, as Back would. Something that
+ * replaces what was on screen (a share to Wave, Now Playing sliding away)
+ * leaves no card behind.
+ */
+export const dismissAllOverlays = (): void => {
+  // oxlint-disable-next-line unicorn/no-array-reverse -- reverses a fresh array; Hermes lacks toReversed
+  for (const entry of [...entries.get()].reverse()) dismissOverlay(entry);
+};
+
 /** Called by the host once a closing card has faded out. */
 export const removeOverlay = (id: number): void =>
   entries.update((list) => list.filter((entry) => entry.id !== id));
