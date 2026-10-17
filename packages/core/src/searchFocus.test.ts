@@ -43,13 +43,14 @@ describe("search field focus", () => {
     assert.deepEqual(focusing.commands, ["focus"]);
   });
 
-  test("once the field reports focus the request is done: no more frames or commands", () => {
+  test("once the field has the focus and the keyboard is up the request is done: no more frames or commands", () => {
     const done = play([
       { type: "shown" },
       { type: "attached" },
       { type: "requested", at: 0 },
       { type: "frame", at: 8 },
       { type: "focused" },
+      { type: "keyboardShown" },
     ]);
     assert.equal(done.wantsFrame, false);
     assert.equal(done.state.request, null);
@@ -136,22 +137,99 @@ describe("search field focus", () => {
       { type: "shown" },
       { type: "frame", at: 48 },
       { type: "focused" },
+      { type: "keyboardShown" },
       ...frames(56, 1000),
     ]);
     assert.deepEqual(run.commands, ["focus", "blur", "focus"]);
     assert.equal(run.wantsFrame, false);
   });
 
-  test("asking while the field already has focus does nothing", () => {
+  test("asking while the field has focus and the keyboard is up does nothing", () => {
     const run = play([
       { type: "shown" },
       { type: "attached" },
       { type: "focused" },
+      { type: "keyboardShown" },
       { type: "requested", at: 0 },
       ...frames(8, 400),
     ]);
     assert.deepEqual(run.commands, []);
     assert.equal(run.state.request, null);
+  });
+
+  test("a focus the field reports without the keyboard coming up is asked again", () => {
+    // Android takes the focus of a field its window doesn't serve yet (still being attached)
+    // and reports it, but ignores the keyboard asked for with it.
+    const run = play([
+      { type: "shown" },
+      { type: "attached" },
+      { type: "requested", at: 0 },
+      { type: "frame", at: 8 },
+      { type: "focused" },
+      ...frames(16, 1200),
+    ]);
+    assert.equal(run.commands[0], "focus");
+    assert.ok(run.commands.includes("refocus"), `asked again: ${run.commands.join(", ")}`);
+  });
+
+  test("tapping Search while it shows, after Back put the keyboard away, raises it again", () => {
+    // Back hides the keyboard and leaves the field focused.
+    const putAway = play([
+      { type: "shown" },
+      { type: "attached" },
+      { type: "requested", at: 0 },
+      { type: "frame", at: 8 },
+      { type: "focused" },
+      { type: "keyboardShown" },
+      { type: "keyboardHidden" },
+    ]);
+    const tapped = play(
+      [
+        { type: "requested", at: 3000 },
+        { type: "frame", at: 3008 },
+      ],
+      putAway.state,
+    );
+    // React Native skips a focus on a field it takes as focused: blur, then focus.
+    assert.deepEqual(tapped.commands, ["refocus"]);
+    const raised = play(
+      [{ type: "blurred" }, { type: "focused" }, { type: "keyboardShown" }],
+      tapped.state,
+    );
+    assert.equal(raised.wantsFrame, false);
+    assert.deepEqual(play(frames(3016, 5000), raised.state).commands, []);
+  });
+
+  test("a focus taken while the keyboard is already up is done at once", () => {
+    const run = play([
+      { type: "keyboardShown" },
+      { type: "shown" },
+      { type: "attached" },
+      { type: "requested", at: 0 },
+      { type: "frame", at: 8 },
+      { type: "focused" },
+      ...frames(16, 2000),
+    ]);
+    assert.deepEqual(run.commands, ["focus"]);
+    assert.equal(run.wantsFrame, false);
+  });
+
+  test("a focus waiting for its keyboard isn't asked again before the keyboard has had time", () => {
+    const { keyboardMs, attempts } = SEARCH_FOCUS_LIMITS;
+    const waiting = play([
+      { type: "shown" },
+      { type: "attached" },
+      { type: "requested", at: 0 },
+      { type: "frame", at: 8 },
+      { type: "focused" },
+      ...frames(16, keyboardMs),
+    ]);
+    assert.deepEqual(waiting.commands, ["focus"]);
+    // The keyboard never comes: asked a bounded number of times, then given up.
+    const given = play(frames(keyboardMs + 8, 10_000), waiting.state);
+    assert.equal(given.commands.length, attempts - 1);
+    assert.equal(given.state.request, null);
+    assert.equal(given.wantsFrame, false);
   });
 
   test("arriving without a tap (Back from a result) asks nothing", () => {

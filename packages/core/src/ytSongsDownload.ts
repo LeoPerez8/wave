@@ -12,6 +12,11 @@ import type { PlaylistItem } from "./playlistEntries.ts";
 import type { YtSong } from "./ytMusic.ts";
 import { soulseekRecordingKey } from "./soulseekDownload.ts";
 import {
+  isUnsearchedSongJob,
+  unsearchedSongJob,
+  type UnsearchedSongJob,
+} from "./unsearchedDownload.ts";
+import {
   ytDownloadSharedJob,
   ytDownloadStatuses,
   ytDownloadsFromJournal,
@@ -42,6 +47,9 @@ const BUTTON_LABELS: { readonly [A in YtSongsDownloadAction]: string } = {
   retryFailed: "Retry Failed",
   cancel: "Cancel",
 };
+
+/** Every label an album's or a playlist's page button can say, so a page can measure them ahead. */
+export const YT_DOWNLOAD_BUTTON_LABELS: readonly string[] = Object.values(BUTTON_LABELS);
 
 /** A song Download or Retry Failed adds to the queue, and the job it shares (null for a job of its own). */
 export interface YtSongsDownloadRequest<S extends YtSong = YtSong> {
@@ -199,25 +207,68 @@ const PLAYLIST_ACTIONS: { readonly [K in YtSongsDownloadAction]: YtPlaylistDownl
 };
 
 /**
- * Where downloading a playlist holding [entries] stands: its YT Music
- * entries are the list, in playlist order; its Library songs and unavailable
- * entries have nothing to download. A Library song whose file a download saved this session is an
- * entry that has taken its place, and counts as saved.
+ * The unsearched songs' jobs that the YT Music songs their searches found
+ * share (an alias each), by the found song's video id.
+ */
+const unsearchedJobsFound = (downloads: YtDownloads): Map<string, string> => {
+  const holders = new Map<string, string>();
+  for (const { song, relatedSongs } of downloads.jobs) {
+    if (!isUnsearchedSongJob(song.videoId)) continue;
+    for (const found of relatedSongs ?? []) holders.set(found.videoId, song.videoId);
+  }
+  return holders;
+};
+
+/**
+ * Where downloading a playlist holding [entries] stands: its YT Music and
+ * unsearched entries are the list, in playlist order, an unsearched one as
+ * the job named after what Spotify listed (`unsearchedSongJob`). An
+ * unavailable entry whose download's search found nothing is still the
+ * list's while its job is in the journal, so its failed row is retried
+ * with the rest; other unavailable entries and the Library's songs have
+ * nothing to download. A Library song whose file a download saved this
+ * session is an entry that has taken its place, and counts as saved.
+ * Cancel ends an unsearched song's job too when the YT Music song its
+ * search found is on it.
  */
 export const ytPlaylistDownload = <S extends YtSong>(
   entries: readonly PlaylistItem<S, { readonly path: string | null }>[],
-  input: SongsDownloadInput<S>,
-): YtPlaylistDownload<S> => {
+  input: SongsDownloadInput<S | UnsearchedSongJob>,
+): YtPlaylistDownload<S | UnsearchedSongJob> => {
   const downloads = ytDownloadsFromJournal(input.jobs);
+  const statusOf = ytDownloadStatuses(downloads);
   const savedPaths = new Set(
     downloads.jobs.flatMap(({ status }) => (status.kind === "done" ? [status.path] : [])),
   );
-  const songs = entries.flatMap((entry) => (entry.source === "stream" ? [entry.song] : []));
+  const songs = entries.flatMap((entry): (S | UnsearchedSongJob)[] => {
+    switch (entry.source) {
+      case "stream":
+        return [entry.song];
+      case "unsearched":
+        return [unsearchedSongJob(entry.song)];
+      case "unavailable": {
+        const job = unsearchedSongJob(entry.song);
+        return statusOf(job.videoId) === null ? [] : [job];
+      }
+      case "library":
+        return [];
+    }
+  });
   const landed = entries.filter(
     (entry) =>
       entry.source === "library" && entry.track.path !== null && savedPaths.has(entry.track.path),
   ).length;
-  return named(songsDownload(songs, input, downloads, landed), PLAYLIST_ACTIONS);
+  const view = songsDownload(songs, input, downloads, landed);
+  const holders = unsearchedJobsFound(downloads);
+  const toCancel = [
+    ...new Set(
+      view.toCancel.flatMap((videoId) => {
+        const holder = holders.get(videoId);
+        return holder === undefined ? [videoId] : [videoId, holder];
+      }),
+    ),
+  ];
+  return named({ ...view, toCancel }, PLAYLIST_ACTIONS);
 };
 
 /** What each playlist entry says in the playlist's long-press menu. */

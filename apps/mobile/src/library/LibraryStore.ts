@@ -14,6 +14,9 @@ import {
   type PlayTotals,
   type ListeningSums,
   type StatsWindow,
+  type TryAgainAnswered,
+  type UnsearchedSong,
+  type YtAlbumSong,
   type YtArtistSaved,
 } from "@wave/core";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
@@ -97,7 +100,12 @@ import {
   selectPlaylists,
   selectPlaylistsLastPlayed,
   selectTrackPaths,
+  selectUnsearchedEntries,
+  settleTryAgain,
+  settleUnsearchedEntries,
   type PlaylistEntry,
+  type PlaylistUnsearched,
+  type UnsearchedEntriesSettled,
 } from "./db/playlists";
 import { hasUnscannedRoot, pruneOrphans, saveBatch } from "./db/save";
 import * as schema from "./db/schema";
@@ -579,6 +587,8 @@ export class LibraryStore extends Context.Service<
     readonly listPlaylists: Effect.Effect<readonly PlaylistRow[], LibraryStoreError>;
     /** When a song last played from each playlist, by playlist id (never played: absent). */
     readonly playlistsLastPlayed: Effect.Effect<ReadonlyMap<number, number>, LibraryStoreError>;
+    /** Every playlist's unsearched songs, top to bottom, for the background fill. */
+    readonly unsearchedEntries: Effect.Effect<readonly PlaylistUnsearched[], LibraryStoreError>;
     /** A playlist with its YT Music entries and its Library songs in [scope]. */
     readonly getPlaylist: (
       id: number,
@@ -625,6 +635,24 @@ export class LibraryStore extends Context.Service<
       playlistId: number,
       itemIds: readonly number[],
     ) => Effect.Effect<void, LibraryStoreError>;
+    /**
+     * Settles what Try Again found of the playlist's unavailable entries: each
+     * found becomes its YT Music song in its place (Core's `tryAgainSettles`).
+     * Returns how many were found and how many searches failed.
+     */
+    readonly settleTryAgain: (
+      playlistId: number,
+      answered: readonly TryAgainAnswered<YtAlbumSong>[],
+    ) => Effect.Effect<{ readonly found: number; readonly failed: number }, LibraryStoreError>;
+    /**
+     * Settles the unsearched song [song] as [becomes] (found, a YT Music
+     * song; not found, unavailable) in every playlist holding it (Core's
+     * `unsearchedSettles`).
+     */
+    readonly settleUnsearched: (
+      song: UnsearchedSong,
+      becomes: PlaylistSong,
+    ) => Effect.Effect<UnsearchedEntriesSettled, LibraryStoreError>;
     /** Makes the playlist hold exactly [songs], in that order (an import's Replace). */
     readonly replacePlaylistSongs: (
       playlistId: number,
@@ -1137,6 +1165,10 @@ const make = Effect.gen(function* () {
       selectPlaylistsLastPlayed(db),
     ),
 
+    unsearchedEntries: attempt("read the playlists' unsearched songs", () =>
+      selectUnsearchedEntries(db),
+    ),
+
     getPlaylist: (id, scope) => attempt("open the playlist", () => selectPlaylist(db, id, scope)),
 
     createPlaylist: (name, songs) =>
@@ -1169,6 +1201,16 @@ const make = Effect.gen(function* () {
     removePlaylistItems: (playlistId, itemIds) =>
       attempt("remove from the playlist", () =>
         removePlaylistItems(db, playlistId, itemIds, Date.now()),
+      ),
+
+    settleTryAgain: (playlistId, answered) =>
+      attempt("save what Try Again found", () =>
+        settleTryAgain(db, playlistId, answered, Date.now()),
+      ),
+
+    settleUnsearched: (song, becomes) =>
+      attempt("save what the search found", () =>
+        settleUnsearchedEntries(db, song, becomes, Date.now()),
       ),
 
     replacePlaylistSongs: (playlistId, songs) =>

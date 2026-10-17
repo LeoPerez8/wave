@@ -371,6 +371,20 @@ export const playlists = sqliteTable(
   ],
 );
 
+/** Whether the entry [ytSong] holds is an unsearched song, as Core's `writePlaylistEntrySong` marks it. */
+export const unsearchedSongIn = (ytSong: AnySQLiteColumn): SQL =>
+  sql`(CASE WHEN json_valid(${ytSong})
+  THEN json_type(${ytSong}, '$.unsearched') = 'true' END IS 1)`;
+
+/**
+ * The title of the unsearched song [ytSong] holds; null for any other entry.
+ * `playlist_items_unsearched_title_idx` indexes it, so settling a song finds
+ * the entries holding it without reading every playlist's.
+ */
+export const unsearchedTitleIn = (ytSong: AnySQLiteColumn): SQL =>
+  sql`CASE WHEN ${unsearchedSongIn(ytSong)}
+  THEN json_extract(${ytSong}, '$.title') END`;
+
 /**
  * A playlist's entries, ordered by `order_key` (Core's `orderKeyBetween`),
  * then `sync_id` for the entries two phones gave one key (Core's
@@ -399,6 +413,7 @@ export const playlistItems = sqliteTable(
     index("playlist_items_track_idx").on(t.trackId),
     index("playlist_items_changed_at_idx").on(t.changedAt),
     index("playlist_items_pushed_idx").on(t.pushed),
+    index("playlist_items_unsearched_title_idx").on(unsearchedTitleIn(t.ytSong)),
     check("playlist_items_one_song", sql`(${t.trackId} IS NULL) <> (${t.ytSong} IS NULL)`),
   ],
 );

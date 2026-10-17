@@ -181,6 +181,40 @@ class YtArtistParserTest {
   }
 
   @Test
+  fun readsTheArtistsFansMightAlsoLike() {
+    val similar = YtArtistParser.page(body("artist-page.json"))!!.similar
+    assertEquals(10, similar.size)
+    assertEquals(
+      YtArtistCandidate(
+        name = "Gesaffelstein",
+        browseId = "UCq7VAQmXDurV-9VN2bSFXvw",
+        audience = 23_100_000L,
+        artworkUrl = "https://yt3.googleusercontent.com/O_rI9mhwQw3m0Sq3RqAb4dHHQV05k30zB1KriF9rS0smdQvhj9bcuQAIQClcDAmO3oIq4a91xN1zPUAD=w544-h544-p-l90-rj",
+      ),
+      similar.first(),
+    )
+    assertEquals(
+      listOf("The Chemical Brothers", "Tame Impala", "MGMT"),
+      similar.drop(1).take(3).map { it.name },
+    )
+    assertEquals("Mr. Oizo", similar[7].name)
+    assertEquals(27_900L, similar[7].audience)
+    assertEquals("Ten Years After", YtArtistParser.page(body("artist-page-no-singles.json"))!!.similar.first().name)
+  }
+
+  @Test
+  fun aPageWithoutSimilarArtistsHasNone() {
+    assertTrue(YtArtistParser.page(pageWithSections())!!.similar.isEmpty())
+    val album = """{"musicTwoRowItemRenderer":{"title":{"runs":[{"text":"Not an artist"}]},""" +
+      """"navigationEndpoint":{"browseEndpoint":{"browseId":"MPREb_x",""" +
+      """"browseEndpointContextSupportedConfigs":{"browseEndpointContextMusicConfig":""" +
+      """{"pageType":"MUSIC_PAGE_TYPE_ALBUM"}}}}}}"""
+    val shelf = """{"musicCarouselShelfRenderer":{"header":{"musicCarouselShelfBasicHeaderRenderer":""" +
+      """{"title":{"runs":[{"text":"Fans might also like"}]}}},"contents":[$album]}}"""
+    assertTrue(YtArtistParser.page(pageWithSections(shelf))!!.similar.isEmpty())
+  }
+
+  @Test
   fun leavesOutVideosPlaylistsAndOtherArtists() {
     val page = YtArtistParser.page(body("artist-page.json"))!!
     val ids = page.albums.map { it.browseId } + page.singles.map { it.browseId }

@@ -43,6 +43,9 @@ class SoulseekModule : Module() {
     }
     AsyncFunction("resumeJobs") Coroutine { -> withContext(Dispatchers.IO) { downloads.requestService() } }
     AsyncFunction("claimDecision") Coroutine { id: String -> withContext(Dispatchers.IO) { downloads.jobs.claim(id) } }
+    AsyncFunction("renewDecision") Coroutine { id: String, generation: Double, token: String ->
+      withContext(Dispatchers.IO) { downloads.jobs.renew(id, generation.toLong(), token) }
+    }
     // The payload comes as JSON: Expo can't convert a null inside a nested object (a tag or a
     // candidate's duration), and the answer would never reach the journal.
     AsyncFunction("submitDecision") Coroutine { id: String, generation: Double, token: String, decision: String, payload: String ->

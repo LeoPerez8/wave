@@ -14,6 +14,7 @@ import {
   lookupFailed,
   queueTracks,
   toQueueTrack,
+  toUnsearchedQueueTrack,
   toYtQueueTrack,
   tracksToLookUp,
 } from "./queueTracks.ts";
@@ -336,6 +337,28 @@ describe("learnUnknownQueueTracks", () => {
       learnUnknownQueueTracks([entry("yt:dQw4w9WgXcQ")], none, () => [saved]),
     );
     assert.equal(queueTracks.get().get("yt:dQw4w9WgXcQ")?.title, "Never Gonna Give You Up");
+  });
+
+  test("an unsearched song is learned from the details saved with the queue, never looked up", async () => {
+    const saved = toUnsearchedQueueTrack({
+      title: "Touch",
+      artists: ["Daft Punk", "Paul Williams"],
+      album: "Random Access Memories",
+      durationMs: 498_000,
+      artworkUrl: "https://i.scdn.co/image/ram",
+    });
+    assert.deepEqual(
+      [saved.artist, saved.artworkPath, saved.thumbPath],
+      ["Daft Punk & Paul Williams", "https://i.scdn.co/image/ram", null],
+    );
+    const asked: number[][] = [];
+    const songsByIds = (ids: readonly number[]) => {
+      asked.push([...ids]);
+      return Effect.succeed([] as PlayableSongRow[]);
+    };
+    await Effect.runPromise(learnUnknownQueueTracks([entry(saved.id)], songsByIds, () => [saved]));
+    assert.equal(queueTracks.get().get(saved.id)?.title, "Touch");
+    assert.deepEqual(asked, []);
   });
 
   test("a failed lookup is tried again next time", async () => {

@@ -28,6 +28,8 @@ export type {
 } from "./designPreview.ts";
 export { trackRowTrailing } from "./trackRowTrailing.ts";
 export type { TrackRowTrailingInput } from "./trackRowTrailing.ts";
+export { lastListActionForm } from "./listActions.ts";
+export type { ListActionForm, ListActionsRoom } from "./listActions.ts";
 export { describeFolder, filesLeavingWithRoot, isWithin, planAddRoot } from "./scanRoots.ts";
 export type { AddRootPlan, FolderLabel, ScanRootState } from "./scanRoots.ts";
 export { resolveSkipSwipe } from "./swipe.ts";
@@ -675,6 +677,7 @@ export type {
 } from "./ytDownload.ts";
 export {
   YT_ALBUM_DOWNLOAD_ACTION_LABELS,
+  YT_DOWNLOAD_BUTTON_LABELS,
   YT_PLAYLIST_DOWNLOAD_ACTION_LABELS,
   ytAlbumDownload,
   ytAlbumDownloadButton,
@@ -832,6 +835,10 @@ export {
   unavailableEntryView,
   unavailableSearchQuery,
   readPlaylistYtSong,
+  isUnsearchedTrackId,
+  queueSongTrackId,
+  readUnsearchedTrackId,
+  unsearchedTrackId,
   writePlaylistEntrySong,
   writePlaylistYtSong,
 } from "./playlistEntries.ts";
@@ -842,7 +849,11 @@ export type {
   PlaylistItem,
   PlaylistPlay,
   PlaylistSong,
+  QueueSong,
+  StoredPlaylistSong,
   StreamedPlaylistEntry,
+  UnsearchedEntry,
+  UnsearchedSong,
   UnavailableEntry,
   UnavailableEntryAction,
   UnavailableEntryView,
@@ -871,42 +882,88 @@ export type {
   SharedTextImport,
 } from "./playlistLinks.ts";
 export { spotifySearchQuery, spotifyYtMatch } from "./spotifyImport.ts";
+export { settleUnsearched, unsearchedSearchQuery, unsearchedSettles } from "./unsearchedEntries.ts";
+export {
+  PLAYING_SEARCHES,
+  PLAYING_SEARCH_RETRY_MS,
+  answerPlayingWalk,
+  keptQueue,
+  passedOverNotice,
+  playerQueueList,
+  playingAnswerStep,
+  playingSearches,
+  startPlayingWalk,
+  withHeldCurrent,
+} from "./unsearchedPlaying.ts";
+export type {
+  PlayingAnswerStep,
+  PlayingSearch,
+  PlayingSearching,
+  PlayingStep,
+  PlayingWalk,
+} from "./unsearchedPlaying.ts";
+export type {
+  PlaylistEntryPlace,
+  UnsearchedSettlement,
+  UnsearchedSettles,
+} from "./unsearchedEntries.ts";
+export {
+  isUnsearchedSongJob,
+  unsearchedDownload,
+  unsearchedJobSong,
+  unsearchedSongJob,
+} from "./unsearchedDownload.ts";
+export type {
+  UnsearchedDownload,
+  UnsearchedSongJob,
+  UnsearchedSongJobId,
+} from "./unsearchedDownload.ts";
+export {
+  FILL_LOOK_AGAIN_MS,
+  FILL_PACE_MS,
+  FILL_PAUSES_MS,
+  FILL_REFUSALS,
+  FILL_RETRY_MS,
+  NO_FILL,
+  fillAnswered,
+  fillPauseLine,
+  nextFillStep,
+} from "./backgroundFill.ts";
+export type {
+  BackgroundFill,
+  FillAnswer,
+  FillPause,
+  FillPlaylist,
+  FillStep,
+  FillWorld,
+} from "./backgroundFill.ts";
+export { tryAgainNotice, tryAgainSearches, tryAgainSettles } from "./tryAgainUnavailable.ts";
+export type { TryAgainAnswered, TryAgainSearch, TryAgainSettled } from "./tryAgainUnavailable.ts";
 export type { YtSongSearch } from "./spotifyImport.ts";
 export {
-  IMPORT_PROGRESS_SHOWN_EVERY_MS,
-  SPOTIFY_SEARCHES_AT_ONCE,
-  importAdded,
-  importAdditions,
-  importProgressOnly,
-  importSearchAnswered,
-  importTurn,
-  nextImportStep,
+  finishPlaylistImport,
+  importLogLine,
   planLinkImport,
-  playlistImportProgress,
   playlistImportView,
   queuePlaylistImport,
   readPlaylistImports,
-  retryPlaylistImport,
   startPlaylistImport,
   updatePlaylistImport,
   withoutPlaylistImport,
   writePlaylistImports,
 } from "./playlistImport.ts";
 export type {
-  ImportAdditions,
+  FinishedImport,
   ImportFind,
   ImportLeftOut,
   ImportLeftOutSection,
   ImportService,
   ImportState,
-  ImportStep,
-  ImportStopReason,
   LeftOutReason,
   LeftOutSong,
   LinkImportPlan,
   LinkedSource,
   PlaylistImport,
-  PlaylistImportProgress,
   PlaylistImportView,
   PlaylistImports,
 } from "./playlistImport.ts";
@@ -1046,6 +1103,7 @@ export {
   discoverMixesDue,
   discoverSeedQuery,
   discoverSeedVideo,
+  discoverSimilarSource,
   parseDiscoverMixes,
   playedFinder,
   storedDiscoverMixes,
@@ -1055,20 +1113,39 @@ export type {
   DiscoverMixFilter,
   DiscoverMixSeed,
   DiscoverMixes,
+  DiscoverLibraryArtist,
+  DiscoverLibrarySong,
   DiscoverRadioSong,
   DiscoverSeedArtist,
+  DiscoverSeedPools,
   DiscoverSeedSong,
+  DiscoverSeedSource,
+  DiscoverSimilarArtist,
+  DiscoverSimilarArtists,
 } from "./discoverMixes.ts";
 export { discoverMixActions, discoverMixPlaylist } from "./discoverMixActions.ts";
 export type { DiscoverMixAction } from "./discoverMixActions.ts";
 
 export {
-  SPOTIFY_SEARCH_BUDGET,
-  SPOTIFY_SEARCH_WINDOW_MS,
-  readSpotifySearchPacing,
-  writeSpotifySearchPacing,
-} from "./spotifySearchPacing.ts";
-export type { SpotifySearchPacing } from "./spotifySearchPacing.ts";
+  NO_SEARCHES,
+  SEARCH_ALLOWANCE,
+  SEARCH_WINDOW_MS,
+  readSearchAllowance,
+  writeSearchAllowance,
+  searchTurnWanted,
+  searchTurnWithdrawn,
+  searchTurns,
+  searchFailedLine,
+  searchWaitLine,
+} from "./searchAllowance.ts";
+export type {
+  SearchAllowance,
+  SearchAsker,
+  SearchFailure,
+  SearchTurns,
+  SearchWait,
+  SearchWaiting,
+} from "./searchAllowance.ts";
 
 export { LIBRARY_SHELF_CHOICES, parseLibraryShelf, storedLibraryShelf } from "./libraryShelf.ts";
 export type { LibraryShelf } from "./libraryShelf.ts";

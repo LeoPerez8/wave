@@ -12,9 +12,11 @@ import {
   autoTrackItems,
   currentEntry,
   decodeAutoMediaId,
+  joinArtists,
   libraryTrackIds,
   nextRepeatMode,
   statsWindow,
+  unsearchedTrackId,
   ytSongArtist,
   ytTrackId,
   type AutoHomeList,
@@ -24,7 +26,7 @@ import {
   type AutoTrack,
   type AutoTrackList,
   type AutoTrackListKind,
-  type MixedSong,
+  type QueueSong,
   type YtSong,
 } from "@wave/core";
 import * as Context from "effect/Context";
@@ -46,7 +48,7 @@ import { sortedPlaylists } from "@/library/playlistOrder";
 import type { AutoPlayback, AutoRequest } from "@/native/wavePlayer";
 import type { PlayerError } from "@/playback/Player";
 import { Queue, queueState, toQueueTrack, type QueueTrack } from "@/playback/Queue";
-import { toYtQueueTrack } from "@/playback/queueTracks";
+import { toUnsearchedQueueTrack, toYtQueueTrack } from "@/playback/queueTracks";
 import { ytMusicEnabled } from "@/settings/ytMusic";
 
 /** Why Wave can't answer an Auto request; `message` is what Auto shows. */
@@ -77,11 +79,12 @@ const decode = (mediaId: string): Effect.Effect<AutoNode, AutoError> => {
 };
 
 /**
- * A song of a track list: a Library song with a file, or a playlist's YT
- * Music entry, streamed as a streamed song is anywhere else. Auto leaves
+ * A song of a track list: a Library song with a file, a playlist's YT Music
+ * entry, streamed as a streamed song is anywhere else, or its unsearched
+ * entry, searched as it's about to play, as on the phone. Auto leaves
  * missing songs out: the store reads Auto's lists with files only (`TrackScope`).
  */
-type AutoSong = MixedSong<YtSong, PlayableSongRow>;
+type AutoSong = QueueSong<YtSong, PlayableSongRow>;
 
 const fromLibrary = (songs: readonly SongRow[]): readonly AutoSong[] =>
   songs.filter(songHasFile).map((track) => ({ source: "library", track }));
@@ -89,32 +92,47 @@ const fromLibrary = (songs: readonly SongRow[]): readonly AutoSong[] =>
 /** A playlist's entries as a track list's songs; an unavailable entry plays nowhere, so isn't one. */
 const playlistSongs = (entries: readonly PlaylistEntryRow[]): readonly AutoSong[] =>
   entries.flatMap((entry): AutoSong[] =>
-    entry.source === "stream"
-      ? [{ source: "stream", song: entry.song }]
+    entry.source === "stream" || entry.source === "unsearched"
+      ? [entry]
       : entry.source === "library" && songHasFile(entry.track)
         ? [{ source: "library", track: entry.track }]
         : [],
   );
 
-/** A song as Core's track lists need it. A YT Music entry has no cached cover to show. */
-const toAutoTrack = (song: AutoSong): AutoTrack =>
-  song.source === "library"
-    ? {
+/** A song as Core's track lists need it. A YT Music or unsearched entry has no cached cover to show. */
+const toAutoTrack = (song: AutoSong): AutoTrack => {
+  switch (song.source) {
+    case "library":
+      return {
         id: String(song.track.id),
         title: song.track.title,
         artist: song.track.artist,
         artworkPath: song.track.artworkPath,
-      }
-    : {
+      };
+    case "stream":
+      return {
         id: ytTrackId(song.song.videoId),
         title: song.song.title,
         artist: ytSongArtist(song.song),
         artworkPath: null,
       };
+    case "unsearched":
+      return {
+        id: unsearchedTrackId(song.song),
+        title: song.song.title,
+        artist: joinArtists(song.song.artists),
+        artworkPath: null,
+      };
+  }
+};
 
 /** A song as the queue needs it; a YT Music entry goes with YouTube's cover address. */
 const toAutoQueueTrack = (song: AutoSong): QueueTrack =>
-  song.source === "library" ? toQueueTrack(song.track) : toYtQueueTrack(song.song, null);
+  song.source === "library"
+    ? toQueueTrack(song.track)
+    : song.source === "stream"
+      ? toYtQueueTrack(song.song, null)
+      : toUnsearchedQueueTrack(song.song);
 
 const ytMusicOff = Effect.fail(new AutoError({ message: "YT Music is off in Settings." }));
 

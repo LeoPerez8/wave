@@ -1,14 +1,15 @@
-import type { MixedSong } from "./ytDiscover.ts";
+import type { QueueSong } from "./playlistEntries.ts";
 import type { YtSong } from "./ytMusic.ts";
 
 /**
  * What a page's Play, Shuffle and taps play (Search's song results, an artist's
- * or an album's page): the Library's tracks alone, or the mixed list (the
- * Library's files, the rest streamed).
+ * or an album's page, a playlist): the Library's tracks alone, or the mixed
+ * list (the Library's files, the rest streamed, a playlist's unsearched
+ * songs searched as they're about to play).
  */
 export type PagePlayback<S extends YtSong, L> =
   | { readonly kind: "library"; readonly tracks: readonly L[] }
-  | { readonly kind: "mixed"; readonly songs: readonly MixedSong<S, L>[] };
+  | { readonly kind: "mixed"; readonly songs: readonly QueueSong<S, L>[] };
 
 /** What a list plays once its missing songs are left out, and where it starts. */
 export interface PlayableSongs<T> {
@@ -70,9 +71,9 @@ export const tappedMissingSong = <T>(
  * plays the Library's songs alone, so nothing streams outside an integrated view.
  */
 export const pagePlayback = <S extends YtSong, L>(
-  songs: readonly MixedSong<S, L>[],
+  songs: readonly QueueSong<S, L>[],
 ): PagePlayback<S, L> =>
-  songs.some((song) => song.source === "stream")
+  songs.some((song) => song.source !== "library")
     ? { kind: "mixed", songs }
     : {
         kind: "library",

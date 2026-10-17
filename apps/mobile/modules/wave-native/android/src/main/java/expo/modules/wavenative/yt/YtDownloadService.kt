@@ -10,10 +10,13 @@ import android.content.pm.ServiceInfo
 import android.os.IBinder
 import android.net.wifi.WifiManager
 import android.os.PowerManager
+import android.os.SystemClock
 import expo.modules.wavenative.R
 import expo.modules.wavenative.download.AndroidDownloads
 import expo.modules.wavenative.download.DurableDownloads
 import expo.modules.wavenative.launcher.LauncherIconSwitcher
+import expo.modules.wavenative.log.ServiceTimeout
+import expo.modules.wavenative.log.WaveLog
 import kotlin.concurrent.thread
 
 /**
@@ -28,10 +31,13 @@ class YtDownloadService : Service() {
   private val downloads get() = AndroidDownloads.get(this)
   private var wakeLock: PowerManager.WakeLock? = null
   private var wifiLock: WifiManager.WifiLock? = null
+  /** When it started (elapsed realtime), for the log line if Android ends it on its time limit. */
+  private var startedAt = 0L
   override fun onBind(intent: Intent?): IBinder? = null
 
   override fun onCreate() {
     super.onCreate()
+    startedAt = SystemClock.elapsedRealtime()
     getSystemService(NotificationManager::class.java).createNotificationChannel(
       NotificationChannel(CHANNEL, "Downloads", NotificationManager.IMPORTANCE_LOW).apply {
         description = "Songs being saved to the Library"; setShowBadge(false)
@@ -64,6 +70,7 @@ class YtDownloadService : Service() {
   }
 
   override fun onTimeout(startId: Int, fgsType: Int) {
+    WaveLog.w("WaveDownloads", ServiceTimeout.line("the downloads service", SystemClock.elapsedRealtime() - startedAt))
     downloads.stop(timedOut = true)
     stopForeground(STOP_FOREGROUND_REMOVE)
     stopSelf()
