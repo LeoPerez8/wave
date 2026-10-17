@@ -6,6 +6,7 @@ import { useSharedValue } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 
 import { CELL } from "@/catalog/grid";
+import { useListScrollable } from "@/motion/heldTouch";
 
 import { releaseNowPlaying, sheetOffset } from "./sheet";
 
@@ -25,7 +26,10 @@ export function DismissArea({
   style?: StyleProp<ViewStyle>;
 }) {
   const start = useSharedValue(0);
+  // A long-pressed finger slides onto its menu's entries; it doesn't drag the sheet.
+  const draggable = useListScrollable();
   const pan = usePanGesture({
+    enabled: draggable,
     // Only a drag down claims the touch; up never does.
     activeOffsetY: [-1_000_000, DRAG_SLOP],
     failOffsetX: [-DRAG_SLOP * 2, DRAG_SLOP * 2],
