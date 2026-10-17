@@ -6,6 +6,7 @@ import type {
   YtPlaylist,
   YtPlaylistFirstPage,
   YtPlaylistPage,
+  YtLibraryPlaylist,
   YtSession,
   YtSong,
 } from "@wave/core";
@@ -55,9 +56,12 @@ export interface NativeYtRadioPage {
 
 /**
  * The codes a YT Music request rejects with: no network, YouTube answered
- * with an error or something unreadable, or YT Music is off in Settings.
+ * with an error or something unreadable, YT Music is off in Settings, or a
+ * request that needs the account's session (the library) has none YouTube
+ * accepts.
  */
-export type YtErrorCode = "ERR_YT_OFFLINE" | "ERR_YT_FAILED" | "ERR_YT_DISABLED";
+export type YtErrorCode =
+  "ERR_YT_OFFLINE" | "ERR_YT_FAILED" | "ERR_YT_DISABLED" | "ERR_YT_SIGNED_OUT";
 
 type WaveYtMusicEvents = {
   /** The session changed natively: YouTube ended it during a request, say. */
@@ -84,6 +88,12 @@ declare class WaveYtMusicModule extends NativeModule<WaveYtMusicEvents> {
   playlist(playlistId: string): Promise<NativeYtPlaylistPage>;
   /** The playlist page a first page's (or a later page's) [continuation] leads to. */
   playlistMore(continuation: string): Promise<NativeYtPlaylistMore>;
+  /**
+   * The playlists in the signed-in account's library (`FEmusic_liked_playlists`,
+   * every page), in YouTube Music's order. Rejects with `ERR_YT_SIGNED_OUT`
+   * signed out, or when YouTube no longer accepts the session (which then expires).
+   */
+  libraryPlaylists(): Promise<readonly YtLibraryPlaylist[]>;
   /** The first page of the radio YouTube Music plays after the song [videoId] (it first). */
   songRadio(videoId: string): Promise<NativeYtRadioPage>;
   /** The first page of the radio of the artist whose page is [browseId] (`UC…`). */
@@ -119,5 +129,7 @@ export const WaveYtMusic = requireNativeModule<WaveYtMusicModule>("WaveYtMusic")
 /** The reason a YT Music request failed, from its rejection. */
 export const ytErrorCode = (error: unknown): YtErrorCode => {
   const code = (error as { code?: unknown } | null)?.code;
-  return code === "ERR_YT_OFFLINE" || code === "ERR_YT_DISABLED" ? code : "ERR_YT_FAILED";
+  return code === "ERR_YT_OFFLINE" || code === "ERR_YT_DISABLED" || code === "ERR_YT_SIGNED_OUT"
+    ? code
+    : "ERR_YT_FAILED";
 };

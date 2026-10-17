@@ -84,14 +84,15 @@ registerPerfMeta("playlistWork", () =>
 /**
  * Imports [plan] into the playlist Import just made, [playlistId] named
  * [name]: every song goes in at once. Replaces an import into that playlist.
+ * Resolves once the playlist has its songs (a failure is shown, not thrown).
  */
 export const startLinkImport = (
   plan: LinkImportPlan<YtAlbumSong>,
   { playlistId, name }: { readonly playlistId: number; readonly name: string },
-): void => {
+): Promise<void> => {
   const job = startPlaylistImport(plan, { playlistId, name });
   imports.set(queuePlaylistImport(imports.get(), job));
-  void finish(job, false);
+  return finish(job, false);
 };
 
 /**

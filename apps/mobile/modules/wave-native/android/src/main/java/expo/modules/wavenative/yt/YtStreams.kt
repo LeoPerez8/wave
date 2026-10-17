@@ -89,6 +89,8 @@ enum class YtStreamFailure(val code: String) {
         YtFailure.OFFLINE -> OFFLINE
         YtFailure.DISABLED -> DISABLED
         YtFailure.FAILED -> if (resolveReason in UNSERVED) UNAVAILABLE else FAILED
+        // Streams never need the session; kept for completeness.
+        YtFailure.SIGNED_OUT -> FAILED
       }
 
     /** The code carried by an error [message], or null when it isn't a stream failure. */

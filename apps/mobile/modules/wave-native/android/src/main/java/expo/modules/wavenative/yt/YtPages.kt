@@ -82,8 +82,32 @@ class YtPages(private val client: YtClient) {
     return YtRadioParser.page(body) ?: throw IllegalStateException("Not a radio: $playlistId")
   }
 
+  /**
+   * The playlists in the signed-in account's library, page after page, in
+   * YouTube Music's order ([YtLibraryParser]). Needs the session: signed out,
+   * or with one YouTube stopped accepting (a 401 expires it; an answer as to
+   * someone signed out expires it here), it fails with [YtFailure.SIGNED_OUT].
+   */
+  suspend fun libraryPlaylists(): List<YtLibraryPlaylist> = client.request {
+    val session = client.session.state as? YtSessionState.SignedIn
+      ?: throw YtException(YtFailure.SIGNED_OUT)
+    val read = YtLibraryParser.read(
+      first = { client.innerTube.browse(YouTubeClient.WEB_REMIX, LIBRARY_PLAYLISTS).bodyAsText() },
+    ) { token -> client.innerTube.browse(YouTubeClient.WEB_REMIX, continuation = token).bodyAsText() }
+    when (read) {
+      is YtLibraryRead.Playlists -> read.playlists
+      YtLibraryRead.SignedOut -> {
+        client.session.checked(session.credentials, YtAccountMenu.SignedOut)
+        throw YtException(YtFailure.SIGNED_OUT)
+      }
+    }
+  }
+
   private companion object {
     /** What YouTube Music's own Start radio sends with a radio's `next`. */
     const val RADIO_PARAMS = "wAEB"
+
+    /** The account's library page of playlists. */
+    const val LIBRARY_PLAYLISTS = "FEmusic_liked_playlists"
   }
 }
