@@ -7,9 +7,13 @@ Pick tickets whose blockers are closed.
 ## Conventions
 
 - Everything in English: UI copy, code, docs, issues, PRs, commits.
-- One PR per ticket, branch `feat/<issue>-<slug>` (`fix/<issue>-<slug>` for a bug fix), PR body
-  says `Closes #<issue>`. The PR title is the release's patch-note line: one line a user
-  understands, saying what changed for them.
+- Start work from the latest `main`, on a branch `feat/<issue>-<slug>` (`fix/<issue>-<slug>`
+  for a bug fix), and land it on `ti` through a PR. A PR can carry several tickets; its body
+  has a `Closes #<issue>` line for each. The PR title is the release's patch-note line: one
+  line a user understands, saying what changed for them. Merge the PR without waiting for its
+  checks (wait only for CI's lockfile autofix when a `package.json` changed); the push run on
+  `ti` is the build that counts. GitHub only closes issues from merges into `main`, so close
+  each ticket by hand with a comment naming the PR.
 - Day-to-day test builds target `ti`. Its version in `apps/mobile/app.config.ts` ends in
   `-ti` (for example `0.5.1-ti`). Merging a version bump publishes it: the push to `ti`
   tags `v0.5.1-ti` and publishes the prerelease, so don't tag by hand. Compatible ti pushes
