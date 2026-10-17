@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Prints the patch notes of a release cut from <ref> (default HEAD): the PRs merged since
-# the previous version's tag, as patch-notes.ts sorts them into New and Fixes. With no
-# previous version tag (0.5.0, the first), they're the hand-written
-# docs/first-release-notes.md. Prints nothing when no PR is worth listing.
+# its channel's previous version tag (previous-tag.sh; ti's with IS_TI=true), as
+# patch-notes.ts sorts them into New and Fixes. With no previous version tag (0.5.0, the
+# first), they're the hand-written docs/first-release-notes.md. Prints nothing when no PR
+# is worth listing.
 # Needs the whole history and its tags (actions/checkout with fetch-depth: 0).
 #   scripts/ci/patch-notes.sh [<ref>]
 # Env: GH_TOKEN, GITHUB_REPOSITORY, PATCH_NOTES_SINCE (optional: count from this ref
@@ -15,18 +16,9 @@ repo="${GITHUB_REPOSITORY:?}"
 
 since="${PATCH_NOTES_SINCE:-}"
 if [ -z "$since" ]; then
-  # The newest version tag in <ref>'s history, leaving out <ref>'s own tag.
-  own="$(git tag --points-at "$head" --list 'v[0-9]*')"
-  versions="$(git tag --merged "$head" --list 'v[0-9]*' --sort=-v:refname \
-    | { grep -vxF -e "$own" || true; })"
-  if [ "${IS_TI:-false}" = "true" ]; then
-    since="$(printf '%s\n' "$versions" | { grep -E '^v[0-9]+\.[0-9]+\.[0-9]+-ti$' || true; } | head -n 1)"
-  fi
-  # The first ti release starts at the last stable version; stable notes never
-  # treat a ti prerelease as their previous stable version.
-  if [ -z "$since" ]; then
-    since="$(printf '%s\n' "$versions" | { grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true; } | head -n 1)"
-  fi
+  channel=main
+  if [ "${IS_TI:-false}" = "true" ]; then channel=ti; fi
+  since="$("$here/previous-tag.sh" "$head" "$channel")"
 fi
 if [ -z "$since" ]; then
   cat "$here/../../docs/first-release-notes.md"
