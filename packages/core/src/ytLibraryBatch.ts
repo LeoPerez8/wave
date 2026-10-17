@@ -25,12 +25,16 @@ export interface YtLibraryRead {
 /** The batch, in the order its playlists are read. */
 export type YtLibraryBatch = readonly YtLibraryRead[];
 
-/** [batch] with [reads] (the playlists an Import just made, in its order) waiting after it. */
+/**
+ * [batch] with [reads] (the playlists an Import just made or refreshed, in
+ * its order) waiting after it. A refreshed playlist still in the batch,
+ * waiting or failed, leaves its old place: it's read once, in the new order.
+ */
 export const queueYtLibraryReads = (
   batch: YtLibraryBatch,
   reads: readonly Omit<YtLibraryRead, "state">[],
 ): YtLibraryBatch => [
-  ...batch,
+  ...batch.filter((queued) => !reads.some((read) => read.playlistId === queued.playlistId)),
   ...reads.map(({ source, playlistId, name, capped }) => ({
     source,
     playlistId,

@@ -155,3 +155,23 @@ describe("a playlist deleted meanwhile", () => {
     assert.deepEqual(pruneYtLibraryBatch(batch, []), []);
   });
 });
+
+describe("a playlist refreshed while still in the batch", () => {
+  test("is read once, in the new Import's order, waiting again even if its read had failed", () => {
+    const gymFailed = ytLibraryReadFailed(imported, 42);
+    const refreshed = queueYtLibraryReads(gymFailed, [
+      { source: "PLnew", playlistId: 50, name: "New", capped: true },
+      { source: "PLgym", playlistId: 42, name: "Gym 2", capped: true },
+    ]);
+    assert.deepEqual(
+      refreshed.map((read) => [read.source, read.state]),
+      [
+        ["PLroad", "waiting"],
+        ["RDCLAK5uy_chill", "waiting"],
+        ["PLnew", "waiting"],
+        ["PLgym", "waiting"],
+      ],
+    );
+    assert.equal(ytLibraryReadView(refreshed, 42), null);
+  });
+});
