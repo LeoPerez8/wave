@@ -136,6 +136,8 @@ function PickerSheet({ onClosed }: { onClosed: () => void }) {
   const offset = useSharedValue(height);
   const start = useSharedValue(0);
   const leaving = useRef(false);
+  /** [leaving] for the drag's worklets: once the sheet is closing, a drag no longer moves it. */
+  const closing = useSharedValue(false);
 
   const [attempt, setAttempt] = useState(0);
   const [answer, setAnswer] = useState<{ readonly attempt: number; readonly read: LibraryRead }>();
@@ -155,27 +157,33 @@ function PickerSheet({ onClosed }: { onClosed: () => void }) {
     };
   }, [attempt]);
 
-  /** Slides the sheet away, then runs [then] (Import) once it has gone. */
+  /**
+   * Slides the sheet away, then runs [then] (Import) once it has gone. A drag
+   * can't take the sheet back while it closes, and a spring cut short all the
+   * same still closes it, so the sheet never stays part-open.
+   */
   const leave = useCallback(
     (then?: () => void) => {
       if (leaving.current) return;
       leaving.current = true;
+      closing.set(true);
       const gone = () => {
         onClosed();
         then?.();
       };
       offset.set(
-        withSpring(height, SPRING, (finished) => {
-          if (finished === true) scheduleOnRN(gone);
+        withSpring(height, SPRING, () => {
+          scheduleOnRN(gone);
         }),
       );
     },
-    [height, offset, onClosed],
+    [closing, height, offset, onClosed],
   );
 
   /** A drag down let go [at] dp below open: dismiss the sheet, importing nothing, or spring back. */
   const release = useCallback(
     (at: number, velocity: number) => {
+      if (leaving.current) return;
       if (settleSheet({ from: "open", offset: at, velocity, height }) === "closed") leave();
       else offset.set(withSpring(0, { ...SPRING, velocity }));
     },
@@ -191,6 +199,7 @@ function PickerSheet({ onClosed }: { onClosed: () => void }) {
     },
     onUpdate: (event) => {
       "worklet";
+      if (closing.get()) return;
       offset.set(Math.max(0, start.get() + event.translationY));
     },
     onDeactivate: (event) => {
