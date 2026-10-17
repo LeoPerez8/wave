@@ -9,6 +9,7 @@ import {
   type PlayContext,
   type PlaylistSong,
   type UnavailableSong,
+  type UnsearchedSong,
   type YtAlbumSong,
 } from "@wave/core";
 import { eq, sql } from "drizzle-orm";
@@ -36,6 +37,7 @@ import {
   selectPlaylistTotals,
   selectTrackPaths,
   settleTryAgain,
+  settleUnsearchedEntries,
 } from "./playlists.ts";
 import { playlistWork, resetPlaylistWork } from "./playlistWork.ts";
 import { saveBatch } from "./save.ts";
@@ -124,7 +126,7 @@ const titlesOf = (
       ? entry.track.title
       : entry.source === "stream"
         ? `yt:${entry.song.title}`
-        : `unavailable:${entry.song.title}`,
+        : `${entry.source}:${entry.song.title}`,
   );
 
 const titles = (page?: { offset: number; limit: number }) => titlesOf(playlistId, page);
@@ -624,6 +626,118 @@ describe("unavailable entries", () => {
         .toSorted(),
       ["false", "true"],
     );
+  });
+});
+
+describe("unsearched entries", () => {
+  const listedSong = (title: string, fields: Partial<UnsearchedSong> = {}): UnsearchedSong => ({
+    title,
+    artists: ["Radiohead"],
+    album: "OK Computer",
+    durationMs: 180_000,
+    artworkUrl: `https://i.scdn.co/image/${title}`,
+    ...fields,
+  });
+  const unsearched = (title: string, fields: Partial<UnsearchedSong> = {}): PlaylistSong => ({
+    source: "unsearched",
+    song: listedSong(title, fields),
+  });
+
+  test("go in their place among the others, with what Spotify listed", () => {
+    const lucky = unsearched("Lucky");
+    appendPlaylistSongs(db, playlistId, [lucky, library("Bloom")], 0);
+    assert.deepEqual(titles().slice(4), ["unsearched:Lucky", "Bloom"]);
+    const entry = selectPlaylistEntries(db, playlistId)[4];
+    assert.deepEqual(entry, { itemId: entry?.itemId, ...lucky });
+  });
+
+  test("one the playlist holds isn't put in again, so a copy goes in once", () => {
+    appendPlaylistSongs(db, playlistId, [unsearched("Lucky")], 0);
+    const again = appendPlaylistSongs(
+      db,
+      playlistId,
+      [unsearched("Lucky"), unsearched("Lucky", { durationMs: 1000 })],
+      0,
+    );
+    assert.deepEqual(again, { added: 1, alreadyIn: 1 });
+  });
+
+  test("count as songs, never as unavailable, and Android Auto lists them", () => {
+    appendPlaylistSongs(
+      db,
+      playlistId,
+      [unsearched("Lucky", { durationMs: 60_000 }), unavailable("Within")],
+      0,
+    );
+    const totals = { trackCount: 6, durationMs: 5 * 180_000 + 60_000, unavailableCount: 1 };
+    assert.deepEqual(selectPlaylistTotals(db).get(playlistId), totals);
+    const page = selectPlaylist(db, playlistId)?.playlist;
+    assert.deepEqual([page?.trackCount, page?.unavailableCount], [6, 1]);
+    assert.deepEqual(titlesOf(playlistId, undefined, "files").slice(4), ["unsearched:Lucky"]);
+  });
+
+  test("their Spotify cover is in the playlist's mosaic", () => {
+    const other = newPlaylist("Imported");
+    appendPlaylistSongs(db, other, [unsearched("Lucky")], 0);
+    assert.deepEqual(selectPlaylistCovers(db, other).get(other)?.thumbPaths, [
+      "https://i.scdn.co/image/Lucky",
+    ]);
+  });
+
+  test("found, it becomes the YT Music song in every playlist holding it; one holding that song loses it", () => {
+    const other = newPlaylist("Other");
+    const third = newPlaylist("Third");
+    const lucky = yt("lucky", { title: "Lucky" });
+    appendPlaylistSongs(db, playlistId, [unsearched("Lucky"), library("Bloom")], 0);
+    appendPlaylistSongs(db, other, [unsearched("Lucky")], 0);
+    appendPlaylistSongs(db, third, [stream(lucky), unsearched("Lucky")], 0);
+    const settled = settleUnsearchedEntries(db, listedSong("Lucky"), stream(lucky), 1_000);
+    assert.deepEqual(settled, {
+      rewritten: 2,
+      removed: 1,
+      playlistIds: [playlistId, other, third],
+    });
+    assert.deepEqual(titles().slice(4), ["yt:Lucky", "Bloom"]);
+    assert.deepEqual(titlesOf(other), ["yt:Lucky"]);
+    assert.deepEqual(titlesOf(third), ["yt:Lucky"]);
+    // Stamped for the Wave account, so the other phones settle it too.
+    assert.deepEqual(
+      changedEntries(999)
+        .map(([, deleted]) => String(deleted))
+        .toSorted(),
+      ["false", "false", "true"],
+    );
+  });
+
+  test("not found, it's unavailable in its place; a song listed otherwise is left alone", () => {
+    appendPlaylistSongs(
+      db,
+      playlistId,
+      [unsearched("Lucky"), unsearched("Lucky", { album: "Live" })],
+      0,
+    );
+    // Settled by what the queue knows of it, which keeps no cover: each entry keeps its own.
+    const known = listedSong("Lucky", { artworkUrl: null });
+    const becomes: PlaylistSong = { source: "unavailable", song: { ...known, reason: "notFound" } };
+    assert.deepEqual(settleUnsearchedEntries(db, known, becomes, 1_000), {
+      rewritten: 1,
+      removed: 0,
+      playlistIds: [playlistId],
+    });
+    assert.deepEqual(titles().slice(4), ["unavailable:Lucky", "unsearched:Lucky"]);
+    const entry = selectPlaylistEntries(db, playlistId)[4];
+    assert.deepEqual(entry?.source === "unavailable" && entry.song, {
+      ...listedSong("Lucky"),
+      reason: "notFound",
+    });
+    assert.equal(selectPlaylist(db, playlistId)?.playlist.unavailableCount, 1);
+  });
+
+  test("one the Library gains becomes that song in its place", () => {
+    appendPlaylistSongs(db, playlistId, [unsearched("Lucky")], 0);
+    const luckyId = addTrack(db, { title: "Lucky", artist: "Radiohead", durationMs: 181_000 });
+    assert.equal(linkPlaylistEntries(db, 0, [luckyId]), 1);
+    assert.equal(titles().at(-1), "Lucky");
   });
 });
 

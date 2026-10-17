@@ -1,7 +1,7 @@
 /**
  * The YouTube Music search allowance every automatic search shares
- * (docs/spec.md, YT Music, "Search allowance"): a link import's searches, a
- * download's, Discover mixes'. Core decides who goes next and what the log
+ * (docs/spec.md, YT Music, "Search allowance"): an unsearched song's as it's
+ * about to play, a download's, Try Again's, Discover mixes'. Core decides who goes next and what the log
  * says about a wait (`searchTurns`, `searchWaitLine`); this keeps the
  * allowance, wakes the searches whose turn came, and logs waits and failed
  * searches. A search typed in Search doesn't come here.
@@ -16,7 +16,6 @@ import {
   writeSearchAllowance,
   type SearchAllowance,
   type SearchAsker,
-  type SearchWait,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 
@@ -49,7 +48,6 @@ let lastId = 0;
 /** The searches waiting, by id: each resolves true once its turn comes. */
 const turns = new Map<number, (granted: boolean) => void>();
 let timer: ReturnType<typeof setTimeout> | undefined;
-const waitListeners = new Set<(wait: SearchWait) => void>();
 
 /** Gives the waiting searches whose turn it is theirs, logs waits started or ended, and sleeps until the next. */
 const decide = (): void => {
@@ -59,10 +57,7 @@ const decide = (): void => {
   const decided = searchTurns(current(), now);
   allowance = decided.allowance;
   if (decided.go.length > 0) kept.set(decided.allowance);
-  for (const wait of decided.waits) {
-    appLog("info", TAG, searchWaitLine(wait));
-    for (const listener of waitListeners) listener(wait);
-  }
+  for (const wait of decided.waits) appLog("info", TAG, searchWaitLine(wait));
   for (const id of decided.go) {
     turns.get(id)?.(true);
     turns.delete(id);
@@ -94,15 +89,6 @@ export const searchTurn = (asker: SearchAsker, signal?: AbortSignal): Promise<bo
     decide();
   });
 };
-
-/** Hears each wait for the allowance that starts or ends (an import adds up its own). */
-export const onSearchWait = (listener: (wait: SearchWait) => void): (() => void) => {
-  waitListeners.add(listener);
-  return () => waitListeners.delete(listener);
-};
-
-/** The searches asked lately, for an import's time left. */
-export const searchesAsked = (): SearchAllowance => current();
 
 /** Notes in the app log that [asker]'s search [query] failed ([reason]); native code logs what it saw. */
 export const logSearchFailure = (

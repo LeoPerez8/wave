@@ -447,13 +447,13 @@ export const SCENARIOS: readonly Scenario[] = [
   {
     name: "import",
     summary:
-      "Share the fixture playlist link, tap Import, then watch ten seconds of the import filling.",
+      "Share the fixture playlist link, tap Import until the playlist has every song, then watch ten seconds after.",
     steps: () => [
       { measure: "card", action: { kind: "share" } },
       {
         measure: "start",
         action: { kind: "tap", target: { text: "Import" } },
-        expect: { mark: "import.running" },
+        expect: { mark: "import.done" },
       },
       { measure: "during-import", action: { kind: "idle" }, windowMs: 10_000 },
     ],

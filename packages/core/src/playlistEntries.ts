@@ -40,17 +40,90 @@ export interface UnavailableEntry {
 }
 
 /**
+ * A song a Spotify import listed that nothing has searched on YouTube Music
+ * yet, as Spotify listed it: it plays, queues and joins playlists as a YT
+ * Music entry does, and a search settles it (`settleUnsearched`).
+ */
+export type UnsearchedSong = Pick<
+  YtSong,
+  "title" | "artists" | "album" | "durationMs" | "artworkUrl"
+>;
+
+/** A playlist's unsearched entry: a song a Spotify import listed, not searched yet. */
+export interface UnsearchedEntry {
+  readonly source: "unsearched";
+  readonly song: UnsearchedSong;
+}
+
+/**
  * A song a playlist holds, or is given: a Library track, a YT Music song
- * streamed, or a song an import couldn't find (unavailable).
+ * streamed, a song an import listed that nothing searched yet (unsearched),
+ * or a song an import couldn't find (unavailable).
  */
 export type PlaylistSong<S extends YtSong = YtSong> =
   | { readonly source: "library"; readonly trackId: number }
   | { readonly source: "stream"; readonly song: S }
+  | UnsearchedEntry
   | UnavailableEntry;
 
-/** A playlist's entry as its page lists it: a Library track, a YT Music song, or an unavailable song. */
+/**
+ * A song that plays and queues: a Library track, a YT Music song streamed,
+ * or an unsearched one, searched as it's about to play.
+ */
+export type QueueSong<S extends YtSong = YtSong, L = unknown> = MixedSong<S, L> | UnsearchedEntry;
+
+/**
+ * A playlist's entry as its page lists it: a Library track, a YT Music song,
+ * an unsearched song, or an unavailable song.
+ */
 export type PlaylistItem<S extends YtSong = YtSong, L = unknown> =
-  MixedSong<S, L> | UnavailableEntry;
+  QueueSong<S, L> | UnavailableEntry;
+
+/** The prefix of the id an unsearched song goes by in the queue. */
+const UNSEARCHED_PREFIX = "unsearched:";
+
+/**
+ * The id an unsearched song goes by in the queue and in a playlist: what
+ * Spotify listed of it (title, artists, album and length), so the id alone
+ * says what to search, and it never meets a Library id or a `yt:` one.
+ */
+export const unsearchedTrackId = ({ title, artists, album, durationMs }: UnsearchedSong): string =>
+  `${UNSEARCHED_PREFIX}${JSON.stringify([title, artists, album, durationMs])}`;
+
+/** Whether [trackId] is an unsearched song's (`unsearchedTrackId`). */
+export const isUnsearchedTrackId = (trackId: string): boolean =>
+  trackId.startsWith(UNSEARCHED_PREFIX);
+
+/**
+ * The song an unsearched id stands for (`unsearchedTrackId`), without its
+ * cover, which the id doesn't keep; null for any other id.
+ */
+export const readUnsearchedTrackId = (trackId: string): UnsearchedSong | null => {
+  if (!isUnsearchedTrackId(trackId)) return null;
+  let value: unknown;
+  try {
+    value = JSON.parse(trackId.slice(UNSEARCHED_PREFIX.length));
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(value) || value.length !== 4) return null;
+  const [title, artists, album, durationMs] = value as unknown[];
+  return readListedSong({ title, artists, album, durationMs, artworkUrl: null });
+};
+
+/** The id [song] goes by in the queue: its Library track's, its YT Music id, or its unsearched id. */
+export const queueSongTrackId = <S extends YtSong>(
+  song: QueueSong<S, { readonly id: number }>,
+): string => {
+  switch (song.source) {
+    case "library":
+      return String(song.track.id);
+    case "stream":
+      return ytTrackId(song.song.videoId);
+    case "unsearched":
+      return unsearchedTrackId(song.song);
+  }
+};
 
 /**
  * What tells a playlist's songs apart: the id the song goes by in the queue
@@ -63,6 +136,8 @@ export const playlistSongKey = (song: PlaylistSong): string => {
       return String(song.trackId);
     case "stream":
       return ytTrackId(song.song.videoId);
+    case "unsearched":
+      return unsearchedTrackId(song.song);
     case "unavailable": {
       const { title, artists, album, durationMs } = song.song;
       return `unavailable:${JSON.stringify([title, artists, album, durationMs])}`;
@@ -101,18 +176,19 @@ export interface PlaylistPlay<S extends YtSong, L> {
 }
 
 /** Whether [entry] can play: anything but an unavailable song. */
-const playable = <S extends YtSong, L>(entry: PlaylistItem<S, L>): entry is MixedSong<S, L> =>
+const playable = <S extends YtSong, L>(entry: PlaylistItem<S, L>): entry is QueueSong<S, L> =>
   entry.source !== "unavailable";
 
 /**
  * What a playlist holding [entries] plays, from the entry at [startIndex] when
  * one was tapped. Unavailable entries never play: Play, Shuffle and a tap
  * skip them, and a tapped one plays nothing (null). With YT Music on, a
- * playlist with YT Music entries is an integrated view: the whole list, the
- * Library's files and the rest streamed (Core's `pagePlayback`). With it off,
- * the YT Music entries show but don't play: Play plays the Library's songs, a
- * tapped Library song plays them from itself, and a tapped YT Music entry
- * plays nothing (null), as does a playlist with no Library songs.
+ * playlist with YT Music or unsearched entries is an integrated view: the
+ * whole list, the Library's files and the rest streamed, an unsearched song
+ * searched as it's about to play (Core's `pagePlayback`). With it off, those
+ * entries show but don't play: Play plays the Library's songs, a tapped
+ * Library song plays them from itself, and a tapped YT Music or unsearched
+ * entry plays nothing (null), as does a playlist with no Library songs.
  */
 export const playlistPlayback = <S extends YtSong, L>(
   listed: readonly PlaylistItem<S, L>[],
@@ -274,26 +350,38 @@ const UNAVAILABLE_REASONS: readonly string[] = [
 
 /**
  * What a playlist stores of a song that isn't a Library track (`yt_song`):
- * a YT Music song (`writePlaylistYtSong`), or an unavailable one, marked by
- * why, with what its source listed and no video id, so a version of Wave
- * that reads only YT Music entries reads it as nothing.
+ * a YT Music song (`writePlaylistYtSong`), an unsearched one (marked
+ * unsearched) or an unavailable one (marked by why), the last two with what
+ * their source listed and no video id. So a version of Wave that reads only
+ * YT Music entries reads either as nothing, and one that reads unavailable
+ * entries too reads an unsearched one as nothing.
  */
 export const writePlaylistEntrySong = (
   song: Exclude<PlaylistSong<YtSong & { readonly albumId?: string | null }>, { source: "library" }>,
 ): string => {
   if (song.source === "stream") return writePlaylistYtSong(song.song);
+  if (song.source === "unsearched") {
+    const { title, artists, album, durationMs, artworkUrl } = song.song;
+    return JSON.stringify({ unsearched: true, title, artists, album, durationMs, artworkUrl });
+  }
   const { title, artists, album, durationMs, artworkUrl, reason } = song.song;
   return JSON.stringify({ unavailable: reason, title, artists, album, durationMs, artworkUrl });
 };
 
+/** A song a playlist stores in `yt_song`: a YT Music song, an unsearched one, or an unavailable one. */
+export type StoredPlaylistSong =
+  { readonly source: "stream"; readonly song: YtAlbumSong } | UnsearchedEntry | UnavailableEntry;
+
 /** The song stored as [stored] (`writePlaylistEntrySong`), or null when nothing readable is. */
-export const readPlaylistEntrySong = (
-  stored: string,
-): { readonly source: "stream"; readonly song: YtAlbumSong } | UnavailableEntry | null => {
+export const readPlaylistEntrySong = (stored: string): StoredPlaylistSong | null => {
   const song = readPlaylistYtSong(stored);
   if (song !== null) return { source: "stream", song };
   const value = parseStoredObject(stored);
   if (value === null) return null;
+  if (value["unsearched"] === true) {
+    const listed = readListedSong(value);
+    return listed === null ? null : { source: "unsearched", song: listed };
+  }
   const { unavailable } = value;
   if (typeof unavailable !== "string" || !UNAVAILABLE_REASONS.includes(unavailable)) return null;
   const listed = readListedSong(value);

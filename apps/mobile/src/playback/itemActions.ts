@@ -51,6 +51,7 @@ import {
   toPlaylistSongs,
   hasStreamedSongs,
   isLibraryTrack,
+  isUnsearchedTrack,
   type ActionItems,
   type TargetEntry,
 } from "./actionTargets";
@@ -338,6 +339,8 @@ export function useItemActions(
         return run(() => {
           const missing: number[] = [];
           for (const item of allTracks) {
+            // An unsearched song has no video to download yet.
+            if (isUnsearchedTrack(item)) continue;
             const song = isLibraryTrack(item) ? item.song : find(item.ytSong);
             if (song === null && !isLibraryTrack(item)) downloadYtSong(item.ytSong);
             else if (song !== null && !songHasFile(song)) missing.push(song.id);

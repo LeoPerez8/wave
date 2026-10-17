@@ -2,33 +2,19 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
-  IMPORT_PROGRESS_SHOWN_EVERY_MS,
-  SPOTIFY_SEARCHES_AT_ONCE,
-  importAdded,
-  importAdditions,
+  finishPlaylistImport,
   importLogLine,
-  importProgressOnly,
-  importSearchAnswered,
-  importTurn,
-  nextImportStep,
   planLinkImport,
-  playlistImportProgress,
   playlistImportView,
   queuePlaylistImport,
   readPlaylistImports,
-  retryPlaylistImport,
   startPlaylistImport,
   updatePlaylistImport,
   withoutPlaylistImport,
   writePlaylistImports,
-  readSearchAllowance,
-  searchTurnWanted,
-  searchTurns,
-  writeSearchAllowance,
-  NO_SEARCHES,
+  writePlaylistYtSong,
   type PlaylistImport,
   type PlaylistImports,
-  type SearchAllowance,
   type SpotifySong,
   type YtSong,
 } from "./index.ts";
@@ -51,6 +37,12 @@ const spotify = (title: string, fields: Partial<SpotifySong> = {}): SpotifySong 
   durationMs: 369_000,
   ...fields,
 });
+
+/** [song] as it goes into the playlist when nothing has searched it: unsearched, in its place. */
+const unsearched = (song: SpotifySong | undefined) => {
+  assert.ok(song);
+  return { source: "unsearched", song: { artworkUrl: null, ...song } };
+};
 
 /** [song] as it goes into the playlist when it isn't found: unavailable, in its place. */
 const unavailable = (
@@ -84,10 +76,13 @@ const spotifyPlaylist = (
   playlist: { title, artworkUrl: null, songs, truncated: false, total },
 });
 
-/** Hands over everything settled, as the app does, and gives back what was added. */
-const handOver = <S extends YtSong>(job: PlaylistImport<S>) => {
-  const { songs, through } = importAdditions(job);
-  return { job: importAdded(job, through), songs };
+/** Imports [listed] from Spotify into playlist 7: what the playlist is given, and the import once done. */
+const importSpotify = (listed: readonly SpotifySong[], total = listed.length) => {
+  const plan = planLinkImport(spotifyPlaylist(listed, "Late Night", total), library);
+  const { songs, job } = finishPlaylistImport(
+    startPlaylistImport(plan, { playlistId: 7, name: "Late Night" }),
+  );
+  return { plan, given: songs, job };
 };
 
 describe("a YouTube Music playlist import", () => {
@@ -101,14 +96,14 @@ describe("a YouTube Music playlist import", () => {
       library,
     );
     const job = startPlaylistImport(plan, { playlistId: 7, name: "Late Night" });
-    const { songs, job: after } = handOver(job);
+    const { songs, job: after } = finishPlaylistImport(job);
     assert.deepEqual(songs, [
       { source: "library", trackId: 1 },
       { source: "stream", song: yt("b", "Within", { durationMs: 228_000 }) },
       { source: "library", trackId: 2 },
     ]);
     assert.equal(after.state.kind, "done");
-    assert.deepEqual(importAdditions(after).songs, []);
+    assert.deepEqual(finishPlaylistImport(after).songs, []);
   });
 
   test("a song that comes twice, or two that are one Library song, goes in once", () => {
@@ -121,7 +116,9 @@ describe("a YouTube Music playlist import", () => {
       ]),
       library,
     );
-    const { songs } = handOver(startPlaylistImport(plan, { playlistId: 7, name: "Late Night" }));
+    const { songs } = finishPlaylistImport(
+      startPlaylistImport(plan, { playlistId: 7, name: "Late Night" }),
+    );
     assert.deepEqual(songs, [
       { source: "library", trackId: 2 },
       { source: "stream", song: yt("b", "Within") },
@@ -155,6 +152,65 @@ describe("a YouTube Music playlist import", () => {
   });
 });
 
+describe("a Spotify playlist import", () => {
+  const songs = [
+    spotify("Giorgio by Moroder", { durationMs: 544_000 }),
+    spotify("Within", { durationMs: 228_000, artworkUrl: "https://i.scdn.co/image/within" }),
+    spotify("Instant Crush", { artists: ["Daft Punk", "Julian Casablancas"], durationMs: 337_000 }),
+    spotify("Untitled", { artists: [] }),
+    spotify("Within", { durationMs: 228_000, artworkUrl: "https://i.scdn.co/image/within" }),
+    spotify("Touch", { durationMs: 498_000 }),
+  ];
+
+  test("makes the playlist whole at once: the Library's songs as its own, the others unsearched", () => {
+    const { given, job } = importSpotify(songs);
+    assert.deepEqual(given, [
+      { source: "library", trackId: 1 },
+      unsearched(songs[1]),
+      unsearched(songs[2]),
+      unavailable(songs[3], "localFile"),
+      { source: "library", trackId: 2 },
+    ]);
+    assert.equal(job.state.kind, "done");
+  });
+
+  test("an unsearched song keeps what Spotify listed, its cover included", () => {
+    const [, within] = importSpotify(songs).given;
+    assert.deepEqual(within, {
+      source: "unsearched",
+      song: {
+        title: "Within",
+        artists: ["Daft Punk"],
+        album: "Random Access Memories",
+        durationMs: 228_000,
+        artworkUrl: "https://i.scdn.co/image/within",
+      },
+    });
+  });
+
+  test("the plan says where each song goes, before anything is searched", () => {
+    const plan = planLinkImport(spotifyPlaylist(songs), library);
+    assert.deepEqual(plan.finds, [
+      { kind: "library", trackId: 1 },
+      { kind: "unsearched" },
+      { kind: "unsearched" },
+      { kind: "notFound" },
+      { kind: "library", trackId: 2 },
+    ]);
+    assert.equal(plan.inLibrary, 2);
+  });
+
+  test("a large playlist goes in whole, each song listed twice once", () => {
+    const listed = Array.from({ length: 2451 }, (_, index) =>
+      spotify(`Song ${index % 2430}`, { durationMs: 200_000 + (index % 2430) }),
+    );
+    const { given, job, plan } = importSpotify(listed);
+    assert.equal(given.length, 2430);
+    assert.equal(plan.leftOut.length, 21);
+    assert.equal(playlistImportView([job], 7)?.line, "21 songs were listed twice");
+  });
+});
+
 describe("a Spotify playlist listing a song more than once", () => {
   test("counts it once, and imports it once", () => {
     const plan = planLinkImport(
@@ -175,12 +231,6 @@ describe("a Spotify playlist listing a song more than once", () => {
       ["Touch", "Within", "Untitled", "Within (Live)"],
     );
     assert.equal(plan.inLibrary, 1);
-    assert.deepEqual(plan.finds, [
-      { kind: "library", trackId: 2 },
-      null,
-      { kind: "notFound" },
-      null,
-    ]);
   });
 
   test("names each song listed twice, so the songs imported and those add up to Spotify's count", () => {
@@ -225,552 +275,30 @@ describe("a Spotify playlist listing a song more than once", () => {
   });
 });
 
-/** Takes every search the import asks now, until it waits for answers. */
-const askAll = <S extends YtSong>(job: PlaylistImport<S>, now = 0) => {
-  const asked: string[] = [];
-  let current = job;
-  for (;;) {
-    const next = nextImportStep(current, now);
-    current = next.job;
-    if (next.step.kind !== "search") return { job: current, asked, step: next.step };
-    asked.push(next.step.query);
-  }
-};
-
-const QUERIES = [
-  "Within Daft Punk",
-  "Instant Crush Daft Punk Julian Casablancas",
-  "Lose Yourself to Dance Daft Punk",
-  "Doin' it Right Daft Punk",
-];
-
-describe("a Spotify playlist import", () => {
-  const songs = [
-    spotify("Giorgio by Moroder", { durationMs: 544_000 }),
-    spotify("Within", { durationMs: 228_000 }),
-    spotify("Instant Crush", { artists: ["Daft Punk", "Julian Casablancas"], durationMs: 337_000 }),
-    spotify("Untitled", { artists: [] }),
-    spotify("Within", { durationMs: 228_000 }),
-    spotify("Lose Yourself to Dance", { durationMs: 353_000 }),
-    spotify("Doin' it Right", { durationMs: 251_000 }),
-    spotify("Fragments of Time", { durationMs: 279_000 }),
-  ];
-  const start = () =>
-    startPlaylistImport(planLinkImport(spotifyPlaylist(songs), library), {
-      playlistId: 7,
-      name: "Late Night",
-    });
-
-  test(`searches the songs the Library hasn't, in the playlist's order, at most ${SPOTIFY_SEARCHES_AT_ONCE} at once`, () => {
-    const { asked, step } = askAll(start());
-    assert.deepEqual(asked, QUERIES);
-    assert.equal(step.kind, "answers");
-  });
-
-  test("the Library's songs go in at once; each song found goes in once those before it are settled", () => {
-    let { job } = askAll(start());
-    let handed = handOver(job);
-    job = handed.job;
-    assert.deepEqual(handed.songs, [{ source: "library", trackId: 1 }]);
-
-    const crush = yt("c", "Instant Crush", {
-      artists: ["Daft Punk", "Julian Casablancas"],
-      durationMs: 337_000,
-    });
-    job = importSearchAnswered(job, QUERIES[1] ?? "", { ok: true, songs: [crush] }, 0);
-    handed = handOver(job);
-    job = handed.job;
-    assert.deepEqual(handed.songs, [], "Within is still searched");
-
-    const within = yt("w", "Within", { durationMs: 228_000 });
-    job = importSearchAnswered(job, QUERIES[0] ?? "", { ok: true, songs: [within] }, 0);
-    handed = handOver(job);
-    job = handed.job;
-    assert.deepEqual(handed.songs, [
-      { source: "stream", song: within },
-      { source: "stream", song: crush },
-      unavailable(songs[3], "localFile"),
-    ]);
-    assert.equal(
-      job.added,
-      4,
-      "the song without an artist is never searched and goes in unavailable (Within's second listing was left out)",
-    );
-
-    assert.deepEqual(askAll(job).asked, ["Fragments of Time Daft Punk"]);
-  });
-
-  test("a song YouTube Music hasn't goes in its place as unavailable, and the import is done once every song is settled", () => {
-    let { job } = askAll(start());
-    for (const query of QUERIES) {
-      job = importSearchAnswered(job, query, { ok: true, songs: [yt("x", "Something Else")] }, 0);
-    }
-    job = askAll(job).job;
-    job = importSearchAnswered(job, "Fragments of Time Daft Punk", { ok: true, songs: [] }, 0);
-    const handed = handOver(job);
-    assert.deepEqual(handed.songs, [
-      { source: "library", trackId: 1 },
-      unavailable(songs[1]),
-      unavailable(songs[2]),
-      unavailable(songs[3], "localFile"),
-      unavailable(songs[5]),
-      unavailable(songs[6]),
-      unavailable(songs[7]),
-    ]);
-    assert.equal(handed.job.state.kind, "done");
-    assert.equal(askAll(handed.job).step.kind, "none");
-  });
-
-  test("an unavailable song keeps the cover Spotify gave it", () => {
-    const cover = "https://i.scdn.co/image/fragments";
-    const plan = planLinkImport(
-      spotifyPlaylist([spotify("Fragments of Time", { artworkUrl: cover })]),
-      library,
-    );
-    let { job, asked } = askAll(startPlaylistImport(plan, { playlistId: 7, name: "Late Night" }));
-    for (const query of asked) job = importSearchAnswered(job, query, { ok: true, songs: [] }, 0);
-    assert.deepEqual(handOver(job).songs, [
-      {
-        source: "unavailable",
-        song: {
-          title: "Fragments of Time",
-          artists: ["Daft Punk"],
-          album: "Random Access Memories",
-          durationMs: 369_000,
-          artworkUrl: cover,
-          reason: "notFound",
-        },
-      },
-    ]);
-  });
-
-  test("a refused search pauses the searching, then is asked again, longer each time it's refused", () => {
-    let { job } = askAll(start());
-    job = importSearchAnswered(job, QUERIES[0] ?? "", { ok: false, reason: "failed" }, 1000);
-    assert.deepEqual(askAll(job, 2999).step, { kind: "wait", untilMs: 3000 });
-    let next = askAll(job, 3000);
-    assert.deepEqual(next.asked, [QUERIES[0]]);
-    job = importSearchAnswered(next.job, QUERIES[0] ?? "", { ok: false, reason: "failed" }, 3000);
-    assert.deepEqual(askAll(job, 3000).step, { kind: "wait", untilMs: 8000 });
-    next = askAll(job, 8000);
-    job = importSearchAnswered(next.job, QUERIES[0] ?? "", { ok: true, songs: [] }, 8000);
-    job = importSearchAnswered(job, QUERIES[1] ?? "", { ok: false, reason: "failed" }, 8000);
-    assert.deepEqual(
-      askAll(job, 8000).step,
-      { kind: "wait", untilMs: 10_000 },
-      "a search answered starts over",
-    );
-  });
-
-  test("YouTube Music refusing for minutes pauses the import longer each time, then it goes on from that song", () => {
-    let { job } = askAll(start());
-    let now = 0;
-    const pauses = [2, 5, 10, 20, 60, 120, 300, 600, 900].map((seconds) => seconds * 1000);
-    for (const pause of pauses) {
-      job = importSearchAnswered(job, QUERIES[0] ?? "", { ok: false, reason: "failed" }, now);
-      assert.equal(job.state.kind, "importing");
-      assert.deepEqual(askAll(job, now).step, { kind: "wait", untilMs: now + pause });
-      now += pause;
-      const again = askAll(job, now);
-      assert.deepEqual(again.asked, [QUERIES[0]], "the same search is asked again, first");
-      job = again.job;
-    }
-    const within = yt("w", "Within", { durationMs: 228_000 });
-    job = importSearchAnswered(job, QUERIES[0] ?? "", { ok: true, songs: [within] }, now);
-    for (const query of QUERIES.slice(1)) {
-      job = importSearchAnswered(job, query, { ok: true, songs: [] }, now);
-    }
-    assert.deepEqual(handOver(job).songs, [
-      { source: "library", trackId: 1 },
-      { source: "stream", song: within },
-      unavailable(songs[2]),
-      unavailable(songs[3], "localFile"),
-      unavailable(songs[5]),
-      unavailable(songs[6]),
-    ]);
-    assert.deepEqual(askAll(job, now).asked, ["Fragments of Time Daft Punk"], "nothing skipped");
-  });
-
-  test("the same search refused for over half an hour stops the import, keeping the songs found", () => {
-    let { job } = askAll(start());
-    let now = 0;
-    for (let refusal = 0; refusal < 10; refusal += 1) {
-      job = importSearchAnswered(job, QUERIES[0] ?? "", { ok: false, reason: "failed" }, now);
-      now += 15 * 60_000;
-      job = askAll(job, now).job;
-    }
-    assert.deepEqual(job.state, { kind: "stopped", reason: "searchFailed" });
-    assert.equal(askAll(job, now).step.kind, "none");
-    assert.deepEqual(handOver(job).songs, [{ source: "library", trackId: 1 }]);
-  });
-
-  test("offline, or with YT Music turned off, the import stops at once", () => {
-    for (const reason of ["offline", "disabled"] as const) {
-      const { job } = askAll(start());
-      const stopped = importSearchAnswered(job, QUERIES[2] ?? "", { ok: false, reason }, 0);
-      assert.deepEqual(stopped.state, { kind: "stopped", reason });
-      assert.equal(askAll(stopped).step.kind, "none");
-      const within = yt("w", "Within", { durationMs: 228_000 });
-      const answered = importSearchAnswered(
-        stopped,
-        QUERIES[0] ?? "",
-        { ok: true, songs: [within] },
-        0,
-      );
-      assert.deepEqual(
-        handOver(answered).songs,
-        [
-          { source: "library", trackId: 1 },
-          { source: "stream", song: within },
-        ],
-        "a search asked before it stopped still finds its song",
-      );
-    }
-  });
-});
-
-/** Songs the Library hasn't, each its own search. */
-const many = (count: number, from = 0): SpotifySong[] =>
-  Array.from({ length: count }, (_, n) => spotify(`Song ${from + n}`));
-
-/** A Spotify import of [songs] into playlist 7. */
-const startBig = (songs: readonly SpotifySong[]) =>
-  startPlaylistImport(planLinkImport(spotifyPlaylist(songs), library), {
-    playlistId: 7,
-    name: "Big",
-  });
-
-/** The searches asked through the allowance, by the id their turn was asked with. */
-const queriesByTurn = new Map<number, string>();
-
-/**
- * Asks every search the import wants at [now] through the shared allowance
- * [searches], as the app does, and answers (not found) each whose turn
- * comes; how many went, and when the next may go once none can.
- */
-const runAt = <S extends YtSong>(
-  job: PlaylistImport<S>,
-  now: number,
-  searches: SearchAllowance,
-) => {
-  let current = job;
-  let allowance = searches;
-  let asked = 0;
-  for (;;) {
-    const next = askAll(current, now);
-    current = next.job;
-    for (const query of next.asked) {
-      const id = queriesByTurn.size + 1;
-      queriesByTurn.set(id, query);
-      allowance = searchTurnWanted(allowance, { id, asker: "import" }, now);
-    }
-    const turns = searchTurns(allowance, now);
-    allowance = turns.allowance;
-    if (turns.go.length === 0)
-      return { job: current, searches: allowance, asked, nextAt: turns.nextAt };
-    asked += turns.go.length;
-    for (const id of turns.go) {
-      const query = queriesByTurn.get(id) ?? "";
-      current = importSearchAnswered(current, query, { ok: true, songs: [] }, now);
-    }
-    current = handOver(current).job;
-  }
-};
-
-/** Playlist 7's import line at [now]. */
-const importLine = (
-  job: PlaylistImport<YtSong>,
-  now: number,
-  searches: Pick<SearchAllowance, "searchesAt"> = NO_SEARCHES,
-) => playlistImportView([job], 7, now, searches)?.line;
-
-describe("a large Spotify playlist's searches, within the shared search allowance", () => {
-  test("the import keeps no pacing of its own: it asks its searches as fast as they're answered", () => {
-    let job = startBig(many(1500));
-    let asked = 0;
-    for (;;) {
-      const next = askAll(job, 0);
-      if (next.asked.length === 0) break;
-      asked += next.asked.length;
-      job = next.job;
-      for (const query of next.asked)
-        job = importSearchAnswered(job, query, { ok: true, songs: [] }, 0);
-    }
-    assert.equal(asked, 1500);
-  });
-
-  test("at most 1,000 searches go in any 15 minutes, then the import waits and goes on", () => {
-    const first = runAt(startBig(many(2500)), 0, NO_SEARCHES);
-    assert.equal(first.asked, 1000);
-    assert.equal(first.nextAt, 15 * 60_000);
-    assert.equal(runAt(first.job, 15 * 60_000 - 1, first.searches).asked, 0);
-    const second = runAt(first.job, 15 * 60_000, first.searches);
-    assert.equal(second.asked, 1000);
-    const third = runAt(second.job, 30 * 60_000, second.searches);
-    assert.equal(third.asked, 500);
-    assert.equal(third.job.state.kind, "done");
-    assert.equal(third.job.added, 2500, "every song settled, none skipped");
-  });
-
-  test("the Library's songs need no search and spend none of the allowance", () => {
-    const songs = [
-      spotify("Giorgio by Moroder", { durationMs: 544_000 }),
-      ...many(999),
-      spotify("Touch", { durationMs: 498_000 }),
-      ...many(5, 999),
-    ];
-    const run = runAt(startBig(songs), 0, NO_SEARCHES);
-    assert.equal(run.asked, 1000);
-    assert.equal(run.job.added, 1002, "the Library's songs settled along the way");
-    assert.equal(run.nextAt, 15 * 60_000);
-  });
-
-  test("the allowance is shared by the imports in turn and kept while Wave is closed", () => {
-    const first = runAt(startBig(many(600)), 0, NO_SEARCHES);
-    assert.equal(first.job.state.kind, "done");
-    const kept = readSearchAllowance(writeSearchAllowance(first.searches));
-    const second = runAt(startBig(many(600, 600)), 60_000, kept);
-    assert.equal(second.asked, 400);
-    assert.equal(second.nextAt, 15 * 60_000);
-    const later = readSearchAllowance(writeSearchAllowance(second.searches));
-    assert.equal(runAt(startBig(many(1200, 1200)), 16 * 60_000, later).asked, 1000);
-  });
-
-  test("a download waiting takes the window's next search before the import", () => {
-    const first = runAt(startBig(many(1500)), 0, NO_SEARCHES);
-    const download = searchTurnWanted(first.searches, { id: -1, asker: "download" }, 60_000);
-    const turns = searchTurns(download, 15 * 60_000);
-    assert.equal(turns.go[0], -1);
-    assert.equal(turns.go.length, SPOTIFY_SEARCHES_AT_ONCE + 1);
-  });
-});
-
 describe("the app log of an import", () => {
-  const songs = [spotify("Giorgio by Moroder", { durationMs: 544_000 }), ...many(3)];
-
-  test("its start says the source, the name, how many songs and how many searches they need", () => {
-    assert.equal(
-      importLogLine(startBig(songs), { kind: "started", resumed: false }),
-      'Import of "Big" from Spotify started: 4 songs, 3 searches needed',
-    );
-    const ytJob = startPlaylistImport(planLinkImport(ytPlaylist([yt("b", "Within")]), library), {
-      playlistId: 7,
-      name: "Mix",
-    });
-    assert.equal(
-      importLogLine(ytJob, { kind: "started", resumed: false }),
-      'Import of "Mix" from YouTube Music started: 1 song, no searches needed',
-    );
-  });
-
-  test("going on after a restart, it says how far it had got", () => {
-    let { job, asked } = askAll(startBig(songs));
-    job = importSearchAnswered(job, asked[0] ?? "", { ok: true, songs: [] }, 0);
-    const read = readPlaylistImports(writePlaylistImports([job]))[0];
-    assert.ok(read !== undefined);
-    assert.equal(
-      importLogLine(read, { kind: "started", resumed: true }),
-      'Import of "Big" from Spotify goes on after a restart: 2 of 4 songs settled, 2 searches needed',
-    );
-  });
-
-  test("a pause after a refusal says how long, and how often that search was refused", () => {
-    let { job } = askAll(startBig(songs));
-    job = importSearchAnswered(job, "Song 1 Daft Punk", { ok: false, reason: "failed" }, 0);
-    job = askAll(job, 2000).job;
-    job = importSearchAnswered(job, "Song 1 Daft Punk", { ok: false, reason: "failed" }, 2000);
-    assert.equal(
-      importLogLine(job, { kind: "paused", query: "Song 1 Daft Punk", now: 2000 }),
-      'Import of "Big" pauses 5 s: YouTube Music refused "Song 1 Daft Punk" 2 times in a row',
-    );
-  });
-
-  test("a stop, a Cancel and a Try Again say how far it got", () => {
-    let { job } = askAll(startBig(songs));
-    job = importSearchAnswered(job, "Song 0 Daft Punk", { ok: true, songs: [] }, 0);
-    const offline = { ok: false, reason: "offline" } as const;
-    const stopped = importSearchAnswered(job, "Song 1 Daft Punk", offline, 0);
-    assert.equal(
-      importLogLine(stopped, { kind: "stopped" }),
-      'Import of "Big" stopped (offline): 1 found, 1 not found, 2 left',
-    );
-    assert.equal(
-      importLogLine(stopped, { kind: "cancelled" }),
-      'Import of "Big" cancelled: 1 found, 1 not found, 2 left',
-    );
-    assert.equal(
-      importLogLine(stopped, { kind: "retried" }),
-      'Import of "Big" tried again: 2 songs left',
-    );
-  });
-
-  test("its end says what was found, the searches, the refusals and the time it took and waited", () => {
-    let { job, asked } = askAll(startBig(songs));
-    for (const query of asked) job = importSearchAnswered(job, query, { ok: true, songs: [] }, 0);
-    job = handOver(job).job;
-    assert.equal(job.state.kind, "done");
-    const waitedMs = 12 * 60_000 + 30_000;
-    const run = { startedAt: 0, searches: 4, refusals: 1, waitedMs, resumed: false };
-    assert.equal(
-      importLogLine(job, { kind: "done", run, now: 27 * 60_000 + 4000 }),
-      'Import of "Big" done: 1 found, 3 not found; 4 searches, 1 refused; 27 min 4 s in all, 12 min 30 s of it waiting for the search allowance',
-    );
-    assert.equal(
-      importLogLine(job, { kind: "done", run: { ...run, resumed: true }, now: 27 * 60_000 + 4000 }),
-      'Import of "Big" done: 1 found, 3 not found; 4 searches, 1 refused; 27 min 4 s in all since Wave started again, 12 min 30 s of it waiting for the search allowance',
-    );
-  });
-});
-
-describe("how long a Spotify import has left", () => {
-  test("the page's line says roughly how long the searches still take, at about 6 a second and 1,000 in 15 minutes", () => {
-    assert.equal(
-      importLine(startBig(many(8)), 0, NO_SEARCHES),
-      "Importing 0 of 8 songs · less than a minute left",
-    );
-    assert.equal(
-      importLine(startBig(many(800)), 0, NO_SEARCHES),
-      "Importing 0 of 800 songs · about 2 min left",
-    );
-    assert.equal(
-      importLine(startBig(many(3000)), 0, NO_SEARCHES),
-      "Importing 0 of 3,000 songs · about 33 min left",
-    );
-    assert.equal(
-      importLine(startBig(many(10_000)), 0, NO_SEARCHES),
-      "Importing 0 of 10,000 songs · about 2 h 18 min left",
-    );
-  });
-
-  test("searches already spent this window, or a pause after a refusal, add their wait", () => {
-    let { job } = askAll(startBig(many(990)), 0);
-    job = importSearchAnswered(job, "Song 0 Daft Punk", { ok: false, reason: "failed" }, 0);
-    assert.equal(importLine(job, 0), "Importing 0 of 990 songs · about 3 min left");
-    const spent = { searchesAt: Array.from({ length: 1000 }, () => 0) };
-    assert.equal(
-      importLine(startBig(many(10)), 60_000, spent),
-      "Importing 0 of 10 songs · about 14 min left",
-    );
-  });
-
-  test("a large import behind a window spent unevenly waits for each part of it in turn", () => {
-    // One search 15 minutes ago, the other 999 a second ago: the first goes once the
-    // oldest leaves the window, the next 999 not until the rest leave, then 1,000 a window.
-    const spent = { searchesAt: [0, ...Array.from({ length: 999 }, () => 898_000)] };
-    assert.equal(
-      importLine(startBig(many(2500)), 899_000, spent),
-      "Importing 0 of 2,500 songs · about 46 min left",
-    );
-    assert.equal(
-      importLine(startBig(many(5000)), 899_000, spent),
-      "Importing 0 of 5,000 songs · about 1 h 18 min left",
-    );
-  });
-
-  test("a YouTube Music playlist import, or one waiting for its last answers, says no time", () => {
-    const { job } = askAll(startBig(many(3)), 0);
-    assert.equal(importLine(job, 0), "Importing 0 of 3 songs");
-    const ytJob = startPlaylistImport(planLinkImport(ytPlaylist([yt("b", "Within")]), library), {
-      playlistId: 7,
-      name: "Mix",
-    });
-    assert.equal(importLine(ytJob, 0, NO_SEARCHES), "Importing 1 of 1 song");
-  });
-});
-
-describe("the imports waiting their turn", () => {
-  const songs = [
-    spotify("Giorgio by Moroder", { durationMs: 544_000 }),
-    spotify("Within", { durationMs: 228_000 }),
-    spotify("Untitled", { artists: [] }),
-    spotify("Doin' it Right", { artists: ["Daft Punk", "Panda Bear"], durationMs: 251_000 }),
-  ];
-  const plan = planLinkImport(spotifyPlaylist(songs), library);
-  const first = startPlaylistImport(plan, { playlistId: 7, name: "Late Night" });
-  const second = startPlaylistImport(plan, { playlistId: 8, name: "Late Night 2" });
-  const WITHIN = "Within Daft Punk";
-  const DOIN = "Doin' it Right Daft Punk Panda Bear";
-  const view = (imports: readonly PlaylistImport<YtSong>[], playlistId: number) => {
-    const shown = playlistImportView(imports, playlistId, 0, NO_SEARCHES);
-    return shown && [shown.line, shown.canCancel, shown.canRetry];
-  };
-
-  test("a second import waits for the first, and goes on once the first is done", () => {
-    let imports = queuePlaylistImport(queuePlaylistImport([], first), second);
-    assert.equal(importTurn(imports)?.playlistId, 7);
-    assert.deepEqual(view(imports, 7), [
-      "Importing 2 of 4 songs · less than a minute left",
-      true,
-      false,
+  test("says the source, the name and where its songs went, in one line", () => {
+    const { job } = importSpotify([
+      spotify("Giorgio by Moroder", { durationMs: 544_000 }),
+      spotify("Within"),
+      spotify("Within"),
+      spotify("Untitled", { artists: [] }),
     ]);
-    assert.deepEqual(view(imports, 8), ["Waiting to import 4 songs", true, false]);
-    assert.deepEqual(playlistImportProgress(imports), {
-      title: "Importing Late Night",
-      detail: "2 of 4 songs · 1 more playlist waiting",
-      done: 2,
-      total: 4,
-    });
-
-    const within = yt("w", "Within", { durationMs: 228_000 });
-    let { job } = askAll(first);
-    job = importSearchAnswered(job, WITHIN, { ok: true, songs: [within] }, 0);
-    job = importSearchAnswered(job, DOIN, { ok: true, songs: [] }, 0);
-    imports = updatePlaylistImport(imports, handOver(job).job);
-    assert.equal(importTurn(imports)?.playlistId, 8);
-    assert.equal(view(imports, 7), null, "the songs not found went in, unavailable");
-  });
-
-  test("an import done with every song found leaves nothing to show", () => {
+    assert.equal(
+      importLogLine(job, { resumed: false }),
+      'Import of "Late Night" from Spotify done at once: 3 songs: 1 from the Library, 1 unsearched, 1 unavailable, 1 listed twice',
+    );
     const ytJob = startPlaylistImport(planLinkImport(ytPlaylist([yt("b", "Within")]), library), {
-      playlistId: 9,
+      playlistId: 7,
       name: "Mix",
     });
-    const imports = updatePlaylistImport(queuePlaylistImport([], ytJob), handOver(ytJob).job);
-    assert.deepEqual(imports, []);
-  });
-
-  test("Cancel lets the next import go on; importing into a playlist again replaces its import", () => {
-    const imports = queuePlaylistImport(queuePlaylistImport([], first), second);
-    assert.equal(importTurn(withoutPlaylistImport(imports, 7))?.playlistId, 8);
-    const again = queuePlaylistImport(imports, { ...first, name: "Again" });
-    assert.deepEqual(
-      again.map((job) => job.name),
-      ["Late Night 2", "Again"],
+    assert.equal(
+      importLogLine(ytJob, { resumed: false }),
+      'Import of "Mix" from YouTube Music done at once: 1 song: 0 from the Library, 1 from YouTube Music, 0 unavailable',
     );
-  });
-
-  test("stopped, the page says why and offers Try Again, which puts it behind the others", () => {
-    for (const [reason, line] of [
-      ["offline", "Import paused: you're offline."],
-      ["disabled", "Import paused: YT Music is off in Settings."],
-      ["failed", "Import paused: YouTube Music stopped answering."],
-    ] as const) {
-      let job = askAll(first).job;
-      const refusals = reason === "failed" ? 10 : 1;
-      for (let refusal = 0; refusal < refusals; refusal += 1) {
-        const now = refusal * 15 * 60_000;
-        job = importSearchAnswered(job, WITHIN, { ok: false, reason }, now);
-        job = askAll(job, now + 15 * 60_000).job;
-      }
-      let imports = updatePlaylistImport(queuePlaylistImport([first], second), job);
-      assert.equal(importTurn(imports)?.playlistId, 8, "a stopped import steps aside");
-      assert.deepEqual(view(imports, 7), [line, true, true], reason);
-      assert.equal(playlistImportProgress(imports)?.title, "Importing Late Night 2");
-
-      imports = retryPlaylistImport(imports, 7);
-      assert.deepEqual(
-        imports.map((queued) => queued.playlistId),
-        [8, 7],
-      );
-      assert.deepEqual(view(imports, 7), ["Waiting to import 4 songs", true, false]);
-      const retried = withoutPlaylistImport(imports, 8)[0];
-      assert.ok(retried);
-      assert.deepEqual(askAll(retried).asked, [WITHIN, DOIN], "asked again at once");
-    }
   });
 });
 
-describe("the songs an import left out, once done", () => {
+describe("the songs an import left out", () => {
   const songs = [
     spotify("Giorgio by Moroder", { durationMs: 544_000 }),
     spotify("Within", { durationMs: 228_000 }),
@@ -780,25 +308,11 @@ describe("the songs an import left out, once done", () => {
     spotify("Doin' it Right", { artists: ["Daft Punk", "Panda Bear"], durationMs: 251_000 }),
     spotify("Touch (feat. Paul Williams)", { durationMs: 498_000 }),
   ];
-  const within = yt("w", "Within", { durationMs: 228_000 });
-  /** Runs the import of [listed] to its end: Within is found, the rest isn't. */
-  const imported = (listed: readonly SpotifySong[], total = listed.length) => {
-    const plan = planLinkImport(spotifyPlaylist(listed, "Late Night", total), library);
-    let { job, asked } = askAll(startPlaylistImport(plan, { playlistId: 7, name: "Late Night" }));
-    for (const query of asked) {
-      const found = query === "Within Daft Punk" ? [within] : [];
-      job = importSearchAnswered(job, query, { ok: true, songs: found }, 0);
-    }
-    const handed = handOver(job);
-    return { plan, job: handed.job, given: handed.songs };
-  };
-  const leftOut = (job: PlaylistImport<YtSong>) =>
-    playlistImportView([job], 7, 0, NO_SEARCHES)?.leftOut;
+  const leftOut = (job: PlaylistImport<YtSong>) => playlistImportView([job], 7)?.leftOut;
 
-  test("lists the songs listed twice; the songs not found are in the playlist, unavailable", () => {
-    const { job, given } = imported(songs);
-    assert.equal(job.state.kind, "done");
-    assert.equal(playlistImportView([job], 7, 0, NO_SEARCHES)?.line, "2 songs were listed twice");
+  test("lists the songs listed twice; the others are all in the playlist", () => {
+    const { job, given } = importSpotify(songs);
+    assert.equal(playlistImportView([job], 7)?.line, "2 songs were listed twice");
     assert.deepEqual(leftOut(job), {
       title: "2 songs were listed twice",
       message: "Each went into Late Night once.",
@@ -811,249 +325,120 @@ describe("the songs an import left out, once done", () => {
     });
     assert.deepEqual(given, [
       { source: "library", trackId: 1 },
-      { source: "stream", song: within },
+      unsearched(songs[1]),
       unavailable(songs[2], "localFile"),
       { source: "library", trackId: 2 },
-      unavailable(songs[5]),
+      unsearched(songs[5]),
     ]);
   });
 
   test("the playlist's songs, those listed twice and those not songs add up to Spotify's count", () => {
-    const { plan, job, given } = imported(songs, 8);
+    const { plan, job, given } = importSpotify(songs, 8);
     const twice = leftOut(job)?.sections[0]?.songs.length ?? 0;
     assert.deepEqual([given.length, twice, plan.notSongs], [5, 2, 1]);
     assert.equal(given.length + twice + plan.notSongs, 8);
   });
 
-  test("two songs found as the same YouTube Music song count as listed twice", () => {
-    const one = yt("o", "One", { durationMs: 200_000 });
-    const plan = planLinkImport(
-      spotifyPlaylist([
-        spotify("One", { durationMs: 200_000 }),
-        spotify("One", { artists: ["Daft Punk", "Someone"], durationMs: 200_000 }),
-      ]),
-      library,
-    );
-    let { job, asked } = askAll(startPlaylistImport(plan, { playlistId: 7, name: "Late Night" }));
-    for (const query of asked) {
-      job = importSearchAnswered(job, query, { ok: true, songs: [one] }, 0);
-    }
-    const { job: done, songs: given } = handOver(job);
-    assert.equal(given.length, 1);
-    assert.deepEqual(leftOut(done)?.sections, [
-      { heading: "Listed twice", songs: ["One · Daft Punk & Someone"] },
-    ]);
+  test("shown until dismissed, while the songs go in it shows nothing", () => {
+    const plan = planLinkImport(spotifyPlaylist(songs), library);
+    const going = startPlaylistImport(plan, { playlistId: 7, name: "Late Night" });
+    let imports = queuePlaylistImport([], going);
+    assert.equal(playlistImportView(imports, 7), null);
+    imports = updatePlaylistImport(imports, finishPlaylistImport(going).job);
+    assert.equal(playlistImportView(imports, 7)?.line, "2 songs were listed twice");
+    assert.deepEqual(withoutPlaylistImport(imports, 7), []);
   });
 
-  test("with every song found, the songs listed twice are still shown until dismissed", () => {
-    const { job } = imported([
-      spotify("Giorgio by Moroder", { durationMs: 544_000 }),
-      spotify("Within", { durationMs: 228_000 }),
-      spotify("Within", { durationMs: 228_000 }),
-    ]);
-    const imports = updatePlaylistImport(queuePlaylistImport([], job), job);
-    assert.equal(playlistImportView(imports, 7, 0, NO_SEARCHES)?.line, "1 song was listed twice");
-    assert.deepEqual(leftOut(job), {
-      title: "1 song was listed twice",
-      message: "Each went into Late Night once.",
-      sections: [{ heading: "Listed twice", songs: ["Within · Daft Punk"] }],
-    });
-  });
-
-  test("with no song listed twice, nothing is left to show, songs not found or not", () => {
-    const { job } = imported(songs.slice(0, 3));
-    assert.equal(playlistImportView([job], 7, 0, NO_SEARCHES), null);
+  test("with no song listed twice, nothing is left to show", () => {
+    const { job } = importSpotify(songs.slice(0, 3));
+    assert.equal(playlistImportView([job], 7), null);
     assert.deepEqual(updatePlaylistImport(queuePlaylistImport([], job), job), []);
   });
 
   test("the songs listed twice are kept while Wave is closed", () => {
-    const { job } = imported(songs);
+    const { job } = importSpotify(songs);
     const [read] = readPlaylistImports(writePlaylistImports([job]));
     assert.ok(read);
     assert.deepEqual(leftOut(read), leftOut(job));
   });
 
-  test("an import kept before songs listed twice were named reads as having none", () => {
-    const plan = planLinkImport(spotifyPlaylist(songs), library);
-    const job = startPlaylistImport(plan, { playlistId: 7, name: "Late Night" });
-    assert.notDeepEqual(job.leftOut, []);
-    const kept = JSON.parse(writePlaylistImports([job])) as { imports: Record<string, unknown>[] };
-    for (const stored of kept.imports) delete stored.leftOut;
-    const [read] = readPlaylistImports(JSON.stringify(kept));
-    assert.ok(read);
-    assert.deepEqual(read.leftOut, []);
+  test("importing into a playlist again replaces its import", () => {
+    const { job } = importSpotify(songs);
+    const again = queuePlaylistImport([job], { ...job, name: "Again" });
+    assert.deepEqual(
+      again.map((queued) => queued.name),
+      ["Again"],
+    );
   });
 });
 
-describe("an import kept by a Wave from before unavailable entries", () => {
-  const songs = [
-    spotify("Giorgio by Moroder", { durationMs: 544_000 }),
-    spotify("Within", { durationMs: 228_000 }),
-    spotify("Untitled", { artists: [] }),
-    spotify("Touch", { durationMs: 498_000 }),
-    spotify("Within", { durationMs: 228_000 }),
-    spotify("Doin' it Right", { artists: ["Daft Punk", "Panda Bear"], durationMs: 251_000 }),
-    spotify("Touch (feat. Paul Williams)", { durationMs: 498_000 }),
-  ];
-  const within = yt("w", "Within", { durationMs: 228_000 });
-  /** Runs [listed]'s import as far as [answered] (Within found, the rest not), and hands it over. */
-  const imported = (listed: readonly SpotifySong[], answered = (_query: string) => true) => {
-    const plan = planLinkImport(spotifyPlaylist(listed), library);
-    let { job, asked } = askAll(startPlaylistImport(plan, { playlistId: 7, name: "Late Night" }));
-    for (const query of asked.filter(answered)) {
-      const found = query === "Within Daft Punk" ? [within] : [];
-      job = importSearchAnswered(job, query, { ok: true, songs: found }, 0);
-    }
-    return handOver(job).job;
-  };
-  /**
-   * [imports] as an older Wave kept them: it gave the playlist none of the
-   * songs it didn't find, and named them once done.
-   */
-  const keptByOlderWave = (imports: PlaylistImport<YtSong>[]) => {
-    const kept = JSON.parse(writePlaylistImports(imports)) as Record<string, unknown>;
-    delete kept.version;
-    return readPlaylistImports(JSON.stringify(kept));
-  };
-  const view = (imports: PlaylistImports<YtSong>) => playlistImportView(imports, 7, 0, NO_SEARCHES);
-
-  test("done, it still names the songs it didn't find, which never went in", () => {
-    const read = keptByOlderWave([imported(songs.slice(0, 3))]);
-    assert.equal(view(read)?.line, "1 song wasn't found");
-    assert.deepEqual(view(read)?.leftOut, {
-      title: "1 song wasn't found",
-      message: "Late Night was imported without it.",
-      sections: [{ heading: "Not found", songs: ["Untitled · Unknown Artist"] }],
-    });
-  });
-
-  test("done with songs listed twice too, it names both", () => {
-    const read = keptByOlderWave([imported(songs)]);
-    assert.deepEqual(view(read)?.leftOut, {
-      title: "2 songs weren't found · 2 listed twice",
-      message:
-        "Late Night was imported without the songs not found. Each song listed twice went in once.",
-      sections: [
-        {
-          heading: "Not found",
-          songs: ["Untitled · Unknown Artist", "Doin' it Right · Daft Punk & Panda Bear"],
-        },
-        {
-          heading: "Listed twice",
-          songs: ["Within · Daft Punk", "Touch (feat. Paul Williams) · Daft Punk"],
-        },
-      ],
-    });
-  });
-
-  test("done with nothing to name, it's gone", () => {
-    const read = keptByOlderWave([imported(songs.slice(0, 2))]);
-    assert.deepEqual(read, []);
-    assert.equal(view(read), null);
-  });
-
-  test("going on, the songs it passed over are named once done; those after go in unavailable", () => {
-    const listed = [
-      spotify("Giorgio by Moroder", { durationMs: 544_000 }),
-      spotify("Doin' it Right", { artists: ["Daft Punk", "Panda Bear"], durationMs: 251_000 }),
-      spotify("Within", { durationMs: 228_000 }),
-      spotify("Fragments of Time", { durationMs: 279_000 }),
-    ];
-    const going = imported(listed, (query) => query !== "Fragments of Time Daft Punk");
-    assert.equal(going.added, 3);
-    const [read] = keptByOlderWave([going]);
-    assert.ok(read);
-    let resumed = askAll(read).job;
-    resumed = importSearchAnswered(
-      resumed,
-      "Fragments of Time Daft Punk",
-      { ok: true, songs: [] },
-      0,
-    );
-    const done = handOver(resumed);
-    assert.deepEqual(done.songs, [unavailable(listed[3])]);
-    const imports = updatePlaylistImport([read], done.job);
-    assert.deepEqual(view(imports)?.leftOut?.sections, [
-      { heading: "Not found", songs: ["Doin' it Right · Daft Punk & Panda Bear"] },
-    ]);
-  });
-
-  test("kept again by this Wave, it still names them", () => {
-    const read = keptByOlderWave([imported(songs.slice(0, 3))]);
-    const again = readPlaylistImports(writePlaylistImports(read));
-    assert.deepEqual(view(again)?.leftOut, view(read)?.leftOut);
-  });
-});
-
-describe("imports kept while Wave is closed", () => {
-  const songs = [
-    spotify("Giorgio by Moroder", { durationMs: 544_000 }),
-    spotify("Within", { durationMs: 228_000 }),
-    spotify("Doin' it Right", { artists: ["Daft Punk", "Panda Bear"], durationMs: 251_000 }),
-    spotify("Fragments of Time", { album: null, durationMs: 279_000 }),
-  ];
-  const plan = planLinkImport(spotifyPlaylist(songs), library);
-  const within = yt("w", "Within", { durationMs: 228_000 });
-
-  test("read back when Wave starts again, each import goes on from where it got to", () => {
-    let going = askAll(startPlaylistImport(plan, { playlistId: 7, name: "Late Night" })).job;
-    going = importSearchAnswered(going, "Within Daft Punk", { ok: true, songs: [within] }, 0);
-    going = importSearchAnswered(
-      going,
-      "Fragments of Time Daft Punk",
-      { ok: false, reason: "failed" },
-      0,
-    );
-    going = handOver(going).job;
-    let stopped = askAll(startPlaylistImport(plan, { playlistId: 8, name: "Late Night 2" })).job;
-    stopped = importSearchAnswered(
-      stopped,
-      "Within Daft Punk",
-      { ok: false, reason: "offline" },
-      0,
-    );
-    stopped = handOver(stopped).job;
-
-    const read = readPlaylistImports(writePlaylistImports([going, stopped]));
-    assert.deepEqual(
-      read.map((job) => [job.playlistId, job.name, job.added, job.state.kind]),
-      [
-        [7, "Late Night", 2, "importing"],
-        [8, "Late Night 2", 1, "importing"],
-      ],
-    );
-    const [first] = read;
-    assert.ok(first);
-    assert.deepEqual(first.songs, songs);
-    assert.deepEqual(
-      askAll(first, 0).asked,
-      ["Doin' it Right Daft Punk Panda Bear", "Fragments of Time Daft Punk"],
-      "the searches unanswered when Wave closed are asked again at once",
-    );
-    assert.deepEqual(first.finds[1], { kind: "ytMusic", song: { ...within, albumId: null } });
-    assert.deepEqual(handOver(first).songs, [], "the songs given before aren't given again");
-  });
-
-  test("a song's cover is kept while Wave is closed, so one not found goes in with it", () => {
-    const cover = "https://i.scdn.co/image/doin";
-    const listed = songs.map((song, index) =>
-      index === 2 ? { ...song, artworkUrl: cover } : song,
-    );
-    let job = askAll(
-      startPlaylistImport(planLinkImport(spotifyPlaylist(listed), library), {
+/**
+ * An import as a Wave from before Spotify imports stopped searching kept it:
+ * [finds] null for each song still to be searched, given the playlist up to
+ * [added], [state] going on, stopped or done. [version] none for one kept
+ * before unavailable entries.
+ */
+const keptBefore = (
+  songs: readonly SpotifySong[],
+  finds: readonly unknown[],
+  { added, state, version = 2 }: { added: number; state: unknown; version?: number | null },
+): string =>
+  JSON.stringify({
+    ...(version === null ? {} : { version }),
+    imports: [
+      {
         playlistId: 7,
         name: "Late Night",
-      }),
-    ).job;
-    job = importSearchAnswered(job, "Within Daft Punk", { ok: true, songs: [within] }, 0);
-    job = handOver(job).job;
-    const [read] = readPlaylistImports(writePlaylistImports([job]));
-    assert.ok(read);
-    let resumed = askAll(read).job;
-    for (const query of ["Doin' it Right Daft Punk Panda Bear", "Fragments of Time Daft Punk"]) {
-      resumed = importSearchAnswered(resumed, query, { ok: true, songs: [] }, 0);
+        service: "spotify",
+        songs,
+        finds,
+        leftOut: [],
+        added,
+        state,
+      },
+    ],
+  });
+
+describe("an import going on when Spotify imports stopped searching", () => {
+  const songs = [
+    spotify("Giorgio by Moroder", { durationMs: 544_000 }),
+    spotify("Within", { durationMs: 228_000 }),
+    spotify("Doin' it Right", { artists: ["Daft Punk", "Panda Bear"], durationMs: 251_000 }),
+    spotify("Fragments of Time", { album: null, durationMs: 279_000, artworkUrl: "cover" }),
+  ];
+  const within = yt("w", "Within", { durationMs: 228_000 });
+  const finds = [
+    { kind: "library", trackId: 1 },
+    { kind: "ytMusic", song: writePlaylistYtSong(within) },
+    null,
+    { kind: "notFound" },
+  ];
+
+  test("ends at once: the songs found stay as found, the rest go in unsearched, in their places", () => {
+    for (const state of [{ kind: "importing" }, { kind: "stopped", reason: "offline" }]) {
+      const [read] = readPlaylistImports(keptBefore(songs, finds, { added: 1, state }));
+      assert.ok(read);
+      const { songs: given, job } = finishPlaylistImport(read);
+      assert.deepEqual(given, [
+        { source: "stream", song: { ...within, albumId: null } },
+        unsearched(songs[2]),
+        unavailable(songs[3]),
+      ]);
+      assert.equal(job.state.kind, "done");
+      assert.deepEqual(updatePlaylistImport([read], job), [], "nothing left to show");
+      assert.equal(
+        importLogLine(job, { resumed: true }),
+        'Import of "Late Night" from Spotify, kept from before the update, ended as Wave started: 4 songs: 1 from the Library, 1 from YouTube Music, 1 unsearched, 1 unavailable',
+      );
     }
-    assert.deepEqual(handOver(resumed).songs, [unavailable(listed[2]), unavailable(listed[3])]);
+  });
+
+  test("songs it gave the playlist before aren't given again", () => {
+    const [read] = readPlaylistImports(
+      keptBefore(songs, finds, { added: 3, state: { kind: "importing" } }),
+    );
+    assert.ok(read);
+    assert.deepEqual(finishPlaylistImport(read).songs, [unavailable(songs[3])]);
   });
 
   test("nothing kept, or nothing readable, is no import", () => {
@@ -1063,221 +448,62 @@ describe("imports kept while Wave is closed", () => {
   });
 });
 
-/** What the notification says of [job]'s progress. */
-const progress = (job: PlaylistImport<YtSong>) => playlistImportProgress([job])?.detail;
-
-describe("a Spotify import as its answers arrive, in any order", () => {
+describe("an import kept by a Wave from before unavailable entries", () => {
   const songs = [
-    spotify("One", { durationMs: 200_000 }),
-    spotify("Two", { durationMs: 210_000 }),
+    spotify("Giorgio by Moroder", { durationMs: 544_000 }),
+    spotify("Within", { durationMs: 228_000 }),
+    spotify("Untitled", { artists: [] }),
     spotify("Touch", { durationMs: 498_000 }),
-    spotify("Two", { album: "Deluxe", durationMs: 210_000 }),
-    spotify("Four", { durationMs: 230_000 }),
-    spotify("Five", { durationMs: 240_000 }),
+    spotify("Doin' it Right", { artists: ["Daft Punk", "Panda Bear"], durationMs: 251_000 }),
   ];
-  const one = yt("o", "One", { durationMs: 200_000 });
-  const two = yt("t", "Two", { durationMs: 210_000 });
-  const four = yt("f", "Four", { durationMs: 230_000 });
-  const five = yt("v", "Five", { durationMs: 240_000 });
-  const start = () =>
-    startPlaylistImport(planLinkImport(spotifyPlaylist(songs), library), {
-      playlistId: 7,
-      name: "Late Night",
-    });
+  const within = writePlaylistYtSong(yt("w", "Within", { durationMs: 228_000 }));
+  const view = (imports: PlaylistImports<YtSong>) => playlistImportView(imports, 7);
+  const done = { kind: "done" };
 
-  test("a song listed again on another album is searched once, and its answer settles both", () => {
-    const { asked } = askAll(start());
-    assert.deepEqual(asked, ["One Daft Punk", "Two Daft Punk", "Four Daft Punk", "Five Daft Punk"]);
-  });
-
-  test("answers arriving last first give the playlist nothing until the first song is settled, then all in order, each once", () => {
-    let { job } = askAll(start());
-    assert.equal(progress(job), "1 of 6 songs");
-    const given: unknown[] = [];
-    for (const [query, found, settled] of [
-      ["Five Daft Punk", five, "2 of 6 songs"],
-      ["Four Daft Punk", four, "3 of 6 songs"],
-      ["Two Daft Punk", two, "5 of 6 songs"],
-    ] as const) {
-      job = importSearchAnswered(job, query, { ok: true, songs: [found] }, 0);
-      assert.equal(progress(job), settled);
-      const handed = handOver(job);
-      job = handed.job;
-      given.push(...handed.songs);
-    }
-    assert.deepEqual(given, [], "One is still searched");
-    assert.equal(job.added, 0);
-    job = importSearchAnswered(job, "One Daft Punk", { ok: true, songs: [one] }, 0);
-    const handed = handOver(job);
-    assert.deepEqual(handed.songs, [
-      { source: "stream", song: one },
-      { source: "stream", song: two },
-      { source: "library", trackId: 2 },
-      { source: "stream", song: four },
-      { source: "stream", song: five },
-    ]);
-    assert.equal(handed.job.added, 6);
-    assert.equal(handed.job.state.kind, "done");
-    assert.deepEqual(importAdditions(handed.job).songs, []);
-  });
-
-  test("a song found again by another search, before or after the first was given, isn't given twice", () => {
-    const listed = [
-      spotify("One", { durationMs: 200_000 }),
-      spotify("Two", { durationMs: 210_000 }),
-      spotify("One", { artists: ["Daft Punk", "Someone"], durationMs: 200_000 }),
-      spotify("Four", { durationMs: 230_000 }),
-      spotify("One", { artists: ["Daft Punk", "Another"], durationMs: 200_000 }),
+  test("done, it still names the songs it didn't find, which never went in", () => {
+    const finds = [
+      { kind: "library", trackId: 1 },
+      { kind: "ytMusic", song: within },
+      { kind: "notFound" },
     ];
-    let { job, asked } = askAll(
-      startPlaylistImport(planLinkImport(spotifyPlaylist(listed), library), {
-        playlistId: 7,
-        name: "Again",
-      }),
+    const read = readPlaylistImports(
+      keptBefore(songs.slice(0, 3), finds, { added: 3, state: done, version: null }),
     );
-    assert.deepEqual(asked, [
-      "One Daft Punk",
-      "Two Daft Punk",
-      "One Daft Punk Someone",
-      "Four Daft Punk",
-    ]);
-    job = importSearchAnswered(job, "One Daft Punk Someone", { ok: true, songs: [one] }, 0);
-    job = importSearchAnswered(job, "One Daft Punk", { ok: true, songs: [one] }, 0);
-    let handed = handOver(job);
-    assert.deepEqual(handed.songs, [{ source: "stream", song: one }]);
-    job = askAll(handed.job).job;
-    job = importSearchAnswered(job, "One Daft Punk Another", { ok: true, songs: [one] }, 0);
-    job = importSearchAnswered(job, "Two Daft Punk", { ok: true, songs: [two] }, 0);
-    handed = handOver(job);
-    assert.deepEqual(handed.songs, [{ source: "stream", song: two }]);
-    job = importSearchAnswered(handed.job, "Four Daft Punk", { ok: true, songs: [] }, 0);
-    handed = handOver(job);
-    assert.deepEqual(
-      handed.songs,
-      [unavailable(listed[3])],
-      "the second One was given already, Four goes in unavailable",
-    );
-    assert.equal(handed.job.state.kind, "done");
-    assert.equal(
-      playlistImportView([handed.job], 7, 0, NO_SEARCHES)?.line,
-      "2 songs were listed twice",
-      "both later Ones were found as the first",
-    );
+    assert.deepEqual(view(read)?.leftOut, {
+      title: "1 song wasn't found",
+      message: "Late Night was imported without it.",
+      sections: [{ heading: "Not found", songs: ["Untitled · Unknown Artist"] }],
+    });
+    const again = readPlaylistImports(writePlaylistImports(read));
+    assert.deepEqual(view(again)?.leftOut, view(read)?.leftOut, "kept again, it still names them");
   });
 
-  test("an earlier state of an import stays as it was after later answers, and two imports of one plan stay apart", () => {
-    const plan = planLinkImport(spotifyPlaylist(songs), library);
-    const asked = askAll(startPlaylistImport(plan, { playlistId: 7, name: "A" })).job;
-    const other = askAll(startPlaylistImport(plan, { playlistId: 8, name: "B" })).job;
-    const answered = importSearchAnswered(asked, "One Daft Punk", { ok: true, songs: [one] }, 0);
-    const later = importSearchAnswered(answered, "Two Daft Punk", { ok: true, songs: [two] }, 0);
-    const elsewhere = importSearchAnswered(other, "One Daft Punk", { ok: true, songs: [] }, 0);
-    assert.deepEqual(
-      [asked, answered, later, other, elsewhere].map((job) => [
-        importAdditions(job).through,
-        progress(job),
-        playlistImportView([job], job.playlistId, 0, NO_SEARCHES)?.line,
-      ]),
-      [
-        [0, "1 of 6 songs", "Importing 1 of 6 songs"],
-        [1, "2 of 6 songs", "Importing 2 of 6 songs"],
-        [4, "4 of 6 songs", "Importing 4 of 6 songs"],
-        [0, "1 of 6 songs", "Importing 1 of 6 songs"],
-        [1, "2 of 6 songs", "Importing 2 of 6 songs"],
-      ],
-    );
-    assert.deepEqual(importAdditions(answered).songs, [{ source: "stream", song: one }]);
-    assert.deepEqual(importAdditions(elsewhere).songs, [unavailable(songs[0])]);
-    assert.deepEqual(askAll(answered).asked, [], "Two, Four and Five are still asked");
-    assert.deepEqual(askAll(elsewhere).asked, []);
+  test("done with nothing to name, it's gone", () => {
+    const finds = [
+      { kind: "library", trackId: 1 },
+      { kind: "ytMusic", song: within },
+    ];
+    const kept = keptBefore(songs.slice(0, 2), finds, { added: 2, state: done, version: null });
+    assert.deepEqual(readPlaylistImports(kept), []);
   });
 
-  test("resumed after Wave closed mid-way, it asks the unanswered searches again in order and gives nothing twice", () => {
-    let { job } = askAll(start());
-    job = importSearchAnswered(job, "Four Daft Punk", { ok: true, songs: [four] }, 0);
-    job = importSearchAnswered(job, "One Daft Punk", { ok: true, songs: [one] }, 0);
-    let handed = handOver(job);
-    assert.deepEqual(handed.songs, [{ source: "stream", song: one }]);
-    const [read] = readPlaylistImports(writePlaylistImports([handed.job]));
+  test("going on, the songs it passed over are named; those after go in as this Wave puts them", () => {
+    const finds = [
+      { kind: "library", trackId: 1 },
+      { kind: "notFound" },
+      { kind: "ytMusic", song: within },
+      { kind: "notFound" },
+      null,
+    ];
+    const listed = [songs[0], songs[4], songs[1], songs[2], songs[3]] as SpotifySong[];
+    const [read] = readPlaylistImports(
+      keptBefore(listed, finds, { added: 3, state: { kind: "importing" }, version: null }),
+    );
     assert.ok(read);
-    assert.equal(read.added, 1);
-    assert.equal(progress(read), "3 of 6 songs");
-    assert.equal(importLine(read, 0), "Importing 3 of 6 songs · less than a minute left");
-    const again = askAll(read);
-    assert.deepEqual(again.asked, ["Two Daft Punk", "Five Daft Punk"]);
-    job = importSearchAnswered(again.job, "Five Daft Punk", { ok: true, songs: [five] }, 0);
-    job = importSearchAnswered(job, "Two Daft Punk", { ok: true, songs: [two] }, 0);
-    handed = handOver(job);
-    assert.deepEqual(
-      handed.songs.map((song) =>
-        song.source === "library"
-          ? song.trackId
-          : song.source === "stream"
-            ? song.song.videoId
-            : null,
-      ),
-      ["t", 2, "f", "v"],
-    );
-    assert.equal(handed.job.state.kind, "done");
-  });
-
-  test("cancelled mid-way, it's gone, and the next import goes on", () => {
-    let { job } = askAll(start());
-    job = importSearchAnswered(job, "Two Daft Punk", { ok: true, songs: [two] }, 0);
-    const next = startPlaylistImport(planLinkImport(spotifyPlaylist(songs), library), {
-      playlistId: 8,
-      name: "Next",
-    });
-    const imports = withoutPlaylistImport(queuePlaylistImport([job], next), 7);
-    assert.equal(playlistImportView(imports, 7, 0, NO_SEARCHES), null);
-    assert.equal(importTurn(imports)?.playlistId, 8);
-    assert.equal(playlistImportProgress(imports)?.detail, "1 of 6 songs");
-  });
-});
-
-describe("what the page and the notification show as an import goes on", () => {
-  const songs = [spotify("Within"), spotify("Instant Crush"), spotify("Touch")];
-  const start = (playlistId = 7) =>
-    startPlaylistImport(planLinkImport(spotifyPlaylist(songs), library), {
-      playlistId,
-      name: "Late Night",
-    });
-
-  test("answers and songs given are progress, shown at a pace", () => {
-    const { job } = askAll(start());
-    const found = importSearchAnswered(
-      job,
-      "Within Daft Punk",
-      { ok: true, songs: [yt("w", "Within", { durationMs: 369_000 })] },
-      0,
-    );
-    assert.equal(importProgressOnly([job], [found]), true);
-    const { job: given } = handOver(found);
-    assert.equal(given.added, 1);
-    assert.equal(importProgressOnly([found], [given]), true);
-    assert.ok(IMPORT_PROGRESS_SHOWN_EVERY_MS > 0);
-  });
-
-  test("an import queued, cancelled, stopped, done or tried again shows at once", () => {
-    const { job } = askAll(start());
-    const other = start(8);
-    assert.equal(importProgressOnly([job], queuePlaylistImport([job], other)), false);
-    assert.equal(importProgressOnly([job, other], withoutPlaylistImport([job, other], 7)), false);
-    const stopped = importSearchAnswered(
-      job,
-      "Within Daft Punk",
-      { ok: false, reason: "offline" },
-      0,
-    );
-    assert.equal(stopped.state.kind, "stopped");
-    assert.equal(importProgressOnly([job], [stopped]), false);
-    assert.equal(importProgressOnly([stopped], retryPlaylistImport([stopped], 7)), false);
-    let done = job;
-    for (const query of ["Within Daft Punk", "Instant Crush Daft Punk", "Touch Daft Punk"]) {
-      done = importSearchAnswered(done, query, { ok: true, songs: [] }, 0);
-    }
-    done = handOver(done).job;
-    assert.equal(done.state.kind, "done");
-    assert.equal(importProgressOnly([job], [done]), false);
+    const finished = finishPlaylistImport(read);
+    assert.deepEqual(finished.songs, [unavailable(songs[2], "localFile"), unsearched(songs[3])]);
+    assert.deepEqual(view(updatePlaylistImport([read], finished.job))?.leftOut?.sections, [
+      { heading: "Not found", songs: ["Doin' it Right · Daft Punk & Panda Bear"] },
+    ]);
   });
 });

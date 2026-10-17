@@ -3,6 +3,9 @@
 Ticket: #307 (parent #301). Branch `feat/307-import-planner`, based on `perf/301-performance` at
 66f0290.
 
+Since #358 a Spotify import searches nothing and finishes at once, so the planner measured here
+and its benchmark (`packages/core/bench/playlistImport.ts`) are gone; this page is kept as a record.
+
 ## What was measured
 
 `packages/core/bench/playlistImport.ts` runs a large Spotify playlist import through Core's public

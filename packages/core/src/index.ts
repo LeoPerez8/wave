@@ -835,6 +835,10 @@ export {
   unavailableEntryView,
   unavailableSearchQuery,
   readPlaylistYtSong,
+  isUnsearchedTrackId,
+  queueSongTrackId,
+  readUnsearchedTrackId,
+  unsearchedTrackId,
   writePlaylistEntrySong,
   writePlaylistYtSong,
 } from "./playlistEntries.ts";
@@ -845,7 +849,11 @@ export type {
   PlaylistItem,
   PlaylistPlay,
   PlaylistSong,
+  QueueSong,
+  StoredPlaylistSong,
   StreamedPlaylistEntry,
+  UnsearchedEntry,
+  UnsearchedSong,
   UnavailableEntry,
   UnavailableEntryAction,
   UnavailableEntryView,
@@ -874,51 +882,49 @@ export type {
   SharedTextImport,
 } from "./playlistLinks.ts";
 export { spotifySearchQuery, spotifyYtMatch } from "./spotifyImport.ts";
-export { tryAgainNotice, tryAgainSearches, tryAgainSettles } from "./tryAgainUnavailable.ts";
+export { settleUnsearched, unsearchedSearchQuery, unsearchedSettles } from "./unsearchedEntries.ts";
+export {
+  PLAYING_SEARCHES,
+  PLAYING_SEARCH_RETRY_MS,
+  passedOverNotice,
+  playerQueueList,
+  playingAnswerStep,
+  playingSearches,
+  withHeldCurrent,
+} from "./unsearchedPlaying.ts";
+export type { PlayingAnswerStep, PlayingSearch, PlayingSearching } from "./unsearchedPlaying.ts";
 export type {
-  TryAgainAnswered,
-  TryAgainSearch,
-  TryAgainSettled,
-} from "./tryAgainUnavailable.ts";
+  PlaylistEntryPlace,
+  UnsearchedSettlement,
+  UnsearchedSettles,
+} from "./unsearchedEntries.ts";
+export { tryAgainNotice, tryAgainSearches, tryAgainSettles } from "./tryAgainUnavailable.ts";
+export type { TryAgainAnswered, TryAgainSearch, TryAgainSettled } from "./tryAgainUnavailable.ts";
 export type { YtSongSearch } from "./spotifyImport.ts";
 export {
-  IMPORT_PROGRESS_SHOWN_EVERY_MS,
-  SPOTIFY_SEARCHES_AT_ONCE,
-  importAdded,
-  importAdditions,
+  finishPlaylistImport,
   importLogLine,
-  importProgressOnly,
-  importSearchAnswered,
-  importTurn,
-  nextImportStep,
   planLinkImport,
-  playlistImportProgress,
   playlistImportView,
   queuePlaylistImport,
   readPlaylistImports,
-  retryPlaylistImport,
   startPlaylistImport,
   updatePlaylistImport,
   withoutPlaylistImport,
   writePlaylistImports,
 } from "./playlistImport.ts";
 export type {
-  ImportAdditions,
+  FinishedImport,
   ImportFind,
   ImportLeftOut,
   ImportLeftOutSection,
-  ImportLogEvent,
-  ImportRun,
   ImportService,
   ImportState,
-  ImportStep,
-  ImportStopReason,
   LeftOutReason,
   LeftOutSong,
   LinkImportPlan,
   LinkedSource,
   PlaylistImport,
-  PlaylistImportProgress,
   PlaylistImportView,
   PlaylistImports,
 } from "./playlistImport.ts";

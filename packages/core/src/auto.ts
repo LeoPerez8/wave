@@ -21,10 +21,9 @@
  * `fetch` and a track list's songs in `listSongs`.
  */
 
-import { playlistPlayback } from "./playlistEntries.ts";
+import { playlistPlayback, queueSongTrackId, type QueueSong } from "./playlistEntries.ts";
 import type { QueueContext } from "./queue.ts";
-import type { MixedSong } from "./ytDiscover.ts";
-import { ytTrackId, type YtSong } from "./ytMusic.ts";
+import type { YtSong } from "./ytMusic.ts";
 
 /** Auto's tabs: the root's children, in order. */
 export type AutoTab = "home" | "playlists" | "albums" | "artists";
@@ -546,15 +545,12 @@ export type AutoListPlay<S extends YtSong, L> =
       readonly kind: "play";
       readonly start: AutoQueueStart;
       readonly added: readonly string[];
-      readonly songs: readonly MixedSong<S, L>[];
+      readonly songs: readonly QueueSong<S, L>[];
     }
   /** A browsable node, an empty list, or a song that has left the list. */
   | { readonly kind: "notFound" }
   /** YT Music is off, and the node is one of its entries or the list has nothing else. */
   | { readonly kind: "ytMusicOff" };
-
-const songTrackId = <L extends { readonly id: number }>(song: MixedSong<YtSong, L>): string =>
-  song.source === "library" ? String(song.track.id) : ytTrackId(song.song.videoId);
 
 /**
  * What playing or adding [node] does, given every song of its list
@@ -564,21 +560,21 @@ const songTrackId = <L extends { readonly id: number }>(song: MixedSong<YtSong, 
  */
 export const autoListPlay = <S extends YtSong, L extends { readonly id: number }>(
   node: AutoNode,
-  songs: readonly MixedSong<S, L>[],
+  songs: readonly QueueSong<S, L>[],
   ytMusic: boolean,
 ): AutoListPlay<S, L> => {
   const listed = autoQueueStart(
     node,
-    songs.map((song) => ({ id: songTrackId(song) })),
+    songs.map((song) => ({ id: queueSongTrackId(song) })),
   );
   if (listed === null) return { kind: "notFound" };
   const play = playlistPlayback(songs, { ytMusic, startIndex: listed.startIndex });
   if (play === null) return { kind: "ytMusicOff" };
-  const played: readonly MixedSong<S, L>[] =
+  const played: readonly QueueSong<S, L>[] =
     play.playback.kind === "mixed"
       ? play.playback.songs
       : play.playback.tracks.map((track) => ({ source: "library", track }));
-  const trackIds = played.map(songTrackId);
+  const trackIds = played.map(queueSongTrackId);
   const { startIndex } = play;
   return {
     kind: "play",

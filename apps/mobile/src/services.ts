@@ -9,6 +9,7 @@ import { LibraryStore } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import type { AutoRequest } from "@/native/wavePlayer";
 import { connectPlayer } from "@/playback/actions";
+import { startPlayingSearches } from "@/playback/playingSearches";
 import { applyCrossfade } from "@/settings/crossfade";
 import { WaveSync } from "@/sync/WaveSync";
 import { startDownloads } from "@/ytmusic/YtDownloads";
@@ -51,9 +52,9 @@ const stampPreference = (key: string): void => {
 /**
  * Starts the app services that work without UI: the library store, the queue
  * and player sync, playback persistence and play history (one `appRuntime`),
- * the Android Auto responder, Auto's lyrics and the stamps of synced
- * preference changes. The Activity's root
- * layout and the headless `WaveService` task (index.ts) both call it;
+ * the Android Auto responder, Auto's lyrics, the searches of unsearched
+ * songs about to play and the stamps of synced preference changes. The
+ * Activity's root layout and the headless `WaveService` task (index.ts) both call it;
  * whichever comes first starts them, and later calls change nothing, so one
  * JS runtime never initialises them twice. The library scan stays with the UI.
  */
@@ -68,6 +69,7 @@ export const startServices = (by: ServicesStarter): void => {
   startedBy = by;
   console.log(`[wave] services started by the ${by}`);
   connectPlayer();
+  startPlayingSearches();
   applyCrossfade();
   onSyncedSettingChange(stampPreference);
   startAutoResponder(answerAuto);
