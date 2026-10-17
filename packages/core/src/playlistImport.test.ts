@@ -23,6 +23,7 @@ import {
   readSpotifySearchPacing,
   writeSpotifySearchPacing,
   type PlaylistImport,
+  type PlaylistImports,
   type SpotifySearchPacing,
   type SpotifySong,
   type YtSong,
@@ -748,7 +749,7 @@ describe("the songs an import left out, once done", () => {
 
   test("with no song listed twice, nothing is left to show, songs not found or not", () => {
     const { job } = imported(songs.slice(0, 3));
-    assert.equal(leftOut(job), null);
+    assert.equal(playlistImportView([job], 7, 0, NONE), null);
     assert.deepEqual(updatePlaylistImport(queuePlaylistImport([], job), job), []);
   });
 
@@ -760,12 +761,114 @@ describe("the songs an import left out, once done", () => {
   });
 
   test("an import kept before songs listed twice were named reads as having none", () => {
-    const { job } = imported(songs.slice(0, 3));
+    const plan = planLinkImport(spotifyPlaylist(songs), library);
+    const job = startPlaylistImport(plan, { playlistId: 7, name: "Late Night" });
+    assert.notDeepEqual(job.leftOut, []);
     const kept = JSON.parse(writePlaylistImports([job])) as { imports: Record<string, unknown>[] };
     for (const stored of kept.imports) delete stored.leftOut;
     const [read] = readPlaylistImports(JSON.stringify(kept));
     assert.ok(read);
     assert.deepEqual(read.leftOut, []);
+  });
+});
+
+describe("an import kept by a Wave from before unavailable entries", () => {
+  const songs = [
+    spotify("Giorgio by Moroder", { durationMs: 544_000 }),
+    spotify("Within", { durationMs: 228_000 }),
+    spotify("Untitled", { artists: [] }),
+    spotify("Touch", { durationMs: 498_000 }),
+    spotify("Within", { durationMs: 228_000 }),
+    spotify("Doin' it Right", { artists: ["Daft Punk", "Panda Bear"], durationMs: 251_000 }),
+    spotify("Touch (feat. Paul Williams)", { durationMs: 498_000 }),
+  ];
+  const within = yt("w", "Within", { durationMs: 228_000 });
+  /** Runs [listed]'s import as far as [answered] (Within found, the rest not), and hands it over. */
+  const imported = (listed: readonly SpotifySong[], answered = (_query: string) => true) => {
+    const plan = planLinkImport(spotifyPlaylist(listed), library);
+    let { job, asked } = askAll(startPlaylistImport(plan, { playlistId: 7, name: "Late Night" }));
+    for (const query of asked.filter(answered)) {
+      const found = query === "Within Daft Punk" ? [within] : [];
+      job = importSearchAnswered(job, query, { ok: true, songs: found }, 0);
+    }
+    return handOver(job).job;
+  };
+  /**
+   * [imports] as an older Wave kept them: it gave the playlist none of the
+   * songs it didn't find, and named them once done.
+   */
+  const keptByOlderWave = (imports: PlaylistImport<YtSong>[]) => {
+    const kept = JSON.parse(writePlaylistImports(imports)) as Record<string, unknown>;
+    delete kept.version;
+    return readPlaylistImports(JSON.stringify(kept));
+  };
+  const view = (imports: PlaylistImports<YtSong>) => playlistImportView(imports, 7, 0, NONE);
+
+  test("done, it still names the songs it didn't find, which never went in", () => {
+    const read = keptByOlderWave([imported(songs.slice(0, 3))]);
+    assert.equal(view(read)?.line, "1 song wasn't found");
+    assert.deepEqual(view(read)?.leftOut, {
+      title: "1 song wasn't found",
+      message: "Late Night was imported without it.",
+      sections: [{ heading: "Not found", songs: ["Untitled · Unknown Artist"] }],
+    });
+  });
+
+  test("done with songs listed twice too, it names both", () => {
+    const read = keptByOlderWave([imported(songs)]);
+    assert.deepEqual(view(read)?.leftOut, {
+      title: "2 songs weren't found · 2 listed twice",
+      message:
+        "Late Night was imported without the songs not found. Each song listed twice went in once.",
+      sections: [
+        {
+          heading: "Not found",
+          songs: ["Untitled · Unknown Artist", "Doin' it Right · Daft Punk & Panda Bear"],
+        },
+        {
+          heading: "Listed twice",
+          songs: ["Within · Daft Punk", "Touch (feat. Paul Williams) · Daft Punk"],
+        },
+      ],
+    });
+  });
+
+  test("done with nothing to name, it's gone", () => {
+    const read = keptByOlderWave([imported(songs.slice(0, 2))]);
+    assert.deepEqual(read, []);
+    assert.equal(view(read), null);
+  });
+
+  test("going on, the songs it passed over are named once done; those after go in unavailable", () => {
+    const listed = [
+      spotify("Giorgio by Moroder", { durationMs: 544_000 }),
+      spotify("Doin' it Right", { artists: ["Daft Punk", "Panda Bear"], durationMs: 251_000 }),
+      spotify("Within", { durationMs: 228_000 }),
+      spotify("Fragments of Time", { durationMs: 279_000 }),
+    ];
+    const going = imported(listed, (query) => query !== "Fragments of Time Daft Punk");
+    assert.equal(going.added, 3);
+    const [read] = keptByOlderWave([going]);
+    assert.ok(read);
+    let resumed = askAll(read).job;
+    resumed = importSearchAnswered(
+      resumed,
+      "Fragments of Time Daft Punk",
+      { ok: true, songs: [] },
+      0,
+    );
+    const done = handOver(resumed);
+    assert.deepEqual(done.songs, [unavailable(listed[3])]);
+    const imports = updatePlaylistImport([read], done.job);
+    assert.deepEqual(view(imports)?.leftOut?.sections, [
+      { heading: "Not found", songs: ["Doin' it Right · Daft Punk & Panda Bear"] },
+    ]);
+  });
+
+  test("kept again by this Wave, it still names them", () => {
+    const read = keptByOlderWave([imported(songs.slice(0, 3))]);
+    const again = readPlaylistImports(writePlaylistImports(read));
+    assert.deepEqual(view(again)?.leftOut, view(read)?.leftOut);
   });
 });
 

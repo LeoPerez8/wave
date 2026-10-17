@@ -360,7 +360,8 @@ const INERT_ROW = { checked: undefined, onPress: () => undefined, onLongPress: (
 /**
  * Plays the playlist from [startIndex] (or from the top, or shuffled),
  * skipping its unavailable entries (Core's `playlistPlayback`): one tapped
- * says why it doesn't play, as does a YT Music entry tapped with YT Music off.
+ * says why it doesn't play, as does Play or Shuffle with nothing but
+ * unavailable entries, and a YT Music entry tapped with YT Music off.
  */
 export const playPlaylistEntries = (
   entries: readonly PlaylistEntryRow[],
@@ -373,8 +374,8 @@ export const playPlaylistEntries = (
     explainUnavailable(tapped.song);
     return;
   }
-  void playPlaylist(entries, startIndex, context, options).then((played) => {
-    if (!played) ToastAndroid.show("YT Music is off in Settings", ToastAndroid.SHORT);
+  void playPlaylist(entries, startIndex, context, options).then((notice) => {
+    if (notice !== null) ToastAndroid.show(notice, ToastAndroid.LONG);
   });
 };
 

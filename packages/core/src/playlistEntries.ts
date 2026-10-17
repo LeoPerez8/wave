@@ -50,7 +50,8 @@ export type PlaylistSong<S extends YtSong = YtSong> =
 
 /** A playlist's entry as its page lists it: a Library track, a YT Music song, or an unavailable song. */
 export type PlaylistItem<S extends YtSong = YtSong, L = unknown> =
-  MixedSong<S, L> | UnavailableEntry;
+  | MixedSong<S, L>
+  | UnavailableEntry;
 
 /**
  * What tells a playlist's songs apart: the id the song goes by in the queue
@@ -327,6 +328,28 @@ const UNAVAILABLE_VIEWS: { readonly [R in UnavailableReason]: UnavailableEntryVi
 /** Why [song] is unavailable: its row's second line, and what tapping it says instead of playing. */
 export const unavailableEntryView = (song: UnavailableSong): UnavailableEntryView =>
   UNAVAILABLE_VIEWS[song.reason];
+
+const UNPLAYABLE_NOTICES: { readonly [R in UnavailableReason]: string } = {
+  notFound: "Wave couldn't find these songs on YouTube Music or in your Library.",
+  localFile: "These songs are local files on Spotify, so Wave couldn't look for them.",
+};
+
+/**
+ * What Play or Shuffle on a playlist says when every entry it could play
+ * ([entries]: the playlist's, its missing songs left out) is unavailable:
+ * why, as tapping one says it. Null when something plays, or with no entries.
+ */
+export const playlistUnplayableNotice = <S extends YtSong, L>(
+  entries: readonly PlaylistItem<S, L>[],
+): string | null => {
+  const songs = entries.flatMap((entry) => (entry.source === "unavailable" ? [entry.song] : []));
+  const [first] = songs;
+  if (first === undefined || songs.length !== entries.length) return null;
+  if (songs.length === 1) return unavailableEntryView(first).notice;
+  return songs.every((song) => song.reason === first.reason)
+    ? UNPLAYABLE_NOTICES[first.reason]
+    : "Wave couldn't find these songs on YouTube Music or in your Library, or they're local files on Spotify.";
+};
 
 /** What an unavailable entry's menu offers. */
 export type UnavailableEntryAction = "removeFromPlaylist" | "search";

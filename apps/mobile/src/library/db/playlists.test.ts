@@ -43,6 +43,7 @@ import {
   addTrack,
   migrateTestDatabase,
   openTestDatabase,
+  traceQueries,
   type TestDatabase,
 } from "./testDatabase.ts";
 
@@ -819,6 +820,65 @@ describe("sorting the Playlists list", () => {
         [playlistId, 5_000],
         [other, 3_000],
       ]),
+    );
+  });
+
+  test("when each playlist was last played is read from an index, never the whole play history", () => {
+    for (let at = 1; at <= 200; at += 1) {
+      recordPlay(db, {
+        trackId: String(ids.Airbag),
+        context: at % 4 === 0 ? fromPlaylist(playlistId) : { kind: "album", id: "1" },
+        startedAt: at * 1_000,
+        listenedMs: 1_000,
+        durationMs: 180_000,
+        endReason: "skipped",
+        counted: false,
+        source: "phone",
+      });
+    }
+    const { result, queries } = traceQueries(db, () => selectPlaylistsLastPlayed(db));
+    assert.deepEqual(result, new Map([[playlistId, 200_000]]));
+    const plans = queries
+      .filter((query) => query.sql.includes("play_events"))
+      .map((query) => query.plan.join("; "));
+    assert.equal(plans.length, 1);
+    for (const plan of plans) {
+      assert.match(plan, /SEARCH play_events USING COVERING INDEX play_events_context_idx/);
+      assert.doesNotMatch(plan, /TEMP B-TREE/);
+    }
+  });
+});
+
+describe("migration 0024", () => {
+  test("plays from before the play contexts' index read the same, through it", async () => {
+    const old = await openTestDatabase({ through: "0023_play_totals" });
+    const track = addTrack(old, { title: "Airbag", album: "Mix", artist: "Radiohead" });
+    // Only the plays are read: the playlist itself needn't exist.
+    const id = 42;
+    for (const [startedAt, context] of [
+      [2_000, fromPlaylist(id)],
+      [7_000, fromPlaylist(id)],
+      [9_000, null],
+    ] as const) {
+      recordPlay(old, {
+        trackId: String(track),
+        context,
+        startedAt,
+        listenedMs: 1_000,
+        durationMs: 180_000,
+        endReason: "skipped",
+        counted: false,
+        source: "phone",
+      });
+    }
+
+    await migrateTestDatabase(old);
+
+    const { result, queries } = traceQueries(old, () => selectPlaylistsLastPlayed(old));
+    assert.deepEqual(result, new Map([[id, 7_000]]));
+    assert.match(
+      queries.map((query) => query.plan.join("; ")).join("; "),
+      /play_events_context_idx/,
     );
   });
 });

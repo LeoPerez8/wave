@@ -9,6 +9,7 @@ import {
   readPlaylistYtSong,
   UNAVAILABLE_ENTRY_ACTION_LABELS,
   playlistSongsLine,
+  playlistUnplayableNotice,
   unavailableEntryActions,
   unavailableEntryView,
   unavailableSearchQuery,
@@ -378,6 +379,43 @@ describe("an unavailable entry", () => {
     const credited = unavailable("Touch", { artists: ["Daft Punk feat. Paul Williams"] }).song;
     assert.equal(unavailableSearchQuery(credited), "Touch Daft Punk");
     assert.equal(unavailableSearchQuery(unavailable("Untitled", { artists: [] }).song), "Untitled");
+  });
+});
+
+describe("playlistUnplayableNotice", () => {
+  type Track = { readonly id: number };
+  const own: MixedSong<YtAlbumSong, Track> = { source: "library", track: { id: 1 } };
+  const local = (title: string) => unavailable(title, { artists: [], reason: "localFile" });
+
+  test("a playlist of one unavailable entry says why, as tapping it does", () => {
+    assert.equal(
+      playlistUnplayableNotice([unavailable("Within")]),
+      "Wave couldn't find this song on YouTube Music or in your Library.",
+    );
+    assert.equal(
+      playlistUnplayableNotice([local("Untitled")]),
+      "This song is a local file on Spotify, so Wave couldn't look for it.",
+    );
+  });
+
+  test("a playlist of several says why for them all", () => {
+    assert.equal(
+      playlistUnplayableNotice([unavailable("Within"), unavailable("Touch")]),
+      "Wave couldn't find these songs on YouTube Music or in your Library.",
+    );
+    assert.equal(
+      playlistUnplayableNotice([local("Untitled"), local("Demo")]),
+      "These songs are local files on Spotify, so Wave couldn't look for them.",
+    );
+    assert.equal(
+      playlistUnplayableNotice([unavailable("Within"), local("Untitled")]),
+      "Wave couldn't find these songs on YouTube Music or in your Library, or they're local files on Spotify.",
+    );
+  });
+
+  test("a playlist with anything that plays, or nothing at all, says nothing", () => {
+    assert.equal(playlistUnplayableNotice([unavailable("Within"), own]), null);
+    assert.equal(playlistUnplayableNotice([]), null);
   });
 });
 
