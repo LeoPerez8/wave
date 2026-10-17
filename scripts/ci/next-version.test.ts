@@ -12,6 +12,14 @@ const script = fileURLToPath(new URL("./next-version.ts", import.meta.url));
 
 const app = ["apps/mobile/src/app/_layout.tsx"];
 
+// apps/mobile/package.json's text at a version, as Prettier leaves it.
+const appPackage = (version: string, extra = {}) =>
+  `${JSON.stringify({ name: "@wave/mobile", version, dependencies: { expo: "58.0.7" }, ...extra }, null, 2)}\n`;
+
+const spawn = (args: string[]) =>
+  spawnSync(process.execPath, [script, ...args], { encoding: "utf8" });
+const run = (args: string[]) => spawn(args).stdout;
+
 describe("nextVersion", () => {
   it("bumps the patch of the highest version tagged, counting a -ti tag by its base", () => {
     const tags = ["latest", "ti-latest", "pr-204", "v0.5.0", "v0.5.1-ti", "v0.5.3-ti", "v0.5.2"];
@@ -55,8 +63,6 @@ describe("nextVersion", () => {
   });
 
   it("releases nothing when the app's package.json changed only its version (a bump merged from the other branch)", () => {
-    const appPackage = (version: string, extra = {}) =>
-      `${JSON.stringify({ name: "@wave/mobile", version, dependencies: { expo: "58.0.7" }, ...extra }, null, 2)}\n`;
     const push = { channel: "ti", version: "0.5.7", tags: ["v0.5.6-ti", "v0.5.7"] } as const;
     const bumpOnly = { previous: appPackage("0.5.6-ti"), current: appPackage("0.5.7") };
     const decision = nextVersion({
@@ -257,15 +263,11 @@ describe("next-version.ts", () => {
     writeFileSync(path, lines.map((line) => `${line}\n`).join(""));
     return path;
   };
-  const appPackage = (name: string, version: string) =>
-    file(name, [JSON.stringify({ name: "@wave/mobile", version })]);
-  const spawn = (args: string[]) =>
-    spawnSync(process.execPath, [script, ...args], { encoding: "utf8" });
-  const run = (args: string[]) => spawn(args).stdout;
+  const packageFile = (name: string, version: string) => file(name, [appPackage(version)]);
   const tags = file("tags.txt", ["latest", "v0.5.3", "v0.5.3-ti"]);
   const at = (version: string) => [
     "--package",
-    appPackage(`package-${version}.json`, version),
+    packageFile(`package-${version}.json`, version),
     "--tags",
     tags,
   ];
@@ -287,7 +289,7 @@ describe("next-version.ts", () => {
 
   it("releases nothing when the app's package.json changed only its version", () => {
     const changed = file("package-only.txt", ["apps/mobile/package.json"]);
-    const previous = appPackage("previous.json", "0.5.3-ti");
+    const previous = packageFile("previous.json", "0.5.3-ti");
     const args = [...at("0.5.3"), "--changed", changed, "--previous-package", previous];
     assert.equal(run(args), "version=\n");
   });
