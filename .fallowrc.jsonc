@@ -13,6 +13,8 @@
     "scripts/ci/kept-apk.ts",
     "scripts/ci/next-version.ts",
     "scripts/ci/apk-version.ts",
+    "scripts/ci/previous-tag.ts",
+    "scripts/ci/merged-prs.ts",
     "scripts/music-folder/organize.ts",
     "scripts/music-folder/replace.ts",
     "scripts/**/*.test.ts",
