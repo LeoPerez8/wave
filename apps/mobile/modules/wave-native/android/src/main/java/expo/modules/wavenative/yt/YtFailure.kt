@@ -31,12 +31,17 @@ enum class YtFailure(val code: String) {
      * The app log's line for [what] (`Songs search "…"`) that failed as [error]: the failure as JS
      * names it (offline, YT Music off, failed), then what native code saw, the HTTP status
      * YouTube answered or the exception's class and message. (Redacted as every line is.)
+     * [statusOf] reads the HTTP status off a cause; JVM tests pass their own, since innertubex
+     * is built for a newer Java than the unit tests run on.
      */
-    fun failedLine(what: String, error: YtException): String = "$what failed (${error.failure.logName}): ${seen(error)}"
+    fun failedLine(what: String, error: YtException, statusOf: (Throwable) -> Int? = ::innerTubeStatus): String =
+      "$what failed (${error.failure.logName}): ${seen(error, statusOf)}"
 
-    private fun seen(error: YtException): String {
+    private fun innerTubeStatus(cause: Throwable): Int? = (cause as? InnerTubeHttpException)?.status?.value
+
+    private fun seen(error: YtException, statusOf: (Throwable) -> Int?): String {
       val causes = generateSequence(error.cause) { it.cause }.toList()
-      causes.filterIsInstance<InnerTubeHttpException>().firstOrNull()?.let { return "HTTP ${it.status.value}" }
+      causes.firstNotNullOfOrNull(statusOf)?.let { return "HTTP $it" }
       val root = causes.lastOrNull() ?: return when (error.failure) {
         YtFailure.OFFLINE -> "no network"
         YtFailure.DISABLED -> "YT Music is off"
