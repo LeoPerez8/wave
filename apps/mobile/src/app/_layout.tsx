@@ -14,6 +14,7 @@ import { afterFirstContent, touchEnded, touchStarted, touchTakenOver } from "@/l
 import { followLibraryLookupSummary } from "@/library/findLyricsAndGenre";
 import { useAllFilesAccess } from "@/library/hooks";
 import { resumePlaylistImports } from "@/library/playlistImports";
+import { resumeYtLibraryImport } from "@/library/ytLibraryImport";
 import { primePlaylists } from "@/library/playlists";
 import { OverlayHost } from "@/overlay/OverlayHost";
 import { FollowCurrentRoute } from "@/library/routes";
@@ -62,6 +63,8 @@ export default function RootLayout() {
       afterFirstContent("scan", startInitialScan);
       // Link imports kept when Wave last closed go on filling their playlists.
       afterFirstContent("imports", resumePlaylistImports);
+      // A From YT Music batch Android stopped reads the playlists it hadn't, in order.
+      afterFirstContent("ytLibraryImport", resumeYtLibraryImport);
     }
   }, [granted]);
 
