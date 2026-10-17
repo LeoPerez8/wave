@@ -11,7 +11,7 @@ import {
   cancelPlaylistImport,
   tryPlaylistImportAgain,
   usePlaylistImports,
-  useSpotifySearches,
+  useSearchesAsked,
 } from "./playlistImports";
 
 /** How often the time left is worked out again, as it changes even while the import waits. */
@@ -23,7 +23,7 @@ const TICK_MS = 5000;
  */
 export const usePlaylistImportView = (playlistId: number): PlaylistImportView | null => {
   const imports = usePlaylistImports();
-  const searches = useSpotifySearches();
+  const searches = useSearchesAsked();
   const [now, setNow] = useState(Date.now);
   const importing = imports.some(
     (job) => job.playlistId === playlistId && job.state.kind === "importing",

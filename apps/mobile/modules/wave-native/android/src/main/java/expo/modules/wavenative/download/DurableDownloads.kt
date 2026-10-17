@@ -186,6 +186,19 @@ class DurableDownloads(
     return job.toMap() + ("decision" to DECISIONS[job["phase"]])
   }
 
+  /**
+   * JS is still working on its decision (waiting for the YouTube Music search allowance, say):
+   * the lease runs another [LEASE_MS], never past the job's deadline. False once it ran out or
+   * went to another claim, as [submit] would be.
+   */
+  @Synchronized fun renew(id: String, generation: Long, token: String): Boolean {
+    val job = jobs[id] ?: return false
+    if (job.number("generation") != generation || job["token"] != token || job.number("leaseUntil") < clock()) return false
+    job["leaseUntil"] = minOf(clock() + LEASE_MS, job.number("deadline"))
+    persist()
+    return true
+  }
+
   @Synchronized fun submit(id: String, generation: Long, token: String, decision: String, payload: Map<String, Any?>): Boolean {
     val job = jobs[id] ?: return false
     if (job.number("generation") != generation || job["token"] != token || job.number("leaseUntil") < clock() || DECISIONS[job["phase"]] != decision) return false
