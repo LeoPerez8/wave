@@ -6,7 +6,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { changes } from "./changes.ts";
+import { reachesUsers } from "./changes.ts";
 
 export type MergedPr = {
   number: number;
@@ -52,7 +52,7 @@ const isMergedPr = (value: unknown): value is MergedPr =>
   Array.isArray(value.issues) &&
   value.issues.every((issue: unknown) => typeof issue === "number" && Number.isSafeInteger(issue));
 
-const parseMergedPr = (line: string, index: number): MergedPr => {
+export const parseMergedPr = (line: string, index: number): MergedPr => {
   let value: unknown;
   try {
     value = JSON.parse(line);
@@ -78,11 +78,7 @@ const closedIssues = (pr: MergedPr) => [
 // Users see what changes the APK or the sync service. A PR that changes only CI, docs or
 // specs (by the change rule) isn't news to them. `files` is null when GitHub couldn't list
 // them all.
-const isListed = (pr: MergedPr) => {
-  if (pr.files === null) return true;
-  const touched = changes(pr.files);
-  return touched.app || touched.core || touched.sync || touched.workspace;
-};
+const isListed = (pr: MergedPr) => pr.files === null || reachesUsers(pr.files);
 
 // A title is plain text with `code` in it: Markdown would drop "<version>" as an HTML
 // tag and let brackets end the link early.
@@ -97,18 +93,30 @@ const section = (heading: string, prs: readonly MergedPr[]) =>
     ? []
     : [`## ${heading}\n\n${prs.map((pr) => `- [${linkText(pr.title)}](${pr.url})\n`).join("")}`];
 
-export const patchNotes = ({ commits, bugIssues, pullRequests }: PatchNotesInput): string => {
+/**
+ * The PRs a release's notes list, in PR order: those merged in its commits, less the ones
+ * users can't see and a feature branch's PR when its tickets' PRs are there. The version
+ * bump counts the same ones.
+ */
+export const listedPullRequests = ({
+  commits,
+  pullRequests,
+}: Pick<PatchNotesInput, "commits" | "pullRequests">): MergedPr[] => {
   const inRelease = new Set(commits);
-  const bugs = new Set(bugIssues);
-  const isFix = (pr: MergedPr) =>
-    pr.branch.startsWith("fix/") || closedIssues(pr).some((issue) => bugs.has(issue));
   const merged = pullRequests.filter((pr) => inRelease.has(pr.mergeCommit));
   // A feature built on its own branch reaches main as one PR, and its tickets' PRs
   // into that branch already say what it brings.
   const featureBranches = new Set(merged.map((pr) => pr.base));
-  const listed = merged
+  return merged
     .filter((pr) => !featureBranches.has(pr.branch) && isListed(pr))
     .toSorted((a, b) => a.number - b.number);
+};
+
+export const patchNotes = ({ commits, bugIssues, pullRequests }: PatchNotesInput): string => {
+  const bugs = new Set(bugIssues);
+  const isFix = (pr: MergedPr) =>
+    pr.branch.startsWith("fix/") || closedIssues(pr).some((issue) => bugs.has(issue));
+  const listed = listedPullRequests({ commits, pullRequests });
   return [
     ...section(
       "New",
