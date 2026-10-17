@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Pushes to main and ti: releases the next version (docs/spec.md, Releases; ti's end in -ti).
 # next-version.ts picks it from the repo's v* tags, one counter for both branches, what changed
-# since the branch's previous release and the PRs merged since then (merged-prs.sh; a feat/ one
-# makes it a minor bump). When the push releases, this writes the version into
-# apps/mobile/package.json, commits that alone as "Release Wave <version>" and pushes it to the
-# branch with the workflow's token, which doesn't start another run. If the branch moved on
-# meanwhile, it starts over from its new tip.
+# since the branch's previous release (previous-tag.sh) and the PRs merged since then
+# (merged-prs.sh; one from a feat/ branch that no release shipped yet makes it a minor bump).
+# When the push releases, this writes the version into apps/mobile/package.json, commits that
+# alone as "Release Wave <version>" and pushes it to the branch with the workflow's token,
+# which doesn't start another run. If the branch moved on meanwhile, it starts over from its
+# new tip. A commit already tagged for its channel is released as it is.
 # Writes `tag=v<version>` (empty when nothing is released) and `sha=<commit>` (the commit the
 # rest of the run checks, builds and tags) to $GITHUB_OUTPUT.
 #   scripts/ci/bump-version.sh main|ti
@@ -38,24 +39,23 @@ fetch "${unshallow[@]}"
 
 for attempt in 1 2 3 4 5; do
   git tag --list 'v*' > "$tmp/tags.txt"
-  # The branch's previous release, as patch-notes.sh picks it: the newest version tag of its
-  # channel in its history. Stable ones for main; for ti the newest -ti one, or the newest
-  # stable one before ti's first.
-  newest() {
-    git tag --merged HEAD --list 'v[0-9]*' --sort=-v:refname \
-      | { grep -E "^v[0-9]+\.[0-9]+\.[0-9]+$1\$" || true; } | head -n 1
-  }
-  since=""
-  if [ "$branch" = ti ]; then since="$(newest -ti)"; fi
-  if [ -z "$since" ]; then since="$(newest "")"; fi
+  git tag --points-at HEAD --list 'v*' > "$tmp/own.txt"
+  # The branch's previous release, as patch-notes.sh picks it.
+  since="$("$here/previous-tag.sh" HEAD "$branch")"
   inputs=()
   if [ -n "$since" ]; then
     # Both names of a moved file, as in changes.sh.
     git diff --name-only --no-renames "$since" HEAD > "$tmp/changed.txt"
-    # The PRs merged since then that the patch notes list decide the bump's size.
+    # So a version bump merged from the other branch doesn't count as a change.
+    git show "$since:$package" > "$tmp/previous-package.json" 2> /dev/null \
+      || : > "$tmp/previous-package.json"
+    # The PRs merged since then that the patch notes list decide the bump's size, less the
+    # ones a v* tag of either channel already contains.
     git rev-list "$since..HEAD" > "$tmp/commits.txt"
+    git rev-list HEAD --not --tags='v*' > "$tmp/unreleased.txt"
     "$here/merged-prs.sh" "$since" HEAD > "$tmp/prs.jsonl"
-    inputs=("$tmp/changed.txt" "$tmp/commits.txt" "$tmp/prs.jsonl")
+    inputs=(--changed "$tmp/changed.txt" --previous-package "$tmp/previous-package.json"
+      --commits "$tmp/commits.txt" --unreleased "$tmp/unreleased.txt" --prs "$tmp/prs.jsonl")
     echo "::group::Changed since $since"
     cat "$tmp/changed.txt"
     echo "::endgroup::"
@@ -65,7 +65,8 @@ for attempt in 1 2 3 4 5; do
 
   current="$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).version)' "$package")"
   echo "The app's version is $current ($package)."
-  version="$(node "$here/next-version.ts" ${channel[@]+"${channel[@]}"} "$current" "$tmp/tags.txt" ${inputs[@]+"${inputs[@]}"} \
+  version="$(node "$here/next-version.ts" ${channel[@]+"${channel[@]}"} --package "$package" \
+    --tags "$tmp/tags.txt" --own "$tmp/own.txt" ${inputs[@]+"${inputs[@]}"} \
     | sed -n 's/^version=//p')"
 
   if [ -z "$version" ]; then
