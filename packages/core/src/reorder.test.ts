@@ -107,6 +107,15 @@ describe("reorderScrollSpeed", () => {
     assert.equal(reorderScrollSpeed({ ...list, top: 504 }), 672);
     assert.equal(reorderScrollSpeed({ ...list, top: 600 }), 672);
   });
+
+  test("a finger (no row height) scrolls the list as it nears an edge", () => {
+    // The Playlists list and a playlist's songs: 8 dp a frame at most.
+    const finger = { rowHeight: 0, viewport: 560, edge: 56, maxSpeed: 8 };
+    assert.equal(reorderScrollSpeed({ ...finger, top: 28 }), -4);
+    assert.equal(reorderScrollSpeed({ ...finger, top: 280 }), 0);
+    assert.equal(reorderScrollSpeed({ ...finger, top: 532 }), 4);
+    assert.equal(reorderScrollSpeed({ ...finger, top: 600 }), 8);
+  });
 });
 
 describe("reorderGridTarget", () => {

@@ -257,7 +257,6 @@ export type {
 export {
   PLAYLIST_LAYOUTS,
   parsePlaylistLayout,
-  playlistLayoutRows,
   storedPlaylistLayout,
 } from "./playlistLayout.ts";
 export type { PlaylistLayout } from "./playlistLayout.ts";

@@ -4,7 +4,6 @@ import { describe, test } from "node:test";
 import {
   PLAYLIST_LAYOUTS,
   parsePlaylistLayout,
-  playlistLayoutRows,
   storedPlaylistLayout,
 } from "./index.ts";
 
@@ -36,22 +35,5 @@ describe("playlist layout", () => {
       PLAYLIST_LAYOUTS.map(({ label }) => label),
       ["List", "Grid", "Large Cards"],
     );
-  });
-
-  test("the list and large cards show one playlist per row", () => {
-    assert.deepEqual(playlistLayoutRows(["a", "b", "c"], "list"), [["a"], ["b"], ["c"]]);
-    assert.deepEqual(playlistLayoutRows(["a", "b", "c"], "large"), [["a"], ["b"], ["c"]]);
-  });
-
-  test("the grid pairs playlists in order, an odd one out alone on the last row", () => {
-    assert.deepEqual(playlistLayoutRows(["a", "b", "c", "d", "e"], "grid"), [
-      ["a", "b"],
-      ["c", "d"],
-      ["e"],
-    ]);
-  });
-
-  test("no playlists make no rows", () => {
-    assert.deepEqual(playlistLayoutRows([], "grid"), []);
   });
 });

@@ -1,8 +1,6 @@
-import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
 import { IconPlaylist } from "@tabler/icons-react-native";
-import { counted, playlistLayoutRows, type PlaylistLayout } from "@wave/core";
-import { useScrollToTop } from "expo-router";
-import { useCallback, useMemo, useRef, type ReactNode } from "react";
+import { counted, type PlaylistLayout } from "@wave/core";
+import { useCallback, useMemo, type ReactNode } from "react";
 import { useWindowDimensions, View, type AccessibilityActionEvent } from "react-native";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
@@ -10,7 +8,6 @@ import { CELL, grid } from "@/catalog/grid";
 import { PlaylistEntry } from "@/catalog/PlaylistEntry";
 import { PlaylistTile } from "@/catalog/PlaylistTile";
 import { playlistTileRowHeight } from "@/catalog/playlistTileSize";
-import { useChromeInset } from "@/chrome/chrome";
 import { EmptyState } from "@/components/EmptyState";
 import { TextButton } from "@/components/TextButton";
 import { openPlaylistActions } from "@/playback/ActionsMenu";
@@ -25,10 +22,9 @@ import { usePlaylistLayout } from "./playlistLayout";
 import { moveShownPlaylist } from "./playlistOrder";
 import { emptyPlaylistRow } from "./playlists";
 import { newPlaylist } from "./PlaylistSheets";
-import { usePlaylistSort, useSortedPlaylists } from "./playlistSort";
+import { useSortedPlaylists } from "./playlistSort";
 import { openPlaylist } from "./routes";
 import { songCount } from "./TrackList";
-import { useListScrollable } from "@/motion/heldTouch";
 import { useRenderCount } from "@/perf/perf";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
@@ -46,9 +42,6 @@ const playlistsOf = (playlists: readonly PlaylistRow[]): ActionItems => ({
   kind: "playlist",
   items: playlists,
 });
-
-/** A row of the list: its playlists' keys. */
-const rowKey = (row: readonly PlaylistRow[]): string => row.map(keyOf).join(",");
 
 /**
  * Tap opens the playlist; long-press opens its menu, which offers Select.
@@ -85,8 +78,8 @@ const moveActions = (index: number, ids: readonly number[], selecting: boolean) 
 
 /**
  * One playlist as [layout] shows it: a row with a small mosaic (list), a tile
- * with its count (grid), or a full-width card (large). While selecting, it
- * shows a check. [arranging]: a handle sits over the end of a tile's name.
+ * with its count (grid), or a full-width card (large), a tile's name leaving
+ * room for the drag handle over its end. While selecting, it shows a check.
  */
 function PlaylistView({
   playlist,
@@ -95,7 +88,6 @@ function PlaylistView({
   layout,
   tile,
   selection,
-  arranging = false,
 }: {
   playlist: PlaylistRow;
   /** Its place in the list: an index of [ids], the order on screen. */
@@ -105,7 +97,6 @@ function PlaylistView({
   /** The cover's side for this layout's tiles. */
   tile: number;
   selection: ListSelection<PlaylistRow>;
-  arranging?: boolean;
 }) {
   const press = playlistPress(playlist, selection);
   const moves = moveActions(index, ids, selection.selecting);
@@ -127,51 +118,10 @@ function PlaylistView({
       accessibilityDetail={songCount(playlist.trackCount)}
       paths={playlist.thumbPaths}
       size={tile}
-      nameInset={arranging ? TILE_GRIP_INSET : undefined}
+      nameInset={TILE_GRIP_INSET}
       {...press}
       {...moves}
     />
-  );
-}
-
-/**
- * A row of playlists as [layout] lays them out: one row (list), two tiles
- * (grid) or one full-width card (large), the first at [first] in the list.
- */
-function PlaylistsRow({
-  row,
-  first,
-  ids,
-  layout,
-  tile,
-  selection,
-}: {
-  row: readonly PlaylistRow[];
-  first: number;
-  ids: readonly number[];
-  layout: PlaylistLayout;
-  tile: number;
-  selection: ListSelection<PlaylistRow>;
-}) {
-  const views = row.map((playlist, index) => (
-    <PlaylistView
-      key={playlist.id}
-      playlist={playlist}
-      index={first + index}
-      ids={ids}
-      layout={layout}
-      tile={tile}
-      selection={selection}
-    />
-  ));
-  if (layout === "list") return views;
-  return (
-    <View
-      className="flex-row"
-      style={{ gap: grid.gutter, height: playlistTileRowHeight(tile, layout === "grid") }}
-    >
-      {views}
-    </View>
   );
 }
 
@@ -188,43 +138,19 @@ const rowHeight = (layout: PlaylistLayout, tile: number): number =>
 
 /**
  * The Playlists list (Library › Playlists and the Playlists tab): every
- * playlist in the order picked under Sort by (Custom: arranged by dragging
- * their handles), in the layout picked from the title's long press, with
- * Import Playlists and New Playlist above them whatever the order.
+ * playlist in the order picked under Sort by, in the layout picked from the
+ * title's long press, with Import Playlists and New Playlist above them
+ * whatever the order. Each playlist's handle drags it to a new place, which
+ * under another sort switches the list to Custom from the order on screen.
  */
 export function PlaylistsList({ empty }: { empty: string }) {
   useRenderCount("PlaylistsList");
-  const scrollable = useListScrollable();
   const playlists = useSortedPlaylists();
   const layout = usePlaylistLayout();
-  const sort = usePlaylistSort();
   const tile = useTileSize(layout);
-  const bottomInset = useChromeInset();
-  const list = useRef<LegendListRef>(null);
-  useScrollToTop(list);
   const selection = useListSelection({ items: playlists, keyOf, target: playlistsOf });
   const ids = useMemo(() => playlists.map((playlist) => playlist.id), [playlists]);
-  const rows = useMemo(() => playlistLayoutRows(playlists, layout), [playlists, layout]);
-  const perRow = layout === "grid" ? 2 : 1;
-  const height = rowHeight(layout, tile);
-  const rowState = useMemo(
-    () => ({ layout, tile, selection, ids }),
-    [layout, tile, selection, ids],
-  );
-  const renderRow = useCallback(
-    ({ item, index }: { item: readonly PlaylistRow[]; index: number }) => (
-      <PlaylistsRow
-        row={item}
-        first={index * perRow}
-        ids={ids}
-        layout={layout}
-        tile={tile}
-        selection={selection}
-      />
-    ),
-    [ids, perRow, layout, tile, selection],
-  );
-  const renderArranged = useCallback(
+  const renderPlaylist = useCallback(
     (playlist: PlaylistRow, index: number) => (
       <PlaylistView
         playlist={playlist}
@@ -233,7 +159,6 @@ export function PlaylistsList({ empty }: { empty: string }) {
         layout={layout}
         tile={tile}
         selection={selection}
-        arranging
       />
     ),
     [ids, layout, tile, selection],
@@ -252,44 +177,21 @@ export function PlaylistsList({ empty }: { empty: string }) {
     );
   }
 
-  const header = (
-    <PlaylistsHeader count={playlists.length}>
-      <PlaylistsActions />
-    </PlaylistsHeader>
-  );
-
-  if (sort === "custom") {
-    return (
-      <ArrangeablePlaylists
-        // A new layout lays the list out afresh: its cells change size and shape.
-        key={layout}
-        playlists={playlists}
-        layout={layout}
-        tile={tile}
-        rowHeight={height}
-        selecting={selection.selecting}
-        header={header}
-        renderPlaylist={renderArranged}
-      />
-    );
-  }
-
   return (
-    <LegendList
-      // A new layout lays the list out afresh: its rows change size and shape.
+    <ArrangeablePlaylists
+      // A new layout lays the list out afresh: its cells change size and shape.
       key={layout}
-      ref={list}
-      scrollEnabled={scrollable}
-      className="flex-1"
-      data={rows}
-      keyExtractor={rowKey}
-      renderItem={renderRow}
-      extraData={rowState}
-      estimatedItemSize={height}
-      getFixedItemSize={() => height}
-      recycleItems
-      contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottomInset }}
-      ListHeaderComponent={header}
+      playlists={playlists}
+      layout={layout}
+      tile={tile}
+      rowHeight={rowHeight(layout, tile)}
+      selecting={selection.selecting}
+      header={
+        <PlaylistsHeader count={playlists.length}>
+          <PlaylistsActions />
+        </PlaylistsHeader>
+      }
+      renderPlaylist={renderPlaylist}
     />
   );
 }
