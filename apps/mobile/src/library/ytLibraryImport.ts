@@ -48,7 +48,7 @@ import { appLog } from "@/log/appLog";
 import { askYtMusic } from "@/ytmusic/askYtMusic";
 
 import { setFavorites } from "./favorites";
-import { listLibrary } from "./importPlaylistLink";
+import { listLibrary } from "./playlistImports";
 import { cancelPlaylistImport, startLinkImport } from "./playlistImports";
 import { createPlaylist, currentPlaylists, replacePlaylistSongs } from "./playlists";
 

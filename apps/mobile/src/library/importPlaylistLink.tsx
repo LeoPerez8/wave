@@ -39,22 +39,15 @@ import { useThemeColor } from "@/theme/useThemeColor";
 import { askYtMusic } from "@/ytmusic/askYtMusic";
 
 import { importPlaylists, saveImportedPlaylist, type ImportedPlaylist } from "./importPlaylists";
-import { LibraryStore } from "./LibraryStore";
-import { startLinkImport } from "./playlistImports";
+import { listLibrary, startLinkImport } from "./playlistImports";
 import { openYtLibraryImport } from "./YtLibraryPicker";
 import { openPlaylist } from "./routes";
-import { appRuntime } from "./runtime";
 
 // ---------------------------------------------------------------------------
 // Import service
 
 /** A linked playlist read, or why it wasn't. */
 export type LinkRead = LinkImportRead<NativeYtSong>;
-
-/** The Library's songs, as an import matches them (`planLinkImport`). */
-export const listLibrary = () =>
-  // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
-  appRuntime.runPromise(LibraryStore.use((store) => store.listSongs));
 
 /** Spotify through `fetch`, as Core's `readSpotifyPlaylist` asks; rejects when out of reach. */
 const spotifyTransport =
