@@ -39,16 +39,41 @@ const library: readonly YtLibraryPlaylist[] = [
 ];
 
 describe("ytLibraryPicker", () => {
-  test("lists the account's own and saved playlists in its order, leaving out what YouTube Music generates", () => {
+  test("lists Liked Songs first, then the account's own and saved playlists in its order, leaving out what YouTube Music generates", () => {
     const { rows } = ytLibraryPicker(library);
     assert.deepEqual(
       rows.map((row) => row.title),
-      ["Road trip", "Gym", "Chill Hits"],
+      ["Liked Songs", "Road trip", "Gym", "Chill Hits"],
     );
   });
 
+  test("Liked Songs is YouTube Music's Liked music, read as LM, with its cover and count from the library page", () => {
+    const [liked] = ytLibraryPicker(library).rows;
+    assert.deepEqual(liked, {
+      playlistId: "LM",
+      title: "Liked Songs",
+      artworkUrl: "https://lh3.googleusercontent.com/LM",
+      line: "1,834 songs",
+      imported: false,
+      ticked: true,
+    });
+  });
+
+  test("Liked Songs is listed even for an account with no playlists", () => {
+    assert.deepEqual(ytLibraryPicker([]).rows, [
+      {
+        playlistId: "LM",
+        title: "Liked Songs",
+        artworkUrl: null,
+        line: null,
+        imported: false,
+        ticked: true,
+      },
+    ]);
+  });
+
   test("each row shows the cover, the name and how many songs the library page says", () => {
-    const [road, gym] = ytLibraryPicker(library).rows;
+    const [, road, gym] = ytLibraryPicker(library).rows;
     assert.deepEqual(road, {
       playlistId: "PLroad",
       title: "Road trip",
@@ -77,14 +102,23 @@ describe("ytLibraryPicker", () => {
       ticked,
     }));
     assert.deepEqual(rows, [
+      { playlistId: "LM", imported: false, ticked: true },
       { playlistId: "PLroad", imported: false, ticked: true },
       { playlistId: "PLgym", imported: true, ticked: false },
       { playlistId: "RDCLAK5uy_chill", imported: false, ticked: true },
     ]);
   });
 
-  test("an account with nothing but generated playlists has no rows", () => {
-    assert.deepEqual(ytLibraryPicker(library.slice(0, 2)).rows, []);
+  test("Liked Songs imported on this phone shows Imported and starts unticked too", () => {
+    const [liked] = ytLibraryPicker(library, new Map([["LM", 9]])).rows;
+    assert.deepEqual([liked?.title, liked?.imported, liked?.ticked], ["Liked Songs", true, false]);
+  });
+
+  test("an account with nothing but generated playlists lists only Liked Songs", () => {
+    assert.deepEqual(
+      ytLibraryPicker(library.slice(0, 2)).rows.map((row) => row.title),
+      ["Liked Songs"],
+    );
   });
 });
 
@@ -95,8 +129,9 @@ describe("ticking rows", () => {
   test("a tap unticks a ticked row and ticks it again, leaving the others", () => {
     const picker = ytLibraryPicker(library);
     const unticked = toggleYtLibraryRow(picker, "PLgym");
-    assert.deepEqual(ticked(unticked), ["PLroad", "RDCLAK5uy_chill"]);
+    assert.deepEqual(ticked(unticked), ["LM", "PLroad", "RDCLAK5uy_chill"]);
     assert.deepEqual(ticked(toggleYtLibraryRow(unticked, "PLgym")), [
+      "LM",
       "PLroad",
       "PLgym",
       "RDCLAK5uy_chill",
@@ -113,6 +148,7 @@ describe("ticking rows", () => {
     const picker = toggleYtLibraryRow(ytLibraryPicker(library), "PLroad");
     assert.equal(ytLibraryPickerView(picker).selectAll, "Select All");
     assert.deepEqual(ticked(pressYtLibrarySelectAll(picker)), [
+      "LM",
       "PLroad",
       "PLgym",
       "RDCLAK5uy_chill",
@@ -132,7 +168,7 @@ describe("ticking rows", () => {
   });
 
   test("with no rows there is nothing to select or import", () => {
-    const view = ytLibraryPickerView(ytLibraryPicker([]));
+    const view = ytLibraryPickerView({ rows: [], origins: new Map() });
     assert.deepEqual(view, { selectAll: null, canImport: false });
   });
 });
@@ -147,6 +183,7 @@ describe("planYtLibraryImport", () => {
   test("makes a playlist of each ticked row, in the picker's order", () => {
     const picker = toggleYtLibraryRow(ytLibraryPicker(library), "PLgym");
     assert.deepEqual(names(picker), [
+      ["LM", "Liked Songs"],
       ["PLroad", "Road trip"],
       ["RDCLAK5uy_chill", "Chill Hits"],
     ]);
@@ -162,6 +199,7 @@ describe("planYtLibraryImport", () => {
       playlist("PLblank", "   "),
     ]);
     assert.deepEqual(names(picker), [
+      ["LM", "Liked Songs"],
       ["PLspaces", "Late night"],
       ["PLblank", "Imported Playlist"],
     ]);
@@ -170,6 +208,7 @@ describe("planYtLibraryImport", () => {
   test("a name another playlist has goes in under Keep Both's name, without asking", () => {
     const picker = ytLibraryPicker([playlist("PLroad", "Road trip"), playlist("PLgym", "Gym")]);
     assert.deepEqual(names(picker, ["road TRIP", "Gym", "Gym 2"]), [
+      ["LM", "Liked Songs"],
       ["PLroad", "Road trip 2"],
       ["PLgym", "Gym 3"],
     ]);
@@ -178,9 +217,31 @@ describe("planYtLibraryImport", () => {
   test("two picked playlists with one name don't share it", () => {
     const picker = ytLibraryPicker([playlist("PLa", "Mix"), playlist("PLb", "Mix")]);
     assert.deepEqual(names(picker), [
+      ["LM", "Liked Songs"],
       ["PLa", "Mix"],
       ["PLb", "Mix 2"],
     ]);
+  });
+
+  test("Liked Songs goes in as Liked Songs, under Keep Both's name when one has it", () => {
+    const picker = ytLibraryPicker([playlist("PLliked", "Liked Songs", { kind: "saved" })]);
+    assert.deepEqual(names(picker, ["liked songs"]), [
+      ["LM", "Liked Songs 2"],
+      ["PLliked", "Liked Songs 3"],
+    ]);
+  });
+
+  test("Liked Songs is read whole; the other playlists stop at the cap", () => {
+    const plan = planYtLibraryImport(ytLibraryPicker(library), []);
+    assert.deepEqual(
+      plan.map(({ playlistId, uncapped }) => [playlistId, uncapped]),
+      [
+        ["LM", true],
+        ["PLroad", false],
+        ["PLgym", false],
+        ["RDCLAK5uy_chill", false],
+      ],
+    );
   });
 });
 
@@ -191,9 +252,17 @@ describe("importing again", () => {
   test("an Imported row ticked again refreshes the playlist it made, under its name in Wave, and makes no second one", () => {
     const picker = toggleYtLibraryRow(ytLibraryPicker(library, origins), "PLgym");
     assert.deepEqual(planYtLibraryImport(picker, wave("Road trip", "Gym workout")), [
-      { playlistId: "PLroad", name: "Road trip 2", replaces: null },
-      { playlistId: "PLgym", name: "Gym workout", replaces: 2 },
-      { playlistId: "RDCLAK5uy_chill", name: "Chill Hits", replaces: null },
+      { playlistId: "LM", name: "Liked Songs", replaces: null, uncapped: true },
+      { playlistId: "PLroad", name: "Road trip 2", replaces: null, uncapped: false },
+      { playlistId: "PLgym", name: "Gym workout", replaces: 2, uncapped: false },
+      { playlistId: "RDCLAK5uy_chill", name: "Chill Hits", replaces: null, uncapped: false },
+    ]);
+  });
+
+  test("Liked Songs ticked again refreshes its playlist, still read whole", () => {
+    const picker = toggleYtLibraryRow(ytLibraryPicker([], new Map([["LM", 4]])), "LM");
+    assert.deepEqual(planYtLibraryImport(picker, wave("Road trip", "Gym", "Chill", "My Likes")), [
+      { playlistId: "LM", name: "My Likes", replaces: 4, uncapped: true },
     ]);
   });
 
@@ -201,7 +270,7 @@ describe("importing again", () => {
     const plan = planYtLibraryImport(ytLibraryPicker(library, origins), wave("Road trip", "Gym"));
     assert.deepEqual(
       plan.map((item) => item.playlistId),
-      ["PLroad", "RDCLAK5uy_chill"],
+      ["LM", "PLroad", "RDCLAK5uy_chill"],
     );
   });
 
@@ -210,7 +279,7 @@ describe("importing again", () => {
     const plan = planYtLibraryImport(picker, [{ id: 5, name: "Gym" }]);
     assert.deepEqual(
       plan.find((item) => item.playlistId === "PLgym"),
-      { playlistId: "PLgym", name: "Gym 2", replaces: null },
+      { playlistId: "PLgym", name: "Gym 2", replaces: null, uncapped: false },
     );
   });
 });
@@ -228,6 +297,7 @@ describe("origins", () => {
     assert.deepEqual(
       rows.map((row) => [row.playlistId, row.imported, row.ticked]),
       [
+        ["LM", false, true],
         ["PLroad", true, false],
         ["PLgym", false, true],
         ["RDCLAK5uy_chill", false, true],

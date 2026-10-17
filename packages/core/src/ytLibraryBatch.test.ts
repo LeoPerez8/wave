@@ -42,6 +42,16 @@ describe("the batch as kept on the phone", () => {
     ]);
   });
 
+  test("Liked Songs, read whole, is kept uncapped", () => {
+    const liked = queueYtLibraryReads(
+      [],
+      [{ source: "LM", playlistId: 40, name: "Liked Songs", capped: false }],
+    );
+    assert.deepEqual(keptAndRead(liked), [
+      { source: "LM", playlistId: 40, name: "Liked Songs", capped: false, state: "waiting" },
+    ]);
+  });
+
   test("nothing kept, or nothing readable, is an empty batch", () => {
     for (const stored of [null, "", "not json", "[]", "{}", '{"version":1,"batch":{}}']) {
       assert.deepEqual(readYtLibraryBatch(stored), [], String(stored));

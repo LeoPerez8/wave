@@ -98,10 +98,16 @@ export interface YtLibraryPicker {
   readonly origins: YtLibraryOrigins;
 }
 
+/** YouTube Music's Liked music, read as a playlist with this id (the library page lists it as `VLLM`). */
+const YT_LIKED_SONGS_ID = "LM";
+
+/** Liked Songs' name in the picker, and its playlist's in Wave. */
+const LIKED_SONGS = "Liked Songs";
+
 /**
  * [rows] as this phone's [origins] mark them: a row imported before says
  * Imported and starts unticked, any other starts ticked. By source id alone,
- * so it holds for every row the picker lists.
+ * so it holds for every row the picker lists, Liked Songs included.
  */
 const markImported = (
   rows: readonly Omit<YtLibraryRow, "imported" | "ticked">[],
@@ -112,30 +118,50 @@ const markImported = (
     return { ...row, imported, ticked: !imported };
   });
 
+const pickerRow = (
+  { playlistId, artworkUrl, songCount }: Omit<YtLibraryPlaylist, "kind" | "title">,
+  title: string,
+): Omit<YtLibraryRow, "imported" | "ticked"> => ({
+  playlistId,
+  title,
+  artworkUrl,
+  line: songCount === null ? null : counted(songCount, "song"),
+});
+
 /**
- * The picker for the account's library [playlists], in YouTube Music's order:
- * the account's own and saved playlists. What YouTube Music generates is left
- * out. Every row starts ticked but those [origins] say were imported on this
- * phone (`liveYtLibraryOrigins` first, so a deleted playlist's row is ticked
+ * The picker for the account's library [playlists]: Liked Songs first (its
+ * cover and count from the page's Liked Music, when it lists it), always
+ * listed, then the account's own and saved playlists in YouTube Music's
+ * order. What YouTube Music generates is left out. Every row starts ticked
+ * but those [origins] say were imported on this phone
+ * (`liveYtLibraryOrigins` first, so a deleted playlist's row is ticked
  * again).
  */
 export const ytLibraryPicker = (
   playlists: readonly YtLibraryPlaylist[],
   origins: YtLibraryOrigins = NO_ORIGINS,
-): YtLibraryPicker => ({
-  rows: markImported(
-    playlists
-      .filter((playlist) => playlist.kind !== "generated")
-      .map(({ playlistId, title, artworkUrl, songCount }) => ({
-        playlistId,
-        title,
-        artworkUrl,
-        line: songCount === null ? null : counted(songCount, "song"),
-      })),
+): YtLibraryPicker => {
+  const liked = playlists.find((playlist) => playlist.playlistId === YT_LIKED_SONGS_ID) ?? {
+    playlistId: YT_LIKED_SONGS_ID,
+    artworkUrl: null,
+    songCount: null,
+  };
+  return {
+    rows: markImported(
+      [
+        pickerRow(liked, LIKED_SONGS),
+        ...playlists
+          .filter(
+            (playlist) =>
+              playlist.kind !== "generated" && playlist.playlistId !== YT_LIKED_SONGS_ID,
+          )
+          .map((playlist) => pickerRow(playlist, playlist.title)),
+      ],
+      origins,
+    ),
     origins,
-  ),
-  origins,
-});
+  };
+};
 
 /** [picker] with the row for [playlistId] ticked if it wasn't, unticked if it was. */
 export const toggleYtLibraryRow = (
@@ -182,14 +208,20 @@ export interface YtLibraryImportItem {
    * from the source (as Replace does); null to make a new one.
    */
   readonly replaces: number | null;
+  /**
+   * Read whole (`readYtPlaylist`'s `uncapped`): Liked Songs. The others stop
+   * at `YT_PLAYLIST_SONG_CAP`.
+   */
+  readonly uncapped: boolean;
 }
 
 /**
- * The playlists Import makes from [picker], one per ticked row in its order.
- * A row imported before refreshes the playlist that import made, which keeps
- * its name. Any other is named as a link import names it
- * (`importedPlaylistName`), and a name one of [playlists] (or an earlier one
- * of these) has goes in under Keep Both's name ("Name 2"), without asking.
+ * The playlists Import makes from [picker], one per ticked row in its order,
+ * Liked Songs read whole. A row imported before refreshes the playlist that
+ * import made, which keeps its name. Any other is named as a link import
+ * names it (`importedPlaylistName`; Liked Songs is "Liked Songs"), and a name
+ * one of [playlists] (or an earlier one of these) has goes in under Keep
+ * Both's name ("Name 2"), without asking.
  */
 export const planYtLibraryImport = (
   picker: YtLibraryPicker,
@@ -199,10 +231,16 @@ export const planYtLibraryImport = (
   const items: YtLibraryImportItem[] = [];
   for (const row of picker.rows) {
     if (!row.ticked) continue;
+    const uncapped = row.playlistId === YT_LIKED_SONGS_ID;
     const origin = picker.origins.get(row.playlistId);
     const refreshed = playlists.find((playlist) => playlist.id === origin);
     if (refreshed !== undefined) {
-      items.push({ playlistId: row.playlistId, name: refreshed.name, replaces: refreshed.id });
+      items.push({
+        playlistId: row.playlistId,
+        name: refreshed.name,
+        replaces: refreshed.id,
+        uncapped,
+      });
       continue;
     }
     const wanted = importedPlaylistName(row.title);
@@ -214,7 +252,7 @@ export const planYtLibraryImport = (
             taken.map((playlist) => playlist.name),
           );
     taken.push({ name });
-    items.push({ playlistId: row.playlistId, name, replaces: null });
+    items.push({ playlistId: row.playlistId, name, replaces: null, uncapped });
   }
   return items;
 };

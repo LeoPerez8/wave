@@ -80,8 +80,9 @@ export class YtMusic extends Context.Service<
     readonly album: (browseId: string) => Effect.Effect<NativeYtAlbum, YtMusicError>;
     /**
      * The playlist [playlistId] and all its songs, page after page, up to
-     * 5,000 (Core's `readYtPlaylist`); fails if any page fails. `onPage`
-     * hears it grow, for a screen that shows each page as it comes.
+     * 5,000, or every one with `uncapped` (Core's `readYtPlaylist`); fails if
+     * any page fails. `onPage` hears it grow, for a screen that shows each
+     * page as it comes.
      */
     readonly playlist: (
       playlistId: string,

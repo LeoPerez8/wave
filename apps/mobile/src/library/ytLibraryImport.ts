@@ -4,11 +4,12 @@
  * Core (`planYtLibraryImport`: Keep Both's name on a clash, without asking).
  * Wave then reads them one at a time, in the picker's order, and fills each
  * as a YouTube Music link import does (`readYtPlaylist`, `planLinkImport`,
- * `finishPlaylistImport`). Nothing is downloaded or searched; there's no
- * notification and no service. The batch is kept on the phone (Core's
- * `writeYtLibraryBatch`), so the playlists not read when Android stopped
- * Wave are read once it starts again, in the same order. A read that fails
- * leaves its playlist empty, with a line and Try Again on its page.
+ * `finishPlaylistImport`), Liked Songs whole and the others up to the cap.
+ * Nothing is downloaded or searched; there's no notification and no service.
+ * The batch is kept on the phone (Core's `writeYtLibraryBatch`), so the
+ * playlists not read when Android stopped Wave are read once it starts again,
+ * in the same order. A read that fails leaves its playlist empty, with a line
+ * and Try Again on its page.
  *
  * Each playlist's origin (the YouTube Music playlist it came from) is kept
  * on this phone, unsynced: the picker marks those rows Imported, and ticking
@@ -101,8 +102,9 @@ let reading = false;
 const fill = async (read: YtLibraryRead): Promise<void> => {
   let reason: string;
   try {
-    // Every read stops at the cap for now: Liked Songs' uncapped read (`capped`) is #370's.
-    const answer = await askYtMusic((ytMusic) => ytMusic.playlist(read.source));
+    const answer = await askYtMusic((ytMusic) =>
+      ytMusic.playlist(read.source, { uncapped: !read.capped }),
+    );
     if (Result.isSuccess(answer)) {
       const plan = planLinkImport(
         { service: "ytMusic", playlist: answer.success },
@@ -184,7 +186,12 @@ export const importYtLibrary = async (picker: YtLibraryPicker): Promise<void> =>
         : await emptyPlaylist(item.replaces, item.name);
     batch.set(
       queueYtLibraryReads(batch.get(), [
-        { source: item.playlistId, playlistId: made.playlistId, name: made.name, capped: true },
+        {
+          source: item.playlistId,
+          playlistId: made.playlistId,
+          name: made.name,
+          capped: !item.uncapped,
+        },
       ]),
     );
     origins.set(new Map(origins.get()).set(item.playlistId, made.playlistId));
