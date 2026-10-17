@@ -109,9 +109,9 @@ const createFieldFocus = (field: () => Field | null, onLibraryWanted: () => void
 /**
  * Raises the keyboard when the Search tab is tapped (Core's `stepSearchFocus`):
  * the field is focused on the first frame the screen is in sight and the
- * field laid out, a focus the field doesn't report is asked again a bounded
- * number of times, and leaving the screen cancels what is pending and puts
- * the keyboard away.
+ * field laid out, a focus that doesn't bring the keyboard up is asked again a
+ * bounded number of times, and leaving the screen cancels what is pending and
+ * puts the keyboard away.
  */
 export const useSearchFieldFocus = (field: RefObject<Field | null>): SearchFieldFocus => {
   const [libraryWanted, setLibraryWanted] = useState(false);
@@ -135,8 +135,18 @@ export const useSearchFieldFocus = (field: RefObject<Field | null>): SearchField
 
   useEffect(() => {
     const stop = onSearchFocusRequest((at) => focus.run({ type: "requested", at }));
+    // A request is done once the keyboard is up, not on the field's focus alone.
+    if (Keyboard.isVisible()) focus.run({ type: "keyboardShown" });
+    const shown = Keyboard.addListener("keyboardDidShow", () =>
+      focus.run({ type: "keyboardShown" }),
+    );
+    const hidden = Keyboard.addListener("keyboardDidHide", () =>
+      focus.run({ type: "keyboardHidden" }),
+    );
     return () => {
       stop();
+      shown.remove();
+      hidden.remove();
       focus.dispose();
     };
   }, [focus]);

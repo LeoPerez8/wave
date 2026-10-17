@@ -43,6 +43,9 @@ const BUTTON_LABELS: { readonly [A in YtSongsDownloadAction]: string } = {
   cancel: "Cancel",
 };
 
+/** Every label an album's or a playlist's page button can say, so a page can measure them ahead. */
+export const YT_DOWNLOAD_BUTTON_LABELS: readonly string[] = Object.values(BUTTON_LABELS);
+
 /** A song Download or Retry Failed adds to the queue, and the job it shares (null for a job of its own). */
 export interface YtSongsDownloadRequest<S extends YtSong = YtSong> {
   readonly song: S;
