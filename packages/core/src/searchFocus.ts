@@ -3,12 +3,16 @@
  * one tap, on a first visit (the tap mounts the screen) and a warm one alike.
  *
  * The tap asks for the field. The field is focused on the first animation
- * frame where the screen is in sight and the field is laid out. Android can
- * drop a focus asked of a view that isn't attached to its window yet, so a
- * focus the field doesn't report is asked again, a few times at most, spaced
- * out. Leaving Search cancels whatever is pending and blurs the field, and a
- * request the screen doesn't show up for in time is dropped, so the keyboard
- * never comes up late or after Search was left.
+ * frame where the screen is in sight and the field is laid out. A request is
+ * done once the field has the focus and the keyboard is up, not on the focus
+ * alone: Android takes (and reports) the focus of a field its window doesn't
+ * serve yet, a field still being attached, and ignores the keyboard asked
+ * for with it; and Back puts the keyboard away without blurring the field.
+ * So a request is asked again, a few times at most, spaced out: soon when
+ * the field doesn't report the focus, later when it does and the keyboard
+ * doesn't come. Leaving Search cancels whatever is pending and blurs the
+ * field, and a request the screen doesn't show up for in time is dropped, so
+ * the keyboard never comes up late or after Search was left.
  */
 
 export interface SearchFocusLimits {
@@ -16,6 +20,8 @@ export interface SearchFocusLimits {
   readonly waitMs: number;
   /** How long a focus has to be reported before it is asked again. */
   readonly retryMs: number;
+  /** How long the keyboard has to come up for a focus the field reported before it is asked again. */
+  readonly keyboardMs: number;
   /** How many times the field is asked to focus for one request, the first included. */
   readonly attempts: number;
 }
@@ -23,6 +29,7 @@ export interface SearchFocusLimits {
 export const SEARCH_FOCUS_LIMITS: SearchFocusLimits = {
   waitMs: 2000,
   retryMs: 150,
+  keyboardMs: 600,
   attempts: 3,
 };
 
@@ -33,7 +40,9 @@ export interface SearchFocusState {
   readonly attached: boolean;
   /** The field reports it has the focus. */
   readonly hasFocus: boolean;
-  /** A tap's request, until the field takes the focus or the request is dropped. */
+  /** The keyboard is up. */
+  readonly keyboard: boolean;
+  /** A tap's request, until the field has the focus with the keyboard up, or the request is dropped. */
   readonly request: {
     /** When the tab was tapped. */
     readonly at: number;
@@ -53,10 +62,14 @@ export type SearchFocusEvent =
   | { readonly type: "hidden" }
   /** The field was laid out. */
   | { readonly type: "attached" }
-  /** The field reports it took the focus (natively: the keyboard is coming). */
+  /** The field reports it took the focus (the keyboard may still not come). */
   | { readonly type: "focused" }
   /** The field reports it lost the focus. */
   | { readonly type: "blurred" }
+  /** The keyboard came up. */
+  | { readonly type: "keyboardShown" }
+  /** The keyboard went down (Back puts it away and leaves the field focused). */
+  | { readonly type: "keyboardHidden" }
   /** An animation frame, at [at]. */
   | { readonly type: "frame"; readonly at: number };
 
@@ -78,8 +91,12 @@ export const startSearchFocus = (): SearchFocusState => ({
   shown: false,
   attached: false,
   hasFocus: false,
+  keyboard: false,
   request: null,
 });
+
+/** The field has the focus and the keyboard is up: nothing left to ask. */
+const raised = (state: SearchFocusState): boolean => state.hasFocus && state.keyboard;
 
 const step = (state: SearchFocusState, command: SearchFocusCommand = null): SearchFocusStep => ({
   state,
@@ -98,9 +115,14 @@ const onFrame = (
   if (request.attempts === 0) {
     if (at - request.at > limits.waitMs) return step({ ...state, request: null });
     if (!state.shown || !state.attached) return step(state);
-    return step({ ...state, request: { ...request, attempts: 1, lastAt: at } }, "focus");
+    // A field focused with the keyboard down (Back put it away) has to be blurred first.
+    return step(
+      { ...state, request: { ...request, attempts: 1, lastAt: at } },
+      state.hasFocus ? "refocus" : "focus",
+    );
   }
-  if (at - request.lastAt < limits.retryMs) return step(state);
+  const wait = state.hasFocus ? limits.keyboardMs : limits.retryMs;
+  if (at - request.lastAt < wait) return step(state);
   if (request.attempts >= limits.attempts) return step({ ...state, request: null });
   return step(
     { ...state, request: { ...request, attempts: request.attempts + 1, lastAt: at } },
@@ -116,7 +138,7 @@ export const stepSearchFocus = (
 ): SearchFocusStep => {
   switch (event.type) {
     case "requested":
-      if (state.hasFocus) return step({ ...state, request: null });
+      if (raised(state)) return step({ ...state, request: null });
       return step({ ...state, request: { at: event.at, attempts: 0, lastAt: event.at } });
     case "shown":
       return step({ ...state, shown: true });
@@ -124,10 +146,18 @@ export const stepSearchFocus = (
       return step({ ...state, shown: false, request: null }, "blur");
     case "attached":
       return step({ ...state, attached: true });
-    case "focused":
-      return step({ ...state, hasFocus: true, request: null });
+    case "focused": {
+      const focused = { ...state, hasFocus: true };
+      return step(raised(focused) ? { ...focused, request: null } : focused);
+    }
     case "blurred":
       return step({ ...state, hasFocus: false });
+    case "keyboardShown": {
+      const shown = { ...state, keyboard: true };
+      return step(raised(shown) ? { ...shown, request: null } : shown);
+    }
+    case "keyboardHidden":
+      return step({ ...state, keyboard: false });
     case "frame":
       return onFrame(state, event.at, limits);
   }
