@@ -10,9 +10,10 @@
 
 import type { MixedSong } from "./ytDiscover.ts";
 import type { YtSong } from "./ytMusic.ts";
+import { soulseekRecordingKey } from "./soulseekDownload.ts";
 import {
   ytDownloadSharedJob,
-  ytDownloadStatus,
+  ytDownloadStatuses,
   ytDownloadsFromJournal,
   type YtDownloadJournalJob,
   type YtDownloadStatus,
@@ -83,10 +84,21 @@ const requests = <S extends YtSong>(
   songs: readonly S[],
   jobs: readonly YtDownloadJournalJob<S>[],
 ): YtSongsDownloadRequest<S>[] => {
-  const ahead: YtDownloadJournalJob<S>[] = [...jobs];
+  // Only a job whose song has the same title and artist can be shared, so a
+  // song is checked against those alone: a long playlist isn't quadratic.
+  const ahead = new Map<string, YtDownloadJournalJob<S>[]>();
+  const add = (job: YtDownloadJournalJob<S>): void => {
+    const key = soulseekRecordingKey(job.song);
+    if (key === null) return;
+    const same = ahead.get(key);
+    if (same === undefined) ahead.set(key, [job]);
+    else same.push(job);
+  };
+  jobs.forEach(add);
   return songs.map((song) => {
-    const sharedJob = ytDownloadSharedJob(ahead, song);
-    if (sharedJob === null) ahead.push({ id: song.videoId, song, phase: "queued" });
+    const key = soulseekRecordingKey(song);
+    const sharedJob = key === null ? null : ytDownloadSharedJob(ahead.get(key) ?? [], song);
+    if (sharedJob === null) add({ id: song.videoId, song, phase: "queued" });
     return { song, sharedJob };
   });
 };
@@ -109,7 +121,8 @@ const songsDownload = <S extends YtSong>(
   downloads: YtDownloads<S>,
   landed: number,
 ): YtSongsDownload<S> => {
-  const statuses = songs.map((song) => ytDownloadStatus(downloads, song.videoId));
+  const statusOf = ytDownloadStatuses(downloads);
+  const statuses = songs.map((song) => statusOf(song.videoId));
   const toDownload = requests(
     songs.filter((song, index) => {
       const status = statuses[index] ?? null;
