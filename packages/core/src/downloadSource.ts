@@ -5,7 +5,9 @@
  * is on, with or without a Google sign-in.
  */
 
+import { spotifyYtMatch } from "./spotifyImport.ts";
 import type { YtDownloadFailure } from "./ytDownloads.ts";
+import type { YtSong } from "./ytMusic.ts";
 import { formatDuration } from "./time.ts";
 
 /** A download's source: the file it saves comes from one of them. */
@@ -164,4 +166,66 @@ export const ytAudioRejection = (
   if (ytAudioMatches(song, durationMs)) return null;
   if (!(durationMs > 0) || song.durationMs === null) return "YouTube's audio has no length";
   return `YouTube's audio is ${formatDuration(durationMs)} long, but the song is ${formatDuration(song.durationMs)}`;
+};
+
+/**
+ * The video a YouTube download of [song] asks for instead of its own: the
+ * song's audio track among YT Music's Songs search [results] (which lists
+ * audio tracks). YT Music's album pages may list a song under its music
+ * video, whose audio runs longer or shorter than the album cut
+ * (`ytAudioMatches` would turn it down). Null keeps the song's own video:
+ * the search lists it, or nothing in it is the same recording by the rules
+ * imports use (`spotifyYtMatch`), or there was no search.
+ */
+export const ytAudioTrack = (song: YtSong, results: readonly YtSong[] | null): string | null => {
+  if (results === null || results.some((result) => result.videoId === song.videoId)) return null;
+  return spotifyYtMatch(song, results)?.videoId ?? null;
+};
+
+/** What the app log says about one YouTube download once its audio is checked (`ytDownloadReport`). */
+export interface YtDownloadReport {
+  /** The video the song is listed under; null for a missing song, which has none of its own. */
+  readonly song: string | null;
+  /** The video the download asked YouTube for (`ytAudioTrack`'s, or the song's). */
+  readonly requested: string;
+  /** The video YouTube's answer was for, the client that gave it and its type (`MUSIC_VIDEO_TYPE_…`). */
+  readonly resolved: string | null;
+  readonly client: string | null;
+  readonly videoType: string | null;
+  /** The length YouTube's answer gave the video. */
+  readonly announcedMs: number | null;
+  /** The length the audio is checked against (`ytAudioMatches`), and where it came from. */
+  readonly expectedMs: number | null;
+  readonly expectedFrom: "ytMusic" | "library";
+  /** How long the downloaded file plays. */
+  readonly measuredMs: number;
+}
+
+const EXPECTED_FROM: Record<YtDownloadReport["expectedFrom"], string> = {
+  ytMusic: "YT Music's listing",
+  library: "its Library track",
+};
+
+const seconds = (ms: number): string => `${(ms / 1000).toFixed(1)} s`;
+
+/**
+ * The app log's line for a YouTube download whose audio was checked: the
+ * videos asked for and served, the client, the video type and the three
+ * lengths, which together tell a music video from the song's audio track.
+ */
+export const ytDownloadReport = (report: YtDownloadReport): string => {
+  const type = report.videoType?.replace(/^MUSIC_VIDEO_TYPE_/u, "") ?? "unknown type";
+  const of = report.song === null ? "" : ` of ${report.song}`;
+  const served = report.resolved ?? "an unknown video";
+  const client = report.client ?? "an unknown client";
+  const announced = report.announcedMs === null ? "no length" : seconds(report.announcedMs);
+  const expected =
+    report.expectedMs === null
+      ? "the song has no length"
+      : `the song is ${seconds(report.expectedMs)}`;
+  return (
+    `YouTube download${of}: asked for ${report.requested}, served ${served} (${type}) by ${client}; ` +
+    `YouTube says ${announced}, ${expected} (${EXPECTED_FROM[report.expectedFrom]}), ` +
+    `the file plays ${seconds(report.measuredMs)}`
+  );
 };

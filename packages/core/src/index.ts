@@ -654,12 +654,15 @@ export {
   downloadSource,
   ytAudioMatches,
   ytAudioRejection,
+  ytAudioTrack,
+  ytDownloadReport,
 } from "./downloadSource.ts";
 export type {
   DownloadFailurePlan,
   DownloadFallbackSetup,
   DownloadSource,
   DownloadSourceSetup,
+  YtDownloadReport,
 } from "./downloadSource.ts";
 export {
   ytDownloadDestination,

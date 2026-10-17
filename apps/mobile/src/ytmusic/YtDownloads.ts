@@ -27,10 +27,13 @@ import {
   soulseekQuery,
   soulseekReceivedMatches,
   soulseekRecording,
+  spotifySearchQuery,
   ytAlbumDownload,
   ytAudioRejection,
+  ytAudioTrack,
   ytDownloadDestination,
   ytDownloadLookup,
+  ytDownloadReport,
   ytDownloadSharedJob,
   ytDownloadStatus,
   ytDownloadTags,
@@ -65,6 +68,8 @@ import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { useMemo, useSyncExternalStore } from "react";
 
+import { appLog } from "@/log/appLog";
+
 import { askForNotifications } from "@/lib/askForNotifications";
 import {
   libraryEdited,
@@ -83,6 +88,7 @@ import {
   soulseekErrorCode,
   type NativeDownloadDecision,
   type NativeDownloadJob,
+  type NativeYoutubeAudio,
   type SoulseekSession,
 } from "@/native/waveSoulseek";
 import type { NativeYtSong } from "@/native/waveYtMusic";
@@ -204,7 +210,10 @@ interface DownloadFallbackPlan {
 type PrepareAnswer =
   | {
       readonly source: DownloadSource;
-      /** The video YouTube Music downloads, for a job not named after one (a missing song's). */
+      /**
+       * The video YouTube Music downloads instead of the job's own: a missing song's, or a
+       * song's audio track (`audioTrack`).
+       */
       readonly video?: string;
       readonly candidates: readonly SoulseekCandidate[];
       readonly tags: YtDownloadTags;
@@ -241,21 +250,45 @@ export const prepareDownload = (song: NativeYtSong) =>
     const source = currentSource(yield* native(() => WaveSoulseek.session()), ytMusicOn);
     if (source === null) return yield* new DownloadFailed({ reason: "noSource" });
     if (source === "youtube") {
-      const tags = yield* metadata(song);
+      const [tags, video] = yield* Effect.all([metadata(song), audioTrack(song)], {
+        concurrency: "unbounded",
+      });
       const target = ytDownloadDestination(roots, excludedFolders, tags, source);
       if (target === null) return yield* new DownloadFailed({ reason: "noFolder" });
       return {
         source,
+        ...(video === undefined ? {} : { video }),
         candidates: [],
         tags,
         targetPath: target.path,
         failurePlan: downloadFailurePlan(source, { ytMusicOn }),
       } satisfies PrepareAnswer;
     }
-    const [found, tags] = yield* Effect.all([searchSoulseek(song), metadata(song)], {
-      concurrency: "unbounded",
-    });
-    return yield* soulseekAnswer(song, found, tags, { roots, excludedFolders }, ytMusicOn);
+    // YouTube Music's fallback downloads the song's audio track too.
+    const [found, tags, video] = yield* Effect.all(
+      [
+        searchSoulseek(song),
+        metadata(song),
+        ytMusicOn ? audioTrack(song) : Effect.succeed(undefined),
+      ],
+      { concurrency: "unbounded" },
+    );
+    return yield* soulseekAnswer(song, found, tags, { roots, excludedFolders }, ytMusicOn, video);
+  });
+
+/**
+ * The video a YouTube download of [song] asks for in place of its own: its audio track, from a
+ * YT Music Songs search (Core's `ytAudioTrack`). YT Music's album pages may list a song under
+ * its music video, whose audio isn't the album cut's length. Undefined keeps the song's own
+ * video, as a search that fails does: the length check still judges what it serves.
+ */
+const audioTrack = (song: YtSong) =>
+  Effect.gen(function* () {
+    const ytMusic = yield* YtMusic;
+    const page = yield* ytMusic
+      .searchSongs(spotifySearchQuery(song))
+      .pipe(Effect.orElseSucceed(() => null));
+    return ytAudioTrack(song, page?.songs ?? null) ?? undefined;
   });
 
 /** The Library's folders, where a download's file goes. */
@@ -486,6 +519,23 @@ const publicationTarget = (claim: NativeDownloadDecision) =>
     return { targetPath: target.path, revision };
   });
 
+/** What the log says about [claim]'s YouTube download once its [audio] is checked (Core's `ytDownloadReport`). */
+const youtubeReport = (claim: NativeDownloadDecision, audio: NativeYoutubeAudio): string => {
+  // A missing song's job has no video of its own: its length is its Track's.
+  const missing = missingSongTrackId(claim.id) !== null;
+  return ytDownloadReport({
+    song: missing ? null : claim.song.videoId,
+    requested: audio.requested ?? claim.video ?? claim.song.videoId,
+    resolved: audio.resolved ?? null,
+    client: audio.client ?? null,
+    videoType: audio.videoType ?? null,
+    announcedMs: audio.announcedMs ?? null,
+    expectedMs: claim.song.durationMs,
+    expectedFrom: missing ? "library" : "ytMusic",
+    measuredMs: audio.durationMs,
+  });
+};
+
 /** The answer to one decision the native journal leased to JS. */
 const answer = (claim: NativeDownloadDecision) =>
   Effect.gen(function* () {
@@ -503,8 +553,12 @@ const answer = (claim: NativeDownloadDecision) =>
           // A rejection says so as its cause, which the failed download's row shows.
           const { durationMs } = claim.audio;
           const rejection = ytAudioRejection(claim.song, durationMs);
+          appLog(
+            rejection === null ? "info" : "warn",
+            "downloads",
+            youtubeReport(claim, claim.audio),
+          );
           if (rejection === null) return { receiptId: claim.receiptId, acceptable: true };
-          console.warn("[wave] YouTube's audio isn't the song's length", { durationMs });
           return { receiptId: claim.receiptId, acceptable: false, cause: rejection };
         }
         const { receivedTags, durationMs } = claim.audio;

@@ -7,8 +7,10 @@ import {
   downloadSource,
   ytAudioMatches,
   ytAudioRejection,
+  ytAudioTrack,
+  ytDownloadReport,
 } from "./index.ts";
-import type { DownloadFailurePlan, YtDownloadFailure } from "./index.ts";
+import type { DownloadFailurePlan, YtDownloadFailure, YtSong } from "./index.ts";
 
 /** What the journal does with a transfer that fails with [failure]. */
 const step = (plan: DownloadFailurePlan, failure: YtDownloadFailure) =>
@@ -216,5 +218,76 @@ describe("ytAudioRejection", () => {
   test("audio without a length is turned down as that", () => {
     assert.equal(ytAudioRejection({ durationMs: 225_000 }, 0), "YouTube's audio has no length");
     assert.equal(ytAudioRejection({ durationMs: null }, 0), "YouTube's audio has no length");
+  });
+});
+
+describe("ytAudioTrack", () => {
+  const ytSong = (videoId: string, title: string, durationMs: number | null): YtSong => ({
+    videoId,
+    title,
+    artists: ["twenty one pilots"],
+    album: "Blurryface",
+    durationMs,
+    artworkUrl: null,
+    explicit: false,
+  });
+  // As YT Music's Blurryface page lists it: the music video's id, the album cut's length.
+  const fromAlbumPage = ytSong("ywvRgGAd2XI", "Lane Boy", 254_000);
+  const audioTrack = ytSong("uumR0WQrJjw", "Lane Boy", 254_000);
+
+  test("a song listed under its music video downloads the Songs search's audio track of it", () => {
+    const results = [audioTrack, ytSong("GmaWJ-kaUrg", "Stressed Out", 264_000)];
+    assert.equal(ytAudioTrack(fromAlbumPage, results), "uumR0WQrJjw");
+  });
+
+  test("a song the search lists keeps its own video, even after another release of it", () => {
+    const compilation = { ...ytSong("Xk1Comp0000", "Lane Boy", 253_000), album: "Hits" };
+    assert.equal(ytAudioTrack(audioTrack, [compilation, audioTrack]), null);
+  });
+
+  test("nothing that isn't the recording replaces the song's video: the length check still judges it", () => {
+    const live = ytSong("WEMcQGj3FPY", "Lane Boy (Live)", 254_000);
+    const otherCut = ytSong("0rQ4lG_PBVM", "Lane Boy", 240_000);
+    assert.equal(ytAudioTrack(fromAlbumPage, [live, otherCut]), null);
+    assert.equal(ytAudioTrack({ ...fromAlbumPage, durationMs: null }, [audioTrack]), null);
+    assert.equal(ytAudioTrack(fromAlbumPage, null), null);
+  });
+});
+
+describe("ytDownloadReport", () => {
+  test("says which video was asked for and served, by which client, and the three lengths", () => {
+    assert.equal(
+      ytDownloadReport({
+        song: "ywvRgGAd2XI",
+        requested: "uumR0WQrJjw",
+        resolved: "uumR0WQrJjw",
+        client: "WEB_REMIX",
+        videoType: "MUSIC_VIDEO_TYPE_ATV",
+        announcedMs: 253_000,
+        expectedMs: 254_000,
+        expectedFrom: "ytMusic",
+        measuredMs: 253_129,
+      }),
+      "YouTube download of ywvRgGAd2XI: asked for uumR0WQrJjw, served uumR0WQrJjw (ATV) by WEB_REMIX; " +
+        "YouTube says 253.0 s, the song is 254.0 s (YT Music's listing), the file plays 253.1 s",
+    );
+  });
+
+  test("says what it doesn't know, and a missing song's length is its Library track's", () => {
+    assert.equal(
+      ytDownloadReport({
+        song: null,
+        requested: "uumR0WQrJjw",
+        resolved: null,
+        client: null,
+        videoType: null,
+        announcedMs: null,
+        expectedMs: null,
+        expectedFrom: "library",
+        measuredMs: 253_129,
+      }),
+      "YouTube download: asked for uumR0WQrJjw, served an unknown video (unknown type) by an unknown client; " +
+        "YouTube says no length, the song has no length (its Library track), the file plays 253.1 s",
+    );
   });
 });

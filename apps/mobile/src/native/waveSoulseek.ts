@@ -70,6 +70,12 @@ export interface NativeYoutubeAudio {
   readonly itag: number;
   readonly bitrate: number;
   readonly durationMs: number;
+  /** The video asked for, and what YouTube's answer said: its video, client, type and length. */
+  readonly requested?: string;
+  readonly resolved?: string | null;
+  readonly client?: string | null;
+  readonly videoType?: string | null;
+  readonly announcedMs?: number | null;
 }
 
 declare class WaveSoulseekModule extends NativeModule<{
