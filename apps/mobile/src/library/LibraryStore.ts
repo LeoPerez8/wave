@@ -14,6 +14,8 @@ import {
   type PlayTotals,
   type ListeningSums,
   type StatsWindow,
+  type TryAgainAnswered,
+  type YtAlbumSong,
   type YtArtistSaved,
 } from "@wave/core";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
@@ -97,6 +99,7 @@ import {
   selectPlaylists,
   selectPlaylistsLastPlayed,
   selectTrackPaths,
+  settleTryAgain,
   type PlaylistEntry,
 } from "./db/playlists";
 import { hasUnscannedRoot, pruneOrphans, saveBatch } from "./db/save";
@@ -625,6 +628,15 @@ export class LibraryStore extends Context.Service<
       playlistId: number,
       itemIds: readonly number[],
     ) => Effect.Effect<void, LibraryStoreError>;
+    /**
+     * Settles what Try Again found of the playlist's unavailable entries: each
+     * found becomes its YT Music song in its place (Core's `tryAgainSettles`).
+     * Returns how many were found and how many searches failed.
+     */
+    readonly settleTryAgain: (
+      playlistId: number,
+      answered: readonly TryAgainAnswered<YtAlbumSong>[],
+    ) => Effect.Effect<{ readonly found: number; readonly failed: number }, LibraryStoreError>;
     /** Makes the playlist hold exactly [songs], in that order (an import's Replace). */
     readonly replacePlaylistSongs: (
       playlistId: number,
@@ -1169,6 +1181,11 @@ const make = Effect.gen(function* () {
     removePlaylistItems: (playlistId, itemIds) =>
       attempt("remove from the playlist", () =>
         removePlaylistItems(db, playlistId, itemIds, Date.now()),
+      ),
+
+    settleTryAgain: (playlistId, answered) =>
+      attempt("save what Try Again found", () =>
+        settleTryAgain(db, playlistId, answered, Date.now()),
       ),
 
     replacePlaylistSongs: (playlistId, songs) =>

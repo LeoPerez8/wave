@@ -5,6 +5,7 @@ import { beforeEach, describe, test } from "node:test";
 import {
   normalizeTrack,
   orderKeyBetween,
+  tryAgainSearches,
   type PlayContext,
   type PlaylistSong,
   type UnavailableSong,
@@ -34,6 +35,7 @@ import {
   selectPlaylistsLastPlayed,
   selectPlaylistTotals,
   selectTrackPaths,
+  settleTryAgain,
 } from "./playlists.ts";
 import { playlistWork, resetPlaylistWork } from "./playlistWork.ts";
 import { saveBatch } from "./save.ts";
@@ -587,6 +589,41 @@ describe("unavailable entries", () => {
     });
     assert.equal(linkPlaylistEntries(db, 0), 1);
     assert.equal(titles().at(-1), "Lucky");
+  });
+
+  test("Try Again turns those found into YT Music entries in their place; one the playlist holds is removed", () => {
+    const lucky = yt("lucky", { title: "Lucky", durationMs: 181_000 });
+    const within = yt("within", { title: "Within", durationMs: 180_000 });
+    appendPlaylistSongs(
+      db,
+      playlistId,
+      [unavailable("Lucky"), unavailable("Within"), stream(within), unavailable("Untitled")],
+      0,
+    );
+    const searches = tryAgainSearches(selectPlaylistEntries(db, playlistId));
+    assert.equal(searches.length, 3);
+    const [luckySearch, withinSearch, untitledSearch] = searches;
+    if (luckySearch === undefined || withinSearch === undefined || untitledSearch === undefined)
+      throw new Error("three searches");
+    const settled = settleTryAgain(
+      db,
+      playlistId,
+      [
+        { search: luckySearch, answer: { ok: true, songs: [lucky] } },
+        { search: withinSearch, answer: { ok: true, songs: [within] } },
+        { search: untitledSearch, answer: { ok: false, reason: "failed" } },
+      ],
+      1_000,
+    );
+    assert.deepEqual(settled, { found: 2, failed: 1 });
+    assert.deepEqual(titles().slice(4), ["yt:Lucky", "yt:Within", "unavailable:Untitled"]);
+    // Stamped for the Wave account: one entry rewritten, one removed.
+    assert.deepEqual(
+      changedEntries(999)
+        .map(([, deleted]) => String(deleted))
+        .toSorted(),
+      ["false", "true"],
+    );
   });
 });
 
