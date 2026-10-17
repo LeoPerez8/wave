@@ -11,18 +11,15 @@ import {
   tryAgainSearches,
   type PlaylistItem,
   type TryAgainAnswered,
-  type TryAgainSearch,
   type YtAlbumSong,
   type YtSongSearch,
 } from "@wave/core";
-import * as Result from "effect/Result";
 import { useSyncExternalStore } from "react";
 
 import { makeExternalStore } from "@/lib/externalStore";
 import { showError } from "@/overlay/alert";
 import { showToast } from "@/overlay/toast";
-import { askYtMusic } from "@/ytmusic/askYtMusic";
-import { logSearchFailure, searchTurn } from "@/ytmusic/searchAllowance";
+import { searchSongsInTurn } from "@/ytmusic/askYtMusic";
 
 import { LibraryStore } from "./LibraryStore";
 import { playlistsChanged } from "./playlists";
@@ -39,22 +36,6 @@ const running = makeExternalStore<ReadonlySet<number>>(new Set());
 /** Whether Try Again is searching for [playlistId]'s unavailable entries now. */
 export const useTryingAgain = (playlistId: number): boolean =>
   useSyncExternalStore(running.subscribe, () => running.get().has(playlistId));
-
-/** One Songs search for [search]'s song, once Try Again's turn comes. Never rejects. */
-const ask = async (search: TryAgainSearch): Promise<YtSongSearch<YtAlbumSong>> => {
-  await searchTurn("tryAgain");
-  let answer: YtSongSearch<YtAlbumSong>;
-  try {
-    const result = await askYtMusic((ytMusic) => ytMusic.searchSongs(search.query));
-    answer = Result.isFailure(result)
-      ? { ok: false, reason: result.failure.reason }
-      : { ok: true, songs: result.success.songs };
-  } catch {
-    answer = { ok: false, reason: "failed" };
-  }
-  if (!answer.ok) logSearchFailure("tryAgain", search.query, answer.reason);
-  return answer;
-};
 
 /** Writes what [answered] found into [playlistId]; returns how many were found and failed. */
 const settle = async (
@@ -97,7 +78,9 @@ export const tryAgainUnavailable = (
             const at = next;
             next += 1;
             const search = batch[at];
-            if (search !== undefined) answers[at] = await ask(search);
+            // Never null: Try Again doesn't give its turns up.
+            if (search !== undefined)
+              answers[at] = (await searchSongsInTurn("tryAgain", search.query)) ?? undefined;
           }
         };
         await Promise.all(Array.from({ length: Math.min(AT_ONCE, batch.length) }, worker));

@@ -1,8 +1,10 @@
+import type { SearchAsker, YtAlbumSong, YtSongSearch } from "@wave/core";
 import * as Effect from "effect/Effect";
-import type * as Result from "effect/Result";
+import * as Result from "effect/Result";
 
 import { appRuntime } from "@/library/runtime";
 
+import { logSearchFailure, searchTurn } from "./searchAllowance";
 import { YtMusic } from "./YtMusic";
 
 /**
@@ -22,3 +24,27 @@ export const askYtMusic = <A, E>(
       }),
     ),
   );
+
+/**
+ * One YouTube Music Songs search for [query] once [asker]'s turn in the shared
+ * search allowance comes (`searchTurn`); a failure is an answer too, and is
+ * logged. Null when [signal] gave the turn up first. Never rejects.
+ */
+export const searchSongsInTurn = async (
+  asker: SearchAsker,
+  query: string,
+  signal?: AbortSignal,
+): Promise<YtSongSearch<YtAlbumSong> | null> => {
+  if (!(await searchTurn(asker, signal))) return null;
+  let answer: YtSongSearch<YtAlbumSong>;
+  try {
+    const result = await askYtMusic((ytMusic) => ytMusic.searchSongs(query));
+    answer = Result.isFailure(result)
+      ? { ok: false, reason: result.failure.reason }
+      : { ok: true, songs: result.success.songs };
+  } catch {
+    answer = { ok: false, reason: "failed" };
+  }
+  if (!answer.ok) logSearchFailure(asker, query, answer.reason);
+  return answer;
+};
