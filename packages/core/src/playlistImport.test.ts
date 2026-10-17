@@ -6,6 +6,7 @@ import {
   SPOTIFY_SEARCHES_AT_ONCE,
   importAdded,
   importAdditions,
+  importLogLine,
   importProgressOnly,
   importSearchAnswered,
   importTurn,
@@ -533,6 +534,81 @@ describe("a large Spotify playlist's searches, within the shared search allowanc
     const turns = searchTurns(download, 15 * 60_000);
     assert.equal(turns.go[0], -1);
     assert.equal(turns.go.length, SPOTIFY_SEARCHES_AT_ONCE + 1);
+  });
+});
+
+describe("the app log of an import", () => {
+  const songs = [spotify("Giorgio by Moroder", { durationMs: 544_000 }), ...many(3)];
+
+  test("its start says the source, the name, how many songs and how many searches they need", () => {
+    assert.equal(
+      importLogLine(startBig(songs), { kind: "started", resumed: false }),
+      'Import of "Big" from Spotify started: 4 songs, 3 searches needed',
+    );
+    const ytJob = startPlaylistImport(planLinkImport(ytPlaylist([yt("b", "Within")]), library), {
+      playlistId: 7,
+      name: "Mix",
+    });
+    assert.equal(
+      importLogLine(ytJob, { kind: "started", resumed: false }),
+      'Import of "Mix" from YouTube Music started: 1 song, no searches needed',
+    );
+  });
+
+  test("going on after a restart, it says how far it had got", () => {
+    let { job, asked } = askAll(startBig(songs));
+    job = importSearchAnswered(job, asked[0] ?? "", { ok: true, songs: [] }, 0);
+    const read = readPlaylistImports(writePlaylistImports([job]))[0];
+    assert.ok(read !== undefined);
+    assert.equal(
+      importLogLine(read, { kind: "started", resumed: true }),
+      'Import of "Big" from Spotify goes on after a restart: 2 of 4 songs settled, 2 searches needed',
+    );
+  });
+
+  test("a pause after a refusal says how long, and how often that search was refused", () => {
+    let { job } = askAll(startBig(songs));
+    job = importSearchAnswered(job, "Song 1 Daft Punk", { ok: false, reason: "failed" }, 0);
+    job = askAll(job, 2000).job;
+    job = importSearchAnswered(job, "Song 1 Daft Punk", { ok: false, reason: "failed" }, 2000);
+    assert.equal(
+      importLogLine(job, { kind: "paused", query: "Song 1 Daft Punk", now: 2000 }),
+      'Import of "Big" pauses 5 s: YouTube Music refused "Song 1 Daft Punk" 2 times in a row',
+    );
+  });
+
+  test("a stop, a Cancel and a Try Again say how far it got", () => {
+    let { job } = askAll(startBig(songs));
+    job = importSearchAnswered(job, "Song 0 Daft Punk", { ok: true, songs: [] }, 0);
+    const stopped = importSearchAnswered(job, "Song 1 Daft Punk", { ok: false, reason: "offline" }, 0);
+    assert.equal(
+      importLogLine(stopped, { kind: "stopped" }),
+      'Import of "Big" stopped (offline): 1 found, 1 not found, 2 left',
+    );
+    assert.equal(
+      importLogLine(stopped, { kind: "cancelled" }),
+      'Import of "Big" cancelled: 1 found, 1 not found, 2 left',
+    );
+    assert.equal(
+      importLogLine(stopped, { kind: "retried" }),
+      'Import of "Big" tried again: 2 songs left',
+    );
+  });
+
+  test("its end says what was found, the searches, the refusals and the time it took and waited", () => {
+    let { job, asked } = askAll(startBig(songs));
+    for (const query of asked) job = importSearchAnswered(job, query, { ok: true, songs: [] }, 0);
+    job = handOver(job).job;
+    assert.equal(job.state.kind, "done");
+    const run = { startedAt: 0, searches: 4, refusals: 1, waitedMs: 12 * 60_000 + 30_000, resumed: false };
+    assert.equal(
+      importLogLine(job, { kind: "done", run, now: 27 * 60_000 + 4000 }),
+      'Import of "Big" done: 1 found, 3 not found; 4 searches, 1 refused; 27 min 4 s in all, 12 min 30 s of it waiting for the search allowance',
+    );
+    assert.equal(
+      importLogLine(job, { kind: "done", run: { ...run, resumed: true }, now: 27 * 60_000 + 4000 }),
+      'Import of "Big" done: 1 found, 3 not found; 4 searches, 1 refused; 27 min 4 s in all since Wave started again, 12 min 30 s of it waiting for the search allowance',
+    );
   });
 });
 

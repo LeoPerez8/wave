@@ -22,7 +22,7 @@ import {
   type YtSongSearch,
 } from "./spotifyImport.ts";
 import type { SpotifyPlaylist, SpotifySong } from "./spotifyPlaylist.ts";
-import { searchesDoneAt, type SearchAllowance } from "./searchAllowance.ts";
+import { logDuration, searchesDoneAt, type SearchAllowance } from "./searchAllowance.ts";
 import type { YtAlbumSong } from "./ytDiscover.ts";
 import { joinArtists, libraryFinder, type LibrarySongKey, type YtSong } from "./ytMusic.ts";
 
@@ -1005,3 +1005,99 @@ export const importProgressOnly = <S extends YtSong>(
       sameState(other.state, job.state)
     );
   });
+
+// ---------------------------------------------------------------------------
+// The app log
+
+/** How long an import has run, for its last line: kept by the app while Wave runs. */
+export interface ImportRun {
+  /** When it started, or went on after a restart (ms). */
+  readonly startedAt: number;
+  /** The searches it asked, and how many of them YouTube Music refused. */
+  readonly searches: number;
+  readonly refusals: number;
+  /** How long its searches waited for the search allowance (ms). */
+  readonly waitedMs: number;
+  /** Whether it went on after a restart: the counts are since then. */
+  readonly resumed: boolean;
+}
+
+/** Something an import did that the app log notes. */
+export type ImportLogEvent =
+  | { readonly kind: "started"; readonly resumed: boolean }
+  /** Paused at [now] after YouTube Music refused [query] (`importSearchAnswered`). */
+  | { readonly kind: "paused"; readonly query: string; readonly now: number }
+  | { readonly kind: "stopped" }
+  | { readonly kind: "cancelled" }
+  | { readonly kind: "retried" }
+  | { readonly kind: "done"; readonly run: ImportRun; readonly now: number };
+
+const SERVICE_NAMES: Record<ImportService, string> = {
+  ytMusic: "YouTube Music",
+  spotify: "Spotify",
+};
+
+const STOP_NAMES: Record<ImportStopReason, string> = {
+  offline: "offline",
+  disabled: "YT Music off",
+  searchFailed: "YouTube Music stopped answering",
+};
+
+/** "1 found, 3 not found, 2 left": the songs found (the Library's too), not found, and still to settle. */
+const findsLine = <S extends YtSong>(job: PlaylistImport<S>, withLeft: boolean): string => {
+  let found = 0;
+  let notFound = 0;
+  for (const find of job.finds) {
+    if (find === null) continue;
+    if (find.kind === "notFound") notFound += 1;
+    else found += 1;
+  }
+  const counts = `${found.toLocaleString("en")} found, ${notFound.toLocaleString("en")} not found`;
+  return withLeft ? `${counts}, ${tallyOf(job).open.toLocaleString("en")} left` : counts;
+};
+
+/** "3 searches needed", "no searches needed". */
+const searchesNeeded = <S extends YtSong>(job: PlaylistImport<S>): string => {
+  const left = searchesLeft(job);
+  return left === 0 ? "no searches needed" : `${counted(left, "search", "searches")} needed`;
+};
+
+/**
+ * The app log's line for [event] of [job]: a few per import, never one per
+ * search answered (docs/spec.md, "App log"). Song titles and artists may
+ * appear, as in any search; nothing else about the Library does.
+ */
+export const importLogLine = <S extends YtSong>(
+  job: PlaylistImport<S>,
+  event: ImportLogEvent,
+): string => {
+  const name = `Import of "${job.name}"`;
+  const total = job.songs.length;
+  const from = SERVICE_NAMES[job.service];
+  switch (event.kind) {
+    case "started":
+      return event.resumed
+        ? `${name} from ${from} goes on after a restart: ${settledCount(job).toLocaleString("en")} of ${counted(total, "song")} settled, ${searchesNeeded(job)}`
+        : `${name} from ${from} started: ${counted(total, "song")}, ${searchesNeeded(job)}`;
+    case "paused": {
+      const refusals = job.refused[event.query] ?? 0;
+      const pause = logDuration(Math.max(0, job.pausedUntil - event.now));
+      return `${name} pauses ${pause}: YouTube Music refused "${event.query}" ${counted(refusals, "time")} in a row`;
+    }
+    case "stopped":
+      return job.state.kind === "stopped"
+        ? `${name} stopped (${STOP_NAMES[job.state.reason]}): ${findsLine(job, true)}`
+        : `${name} stopped: ${findsLine(job, true)}`;
+    case "cancelled":
+      return `${name} cancelled: ${findsLine(job, true)}`;
+    case "retried":
+      return `${name} tried again: ${counted(tallyOf(job).open, "song")} left`;
+    case "done": {
+      const { run, now } = event;
+      const since = run.resumed ? " since Wave started again" : "";
+      const searches = counted(run.searches, "search", "searches");
+      const waited = `${logDuration(run.waitedMs)} of it waiting for the search allowance`;
+      return `${name} done: ${findsLine(job, false)}; ${searches}, ${run.refusals.toLocaleString("en")} refused; ${logDuration(now - run.startedAt)} in all${since}, ${waited}`;
+    }
+  }
+};
