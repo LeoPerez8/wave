@@ -13,6 +13,7 @@ import {
   discoverMixSongs,
   discoverSeedQuery,
   discoverSeedVideo,
+  discoverSimilarSource,
   playedFinder,
   recordingKey,
 } from "./index.ts";
@@ -315,6 +316,154 @@ describe("Discover mixes' seeds from the Library", () => {
   });
 });
 
+describe("Discover mixes' seeds from artists similar to the Library's", () => {
+  const nothingPlayed = { artists: [], songs: [] };
+  const libraryArtist = (id: number, name: string, songCount: number) => ({ id, name, songCount });
+  const librarySong = (id: number, title: string, artist: string, artistIds: number[]) => ({
+    ...seedSong(id, title, artist, artistIds),
+    addedAt: 1000 - id,
+  });
+  const ytArtist = (name: string, browseId: string) => ({ name, browseId });
+  /** A Library of two artists, Air and Moby, every song by one of them. */
+  const twoArtists = {
+    artists: [libraryArtist(1, "Air", 60), libraryArtist(2, "Moby", 44)],
+    songs: [
+      librarySong(10, "Sexy Boy", "Air", [1]),
+      librarySong(11, "Porcelain", "Moby", [2]),
+      librarySong(12, "Natural Blues", "Moby", [2]),
+      librarySong(13, "Extreme Ways", "Moby", [2]),
+      librarySong(14, "Lift Me Up", "Moby", [2]),
+      librarySong(15, "In This World", "Moby", [2]),
+    ],
+  };
+  const withSource = (seeds: ReturnType<typeof discoverMixSeeds>) =>
+    seeds.map((seed) => `${seed.from} ${seed.kind}: ${seed.name}`);
+
+  test("fill the six after the Library's, leaving out artists the Library has", () => {
+    const seeds = discoverMixSeeds({
+      played: nothingPlayed,
+      library: twoArtists,
+      similar: [
+        {
+          of: "Air",
+          artists: [
+            ytArtist("Moby", "UCmoby"),
+            ytArtist("Zero 7", "UCzero7"),
+            ytArtist("Röyksopp", "UCroyksopp"),
+          ],
+        },
+        {
+          of: "Moby",
+          artists: [
+            ytArtist("Faithless", "UCfaithless"),
+            ytArtist("zero 7", "UCzero7b"),
+            ytArtist("Various Artists", "UCvarious"),
+            ytArtist("Groove Armada", "UCgroove"),
+            ytArtist("Lemon Jelly", "UClemon"),
+          ],
+        },
+      ],
+    });
+    assert.deepEqual(withSource(seeds), [
+      "library artist: Air",
+      "library artist: Moby",
+      "similar artist: Zero 7",
+      "similar artist: Faithless",
+      "similar artist: Röyksopp",
+      "similar artist: Groove Armada",
+    ]);
+    const zero7 = seeds[2];
+    assert.ok(zero7?.kind === "artist" && zero7.browseId === "UCzero7");
+  });
+
+  test("too few for the six, stay while fewer of the Library's artists make room for songs", () => {
+    const seeds = discoverMixSeeds({
+      played: nothingPlayed,
+      library: twoArtists,
+      similar: [{ of: "Air", artists: [ytArtist("Zero 7", "UCzero7")] }],
+    });
+    assert.deepEqual(withSource(seeds), [
+      "library artist: Air",
+      "library song: Porcelain",
+      "library song: Natural Blues",
+      "library song: Extreme Ways",
+      "library song: Lift Me Up",
+      "similar artist: Zero 7",
+    ]);
+  });
+
+  test("none read, the Library's seeds are as they were", () => {
+    const without = discoverMixSeeds({ played: nothingPlayed, library: twoArtists });
+    assert.deepEqual(
+      discoverMixSeeds({
+        played: nothingPlayed,
+        library: twoArtists,
+        similar: [
+          { of: "Air", artists: [] },
+          { of: "Moby", artists: [ytArtist("Air", "UCair")] },
+        ],
+      }),
+      without,
+    );
+    assert.ok(without.every((seed) => seed.from === "library"));
+  });
+
+  test("are read from the Library's artist pages one at a time, while the seeds have room", () => {
+    const air = { of: "Air", artists: [ytArtist("Zero 7", "UCzero7")] };
+    assert.deepEqual(discoverSimilarSource({ played: nothingPlayed, library: twoArtists }), {
+      id: 1,
+      name: "Air",
+    });
+    assert.deepEqual(
+      discoverSimilarSource({ played: nothingPlayed, library: twoArtists, similar: [air] }),
+      { id: 2, name: "Moby" },
+    );
+    const plenty = {
+      of: "Air",
+      artists: ["Zero 7", "Röyksopp", "Lemon Jelly", "Groove Armada"].map((name) =>
+        ytArtist(name, `UC${name}`),
+      ),
+    };
+    assert.equal(
+      discoverSimilarSource({ played: nothingPlayed, library: twoArtists, similar: [plenty] }),
+      null,
+    );
+  });
+
+  test("start from the most played artists, and stop after three pages", () => {
+    const library = {
+      artists: [...twoArtists.artists, libraryArtist(3, "Moloko", 2), libraryArtist(4, "Bent", 1)],
+      songs: twoArtists.songs,
+    };
+    const played = { artists: [seedArtist(3, "Moloko")], songs: [] };
+    assert.equal(discoverSimilarSource({ played, library })?.name, "Moloko");
+    const none = (of: string) => ({ of, artists: [] });
+    assert.equal(
+      discoverSimilarSource({ played, library, similar: [none("Moloko")] })?.name,
+      "Air",
+    );
+    assert.equal(
+      discoverSimilarSource({
+        played,
+        library,
+        similar: [none("Moloko"), none("Air"), none("Moby")],
+      }),
+      null,
+    );
+  });
+
+  test("aren't looked for when the Library's own seeds fill the six", () => {
+    const library = {
+      artists: ["Air", "Moby", "Moloko"].map((name, at) => libraryArtist(at + 1, name, 10)),
+      songs: ["Justice", "Phoenix", "Cassius"].map((artist, at) =>
+        librarySong(20 + at, `Song ${at}`, artist, [10 + at]),
+      ),
+    };
+    assert.equal(discoverSimilarSource({ played: nothingPlayed, library }), null);
+    assert.equal(discoverSimilarSource({ played: nothingPlayed }), null);
+  });
+});
+
 const yt = (
   videoId: string,
   title: string,
@@ -518,6 +667,27 @@ describe("A mix", () => {
       title: "Glory Box mix",
       artists: "X",
       line: "30 songs",
+    });
+  });
+
+  test("from a similar artist, is named after that artist", () => {
+    const [seed] = discoverMixSeeds({
+      played: { artists: [], songs: [] },
+      library: { artists: [{ id: 1, name: "Air", songCount: 1 }], songs: [] },
+      similar: [
+        {
+          of: "Air",
+          artists: [
+            { name: "Air", browseId: "UCair" },
+            { name: "Zero 7", browseId: "UCzero7" },
+          ],
+        },
+      ],
+    }).filter((candidate) => candidate.from === "similar");
+    const mix = seed && discoverMix(seed, songs(12));
+    assert.deepEqual(mix && { id: mix.id, title: discoverMixCaption(mix).title }, {
+      id: "artist:zero 7",
+      title: "Zero 7 mix",
     });
   });
 
