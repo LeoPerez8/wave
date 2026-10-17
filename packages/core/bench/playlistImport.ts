@@ -30,6 +30,7 @@ import {
   planLinkImport,
   playlistImportProgress,
   playlistImportView,
+  playlistSongKey,
   readSpotifySearchPacing,
   startPlaylistImport,
   updatePlaylistImport,
@@ -204,7 +205,10 @@ const run = (
   const core = timed(calls);
   const chance = random(size);
   const plan = planLinkImport(
-    { service: "spotify", playlist: { title: "Big", artworkUrl: null, songs, truncated: false } },
+    {
+      service: "spotify",
+      playlist: { title: "Big", artworkUrl: null, songs, truncated: false, total: songs.length },
+    },
     library,
   );
   let job: PlaylistImport<YtSong> = startPlaylistImport(plan, { playlistId: 1, name: "Big" });
@@ -287,7 +291,7 @@ const outcome = (given: readonly PlaylistSong<YtSong>[], job: PlaylistImport<YtS
   createHash("sha256")
     .update(
       JSON.stringify({
-        given: given.map((song) => (song.source === "library" ? song.trackId : song.song.videoId)),
+        given: given.map(playlistSongKey),
         finds: Array.from({ length: job.finds.length }, (_, index) => {
           const found = job.finds[index] ?? null;
           if (found === null) return null;

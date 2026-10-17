@@ -76,6 +76,7 @@ describe("readSpotifyPlaylist", () => {
     );
     assert.equal(read.playlist.songs[0]?.album, "After Hours");
     assert.equal(read.playlist.truncated, false);
+    assert.equal(read.playlist.total, 5, "Spotify's own count");
     assert.deepEqual(asked[0], {
       method: "GET",
       url: `https://open.spotify.com/embed/playlist/${ID}`,
@@ -135,6 +136,7 @@ describe("readSpotifyPlaylist", () => {
         ["Blinding Lights", "Believer", "EVERYTHING I OWN"],
       );
       assert.equal(read.playlist.truncated, false);
+      assert.equal(read.playlist.total, 3, "the embed page gives no count of its own");
     }
   });
 
@@ -232,13 +234,21 @@ describe("spotifyPlaylistPage", () => {
         artists: ["The Weeknd"],
         album: "After Hours",
         durationMs: 200_040,
+        artworkUrl: "https://i.scdn.co/image/ab67616d00001e028863bc11d2aa12b54f5aeb36",
       },
-      { title: "Believer", artists: ["Imagine Dragons"], album: "Evolve", durationMs: 204_346 },
+      {
+        title: "Believer",
+        artists: ["Imagine Dragons"],
+        album: "Evolve",
+        durationMs: 204_346,
+        artworkUrl: "https://i.scdn.co/image/ab67616d00001e025675e83f707f1d7271e5cf8a",
+      },
       {
         title: "EVERYTHING I OWN",
         artists: ["MELINDA LINDNER"],
         album: "BEST OF BREAD",
         durationMs: 207_530,
+        artworkUrl: "https://i.scdn.co/image/ab67616d00001e023696aa3d9c16220c966009bc",
       },
     ]);
   });
@@ -273,7 +283,7 @@ describe("spotifyPlaylistPage", () => {
     assert.equal(page.songs.length, 2);
   });
 
-  test("a local file keeps its name and artist, and a song not playable here keeps its details", () => {
+  test("a local file keeps its name and artist, and a song not playable here keeps its details and cover", () => {
     const page = spotifyPlaylistPage(json("fetch-playlist-local-and-restricted.json"));
     assert.ok(page !== null && page !== "notFound");
     assert.equal(page.items, 10);
@@ -288,6 +298,7 @@ describe("spotifyPlaylistPage", () => {
       artists: ["John Williams"],
       album: "Star Wars: The Force Awakens (Original Motion Picture Soundtrack)",
       durationMs: 145_293,
+      artworkUrl: "https://i.scdn.co/image/ab67616d00001e02e2add5f2d1440a02e4e10a75",
     });
     assert.equal(page.songs.length, 10);
   });

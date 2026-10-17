@@ -21,15 +21,19 @@ import {
   missingSongTrackId,
   missingSongVideo,
   missingSongsDownload,
+  queuedDownloads,
   settledDownloadFailures,
   soulseekCandidates,
   soulseekQuery,
   soulseekReceivedMatches,
   soulseekRecording,
+  spotifySearchQuery,
   ytAlbumDownload,
-  ytAudioMatches,
+  ytAudioRejection,
+  ytAudioTrack,
   ytDownloadDestination,
   ytDownloadLookup,
+  ytDownloadReport,
   ytDownloadSharedJob,
   ytDownloadStatus,
   ytDownloadTags,
@@ -45,7 +49,8 @@ import {
   type MissingSongsDownload,
   type MissingSongsDownloadAction,
   type MissingTrack,
-  type MixedSong,
+  type PlaylistItem,
+  type QueuedDownload,
   type SoulseekCandidate,
   type YtAlbumDownload,
   type YtAlbumDownloadAction,
@@ -62,6 +67,8 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { useMemo, useSyncExternalStore } from "react";
+
+import { appLog } from "@/log/appLog";
 
 import { askForNotifications } from "@/lib/askForNotifications";
 import {
@@ -81,6 +88,7 @@ import {
   soulseekErrorCode,
   type NativeDownloadDecision,
   type NativeDownloadJob,
+  type NativeYoutubeAudio,
   type SoulseekSession,
 } from "@/native/waveSoulseek";
 import type { NativeYtSong } from "@/native/waveYtMusic";
@@ -194,6 +202,11 @@ interface DownloadFallbackPlan {
   readonly source: "youtube";
   /** The video it downloads, for a job not named after one (a missing song's). */
   readonly video?: string;
+  /**
+   * YouTube's turn starts with a prepare decision (`prepareFallback`), which names the video it
+   * downloads: a song's audio track, looked up only once Soulseek has handed the job over.
+   */
+  readonly prepare?: true;
   readonly targetPath: string;
   readonly failurePlan: DownloadFailurePlan;
 }
@@ -202,7 +215,10 @@ interface DownloadFallbackPlan {
 type PrepareAnswer =
   | {
       readonly source: DownloadSource;
-      /** The video YouTube Music downloads, for a job not named after one (a missing song's). */
+      /**
+       * The video YouTube Music downloads instead of the job's own: a missing song's, or a
+       * song's audio track (`audioTrack`).
+       */
       readonly video?: string;
       readonly candidates: readonly SoulseekCandidate[];
       readonly tags: YtDownloadTags;
@@ -239,21 +255,65 @@ export const prepareDownload = (song: NativeYtSong) =>
     const source = currentSource(yield* native(() => WaveSoulseek.session()), ytMusicOn);
     if (source === null) return yield* new DownloadFailed({ reason: "noSource" });
     if (source === "youtube") {
-      const tags = yield* metadata(song);
+      const [tags, video] = yield* Effect.all([metadata(song), audioTrack(song)], {
+        concurrency: "unbounded",
+      });
       const target = ytDownloadDestination(roots, excludedFolders, tags, source);
       if (target === null) return yield* new DownloadFailed({ reason: "noFolder" });
       return {
         source,
+        ...(video === undefined ? {} : { video }),
         candidates: [],
         tags,
         targetPath: target.path,
         failurePlan: downloadFailurePlan(source, { ytMusicOn }),
       } satisfies PrepareAnswer;
     }
+    // YouTube Music's fallback looks up the song's audio track once it starts (`prepareFallback`).
     const [found, tags] = yield* Effect.all([searchSoulseek(song), metadata(song)], {
       concurrency: "unbounded",
     });
-    return yield* soulseekAnswer(song, found, tags, { roots, excludedFolders }, ytMusicOn);
+    return yield* soulseekAnswer(song, found, tags, { roots, excludedFolders }, ytMusicOn, {
+      prepare: true,
+    });
+  });
+
+/**
+ * The journal's "prepare" decision for a Soulseek job it handed over to YouTube Music
+ * (`fellBackFrom`): the video it downloads, the song's audio track, now that YouTube's turn has
+ * come. The tags and the M4A's place are the ones Soulseek's prepare answer planned. With YT
+ * Music turned off since, there's no source, and Soulseek's failure stands.
+ */
+const prepareFallback = (claim: NativeDownloadDecision) =>
+  Effect.gen(function* () {
+    if (!ytMusicEnabled()) return yield* new DownloadFailed({ reason: "noSource" });
+    const { tags, targetPath } = claim;
+    if (tags === undefined || targetPath === undefined)
+      return yield* new DownloadFailed({ reason: "failed" });
+    const video = yield* audioTrack(claim.song);
+    return {
+      source: "youtube",
+      ...(video === undefined ? {} : { video }),
+      candidates: [],
+      tags,
+      targetPath,
+      failurePlan: downloadFailurePlan("youtube", { ytMusicOn: true }),
+    } satisfies PrepareAnswer;
+  });
+
+/**
+ * The video a YouTube download of [song] asks for in place of its own: its audio track, from a
+ * YT Music Songs search (Core's `ytAudioTrack`). YT Music's album pages may list a song under
+ * its music video, whose audio isn't the album cut's length. Undefined keeps the song's own
+ * video, as a search that fails does: the length check still judges what it serves.
+ */
+const audioTrack = (song: YtSong) =>
+  Effect.gen(function* () {
+    const ytMusic = yield* YtMusic;
+    const page = yield* ytMusic
+      .searchSongs(spotifySearchQuery(song))
+      .pipe(Effect.orElseSucceed(() => null));
+    return ytAudioTrack(song, page?.songs ?? null) ?? undefined;
   });
 
 /** The Library's folders, where a download's file goes. */
@@ -275,7 +335,8 @@ const searchSoulseek = (song: YtSong) => {
 /**
  * A Soulseek job's prepare answer from its search ([found]): the peers with [song]'s recording,
  * or Soulseek's failure, with YouTube Music's fallback while YT Music is on ([ytMusicOn]) and
- * its M4A has a place. A job not named after a video falls back only to the [video] named.
+ * its M4A has a place. A job not named after a video falls back only to the video [youtube]
+ * names; a song's fallback asks for its video when it starts (`prepare`).
  */
 const soulseekAnswer = (
   song: YtSong,
@@ -283,22 +344,20 @@ const soulseekAnswer = (
   tags: YtDownloadTags,
   { roots, excludedFolders }: DownloadFolders,
   ytMusicOn: boolean,
-  video?: string,
+  youtube: Pick<DownloadFallbackPlan, "video" | "prepare">,
 ) =>
   Effect.gen(function* () {
-    const youtube = ytMusicOn
-      ? ytDownloadDestination(roots, excludedFolders, tags, "youtube")
-      : null;
+    const m4a = ytMusicOn ? ytDownloadDestination(roots, excludedFolders, tags, "youtube") : null;
     // YouTube Music carries the job on only where its M4A has a place.
-    const failurePlan = downloadFailurePlan("soulseek", { ytMusicOn: youtube !== null });
+    const failurePlan = downloadFailurePlan("soulseek", { ytMusicOn: m4a !== null });
     const fallback: { readonly fallback?: DownloadFallbackPlan } =
-      youtube === null
+      m4a === null
         ? {}
         : {
             fallback: {
               source: "youtube",
-              ...(video === undefined ? {} : { video }),
-              targetPath: youtube.path,
+              ...youtube,
+              targetPath: m4a.path,
               failurePlan: downloadFailurePlan("youtube", { ytMusicOn }),
             },
           };
@@ -422,7 +481,7 @@ const prepareMissingSong = (trackId: number) =>
       tags,
       { roots, excludedFolders },
       ytMusicOn && video !== null,
-      video?.videoId,
+      video === null ? {} : { video: video.videoId },
     );
   });
 
@@ -484,11 +543,31 @@ const publicationTarget = (claim: NativeDownloadDecision) =>
     return { targetPath: target.path, revision };
   });
 
+/** What the log says about [claim]'s YouTube download once its [audio] is checked (Core's `ytDownloadReport`). */
+const youtubeReport = (claim: NativeDownloadDecision, audio: NativeYoutubeAudio): string => {
+  // A missing song's job has no video of its own: its length is its Track's.
+  const missing = missingSongTrackId(claim.id) !== null;
+  return ytDownloadReport({
+    song: missing ? null : claim.song.videoId,
+    requested: audio.requested ?? claim.video ?? claim.song.videoId,
+    resolved: audio.resolved ?? null,
+    client: audio.client ?? null,
+    videoType: audio.videoType ?? null,
+    announcedMs: audio.announcedMs ?? null,
+    expectedMs: claim.song.durationMs,
+    expectedFrom: missing ? "library" : "ytMusic",
+    measuredMs: audio.durationMs,
+  });
+};
+
 /** The answer to one decision the native journal leased to JS. */
 const answer = (claim: NativeDownloadDecision) =>
   Effect.gen(function* () {
     switch (claim.decision) {
       case "prepare": {
+        // Soulseek handed the job over to YouTube Music, whose turn starts here.
+        if (claim.fellBackFrom !== undefined && claim.source === "youtube")
+          return yield* prepareFallback(claim);
         const trackId = missingSongTrackId(claim.id);
         return trackId === null
           ? yield* prepareDownload(claim.song)
@@ -498,11 +577,16 @@ const answer = (claim: NativeDownloadDecision) =>
         if (claim.audio === undefined) return yield* new DownloadFailed({ reason: "failed" });
         if (!("receivedTags" in claim.audio)) {
           // YouTube's M4A arrived complete; it's the song when it plays as long.
+          // A rejection says so as its cause, which the failed download's row shows.
           const { durationMs } = claim.audio;
-          const acceptable = ytAudioMatches(claim.song, durationMs);
-          if (!acceptable)
-            console.warn("[wave] YouTube's audio isn't the song's length", { durationMs });
-          return { receiptId: claim.receiptId, acceptable };
+          const rejection = ytAudioRejection(claim.song, durationMs);
+          appLog(
+            rejection === null ? "info" : "warn",
+            "downloads",
+            youtubeReport(claim, claim.audio),
+          );
+          if (rejection === null) return { receiptId: claim.receiptId, acceptable: true };
+          return { receiptId: claim.receiptId, acceptable: false, cause: rejection };
         }
         const { receivedTags, durationMs } = claim.audio;
         const acceptable = soulseekReceivedMatches(claim.song, receivedTags, durationMs);
@@ -862,8 +946,8 @@ export const useYtAlbumDownload = (
   return useMemo(() => ytAlbumDownload(songs, { inLibrary, jobs }), [songs, inLibrary, jobs]);
 };
 
-/** A playlist's entry: a Library song (its file) or a YT Music song. */
-type PlaylistEntry = MixedSong<NativeYtSong, { readonly path: string | null }>;
+/** A playlist's entry: a Library song (its file), a YT Music song, or an unavailable song. */
+type PlaylistEntry = PlaylistItem<NativeYtSong, { readonly path: string | null }>;
 
 /** What a playlist's download entries act on: its YT Music entries' songs, in playlist order. */
 export const playlistYtSongs = (entries: readonly PlaylistEntry[]): NativeYtSong[] =>
@@ -1026,6 +1110,29 @@ export const useMissingSongsDownload = (): MissingSongsDownload<MissingSongJob> 
 };
 
 /**
+ * Settings › Downloads' songs on their way (Core's `queuedDownloads`), following the journal: the
+ * ones downloading first, then the waiting ones in queue order, each with its progress line.
+ */
+export const useQueuedDownloads = (): readonly QueuedDownload<NativeYtSong>[] => {
+  const jobs = useSyncExternalStore(journal.subscribe, journal.get);
+  return useMemo(() => queuedDownloads(jobs), [jobs]);
+};
+
+/**
+ * Settings › Downloads' Cancel on a song on its way: as its menu's Cancel Download, and every
+ * video asked for on the job lets go of it, so a shared job ends too.
+ */
+export const cancelQueuedDownload = ({ cancel }: QueuedDownload<NativeYtSong>): void => {
+  if (cancel === null) return;
+  requests = requests
+    .then(async () => {
+      for (const videoId of cancel) await WaveSoulseek.cancelJob(videoId);
+      await refresh();
+    })
+    .catch(() => undefined);
+};
+
+/**
  * Settings › Downloads' failed songs (Core's `failedDownloads`), following the journal, the
  * Library (a song downloaded some other way leaves the list) and its missing songs (one filled
  * in or taken out leaves too).
@@ -1090,8 +1197,8 @@ export const retryFailedDownloads = (failed: readonly FailedDownload<NativeYtSon
 };
 
 /**
- * Settings › Downloads' Clear All: [failed] leave the list and the journal. Every video asked
- * for on a job lets go of it, so a shared job ends too.
+ * Settings › Downloads' Clear All and each row's trash button: [failed] leave the list and the
+ * journal. Every video asked for on a job lets go of it, so a shared job ends too.
  */
 export const clearFailedDownloads = (failed: readonly FailedDownload<NativeYtSong>[]): void => {
   requests = requests

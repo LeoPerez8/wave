@@ -814,6 +814,12 @@ CREATE TRIGGER \`play_totals_delete\` AFTER DELETE ON \`play_events\` BEGIN
 END;
 `;
 
+// The plays by where they were played from, so when each playlist was last
+// played is read without going through the whole history.
+const mPlayContexts = `
+CREATE INDEX \`play_events_context_idx\` ON \`play_events\` (\`context_type\`,\`context_id\`,\`started_at\`);
+`;
+
 export default {
   journal: {
     entries: [
@@ -841,6 +847,7 @@ export default {
       { idx: 21, when: 1_793_620_800_000, tag: "0021_playlist_images", breakpoints: true },
       { idx: 22, when: 1_793_707_200_000, tag: "0022_playlist_revisions", breakpoints: true },
       { idx: 23, when: 1_793_793_600_000, tag: "0023_play_totals", breakpoints: true },
+      { idx: 24, when: 1_793_880_000_000, tag: "0024_play_contexts", breakpoints: true },
     ],
   },
   migrations: {
@@ -868,5 +875,6 @@ export default {
     m0021: mPlaylistImages,
     m0022: mPlaylistRevisions,
     m0023: mPlayTotals,
+    m0024: mPlayContexts,
   },
 };

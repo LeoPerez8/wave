@@ -7,8 +7,14 @@ import java.io.File
 import java.io.IOException
 import java.io.InputStream
 
-/** What was downloaded: the stream YouTube served (M4A, as it is) and its size. */
-data class YtAudioFile(val itag: Int, val bitrate: Int, val mimeType: String, val bytes: Long)
+/** What was downloaded: the stream YouTube served (M4A, as it is), its size and the video it's the audio of. */
+data class YtAudioFile(
+  val itag: Int,
+  val bitrate: Int,
+  val mimeType: String,
+  val bytes: Long,
+  val source: YtStreamSource = YtStreamSource.UNKNOWN,
+)
 
 /** One answer from googlevideo for a byte range: its HTTP status and, for 200/206, the bytes. */
 class YtRange(val status: Int, val body: InputStream?)
@@ -84,7 +90,7 @@ class YtAudioDownload(private val streams: YtAudioStreams, private val ranges: R
     // Returns only once the part file holds the announced length, the fresh stream's after a start over.
     val bytes = ranges.download(source, length, part, onProgress = { onProgress(it, length) }, isCancelled = isCancelled)
     // The stream the file came from: the last one resolved, whichever that was.
-    return YtAudioFile(stream.itag, stream.bitrate, stream.mimeType, bytes)
+    return YtAudioFile(stream.itag, stream.bitrate, stream.mimeType, bytes, stream.source)
   }
 
   private fun m4a(stream: YtStream): YtStream =

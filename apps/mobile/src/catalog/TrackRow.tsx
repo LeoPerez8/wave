@@ -61,6 +61,11 @@ type Props = {
    * song: a small downloaded icon leads its second line.
    */
   downloaded?: boolean;
+  /**
+   * A song that can't play (a playlist's unavailable entry): dimmed as a
+   * missing song is, with its menu still open.
+   */
+  unavailable?: boolean;
   onPress: () => void;
   onLongPress?: () => void;
   /** Screen-reader actions standing in for gestures (move, remove in a playlist). */
@@ -89,6 +94,7 @@ export function TrackRow({
   checked,
   progress,
   downloaded = false,
+  unavailable = false,
   onPress,
   onLongPress,
   accessibilityActions,
@@ -116,6 +122,7 @@ export function TrackRow({
         ...(plays === undefined ? [] : [trailing]),
         ...(downloaded && !missingSong ? ["downloaded"] : []),
         ...(missingSong ? [downloadLine ?? "not downloaded"] : []),
+        ...(unavailable ? ["unavailable"] : []),
         ...(playing ? ["now playing"] : []),
       ].join(", ")}
       accessibilityState={
@@ -131,7 +138,7 @@ export function TrackRow({
       depth={0.015}
     >
       <View
-        className={`flex-row items-center ${missingSong ? "opacity-45" : ""}`}
+        className={`flex-row items-center ${missingSong || unavailable ? "opacity-45" : ""}`}
         style={{ height: grid.row, gap: CELL * 1.5 }}
       >
         {selecting && <CheckCell checked={checked} />}

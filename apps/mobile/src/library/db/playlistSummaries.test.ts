@@ -100,6 +100,7 @@ describe("Library › Playlists while one playlist fills", () => {
     assert.deepEqual(selectPlaylistTotals(db, filling).get(filling), {
       trackCount: 3,
       durationMs: 400_000,
+      unavailableCount: 0,
     });
   });
 
@@ -289,6 +290,7 @@ describe("selectPlaylistTotals", () => {
     assert.deepEqual(selectPlaylistTotals(db, playlist).get(playlist), {
       trackCount: 4,
       durationMs: 2_002.5,
+      unavailableCount: 0,
     });
   });
 });

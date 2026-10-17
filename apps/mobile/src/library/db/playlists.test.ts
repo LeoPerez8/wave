@@ -2,12 +2,20 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, test } from "node:test";
 
-import { normalizeTrack, orderKeyBetween, type PlaylistSong, type YtAlbumSong } from "@wave/core";
+import {
+  normalizeTrack,
+  orderKeyBetween,
+  type PlayContext,
+  type PlaylistSong,
+  type UnavailableSong,
+  type YtAlbumSong,
+} from "@wave/core";
 import { eq, sql } from "drizzle-orm";
 
 import type { IndexedTrack } from "../LibraryStore.ts";
 import { libraryCounts, sectionSongCounts } from "./counts.ts";
 import { creditSplits } from "./credits.ts";
+import { recordPlay } from "./playHistory.ts";
 import {
   addToPlaylist,
   appendPlaylistSongs,
@@ -23,6 +31,7 @@ import {
   selectPlaylistEntries,
   selectPlaylistEntriesRevision,
   selectPlaylists,
+  selectPlaylistsLastPlayed,
   selectPlaylistTotals,
   selectTrackPaths,
 } from "./playlists.ts";
@@ -34,6 +43,7 @@ import {
   addTrack,
   migrateTestDatabase,
   openTestDatabase,
+  traceQueries,
   type TestDatabase,
 } from "./testDatabase.ts";
 
@@ -55,6 +65,18 @@ const yt = (videoId: string, fields: Partial<YtAlbumSong> = {}): YtAlbumSong => 
 
 const library = (title: string): PlaylistSong => ({ source: "library", trackId: ids[title] ?? -1 });
 const stream = (song: YtAlbumSong): PlaylistSong => ({ source: "stream", song });
+const unavailable = (title: string, fields: Partial<UnavailableSong> = {}): PlaylistSong => ({
+  source: "unavailable",
+  song: {
+    title,
+    artists: ["Radiohead"],
+    album: "OK Computer",
+    durationMs: 180_000,
+    artworkUrl: null,
+    reason: "notFound",
+    ...fields,
+  },
+});
 
 const newPlaylist = (name: string): number =>
   db
@@ -89,10 +111,18 @@ beforeEach(async () => {
   }
 });
 
-/** What the playlist lists, a YT Music entry as `yt:<title>`. */
-const titlesOf = (id: number, page?: { offset: number; limit: number }) =>
-  selectPlaylistEntries(db, id, page).map((entry) =>
-    entry.source === "library" ? entry.track.title : `yt:${entry.song.title}`,
+/** What the playlist lists, a YT Music entry as `yt:<title>`, an unavailable one as `unavailable:<title>`. */
+const titlesOf = (
+  id: number,
+  page?: { offset: number; limit: number },
+  scope?: "library" | "files",
+) =>
+  selectPlaylistEntries(db, id, page, scope).map((entry) =>
+    entry.source === "library"
+      ? entry.track.title
+      : entry.source === "stream"
+        ? `yt:${entry.song.title}`
+        : `unavailable:${entry.song.title}`,
   );
 
 const titles = (page?: { offset: number; limit: number }) => titlesOf(playlistId, page);
@@ -463,7 +493,11 @@ describe("selectPlaylistTotals", () => {
     appendPlaylistSongs(db, playlistId, [stream(yt("b", { durationMs: null }))], 0);
     const empty = newPlaylist("Empty");
     const totals = selectPlaylistTotals(db);
-    assert.deepEqual(totals.get(playlistId), { trackCount: 6, durationMs: 4 * 180_000 + 60_000 });
+    assert.deepEqual(totals.get(playlistId), {
+      trackCount: 6,
+      durationMs: 4 * 180_000 + 60_000,
+      unavailableCount: 0,
+    });
     assert.equal(totals.get(empty), undefined);
   });
 
@@ -481,7 +515,78 @@ describe("selectPlaylistTotals", () => {
     assert.deepEqual(selectPlaylistTotals(db).get(playlistId), {
       trackCount: entries.length,
       durationMs: 4 * 180_000 + 60_000,
+      unavailableCount: 0,
     });
+  });
+});
+
+describe("unavailable entries", () => {
+  test("go in their place among the others, with what the source listed", () => {
+    const within = unavailable("Within", { artworkUrl: "https://i.scdn.co/image/w" });
+    appendPlaylistSongs(db, playlistId, [within, library("Bloom"), unavailable("Untitled")], 0);
+    assert.deepEqual(titles().slice(4), ["unavailable:Within", "Bloom", "unavailable:Untitled"]);
+    const entry = selectPlaylistEntries(db, playlistId)[4];
+    assert.deepEqual(entry, { itemId: entry?.itemId, ...within });
+  });
+
+  test("an unavailable song the playlist holds isn't put in again, as an import going on after a restart gives it", () => {
+    appendPlaylistSongs(db, playlistId, [unavailable("Within")], 0);
+    const again = appendPlaylistSongs(
+      db,
+      playlistId,
+      [unavailable("Within"), unavailable("Other")],
+      0,
+    );
+    assert.deepEqual(again, { added: 1, alreadyIn: 1 });
+  });
+
+  test("count in the playlist's songs and length, and are counted apart as unavailable", () => {
+    appendPlaylistSongs(db, playlistId, [unavailable("Within", { durationMs: 60_000 })], 0);
+    appendPlaylistSongs(db, playlistId, [stream(yt("a", { durationMs: 30_000 }))], 0);
+    const totals = { trackCount: 6, durationMs: 4 * 180_000 + 90_000, unavailableCount: 1 };
+    assert.deepEqual(selectPlaylistTotals(db).get(playlistId), totals);
+    const page = selectPlaylist(db, playlistId)?.playlist;
+    assert.deepEqual(
+      [page?.trackCount, page?.durationMs, page?.unavailableCount],
+      [6, totals.durationMs, 1],
+    );
+  });
+
+  test("Android Auto, which lists what can play, leaves them out", () => {
+    appendPlaylistSongs(
+      db,
+      playlistId,
+      [unavailable("Within"), stream(yt("a", { title: "Lucky" }))],
+      0,
+    );
+    assert.deepEqual(titlesOf(playlistId, undefined, "files"), [
+      "Daydreaming",
+      "Airbag",
+      "Creep",
+      "Airbag",
+      "yt:Lucky",
+    ]);
+    assert.deepEqual(titlesOf(playlistId, { offset: 4, limit: 2 }, "files"), ["yt:Lucky"]);
+  });
+
+  test("one the Library gains becomes that song in its place; one it holds already is removed", () => {
+    const other = newPlaylist("Other");
+    appendPlaylistSongs(db, playlistId, [unavailable("Lucky"), library("Bloom")], 0);
+    const luckyId = addTrack(db, { title: "Lucky", artist: "Radiohead", durationMs: 181_000 });
+    ids.Lucky = luckyId;
+    appendPlaylistSongs(db, other, [library("Lucky"), unavailable("Lucky")], 0);
+    assert.equal(linkPlaylistEntries(db, 0, [luckyId]), 2);
+    assert.deepEqual(titles().slice(4), ["Lucky", "Bloom"]);
+    assert.deepEqual(titlesOf(other), ["Lucky"]);
+  });
+
+  test("a scan links them too, against the whole Library", () => {
+    appendPlaylistSongs(db, playlistId, [unavailable("Lucky")], 0);
+    saveBatch(db, creditSplits(), [indexedTrack("Lucky", "Radiohead", 180_000)], [], [], 0, {
+      linkEntries: false,
+    });
+    assert.equal(linkPlaylistEntries(db, 0), 1);
+    assert.equal(titles().at(-1), "Lucky");
   });
 });
 
@@ -669,6 +774,111 @@ describe("playlists made and renamed here", () => {
     assert.deepEqual(
       selectChangesSince(db, 999).playlists.map((row) => [row.name, row.changedAt]),
       [["Late Drive", 1_001]],
+    );
+  });
+});
+
+/** Plays started from playlist [id]. */
+const fromPlaylist = (id: number): PlayContext => ({ kind: "playlist", id: String(id) });
+
+describe("sorting the Playlists list", () => {
+  test("each playlist is listed with when it was made", () => {
+    const made = createPlaylist(db, "Mix", [], 4_000);
+    assert.deepEqual(
+      selectPlaylists(db).map((row) => [row.name, row.createdAt]),
+      [
+        ["Drive", 0],
+        ["Mix", 4_000],
+      ],
+    );
+    assert.equal(selectPlaylist(db, made.playlistId)?.playlist.createdAt, 4_000);
+  });
+
+  test("a playlist last played when the latest song played from it started", () => {
+    const other = newPlaylist("Other");
+    newPlaylist("Never played");
+    const play = (title: string, startedAt: number, context: PlayContext | null) =>
+      recordPlay(db, {
+        trackId: String(ids[title]),
+        context,
+        startedAt,
+        listenedMs: 1_000,
+        durationMs: 180_000,
+        endReason: "skipped",
+        counted: false,
+        source: "phone",
+      });
+    play("Airbag", 1_000, fromPlaylist(playlistId));
+    play("Creep", 5_000, fromPlaylist(playlistId));
+    play("Bloom", 3_000, fromPlaylist(other));
+    // Played from elsewhere: an album, Play Next.
+    play("Bloom", 9_000, { kind: "album", id: String(playlistId) });
+    play("Creep", 9_500, null);
+    assert.deepEqual(
+      selectPlaylistsLastPlayed(db),
+      new Map([
+        [playlistId, 5_000],
+        [other, 3_000],
+      ]),
+    );
+  });
+
+  test("when each playlist was last played is read from an index, never the whole play history", () => {
+    for (let at = 1; at <= 200; at += 1) {
+      recordPlay(db, {
+        trackId: String(ids.Airbag),
+        context: at % 4 === 0 ? fromPlaylist(playlistId) : { kind: "album", id: "1" },
+        startedAt: at * 1_000,
+        listenedMs: 1_000,
+        durationMs: 180_000,
+        endReason: "skipped",
+        counted: false,
+        source: "phone",
+      });
+    }
+    const { result, queries } = traceQueries(db, () => selectPlaylistsLastPlayed(db));
+    assert.deepEqual(result, new Map([[playlistId, 200_000]]));
+    const plans = queries
+      .filter((query) => query.sql.includes("play_events"))
+      .map((query) => query.plan.join("; "));
+    assert.equal(plans.length, 1);
+    for (const plan of plans) {
+      assert.match(plan, /SEARCH play_events USING COVERING INDEX play_events_context_idx/);
+      assert.doesNotMatch(plan, /TEMP B-TREE/);
+    }
+  });
+});
+
+describe("migration 0024", () => {
+  test("plays from before the play contexts' index read the same, through it", async () => {
+    const old = await openTestDatabase({ through: "0023_play_totals" });
+    const track = addTrack(old, { title: "Airbag", album: "Mix", artist: "Radiohead" });
+    // Only the plays are read: the playlist itself needn't exist.
+    const id = 42;
+    for (const [startedAt, context] of [
+      [2_000, fromPlaylist(id)],
+      [7_000, fromPlaylist(id)],
+      [9_000, null],
+    ] as const) {
+      recordPlay(old, {
+        trackId: String(track),
+        context,
+        startedAt,
+        listenedMs: 1_000,
+        durationMs: 180_000,
+        endReason: "skipped",
+        counted: false,
+        source: "phone",
+      });
+    }
+
+    await migrateTestDatabase(old);
+
+    const { result, queries } = traceQueries(old, () => selectPlaylistsLastPlayed(old));
+    assert.deepEqual(result, new Map([[id, 7_000]]));
+    assert.match(
+      queries.map((query) => query.plan.join("; ")).join("; "),
+      /play_events_context_idx/,
     );
   });
 });

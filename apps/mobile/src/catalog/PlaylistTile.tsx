@@ -1,4 +1,4 @@
-import { Text, View } from "react-native";
+import { Text, View, type PressableProps } from "react-native";
 
 import { Press } from "@/motion/Press";
 
@@ -26,6 +26,11 @@ type Props = {
    * the corner. Undefined outside selection mode.
    */
   checked?: boolean | undefined;
+  /** Actions for screen readers beyond a tap and a long press (Move up, Move down). */
+  accessibilityActions?: PressableProps["accessibilityActions"];
+  onAccessibilityAction?: PressableProps["onAccessibilityAction"];
+  /** Room kept clear at the end of the name's line, in dp, for what sits over it (a drag handle). */
+  nameInset?: number | undefined;
 };
 
 /**
@@ -42,6 +47,9 @@ export function PlaylistTile({
   onPress,
   onLongPress,
   checked,
+  accessibilityActions,
+  onAccessibilityAction,
+  nameInset,
 }: Props) {
   const selecting = checked !== undefined;
   return (
@@ -51,6 +59,8 @@ export function PlaylistTile({
       accessibilityState={selecting ? { checked } : undefined}
       onPress={onPress}
       onLongPress={onLongPress}
+      accessibilityActions={accessibilityActions}
+      onAccessibilityAction={onAccessibilityAction}
       haptic="selection"
       depth={0.02}
       style={{ width: size }}
@@ -63,7 +73,7 @@ export function PlaylistTile({
         <Text
           numberOfLines={1}
           className="font-sans text-body font-medium text-foreground"
-          style={{ height: CAPTION_LINE }}
+          style={{ height: CAPTION_LINE, paddingRight: nameInset }}
         >
           {name}
         </Text>

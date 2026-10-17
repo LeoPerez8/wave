@@ -26,8 +26,27 @@ data class YtStream(
   val bitrate: Int,
   val contentLength: Long?,
   val expiresAtMs: Long,
+  /** What YouTube's answer said about the video; logged with each download. */
+  val source: YtStreamSource = YtStreamSource.UNKNOWN,
 ) {
-  override fun toString(): String = "YtStream(itag=$itag, mimeType=$mimeType, bitrate=$bitrate)"
+  override fun toString(): String = "YtStream(itag=$itag, mimeType=$mimeType, bitrate=$bitrate, source=$source)"
+}
+
+/**
+ * The video a [YtStream] is the audio of, as YouTube's answer described it: its id, the
+ * player client that answered, its type (`MUSIC_VIDEO_TYPE_ATV` for a song's audio track,
+ * `…_OMV` for its music video, `…_UGC` for an upload; only some clients say) and its length.
+ * Null where the answer didn't say.
+ */
+data class YtStreamSource(
+  val videoId: String?,
+  val client: String?,
+  val videoType: String?,
+  val lengthMs: Long?,
+) {
+  companion object {
+    val UNKNOWN = YtStreamSource(null, null, null, null)
+  }
 }
 
 /**
@@ -104,6 +123,12 @@ class YtStreamResolver(context: Context) {
       bitrate = extracted.bitrate ?: 0,
       contentLength = extracted.contentLengthBytes,
       expiresAtMs = YtStreams.expiresAtMs(extracted.expiresAt?.toEpochMilliseconds(), extracted.audioUrl, now()),
+      source = YtStreamSource(
+        videoId = extracted.videoId,
+        client = extracted.clientName,
+        videoType = extracted.mediaMetadata?.musicVideoType,
+        lengthMs = extracted.mediaMetadata?.durationSeconds?.let { it * 1000 },
+      ),
     )
     cache.put(videoId, preferM4a, stream, extracted.clientName)
     return stream

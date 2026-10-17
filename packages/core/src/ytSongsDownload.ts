@@ -8,7 +8,7 @@
  * one such list.
  */
 
-import type { MixedSong } from "./ytDiscover.ts";
+import type { PlaylistItem } from "./playlistEntries.ts";
 import type { YtSong } from "./ytMusic.ts";
 import { soulseekRecordingKey } from "./soulseekDownload.ts";
 import {
@@ -200,12 +200,12 @@ const PLAYLIST_ACTIONS: { readonly [K in YtSongsDownloadAction]: YtPlaylistDownl
 
 /**
  * Where downloading a playlist holding [entries] stands: its YT Music
- * entries are the list, in playlist order; its Library songs have nothing to
- * download. A Library song whose file a download saved this session is an
+ * entries are the list, in playlist order; its Library songs and unavailable
+ * entries have nothing to download. A Library song whose file a download saved this session is an
  * entry that has taken its place, and counts as saved.
  */
 export const ytPlaylistDownload = <S extends YtSong>(
-  entries: readonly MixedSong<S, { readonly path: string | null }>[],
+  entries: readonly PlaylistItem<S, { readonly path: string | null }>[],
   input: SongsDownloadInput<S>,
 ): YtPlaylistDownload<S> => {
   const downloads = ytDownloadsFromJournal(input.jobs);

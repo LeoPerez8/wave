@@ -33,8 +33,9 @@ interface DurablePublication {
  * (`failurePlan`). The journal only carries it out, with its own counts and deadlines.
  *
  * Every failure keeps what actually went wrong as the job's `cause` (an exception's class and
- * message, or what JS reported with its answer) and writes it to [log]. The reason stays one of
- * Core's failures; `storage` only for a real storage problem (`DownloadFiles.storageProblem`).
+ * message, or what JS reported with its answer) and writes it to [log]. The cause belongs to the
+ * failure the job shows: falling back to YouTube Music sets Soulseek's aside. The reason stays one
+ * of Core's failures; `storage` only for a real storage problem (`DownloadFiles.storageProblem`).
  *
  * Up to [slots] songs download at once, in the order they were asked for; the next one starts as
  * one of them frees its slot. A song that waits (in a peer's queue, for a pause before trying
@@ -133,7 +134,7 @@ class DurableDownloads(
         existing["generation"] = existing.number("generation") + 1
         existing.remove("token"); existing.remove("reason"); existing.remove("importFailure"); existing.remove("cause")
         // Retry starts again from the source decided now, Soulseek first while it has an account.
-        existing.remove("fallback"); existing.remove("fellBackFrom"); existing.remove("video")
+        existing.remove("fallback"); existing.remove("fellBackFrom"); existing.remove("fellBackCause"); existing.remove("video")
         // Asked for again: it waits behind what's already queued.
         val key = existing["id"] as String
         jobs.remove(key); jobs[key] = existing
@@ -232,7 +233,8 @@ class DurableDownloads(
       "confirm" -> {
         if (payload["receiptId"] != job["receiptId"]) return false
         if (payload["acceptable"] == true) transition(job, "tagging")
-        else plan(job)["rejected"]?.let { fail(job, it as String) } ?: nextCandidate(job)
+        // JS says why it turned the audio down (YouTube's length check), as the failure's cause.
+        else plan(job)["rejected"]?.let { fail(job, it as String, payload["cause"] as? String) } ?: nextCandidate(job)
       }
       "publish" -> {
         if (payload.number("revision") != policy.number("revision")) { job.remove("token"); persist(); return false }
@@ -563,7 +565,8 @@ class DurableDownloads(
    * Carries [job] on from YouTube Music when Soulseek's [reason] is one Core hands over: the same
    * job and row, with YouTube's M4A as the target, YouTube's failure plan and a time budget of its
    * own. The fallback is used up, so YouTube's own failure ends the job; Retry starts again from
-   * Soulseek.
+   * Soulseek. A fallback that asks for it (`prepare`) starts YouTube's turn with a prepare decision,
+   * where JS names the video it downloads (the song's audio track) only now that it's needed.
    */
   private fun fallBack(job: MutableMap<String, Any?>, reason: String): Boolean {
     if (!fallsBack(job, reason)) return false
@@ -573,24 +576,31 @@ class DurableDownloads(
     setSource(job, YOUTUBE)
     fallback["failurePlan"]?.let { job["failurePlan"] = clean(it) }
     job["fellBackFrom"] = reason
+    // Soulseek's cause explains Soulseek's failure: YouTube's failure records its own.
+    job.remove("cause")?.let { job["fellBackCause"] = it }
     (fallback["video"] as? String)?.let { job["video"] = it }
     job["targetPath"] = fallback["targetPath"]
     job["candidates"] = youtubeCandidates(job); job["candidateIndex"] = 0L; job["attempts"] = 0L
     job["deadline"] = clock() + JOB_MS
     job["generation"] = job.number("generation") + 1
-    transition(job, "prepared")
+    transition(job, if (fallback["prepare"] == true) "preparing" else "prepared")
     return true
   }
 
   /**
    * Every way a job fails goes through here, which is where Soulseek's failures fall back. A
-   * [cause] says what actually went wrong; it stays on the job (and in the log) through a fallback.
+   * [cause] says what actually went wrong; it stays on the job (and in the log) while the job shows
+   * its failure, so a fallback sets it aside for YouTube's.
    */
   private fun fail(job: MutableMap<String, Any?>, reason: String, cause: String? = null) {
     if (cause != null) recordCause(job, reason, cause)
     if (fallBack(job, reason)) return
-    // YT Music was turned off before YouTube could take over: Soulseek's failure stands.
-    job["reason"] = if (reason == "noSource") job["fellBackFrom"] as? String ?: reason else reason
+    // YT Music was turned off before YouTube could take over: Soulseek's failure stands, with its cause.
+    val fellBackFrom = job["fellBackFrom"] as? String
+    if (reason == "noSource" && fellBackFrom != null) {
+      job["reason"] = fellBackFrom
+      job.remove("fellBackCause")?.let { job["cause"] = it } ?: job.remove("cause")
+    } else job["reason"] = reason
     job["endedAt"] = clock(); transition(job, "failed"); job["generation"] = job.number("generation") + 1; cleanup(job)
   }
   /** A published file the Library couldn't import, with what went wrong. */

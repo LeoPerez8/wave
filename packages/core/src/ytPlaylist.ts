@@ -29,6 +29,8 @@ export interface YtPlaylist<S extends YtSong = YtSong> {
   readonly author: string | null;
   readonly artworkUrl: string | null;
   readonly songs: readonly S[];
+  /** The rows that list one of [songs] again, in their order: each is kept once, at its first place. */
+  readonly repeats: readonly S[];
   /** The playlist goes on past [songs]: the read stopped at its cap. */
   readonly truncated: boolean;
 }
@@ -66,16 +68,23 @@ export const readYtPlaylist = async <S extends YtSong>(
   const { onPage, signal } = options;
   const head = await first();
   const songs = new Map<string, S>();
+  const repeats: S[] = [];
   let page: YtPlaylistPage<S> = head;
   for (let pages = 1; ; pages++) {
-    for (const song of page.songs) if (!songs.has(song.videoId)) songs.set(song.videoId, song);
+    for (const song of page.songs) {
+      if (songs.has(song.videoId)) repeats.push(song);
+      else songs.set(song.videoId, song);
+    }
     const full = songs.size >= YT_PLAYLIST_SONG_CAP || pages >= YT_PLAYLIST_PAGE_CAP;
     const next = full ? null : page.continuation;
+    const kept = [...songs.values()].slice(0, YT_PLAYLIST_SONG_CAP);
+    const keptIds = new Set(kept.map((song) => song.videoId));
     const playlist: YtPlaylist<S> = {
       title: head.title,
       author: head.author,
       artworkUrl: head.artworkUrl,
-      songs: [...songs.values()].slice(0, YT_PLAYLIST_SONG_CAP),
+      songs: kept,
+      repeats: repeats.filter((song) => keptIds.has(song.videoId)),
       truncated: songs.size > YT_PLAYLIST_SONG_CAP || (full && page.continuation !== null),
     };
     onPage?.(playlist, next === null);

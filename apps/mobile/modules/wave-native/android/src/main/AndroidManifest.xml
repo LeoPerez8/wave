@@ -78,6 +78,17 @@
       android:authorities="${applicationId}.artwork"
       android:exported="true" />
 
+    <!-- Settings › Developer › Export Logs shares the app log as a file (AppLogFileProvider). -->
+    <provider
+      android:name="expo.modules.wavenative.log.AppLogFileProvider"
+      android:authorities="${applicationId}.logs"
+      android:exported="false"
+      android:grantUriPermissions="true">
+      <meta-data
+        android:name="android.support.FILE_PROVIDER_PATHS"
+        android:resource="@xml/wave_log_paths" />
+    </provider>
+
     <!-- Lists Wave as a media app in Android Auto. -->
     <meta-data
       android:name="com.google.android.gms.car.application"

@@ -9,7 +9,7 @@ import android.graphics.Canvas
 import android.graphics.Rect
 import android.net.Uri
 import android.os.ParcelFileDescriptor
-import android.util.Log
+import expo.modules.wavenative.log.WaveLog
 import java.io.File
 import java.io.FileNotFoundException
 
@@ -70,7 +70,7 @@ class ArtworkProvider : ContentProvider() {
       temp.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 85, it) }
       if (temp.renameTo(target)) target else null.also { temp.delete() }
     } catch (e: Exception) {
-      Log.w("WaveArtwork", "Couldn't draw a mosaic", e)
+      WaveLog.w("WaveArtwork", "Couldn't draw a mosaic", e)
       null
     }
   }

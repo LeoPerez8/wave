@@ -7,7 +7,10 @@ import {
 
 import type { TitleLongPress } from "@/components/TitleLongPress";
 import { persistedSetting } from "@/lib/persistedSetting";
-import { openTitleChoices } from "@/overlay/titleChoices";
+import { openTitleChoiceGroups, titleChoiceGroup } from "@/overlay/titleChoices";
+import type { ChoiceSetting } from "@/settings/ChoiceRow";
+
+import { playlistSortChoice } from "./playlistSort";
 
 const playlistLayout = persistedSetting<PlaylistLayout>({
   key: "settings.playlistLayout",
@@ -18,20 +21,39 @@ const playlistLayout = persistedSetting<PlaylistLayout>({
 /** How the Playlists list shows playlists (a list until changed); re-renders when it changes. */
 export const usePlaylistLayout = playlistLayout.useValue;
 
-const LAYOUT_CHOICES = PLAYLIST_LAYOUTS.map(({ layout, label }) => ({ value: layout, label }));
+/**
+ * The layouts, offered by the title's long press and by Settings › Layout ›
+ * Playlists alike.
+ */
+export const playlistLayoutChoice: ChoiceSetting<PlaylistLayout> = {
+  label: "Show playlists as",
+  choices: PLAYLIST_LAYOUTS.map(({ layout, label }) => ({ value: layout, label })),
+  setting: playlistLayout,
+};
 
 /**
- * The Playlists title's long press: a card of the layouts, the current one
- * checked. Picking one switches every Playlists list at once and keeps it
- * across restarts.
+ * The Playlists title's long press: a card of the layouts, then Sort by's
+ * sorts, the current ones checked. Picking one switches every Playlists list
+ * at once and keeps it across restarts.
  */
 export const playlistLayoutTitleLongPress: TitleLongPress = {
   label: "Choose how playlists show",
   open: () =>
-    openTitleChoices({
-      label: "Show playlists as",
-      choices: LAYOUT_CHOICES,
-      current: playlistLayout.get(),
-      choose: playlistLayout.set,
+    openTitleChoiceGroups({
+      label: "Show and sort playlists",
+      groups: [
+        // No heading: the highlighted title says what the card is about.
+        titleChoiceGroup({
+          choices: playlistLayoutChoice.choices,
+          current: playlistLayout.get(),
+          choose: playlistLayout.set,
+        }),
+        titleChoiceGroup({
+          heading: playlistSortChoice.label,
+          choices: playlistSortChoice.choices,
+          current: playlistSortChoice.setting.get(),
+          choose: playlistSortChoice.setting.set,
+        }),
+      ],
     }),
 };

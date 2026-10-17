@@ -13,12 +13,13 @@ import {
   playlistArtwork,
   playlistEntryLinks,
   playlistMosaic,
-  readPlaylistYtSong,
+  readPlaylistEntrySong,
   sortKey,
-  writePlaylistYtSong,
-  type MixedSong,
+  writePlaylistEntrySong,
   type OrderedEntry,
+  type PlaylistItem,
   type PlaylistSong,
+  type UnavailableEntry,
   type YtAlbumSong,
 } from "@wave/core";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
@@ -42,10 +43,16 @@ const IN_ORDER = [asc(schema.playlistItems.orderKey), asc(schema.playlistItems.s
 /** Entries the playlist holds: not removed (tombstones). */
 const live = eq(schema.playlistItems.deleted, false);
 
-/** [playlistId]'s stored YT Music song [stored] (Core's `readPlaylistYtSong`), counted as decoded. */
-const decode = (playlistId: number, stored: string): YtAlbumSong | null => {
+/** A song a playlist stores in `yt_song`: a YT Music song it streams, or an unavailable song. */
+type StoredSong = { readonly source: "stream"; readonly song: YtAlbumSong } | UnavailableEntry;
+
+/**
+ * [playlistId]'s stored song [stored] (Core's `readPlaylistEntrySong`): a YT
+ * Music song or an unavailable one, counted as decoded.
+ */
+const decode = (playlistId: number, stored: string): StoredSong | null => {
   countDecoded(playlistId);
-  return readPlaylistYtSong(stored);
+  return readPlaylistEntrySong(stored);
 };
 
 /** A playlist's Library tracks in [scope] with their playlist item. */
@@ -78,20 +85,21 @@ export type PlaylistTrack = Omit<ReturnType<typeof playlistTracks>[number], "ite
 
 /**
  * One entry of a playlist, in its place (`itemId`; the same song may be in it
- * more than once): a Library track, or a YT Music song streamed.
+ * more than once): a Library track, a YT Music song streamed, or a song an
+ * import couldn't find (unavailable).
  */
-export type PlaylistEntry<T = PlaylistTrack> = MixedSong<YtAlbumSong, T> & {
+export type PlaylistEntry<T = PlaylistTrack> = PlaylistItem<YtAlbumSong, T> & {
   readonly itemId: number;
 };
 
-/** A stored YT Music song as decoded, and the entry's stamp when it was. */
+/** A stored song as decoded, and the entry's stamp when it was. */
 interface DecodedSong {
   readonly changedAt: number;
-  readonly song: YtAlbumSong | null;
+  readonly song: StoredSong | null;
 }
 
 /**
- * Per database, the YT Music songs of the playlist last read whole, by entry:
+ * Per database, the stored songs of the playlist last read whole, by entry:
  * read again (an import filling it, its page in sight), only entries added
  * or changed since are decoded. A streamed entry's song is written once,
  * when it's added, and an entry that changes is stamped (`changed_at`) or,
@@ -104,7 +112,7 @@ const decodedSongs = new WeakMap<
 >();
 
 /**
- * The YT Music songs of [playlistId]'s entries [streamed] (in [whole] reads,
+ * The stored songs of [playlistId]'s entries [streamed] (in [whole] reads,
  * every one it holds), decoded or, for a [whole] read, as decoded before.
  */
 const streamedSongs = (
@@ -151,10 +159,11 @@ const LOOKUP_CHUNK = 2_000;
 
 /**
  * A playlist's entries in playlist order, [page] of them if given: its YT
- * Music entries and its Library tracks in [scope] (Android Auto's: only
- * those with a file). A YT Music entry whose stored song can't be read is
- * left out. Reading the whole playlist again decodes only the YT Music
- * entries added or changed since (`streamedSongs`).
+ * Music entries, its unavailable entries and its Library tracks in [scope]
+ * (Android Auto's: only what can play, the tracks with a file and no
+ * unavailable entry). An entry whose stored song can't be read is left out.
+ * Reading the whole playlist again decodes only the stored songs added or
+ * changed since (`streamedSongs`).
  */
 export const selectPlaylistEntries = (
   db: LibraryDatabase,
@@ -176,7 +185,7 @@ export const selectPlaylistEntries = (
         live,
         scope === "files"
           ? or(
-              isNull(playlistItems.trackId),
+              and(isNull(playlistItems.trackId), sql`NOT ${storedUnavailable}`),
               inArray(
                 playlistItems.trackId,
                 db.select({ id: schema.tracks.id }).from(schema.tracks).where(hasFile),
@@ -206,8 +215,8 @@ export const selectPlaylistEntries = (
   );
   return items.flatMap((item): PlaylistEntry[] => {
     if (item.streamed) {
-      const song = songs.get(item.id)?.song ?? null;
-      return song === null ? [] : [{ itemId: item.id, source: "stream", song }];
+      const stored = songs.get(item.id)?.song ?? null;
+      return stored === null ? [] : [{ itemId: item.id, ...stored }];
     }
     const track = tracks.get(item.id);
     return track === undefined ? [] : [{ itemId: item.id, source: "library", track }];
@@ -288,7 +297,7 @@ const placeSongs = (
     songs.map((song, i) => ({
       playlistId,
       trackId: song.source === "library" ? song.trackId : null,
-      ytSong: song.source === "stream" ? writePlaylistYtSong(song.song) : null,
+      ytSong: song.source === "library" ? null : writePlaylistEntrySong(song),
       orderKey: keys[i] ?? "",
       addedAt: now,
       changedAt: now,
@@ -300,14 +309,22 @@ const placeSongs = (
 const storedVideoId = sql`CASE WHEN json_valid(${schema.playlistItems.ytSong})
   THEN json_extract(${schema.playlistItems.ytSong}, '$.videoId') END`;
 
+/** Whether the entry is an unavailable song, as Core's `writePlaylistEntrySong` marks it. */
+const storedUnavailable = sql`(CASE WHEN json_valid(${schema.playlistItems.ytSong})
+  THEN json_type(${schema.playlistItems.ytSong}, '$.unavailable') END IS NOT NULL)`;
+
+/** A stored unavailable song's title, read by SQLite; null for any other entry. */
+const storedUnavailableTitle = sql`CASE WHEN ${storedUnavailable}
+  THEN json_extract(${schema.playlistItems.ytSong}, '$.title') END`;
+
 /** [values] as one bound value that SQLite reads back as a list: `x IN ${jsonList(values)}`. */
 const jsonList = (values: readonly (string | number)[]) =>
   sql`(SELECT value FROM json_each(${JSON.stringify(values)}))`;
 
 /**
  * What a playlist holds of [songs], as Core's `planPlaylistSongs` compares
- * them: its Library tracks among them, and its YT Music songs with their
- * video ids. SQLite finds the candidates, so only the stored songs a batch
+ * them: its Library tracks among them, its YT Music songs with their video
+ * ids, and its unavailable songs with their titles. SQLite finds the candidates, so only the stored songs a batch
  * could repeat are decoded, not the whole playlist; decoding them checks each
  * is readable, as the playlist's list reads it.
  */
@@ -319,9 +336,11 @@ const heldAmong = (
   const { playlistItems } = schema;
   const trackIds: number[] = [];
   const videoIds: string[] = [];
+  const unavailableTitles: string[] = [];
   for (const song of songs) {
     if (song.source === "library") trackIds.push(song.trackId);
-    else videoIds.push(song.song.videoId);
+    else if (song.source === "stream") videoIds.push(song.song.videoId);
+    else unavailableTitles.push(song.song.title);
   }
   const inPlaylist = and(eq(playlistItems.playlistId, playlistId), live);
   const held: PlaylistSong[] = [];
@@ -347,7 +366,18 @@ const heldAmong = (
       .all();
     for (const { ytSong } of rows) {
       const song = decode(playlistId, ytSong);
-      if (song !== null) held.push({ source: "stream", song });
+      if (song !== null) held.push(song);
+    }
+  }
+  if (unavailableTitles.length > 0) {
+    const rows = db
+      .select({ ytSong: sql<string>`${playlistItems.ytSong}` })
+      .from(playlistItems)
+      .where(and(inPlaylist, sql`${storedUnavailableTitle} IN ${jsonList(unavailableTitles)}`))
+      .all();
+    for (const { ytSong } of rows) {
+      const song = decode(playlistId, ytSong);
+      if (song !== null) held.push(song);
     }
   }
   return held;
@@ -488,13 +518,14 @@ export const selectPlaylistEntriesRevision = (db: LibraryDatabase): number =>
     .get()?.sum ?? 0;
 
 /**
- * Turns the YT Music entries of every playlist that the Library tracks
- * [trackIds] (just downloaded; the whole Library when not given, as a scan
- * does once it ends) positively are (Core's `playlistEntryLinks`) into those
- * tracks, in the same place; an entry whose track its playlist already holds
- * is removed instead (a tombstone). Each change is stamped at [now]. Returns
- * how many entries it changed. Does nothing (one small query) while no
- * playlist holds a YT Music entry. Run it inside the caller's transaction.
+ * Turns the YT Music and unavailable entries of every playlist that the
+ * Library tracks [trackIds] (just downloaded; the whole Library when not
+ * given, as a scan does once it ends) positively are (Core's
+ * `playlistEntryLinks`) into those tracks, in the same place; an entry whose
+ * track its playlist already holds is removed instead (a tombstone). Each
+ * change is stamped at [now]. Returns how many entries it changed. Does
+ * nothing (one small query) while no playlist holds such an entry. Run it
+ * inside the caller's transaction.
  */
 export const linkPlaylistEntries = (
   db: LibraryDatabase,
@@ -521,8 +552,8 @@ export const linkPlaylistEntries = (
     .orderBy(asc(playlistItems.playlistId), ...IN_ORDER)
     .all()
     .flatMap(({ itemId, playlistId, ytSong }) => {
-      const song = ytSong === null ? null : decode(playlistId, ytSong);
-      return song === null ? [] : [{ itemId, playlistId, song }];
+      const stored = ytSong === null ? null : decode(playlistId, ytSong);
+      return stored === null ? [] : [{ itemId, playlistId, song: stored.song }];
     });
   if (entries.length === 0) return 0;
   const columns = {
@@ -719,10 +750,12 @@ export const selectPlaylistCovers = (
   );
 };
 
-/** How many songs a playlist holds and how long they play. */
+/** How many songs a playlist holds, how long they play, and how many of them are unavailable. */
 export interface PlaylistTotals {
   readonly trackCount: number;
   readonly durationMs: number;
+  /** Its unavailable entries, counted in [trackCount] too. */
+  readonly unavailableCount: number;
 }
 
 /**
@@ -748,34 +781,61 @@ const READABLE_YT_SONG = sql`CASE
 END`;
 
 /**
+ * Whether the stored song `pi.yt_song` is an unavailable song Core's
+ * `readPlaylistEntrySong` reads (and not a YT Music song): marked by why it's
+ * unavailable, with a title, artists (names), an album and a cover (each a
+ * text or null) and a length (a number or null).
+ */
+const READABLE_UNAVAILABLE_SONG = sql`CASE
+  WHEN NOT json_valid(pi.yt_song) THEN 0
+  WHEN json_type(pi.yt_song) <> 'object' THEN 0
+  WHEN ${READABLE_YT_SONG} THEN 0
+  ELSE coalesce(
+    json_extract(pi.yt_song, '$.unavailable') IN ('notFound', 'localFile')
+      AND json_type(pi.yt_song, '$.unavailable') = 'text'
+      AND json_type(pi.yt_song, '$.title') = 'text'
+      AND json_type(pi.yt_song, '$.artists') = 'array'
+      AND NOT EXISTS (
+        SELECT 1 FROM json_each(pi.yt_song, '$.artists') WHERE json_each.type <> 'text')
+      AND json_type(pi.yt_song, '$.album') IN ('null', 'text')
+      AND json_type(pi.yt_song, '$.artworkUrl') IN ('null', 'text')
+      AND json_type(pi.yt_song, '$.durationMs') IN ('null', 'integer', 'real'),
+    0)
+END`;
+
+/**
  * Each playlist's song count and length (only [playlists]' when given: one id
- * or several), YT Music entries included (one of unknown length adds nothing
- * to it). An entry whose stored song can't be read is left out, as the
- * playlist's list leaves it out (`selectPlaylistEntries`, with Core's
- * `readPlaylistYtSong`; SQLite makes the same checks here, `READABLE_YT_SONG`).
+ * or several), YT Music and unavailable entries included (one of unknown
+ * length adds nothing to it), and how many are unavailable. An entry whose
+ * stored song can't be read is left out, as the playlist's list leaves it out
+ * (`selectPlaylistEntries`, with Core's `readPlaylistEntrySong`; SQLite makes
+ * the same checks here, `READABLE_YT_SONG`, `READABLE_UNAVAILABLE_SONG`).
  * Playlists holding nothing are left out.
  */
 export const selectPlaylistTotals = (
   db: LibraryDatabase,
   playlists?: number | readonly number[],
 ): Map<number, PlaylistTotals> => {
-  const rows = db.all<{ playlistId: number; trackCount: number; durationMs: number }>(sql`
+  const rows = db.all<PlaylistTotals & { playlistId: number }>(sql`
     SELECT pi.playlist_id AS playlistId, count(*) AS trackCount,
       coalesce(sum(CASE
         WHEN pi.track_id IS NOT NULL THEN t.duration_ms
         WHEN json_valid(pi.yt_song) THEN json_extract(pi.yt_song, '$.durationMs')
-      END), 0) AS durationMs
+      END), 0) AS durationMs,
+      coalesce(sum(CASE WHEN pi.track_id IS NULL THEN ${READABLE_UNAVAILABLE_SONG} ELSE 0 END), 0)
+        AS unavailableCount
     FROM playlist_items pi
     LEFT JOIN tracks t ON t.id = pi.track_id
     WHERE NOT pi.deleted AND ${entriesOf(playlists)}
       -- A Library entry whose track is gone is on its way out (the cascade), never counted.
-      AND CASE WHEN pi.track_id IS NOT NULL THEN t.id IS NOT NULL ELSE ${READABLE_YT_SONG} END
+      AND CASE WHEN pi.track_id IS NOT NULL THEN t.id IS NOT NULL
+        ELSE ${READABLE_YT_SONG} OR ${READABLE_UNAVAILABLE_SONG} END
     GROUP BY pi.playlist_id`);
   return new Map(rows.map(({ playlistId, ...total }) => [playlistId, total]));
 };
 
 const NO_COVERS = { thumbPaths: [], artworkPaths: [] } as const;
-const NO_SONGS = { trackCount: 0, durationMs: 0 } as const;
+const NO_SONGS = { trackCount: 0, durationMs: 0, unavailableCount: 0 } as const;
 
 /** A playlist's mosaic and totals, as Library › Playlists and its page show them. */
 interface PlaylistSummary {
@@ -879,18 +939,44 @@ const playlistArt = (
   };
 };
 
-/** How many songs [entries] are and how long they play (one of unknown length adds nothing). */
+/**
+ * How many songs [entries] are, how long they play (one of unknown length
+ * adds nothing) and how many are unavailable.
+ */
 const entriesTotals = (entries: readonly PlaylistEntry[]): PlaylistTotals => {
   let durationMs = 0;
+  let unavailableCount = 0;
   for (const entry of entries) {
     durationMs +=
       entry.source === "library" ? entry.track.durationMs : (entry.song.durationMs ?? 0);
+    if (entry.source === "unavailable") unavailableCount += 1;
   }
-  return { trackCount: entries.length, durationMs };
+  return { trackCount: entries.length, durationMs, unavailableCount };
 };
 
 /** Playlists the owner has: not deleted (tombstones). */
 const livePlaylist = eq(schema.playlists.deleted, false);
+
+/**
+ * When a song last started playing from each playlist (a play whose context
+ * is the playlist), by playlist id, for sorting the Playlists list by Recently
+ * Played (Core's `sortPlaylists`). Playlists never played from aren't in it.
+ */
+export const selectPlaylistsLastPlayed = (db: LibraryDatabase): Map<number, number> => {
+  const { playEvents } = schema;
+  const rows = db
+    .select({ id: playEvents.contextId, at: sql<number>`max(${playEvents.startedAt})` })
+    .from(playEvents)
+    .where(and(eq(playEvents.contextType, "playlist"), isNotNull(playEvents.contextId)))
+    .groupBy(playEvents.contextId)
+    .all();
+  const lastPlayed = new Map<number, number>();
+  for (const { id, at } of rows) {
+    const playlistId = Number(id);
+    if (Number.isSafeInteger(playlistId)) lastPlayed.set(playlistId, at);
+  }
+  return lastPlayed;
+};
 
 /**
  * Every playlist by name, with its artwork (its own image or its mosaic) and
@@ -902,7 +988,12 @@ export const selectPlaylists = (db: LibraryDatabase): PlaylistRow[] => {
   const { playlists } = schema;
   countListRead();
   const rows = db
-    .select({ id: playlists.id, name: playlists.name, ...imageColumns })
+    .select({
+      id: playlists.id,
+      name: playlists.name,
+      createdAt: playlists.createdAt,
+      ...imageColumns,
+    })
     .from(playlists)
     .where(livePlaylist)
     .all();
@@ -932,7 +1023,12 @@ export const selectPlaylist = (
   const { playlists } = schema;
   countPageRead(id);
   const row = db
-    .select({ id: playlists.id, name: playlists.name, ...imageColumns })
+    .select({
+      id: playlists.id,
+      name: playlists.name,
+      createdAt: playlists.createdAt,
+      ...imageColumns,
+    })
     .from(playlists)
     .where(and(eq(playlists.id, id), livePlaylist))
     .get();
@@ -944,13 +1040,14 @@ export const selectPlaylist = (
   const counted = scope === "library" ? new Map([[id, entriesTotals(items)]]) : undefined;
   const summary = playlistSummaries(db, [id], counted).get(id);
   const covers = summary?.covers ?? NO_COVERS;
-  const { trackCount, durationMs } = summary?.totals ?? NO_SONGS;
+  const { trackCount, durationMs, unavailableCount } = summary?.totals ?? NO_SONGS;
   return {
     playlist: {
       ...playlist,
       sort: sortKey(playlist.name),
       trackCount,
       durationMs,
+      unavailableCount,
       ...playlistArt({ imagePath, imageThumbPath }, covers),
     },
     items,
