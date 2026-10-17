@@ -565,7 +565,8 @@ class DurableDownloads(
    * Carries [job] on from YouTube Music when Soulseek's [reason] is one Core hands over: the same
    * job and row, with YouTube's M4A as the target, YouTube's failure plan and a time budget of its
    * own. The fallback is used up, so YouTube's own failure ends the job; Retry starts again from
-   * Soulseek.
+   * Soulseek. A fallback that asks for it (`prepare`) starts YouTube's turn with a prepare decision,
+   * where JS names the video it downloads (the song's audio track) only now that it's needed.
    */
   private fun fallBack(job: MutableMap<String, Any?>, reason: String): Boolean {
     if (!fallsBack(job, reason)) return false
@@ -582,7 +583,7 @@ class DurableDownloads(
     job["candidates"] = youtubeCandidates(job); job["candidateIndex"] = 0L; job["attempts"] = 0L
     job["deadline"] = clock() + JOB_MS
     job["generation"] = job.number("generation") + 1
-    transition(job, "prepared")
+    transition(job, if (fallback["prepare"] == true) "preparing" else "prepared")
     return true
   }
 
