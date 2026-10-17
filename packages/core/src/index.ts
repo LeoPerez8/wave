@@ -887,6 +887,12 @@ export type {
   UnsearchedSettlement,
   UnsearchedSettles,
 } from "./unsearchedEntries.ts";
+export { tryAgainNotice, tryAgainSearches, tryAgainSettles } from "./tryAgainUnavailable.ts";
+export type {
+  TryAgainAnswered,
+  TryAgainSearch,
+  TryAgainSettled,
+} from "./tryAgainUnavailable.ts";
 export type { YtSongSearch } from "./spotifyImport.ts";
 export {
   IMPORT_PROGRESS_SHOWN_EVERY_MS,
@@ -1065,6 +1071,7 @@ export {
   discoverMixesDue,
   discoverSeedQuery,
   discoverSeedVideo,
+  discoverSimilarSource,
   parseDiscoverMixes,
   playedFinder,
   storedDiscoverMixes,
@@ -1081,6 +1088,8 @@ export type {
   DiscoverSeedPools,
   DiscoverSeedSong,
   DiscoverSeedSource,
+  DiscoverSimilarArtist,
+  DiscoverSimilarArtists,
 } from "./discoverMixes.ts";
 export { discoverMixActions, discoverMixPlaylist } from "./discoverMixActions.ts";
 export type { DiscoverMixAction } from "./discoverMixActions.ts";

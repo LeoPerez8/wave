@@ -15,10 +15,12 @@ import {
   playlistMosaic,
   readPlaylistEntrySong,
   sortKey,
+  tryAgainSettles,
   writePlaylistEntrySong,
   type OrderedEntry,
   type PlaylistItem,
   type PlaylistSong,
+  type TryAgainAnswered,
   type UnavailableEntry,
   type YtAlbumSong,
 } from "@wave/core";
@@ -601,6 +603,57 @@ export const linkPlaylistEntries = (
   }
   return links.length + drops.length;
 };
+
+/**
+ * Settles what Try Again's [answered] searches found in [playlistId] (Core's
+ * `tryAgainSettles`): each unavailable entry found becomes its YT Music song
+ * in its place, and one found as a song the playlist already holds is
+ * removed (a tombstone). Entries no longer unavailable (removed, or the
+ * Library's song meanwhile) are left as they are. Each change is stamped at
+ * [now]. Returns how many were found and how many searches failed.
+ */
+export const settleTryAgain = (
+  db: LibraryDatabase,
+  playlistId: number,
+  answered: readonly TryAgainAnswered<YtAlbumSong>[],
+  now: number,
+): { readonly found: number; readonly failed: number } =>
+  db.transaction((tx) => {
+    const { playlists, playlistItems } = schema;
+    // What the playlist holds of the songs found, so none goes in twice.
+    const candidates = tryAgainSettles(answered, []).replace.map(
+      ({ song }): PlaylistSong => ({ source: "stream", song }),
+    );
+    const { replace, drops, found, failed } = tryAgainSettles(
+      answered,
+      heldAmong(tx, playlistId, candidates),
+    );
+    const stillUnavailable = (itemId: number) =>
+      and(
+        eq(playlistItems.id, itemId),
+        eq(playlistItems.playlistId, playlistId),
+        live,
+        storedUnavailable,
+      );
+    for (const { itemId, song } of replace) {
+      tx.update(playlistItems)
+        .set({
+          ytSong: writePlaylistEntrySong({ source: "stream", song }),
+          ...stamped(playlistItems, now),
+        })
+        .where(stillUnavailable(itemId))
+        .run();
+    }
+    for (const itemId of drops) {
+      tx.update(playlistItems)
+        .set({ deleted: true, ...stamped(playlistItems, now) })
+        .where(stillUnavailable(itemId))
+        .run();
+    }
+    if (replace.length + drops.length > 0)
+      tx.update(playlists).set({ updatedAt: now }).where(eq(playlists.id, playlistId)).run();
+    return { found, failed };
+  });
 
 /** A playlist's mosaic: thumbnails for lists and menus, full-size covers for its screen's header. */
 export interface PlaylistCovers {
