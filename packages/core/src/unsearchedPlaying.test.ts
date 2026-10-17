@@ -14,6 +14,7 @@ import {
   readUnsearchedTrackId,
   reduceQueue,
   unsearchedTrackId,
+  withHeldCurrent,
   type QueueState,
   type UnsearchedSong,
 } from "./index.ts";
@@ -113,6 +114,14 @@ describe("what the player holds of a queue with unsearched songs", () => {
 
   test("an empty queue is an empty player", () => {
     assert.deepEqual(playerQueueList(EMPTY_QUEUE), { keys: [], index: -1 });
+  });
+
+  test("a queue that can't wait (picked back up after a restart) starts at the next song it holds", () => {
+    assert.equal(show(withHeldCurrent(play("1 u:A u:B 2", 1))), "1 u:A u:B [2]");
+    assert.equal(show(withHeldCurrent(play("1 u:A u:B", 2))), "[1] u:A u:B");
+    const held = play("1 u:A 2", 2);
+    assert.equal(withHeldCurrent(held), held);
+    assert.equal(withHeldCurrent(play("u:A u:B", 0)).index, -1);
   });
 });
 

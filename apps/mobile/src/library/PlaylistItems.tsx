@@ -1,5 +1,5 @@
 import { IconGripVertical, IconTrash } from "@tabler/icons-react-native";
-import { moveItem, resolveRemoveSwipe, ytTrackId, type QueueContext } from "@wave/core";
+import { moveItem, queueSongTrackId, resolveRemoveSwipe, type QueueContext } from "@wave/core";
 import * as Haptics from "expo-haptics";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { Text, ToastAndroid, View, type AccessibilityActionEvent } from "react-native";
@@ -18,7 +18,7 @@ import { TrackRow } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { playPlaylist } from "@/playback/actions";
 import { useCurrentTrackId } from "@/playback/hooks";
-import { openTrackActions } from "@/playback/ActionsMenu";
+import { openTrackActions, openUnsearchedActions } from "@/playback/ActionsMenu";
 import type { ActionItems, TrackItem } from "@/playback/actionTargets";
 import { selectableRow } from "@/selection/selectableRow";
 import { useListSelection } from "@/selection/useListSelection";
@@ -31,6 +31,8 @@ import {
   openUnavailableEntryActions,
   UnavailableSongRow,
 } from "./UnavailableEntry";
+
+import { UnsearchedSongRow } from "./UnsearchedSongRow";
 
 import { useFavoriteIds } from "./favorites";
 import type { PlaylistEntryRow } from "./LibraryStore";
@@ -207,6 +209,16 @@ function PlaylistItem({
                 accessibilityActions={accessibilityActions}
                 onAccessibilityAction={onAccessibilityAction}
               />
+            ) : item.source === "unsearched" ? (
+              <UnsearchedSongRow
+                song={item.song}
+                checked={checked}
+                playing={playing}
+                onPress={onPress}
+                onLongPress={onLongPress}
+                accessibilityActions={accessibilityActions}
+                onAccessibilityAction={onAccessibilityAction}
+              />
             ) : (
               <UnavailableSongRow
                 song={item.song}
@@ -253,11 +265,7 @@ const entryKey = (item: PlaylistEntryRow): string => String(item.itemId);
 
 /** The id the entry's song goes by in the queue, to show it playing; null for one that never plays. */
 const queueId = (item: PlaylistEntryRow): string | null =>
-  item.source === "library"
-    ? String(item.track.id)
-    : item.source === "stream"
-      ? ytTrackId(item.song.videoId)
-      : null;
+  item.source === "unavailable" ? null : queueSongTrackId(item);
 
 /** Whether the entry can be checked: an unavailable entry has nothing the selection bar acts on. */
 const checkable = (item: PlaylistEntryRow): boolean => item.source !== "unavailable";
@@ -318,7 +326,7 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
       order: next(previous !== null && previous.base === read ? previous.order : read),
     }));
   // While YT Music entries are among them, the Library's songs carry the downloaded icon.
-  const mixed = order.some((item) => item.source === "stream");
+  const mixed = order.some((item) => item.source === "stream" || item.source === "unsearched");
   const tracksOf = useCallback(
     (selected: readonly PlaylistEntryRow[]): ActionItems => ({
       kind: "track",
@@ -327,7 +335,9 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
           ? [{ song: item.track, playlistItem: placeOf(item) }]
           : item.source === "stream"
             ? [{ ytSong: item.song, playlistItem: placeOf(item) }]
-            : [],
+            : item.source === "unsearched"
+              ? [{ unsearched: item.song, playlistItem: placeOf(item) }]
+              : [],
       ),
     }),
     [placeOf],
@@ -373,6 +383,7 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
             const menu = { ...options, playlistItem: placeOf(item) };
             if (item.source === "library") openTrackActions(item.track, menu);
             else if (item.source === "stream") openYtSongActions(item.song, menu);
+            else if (item.source === "unsearched") openUnsearchedActions(item.song, menu);
             else openUnavailableEntryActions(item.song, placeOf(item));
           });
     return (

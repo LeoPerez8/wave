@@ -890,6 +890,7 @@ export {
   playerQueueList,
   playingAnswerStep,
   playingSearches,
+  withHeldCurrent,
 } from "./unsearchedPlaying.ts";
 export type { PlayingAnswerStep, PlayingSearch, PlayingSearching } from "./unsearchedPlaying.ts";
 export type {

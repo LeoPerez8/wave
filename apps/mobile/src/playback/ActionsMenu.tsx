@@ -1,4 +1,4 @@
-import { YT_PLAYLIST_DOWNLOAD_ACTION_LABELS, entryDivider } from "@wave/core";
+import { YT_PLAYLIST_DOWNLOAD_ACTION_LABELS, entryDivider, type UnsearchedSong } from "@wave/core";
 import type { ReactNode } from "react";
 import { Text, View } from "react-native";
 
@@ -82,6 +82,20 @@ export const openTrackActions = (
   options: MenuOptions & { readonly playlistItem?: PlaylistPlace | undefined } = {},
 ): void =>
   openActions({ kind: "track", items: [{ song, playlistItem: options.playlistItem }] }, options);
+
+/**
+ * Opens the long-press menu for a playlist's unsearched entry: what a YT
+ * Music entry's offers that needs no video (Play Next, Add to Queue, Add to
+ * Playlist, Remove from Playlist, Go to Artist, Select).
+ */
+export const openUnsearchedActions = (
+  song: UnsearchedSong,
+  options: MenuOptions & { readonly playlistItem?: PlaylistPlace | undefined } = {},
+): void =>
+  openActions(
+    { kind: "track", items: [{ unsearched: song, playlistItem: options.playlistItem }] },
+    options,
+  );
 
 /**
  * Opens the long-press menu for the Library song [id], reading its row first:

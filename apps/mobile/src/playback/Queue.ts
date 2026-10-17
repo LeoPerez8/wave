@@ -2,20 +2,28 @@ import {
   EMPTY_QUEUE,
   REAL_SHUFFLE,
   applyPlayerSync,
+  currentEntry,
   extrapolatePosition,
   keptPlayingEntry,
   keysToLoad,
   parseQueueState,
+  passedOverNotice,
   planPlayerSync,
+  playerQueueList,
+  playingAnswerStep,
   queueSourceAfter,
+  readUnsearchedTrackId,
   reduceQueue,
   shuffledTrackIds,
   shufflesQueue,
   statsWindow,
+  withHeldCurrent,
+  ytTrackId,
   type PlayerList,
   type PlaySource,
   type QueueCommand,
   type QueueEntry,
+  type QueuePlayback,
   type QueueState,
   type RepeatMode,
   type Shuffle,
@@ -29,10 +37,12 @@ import * as Semaphore from "effect/Semaphore";
 import { makeExternalStore } from "@/lib/externalStore";
 import { LibraryStore } from "@/library/LibraryStore";
 import type { NativeSyncStep, PlayerItem } from "@/native/wavePlayer";
+import { showToast } from "@/overlay/toast";
 import { perfMark } from "@/perf/perf";
 import { shuffleKind } from "@/settings/shuffleKind";
 
 import { Player, PlayerError, playbackState } from "./Player";
+import { searchPlaying } from "./playingSearch";
 import { learnQueueTracks, queueTracks, type QueueTrack } from "./queueTracks";
 
 export { toQueueTrack, type QueueTrack } from "./queueTracks";
@@ -122,8 +132,19 @@ const toNative = (step: SyncStep): NativeSyncStep => {
   }
 };
 
-const sameKeys = (entries: readonly QueueEntry[], keys: readonly string[]): boolean =>
-  entries.length === keys.length && entries.every((entry, i) => entry.key === keys[i]);
+const sameKeys = (held: readonly string[] | undefined, keys: readonly string[]): boolean =>
+  held !== undefined && held.length === keys.length && held.every((key, i) => key === keys[i]);
+
+/**
+ * Whether the owner chose the entry [command] makes current (a tap, Play,
+ * Shuffle, an Up Next entry, a first song queued): tapped while it can't be
+ * searched (offline, YT Music off), an unsearched song says why and nothing
+ * changes. Skips and the player moving on go past it instead.
+ */
+const chosenBy = (command: QueueCommand, before: QueueState): boolean =>
+  command.type === "play" ||
+  command.type === "jumpTo" ||
+  ((command.type === "playNext" || command.type === "addToQueue") && before.index < 0);
 
 /** The player item for [entry], from the tracks the queue learned. */
 const itemFor = (entry: QueueEntry): Effect.Effect<PlayerItem, PlayerError> => {
@@ -192,10 +213,10 @@ export const layer = Layer.effect(
 
     const applyPlan = (state: QueueState) =>
       Effect.gen(function* () {
-        const steps = planPlayerSync(native, {
-          keys: state.entries.map((entry) => entry.key),
-          index: state.index,
-        });
+        // The player holds no unsearched entry, and waits while the playing one is searched.
+        const list = playerQueueList(state);
+        if (list === null) return;
+        const steps = planPlayerSync(native, list);
         if (steps.length === 0) return;
         // A skip sends no items, so it doesn't look through the whole queue.
         const toLoad = new Set(keysToLoad(native, steps));
@@ -260,12 +281,102 @@ export const layer = Layer.effect(
         reduceQueue(state, command, Math.random, shuffle),
       );
 
+    /**
+     * While [state]'s playing entry is unsearched, searches it (with the
+     * playing priority, Core's `playingSearches`; the song shows as playing
+     * meanwhile, and the song before it pauses): found, it plays as a YT
+     * Music song; not found or failed, a notice names it and the next song
+     * goes the same way (Core's `playingAnswerStep`). Null when the owner
+     * chose it ([chosen]) and it can't be searched (offline, YT Music off):
+     * the notice says why and the queue stays as it was ([before]).
+     */
+    const settlePlaying = (
+      before: QueueState,
+      start: QueueState,
+      startPlayback: QueuePlayback,
+      chosen: boolean,
+    ) =>
+      Effect.gen(function* () {
+        let state = start;
+        let playback = startPlayback;
+        let paused = false;
+        const asked = new Set<string>();
+        for (;;) {
+          const current = currentEntry(state);
+          const song = current === null ? null : readUnsearchedTrackId(current.trackId);
+          if (current === null || song === null) break;
+          // Gone round the queue, or it ran out, on songs that didn't play.
+          if (asked.has(current.trackId) || playback === "stop") {
+            state = withHeldCurrent(state);
+            playback = "stop";
+            break;
+          }
+          asked.add(current.trackId);
+          queueState.set(state);
+          if (!paused && playbackState.get().playWhenReady) {
+            yield* player.pause;
+            paused = true;
+          }
+          const settlement = (yield* Effect.promise(() => searchPlaying(current.trackId))) ?? {
+            kind: "failed",
+            reason: "failed",
+          };
+          const step = playingAnswerStep(song, settlement, { chosen: chosen && asked.size === 1 });
+          if (settlement.kind === "found") {
+            const becomes = ytTrackId(settlement.becomes.song.videoId);
+            state = reduceQueue(state, {
+              type: "settled",
+              trackId: current.trackId,
+              becomes,
+            }).state;
+            break;
+          }
+          if (step.kind !== "play") void showToast(step.notice);
+          if (step.kind === "stay") {
+            queueState.set(before);
+            if (paused) yield* player.play;
+            return null;
+          }
+          const next = reduceQueue(
+            state,
+            settlement.kind === "notFound"
+              ? { type: "settled", trackId: current.trackId, becomes: null }
+              : { type: "next" },
+          );
+          state = next.state;
+          if (next.playback === "stop") playback = "stop";
+        }
+        if (paused && playback === "keep") playback = "play";
+        return { state, playback };
+      });
+
     const run = (command: QueueCommand, added: readonly QueueTrack[]) =>
       Effect.gen(function* () {
+        const knownBefore = queueTracks.get();
         learnTracks(command, added);
         if (command.type === "playerMoved") native = { ...native, currentKey: command.key };
         const before = queueState.get();
-        const { state, playback } = yield* reduce(before, command);
+        const reduced = yield* reduce(before, command);
+        const settled =
+          playerQueueList(reduced.state) === null
+            ? yield* settlePlaying(
+                before,
+                reduced.state,
+                reduced.playback,
+                chosenBy(command, before),
+              )
+            : reduced;
+        // Stayed as it was: the old queue's tracks too, which a new play forgot.
+        if (settled === null) {
+          queueTracks.set(knownBefore);
+          return;
+        }
+        const { state, playback } = settled;
+        // The player went on past songs still unsearched: they're skipped, as a failed search skips them.
+        if (command.type === "playerMoved") {
+          const notice = passedOverNotice(before, state);
+          if (notice !== null) void showToast(notice);
+        }
         if (state === before && playback === "keep") return;
         queueState.set(state);
         if (state !== before) queueChanged();
@@ -299,21 +410,37 @@ export const layer = Layer.effect(
     const handOver = (command: PlayCommand, added: readonly QueueTrack[]) =>
       lane.withPermit(
         Effect.gen(function* () {
+          const knownBefore = queueTracks.get();
           learnTracks(command, added);
-          const { state } = yield* reduce(queueState.get(), command);
-          const items = yield* Effect.forEach(state.entries, itemFor);
+          const before = queueState.get();
+          const reduced = yield* reduce(before, command);
+          // An unsearched song played from Auto is searched first, as on the phone.
+          const settled =
+            playerQueueList(reduced.state) === null
+              ? yield* settlePlaying(before, reduced.state, "play", true)
+              : reduced;
+          if (settled === null) {
+            queueTracks.set(knownBefore);
+            return yield* Effect.fail(
+              new PlayerError({ operation: "play from Android Auto", cause: "not searched" }),
+            );
+          }
+          const { state } = settled;
+          const list = playerQueueList(state) ?? { keys: [], index: -1 };
+          const held = new Set(list.keys);
+          const items = yield* Effect.forEach(
+            state.entries.filter((entry) => held.has(entry.key)),
+            itemFor,
+          );
           queueSource.update((source) => queueSourceAfter(source, command, "auto"));
           queueState.set(state);
           queueChanged();
           // What the player holds once the session has set the items; the next
           // sync checks it did (`nativeKnown`) before planning from it.
-          native = {
-            keys: state.entries.map((entry) => entry.key),
-            currentKey: state.entries[state.index]?.key ?? null,
-          };
+          native = { keys: list.keys, currentKey: list.keys[list.index] ?? null };
           nativeKnown = false;
           yield* applyRepeat(state);
-          return { items, startIndex: Math.max(0, state.index) };
+          return { items, startIndex: Math.max(0, list.index) };
         }),
       );
 
@@ -325,7 +452,7 @@ export const layer = Layer.effect(
       yield* readNative;
       const json = yield* player.savedQueue;
       const saved = json === null ? null : parseQueueState(JSON.parse(json));
-      if (saved === null || !sameKeys(saved.entries, native.keys)) return;
+      if (saved === null || !sameKeys(playerQueueList(saved)?.keys, native.keys)) return;
       const resumedByPlayer = yield* player.takeResumed;
       keptPlayingKey.set(keptPlayingEntry(native.currentKey, { resumedByPlayer }));
       const source = yield* player.savedQueueSource;
@@ -385,19 +512,21 @@ export const layer = Layer.effect(
       );
     });
 
-    const restoreSaved = (state: QueueState, added: readonly QueueTrack[], positionMs: number) =>
+    const restoreSaved = (saved: QueueState, added: readonly QueueTrack[], positionMs: number) =>
       lane.withPermit(
         Effect.gen(function* () {
           if (queueState.get().entries.length > 0) return false;
           yield* readNative;
           if (native.keys.length > 0) return false;
+          // Paused, it can't wait for a search: an unsearched playing song gives way to the next.
+          const state = withHeldCurrent(saved);
           learnQueueTracks(added);
           queueState.set(state);
           // A fresh player stays paused: nothing here asks it to play.
           yield* sync(state);
           yield* player.setRepeatMode(state.repeat);
           appliedRepeat = state.repeat;
-          if (positionMs > 0) yield* player.seekTo(positionMs);
+          if (positionMs > 0 && state === saved) yield* player.seekTo(positionMs);
           settle();
           return true;
         }).pipe(Effect.tapError(() => Effect.sync(() => queueState.set(EMPTY_QUEUE)))),

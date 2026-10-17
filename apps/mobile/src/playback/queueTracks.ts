@@ -7,13 +7,17 @@
  */
 import {
   createQueueCoverBatcher,
+  isUnsearchedTrackId,
+  joinArtists,
   libraryTrackIds,
   withQueueCovers,
   parseTrackId,
+  unsearchedTrackId,
   ytSongArtist,
   ytTrackId,
   type ArtworkPalette,
   type QueueEntry,
+  type UnsearchedSong,
   type YtSong,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
@@ -79,6 +83,27 @@ export const toYtQueueTrack = (song: YtSong, artwork: CachedArtwork | null): Que
     artworkPath: artwork?.path ?? song.artworkUrl,
     thumbPath: artwork?.thumbPath ?? null,
     palette: artwork?.palette ?? null,
+  };
+};
+
+/**
+ * An unsearched song as the queue needs it: it goes by its unsearched id
+ * (`unsearchedTrackId`) and shows what Spotify listed. The player never
+ * holds it (it's searched before it plays), and like a YT Music song whose
+ * cover isn't cached, the queue rows show no cover for it.
+ */
+export const toUnsearchedQueueTrack = (song: UnsearchedSong): QueueTrack => {
+  const id = unsearchedTrackId(song);
+  return {
+    id,
+    path: id,
+    title: song.title,
+    artist: joinArtists(song.artists),
+    artists: song.artists,
+    album: song.album,
+    artworkPath: song.artworkUrl,
+    thumbPath: null,
+    palette: null,
   };
 };
 
@@ -187,7 +212,9 @@ export const learnUnknownQueueTracks = <E, R>(
   Effect.suspend(() => {
     const missing = tracksToLookUp(entries);
     if (missing.length === 0) return Effect.void;
-    const streamed = new Set(missing.filter((id) => parseTrackId(id)?.kind === "yt"));
+    const streamed = new Set(
+      missing.filter((id) => parseTrackId(id)?.kind === "yt" || isUnsearchedTrackId(id)),
+    );
     if (streamed.size > 0) {
       learnQueueTracks(savedYtTracks().filter((track) => streamed.has(track.id)));
     }

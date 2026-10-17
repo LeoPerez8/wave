@@ -52,11 +52,31 @@ export interface PlayingSearching {
 export const playerQueueList = (state: QueueState): QueueList | null => {
   const current = state.entries[state.index];
   if (current !== undefined && isUnsearchedTrackId(current.trackId)) return null;
-  const held = state.entries.filter((entry) => !isUnsearchedTrackId(entry.trackId));
+  const holds = state.entries.filter(held);
   return {
-    keys: held.map((entry) => entry.key),
-    index: current === undefined ? -1 : held.indexOf(current),
+    keys: holds.map((entry) => entry.key),
+    index: current === undefined ? -1 : holds.indexOf(current),
   };
+};
+
+/** Whether the player can hold [entry]: anything but an unsearched song. */
+const held = (entry: QueueEntry): boolean => !isUnsearchedTrackId(entry.trackId);
+
+/**
+ * [state] with its playing entry one the player holds, for a queue that
+ * can't wait for a search (picked back up after a restart, paused, or run
+ * out on an unsearched song): the first held entry after the playing one,
+ * else the last held before it, else none (-1). Unchanged when the playing
+ * entry is held already.
+ */
+export const withHeldCurrent = (state: QueueState): QueueState => {
+  const current = state.entries[state.index];
+  if (current === undefined || !isUnsearchedTrackId(current.trackId)) return state;
+  const after = state.entries.findIndex((entry, at) => at > state.index && held(entry));
+  if (after >= 0) return { ...state, index: after };
+  let before = state.index - 1;
+  while (before >= 0 && !held(state.entries[before]!)) before -= 1;
+  return { ...state, index: before };
 };
 
 /**
