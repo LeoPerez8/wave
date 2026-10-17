@@ -28,3 +28,8 @@
 # Wave account: Credential Manager finds its Play services provider by reflection.
 -if class androidx.credentials.CredentialManager
 -keep class androidx.credentials.playservices.** { *; }
+
+# The app log (#331) writes exceptions by class name: keep Wave's own readable in release
+# builds, and keep line numbers so a logged stack can be retraced with R8's mapping.
+-keepnames class expo.modules.wavenative.** extends java.lang.Throwable
+-keepattributes SourceFile,LineNumberTable

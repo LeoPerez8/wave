@@ -99,8 +99,10 @@ export interface YtDownloadJournalJob<S extends YtSong = YtSong> {
   readonly importFailure?: YtDownloadFailure;
   /**
    * What last went wrong, as "Class: message" (`downloadFailureCause`, or the
-   * native exception): kept through a fallback and a retry's attempts, and
-   * cleared when the user retries. Absent for a failure decided on.
+   * native exception): kept through a retry's attempts and cleared when the
+   * user retries. It belongs to the failure the job shows: a fallback sets
+   * Soulseek's aside, which comes back only with Soulseek's failure. Absent
+   * for a failure decided on.
    */
   readonly cause?: string;
   /** The Library imported the file. */

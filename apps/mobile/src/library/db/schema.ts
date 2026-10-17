@@ -592,6 +592,8 @@ export const playEvents = sqliteTable(
     index("play_events_track_idx").on(t.trackId),
     index("play_events_started_at_idx").on(t.startedAt),
     index("play_events_pushed_idx").on(t.pushed),
+    // When each playlist was last played (the Playlists list's Recently Played).
+    index("play_events_context_idx").on(t.contextType, t.contextId, t.startedAt),
   ],
 );
 

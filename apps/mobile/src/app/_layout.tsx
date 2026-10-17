@@ -19,6 +19,7 @@ import { OverlayHost } from "@/overlay/OverlayHost";
 import { FollowCurrentRoute } from "@/library/routes";
 import { useOpenSharedText } from "@/library/sharedText";
 import { startInitialScan } from "@/library/runtime";
+import { ErrorScreen } from "@/log/ErrorScreen";
 import { NowPlayingSheet, UnderNowPlaying } from "@/nowPlaying/NowPlayingSheet";
 import { PERF_ENABLED, perfTouch, useRenderCount } from "@/perf/perf";
 import { PerfProbe } from "@/perf/PerfProbe";
@@ -34,6 +35,9 @@ const onRootTouchStart = PERF_ENABLED
       perfTouch(event);
     }
   : touchStarted;
+
+/** A render error shows a screen to try again or export the logs from, instead of closing Wave. */
+export { ErrorScreen as ErrorBoundary };
 
 export default function RootLayout() {
   useRenderCount("RootLayout");

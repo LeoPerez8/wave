@@ -9,6 +9,7 @@ import {
 import { useLayoutEffect, useState, useSyncExternalStore } from "react";
 
 import { makeExternalStore } from "@/lib/externalStore";
+import { noteScreen } from "@/log/appLog";
 
 import type { AlbumRow, ArtistRow, GenreRow, PlaylistRow } from "./LibraryStore";
 
@@ -36,6 +37,8 @@ export function FollowCurrentRoute(): null {
   const pathname = usePathname();
   const params = useGlobalSearchParams();
   useLayoutEffect(() => currentRoute.set({ pathname, params }), [pathname, params]);
+  // The app log's freezes say which screen was showing.
+  useLayoutEffect(() => noteScreen(pathname), [pathname]);
   return null;
 }
 

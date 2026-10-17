@@ -3,7 +3,6 @@ package expo.modules.wavenative.yt.potoken
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
 import android.webkit.ConsoleMessage
 import android.webkit.JavascriptInterface
 import android.webkit.RenderProcessGoneDetail
@@ -16,6 +15,7 @@ import java.net.URL
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
+import expo.modules.wavenative.log.WaveLog
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -102,7 +102,7 @@ class YtPoTokenWebView private constructor(
     }
     webView.webViewClient = object : WebViewClient() {
       override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
-        Log.w(TAG, "Token web view renderer gone (crashed: ${detail.didCrash()})")
+        WaveLog.w(TAG, "Token web view renderer gone (crashed: ${detail.didCrash()})")
         isDead = true
         val error = PoTokenException("Renderer gone")
         failSetUp(error)

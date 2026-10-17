@@ -1,6 +1,6 @@
 /**
- * Drag-to-reorder in a list of fixed-height rows (Up Next, playlist items):
- * where a dragged row would land if it were dropped now.
+ * Drag-to-reorder in a list of rows (Up Next, playlist items, the arrangement
+ * editors): where a dragged row would land if it were dropped now.
  *
  * Up Next runs these on the UI thread, inside Reanimated worklets, so a drag
  * keeps following the finger while JavaScript is busy: each starts with the
@@ -12,18 +12,44 @@ export interface ReorderDrag {
   readonly from: number;
   /** How far the row has moved through the list (finger travel plus any auto-scroll), in dp; negative is up. */
   readonly distance: number;
-  readonly rowHeight: number;
+  /**
+   * One height for every row, or each row's own in list order (rows that
+   * grow with large text), in dp.
+   */
+  readonly rowHeight: number | readonly number[];
   /** Rows in the list. */
   readonly count: number;
 }
 
 /**
- * The index the dragged row would take: another row's place once its centre
- * passes that row's middle.
+ * The index the dragged row would take: another row's place once the dragged
+ * row's leading edge (its bottom going down, its top going up) passes that
+ * row's middle.
  */
 export const reorderTarget = ({ from, distance, rowHeight, count }: ReorderDrag): number => {
   "worklet";
-  return Math.max(0, Math.min(count - 1, from + Math.round(distance / rowHeight)));
+  if (typeof rowHeight === "number") {
+    return Math.max(0, Math.min(count - 1, from + Math.round(distance / rowHeight)));
+  }
+  let to = from;
+  // How far the dragged row's leading edge must travel to reach the next row's middle.
+  let passed = 0;
+  if (distance > 0) {
+    for (let index = from + 1; index < count; index++) {
+      const height = rowHeight[index] ?? 0;
+      if (distance < passed + height / 2) break;
+      to = index;
+      passed += height;
+    }
+  } else {
+    for (let index = from - 1; index >= 0; index--) {
+      const height = rowHeight[index] ?? 0;
+      if (-distance <= passed + height / 2) break;
+      to = index;
+      passed += height;
+    }
+  }
+  return to;
 };
 
 export interface ReorderRow {
@@ -74,4 +100,63 @@ export const reorderScrollSpeed = ({
   const bottomGap = viewport - (top + rowHeight);
   if (bottomGap < edge) return maxSpeed * Math.min(1, (edge - bottomGap) / edge);
   return 0;
+};
+
+export interface ReorderGridDrag {
+  /** The dragged tile's index when the drag started. */
+  readonly from: number;
+  /** How far the tile has moved across and down (finger travel plus any auto-scroll), in dp. */
+  readonly dx: number;
+  readonly dy: number;
+  /** From one tile's left edge to the next one's, gutter included, in dp. */
+  readonly cellWidth: number;
+  /** From one row's top to the next one's, in dp. */
+  readonly cellHeight: number;
+  /** Tiles to a row, filled left to right then top down; 1 is a list. */
+  readonly columns: number;
+  /** Tiles in the grid. */
+  readonly count: number;
+}
+
+/**
+ * The index a dragged tile in a grid would take: another tile's place once
+ * its centre passes that tile's middle, across and down, kept inside the grid.
+ * With one column it is `reorderTarget`.
+ */
+export const reorderGridTarget = ({
+  from,
+  dx,
+  dy,
+  cellWidth,
+  cellHeight,
+  columns,
+  count,
+}: ReorderGridDrag): number => {
+  "worklet";
+  const rows = Math.ceil(count / columns);
+  const column = Math.max(0, Math.min(columns - 1, (from % columns) + Math.round(dx / cellWidth)));
+  const row = Math.max(
+    0,
+    Math.min(rows - 1, Math.floor(from / columns) + Math.round(dy / cellHeight)),
+  );
+  return Math.max(0, Math.min(count - 1, row * columns + column));
+};
+
+/**
+ * How many cells a tile steps across (`x`) and down (`y`) to make room for
+ * the dragged one: one place back or on, which wraps to the row above or
+ * below at a row's end. The dragged tile itself follows the finger: no step.
+ */
+export const reorderGridShift = ({
+  index,
+  from,
+  to,
+  columns,
+}: ReorderRow & { readonly columns: number }): { readonly x: number; readonly y: number } => {
+  "worklet";
+  const place = index + reorderShift({ index, from, to });
+  return {
+    x: (place % columns) - (index % columns),
+    y: Math.floor(place / columns) - Math.floor(index / columns),
+  };
 };

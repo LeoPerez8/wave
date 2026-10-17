@@ -42,6 +42,7 @@ import {
   type PlayableSongRow,
   type SongRow,
 } from "@/library/LibraryStore";
+import { sortedPlaylists } from "@/library/playlistOrder";
 import type { AutoPlayback, AutoRequest } from "@/native/wavePlayer";
 import type { PlayerError } from "@/playback/Player";
 import { Queue, queueState, toQueueTrack, type QueueTrack } from "@/playback/Queue";
@@ -85,12 +86,12 @@ type AutoSong = MixedSong<YtSong, PlayableSongRow>;
 const fromLibrary = (songs: readonly SongRow[]): readonly AutoSong[] =>
   songs.filter(songHasFile).map((track) => ({ source: "library", track }));
 
-/** A playlist's entries as a track list's songs. */
+/** A playlist's entries as a track list's songs; an unavailable entry plays nowhere, so isn't one. */
 const playlistSongs = (entries: readonly PlaylistEntryRow[]): readonly AutoSong[] =>
   entries.flatMap((entry): AutoSong[] =>
     entry.source === "stream"
       ? [{ source: "stream", song: entry.song }]
-      : songHasFile(entry.track)
+      : entry.source === "library" && songHasFile(entry.track)
         ? [{ source: "library", track: entry.track }]
         : [],
   );
@@ -200,9 +201,9 @@ export const layer = Layer.effect(
       switch (source.type) {
         case "albums":
           return store.listAlbumsPage(page).pipe(Effect.map((albums) => albums.map(autoAlbumItem)));
-        // A handful of rows: page the Library's own list.
+        // A handful of rows: page the Library's own list, in the order the phone shows it.
         case "playlists":
-          return store.listPlaylists.pipe(
+          return sortedPlaylists(store).pipe(
             Effect.map((playlists) => pageOf(playlists, page).map(autoPlaylistItem)),
           );
         // The app's Home shelf: a handful of albums.

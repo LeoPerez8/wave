@@ -1,4 +1,4 @@
-import { Text, View } from "react-native";
+import { Text, View, type PressableProps } from "react-native";
 
 import { Press } from "@/motion/Press";
 
@@ -19,10 +19,22 @@ type Props = {
    * cell. Undefined outside selection mode.
    */
   checked?: boolean | undefined;
+  /** Actions for screen readers beyond a tap and a long press (Move up, Move down). */
+  accessibilityActions?: PressableProps["accessibilityActions"];
+  onAccessibilityAction?: PressableProps["onAccessibilityAction"];
 };
 
 /** A playlist in a list: its mosaic as a 40dp thumbnail, the name over a graphite count. */
-export function PlaylistEntry({ name, detail, paths, onPress, onLongPress, checked }: Props) {
+export function PlaylistEntry({
+  name,
+  detail,
+  paths,
+  onPress,
+  onLongPress,
+  checked,
+  accessibilityActions,
+  onAccessibilityAction,
+}: Props) {
   const selecting = checked !== undefined;
   return (
     <Press
@@ -31,6 +43,8 @@ export function PlaylistEntry({ name, detail, paths, onPress, onLongPress, check
       accessibilityState={selecting ? { checked } : undefined}
       onPress={onPress}
       onLongPress={onLongPress}
+      accessibilityActions={accessibilityActions}
+      onAccessibilityAction={onAccessibilityAction}
       haptic="selection"
       depth={0.015}
     >

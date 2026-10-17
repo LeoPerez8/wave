@@ -36,9 +36,9 @@ describe("releaseTagProblem", () => {
     for (const tag of ["v0.5.1", "v0.4.0", "0.5.0", "v0.5.0-rc1", "v0.5"]) {
       assert.equal(
         releaseTagProblem(tag, "0.5.0"),
-        `The tag ${tag} doesn't match the app's version, 0.5.0 (apps/mobile/app.config.ts). ` +
-          "Bump the version in a PR first, then tag its merge commit v<version>; " +
-          "or tag v0.5.0 to release 0.5.0.",
+        `The tag ${tag} doesn't match the app's version, 0.5.0 (apps/mobile/package.json). ` +
+          "Pushes to main and ti release their next version on their own; a tag by hand must " +
+          'name the version of the commit it tags: tag this one v0.5.0, or tag the "Release Wave <version>" commit you want.',
         tag,
       );
     }

@@ -1,12 +1,12 @@
 package expo.modules.wavenative.yt.potoken
 
 import android.content.Context
-import android.util.Log
 import android.webkit.CookieManager
 import com.metrolist.innertubex.extraction.PoTokenResult
 import com.metrolist.innertubex.extraction.TokenProvider
 import com.metrolist.innertubex.extraction.TokenProviderCapabilities
 import com.metrolist.innertubex.extraction.strategy.PoTokenProviderKind
+import expo.modules.wavenative.log.WaveLog
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
@@ -46,17 +46,17 @@ class YtPoTokens(context: Context) : TokenProvider {
         PoTokenResult(playerRequestToken = playerToken, streamingDataToken = streamingToken, visitorData = visitorData)
       }
     } catch (e: TimeoutCancellationException) {
-      Log.w(TAG, "No proof-of-origin token in time; going on without")
+      WaveLog.w(TAG, "No proof-of-origin token in time; going on without")
       reset()
       null
     } catch (e: CancellationException) {
       throw e
     } catch (e: BadWebViewException) {
-      Log.w(TAG, "The WebView can't mint proof-of-origin tokens")
+      WaveLog.w(TAG, "The WebView can't mint proof-of-origin tokens")
       webViewUsable = false
       null
     } catch (e: Exception) {
-      Log.w(TAG, "Couldn't mint a proof-of-origin token (${e::class.simpleName})")
+      WaveLog.w(TAG, "Couldn't mint a proof-of-origin token (${e::class.simpleName})")
       null
     }
   }

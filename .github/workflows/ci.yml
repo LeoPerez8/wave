@@ -3,9 +3,9 @@ name: CI
 on:
   pull_request:
   push:
-    # A push to main or ti whose app version isn't tagged yet publishes that version's
-    # release and creates its tag (docs/spec.md, Releases). Stable versions belong to main,
-    # <version>-ti ones to ti. Pushing v<version> by hand publishes it too.
+    # A push to main or ti that changes the app releases the next version (a -ti prerelease
+    # on ti): the Version job commits and tags it on the branch, and the release job publishes
+    # it (docs/spec.md, Releases). Pushing v<version> by hand publishes it too.
     branches: [main, ti]
     tags: ["v*"]
 
@@ -14,9 +14,13 @@ permissions:
   contents: write
   pull-requests: write
 
+# Runs on main or ti queue up instead of cancelling each other: a run that has pushed its
+# version bump must get to release it. A newer push still replaces a run that's only waiting,
+# and the next run releases what that one would have, counting from the previous release.
+# Across main and ti, the Version job takes turns too.
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/ti' }}
 
 env:
   PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -25,6 +29,8 @@ env:
   # a compatible native APK. Branch pushes release through the Checks job's release_tag.
   IS_RELEASE: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
   IS_TI: ${{ github.ref == 'refs/heads/ti' || (startsWith(github.ref, 'refs/tags/v') && endsWith(github.ref, '-ti')) || github.event.pull_request.base.ref == 'ti' }}
+  # A push to main or ti, which may release the next version (the Version job).
+  IS_BUMP: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/ti') }}
 
 jobs:
   # What the change touches, by the rule in scripts/ci/changes.ts. Jobs that only
@@ -74,10 +80,51 @@ jobs:
           scripts/ci/report.sh skipped "Native unit tests" \
             "Nothing they test changed (wave-native, the app config, config plugins, the lockfile or CI), so they didn't run."
 
-  # The patch notes a release cut from this commit gets (scripts/ci/patch-notes.sh),
-  # shown in the run's summary. A run that releases publishes them.
+  # A push to main or ti that changes the app releases the next version (ti's end in -ti):
+  # this commits it to the branch's package.json as "Release Wave <version>", on top of the
+  # branch's latest tip, and tags it v<version> in the same push (scripts/ci/bump-version.sh).
+  # The rest of the run checks, builds and publishes that commit. CI, docs and spec-only pushes
+  # don't release, and the log says why. Anywhere else the job does nothing.
+  version:
+    name: Version
+    runs-on: ubuntu-latest
+    # main and ti count from the same v* tags, so their bumps take turns: the next one reads
+    # the tag this one pushed. The run-level group already lets only one run per branch in,
+    # so this group never holds more than one waiting job, which GitHub would cancel.
+    concurrency:
+      group: ${{ (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/ti')) && 'version-bump' || format('version-{0}', github.run_id) }}
+      cancel-in-progress: false
+    outputs:
+      # The version bump's commit, or the branch's tip when nothing is released; empty off
+      # main and ti.
+      sha: ${{ steps.bump.outputs.sha }}
+      # v<version>, already on that commit, or empty.
+      tag: ${{ steps.bump.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v5
+        if: env.IS_BUMP == 'true'
+        with:
+          ref: ${{ github.ref }}
+
+      - uses: actions/setup-node@v5
+        if: env.IS_BUMP == 'true'
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Bump the version
+        id: bump
+        if: env.IS_BUMP == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/ci/bump-version.sh "$GITHUB_REF_NAME"
+
+  # The patch notes a release cut from this run's commit gets (scripts/ci/patch-notes.sh),
+  # shown in the run's summary. A run that releases publishes them. They wait for the Version
+  # job, whose bump may sit on a newer tip of main or ti than the pushed commit.
   notes:
     name: Patch notes
+    needs: [version]
     runs-on: ubuntu-latest
     outputs:
       notes: ${{ steps.notes.outputs.notes }}
@@ -87,7 +134,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ needs.version.outputs.sha || github.event.pull_request.head.sha || github.sha }}
           # The previous version's tag and every commit since it; file contents on demand.
           fetch-depth: 0
           filter: blob:none
@@ -111,15 +158,19 @@ jobs:
 
   checks:
     name: Checks
+    needs: [version]
     runs-on: ubuntu-latest
     outputs:
-      sha: ${{ steps.autofix.outputs.sha || github.event.pull_request.head.sha || github.sha }}
-      # The versioned release this push publishes (scripts/ci/release-tag.ts), or empty.
-      release_tag: ${{ steps.release.outputs.tag }}
+      # The commit the rest of the run checks out: the autofix commit on PRs, the version
+      # bump on main and ti.
+      sha: ${{ steps.autofix.outputs.sha || needs.version.outputs.sha || github.event.pull_request.head.sha || github.sha }}
+      # The versioned release this run publishes, or empty: the version bump's on main and ti
+      # (scripts/ci/next-version.ts), or a hand-pushed tag, which "Check release tag" checked.
+      release_tag: ${{ needs.version.outputs.tag || (startsWith(github.ref, 'refs/tags/v') && github.ref_name) || '' }}
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: ${{ github.event.pull_request.head.ref || github.ref }}
+          ref: ${{ github.event.pull_request.head.ref || needs.version.outputs.sha || github.ref }}
 
       - uses: pnpm/action-setup@v4
 
@@ -144,13 +195,6 @@ jobs:
       - name: Check release tag
         if: env.IS_RELEASE == 'true'
         run: scripts/ci/step.sh "Check release tag" scripts/ci/check-release-tag.sh "$GITHUB_REF_NAME"
-
-      # A push to main or ti releases its app version when v<version> isn't tagged yet and
-      # the version belongs to that branch. The log says why when it doesn't.
-      - name: Decide the release
-        id: release
-        if: github.event_name == 'push'
-        run: scripts/ci/release-tag.sh
 
       # On PRs, by the rule in scripts/ci/changes.ts: the packages the PR changed and their
       # dependents, or all of them. Pushes to main and release tags always check every package.
@@ -482,9 +526,9 @@ jobs:
           fi
           scripts/ci/report.sh "${{ job.status }}" "Android APK" "$extra"
 
-  # Publishes the release the Checks job decided on: a hand-pushed tag, or a branch push
-  # whose version isn't tagged yet, which creates v<version> on this run's commit. A tag
-  # created with the workflow's token doesn't start another run.
+  # Publishes the release the Checks job decided on: a hand-pushed tag, or a branch push's
+  # version bump, whose v<version> tag the Version job pushed with it. A tag pushed with the
+  # workflow's token doesn't start another run.
   release:
     name: Publish versioned release
     needs: [checks, android, native-tests, notes]
@@ -504,6 +548,7 @@ jobs:
 
       - uses: actions/checkout@v5
         with:
+          ref: ${{ needs.checks.outputs.sha }}
           sparse-checkout: scripts/ci
 
       - uses: actions/download-artifact@v4
@@ -515,6 +560,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.checks.outputs.release_tag }}
+          RELEASE_SHA: ${{ needs.checks.outputs.sha }}
           PATCH_NOTES: ${{ needs.notes.outputs.notes }}
           APK_NAME: ${{ needs.android.outputs.artifact }}
         run: |

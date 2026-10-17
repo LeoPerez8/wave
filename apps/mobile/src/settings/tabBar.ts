@@ -1,4 +1,4 @@
-import { parseTabBar, storedTabBar, type TabBar } from "@wave/core";
+import { editTabBar, parseTabBar, storedTabBar, type TabBar, type TabBarEdit } from "@wave/core";
 import { Storage } from "expo-sqlite/kv-store";
 
 import { persistedSetting } from "@/lib/persistedSetting";
@@ -24,6 +24,10 @@ export const getTabBar = tabBar.get;
 
 /** Saves the bar the editor hands back. */
 export const setTabBar = tabBar.set;
+
+/** Applies [change] to the bar and saves it at once (Settings › Layout › Tab bar). */
+export const editSavedTabBar = (change: TabBarEdit): void =>
+  tabBar.set(editTabBar(tabBar.get(), change));
 
 /** The tabs the bar shows, in order; re-renders when the editor changes them. */
 export const useTabBar = tabBar.useValue;

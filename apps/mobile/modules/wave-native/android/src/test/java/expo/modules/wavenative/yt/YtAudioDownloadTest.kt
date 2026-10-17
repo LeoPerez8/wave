@@ -20,6 +20,15 @@ class YtAudioDownloadTest {
     }
   }
 
+  @Test fun theFileSaysWhichVideoClientTypeAndLengthYoutubeAnsweredWith() {
+    withPart { part ->
+      val answered = YtStreamSource(videoId = "uumR0WQrJjw", client = "WEB_REMIX", videoType = "MUSIC_VIDEO_TYPE_ATV", lengthMs = 253_000)
+      val youtube = FakeYoutube(stream("a", AUDIO.size.toLong()).copy(source = answered) to AUDIO)
+      val file = download(youtube).download("uumR0WQrJjw", part)
+      assertEquals(answered, file.source)
+    }
+  }
+
   @Test fun theLengthComesFromTheStreamItsAddressOrAHeadRequest() {
     withPart { part ->
       val clen = FakeYoutube(stream("a?clen=${AUDIO.size}", null) to AUDIO)

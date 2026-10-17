@@ -404,6 +404,9 @@ function ImportCard({ link, close }: { link: PlaylistLink; close: () => void }) 
             >
               {view.line}
             </Text>
+            {view.source !== null && (
+              <Text className="font-sans text-footnote text-secondary">{view.source}</Text>
+            )}
           </View>
         </View>
         {view.note !== null && (

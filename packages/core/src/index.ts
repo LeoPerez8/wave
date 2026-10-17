@@ -89,8 +89,14 @@ export { contrastRatio, paletteGradient } from "./palette.ts";
 export type { ArtworkPalette, Gradient, GradientTheme } from "./palette.ts";
 export { settleSheet } from "./sheet.ts";
 export type { SheetDrag, SheetState } from "./sheet.ts";
-export { reorderScrollSpeed, reorderShift, reorderTarget } from "./reorder.ts";
-export type { ReorderDrag, ReorderEdge, ReorderRow } from "./reorder.ts";
+export {
+  reorderGridShift,
+  reorderGridTarget,
+  reorderScrollSpeed,
+  reorderShift,
+  reorderTarget,
+} from "./reorder.ts";
+export type { ReorderDrag, ReorderEdge, ReorderGridDrag, ReorderRow } from "./reorder.ts";
 export {
   RECENT_SEARCHES,
   createSearchIndex,
@@ -236,15 +242,34 @@ export {
   tabsOffBar,
 } from "./tabBar.ts";
 export type { TabBar, TabBarEdit, TabBarTab } from "./tabBar.ts";
-export { SETTINGS_PAGES, accountsSummary, downloadsSummary } from "./settingsPages.ts";
-export type { SettingsPage, SettingsPageEntry } from "./settingsPages.ts";
 export {
-  PLAYLIST_LAYOUTS,
-  parsePlaylistLayout,
-  playlistLayoutRows,
-  storedPlaylistLayout,
-} from "./playlistLayout.ts";
+  LAYOUT_PAGES,
+  SETTINGS_PAGES,
+  accountsSummary,
+  downloadsSummary,
+} from "./settingsPages.ts";
+export type {
+  LayoutPage,
+  LayoutPageEntry,
+  SettingsPage,
+  SettingsPageEntry,
+} from "./settingsPages.ts";
+export { PLAYLIST_LAYOUTS, parsePlaylistLayout, storedPlaylistLayout } from "./playlistLayout.ts";
 export type { PlaylistLayout } from "./playlistLayout.ts";
+export {
+  PLAYLIST_SORTS,
+  choosePlaylistSort,
+  movePlaylist,
+  parsePlaylistOrder,
+  sortPlaylists,
+  storedPlaylistOrder,
+} from "./playlistSort.ts";
+export type {
+  PlaylistOrder,
+  PlaylistOrdering,
+  PlaylistSort,
+  SortablePlaylist,
+} from "./playlistSort.ts";
 export { TAB_PATH, detailPath, inLibraryStack, isDetailPath, tabOfPath } from "./navigation.ts";
 export type { DetailScreen } from "./navigation.ts";
 export { planAlert } from "./alert.ts";
@@ -623,12 +648,16 @@ export {
   downloadFallback,
   downloadSource,
   ytAudioMatches,
+  ytAudioRejection,
+  ytAudioTrack,
+  ytDownloadReport,
 } from "./downloadSource.ts";
 export type {
   DownloadFailurePlan,
   DownloadFallbackSetup,
   DownloadSource,
   DownloadSourceSetup,
+  YtDownloadReport,
 } from "./downloadSource.ts";
 export {
   ytDownloadDestination,
@@ -665,6 +694,8 @@ export type {
 } from "./ytSongsDownload.ts";
 export { failedDownloads, settledDownloadFailures } from "./failedDownloads.ts";
 export { ytDownloadsToForget } from "./forgottenDownloads.ts";
+export { queuedDownloads, queuedDownloadsSummary } from "./queuedDownloads.ts";
+export type { QueuedDownload } from "./queuedDownloads.ts";
 export type {
   FailedDownload,
   FailedDownloadRetry,
@@ -793,16 +824,30 @@ export {
   playlistEntryLinks,
   playlistPlayback,
   playlistSongKey,
+  playlistSongsLine,
+  playlistUnplayableNotice,
+  readPlaylistEntrySong,
+  UNAVAILABLE_ENTRY_ACTION_LABELS,
+  unavailableEntryActions,
+  unavailableEntryView,
+  unavailableSearchQuery,
   readPlaylistYtSong,
+  writePlaylistEntrySong,
   writePlaylistYtSong,
 } from "./playlistEntries.ts";
 export type {
   HeldPlaylistTrack,
   PlaylistEntryLink,
   PlaylistEntryLinks,
+  PlaylistItem,
   PlaylistPlay,
   PlaylistSong,
   StreamedPlaylistEntry,
+  UnavailableEntry,
+  UnavailableEntryAction,
+  UnavailableEntryView,
+  UnavailableReason,
+  UnavailableSong,
 } from "./playlistEntries.ts";
 export {
   linkImportView,
@@ -850,10 +895,14 @@ export {
 export type {
   ImportAdditions,
   ImportFind,
+  ImportLeftOut,
+  ImportLeftOutSection,
   ImportService,
   ImportState,
   ImportStep,
   ImportStopReason,
+  LeftOutReason,
+  LeftOutSong,
   LinkImportPlan,
   LinkedSource,
   PlaylistImport,
@@ -1033,3 +1082,13 @@ export { createPagedRows, PAGED_ROWS_LIMITS } from "./pagedRows.ts";
 export type { PagedRows, PagedRowsLimits, PagedRowsStats } from "./pagedRows.ts";
 export { recentlyPlayedAlbums } from "./recentlyPlayed.ts";
 export type { LatestPlayedSong } from "./recentlyPlayed.ts";
+export {
+  APP_LOG_LIMITS,
+  describeLogArgs,
+  formatLogEntry,
+  logFileName,
+  logHeader,
+  redactSecrets,
+  trimLog,
+} from "./appLog.ts";
+export type { LogDevice, LogEntry, LogLevel, LogLimits, LogTrim } from "./appLog.ts";

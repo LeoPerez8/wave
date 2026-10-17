@@ -30,6 +30,8 @@ export interface NativeDownloadJob extends YtDownloadJournalJob<NativeYtSong> {
    * song's, `missing:<id>`), once its prepare answer or fallback named it.
    */
   readonly video?: string;
+  /** Where the job's file goes, as the last prepare answer (or its fallback) placed it. */
+  readonly targetPath?: string;
   /** What the journal does when the job's source fails, as the last prepare answer planned it. */
   readonly failurePlan?: DownloadFailurePlan;
   /** YouTube Music's fallback for a Soulseek job, as the last prepare answer planned it. */
@@ -70,6 +72,12 @@ export interface NativeYoutubeAudio {
   readonly itag: number;
   readonly bitrate: number;
   readonly durationMs: number;
+  /** The video asked for, and what YouTube's answer said: its video, client, type and length. */
+  readonly requested?: string;
+  readonly resolved?: string | null;
+  readonly client?: string | null;
+  readonly videoType?: string | null;
+  readonly announcedMs?: number | null;
 }
 
 declare class WaveSoulseekModule extends NativeModule<{
