@@ -24,7 +24,10 @@ describe("previousTag", () => {
   });
 
   it("is none when the channel has no previous release", () => {
-    assert.equal(previousTag({ channel: "main", tags: ["v0.5.1-ti", "latest"], own: [] }), undefined);
+    assert.equal(
+      previousTag({ channel: "main", tags: ["v0.5.1-ti", "latest"], own: [] }),
+      undefined,
+    );
     assert.equal(previousTag({ channel: "ti", tags: ["v0.5.0"], own: ["v0.5.0"] }), undefined);
   });
 });

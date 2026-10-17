@@ -67,10 +67,7 @@ describe("nextVersion", () => {
     assert.equal(decision.version, undefined);
     assert.match(decision.reason, /only CI, docs, specs or the app's version changed/i);
     const changed = ["apps/mobile/package.json"];
-    assert.equal(
-      nextVersion({ ...push, changed, appPackage: bumpOnly }).version,
-      undefined,
-    );
+    assert.equal(nextVersion({ ...push, changed, appPackage: bumpOnly }).version, undefined);
     const newDependency = {
       previous: appPackage("0.5.6-ti"),
       current: appPackage("0.5.7", { dependencies: { expo: "58.0.8" } }),
@@ -128,7 +125,10 @@ describe("nextVersion", () => {
     assert.equal(decision.version, "0.5.5");
     assert.match(decision.reason, /already tagged v0\.5\.5/);
     const ti = { channel: "ti", tags, changed: app } as const;
-    assert.equal(nextVersion({ ...ti, version: "0.5.4-ti", own: ["v0.5.4-ti"] }).version, "0.5.4-ti");
+    assert.equal(
+      nextVersion({ ...ti, version: "0.5.4-ti", own: ["v0.5.4-ti"] }).version,
+      "0.5.4-ti",
+    );
     assert.equal(nextVersion({ ...ti, version: "0.5.5", own: ["v0.5.5"] }).version, "0.5.6-ti");
   });
 
