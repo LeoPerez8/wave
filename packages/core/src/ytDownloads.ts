@@ -191,6 +191,22 @@ export const ytDownloadStatus = (state: YtDownloads, videoId: string): YtDownloa
       job.song.videoId === videoId || job.relatedSongs?.some((song) => song.videoId === videoId),
   )?.status ?? null;
 
+/**
+ * `ytDownloadStatus` for any number of video ids, the jobs read once: a long
+ * list's statuses aren't a search each.
+ */
+export const ytDownloadStatuses = (
+  state: YtDownloads,
+): ((videoId: string) => YtDownloadStatus | null) => {
+  const byId = new Map<string, YtDownloadStatus>();
+  for (const job of state.jobs) {
+    for (const { videoId } of [job.song, ...(job.relatedSongs ?? [])]) {
+      if (!byId.has(videoId)) byId.set(videoId, job.status);
+    }
+  }
+  return (videoId) => byId.get(videoId) ?? null;
+};
+
 export type YtDownloadAction = "download" | "cancelDownload" | "retryDownload";
 
 export const YT_DOWNLOAD_ACTION_LABELS: { readonly [A in YtDownloadAction]: string } = {
