@@ -221,30 +221,48 @@ export const writePlaylistYtSong = (song: YtSong & { readonly albumId?: string |
 const stringOrNull = (value: unknown): value is string | null =>
   value === null || typeof value === "string";
 
-/** The song stored as [stored] (`writePlaylistYtSong`), or null when nothing readable is. */
-export const readPlaylistYtSong = (stored: string): YtAlbumSong | null => {
+/** [stored] parsed, when it's a JSON object; null otherwise. */
+const parseStoredObject = (stored: string): Record<string, unknown> | null => {
   let value: unknown;
   try {
     value = JSON.parse(stored);
   } catch {
     return null;
   }
-  if (typeof value !== "object" || value === null) return null;
-  const { videoId, title, artists, album, albumId, durationMs, artworkUrl, explicit } =
-    value as Record<string, unknown>;
-  if (typeof videoId !== "string" || videoId === "" || typeof title !== "string") return null;
+  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
+};
+
+/** What every stored song lists of itself: title, artists, album, length and cover. */
+type ListedSong = Pick<YtSong, "title" | "artists" | "album" | "durationMs" | "artworkUrl">;
+
+/** The [ListedSong] fields of a stored song, or null when any of them isn't readable. */
+const readListedSong = ({
+  title,
+  artists,
+  album,
+  durationMs,
+  artworkUrl,
+}: Record<string, unknown>): ListedSong | null => {
+  if (typeof title !== "string") return null;
   if (!Array.isArray(artists) || !artists.every((artist) => typeof artist === "string"))
     return null;
   if (!stringOrNull(album) || !stringOrNull(artworkUrl)) return null;
   if (durationMs !== null && typeof durationMs !== "number") return null;
+  return { title, artists: artists as string[], album, durationMs, artworkUrl };
+};
+
+/** The song stored as [stored] (`writePlaylistYtSong`), or null when nothing readable is. */
+export const readPlaylistYtSong = (stored: string): YtAlbumSong | null => {
+  const value = parseStoredObject(stored);
+  if (value === null) return null;
+  const { videoId, albumId, explicit } = value;
+  if (typeof videoId !== "string" || videoId === "") return null;
+  const listed = readListedSong(value);
+  if (listed === null) return null;
   return {
     videoId,
-    title,
-    artists: artists as string[],
-    album,
+    ...listed,
     albumId: typeof albumId === "string" ? albumId : null,
-    durationMs,
-    artworkUrl,
     explicit: explicit === true,
   };
 };
@@ -274,34 +292,13 @@ export const readPlaylistEntrySong = (
 ): { readonly source: "stream"; readonly song: YtAlbumSong } | UnavailableEntry | null => {
   const song = readPlaylistYtSong(stored);
   if (song !== null) return { source: "stream", song };
-  let value: unknown;
-  try {
-    value = JSON.parse(stored);
-  } catch {
-    return null;
-  }
-  if (typeof value !== "object" || value === null) return null;
-  const { unavailable, title, artists, album, durationMs, artworkUrl } = value as Record<
-    string,
-    unknown
-  >;
+  const value = parseStoredObject(stored);
+  if (value === null) return null;
+  const { unavailable } = value;
   if (typeof unavailable !== "string" || !UNAVAILABLE_REASONS.includes(unavailable)) return null;
-  if (typeof title !== "string") return null;
-  if (!Array.isArray(artists) || !artists.every((artist) => typeof artist === "string"))
-    return null;
-  if (!stringOrNull(album) || !stringOrNull(artworkUrl)) return null;
-  if (durationMs !== null && typeof durationMs !== "number") return null;
-  return {
-    source: "unavailable",
-    song: {
-      title,
-      artists: artists as string[],
-      album,
-      durationMs,
-      artworkUrl,
-      reason: unavailable as UnavailableReason,
-    },
-  };
+  const listed = readListedSong(value);
+  if (listed === null) return null;
+  return { source: "unavailable", song: { ...listed, reason: unavailable as UnavailableReason } };
 };
 
 // ---------------------------------------------------------------------------

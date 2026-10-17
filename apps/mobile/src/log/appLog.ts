@@ -61,7 +61,7 @@ const writePending = async (): Promise<void> => {
 };
 
 /** Writes the waiting entries; one write at a time, so a trim never races another. */
-export const flushAppLog = (): Promise<void> => {
+const flushAppLog = (): Promise<void> => {
   writing = writing
     .then(writePending)
     .catch((error: unknown) => consoleWarn("[wave] Couldn't write the app log", error));
