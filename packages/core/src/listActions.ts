@@ -30,10 +30,7 @@ const ROUNDING = 0.5;
  * label being measured ahead, a change of state (Download, Cancel, Retry
  * Failed) settles its form on its first frame.
  */
-export const lastListActionForm = (
-  room: ListActionsRoom,
-  label: string,
-): ListActionForm | null => {
+export const lastListActionForm = (room: ListActionsRoom, label: string): ListActionForm | null => {
   const widths = [...room.before, room.last[label]];
   if (room.line === undefined || widths.some((width) => width === undefined)) return null;
   const total =

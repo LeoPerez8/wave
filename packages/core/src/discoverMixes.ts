@@ -236,7 +236,7 @@ const similarPool = (
   };
   const next = similar.map(() => 0);
   const pool: SeedArtist[] = [];
-  for (let more = true; more; ) {
+  for (let more = true; more;) {
     more = false;
     similar.forEach(({ artists }, page) => {
       for (let at = next[page] ?? artists.length; at < artists.length; at++) {
@@ -255,9 +255,7 @@ const similarPool = (
 
 /** The Library as seeding takes it: its artists with the most songs, then its newest songs. */
 const libraryPool = (library: NonNullable<DiscoverSeedPools["library"]>): SeedPool => ({
-  artists: [...library.artists]
-    .sort((a, b) => b.songCount - a.songCount)
-    .slice(0, LIBRARY_ARTISTS),
+  artists: [...library.artists].sort((a, b) => b.songCount - a.songCount).slice(0, LIBRARY_ARTISTS),
   songs: [...library.songs].sort((a, b) => b.addedAt - a.addedAt),
 });
 
@@ -530,7 +528,12 @@ export const discoverMixesBuilt = (
   mixes: readonly DiscoverMix[],
   builtAt: number,
   seeds: readonly DiscoverMixSeed[],
-): DiscoverMixes | null => built(mixes, builtAt, seeds.some((seed) => seed.from === "plays"));
+): DiscoverMixes | null =>
+  built(
+    mixes,
+    builtAt,
+    seeds.some((seed) => seed.from === "plays"),
+  );
 
 /** What to save for [mixes]. */
 export const storedDiscoverMixes = (mixes: DiscoverMixes): string => JSON.stringify(mixes);
@@ -580,7 +583,11 @@ const readMix = (value: unknown): DiscoverMix | null => {
 export const parseDiscoverMixes = (stored: string | null): DiscoverMixes | null => {
   const { builtAt, playSeeds, mixes } = readStoredRecord(stored);
   if (!isNumber(builtAt) || !Array.isArray(mixes)) return null;
-  return built(mixes.flatMap((mix) => readMix(mix) ?? []), builtAt, playSeeds !== false);
+  return built(
+    mixes.flatMap((mix) => readMix(mix) ?? []),
+    builtAt,
+    playSeeds !== false,
+  );
 };
 
 const localDay = (ms: number): string => new Date(ms).toDateString();
