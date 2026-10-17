@@ -7,7 +7,7 @@
  */
 
 /** Who asks an automatic YouTube Music search. */
-export type SearchAsker = "playing" | "download" | "tryAgain" | "discover";
+export type SearchAsker = "playing" | "download" | "tryAgain" | "discover" | "fill";
 
 /**
  * At most this many searches in any `SEARCH_WINDOW_MS`. YouTube Music began
@@ -27,17 +27,15 @@ interface AskerTurn {
   readonly name: string;
 }
 
-/**
- * Where each asker stands. A new one (the background fill, #359, ranking
- * after downloads and taking none while the window holds 800, so the rest
- * stay free for playing and downloads) is one more row.
- */
+/** Where each asker stands. A new one is one more row. */
 const ASKERS: Readonly<Record<SearchAsker, AskerTurn>> = {
   playing: { rank: 0, most: SEARCH_ALLOWANCE, name: "the song about to play" },
   download: { rank: 1, most: SEARCH_ALLOWANCE, name: "a download" },
   // A playlist's unavailable entries searched again: downloads' priority, named apart in the log.
   tryAgain: { rank: 1, most: SEARCH_ALLOWANCE, name: "Try Again" },
   discover: { rank: 2, most: SEARCH_ALLOWANCE, name: "a Discover mix" },
+  // Unsearched entries searched while Wave runs: last, and never the 200 kept for playing and downloads.
+  fill: { rank: 3, most: 800, name: "the background fill" },
 };
 
 /** The order askers are named in when several do something at once: by rank. */
