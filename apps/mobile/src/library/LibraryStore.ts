@@ -100,9 +100,11 @@ import {
   selectPlaylists,
   selectPlaylistsLastPlayed,
   selectTrackPaths,
+  selectUnsearchedEntries,
   settleTryAgain,
   settleUnsearchedEntries,
   type PlaylistEntry,
+  type PlaylistUnsearched,
   type UnsearchedEntriesSettled,
 } from "./db/playlists";
 import { hasUnscannedRoot, pruneOrphans, saveBatch } from "./db/save";
@@ -585,6 +587,8 @@ export class LibraryStore extends Context.Service<
     readonly listPlaylists: Effect.Effect<readonly PlaylistRow[], LibraryStoreError>;
     /** When a song last played from each playlist, by playlist id (never played: absent). */
     readonly playlistsLastPlayed: Effect.Effect<ReadonlyMap<number, number>, LibraryStoreError>;
+    /** Every playlist's unsearched songs, top to bottom, for the background fill. */
+    readonly unsearchedEntries: Effect.Effect<readonly PlaylistUnsearched[], LibraryStoreError>;
     /** A playlist with its YT Music entries and its Library songs in [scope]. */
     readonly getPlaylist: (
       id: number,
@@ -1159,6 +1163,10 @@ const make = Effect.gen(function* () {
 
     playlistsLastPlayed: attempt("read when playlists last played", () =>
       selectPlaylistsLastPlayed(db),
+    ),
+
+    unsearchedEntries: attempt("read the playlists' unsearched songs", () =>
+      selectUnsearchedEntries(db),
     ),
 
     getPlaylist: (id, scope) => attempt("open the playlist", () => selectPlaylist(db, id, scope)),

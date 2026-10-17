@@ -36,6 +36,7 @@ import {
   selectPlaylistsLastPlayed,
   selectPlaylistTotals,
   selectTrackPaths,
+  selectUnsearchedEntries,
   settleTryAgain,
   settleUnsearchedEntries,
 } from "./playlists.ts";
@@ -731,6 +732,34 @@ describe("unsearched entries", () => {
       reason: "notFound",
     });
     assert.equal(selectPlaylist(db, playlistId)?.playlist.unavailableCount, 1);
+  });
+
+  test("the background fill reads each playlist's unsearched songs, top to bottom", () => {
+    const other = newPlaylist("Imported");
+    const gone = newPlaylist("Gone");
+    appendPlaylistSongs(
+      db,
+      playlistId,
+      [unsearched("Lucky"), unavailable("Within"), unsearched("Airbag")],
+      0,
+    );
+    appendPlaylistSongs(db, other, [unsearched("Karma Police"), unsearched("Lucky")], 0);
+    appendPlaylistSongs(db, gone, [unsearched("Exit Music")], 0);
+    deletePlaylist(db, gone, 0);
+    const [airbag] = selectPlaylistEntries(db, playlistId).slice(-1);
+    if (airbag === undefined) throw new Error("Airbag is in the playlist");
+    movePlaylistItem(db, playlistId, airbag.itemId, 0, 0);
+    assert.deepEqual(
+      selectUnsearchedEntries(db).map(({ playlistId: id, songs }) => [
+        id,
+        songs.map((song) => song.title),
+      ]),
+      [
+        [playlistId, ["Airbag", "Lucky"]],
+        [other, ["Karma Police", "Lucky"]],
+      ],
+    );
+    assert.deepEqual(selectUnsearchedEntries(db)[0]?.songs[1], listedSong("Lucky"));
   });
 
   test("one the Library gains becomes that song in its place", () => {

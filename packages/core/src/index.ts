@@ -909,6 +909,25 @@ export type {
   UnsearchedSongJob,
   UnsearchedSongJobId,
 } from "./unsearchedDownload.ts";
+export {
+  FILL_LOOK_AGAIN_MS,
+  FILL_PACE_MS,
+  FILL_PAUSES_MS,
+  FILL_REFUSALS,
+  FILL_RETRY_MS,
+  NO_FILL,
+  fillAnswered,
+  fillPauseLine,
+  nextFillStep,
+} from "./backgroundFill.ts";
+export type {
+  BackgroundFill,
+  FillAnswer,
+  FillPause,
+  FillPlaylist,
+  FillStep,
+  FillWorld,
+} from "./backgroundFill.ts";
 export { tryAgainNotice, tryAgainSearches, tryAgainSettles } from "./tryAgainUnavailable.ts";
 export type { TryAgainAnswered, TryAgainSearch, TryAgainSettled } from "./tryAgainUnavailable.ts";
 export type { YtSongSearch } from "./spotifyImport.ts";

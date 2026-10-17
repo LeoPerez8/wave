@@ -1307,6 +1307,13 @@ export const useQueuedDownloads = (): readonly QueuedDownload<NativeYtSong>[] =>
   return useMemo(() => queuedDownloads(jobs), [jobs]);
 };
 
+/** Whether any download is queued or downloading (Core's `queuedDownloads`), as the journal last said. */
+export const downloadsOnTheirWay = (): boolean => queuedDownloads(journal.get()).length > 0;
+
+/** Calls [listener] whenever the journal changes; returns how to stop. */
+export const onDownloadsChanged = (listener: () => void): (() => void) =>
+  journal.subscribe(listener);
+
 /**
  * Settings › Downloads' Cancel on a song on its way: as its menu's Cancel Download, and every
  * video asked for on the job lets go of it, so a shared job ends too.
