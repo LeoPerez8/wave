@@ -7,6 +7,7 @@ import {
   type PlayableSongs,
   type PlaylistItem,
   playlistPlayback,
+  playlistUnplayableNotice,
   skipMissingSongs,
   tappedMissingSong,
   type UpNextMove,
@@ -311,27 +312,31 @@ const notMissing = (
  * whole list (the Library's files, the rest streamed); with it off, the
  * Library's songs alone. Unavailable entries never play (a tapped one is the
  * caller's to explain). Missing songs never play: a tapped one downloads
- * instead. Resolves false when there's nothing to play because YT Music is
- * off (a YT Music entry tapped).
+ * instead. Resolves to what to say when nothing plays: why, when every entry
+ * but the missing songs is unavailable (Core's `playlistUnplayableNotice`),
+ * or that YT Music is off (a YT Music entry tapped, or nothing else to play);
+ * null otherwise.
  */
 export const playPlaylist = async (
   entries: readonly PlaylistListed[],
   listedStart: number | undefined,
   context: QueueContext,
   options: PlayOptions = {},
-): Promise<boolean> => {
+): Promise<string | null> => {
   const files = leaveOutMissing(entries, listedStart, notMissing, (entry) =>
     entry.source === "library" ? entry.track : null,
   );
-  // A missing song tapped, or nothing but missing songs and unavailable entries: YT Music isn't why.
-  if (files === null || files.songs.every((entry) => entry.source === "unavailable")) return true;
+  // A missing song tapped (it downloads), or nothing but missing songs.
+  if (files === null) return null;
+  const unplayable = playlistUnplayableNotice(files.songs);
+  if (unplayable !== null) return unplayable;
   const play = playlistPlayback(files.songs, {
     ytMusic: ytMusicEnabled(),
     startIndex: files.startIndex,
   });
-  if (play === null) return false;
+  if (play === null) return "YT Music is off in Settings";
   await startPlayback(play.playback, play.startIndex, context, options);
-  return true;
+  return null;
 };
 
 export const playYtNext = (songs: readonly YtSong[]): Promise<void> =>

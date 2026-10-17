@@ -830,6 +830,7 @@ export {
   playlistPlayback,
   playlistSongKey,
   playlistSongsLine,
+  playlistUnplayableNotice,
   readPlaylistEntrySong,
   UNAVAILABLE_ENTRY_ACTION_LABELS,
   unavailableEntryActions,
