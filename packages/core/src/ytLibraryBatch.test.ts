@@ -3,8 +3,10 @@ import { describe, test } from "node:test";
 
 import {
   nextYtLibraryRead,
+  planLinkImport,
   pruneYtLibraryBatch,
   queueYtLibraryReads,
+  ytLibraryFavorites,
   ytLibraryReadDone,
   ytLibraryReadFailed,
   ytLibraryReadLogLine,
@@ -12,15 +14,23 @@ import {
   readYtLibraryBatch,
   writeYtLibraryBatch,
   type YtLibraryBatch,
+  type YtLibraryRead,
+  type YtSong,
 } from "./index.ts";
 
 /** Three playlists Import just made, in the picker's order. */
 const imported = queueYtLibraryReads(
   [],
   [
-    { source: "PLroad", playlistId: 41, name: "Road trip", capped: true },
-    { source: "PLgym", playlistId: 42, name: "Gym 2", capped: true },
-    { source: "RDCLAK5uy_chill", playlistId: 43, name: "Chill Hits", capped: true },
+    { source: "PLroad", playlistId: 41, name: "Road trip", capped: true, favorites: false },
+    { source: "PLgym", playlistId: 42, name: "Gym 2", capped: true, favorites: false },
+    {
+      source: "RDCLAK5uy_chill",
+      playlistId: 43,
+      name: "Chill Hits",
+      capped: true,
+      favorites: false,
+    },
   ],
 );
 
@@ -30,13 +40,28 @@ const keptAndRead = (batch: YtLibraryBatch): YtLibraryBatch =>
 describe("the batch as kept on the phone", () => {
   test("reads back as it was written: each playlist's source, Wave playlist, name and cap, waiting", () => {
     assert.deepEqual(keptAndRead(imported), [
-      { source: "PLroad", playlistId: 41, name: "Road trip", capped: true, state: "waiting" },
-      { source: "PLgym", playlistId: 42, name: "Gym 2", capped: true, state: "waiting" },
+      {
+        source: "PLroad",
+        playlistId: 41,
+        name: "Road trip",
+        capped: true,
+        favorites: false,
+        state: "waiting",
+      },
+      {
+        source: "PLgym",
+        playlistId: 42,
+        name: "Gym 2",
+        capped: true,
+        favorites: false,
+        state: "waiting",
+      },
       {
         source: "RDCLAK5uy_chill",
         playlistId: 43,
         name: "Chill Hits",
         capped: true,
+        favorites: false,
         state: "waiting",
       },
     ]);
@@ -45,11 +70,41 @@ describe("the batch as kept on the phone", () => {
   test("Liked Songs, read whole, is kept uncapped", () => {
     const liked = queueYtLibraryReads(
       [],
-      [{ source: "LM", playlistId: 40, name: "Liked Songs", capped: false }],
+      [{ source: "LM", playlistId: 40, name: "Liked Songs", capped: false, favorites: false }],
     );
     assert.deepEqual(keptAndRead(liked), [
-      { source: "LM", playlistId: 40, name: "Liked Songs", capped: false, state: "waiting" },
+      {
+        source: "LM",
+        playlistId: 40,
+        name: "Liked Songs",
+        capped: false,
+        favorites: false,
+        state: "waiting",
+      },
     ]);
+  });
+
+  test("Liked Songs with Also add to Favorites on is kept starring, so a resumed read or Try Again still stars", () => {
+    const liked = queueYtLibraryReads(
+      [],
+      [{ source: "LM", playlistId: 40, name: "Liked Songs", capped: false, favorites: true }],
+    );
+    const kept = keptAndRead(liked);
+    assert.equal(nextYtLibraryRead(kept)?.favorites, true);
+    assert.equal(
+      ytLibraryReadView(keptAndRead(ytLibraryReadFailed(kept, 40)), 40)?.read.favorites,
+      true,
+    );
+  });
+
+  test("a playlist kept without the Favorites choice stars nothing", () => {
+    const stored = JSON.stringify({
+      version: 1,
+      batch: [
+        { source: "LM", playlistId: 40, name: "Liked Songs", capped: false, state: "waiting" },
+      ],
+    });
+    assert.equal(readYtLibraryBatch(stored)[0]?.favorites, false);
   });
 
   test("nothing kept, or nothing readable, is an empty batch", () => {
@@ -100,7 +155,7 @@ describe("resuming the batch", () => {
 
   test("a later Import's playlists wait after the ones left", () => {
     const later = queueYtLibraryReads(ytLibraryReadDone(imported, 41), [
-      { source: "PLnew", playlistId: 50, name: "New", capped: true },
+      { source: "PLnew", playlistId: 50, name: "New", capped: true, favorites: false },
     ]);
     assert.deepEqual(
       later.map((read) => read.source),
@@ -126,7 +181,14 @@ describe("a failed read", () => {
   test("its playlist's page says so, with Try Again; the others' pages say nothing", () => {
     assert.deepEqual(ytLibraryReadView(gymFailed, 42), {
       line: "Couldn't read it from YouTube Music",
-      read: { source: "PLgym", playlistId: 42, name: "Gym 2", capped: true, state: "failed" },
+      read: {
+        source: "PLgym",
+        playlistId: 42,
+        name: "Gym 2",
+        capped: true,
+        favorites: false,
+        state: "failed",
+      },
     });
     assert.equal(ytLibraryReadView(gymFailed, 43), null, "waiting its turn");
     assert.equal(ytLibraryReadView(gymFailed, 41), null, "read");
@@ -170,8 +232,8 @@ describe("a playlist refreshed while still in the batch", () => {
   test("is read once, in the new Import's order, waiting again even if its read had failed", () => {
     const gymFailed = ytLibraryReadFailed(imported, 42);
     const refreshed = queueYtLibraryReads(gymFailed, [
-      { source: "PLnew", playlistId: 50, name: "New", capped: true },
-      { source: "PLgym", playlistId: 42, name: "Gym 2", capped: true },
+      { source: "PLnew", playlistId: 50, name: "New", capped: true, favorites: false },
+      { source: "PLgym", playlistId: 42, name: "Gym 2", capped: true, favorites: false },
     ]);
     assert.deepEqual(
       refreshed.map((read) => [read.source, read.state]),
@@ -183,5 +245,66 @@ describe("a playlist refreshed while still in the batch", () => {
       ],
     );
     assert.equal(ytLibraryReadView(refreshed, 42), null);
+  });
+});
+
+const likedSong = (videoId: string, title: string, durationMs: number): YtSong => ({
+  videoId,
+  title,
+  artists: ["Daft Punk"],
+  album: "Random Access Memories",
+  durationMs,
+  artworkUrl: null,
+  explicit: false,
+});
+
+/** Liked Songs in the batch, with Also add to Favorites [favorites]. */
+const likedRead = (favorites: boolean): YtLibraryRead => ({
+  source: "LM",
+  playlistId: 40,
+  name: "Liked Songs",
+  capped: false,
+  favorites,
+  state: "waiting",
+});
+
+describe("ytLibraryFavorites", () => {
+  /** The Library when the liked songs are read. */
+  const library = [
+    { id: 1, title: "Giorgio by Moroder", artist: "Daft Punk", durationMs: 544_000 },
+    { id: 2, title: "Touch", artist: "Daft Punk", durationMs: 498_000 },
+    { id: 3, title: "Contact", artist: "Daft Punk", durationMs: 381_000 },
+  ];
+
+  /** Liked Songs as read: two songs the Library has, one it hasn't, and one liked twice. */
+  const plan = planLinkImport(
+    {
+      service: "ytMusic",
+      playlist: {
+        title: "Liked Music",
+        artworkUrl: null,
+        songs: [
+          likedSong("t", "Touch", 498_000),
+          likedSong("x", "Instant Crush", 337_000),
+          likedSong("g", "Giorgio by Moroder", 544_000),
+        ],
+        repeats: [likedSong("t2", "Touch", 498_000)],
+        truncated: false,
+      },
+    },
+    library,
+  );
+
+  test("with Also add to Favorites on, stars each liked song the Library has, once", () => {
+    assert.deepEqual(ytLibraryFavorites(likedRead(true), plan), [2, 1]);
+  });
+
+  test("a song that goes in as a YT Music entry gets no star", () => {
+    assert.ok(!ytLibraryFavorites(likedRead(true), plan).includes(3), "Contact isn't liked");
+    assert.equal(ytLibraryFavorites(likedRead(true), plan).length, 2, "Instant Crush streams");
+  });
+
+  test("with it off, stars nothing", () => {
+    assert.deepEqual(ytLibraryFavorites(likedRead(false), plan), []);
   });
 });

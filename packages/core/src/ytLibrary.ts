@@ -96,10 +96,18 @@ export interface YtLibraryPicker {
   readonly rows: readonly YtLibraryRow[];
   /** The origins it was opened with: the playlists an Imported row refreshes. */
   readonly origins: YtLibraryOrigins;
+  /**
+   * Also add to Favorites, under Liked Songs: Import stars the liked songs
+   * the Library has. It applies only while Liked Songs is ticked.
+   */
+  readonly favorites: boolean;
 }
 
-/** YouTube Music's Liked music, read as a playlist with this id (the library page lists it as `VLLM`). */
-const YT_LIKED_SONGS_ID = "LM";
+/**
+ * YouTube Music's Liked music, read as a playlist with this id (the library
+ * page lists it as `VLLM`): the picker's Liked Songs row.
+ */
+export const YT_LIKED_SONGS_ID = "LM";
 
 /** Liked Songs' name in the picker, and its playlist's in Wave. */
 const LIKED_SONGS = "Liked Songs";
@@ -160,6 +168,7 @@ export const ytLibraryPicker = (
       origins,
     ),
     origins,
+    favorites: false,
   };
 };
 
@@ -183,13 +192,35 @@ export interface YtLibraryPickerView {
   readonly selectAll: "Select All" | "Deselect All" | null;
   /** Whether Import does anything: some row is ticked. */
   readonly canImport: boolean;
+  /**
+   * The Also add to Favorites switch under Liked Songs: enabled only while
+   * Liked Songs is ticked, and shown off while it isn't (Import stars
+   * nothing then).
+   */
+  readonly favorites: { readonly on: boolean; readonly enabled: boolean };
 }
 
-export const ytLibraryPickerView = ({ rows }: YtLibraryPicker): YtLibraryPickerView => ({
-  selectAll:
-    rows.length === 0 ? null : rows.every((row) => row.ticked) ? "Deselect All" : "Select All",
-  canImport: rows.some((row) => row.ticked),
-});
+/** Whether [picker]'s Liked Songs row is ticked. */
+const likedTicked = (picker: YtLibraryPicker): boolean =>
+  picker.rows.some((row) => row.playlistId === YT_LIKED_SONGS_ID && row.ticked);
+
+export const ytLibraryPickerView = (picker: YtLibraryPicker): YtLibraryPickerView => {
+  const { rows } = picker;
+  const enabled = likedTicked(picker);
+  return {
+    selectAll:
+      rows.length === 0 ? null : rows.every((row) => row.ticked) ? "Deselect All" : "Select All",
+    canImport: rows.some((row) => row.ticked),
+    favorites: { on: enabled && picker.favorites, enabled },
+  };
+};
+
+/**
+ * Also add to Favorites flipped: on if it was off, off if it was on. While
+ * Liked Songs is unticked it's disabled, and [picker] stays as it is.
+ */
+export const toggleYtLibraryFavorites = (picker: YtLibraryPicker): YtLibraryPicker =>
+  likedTicked(picker) ? { ...picker, favorites: !picker.favorites } : picker;
 
 /** The Select All / Deselect All button: every row ticked, or, when all were, none. */
 export const pressYtLibrarySelectAll = (picker: YtLibraryPicker): YtLibraryPicker => {
@@ -213,6 +244,11 @@ export interface YtLibraryImportItem {
    * at `YT_PLAYLIST_SONG_CAP`.
    */
   readonly uncapped: boolean;
+  /**
+   * Its songs the Library has get the Favorite star once it's read: Liked
+   * Songs, with Also add to Favorites on.
+   */
+  readonly favorites: boolean;
 }
 
 /**
@@ -221,7 +257,8 @@ export interface YtLibraryImportItem {
  * import made, which keeps its name. Any other is named as a link import
  * names it (`importedPlaylistName`; Liked Songs is "Liked Songs"), and a name
  * one of [playlists] (or an earlier one of these) has goes in under Keep
- * Both's name ("Name 2"), without asking.
+ * Both's name ("Name 2"), without asking. With Also add to Favorites on,
+ * Liked Songs' read stars its songs the Library has.
  */
 export const planYtLibraryImport = (
   picker: YtLibraryPicker,
@@ -232,6 +269,7 @@ export const planYtLibraryImport = (
   for (const row of picker.rows) {
     if (!row.ticked) continue;
     const uncapped = row.playlistId === YT_LIKED_SONGS_ID;
+    const favorites = uncapped && picker.favorites;
     const origin = picker.origins.get(row.playlistId);
     const refreshed = playlists.find((playlist) => playlist.id === origin);
     if (refreshed !== undefined) {
@@ -240,6 +278,7 @@ export const planYtLibraryImport = (
         name: refreshed.name,
         replaces: refreshed.id,
         uncapped,
+        favorites,
       });
       continue;
     }
@@ -252,7 +291,7 @@ export const planYtLibraryImport = (
             taken.map((playlist) => playlist.name),
           );
     taken.push({ name });
-    items.push({ playlistId: row.playlistId, name, replaces: null, uncapped });
+    items.push({ playlistId: row.playlistId, name, replaces: null, uncapped, favorites });
   }
   return items;
 };

@@ -8,6 +8,7 @@ import {
   writeYtLibraryOrigins,
   ytLibraryFailure,
   pressYtLibrarySelectAll,
+  toggleYtLibraryFavorites,
   toggleYtLibraryRow,
   ytLibraryPicker,
   ytLibraryPickerView,
@@ -168,8 +169,12 @@ describe("ticking rows", () => {
   });
 
   test("with no rows there is nothing to select or import", () => {
-    const view = ytLibraryPickerView({ rows: [], origins: new Map() });
-    assert.deepEqual(view, { selectAll: null, canImport: false });
+    const view = ytLibraryPickerView({ rows: [], origins: new Map(), favorites: false });
+    assert.deepEqual(view, {
+      selectAll: null,
+      canImport: false,
+      favorites: { on: false, enabled: false },
+    });
   });
 });
 
@@ -252,17 +257,29 @@ describe("importing again", () => {
   test("an Imported row ticked again refreshes the playlist it made, under its name in Wave, and makes no second one", () => {
     const picker = toggleYtLibraryRow(ytLibraryPicker(library, origins), "PLgym");
     assert.deepEqual(planYtLibraryImport(picker, wave("Road trip", "Gym workout")), [
-      { playlistId: "LM", name: "Liked Songs", replaces: null, uncapped: true },
-      { playlistId: "PLroad", name: "Road trip 2", replaces: null, uncapped: false },
-      { playlistId: "PLgym", name: "Gym workout", replaces: 2, uncapped: false },
-      { playlistId: "RDCLAK5uy_chill", name: "Chill Hits", replaces: null, uncapped: false },
+      { playlistId: "LM", name: "Liked Songs", replaces: null, uncapped: true, favorites: false },
+      {
+        playlistId: "PLroad",
+        name: "Road trip 2",
+        replaces: null,
+        uncapped: false,
+        favorites: false,
+      },
+      { playlistId: "PLgym", name: "Gym workout", replaces: 2, uncapped: false, favorites: false },
+      {
+        playlistId: "RDCLAK5uy_chill",
+        name: "Chill Hits",
+        replaces: null,
+        uncapped: false,
+        favorites: false,
+      },
     ]);
   });
 
   test("Liked Songs ticked again refreshes its playlist, still read whole", () => {
     const picker = toggleYtLibraryRow(ytLibraryPicker([], new Map([["LM", 4]])), "LM");
     assert.deepEqual(planYtLibraryImport(picker, wave("Road trip", "Gym", "Chill", "My Likes")), [
-      { playlistId: "LM", name: "My Likes", replaces: 4, uncapped: true },
+      { playlistId: "LM", name: "My Likes", replaces: 4, uncapped: true, favorites: false },
     ]);
   });
 
@@ -279,8 +296,73 @@ describe("importing again", () => {
     const plan = planYtLibraryImport(picker, [{ id: 5, name: "Gym" }]);
     assert.deepEqual(
       plan.find((item) => item.playlistId === "PLgym"),
-      { playlistId: "PLgym", name: "Gym 2", replaces: null, uncapped: false },
+      { playlistId: "PLgym", name: "Gym 2", replaces: null, uncapped: false, favorites: false },
     );
+  });
+});
+
+/** Each playlist [picker]'s Import makes, and whether its read stars. */
+const starred = (picker: YtLibraryPicker) =>
+  planYtLibraryImport(picker, []).map(({ playlistId, favorites }) => [playlistId, favorites]);
+
+describe("Also add to Favorites", () => {
+  test("is off when the picker opens, and works while Liked Songs is ticked", () => {
+    const picker = ytLibraryPicker(library);
+    assert.deepEqual(ytLibraryPickerView(picker).favorites, { on: false, enabled: true });
+    const on = toggleYtLibraryFavorites(picker);
+    assert.deepEqual(ytLibraryPickerView(on).favorites, { on: true, enabled: true });
+    assert.deepEqual(ytLibraryPickerView(toggleYtLibraryFavorites(on)).favorites, {
+      on: false,
+      enabled: true,
+    });
+  });
+
+  test("unticking Liked Songs disables it and shows it off; ticking it again brings the choice back", () => {
+    const on = toggleYtLibraryFavorites(ytLibraryPicker(library));
+    const unticked = toggleYtLibraryRow(on, "LM");
+    assert.deepEqual(ytLibraryPickerView(unticked).favorites, { on: false, enabled: false });
+    assert.deepEqual(ytLibraryPickerView(toggleYtLibraryRow(unticked, "LM")).favorites, {
+      on: true,
+      enabled: true,
+    });
+    const deselected = pressYtLibrarySelectAll(on);
+    assert.deepEqual(ytLibraryPickerView(deselected).favorites, { on: false, enabled: false });
+  });
+
+  test("off, Import stars nothing", () => {
+    assert.deepEqual(starred(ytLibraryPicker(library)), [
+      ["LM", false],
+      ["PLroad", false],
+      ["PLgym", false],
+      ["RDCLAK5uy_chill", false],
+    ]);
+  });
+
+  test("on, Import stars Liked Songs' songs and no other playlist's", () => {
+    assert.deepEqual(starred(toggleYtLibraryFavorites(ytLibraryPicker(library))), [
+      ["LM", true],
+      ["PLroad", false],
+      ["PLgym", false],
+      ["RDCLAK5uy_chill", false],
+    ]);
+  });
+
+  test("on, Liked Songs imported again still stars", () => {
+    const picker = toggleYtLibraryFavorites(
+      toggleYtLibraryRow(ytLibraryPicker([], new Map([["LM", 1]])), "LM"),
+    );
+    assert.deepEqual(planYtLibraryImport(picker, wave("My Likes")), [
+      { playlistId: "LM", name: "My Likes", replaces: 1, uncapped: true, favorites: true },
+    ]);
+  });
+
+  test("can't be turned on while Liked Songs is unticked", () => {
+    const unticked = toggleYtLibraryRow(ytLibraryPicker(library), "LM");
+    const pressed = toggleYtLibraryFavorites(unticked);
+    assert.deepEqual(ytLibraryPickerView(toggleYtLibraryRow(pressed, "LM")).favorites, {
+      on: false,
+      enabled: true,
+    });
   });
 });
 

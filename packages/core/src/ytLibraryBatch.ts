@@ -6,6 +6,9 @@
  * playlist's line and Try Again.
  */
 
+import type { LinkImportPlan } from "./playlistImport.ts";
+import type { YtSong } from "./ytMusic.ts";
+
 /** Waiting its turn to be read, or read and failed (its playlist stays empty). */
 export type YtLibraryReadState = "waiting" | "failed";
 
@@ -19,6 +22,11 @@ export interface YtLibraryRead {
   readonly name: string;
   /** Whether the read stops at the 5,000-song cap (`YT_PLAYLIST_SONG_CAP`). */
   readonly capped: boolean;
+  /**
+   * Whether its songs the Library has get the Favorite star once it's read
+   * (Liked Songs with Also add to Favorites on; `ytLibraryFavorites`).
+   */
+  readonly favorites: boolean;
   readonly state: YtLibraryReadState;
 }
 
@@ -35,11 +43,12 @@ export const queueYtLibraryReads = (
   reads: readonly Omit<YtLibraryRead, "state">[],
 ): YtLibraryBatch => [
   ...batch.filter((queued) => !reads.some((read) => read.playlistId === queued.playlistId)),
-  ...reads.map(({ source, playlistId, name, capped }) => ({
+  ...reads.map(({ source, playlistId, name, capped, favorites }) => ({
     source,
     playlistId,
     name,
     capped,
+    favorites,
     state: "waiting" as const,
   })),
 ];
@@ -76,6 +85,21 @@ export const ytLibraryReadFailed = (batch: YtLibraryBatch, playlistId: number): 
     read.playlistId === playlistId ? { ...read, state: "failed" as const } : read,
   );
 
+/**
+ * The tracks to star once [read]'s playlist is read as [plan]: with Also add
+ * to Favorites on, each of its songs that goes in as a Library track
+ * (`libraryFinder`, as `planLinkImport` matched it), once. A song that goes
+ * in as a YT Music entry gets none, even downloaded later. Only stars: the
+ * import never takes one away.
+ */
+export const ytLibraryFavorites = (
+  read: YtLibraryRead,
+  plan: Pick<LinkImportPlan<YtSong>, "finds">,
+): readonly number[] =>
+  read.favorites
+    ? plan.finds.flatMap((found) => (found.kind === "library" ? [found.trackId] : []))
+    : [];
+
 /** What a playlist's page shows when its read failed: the line, and the read Try Again makes. */
 export interface YtLibraryReadView {
   readonly line: string;
@@ -109,15 +133,18 @@ type Fields = Record<string, unknown>;
 const isFields = (value: unknown): value is Fields =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-/** A kept playlist; null when unreadable. */
+/**
+ * A kept playlist; null when unreadable. One kept by a Wave from before Also
+ * add to Favorites stars nothing.
+ */
 const readRead = (value: unknown): YtLibraryRead | null => {
   if (!isFields(value)) return null;
-  const { source, playlistId, name, capped, state } = value;
+  const { source, playlistId, name, capped, favorites, state } = value;
   if (typeof source !== "string" || typeof playlistId !== "number" || typeof name !== "string") {
     return null;
   }
   if (typeof capped !== "boolean" || (state !== "waiting" && state !== "failed")) return null;
-  return { source, playlistId, name, capped, state };
+  return { source, playlistId, name, capped, favorites: favorites === true, state };
 };
 
 /**

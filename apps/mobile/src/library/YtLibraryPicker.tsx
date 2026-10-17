@@ -3,24 +3,36 @@
  * "Importing playlists from a link"): signed out, it signs in first (the
  * sign-in Settings › Accounts uses), then a full-screen sheet rises with the
  * playlists in the account's YouTube Music library. Core decides the rows,
- * the ticks and Select All (`ytLibraryPicker`); Import makes the playlists
- * and reads them in the background (`importYtLibrary`). Cancel, Back or
+ * the ticks, Select All and the Also add to Favorites switch under Liked
+ * Songs (`ytLibraryPicker`); Import makes the playlists and reads them in
+ * the background (`importYtLibrary`). Cancel, Back or
  * dragging the sheet down imports nothing.
  */
 import {
   pressYtLibrarySelectAll,
   settleSheet,
+  toggleYtLibraryFavorites,
   toggleYtLibraryRow,
+  YT_LIKED_SONGS_ID,
   ytLibraryFailure,
   ytLibraryPicker,
   ytLibraryPickerView,
   type YtLibraryFailure,
   type YtLibraryPicker as Picker,
+  type YtLibraryPickerView,
   type YtLibraryRow,
 } from "@wave/core";
 import * as Result from "effect/Result";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { ActivityIndicator, FlatList, Modal, Text, useWindowDimensions, View } from "react-native";
+import {
+  ActivityIndicator,
+  FlatList,
+  Modal,
+  Switch,
+  Text,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import {
   GestureDetector,
   GestureHandlerRootView,
@@ -278,14 +290,23 @@ function PickerSheet({ onClosed }: { onClosed: () => void }) {
               // Never empty: Liked Songs is always listed.
               <FlatList
                 data={read.picker.rows}
+                extraData={read.picker}
                 keyExtractor={(row) => row.playlistId}
                 renderItem={({ item }) => (
-                  <PickerRow
-                    row={item}
-                    toggle={() =>
-                      setPicker((picker) => toggleYtLibraryRow(picker, item.playlistId))
-                    }
-                  />
+                  <>
+                    <PickerRow
+                      row={item}
+                      toggle={() =>
+                        setPicker((picker) => toggleYtLibraryRow(picker, item.playlistId))
+                      }
+                    />
+                    {item.playlistId === YT_LIKED_SONGS_ID && view !== null && (
+                      <FavoritesSwitch
+                        favorites={view.favorites}
+                        toggle={() => setPicker(toggleYtLibraryFavorites)}
+                      />
+                    )}
+                  </>
                 )}
                 contentContainerStyle={{ paddingVertical: CELL }}
               />
@@ -344,6 +365,48 @@ function PickerRow({ row, toggle }: { row: YtLibraryRow; toggle: () => void }) {
         )}
       </View>
     </Press>
+  );
+}
+
+/** Where a row's name starts: past its tick and cover. */
+const TEXT_INSET = grid.margin - CELL + grid.stateCell + CELL * 1.5 + COVER + CELL * 1.5;
+
+const FAVORITES = "Also add to Favorites";
+
+/**
+ * Also add to Favorites, under Liked Songs, lined up with the rows' names:
+ * Import stars the liked songs the Library has. Off and dimmed while Liked
+ * Songs is unticked.
+ */
+function FavoritesSwitch({
+  favorites: { on, enabled },
+  toggle,
+}: {
+  favorites: YtLibraryPickerView["favorites"];
+  toggle: () => void;
+}) {
+  const accent = useThemeColor("accent");
+  const fill = useThemeColor("fill");
+  const surface = useThemeColor("surface");
+  return (
+    <View
+      className="flex-row items-center"
+      style={{ minHeight: grid.row, paddingLeft: TEXT_INSET, paddingRight: grid.margin }}
+    >
+      <Text
+        className={`flex-1 font-sans text-subheadline ${enabled ? "text-foreground" : "text-tertiary"}`}
+      >
+        {FAVORITES}
+      </Text>
+      <Switch
+        accessibilityLabel={FAVORITES}
+        value={on}
+        disabled={!enabled}
+        onValueChange={toggle}
+        trackColor={{ false: fill, true: accent }}
+        thumbColor={surface}
+      />
+    </View>
   );
 }
 
