@@ -9,6 +9,7 @@ import {
   sortKey,
   sortPlaylists,
   storedPlaylistOrder,
+  type PlaylistSort,
 } from "./index.ts";
 
 const DAY = 86_400_000;
@@ -25,6 +26,12 @@ const names = (playlists: readonly { readonly name: string }[]): string[] =>
   playlists.map(({ name }) => name);
 
 const NOTHING_PLAYED: ReadonlyMap<number, number> = new Map();
+
+const ordering = (
+  sort: PlaylistSort,
+  order: readonly number[] = [],
+  lastPlayed = NOTHING_PLAYED,
+) => ({ sort, order, lastPlayed });
 
 describe("playlist sort choice", () => {
   test("the card offers Name, Recently Added, Recently Played and Custom, in that order", () => {
@@ -59,23 +66,43 @@ describe("playlist sort choice", () => {
     });
   });
 
-  test("picking Custom before anything was arranged starts from the order on screen", () => {
-    const chosen = choosePlaylistSort({ sort: "added", order: [] }, "custom", [4, 2, 9]);
-    assert.deepEqual(chosen, { sort: "custom", order: [4, 2, 9] });
+  // Day 1, 3 and 2: Recently Added shows Cumbia, Bossa, Afrobeat.
+  const afrobeat = playlist(1, "Afrobeat", 1);
+  const bossa = playlist(2, "Bossa", 3);
+  const cumbia = playlist(3, "Cumbia", 2);
+  const all = [afrobeat, bossa, cumbia];
+
+  test("picking Custom before anything was arranged starts from the order the sort showed", () => {
+    assert.deepEqual(choosePlaylistSort(ordering("added"), "custom", all), {
+      sort: "custom",
+      order: [bossa.id, cumbia.id, afrobeat.id],
+    });
+    assert.deepEqual(choosePlaylistSort(ordering("name"), "custom", all), {
+      sort: "custom",
+      order: [afrobeat.id, bossa.id, cumbia.id],
+    });
+  });
+
+  test("picking Custom from Recently Played starts from the play order, never played last by name", () => {
+    const plays = new Map([[cumbia.id, 5 * DAY]]);
+    assert.deepEqual(choosePlaylistSort(ordering("played", [], plays), "custom", all), {
+      sort: "custom",
+      order: [cumbia.id, afrobeat.id, bossa.id],
+    });
   });
 
   test("picking Custom again brings back the order arranged before", () => {
-    const chosen = choosePlaylistSort({ sort: "name", order: [9, 4] }, "custom", [2, 4, 9]);
-    assert.deepEqual(chosen, { sort: "custom", order: [9, 4] });
+    const chosen = choosePlaylistSort(ordering("name", [cumbia.id, afrobeat.id]), "custom", all);
+    assert.deepEqual(chosen, { sort: "custom", order: [cumbia.id, afrobeat.id] });
   });
 
-  test("an arranged order whose playlists are all gone starts again from the screen", () => {
-    const chosen = choosePlaylistSort({ sort: "name", order: [30, 31] }, "custom", [2, 4]);
-    assert.deepEqual(chosen, { sort: "custom", order: [2, 4] });
+  test("an arranged order whose playlists are all gone starts again from the sort's order", () => {
+    const chosen = choosePlaylistSort(ordering("added", [30, 31]), "custom", all);
+    assert.deepEqual(chosen, { sort: "custom", order: [bossa.id, cumbia.id, afrobeat.id] });
   });
 
   test("picking another sort keeps the arranged order for later", () => {
-    const chosen = choosePlaylistSort({ sort: "custom", order: [9, 4] }, "played", [9, 4]);
+    const chosen = choosePlaylistSort(ordering("custom", [9, 4]), "played", all);
     assert.deepEqual(chosen, { sort: "played", order: [9, 4] });
   });
 });

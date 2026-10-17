@@ -57,22 +57,6 @@ export const storedPlaylistOrder = ({ sort, order }: PlaylistOrder): string | nu
     ? null
     : JSON.stringify({ sort, order });
 
-/**
- * The order once the owner picks [chosen] on the card, [shown] being the ids
- * in the order on screen. Custom brings back the order arranged before; with
- * none (or none of its playlists left) it starts from the order on screen.
- */
-export const choosePlaylistSort = (
-  current: PlaylistOrder,
-  chosen: PlaylistSort,
-  shown: readonly number[],
-): PlaylistOrder => {
-  if (chosen !== "custom") return { sort: chosen, order: current.order };
-  const arranged = new Set(current.order);
-  const kept = shown.some((id) => arranged.has(id));
-  return { sort: chosen, order: kept ? current.order : shown };
-};
-
 /** What ordering a playlist takes. */
 export interface SortablePlaylist {
   readonly id: number;
@@ -132,6 +116,25 @@ export const sortPlaylists = <P extends SortablePlaylist>(
   const compare = sort === "added" ? newestFirst : sort === "played" ? latestPlayFirst : byName;
   // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
   return [...playlists].sort(compare);
+};
+
+/**
+ * The order once the owner picks [chosen] on the card, [current] being what
+ * the list shows [playlists] by now. Custom brings back the order arranged
+ * before; with none (or none of its playlists left) it starts from the order
+ * [current] shows them in.
+ */
+export const choosePlaylistSort = (
+  current: PlaylistOrdering,
+  chosen: PlaylistSort,
+  playlists: readonly SortablePlaylist[],
+): PlaylistOrder => {
+  if (chosen !== "custom") return { sort: chosen, order: current.order };
+  const arranged = new Set(current.order);
+  if (playlists.some((playlist) => arranged.has(playlist.id))) {
+    return { sort: chosen, order: current.order };
+  }
+  return { sort: chosen, order: sortPlaylists(playlists, current).map((playlist) => playlist.id) };
 };
 
 /**
