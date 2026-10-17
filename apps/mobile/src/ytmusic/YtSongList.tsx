@@ -7,6 +7,9 @@ import {
   IconX,
 } from "@tabler/icons-react-native";
 import {
+  YT_ALBUM_DOWNLOAD_ACTION_LABELS,
+  YT_DOWNLOAD_BUTTON_LABELS,
+  YT_PLAYLIST_DOWNLOAD_ACTION_LABELS,
   discoverSongs,
   joinArtists,
   ytAlbumDownloadButton,
@@ -26,7 +29,7 @@ import { Text, useWindowDimensions, View } from "react-native";
 
 import { Artwork } from "@/catalog/Artwork";
 import { CELL, grid } from "@/catalog/grid";
-import { ListAction, PlayShuffle } from "@/catalog/PlayShuffle";
+import { PlayShuffle, type LastListAction } from "@/catalog/PlayShuffle";
 import { useChromeInset } from "@/chrome/chrome";
 import { EmptyState } from "@/components/EmptyState";
 import { ScreenHeader } from "@/components/ScreenHeader";
@@ -177,16 +180,23 @@ export interface YtListDownloadButton {
   readonly onPress: () => void;
 }
 
-/** An album's or a playlist's download button, as a list action after Play and Shuffle. */
-export function ListDownloadAction({ download }: { download: YtListDownloadButton }) {
-  return (
-    <ListAction
-      icon={DOWNLOAD_ICONS[download.action]}
-      label={download.label}
-      onPress={download.onPress}
-    />
-  );
-}
+/** The full name of each download button, heard in either of its forms. */
+const DOWNLOAD_NAMES: { readonly [A in YtListDownloadAction]: string } = {
+  ...YT_ALBUM_DOWNLOAD_ACTION_LABELS,
+  ...YT_PLAYLIST_DOWNLOAD_ACTION_LABELS,
+};
+
+/** An album's or a playlist's download button, as the list action after Play and Shuffle. */
+export const listDownloadAction = (download: YtListDownloadButton | null): LastListAction | null =>
+  download === null
+    ? null
+    : {
+        icon: DOWNLOAD_ICONS[download.action],
+        label: download.label,
+        labels: YT_DOWNLOAD_BUTTON_LABELS,
+        accessibilityLabel: DOWNLOAD_NAMES[download.action],
+        onPress: download.onPress,
+      };
 
 /**
  * Downloading the YT Music album whose songs are [songs] (none: no album):
@@ -277,9 +287,11 @@ function Head({
         )}
       </View>
       {onPlay !== null && (
-        <PlayShuffle onPlay={() => onPlay(false)} onShuffle={() => onPlay(true)}>
-          {download !== null && <ListDownloadAction download={download} />}
-        </PlayShuffle>
+        <PlayShuffle
+          onPlay={() => onPlay(false)}
+          onShuffle={() => onPlay(true)}
+          last={listDownloadAction(download)}
+        />
       )}
     </View>
   );
