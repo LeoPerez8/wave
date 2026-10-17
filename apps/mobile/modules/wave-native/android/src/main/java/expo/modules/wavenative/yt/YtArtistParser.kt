@@ -41,6 +41,8 @@ data class YtArtistPage(
    * (without the `VL` its browse id adds); null when the page has none.
    */
   val songsPlaylistId: String? = null,
+  /** The artists the page lists as similar ("Fans might also like"), in its order. */
+  val similar: List<YtArtistCandidate> = emptyList(),
 ) {
   fun toMap(): Map<String, Any?> =
     mapOf(
@@ -50,6 +52,7 @@ data class YtArtistPage(
       "albums" to albums.map(YtShelfItem.Album::toMap),
       "singles" to singles.map(YtShelfItem.Album::toMap),
       "songsPlaylistId" to songsPlaylistId,
+      "similar" to similar.map(YtArtistCandidate::toMap),
     )
 }
 
@@ -60,8 +63,9 @@ data class YtArtistPage(
  * the top songs (song rows, read as search reads them) whose "See all" opens
  * the playlist of every song of theirs, and the
  * `musicCarouselShelfRenderer`s titled "Albums" and "Singles…" hold album
- * tiles (read as the home reads them). Videos, playlists, live performances
- * and related artists have no place in Wave and are left out. YT Music is
+ * tiles (read as the home reads them), and the one titled "Fans might also
+ * like" artist tiles (Discover mixes' similar artists). Videos, playlists and
+ * live performances have no place in Wave and are left out. YT Music is
  * asked in English ([YtClient]), so shelves are told apart by their titles.
  */
 object YtArtistParser {
@@ -70,6 +74,7 @@ object YtArtistParser {
   private const val ARTIST_PAGE = "MUSIC_PAGE_TYPE_ARTIST"
   private const val ALBUMS = "Albums"
   private const val SINGLES = "Singles"
+  private const val SIMILAR = "Fans might also like"
   private const val SEPARATOR = " • "
   private val SIZE = Regex("""=w\d+-h\d+""")
   /** The size the artist's image is asked for: the artist page's large circle. */
@@ -138,7 +143,29 @@ object YtArtistParser {
       albums = albums { it == ALBUMS },
       singles = albums { it.startsWith(SINGLES) },
       songsPlaylistId = songShelf?.let(::seeAll),
+      similar = carousels.firstOrNull { shelfTitle(it) == SIMILAR }
+        ?.get("contents").arr.orEmpty()
+        .mapNotNull { it.path("musicTwoRowItemRenderer").obj?.let(::artistTile) }
+        .distinctBy { it.browseId },
     )
+  }
+
+  /** A "Fans might also like" tile: the artist's name over "23.1M monthly audience". */
+  private fun artistTile(tile: JsonObject): YtArtistCandidate? {
+    val endpoint = tile.path("navigationEndpoint", "browseEndpoint")
+    val pageType = endpoint.path(
+      "browseEndpointContextSupportedConfigs", "browseEndpointContextMusicConfig", "pageType",
+    ).string
+    if (pageType != ARTIST_PAGE) return null
+    val browseId = endpoint.path("browseId").string?.takeIf(String::isNotEmpty) ?: return null
+    val name = tile.path("title", "runs").arr?.joinToString("") { it.path("text").string.orEmpty() }
+      ?.trim()?.takeIf(String::isNotEmpty) ?: return null
+    val audience = tile.path("subtitle", "runs").arr
+      ?.joinToString("") { it.path("text").string.orEmpty() }
+      ?.split(SEPARATOR)?.firstNotNullOfOrNull(::audience)
+    val artworkUrl = tile.path("thumbnailRenderer", "musicThumbnailRenderer", "thumbnail", "thumbnails").arr
+      ?.lastOrNull().path("url").string?.takeIf(String::isNotEmpty)
+    return YtArtistCandidate(name = name, browseId = browseId, audience = audience, artworkUrl = artworkUrl)
   }
 
   /**
