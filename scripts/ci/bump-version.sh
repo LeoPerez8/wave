@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 # Pushes to main and ti: releases the next version (docs/spec.md, Releases; ti's end in -ti).
-# next-version.ts picks it from the repo's v* tags, one counter for both branches, and what
-# changed since the branch's previous release. When the push releases, this writes the version
-# into apps/mobile/package.json, commits that alone as "Release Wave <version>" and pushes it to
-# the branch with the workflow's token, which doesn't start another run. If the branch moved on
+# next-version.ts picks it from the repo's v* tags, one counter for both branches, what changed
+# since the branch's previous release and the PRs merged since then (merged-prs.sh; a feat/ one
+# makes it a minor bump). When the push releases, this writes the version into
+# apps/mobile/package.json, commits that alone as "Release Wave <version>" and pushes it to the
+# branch with the workflow's token, which doesn't start another run. If the branch moved on
 # meanwhile, it starts over from its new tip.
 # Writes `tag=v<version>` (empty when nothing is released) and `sha=<commit>` (the commit the
 # rest of the run checks, builds and tags) to $GITHUB_OUTPUT.
 #   scripts/ci/bump-version.sh main|ti
-# Run from a checkout of that branch (HEAD on its tip). Env: GITHUB_OUTPUT.
+# Run from a checkout of that branch (HEAD on its tip). Env: GITHUB_OUTPUT, GH_TOKEN,
+# GITHUB_REPOSITORY.
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -46,11 +48,14 @@ for attempt in 1 2 3 4 5; do
   since=""
   if [ "$branch" = ti ]; then since="$(newest -ti)"; fi
   if [ -z "$since" ]; then since="$(newest "")"; fi
-  changed=()
+  inputs=()
   if [ -n "$since" ]; then
     # Both names of a moved file, as in changes.sh.
     git diff --name-only --no-renames "$since" HEAD > "$tmp/changed.txt"
-    changed=("$tmp/changed.txt")
+    # The PRs merged since then that the patch notes list decide the bump's size.
+    git rev-list "$since..HEAD" > "$tmp/commits.txt"
+    "$here/merged-prs.sh" "$since" HEAD > "$tmp/prs.jsonl"
+    inputs=("$tmp/changed.txt" "$tmp/commits.txt" "$tmp/prs.jsonl")
     echo "::group::Changed since $since"
     cat "$tmp/changed.txt"
     echo "::endgroup::"
@@ -60,7 +65,7 @@ for attempt in 1 2 3 4 5; do
 
   current="$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).version)' "$package")"
   echo "The app's version is $current ($package)."
-  version="$(node "$here/next-version.ts" ${channel[@]+"${channel[@]}"} "$current" "$tmp/tags.txt" ${changed[@]+"${changed[@]}"} \
+  version="$(node "$here/next-version.ts" ${channel[@]+"${channel[@]}"} "$current" "$tmp/tags.txt" ${inputs[@]+"${inputs[@]}"} \
     | sed -n 's/^version=//p')"
 
   if [ -z "$version" ]; then

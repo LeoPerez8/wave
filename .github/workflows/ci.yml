@@ -153,6 +153,8 @@ jobs:
       - name: Bump the version
         id: bump
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/ti')
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: scripts/ci/bump-version.sh "$GITHUB_REF_NAME"
 
       - name: Install

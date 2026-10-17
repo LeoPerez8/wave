@@ -12,13 +12,14 @@ Pick tickets whose blockers are closed.
   understands, saying what changed for them.
 - Day-to-day test builds target `ti`. Its version in `apps/mobile/package.json` ends in
   `-ti` (for example `0.5.6-ti`). Nobody bumps or tags a version by hand: every push to `main`
-  or `ti` that changes the app gets a bot commit "Release Wave <version>" (the next patch
-  version) that CI tags and publishes. Both branches count from the highest `v*` tag, so they
-  share one sequence (0.5.4-ti, 0.5.5, 0.5.6-ti), and ti's releases are prereleases. Only a
-  major bump is a hand edit of `package.json`. Pull the branch after merging. Main always
-  builds fully. ti pushes and tags repack a kept APK when only JS changed, and the repack
-  writes the new version into it; a new native input or Metro resource first needs a full
-  build. See `docs/spec.md`, Build and CI.
+  or `ti` that changes the app gets a bot commit "Release Wave <version>" that CI tags and
+  publishes. The bump is minor when a PR the patch notes list since the previous tag has a
+  `feat/` branch, else patch. Both branches count from the highest `v*` tag, so they share one
+  sequence (0.5.4-ti, 0.5.5, 0.5.6-ti), and ti's releases are prereleases. Only a major bump
+  is a hand edit of `package.json`. Pull the branch after merging. Main always builds fully.
+  ti pushes and tags repack a kept APK when only JS changed, and the repack writes the new
+  version into it; a new native input or Metro resource first needs a full build. See
+  `docs/spec.md`, Build and CI.
 - Decision-heavy logic (queue, counted plays, search, sorting, scan reconciliation, LRC,
   sleep timer) goes in `packages/core`, which must keep **zero runtime dependencies** and
   use only erasable TypeScript syntax with `.ts` import extensions. Test it through its
