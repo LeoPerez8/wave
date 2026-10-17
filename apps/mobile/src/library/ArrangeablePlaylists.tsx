@@ -117,7 +117,7 @@ function ArrangeableCell({ index, cells, layout, drag, selecting, children, hand
 }
 
 type Props = {
-  /** In the order the owner arranged them. */
+  /** In the order the list shows them. */
   playlists: readonly PlaylistRow[];
   layout: PlaylistLayout;
   /** The cover's side in this layout's tiles. */
@@ -133,10 +133,10 @@ type Props = {
 };
 
 /**
- * The Playlists list in the owner's own order (Custom), in any layout: each
- * playlist has a handle that drags it to a new place (scrolling the list near
- * its edges), across a grid's columns as well as down. A drop keeps the new
- * order at once, everywhere.
+ * The Playlists list in any layout and any sort: each playlist has a handle
+ * that drags it to a new place (scrolling the list near its edges), across a
+ * grid's columns as well as down. A drop keeps the new order at once,
+ * everywhere, switching to Custom from the order on screen under another sort.
  */
 export function ArrangeablePlaylists({
   playlists,
