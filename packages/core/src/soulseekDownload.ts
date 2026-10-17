@@ -167,6 +167,19 @@ export const soulseekSameRecording = (a: YtSong, b: YtSong): boolean => {
   );
 };
 
+/**
+ * What two songs that are the same recording (`soulseekSameRecording`) have
+ * in common, their title and artist; null for a song that is no other's, as
+ * one of unknown length. Songs with different keys are never the same
+ * recording, so it narrows who to compare.
+ */
+export const soulseekRecordingKey = (song: YtSong): string | null => {
+  const { title, artist, durationMs } = soulseekRecording(song);
+  return title === "" || artist === "" || durationMs === null
+    ? null
+    : JSON.stringify([title, artist]);
+};
+
 /** Eligible original MP3 320 peers for exactly the requested recording. */
 export const soulseekCandidates = (
   song: YtSong,
