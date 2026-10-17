@@ -1083,14 +1083,6 @@ export type {
   SearchWaiting,
 } from "./searchAllowance.ts";
 
-export {
-  SPOTIFY_SEARCH_BUDGET,
-  SPOTIFY_SEARCH_WINDOW_MS,
-  readSpotifySearchPacing,
-  writeSpotifySearchPacing,
-} from "./spotifySearchPacing.ts";
-export type { SpotifySearchPacing } from "./spotifySearchPacing.ts";
-
 export { LIBRARY_SHELF_CHOICES, parseLibraryShelf, storedLibraryShelf } from "./libraryShelf.ts";
 export type { LibraryShelf } from "./libraryShelf.ts";
 

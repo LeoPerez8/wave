@@ -22,12 +22,7 @@ import {
   type YtSongSearch,
 } from "./spotifyImport.ts";
 import type { SpotifyPlaylist, SpotifySong } from "./spotifyPlaylist.ts";
-import {
-  spotifySearchAllowedAt,
-  spotifySearchAsked,
-  spotifySearchesDoneAt,
-  type SpotifySearchPacing,
-} from "./spotifySearchPacing.ts";
+import { searchesDoneAt, type SearchAllowance } from "./searchAllowance.ts";
 import type { YtAlbumSong } from "./ytDiscover.ts";
 import { joinArtists, libraryFinder, type LibrarySongKey, type YtSong } from "./ytMusic.ts";
 
@@ -461,39 +456,31 @@ const nextQuery = <S extends YtSong>(job: PlaylistImport<S>): string | null => {
 };
 
 /**
- * What the app does next for [job] at [now] (ms), given the searches Spotify
- * imports asked lately ([searches]), and both once it's done. The songs still
- * to be found are searched in the source's order, one Songs search per song
- * (its title and artists, `spotifySearchQuery`; a song listed twice is
- * searched once), at most `SPOTIFY_SEARCHES_AT_ONCE` at once and
- * `SPOTIFY_SEARCH_BUDGET` in any `SPOTIFY_SEARCH_WINDOW_MS`, none while
- * paused after a refusal. The Library's songs are never searched, so they
- * spend none of that. This is the one place deciding whether a search may be
- * asked now.
+ * What the app does next for [job] at [now] (ms), and the import once it's
+ * done. The songs still to be found are searched in the source's order, one
+ * Songs search per song (its title and artists, `spotifySearchQuery`; a song
+ * listed twice is searched once), at most `SPOTIFY_SEARCHES_AT_ONCE` at once,
+ * none while paused after a refusal. Each search then waits its turn in the
+ * allowance every automatic search shares (`searchTurns`): the import keeps
+ * no pacing of its own. The Library's songs are never searched, so they
+ * spend none of it.
  */
 export const nextImportStep = <S extends YtSong>(
   job: PlaylistImport<S>,
   now: number,
-  searches: SpotifySearchPacing,
 ): {
   readonly job: PlaylistImport<S>;
   readonly step: ImportStep;
-  readonly searches: SpotifySearchPacing;
 } => {
-  const as = (step: ImportStep) => ({ job, step, searches });
+  const as = (step: ImportStep) => ({ job, step });
   if (job.state.kind !== "importing") return as({ kind: "none" });
   const waiting =
     job.asking.length > 0 ? ({ kind: "answers" } as const) : ({ kind: "none" } as const);
   if (job.asking.length >= SPOTIFY_SEARCHES_AT_ONCE) return as(waiting);
   const query = nextQuery(job);
   if (query === null) return as(waiting);
-  const from = Math.max(job.pausedUntil, spotifySearchAllowedAt(searches, now));
-  if (now < from) return as({ kind: "wait", untilMs: from });
-  return {
-    job: { ...job, asking: [...job.asking, query] },
-    step: { kind: "search", query },
-    searches: spotifySearchAsked(searches, now),
-  };
+  if (now < job.pausedUntil) return as({ kind: "wait", untilMs: job.pausedUntil });
+  return { job: { ...job, asking: [...job.asking, query] }, step: { kind: "search", query } };
 };
 
 /**
@@ -903,31 +890,31 @@ const timeLeftLine = (ms: number): string => {
 
 /**
  * About how long [job]'s searches still take at [now], given the searches
- * Spotify imports asked lately ([searches]): at about 6 a second, within
- * `SPOTIFY_SEARCH_BUDGET` in any `SPOTIFY_SEARCH_WINDOW_MS`, after any pause
- * for a refusal. Null when none is left to ask.
+ * asked lately ([searches], the shared allowance's): at about 6 a second,
+ * within `SEARCH_ALLOWANCE` in any `SEARCH_WINDOW_MS`, after any pause for a
+ * refusal. Null when none is left to ask.
  */
 const timeLeft = <S extends YtSong>(
   job: PlaylistImport<S>,
   now: number,
-  searches: SpotifySearchPacing,
+  searches: Pick<SearchAllowance, "searchesAt">,
 ): number | null => {
   const left = searchesLeft(job);
   if (left === 0) return null;
-  return spotifySearchesDoneAt(searches, Math.max(now, job.pausedUntil), left) - now;
+  return searchesDoneAt(searches.searchesAt, Math.max(now, job.pausedUntil), left) - now;
 };
 
 /**
  * What [playlistId]'s page shows of its import at [now] (ms), given the
- * searches Spotify imports asked lately ([searches]); null with none. The
- * import going on says how far it got and, while it has searches to ask,
- * about how long they take.
+ * searches asked lately ([searches], the shared allowance's); null with
+ * none. The import going on says how far it got and, while it has searches
+ * to ask, about how long they take.
  */
 export const playlistImportView = <S extends YtSong>(
   imports: PlaylistImports<S>,
   playlistId: number,
   now: number,
-  searches: SpotifySearchPacing,
+  searches: Pick<SearchAllowance, "searchesAt">,
 ): PlaylistImportView | null => {
   const job = imports.find((queued) => queued.playlistId === playlistId);
   if (job === undefined) return null;
