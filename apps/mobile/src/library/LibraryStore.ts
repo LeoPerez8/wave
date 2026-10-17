@@ -15,6 +15,7 @@ import {
   type ListeningSums,
   type StatsWindow,
   type TryAgainAnswered,
+  type UnsearchedSong,
   type YtAlbumSong,
   type YtArtistSaved,
 } from "@wave/core";
@@ -100,7 +101,9 @@ import {
   selectPlaylistsLastPlayed,
   selectTrackPaths,
   settleTryAgain,
+  settleUnsearchedEntries,
   type PlaylistEntry,
+  type UnsearchedEntriesSettled,
 } from "./db/playlists";
 import { hasUnscannedRoot, pruneOrphans, saveBatch } from "./db/save";
 import * as schema from "./db/schema";
@@ -637,6 +640,15 @@ export class LibraryStore extends Context.Service<
       playlistId: number,
       answered: readonly TryAgainAnswered<YtAlbumSong>[],
     ) => Effect.Effect<{ readonly found: number; readonly failed: number }, LibraryStoreError>;
+    /**
+     * Settles the unsearched song [song] as [becomes] (found, a YT Music
+     * song; not found, unavailable) in every playlist holding it (Core's
+     * `unsearchedSettles`).
+     */
+    readonly settleUnsearched: (
+      song: UnsearchedSong,
+      becomes: PlaylistSong,
+    ) => Effect.Effect<UnsearchedEntriesSettled, LibraryStoreError>;
     /** Makes the playlist hold exactly [songs], in that order (an import's Replace). */
     readonly replacePlaylistSongs: (
       playlistId: number,
@@ -1186,6 +1198,11 @@ const make = Effect.gen(function* () {
     settleTryAgain: (playlistId, answered) =>
       attempt("save what Try Again found", () =>
         settleTryAgain(db, playlistId, answered, Date.now()),
+      ),
+
+    settleUnsearched: (song, becomes) =>
+      attempt("save what the search found", () =>
+        settleUnsearchedEntries(db, song, becomes, Date.now()),
       ),
 
     replacePlaylistSongs: (playlistId, songs) =>

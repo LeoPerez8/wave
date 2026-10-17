@@ -12,7 +12,7 @@ import { openPlaylistActions } from "@/playback/ActionsMenu";
 import { DetailFrame } from "@/library/DetailFrame";
 import { usePlaylist } from "@/library/hooks";
 import { LibraryStore, type PlaylistEntryRow, type PlaylistRow } from "@/library/LibraryStore";
-import { PlaylistImportLine, usePlaylistImportView } from "@/library/PlaylistImportLine";
+import { PlaylistImportLine } from "@/library/PlaylistImportLine";
 import { PlaylistItems, playPlaylistEntries } from "@/library/PlaylistItems";
 import { parseId, useKnownRow } from "@/library/routes";
 import { appRuntime } from "@/library/runtime";
@@ -109,16 +109,12 @@ function PlaylistHead({ shown }: { shown: Shown }) {
   );
 }
 
-function NoSongs({ playlistId }: { playlistId: number }) {
-  // While an import fills it, its songs are on their way.
-  const importing = usePlaylistImportView(playlistId)?.canCancel === true;
+function NoSongs() {
   return (
     <View style={{ paddingTop: CELL * 3, gap: CELL / 2 }}>
       <Text className="font-sans text-title3 font-normal text-foreground">No songs yet</Text>
       <Text className="font-sans text-subheadline text-secondary">
-        {importing
-          ? "Songs appear here as they're found."
-          : "Long-press a song, an album or an artist and choose Add to Playlist."}
+        Long-press a song, an album or an artist and choose Add to Playlist.
       </Text>
     </View>
   );
@@ -145,7 +141,7 @@ export default function PlaylistScreen() {
           playlistId={playlist.id}
           items={items}
           header={<PlaylistHead shown={{ playlist, items }} />}
-          empty={<NoSongs playlistId={playlist.id} />}
+          empty={<NoSongs />}
         />
       )}
     </DetailFrame>

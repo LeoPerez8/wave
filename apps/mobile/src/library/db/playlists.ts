@@ -16,12 +16,15 @@ import {
   readPlaylistEntrySong,
   sortKey,
   tryAgainSettles,
+  unsearchedSettles,
+  unsearchedTrackId,
   writePlaylistEntrySong,
   type OrderedEntry,
   type PlaylistItem,
   type PlaylistSong,
+  type StoredPlaylistSong,
   type TryAgainAnswered,
-  type UnavailableEntry,
+  type UnsearchedSong,
   type YtAlbumSong,
 } from "@wave/core";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
@@ -45,12 +48,12 @@ const IN_ORDER = [asc(schema.playlistItems.orderKey), asc(schema.playlistItems.s
 /** Entries the playlist holds: not removed (tombstones). */
 const live = eq(schema.playlistItems.deleted, false);
 
-/** A song a playlist stores in `yt_song`: a YT Music song it streams, or an unavailable song. */
-type StoredSong = { readonly source: "stream"; readonly song: YtAlbumSong } | UnavailableEntry;
+/** A song a playlist stores in `yt_song`: a YT Music song it streams, an unsearched song, or an unavailable one. */
+type StoredSong = StoredPlaylistSong;
 
 /**
  * [playlistId]'s stored song [stored] (Core's `readPlaylistEntrySong`): a YT
- * Music song or an unavailable one, counted as decoded.
+ * Music song, an unsearched one or an unavailable one, counted as decoded.
  */
 const decode = (playlistId: number, stored: string): StoredSong | null => {
   countDecoded(playlistId);
@@ -319,6 +322,14 @@ const storedUnavailable = sql`(CASE WHEN json_valid(${schema.playlistItems.ytSon
 const storedUnavailableTitle = sql`CASE WHEN ${storedUnavailable}
   THEN json_extract(${schema.playlistItems.ytSong}, '$.title') END`;
 
+/** Whether the entry is an unsearched song, as Core's `writePlaylistEntrySong` marks it. */
+const storedUnsearched = sql`(CASE WHEN json_valid(${schema.playlistItems.ytSong})
+  THEN json_type(${schema.playlistItems.ytSong}, '$.unsearched') = 'true' END IS 1)`;
+
+/** A stored unsearched song's title, read by SQLite; null for any other entry. */
+const storedUnsearchedTitle = sql`CASE WHEN ${storedUnsearched}
+  THEN json_extract(${schema.playlistItems.ytSong}, '$.title') END`;
+
 /** [values] as one bound value that SQLite reads back as a list: `x IN ${jsonList(values)}`. */
 const jsonList = (values: readonly (string | number)[]) =>
   sql`(SELECT value FROM json_each(${JSON.stringify(values)}))`;
@@ -339,9 +350,11 @@ const heldAmong = (
   const trackIds: number[] = [];
   const videoIds: string[] = [];
   const unavailableTitles: string[] = [];
+  const unsearchedTitles: string[] = [];
   for (const song of songs) {
     if (song.source === "library") trackIds.push(song.trackId);
     else if (song.source === "stream") videoIds.push(song.song.videoId);
+    else if (song.source === "unsearched") unsearchedTitles.push(song.song.title);
     else unavailableTitles.push(song.song.title);
   }
   const inPlaylist = and(eq(playlistItems.playlistId, playlistId), live);
@@ -371,11 +384,15 @@ const heldAmong = (
       if (song !== null) held.push(song);
     }
   }
-  if (unavailableTitles.length > 0) {
+  for (const [stored, titles] of [
+    [storedUnavailableTitle, unavailableTitles],
+    [storedUnsearchedTitle, unsearchedTitles],
+  ] as const) {
+    if (titles.length === 0) continue;
     const rows = db
       .select({ ytSong: sql<string>`${playlistItems.ytSong}` })
       .from(playlistItems)
-      .where(and(inPlaylist, sql`${storedUnavailableTitle} IN ${jsonList(unavailableTitles)}`))
+      .where(and(inPlaylist, sql`${stored} IN ${jsonList(titles)}`))
       .all();
     for (const { ytSong } of rows) {
       const song = decode(playlistId, ytSong);
@@ -621,9 +638,10 @@ export const settleTryAgain = (
   db.transaction((tx) => {
     const { playlists, playlistItems } = schema;
     // What the playlist holds of the songs found, so none goes in twice.
-    const candidates = tryAgainSettles(answered, []).replace.map(
-      ({ song }): PlaylistSong => ({ source: "stream", song }),
-    );
+    const candidates = tryAgainSettles(answered, []).replace.map(({ song }): PlaylistSong => ({
+      source: "stream",
+      song,
+    }));
     const { replace, drops, found, failed } = tryAgainSettles(
       answered,
       heldAmong(tx, playlistId, candidates),
@@ -654,6 +672,82 @@ export const settleTryAgain = (
       tx.update(playlists).set({ updatedAt: now }).where(eq(playlists.id, playlistId)).run();
     return { found, failed };
   });
+
+/**
+ * Settles the unsearched song [song] as [becomes] (Core's `settleUnsearched`:
+ * the YT Music song found, or the unavailable song not found) in every
+ * playlist that holds it: each entry holding it (by what Spotify listed,
+ * `unsearchedTrackId`) becomes that song in its place, or, in a playlist
+ * that holds the song already, is removed (Core's `unsearchedSettles`).
+ * Each change is stamped at [now], so the Wave account carries it to the
+ * other phones. Returns how many entries were rewritten and removed, and
+ * the playlists that held it.
+ */
+export const settleUnsearchedEntries = (
+  db: LibraryDatabase,
+  song: UnsearchedSong,
+  becomes: PlaylistSong,
+  now: number,
+): UnsearchedEntriesSettled =>
+  db.transaction((tx) => {
+    const { playlists, playlistItems } = schema;
+    const key = unsearchedTrackId(song);
+    const holders = tx
+      .select({
+        itemId: playlistItems.id,
+        playlistId: playlistItems.playlistId,
+        ytSong: sql<string>`${playlistItems.ytSong}`,
+      })
+      .from(playlistItems)
+      .where(and(live, sql`${storedUnsearchedTitle} = ${song.title}`))
+      .orderBy(asc(playlistItems.playlistId), ...IN_ORDER)
+      .all()
+      .flatMap(({ itemId, playlistId, ytSong }) => {
+        const stored = decode(playlistId, ytSong);
+        return stored?.source === "unsearched" && unsearchedTrackId(stored.song) === key
+          ? [{ itemId, playlistId, listed: stored.song }]
+          : [];
+      });
+    if (holders.length === 0) return { rewritten: 0, removed: 0, playlistIds: [] };
+    const playlistIds = [...new Set(holders.map((holder) => holder.playlistId))];
+    const held = playlistIds.flatMap((playlistId) =>
+      heldAmong(tx, playlistId, [becomes]).map((heldSong) => ({ playlistId, song: heldSong })),
+    );
+    const { rewrites, drops } = unsearchedSettles(holders, becomes, held);
+    const listedBy = new Map(holders.map((holder) => [holder.itemId, holder.listed]));
+    for (const itemId of rewrites) {
+      // Not found, each entry keeps what its own listing kept (Spotify's cover with it).
+      const listed = listedBy.get(itemId);
+      const entry: PlaylistSong =
+        becomes.source === "unavailable" && listed !== undefined
+          ? { source: "unavailable", song: { ...listed, reason: becomes.song.reason } }
+          : becomes;
+      tx.update(playlistItems)
+        .set({
+          trackId: entry.source === "library" ? entry.trackId : null,
+          ytSong: entry.source === "library" ? null : writePlaylistEntrySong(entry),
+          ...stamped(playlistItems, now),
+        })
+        .where(eq(playlistItems.id, itemId))
+        .run();
+    }
+    for (let i = 0; i < drops.length; i += LINK_CHUNK) {
+      tx.update(playlistItems)
+        .set({ deleted: true, ...stamped(playlistItems, now) })
+        .where(inArray(playlistItems.id, drops.slice(i, i + LINK_CHUNK)))
+        .run();
+    }
+    tx.update(playlists).set({ updatedAt: now }).where(inArray(playlists.id, playlistIds)).run();
+    return { rewritten: rewrites.length, removed: drops.length, playlistIds };
+  });
+
+/** What settling an unsearched song changed (`settleUnsearchedEntries`). */
+export interface UnsearchedEntriesSettled {
+  readonly rewritten: number;
+  readonly removed: number;
+  /** The playlists that held it. */
+  readonly playlistIds: readonly number[];
+}
 
 /** A playlist's mosaic: thumbnails for lists and menus, full-size covers for its screen's header. */
 export interface PlaylistCovers {
@@ -857,12 +951,35 @@ const READABLE_UNAVAILABLE_SONG = sql`CASE
 END`;
 
 /**
+ * Whether the stored song `pi.yt_song` is an unsearched song Core's
+ * `readPlaylistEntrySong` reads (and not a YT Music song): marked
+ * unsearched, with a title, artists (names), an album and a cover (each a
+ * text or null) and a length (a number or null).
+ */
+const READABLE_UNSEARCHED_SONG = sql`CASE
+  WHEN NOT json_valid(pi.yt_song) THEN 0
+  WHEN json_type(pi.yt_song) <> 'object' THEN 0
+  WHEN ${READABLE_YT_SONG} THEN 0
+  ELSE coalesce(
+    json_type(pi.yt_song, '$.unsearched') = 'true'
+      AND json_type(pi.yt_song, '$.title') = 'text'
+      AND json_type(pi.yt_song, '$.artists') = 'array'
+      AND NOT EXISTS (
+        SELECT 1 FROM json_each(pi.yt_song, '$.artists') WHERE json_each.type <> 'text')
+      AND json_type(pi.yt_song, '$.album') IN ('null', 'text')
+      AND json_type(pi.yt_song, '$.artworkUrl') IN ('null', 'text')
+      AND json_type(pi.yt_song, '$.durationMs') IN ('null', 'integer', 'real'),
+    0)
+END`;
+
+/**
  * Each playlist's song count and length (only [playlists]' when given: one id
- * or several), YT Music and unavailable entries included (one of unknown
- * length adds nothing to it), and how many are unavailable. An entry whose
- * stored song can't be read is left out, as the playlist's list leaves it out
- * (`selectPlaylistEntries`, with Core's `readPlaylistEntrySong`; SQLite makes
- * the same checks here, `READABLE_YT_SONG`, `READABLE_UNAVAILABLE_SONG`).
+ * or several), YT Music, unsearched and unavailable entries included (one of
+ * unknown length adds nothing to it), and how many are unavailable (an
+ * unsearched one isn't). An entry whose stored song can't be read is left
+ * out, as the playlist's list leaves it out (`selectPlaylistEntries`, with
+ * Core's `readPlaylistEntrySong`; SQLite makes the same checks here,
+ * `READABLE_YT_SONG`, `READABLE_UNSEARCHED_SONG`, `READABLE_UNAVAILABLE_SONG`).
  * Playlists holding nothing are left out.
  */
 export const selectPlaylistTotals = (
@@ -882,7 +999,7 @@ export const selectPlaylistTotals = (
     WHERE NOT pi.deleted AND ${entriesOf(playlists)}
       -- A Library entry whose track is gone is on its way out (the cascade), never counted.
       AND CASE WHEN pi.track_id IS NOT NULL THEN t.id IS NOT NULL
-        ELSE ${READABLE_YT_SONG} OR ${READABLE_UNAVAILABLE_SONG} END
+        ELSE ${READABLE_YT_SONG} OR ${READABLE_UNSEARCHED_SONG} OR ${READABLE_UNAVAILABLE_SONG} END
     GROUP BY pi.playlist_id`);
   return new Map(rows.map(({ playlistId, ...total }) => [playlistId, total]));
 };

@@ -135,9 +135,9 @@ export const readLinkImport = async (
 };
 
 /**
- * Makes the planned playlist at once, empty (Replace or Keep Both when its
- * name is taken, as the M3U import asks), opens it, and starts filling it in
- * the background (`startLinkImport`).
+ * Makes the planned playlist (Replace or Keep Both when its name is taken,
+ * as the M3U import asks), gives it every song at once (`startLinkImport`),
+ * and opens it.
  */
 export const saveLinkImport = async (
   plan: LinkImportPlan<NativeYtSong>,
