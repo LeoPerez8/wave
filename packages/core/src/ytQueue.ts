@@ -7,8 +7,13 @@
  * queue so a cold start can pick them back up.
  */
 
+import { isUnsearchedTrackId } from "./playlistEntries.ts";
 import type { QueueEntry } from "./queue.ts";
 import { parseTrackId } from "./ytMusic.ts";
+
+/** Whether [trackId] isn't the Library's: a YT Music song, or an unsearched one (`unsearchedTrackId`). */
+const streamedTrackId = (trackId: string): boolean =>
+  parseTrackId(trackId)?.kind === "yt" || isUnsearchedTrackId(trackId);
 
 /** The Library tracks among [trackIds] (a queue's), each once, for looking them up. */
 export const libraryTrackIds = (trackIds: readonly string[]): number[] => {
@@ -22,8 +27,8 @@ export const libraryTrackIds = (trackIds: readonly string[]): number[] => {
 
 /**
  * The details to keep with a queue for a cold start: those of its YT Music
- * songs (the Library has the others), each once, in queue order. Songs whose
- * details aren't in [known] are skipped.
+ * and unsearched songs (the Library has the others), each once, in queue
+ * order. Songs whose details aren't in [known] are skipped.
  */
 export const queuedYtTracks = <T>(
   entries: readonly QueueEntry[],
@@ -31,7 +36,7 @@ export const queuedYtTracks = <T>(
 ): T[] => {
   const kept = new Map<string, T>();
   for (const { trackId } of entries) {
-    if (kept.has(trackId) || parseTrackId(trackId)?.kind !== "yt") continue;
+    if (kept.has(trackId) || !streamedTrackId(trackId)) continue;
     const track = known.get(trackId);
     if (track !== undefined) kept.set(trackId, track);
   }
@@ -74,12 +79,13 @@ export interface RestorableTracks {
 
 /**
  * Whether a saved queue's track can be restored (for `restorePlayback`): a
- * Library track still in the Library, or a YT Music song whose details were
- * saved, while YT Music is on.
+ * Library track still in the Library, or a YT Music or unsearched song whose
+ * details were saved, while YT Music is on.
  */
 export const restorableTrack =
   ({ libraryIds, savedYtTracks, ytMusicOn }: RestorableTracks) =>
   (trackId: string): boolean => {
+    if (isUnsearchedTrackId(trackId)) return ytMusicOn && savedYtTracks.has(trackId);
     const track = parseTrackId(trackId);
     if (track === null) return false;
     return track.kind === "library"

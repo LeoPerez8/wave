@@ -94,6 +94,23 @@ export const unsearchedTrackId = ({ title, artists, album, durationMs }: Unsearc
 export const isUnsearchedTrackId = (trackId: string): boolean =>
   trackId.startsWith(UNSEARCHED_PREFIX);
 
+/**
+ * The song an unsearched id stands for (`unsearchedTrackId`), without its
+ * cover, which the id doesn't keep; null for any other id.
+ */
+export const readUnsearchedTrackId = (trackId: string): UnsearchedSong | null => {
+  if (!isUnsearchedTrackId(trackId)) return null;
+  let value: unknown;
+  try {
+    value = JSON.parse(trackId.slice(UNSEARCHED_PREFIX.length));
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(value) || value.length !== 4) return null;
+  const [title, artists, album, durationMs] = value as unknown[];
+  return readListedSong({ title, artists, album, durationMs, artworkUrl: null });
+};
+
 /** The id [song] goes by in the queue: its Library track's, its YT Music id, or its unsearched id. */
 export const queueSongTrackId = <S extends YtSong>(
   song: QueueSong<S, { readonly id: number }>,

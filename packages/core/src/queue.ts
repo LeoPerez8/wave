@@ -72,7 +72,13 @@ export type QueueCommand =
   | ({ readonly type: "move" } & UpNextMove)
   | { readonly type: "remove"; readonly key: string }
   /** These tracks left the library (their files were deleted): every entry of theirs goes. */
-  | { readonly type: "removeTracks"; readonly trackIds: readonly string[] };
+  | { readonly type: "removeTracks"; readonly trackIds: readonly string[] }
+  /**
+   * An unsearched song (by its id) was searched: found, every entry of it
+   * becomes [becomes] (the YT Music song's id) in its place, keeping its key;
+   * not found (null), every entry of it goes, as `removeTracks` takes them.
+   */
+  | { readonly type: "settled"; readonly trackId: string; readonly becomes: string | null };
 
 /**
  * What the app should do to playback besides syncing the list:
@@ -464,6 +470,16 @@ const removeTracks = (state: QueueState, trackIds: readonly string[]): QueueResu
   return result({ ...state, entries, index: entries.length - 1 }, "stop");
 };
 
+/** An unsearched song's entries once searched: each becomes [becomes], or (null) they go. */
+const settled = (state: QueueState, trackId: string, becomes: string | null): QueueResult => {
+  if (becomes === null) return removeTracks(state, [trackId]);
+  if (!state.entries.some((entry) => entry.trackId === trackId)) return result(state);
+  const entries = state.entries.map((entry) =>
+    entry.trackId === trackId ? { ...entry, trackId: becomes } : entry,
+  );
+  return result({ ...state, entries });
+};
+
 /**
  * Applies one command. `random` returns numbers in [0, 1); pass a seeded one
  * in tests. [shuffle] is the kind of shuffle a command that shuffles uses.
@@ -505,6 +521,8 @@ export const reduceQueue = (
       return remove(state, command.key);
     case "removeTracks":
       return removeTracks(state, command.trackIds);
+    case "settled":
+      return settled(state, command.trackId, command.becomes);
   }
 };
 
