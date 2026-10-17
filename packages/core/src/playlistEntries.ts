@@ -50,8 +50,7 @@ export type PlaylistSong<S extends YtSong = YtSong> =
 
 /** A playlist's entry as its page lists it: a Library track, a YT Music song, or an unavailable song. */
 export type PlaylistItem<S extends YtSong = YtSong, L = unknown> =
-  | MixedSong<S, L>
-  | UnavailableEntry;
+  MixedSong<S, L> | UnavailableEntry;
 
 /**
  * What tells a playlist's songs apart: the id the song goes by in the queue

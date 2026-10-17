@@ -254,11 +254,7 @@ export type {
   SettingsPage,
   SettingsPageEntry,
 } from "./settingsPages.ts";
-export {
-  PLAYLIST_LAYOUTS,
-  parsePlaylistLayout,
-  storedPlaylistLayout,
-} from "./playlistLayout.ts";
+export { PLAYLIST_LAYOUTS, parsePlaylistLayout, storedPlaylistLayout } from "./playlistLayout.ts";
 export type { PlaylistLayout } from "./playlistLayout.ts";
 export {
   PLAYLIST_SORTS,

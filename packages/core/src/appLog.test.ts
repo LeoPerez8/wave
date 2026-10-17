@@ -148,7 +148,10 @@ describe("describeLogArgs", () => {
 
     const message = describeLogArgs(["[wave] Library", library]);
 
-    assert.ok(message.startsWith('Library [{"title":"Song 0"},{"title":"Song 1"},'), message.slice(0, 80));
+    assert.ok(
+      message.startsWith('Library [{"title":"Song 0"},{"title":"Song 1"},'),
+      message.slice(0, 80),
+    );
     assert.ok(message.length < 10_000, String(message.length));
     assert.match(message, /… \(cut short\)$/);
     assert.ok(read < 2_000, `read ${read} titles`);

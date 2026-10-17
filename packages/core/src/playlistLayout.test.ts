@@ -1,11 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import {
-  PLAYLIST_LAYOUTS,
-  parsePlaylistLayout,
-  storedPlaylistLayout,
-} from "./index.ts";
+import { PLAYLIST_LAYOUTS, parsePlaylistLayout, storedPlaylistLayout } from "./index.ts";
 
 describe("playlist layout", () => {
   test("a fresh install (nothing stored) shows playlists as a list", () => {

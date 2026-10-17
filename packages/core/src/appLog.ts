@@ -224,7 +224,9 @@ export const describeLogArgs = (args: readonly unknown[]): string => {
   });
   if (message.startsWith(WAVE_PREFIX)) message = message.slice(WAVE_PREFIX.length);
   if (message.length <= MAX_MESSAGE_CHARS) return message;
-  const cut = uncounted ? "cut short" : `${message.length - MAX_MESSAGE_CHARS + more} more characters`;
+  const cut = uncounted
+    ? "cut short"
+    : `${message.length - MAX_MESSAGE_CHARS + more} more characters`;
   return `${message.slice(0, MAX_MESSAGE_CHARS)}… (${cut})`;
 };
 
