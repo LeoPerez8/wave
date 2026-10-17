@@ -129,7 +129,7 @@ describe("readYtPlaylist", () => {
     assert.equal(asked.length, 149);
   });
 
-  test("uncapped, a token it already followed ends the read", async () => {
+  test("uncapped, a token it already followed ends the read, read whole", async () => {
     const asked: string[] = [];
     const read = await readYtPlaylist(
       async () => firstPage(["a"], "p2"),
@@ -138,10 +138,10 @@ describe("readYtPlaylist", () => {
     );
     assert.deepEqual(asked, ["p2", "p3"]);
     assert.deepEqual(ids(read.songs), ["a", "b", "c"]);
-    assert.equal(read.truncated, true);
+    assert.equal(read.truncated, false, "the pages loop back: every song is read");
   });
 
-  test("uncapped, a page of nothing but songs already read ends the read", async () => {
+  test("uncapped, a page of nothing but songs already read ends the read, read whole", async () => {
     // Fresh tokens that keep answering the same songs.
     const asked: string[] = [];
     const more = async (token: string): Promise<YtPlaylistPage> => {
@@ -153,7 +153,7 @@ describe("readYtPlaylist", () => {
     });
     assert.deepEqual(asked, ["p2", "p2+"]);
     assert.deepEqual(ids(read.songs), ["a", "b", "c"]);
-    assert.equal(read.truncated, true);
+    assert.equal(read.truncated, false, "a stale token: every song is read");
   });
 
   test("uncapped, a page with no songs it can read goes on", async () => {
