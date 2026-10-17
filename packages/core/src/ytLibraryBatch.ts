@@ -1,0 +1,233 @@
+/**
+ * From YT Music's batch (docs/spec.md, "Importing playlists from a link",
+ * From YT Music): the playlists Import made that are still to be read from
+ * YouTube Music, kept on the phone so a Wave Android stopped reads the rest
+ * when it starts again, in the same order. A read that failed stays, for its
+ * playlist's line and Try Again.
+ */
+
+import type { LinkImportPlan } from "./playlistImport.ts";
+import { readStoredRecord } from "./storedJson.ts";
+import type { YtSong } from "./ytMusic.ts";
+
+/** Waiting its turn to be read, or read and failed (its playlist stays empty). */
+export type YtLibraryReadState = "waiting" | "failed";
+
+/** A playlist Import made, to be read from YouTube Music. */
+export interface YtLibraryRead {
+  /**
+   * Tells this read apart from any other of the same playlist (a refresh
+   * queued while it ran), so a read's answer only ever settles its own
+   * entry. Given as it's queued; it lives while Wave runs, as a read does.
+   */
+  readonly token: number;
+  /** The YouTube Music playlist it's read from, without `VL`. */
+  readonly source: string;
+  /** The Wave playlist it fills. */
+  readonly playlistId: number;
+  /** That playlist's name as Import made it. */
+  readonly name: string;
+  /** Whether the read stops at the 5,000-song cap (`YT_PLAYLIST_SONG_CAP`). */
+  readonly capped: boolean;
+  /**
+   * Whether its songs the Library has get the Favorite star once it's read
+   * (Liked Songs with Also add to Favorites on; `ytLibraryFavorites`).
+   */
+  readonly favorites: boolean;
+  readonly state: YtLibraryReadState;
+}
+
+/** The batch: its playlists in the order they're read, and the last token given. */
+export interface YtLibraryBatch {
+  readonly reads: readonly YtLibraryRead[];
+  readonly lastToken: number;
+}
+
+/** A batch with nothing to read. */
+export const NO_YT_LIBRARY_READS: YtLibraryBatch = { reads: [], lastToken: 0 };
+
+/**
+ * [batch] with [reads] (the playlists an Import just made or refreshed, in
+ * its order) waiting after it, each with a new token. A refreshed playlist
+ * still in the batch, waiting or failed, leaves its old place: it's read
+ * once, in the new order, and a read of it still running answers nothing.
+ */
+export const queueYtLibraryReads = (
+  batch: YtLibraryBatch,
+  reads: readonly Omit<YtLibraryRead, "state" | "token">[],
+): YtLibraryBatch => ({
+  reads: [
+    ...batch.reads.filter((queued) => !reads.some((read) => read.playlistId === queued.playlistId)),
+    ...reads.map(({ source, playlistId, name, capped, favorites }, index) => ({
+      token: batch.lastToken + index + 1,
+      source,
+      playlistId,
+      name,
+      capped,
+      favorites,
+      state: "waiting" as const,
+    })),
+  ],
+  lastToken: batch.lastToken + reads.length,
+});
+
+/**
+ * The playlist to read next: the first one waiting. One being read when
+ * Wave stopped is still waiting, so it's read again first.
+ */
+export const nextYtLibraryRead = (batch: YtLibraryBatch): YtLibraryRead | undefined =>
+  batch.reads.find((read) => read.state === "waiting");
+
+/**
+ * Whether [read] is still in [batch], so its answer fills its playlist. A
+ * read whose playlist was refreshed (a newer read fills it) or deleted
+ * meanwhile gives its answer to nothing.
+ */
+export const isYtLibraryReadQueued = (batch: YtLibraryBatch, read: YtLibraryRead): boolean =>
+  batch.reads.some((queued) => queued.token === read.token);
+
+/**
+ * [batch] once [read]'s playlist was read (its songs go to the link import
+ * from then on): it's no longer in the batch. A newer read of the same
+ * playlist stays.
+ */
+export const ytLibraryReadDone = (batch: YtLibraryBatch, read: YtLibraryRead): YtLibraryBatch =>
+  isYtLibraryReadQueued(batch, read)
+    ? { ...batch, reads: batch.reads.filter((queued) => queued.token !== read.token) }
+    : batch;
+
+/** [batch] without the playlists deleted meanwhile: those not among [playlistIds], here or on another phone. */
+export const pruneYtLibraryBatch = (
+  batch: YtLibraryBatch,
+  playlistIds: readonly number[],
+): YtLibraryBatch => {
+  const kept = new Set(playlistIds);
+  const reads = batch.reads.filter((read) => kept.has(read.playlistId));
+  return reads.length === batch.reads.length ? batch : { ...batch, reads };
+};
+
+/** What a failed read leaves (`ytLibraryReadFailed`). */
+export interface YtLibraryReadFailure {
+  readonly batch: YtLibraryBatch;
+  /** Whether the batch stops reading for now, as every read after it would fail alike. */
+  readonly pause: boolean;
+}
+
+/** Why a read failed when every read would fail alike: no network, YT Music off. */
+const PAUSING_REASONS: ReadonlySet<string> = new Set(["offline", "disabled"]);
+
+/**
+ * What [batch] becomes once [read] failed because of [reason]. Offline
+ * (`offline`) or with YT Music off (`disabled`), nothing changes and the
+ * batch pauses: its playlist and the rest keep waiting, in order, and a
+ * failed one Try Again read keeps its line. Refused, or an answer Wave
+ * can't read, marks its playlist failed (it stays empty, with Try Again)
+ * and the rest goes on. A newer read of the same playlist stays as it was.
+ */
+export const ytLibraryReadFailed = (
+  batch: YtLibraryBatch,
+  read: YtLibraryRead,
+  reason: string,
+): YtLibraryReadFailure => {
+  if (PAUSING_REASONS.has(reason)) return { batch, pause: true };
+  if (!isYtLibraryReadQueued(batch, read)) return { batch, pause: false };
+  return {
+    batch: {
+      ...batch,
+      reads: batch.reads.map((queued) =>
+        queued.token === read.token ? { ...queued, state: "failed" as const } : queued,
+      ),
+    },
+    pause: false,
+  };
+};
+
+/**
+ * The tracks to star once [read]'s playlist is read as [plan]: with Also add
+ * to Favorites on, each of its songs that goes in as a Library track
+ * (`libraryFinder`, as `planLinkImport` matched it), once. A song that goes
+ * in as a YT Music entry gets none, even downloaded later. Only stars: the
+ * import never takes one away.
+ */
+export const ytLibraryFavorites = (
+  read: YtLibraryRead,
+  plan: Pick<LinkImportPlan<YtSong>, "finds">,
+): readonly number[] =>
+  read.favorites
+    ? plan.finds.flatMap((found) => (found.kind === "library" ? [found.trackId] : []))
+    : [];
+
+/** What a playlist's page shows when its read failed: the line, and the read Try Again makes. */
+export interface YtLibraryReadView {
+  readonly line: string;
+  readonly read: YtLibraryRead;
+}
+
+/** What [playlistId]'s page shows of its read: null unless it failed. */
+export const ytLibraryReadView = (
+  batch: YtLibraryBatch,
+  playlistId: number,
+): YtLibraryReadView | null => {
+  const read = batch.reads.find((queued) => queued.playlistId === playlistId);
+  return read?.state === "failed" ? { line: "Couldn't read it from YouTube Music", read } : null;
+};
+
+/** The app log's line for [read] that failed because of [reason]; no song titles. */
+export const ytLibraryReadLogLine = (read: YtLibraryRead, reason: string): string =>
+  `Import of "${read.name}" from YouTube Music couldn't read the playlist (${reason}); it stays empty, with Try Again`;
+
+/** The app log's line for the batch paused at [read] because of [reason] (`ytLibraryReadFailed`). */
+export const ytLibraryPauseLogLine = (read: YtLibraryRead, reason: string): string =>
+  `Import of "${read.name}" from YouTube Music waits (${reason}); the batch goes on when Wave starts again, comes back to the foreground or imports again`;
+
+// ---------------------------------------------------------------------------
+// Kept while Wave is closed
+
+const KEPT_VERSION = 1;
+
+/**
+ * [batch] as kept on the phone (`readYtLibraryBatch`); null when there's
+ * nothing to keep. Tokens aren't kept: no read outlives Wave.
+ */
+export const writeYtLibraryBatch = (batch: YtLibraryBatch): string | null =>
+  batch.reads.length === 0
+    ? null
+    : JSON.stringify({
+        version: KEPT_VERSION,
+        batch: batch.reads.map(({ source, playlistId, name, capped, favorites, state }) => ({
+          source,
+          playlistId,
+          name,
+          capped,
+          favorites,
+          state,
+        })),
+      });
+
+/**
+ * A kept playlist, given [token]; null when unreadable. One kept by a Wave
+ * from before Also add to Favorites stars nothing.
+ */
+const readRead = (value: unknown, token: number): YtLibraryRead | null => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const { source, playlistId, name, capped, favorites, state } = value as Record<string, unknown>;
+  if (typeof source !== "string" || typeof playlistId !== "number" || typeof name !== "string") {
+    return null;
+  }
+  if (typeof capped !== "boolean" || (state !== "waiting" && state !== "failed")) return null;
+  return { token, source, playlistId, name, capped, favorites: favorites === true, state };
+};
+
+/**
+ * The batch kept as [stored] (`writeYtLibraryBatch`), in its order, each
+ * playlist with a new token; a playlist kept unreadably is left out. Empty
+ * when nothing readable is kept, or it was kept another way.
+ */
+export const readYtLibraryBatch = (stored: string | null): YtLibraryBatch => {
+  const { version, batch } = readStoredRecord(stored);
+  if (version !== KEPT_VERSION || !Array.isArray(batch)) return NO_YT_LIBRARY_READS;
+  const reads = batch
+    .map((value: unknown, index) => readRead(value, index + 1))
+    .filter((read): read is YtLibraryRead => read !== null);
+  return { reads, lastToken: batch.length };
+};

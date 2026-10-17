@@ -39,19 +39,15 @@ import { useThemeColor } from "@/theme/useThemeColor";
 import { askYtMusic } from "@/ytmusic/askYtMusic";
 
 import { importPlaylists, saveImportedPlaylist, type ImportedPlaylist } from "./importPlaylists";
-import { LibraryStore } from "./LibraryStore";
-import { startLinkImport } from "./playlistImports";
+import { listLibrary, startLinkImport } from "./playlistImports";
+import { openYtLibraryImport } from "./YtLibraryPicker";
 import { openPlaylist } from "./routes";
-import { appRuntime } from "./runtime";
 
 // ---------------------------------------------------------------------------
 // Import service
 
 /** A linked playlist read, or why it wasn't. */
 export type LinkRead = LinkImportRead<NativeYtSong>;
-
-// oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
-const listLibrary = () => appRuntime.runPromise(LibraryStore.use((store) => store.listSongs));
 
 /** Spotify through `fetch`, as Core's `readSpotifyPlaylist` asks; rejects when out of reach. */
 const spotifyTransport =
@@ -143,7 +139,7 @@ export const saveLinkImport = async (
   plan: LinkImportPlan<NativeYtSong>,
 ): Promise<ImportedPlaylist> => {
   const saved = await saveImportedPlaylist(plan.name, []);
-  startLinkImport(plan, saved);
+  void startLinkImport(plan, saved);
   openPlaylist(saved.playlistId);
   return saved;
 };
@@ -184,8 +180,9 @@ export const openSharedText = (text: string): void => {
 };
 
 /**
- * Library › Playlists › Import: From a Link or From Files (Core's
- * `playlistImportSources`). With YT Music off it opens the file picker at once.
+ * Library › Playlists › Import: From a Link, From Files or From YT Music
+ * (Core's `playlistImportSources`). With YT Music off it opens the file
+ * picker at once.
  */
 export const openPlaylistImport = (): void => {
   const sources = playlistImportSources({ ytMusic: ytMusicEnabled() });
@@ -195,6 +192,7 @@ export const openPlaylistImport = (): void => {
   }
   openSourceMenu(sources, (source) => {
     if (source === "files") void importPlaylists();
+    else if (source === "ytMusic") void openYtLibraryImport();
     else void followUp(fromClipboard).then(askForLink);
   });
 };
@@ -226,6 +224,7 @@ export const openSourceMenu = (
 const SOURCE_LABELS: Record<PlaylistImportSource, string> = {
   link: "From a Link",
   files: "From Files",
+  ytMusic: "From YT Music",
 };
 
 /** The Import card: one entry per source, each handed to [choose]. */

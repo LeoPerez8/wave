@@ -61,6 +61,11 @@ export interface LinkImportPlan<S extends YtSong> {
   readonly leftOut: readonly LeftOutSong[];
   /** How many items the source counts that aren't songs Wave can read (Spotify's podcast episodes). */
   readonly notSongs: number;
+  /**
+   * Of a playlist that goes on past what was read (its read stopped at a
+   * cap), how many of its songs were read; null when it was read whole.
+   */
+  readonly cut: number | null;
 }
 
 /**
@@ -141,6 +146,7 @@ export const planLinkImport = <
     sourceTotal: listed.length + notSongs,
     leftOut,
     notSongs,
+    cut: source.playlist.truncated ? source.playlist.songs.length : null,
   };
 };
 
@@ -154,7 +160,7 @@ const listedSong = ({ title, artists, album, durationMs, artworkUrl }: SpotifySo
 export type ImportState =
   /** Its songs still to be given to the playlist. */
   | { readonly kind: "importing" }
-  /** Every song given to the playlist; kept only for the songs it left out. */
+  /** Every song given to the playlist; kept only for its line (its cut, the songs it left out). */
   | { readonly kind: "done" };
 
 /** A link import into the playlist Import made. */
@@ -164,15 +170,20 @@ export interface PlaylistImport<S extends YtSong> {
   /** The playlist's name when it was made. */
   readonly name: string;
   readonly service: ImportService;
-  /** The source's songs, in its order. */
+  /** The source's songs, in its order; none once it's kept done (`updatePlaylistImport`). */
   readonly songs: readonly SpotifySong[];
   /** Where each of [songs] goes. */
   readonly finds: readonly ImportFind<S>[];
-  /** The source's songs left out before the import started (`LinkImportPlan`'s). */
+  /**
+   * The source's songs left out before the import started (`LinkImportPlan`'s);
+   * once it's kept done, those that went in once as the same song as one before them too.
+   */
   readonly leftOut: readonly LeftOutSong[];
   /** How many of [songs], from the first, have been given to the playlist. */
   readonly added: number;
   readonly state: ImportState;
+  /** The source goes on past [songs]: how many of its songs were read (`LinkImportPlan`'s). */
+  readonly cut: number | null;
 }
 
 /** The import of [plan] into the playlist it made, [playlistId], named [name]. Nothing is given to it yet. */
@@ -188,6 +199,7 @@ export const startPlaylistImport = <S extends YtSong>(
   leftOut: plan.leftOut,
   added: 0,
   state: { kind: "importing" },
+  cut: plan.cut,
 });
 
 /**
@@ -228,7 +240,7 @@ const placed = <S extends YtSong>(job: PlaylistImport<S>) => {
 export interface FinishedImport<S extends YtSong> {
   /** The songs to append, in the source's order. */
   readonly songs: readonly PlaylistSong<S>[];
-  /** Done; `updatePlaylistImport` keeps it only while it has songs left out to show. */
+  /** Done; `updatePlaylistImport` keeps it only while it has a cut or songs left out to show. */
   readonly job: PlaylistImport<S>;
 }
 
@@ -277,23 +289,47 @@ export const queuePlaylistImport = <S extends YtSong>(
  * that go in as the same song as one before them, which go in once. In the
  * source's order within each.
  */
-const listedTwice = <S extends YtSong>(job: PlaylistImport<S>): SpotifySong[] => {
+const listedTwice = <S extends YtSong>(job: PlaylistImport<S>): SpotifySong[] => [
+  ...job.leftOut.filter((left) => left.reason === "listedTwice").map((left) => left.song),
+  ...wentInOnce(job),
+];
+
+/** The songs of [job] that go in as the same song as one before them, in the source's order. */
+const wentInOnce = <S extends YtSong>(job: PlaylistImport<S>): SpotifySong[] => {
   const { songs, firstAt } = placed(job);
-  const twice = job.leftOut
-    .filter((left) => left.reason === "listedTwice")
-    .map((left) => left.song);
+  const once: SpotifySong[] = [];
   songs.forEach((song, index) => {
     if (song === null) return;
     const first = firstAt.get(playlistSongKey(song));
     const listed = job.songs[index];
-    if (first !== undefined && first < index && listed !== undefined) twice.push(listed);
+    if (first !== undefined && first < index && listed !== undefined) once.push(listed);
   });
-  return twice;
+  return once;
 };
 
 /**
+ * [job] as kept once done: its line needs only its name, its cut and the
+ * songs it left out, so it keeps none of the source's songs (up to 5,000)
+ * and names those that went in once as left out, listed twice.
+ */
+const slimmed = <S extends YtSong>(job: PlaylistImport<S>): PlaylistImport<S> =>
+  job.state.kind !== "done" || job.songs.length === 0
+    ? job
+    : {
+        ...job,
+        songs: [],
+        finds: [],
+        added: 0,
+        leftOut: [
+          ...job.leftOut,
+          ...wentInOnce(job).map((song): LeftOutSong => ({ song, reason: "listedTwice" })),
+        ],
+      };
+
+/**
  * The imports with [job] as it is now. Done with no song left out, it's
- * gone: there's nothing to show.
+ * gone: there's nothing to show. Done with something to show, it keeps only
+ * what its line shows.
  */
 export const updatePlaylistImport = <S extends YtSong>(
   imports: PlaylistImports<S>,
@@ -301,7 +337,7 @@ export const updatePlaylistImport = <S extends YtSong>(
 ): PlaylistImports<S> =>
   nothingToShow(job)
     ? withoutPlaylistImport(imports, job.playlistId)
-    : imports.map((queued) => (queued.playlistId === job.playlistId ? job : queued));
+    : imports.map((queued) => (queued.playlistId === job.playlistId ? slimmed(job) : queued));
 
 // ---------------------------------------------------------------------------
 // Kept while Wave is closed
@@ -332,6 +368,7 @@ export const writePlaylistImports = <S extends YtSong & { readonly albumId?: str
       leftOut: job.leftOut.map(({ song, reason }) => ({ song: listedSong(song), reason })),
       added: job.added,
       state: job.state,
+      cut: job.cut,
     })),
   });
 
@@ -415,7 +452,7 @@ const passedOver = (
 const readImport = (value: unknown, older: boolean): PlaylistImport<YtAlbumSong> | null => {
   if (!isFields(value)) return null;
   // An import kept before songs left out were named has none.
-  const { playlistId, name, service, songs, finds, leftOut = [], added, state } = value;
+  const { playlistId, name, service, songs, finds, leftOut = [], added, state, cut } = value;
   if (typeof playlistId !== "number" || typeof name !== "string") return null;
   if (service !== "ytMusic" && service !== "spotify") return null;
   if (!Array.isArray(songs) || !Array.isArray(finds) || songs.length !== finds.length) return null;
@@ -444,6 +481,8 @@ const readImport = (value: unknown, older: boolean): PlaylistImport<YtAlbumSong>
     ],
     added: keptAdded,
     state: keptState,
+    // An import kept before a cut playlist said so says nothing of it.
+    cut: typeof cut === "number" ? cut : null,
   };
 };
 
@@ -453,7 +492,8 @@ const readImport = (value: unknown, older: boolean): PlaylistImport<YtAlbumSong>
  * stopped or waiting) is to be finished at once (`finishPlaylistImport`):
  * the songs it hadn't found go in unsearched, and those found as they were
  * found. None when nothing readable is kept. An older Wave's done import
- * names the songs it didn't find, or, with nothing to name, is gone.
+ * names the songs it didn't find, or, with nothing to name, is gone. A done
+ * one keeps only what its line shows.
  */
 export const readPlaylistImports = (stored: string | null): PlaylistImports<YtAlbumSong> => {
   if (stored === null) return [];
@@ -467,11 +507,17 @@ export const readPlaylistImports = (stored: string | null): PlaylistImports<YtAl
   const older = value.version !== KEPT_VERSION;
   return value.imports
     .map((kept) => readImport(kept, older))
-    .filter((job): job is PlaylistImport<YtAlbumSong> => job !== null && !nothingToShow(job));
+    .filter((job): job is PlaylistImport<YtAlbumSong> => job !== null && !nothingToShow(job))
+    .map(slimmed);
 };
 
 // ---------------------------------------------------------------------------
 // What the playlist page shows
+
+const SERVICE_NAMES: Record<ImportService, string> = {
+  ytMusic: "YouTube Music",
+  spotify: "Spotify",
+};
 
 /** A song as the list of songs left out names it: "Title · Artist & Artist". */
 const songLine = (song: SpotifySong): string =>
@@ -528,21 +574,27 @@ const leftOutNotice = <S extends YtSong>(job: PlaylistImport<S>): ImportLeftOut 
   };
 };
 
-/** Whether [job] is done with no song left out to show. */
+/** Whether [job] is done with no song left out and nothing cut to show. */
 const nothingToShow = <S extends YtSong>(job: PlaylistImport<S>): boolean =>
-  job.state.kind === "done" && leftOutNotice(job) === null;
+  job.state.kind === "done" && job.cut === null && leftOutNotice(job) === null;
 
-/** The import line on a playlist's page: the songs its import left out, which it opens. */
+/**
+ * The import line on a playlist's page: that only the source's first songs
+ * came, and the songs its import left out, which it opens. The page can
+ * dismiss it.
+ */
 export interface PlaylistImportView {
   readonly line: string;
-  /** The songs left out; the page can dismiss them. */
-  readonly leftOut: ImportLeftOut;
+  /** The songs left out; null when the line only says the source was cut. */
+  readonly leftOut: ImportLeftOut | null;
 }
 
 /**
- * What [playlistId]'s page shows of its import: once it's done, the songs it
- * left out ("2 songs were listed twice"); null with none, or while its songs
- * go in, which takes a moment and shows nothing.
+ * What [playlistId]'s page shows of its import once it's done: that only the
+ * source's first songs came ("Only its first 5,000 songs came from YouTube
+ * Music"), then the songs it left out ("2 songs were listed twice"); null
+ * with neither, or while its songs go in, which takes a moment and shows
+ * nothing.
  */
 export const playlistImportView = <S extends YtSong>(
   imports: PlaylistImports<S>,
@@ -551,16 +603,16 @@ export const playlistImportView = <S extends YtSong>(
   const job = imports.find((queued) => queued.playlistId === playlistId);
   if (job?.state.kind !== "done") return null;
   const leftOut = leftOutNotice(job);
-  return leftOut === null ? null : { line: leftOut.title, leftOut };
+  const cut =
+    job.cut === null
+      ? null
+      : `Only its first ${counted(job.cut, "song")} came from ${SERVICE_NAMES[job.service]}`;
+  const lines = [cut, leftOut?.title].filter((line) => line !== null && line !== undefined);
+  return lines.length === 0 ? null : { line: lines.join(" · "), leftOut };
 };
 
 // ---------------------------------------------------------------------------
 // The app log
-
-const SERVICE_NAMES: Record<ImportService, string> = {
-  ytMusic: "YouTube Music",
-  spotify: "Spotify",
-};
 
 /**
  * The app log's line for [job] once the playlist has its songs: the source,

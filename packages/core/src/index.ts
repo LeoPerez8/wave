@@ -1169,3 +1169,49 @@ export {
   trimLog,
 } from "./appLog.ts";
 export type { LogDevice, LogEntry, LogLevel, LogLimits, LogTrim } from "./appLog.ts";
+export {
+  liveYtLibraryOrigins,
+  planYtLibraryImport,
+  pressYtLibrarySelectAll,
+  readYtLibraryOrigins,
+  toggleYtLibraryFavorites,
+  toggleYtLibraryRow,
+  writeYtLibraryOrigins,
+  YT_LIKED_SONGS_ID,
+  ytLibraryFailure,
+  ytLibraryPicker,
+  ytLibraryPickerView,
+} from "./ytLibrary.ts";
+export type {
+  YtLibraryFailure,
+  YtLibraryFailureView,
+  YtLibraryImportItem,
+  YtLibraryOrigins,
+  YtLibraryPicker,
+  YtLibraryPickerView,
+  YtLibraryPlaylist,
+  YtLibraryPlaylistKind,
+  YtLibraryRow,
+} from "./ytLibrary.ts";
+export {
+  isYtLibraryReadQueued,
+  nextYtLibraryRead,
+  NO_YT_LIBRARY_READS,
+  pruneYtLibraryBatch,
+  queueYtLibraryReads,
+  readYtLibraryBatch,
+  writeYtLibraryBatch,
+  ytLibraryFavorites,
+  ytLibraryPauseLogLine,
+  ytLibraryReadDone,
+  ytLibraryReadFailed,
+  ytLibraryReadLogLine,
+  ytLibraryReadView,
+} from "./ytLibraryBatch.ts";
+export type {
+  YtLibraryBatch,
+  YtLibraryRead,
+  YtLibraryReadFailure,
+  YtLibraryReadState,
+  YtLibraryReadView,
+} from "./ytLibraryBatch.ts";

@@ -14,10 +14,12 @@ import { afterFirstContent, touchEnded, touchStarted, touchTakenOver } from "@/l
 import { followLibraryLookupSummary } from "@/library/findLyricsAndGenre";
 import { useAllFilesAccess } from "@/library/hooks";
 import { resumePlaylistImports } from "@/library/playlistImports";
+import { resumeYtLibraryImport } from "@/library/ytLibraryImport";
 import { primePlaylists } from "@/library/playlists";
 import { OverlayHost } from "@/overlay/OverlayHost";
 import { FollowCurrentRoute } from "@/library/routes";
 import { useOpenSharedText } from "@/library/sharedText";
+import { YtLibraryPickerHost } from "@/library/YtLibraryPicker";
 import { startInitialScan } from "@/library/runtime";
 import { ErrorScreen } from "@/log/ErrorScreen";
 import { NowPlayingSheet, UnderNowPlaying } from "@/nowPlaying/NowPlayingSheet";
@@ -61,6 +63,8 @@ export default function RootLayout() {
       afterFirstContent("scan", startInitialScan);
       // Link imports kept when Wave last closed go on filling their playlists.
       afterFirstContent("imports", resumePlaylistImports);
+      // A From YT Music batch Android stopped reads the playlists it hadn't, in order.
+      afterFirstContent("ytLibraryImport", resumeYtLibraryImport);
     }
   }, [granted]);
 
@@ -103,6 +107,8 @@ export default function RootLayout() {
           </UnderNowPlaying>
           {/* Always mounted, out of sight until opened, so a tap only starts its spring. */}
           {granted ? <NowPlayingSheet /> : null}
+          {/* Library › Playlists › Import › From YT Music's sheet, while it's up. */}
+          <YtLibraryPickerHost />
         </OverlayHost>
       </SafeAreaProvider>
     </GestureHandlerRootView>

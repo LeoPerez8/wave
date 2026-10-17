@@ -20,6 +20,7 @@ import { parseId, useKnownRow } from "@/library/routes";
 import { appRuntime } from "@/library/runtime";
 import { songCount } from "@/library/TrackList";
 import { UnavailableTryAgain } from "@/library/UnavailableEntry";
+import { YtLibraryReadLine } from "@/library/YtLibraryReadLine";
 import { listDownloadAction, useYtPlaylistDownloadButton } from "@/ytmusic/YtSongList";
 
 const NO_ENTRIES: readonly PlaylistEntryRow[] = [];
@@ -96,6 +97,7 @@ function PlaylistHead({ shown }: { shown: Shown }) {
           </Text>
         )}
         <PlaylistImportLine playlistId={playlist.id} />
+        <YtLibraryReadLine playlistId={playlist.id} />
       </View>
       {count > 0 ? (
         <PlayShuffle
