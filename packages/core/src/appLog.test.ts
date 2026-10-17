@@ -136,6 +136,51 @@ describe("describeLogArgs", () => {
     assert.equal(describeLogArgs([loop]), '{"name":"loop","self":"[circular]"}');
   });
 
+  test("a huge object is read only as far as the message goes", () => {
+    let read = 0;
+    const song = (index: number) => ({
+      get title() {
+        read++;
+        return `Song ${index}`;
+      },
+    });
+    const library = Array.from({ length: 100_000 }, (_, index) => song(index));
+
+    const message = describeLogArgs(["[wave] Library", library]);
+
+    assert.ok(message.startsWith('Library [{"title":"Song 0"},{"title":"Song 1"},'), message.slice(0, 80));
+    assert.ok(message.length < 10_000, String(message.length));
+    assert.match(message, /… \(cut short\)$/);
+    assert.ok(read < 2_000, `read ${read} titles`);
+  });
+
+  test("a deeply nested object is written to a few levels", () => {
+    let nested: Record<string, unknown> = { leaf: true };
+    for (let i = 0; i < 100_000; i++) nested = { child: nested };
+
+    assert.equal(
+      describeLogArgs([{ ok: [1, 2], nested }]),
+      '{"ok":[1,2],"nested":{"child":{"child":{"child":{"child":{"child":{"child":{"child":{…}}}}}}}}}',
+    );
+  });
+
+  test("what JSON.stringify would write: dates, left-out values, an object seen twice", () => {
+    const album = { title: "Blackstar" };
+    assert.equal(
+      describeLogArgs([
+        {
+          at: new Date(Date.UTC(2026, 9, 16)),
+          skipped: undefined,
+          play: () => {},
+          list: [undefined, Number.NaN, 7n],
+          first: album,
+          again: album,
+        },
+      ]),
+      '{"at":"2026-10-16T00:00:00.000Z","list":[null,null,"7"],"first":{"title":"Blackstar"},"again":{"title":"Blackstar"}}',
+    );
+  });
+
   test("a huge message is cut short", () => {
     const message = describeLogArgs(["x".repeat(50_000)]);
     assert.ok(message.length < 10_000, String(message.length));
