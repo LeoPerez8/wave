@@ -88,6 +88,24 @@ describe("the YouTube Music search allowance", () => {
     );
   });
 
+  test("the background fill goes after everyone, and takes none while the window holds 800", () => {
+    let allowance: SearchAllowance = spent(798);
+    allowance = searchTurnWanted(allowance, { id: 1, asker: "fill" }, 1000);
+    allowance = searchTurnWanted(allowance, { id: 2, asker: "discover" }, 1000);
+    allowance = searchTurnWanted(allowance, { id: 3, asker: "fill" }, 1000);
+    const first = searchTurns(allowance, 1000);
+    assert.deepEqual(first.go, [2, 1], "a Discover mix first, then the fill's one search left");
+    assert.equal(first.allowance.searchesAt.length, 800);
+    assert.equal(
+      first.nextAt,
+      SEARCH_WINDOW_MS,
+      "free once the searches asked at 0 leave the window",
+    );
+    // Playing and downloads still have the 200 the fill leaves them.
+    const playing = searchTurnWanted(first.allowance, { id: 4, asker: "playing" }, 2000);
+    assert.deepEqual(searchTurns(playing, 2000).go, [4]);
+  });
+
   test("a search given up while it waits leaves the line and spends nothing", () => {
     let allowance = spent(SEARCH_ALLOWANCE);
     allowance = searchTurnWanted(allowance, { id: 1, asker: "discover" }, 10);

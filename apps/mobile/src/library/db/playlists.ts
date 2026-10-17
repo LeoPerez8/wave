@@ -749,6 +749,37 @@ export interface UnsearchedEntriesSettled {
   readonly playlistIds: readonly number[];
 }
 
+/** A playlist's unsearched songs, top to bottom (`selectUnsearchedEntries`). */
+export interface PlaylistUnsearched {
+  readonly playlistId: number;
+  readonly songs: readonly UnsearchedSong[];
+}
+
+/**
+ * Every playlist holding unsearched entries, with them top to bottom, for
+ * the background fill (Core's `nextFillStep`). Only those entries are
+ * decoded; a deleted playlist's aren't read.
+ */
+export const selectUnsearchedEntries = (db: LibraryDatabase): PlaylistUnsearched[] => {
+  const { playlists, playlistItems } = schema;
+  const rows = db
+    .select({ playlistId: playlistItems.playlistId, ytSong: sql<string>`${playlistItems.ytSong}` })
+    .from(playlistItems)
+    .innerJoin(playlists, eq(playlists.id, playlistItems.playlistId))
+    .where(and(live, livePlaylist, storedUnsearched))
+    .orderBy(asc(playlistItems.playlistId), ...IN_ORDER)
+    .all();
+  const byPlaylist = new Map<number, UnsearchedSong[]>();
+  for (const { playlistId, ytSong } of rows) {
+    const stored = decode(playlistId, ytSong);
+    if (stored?.source !== "unsearched") continue;
+    const songs = byPlaylist.get(playlistId) ?? [];
+    songs.push(stored.song);
+    byPlaylist.set(playlistId, songs);
+  }
+  return [...byPlaylist].map(([playlistId, songs]) => ({ playlistId, songs }));
+};
+
 /** A playlist's mosaic: thumbnails for lists and menus, full-size covers for its screen's header. */
 export interface PlaylistCovers {
   readonly thumbPaths: readonly string[];

@@ -1,6 +1,7 @@
 import { IconDots } from "@tabler/icons-react-native";
 import { playlistSongsLine } from "@wave/core";
 import { useLocalSearchParams } from "expo-router";
+import { useEffect } from "react";
 import { Text, useWindowDimensions, View } from "react-native";
 
 import { CELL, grid } from "@/catalog/grid";
@@ -9,6 +10,7 @@ import { PlayShuffle } from "@/catalog/PlayShuffle";
 import { IconButton } from "@/components/IconButton";
 import { useRenderCount } from "@/perf/perf";
 import { openPlaylistActions } from "@/playback/ActionsMenu";
+import { playlistOpened } from "@/library/backgroundFill";
 import { DetailFrame } from "@/library/DetailFrame";
 import { usePlaylist } from "@/library/hooks";
 import { LibraryStore, type PlaylistEntryRow, type PlaylistRow } from "@/library/LibraryStore";
@@ -132,6 +134,10 @@ export default function PlaylistScreen() {
   const playlistId = parseId(id);
   const detail = usePlaylist(playlistId);
   const known = useKnownRow("playlist", playlistId);
+  // The background fill goes on with the playlist opened last.
+  useEffect(() => {
+    if (playlistId >= 0) playlistOpened(playlistId);
+  }, [playlistId]);
   const shown: Shown | null | undefined =
     detail === undefined && known !== undefined ? { playlist: known, items: undefined } : detail;
   return (
