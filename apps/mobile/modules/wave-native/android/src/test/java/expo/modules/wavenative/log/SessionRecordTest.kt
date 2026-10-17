@@ -28,7 +28,13 @@ class SessionRecordTest {
 
   private fun entries(): List<String> = WaveLog.flush().let { file.read() }.split(Regex("\n(?=\\d{4}-)")).map { it.trimEnd('\n') }.filter { it.isNotEmpty() }
 
+  /**
+   * A new process: it starts with nothing queued, so what the last session queued is
+   * written before the file is emptied. Otherwise the writer's thread could append it
+   * after, as if this launch had written it.
+   */
   private fun nextLaunch(vararg exits: Exit) {
+    WaveLog.flush()
     file.dropHead(Long.MAX_VALUE)
     SessionRecord(folder).reportPrevious(exits.toList())
   }
