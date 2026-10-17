@@ -120,6 +120,16 @@ describe("nextVersion on ti", () => {
     );
   });
 
+  it("bumps the minor for a feat/ PR, with the -ti suffix", () => {
+    const decision = nextVersion({
+      ...ti,
+      version: "0.5.5-ti",
+      tags: ["v0.5.5-ti"],
+      bump: { size: "minor", pr: { number: 20, branch: "feat/20-sleep-timer" } },
+    });
+    assert.equal(decision.version, "0.6.0-ti");
+  });
+
   it("takes the next number when a merge from main left a stable version in package.json", () => {
     const decision = nextVersion({ ...ti, version: "0.5.6", tags: ["v0.5.5-ti", "v0.5.6"] });
     assert.equal(decision.version, "0.5.7-ti");
