@@ -7,7 +7,7 @@
  */
 
 /** Who asks an automatic YouTube Music search. */
-export type SearchAsker = "playing" | "download" | "tryAgain" | "import" | "discover";
+export type SearchAsker = "playing" | "download" | "tryAgain" | "discover";
 
 /**
  * At most this many searches in any `SEARCH_WINDOW_MS`. YouTube Music began
@@ -37,7 +37,6 @@ const ASKERS: Readonly<Record<SearchAsker, AskerTurn>> = {
   download: { rank: 1, most: SEARCH_ALLOWANCE, name: "a download" },
   // A playlist's unavailable entries searched again: downloads' priority, named apart in the log.
   tryAgain: { rank: 1, most: SEARCH_ALLOWANCE, name: "Try Again" },
-  import: { rank: 2, most: SEARCH_ALLOWANCE, name: "the import" },
   discover: { rank: 2, most: SEARCH_ALLOWANCE, name: "a Discover mix" },
 };
 
@@ -131,9 +130,7 @@ const inTurn = (waiting: readonly SearchWaiting[]): SearchWaiting[] =>
   waiting
     .map((search, order) => ({ search, order }))
     // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
-    .sort(
-      (a, b) => ASKERS[a.search.asker].rank - ASKERS[b.search.asker].rank || a.order - b.order,
-    )
+    .sort((a, b) => ASKERS[a.search.asker].rank - ASKERS[b.search.asker].rank || a.order - b.order)
     .map(({ search }) => search);
 
 /** When a window holding [searchesAt] (oldest first) holds fewer than [most] again (ms). */
@@ -188,46 +185,6 @@ export const searchTurns = (allowance: SearchAllowance, now: number): SearchTurn
     nextAt: blocked === undefined ? null : freeAt(searchesAt, ASKERS[blocked.asker].most, now),
     waits: changed,
   };
-};
-
-/** About how long one search takes, four at once: 495 took 85 seconds (measured 2026-10-14). */
-const SEARCH_MS = 170;
-
-/**
- * About when [count] more searches will have been asked, the first no
- * sooner than [from] (ms), at about 6 a second and within the allowance,
- * given the searches [searchesAt] (oldest first) holds.
- *
- * Each search is asked as soon as both allow: a search after the one before,
- * and a window after the one an allowance before it. Once more than an
- * allowance of searches in a row each waited exactly that window, every
- * later one does too (the allowance's searches take less than a window), so
- * the rest repeat the last allowance's times a window later each time: the
- * work stays within a few allowances however many searches are left.
- */
-export const searchesDoneAt = (
-  searchesAt: readonly number[],
-  from: number,
-  count: number,
-): number => {
-  const times = recent(searchesAt, from);
-  let at = from;
-  /** How many searches in a row, up to the last, came a window after the one an allowance before. */
-  let steady = 0;
-  for (let search = 0; search < count; search += 1) {
-    const oldest = times[times.length - SEARCH_ALLOWANCE];
-    if (oldest !== undefined) at = Math.max(at, oldest + SEARCH_WINDOW_MS);
-    steady = oldest !== undefined && at === oldest + SEARCH_WINDOW_MS ? steady + 1 : 0;
-    times.push(at);
-    if (steady > SEARCH_ALLOWANCE) {
-      const left = count - search - 1;
-      const windows = Math.ceil(left / SEARCH_ALLOWANCE);
-      const repeated = times[times.length - 1 + left - windows * SEARCH_ALLOWANCE] ?? at;
-      return repeated + windows * SEARCH_WINDOW_MS + SEARCH_MS;
-    }
-    at += SEARCH_MS;
-  }
-  return at;
 };
 
 // ---------------------------------------------------------------------------
