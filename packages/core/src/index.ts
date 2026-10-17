@@ -898,6 +898,17 @@ export type {
   UnsearchedSettlement,
   UnsearchedSettles,
 } from "./unsearchedEntries.ts";
+export {
+  isUnsearchedSongJob,
+  unsearchedDownload,
+  unsearchedJobSong,
+  unsearchedSongJob,
+} from "./unsearchedDownload.ts";
+export type {
+  UnsearchedDownload,
+  UnsearchedSongJob,
+  UnsearchedSongJobId,
+} from "./unsearchedDownload.ts";
 export { tryAgainNotice, tryAgainSearches, tryAgainSettles } from "./tryAgainUnavailable.ts";
 export type { TryAgainAnswered, TryAgainSearch, TryAgainSettled } from "./tryAgainUnavailable.ts";
 export type { YtSongSearch } from "./spotifyImport.ts";

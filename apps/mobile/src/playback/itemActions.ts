@@ -6,6 +6,7 @@ import {
   itemActions,
   playlistPlayback,
   playlistRemovals,
+  unsearchedSongJob,
   type ActionSurface,
   type ItemAction,
   type ItemActionEntry,
@@ -335,15 +336,21 @@ export function useItemActions(
       case "download":
       case "retryDownload":
         // Missing songs download into their Library entries; YT Music songs
-        // the Library doesn't have yet download as new songs.
+        // the Library doesn't have yet download as new songs, and an
+        // unsearched one as the job that searches it first.
         return run(() => {
           const missing: number[] = [];
           for (const item of allTracks) {
-            // An unsearched song has no video to download yet.
-            if (isUnsearchedTrack(item)) continue;
-            const song = isLibraryTrack(item) ? item.song : find(item.ytSong);
-            if (song === null && !isLibraryTrack(item)) downloadYtSong(item.ytSong);
-            else if (song !== null && !songHasFile(song)) missing.push(song.id);
+            if (isLibraryTrack(item)) {
+              if (!songHasFile(item.song)) missing.push(item.song.id);
+              continue;
+            }
+            const ytSong = isUnsearchedTrack(item)
+              ? unsearchedSongJob(item.unsearched)
+              : item.ytSong;
+            const song = find(ytSong);
+            if (song === null) downloadYtSong(ytSong);
+            else if (!songHasFile(song)) missing.push(song.id);
           }
           if (missing.length > 0) downloadMissingSongs(missing);
         });

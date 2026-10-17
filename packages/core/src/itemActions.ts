@@ -75,8 +75,8 @@ export interface ActionItem {
   readonly downloaded?: boolean | undefined;
   /**
    * A playlist's unsearched entry (a song a Spotify import listed, not
-   * searched yet), streamed as a YT Music entry is: it queues and joins
-   * playlists, but has no video to download yet.
+   * searched yet), streamed as a YT Music entry is: it queues, joins
+   * playlists and downloads (its download searches it first).
    */
   readonly unsearched?: boolean | undefined;
   /**
@@ -209,10 +209,12 @@ export const confirmsFirst = (action: ItemAction): boolean =>
   action === "deletePlaylist" ||
   action === "deletePlaylists";
 
-/** A song with no file here yet (missing, or streamed, unsearched aside): Download fetches it. */
+/**
+ * A song with no file here yet (missing, or streamed, an unsearched one
+ * included): Download fetches it.
+ */
 const needsDownload = (item: ActionItem): boolean =>
-  item.missing === true ||
-  (item.streamed === true && item.downloaded !== true && item.unsearched !== true);
+  item.missing === true || (item.streamed === true && item.downloaded !== true);
 
 /** The value every item has, or undefined when they differ or any lacks one. */
 const shared = (values: readonly (number | undefined)[]): number | undefined => {

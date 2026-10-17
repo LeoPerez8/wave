@@ -651,10 +651,16 @@ describe("itemActions on YT Music songs checked with the Library's", () => {
     assert.ok(!names(itemActions(tracks([streamed("Justice")]))).includes("download"));
   });
 
-  test("a playlist's unsearched entries take what a YT Music entry takes, but don't download yet", () => {
+  test("a playlist's unsearched entries take what a YT Music entry takes, the selection bar's Download too", () => {
     const unsearched = { ...streamed("Justice"), unsearched: true, inPlaylist: true };
     const bar = itemActions(tracks([unsearched, unsearched], { surface: "selection" }));
-    assert.deepEqual(names(bar), ["playNext", "addToQueue", "addToPlaylist", "removeFromPlaylist"]);
+    assert.deepEqual(names(bar), [
+      "playNext",
+      "addToQueue",
+      "addToPlaylist",
+      "removeFromPlaylist",
+      "download",
+    ]);
     const menu = itemActions(tracks([unsearched], { selectable: true }));
     assert.deepEqual(names(menu), [
       "playNext",
