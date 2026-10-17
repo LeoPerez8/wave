@@ -1187,3 +1187,20 @@ export type {
   YtLibraryPlaylistKind,
   YtLibraryRow,
 } from "./ytLibrary.ts";
+export {
+  nextYtLibraryRead,
+  pruneYtLibraryBatch,
+  queueYtLibraryReads,
+  readYtLibraryBatch,
+  writeYtLibraryBatch,
+  ytLibraryReadDone,
+  ytLibraryReadFailed,
+  ytLibraryReadLogLine,
+  ytLibraryReadView,
+} from "./ytLibraryBatch.ts";
+export type {
+  YtLibraryBatch,
+  YtLibraryRead,
+  YtLibraryReadState,
+  YtLibraryReadView,
+} from "./ytLibraryBatch.ts";
