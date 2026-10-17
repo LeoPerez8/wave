@@ -1,25 +1,26 @@
 import {
   EMPTY_QUEUE,
   REAL_SHUFFLE,
+  answerPlayingWalk,
   applyPlayerSync,
-  currentEntry,
   extrapolatePosition,
   keptPlayingEntry,
+  keptQueue,
   keysToLoad,
   parseQueueState,
   passedOverNotice,
   planPlayerSync,
   playerQueueList,
-  playingAnswerStep,
   queueSourceAfter,
-  readUnsearchedTrackId,
   reduceQueue,
   shuffledTrackIds,
   shufflesQueue,
+  startPlayingWalk,
   statsWindow,
   withHeldCurrent,
-  ytTrackId,
   type PlayerList,
+  type PlayingStep,
+  type PlayingWalk,
   type PlaySource,
   type QueueCommand,
   type QueueEntry,
@@ -28,6 +29,8 @@ import {
   type RepeatMode,
   type Shuffle,
   type SyncStep,
+  type UnsearchedSettlement,
+  type YtAlbumSong,
 } from "@wave/core";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -132,19 +135,31 @@ const toNative = (step: SyncStep): NativeSyncStep => {
   }
 };
 
-const sameKeys = (held: readonly string[] | undefined, keys: readonly string[]): boolean =>
-  held !== undefined && held.length === keys.length && held.every((key, i) => key === keys[i]);
+type PlayingSettlement = UnsearchedSettlement<YtAlbumSong>;
 
-/**
- * Whether the owner chose the entry [command] makes current (a tap, Play,
- * Shuffle, an Up Next entry, a first song queued): tapped while it can't be
- * searched (offline, YT Music off), an unsearched song says why and nothing
- * changes. Skips and the player moving on go past it instead.
- */
-const chosenBy = (command: QueueCommand, before: QueueState): boolean =>
-  command.type === "play" ||
-  command.type === "jumpTo" ||
-  ((command.type === "playNext" || command.type === "addToQueue") && before.index < 0);
+/** The playing song's search (`searchPlaying`); one given up counts as failed. */
+const askPlaying = (trackId: string): Promise<PlayingSettlement> =>
+  searchPlaying(trackId).then(
+    (settled): PlayingSettlement => settled ?? { kind: "failed", reason: "failed" },
+  );
+
+/** A command waiting, outside the queue's lane, for its playing song's search (Core's `PlayingWalk`). */
+interface Waiting {
+  readonly walk: PlayingWalk;
+  readonly trackId: string;
+  readonly answer: Promise<PlayingSettlement>;
+  /** The tracks the queue knew before the command: going back, the queue knows them again. */
+  readonly knownBefore: ReadonlyMap<string, QueueTrack>;
+}
+
+/** Where a command got to in the lane: done (go, stay, or another command took its place) or waiting. */
+type Outcome =
+  | { readonly kind: "go"; readonly state: QueueState; readonly playback: QueuePlayback }
+  | { readonly kind: "stay" }
+  | { readonly kind: "superseded" }
+  | { readonly kind: "wait"; readonly waiting: Waiting };
+
+type Done = Exclude<Outcome, { readonly kind: "wait" }>;
 
 /** The player item for [entry], from the tracks the queue learned. */
 const itemFor = (entry: QueueEntry): Effect.Effect<PlayerItem, PlayerError> => {
@@ -281,105 +296,125 @@ export const layer = Layer.effect(
         reduceQueue(state, command, Math.random, shuffle),
       );
 
+    // The command waiting for its playing song's search, if any: the next
+    // command takes its place (Core's `startPlayingWalk`).
+    let waiting: Waiting | null = null;
+    // Whether a command paused the player while its playing song was searched:
+    // once the queue goes on, playback goes on too.
+    let pausedForSearch = false;
+
     /**
-     * While [state]'s playing entry is unsearched, searches it (with the
-     * playing priority, Core's `playingSearches`; the song shows as playing
-     * meanwhile, and the song before it pauses): found, it plays as a YT
-     * Music song; not found or failed, a notice names it and the next song
-     * goes the same way (Core's `playingAnswerStep`). Null when the owner
-     * chose it ([chosen]) and it can't be searched (offline, YT Music off):
-     * the notice says why and the queue stays as it was ([before]).
+     * Takes [step] (Core's `PlayingStep`) in the lane: shows its notice, then
+     * waits for the playing song's search (the song shows as playing, and the
+     * song before it pauses), goes back to the queue as it was, or goes on.
+     * [rejoin] is the command waiting before, whose search for the same song
+     * is joined rather than asked again.
      */
-    const settlePlaying = (
-      before: QueueState,
-      start: QueueState,
-      startPlayback: QueuePlayback,
-      chosen: boolean,
+    const take = (
+      step: PlayingStep,
+      knownBefore: ReadonlyMap<string, QueueTrack>,
+      rejoin: Waiting | null,
     ) =>
       Effect.gen(function* () {
-        let state = start;
-        let playback = startPlayback;
-        let paused = false;
-        const asked = new Set<string>();
-        for (;;) {
-          const current = currentEntry(state);
-          const song = current === null ? null : readUnsearchedTrackId(current.trackId);
-          if (current === null || song === null) break;
-          // Gone round the queue, or it ran out, on songs that didn't play.
-          if (asked.has(current.trackId) || playback === "stop") {
-            state = withHeldCurrent(state);
-            playback = "stop";
-            break;
+        if (step.notice !== null) void showToast(step.notice);
+        switch (step.kind) {
+          case "search": {
+            queueState.set(step.state);
+            if (!pausedForSearch && playbackState.get().playWhenReady) {
+              yield* player.pause;
+              pausedForSearch = true;
+            }
+            const answer =
+              rejoin?.trackId === step.trackId ? rejoin.answer : askPlaying(step.trackId);
+            waiting = { walk: step.walk, trackId: step.trackId, answer, knownBefore };
+            return { kind: "wait", waiting } satisfies Outcome;
           }
-          asked.add(current.trackId);
-          queueState.set(state);
-          if (!paused && playbackState.get().playWhenReady) {
-            yield* player.pause;
-            paused = true;
+          case "stay":
+            queueState.set(step.state);
+            // The old queue's tracks too, which a new play forgot, and keeps
+            // those learned meanwhile (songs coming up found while it waited).
+            queueTracks.set(new Map([...knownBefore, ...queueTracks.get()]));
+            if (pausedForSearch) {
+              pausedForSearch = false;
+              yield* player.play;
+            }
+            return { kind: "stay" } satisfies Outcome;
+          case "go": {
+            const playback = pausedForSearch && step.playback === "keep" ? "play" : step.playback;
+            pausedForSearch = false;
+            return { kind: "go", state: step.state, playback } satisfies Outcome;
           }
-          const settlement = (yield* Effect.promise(() => searchPlaying(current.trackId))) ?? {
-            kind: "failed",
-            reason: "failed",
-          };
-          const step = playingAnswerStep(song, settlement, { chosen: chosen && asked.size === 1 });
-          if (settlement.kind === "found") {
-            const becomes = ytTrackId(settlement.becomes.song.videoId);
-            state = reduceQueue(state, {
-              type: "settled",
-              trackId: current.trackId,
-              becomes,
-            }).state;
-            break;
-          }
-          if (step.kind !== "play") void showToast(step.notice);
-          if (step.kind === "stay") {
-            queueState.set(before);
-            if (paused) yield* player.play;
-            return null;
-          }
-          const next = reduceQueue(
-            state,
-            settlement.kind === "notFound"
-              ? { type: "settled", trackId: current.trackId, becomes: null }
-              : { type: "next" },
-          );
-          state = next.state;
-          if (next.playback === "stop") playback = "stop";
         }
-        if (paused && playback === "keep") playback = "play";
-        return { state, playback };
       });
 
-    const run = (command: QueueCommand, added: readonly QueueTrack[]) =>
+    /** Runs [command] in the lane, up to its end or its wait for a search. */
+    const start = (command: QueueCommand, added: readonly QueueTrack[]) =>
       Effect.gen(function* () {
-        const knownBefore = queueTracks.get();
+        const pending = waiting;
+        waiting = null;
+        const knownBefore = pending?.knownBefore ?? queueTracks.get();
         learnTracks(command, added);
         if (command.type === "playerMoved") native = { ...native, currentKey: command.key };
         const before = queueState.get();
         const reduced = yield* reduce(before, command);
-        const settled =
-          playerQueueList(reduced.state) === null
-            ? yield* settlePlaying(
-                before,
-                reduced.state,
-                reduced.playback,
-                chosenBy(command, before),
-              )
-            : reduced;
-        // Stayed as it was: the old queue's tracks too, which a new play forgot.
-        if (settled === null) {
-          queueTracks.set(knownBefore);
-          return;
-        }
-        const { state, playback } = settled;
+        const step = startPlayingWalk(before, command, reduced, pending?.walk ?? null);
         // The player went on past songs still unsearched: they're skipped, as a failed search skips them.
-        if (command.type === "playerMoved") {
-          const notice = passedOverNotice(before, state);
+        if (command.type === "playerMoved" && step.kind === "go") {
+          const notice = passedOverNotice(before, step.state);
           if (notice !== null) void showToast(notice);
         }
-        if (state === before && playback === "keep") return;
+        return yield* take(step, knownBefore, pending);
+      });
+
+    /** Takes [answer], [w]'s search's, in the lane, unless a newer command took its place. */
+    const answered = (w: Waiting, answer: PlayingSettlement) =>
+      Effect.gen(function* () {
+        if (waiting !== w) return { kind: "superseded" } satisfies Outcome;
+        waiting = null;
+        return yield* take(answerPlayingWalk(w.walk, answer), w.knownBefore, null);
+      });
+
+    /**
+     * Runs [next] in the lane and, once it's done, [finish] with it there.
+     * A wait for a search happens outside the lane, so other commands and the
+     * player's events go on meanwhile; the answer is taken in the lane again.
+     */
+    const walkOut = <A>(
+      next: Effect.Effect<Outcome, PlayerError>,
+      finish: (done: Done) => Effect.Effect<A, PlayerError>,
+    ): Effect.Effect<A, PlayerError> =>
+      Effect.gen(function* () {
+        const outcome = yield* lane.withPermit(
+          Effect.flatMap(
+            next,
+            (got): Effect.Effect<{ readonly value: A } | Waiting, PlayerError> =>
+              got.kind === "wait"
+                ? Effect.succeed(got.waiting)
+                : Effect.map(finish(got), (value) => ({ value })),
+          ),
+        );
+        return "value" in outcome ? outcome.value : yield* waitOut(outcome, finish);
+      });
+
+    /** Waits for [w]'s search outside the lane, then goes on as `walkOut`. */
+    const waitOut = <A>(
+      w: Waiting,
+      finish: (done: Done) => Effect.Effect<A, PlayerError>,
+    ): Effect.Effect<A, PlayerError> =>
+      Effect.flatMap(
+        Effect.promise(() => w.answer),
+        (answer) => walkOut(answered(w, answer), finish),
+      );
+
+    /** What a dispatched command's end does: the queue becomes its state, and the player follows. */
+    const apply = (done: Done) =>
+      Effect.gen(function* () {
+        if (done.kind !== "go") return;
+        const { state, playback } = done;
+        const shown = queueState.get();
+        if (state === shown && playback === "keep") return;
         queueState.set(state);
-        if (state !== before) queueChanged();
+        if (state !== shown) queueChanged();
         yield* sync(state);
         yield* applyRepeat(state);
         switch (playback) {
@@ -400,32 +435,25 @@ export const layer = Layer.effect(
       });
 
     const dispatch = (command: QueueCommand, added: readonly QueueTrack[] = []) =>
-      lane.withPermit(
-        Effect.gen(function* () {
+      walkOut(
+        Effect.suspend(() => {
           queueSource.update((source) => queueSourceAfter(source, command, "phone"));
-          yield* run(command, added);
+          return start(command, added);
         }),
+        apply,
       );
 
+    // An unsearched song played from Auto is searched first, as on the phone.
     const handOver = (command: PlayCommand, added: readonly QueueTrack[]) =>
-      lane.withPermit(
+      walkOut(start(command, added), (done) =>
         Effect.gen(function* () {
-          const knownBefore = queueTracks.get();
-          learnTracks(command, added);
-          const before = queueState.get();
-          const reduced = yield* reduce(before, command);
-          // An unsearched song played from Auto is searched first, as on the phone.
-          const settled =
-            playerQueueList(reduced.state) === null
-              ? yield* settlePlaying(before, reduced.state, "play", true)
-              : reduced;
-          if (settled === null) {
-            queueTracks.set(knownBefore);
+          if (done.kind !== "go") {
+            const cause = done.kind === "stay" ? "not searched" : "played something else meanwhile";
             return yield* Effect.fail(
-              new PlayerError({ operation: "play from Android Auto", cause: "not searched" }),
+              new PlayerError({ operation: "play from Android Auto", cause }),
             );
           }
-          const { state } = settled;
+          const { state } = done;
           const list = playerQueueList(state) ?? { keys: [], index: -1 };
           const held = new Set(list.keys);
           const items = yield* Effect.forEach(
@@ -451,8 +479,10 @@ export const layer = Layer.effect(
     const restore = Effect.gen(function* () {
       yield* readNative;
       const json = yield* player.savedQueue;
-      const saved = json === null ? null : parseQueueState(JSON.parse(json));
-      if (saved === null || !sameKeys(playerQueueList(saved)?.keys, native.keys)) return;
+      const parsed = json === null ? null : parseQueueState(JSON.parse(json));
+      // Saved while its playing song was searched, it goes on from a song the player holds.
+      const saved = parsed === null ? null : keptQueue(parsed, native.keys);
+      if (saved === null) return;
       const resumedByPlayer = yield* player.takeResumed;
       keptPlayingKey.set(keptPlayingEntry(native.currentKey, { resumedByPlayer }));
       const source = yield* player.savedQueueSource;
@@ -460,7 +490,10 @@ export const layer = Layer.effect(
       queueState.set(saved);
       appliedRepeat = saved.repeat;
       if (native.currentKey !== null) {
-        yield* run({ type: "playerMoved", key: native.currentKey }, []);
+        const outcome = yield* start({ type: "playerMoved", key: native.currentKey }, []);
+        // The lane is this one's already: a wait (none follows the player) goes on outside it.
+        if (outcome.kind === "wait") Effect.runFork(Effect.ignore(waitOut(outcome.waiting, apply)));
+        else yield* apply(outcome);
       }
     }).pipe(Effect.catch(() => Effect.void));
 

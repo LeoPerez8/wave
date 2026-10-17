@@ -81,7 +81,8 @@ const dispatch = (trackId: string, becomes: string | null): Promise<void> =>
 
 /**
  * What a search of a song coming up settled does to the queue. The playing
- * song's is the queue's own to apply (it waits for it, `searchPlaying`).
+ * song's is the queue's own to apply (it waits for it, `searchPlaying`),
+ * unless a newer command made another song playing meanwhile.
  */
 const settleComingUp = (trackId: string, settled: Settlement | null): void => {
   if (settled === null || settled.kind === "failed") {
@@ -139,7 +140,13 @@ let started = false;
 export const startPlayingSearches = (): void => {
   if (started) return;
   started = true;
-  setPlayingSearcher(search);
+  // The queue takes its playing song's answer; if another command came
+  // meanwhile, the song is one coming up (or played) like the others.
+  setPlayingSearcher((trackId) => {
+    const searched = search(trackId);
+    void searched.then((settled) => settleComingUp(trackId, settled));
+    return searched;
+  });
   queueState.subscribe(schedule);
   schedule();
 };

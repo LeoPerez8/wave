@@ -886,13 +886,22 @@ export { settleUnsearched, unsearchedSearchQuery, unsearchedSettles } from "./un
 export {
   PLAYING_SEARCHES,
   PLAYING_SEARCH_RETRY_MS,
+  answerPlayingWalk,
+  keptQueue,
   passedOverNotice,
   playerQueueList,
   playingAnswerStep,
   playingSearches,
+  startPlayingWalk,
   withHeldCurrent,
 } from "./unsearchedPlaying.ts";
-export type { PlayingAnswerStep, PlayingSearch, PlayingSearching } from "./unsearchedPlaying.ts";
+export type {
+  PlayingAnswerStep,
+  PlayingSearch,
+  PlayingSearching,
+  PlayingStep,
+  PlayingWalk,
+} from "./unsearchedPlaying.ts";
 export type {
   PlaylistEntryPlace,
   UnsearchedSettlement,
