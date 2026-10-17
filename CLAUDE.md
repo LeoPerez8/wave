@@ -14,7 +14,8 @@ Pick tickets whose blockers are closed.
   `-ti` (for example `0.5.6-ti`). Nobody bumps or tags a version by hand: every push to `main`
   or `ti` that changes the app gets a bot commit "Release Wave <version>" that CI tags and
   publishes. The bump is minor when a PR the patch notes list since the previous tag has a
-  `feat/` branch, else patch. Both branches count from the highest `v*` tag, so they share one
+  `feat/` branch and no `v*` tag holds it yet (a feature released on ti doesn't bump main's
+  minor again), else patch. Both branches count from the highest `v*` tag, so they share one
   sequence (0.5.4-ti, 0.5.5, 0.5.6-ti), and ti's releases are prereleases. Only a major bump
   is a hand edit of `package.json`. Pull the branch after merging. Main always builds fully.
   ti pushes and tags repack a kept APK when only JS changed, and the repack writes the new
