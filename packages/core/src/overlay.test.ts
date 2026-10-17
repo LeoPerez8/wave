@@ -152,6 +152,36 @@ describe("placeOverlayCard next to an anchor", () => {
     assert.deepEqual([frame.side, frame.top], ["above", 532]);
   });
 
+  test("a card opened from the tab bar under the mini player stays clear of the status bar", () => {
+    // The tab bar's editor, from a long press on a tab: the bar (64 dp) sits a cell above
+    // the gesture bar, the mini player (56 dp) a cell above it, 136 dp of chrome in all.
+    // The card stops a margin above the mini player (915 - 24 - 136 - 24 = 731) and a margin
+    // below the status bar (56): 675 dp, its rows scrolling and Done showing at its foot.
+    const tab = { rect: { top: 819, bottom: 883, left: 24, right: 106 }, gap: 8, minHeight: 160 };
+    const tall = placeOverlayCard({ ...phone, cardHeight: 900, anchor: tab, chromeBottom: 136 });
+    assert.deepEqual(tall, {
+      left: 24,
+      top: 56,
+      width: 364,
+      maxHeight: 675,
+      side: "above",
+      flow: "up",
+    });
+    // Just taller than that room: it once got the room down to the tab itself, so it sat on
+    // the mini player's margin and ran up to 31 dp, under the 32 dp status bar.
+    const snug = placeOverlayCard({ ...phone, cardHeight: 700, anchor: tab, chromeBottom: 136 });
+    assert.deepEqual([snug.top, snug.maxHeight], [56, 675]);
+    // A card that fits sits on the mini player's margin, as before.
+    const short = placeOverlayCard({ ...phone, cardHeight: 400, anchor: tab, chromeBottom: 136 });
+    assert.deepEqual([short.top, short.maxHeight], [331, 675]);
+  });
+
+  test("a menu from a row scrolled up under the status bar stays a margin below the bar", () => {
+    // Only the row's last 8 dp show under the 32 dp status bar.
+    const frame = placeOverlayCard({ ...phone, cardHeight: 900, anchor: near(-16) });
+    assert.deepEqual([frame.side, frame.top, frame.maxHeight], ["below", 56, 811]);
+  });
+
   test("on a wide screen the menu centres under the album tile, kept a margin inside the edges", () => {
     const tablet = { ...phone, window: { width: 1000, height: 1400 }, cardHeight: 300 };
     assert.equal(placeOverlayCard({ ...tablet, anchor: tile(360, 840) }).left, 360);
