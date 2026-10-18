@@ -1314,7 +1314,7 @@ export {
   lyricCardColours,
   lyricCardFileName,
   lyricCardInk,
-  lyricCardTextSize,
+  lyricCardLayout,
   lyricShareDestinations,
   lyricStoryBackground,
   nextLyricCardColour,
@@ -1323,6 +1323,7 @@ export {
   tapLyricLine,
 } from "./lyricsShare.ts";
 export type {
+  LyricCardShape,
   LyricSelection,
   LyricSelectionTap,
   LyricShareApps,
