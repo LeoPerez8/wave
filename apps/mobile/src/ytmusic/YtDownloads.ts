@@ -1038,6 +1038,8 @@ const forgetDeletedDownloads = async (
 /** The replacements already recorded as having no better copy this launch, by job id. */
 const remembered = new Set<string>();
 const noBetterCopyListeners = new Set<() => void>();
+/** The writes recording them, in order: settled replacements are forgotten only after. */
+let recordingNoBetterCopies = Promise.resolve();
 
 /**
  * Records the songs the journal's replacements found no better copy of (Core's
@@ -1045,18 +1047,20 @@ const noBetterCopyListeners = new Set<() => void>();
  * Recorded again at the next launch's first refresh if writing fails, the journal keeping
  * the failure until it's retried or cleared.
  */
-const rememberNoBetterCopies = (jobs: readonly NativeDownloadJob[]): void => {
+const rememberNoBetterCopies = (jobs: readonly NativeDownloadJob[]): Promise<void> => {
   const fresh = noBetterCopies(jobs).filter(
     (song) => !remembered.has(`${song.direction}:${song.trackId}`),
   );
-  if (fresh.length === 0) return;
+  if (fresh.length === 0) return recordingNoBetterCopies;
   for (const song of fresh) remembered.add(`${song.direction}:${song.trackId}`);
-  void appRuntime
-    .runPromise(
-      Effect.gen(function* () {
-        const store = yield* LibraryStore;
-        yield* store.rememberNoBetterCopies(fresh);
-      }),
+  recordingNoBetterCopies = recordingNoBetterCopies
+    .then(() =>
+      appRuntime.runPromise(
+        Effect.gen(function* () {
+          const store = yield* LibraryStore;
+          yield* store.rememberNoBetterCopies(fresh);
+        }),
+      ),
     )
     .then(
       () => {
@@ -1066,6 +1070,7 @@ const rememberNoBetterCopies = (jobs: readonly NativeDownloadJob[]): void => {
         for (const song of fresh) remembered.delete(`${song.direction}:${song.trackId}`);
       },
     );
+  return recordingNoBetterCopies;
 };
 
 /** Calls [listener] once songs were recorded as having no better copy; returns how to stop. */
@@ -1096,7 +1101,7 @@ const refresh = async (): Promise<void> => {
         journal.set(jobs);
       }
       for (const job of jobs) if (awaitsAnswer(job)) void answerJob(job.id);
-      rememberNoBetterCopies(jobs);
+      void rememberNoBetterCopies(jobs);
       const active = jobs.some(unfinished);
       if (active && poll === null) poll = setInterval(refreshQuietly, 5_000);
       if (!active && poll !== null) {
@@ -1132,6 +1137,8 @@ const forgetSettledFailures = (): void => {
     .then(async () => {
       const jobs = await WaveSoulseek.jobsSnapshot();
       if (!jobs.some(hasFailed)) return;
+      // A replacement with no better copy settles here: what it found is recorded first.
+      await rememberNoBetterCopies(jobs);
       const { songs, missing } = await appRuntime.runPromise(
         Effect.gen(function* () {
           const store = yield* LibraryStore;
