@@ -189,35 +189,45 @@ export const ytLibraryReadFailed = (
 };
 
 /** What Also add to Favorites does once Liked Songs is read (`ytLibraryFavorites`). */
-export interface YtLibraryFavorites {
+export interface YtLibraryFavorites<S extends YtSong = YtSong> {
   /** The Library tracks starred at once. */
   readonly star: readonly number[];
   /** The liked songs the Library hasn't: each starred once it enters the Library. */
   readonly pending: readonly PendingFavorite[];
+  /**
+   * The pending favorites' songs, as YT Music found them: their stars ask for
+   * their downloads (a star means downloaded), which join the queue under
+   * Favorites. None for Import & Download's read, whose playlist Download
+   * asks for them all itself.
+   */
+  readonly download: readonly S[];
 }
-
-const NO_FAVORITES: YtLibraryFavorites = { star: [], pending: [] };
 
 /**
  * What [read]'s playlist, read as [plan], stars: with Also add to Favorites
  * on, each of its songs that goes in as a Library track (`libraryFinder`, as
  * `planLinkImport` matched it) at once, and each that goes in as a YT Music
  * entry becomes a pending favorite (`pendingFavorite`), starred once a
- * download or a scan brings it into the Library (`settlePendingFavorites`).
- * Each once. Only stars: the import never takes one away.
+ * download or a scan brings it into the Library (`settlePendingFavorites`),
+ * its download asked for as any star's is. Each once. Only stars: the import
+ * never takes one away.
  */
-export const ytLibraryFavorites = (
+export const ytLibraryFavorites = <S extends YtSong>(
   read: YtLibraryRead,
-  plan: Pick<LinkImportPlan<YtSong>, "finds">,
-): YtLibraryFavorites => {
-  if (!read.favorites) return NO_FAVORITES;
+  plan: Pick<LinkImportPlan<S>, "finds">,
+): YtLibraryFavorites<S> => {
   const star: number[] = [];
   const pending: PendingFavorite[] = [];
+  const download: S[] = [];
+  if (!read.favorites) return { star, pending, download };
   for (const found of plan.finds) {
     if (found.kind === "library") star.push(found.trackId);
-    else if (found.kind === "ytMusic") pending.push(pendingFavorite(found.song));
+    else if (found.kind === "ytMusic") {
+      pending.push(pendingFavorite(found.song));
+      if (!read.download) download.push(found.song);
+    }
   }
-  return { star, pending };
+  return { star, pending, download };
 };
 
 /** What a playlist's page shows when its read failed: the line, and the read Try Again makes. */

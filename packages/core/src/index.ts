@@ -1343,6 +1343,9 @@ export {
   starredDownload,
   unstarredDownload,
   writeStarDownloads,
+  syncedStarDownloads,
+  readSyncedStars,
+  writeSyncedStars,
 } from "./starDownloads.ts";
 export type { StarredDownload, UnstarredDownload } from "./starDownloads.ts";
 export { pickWeighted, playsWeight } from "./weightedPick.ts";
@@ -1380,3 +1383,4 @@ export type {
 } from "./qualityReplacement.ts";
 export { libraryLyrics, libraryLyricsSong } from "./libraryLyrics.ts";
 export type { LibraryLyrics, LibraryLyricsState, LibraryLyricsTrack } from "./libraryLyrics.ts";
+export type { SyncedStarDownloads } from "./starDownloads.ts";
