@@ -174,6 +174,61 @@ describe("itemActions", () => {
     assert.ok(bar([true]).includes("fixSong"));
   });
 
+  test("an album with a song missing something offers Fix Songs in its menu", () => {
+    const menu = itemActions({
+      kind: "album",
+      items: [{ artistIds: [10], songs: [{ fixable: false }, { fixable: true }] }],
+      here: "/library/albums",
+      onlineLookups: true,
+    });
+    assert.ok(names(menu).includes("fixSongs"));
+  });
+
+  test("a collection whose songs have everything, or with online lookups off, offers no Fix Songs", () => {
+    const offers = (kind: "album" | "artist" | "genre", fixable: boolean, onlineLookups: boolean) =>
+      names(
+        itemActions({
+          kind,
+          items: [{ songs: [{ fixable: false }, { fixable }] }],
+          here: "/",
+          onlineLookups,
+        }),
+      ).some((action) => action.startsWith("fix"));
+    for (const kind of ["album", "artist", "genre"] as const) {
+      assert.ok(offers(kind, true, true), kind);
+      assert.ok(!offers(kind, false, true), kind);
+      assert.ok(!offers(kind, true, false), kind);
+    }
+  });
+
+  test("a collection's missing songs and a playlist's streamed entries don't count for Fix Songs", () => {
+    const offers = (songs: ActionSubject["items"]) =>
+      names(
+        itemActions({ kind: "playlist", items: [{ songs }], here: "/", onlineLookups: true }),
+      ).includes("fixSongs");
+    assert.ok(!offers([{ missing: true, fixable: true }]));
+    assert.ok(!offers([{ streamed: true, fixable: true }]));
+    assert.ok(!offers([{ streamed: true, unsearched: true, fixable: true }]));
+    assert.ok(offers([{ streamed: true }, { missing: true, fixable: true }, { fixable: true }]));
+  });
+
+  test("a playlist's Fix Songs comes after its other entries, before Delete Playlist and Select", () => {
+    const menu = itemActions({
+      kind: "playlist",
+      items: [{ songs: [{ fixable: true }] }],
+      here: "/",
+      selectable: true,
+      onlineLookups: true,
+    });
+    assert.deepEqual(names(menu).slice(-5), [
+      "renamePlaylist",
+      "changeImage",
+      "fixSongs",
+      "deletePlaylist",
+      "select",
+    ]);
+  });
+
   test("a starred song offers Remove from Favorites instead", () => {
     assert.deepEqual(
       names(itemActions(tracks([song({ favorite: true })]))).filter((name) => name.includes("av")),

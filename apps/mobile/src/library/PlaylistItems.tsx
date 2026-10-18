@@ -2,7 +2,7 @@ import { IconGripVertical, IconTrash } from "@tabler/icons-react-native";
 import { moveItem, queueSongTrackId, resolveRemoveSwipe, type QueueContext } from "@wave/core";
 import * as Haptics from "expo-haptics";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from "react";
-import { Text, ToastAndroid, View, type AccessibilityActionEvent } from "react-native";
+import { Text, View, type AccessibilityActionEvent } from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 import Animated, {
   useAnimatedStyle,
@@ -23,6 +23,7 @@ import type { ActionItems, TrackItem } from "@/playback/actionTargets";
 import { selectableRow } from "@/selection/selectableRow";
 import { useListSelection } from "@/selection/useListSelection";
 import { useThemeColor } from "@/theme/useThemeColor";
+import { showToast } from "@/overlay/toast";
 import { YtSongRow } from "@/ytmusic/YtSongRow";
 import { openYtSongActions } from "@/ytmusic/YtSongActions";
 
@@ -291,7 +292,7 @@ export const playPlaylistEntries = (
     return;
   }
   void playPlaylist(entries, startIndex, context, options).then((notice) => {
-    if (notice !== null) ToastAndroid.show(notice, ToastAndroid.LONG);
+    if (notice !== null) void showToast(notice);
   });
 };
 

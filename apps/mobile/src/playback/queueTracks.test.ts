@@ -15,8 +15,10 @@ import {
   queueTracks,
   toQueueTrack,
   toUnsearchedQueueTrack,
+  queuedYtSong,
   toYtQueueTrack,
   tracksToLookUp,
+  type QueueTrack,
 } from "./queueTracks.ts";
 
 const song = (
@@ -100,22 +102,20 @@ describe("queue tracks", () => {
   });
 
   test("a YT Music song plays by its track id, with its credit and cached artwork", () => {
-    const track = toYtQueueTrack(
-      {
-        videoId: "kJQP7kiw5Fk",
-        title: "Despacito",
-        artists: ["Luis Fonsi", "Daddy Yankee"],
-        album: "VIDA",
-        durationMs: 229_000,
-        artworkUrl: "https://lh3.googleusercontent.com/despacito=w544-h544",
-        explicit: false,
-      },
-      {
-        path: "/files/artwork/abc.jpg",
-        thumbPath: "/files/artwork/abc_thumb.jpg",
-        palette: { dominant: "#203040" },
-      },
-    );
+    const despacito: YtSong = {
+      videoId: "kJQP7kiw5Fk",
+      title: "Despacito",
+      artists: ["Luis Fonsi", "Daddy Yankee"],
+      album: "VIDA",
+      durationMs: 229_000,
+      artworkUrl: "https://lh3.googleusercontent.com/despacito=w544-h544",
+      explicit: false,
+    };
+    const track = toYtQueueTrack(despacito, {
+      path: "/files/artwork/abc.jpg",
+      thumbPath: "/files/artwork/abc_thumb.jpg",
+      palette: { dominant: "#203040" },
+    });
     assert.deepEqual(track, {
       id: "yt:kJQP7kiw5Fk",
       path: "yt:kJQP7kiw5Fk",
@@ -127,6 +127,7 @@ describe("queue tracks", () => {
       thumbPath: "/files/artwork/abc_thumb.jpg",
       palette: { dominant: "#203040" },
       explicit: false,
+      ytSong: despacito,
     });
   });
 
@@ -149,6 +150,45 @@ describe("queue tracks", () => {
     );
     assert.equal(track.thumbPath, null);
     assert.equal(track.palette, null);
+  });
+
+  test("a YT Music song's queue track gives back the song it was queued from", () => {
+    const despacito = {
+      videoId: "kJQP7kiw5Fk",
+      title: "Despacito",
+      artists: ["Luis Fonsi", "Daddy Yankee"],
+      album: "VIDA",
+      durationMs: 229_000,
+      artworkUrl: "https://lh3.googleusercontent.com/despacito=w120-h120-l90-rj",
+      explicit: false,
+      albumId: "MPREb_vida",
+    };
+    assert.deepEqual(queuedYtSong(toYtQueueTrack(despacito, cover("x"))), despacito);
+    assert.equal(queuedYtSong(toQueueTrack(song(1))), null);
+  });
+
+  test("a YT Music song saved with the queue before it kept its song is rebuilt from its details", () => {
+    const saved: QueueTrack = {
+      id: "yt:kJQP7kiw5Fk",
+      path: "yt:kJQP7kiw5Fk",
+      title: "Despacito",
+      artist: "Luis Fonsi & Daddy Yankee",
+      artists: ["Luis Fonsi", "Daddy Yankee"],
+      album: "VIDA",
+      artworkPath: "/files/artwork/abc.jpg",
+      thumbPath: "/files/artwork/abc_thumb.jpg",
+      explicit: true,
+    };
+    assert.deepEqual(queuedYtSong(saved), {
+      videoId: "kJQP7kiw5Fk",
+      title: "Despacito",
+      artists: ["Luis Fonsi", "Daddy Yankee"],
+      album: "VIDA",
+      durationMs: null,
+      artworkUrl: null,
+      explicit: true,
+      albumId: null,
+    });
   });
 
   test("learned tracks are there to read straight away, and tell subscribers", () => {

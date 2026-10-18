@@ -1310,6 +1310,23 @@ export type { ExplicitPlayback } from "./explicitPlayback.ts";
 export type { PassOver } from "./queue.ts";
 export { discoverMixKeep } from "./discoverMixLevels.ts";
 export type { DiscoverMixKeep } from "./discoverMixLevels.ts";
+export { nowPlayingDownload } from "./nowPlayingDownload.ts";
+export type { NowPlayingDownload } from "./nowPlayingDownload.ts";
+export {
+  LYRICS_MISS_RETRY_MS,
+  nonDLyrics,
+  nonDLyricsSong,
+  ytMusicFoundLyrics,
+} from "./onlineLyrics.ts";
+export type {
+  NonDSongDetails,
+  LyricsAnswer,
+  LyricsSearchSong,
+  LyricsSource,
+  NonDLyrics,
+  NonDLyricsState,
+  SavedLyrics,
+} from "./onlineLyrics.ts";
 export { pickWeighted, playsWeight } from "./weightedPick.ts";
 export type { RandomSource } from "./weightedPick.ts";
 export { ARTIST_MIX_COUNT, artistMixSeeds, artistMixSimilarSource } from "./artistMixes.ts";

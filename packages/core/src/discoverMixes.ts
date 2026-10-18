@@ -69,7 +69,7 @@ export interface DiscoverSimilarArtist {
 
 /** The similar artists a Library artist's YouTube Music page lists ("Fans might also like"). */
 export interface DiscoverSimilarArtists {
-  /** The Library artist whose page it is (`discoverSimilarSource`). */
+  /** The Library artist whose page it is (`artistMixSimilarSource`). */
   readonly of: string;
   /** In the page's order; none when the page couldn't be read or lists none. */
   readonly artists: readonly DiscoverSimilarArtist[];

@@ -35,6 +35,7 @@ import {
   type DeezerAlbum,
   type DeezerAlbumTrack,
   type DeezerTags,
+  type FoundLyrics,
   type FoundTags,
   type IndexedTags,
   type SongLookup,
@@ -158,6 +159,29 @@ const settle = <A>(find: (signal: AbortSignal) => Promise<A>): Effect.Effect<Tag
       },
     }),
   );
+
+/**
+ * [song]'s lyrics on LRCLIB alone, matched as Fix Song matches them (Core's
+ * `pickFoundLyrics`: synced preferred, within 2 s of its length); null when
+ * LRCLIB has none. Fails with `LookupFailed` when LRCLIB can't be reached in
+ * time, and with `LookupsOff` (sending nothing) when Settings turned lookups
+ * off. The Lyrics view's search for a non-D song.
+ */
+export const searchLrclibLyrics = (
+  song: SongLookup,
+): Effect.Effect<FoundLyrics | null, LookupFailed | LookupsOff> => {
+  if (!lyricsAndGenreLookupsEnabled()) return Effect.fail(new LookupsOff());
+  return Effect.tryPromise({
+    try: (signal) => findLyrics(song, signal),
+    catch: (cause) => new LookupFailed({ cause }),
+  }).pipe(
+    Effect.timeout(LOOKUP_TIMEOUT),
+    // Taking too long is failing.
+    Effect.mapError((error) =>
+      error instanceof LookupFailed ? error : new LookupFailed({ cause: error }),
+    ),
+  );
+};
 
 /** A song with nothing yet (a download being tagged): everything is looked up. */
 const HAS_NOTHING: IndexedTags = {
