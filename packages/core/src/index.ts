@@ -1227,3 +1227,4 @@ export type {
 } from "./ytLibraryBatch.ts";
 export { discoverMixesSection } from "./discoverMixesSection.ts";
 export type { DiscoverMixesSection } from "./discoverMixesSection.ts";
+export { streamedCoverUrl, streamedCoverUrls } from "./streamedCover.ts";
