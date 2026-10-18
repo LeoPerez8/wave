@@ -122,14 +122,22 @@ function Segment({
       style={{ height: TARGET }}
     >
       <View
-        className={`flex-row items-center justify-center${selected ? " bg-accent" : ""}`}
+        className="flex-row items-center justify-center"
         style={{
           height: HEIGHT - INSET * 2,
-          borderRadius: SEGMENT_RADIUS,
           paddingHorizontal: form === "labelled" ? CELL * 1.5 : CELL * 1.25,
           gap: CELL * 0.75,
         }}
       >
+        {/* The teal pill stays mounted with its colour and radius from the first frame and is only
+            shown or hidden. A background class a tap added drew square on Android: the segment
+            was flattened away while it had no background, and the view made for it on the tap
+            lost the radius. */}
+        <View
+          pointerEvents="none"
+          className="absolute bottom-0 left-0 right-0 top-0 bg-accent"
+          style={{ borderRadius: SEGMENT_RADIUS, opacity: selected ? 1 : 0 }}
+        />
         <SegmentFace label={label} icon={icon} form={form} selected={selected} />
       </View>
     </Press>
