@@ -78,7 +78,7 @@ describe("the queue passes over explicit songs (Don't play explicit)", () => {
   test("a play replaces the queue unless it passes every song over (an empty one clears it)", () => {
     assert.equal(playReplacesQueue(playOf("a b"), passOver), true);
     assert.equal(playReplacesQueue(playOf("b d"), passOver), false);
-    assert.equal(playReplacesQueue({ ...playOf("a"), trackIds: [] }, passOver), true);
+    assert.equal(playReplacesQueue({ type: "play", trackIds: [], context: songs }, passOver), true);
     assert.equal(playReplacesQueue({ type: "addToQueue", trackIds: ["a"] }, passOver), false);
     assert.equal(playReplacesQueue(playOf("b d")), true);
   });
