@@ -4,8 +4,21 @@ import * as Result from "effect/Result";
 import { useCallback, useEffect, useReducer } from "react";
 
 import type { NativeYtSong } from "@/native/waveYtMusic";
+import { useSearchOnlineAlways } from "@/settings/searchOnline";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 import { askYtMusic } from "@/ytmusic/askYtMusic";
+import { withSearchTurn } from "@/ytmusic/searchAllowance";
+import type { YtMusicError } from "@/ytmusic/YtMusic";
+
+/**
+ * [search] for [query]: asked as you type ([always], Search online set to
+ * Always), it waits its turn in the shared search allowance; otherwise at once.
+ */
+const inTurn = <A, R>(
+  always: boolean,
+  query: string,
+  search: Effect.Effect<A, YtMusicError, R>,
+): Effect.Effect<A, YtMusicError, R> => (always ? withSearchTurn("search", query, search) : search);
 
 /**
  * What Search has asked YT Music for [query] (its songs, artists and albums,
@@ -15,19 +28,24 @@ import { askYtMusic } from "@/ytmusic/askYtMusic";
  * Online asks at once (or shows again what it already has for the query),
  * and the view then follows the query until the field is cleared. Library
  * hides YT Music's results with no request. Answers to older queries are
- * dropped (Core's `stepYtSection`). Off in Settings, it stays hidden and
- * nothing is asked.
+ * dropped (Core's `stepYtSection`). With Search online set to Always, Online
+ * is selected until Library is tapped (and again once the field is cleared),
+ * so every query is asked once typing pauses, each search taking its turn in
+ * the shared search allowance (`withSearchTurn`). Off in Settings, it stays
+ * hidden and nothing is asked.
  */
 export const useYtMusicSection = (
   query: string,
   libraryHasResults: boolean,
 ): readonly [YtSection<NativeYtSong>, (pick: YtPick) => void] => {
   const enabled = useYtMusicEnabled();
+  const always = useSearchOnlineAlways();
   const [section, dispatch] = useReducer(stepYtSection<NativeYtSong>, YT_SECTION_HIDDEN);
 
+  // Choosing Always asks for what's typed now; On demand leaves what shows until the field is cleared.
   useEffect(
-    () => dispatch({ type: "typed", query, enabled, libraryHasResults }),
-    [query, enabled, libraryHasResults],
+    () => dispatch({ type: "typed", query, enabled, libraryHasResults, always }),
+    [query, enabled, libraryHasResults, always],
   );
 
   const loading = section.status === "loading" ? section.query : null;
@@ -39,9 +57,9 @@ export const useYtMusicSection = (
       const search = askYtMusic((ytMusic) =>
         Effect.all(
           {
-            songs: ytMusic.searchSongs(loading),
-            artists: ytMusic.searchArtists(loading),
-            albums: ytMusic.searchAlbums(loading),
+            songs: inTurn(always, loading, ytMusic.searchSongs(loading)),
+            artists: inTurn(always, loading, ytMusic.searchArtists(loading)),
+            albums: inTurn(always, loading, ytMusic.searchAlbums(loading)),
           },
           { concurrency: "unbounded" },
         ),
@@ -57,7 +75,7 @@ export const useYtMusicSection = (
       });
     }, delayMs);
     return () => clearTimeout(timer);
-  }, [loading, delayMs]);
+  }, [loading, delayMs, always]);
 
   const pick = useCallback((picked: YtPick) => dispatch({ type: "picked", pick: picked }), []);
   return [section, pick] as const;

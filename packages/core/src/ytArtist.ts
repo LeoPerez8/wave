@@ -781,7 +781,9 @@ const onlineAlbumView = <S extends YtSong, L extends LibraryAlbumTrack>(
  * nothing, toggle and all: YT Music off, an album artist that isn't an
  * artist's name, or what was saved for the artist not read yet. Its Library |
  * Online toggle shows the segment picked on this visit, else Online when it
- * was opened integrated, else Library. With Library it shows the album as it
+ * was opened integrated or Search online is set to Always (where an ask on
+ * its own that got no answer shows Library, with the quiet line), else
+ * Library. With Library it shows the album as it
  * is, whatever is saved, and reads nothing. With Online it goes by the artist
  * page's saved answer (`stepYtArtistSection`): while that stands, the album
  * is looked up among the artist's releases and, when it's there, the
