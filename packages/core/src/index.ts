@@ -1239,3 +1239,5 @@ export type {
 export { discoverMixesSection } from "./discoverMixesSection.ts";
 export type { DiscoverMixesSection } from "./discoverMixesSection.ts";
 export { streamedCoverUrl, streamedCoverUrls } from "./streamedCover.ts";
+export { PLAY_ACTION_LABELS, menuLayout } from "./menuLayout.ts";
+export type { MenuLayout, MenuSubject, PlayAction, PlayCard } from "./menuLayout.ts";

@@ -1,5 +1,6 @@
 import {
   IconArrowForwardUp,
+  IconArrowsShuffle,
   IconDeviceFloppy,
   IconDisc,
   IconDownload,
@@ -9,6 +10,7 @@ import {
   IconPencil,
   IconPhotoEdit,
   IconPhotoOff,
+  IconPlayerPlay,
   IconPlaylistAdd,
   IconPlaylistX,
   IconRefresh,
@@ -23,6 +25,7 @@ import {
 import type {
   DiscoverMixAction,
   ItemAction,
+  PlayAction,
   UnavailableEntryAction,
   YtAlbumDownloadAction,
   YtPlaylistDownloadAction,
@@ -38,10 +41,11 @@ export type ActionIcon = ComponentType<ActionIconProps>;
 /**
  * Every entry a long-press menu or the selection bar can offer: the Library's
  * item actions, a YT Music album's, a playlist's and a Discover mix's
- * entries, and an unavailable entry's.
+ * entries, an unavailable entry's, and the play cards and Shuffle row.
  */
 export type MenuAction =
   | ItemAction
+  | PlayAction
   | YtAlbumDownloadAction
   | YtPlaylistDownloadAction
   | DiscoverMixAction
@@ -53,6 +57,8 @@ export type MenuAction =
  * album's, a playlist's or a mix's, a cancel the X, a retry the circling arrows.
  */
 export const ACTION_ICONS: { readonly [A in MenuAction]: ActionIcon } = {
+  play: IconPlayerPlay,
+  shuffle: IconArrowsShuffle,
   playNext: IconArrowForwardUp,
   addToQueue: IconRowInsertBottom,
   addToPlaylist: IconPlaylistAdd,
