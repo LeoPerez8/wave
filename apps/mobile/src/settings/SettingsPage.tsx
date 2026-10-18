@@ -1,11 +1,20 @@
-import { LAYOUT_PAGES, SETTINGS_PAGES, type LayoutPage, type SettingsPage } from "@wave/core";
+import {
+  LAYOUT_PAGES,
+  SETTINGS_PAGES,
+  type LayoutPage,
+  type SettingsIcon,
+  type SettingsPage,
+  type SettingsTileColour,
+} from "@wave/core";
 import type { ReactNode } from "react";
 import { ScrollView, Text, View } from "react-native";
 
-import { grid } from "@/catalog/grid";
+import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { Press } from "@/motion/Press";
+
+import { SettingsTile } from "./SettingsTile";
 
 /** Room between a page's sections. */
 const SECTION_GAP = 48;
@@ -59,14 +68,20 @@ export function SettingsEditorScreen({
   );
 }
 
-/** A row in Settings opening one of its pages, with a line on what's there when it has one. */
+/**
+ * A row in Settings opening one of its pages, with a line on what's there when
+ * it has one. Settings' own rows lead with their page's tile; the rows inside
+ * a page (Layout's) have none.
+ */
 export function SettingsPageRow({
   title,
   summary,
+  tile,
   onPress,
 }: {
   title: string;
   summary: string | null;
+  tile?: { icon: SettingsIcon; colour: SettingsTileColour };
   onPress: () => void;
 }) {
   return (
@@ -76,13 +91,16 @@ export function SettingsPageRow({
       onPress={onPress}
       haptic="selection"
     >
-      <View className="justify-center py-2" style={{ minHeight: grid.row }}>
-        <Text className="font-sans text-title3 font-normal text-foreground">{title}</Text>
-        {summary !== null && (
-          <Text numberOfLines={1} className="font-sans text-subheadline text-secondary">
-            {summary}
-          </Text>
-        )}
+      <View className="flex-row items-center py-2" style={{ minHeight: grid.row, gap: CELL * 2 }}>
+        {tile !== undefined && <SettingsTile icon={tile.icon} colour={tile.colour} />}
+        <View className="flex-1 justify-center">
+          <Text className="font-sans text-title3 font-normal text-foreground">{title}</Text>
+          {summary !== null && (
+            <Text numberOfLines={1} className="font-sans text-subheadline text-secondary">
+              {summary}
+            </Text>
+          )}
+        </View>
       </View>
       <Hairline />
     </Press>
