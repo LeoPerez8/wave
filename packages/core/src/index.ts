@@ -726,6 +726,7 @@ export type {
   YtAlbumDownload,
   YtAlbumDownloadAction,
   YtAlbumDownloadRequest,
+  YtListDownloadButtonState,
   YtPlaylistDownload,
   YtPlaylistDownloadAction,
   YtSongsDownload,

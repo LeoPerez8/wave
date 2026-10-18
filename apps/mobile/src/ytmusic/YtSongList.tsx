@@ -20,6 +20,7 @@ import {
   type MixedSong,
   type PlaylistItem,
   type QueueContext,
+  type YtListDownloadButtonState,
   type YtPlaylistRest,
   type YtQuietReason,
 } from "@wave/core";
@@ -45,13 +46,14 @@ import type { SongRow } from "@/library/LibraryStore";
 import { songCount } from "@/library/TrackList";
 import { useListScrollable } from "@/motion/heldTouch";
 import type { NativeYtPlaylist, NativeYtSong } from "@/native/waveYtMusic";
+import { showToast } from "@/overlay/toast";
 import { playDiscoverSongs } from "@/playback/actions";
 import { listedTrackItem, trackItemKey, tracksTarget } from "@/playback/actionTargets";
 import { useListSelection } from "@/selection/useListSelection";
 
 import { askYtMusic } from "./askYtMusic";
 import { DiscoverSongRow } from "./DiscoverSongRow";
-import { useLibraryFinder, useLoadedInLibrary } from "./libraryFinder";
+import { useLibraryFinder, useLoadedInLibrary, useLoadedLibraryFinder } from "./libraryFinder";
 import type { YtListHead, YtListScreen } from "./routes";
 import {
   runYtDownloadAction,
@@ -179,7 +181,11 @@ const totalMinutes = (songs: readonly Song[]): string | null => {
   return ms === 0 ? null : `${Math.max(1, Math.round(ms / 60_000))} min`;
 };
 
-const DOWNLOAD_ICONS: { readonly [A in YtListDownloadAction]: typeof IconDownload } = {
+/** What a list's download button can show: an entry to act on, or that every song is downloaded. */
+type YtListDownloadButtonAction = YtListDownloadAction | "downloaded";
+
+const DOWNLOAD_ICONS: { readonly [A in YtListDownloadButtonAction]: typeof IconDownload } = {
+  downloaded: IconDownload,
   downloadAlbum: IconDownload,
   downloadPlaylist: IconDownload,
   retryFailed: IconRefresh,
@@ -192,15 +198,35 @@ const DOWNLOAD_ICONS: { readonly [A in YtListDownloadAction]: typeof IconDownloa
  * `ytAlbumDownloadButton`, `ytPlaylistDownloadButton`).
  */
 export interface YtListDownloadButton {
-  readonly action: YtListDownloadAction;
+  readonly action: YtListDownloadButtonAction;
   readonly label: string;
   readonly onPress: () => void;
 }
 
 /** The full name of each download button, heard in either of its forms. */
-const DOWNLOAD_NAMES: { readonly [A in YtListDownloadAction]: string } = {
+const DOWNLOAD_NAMES: { readonly [A in YtListDownloadButtonAction]: string } = {
   ...YT_ALBUM_DOWNLOAD_ACTION_LABELS,
   ...YT_PLAYLIST_DOWNLOAD_ACTION_LABELS,
+  downloaded: "Downloaded",
+};
+
+/** Tapping Downloaded only says so: it never removes a file. */
+const sayDownloaded = (): void => void showToast("Downloaded");
+
+/**
+ * A page's download button from Core's [button]: an entry runs [run];
+ * Downloaded only says so, and waits for the Library's first read ([loaded]),
+ * before which every song counts as in it.
+ */
+const pageButton = <A extends YtListDownloadAction>(
+  button: YtListDownloadButtonState<A> | null,
+  loaded: boolean,
+  run: (action: A) => void,
+): YtListDownloadButton | null => {
+  if (button === null) return null;
+  const { action, label } = button;
+  if (action === "downloaded") return loaded ? { action, label, onPress: sayDownloaded } : null;
+  return { action, label, onPress: () => run(action) };
 };
 
 /** An album's or a playlist's download button, as the list action after Play and Shuffle. */
@@ -226,17 +252,17 @@ export const useYtAlbumDownloadButton = (
   origin: DownloadOrigin | null,
 ): { readonly progress: string | null; readonly button: YtListDownloadButton | null } => {
   const inLibrary = useLoadedInLibrary();
+  const loaded = useLoadedLibraryFinder() !== null;
   const download = useYtAlbumDownload(songs, inLibrary);
   const button = ytAlbumDownloadButton(download);
   return {
     progress: download.line,
     button:
-      button === null || songs.length === 0
+      songs.length === 0
         ? null
-        : {
-            ...button,
-            onPress: () => runYtDownloadAction(button.action, songs, inLibrary, origin),
-          },
+        : pageButton(button, loaded, (action) =>
+            runYtDownloadAction(action, songs, inLibrary, origin),
+          ),
   };
 };
 
@@ -250,17 +276,14 @@ export const useYtPlaylistDownloadButton = (
   origin: DownloadOrigin | null,
 ): { readonly progress: string | null; readonly button: YtListDownloadButton | null } => {
   const inLibrary = useLoadedInLibrary();
+  const loaded = useLoadedLibraryFinder() !== null;
   const download = useYtPlaylistDownload(entries, inLibrary);
   const button = ytPlaylistDownloadButton(download);
   return {
     progress: download.line,
-    button:
-      button === null
-        ? null
-        : {
-            ...button,
-            onPress: () => runYtPlaylistDownloadAction(button.action, entries, inLibrary, origin),
-          },
+    button: pageButton(button, loaded, (action) =>
+      runYtPlaylistDownloadAction(action, entries, inLibrary, origin),
+    ),
   };
 };
 
