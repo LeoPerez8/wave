@@ -376,6 +376,13 @@ export const playlists = sqliteTable(
      */
     imagePath: text("image_path"),
     imageThumbPath: text("image_thumb_path"),
+    /**
+     * The photo the image was framed from, kept for Adjust Image, and the
+     * framing (Core's `framingText`); null for an image saved before
+     * originals were kept, which is its own original.
+     */
+    imageOriginalPath: text("image_original_path"),
+    imageFraming: text("image_framing"),
     /** When the name changed or the playlist was created or deleted (its entries have their own). */
     ...changeStamp(),
   },

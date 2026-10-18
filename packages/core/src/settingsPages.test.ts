@@ -7,6 +7,7 @@ import {
   accountsSummary,
   downloadsSummary,
   queuedDownloadCounts,
+  type SpotifySession,
   type WaveSession,
   type YtSession,
 } from "./index.ts";
@@ -93,6 +94,22 @@ describe("Accounts row summary", () => {
 
   test("signed into both, it names YT Music's first", () => {
     assert.equal(accountsSummary(YT_SIGNED_IN, WAVE_SIGNED_IN), "YT Music: Leo Perez · Wave: Leo");
+  });
+
+  test("names the Spotify account between YT Music's and Wave's", () => {
+    const spotify: SpotifySession = {
+      status: "signedIn",
+      account: { name: "leo.perez", photoUrl: null },
+    };
+    assert.equal(accountsSummary(YT_SIGNED_OUT, WAVE_SIGNED_OUT, spotify), "Spotify: leo.perez");
+    assert.equal(
+      accountsSummary(YT_SIGNED_IN, WAVE_SIGNED_IN, spotify),
+      "YT Music: Leo Perez · Spotify: leo.perez · Wave: Leo",
+    );
+    assert.equal(
+      accountsSummary(YT_SIGNED_OUT, WAVE_SIGNED_OUT, { status: "expired", account: null }),
+      null,
+    );
   });
 
   test("an expired or ended session isn't named, and with nothing signed in there's no summary", () => {

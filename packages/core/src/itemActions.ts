@@ -132,6 +132,11 @@ export interface ActionSubject<A extends LibraryArtistRef = LibraryArtistRef> {
    * artists they share with the other items; without it, they offer none.
    */
   readonly streamedArtists?: StreamedArtists<A> | undefined;
+  /**
+   * A service a playlist can be shared on is on (YT Music): a playlist's
+   * menu offers Share.
+   */
+  readonly sharing?: boolean | undefined;
 }
 
 export type ItemAction =
@@ -146,7 +151,9 @@ export type ItemAction =
   | "goToArtist"
   | "renamePlaylist"
   | "changeImage"
+  | "adjustImage"
   | "removeImage"
+  | "share"
   | "deletePlaylist"
   | "deletePlaylists"
   | "fixSong"
@@ -195,7 +202,9 @@ export const ITEM_ACTION_LABELS: { readonly [A in ItemAction]: string } = {
   goToArtist: "Go to Artist",
   renamePlaylist: "Rename Playlist",
   changeImage: "Change Image",
+  adjustImage: "Adjust Image",
   removeImage: "Remove Image",
+  share: "Share",
   deletePlaylist: "Delete Playlist",
   deletePlaylists: "Delete Playlists",
   fixSong: "Fix Song",
@@ -396,7 +405,11 @@ export const itemActions = <A extends LibraryArtistRef = LibraryArtistRef>(
     // Its own image is set from its menu (the selection bar leaves it out); the mosaic shows without one.
     if (surface === "menu") {
       entries.push({ action: "changeImage" });
-      if (only?.hasImage === true) entries.push({ action: "removeImage" });
+      // Adjust Image reframes it from the original photo, at the last framing.
+      if (only?.hasImage === true)
+        entries.push({ action: "adjustImage" }, { action: "removeImage" });
+      // Shared as a playlist on another service, from its menu alone (#483).
+      if (subject.sharing === true) entries.push({ action: "share" });
     }
   }
   // Looks up online what the songs lack and writes it into their files; it
@@ -418,6 +431,9 @@ export const itemActions = <A extends LibraryArtistRef = LibraryArtistRef>(
     entries.push({ action: "fixSongs" });
   if (kind === "playlist")
     entries.push({ action: items.length === 1 ? "deletePlaylist" : "deletePlaylists" });
+  // One song's menu shares it as a card (the song share sheet), whatever kind of song it is.
+  if (surface === "menu" && kind === "track" && items.length === 1)
+    entries.push({ action: "share" });
   if (surface === "menu" && subject.selectable === true) entries.push({ action: "select" });
   // Last, and destructive (after asking): deletes the songs' files from the
   // phone, or takes missing songs out of the Library.
@@ -436,6 +452,7 @@ export type YtSongActionEntry<A> =
         | "favorite"
         | "unfavorite"
         | "removeFromPlaylist"
+        | "share"
         | "select";
     }
   /** The song's YT Music album page, by its browse id (`MPREb_…`). */
@@ -499,6 +516,7 @@ export const ytSongActions = <A>(
   ...(artists === undefined || artists.kind === "here"
     ? []
     : [{ action: "goToArtist", artists } as const]),
+  { action: "share" },
   ...(selectable ? [{ action: "select" } as const] : []),
 ];
 

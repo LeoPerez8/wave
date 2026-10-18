@@ -1,8 +1,18 @@
-import { sortKey, type PlaylistSong } from "@wave/core";
+import {
+  CENTRE_FRAMING,
+  framingSquare,
+  framingText,
+  readFraming,
+  sortKey,
+  type ImageFraming,
+  type ImageSize,
+  type PlaylistSong,
+} from "@wave/core";
 import * as Effect from "effect/Effect";
+import { Image } from "react-native";
 
 import { makeExternalStore } from "@/lib/externalStore";
-import { WaveNative } from "@/native/waveNative";
+import { WaveNative, type PlaylistPhoto } from "@/native/waveNative";
 
 import { countNotified } from "./db/playlistWork";
 import {
@@ -148,21 +158,88 @@ const deleteImageFiles = (paths: readonly string[]): Promise<void> =>
   paths.length === 0 ? Promise.resolve() : WaveNative.deletePlaylistImages(paths).catch(() => {});
 
 /**
- * Opens Android's photo picker and gives the playlist the picked photo,
- * cropped square, as its image in place of its mosaic. The image stays on
- * this phone. Resolves false when nothing was picked.
+ * The crop screen: frames [photo], starting at [framing]. Resolves the
+ * framing chosen (Done), or null (Cancel).
  */
-export const pickPlaylistImage = async (id: number): Promise<boolean> => {
-  const files = await WaveNative.pickPlaylistImage();
-  if (files === null) return false;
-  const unused = await edit((store) => store.setPlaylistImage(id, files), id).catch(
+export type FramePhoto = (
+  photo: PlaylistPhoto,
+  framing: ImageFraming,
+) => Promise<ImageFraming | null>;
+
+/**
+ * Frames [photo] with [frame], then gives the playlist that square of it as
+ * its image, keeping [photo] as the original. A [fresh] photo (just picked)
+ * is deleted when it doesn't become the original. Resolves false on Cancel.
+ */
+const framePlaylistImage = async (
+  id: number,
+  photo: PlaylistPhoto,
+  start: ImageFraming,
+  frame: FramePhoto,
+  fresh: boolean,
+): Promise<boolean> => {
+  const discard = fresh ? [photo.path] : [];
+  const framing = await frame(photo, start).catch(async (error: unknown) => {
+    await deleteImageFiles(discard);
+    throw error;
+  });
+  if (framing === null) {
+    await deleteImageFiles(discard);
+    return false;
+  }
+  const square = framingSquare(photo, framing);
+  const files = await WaveNative.cropPlaylistImage(
+    photo.path,
+    square.left,
+    square.top,
+    square.side,
+  ).catch(async (error: unknown) => {
+    await deleteImageFiles(discard);
+    throw error;
+  });
+  const image = { ...files, originalPath: photo.path, framing: framingText(photo, framing) };
+  const unused = await edit((store) => store.setPlaylistImage(id, image), id).catch(
     async (error: unknown) => {
-      await deleteImageFiles([files.path, files.thumbPath]);
+      await deleteImageFiles([files.path, files.thumbPath, ...discard]);
       throw error;
     },
   );
   await deleteImageFiles(unused);
   return true;
+};
+
+/**
+ * Change Image: opens Android's photo picker, frames the picked photo square
+ * with [frame] (the crop screen, from its centre square), and gives the
+ * playlist that framing as its image in place of its mosaic, keeping the
+ * photo for Adjust Image. The image stays on this phone. Resolves false when
+ * nothing was picked or the framing was cancelled.
+ */
+export const pickPlaylistImage = async (id: number, frame: FramePhoto): Promise<boolean> => {
+  const photo = await WaveNative.pickPlaylistPhoto();
+  if (photo === null) return false;
+  return framePlaylistImage(id, photo, CENTRE_FRAMING, frame, true);
+};
+
+/** A saved image's size, in px. */
+const imageSize = (path: string): Promise<ImageSize> => Image.getSize(`file://${path}`);
+
+/**
+ * Adjust Image: frames the playlist's original photo again with [frame],
+ * starting at the last framing (an image saved before originals were kept is
+ * its own original, from its centre). Resolves false when the playlist has no
+ * image or the framing was cancelled.
+ */
+export const adjustPlaylistImage = async (id: number, frame: FramePhoto): Promise<boolean> => {
+  const original = await appRuntime.runPromise(
+    // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+    LibraryStore.use((store) => store.playlistImageOriginal(id)),
+  );
+  if (original === null) return false;
+  const kept = readFraming(original.framing);
+  const size = kept?.size ?? (await imageSize(original.originalPath));
+  const photo = { path: original.originalPath, width: size.width, height: size.height };
+  return framePlaylistImage(id, photo, kept?.framing ?? CENTRE_FRAMING, frame, false);
 };
 
 /** Takes the playlist's image away, so its mosaic shows again. */

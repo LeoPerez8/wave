@@ -20,7 +20,9 @@ import {
   WaveYtMusic,
   ytErrorCode,
   type NativeYtArtistPage,
+  type NativeYtOwnEntry,
   type NativeYtPlaylist,
+  type NativeYtPlaylistEdit,
   type NativeYtRadioPage,
   type NativeYtSearchPage,
   type NativeYtSong,
@@ -94,6 +96,24 @@ export class YtMusic extends Context.Service<
      */
     readonly libraryPlaylists: Effect.Effect<readonly YtLibraryPlaylist[], YtLibraryError>;
     /**
+     * The entries of the account's playlist [playlistId] (a shared one),
+     * every page; null when it was deleted or isn't the account's. Fails as
+     * `signedOut` without a session YouTube accepts.
+     */
+    readonly ownPlaylist: (
+      playlistId: string,
+    ) => Effect.Effect<readonly NativeYtOwnEntry[] | null, YtLibraryError>;
+    /** Makes an unlisted playlist [title] on the account with [videoIds] in order: its id. */
+    readonly createPlaylist: (
+      title: string,
+      videoIds: readonly string[],
+    ) => Effect.Effect<string, YtLibraryError>;
+    /** Applies [edits] to the account's playlist [playlistId], in order, in one request. */
+    readonly editPlaylist: (
+      playlistId: string,
+      edits: readonly NativeYtPlaylistEdit[],
+    ) => Effect.Effect<void, YtLibraryError>;
+    /**
      * The first page of a radio: the song [videoId]'s, or the artist's whose
      * page is [browseId]. Needs no sign-in.
      */
@@ -145,6 +165,18 @@ export const layer = Layer.succeed(YtMusic, {
     try: () => WaveYtMusic.libraryPlaylists(),
     catch: libraryFailure,
   }),
+  ownPlaylist: (playlistId) =>
+    Effect.tryPromise({ try: () => WaveYtMusic.ownPlaylist(playlistId), catch: libraryFailure }),
+  createPlaylist: (title, videoIds) =>
+    Effect.tryPromise({
+      try: () => WaveYtMusic.createPlaylist(title, videoIds),
+      catch: libraryFailure,
+    }),
+  editPlaylist: (playlistId, edits) =>
+    Effect.tryPromise({
+      try: () => WaveYtMusic.editPlaylist(playlistId, edits),
+      catch: libraryFailure,
+    }),
   radio: (seed) =>
     Effect.tryPromise({
       try: () =>

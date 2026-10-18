@@ -8,6 +8,7 @@ import { eq } from "drizzle-orm";
 import { creditSplits } from "./credits.ts";
 import {
   removePlaylistImage,
+  selectPlaylistImageOriginal,
   setPlaylistImage,
   takeDeletedPlaylistImages,
 } from "./playlistImages.ts";
@@ -27,10 +28,20 @@ import { addTrack, openTestDatabase, type TestDatabase } from "./testDatabase.ts
 let db: TestDatabase;
 let playlistId: number;
 
-const image = (name: string) => ({
+/** Image [name], framed out of original photo [original] (each pick saves a new one). */
+const image = (name: string, original = name, framing = `{"framing":"${name}"}`) => ({
   path: `/files/artwork/playlists/${name}.jpg`,
   thumbPath: `/files/artwork/playlists/${name}_thumb.jpg`,
+  originalPath: `/files/artwork/playlists/${original}_photo.jpg`,
+  framing,
 });
+
+/** Every file of image [name]: the image, its thumbnail and its original. */
+const filesOf = (name: string) => [
+  image(name).path,
+  image(name).thumbPath,
+  image(name).originalPath,
+];
 
 /** Two albums: the first one's cover stands alone (Core's `playlistMosaic`). */
 const MOSAIC = { thumbPaths: ["/covers/h1.thumb.jpg"], artworkPaths: ["/covers/h1.jpg"] };
@@ -83,37 +94,69 @@ describe("a playlist's own image", () => {
 
   test("changing it hands back the old image's files, to delete", () => {
     setPlaylistImage(db, playlistId, image("a"));
-    assert.deepEqual(setPlaylistImage(db, playlistId, image("b")), [
-      image("a").path,
-      image("a").thumbPath,
-    ]);
+    assert.deepEqual(setPlaylistImage(db, playlistId, image("b")), filesOf("a"));
     assert.deepEqual(listed()?.thumbPaths, [image("b").thumbPath]);
   });
 
   test("removing it brings the mosaic back and hands back its files", () => {
     setPlaylistImage(db, playlistId, image("a"));
-    assert.deepEqual(removePlaylistImage(db, playlistId), [image("a").path, image("a").thumbPath]);
+    assert.deepEqual(removePlaylistImage(db, playlistId), filesOf("a"));
     assert.deepEqual(listed(), { ...MOSAIC, hasImage: false });
     assert.deepEqual(removePlaylistImage(db, playlistId), []);
   });
 
-  test("given to a playlist that's gone, the new files come straight back", () => {
-    deletePlaylist(db, playlistId, 1_000);
-    assert.deepEqual(setPlaylistImage(db, playlistId, image("a")), [
+  test("keeps the original photo and its framing, for Adjust Image", () => {
+    assert.equal(selectPlaylistImageOriginal(db, playlistId), null);
+    setPlaylistImage(db, playlistId, image("a"));
+    assert.deepEqual(selectPlaylistImageOriginal(db, playlistId), {
+      originalPath: image("a").originalPath,
+      framing: image("a").framing,
+    });
+  });
+
+  test("reframing from the same original hands back the old framing's files, not the original", () => {
+    setPlaylistImage(db, playlistId, image("a"));
+    assert.deepEqual(setPlaylistImage(db, playlistId, image("a2", "a", "{}")), [
       image("a").path,
       image("a").thumbPath,
     ]);
-    assert.deepEqual(setPlaylistImage(db, 9_999, image("b")), [
-      image("b").path,
-      image("b").thumbPath,
+    assert.deepEqual(selectPlaylistImageOriginal(db, playlistId), {
+      originalPath: image("a").originalPath,
+      framing: "{}",
+    });
+    assert.deepEqual(listed()?.thumbPaths, [image("a2").thumbPath]);
+  });
+
+  test("an image saved before originals were kept is its own original", () => {
+    db.update(schema.playlists)
+      .set({ imagePath: image("old").path, imageThumbPath: image("old").thumbPath })
+      .where(eq(schema.playlists.id, playlistId))
+      .run();
+    assert.deepEqual(selectPlaylistImageOriginal(db, playlistId), {
+      originalPath: image("old").path,
+      framing: null,
+    });
+    // Reframed from it, the old image stays on as the original.
+    const reframed = { ...image("new"), originalPath: image("old").path };
+    assert.deepEqual(setPlaylistImage(db, playlistId, reframed), [image("old").thumbPath]);
+    assert.deepEqual(removePlaylistImage(db, playlistId), [
+      image("new").path,
+      image("new").thumbPath,
+      image("old").path,
     ]);
+  });
+
+  test("given to a playlist that's gone, the new files come straight back", () => {
+    deletePlaylist(db, playlistId, 1_000);
+    assert.deepEqual(setPlaylistImage(db, playlistId, image("a")), filesOf("a"));
+    assert.deepEqual(setPlaylistImage(db, 9_999, image("b")), filesOf("b"));
   });
 
   test("a deleted playlist's image files are handed back once, for deleting", () => {
     setPlaylistImage(db, playlistId, image("a"));
     assert.deepEqual(takeDeletedPlaylistImages(db), []);
     deletePlaylist(db, playlistId, 1_000);
-    assert.deepEqual(takeDeletedPlaylistImages(db), [image("a").path, image("a").thumbPath]);
+    assert.deepEqual(takeDeletedPlaylistImages(db), filesOf("a"));
     assert.deepEqual(takeDeletedPlaylistImages(db), []);
   });
 
@@ -135,7 +178,7 @@ describe("a playlist's own image", () => {
       new Map(),
       5_000,
     );
-    assert.deepEqual(takeDeletedPlaylistImages(db), [image("a").path, image("a").thumbPath]);
+    assert.deepEqual(takeDeletedPlaylistImages(db), filesOf("a"));
   });
 
   test("stays on this phone: setting or removing it isn't a change the Wave account gets", () => {
