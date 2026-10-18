@@ -419,6 +419,7 @@ class DurableFallbackDownloadsTest {
         owner.advance(transfer { _, _, source -> source.parentFile.mkdirs(); source.writeText("half"); throw ProcessDeath() }, Untouched)
       }
       now += 10_000
+      owner.flush()
       owner = DurableDownloads(journal, clock = { now })
       val asked = mutableListOf<Any?>()
       val transport = transfer { _, candidate, source ->

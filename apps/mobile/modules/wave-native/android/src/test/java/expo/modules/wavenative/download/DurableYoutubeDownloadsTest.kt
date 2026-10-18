@@ -271,6 +271,7 @@ class DurableYoutubeDownloadsTest {
       owner.enqueue(song, null, emptyMap(), "youtube")
       prepareYoutube(owner, File(folder, "Recording.m4a"))
       assertThrows(ProcessDeath::class.java) { owner.advance(transfer { _, _, _ -> throw ProcessDeath() }, Untouched) }
+      owner.flush()
       now += DurableDownloads.ATTEMPT_MS - 10_000
       owner = DurableDownloads(journal, clock = { now })
       val restored = owner
@@ -299,6 +300,7 @@ class DurableYoutubeDownloadsTest {
       owner.enqueue(song, null, emptyMap(), "youtube")
       prepareYoutube(owner, File(folder, "Recording.m4a"))
       assertThrows(ProcessDeath::class.java) { owner.advance(dying, Untouched) }
+      owner.flush()
       val before = owner.snapshot().single()
       now += 10_000
       owner = DurableDownloads(journal, clock = { now })

@@ -42,6 +42,8 @@ import java.util.concurrent.TimeUnit
 
 /** Application-context owner, independent of Expo module and Activity lifetimes. */
 class AndroidDownloads private constructor(private val context: Context) {
+  /** Writes the journal's changes that wait for their second (#452), off the main thread and whether or not the service runs. */
+  private val journalWriter = Executors.newSingleThreadScheduledExecutor { run -> Thread(run, "Wave download journal").apply { isDaemon = true } }
   // Each failure's cause also goes to the app log, so a device run shows why a download stopped;
   // and each transfer's speed, so it shows where a download's time went. Its budgets wait for the
   // download service (startWork): Wave opening before the service starts isn't charged.
@@ -50,6 +52,7 @@ class AndroidDownloads private constructor(private val context: Context) {
     log = { WaveLog.w(TAG, it) },
     note = { WaveLog.i(TAG, it) },
     budgetRunning = false,
+    later = { delay, run -> journalWriter.schedule(run, delay, TimeUnit.MILLISECONDS) },
   )
   private val soulseek = AndroidSoulseek.get(context)
   private val main = Handler(Looper.getMainLooper())
@@ -213,6 +216,9 @@ class AndroidDownloads private constructor(private val context: Context) {
     deadlines = Executors.newSingleThreadScheduledExecutor().also { executor ->
       // Also refreshes the notification and the rows while transfers go on.
       executor.scheduleWithFixedDelay({ runCatching { jobs.expire(transport); changed(); main.post(refresh) } }, 1, 1, TimeUnit.SECONDS)
+      // What the journal's writes cost, once a minute while the service runs.
+      jobs.takeWriteStats()
+      executor.scheduleWithFixedDelay({ runCatching { WaveLog.i(TAG, jobs.takeWriteStats().line()) } }, JOURNAL_LINE_MS, JOURNAL_LINE_MS, TimeUnit.MILLISECONDS)
     }
     // Each song's transfer, tagging or publication runs on a thread of its own, several songs at once.
     val pool = Executors.newCachedThreadPool().also { steps = it }
@@ -243,6 +249,8 @@ class AndroidDownloads private constructor(private val context: Context) {
   @Synchronized fun stop(why: DownloadServiceStop, timedOut: Boolean = false) {
     if (worker != null) WaveLog.i(TAG, DownloadServiceLines.stopped(why, SystemClock.elapsedRealtime() - startedAt, jobs.counts()))
     jobs.stopWork(transport)
+    // What waits for its second is written now, off the main thread (a full disk keeps it for the next write).
+    journalWriter.execute { runCatching { jobs.flush() } }
     worker?.shutdownNow(); worker = null
     steps?.shutdownNow(); steps = null
     deadlines?.shutdownNow(); deadlines = null
@@ -279,6 +287,8 @@ class AndroidDownloads private constructor(private val context: Context) {
     private const val TAG = "WaveDownloads"
     /** How often, at most, JS hears that the journal changed. */
     private const val NOTIFY_MS = 500L
+    /** How often the journal's line ([JournalWrites]) is written while the service runs. */
+    private const val JOURNAL_LINE_MS = 60_000L
     /** Less free space than this beside the part file means the write failed for want of room. */
     private const val MIN_FREE_BYTES = 8L shl 20
     @Volatile private var instance: AndroidDownloads? = null

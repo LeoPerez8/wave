@@ -66,6 +66,7 @@ class DurableDownloadFailuresTest {
       assertEquals(cause, job["cause"])
       assertTrue(log.joinToString("\n"), log.any { it.contains(cause) && it.contains("tagging") })
       // The journal keeps it across a restart, so the next start can still show it.
+      owner.flush()
       assertEquals(cause, DurableDownloads(File(folder, "jobs")).snapshot().single()["cause"])
     }
   }
