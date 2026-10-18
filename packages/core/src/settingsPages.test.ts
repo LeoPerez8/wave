@@ -6,7 +6,7 @@ import {
   SETTINGS_PAGES,
   accountsSummary,
   downloadsSummary,
-  queuedDownloads,
+  queuedDownloadCounts,
   type SpotifySession,
   type WaveSession,
   type YtSession,
@@ -145,13 +145,13 @@ describe("the Downloads row's line", () => {
       },
       phase,
     });
-    const queued = queuedDownloads([
+    const queued = queuedDownloadCounts([
       job("a", "transferring"),
       job("b", "transferring"),
       ...["c", "d", "e", "f", "g"].map((id) => job(id, "queued")),
     ]);
     assert.equal(downloadsSummary(0, queued), "2 downloading · 5 waiting");
     assert.equal(downloadsSummary(3, queued), "2 downloading · 5 waiting · 3 songs failed");
-    assert.equal(downloadsSummary(1, []), "1 song failed");
+    assert.equal(downloadsSummary(1, { downloading: 0, waiting: 0 }), "1 song failed");
   });
 });

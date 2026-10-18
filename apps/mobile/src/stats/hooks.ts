@@ -1,5 +1,5 @@
-import { STATS_TOP, type StatsPeriod } from "@wave/core";
-import type * as Effect from "effect/Effect";
+import { STATS_TOP, parseRecapId, type RecapPeriod, type StatsPeriod } from "@wave/core";
+import * as Effect from "effect/Effect";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 
@@ -8,7 +8,7 @@ import { useFocusedVersion } from "@/lib/useFocusedVersion";
 import { appRuntime } from "@/library/runtime";
 import { playHistoryVersion } from "@/playback/PlayHistory";
 
-import { Stats, type ArtistStats, type Ranked } from "./Stats";
+import { Stats, type ArtistStats, type LoadedRecap, type Ranked } from "./Stats";
 
 /**
  * What `read` gives from Stats, or undefined while it first loads. Re-read
@@ -97,3 +97,23 @@ export const useTopArtists = (
   period: StatsPeriod,
   limit: number = STATS_TOP,
 ): readonly Ranked<ArtistRow>[] | undefined => useRanking(period, limit, readTopArtists);
+
+const readRecaps = (stats: Stats["Service"]) => stats.recaps;
+
+/** Every period with a Recap, newest first, or undefined while it first loads. */
+export const useRecaps = (): readonly RecapPeriod[] | undefined => useStatsRead(readRecaps);
+
+/**
+ * The Recap a route's `id` names (Core's `recapId`), or undefined while it
+ * first loads; null when the id names no Recap available now.
+ */
+export const useRecap = (id: string): LoadedRecap | null | undefined =>
+  useStatsRead(
+    useCallback(
+      (stats: Stats["Service"]) => {
+        const period = parseRecapId(id);
+        return period === null ? Effect.succeed(null) : stats.recap(period);
+      },
+      [id],
+    ),
+  );

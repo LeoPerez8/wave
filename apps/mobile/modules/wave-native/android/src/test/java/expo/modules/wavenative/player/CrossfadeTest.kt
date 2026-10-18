@@ -47,14 +47,14 @@ class CrossfadeTest {
     override var nextReady = true
     override var currentKey: String? = "a"
     override var nextKey: String? = "b"
+
+    /** The clock (elapsed real time); it stands still unless a test moves it. */
+    override var nowMs = 0L
     var tail: Deck? = null
     val opened = mutableListOf<Long>()
     var advanced = 0
     var fadesEnded = 0
     var prefetches = 0
-
-    /** What the app log heard of late next songs: how late, and the overlap left (0: none). */
-    val late = mutableListOf<Pair<Long, Long>>()
 
     override fun openTail(positionMs: Long): CrossfadeDeck {
       opened += positionMs
@@ -80,15 +80,13 @@ class CrossfadeTest {
       prefetches++
     }
 
-    override fun nextLate(lateMs: Long, overlapMs: Long) {
-      late += lateMs to overlapMs
-    }
+    override var nextSearching = false
 
-    /** What the app log heard of overlaps (or pre-rolls) ending early, and whether the overlap had begun. */
-    val endedEarly = mutableListOf<Pair<CrossfadeEnd, Boolean>>()
+    /** What the app log heard of each song change. */
+    val outcomes = mutableListOf<CrossfadeOutcome>()
 
-    override fun endedEarly(why: CrossfadeEnd, overlapping: Boolean) {
-      endedEarly += why to overlapping
+    override fun outcome(outcome: CrossfadeOutcome) {
+      outcomes += outcome
     }
   }
 
@@ -176,8 +174,7 @@ class CrossfadeTest {
     crossfade.tick()
     assertNull(service.tail)
     assertEquals(1f, service.main.level)
-    assertTrue(service.endedEarly.isEmpty())
-    assertTrue(service.late.isEmpty())
+    assertEquals(listOf<CrossfadeOutcome>(CrossfadeOutcome.Done(overlapMs = 15_000, lateMs = 0)), service.outcomes)
   }
 
   @Test
@@ -358,7 +355,7 @@ class CrossfadeTest {
     crossfade.playTo(service, 175_000)
     assertTrue(crossfade.moved("b"))
     assertFalse(crossfade.moved("b"))
-    assertTrue(service.endedEarly.isEmpty())
+    assertTrue(service.outcomes.isEmpty())
   }
 
   @Test
@@ -386,21 +383,27 @@ class CrossfadeTest {
     crossfade.tick()
     assertEquals(0.707f, outgoing.level, 0.01f)
     assertEquals(0.707f, service.main.level, 0.01f)
-    assertEquals(listOf(4000L to 6000L), service.late)
+    assertTrue(service.outcomes.isEmpty())
+    service.main.positionMs = 6000
+    outgoing.positionMs = 180_000
+    outgoing.ended = true
+    crossfade.tick()
+    assertEquals(listOf<CrossfadeOutcome>(CrossfadeOutcome.Done(overlapMs = 6000, lateMs = 4000)), service.outcomes)
   }
 
   @Test
   fun aNextSongNeverReadyBeforeTheEndPlaysGaplessWithNoFadeOut() {
     val service = Service().apply { nextReady = false }
     val crossfade = crossfade(service, overlapMs = 10_000)
+    crossfade.moved("a")
     crossfade.playTo(service, 167_000)
     crossfade.playTo(service, 175_000)
     crossfade.playTo(service, 179_100)
     assertNull(service.tail)
     assertEquals(0, service.advanced)
     assertEquals(1f, service.main.level)
-    assertEquals(1, service.late.size)
-    assertEquals(0L, service.late.single().second)
+    crossfade.moved("b")
+    assertEquals(listOf<CrossfadeOutcome>(CrossfadeOutcome.Skipped(CrossfadeSkip.NotReady, lateMs = 9100)), service.outcomes)
   }
 
   @Test
@@ -429,7 +432,12 @@ class CrossfadeTest {
     crossfade.tick()
     assertEquals(0.707f, outgoing.level, 0.01f)
     assertEquals(0.707f, service.main.level, 0.01f)
-    assertEquals(listOf(4000L to 6000L), service.late)
+    assertTrue(service.outcomes.isEmpty())
+    service.main.positionMs = 6000
+    outgoing.positionMs = 180_000
+    outgoing.ended = true
+    crossfade.tick()
+    assertEquals(listOf<CrossfadeOutcome>(CrossfadeOutcome.Done(overlapMs = 6000, lateMs = 4000)), service.outcomes)
   }
 
   @Test
@@ -450,7 +458,7 @@ class CrossfadeTest {
     assertNull(service.tail)
     assertEquals(1, service.fadesEnded)
     assertEquals(1f, service.main.level)
-    assertEquals(0L, service.late.single().second)
+    assertEquals(listOf<CrossfadeOutcome>(CrossfadeOutcome.Skipped(CrossfadeSkip.NotReady, lateMs = 10_000)), service.outcomes)
   }
 
   @Test
@@ -470,7 +478,7 @@ class CrossfadeTest {
     assertEquals(outgoing, service.tail)
     assertEquals(0.707f, outgoing.level, 0.01f)
     assertEquals(0, service.fadesEnded)
-    assertTrue(service.endedEarly.isEmpty())
+    assertTrue(service.outcomes.isEmpty())
   }
 
   @Test
@@ -484,7 +492,7 @@ class CrossfadeTest {
     assertNull(service.tail)
     assertEquals(1, service.fadesEnded)
     assertEquals(1f, service.main.level)
-    assertEquals(listOf(CrossfadeEnd.Moved to true), service.endedEarly)
+    assertEquals(listOf<CrossfadeOutcome>(CrossfadeOutcome.Cut(CrossfadeEnd.Moved, elapsedMs = 0, overlapMs = null)), service.outcomes)
   }
 
   @Test
@@ -507,7 +515,7 @@ class CrossfadeTest {
     assertEquals(1, service.advanced)
     crossfade.moved("d")
     assertEquals(outgoing, service.tail)
-    assertTrue(service.endedEarly.isEmpty())
+    assertTrue(service.outcomes.isEmpty())
   }
 
   @Test
@@ -527,7 +535,7 @@ class CrossfadeTest {
     assertTrue(outgoing.wanted)
     crossfade.playTo(service, 175_000)
     assertEquals(1, service.advanced)
-    assertTrue(service.endedEarly.isEmpty())
+    assertTrue(service.outcomes.isEmpty())
   }
 
   @Test
@@ -563,6 +571,7 @@ class CrossfadeTest {
   fun aCopyThatNeverGetsInStepLeavesTheSongGaplessAndSaysWhy() {
     val service = Service()
     val crossfade = crossfade(service)
+    crossfade.moved("a")
     crossfade.playTo(service, 172_000)
     service.tail!!.sounding = false
     service.main.positionMs = 179_100
@@ -570,7 +579,8 @@ class CrossfadeTest {
     assertNull(service.tail)
     assertEquals(0, service.advanced)
     assertEquals(1f, service.main.level)
-    assertEquals(listOf(CrossfadeEnd.NotInStep to false), service.endedEarly)
+    crossfade.moved("b")
+    assertEquals(listOf<CrossfadeOutcome>(CrossfadeOutcome.Skipped(CrossfadeEnd.NotInStep)), service.outcomes)
   }
 
   @Test
@@ -591,7 +601,7 @@ class CrossfadeTest {
     assertEquals(outgoing, service.tail)
     assertEquals(0.707f, outgoing.level, 0.01f)
     assertEquals(0.707f, service.main.level, 0.01f)
-    assertTrue(service.endedEarly.isEmpty())
+    assertTrue(service.outcomes.isEmpty())
   }
 
   @Test
@@ -610,7 +620,7 @@ class CrossfadeTest {
     service.tail!!.positionMs = 178_310
     crossfade.tick()
     assertEquals(1, service.advanced)
-    assertTrue(service.endedEarly.isEmpty())
+    assertTrue(service.outcomes.isEmpty())
   }
 
   @Test
@@ -623,7 +633,7 @@ class CrossfadeTest {
       crossfade.interrupt(why)
       assertNull(service.tail)
       assertEquals(1f, service.main.level)
-      assertEquals(listOf(why to true), service.endedEarly)
+      assertEquals(listOf<CrossfadeOutcome>(CrossfadeOutcome.Cut(why, elapsedMs = 0, overlapMs = null)), service.outcomes)
     }
   }
 
@@ -637,7 +647,7 @@ class CrossfadeTest {
     service.tail!!.sounding = false
     service.main.positionMs = 7000
     crossfade.tick()
-    assertEquals(listOf(CrossfadeEnd.Stalled to true), service.endedEarly)
+    assertEquals(listOf<CrossfadeOutcome>(CrossfadeOutcome.Cut(CrossfadeEnd.Stalled, elapsedMs = 0, overlapMs = 5000)), service.outcomes)
   }
 
   @Test
@@ -665,7 +675,166 @@ class CrossfadeTest {
     assertEquals(outgoing, service.tail)
     assertEquals(0.707f, outgoing.level, 0.01f)
     assertEquals(gainAt(0.3f), service.main.level, 0.01f)
-    assertTrue(service.endedEarly.isEmpty())
+    assertTrue(service.outcomes.isEmpty())
+  }
+
+  @Test
+  fun anOverlapEndsByTheClockEvenIfTheMainPlayersPositionStopsAdvancing() {
+    val service = Service()
+    val crossfade = crossfade(service)
+    crossfade.playTo(service, 172_000)
+    crossfade.playTo(service, 175_000)
+    val outgoing = service.tail!!
+    service.main.positionMs = 1000
+    outgoing.positionMs = 176_000
+    service.nowMs = 1000
+    crossfade.tick()
+
+    // Neither position moves again, though both report playing.
+    service.nowMs = 6900
+    crossfade.tick()
+    assertEquals(outgoing, service.tail)
+    service.nowMs = 7000
+    crossfade.tick()
+    assertNull(service.tail)
+    assertEquals(1, service.fadesEnded)
+    assertEquals(1f, service.main.level)
+  }
+
+  @Test
+  fun aPauseDuringTheOverlapDoesntCountAgainstItsClock() {
+    val service = Service()
+    val crossfade = crossfade(service)
+    crossfade.playTo(service, 172_000)
+    crossfade.playTo(service, 175_000)
+    val outgoing = service.tail!!
+    service.main.positionMs = 1000
+    outgoing.positionMs = 176_000
+    crossfade.tick()
+
+    service.nowMs = 1000
+    service.mainWantsToPlay = false
+    crossfade.onPlayingChanged()
+    crossfade.tick()
+    service.nowMs = 60_000
+    service.mainWantsToPlay = true
+    crossfade.onPlayingChanged()
+    crossfade.tick()
+    assertEquals(outgoing, service.tail)
+    service.nowMs = 65_000
+    crossfade.tick()
+    assertNull(service.tail)
+  }
+
+  /** Plays song "a" from [fromMs] to [toMs] in [stepMs] steps with ticks, then the player moves to [to]. */
+  private fun Crossfade.songChange(service: Service, fromMs: Long, toMs: Long, to: String = "b", stepMs: Long = 1000) {
+    moved("a")
+    var at = fromMs
+    while (at <= toMs) {
+      playTo(service, at)
+      at += stepMs
+    }
+    // Back to "a": repeat one starting it again.
+    moved(to, restarted = to == "a")
+  }
+
+  @Test
+  fun anOverlapThatRunsItsLengthLogsDoneWithItsOverlap() {
+    val service = Service()
+    val crossfade = crossfade(service)
+    crossfade.moved("a")
+    crossfade.playTo(service, 172_000)
+    crossfade.playTo(service, 175_000)
+    crossfade.moved("b")
+    val outgoing = service.tail!!
+    crossfade.tick()
+    assertTrue(service.outcomes.isEmpty())
+    service.main.positionMs = 5000
+    outgoing.positionMs = 180_000
+    outgoing.ended = true
+    crossfade.tick()
+    assertEquals(listOf<CrossfadeOutcome>(CrossfadeOutcome.Done(overlapMs = 5000, lateMs = 0)), service.outcomes)
+  }
+
+  @Test
+  fun everySongChangeWithoutAnOverlapLogsTheRuleThatSkippedIt() {
+    fun skipped(why: CrossfadeReason, lateMs: Long = 0) = listOf<CrossfadeOutcome>(CrossfadeOutcome.Skipped(why, lateMs))
+
+    Service().let { service ->
+      crossfade(service, overlapMs = 0).songChange(service, 170_000, 179_000)
+      assertEquals(skipped(CrossfadeSkip.Off), service.outcomes)
+    }
+    Service().let { service ->
+      service.main.sounding = false
+      crossfade(service).songChange(service, 170_000, 179_000)
+      assertEquals(skipped(CrossfadeSkip.NotPlaying), service.outcomes)
+    }
+    Service().let { service ->
+      service.mainDurationMs = null
+      crossfade(service).songChange(service, 170_000, 179_000)
+      assertEquals(skipped(CrossfadeSkip.UnknownLength), service.outcomes)
+    }
+    Service().let { service ->
+      // Picked up 1 s before the end: too late to get in step.
+      crossfade(service).songChange(service, 179_000, 179_000)
+      assertEquals(skipped(CrossfadeSkip.PastHandoff), service.outcomes)
+    }
+    Service().let { service ->
+      service.movesOnNaturally = false
+      crossfade(service).songChange(service, 170_000, 179_000, to = "a")
+      assertEquals(skipped(CrossfadeSkip.NoNext), service.outcomes)
+    }
+    Service().let { service ->
+      // A skip mid-song.
+      crossfade(service).songChange(service, 100_000, 100_000, to = "c")
+      assertEquals(skipped(CrossfadeSkip.Early), service.outcomes)
+    }
+    Service().let { service ->
+      service.nextReady = false
+      crossfade(service).songChange(service, 170_000, 179_500, stepMs = 500)
+      assertEquals(skipped(CrossfadeSkip.NotReady, lateMs = 4500), service.outcomes)
+    }
+    Service().let { service ->
+      service.nextReady = false
+      service.nextSearching = true
+      crossfade(service).songChange(service, 170_000, 179_500, stepMs = 500)
+      assertEquals(skipped(CrossfadeSkip.Searching, lateMs = 4500), service.outcomes)
+    }
+    Service().let { service ->
+      // A skip during the pre-roll.
+      crossfade(service).songChange(service, 172_000, 173_000, to = "c")
+      assertEquals(skipped(CrossfadeEnd.Moved), service.outcomes)
+    }
+  }
+
+  @Test
+  fun anOverlapCutShortLogsHowLongItRanThenTheSkipLogsItsOwnChange() {
+    val service = Service()
+    val crossfade = crossfade(service)
+    crossfade.moved("a")
+    crossfade.playTo(service, 172_000)
+    crossfade.playTo(service, 175_000)
+    crossfade.moved("b")
+    crossfade.tick()
+    service.nowMs = 2000
+    crossfade.moved("c")
+    assertEquals(
+      listOf(
+        CrossfadeOutcome.Cut(CrossfadeEnd.Moved, elapsedMs = 2000, overlapMs = 5000),
+        CrossfadeOutcome.Skipped(CrossfadeSkip.Early),
+      ),
+      service.outcomes,
+    )
+  }
+
+  @Test
+  fun aSyncReportingTheSameSongAgainLogsNoChange() {
+    val service = Service()
+    val crossfade = crossfade(service)
+    crossfade.moved("a")
+    crossfade.moved("a")
+    crossfade.moved("a")
+    assertTrue(service.outcomes.isEmpty())
   }
 
   /** Equal-power gain [fraction] of the way into a fade-in, worked out by hand: sin(fraction × 90°). */

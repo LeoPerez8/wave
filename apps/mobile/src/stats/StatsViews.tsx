@@ -1,8 +1,16 @@
 import { IconChartBar } from "@tabler/icons-react-native";
 import { LegendList } from "@legendapp/list/react-native";
-import { counted, STATS_PERIODS, type QueueContext, type StatsPeriod } from "@wave/core";
+import {
+  counted,
+  recapId,
+  recapTitle,
+  STATS_PERIODS,
+  type QueueContext,
+  type RecapPeriod,
+  type StatsPeriod,
+} from "@wave/core";
 import { useCallback, useMemo, type ReactElement } from "react";
-import { Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 
 import { CELL, grid } from "@/catalog/grid";
 import { NameRow } from "@/catalog/NameRow";
@@ -11,7 +19,7 @@ import { useChromeInset } from "@/chrome/chrome";
 import { EmptyState } from "@/components/EmptyState";
 import { useFavoriteIds } from "@/library/favorites";
 import type { AlbumRow, ArtistRow, SongRow } from "@/library/LibraryStore";
-import { openAlbum, openArtist } from "@/library/routes";
+import { openAlbum, openArtist, openRecap } from "@/library/routes";
 import { toTrackSummary } from "@/library/TrackList";
 import { Press } from "@/motion/Press";
 import { playSongs } from "@/playback/actions";
@@ -298,6 +306,43 @@ export function RankedSongList({
       contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottomInset }}
       ListHeaderComponent={header}
     />
+  );
+}
+
+/** A Recap's tile on Stats' Recaps row. */
+const RECAP_TILE = { width: CELL * 17, height: CELL * 21 } as const;
+
+/**
+ * Stats' Recaps row: a tile for every Recap, newest first, scrolling
+ * sideways to the screen's edges. Tapping one plays its stories.
+ */
+export function RecapsRow({ recaps }: { recaps: readonly RecapPeriod[] }) {
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={{ marginHorizontal: -grid.margin }}
+      contentContainerStyle={{ paddingHorizontal: grid.margin, gap: CELL * 1.5 }}
+    >
+      {recaps.map((period) => (
+        <Press
+          key={recapId(period)}
+          accessibilityRole="button"
+          accessibilityLabel={`${recapTitle(period)} Recap`}
+          onPress={() => openRecap(period)}
+          haptic="selection"
+          className="justify-end rounded-2xl bg-tile-indigo"
+          style={{ ...RECAP_TILE, padding: CELL * 1.5 }}
+        >
+          <Text className="font-sans text-footnote font-semibold text-on-tile opacity-80">
+            Recap
+          </Text>
+          <Text numberOfLines={2} className="font-sans text-title3 font-bold text-on-tile">
+            {recapTitle(period)}
+          </Text>
+        </Press>
+      ))}
+    </ScrollView>
   );
 }
 

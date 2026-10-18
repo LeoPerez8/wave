@@ -137,6 +137,7 @@ export interface ActionSubject<A extends LibraryArtistRef = LibraryArtistRef> {
 export type ItemAction =
   | "playNext"
   | "addToQueue"
+  | "magicQueue"
   | "addToPlaylist"
   | "favorite"
   | "unfavorite"
@@ -185,6 +186,7 @@ export type ItemActionEntry<A extends LibraryArtistRef = LibraryArtistRef> =
 export const ITEM_ACTION_LABELS: { readonly [A in ItemAction]: string } = {
   playNext: "Play Next",
   addToQueue: "Add to Queue",
+  magicQueue: "Magic Queue",
   addToPlaylist: "Add to Playlist",
   favorite: "Favorite",
   unfavorite: "Remove from Favorites",
@@ -322,6 +324,22 @@ export const isCollectionKind = (kind: ItemKind): kind is CollectionKind => COLL
 const fixableFile = (song: ActionItem): boolean =>
   song.fixable === true && song.missing !== true && song.streamed !== true;
 
+/**
+ * Whether a menu starts a Magic Queue from its item: one Library song with a
+ * file here, album, artist or playlist (the seeds a Magic Queue grows from
+ * the Library); not a genre, nor the selection bar.
+ */
+const offersMagicQueue = (
+  kind: ItemKind,
+  items: readonly ActionItem[],
+  surface: ActionSurface,
+): boolean => {
+  const [only] = items;
+  if (surface !== "menu" || items.length !== 1 || only === undefined) return false;
+  if (kind === "track") return only.missing !== true && only.streamed !== true;
+  return kind === "album" || kind === "artist" || kind === "playlist";
+};
+
 /** The entries to offer on [subject]'s items, in order. */
 export const itemActions = <A extends LibraryArtistRef = LibraryArtistRef>(
   subject: ActionSubject<A>,
@@ -345,6 +363,7 @@ export const itemActions = <A extends LibraryArtistRef = LibraryArtistRef>(
     ...(missing < items.length
       ? [{ action: "playNext" } as const, { action: "addToQueue" } as const]
       : []),
+    ...(offersMagicQueue(kind, items, surface) ? [{ action: "magicQueue" } as const] : []),
     { action: "addToPlaylist" },
   ];
   // Albums' missing songs download as Settings' Download All does them, only theirs.

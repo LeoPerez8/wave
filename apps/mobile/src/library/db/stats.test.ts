@@ -17,6 +17,7 @@ import { removeTracks } from "./save.ts";
 import * as schema from "./schema.ts";
 import {
   artistPlays,
+  countedListening,
   creditedPlayTotals,
   songListening,
   songsCrediting,
@@ -718,5 +719,30 @@ describe("One artist's plays", () => {
       before.queries.map((query) => query.rows),
     );
     assert.equal(after.queries.length, 3);
+  });
+});
+
+describe("Counted listening for Recaps", () => {
+  const QUARTER = 15 * 60_000;
+
+  test("sums counted plays per quarter hour, deleted songs included, skips left out", () => {
+    const [kept, gone] = addCredited(
+      { title: "Kept", artist: "A" },
+      { title: "Gone", artist: "B" },
+    );
+    if (kept === undefined || gone === undefined) throw new Error("tracks not added");
+    recordPlay(db, play(kept, 10 * QUARTER + 1_000, { listenedMs: 100_000 }));
+    recordPlay(db, play(gone, 10 * QUARTER + 5_000, { listenedMs: 200_000 }));
+    recordPlay(db, play(kept, 10 * QUARTER + 9_000, skip));
+    recordPlay(db, play(kept, 12 * QUARTER, { listenedMs: 50_000 }));
+    deleteSongs(gone);
+
+    assert.deepEqual(
+      countedListening(db).toSorted((a, b) => a.startedAt - b.startedAt),
+      [
+        { startedAt: 10 * QUARTER, listenedMs: 300_000 },
+        { startedAt: 12 * QUARTER, listenedMs: 50_000 },
+      ],
+    );
   });
 });

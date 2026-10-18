@@ -31,7 +31,11 @@ import {
   homeSectionTitle,
   identityKey,
   interleaveRadios,
+  libraryGenreProfiles,
+  mixAffinity,
   mixesShown,
+  mixProfileLookups,
+  mixSeedProfile,
   mixRefreshAvoid,
   mixRefreshWaitNotice,
   mixSectionOfId,
@@ -53,6 +57,8 @@ import {
   type DiscoverMixes,
   type DiscoverMixesSection,
   type DiscoverSimilarArtists,
+  type GenreProfileLibrary,
+  type GenreProfileOf,
   type MixRefreshAvoid,
   type ShownMixes,
   type YtAlbumSong,
@@ -77,6 +83,7 @@ import { Stats } from "@/stats/Stats";
 import { searchAllowanceFreeAt, withSearchTurn } from "@/ytmusic/searchAllowance";
 import { YtMusic } from "@/ytmusic/YtMusic";
 
+import { lookUpArtistProfiles, lookedUpProfileOf } from "./artistGenres";
 import { useDiscoverMixLevel, type MixSectionId } from "./discoverMixLevel";
 import { mixIndexes, refreshKnownVideos, useKnownVideos, type MixIndexes } from "./mixKnown";
 
@@ -162,15 +169,37 @@ interface ReadingRadio {
   continuation: string | null;
 }
 
+/** What a build knows of artists' genres: the Library, and every artist's profile by name. */
+interface MixGenres {
+  readonly library: GenreProfileLibrary;
+  readonly profileOf: GenreProfileOf;
+}
+
+/**
+ * The build's genre profiles (Core's `libraryGenreProfiles`): a Library
+ * artist's from their songs, an outside artist's as Deezer gave it.
+ */
+const mixGenres = (library: GenreProfileLibrary): MixGenres => {
+  const ofLibrary = libraryGenreProfiles(library);
+  return {
+    library,
+    profileOf: (artist) => {
+      const own = ofLibrary(artist);
+      return own === undefined ? lookedUpProfileOf(artist) : own;
+    },
+  };
+};
+
 /**
  * [seed]'s radios, read at the same time and interleaved (`interleaveRadios`;
  * an artist mix has one), a page of each after another while Core asks for
  * more (a radio whose start or later page fails is left at what was read):
- * the new songs the mix keeps (`discoverMixSongs`, enough for level 5) and
- * every song the radios played, interleaved, for the mix's familiar share.
- * Null when no radio could be read.
+ * the new songs the mix keeps (`discoverMixSongs`, enough for level 5, held
+ * to the seed's genres by `mixAffinity`, outside artists' looked up on
+ * Deezer as their songs come) and every song the radios played,
+ * interleaved, for the mix's familiar share. Null when no radio could be read.
  */
-const readRadios = (seed: DiscoverMixSeed, filter: Filter) =>
+const readRadios = (seed: DiscoverMixSeed, filter: Filter, genres: MixGenres) =>
   Effect.gen(function* () {
     const ytMusic = yield* YtMusic;
     const firstPages = yield* Effect.all(
@@ -183,7 +212,14 @@ const readRadios = (seed: DiscoverMixSeed, filter: Filter) =>
         : [],
     );
     if (radios.length === 0) return null;
-    const keep = () => discoverMixSongs([interleaveRadios(radios.map((r) => r.songs))], filter);
+    const { library, profileOf } = genres;
+    const knowGenres = (songs: readonly { readonly artists: readonly string[] }[]) =>
+      lookUpArtistProfiles(mixProfileLookups(songs, profileOf));
+    const seedArtists = { artists: mixSeedArtists(seed).map((artist) => artist.name) };
+    yield* knowGenres([seedArtists, ...interleaveRadios(radios.map((r) => r.songs))]);
+    const affinity = mixAffinity(mixSeedProfile(seed, library, profileOf), profileOf);
+    const keep = () =>
+      discoverMixSongs([interleaveRadios(radios.map((r) => r.songs))], { ...filter, affinity });
     let pages = 1;
     let kept = keep();
     while (
@@ -211,6 +247,7 @@ const readRadios = (seed: DiscoverMixSeed, filter: Filter) =>
         { concurrency: "unbounded" },
       );
       pages += 1;
+      yield* knowGenres(interleaveRadios(radios.map((r) => r.songs)));
       kept = keep();
     }
     return { kept, radio: interleaveRadios(radios.map((r) => r.songs)) };
@@ -229,6 +266,7 @@ const mixesOf = (
 ) =>
   Effect.gen(function* () {
     const { known } = library;
+    const genres = mixGenres(library);
     // A refresh's new songs leave out those the section showed today, where it can.
     const avoidSongs = avoid === undefined ? {} : { avoid: avoid.songs };
     const taken = new Set<string>();
@@ -236,7 +274,7 @@ const mixesOf = (
     const mixes: DiscoverMix[] = [];
     for (const seed of seeds) {
       const read = yield* Effect.result(
-        readRadios(seed, { known: known.known, taken, ...avoidSongs }),
+        readRadios(seed, { known: known.known, taken, ...avoidSongs }, genres),
       );
       if (Result.isFailure(read) || read.success === null) continue;
       yield* freeTurnEffect;

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { queuedDownloads, queuedDownloadsSummary } from "./index.ts";
+import { queuedDownloadCounts, queuedDownloads, queuedDownloadsSummary } from "./index.ts";
 import type { YtDownloadJournalJob, YtSong } from "./index.ts";
 
 const song = (videoId: string): YtSong => ({
@@ -93,10 +93,10 @@ describe("Settings › Downloads: the songs on their way", () => {
   test("the section's line counts the songs downloading and waiting; nothing on its way, no section", () => {
     const waiting = (count: number) =>
       Array.from({ length: count }, (_, i) => job(`w${i}`, { phase: "queued" }));
-    assert.equal(queuedDownloadsSummary(queuedDownloads([])), null);
+    assert.equal(queuedDownloadsSummary(queuedDownloadCounts([])), null);
     assert.equal(
       queuedDownloadsSummary(
-        queuedDownloads([
+        queuedDownloadCounts([
           job("a", { phase: "transferring" }),
           job("b", { phase: "tagging" }),
           ...waiting(5),
@@ -104,10 +104,24 @@ describe("Settings › Downloads: the songs on their way", () => {
       ),
       "2 downloading · 5 waiting",
     );
-    assert.equal(queuedDownloadsSummary(queuedDownloads(waiting(1200))), "1,200 waiting");
+    assert.equal(queuedDownloadsSummary(queuedDownloadCounts(waiting(1200))), "1,200 waiting");
     assert.equal(
-      queuedDownloadsSummary(queuedDownloads([job("a", { phase: "preparing" })])),
+      queuedDownloadsSummary(queuedDownloadCounts([job("a", { phase: "preparing" })])),
       "1 downloading",
+    );
+  });
+
+  test("the counts leave out the songs that failed or finished, without listing any", () => {
+    assert.deepEqual(
+      queuedDownloadCounts([
+        job("a", { phase: "transferring" }),
+        job("b"),
+        job("c"),
+        job("failed", { phase: "failed", reason: "failed" }),
+        job("cancelled", { phase: "cancelled" }),
+        job("unimported", { phase: "completed", importFailure: "storage" }),
+      ]),
+      { downloading: 1, waiting: 2 },
     );
   });
 });

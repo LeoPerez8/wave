@@ -38,6 +38,7 @@ import {
   toggleShuffle,
 } from "@/playback/actions";
 import { useQueue } from "@/playback/hooks";
+import { useMagicQueueLabel } from "@/playback/MagicQueue";
 import { queueState } from "@/playback/Queue";
 import type { PlaybackState } from "@/playback/Player";
 import type { QueueTrack } from "@/playback/queueTracks";
@@ -103,12 +104,13 @@ const REPEAT_LABEL: Record<RepeatMode, string> = {
 /**
  * The top of the Queue view: what's playing (small), the shuffle and repeat
  * toggles (a long press on shuffle opens the shuffle card; it reads Smart
- * Shuffle, with its own icon, while that's chosen), then the Up Next heading. Sits in the sheet's drag-to-dismiss area.
+ * Shuffle, with its own icon, while that's chosen), then the Up Next heading ("Magic Queue · from <seed>" over a Magic Queue). Sits in the sheet's drag-to-dismiss area.
  */
 export function QueueHeader({ item }: { item: NonNullable<PlaybackState["item"]> }) {
   const queue = useQueue();
   const shuffle = useShuffleControl();
   const count = queue.entries.length - queue.index - 1;
+  const magic = useMagicQueueLabel();
   return (
     <View>
       <TrackHeader item={item} />
@@ -127,7 +129,7 @@ export function QueueHeader({ item }: { item: NonNullable<PlaybackState["item"]>
         className="flex-row items-center justify-between"
         style={{ paddingTop: CELL * 2, paddingBottom: CELL }}
       >
-        <CatalogLine>Up next</CatalogLine>
+        <CatalogLine className="shrink">{magic ?? "Up next"}</CatalogLine>
         {count > 0 && (
           <Text
             className="font-sans text-footnote text-secondary"
