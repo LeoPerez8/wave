@@ -1,9 +1,11 @@
 import {
+  lookupFailureLine,
   ytMusicFoundLyrics,
   type FoundLyrics,
   type LyricsAnswer,
   type LyricsSearchSong,
   type LyricsSource,
+  type LookupService,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 
@@ -14,13 +16,16 @@ import { WaveYtDownloads } from "@/native/waveYtDownloads";
 /** How long YT Music's lyrics may take before they count as failed (LRCLIB's search has its own limit). */
 const YT_MUSIC_TIMEOUT = "30 seconds";
 
-/** A source's request, settled: what it found, or that it failed. */
-const settle = (effect: Effect.Effect<FoundLyrics | null, unknown>): Effect.Effect<LyricsAnswer> =>
+/** A source's request, settled: what it found, or that it failed, logged with the service and why. */
+const settle = (
+  service: LookupService,
+  effect: Effect.Effect<FoundLyrics | null, unknown>,
+): Effect.Effect<LyricsAnswer> =>
   effect.pipe(
     Effect.match({
       onSuccess: (lyrics): LyricsAnswer => ({ ok: true, lyrics }),
       onFailure: (cause): LyricsAnswer => {
-        console.warn("[wave] lyrics search failed", cause);
+        console.warn(`[wave] ${lookupFailureLine("lyrics search", service, cause)}`);
         return { ok: false };
       },
     }),
@@ -46,9 +51,9 @@ export const askLyrics = (source: LyricsSource, song: LyricsSearchSong): Promise
   if (source === "lrclib") {
     return song.lookup === null
       ? Promise.resolve(NOTHING)
-      : appRuntime.runPromise(settle(searchLrclibLyrics(song.lookup)));
+      : appRuntime.runPromise(settle("LRCLIB", searchLrclibLyrics(song.lookup)));
   }
   return song.videoId === null
     ? Promise.resolve(NOTHING)
-    : appRuntime.runPromise(settle(ytMusicLyrics(song.videoId)));
+    : appRuntime.runPromise(settle("YT Music", ytMusicLyrics(song.videoId)));
 };

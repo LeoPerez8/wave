@@ -15,6 +15,7 @@ import {
   writeStarDownloads,
   downloadFailureAnswer,
   downloadJobKind,
+  downloadTagWriteOrigin,
   downloadFailurePlan,
   downloadSource,
   downloadStorageFull,
@@ -1023,7 +1024,9 @@ const answerJob = async (id: string): Promise<void> => {
       JSON.stringify(payload),
     );
     if (accepted && claim.decision === "import" && claim.saved !== undefined && "path" in payload)
-      void appRuntime.runPromise(fillInLyricsAndGenre(downloadedSong(claim.saved)));
+      void appRuntime.runPromise(
+        fillInLyricsAndGenre(downloadedSong(claim.saved), downloadTagWriteOrigin(claim.id)),
+      );
   } catch {
     // JS or the bridge went away mid-answer: the native lease expires and replays the decision.
   } finally {
