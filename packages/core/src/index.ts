@@ -1414,3 +1414,5 @@ export type {
   MixPlaylistEntry,
   StreamedSong,
 } from "./mixKnownSongs.ts";
+export { downloadJobKind } from "./downloadJobKind.ts";
+export type { DownloadJobKind } from "./downloadJobKind.ts";
