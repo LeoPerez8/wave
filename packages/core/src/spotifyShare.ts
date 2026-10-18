@@ -115,7 +115,7 @@ export const readSpotifySharedPlaylist = async (
  * Spotify leaves it. Rejects on an answer that isn't the library.
  */
 export const spotifyLibraryHas = (uri: string, read: SpotifyPageRead): Promise<boolean> =>
-  readSpotifyPages(
+  readSpotifyPages<boolean>(
     async (offset) => {
       const library = at(await read(offset), "me", "libraryV3");
       const items = at(library, "items");

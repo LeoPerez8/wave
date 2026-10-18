@@ -65,8 +65,8 @@ import { AppState } from "react-native";
 import { makeExternalStore } from "@/lib/externalStore";
 import { persistedSetting } from "@/lib/persistedSetting";
 import { appLog } from "@/log/appLog";
-import { askSpotifyAccount, WaveSpotify } from "@/native/waveSpotify";
 import type { NativeYtSong } from "@/native/waveYtMusic";
+import { askSpotifyAccount } from "@/spotify/askSpotify";
 import { askYtMusic } from "@/ytmusic/askYtMusic";
 import { currentLibraryFinder } from "@/ytmusic/libraryFinder";
 import { downloadStarredSongs, runYtPlaylistDownloadAction } from "@/ytmusic/YtDownloads";
@@ -172,18 +172,15 @@ type SourceRead =
 const readSource = async (read: YtLibraryRead): Promise<SourceRead> => {
   if (isSpotifyLibrarySource(read.source)) {
     const answer = await readSpotifyAccountPlaylist(read.source, (request) =>
-      askSpotifyAccount(() =>
+      askSpotifyAccount((spotify) =>
         request.kind === "likedSongs"
-          ? WaveSpotify.likedSongs(request.offset)
-          : WaveSpotify.playlist(request.uri, request.offset),
+          ? spotify.likedSongs(request.offset)
+          : spotify.playlist(request.uri, request.offset),
       ),
     );
     if (!answer.ok) return answer;
     // Typed whole, not narrowed to Spotify's side, so the plan's songs are YT Music's as the app reads them.
-    const source = {
-      service: "spotify" as const,
-      playlist: answer.playlist,
-    } as LinkedSource<NativeYtSong>;
+    const source: LinkedSource<NativeYtSong> = { service: "spotify", playlist: answer.playlist };
     return { ok: true, source };
   }
   const answer = await askYtMusic((ytMusic) =>
