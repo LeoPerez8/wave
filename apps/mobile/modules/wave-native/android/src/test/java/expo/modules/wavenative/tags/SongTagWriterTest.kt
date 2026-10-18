@@ -296,6 +296,94 @@ class SongTagWriterTest {
     assertArrayEquals("audio file untouched", before, file.readBytes())
   }
 
+  /** Fills in [fixture]'s advisory tag (1, then 0 in another copy) and checks nothing else changed. */
+  private fun assertFillsInAdvisory(fixture: String) {
+    for (advisory in listOf(1, 0)) {
+      val file = copyOf(fixture)
+      check(reader.read(file).advisory == null) { "$fixture has no advisory tag" }
+      val tagsBefore = reader.read(file)
+      val audioBefore = AudioPayload.of(file)
+      val report = writer.write(file, lyrics = null, genre = null, advisory = advisory)
+      assertEquals(
+        "$fixture report",
+        TagWriteReport(LyricsDestination.NONE, TagDestination.NONE, explicit = TagDestination.TAGS),
+        report,
+      )
+      val tagsAfter = reader.read(file)
+      assertEquals("$fixture advisory", advisory.toString(), tagsAfter.advisory)
+      assertEquals(
+        "$fixture other tags",
+        tagsBefore.copy(artwork = null),
+        tagsAfter.copy(advisory = null, artwork = null),
+      )
+      assertArrayEquals("$fixture audio", audioBefore, AudioPayload.of(file))
+    }
+  }
+
+  @Test fun fillsInAnMp3sAdvisory() = assertFillsInAdvisory("tagged.mp3")
+
+  @Test fun fillsInAFlacsAdvisory() = assertFillsInAdvisory("tagged.flac")
+
+  @Test fun fillsInAnM4asAdvisory() = assertFillsInAdvisory("tagged-aac.m4a")
+
+  @Test fun fillsInAnOggVorbisAdvisory() = assertFillsInAdvisory("tagged.ogg")
+
+  @Test fun fillsInAWavsAdvisory() = assertFillsInAdvisory("tagged.wav")
+
+  @Test fun fillsInAnUntaggedMp3sAdvisory() = assertFillsInAdvisory("untagged.mp3")
+
+  /** A file with an advisory tag keeps it (a YT Music download's, another app's); alone, it isn't touched. */
+  private fun assertKeepsAdvisory(fixture: String, has: String) {
+    val file = copyOf(fixture)
+    val before = file.readBytes()
+    val other = if (has == "1") 0 else 1
+    val report = writer.write(file, lyrics = null, genre = null, advisory = other)
+    assertEquals("$fixture report", TagWriteReport(LyricsDestination.NONE, TagDestination.NONE), report)
+    assertArrayEquals("$fixture untouched", before, file.readBytes())
+
+    assertEquals(TagDestination.NONE, writer.write(file, lyrics = NEW_LYRICS, genre = null, advisory = other).explicit)
+    assertEquals("$fixture advisory", has, reader.read(file).advisory)
+    assertEquals("$fixture lyrics", NEW_LYRICS, reader.read(file).lyrics)
+  }
+
+  @Test fun anMp3KeepsItsAdvisory() = assertKeepsAdvisory("explicit.mp3", has = "1")
+
+  @Test fun aFlacKeepsItsAdvisory() = assertKeepsAdvisory("explicit.flac", has = "1")
+
+  @Test fun anM4aKeepsItsAdvisory() = assertKeepsAdvisory("explicit.m4a", has = "1")
+
+  @Test fun anOggVorbisKeepsItsAdvisory() = assertKeepsAdvisory("clean.ogg", has = "0")
+
+  @Test
+  fun writesTheAdvisoryWithEverythingElse() {
+    val file = copyOf("untagged.mp3")
+    val report = writer.write(file, lyrics = NEW_LYRICS, genre = "Jazz", place = PLACE, advisory = 1)
+    assertEquals(
+      TagWriteReport(LyricsDestination.TAGS, TagDestination.TAGS, TagDestination.TAGS, TagDestination.TAGS, TagDestination.TAGS),
+      report,
+    )
+    val tags = reader.read(file)
+    assertEquals(listOf(NEW_LYRICS, "Jazz", "6", "1997", "1"), listOf(tags.lyrics, tags.genre, tags.trackNumber, tags.year, tags.advisory))
+  }
+
+  @Test
+  fun opusGetsNoAdvisory() {
+    val file = copyOf("tagged.opus")
+    val before = file.readBytes()
+    val report = writer.write(file, lyrics = null, genre = null, advisory = 1)
+    assertEquals(
+      TagWriteReport(LyricsDestination.NONE, TagDestination.NONE, explicit = TagDestination.NOT_WRITTEN),
+      report,
+    )
+    assertArrayEquals("audio file untouched", before, file.readBytes())
+  }
+
+  @Test
+  fun reportsWhereTheAdvisoryWentToJs() {
+    val report = TagWriteReport(LyricsDestination.NONE, TagDestination.NONE, explicit = TagDestination.TAGS)
+    assertEquals("tags", report.toMap()["explicit"])
+  }
+
   private companion object {
     val PLACE = AlbumPlace(trackNumber = 6, discNumber = 2, year = 1997)
     val PLACE_KEYS = listOf(FieldKey.TRACK_TOTAL, FieldKey.TRACK, FieldKey.DISC_TOTAL, FieldKey.DISC_NO, FieldKey.YEAR)
