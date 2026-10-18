@@ -39,12 +39,16 @@ object AndroidPlaylistImages {
    */
   fun squareJpegs(path: String, square: Square): Pair<ByteArray, ByteArray> {
     val decoded = decode(ImageDecoder.createSource(File(path)), shrink = false)
-    val fit = PlaylistImageStore.fitSquare(decoded.width, decoded.height, square)
-    val cropped = Bitmap.createBitmap(decoded, fit.left, fit.top, fit.side, fit.side)
     try {
-      return jpeg(cropped, PlaylistImageStore.LARGE_SIZE) to jpeg(cropped, PlaylistImageStore.THUMB_SIZE)
+      val fit = PlaylistImageStore.fitSquare(decoded.width, decoded.height, square)
+      // Inside the try: a crop that throws (out of memory on a big original) still frees the decoded photo.
+      val cropped = Bitmap.createBitmap(decoded, fit.left, fit.top, fit.side, fit.side)
+      try {
+        return jpeg(cropped, PlaylistImageStore.LARGE_SIZE) to jpeg(cropped, PlaylistImageStore.THUMB_SIZE)
+      } finally {
+        if (cropped !== decoded) cropped.recycle()
+      }
     } finally {
-      if (cropped !== decoded) cropped.recycle()
       decoded.recycle()
     }
   }

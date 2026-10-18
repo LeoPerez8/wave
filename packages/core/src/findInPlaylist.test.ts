@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { createPlaylistFinder } from "./index.ts";
+import {
+  createPlaylistFinder,
+  findInPlaylistHead,
+  foundInPlaylist,
+  hasFindQuery,
+} from "./index.ts";
 
 interface Song {
   readonly title: string;
@@ -70,5 +75,59 @@ describe("Find in Playlist", () => {
   test("a song with no artist or album is still found by its title", () => {
     const find = createPlaylistFinder(["Halo"], (title) => ({ title, artist: null }));
     assert.deepEqual(find.find("halo"), [0]);
+  });
+});
+
+describe("Find in Playlist's query", () => {
+  test("a query has something to find by once it holds a letter or a digit", () => {
+    assert.equal(hasFindQuery("halo"), true);
+    assert.equal(hasFindQuery(" 4 "), true);
+  });
+
+  test("a blank or punctuation-only query has nothing to find by", () => {
+    assert.equal(hasFindQuery(""), false);
+    assert.equal(hasFindQuery("   "), false);
+    assert.equal(hasFindQuery("…"), false);
+  });
+});
+
+describe("the list Find in Playlist shows", () => {
+  const songs = ["Halo", "Back in Black", "Crazy in Love", "Take On Me"];
+
+  test("while nothing is typed, the whole list shows and each row is its own place", () => {
+    const shown = foundInPlaylist(songs, null);
+    assert.deepEqual(shown.songs, songs);
+    assert.equal(shown.placeOf(2), 2);
+  });
+
+  test("the songs found show in playlist order, and a row leads back to its place in the playlist", () => {
+    const shown = foundInPlaylist(songs, [1, 3]);
+    assert.deepEqual(shown.songs, ["Back in Black", "Take On Me"]);
+    assert.equal(shown.placeOf(0), 1);
+    assert.equal(shown.placeOf(1), 3);
+  });
+
+  test("a place past the playlist's end (a list that shrank meanwhile) shows nothing", () => {
+    assert.deepEqual(foundInPlaylist(songs, [0, 9]).songs, ["Halo"]);
+  });
+});
+
+describe("what sits under Find in Playlist's field", () => {
+  test("while nothing is typed, the list's own header", () => {
+    assert.equal(findInPlaylistHead(null, true), "header");
+    assert.equal(findInPlaylistHead(null, false), "header");
+  });
+
+  test("a query that finds nothing in a list that's all in says No songs match", () => {
+    assert.equal(findInPlaylistHead([], true), "noMatch");
+  });
+
+  test("while a playlist's pages are still arriving, a query that finds nothing yet says nothing", () => {
+    assert.equal(findInPlaylistHead([], false), "none");
+  });
+
+  test("a query that finds songs shows just them", () => {
+    assert.equal(findInPlaylistHead([2], true), "none");
+    assert.equal(findInPlaylistHead([2], false), "none");
   });
 });

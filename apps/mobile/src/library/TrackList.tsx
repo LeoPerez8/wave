@@ -29,10 +29,8 @@ import { useListSelection } from "@/selection/useListSelection";
 import { useFavoriteIds } from "./favorites";
 import {
   FIND_FIELD_HEIGHT,
-  FindInPlaylistField,
-  foundSongs,
+  FindHead,
   librarySongText,
-  NoSongsMatch,
   useFindInLegendList,
 } from "./FindInPlaylist";
 import type { SongRow } from "./LibraryStore";
@@ -186,8 +184,7 @@ export function TrackList({ songs, context, header, sort, findable = false }: Pr
   );
   const spine = useSpine(sortKeys, list);
   const find = useFindInLegendList(list, songs, librarySongText, findable);
-  const { found } = find;
-  const shown = useMemo(() => foundSongs(songs, found), [songs, found]);
+  const { found, shown, placeOf } = find;
 
   const renderItem = useCallback(
     ({ item, index }: { item: SongRow; index: number }) => (
@@ -200,12 +197,12 @@ export function TrackList({ songs, context, header, sort, findable = false }: Pr
           item,
           listSelection,
           // A found song plays the whole list from its own place in it.
-          () => playSongs(songs, found?.[index] ?? index, context),
+          () => playSongs(songs, placeOf(index), context),
           (options) => openTrackActions(item, options),
         )}
       />
     ),
-    [context, currentId, favorites, songs, found, listSelection],
+    [context, currentId, favorites, songs, placeOf, listSelection],
   );
 
   return (
@@ -229,16 +226,7 @@ export function TrackList({ songs, context, header, sort, findable = false }: Pr
           minHeight: findable ? find.minHeight : undefined,
         }}
         initialScrollOffset={findable ? FIND_FIELD_HEIGHT : undefined}
-        ListHeaderComponent={
-          findable ? (
-            <>
-              <FindInPlaylistField find={find} />
-              {found === null ? header : found.length === 0 ? <NoSongsMatch /> : null}
-            </>
-          ) : (
-            header
-          )
-        }
+        ListHeaderComponent={findable ? <FindHead find={find} header={header} /> : header}
       />
       {spine.show && found === null && (
         <AlphabetSpine entries={spine.entries} onJump={spine.onJump} topRow={spine.topRow} />

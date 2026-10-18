@@ -38,6 +38,48 @@ export const FIND_IN_PLAYLIST_PLACEHOLDER = "Find in Playlist";
 export const FIND_IN_PLAYLIST_NO_MATCH = "No songs match";
 
 /**
+ * Whether [query] has anything to find by: false for a blank or
+ * punctuation-only one, which leaves the whole list showing.
+ */
+export const hasFindQuery = (query: string): boolean => normalizeSearchText(query) !== "";
+
+/** The rows a list shows while Find in Playlist narrows it. */
+export interface FoundInPlaylist<T> {
+  /** The songs shown, in playlist order: all of them while nothing is typed. */
+  readonly songs: readonly T[];
+  /** The place in the playlist of the row shown at [index], for a tap to play from. */
+  readonly placeOf: (index: number) => number;
+}
+
+/**
+ * What a list shows of [songs] when [found] (a finder's answer) narrows it:
+ * the whole list while it's null.
+ */
+export const foundInPlaylist = <T>(
+  songs: readonly T[],
+  found: readonly number[] | null,
+): FoundInPlaylist<T> =>
+  found === null
+    ? { songs, placeOf: (index) => index }
+    : {
+        songs: found.flatMap((place) => (place in songs ? [songs[place]!] : [])),
+        placeOf: (index) => found[index] ?? index,
+      };
+
+/**
+ * What sits under the field: "header", the list's own head, while nothing is
+ * typed; "noMatch" ("No songs match") once the query finds nothing in a list
+ * that's all in ([allRead]); "none" otherwise, over the songs found. A YT
+ * Music playlist whose pages are still arriving never says "No songs match":
+ * its skeleton rows stand for the songs still to come.
+ */
+export const findInPlaylistHead = (
+  found: readonly number[] | null,
+  allRead: boolean,
+): "header" | "noMatch" | "none" =>
+  found === null ? "header" : found.length === 0 && allRead ? "noMatch" : "none";
+
+/**
  * A finder over [songs], in playlist order. [describe] says what finds each
  * one. Build it once per list; each query then reuses the prepared text.
  */
@@ -57,7 +99,7 @@ export const createPlaylistFinder = <T>(
   const index = createSearchIndex(entries);
   return {
     find: (query) => {
-      if (normalizeSearchText(query) === "") return null;
+      if (!hasFindQuery(query)) return null;
       const results = index.search(query);
       const found = results.groups.flatMap((group) => group.items.map((entry) => entry.index));
       // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted

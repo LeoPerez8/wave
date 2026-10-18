@@ -192,12 +192,12 @@ function CropScreen({ request: { photo, framing: start, done } }: { request: Cro
   );
 }
 
-/** The photo outside the crop square, dimmed. */
+/** The photo outside the crop square, faded toward the screen's ground. */
 function Dim(frame: { left: number; top: number; width: number; height: number }) {
   return (
     <View
       pointerEvents="none"
-      className="bg-scrim"
+      className="bg-background"
       style={{ position: "absolute", opacity: 0.6, ...frame }}
     />
   );

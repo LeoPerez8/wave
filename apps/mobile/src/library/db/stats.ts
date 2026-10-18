@@ -11,6 +11,7 @@
  */
 import {
   readStoredGenres,
+  type ArtistFirstPlay,
   type ArtistStatsInput,
   type CountedListening,
   type CreditedPlayTotals,
@@ -264,12 +265,9 @@ export const songGenres = (db: LibraryDatabase, ids: readonly number[]): RecapSo
  * listed (Core's `recap` tells the period's discoveries from these). Reads
  * only those artists' songs' plays, through the play events' track index.
  */
-export const artistFirstPlays = (
-  db: LibraryDatabase,
-  ids: readonly number[],
-): { id: number; firstPlayAt: number }[] =>
+export const artistFirstPlays = (db: LibraryDatabase, ids: readonly number[]): ArtistFirstPlay[] =>
   chunks(ids).flatMap((only) =>
-    db.all<{ id: number; firstPlayAt: number }>(
+    db.all<ArtistFirstPlay>(
       sql`WITH credited AS (${CREDITED_ARTISTS})
         SELECT credited.artist_id AS id, min(play_events.started_at) AS "firstPlayAt"
         FROM credited CROSS JOIN play_events ON play_events.track_id = credited.track_id

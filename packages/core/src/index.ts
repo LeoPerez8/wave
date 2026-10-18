@@ -136,8 +136,11 @@ export {
   FIND_IN_PLAYLIST_NO_MATCH,
   FIND_IN_PLAYLIST_PLACEHOLDER,
   createPlaylistFinder,
+  findInPlaylistHead,
+  foundInPlaylist,
+  hasFindQuery,
 } from "./findInPlaylist.ts";
-export type { PlaylistFinder, PlaylistFindText } from "./findInPlaylist.ts";
+export type { FoundInPlaylist, PlaylistFinder, PlaylistFindText } from "./findInPlaylist.ts";
 export { createSearchCatalog } from "./searchCatalog.ts";
 export type { SearchCatalog, SearchCatalogStats } from "./searchCatalog.ts";
 export { SEARCH_FOCUS_LIMITS, startSearchFocus, stepSearchFocus } from "./searchFocus.ts";
@@ -224,12 +227,15 @@ export {
   parseOpenedRecaps,
   parseRecapId,
   recap,
+  recapAutoForward,
   recapBack,
   recapBarFill,
+  recapCardFileName,
   recapForward,
   recapHourLabel,
   recapId,
   recapSlides,
+  recapStoryBackground,
   recapTitle,
   recapToAnnounce,
   recapWeekdayLabel,
@@ -238,6 +244,7 @@ export {
   withRecapOpened,
 } from "./recap.ts";
 export type {
+  ArtistFirstPlay,
   CountedListening,
   Recap,
   RecapGenre,
@@ -348,6 +355,8 @@ export {
   NIGHT_SLATE,
   TONES,
   themeContrastIssues,
+  RECAP_COLOURS,
+  RECAP_INK,
   SETTINGS_TILE_COLOURS,
   SETTINGS_TILE_GLYPH,
 } from "./theme.ts";
@@ -361,7 +370,7 @@ export {
 } from "./colourPicker.ts";
 export type { ColourPickerLayout, ColourPickerTarget } from "./colourPicker.ts";
 export { overlayDivider } from "./overlayDivider.ts";
-export type { ContrastIssue, Theme, ThemeColors } from "./theme.ts";
+export type { ContrastIssue, RecapColour, Theme, ThemeColors } from "./theme.ts";
 export {
   CUSTOM_INK,
   DEFAULT_THEME_CHOICE,

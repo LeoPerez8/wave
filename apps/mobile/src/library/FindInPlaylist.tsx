@@ -2,12 +2,15 @@ import {
   FIND_IN_PLAYLIST_NO_MATCH,
   FIND_IN_PLAYLIST_PLACEHOLDER,
   createPlaylistFinder,
+  findInPlaylistHead,
+  foundInPlaylist,
+  hasFindQuery,
   joinArtists,
-  normalizeSearchText,
   type PlaylistFindText,
 } from "@wave/core";
 import type { LegendListRef } from "@legendapp/list/react-native";
 import {
+  type ReactNode,
   type RefObject,
   useCallback,
   useEffect,
@@ -58,10 +61,7 @@ export const entryText = (
 ): PlaylistFindText =>
   entry.source === "library" ? librarySongText(entry.track) : creditedText(entry.song);
 
-/** Whether [query] has anything to find by (Core's `createPlaylistFinder` narrows the list). */
-const finding = (query: string): boolean => normalizeSearchText(query) !== "";
-
-export interface FindInList {
+export interface FindInList<T = unknown> {
   readonly query: string;
   readonly onChange: (query: string) => void;
   /**
@@ -69,6 +69,10 @@ export interface FindInList {
    * null while nothing is typed: the whole list shows, with its header.
    */
   readonly found: readonly number[] | null;
+  /** The songs the list shows: all of them while nothing is typed, else those found, in order. */
+  readonly shown: readonly T[];
+  /** The place in the whole list of the song shown at [index], for a tap to play from. */
+  readonly placeOf: (index: number) => number;
   /**
    * For the list's content container: tall enough that the field can always
    * scroll out of sight, however short the list.
@@ -87,11 +91,12 @@ export function useFindInList<T>(
   describe: (song: T) => PlaylistFindText | null,
   offset: () => number,
   scrollTo: (y: number) => void,
-): FindInList {
+): FindInList<T> {
   const { height } = useWindowDimensions();
   const [query, setQuery] = useState("");
   const finder = useMemo(() => createPlaylistFinder(songs, describe), [songs, describe]);
   const found = useMemo(() => finder.find(query), [finder, query]);
+  const { songs: shown, placeOf } = useMemo(() => foundInPlaylist(songs, found), [songs, found]);
   // The list's latest scroll handles, for a change made after the render that passed them.
   const scroll = useRef({ offset, scrollTo });
   useLayoutEffect(() => {
@@ -101,8 +106,8 @@ export function useFindInList<T>(
   const [restore, setRestore] = useState<{ readonly y: number } | null>(null);
   const current = useRef("");
   const onChange = useCallback((next: string) => {
-    const was = finding(current.current);
-    const is = finding(next);
+    const was = hasFindQuery(current.current);
+    const is = hasFindQuery(next);
     if (!was && is) saved.current = scroll.current.offset();
     if (was && !is && saved.current !== null) {
       setRestore({ y: saved.current });
@@ -117,7 +122,7 @@ export function useFindInList<T>(
     const frame = requestAnimationFrame(() => scroll.current.scrollTo(restore.y));
     return () => cancelAnimationFrame(frame);
   }, [restore]);
-  return { query, onChange, found, minHeight: height + FIND_FIELD_HEIGHT };
+  return { query, onChange, found, shown, placeOf, minHeight: height + FIND_FIELD_HEIGHT };
 }
 
 /**
@@ -129,7 +134,7 @@ export function useFindInLegendList<T>(
   songs: readonly T[],
   describe: (song: T) => PlaylistFindText | null,
   enabled: boolean,
-): FindInList {
+): FindInList<T> {
   return useFindInList(
     enabled ? songs : NO_SONGS,
     describe,
@@ -141,17 +146,31 @@ export function useFindInLegendList<T>(
 const NO_SONGS: readonly never[] = [];
 
 /**
- * The songs a list shows while [find] narrows it, in its order: all of
- * [songs] while nothing is typed.
+ * The top of a findable list: the Find in Playlist field, then the list's
+ * [header] while nothing is typed, or "No songs match" when the query finds
+ * nothing (Core's `findInPlaylistHead`). A list still reading its pages
+ * ([allRead] false) doesn't say so yet: its skeleton rows stand for the rest.
  */
-export const foundSongs = <T,>(
-  songs: readonly T[],
-  found: readonly number[] | null,
-): readonly T[] =>
-  found === null ? songs : found.flatMap((index) => (index in songs ? [songs[index]!] : []));
+export function FindHead({
+  find,
+  header,
+  allRead = true,
+}: {
+  find: FindInList;
+  header: ReactNode;
+  allRead?: boolean;
+}) {
+  const head = findInPlaylistHead(find.found, allRead);
+  return (
+    <>
+      <FindInPlaylistField find={find} />
+      {head === "header" ? header : head === "noMatch" ? <NoSongsMatch /> : null}
+    </>
+  );
+}
 
 /** The Find in Playlist field, at the top of a playlist's list. */
-export function FindInPlaylistField({ find }: { find: FindInList }) {
+function FindInPlaylistField({ find }: { find: FindInList }) {
   return (
     <View style={{ height: FIND_FIELD_HEIGHT }}>
       <SearchField
@@ -165,7 +184,7 @@ export function FindInPlaylistField({ find }: { find: FindInList }) {
 }
 
 /** Under the field when the query finds no song. */
-export function NoSongsMatch() {
+function NoSongsMatch() {
   return (
     <View style={{ paddingTop: CELL * 3 }}>
       <Text className="font-sans text-subheadline text-secondary">{FIND_IN_PLAYLIST_NO_MATCH}</Text>
