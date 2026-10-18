@@ -87,8 +87,16 @@ describe("queue tracks", () => {
       album: "Album 7",
       artworkPath: "/covers/7.jpg",
       thumbPath: "/covers/7.thumb.jpg",
+      explicit: false,
     });
     assert.equal(toQueueTrack(song(8, null)).thumbPath, null);
+  });
+
+  test("a queued song carries whether it's explicit, unknown counting as clean", () => {
+    assert.equal(toQueueTrack({ ...song(1), explicit: "explicit" }).explicit, true);
+    assert.equal(toQueueTrack({ ...song(2), explicit: "clean" }).explicit, false);
+    assert.equal(toQueueTrack(song(3)).explicit, false);
+    assert.equal(toYtQueueTrack({ ...ytSong("x"), explicit: true }, null).explicit, true);
   });
 
   test("a YT Music song plays by its track id, with its credit and cached artwork", () => {
@@ -118,6 +126,7 @@ describe("queue tracks", () => {
       artworkPath: "/files/artwork/abc.jpg",
       thumbPath: "/files/artwork/abc_thumb.jpg",
       palette: { dominant: "#203040" },
+      explicit: false,
     });
   });
 

@@ -16,6 +16,7 @@ import type {
   DiscoverSeedSong,
   DiscoverSongPlays,
 } from "./discoverMixes.ts";
+import { isExplicit, type ExplicitFlag } from "./explicit.ts";
 import { identityKey } from "./library.ts";
 import type { MixedSong, YtAlbumSong } from "./ytDiscover.ts";
 
@@ -41,6 +42,34 @@ export interface DiscoverMixBlend {
    */
   readonly keep?: (song: DiscoverMixSong) => boolean;
 }
+
+/** What a mix may play of its stored songs. */
+export interface DiscoverMixKeep {
+  /** Don't play explicit is on: explicit songs (new or the Library's) are left out. */
+  readonly dontPlayExplicit: boolean;
+  /**
+   * The Library's songs by id, or null when they aren't read (Home): a pool
+   * song it no longer has is left out, and its flag is the Library's, not
+   * the one the build saved.
+   */
+  readonly library: ReadonlyMap<number, { readonly explicit: ExplicitFlag }> | null;
+}
+
+/**
+ * The songs a mix keeps (`DiscoverMixBlend.keep`): Library songs still in
+ * the Library, and, while Don't play explicit is on, clean ones alone
+ * (unknown counts as clean). Turning the switch over re-blends the saved
+ * mixes; nothing is built again.
+ */
+export const discoverMixKeep =
+  ({ dontPlayExplicit, library }: DiscoverMixKeep) =>
+  (song: DiscoverMixSong): boolean => {
+    if (song.source === "stream") return !(dontPlayExplicit && isExplicit(song.song.explicit));
+    const known = library === null ? undefined : library.get(song.track.id);
+    if (library !== null && known === undefined) return false;
+    const flag = known?.explicit ?? song.track.explicit ?? "unknown";
+    return !(dontPlayExplicit && isExplicit(flag));
+  };
 
 /** How many levels there are: level n makes n fifths of a mix new. */
 const LEVELS = 5;
@@ -155,7 +184,12 @@ export const discoverMixLibraryPool = <S extends DiscoverRadioSong>(
   const add = (song: DiscoverSeedSong): void => {
     if (pool.length >= most || seen.has(song.id)) return;
     seen.add(song.id);
-    pool.push({ id: song.id, title: song.title, artist: song.artist });
+    const { id, title, artist, explicit } = song;
+    pool.push(
+      explicit === undefined || explicit === "unknown"
+        ? { id, title, artist }
+        : { id, title, artist, explicit },
+    );
   };
   for (const song of radio) {
     if (song.video) continue;

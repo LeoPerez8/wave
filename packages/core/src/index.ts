@@ -1297,3 +1297,13 @@ export { applyJournalChanges } from "./journalChanges.ts";
 export type { JournalChanges } from "./journalChanges.ts";
 export { PLAY_ACTION_LABELS, menuLayout } from "./menuLayout.ts";
 export type { MenuLayout, MenuSubject, PlayAction, PlayCard } from "./menuLayout.ts";
+export {
+  explicitPassOver,
+  explicitPlayNotice,
+  explicitSkipNotice,
+  queuedPassedOver,
+} from "./explicitPlayback.ts";
+export type { ExplicitPlayback } from "./explicitPlayback.ts";
+export type { PassOver } from "./queue.ts";
+export { discoverMixKeep } from "./discoverMixLevels.ts";
+export type { DiscoverMixKeep } from "./discoverMixLevels.ts";
