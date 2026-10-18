@@ -89,13 +89,11 @@ describe("placeOverlayCard next to an anchor", () => {
     assert.equal(frame.top, 192);
   });
 
-  test("the floating tab bar and mini player count as the bottom of the screen", () => {
-    const anchor = near(450);
-    assert.equal(placeOverlayCard({ ...phone, cardHeight: 300, anchor }).side, "below");
-    const frame = placeOverlayCard({ ...phone, cardHeight: 300, anchor, chromeBottom: 136 });
-    assert.equal(frame.side, "above");
-    assert.equal(frame.top, 142);
-    assert.equal(frame.maxHeight, 386);
+  test("a menu under a row near the bottom opens below it, over the mini player and tab bar", () => {
+    // The floating chrome (tab bar and mini player, 755 to 891 dp) is no bottom edge: only the
+    // gesture bar is. A 100 dp card fits between the row's foot (756 + 8) and 915 - 24 - 24.
+    const frame = placeOverlayCard({ ...phone, cardHeight: 100, anchor: near(700) });
+    assert.deepEqual([frame.side, frame.top, frame.maxHeight], ["below", 764, 103]);
   });
 
   test("a menu too tall for either side shrinks to fit the roomier side and scrolls", () => {
@@ -142,38 +140,23 @@ describe("placeOverlayCard next to an anchor", () => {
     assert.equal(small.maxHeight, 811);
   });
 
-  test("a row half under the tab bar still gets a menu clear of it, above the row", () => {
-    const frame = placeOverlayCard({
-      ...phone,
-      cardHeight: 200,
-      anchor: near(740),
-      chromeBottom: 80,
-    });
-    assert.deepEqual([frame.side, frame.top], ["above", 532]);
-  });
-
-  test("a card opened from the tab bar under the mini player stays clear of the status bar", () => {
+  test("a card opened from the tab bar draws over the mini player, clear of the status bar", () => {
     // The tab bar's editor, from a long press on a tab: the bar (64 dp) sits a cell above
-    // the gesture bar, the mini player (56 dp) a cell above it, 136 dp of chrome in all.
-    // The card stops a margin above the mini player (915 - 24 - 136 - 24 = 731) and a margin
-    // below the status bar (56): 675 dp, its rows scrolling and Done showing at its foot.
+    // the gesture bar. The card may run from a gap above the tab (819 - 8 = 811) to a margin
+    // below the status bar (56): 755 dp, its rows scrolling and Done showing at its foot.
     const tab = { rect: { top: 819, bottom: 883, left: 24, right: 106 }, gap: 8, minHeight: 160 };
-    const tall = placeOverlayCard({ ...phone, cardHeight: 900, anchor: tab, chromeBottom: 136 });
+    const tall = placeOverlayCard({ ...phone, cardHeight: 900, anchor: tab });
     assert.deepEqual(tall, {
       left: 24,
       top: 56,
       width: 364,
-      maxHeight: 675,
+      maxHeight: 755,
       side: "above",
       flow: "up",
     });
-    // Just taller than that room: it once got the room down to the tab itself, so it sat on
-    // the mini player's margin and ran up to 31 dp, under the 32 dp status bar.
-    const snug = placeOverlayCard({ ...phone, cardHeight: 700, anchor: tab, chromeBottom: 136 });
-    assert.deepEqual([snug.top, snug.maxHeight], [56, 675]);
-    // A card that fits sits on the mini player's margin, as before.
-    const short = placeOverlayCard({ ...phone, cardHeight: 400, anchor: tab, chromeBottom: 136 });
-    assert.deepEqual([short.top, short.maxHeight], [331, 675]);
+    // A card that fits sits just above the tab, over the mini player.
+    const short = placeOverlayCard({ ...phone, cardHeight: 400, anchor: tab });
+    assert.deepEqual([short.top, short.maxHeight], [411, 755]);
   });
 
   test("a menu from a row scrolled up under the status bar stays a margin below the bar", () => {

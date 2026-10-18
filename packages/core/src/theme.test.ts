@@ -1,7 +1,16 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { DEFAULT_THEME, NIGHT_SLATE, TONES, contrastRatio, themeContrastIssues } from "./index.ts";
+import {
+  DEFAULT_THEME,
+  NIGHT_SLATE,
+  SETTINGS_PAGES,
+  SETTINGS_TILE_COLOURS,
+  SETTINGS_TILE_GLYPH,
+  TONES,
+  contrastRatio,
+  themeContrastIssues,
+} from "./index.ts";
 
 describe("DEFAULT_THEME", () => {
   test("light mode keeps the fog theme it shipped with", () => {
@@ -109,5 +118,38 @@ describe("themeContrastIssues", () => {
       themeContrastIssues(flat).map(({ ink, on }) => `${ink} on ${on}`),
       ["on-accent on accent"],
     );
+  });
+});
+
+describe("SETTINGS_TILE_COLOURS", () => {
+  const schemes = ["light", "dark"] as const;
+
+  test("has a colour, in each scheme, for the tile of every Settings page", () => {
+    for (const scheme of schemes) {
+      for (const { title, colour } of SETTINGS_PAGES) {
+        assert.match(
+          SETTINGS_TILE_COLOURS[scheme][colour],
+          /^#[0-9a-f]{6}$/,
+          `${title}, ${scheme}`,
+        );
+      }
+    }
+  });
+
+  test("keeps a white glyph legible on every tile, light and dark (3:1, a non-text mark)", () => {
+    assert.equal(SETTINGS_TILE_GLYPH, "#ffffff");
+    for (const scheme of schemes) {
+      for (const [name, colour] of Object.entries(SETTINGS_TILE_COLOURS[scheme])) {
+        const ratio = contrastRatio(SETTINGS_TILE_GLYPH, colour);
+        assert.ok(ratio >= 3, `white on ${name} (${scheme}) is ${ratio.toFixed(2)}:1`);
+      }
+    }
+  });
+
+  test("sets every tile off dark mode's black ground", () => {
+    for (const [name, colour] of Object.entries(SETTINGS_TILE_COLOURS.dark)) {
+      const ratio = contrastRatio(colour, DEFAULT_THEME.dark.background);
+      assert.ok(ratio >= 3, `${name} on the dark ground is ${ratio.toFixed(2)}:1`);
+    }
   });
 });

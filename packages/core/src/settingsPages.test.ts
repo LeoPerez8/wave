@@ -38,6 +38,27 @@ describe("Settings pages", () => {
       ],
     );
   });
+
+  test("each page names its icon and its own colour, in the iOS Settings way", () => {
+    assert.deepEqual(
+      SETTINGS_PAGES.map(({ title, icon, colour }) => [title, icon, colour]),
+      [
+        ["Library", "books", "red"],
+        ["Appearance", "palette", "purple"],
+        ["Layout", "layout", "indigo"],
+        ["Playback", "play", "pink"],
+        ["Lyrics and tags", "quote", "orange"],
+        ["Downloads", "download", "green"],
+        ["Accounts", "user", "blue"],
+        ["Developer", "code", "grey"],
+      ],
+    );
+  });
+
+  test("no two pages share a colour", () => {
+    const colours = SETTINGS_PAGES.map(({ colour }) => colour);
+    assert.equal(new Set(colours).size, colours.length);
+  });
 });
 
 describe("the Layout page", () => {
