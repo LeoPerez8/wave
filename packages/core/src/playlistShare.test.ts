@@ -10,6 +10,7 @@ import {
   playlistShareServices,
   shareSignInAlert,
   sharedEditBatches,
+  spotifyPlaylistUrl,
   ytMusicPlaylistUrl,
   ytShareMatch,
   ytShareSong,
@@ -207,10 +208,11 @@ describe("sharedEditBatches", () => {
 });
 
 describe("playlistShareServices", () => {
-  test("offers YT Music while it's on, and nothing otherwise", () => {
-    assert.deepEqual(playlistShareServices({ ytMusic: true }), ["ytMusic"]);
-    assert.deepEqual(playlistShareServices({ ytMusic: false }), []);
+  test("offers Spotify always, and YT Music before it while YT Music is on", () => {
+    assert.deepEqual(playlistShareServices({ ytMusic: true }), ["ytMusic", "spotify"]);
+    assert.deepEqual(playlistShareServices({ ytMusic: false }), ["spotify"]);
     assert.equal(PLAYLIST_SHARE_LABELS.ytMusic, "YT Music");
+    assert.equal(PLAYLIST_SHARE_LABELS.spotify, "Spotify");
   });
 
   test("asks to sign in before sharing signed out", () => {
@@ -220,9 +222,22 @@ describe("playlistShareServices", () => {
         "Sharing a playlist makes an unlisted copy of it on your YouTube Music account, with a link anyone can open.",
       action: { label: "Sign In" },
     });
+    assert.deepEqual(shareSignInAlert("spotify"), {
+      title: "Sign In to Spotify",
+      message:
+        "Sharing a playlist makes a public copy of it on your Spotify account, with a link anyone can open.",
+      action: { label: "Sign In" },
+    });
   });
 
   test("links to a YT Music playlist by its id", () => {
     assert.equal(ytMusicPlaylistUrl("PLabc"), "https://music.youtube.com/playlist?list=PLabc");
+  });
+
+  test("links to a Spotify playlist by its URI", () => {
+    assert.equal(
+      spotifyPlaylistUrl("spotify:playlist:37i9dQZF1DXcBWIGoYBM5M"),
+      "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M",
+    );
   });
 });

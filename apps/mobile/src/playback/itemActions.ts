@@ -6,6 +6,7 @@ import {
   itemActions,
   playlistPlayback,
   playlistRemovals,
+  playlistShareServices,
   unsearchedSongJob,
   type ActionSurface,
   type ItemAction,
@@ -205,7 +206,7 @@ function usePlan(
 } {
   const here = usePathname();
   const onlineLookups = useLyricsAndGenreLookupsEnabled();
-  // A playlist can be shared on YT Music while it's on.
+  // A playlist can be shared on Spotify, and on YT Music while it's on.
   const ytMusic = useYtMusicEnabled();
   const download = useMissingSongDownloadStatus(onlyMissingSong(target));
   // YT Music songs among the items: whether each is a file by now, and who their artists are.
@@ -245,7 +246,7 @@ function usePlan(
     onlineLookups,
     here,
     streamedArtists,
-    sharing: ytMusic,
+    sharing: playlistShareServices({ ytMusic }).length > 0,
   });
   return { planned, missingSongs, perAlbum, collectionSongs };
 }

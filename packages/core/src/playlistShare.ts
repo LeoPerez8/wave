@@ -16,33 +16,47 @@ import type { SpotifySong } from "./spotifyPlaylist.ts";
 import type { YtSong } from "./ytMusic.ts";
 
 /** A service a playlist can be shared on. */
-export type PlaylistShareService = "ytMusic";
+export type PlaylistShareService = "ytMusic" | "spotify";
 
 /** What a playlist's Share card calls each service. */
 export const PLAYLIST_SHARE_LABELS: { readonly [S in PlaylistShareService]: string } = {
   ytMusic: "YT Music",
+  spotify: "Spotify",
 };
 
-/** The services a playlist can be shared on now: YT Music while it's on in Settings. */
+/**
+ * The services a playlist can be shared on now: YT Music while it's on in
+ * Settings, and Spotify, whose only switch is signing in.
+ */
 export const playlistShareServices = ({
   ytMusic,
 }: {
   readonly ytMusic: boolean;
-}): PlaylistShareService[] => (ytMusic ? ["ytMusic"] : []);
+}): PlaylistShareService[] => (ytMusic ? ["ytMusic", "spotify"] : ["spotify"]);
+
+/** The copy sharing on each service makes. */
+const SHARED_COPY: { readonly [S in PlaylistShareService]: string } = {
+  ytMusic: "an unlisted copy of it on your YouTube Music account",
+  // Spotify's private playlists don't open for anyone else.
+  spotify: "a public copy of it on your Spotify account",
+};
 
 /** What sharing on [service] signed out asks: signing in, which it needs. */
 export const shareSignInAlert = (
   service: PlaylistShareService,
 ): AlertSpec & { readonly action: NonNullable<AlertSpec["action"]> } => ({
   title: `Sign In to ${PLAYLIST_SHARE_LABELS[service]}`,
-  message:
-    "Sharing a playlist makes an unlisted copy of it on your YouTube Music account, with a link anyone can open.",
+  message: `Sharing a playlist makes ${SHARED_COPY[service]}, with a link anyone can open.`,
   action: { label: "Sign In" },
 });
 
 /** The link to the YT Music playlist [playlistId], as sharing sends it. */
 export const ytMusicPlaylistUrl = (playlistId: string): string =>
   `https://music.youtube.com/playlist?list=${playlistId}`;
+
+/** The link to the Spotify playlist [uri] (`spotify:playlist:<id>`), as sharing sends it. */
+export const spotifyPlaylistUrl = (uri: string): string =>
+  `https://open.spotify.com/playlist/${uri.split(":").at(-1) ?? ""}`;
 
 /** How many edits one request to the service carries. */
 const EDITS_PER_REQUEST = 100;

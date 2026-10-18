@@ -133,8 +133,8 @@ export interface ActionSubject<A extends LibraryArtistRef = LibraryArtistRef> {
    */
   readonly streamedArtists?: StreamedArtists<A> | undefined;
   /**
-   * A service a playlist can be shared on is on (YT Music): a playlist's
-   * menu offers Share.
+   * A service a playlist can be shared on is on (`playlistShareServices`):
+   * a playlist's menu offers Share.
    */
   readonly sharing?: boolean | undefined;
 }
