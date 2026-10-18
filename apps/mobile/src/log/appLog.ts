@@ -149,17 +149,18 @@ interface ErrorUtilsGlobal {
   setGlobalHandler(handler: (error: unknown, isFatal?: boolean) => void): void;
 }
 
-interface HermesRejectionTracker {
+interface HermesInternalGlobal {
   enablePromiseRejectionTracker?(options: {
     allRejections: boolean;
     onUnhandled: (id: number, rejection: unknown) => void;
     onHandled: (id: number) => void;
   }): void;
+  getInstrumentedStats?(): { js_heapSize?: number };
 }
 
 const globals = globalThis as typeof globalThis & {
   ErrorUtils?: ErrorUtilsGlobal;
-  HermesInternal?: HermesRejectionTracker;
+  HermesInternal?: HermesInternalGlobal;
 };
 
 /** Unhandled errors go in the log with their stack, then on to React Native's handler. */
@@ -198,6 +199,21 @@ const captureUnhandledRejections = (): void => {
   });
 };
 
+/**
+ * Native code's memory lines (`log/JsHeap.kt`, `log/MemoryWarnings.kt`): it asks for the Hermes
+ * heap, which only JS can read, and at Android's memory warnings the waiting entries are written
+ * at once instead of after the two-second wait, so the lines before a kill reach the file.
+ */
+const answerMemoryEvents = (log: NonNullable<typeof WaveAppLog>): void => {
+  log.addListener("hermesHeapWanted", () => {
+    const heap = globals.HermesInternal?.getInstrumentedStats?.().js_heapSize;
+    if (typeof heap === "number") log.reportHermesHeap?.(heap);
+  });
+  log.addListener("memoryWarning", () => {
+    void flushAppLog();
+  });
+};
+
 let installed = false;
 
 /**
@@ -213,6 +229,7 @@ export const installAppLog = (): void => {
   console.error = captureConsole("error", consoleError);
   captureUncaughtErrors();
   captureUnhandledRejections();
+  answerMemoryEvents(WaveAppLog);
   AppState.addEventListener("change", (state) => {
     if (state !== "active") void flushAppLog();
   });

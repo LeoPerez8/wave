@@ -8,6 +8,8 @@ import android.os.Looper
 import android.os.SystemClock
 import expo.modules.wavenative.artwork.AndroidArtworkProcessor
 import expo.modules.wavenative.artwork.ArtworkStore
+import expo.modules.wavenative.log.AndroidMemory
+import expo.modules.wavenative.log.JsHeap
 import expo.modules.wavenative.log.WaveLog
 import expo.modules.wavenative.player.JsRuntime
 import expo.modules.wavenative.scan.LibraryScanner
@@ -177,6 +179,21 @@ class AndroidDownloads private constructor(private val context: Context) {
     }
   }
 
+  /**
+   * The lines written about once a minute while the service runs, on a thread of their own (the
+   * memory line waits up to half a second for JS's heap). Another line takes the same beat with
+   * `minutes.add { WaveLog.i(TAG, …) }` here.
+   */
+  private val minutes = MinuteLines(SystemClock::elapsedRealtime, every = { period, tick ->
+    val ticking = minuteTicker.scheduleWithFixedDelay({ tick() }, period, period, TimeUnit.MILLISECONDS)
+    ({ ticking.cancel(false) })
+  }).also { minutes ->
+    minutes.add { WaveLog.i(TAG, DownloadServiceLines.memory(jobs.counts(), AndroidMemory.read(), JsHeap.app.read())) }
+  }
+  private val minuteTicker by lazy {
+    Executors.newSingleThreadScheduledExecutor { tick -> Thread(tick, "WaveDownloadMinutes").apply { isDaemon = true } }
+  }
+
   fun subscribe(listener: () -> Unit): () -> Unit { listeners.add(listener); return { listeners.remove(listener) } }
   /**
    * The journal may have changed. Listeners (JS, which then asks for what changed since its
@@ -206,9 +223,10 @@ class AndroidDownloads private constructor(private val context: Context) {
   /** Starts the work, unless it runs already; [restarted] when Android restarted the service after Wave was closed. */
   @Synchronized fun start(onIdle: () -> Unit, refresh: () -> Unit, restarted: Boolean = false) {
     if (worker != null) return
-    WaveLog.i(TAG, DownloadServiceLines.started(restarted, jobs.counts()))
+    WaveLog.i(TAG, DownloadServiceLines.started(restarted, jobs.counts(), AndroidMemory.read()))
     startedAt = SystemClock.elapsedRealtime()
     jobs.startWork()
+    minutes.start()
     main.post { JsRuntime.ensureStarted(context, OWNER) }
     deadlines = Executors.newSingleThreadScheduledExecutor().also { executor ->
       // Also refreshes the notification and the rows while transfers go on.
@@ -241,8 +259,9 @@ class AndroidDownloads private constructor(private val context: Context) {
 
   /** Android's time limit stops actual socket work before removing foreground protection. */
   @Synchronized fun stop(why: DownloadServiceStop, timedOut: Boolean = false) {
-    if (worker != null) WaveLog.i(TAG, DownloadServiceLines.stopped(why, SystemClock.elapsedRealtime() - startedAt, jobs.counts()))
+    if (worker != null) WaveLog.i(TAG, DownloadServiceLines.stopped(why, SystemClock.elapsedRealtime() - startedAt, jobs.counts(), AndroidMemory.read()))
     jobs.stopWork(transport)
+    minutes.stop()
     worker?.shutdownNow(); worker = null
     steps?.shutdownNow(); steps = null
     deadlines?.shutdownNow(); deadlines = null
