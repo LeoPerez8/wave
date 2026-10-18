@@ -35,7 +35,7 @@ class DurableJournalWritesTest {
   @Test fun aBigQueueWritesAboutOnceASecond() = inFolder { folder ->
     var now = 1_000L
     val owner = DurableDownloads(File(folder, "jobs"), clock = { now })
-    for (index in 1..700) owner.enqueue(song("song-$index"), null)
+    owner.enqueueAll((1..700).map { DurableDownloads.Request(song("song-$it"), equivalentId = null) })
     owner.advance(NoTransfer, NoPublication)
     owner.flush()
     val leases = (1..5).map { owner.claim("song-$it")!! }
@@ -60,16 +60,38 @@ class DurableJournalWritesTest {
     val delays = mutableListOf<Long>()
     val waiting = mutableListOf<() -> Unit>()
     val owner = DurableDownloads(journal, clock = { now }, later = { delay, run -> delays += delay; waiting += run })
+    for (id in listOf("song-1", "song-2", "song-3")) owner.enqueue(song(id), null)
+    now += 300
+    owner.moveQueued(listOf("song-3", "song-1"))
+    owner.moveQueued(listOf("song-2", "song-3"))
+    // One write waits for the two, 700 ms on.
+    assertEquals(listOf(700L), delays)
+    assertEquals(listOf("song-1", "song-2", "song-3"), reopened(journal).map { it["id"] })
+    now += 700
+    waiting.single()()
+    assertEquals(listOf("song-2", "song-3", "song-1"), reopened(journal).map { it["id"] })
+  }
+
+  /** "A crash still loses no job": a song asked for is in the journal before [DurableDownloads.enqueue] returns. */
+  @Test fun aNewJobIsWrittenAtOnce() = inFolder { folder ->
+    var now = 1_000L
+    val journal = File(folder, "jobs")
+    val owner = DurableDownloads(journal, clock = { now }, later = { _, _ -> })
     owner.enqueue(song("song-1"), null)
     now += 300
     owner.enqueue(song("song-2"), null)
-    owner.enqueue(song("song-3"), null)
-    // One write waits for the two, 700 ms on.
-    assertEquals(listOf(700L), delays)
-    assertEquals(listOf("song-1"), reopened(journal).map { it["id"] })
-    now += 700
-    waiting.single()()
-    assertEquals(listOf("song-1", "song-2", "song-3"), reopened(journal).map { it["id"] })
+    assertEquals(listOf("song-1", "song-2"), reopened(journal).map { it["id"] })
+  }
+
+  /** A replacement run of 725 songs is asked for in one write, not 725. */
+  @Test fun aBatchOfNewJobsIsOneWrite() = inFolder { folder ->
+    val journal = File(folder, "jobs")
+    val owner = DurableDownloads(journal, later = { _, _ -> })
+    owner.flush(); owner.takeWriteStats()
+    val ids = owner.enqueueAll((1..725).map { DurableDownloads.Request(song("song-$it"), equivalentId = null) })
+    assertEquals((1..725).map { "song-$it" }, ids)
+    assertEquals(1, owner.takeWriteStats().writes)
+    assertEquals(ids, reopened(journal).map { it["id"] })
   }
 
   /**

@@ -144,12 +144,35 @@ class DownloadTagWriterTest {
     assertEquals(sha, written)
   }
 
-  /** jaudiotagger writes an MP3's tag in place: it never saw the rest of the file. */
+  /** A Soulseek MP3 is written whole too, into a copy hashed as it's written: never read again for its digest (#455). */
   @Test
-  fun tellsNoDigestForAFileItTaggedInPlace() {
+  fun tellsTheDigestOfTheMp3ItWroteWhole() {
     val file = Fixtures.libraryOf("soulseek-320.mp3" to ".download.part.mp3").resolve(".download.part.mp3")
-    assertNull(DownloadTagWriter().write(file, DownloadTags.fromJs(mapOf("title" to "Get Lucky", "artist" to "Daft Punk"))!!, null))
+    val audioBefore = AudioPayload.of(file)
+    val written = DownloadTagWriter().write(file, tags, Fixtures.cover())
+    assertEquals(sha256(file), written)
+    assertArrayEquals(audioBefore, AudioPayload.of(file))
+    assertEquals(tags.title, reader.read(file).title)
   }
+
+  /** An ID3v1 tag at the end stays one, after the audio, as jaudiotagger's own writer leaves it. */
+  @Test
+  fun anMp3sId3v1TagStaysOneAtTheEnd() {
+    val file = Fixtures.libraryOf("soulseek-320.mp3" to ".download.part.mp3").resolve(".download.part.mp3")
+    val withV1 = AudioFileIO.read(file) as org.jaudiotagger.audio.mp3.MP3File
+    withV1.setID3v1Tag(org.jaudiotagger.tag.id3.ID3v11Tag().apply { setField(FieldKey.TITLE, "Peer's title") })
+    withV1.commit()
+    val audioBefore = AudioPayload.of(file)
+    val written = DownloadTagWriter().write(file, tags, null)
+    val bytes = file.readBytes()
+    assertEquals(sha256(file), written)
+    assertEquals("TAG", String(bytes, bytes.size - 128, 3, Charsets.ISO_8859_1))
+    assertEquals(false, String(bytes, bytes.size - 256, 3, Charsets.ISO_8859_1) == "TAG")
+    assertArrayEquals(audioBefore, AudioPayload.of(file))
+  }
+
+  private fun sha256(file: File): String =
+    java.security.MessageDigest.getInstance("SHA-256").digest(file.readBytes()).joinToString("") { "%02x".format(it) }
 
   @Test
   fun writesTheAdvisoryAScanReadsBack() {

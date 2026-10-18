@@ -3,6 +3,7 @@ import {
   heldTracks,
   inLibraryUnlessHeld,
   type SearchKind,
+  type YtPick,
   ytSectionToggle,
   ytSectionView,
 } from "@wave/core";
@@ -143,7 +144,16 @@ export default function SearchScreen() {
   // Always (the toggle's long press chooses it); it answers on its own time, and its
   // songs, artists and albums the library doesn't have join the library's.
   // Until the library is ready, nothing is asked.
-  const [ytSection, pickYt] = useYtMusicSection(deferredQuery, !libraryEmpty);
+  const [ytSection, pickYtSection] = useYtMusicSection(deferredQuery, !libraryEmpty);
+  // Each tap on Online, so a top artist whose page couldn't be read is tried again.
+  const [onlineTaps, setOnlineTaps] = useState(0);
+  const pickYt = useCallback(
+    (pick: YtPick) => {
+      if (pick === "online") setOnlineTaps((taps) => taps + 1);
+      pickYtSection(pick);
+    },
+    [pickYtSection],
+  );
   const toggle = useLineToggle(ytSectionToggle(ytSection), pickYt);
   const inLibrary = library?.library;
   const ytView = useMemo(
@@ -159,7 +169,12 @@ export default function SearchScreen() {
   const placed = useSongsInPlace(holding, ytView?.songs ?? NO_YT_SONGS, find);
   // A Library artist on top, with Online, counts the songs their online page adds.
   const topArtist = results?.top?.kind === "artist" ? results.top.artist : null;
-  const topArtistSongs = useTopArtistSongs(ytSection, topArtist, inLibrary?.hasSong ?? null);
+  const topArtistSongs = useTopArtistSongs(
+    ytSection,
+    topArtist,
+    inLibrary?.hasSong ?? null,
+    onlineTaps,
+  );
   const rows = useMemo(() => {
     if (results === null) return [];
     const ytFound =

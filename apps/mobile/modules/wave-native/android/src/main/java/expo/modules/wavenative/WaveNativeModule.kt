@@ -61,10 +61,9 @@ import expo.modules.wavenative.tags.MediaRetrieverTagReader
 import expo.modules.wavenative.tags.SongTagWriter
 import expo.modules.wavenative.tags.TagDestination
 import expo.modules.wavenative.tags.TagWriteFailure
-import expo.modules.wavenative.tags.TagWriteStep
+import expo.modules.wavenative.tags.TagWriteFile
 import expo.modules.wavenative.tags.TagWriteStepException
-import expo.modules.wavenative.tags.attempt
-import expo.modules.wavenative.yt.AndroidM4aDuration
+import expo.modules.wavenative.yt.AndroidAudioDuration
 import java.io.File
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -296,7 +295,7 @@ class WaveNativeModule : Module() {
      * Runs off the main thread.
      */
     AsyncFunction("readAudioLengths") { paths: List<String> ->
-      AudioLengths { file -> AndroidM4aDuration.of(file) }.read(paths).map { it?.toDouble() }
+      AudioLengths { file -> AndroidAudioDuration.of(file) }.read(paths).map { it?.toDouble() }
     }
 
     /**
@@ -343,6 +342,8 @@ class WaveNativeModule : Module() {
         advisory: Int?,
       ->
       val file = File(path)
+      // The file as the write finds it: a failed write may cut it short or rename it.
+      val before = TagWriteFile.of(file)
       try {
         BackgroundThreads.during {
           val report =
@@ -358,15 +359,24 @@ class WaveNativeModule : Module() {
               listOf(report.genre, report.trackNumber, report.year, report.explicit).any { it == TagDestination.TAGS }
           // A sidecar alone leaves the tags as they were, but the index learns the song has lyrics.
           val reindex = tagsChanged || report.lyrics == LyricsDestination.SIDECAR
-          val (track, artwork) =
-            if (reindex) TagWriteStep.REINDEX.attempt { singleFileScanner().index(file) } else null to null
+          // The tags are on disk: a file that can't be read again is a re-index failure, not a
+          // failed write. The report goes back without the track, with why, and the next scan
+          // brings the index up to date (as when JS's own save of it fails).
+          val indexed =
+            if (!reindex) Result.success(null to null)
+            else try { Result.success(singleFileScanner().index(file)) } catch (e: Exception) { Result.failure(e) }
+          val (track, artwork) = indexed.getOrNull() ?: (null to null)
           // A download's file waits for its fill-in to be done (`downloadFilledIn`), so it's scanned once.
           if (tagsChanged) AndroidMediaScans.get(context).add(listOf(path))
           report.toMap() +
-            mapOf("track" to track?.let(::trackToMap), "artwork" to artwork?.let(::artworkToMap))
+            mapOf(
+              "track" to track?.let(::trackToMap),
+              "artwork" to artwork?.let(::artworkToMap),
+              "reindexFailed" to indexed.exceptionOrNull()?.let { mapOf("exception" to it.javaClass.name, "message" to it.message.orEmpty()) },
+            )
         }
       } catch (e: TagWriteStepException) {
-        mapOf("failed" to TagWriteFailure.of(e, file).toMap())
+        mapOf("failed" to TagWriteFailure.of(e, before).toMap())
       }
     }
 

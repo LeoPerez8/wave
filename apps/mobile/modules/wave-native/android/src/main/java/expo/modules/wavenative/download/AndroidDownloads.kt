@@ -9,6 +9,7 @@ import expo.modules.wavenative.artwork.AndroidArtworkProcessor
 import expo.modules.wavenative.artwork.ArtworkStore
 import expo.modules.wavenative.log.AndroidMemory
 import expo.modules.wavenative.log.JsHeap
+import expo.modules.wavenative.log.NativeLog
 import expo.modules.wavenative.log.WaveLog
 import expo.modules.wavenative.player.JsRuntime
 import expo.modules.wavenative.scan.LibraryScanner
@@ -23,7 +24,7 @@ import expo.modules.wavenative.tags.DownloadTagWriter
 import expo.modules.wavenative.tags.DownloadTags
 import expo.modules.wavenative.tags.JAudioTaggerReader
 import expo.modules.wavenative.tags.MediaRetrieverTagReader
-import expo.modules.wavenative.yt.AndroidM4aDuration
+import expo.modules.wavenative.yt.AndroidAudioDuration
 import expo.modules.wavenative.yt.AndroidYtAudioStreams
 import expo.modules.wavenative.yt.YtAudioDownload
 import expo.modules.wavenative.yt.YtDownloadService
@@ -99,7 +100,7 @@ class AndroidDownloads private constructor(private val context: Context) {
           WaveLog.i(TAG, if (from > 0) "A YouTube transfer goes on from byte $from of $total" else "A YouTube transfer starts over: its part file held another stream")
         },
       )
-      val durationMs = AndroidM4aDuration.of(source, cancelled)
+      val durationMs = AndroidAudioDuration.of(source, cancelled)
       // What YouTube answered with goes along, so the confirm decision logs it beside the lengths.
       mapOf(
         "partPath" to source.path, "bytes" to file.bytes, "mimeType" to file.mimeType, "itag" to file.itag.toLong(),
@@ -194,7 +195,12 @@ class AndroidDownloads private constructor(private val context: Context) {
     val ticking = minuteTicker.scheduleWithFixedDelay({ tick() }, period, period, TimeUnit.MILLISECONDS)
     ({ ticking.cancel(false) })
   }).also { minutes ->
-    minutes.add { WaveLog.i(TAG, DownloadServiceLines.memory(jobs.counts(), AndroidMemory.read(), JsHeap.app.read())) }
+    minutes.add {
+      val use = AndroidMemory.read()
+      WaveLog.i(TAG, DownloadServiceLines.memory(jobs.counts(), use, JsHeap.app.read()))
+      // Android 14+ no longer sends the running memory warnings: the tick checks for itself (#450).
+      NativeLog.memoryChecked(use, AndroidMemory.phoneLow(context))
+    }
     // What the journal's writes cost since the last line (#452).
     minutes.add { WaveLog.i(TAG, jobs.takeWriteStats().line()) }
     // What went to the media scanner, in how many batches (#455).
@@ -202,6 +208,11 @@ class AndroidDownloads private constructor(private val context: Context) {
   }
   private val minuteTicker by lazy {
     Executors.newSingleThreadScheduledExecutor { tick -> Thread(tick, "WaveDownloadMinutes").apply { isDaemon = true } }
+  }
+
+  /** Writes a service line that reads Wave's memory on the minute lines' thread, in order with them. */
+  private fun offMain(line: () -> Unit) {
+    try { minuteTicker.execute { runCatching(line) } } catch (_: java.util.concurrent.RejectedExecutionException) {}
   }
 
   fun subscribe(listener: () -> Unit): () -> Unit { listeners.add(listener); return { listeners.remove(listener) } }
@@ -233,7 +244,9 @@ class AndroidDownloads private constructor(private val context: Context) {
   /** Starts the work, unless it runs already; [restarted] when Android restarted the service after Wave was closed. */
   @Synchronized fun start(onIdle: () -> Unit, refresh: () -> Unit, restarted: Boolean = false) {
     if (worker != null) return
-    WaveLog.i(TAG, DownloadServiceLines.started(restarted, jobs.counts(), AndroidMemory.read()))
+    val counts = jobs.counts()
+    // Wave's memory is read off the main thread, where the service starts.
+    offMain { WaveLog.i(TAG, DownloadServiceLines.started(restarted, counts, AndroidMemory.read())) }
     startedAt = SystemClock.elapsedRealtime()
     jobs.startWork()
     minutes.start()
@@ -277,8 +290,14 @@ class AndroidDownloads private constructor(private val context: Context) {
    */
   @Synchronized fun stop(why: DownloadServiceStop, timedOut: Boolean = false) {
     if (worker != null) {
-      WaveLog.i(TAG, DownloadServiceLines.stopped(why, SystemClock.elapsedRealtime() - startedAt, jobs.counts(), AndroidMemory.read()))
-      jobs.replacementRun()?.takeIf { it.waiting > 0 }?.let { WaveLog.i(TAG, DownloadServiceLines.replacementRun(it, why)) }
+      val ranMs = SystemClock.elapsedRealtime() - startedAt
+      val counts = jobs.counts()
+      val run = jobs.replacementRun()?.takeIf { it.waiting > 0 }
+      // Wave's memory is read off the main thread (the PSS reads `/proc`, slower when memory is short).
+      offMain {
+        WaveLog.i(TAG, DownloadServiceLines.stopped(why, ranMs, counts, AndroidMemory.read()))
+        run?.let { WaveLog.i(TAG, DownloadServiceLines.replacementRun(it, why)) }
+      }
     }
     jobs.stopWork(transport)
     minutes.stop()

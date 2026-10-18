@@ -19,7 +19,7 @@ import {
 import { and, eq, inArray, isNotNull, isNull, sql, type SQL } from "drizzle-orm";
 
 import { chunks } from "./chunks.ts";
-import type { CreditSplits } from "./credits.ts";
+import { readCredits, type CreditSplits } from "./credits.ts";
 import type { LibraryDatabase } from "./database.ts";
 import { pruneOrphans, saveMissingSongs } from "./save.ts";
 import * as schema from "./schema.ts";
@@ -124,7 +124,7 @@ export const selectMissingSongs = (
       id: row.id,
       title: row.title,
       artist: row.artist,
-      artists: row.artists === null ? [row.artist] : (JSON.parse(row.artists) as string[]),
+      artists: readCredits(row.artist, row.artists),
       album: row.album,
       albumArtist: row.albumArtist,
       year: row.year,

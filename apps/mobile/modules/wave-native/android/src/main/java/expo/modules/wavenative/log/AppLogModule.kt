@@ -23,7 +23,7 @@ class AppLogModule : Module() {
   private val context: Context get() = appContext.reactContext ?: throw Exceptions.ReactContextLost()
   private val log: AppLogFile get() = AppLogFile.of(context)
   private var unwatchJs: (() -> Unit)? = null
-  private var unlisten: List<() -> Unit> = emptyList()
+  private var stopListening: List<() -> Unit> = emptyList()
 
   override fun definition() = ModuleDefinition {
     Name("WaveAppLog")
@@ -37,7 +37,7 @@ class AppLogModule : Module() {
       // Already started at Application.onCreate; this covers a host that didn't dispatch it.
       NativeLog.start(react)
       (react as? ReactContext)?.let { unwatchJs = NativeLog.watchJs(it) }
-      unlisten = listOf(
+      stopListening = listOf(
         JsHeap.app.listen { sendEvent("hermesHeapWanted") },
         NativeLog.onMemoryWarning { sendEvent("memoryWarning") },
       )
@@ -46,8 +46,8 @@ class AppLogModule : Module() {
     OnDestroy {
       unwatchJs?.invoke()
       unwatchJs = null
-      unlisten.forEach { it() }
-      unlisten = emptyList()
+      stopListening.forEach { it() }
+      stopListening = emptyList()
     }
 
     /** JS's answer to hermesHeapWanted: the Hermes heap in bytes. */

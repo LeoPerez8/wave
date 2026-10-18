@@ -50,17 +50,26 @@ data class TagWriteFailure(
     )
 
   companion object {
-    /** [failure] on [file], as the file is now. */
-    fun of(failure: TagWriteStepException, file: File): TagWriteFailure {
+    /** [failure] on a file that was as [before] when the write ran. */
+    fun of(failure: TagWriteStepException, before: TagWriteFile): TagWriteFailure {
       val cause = failure.cause ?: failure
-      val exists = file.isFile
       return TagWriteFailure(
         step = failure.step,
         exception = cause.javaClass.name,
         message = cause.message.orEmpty(),
-        fileExists = exists,
-        fileBytes = if (exists) file.length() else null,
+        fileExists = before.exists,
+        fileBytes = before.bytes,
       )
+    }
+  }
+}
+
+/** A file as a tag write found it, read before writing: whether it was there, and its size (null when not). */
+data class TagWriteFile(val exists: Boolean, val bytes: Long?) {
+  companion object {
+    fun of(file: File): TagWriteFile {
+      val exists = file.isFile
+      return TagWriteFile(exists, if (exists) file.length() else null)
     }
   }
 }

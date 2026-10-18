@@ -12,11 +12,18 @@ import {
   ytSectionView,
   ytSearchArtistReads,
   ytSearchArtistSongs,
+  YT_SEARCH_ARTISTS_UNKNOWN,
+  ytArtistSavedStands,
+  ytSearchArtistToRead,
+  ytSearchArtistsKnownAfter,
+  ytSearchTopArtistSongs,
 } from "./index.ts";
 import type {
   YtArtistAlbum,
   YtArtistCandidate,
   YtArtistSaved,
+  YtSearchArtistsEvent,
+  YtSearchArtistsKnown,
   YtSection,
   YtSong,
 } from "./index.ts";
@@ -661,5 +668,67 @@ describe("the top-hit Library artist's song count in Search", () => {
   test("only a Library artist on top, and not one whose name isn't an artist's", () => {
     assert.equal(ytSearchArtistReads(online(), null), false);
     assert.equal(ytSearchArtistReads(online(), "Various Artists"), false);
+  });
+});
+
+describe("what Search knows of its top-hit artists' online pages during a visit", () => {
+  const NOW = 1_000 * 24 * 60 * 60 * 1000;
+  const ANSWER: YtArtistSaved = {
+    outcome: "found",
+    checkedAt: NOW,
+    browseId: "UCbluestones",
+    page: {
+      name: "Blue Stones",
+      songs: [],
+      allSongs: [song("mine"), song("a")],
+      albums: [],
+      singles: [],
+    },
+  };
+  const online = (query = "blue"): YtSection =>
+    found(pick(typedFound(YT_SECTION_HIDDEN, query), "online"), query, []);
+  const after = (...events: YtSearchArtistsEvent[]): YtSearchArtistsKnown =>
+    events.reduce<YtSearchArtistsKnown>(
+      (known, event) => ytSearchArtistsKnownAfter(known, event),
+      YT_SEARCH_ARTISTS_UNKNOWN,
+    );
+
+  test("reads a Library artist on top once YouTube Music's answer shows, once a visit", () => {
+    assert.equal(
+      ytSearchArtistToRead(online(), "Blue Stones", YT_SEARCH_ARTISTS_UNKNOWN),
+      "blue stones",
+    );
+    const read = after({ kind: "read", key: "blue stones", saved: ANSWER, at: NOW });
+    assert.equal(ytSearchArtistToRead(online("blue st"), "Blue Stones", read), null);
+  });
+
+  test("a failed read isn't tried again for a refined query, only once Online is tapped", () => {
+    const failed = after({ kind: "failed", key: "blue stones" });
+    assert.equal(ytSearchArtistToRead(online("blue st"), "Blue Stones", failed), null);
+    assert.equal(ytSearchArtistToRead(online("blue stones"), "Blue Stones", failed), null);
+    // Another artist on top is read all the same.
+    assert.equal(ytSearchArtistToRead(online("daft"), "Daft Punk", failed), "daft punk");
+    const tapped = ytSearchArtistsKnownAfter(failed, { kind: "onlineTapped" });
+    assert.equal(ytSearchArtistToRead(online("blue st"), "Blue Stones", tapped), "blue stones");
+  });
+
+  test("the row's count: the merged one, or null while the Library's stands", () => {
+    const local = { artistKey: "blue stones", songs: 1 };
+    const context = { inLibrary: library.hasSong };
+    const read = after({ kind: "read", key: "blue stones", saved: ANSWER, at: NOW });
+    assert.equal(ytSearchTopArtistSongs(online(), local, read, context), 2);
+    assert.equal(ytSearchTopArtistSongs(online(), local, YT_SEARCH_ARTISTS_UNKNOWN, context), null);
+    assert.equal(ytSearchTopArtistSongs(pick(online(), "library"), local, read, context), null);
+    // The online page adds nothing the Library lacks.
+    assert.equal(ytSearchTopArtistSongs(online(), local, read, { inLibrary: () => true }), null);
+  });
+
+  test("a saved answer is reused while it stands on the artist's page", () => {
+    assert.equal(ytArtistSavedStands(ANSWER, NOW), true);
+    assert.equal(ytArtistSavedStands(ANSWER, NOW + 8 * 24 * 60 * 60 * 1000), false);
+    // Read for a Library album: their page without every song isn't the artist page's answer.
+    const { allSongs: _every, ...pageOnly } = ANSWER.page;
+    assert.equal(ytArtistSavedStands({ ...ANSWER, page: pageOnly }, NOW), false);
+    assert.equal(ytArtistSavedStands(null, NOW), false);
   });
 });

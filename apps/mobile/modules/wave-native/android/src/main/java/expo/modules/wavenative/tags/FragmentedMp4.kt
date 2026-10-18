@@ -11,6 +11,7 @@ import java.nio.file.StandardCopyOption
 import java.security.DigestOutputStream
 import org.jaudiotagger.audio.AudioFile
 import org.jaudiotagger.audio.AudioFileIO
+import org.jaudiotagger.audio.mp3.MP3File
 import org.jaudiotagger.tag.mp4.Mp4Tag
 import org.jaudiotagger.tag.mp4.Mp4TagCreator
 
@@ -29,13 +30,16 @@ internal object FragmentedMp4 {
    * fragmented M4A (a YouTube download, a quality replacement's copy),
    * jaudiotagger's writer otherwise. Every tag writer goes through here.
    * Returns the file's SHA-256 when the write went through every byte of it, else null.
+   * [hashed]: the digest is wanted (a download being published), so an MP3 is
+   * written whole into a hashed copy ([HashedMp3]) rather than in place.
    */
-  fun writeTag(audio: AudioFile, file: File): String? {
+  fun writeTag(audio: AudioFile, file: File, hashed: Boolean = false): String? {
     val tag = audio.tag
     if (tag is Mp4Tag && isFragmented(file)) {
       val ilst = Mp4TagCreator().convertMetadata(tag)
       return writeIlst(file, ByteArray(ilst.remaining()).also(ilst::get))
     }
+    if (hashed && audio is MP3File) audio.iD3v2Tag?.let { return HashedMp3.write(audio, file, it) }
     AudioFileIO.write(audio)
     return null
   }

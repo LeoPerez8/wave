@@ -26,7 +26,7 @@ export const storedCredits = (credits: Credits): string | null =>
   credits.length === 1 ? null : JSON.stringify(credits);
 
 /** A row's credits from the credit it shows and the stored ones (`storedCredits`). */
-const readCredits = (credit: string, stored: string | null): Credits =>
+export const readCredits = (credit: string, stored: string | null): Credits =>
   stored === null ? [credit] : (JSON.parse(stored) as string[]);
 
 /** The credits of every track (artist) and album (album artist) in the Library. */
