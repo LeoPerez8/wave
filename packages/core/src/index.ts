@@ -1204,6 +1204,15 @@ export {
   snapCrossfade,
 } from "./crossfade.ts";
 export {
+  bufferAheadMs,
+  LIBRARY_BUFFER_MS,
+  readStreamBuffer,
+  STREAM_BUFFER_DEFAULT,
+  STREAM_BUFFER_MINUTES,
+  streamBufferMs,
+} from "./streamBuffer.ts";
+export type { StreamBufferMinutes } from "./streamBuffer.ts";
+export {
   discoverMix,
   discoverMixCaption,
   discoverMixReadsMore,
