@@ -60,7 +60,8 @@ data class TagWriteReport(
  * Writes a song's lyrics and genre into its file, replacing what is there, and
  * fills in its track number, disc number, year and advisory tag ([Advisory]:
  * 1 explicit, 0 clean), keeping any the file already has, with jaudiotagger
- * (MP3, FLAC, M4A, Ogg Vorbis and WAV). Only those fields change: the audio
+ * (MP3, FLAC, M4A, Ogg Vorbis and WAV; a fragmented M4A, what YouTube serves,
+ * through [FragmentedMp4]). Only those fields change: the audio
  * and every other tag are left as they were. The disc number is written only
  * with the track number it belongs to.
  *
@@ -147,7 +148,8 @@ class SongTagWriter {
       info?.setField(FieldKey.YEAR, it.toString())
     }
     newAdvisory?.let { Advisory.write(tag, it) }
-    AudioFileIO.write(audio)
+    // A YouTube download or a quality replacement's copy is a fragmented M4A (#454).
+    FragmentedMp4.writeTag(audio, file)
     if (lyrics != null) Sidecars.find(file)?.let { writeSidecar(file, lyrics, it) }
   }
 
