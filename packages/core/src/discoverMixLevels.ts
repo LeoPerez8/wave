@@ -201,6 +201,7 @@ export const discoverMixLibraryPool = <S extends DiscoverRadioSong>(
   }
   const rest = library.songs
     .filter(mixSongFilter(seed, library.artists))
+    // oxlint-disable-next-line unicorn/no-array-sort -- sorts the fresh array filter made; Hermes lacks toSorted
     .sort((a, b) => playsOf(b) - playsOf(a) || b.addedAt - a.addedAt);
   for (const song of rest) add(song);
   return pool;

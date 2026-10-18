@@ -388,6 +388,7 @@ const seedGenres = (library: NonNullable<DiscoverSeedPools["library"]>): SeedGen
       ...genre,
       listened: genre.songs.reduce((sum, song) => sum + playsOf(song), 0),
     }))
+    // oxlint-disable-next-line unicorn/no-array-sort -- sorts the fresh array map made; Hermes lacks toSorted
     .sort((a, b) => b.listened - a.listened || b.songs.length - a.songs.length);
   return ranked.map(({ name, songs }) => {
     const artists = new Map<number, { plays: number; songs: number; first: number }>();
@@ -402,11 +403,13 @@ const seedGenres = (library: NonNullable<DiscoverSeedPools["library"]>): SeedGen
     return {
       name,
       artists: [...artists.entries()]
+        // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
         .sort(([, a], [, b]) => b.plays - a.plays || b.songs - a.songs || a.first - b.first)
         .flatMap(([id]) => {
           const artist = names.get(id);
           return artist === undefined ? [] : [{ id, name: artist }];
         }),
+      // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
       songs: [...songs].sort((a, b) => playsOf(b) - playsOf(a) || b.addedAt - a.addedAt),
     };
   });
