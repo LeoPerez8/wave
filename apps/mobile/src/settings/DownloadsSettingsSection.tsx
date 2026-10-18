@@ -1,4 +1,4 @@
-import type { QualityDirection } from "@wave/core";
+import { qualityDirection, type QualityDirection } from "@wave/core";
 import * as Effect from "effect/Effect";
 import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
@@ -47,9 +47,7 @@ export function DownloadsSettingsSection() {
   const [asked, setAsked] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
-  const replacement = useQualityOffer(
-    busy ? null : session.status !== "off" ? "upgrade" : "downgrade",
-  );
+  const replacement = useQualityOffer(busy ? null : qualityDirection(session.status !== "off"));
 
   useEffect(() => {
     let current = true;

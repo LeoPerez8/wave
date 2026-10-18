@@ -234,15 +234,27 @@ describe("downloading a playlist's YT Music entries", () => {
       ),
       { action: "retryFailed", label: "Retry Failed" },
     );
-    // Every entry is the Library's song now.
+    // Every entry is the Library's song now, the downloads' songs in place of theirs.
     assert.deepEqual(
+      ytPlaylistDownloadButton(
+        ytPlaylistDownload([file("/Music/x.mp3"), file("/Music/a.mp3"), file("/Music/b.mp3")], {
+          inLibrary: nothingInLibrary,
+          jobs: [job("a", saved("/Music/a.mp3")), job("b", saved("/Music/b.mp3"))],
+        }),
+      ),
+      { action: "downloaded", label: "Downloaded" },
+    );
+  });
+
+  test("a playlist of the Library's songs only, with nothing it downloaded, has no button", () => {
+    assert.equal(
       ytPlaylistDownloadButton(
         ytPlaylistDownload([file("/Music/x.mp3"), file("/Music/a.mp3")], {
           inLibrary: nothingInLibrary,
           jobs: [],
         }),
       ),
-      { action: "downloaded", label: "Downloaded" },
+      null,
     );
   });
 

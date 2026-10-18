@@ -80,7 +80,10 @@ export interface YtSongsDownload<
   readonly toRetry: readonly YtSongsDownloadRequest<S>[];
   /** The video ids Cancel cancels: songs queued or downloading, not yet saving. */
   readonly toCancel: readonly string[];
-  /** The list has songs and the Library has every one of them. */
+  /**
+   * The list has songs and the Library has every one of them. A playlist only counts with YT
+   * Music entries or songs a download saved in their place, where it would offer Download.
+   */
   readonly downloaded: boolean;
 }
 
@@ -278,8 +281,10 @@ export const ytPlaylistDownload = <S extends YtSong>(
     ),
   ];
   // Downloaded: every entry is a Library song with a file, or a YT Music song the Library has.
+  // Only in place of a Download the playlist would offer: it has YT Music entries, or songs a
+  // download saved in place of theirs. A playlist of the Library's songs only offers neither.
   const downloaded =
-    entries.length > 0 &&
+    (landed > 0 || entries.some((entry) => entry.source === "stream")) &&
     entries.every((entry) =>
       entry.source === "library"
         ? entry.track.path !== null

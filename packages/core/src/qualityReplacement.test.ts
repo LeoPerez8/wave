@@ -19,6 +19,8 @@ import {
   qualityUpgradeOffer,
   youTubeCopyKbps,
   qualityUpgradeSongs,
+  qualityDirection,
+  qualitySongs,
   settledDownloadFailures,
 } from "./index.ts";
 import type { QualityFile, ReplacedTrack, YtDownloadJournalJob, YtSong } from "./index.ts";
@@ -47,6 +49,27 @@ const mp3s = (count: number): QualityFile[] =>
       sizeBytes: 12_000_000,
     }),
   );
+
+describe("qualitySongs", () => {
+  test("Download in best quality on upgrades the Library's songs; off frees up space", () => {
+    assert.equal(qualityDirection(true), "upgrade");
+    assert.equal(qualityDirection(false), "downgrade");
+  });
+
+  test("the songs a replacement in each direction offers", () => {
+    const songs = [file(1, { bitrateKbps: 128 }), mp3(2)];
+    assert.deepEqual(qualitySongs("upgrade", songs, none), qualityUpgradeSongs(songs, none));
+    assert.deepEqual(qualitySongs("downgrade", songs, none), qualityDowngradeSongs(songs, none));
+    assert.deepEqual(
+      qualitySongs("upgrade", songs, none).map((song) => song.id),
+      [1],
+    );
+    assert.deepEqual(
+      qualitySongs("downgrade", songs, none).map((song) => song.id),
+      [2],
+    );
+  });
+});
 
 describe("qualityUpgradeSongs", () => {
   test("offers a 128k YouTube download and keeps an AAC 256k one", () => {

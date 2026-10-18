@@ -420,14 +420,19 @@ class DurableDownloads(
   }
 
   /**
-   * The pause on YouTube downloads ([pauseYoutube]); null when there's none now. Read without
-   * the journal's lock, as the notification does on the main thread.
+   * The pause on YouTube downloads as the journal keeps it ([pauseYoutube]), even once it's over:
+   * its backoff level is what JS's throttle starts from after a restart (Core's
+   * `ytThrottleRestored`). Null when there never was one. Read without the journal's lock.
    */
-  fun youtubePause(): YoutubePause? = pauseView?.takeIf { it.until > clock() }
+  fun youtubePause(): YoutubePause? = pauseView
+
+  /** The pause on YouTube downloads while it's on ([youtubePause]); null when YouTube isn't paused now. */
+  fun youtubePausedNow(): YoutubePause? = pauseView?.takeIf { it.until > clock() }
+
+  private fun youtubePaused() = policy.map(YOUTUBE_PAUSE).number("until") > clock()
 
   /** A YouTube song waiting for its transfer while YouTube is paused: it neither starts nor holds a slot. */
-  private fun youtubeHeld(job: Map<String, Any?>) =
-    job["source"] == YOUTUBE && job["phase"] == "prepared" && policy.map(YOUTUBE_PAUSE).number("until") > clock()
+  private fun youtubeHeld(job: Map<String, Any?>) = job["source"] == YOUTUBE && job["phase"] == "prepared" && youtubePaused()
 
   /**
    * Once a pause is over, gives YouTube's jobs back the budget its time charged them: the
@@ -467,14 +472,19 @@ class DurableDownloads(
   private fun waits(job: Map<String, Any?>) = job["queuePosition"] != null || job.number("retryAt") > clock() || youtubeHeld(job) ||
     (job["phase"] in DECISIONS && clock() - job.number("phaseAt") >= DECISION_WAIT_MS)
 
-  /** Starts queued songs, in order, while a slot is free. A song's time starts when it does. */
+  /**
+   * Starts queued songs, in order, while a slot is free. A song's time starts when it does. While
+   * YouTube is paused, its songs neither start nor count against the songs started, so the
+   * Soulseek songs behind them go on.
+   */
   private fun admit() {
     var busy = jobs.values.count { started(it) && !waits(it) }
-    var startedCount = jobs.values.count(::started)
+    var startedCount = jobs.values.count { started(it) && !youtubeHeld(it) }
+    val youtubePaused = youtubePaused()
     var changed = false
     for (job in jobs.values) {
       if (busy >= slots || startedCount >= slots * 2) break
-      if (job["phase"] != "queued") continue
+      if (job["phase"] != "queued" || (youtubePaused && job["source"] == YOUTUBE)) continue
       startBudget(job); startSoulseekTurn(job); transition(job, "preparing")
       busy++; startedCount++; changed = true
     }
@@ -982,7 +992,7 @@ class DurableDownloads(
     job["refusedAt"] = clock()
     job["attempts"] = maxOf(0L, job.number("attempts") - 1)
     recordCause(job, reason, cause)
-    val pause = youtubePause()
+    val pause = youtubePausedNow()
     val pauses = (refusal["pausesMs"] as? List<*>).orEmpty().map { (it as Number).toLong() }
     val count = job.number("refusals")
     if (pause == null && count >= pauses.size) {
@@ -1320,8 +1330,11 @@ class DurableDownloads(
     private val REPLACEMENT_PREFIXES = listOf("upgrade:", "downgrade:")
     /** A replacement's failure for finding no better copy (Core's `NO_BETTER_COPY_FOUND`): the song keeps its file. */
     private const val NO_BETTER_COPY = "notFound"
-    /** Until the audio is accepted; afterwards a failure is the save's, which YouTube would share. */
-    private val ACQUIRING = setOf("preparing", "prepared", "transferring", "sourceReady")
+    /**
+     * Until the audio is accepted; afterwards a failure is the save's, which YouTube would share.
+     * The phases a song killed with Wave is resumed from, which [DownloadCounts] counts waiting.
+     */
+    internal val ACQUIRING = setOf("preparing", "prepared", "transferring", "sourceReady")
     /** Where a job's budget is charged: until its file is downloaded. */
     private val CHARGED = setOf("preparing", "prepared", "transferring")
     private val DECISIONS = mapOf("preparing" to "prepare", "sourceReady" to "confirm", "awaitingPublication" to "publish", "completed" to "import")
@@ -1363,7 +1376,7 @@ data class DownloadCounts(val running: Int, val left: Int, val saving: Int = 0) 
         !(job["phase"] == "completed" && (job["acknowledged"] == true || job["importFailure"] != null))
 
     /** Until the audio is accepted ([DurableDownloads] resumes these after Wave was killed). */
-    private val ACQUIRING = setOf("preparing", "prepared", "transferring", "sourceReady")
+    private val ACQUIRING = DurableDownloads.ACQUIRING
     /** Started and not yet tagged: what holds a slot. */
     private val STARTED = ACQUIRING + "tagging"
 

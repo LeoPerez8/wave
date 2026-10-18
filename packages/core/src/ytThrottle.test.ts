@@ -17,7 +17,7 @@ const MIN = 60_000;
 const refuse = (state: YtThrottle, songs: readonly string[], at: number): YtThrottle =>
   songs.reduce((next, song, i) => ytThrottleRefused(next, song, at + i * 1_000), state);
 
-const afterSuccess = ytThrottleSucceeded(YT_THROTTLE_START, 0);
+const afterSuccess = ytThrottleSucceeded(YT_THROTTLE_START);
 
 /** A YouTube job as the journal reports it, with its marks. */
 const job = (id: string, marks: { refusedAt?: number; servedAt?: number }) => ({ id, ...marks });
@@ -65,7 +65,7 @@ describe("ytThrottle", () => {
 
   test("a download that works starts the backoff over", () => {
     const paused = refuse(afterSuccess, ["a", "b", "c", "d", "e"], 0);
-    const after = ytThrottleSucceeded(paused, (paused.pausedUntil ?? 0) + 1_000);
+    const after = ytThrottleSucceeded(paused);
     const again = refuse(after, ["a", "b", "c", "d", "e"], (paused.pausedUntil ?? 0) + 2_000);
     assert.equal((again.pausedUntil ?? 0) - ((paused.pausedUntil ?? 0) + 6_000), 2 * MIN);
   });
@@ -86,7 +86,7 @@ describe("ytThrottleRead", () => {
       job("x", { servedAt: 20_000 }),
       ...["a", "b", "c", "d"].map((id, i) => job(id, { refusedAt: 10_000 + i })),
     ];
-    const state = ytThrottleRead(ytThrottleSucceeded(YT_THROTTLE_START, 0), jobs);
+    const state = ytThrottleRead(ytThrottleSucceeded(YT_THROTTLE_START), jobs);
     assert.equal(ytThrottleRefused(state, "e", 21_000).pausedUntil, null);
   });
 
@@ -99,7 +99,7 @@ describe("ytThrottleRead", () => {
 
 describe("ytThrottleRestored", () => {
   test("Wave restarting mid-pause keeps the pause and its backoff, and reads only what comes next", () => {
-    const state = ytThrottleRestored({ until: 5 * MIN, level: 2 }, 3 * MIN);
+    const state = ytThrottleRestored({ until: 5 * MIN, level: 2 }, 3 * MIN, []);
     assert.equal(state.pausedUntil, 5 * MIN);
     const jobs = ["a", "b", "c", "d", "e"].map((id, i) => ({ id, refusedAt: 6 * MIN + i }));
     assert.equal(ytThrottleRead(state, jobs).pausedUntil, 6 * MIN + 4 + 8 * MIN);
@@ -108,7 +108,27 @@ describe("ytThrottleRestored", () => {
   });
 
   test("with no pause kept, it starts afresh from now", () => {
-    assert.deepEqual(ytThrottleRestored(null, 7), { ...YT_THROTTLE_START, readUpTo: 7 });
+    assert.deepEqual(ytThrottleRestored(null, 7, []), { ...YT_THROTTLE_START, readUpTo: 7 });
+  });
+
+  test("a pause over before the restart still keeps its backoff: the next burst pauses longer", () => {
+    // Paused at level 2 until minute 5; Wave starts again at minute 20, YouTube still limiting.
+    const state = ytThrottleRestored({ until: 5 * MIN, level: 2 }, 20 * MIN, []);
+    assert.equal(ytThrottleNotice(state.pausedUntil, 20 * MIN), null);
+    const jobs = ["a", "b", "c", "d", "e"].map((id, i) => ({ id, refusedAt: 21 * MIN + i }));
+    assert.equal(ytThrottleRead(state, jobs).pausedUntil, 21 * MIN + 4 + 8 * MIN);
+  });
+
+  test("a stream the journal shows served before the restart means downloads had worked", () => {
+    const jobs = [job("x", { servedAt: 2 * MIN })];
+    const state = ytThrottleRestored(null, 10 * MIN, jobs);
+    assert.equal(state.succeeded, true);
+    const burst = ["a", "b", "c", "d", "e"].map((id, i) => job(id, { refusedAt: 11 * MIN + i }));
+    assert.equal(ytThrottleRead(state, burst).pausedUntil, 11 * MIN + 4 + 2 * MIN);
+    assert.equal(
+      ytThrottleRestored(null, 10 * MIN, [job("y", { refusedAt: MIN })]).succeeded,
+      false,
+    );
   });
 });
 
