@@ -130,6 +130,7 @@ import {
   selectReplacedTrack,
   type ReplacedFile,
 } from "./db/qualityReplacement";
+import { forgetFileDeletions, pendingFileDeletions, recordFileDeletions } from "./db/fileDeletions";
 import { keepLyricsMiss, selectLyricsSearchTrack, type LyricsSearchTrack } from "./db/lyricsMisses";
 import {
   noteStreamedSong,
@@ -764,6 +765,19 @@ export class LibraryStore extends Context.Service<
       track: IndexedTrack,
       artworkRows: readonly IndexedArtwork[],
     ) => Effect.Effect<ReplacedFile, LibraryStoreError>;
+    /**
+     * Records that the files [paths] must go (`schema.fileDeletions`); the app's
+     * `finishFileDeletions` deletes them. The swap records its old file itself.
+     */
+    readonly recordFileDeletions: (
+      paths: readonly string[],
+    ) => Effect.Effect<void, LibraryStoreError>;
+    /** The files still recorded for deletion, oldest first; a file a Track holds is dropped from them. */
+    readonly pendingFileDeletions: Effect.Effect<readonly string[], LibraryStoreError>;
+    /** Clears the records of the files [paths]: deleted, or missing. */
+    readonly forgetFileDeletions: (
+      paths: readonly string[],
+    ) => Effect.Effect<void, LibraryStoreError>;
     /** Records a play as it starts (Core's `PlayEvent`); returns its id, to update it as it goes on. */
     readonly recordPlay: (
       play: PlayEvent,
@@ -1385,6 +1399,11 @@ const make = Effect.gen(function* () {
       attempt("replace a song's file", () =>
         replaceTrackFile(db, splits, trackId, track, artworkRows, Date.now()),
       ),
+    recordFileDeletions: (paths) =>
+      attempt("record files to delete", () => recordFileDeletions(db, paths, Date.now())),
+    pendingFileDeletions: attempt("read the files to delete", () => pendingFileDeletions(db)),
+    forgetFileDeletions: (paths) =>
+      attempt("forget deleted files", () => forgetFileDeletions(db, paths)),
 
     recordPlay: (play, overlapping) =>
       attempt("record the play", () => recordPlay(db, play, overlapping)),

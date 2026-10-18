@@ -461,7 +461,11 @@ describe("failedReplacementFiles", () => {
       }),
       job("downgrade:3", { phase: "failed", reason: "storage", finalPath: "/Music/C.m4a" }),
     ];
-    assert.deepEqual(failedReplacementFiles(jobs), ["/Music/A.mp3", "/Music/B.mp3", "/Music/C.m4a"]);
+    assert.deepEqual(failedReplacementFiles(jobs), [
+      "/Music/A.mp3",
+      "/Music/B.mp3",
+      "/Music/C.m4a",
+    ]);
   });
 
   test("keeps a file that took the old one's very path, and anything that didn't fail", () => {

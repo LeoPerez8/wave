@@ -107,11 +107,14 @@ export const selectReplacedTrack = (db: LibraryDatabase, trackId: number): Repla
 export type ReplacedFile =
   | {
       readonly kind: "replaced";
-      /** The file the Track had: delete it unless the new one took its very path. */
+      /**
+       * The file the Track had. Unless the new one took its very path, its deletion is
+       * recorded with the swap (`schema.fileDeletions`).
+       */
       readonly oldPath: string;
       readonly starred: SavedBatch["starred"];
     }
-  /** The Track was removed meanwhile, or has no file: nothing was saved. */
+  /** The Track was removed meanwhile, or has no file: nothing was saved; the new file's deletion is recorded. */
   | { readonly kind: "gone" };
 
 /**
@@ -120,7 +123,10 @@ export type ReplacedFile =
  * recording key whatever the new tags say (as a missing song's download
  * keeps it, `IndexedTrack.fills`). A Track a scan made of the new file
  * before this (it was published a moment ago) goes: the path is the
- * replaced song's. One transaction.
+ * replaced song's. The old file's deletion is recorded in the same
+ * transaction (`recordFileDeletions`), so a kill before it's deleted leaves
+ * it recorded for the next launch, and a replayed import (its Track already
+ * on the new file) still finds it.
  */
 export const replaceTrackFile = (
   db: LibraryDatabase,

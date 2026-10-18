@@ -12,6 +12,7 @@ import {
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { refreshDownloadPolicy } from "./downloadPolicy";
+import { finishFileDeletions } from "./fileDeletions";
 import * as Stream from "effect/Stream";
 
 import { freeTurnEffect } from "@/lib/backgroundWork";
@@ -131,6 +132,9 @@ const scanFolders = (roots: readonly string[]) =>
     const scanner = yield* NativeScanner;
     // Without access the folders look empty, and every song would be removed as missing.
     if (!(yield* scanner.hasAllFilesAccess)) return;
+    // Files recorded for deletion (a replaced song's old file) go first, at launch included;
+    // one that couldn't be deleted is left out, so it never comes back as a second song.
+    const doomed = new Set(yield* finishFileDeletions("scan"));
     const excluded = yield* store.excludedFolders;
     const known = yield* store.knownFiles(roots);
     const kind = known.length === 0 ? "full" : "incremental";
@@ -170,7 +174,10 @@ const scanFolders = (roots: readonly string[]) =>
           case "Batch": {
             const changes = reconcileScan({
               missing,
-              read: event.tracks.map(toIndexedTrack),
+              read: (doomed.size === 0
+                ? event.tracks
+                : event.tracks.filter((track) => !doomed.has(track.path))
+              ).map(toIndexedTrack),
               isIndexed: (path) => indexed.has(path),
             });
             missing = changes.unmatched;
