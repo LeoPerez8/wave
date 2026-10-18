@@ -10,6 +10,7 @@ import {
   genreFamily,
   parseRecapId,
   recap,
+  recapAutoForward,
   recapBack,
   recapBarFill,
   recapForward,
@@ -480,6 +481,16 @@ describe("recap viewer", () => {
   test("tapping right goes to the next slide and closes after the last", () => {
     assert.equal(recapForward(0, 2), 1);
     assert.equal(recapForward(1, 2), null);
+  });
+
+  test("a slide's time running out moves on to the next slide", () => {
+    assert.equal(recapAutoForward(0, 3), 1);
+    assert.equal(recapAutoForward(1, 3), 2);
+  });
+
+  test("the summary card (the last slide) stays when its time runs out: only a tap, a swipe or close end it", () => {
+    assert.equal(recapAutoForward(2, 3), null);
+    assert.equal(recapAutoForward(0, 1), null);
   });
 
   test("tapping left goes to the previous slide, and restarts the first", () => {

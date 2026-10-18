@@ -439,6 +439,14 @@ export const RECAP_SLIDE_MS = 6000;
 export const recapForward = (index: number, count: number): number | null =>
   index + 1 < count ? index + 1 : null;
 
+/**
+ * Where the stories go when slide `index` of `count` has shown for its time:
+ * the next slide, or null on the last one, the summary card, which stays
+ * until a tap, a swipe down or close ends the stories (as Wrapped's does).
+ */
+export const recapAutoForward = (index: number, count: number): number | null =>
+  recapForward(index, count);
+
 /** The slide before `index`; on the first slide, the first again (it restarts). */
 export const recapBack = (index: number): number => Math.max(0, index - 1);
 

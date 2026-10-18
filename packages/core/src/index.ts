@@ -227,6 +227,7 @@ export {
   parseOpenedRecaps,
   parseRecapId,
   recap,
+  recapAutoForward,
   recapBack,
   recapBarFill,
   recapForward,

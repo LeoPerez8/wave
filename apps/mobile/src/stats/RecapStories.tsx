@@ -2,6 +2,7 @@ import { IconShare3, IconX } from "@tabler/icons-react-native";
 import {
   RECAP_SLIDE_MS,
   recapBack,
+  recapAutoForward,
   recapBarFill,
   recapForward,
   recapHourLabel,
@@ -529,8 +530,8 @@ function ProgressBar({
 }
 
 /**
- * A Recap's stories: full-screen slides that move on by themselves, with a
- * progress bar for each at the top. A tap on the right goes forward (past the
+ * A Recap's stories: full-screen slides that move on by themselves (the
+ * summary card, last, stays), with a progress bar for each at the top. A tap on the right goes forward (past the
  * last slide, it closes), on the left back; holding pauses; dragging down or
  * the close button closes. `recap` is undefined while it loads and null when
  * the period has no Recap.
@@ -575,6 +576,14 @@ export function RecapStories({
     }
   }, [close, count, index, progress]);
 
+  // A slide's time ran out: on to the next, but the summary card stays.
+  const timeUp = useCallback(() => {
+    const next = recapAutoForward(index, count);
+    if (next === null) return;
+    progress.set(0);
+    setIndex(next);
+  }, [count, index, progress]);
+
   const back = useCallback(() => {
     progress.set(0);
     // Back on the first slide restarts it: the timer below starts again.
@@ -582,8 +591,9 @@ export function RecapStories({
     setRestarts((n) => n + 1);
   }, [progress]);
 
-  // The slide showing plays out its time, then the stories move on; a pause
-  // holds the bar where it is and the rest of the time resumes after.
+  // The slide showing plays out its time, then the stories move on (the
+  // summary card's bar fills and stays); a pause holds the bar where it is
+  // and the rest of the time resumes after.
   useEffect(() => {
     if (count === 0 || paused) {
       cancelAnimation(progress);
@@ -595,14 +605,14 @@ export function RecapStories({
         { duration: (1 - progress.get()) * RECAP_SLIDE_MS, easing: Easing.linear },
         (finished) => {
           "worklet";
-          if (finished === true) scheduleOnRN(forward);
+          if (finished === true) scheduleOnRN(timeUp);
         },
       ),
     );
     return () => cancelAnimation(progress);
     // `index` and `restarts` aren't read in here: a new slide, or the same one again, restarts the timer.
     // oxlint-disable-next-line react/exhaustive-effect-dependencies
-  }, [count, forward, paused, progress, index, restarts]);
+  }, [count, timeUp, paused, progress, index, restarts]);
 
   const settleDrag = useCallback(
     (translation: number, velocity: number) => {
