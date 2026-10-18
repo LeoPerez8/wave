@@ -108,7 +108,7 @@ describe("A mix's level", () => {
     }).songs;
     assert.deepEqual(
       songs.map((song) => (song.source === "stream" ? song.song.videoId : song.track.id)),
-      ["v0", "v2", 1, "v3", 3, "v4", 4, "v5", 5],
+      ["v0", "v2", 1, "v3", 3, "v4", "v5", 4, "v6", 5],
     );
   });
 
@@ -328,7 +328,26 @@ describe("A mix with Don't play explicit", () => {
   test("on, keeps no explicit song, new or the Library's", () => {
     const keep = discoverMixKeep({ dontPlayExplicit: true, library: null });
     const blended = blendDiscoverMix(mix, { level: 1, keep });
-    assert.deepEqual(ids(blended), ["v1", 2, 3, 5, 6, 7]);
+    assert.deepEqual(ids(blended), ["v1", 2, "v2", 3, 5, "v4", 6, "v5", 7, 8]);
+  });
+
+  test("on, fills the explicit new songs' places with clean Library songs, so the mix keeps its length", () => {
+    const keep = discoverMixKeep({ dontPlayExplicit: true, library: null });
+    const allExplicit = discoverMix(
+      portishead,
+      newSongs(12).map((song) => ({ ...song, explicit: true })),
+      librarySongs(9),
+    )!;
+    const blended = blendDiscoverMix(allExplicit, { level: 3, keep });
+    assert.equal(shape(blended), "LLLLLLLLL");
+    const halfExplicit = discoverMix(
+      portishead,
+      newSongs(20).map((song, n) => ({ ...song, explicit: n % 2 === 0 })),
+      librarySongs(16),
+    )!;
+    const half = blendDiscoverMix(halfExplicit, { level: 3, keep });
+    assert.equal(half.songs.length, 20);
+    assert.equal(half.songs.filter((song) => song.source === "stream").length, 10);
   });
 
   test("off, keeps every song, as the mix was", () => {

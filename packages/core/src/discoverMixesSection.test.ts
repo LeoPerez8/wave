@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { discoverMixesSection, parseDiscoverMixes, type DiscoverMixes } from "./index.ts";
+import {
+  discoverMixKeep,
+  discoverMixesSection,
+  parseDiscoverMixes,
+  savedDiscoverMix,
+  type DiscoverMixes,
+} from "./index.ts";
 
 const song = (videoId: string) => ({
   videoId,
@@ -25,7 +31,7 @@ const saved: DiscoverMixes = {
     {
       id: "artist:portishead",
       seed: { kind: "artist", name: "Portishead" },
-      songs: [song("a"), song("b"), song("c"), song("d"), song("e")],
+      songs: ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"].map((id) => song(id)),
       library: [
         { id: 1, title: "Roads", artist: "Portishead" },
         { id: 2, title: "Teardrop", artist: "Massive Attack" },
@@ -74,8 +80,8 @@ describe("Home's Discover mixes section", () => {
           )
         : null;
     };
-    assert.deepEqual(at(5), ["a", "b", "c", "d", "e"]);
-    assert.deepEqual(at(1), ["a", "b", 1, "c", 2]);
+    assert.deepEqual(at(5), ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"]);
+    assert.deepEqual(at(1), ["a", "b", "c", "d", 1, "e", "f", "g", "h", 2]);
   });
 
   test("shows a skeleton while no mixes are saved: the first build, or after a failed one", () => {
@@ -102,5 +108,45 @@ describe("Home's Discover mixes section", () => {
         kind: "hidden",
       },
     );
+  });
+
+  test("leaves out a mix that blends to fewer than ten songs, and is hidden when none is left", () => {
+    const explicitOnes = (mixes: DiscoverMixes): DiscoverMixes => ({
+      ...mixes,
+      mixes: mixes.mixes.map((mix) => ({
+        ...mix,
+        songs: mix.songs.map((entry, n) => ({ ...entry, explicit: n > 0 })),
+      })),
+    });
+    const keep = discoverMixKeep({ dontPlayExplicit: true, library: null });
+    assert.deepEqual(
+      discoverMixesSection(explicitOnes(saved), {
+        ytMusic: true,
+        nothingToBuildFrom: false,
+        blend: { level: 3, keep },
+      }),
+      { kind: "hidden" },
+    );
+  });
+});
+
+describe("A saved mix's page", () => {
+  test("is the mix [id] as the owner's level blends it", () => {
+    const mix = savedDiscoverMix(saved, "artist:portishead", { level: 5 });
+    assert.equal(mix?.songs.length, 10);
+  });
+
+  test("is gone when no saved mix has [id], or when it blends to fewer than ten songs", () => {
+    assert.equal(savedDiscoverMix(saved, "artist:massive-attack", blend), null);
+    assert.equal(savedDiscoverMix(null, "artist:portishead", blend), null);
+    const keep = discoverMixKeep({ dontPlayExplicit: true, library: null });
+    const explicit: DiscoverMixes = {
+      ...saved,
+      mixes: saved.mixes.map((mix) => ({
+        ...mix,
+        songs: mix.songs.map((entry) => ({ ...entry, explicit: true })),
+      })),
+    };
+    assert.equal(savedDiscoverMix(explicit, "artist:portishead", { level: 3, keep }), null);
   });
 });

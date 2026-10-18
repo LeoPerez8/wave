@@ -610,7 +610,7 @@ export const discoverMixReadsMore = ({
 }): boolean => more && kept < MIX_ENOUGH && pages < RADIO_PAGES;
 
 /** A mix with fewer songs than this isn't one. */
-const MIX_FEWEST = 10;
+export const MIX_FEWEST = 10;
 
 /** One of the mixes, as Home shows it and its page lists it. */
 export interface DiscoverMix {
