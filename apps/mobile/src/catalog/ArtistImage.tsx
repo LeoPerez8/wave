@@ -1,9 +1,10 @@
 import { artistInitial } from "@wave/core";
 import { IconUser } from "@tabler/icons-react-native";
 import { Image } from "expo-image";
-import { Text, View } from "react-native";
+import { Image as SoftwareImage, Text, View } from "react-native";
 
 import { useArtistPhoto } from "@/library/artistPhotos";
+import { useCapturedImage } from "@/share/imageCapture";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 /** What an artist image needs: the artist's name and image (see `ArtistRow`). */
@@ -36,6 +37,19 @@ export function ArtistImage({ artist, size, large = false }: Props) {
     : (photo?.thumbPath ?? artist.thumbPath);
   const uri = path === null ? (artist.imageUrl ?? null) : `file://${path}`;
   const circle = { width: size, height: size, borderRadius: size / 2 };
+  const captured = useCapturedImage(uri);
+  if (uri !== null && captured !== undefined) {
+    // Drawn into a shared image: a bitmap the snapshot's software canvas can draw.
+    return (
+      <SoftwareImage
+        source={{ uri }}
+        style={[circle, { backgroundColor: fill }]}
+        resizeMode="cover"
+        onLoadEnd={captured}
+        accessibilityIgnoresInvertColors
+      />
+    );
+  }
   if (uri !== null) {
     return (
       <Image
