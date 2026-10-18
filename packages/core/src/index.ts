@@ -1150,6 +1150,7 @@ export {
 export type {
   DiscoverMix,
   DiscoverMixFilter,
+  DiscoverMixFamiliarSong,
   DiscoverMixLibrarySong,
   DiscoverMixSeed,
   DiscoverMixes,
@@ -1267,7 +1268,7 @@ export {
   DEFAULT_DISCOVER_MIX_LEVEL,
   DISCOVER_MIX_LEVELS,
   blendDiscoverMix,
-  discoverMixLibraryPool,
+  discoverMixFamiliarPool,
   placeDiscoverMixSongs,
   readDiscoverMixLevel,
 } from "./discoverMixLevels.ts";
@@ -1276,6 +1277,7 @@ export type {
   DiscoverMixBlend,
   DiscoverMixLevel,
   DiscoverMixPoolSources,
+  DiscoverMixTaken,
   DiscoverMixSong,
 } from "./discoverMixLevels.ts";
 export {
@@ -1392,3 +1394,11 @@ export type {
 export { libraryLyrics, libraryLyricsSong } from "./libraryLyrics.ts";
 export type { LibraryLyrics, LibraryLyricsState, LibraryLyricsTrack } from "./libraryLyrics.ts";
 export type { SyncedStarDownloads } from "./starDownloads.ts";
+export { mixKnownSongs } from "./mixKnownSongs.ts";
+export type {
+  KnownNonDSong,
+  MixKnownSongs,
+  MixKnownSources,
+  MixPlaylistEntry,
+  StreamedSong,
+} from "./mixKnownSongs.ts";

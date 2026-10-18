@@ -20,6 +20,7 @@ import { LibraryStore } from "@/library/LibraryStore";
 
 import { Player, playbackState } from "./Player";
 import { keptPlayingKey, queueSource, queueState } from "./Queue";
+import { queuedYtSong, queueTracks } from "./queueTracks";
 
 /** Bumped whenever a play starts or ends; Stats re-read on it while focused (`useFocusedVersion`). */
 export const playHistoryVersion = makeExternalStore(0);
@@ -90,6 +91,24 @@ export const layer = Layer.effectDiscard(
     let wasPlaying = false;
     // Whether the player keeping a play going through a JS restart was checked for.
     let resumeChecked = false;
+    // The queue entry last looked at for a streamed song, so each one is noted once.
+    let streamedKey: string | null = null;
+
+    /**
+     * Notes a YT Music song as streamed once its entry starts playing. Streamed
+     * plays aren't play history (`trackPlays`); Home's mixes read them, so a
+     * song the owner streamed is never new to them.
+     */
+    const noteStreamed = (key: string | null, playing: boolean, at: number): void => {
+      if (!playing || key === null || key === streamedKey) return;
+      streamedKey = key;
+      const trackId = trackFor(key)?.trackId;
+      const track = trackId === undefined ? undefined : queueTracks.get().get(trackId);
+      const song = track === undefined ? null : queuedYtSong(track);
+      if (song === null) return;
+      write(store.noteStreamedSong(song, at));
+      publishLibraryChange({ kind: "streamed", burst: true });
+    };
 
     const saveProgress = (): void => {
       lastSave = Date.now();
@@ -154,6 +173,7 @@ export const layer = Layer.effectDiscard(
       };
       resume(signal);
       feed(signal);
+      noteStreamed(key, state.isPlaying, signal.at);
       const pausedOrResumed = wasPlaying !== state.isPlaying;
       wasPlaying = state.isPlaying;
       if (pausedOrResumed || (state.isPlaying && Date.now() - lastSave >= SAVE_INTERVAL_MS))

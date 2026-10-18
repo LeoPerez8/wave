@@ -1,14 +1,16 @@
 /**
- * How much of each Discover mix is new music (docs/spec.md, "Discover
- * mixes"): a level from 1 (20% new songs, the rest the Library's) to 5 (all
- * new). A build stores each mix's new songs (enough for level 5) and its
- * Library pool; the level only re-blends what's stored, so changing it needs
- * no network and no rebuild.
+ * How much of each mix is new music (docs/spec.md, "Artist mixes"): a level
+ * from 1 (20% new songs, the rest familiar) to 5 (all new). A build stores
+ * each mix's new songs (enough for level 5) and its familiar share; the
+ * level only re-blends what's stored, so changing it needs no network and no
+ * rebuild.
  */
 
+import { splitCredit } from "./credits.ts";
 import type {
   DiscoverLibrarySong,
   DiscoverMix,
+  DiscoverMixFamiliarSong,
   DiscoverMixLibrarySong,
   DiscoverMixSeed,
   DiscoverRadioSong,
@@ -20,13 +22,25 @@ import { mixLibrarySong } from "./discoverMixes.ts";
 import { isExplicit, type ExplicitFlag } from "./explicit.ts";
 import { ofGenreFamily } from "./genreMixes.ts";
 import { identityKey } from "./library.ts";
+import type { MixKnownSongs } from "./mixKnownSongs.ts";
+import { normalizeSearchText } from "./search.ts";
 import type { MixedSong, YtAlbumSong } from "./ytDiscover.ts";
 
 /** How much of each mix is new: 1 = 20% new songs, up to 5 = all new. */
 export type DiscoverMixLevel = 1 | 2 | 3 | 4 | 5;
 
-/** A song of a mix as it plays: a new one, streamed, or one of the Library's. */
-export type DiscoverMixSong = MixedSong<YtAlbumSong, DiscoverMixLibrarySong>;
+/**
+ * A song of a mix as it plays: one of the Library's, or one that streams: a
+ * new one, or a familiar one ([familiar]) the phone has no file for.
+ */
+export type DiscoverMixSong =
+  | {
+      readonly source: "stream";
+      readonly song: YtAlbumSong;
+      /** A song of the familiar share, not a new one; absent for a new one. */
+      readonly familiar?: true;
+    }
+  | { readonly source: "library"; readonly track: DiscoverMixLibrarySong };
 
 /** A mix as the owner's level makes it: what Home, its page and its actions show and play. */
 export interface BlendedDiscoverMix {
@@ -40,7 +54,8 @@ export interface DiscoverMixBlend {
   readonly level: DiscoverMixLevel;
   /**
    * Whether the mix may play a song of its pools (a Library song still in the
-   * Library); absent, every one. Applied before blending, so the shares hold.
+   * Library, a new song the owner doesn't know yet); absent, every one.
+   * Applied before blending, so the shares hold.
    */
   readonly keep?: (song: DiscoverMixSong) => boolean;
 }
@@ -55,18 +70,28 @@ export interface DiscoverMixKeep {
    * the one the build saved.
    */
   readonly library: ReadonlyMap<number, { readonly explicit: ExplicitFlag }> | null;
+  /**
+   * The videos of the songs the owner has streamed, or has in a playlist,
+   * now: a new song among them was played or added since the build, so it's
+   * left out. Absent: none.
+   */
+  readonly knownVideos?: ReadonlySet<string>;
 }
 
 /**
  * The songs a mix keeps (`DiscoverMixBlend.keep`): Library songs still in
- * the Library, and, while Don't play explicit is on, clean ones alone
- * (unknown counts as clean). Turning the switch over re-blends the saved
- * mixes; nothing is built again.
+ * the Library, new songs the owner hasn't streamed or put in a playlist
+ * since the build ([knownVideos]), and, while Don't play explicit is on,
+ * clean ones alone (unknown counts as clean). Turning the switch over
+ * re-blends the saved mixes; nothing is built again.
  */
 export const discoverMixKeep =
-  ({ dontPlayExplicit, library }: DiscoverMixKeep) =>
+  ({ dontPlayExplicit, library, knownVideos }: DiscoverMixKeep) =>
   (song: DiscoverMixSong): boolean => {
-    if (song.source === "stream") return !(dontPlayExplicit && isExplicit(song.song.explicit));
+    if (song.source === "stream") {
+      if (song.familiar !== true && knownVideos?.has(song.song.videoId) === true) return false;
+      return !(dontPlayExplicit && isExplicit(song.song.explicit));
+    }
     const known = library === null ? undefined : library.get(song.track.id);
     if (library !== null && known === undefined) return false;
     const flag = known?.explicit ?? song.track.explicit ?? "unknown";
@@ -124,8 +149,8 @@ const interleave = <A, B>(fresh: readonly A[], familiar: readonly B[]): (A | B)[
 
 /**
  * [mix] at [level]: as many songs as it has new ones (its level-5 length),
- * level fifths of them new (rounded) and the rest from its Library pool, in
- * the pool's order, interleaved from a new song. The songs [keep] refuses
+ * level fifths of them new (rounded) and the rest from its familiar share,
+ * in the share's order, interleaved from a new song. The songs [keep] refuses
  * are out of both pools first; the length stays the stored new songs'. A
  * pool too short for the familiar share leaves the rest to new songs, and
  * too few new songs (explicit ones left out) leave theirs to the pool, so
@@ -137,8 +162,10 @@ export const blendDiscoverMix = (
   { level, keep = () => true }: DiscoverMixBlend,
 ): BlendedDiscoverMix => {
   const fresh = mix.songs.map((song): DiscoverMixSong => ({ source: "stream", song })).filter(keep);
-  const pool = (mix.library ?? [])
-    .map((track): DiscoverMixSong => ({ source: "library", track }))
+  const pool = (mix.familiar ?? [])
+    .map((song): DiscoverMixSong =>
+      song.source === "stream" ? { source: "stream", song: song.song, familiar: true } : song,
+    )
     .filter(keep);
   const length = mix.songs.length;
   const freshShare = Math.min(fresh.length, Math.round((length * level) / LEVELS));
@@ -150,56 +177,87 @@ export const blendDiscoverMix = (
   };
 };
 
-/** What a mix's Library pool is picked from. */
-export interface DiscoverMixPoolSources<S extends DiscoverRadioSong> {
+/** The songs the shares of the mixes before this one have. */
+export interface DiscoverMixTaken {
+  /** Library songs, by id. */
+  readonly tracks: ReadonlySet<number>;
+  /** Songs that stream, by video. */
+  readonly videos: ReadonlySet<string>;
+}
+
+/** What a mix's familiar share is picked from. */
+export interface DiscoverMixPoolSources<L extends DiscoverLibrarySong> {
   /** Its seed's radio, as read, in order. */
-  readonly radio: readonly S[];
-  /** The Library song a radio song is (Core's `libraryFinder`), or null. */
-  readonly find: (song: S) => DiscoverSeedSong | null;
+  readonly radio: readonly (DiscoverRadioSong & { readonly albumId: string | null })[];
+  /** The songs the owner knows (`mixKnownSongs`), over [library]'s songs. */
+  readonly known: MixKnownSongs<L>;
   readonly library: {
     readonly artists: readonly DiscoverSeedArtist[];
     readonly songs: readonly DiscoverLibrarySong[];
     /** The Library songs' all-time counted plays (songs not listed have none). */
     readonly plays?: readonly DiscoverSongPlays[];
   };
-  /** The Library songs the pools of the mixes before this one have, by id. */
-  readonly taken: ReadonlySet<number>;
+  /** What the shares of the mixes before this one have. */
+  readonly taken: DiscoverMixTaken;
   /** How many new songs the mix has: its length. */
   readonly length: number;
 }
 
+const recordingOf = (song: Pick<YtAlbumSong, "title" | "artists">): string =>
+  `${normalizeSearchText(song.title)}\u001f${song.artists.map(normalizeSearchText).join("\u001f")}`;
+
 /**
- * The Library songs [seed]'s mix may play as its familiar share, in the order
- * the share takes them: first the ones its radio played, in the radio's
- * order (music videos aside), then the Library's songs of its genre family, or, for
- * a mix without one, of its seed artist, the most played and then the
- * newest first. Never a song twice or one an earlier mix's pool has
- * ([taken]); as many as level 1 takes at most.
+ * The songs [seed]'s mix may play as its familiar share, in the order the
+ * share takes them: first the songs the owner knows that its radio played,
+ * in the radio's order (music videos aside), the Library's as Library songs
+ * and the others streamed as the radio has them; then the Library's songs of
+ * its genre family, or, for a mix without one, of its seed artist, the most
+ * played and then the newest first; then the non-D songs the owner knows
+ * (streamed or in a playlist) by its seed artists, the most streamed and
+ * then the newest first. Never a song twice or one an earlier mix's share
+ * has ([taken]); as many as level 1 takes at most.
  */
-export const discoverMixLibraryPool = <S extends DiscoverRadioSong>(
+export const discoverMixFamiliarPool = <L extends DiscoverLibrarySong>(
   seed: DiscoverMixSeed,
-  { radio, find, library, taken, length }: DiscoverMixPoolSources<S>,
-): DiscoverMixLibrarySong[] => {
+  { radio, known, library, taken, length }: DiscoverMixPoolSources<L>,
+): DiscoverMixFamiliarSong[] => {
   const most = length - Math.round(length / LEVELS);
   const plays = new Map((library.plays ?? []).map((entry) => [entry.id, entry.countedPlays]));
   const playsOf = (song: DiscoverSeedSong): number => plays.get(song.id) ?? 0;
-  const seen = new Set(taken);
-  const pool: DiscoverMixLibrarySong[] = [];
-  const add = (song: DiscoverSeedSong): void => {
-    if (pool.length >= most || seen.has(song.id)) return;
-    seen.add(song.id);
-    pool.push(mixLibrarySong(song));
+  const tracks = new Set(taken.tracks);
+  const videos = new Set(taken.videos);
+  const recordings = new Set<string>();
+  const pool: DiscoverMixFamiliarSong[] = [];
+  const addTrack = (song: DiscoverSeedSong): void => {
+    if (pool.length >= most || tracks.has(song.id)) return;
+    tracks.add(song.id);
+    pool.push({ source: "library", track: mixLibrarySong(song) });
   };
-  for (const song of radio) {
-    if (song.video) continue;
-    const track = find(song);
-    if (track !== null) add(track);
+  const addStream = (song: YtAlbumSong): void => {
+    const recording = recordingOf(song);
+    if (pool.length >= most || videos.has(song.videoId) || recordings.has(recording)) return;
+    videos.add(song.videoId);
+    recordings.add(recording);
+    pool.push({ source: "stream", song });
+  };
+  for (const { video, ...song } of radio) {
+    if (video) continue;
+    const track = known.inLibrary(song);
+    if (track !== null) addTrack(track);
+    else if (known.known(song)) addStream(song);
   }
   const rest = library.songs
     .filter(mixSongFilter(seed, library.artists))
     // oxlint-disable-next-line unicorn/no-array-sort -- sorts the fresh array filter made; Hermes lacks toSorted
     .sort((a, b) => playsOf(b) - playsOf(a) || b.addedAt - a.addedAt);
-  for (const song of rest) add(song);
+  for (const song of rest) addTrack(song);
+  const seedArtists = new Set(
+    (seed.artists?.map((artist) => artist.name) ?? [seed.name]).map(identityKey),
+  );
+  for (const { song } of known.nonD) {
+    const artists = song.artists.flatMap((artist) => splitCredit(artist)).map(identityKey);
+    if (artists.some((artist) => seedArtists.has(artist))) addStream(song);
+  }
   return pool;
 };
 
