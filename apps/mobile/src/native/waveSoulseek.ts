@@ -168,9 +168,7 @@ export interface JobRequest {
  * run of hundreds isn't hundreds of synced writes). The jobs' ids.
  */
 export const enqueueJobs = (requests: readonly JobRequest[]): Promise<string[]> =>
-  requests.length === 0
-    ? Promise.resolve([])
-    : WaveSoulseek.enqueueJobs(JSON.stringify(requests));
+  requests.length === 0 ? Promise.resolve([]) : WaveSoulseek.enqueueJobs(JSON.stringify(requests));
 
 /** Never includes credentials or raw native error messages in user-facing copy. */
 export const soulseekErrorCode = (error: unknown): string | null => {

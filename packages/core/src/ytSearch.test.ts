@@ -675,7 +675,13 @@ describe("what Search knows of its top-hit artists' online pages during a visit"
     outcome: "found",
     checkedAt: NOW,
     browseId: "UCbluestones",
-    page: { name: "Blue Stones", songs: [], allSongs: [song("mine"), song("a")], albums: [], singles: [] },
+    page: {
+      name: "Blue Stones",
+      songs: [],
+      allSongs: [song("mine"), song("a")],
+      albums: [],
+      singles: [],
+    },
   };
   const online = (query = "blue"): YtSection =>
     found(pick(typedFound(YT_SECTION_HIDDEN, query), "online"), query, []);
@@ -683,7 +689,10 @@ describe("what Search knows of its top-hit artists' online pages during a visit"
     events.reduce(ytSearchArtistsKnownAfter, YT_SEARCH_ARTISTS_UNKNOWN);
 
   test("reads a Library artist on top once YouTube Music's answer shows, once a visit", () => {
-    assert.equal(ytSearchArtistToRead(online(), "Blue Stones", YT_SEARCH_ARTISTS_UNKNOWN), "blue stones");
+    assert.equal(
+      ytSearchArtistToRead(online(), "Blue Stones", YT_SEARCH_ARTISTS_UNKNOWN),
+      "blue stones",
+    );
     const read = after({ kind: "read", key: "blue stones", saved: ANSWER, at: NOW });
     assert.equal(ytSearchArtistToRead(online("blue st"), "Blue Stones", read), null);
   });

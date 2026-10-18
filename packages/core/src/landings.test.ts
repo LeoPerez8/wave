@@ -120,7 +120,9 @@ describe("a song and its fill-in make one change", () => {
     landings.filled([2], { wrote: true });
     advance(10_000);
 
-    assert.deepEqual(announced, [{ at: 2300, change: { kind: "tracks", ids: [1, 2], burst: true } }]);
+    assert.deepEqual(announced, [
+      { at: 2300, change: { kind: "tracks", ids: [1, 2], burst: true } },
+    ]);
   });
 
   test("a song waits for its fill-in 2 s at most; a fill-in that writes later is a change of its own", () => {

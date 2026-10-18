@@ -30,7 +30,12 @@ const playlistIds = sql<string | null>`(SELECT group_concat(id) FROM (
   ORDER BY playlist_items.playlist_id))`;
 
 const readIds = (ids: string | null): number[] =>
-  ids === null ? [] : ids.split(",").map(Number).sort((a, b) => a - b);
+  ids === null
+    ? []
+    : ids
+        .split(",")
+        .map(Number)
+        .toSorted((a, b) => a - b);
 
 /**
  * The Library's MP3 and M4A files (the only kinds a replacement makes), with
@@ -143,7 +148,7 @@ export const fixReplacementDuplicate = (
     ): found is NonNullable<typeof found> =>
       found !== undefined &&
       Boolean(found.favorite) === track.favorite &&
-      readIds(found.playlists).join() === [...track.playlists].sort((a, b) => a - b).join();
+      readIds(found.playlists).join() === track.playlists.toSorted((a, b) => a - b).join();
     const kept = fileOf(fix.keep);
     const dropped = fileOf(fix.drop);
     if (!asChecked(kept, fix.keep) || !asChecked(dropped, fix.drop)) return false;

@@ -160,8 +160,7 @@ export const replacementDuplicateFix = <F extends DuplicateCheckFile>(
   const oldComplete = complete(pair.old, lengths.old);
   const songLength = oldComplete ? (lengths.old ?? 0) : pair.old.durationMs;
   const onNew =
-    complete(pair.new, lengths.new) &&
-    (songLength <= 0 || within(lengths.new ?? 0, songLength));
+    complete(pair.new, lengths.new) && (songLength <= 0 || within(lengths.new ?? 0, songLength));
   if (!onNew && !oldComplete)
     return { kind: "leave", reason: "incomplete", incomplete: [pair.old.path, pair.new.path] };
   return {
