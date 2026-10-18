@@ -34,6 +34,12 @@ export interface YtLibraryRead {
    * (Liked Songs with Also add to Favorites on; `ytLibraryFavorites`).
    */
   readonly favorites: boolean;
+  /**
+   * Whether its downloads are queued once it's read and filled, as its
+   * Download Playlist would (Import & Download). A read that failed loses it:
+   * Try Again imports it without downloading.
+   */
+  readonly download: boolean;
   readonly state: YtLibraryReadState;
 }
 
@@ -46,6 +52,11 @@ export interface YtLibraryBatch {
 /** A batch with nothing to read. */
 export const NO_YT_LIBRARY_READS: YtLibraryBatch = { reads: [], lastToken: 0 };
 
+/** A playlist an Import queues: Import & Download's with `download`, Import's without. */
+export type YtLibraryReadToQueue = Omit<YtLibraryRead, "state" | "token" | "download"> & {
+  readonly download?: boolean;
+};
+
 /**
  * [batch] with [reads] (the playlists an Import just made or refreshed, in
  * its order) waiting after it, each with a new token. A refreshed playlist
@@ -54,17 +65,18 @@ export const NO_YT_LIBRARY_READS: YtLibraryBatch = { reads: [], lastToken: 0 };
  */
 export const queueYtLibraryReads = (
   batch: YtLibraryBatch,
-  reads: readonly Omit<YtLibraryRead, "state" | "token">[],
+  reads: readonly YtLibraryReadToQueue[],
 ): YtLibraryBatch => ({
   reads: [
     ...batch.reads.filter((queued) => !reads.some((read) => read.playlistId === queued.playlistId)),
-    ...reads.map(({ source, playlistId, name, capped, favorites }, index) => ({
+    ...reads.map(({ source, playlistId, name, capped, favorites, download }, index) => ({
       token: batch.lastToken + index + 1,
       source,
       playlistId,
       name,
       capped,
       favorites,
+      download: download === true,
       state: "waiting" as const,
     })),
   ],
@@ -121,8 +133,9 @@ const PAUSING_REASONS: ReadonlySet<string> = new Set(["offline", "disabled"]);
  * (`offline`) or with YT Music off (`disabled`), nothing changes and the
  * batch pauses: its playlist and the rest keep waiting, in order, and a
  * failed one Try Again read keeps its line. Refused, or an answer Wave
- * can't read, marks its playlist failed (it stays empty, with Try Again)
- * and the rest goes on. A newer read of the same playlist stays as it was.
+ * can't read, marks its playlist failed (it stays empty, with Try Again,
+ * which imports it without downloading) and the rest goes on. A newer read
+ * of the same playlist stays as it was.
  */
 export const ytLibraryReadFailed = (
   batch: YtLibraryBatch,
@@ -135,7 +148,9 @@ export const ytLibraryReadFailed = (
     batch: {
       ...batch,
       reads: batch.reads.map((queued) =>
-        queued.token === read.token ? { ...queued, state: "failed" as const } : queued,
+        queued.token === read.token
+          ? { ...queued, download: false, state: "failed" as const }
+          : queued,
       ),
     },
     pause: false,
@@ -194,28 +209,44 @@ export const writeYtLibraryBatch = (batch: YtLibraryBatch): string | null =>
     ? null
     : JSON.stringify({
         version: KEPT_VERSION,
-        batch: batch.reads.map(({ source, playlistId, name, capped, favorites, state }) => ({
-          source,
-          playlistId,
-          name,
-          capped,
-          favorites,
-          state,
-        })),
+        batch: batch.reads.map(
+          ({ source, playlistId, name, capped, favorites, download, state }) => ({
+            source,
+            playlistId,
+            name,
+            capped,
+            favorites,
+            download,
+            state,
+          }),
+        ),
       });
 
 /**
  * A kept playlist, given [token]; null when unreadable. One kept by a Wave
- * from before Also add to Favorites stars nothing.
+ * from before Also add to Favorites stars nothing, and one from before
+ * Import & Download downloads nothing.
  */
 const readRead = (value: unknown, token: number): YtLibraryRead | null => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
-  const { source, playlistId, name, capped, favorites, state } = value as Record<string, unknown>;
+  const { source, playlistId, name, capped, favorites, download, state } = value as Record<
+    string,
+    unknown
+  >;
   if (typeof source !== "string" || typeof playlistId !== "number" || typeof name !== "string") {
     return null;
   }
   if (typeof capped !== "boolean" || (state !== "waiting" && state !== "failed")) return null;
-  return { token, source, playlistId, name, capped, favorites: favorites === true, state };
+  return {
+    token,
+    source,
+    playlistId,
+    name,
+    capped,
+    favorites: favorites === true,
+    download: download === true,
+    state,
+  };
 };
 
 /**

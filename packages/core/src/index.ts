@@ -1214,4 +1214,5 @@ export type {
   YtLibraryReadFailure,
   YtLibraryReadState,
   YtLibraryReadView,
+  YtLibraryReadToQueue,
 } from "./ytLibraryBatch.ts";
