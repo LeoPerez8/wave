@@ -341,7 +341,7 @@ class DurableDownloads(
     for (job in jobs.values) {
       if (busy >= slots || startedCount >= slots * 2) break
       if (job["phase"] != "queued") continue
-      startBudget(job); transition(job, "preparing")
+      startBudget(job); startSoulseekTurn(job); transition(job, "preparing")
       busy++; startedCount++; changed = true
     }
     if (changed) persist()
@@ -363,7 +363,7 @@ class DurableDownloads(
     if (stopped) return false
     val job = published.firstOrNull { it["id"] == id } ?: return false
     return job["phase"] == "transferring" && job.number("attemptDeadline") > budgetNow() &&
-      (job["queuePosition"] == null || job.number("queueDeadline") > budgetNow())
+      (job["queuePosition"] == null || job.number("queueDeadline") > budgetNow()) && !soulseekTurnOver(job)
   }
 
   /**
@@ -437,6 +437,10 @@ class DurableDownloads(
         // Android stopping the work isn't the source's fault; running out of time is.
         else fail(job, if (stopAll) "failed" else "timedOut", cause)
         transport.cancel(job["id"] as String)
+      } else if (soulseekTurnOver(job)) {
+        changed = true
+        transport.cancel(job["id"] as String)
+        fail(job, "timedOut", SOULSEEK_OUT_OF_TIME)
       } else if (job["phase"] == "transferring" && (job.number("attemptDeadline") <= budgetNow() || (job["queuePosition"] != null && job.number("queueDeadline") <= budgetNow()))) {
         changed = true
         transport.cancel(job["id"] as String)
@@ -475,6 +479,7 @@ class DurableDownloads(
       if (id in running || job.number("retryAt") > clock()) continue
       if (job["phase"] == "prepared") {
         if (job.number("attempts") >= MAX_ATTEMPTS || job.number("candidateIndex") >= job.maps("candidates").size) { fail(job, exhausted(job)); persist(); continue }
+        if (soulseekTurnOver(job)) { fail(job, "timedOut", SOULSEEK_OUT_OF_TIME); persist(); continue }
         if (job.number("resumeAttemptDeadline") in 1..budgetNow() || job.number("resumeQueueDeadline") in 1..budgetNow()) { nextCandidate(job); persist(); continue }
         job["attempts"] = job.number("attempts") + 1
         // YouTube goes on in the part file its last attempt left (YtAudioDownload checks it's the same stream's).
@@ -511,17 +516,19 @@ class DurableDownloads(
               // Arriving bytes keep a slow peer's turn; one that goes quiet for STALL_MS is replaced.
               // YouTube's range retries get YOUTUBE_STALL_MS before the journal steps in.
               if (received > job.number("received")) job["attemptDeadline"] = withinBudget(job, if (job["source"] == YOUTUBE) YOUTUBE_STALL_MS else STALL_MS)
-              // A peer's queue place is rare news a restart keeps; bytes are progress.
+              // A peer's queue place, and its first bytes (they meet Soulseek's start budget), are rare
+              // news a restart keeps; other bytes are progress.
+              val started = received > 0 && job.remove("soulseekDeadline") != null
               val queueMoved = queue != job["queuePosition"]
               job["received"] = received; job["total"] = total; job["queuePosition"] = queue
               if (queue != null && job.number("queueDeadline") <= budgetNow()) transport.cancel(id)
-              if (queueMoved) persist() else progressed(job)
+              if (queueMoved || started) persist() else progressed(job)
             }
           }
           synchronized(this) {
             val job = held(id, generation, "transferring") ?: run { source.delete(); return }
             if (stopped) { cleanup(job); transition(job, "prepared"); persist(); return }
-            job["audio"] = clean(audio); job["receiptId"] = UUID.randomUUID().toString(); transition(job, "sourceReady"); persist()
+            job["audio"] = clean(audio); job["receiptId"] = UUID.randomUUID().toString(); job.remove("soulseekDeadline"); transition(job, "sourceReady"); persist()
           }
         }
         "tagging" -> {
@@ -683,7 +690,7 @@ class DurableDownloads(
     if (!fallsBack(job, reason)) return false
     val fallback = job.map("fallback")
     cleanup(job)
-    for (key in listOf("fallback", "failurePlan", "peer", "audio", "receiptId", "received", "total", "queuePosition", "queueDeadline", "attemptDeadline", "resumeAttemptDeadline", "resumeQueueDeadline")) job.remove(key)
+    for (key in listOf("fallback", "failurePlan", "peer", "audio", "receiptId", "received", "total", "queuePosition", "queueDeadline", "attemptDeadline", "resumeAttemptDeadline", "resumeQueueDeadline", "soulseekDeadline")) job.remove(key)
     setSource(job, YOUTUBE)
     fallback["failurePlan"]?.let { job["failurePlan"] = clean(it) }
     job["fellBackFrom"] = reason
@@ -765,6 +772,25 @@ class DurableDownloads(
   /** A deadline [ms] from now on the budget's clock, never past [job]'s own. */
   private fun withinBudget(job: Map<String, Any?>, ms: Long): Long = minOf(budgetNow() + ms, job.number("deadline"))
 
+  /**
+   * Soulseek's start budget, a rule of its own beside the job's [JOB_MS]: a Soulseek job whose
+   * peers haven't started sending [SOULSEEK_START_MS] after it left the queue (its search,
+   * connecting, peers' queues and pauses included) goes to YouTube Music, behind mobile NAT the
+   * likely end anyway. It runs on the budget's clock, from [startBudget], as `soulseekDeadline`.
+   */
+  private fun startSoulseekTurn(job: MutableMap<String, Any?>) {
+    if (job["source"] != YOUTUBE) job["soulseekDeadline"] = withinBudget(job, SOULSEEK_START_MS) else job.remove("soulseekDeadline")
+  }
+  /**
+   * Whether [job]'s Soulseek turn is over ([startSoulseekTurn]). A peer's first bytes meet it
+   * (`soulseekDeadline` goes), so a transfer that started in time runs on under the usual rules.
+   * Only while YouTube Music can take over: without a fallback Soulseek keeps the job's whole
+   * time. Reads [job] alone, so it holds on the published copy.
+   */
+  private fun soulseekTurnOver(job: Map<String, Any?>) =
+    job["soulseekDeadline"] != null && job.number("soulseekDeadline") <= budgetNow() && job["source"] != YOUTUBE &&
+      charged(job) && fallsBack(job, "timedOut")
+
   // Persistence. A change a restart must keep (a job enqueued, a phase, a decision, a failure, a
   // cancel, a peer's queue place) is written at once by [persist]. Transfer progress only marks
   // the journal [progressed]: it's written with the next change, or once [PROGRESS_WRITE_MS] has
@@ -821,13 +847,17 @@ class DurableDownloads(
   }
 
   companion object {
-    /** How many songs download at once (measured for #239). */
-    const val SLOTS = 3
+    /** How many songs download at once (three measured for #239; five since #395, as Soulseek rarely delivers behind mobile NAT). */
+    const val SLOTS = 5
     /** How long a started song may wait for JS's answer before it leaves its slot to the next. */
     const val DECISION_WAIT_MS = 30_000L
     const val LEASE_MS = 45_000L
     /** A job's budget from leaving the queue until its file is downloaded: search, peers' queues and transfers. */
     const val JOB_MS = 20 * 60_000L
+    /** How long Soulseek has, from the job going to it, for a peer to start sending ([soulseekTurnOver]). */
+    const val SOULSEEK_START_MS = 120_000L
+    /** The cause of Soulseek's turn ending at [SOULSEEK_START_MS]. */
+    const val SOULSEEK_OUT_OF_TIME = "Soulseek didn't start a transfer within 2 minutes"
     /** How long one peer may keep us in its upload queue. */
     const val QUEUE_MS = 120_000L
     /** How long one peer has to start sending. */
