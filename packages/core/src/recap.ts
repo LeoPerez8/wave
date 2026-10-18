@@ -5,6 +5,11 @@
  * Recap holds and the slides it shows, in order.
  */
 import { songFamilies, type GenreFamily } from "./genreMixes.ts";
+import {
+  lyricCardFileName,
+  lyricStoryBackground,
+  type LyricStoryBackground,
+} from "./lyricsShare.ts";
 import { rankPlays, type PlayTotals, type StatsWindow } from "./stats.ts";
 
 /** A calendar month, local time; `month` is 1 (January) to 12. */
@@ -114,6 +119,20 @@ const MONTHS = [
 export const recapTitle = (period: RecapPeriod): string =>
   period.kind === "month" ? `${MONTHS[period.month - 1]} ${period.year}` : String(period.year);
 
+/**
+ * A shared slide's PNG's file name, the Recap [title]'s (`recapTitle`):
+ * `Wave - Recap <title> - <yyyyMMdd-HHmmss>.png`, local time, as a lyrics card's.
+ */
+export const recapCardFileName = (title: string, at: Date): string =>
+  lyricCardFileName(`Recap ${title}`, at);
+
+/**
+ * The background of the Instagram story a shared slide goes to as a sticker:
+ * the slide's [colour] top and bottom, so it sits on its own colour.
+ */
+export const recapStoryBackground = (colour: string): LyricStoryBackground =>
+  lyricStoryBackground(colour);
+
 /** How many songs a Recap's top songs list. */
 export const RECAP_TOP_SONGS = 5;
 /** How many artists a Recap's top artists list. */
@@ -138,7 +157,13 @@ export interface RecapInput {
    * When each of `artists` had their first counted play ever (any period); an
    * artist not listed isn't counted as discovered.
    */
-  readonly artistFirstPlays?: readonly { readonly id: number; readonly firstPlayAt: number }[];
+  readonly artistFirstPlays?: readonly ArtistFirstPlay[];
+}
+
+/** When the artist [id] had their first counted play ever (ms since the epoch). */
+export interface ArtistFirstPlay {
+  readonly id: number;
+  readonly firstPlayAt: number;
 }
 
 /** A song's genre tag: its first value and, for a multi-value tag, every value. */
@@ -438,6 +463,14 @@ export const RECAP_SLIDE_MS = 6000;
 /** The slide after `index` of `count`, or null when the stories end and close. */
 export const recapForward = (index: number, count: number): number | null =>
   index + 1 < count ? index + 1 : null;
+
+/**
+ * Where the stories go when slide `index` of `count` has shown for its time:
+ * the next slide, or null on the last one, the summary card, which stays
+ * until a tap, a swipe down or close ends the stories (as Wrapped's does).
+ */
+export const recapAutoForward = (index: number, count: number): number | null =>
+  recapForward(index, count);
 
 /** The slide before `index`; on the first slide, the first again (it restarts). */
 export const recapBack = (index: number): number => Math.max(0, index - 1);

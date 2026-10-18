@@ -312,34 +312,44 @@ export function RankedSongList({
 /** A Recap's tile on Stats' Recaps row. */
 const RECAP_TILE = { width: CELL * 17, height: CELL * 21 } as const;
 
-/** A Recap tile's label over its title: a year's stands apart from the months'. */
-const recapTileLabel = (period: RecapPeriod): string =>
-  period.kind === "year" ? "Year in music" : "Recap";
-
-/** A Recap tile's colour: purple for a year, indigo for a month. */
-const recapTileColour = (period: RecapPeriod): string =>
-  period.kind === "year" ? "bg-tile-purple" : "bg-tile-indigo";
+/**
+ * How a Recap's tile and Home's card read, by period kind: a year's stand
+ * apart from the months' by their label, their "ready" line and their colour
+ * (purple for a year, indigo for a month).
+ */
+const RECAP_LOOK: {
+  readonly [K in RecapPeriod["kind"]]: {
+    readonly label: string;
+    readonly ready: string;
+    readonly colour: string;
+  };
+} = {
+  month: { label: "Recap", ready: "Your Recap is ready", colour: "bg-recap-indigo" },
+  year: { label: "Year in music", ready: "Your year in music is ready", colour: "bg-recap-purple" },
+};
 
 /**
  * Home's card for a new Recap (Core's `recapToAnnounce`), shown until it's
  * opened. Tapping it plays its stories.
  */
 export function RecapCard({ period }: { period: RecapPeriod }) {
-  const ready = period.kind === "year" ? "Your year in music is ready" : "Your Recap is ready";
+  const { ready, colour } = RECAP_LOOK[period.kind];
   return (
     <Press
       accessibilityRole="button"
       accessibilityLabel={`${ready}: ${recapTitle(period)}`}
       onPress={() => openRecap(period)}
       haptic="selection"
-      className={`rounded-2xl ${recapTileColour(period)}`}
+      className={`rounded-2xl ${colour}`}
       style={{ padding: CELL * 2, gap: CELL / 2 }}
     >
-      <Text className="font-sans text-footnote font-semibold text-on-tile opacity-80">{ready}</Text>
-      <Text numberOfLines={1} className="font-sans text-title2 font-bold text-on-tile">
+      <Text className="font-sans text-footnote font-semibold text-on-recap opacity-80">
+        {ready}
+      </Text>
+      <Text numberOfLines={1} className="font-sans text-title2 font-bold text-on-recap">
         {recapTitle(period)}
       </Text>
-      <Text className="font-sans text-subheadline text-on-tile opacity-80">Tap to watch</Text>
+      <Text className="font-sans text-subheadline text-on-recap opacity-80">Tap to watch</Text>
     </Press>
   );
 }
@@ -361,16 +371,16 @@ export function RecapsRow({ recaps }: { recaps: readonly RecapPeriod[] }) {
         <Press
           key={recapId(period)}
           accessibilityRole="button"
-          accessibilityLabel={`${recapTitle(period)} ${recapTileLabel(period)}`}
+          accessibilityLabel={`${recapTitle(period)} ${RECAP_LOOK[period.kind].label}`}
           onPress={() => openRecap(period)}
           haptic="selection"
-          className={`justify-end rounded-2xl ${recapTileColour(period)}`}
+          className={`justify-end rounded-2xl ${RECAP_LOOK[period.kind].colour}`}
           style={{ ...RECAP_TILE, padding: CELL * 1.5 }}
         >
-          <Text className="font-sans text-footnote font-semibold text-on-tile opacity-80">
-            {recapTileLabel(period)}
+          <Text className="font-sans text-footnote font-semibold text-on-recap opacity-80">
+            {RECAP_LOOK[period.kind].label}
           </Text>
-          <Text numberOfLines={2} className="font-sans text-title3 font-bold text-on-tile">
+          <Text numberOfLines={2} className="font-sans text-title3 font-bold text-on-recap">
             {recapTitle(period)}
           </Text>
         </Press>
