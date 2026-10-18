@@ -103,6 +103,7 @@ v1 delivers the core player and library. v2 adds the advanced audio and library-
 44. As a user, I want a Queue view in Now Playing with shuffle and repeat toggles, so that I can manage playback from one place.
 45. As a user, I want a sleep timer (15/30/45/60 minutes, custom, or end of current track), so that music stops when I fall asleep.
 46. As a user, I want to see the remaining sleep-timer time and cancel it, so that I stay in control.
+    46a. As a user, I want to add the song playing to a playlist and download it from Now Playing, so that I keep a song I'm streaming without hunting for its menu. Now Playing's bottom row holds Lyrics, Sleep timer, **Add to Playlist**, **Download** and Queue, evenly spaced. Add to Playlist, for every song, opens the Add to Playlist picker for the song playing; a streamed song goes in as its menu adds it (the Library's song when the Library has it, else a YT Music entry). Download shows only for a song this phone has no file for: a tap downloads it as its menu's Download does (into its Library entry when the Library lists it as missing); it then shows waiting (a dashed circle) and a progress ring while the file arrives, and is gone once the song is in the Library. A failed download shows as failed, and a tap retries (Core's `nowPlayingDownload`).
 
 ### Search tab
 

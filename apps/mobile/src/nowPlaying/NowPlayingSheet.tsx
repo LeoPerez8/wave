@@ -19,7 +19,12 @@ import { useThemeColor } from "@/theme/useThemeColor";
 
 import { Background } from "./Background";
 import { DismissArea } from "./DismissArea";
-import { useNowPlayingGradient, useNowPlayingPalette, useTrackDetails } from "./hooks";
+import {
+  useNowPlayingGradient,
+  useNowPlayingPalette,
+  usePlayingYtSong,
+  useTrackDetails,
+} from "./hooks";
 import { LyricsView } from "./LyricsView";
 import { PlayerView } from "./PlayerView";
 import { QueueHeader, UpNextList } from "./QueueView";
@@ -32,6 +37,7 @@ import {
   useNowPlayingShown,
 } from "./sheet";
 import { SleepTimerButton } from "./SleepTimer";
+import { AddToPlaylistButton, DownloadButton } from "./SongButtons";
 import { Transport } from "./Transport";
 
 /** What fills the space above the controls. */
@@ -160,6 +166,7 @@ export function NowPlayingSheet() {
   );
   const trackId = useCurrentTrackId();
   const details = useTrackDetails(trackId);
+  const ytSong = usePlayingYtSong(trackId);
   const palette = useNowPlayingPalette(trackId, details);
   const gradient = useNowPlayingGradient(palette);
   const [view, setView] = useState<NowPlayingView>("player");
@@ -240,7 +247,8 @@ export function NowPlayingSheet() {
         <DismissArea style={{ paddingTop: CELL * 3, gap: CELL * 2 }}>
           <Scrubber />
           <Transport />
-          <View className="flex-row items-center">
+          {/* Evenly spaced, with or without Download (a non-D song's alone). */}
+          <View className="flex-row items-center justify-between">
             <ViewToggle
               icon={IconQuote}
               label="Lyrics"
@@ -248,7 +256,16 @@ export function NowPlayingSheet() {
               onPress={toggleLyrics}
             />
             <SleepTimerButton />
-            <View className="flex-1" />
+            {item !== null && (
+              <>
+                <AddToPlaylistButton
+                  trackId={trackId}
+                  ytSong={ytSong}
+                  title={item.title ?? "Unknown title"}
+                />
+                <DownloadButton ytSong={ytSong} />
+              </>
+            )}
             <ViewToggle
               icon={IconListNumbers}
               label="Queue"
