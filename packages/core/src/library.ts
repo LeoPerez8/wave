@@ -227,6 +227,26 @@ const creditsOf = (
 const shownCredit = (credits: readonly string[]): string | null =>
   credits.length > 0 ? credits.join(", ") : null;
 
+/** How a track's genre tag values (`LibraryTrack.genres`) are stored: null for one or none, else each of them. */
+export const storedGenres = (genres: readonly string[]): string | null =>
+  genres.length > 1 ? JSON.stringify(genres) : null;
+
+/**
+ * A track's genre tag values as `storedGenres` saved them; none for nothing
+ * stored or a value that isn't a list of text, so one bad row reads as a
+ * song with no extra genres instead of stopping the whole read.
+ */
+export const readStoredGenres = (stored: string | null): string[] => {
+  if (stored === null) return [];
+  let raw: unknown;
+  try {
+    raw = JSON.parse(stored);
+  } catch {
+    return [];
+  }
+  return Array.isArray(raw) && raw.every((value) => typeof value === "string") ? raw : [];
+};
+
 /** Turns raw scanner output into a library track with fallbacks, parsed numbers and keys. */
 export const normalizeTrack = (raw: RawTrack): LibraryTrack => {
   const { folder, fileName } = splitPath(raw.path);

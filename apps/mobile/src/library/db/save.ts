@@ -6,6 +6,7 @@
 import {
   fillMissingSongs,
   recordingKey,
+  storedGenres,
   type LibraryTrack,
   type MissingSongSave,
 } from "@wave/core";
@@ -27,7 +28,7 @@ import { settlePendingFavorites } from "./pendingFavorites.ts";
 import { linkPlaylistEntries } from "./playlists.ts";
 import * as schema from "./schema.ts";
 import { leaveKeys, selectJoinedAccount } from "./syncRows.ts";
-import { deleteTracks, storedGenres } from "./tracks.ts";
+import { deleteTracks } from "./tracks.ts";
 
 const excluded = (column: SQLiteColumn): SQL => sql.raw(`excluded."${column.name}"`);
 
