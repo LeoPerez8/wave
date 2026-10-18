@@ -4,8 +4,6 @@ import expo.modules.wavenative.log.LogUnits
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
-import java.io.ObjectInputStream
-import java.io.ObjectOutputStream
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
@@ -45,6 +43,10 @@ interface DurablePublication {
  * again, or for JS's answer longer than [DECISION_WAIT_MS]) doesn't hold a slot, so it never
  * holds up the songs behind it; at most twice [slots] are started at once all the same. Saving to
  * the Library goes one song at a time: the publish and import decisions, and publication itself.
+ *
+ * The journal is written in small, coalesced writes (#452): the changes of a second share one
+ * write ([WRITE_MS]), which appends only what changed to a log beside a snapshot ([JournalStore]),
+ * so a big queue's tags and lyrics aren't rewritten on every change. See "Persistence" below.
  */
 class DurableDownloads(
   private val journal: File,
@@ -58,6 +60,11 @@ class DurableDownloads(
    * before its download service does, passes false: its clock waits for [startWork].
    */
   budgetRunning: Boolean = true,
+  /**
+   * Runs a write that waits for [WRITE_MS] to pass ([persist]) after the delay it's given, on
+   * another thread. Without one, the deadline thread's [expire] writes it.
+   */
+  private val later: ((delayMs: Long, run: () -> Unit) -> Unit)? = null,
 ) {
   private val jobs = LinkedHashMap<String, MutableMap<String, Any?>>()
   private var policy = mutableMapOf<String, Any?>("roots" to emptyList<String>(), "excluded" to emptyList<String>(), "revision" to 0L)
@@ -86,12 +93,11 @@ class DurableDownloads(
    */
   private var budgetWrittenAt = 0L
 
+  /** The journal's files: a snapshot and a log of what changed since ([JournalStore]). */
+  private val store = JournalStore(journal)
+
   init {
-    // An unreadable journal (never expected: writes are atomic) must not crash every launch.
-    @Suppress("UNCHECKED_CAST")
-    val saved = if (journal.isFile) runCatching {
-      FileInputStream(journal).use { ObjectInputStream(it).readObject() } as Map<String, Any?>
-    }.getOrNull() else null
+    val saved = store.load()
     budget = BudgetClock(clock, (saved?.get("budgetClock") as? Number)?.toLong(), running = budgetRunning)
     if (saved != null) {
       for ((id, job) in saved.map("jobs")) {
@@ -125,9 +131,26 @@ class DurableDownloads(
         job["generation"] = job.number("generation") + 1
         transition(job, "preparing")
       }
+      sweepParts()
       // A full disk mustn't stop Wave or the download service from opening the journal: the
       // jobs stay in memory (and readable), and the next change that can be written saves them.
-      try { persist() } catch (_: java.io.IOException) {}
+      try { persistNow() } catch (_: java.io.IOException) {}
+    }
+  }
+
+  /**
+   * Deletes the part files no job holds in the folders its started jobs download to: a step the
+   * last write didn't record (a transfer started within [WRITE_MS] of a crash) may have left one.
+   * Only Wave's own part files (`.wave-<uuid>.part.<ext>`, [DownloadFiles.partFileFor]); nothing
+   * runs while the journal opens, so none is in use.
+   */
+  private fun sweepParts() {
+    val held = jobs.values.flatMap { job -> listOf("sourcePath", "outputPath", "publishSource", "finalPath").mapNotNull { job[it] as? String } }.toSet()
+    val folders = jobs.values.filter { it["phase"] != "queued" && pending(it) }
+      .flatMap { job -> listOfNotNull(job["targetPath"] as? String, job.map("fallback")["targetPath"] as? String) }
+      .mapNotNull { File(it).parentFile }.toSet()
+    for (folder in folders) {
+      folder.listFiles { file -> file.name.startsWith(".wave-") && file.name.contains(".part.") && file.path !in held }?.forEach { it.delete() }
     }
   }
 
@@ -468,7 +491,8 @@ class DurableDownloads(
       transition(job, "queued")
       changed = true
     }
-    if (changed) persist()
+    // Written at once: the service is going, and the process may go with it.
+    if (changed) persistNow()
   }
 
   /**
@@ -542,7 +566,8 @@ class DurableDownloads(
         }
       }
     }
-    if (changed || (charging && budgetNow() - budgetWrittenAt >= BUDGET_WRITE_MS)) persist() else writeProgressIfDue()
+    if (changed) persist()
+    if (charging && budgetNow() - budgetWrittenAt >= BUDGET_WRITE_MS) persistNow() else writeIfDue()
   }
 
   /** Expires what's out of time, then runs the next native step, if there is one, on this thread. */
@@ -698,14 +723,14 @@ class DurableDownloads(
       // A changed root requires a new hidden file on the destination filesystem.
       if (source.parentFile.canonicalFile != target.parentFile.canonicalFile) {
         val local = DownloadFiles.partFileFor(target, "$id-$generation-publication")
-        onJob { job -> job["outputPath"] = local.path; persist() } ?: return
+        onJob { job -> job["outputPath"] = local.path; persistNow() } ?: return
         FileInputStream(source).use { input -> FileOutputStream(local).use { out -> input.copyTo(out); out.fd.sync() } }
         source = local
       }
       // A replacement overwrites the file it replaces; anything else gets a free name beside it.
       val chosen = if (start["replaces"] == target.path) target.path else DownloadFiles.freeName(target).path
       val sum = digest(source)
-      onJob { job -> job["finalPath"] = chosen; job["digest"] = sum; job["publishSource"] = source.path; persist() } ?: return
+      onJob { job -> job["finalPath"] = chosen; job["digest"] = sum; job["publishSource"] = source.path; persistNow() } ?: return
     }
     val chosen = onJob { job ->
       val final = File(job["finalPath"] as String)
@@ -716,7 +741,7 @@ class DurableDownloads(
     // Another file took the chosen name before this one was moved there: the next free one.
     if (!replacing && final.exists() && publishSource.isFile && digest(final) != sum) {
       final = DownloadFiles.freeName(target)
-      onJob { job -> job["finalPath"] = final.path; persist() } ?: return
+      onJob { job -> job["finalPath"] = final.path; persistNow() } ?: return
     }
     // The replaced file goes in the same step the new one arrives, never before, and only for the
     // very copy whose digest was taken: the rename over it keeps that copy's bytes.
@@ -963,11 +988,15 @@ class DurableDownloads(
     job["soulseekDeadline"] != null && job.number("soulseekDeadline") <= budgetNow() && job["source"] != YOUTUBE &&
       charged(job) && fallsBack(job, "timedOut")
 
-  // Persistence. A change a restart must keep (a job enqueued, a phase, a decision, a failure, a
-  // cancel, a peer's queue place) is written at once by [persist]. Transfer progress only marks
-  // the journal [progressed]: it's written with the next change, or once [PROGRESS_WRITE_MS] has
-  // passed (the deadline thread's [expire] sees to that), so a crash loses a few seconds of
-  // progress, never a job.
+  // Persistence (#452). A change a restart must keep (a job enqueued, a phase, a decision, a
+  // failure, a cancel, a peer's queue place) is shown to readers at once and written by [persist]
+  // with the changes around it, at most every [WRITE_MS]; a write appends only what changed
+  // ([JournalStore]). Only the publication writes at once ([persistNow]), before a file is copied
+  // into or moved to the Library folder. A crash loses at most the last [WRITE_MS] of changes: the
+  // job goes on from the step it last wrote, which can only redo a step, and a part file that step
+  // had made is swept as the journal opens ([sweepParts]). Transfer progress only marks the journal
+  // [progressed]: it's written with the next change, or once [PROGRESS_WRITE_MS] has passed (the
+  // deadline thread's [expire] sees to that), so a crash loses a few seconds of progress.
 
   /** When the journal file was last written ([clock]). */
   private var writtenAt = 0L
@@ -985,7 +1014,7 @@ class DurableDownloads(
     progressUnwritten = true
     val id = job["id"] as String
     if (clock() - (progressShownAt[id] ?: Long.MIN_VALUE / 2) >= PROGRESS_SHOW_MS) { progressShownAt[id] = clock(); publishJob(job) }
-    writeProgressIfDue()
+    writeIfDue()
   }
 
   /** Copies only [job] for readers, with a new revision if it changed. */
@@ -1001,22 +1030,69 @@ class DurableDownloads(
     view = JournalView(entries, revision, before.orderRevision)
   }
 
-  private fun writeProgressIfDue() { if (progressUnwritten && clock() - writtenAt >= PROGRESS_WRITE_MS) persist() }
+  /** Whether a change ([persist]) is waiting for its write. */
+  private var unwritten = false
+  /** Whether [later] will see to the waiting change. */
+  private var writeScheduled = false
 
-  /** Publishes the journal to readers and writes it to its file, atomically and synced. */
+  /**
+   * Publishes the journal to readers at once, and writes it with the changes around it: at once
+   * when the last write was [WRITE_MS] ago or more, else once that's over ([later], or the
+   * deadline thread's [expire]).
+   */
   private fun persist() {
     publish()
-    writtenAt = clock(); progressUnwritten = false; budgetWrittenAt = budgetNow()
-    journal.parentFile?.mkdirs()
-    val temp = File(journal.path + ".tmp")
-    FileOutputStream(temp).use { output ->
-      val stream = ObjectOutputStream(output)
-      stream.writeObject(clean(mapOf("jobs" to jobs, "libraryPolicy" to policy, "budgetClock" to budgetWrittenAt)))
-      stream.flush()
-      output.fd.sync()
-    }
-    Files.move(temp.toPath(), journal.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+    unwritten = true
+    if (clock() - writtenAt >= WRITE_MS) write() else scheduleWrite()
   }
+
+  /**
+   * Publishes and writes the journal now, with every change waiting: only before file work a
+   * restart must find in the journal (a file copied into or moved to the Library folder), and as
+   * the journal opens.
+   */
+  private fun persistNow() { publish(); write() }
+
+  /** Writes what's due: a waiting change once [WRITE_MS] passed since the last write, progress once [PROGRESS_WRITE_MS] did. */
+  private fun writeIfDue() {
+    val since = clock() - writtenAt
+    if ((unwritten && since >= WRITE_MS) || (progressUnwritten && since >= PROGRESS_WRITE_MS)) persistNow()
+    else if (unwritten) scheduleWrite()
+  }
+
+  private fun scheduleWrite() {
+    val later = later ?: return
+    if (writeScheduled) return
+    writeScheduled = true
+    later(maxOf(0L, writtenAt + WRITE_MS - clock())) {
+      synchronized(this) {
+        writeScheduled = false
+        // A full disk: the next change, or the next write that's due, tries again.
+        try { writeIfDue() } catch (_: java.io.IOException) {}
+      }
+    }
+  }
+
+  /** Writes what changed since the last write ([JournalStore]); readers' copies are what it writes. */
+  private fun write() {
+    @Suppress("UNCHECKED_CAST")
+    store.write(view.jobs, clean(policy) as Map<String, Any?>, budgetNow())
+    writtenAt = clock(); unwritten = false; progressUnwritten = false; budgetWrittenAt = budgetNow()
+  }
+
+  /** Writes whatever changed and isn't written yet: the download service stopping, say. */
+  @Synchronized fun flush() { if (unwritten || progressUnwritten) persistNow() }
+
+  /** When [takeWriteStats] was last called ([clock]). */
+  private var statsSince = clock()
+
+  /** What writing the journal cost since the last call ([JournalWrites]): the download service's journal line. */
+  fun takeWriteStats(): JournalWrites {
+    val now = clock()
+    val span = synchronized(statsLock) { (now - statsSince).also { statsSince = now } }
+    return store.takeStats(span)
+  }
+  private val statsLock = Any()
 
   companion object {
     /** How many songs download at once (three measured for #239; five since #395, as Soulseek rarely delivers behind mobile NAT). */
@@ -1042,6 +1118,11 @@ class DurableDownloads(
      * retries ([RangeDownload.RETRY_CYCLE_MS]): it retries ranges, the journal gives up on a dead transfer.
      */
     const val YOUTUBE_STALL_MS = 4 * 60_000L
+    /**
+     * How often, at most, the journal writes the changes that come between (#452): what a crash
+     * can lose of them, the publication's own writes aside ([persistNow]).
+     */
+    const val WRITE_MS = 1_000L
     /** How long transfer progress may go unwritten: what a crash can lose of it. */
     const val PROGRESS_WRITE_MS = 5_000L
     /**

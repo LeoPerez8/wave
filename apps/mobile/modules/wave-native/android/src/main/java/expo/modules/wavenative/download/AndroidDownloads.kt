@@ -44,6 +44,8 @@ import java.util.concurrent.TimeUnit
 
 /** Application-context owner, independent of Expo module and Activity lifetimes. */
 class AndroidDownloads private constructor(private val context: Context) {
+  /** Writes the journal's changes that wait for their second (#452), off the main thread and whether or not the service runs. */
+  private val journalWriter = Executors.newSingleThreadScheduledExecutor { run -> Thread(run, "Wave download journal").apply { isDaemon = true } }
   // Each failure's cause also goes to the app log, so a device run shows why a download stopped;
   // and each transfer's speed, so it shows where a download's time went. Its budgets wait for the
   // download service (startWork): Wave opening before the service starts isn't charged.
@@ -52,6 +54,7 @@ class AndroidDownloads private constructor(private val context: Context) {
     log = { WaveLog.w(TAG, it) },
     note = { WaveLog.i(TAG, it) },
     budgetRunning = false,
+    later = { delay, run -> journalWriter.schedule(run, delay, TimeUnit.MILLISECONDS) },
   )
   private val soulseek = AndroidSoulseek.get(context)
   private val main = Handler(Looper.getMainLooper())
@@ -189,6 +192,8 @@ class AndroidDownloads private constructor(private val context: Context) {
     ({ ticking.cancel(false) })
   }).also { minutes ->
     minutes.add { WaveLog.i(TAG, DownloadServiceLines.memory(jobs.counts(), AndroidMemory.read(), JsHeap.app.read())) }
+    // What the journal's writes cost since the last line (#452).
+    minutes.add { WaveLog.i(TAG, jobs.takeWriteStats().line()) }
   }
   private val minuteTicker by lazy {
     Executors.newSingleThreadScheduledExecutor { tick -> Thread(tick, "WaveDownloadMinutes").apply { isDaemon = true } }
@@ -227,6 +232,8 @@ class AndroidDownloads private constructor(private val context: Context) {
     startedAt = SystemClock.elapsedRealtime()
     jobs.startWork()
     minutes.start()
+    // The journal's line counts its writes from the service's start.
+    jobs.takeWriteStats()
     main.post { JsRuntime.ensureStarted(context, OWNER) }
     deadlines = Executors.newSingleThreadScheduledExecutor().also { executor ->
       // Also refreshes the notification and the rows while transfers go on.
@@ -269,6 +276,8 @@ class AndroidDownloads private constructor(private val context: Context) {
     }
     jobs.stopWork(transport)
     minutes.stop()
+    // What waits for its second is written now, off the main thread (a full disk keeps it for the next write).
+    journalWriter.execute { runCatching { jobs.flush() } }
     worker?.shutdownNow(); worker = null
     steps?.shutdownNow(); steps = null
     deadlines?.shutdownNow(); deadlines = null

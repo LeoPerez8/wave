@@ -19,6 +19,7 @@ class SavedDownloadCountsTest {
     owner.cancel("song-2", NoTransfer)
     owner.cancel("song-12", NoTransfer)
 
+    owner.flush() // the journal writes what changed within a second
     assertEquals(DownloadCounts(running = 4, left = 6), savedDownloadCounts(journal))
   }
 
@@ -28,6 +29,7 @@ class SavedDownloadCountsTest {
     owner.enqueue(mapOf("videoId" to "song", "title" to "Song", "durationMs" to 12_000L), null)
     owner.cancel("song", NoTransfer)
 
+    owner.flush()
     assertEquals(DownloadCounts(running = 0, left = 0), savedDownloadCounts(journal))
   }
 

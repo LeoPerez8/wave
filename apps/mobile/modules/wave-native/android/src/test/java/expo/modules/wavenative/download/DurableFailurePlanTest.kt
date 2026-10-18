@@ -86,6 +86,7 @@ class DurableFailurePlanTest {
       owner.advance(NoTransfer, Untouched)
       answer(owner, "prepare", mapOf("candidates" to listOf(peer), "targetPath" to File(folder, "Recording.mp3").path, "tags" to emptyMap<String, Any?>()))
       assertEquals("prepared", owner.snapshot().single()["phase"])
+      owner.flush()
       val updated = DurableDownloads(journal)
       assertEquals("preparing", updated.snapshot().single()["phase"])
       assertEquals("prepare", updated.claim("song")!!["decision"])
