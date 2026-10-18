@@ -1,9 +1,4 @@
-import type {
-  SpotifyAccountAnswer,
-  SpotifyAccountFailure,
-  SpotifySession,
-  SpotifySignInFailure,
-} from "@wave/core";
+import type { SpotifySession } from "@wave/core";
 import { NativeModule, requireNativeModule } from "expo";
 
 /**
@@ -17,7 +12,8 @@ export type SpotifyErrorCode =
 /**
  * The Spotify account's native module (`modules/wave-native`, package
  * `spotify`). It keeps the session (the `sp_dc` cookie, in no-backup storage)
- * and the tokens it buys natively; JS only learns whose account it is.
+ * and the tokens it buys natively; JS only learns whose account it is. The
+ * app asks it through the `Spotify` service (`spotify/Spotify.ts`).
  */
 declare class WaveSpotifyModule extends NativeModule<{
   /** The session changed natively: Spotify stopped accepting it during a request, say. */
@@ -71,7 +67,7 @@ declare class WaveSpotifyModule extends NativeModule<{
 
 export const WaveSpotify = requireNativeModule<WaveSpotifyModule>("WaveSpotify");
 
-/** The reason a Spotify request failed, from its rejection. */
+/** The reason a Spotify request failed, from its rejection (the `Spotify` service's `SpotifyError`). */
 export const spotifyErrorCode = (error: unknown): SpotifyErrorCode => {
   const code = (error as { code?: unknown } | null)?.code;
   return code === "ERR_SPOTIFY_OFFLINE" ||
@@ -79,41 +75,4 @@ export const spotifyErrorCode = (error: unknown): SpotifyErrorCode => {
     code === "ERR_SPOTIFY_CHANGED"
     ? code
     : "ERR_SPOTIFY_FAILED";
-};
-
-/** Why a query as the account didn't answer, as Core's library reads take it. */
-const ACCOUNT_FAILURES: Record<SpotifyErrorCode, SpotifyAccountFailure> = {
-  ERR_SPOTIFY_OFFLINE: "offline",
-  ERR_SPOTIFY_FAILED: "failed",
-  ERR_SPOTIFY_SIGNED_OUT: "signedOut",
-  ERR_SPOTIFY_CHANGED: "changed",
-};
-
-/** [query]'s `data`, read from its JSON, or why it didn't answer (Core's `SpotifyAccountAnswer`). */
-export const askSpotifyAccount = async (
-  query: () => Promise<string>,
-): Promise<SpotifyAccountAnswer> => {
-  let json: string;
-  try {
-    json = await query();
-  } catch (error) {
-    return { ok: false, reason: ACCOUNT_FAILURES[spotifyErrorCode(error)] };
-  }
-  try {
-    return { ok: true, data: JSON.parse(json) as unknown };
-  } catch {
-    return { ok: false, reason: "failed" };
-  }
-};
-
-/** Why a sign-in didn't work, as Settings says it. */
-export const spotifySignInFailure = (error: unknown): SpotifySignInFailure => {
-  switch (spotifyErrorCode(error)) {
-    case "ERR_SPOTIFY_OFFLINE":
-      return "offline";
-    case "ERR_SPOTIFY_CHANGED":
-      return "changed";
-    default:
-      return "failed";
-  }
 };

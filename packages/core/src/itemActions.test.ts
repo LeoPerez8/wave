@@ -55,7 +55,7 @@ describe("itemActions", () => {
     ]);
   });
 
-  test("every song's menu offers Share, before Select; several songs, and other items, don't", () => {
+  test("every song's menu offers Share, before Select; several songs, albums, artists and genres don't", () => {
     const offers = (subject: ActionSubject) => names(itemActions(subject)).includes("share");
     assert.equal(ITEM_ACTION_LABELS.share, "Share");
     assert.deepEqual(names(itemActions(tracks([song()], { selectable: true }))).slice(-3), [
@@ -69,7 +69,8 @@ describe("itemActions", () => {
     assert.ok(offers(tracks([{ streamed: true, unsearched: true, artistNames: ["A"] }])));
     assert.ok(!offers(tracks([song(), song()])));
     assert.ok(!offers(tracks([song()], { surface: "selection" })));
-    for (const kind of ["album", "artist", "playlist", "genre"] as const)
+    // A playlist's menu shares it as a playlist (below).
+    for (const kind of ["album", "artist", "genre"] as const)
       assert.ok(!offers({ kind, items: [{}], here: "/" }), kind);
   });
 
@@ -268,9 +269,10 @@ describe("itemActions", () => {
       selectable: true,
       onlineLookups: true,
     });
-    assert.deepEqual(names(menu).slice(-5), [
+    assert.deepEqual(names(menu).slice(-6), [
       "renamePlaylist",
       "changeImage",
+      "share",
       "fixSongs",
       "deletePlaylist",
       "select",
@@ -523,23 +525,20 @@ describe("itemActions", () => {
     assert.ok(!two.includes("renamePlaylist"));
   });
 
-  test("a playlist's menu offers Share after its image entries while it can be shared somewhere", () => {
-    const menu = (sharing?: boolean, hasImage?: boolean) =>
-      names(itemActions({ kind: "playlist", items: [{ hasImage }], here: "/", sharing }));
-    assert.deepEqual(menu(true).slice(-4), [
+  test("a playlist's menu always offers Share after its image entries: Spotify needs no switch", () => {
+    const menu = (hasImage?: boolean) =>
+      names(itemActions({ kind: "playlist", items: [{ hasImage }], here: "/" }));
+    assert.deepEqual(menu().slice(-4), [
       "renamePlaylist",
       "changeImage",
       "share",
       "deletePlaylist",
     ]);
-    assert.deepEqual(menu(true, true).slice(-3), ["removeImage", "share", "deletePlaylist"]);
-    assert.ok(!menu(false).includes("share"));
-    assert.ok(!menu().includes("share"));
+    assert.deepEqual(menu(true).slice(-3), ["removeImage", "share", "deletePlaylist"]);
     const selected = itemActions({
       kind: "playlist",
       items: [{}],
       here: "/",
-      sharing: true,
       surface: "selection",
     });
     assert.ok(!names(selected).includes("share"));
@@ -549,17 +548,19 @@ describe("itemActions", () => {
   test("a playlist's menu changes its image, and adjusts or removes it once it has one", () => {
     const menu = (hasImage?: boolean) =>
       names(itemActions({ kind: "playlist", items: [{ hasImage }], here: "/" }));
-    assert.deepEqual(menu().slice(-4), [
+    assert.deepEqual(menu().slice(-5), [
       "addToPlaylist",
       "renamePlaylist",
       "changeImage",
+      "share",
       "deletePlaylist",
     ]);
-    assert.deepEqual(menu(true).slice(-5), [
+    assert.deepEqual(menu(true).slice(-6), [
       "renamePlaylist",
       "changeImage",
       "adjustImage",
       "removeImage",
+      "share",
       "deletePlaylist",
     ]);
     assert.equal(ITEM_ACTION_LABELS.changeImage, "Change Image");
@@ -1132,7 +1133,8 @@ describe("ytSongActions", () => {
 
 describe("isCollectionKind", () => {
   test("albums, artists, playlists and genres hold songs; tracks, Library entries and mixed checks don't", () => {
-    for (const kind of ["album", "artist", "playlist", "genre"] as const) {
+    // A playlist's menu shares it as a playlist (below).
+    for (const kind of ["album", "artist", "genre"] as const) {
       assert.equal(isCollectionKind(kind), true, kind);
     }
     for (const kind of ["track", "section", "mixed"] as const) {

@@ -10,7 +10,7 @@ import {
   type LyricShareDestination,
   type LyricStoryBackground,
 } from "@wave/core";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { appLog } from "@/log/appLog";
 import { showToast } from "@/overlay/toast";
@@ -31,6 +31,38 @@ const NO_APPS: LyricShareApps = { instagramStories: false, whatsapp: false };
 /** The apps the last preview found: the row's layout while the next one checks again. */
 let lastApps: LyricShareApps | null = null;
 
+/**
+ * The preview's corners, switched only while its image is drawn (the lyrics
+ * card rounds them for Instagram's sticker, the song card squares them for
+ * the others): [drawing] while switched; [startDrawing] switches them and
+ * resolves a frame later, once they've reached the native view the image is
+ * drawn from; [endDrawing] switches them back.
+ */
+export const useDrawingCorners = (): {
+  readonly drawing: boolean;
+  readonly startDrawing: () => Promise<void>;
+  readonly endDrawing: () => void;
+} => {
+  const [drawing, setDrawing] = useState(false);
+  const drawn = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    if (!drawing) return;
+    const resolve = drawn.current;
+    drawn.current = null;
+    requestAnimationFrame(() => resolve?.());
+  }, [drawing]);
+  const startDrawing = useCallback(
+    () =>
+      new Promise<void>((resolve) => {
+        drawn.current = resolve;
+        setDrawing(true);
+      }),
+    [],
+  );
+  const endDrawing = useCallback(() => setDrawing(false), []);
+  return { drawing, startDrawing, endDrawing };
+};
+
 export interface ImageShareOptions {
   /** The view drawn into the image. */
   readonly source: ImageSource;
@@ -43,9 +75,9 @@ export interface ImageShareOptions {
   readonly logTag: string;
   /** The Instagram story's background behind the image. */
   readonly storyBackground: LyricStoryBackground;
-  /** Readies the view for Instagram's sticker before it's drawn (the lyrics card rounds its corners). */
-  readonly prepareSticker?: () => Promise<void>;
-  /** Undoes `prepareSticker` once the image is drawn, whichever destination it was for. */
+  /** Readies the view before it's drawn for [destination] (`useDrawingCorners`). */
+  readonly prepare?: (destination: LyricShareDestination) => Promise<void>;
+  /** Undoes `prepare` once the image is drawn, whichever destination it was for. */
   readonly afterDraw?: () => void;
 }
 
@@ -55,7 +87,8 @@ export interface ImageShareOptions {
  * drawing the view into a PNG and sending it, one at a time. `known` is false
  * until some check of the apps has answered (the row stays hidden, keeping its
  * place); `disabled` while an image is on its way or this preview's own check
- * hasn't answered.
+ * hasn't answered. A row of its own (the song sheet's, with its links) orders
+ * `image`, each destination by its key, from `apps`, the apps on hand.
  */
 export function useImageShare({
   source,
@@ -64,10 +97,12 @@ export function useImageShare({
   sheetTitle,
   logTag,
   storyBackground,
-  prepareSticker,
+  prepare,
   afterDraw,
 }: ImageShareOptions): {
   readonly destinations: readonly ShareDestination[];
+  readonly image: Readonly<Record<LyricShareDestination, ShareDestination>>;
+  readonly apps: LyricShareApps;
   readonly known: boolean;
   readonly disabled: boolean;
 } {
@@ -91,16 +126,16 @@ export function useImageShare({
   }, []);
 
   const sendImage = async (
+    destination: LyricShareDestination,
     action: string,
     send: (path: string) => Promise<void>,
     failed: string,
-    { sticker = false }: { readonly sticker?: boolean } = {},
   ): Promise<void> => {
     if (sending.current) return;
     sending.current = true;
     setBusy(true);
     try {
-      if (sticker && prepareSticker !== undefined) await prepareSticker();
+      if (prepare !== undefined) await prepare(destination);
       const path = await writeViewPng(source, fileName()).finally(() => afterDraw?.());
       await send(path);
     } catch (error) {
@@ -119,10 +154,10 @@ export function useImageShare({
       icon: IconBrandInstagram,
       onPress: () =>
         void sendImage(
+          "instagramStories",
           `share ${what} to Instagram Stories`,
           (path) => shareImageToInstagramStory(path, storyBackground),
           "Couldn't open Instagram",
-          { sticker: true },
         ),
     },
     whatsapp: {
@@ -130,7 +165,12 @@ export function useImageShare({
       label: "WhatsApp",
       icon: IconBrandWhatsapp,
       onPress: () =>
-        void sendImage(`share ${what} to WhatsApp`, shareImageToWhatsApp, "Couldn't open WhatsApp"),
+        void sendImage(
+          "whatsapp",
+          `share ${what} to WhatsApp`,
+          shareImageToWhatsApp,
+          "Couldn't open WhatsApp",
+        ),
     },
     save: {
       key: "save",
@@ -138,6 +178,7 @@ export function useImageShare({
       icon: IconPhotoDown,
       onPress: () =>
         void sendImage(
+          "save",
           `save ${what}`,
           async (path) => {
             await saveImageToGallery(path);
@@ -152,6 +193,7 @@ export function useImageShare({
       icon: IconDots,
       onPress: () =>
         void sendImage(
+          "more",
           `share ${what}`,
           (path) => openImageShareSheet(path, sheetTitle),
           "Couldn't share the image",
@@ -161,6 +203,8 @@ export function useImageShare({
   const shown = apps ?? laidOutAs;
   return {
     destinations: lyricShareDestinations(shown ?? NO_APPS).map((key) => all[key]),
+    image: all,
+    apps: shown ?? NO_APPS,
     known: shown !== null,
     disabled: busy || apps === null,
   };

@@ -20,7 +20,7 @@ import type { TrackDetails } from "@/library/LibraryStore";
 import { useCurrentTrackId } from "@/playback/hooks";
 import { playbackState, type PlaybackState } from "@/playback/Player";
 import { LyricCardLayer } from "@/share/LyricCardPreview";
-import { openSongShare } from "@/share/songShare";
+import { shareNowPlaying } from "@/share/songShare";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { Background } from "./Background";
@@ -238,12 +238,16 @@ export function NowPlayingSheet() {
                 icon={IconShare3}
                 label="Share Song"
                 onPress={() =>
-                  openSongShare({
-                    title: item.title ?? "Unknown title",
-                    artist: item.artist ?? "Unknown Artist",
-                    artworkUri: item.artworkUri ?? undefined,
-                    palette,
-                  })
+                  shareNowPlaying(
+                    {
+                      title: item.title ?? "Unknown title",
+                      artist: item.artist ?? "Unknown Artist",
+                      artworkUri: item.artworkUri ?? undefined,
+                      palette,
+                    },
+                    trackId,
+                    ytSong,
+                  )
                 }
               />
             )}

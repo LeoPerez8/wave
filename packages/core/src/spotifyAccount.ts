@@ -24,6 +24,16 @@ export type SpotifySession =
  */
 export type SpotifySignInFailure = "offline" | "failed" | "changed";
 
+/** What Wave says when Spotify changed its web player: an update of Wave reads it again. */
+export const SPOTIFY_CHANGED_LINE = "Spotify changed something. Try again after updating Wave.";
+
+/** Why a sign-in didn't work, as Settings, From Spotify and sharing say it. */
+export const SPOTIFY_SIGN_IN_FAILURE_LINES: { readonly [F in SpotifySignInFailure]: string } = {
+  offline: "Couldn't sign in without a connection.",
+  failed: "Spotify didn't confirm the sign-in. Try again.",
+  changed: SPOTIFY_CHANGED_LINE,
+};
+
 /** The Spotify part of Settings › Accounts, with what's going on right now. */
 export interface SpotifyAccountState {
   readonly session: SpotifySession;

@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  librarySearchSong,
   matchSharedSongs,
+  sharePlaylistFailureLine,
+  syncSharedPlaylist,
   sharedPlaylistChanges,
   sharedPlaylistMoves,
   sharedSongsLine,
@@ -14,6 +17,9 @@ import {
   ytMusicPlaylistUrl,
   ytShareMatch,
   ytShareSong,
+  type SharedEntry,
+  type SharedMove,
+  type SharedPlaylistService,
   type YtSong,
 } from "./index.ts";
 
@@ -238,6 +244,183 @@ describe("playlistShareServices", () => {
     assert.equal(
       spotifyPlaylistUrl("spotify:playlist:37i9dQZF1DXcBWIGoYBM5M"),
       "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M",
+    );
+  });
+});
+
+/**
+ * A service holding [playlists] (id → entries; a deleted one left out),
+ * recording what sharing asks of it. Adds go at the end as `<id>@<n>`
+ * entries; moves are applied as `applyMoves` does.
+ */
+const fakeService = (
+  remembered: string | null,
+  playlists: Record<string, SharedEntry[]>,
+  { holds = true }: { readonly holds?: boolean } = {},
+) => {
+  const calls: string[] = [];
+  let made = 0;
+  let added = 0;
+  const service: SharedPlaylistService = {
+    recall: async () => remembered,
+    remember: async (playlistId) => {
+      calls.push(`remember ${playlistId}`);
+    },
+    holds: async (playlistId) => {
+      calls.push(`holds ${playlistId}`);
+      return holds;
+    },
+    read: async (playlistId) => {
+      calls.push(`read ${playlistId}`);
+      return playlists[playlistId] ?? null;
+    },
+    change: async (playlistId, { name, removes, adds }) => {
+      calls.push(`change ${playlistId} ${name} -${removes.length} +${adds.join(",")}`);
+      const removed = new Set(removes.map(({ entryId }) => entryId));
+      playlists[playlistId] = [
+        ...(playlists[playlistId] ?? []).filter(({ entryId }) => !removed.has(entryId)),
+        ...adds.map((id) => ({ id, entryId: `${id}@${(added += 1)}` })),
+      ];
+    },
+    move: async (playlistId, moves: readonly SharedMove[]) => {
+      calls.push(`move ${playlistId} ${moves.length}`);
+      const entries = playlists[playlistId] ?? [];
+      const order = applyMoves(entries, moves);
+      const byId = new Map(entries.map((e) => [e.id, e]));
+      playlists[playlistId] = order.map((id) => byId.get(id) ?? entry(id));
+    },
+    create: async (name, ids) => {
+      const playlistId = `new-${(made += 1)}`;
+      calls.push(`create ${name} ${ids.join(",")}`);
+      playlists[playlistId] = ids.map((id) => entry(id));
+      return playlistId;
+    },
+  };
+  return { service, calls, playlists };
+};
+
+describe("syncSharedPlaylist", () => {
+  test("makes the playlist the first time and remembers it", async () => {
+    const { service, calls } = fakeService(null, {});
+    assert.equal(await syncSharedPlaylist(service, "Mix", ["a", "b"]), "new-1");
+    assert.deepEqual(calls, ["create Mix a,b", "remember new-1"]);
+  });
+
+  test("brings the remembered playlist up to date: changes, reads it again, then orders it", async () => {
+    const { service, calls, playlists } = fakeService("old", {
+      old: [entry("b"), entry("x"), entry("a")],
+    });
+    assert.equal(await syncSharedPlaylist(service, "Mix", ["c", "a", "b"]), "old");
+    assert.deepEqual(calls, [
+      "holds old",
+      "read old",
+      "change old Mix -1 +c",
+      "read old",
+      "move old 2",
+    ]);
+    assert.deepEqual(
+      playlists["old"]?.map(({ id }) => id),
+      ["c", "a", "b"],
+    );
+  });
+
+  test("renames without reading again when the songs are the same, and moves nothing in order", async () => {
+    const { service, calls } = fakeService("old", { old: [entry("a"), entry("b")] });
+    assert.equal(await syncSharedPlaylist(service, "New Name", ["a", "b"]), "old");
+    assert.deepEqual(calls, ["holds old", "read old", "change old New Name -0 +"]);
+  });
+
+  test("makes it again when the remembered one was deleted", async () => {
+    const { service, calls } = fakeService("gone", {});
+    assert.equal(await syncSharedPlaylist(service, "Mix", ["a"]), "new-1");
+    assert.deepEqual(calls, ["holds gone", "read gone", "create Mix a", "remember new-1"]);
+  });
+
+  test("makes it again, unread, when the account no longer holds it", async () => {
+    const { service, calls } = fakeService("old", { old: [entry("a")] }, { holds: false });
+    assert.equal(await syncSharedPlaylist(service, "Mix", ["a"]), "new-1");
+    assert.deepEqual(calls, ["holds old", "create Mix a", "remember new-1"]);
+  });
+
+  test("makes it again when it's gone by the time it's read again", async () => {
+    const { service, calls, playlists } = fakeService("old", { old: [entry("a")] });
+    const change = service.change;
+    const vanishing: SharedPlaylistService = {
+      ...service,
+      change: async (playlistId, changes) => {
+        await change(playlistId, changes);
+        delete playlists[playlistId];
+      },
+    };
+    assert.equal(await syncSharedPlaylist(vanishing, "Mix", ["a", "b"]), "new-1");
+    assert.deepEqual(calls.slice(-3), ["read old", "create Mix a,b", "remember new-1"]);
+  });
+
+  test("asks nothing of the account first when the service has no holds step", async () => {
+    const { service, calls } = fakeService("old", { old: [entry("a")] });
+    const { holds: _holds, ...plain } = service;
+    assert.equal(await syncSharedPlaylist(plain, "Mix", ["a"]), "old");
+    assert.deepEqual(calls, ["read old", "change old Mix -0 +"]);
+  });
+
+  test("rejects when the service does", async () => {
+    const { service } = fakeService(null, {});
+    const failing: SharedPlaylistService = {
+      ...service,
+      create: () => Promise.reject(new Error("no")),
+    };
+    await assert.rejects(syncSharedPlaylist(failing, "Mix", ["a"]), /no/);
+  });
+});
+
+describe("sharePlaylistFailureLine", () => {
+  test("says why sharing on YT Music stopped", () => {
+    assert.equal(
+      sharePlaylistFailureLine("ytMusic", "noSearchAnswer"),
+      "YouTube Music didn't answer a search. Try again.",
+    );
+    assert.equal(sharePlaylistFailureLine("ytMusic", "offline"), "Sharing needs a connection.");
+    assert.equal(
+      sharePlaylistFailureLine("ytMusic", "signedOut"),
+      "YouTube Music signed you out. Sign in and share again.",
+    );
+    assert.equal(
+      sharePlaylistFailureLine("ytMusic", "failed"),
+      "YouTube Music didn't take the playlist. Try again.",
+    );
+  });
+
+  test("says why sharing on Spotify stopped", () => {
+    assert.equal(
+      sharePlaylistFailureLine("spotify", "noSearchAnswer"),
+      "Spotify didn't answer a search. Try again.",
+    );
+    assert.equal(sharePlaylistFailureLine("spotify", "offline"), "Sharing needs a connection.");
+    assert.equal(
+      sharePlaylistFailureLine("spotify", "signedOut"),
+      "Spotify signed you out. Sign in and share again.",
+    );
+    assert.equal(
+      sharePlaylistFailureLine("spotify", "changed"),
+      "Spotify changed something. Try again after updating Wave.",
+    );
+    assert.equal(
+      sharePlaylistFailureLine("spotify", "failed"),
+      "Spotify didn't take the playlist. Try again.",
+    );
+  });
+});
+
+describe("librarySearchSong", () => {
+  test("searches a Library song by its title, its artist, its album and its length", () => {
+    assert.deepEqual(
+      librarySearchSong({
+        title: "Get Lucky",
+        artist: "Daft Punk",
+        album: "RAM",
+        durationMs: 369_000,
+      }),
+      lucky,
     );
   });
 });

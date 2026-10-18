@@ -17,6 +17,7 @@ import { useScanRoots, useScanState } from "@/library/hooks";
 import { WaveAccount } from "@/native/waveAccount";
 import { WaveSpotify } from "@/native/waveSpotify";
 import { WaveYtMusic } from "@/native/waveYtMusic";
+import { askSpotify } from "@/spotify/askSpotify";
 import { askYtMusic } from "@/ytmusic/askYtMusic";
 import { useDownloadCounts } from "@/ytmusic/YtDownloads";
 
@@ -54,12 +55,9 @@ const useAccountsSummary = (): string | null => {
         },
         () => {},
       );
-      void WaveSpotify.session().then(
-        (session) => {
-          if (current) setSpotify(session);
-        },
-        () => {},
-      );
+      void askSpotify((account) => account.session).then((result) => {
+        if (current && Result.isSuccess(result)) setSpotify(result.success);
+      });
       return () => {
         current = false;
       };

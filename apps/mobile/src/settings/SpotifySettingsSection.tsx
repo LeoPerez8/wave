@@ -1,4 +1,9 @@
-import { spotifyAccountView, type SpotifyAccount, type SpotifyAccountNote } from "@wave/core";
+import {
+  SPOTIFY_SIGN_IN_FAILURE_LINES,
+  spotifyAccountView,
+  type SpotifyAccount,
+  type SpotifyAccountNote,
+} from "@wave/core";
 import { Text, View } from "react-native";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
@@ -11,13 +16,11 @@ import { useSpotifyAccount } from "./spotifyAccount";
 
 const NOTES: Record<SpotifyAccountNote, string> = {
   optional:
-    "Signing in lets Wave read your Spotify playlists. Sign in with your email and password " +
-    "or an emailed code: Continue with Google may not work here. The session stays on this " +
-    "phone, and Wave talks to Spotify the way its web player does.",
+    "Signing in lets Wave read your Spotify playlists and share yours there. Sign in with " +
+    "your email and password or an emailed code: Continue with Google may not work here. " +
+    "The session stays on this phone, and Wave talks to Spotify the way its web player does.",
   expired: "Spotify ended your session, so Wave is signed out. Sign in again to use your account.",
-  offline: "Couldn't sign in without a connection.",
-  failed: "Spotify didn't confirm the sign-in. Try again.",
-  changed: "Spotify changed something. Try again after updating Wave.",
+  ...SPOTIFY_SIGN_IN_FAILURE_LINES,
 };
 
 const SIGN_IN_LABELS = {
@@ -52,7 +55,7 @@ function AccountRow({ account, onSignOut }: { account: SpotifyAccount; onSignOut
   );
 }
 
-/** Settings › Accounts › Spotify: the account Wave reads your Spotify playlists with. */
+/** Settings › Accounts › Spotify: the account Wave reads and shares your Spotify playlists with. */
 export function SpotifySettingsSection() {
   const account = useSpotifyAccount();
   const view = spotifyAccountView(account.state);

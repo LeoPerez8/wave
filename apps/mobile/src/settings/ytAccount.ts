@@ -9,6 +9,7 @@ import * as Result from "effect/Result";
 import { useCallback, useEffect, useReducer } from "react";
 
 import { WaveYtMusic } from "@/native/waveYtMusic";
+import { showMessage } from "@/overlay/alert";
 import { askYtMusic } from "@/ytmusic/askYtMusic";
 
 /**
@@ -58,4 +59,30 @@ export const useYtAccount = (): {
   }, []);
 
   return { state, signIn, signOut };
+};
+
+/** Whether YT Music holds the account's session, as saved (YouTube isn't asked); no answer is no. */
+export const ytMusicSignedIn = async (): Promise<boolean> => {
+  const session = await askYtMusic((ytMusic) => ytMusic.session);
+  return Result.isSuccess(session) && session.success.status === "signedIn";
+};
+
+const SIGN_IN_FAILED: Record<"offline" | "failed", string> = {
+  offline: "Couldn't sign in without a connection.",
+  failed: "YouTube didn't confirm the sign-in. Try again.",
+};
+
+/**
+ * Opens YouTube Music's sign-in page (Settings' sign-in), for From YT Music
+ * and sharing on YT Music; true once signed in. Backing out of it is false
+ * with nothing said; a sign-in that didn't work says why.
+ */
+export const signInToYtMusic = async (): Promise<boolean> => {
+  const result = await askYtMusic((ytMusic) => ytMusic.signIn);
+  if (Result.isFailure(result)) {
+    const reason = result.failure.reason === "offline" ? "offline" : "failed";
+    void showMessage("Couldn't sign in", SIGN_IN_FAILED[reason]);
+    return false;
+  }
+  return result.success?.status === "signedIn";
 };

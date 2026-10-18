@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { SPOTIFY_ACCOUNT_SIGNED_OUT, spotifyAccountView, stepSpotifyAccount } from "./index.ts";
+import {
+  SPOTIFY_ACCOUNT_SIGNED_OUT,
+  SPOTIFY_SIGN_IN_FAILURE_LINES,
+  spotifyAccountView,
+  spotifyLibraryFailure,
+  stepSpotifyAccount,
+} from "./index.ts";
 import type { SpotifyAccount, SpotifyAccountState, SpotifySession } from "./index.ts";
 
 const leo: SpotifyAccount = { name: "Leo Perez", photoUrl: "https://i.scdn.co/image/leo" };
@@ -94,5 +100,19 @@ describe("stepSpotifyAccount", () => {
       action: "signIn",
       note: "optional",
     });
+  });
+});
+
+describe("SPOTIFY_SIGN_IN_FAILURE_LINES", () => {
+  test("says why a sign-in didn't work, wherever it was started", () => {
+    assert.deepEqual(SPOTIFY_SIGN_IN_FAILURE_LINES, {
+      offline: "Couldn't sign in without a connection.",
+      failed: "Spotify didn't confirm the sign-in. Try again.",
+      changed: "Spotify changed something. Try again after updating Wave.",
+    });
+  });
+
+  test("says Spotify changed something the way the From Spotify picker does", () => {
+    assert.equal(spotifyLibraryFailure("changed").line, SPOTIFY_SIGN_IN_FAILURE_LINES.changed);
   });
 });

@@ -118,14 +118,8 @@ class SpotifyClient(
    * session Spotify accepts (#486 and #487 read and write through this).
    */
   suspend fun query(operation: SpotifyOperation, variables: JsonObject): JsonObject = request {
-    val current = session.state as? SpotifySessionState.SignedIn ?: throw SpotifyException(SpotifyFailure.SIGNED_OUT)
-    val token = try {
-      token(current.credentials)
-    } catch (_: Rejected) {
-      session.expire(current.credentials)
-      throw SpotifyException(SpotifyFailure.SIGNED_OUT)
-    }
-    send(token, operation, variables, retryToken = { token(current.credentials, fresh = true) })
+    val (credentials, token) = signedInToken()
+    send(token, operation, variables, retryToken = { token(credentials, fresh = true) })
   }
 
   /**
@@ -135,13 +129,7 @@ class SpotifyClient(
    * token; any other refusal fails ([SpotifyFailure.FAILED]).
    */
   suspend fun spclient(method: String, path: String, body: JsonElement? = null): String = request {
-    val current = session.state as? SpotifySessionState.SignedIn ?: throw SpotifyException(SpotifyFailure.SIGNED_OUT)
-    val token = try {
-      token(current.credentials)
-    } catch (_: Rejected) {
-      session.expire(current.credentials)
-      throw SpotifyException(SpotifyFailure.SIGNED_OUT)
-    }
+    val (credentials, token) = signedInToken()
     fun send(token: SpotifyToken): SpotifyResponse {
       val headers = buildMap {
         put("Authorization", "Bearer ${token.accessToken}")
@@ -152,13 +140,28 @@ class SpotifyClient(
       return http.send(SpotifyRequest(method, "$SPCLIENT$path", headers, body?.toString()))
     }
     var response = send(token)
-    if (response.status == 401) response = send(token(current.credentials, fresh = true))
+    if (response.status == 401) response = send(token(credentials, fresh = true))
     if (response.status !in 200..299) throw SpotifyException(SpotifyFailure.FAILED)
     response.body
   }
 
   /** The cookie no longer buys a signed-in token. */
   private class Rejected : Exception()
+
+  /**
+   * The signed-in session's credentials and a token for them. Rejects with
+   * [SpotifyFailure.SIGNED_OUT] without a session, or once Spotify stops
+   * accepting its cookie (the session expires then).
+   */
+  private fun signedInToken(): Pair<SpotifyCredentials, SpotifyToken> {
+    val current = session.state as? SpotifySessionState.SignedIn ?: throw SpotifyException(SpotifyFailure.SIGNED_OUT)
+    return try {
+      current.credentials to token(current.credentials)
+    } catch (_: Rejected) {
+      session.expire(current.credentials)
+      throw SpotifyException(SpotifyFailure.SIGNED_OUT)
+    }
+  }
 
   /** A signed-in token for [credentials]: the cached one while usable, else a new one. */
   private fun token(credentials: SpotifyCredentials, fresh: Boolean = false): SpotifyToken {

@@ -8,10 +8,11 @@
  * same for every service is `playlistShare.ts`.
  */
 
+import { at, text } from "./json.ts";
 import type { UnavailableEntry, UnsearchedEntry } from "./playlistEntries.ts";
 import type { SharedEntry, ShareSong } from "./playlistShare.ts";
 import { artistNames, spotifyYtMatch } from "./spotifyImport.ts";
-import type { SpotifySong } from "./spotifyPlaylist.ts";
+import { readSpotifyPages, spotifyTrackSong, type SpotifySong } from "./spotifyPlaylist.ts";
 import type { YtSong } from "./ytMusic.ts";
 
 /**
@@ -40,43 +41,19 @@ export const spotifyShareSong = (item: SpotifyShareItem): ShareSong<SpotifySong>
   return { id: null, search: { title, artists, album, durationMs } };
 };
 
-type Json = Readonly<Record<string, unknown>>;
-
-const object = (value: unknown): Json | null =>
-  typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Json) : null;
-const array = (value: unknown): readonly unknown[] => (Array.isArray(value) ? value : []);
-const text = (value: unknown): string | null =>
-  typeof value === "string" && value.trim() !== "" ? value.trim() : null;
-const at = (value: unknown, ...path: readonly string[]): unknown =>
-  path.reduce<unknown>((node, key) => object(node)?.[key], value);
-
 /** A track in Spotify's search answer, as matching compares it. */
-interface SpotifyTrack {
+interface SpotifyTrack extends SpotifySong {
   readonly uri: string;
-  readonly title: string;
-  readonly artists: readonly string[];
-  readonly album: string | null;
-  readonly durationMs: number | null;
 }
 
-/** A `searchTracks` result, or null when it isn't a track Spotify plays. */
+/** A `searchTracks` result (a track's `data`, as `spotifyTrackSong` reads it), or null when it isn't a track Spotify plays. */
 const searchTrack = (result: unknown): SpotifyTrack | null => {
   const data = at(result, "item", "data");
   if (text(at(data, "__typename")) !== "Track" || at(data, "playability", "playable") === false)
     return null;
   const uri = text(at(data, "uri"));
-  const title = text(at(data, "name"));
-  if (uri === null || title === null) return null;
-  const durationMs = at(data, "duration", "totalMilliseconds");
-  return {
-    uri,
-    title,
-    artists: array(at(data, "artists", "items"))
-      .map((artist) => text(at(artist, "profile", "name")))
-      .filter((name) => name !== null),
-    album: text(at(data, "albumOfTrack", "name")),
-    durationMs: typeof durationMs === "number" && durationMs > 0 ? durationMs : null,
-  };
+  const song = spotifyTrackSong(data);
+  return uri === null || song === null ? null : { ...song, uri };
 };
 
 /**
@@ -111,23 +88,25 @@ export const readSpotifySharedPlaylist = async (
   read: SpotifyPageRead,
 ): Promise<SharedEntry[] | null> => {
   const entries: SharedEntry[] = [];
-  for (let offset = 0; ;) {
-    const playlist = at(await read(offset), "playlistV2");
-    const kind = text(at(playlist, "__typename"));
-    if (kind !== null && NOT_FOUND.has(kind)) return null;
-    if (at(playlist, "currentUserCapabilities", "canEditItems") === false) return null;
-    const items = at(playlist, "content", "items");
-    const total = at(playlist, "content", "totalCount");
-    if (kind !== "Playlist" || !Array.isArray(items) || typeof total !== "number")
-      throw new Error("Spotify answered something that isn't a playlist");
-    for (const item of items) {
-      const id = text(at(item, "itemV2", "data", "uri"));
-      const entryId = text(at(item, "uid"));
-      if (id !== null && entryId !== null) entries.push({ id, entryId });
-    }
-    offset += items.length;
-    if (items.length === 0 || offset >= total) return entries;
-  }
+  return readSpotifyPages<SharedEntry[] | null>(
+    async (offset) => {
+      const playlist = at(await read(offset), "playlistV2");
+      const kind = text(at(playlist, "__typename"));
+      if (kind !== null && NOT_FOUND.has(kind)) return { done: null };
+      if (at(playlist, "currentUserCapabilities", "canEditItems") === false) return { done: null };
+      const items = at(playlist, "content", "items");
+      const total = at(playlist, "content", "totalCount");
+      if (kind !== "Playlist" || !Array.isArray(items) || typeof total !== "number")
+        throw new Error("Spotify answered something that isn't a playlist");
+      for (const item of items) {
+        const id = text(at(item, "itemV2", "data", "uri"));
+        const entryId = text(at(item, "uid"));
+        if (id !== null && entryId !== null) entries.push({ id, entryId });
+      }
+      return { items: items.length, total };
+    },
+    () => entries,
+  );
 };
 
 /**
@@ -135,21 +114,19 @@ export const readSpotifySharedPlaylist = async (
  * with [read] (`libraryV3`'s `data`, playlists only): a playlist deleted on
  * Spotify leaves it. Rejects on an answer that isn't the library.
  */
-export const spotifyLibraryHas = async (uri: string, read: SpotifyPageRead): Promise<boolean> => {
-  for (let offset = 0; ;) {
-    const library = at(await read(offset), "me", "libraryV3");
-    const items = at(library, "items");
-    const total = at(library, "totalCount");
-    if (!Array.isArray(items) || typeof total !== "number")
-      throw new Error("Spotify answered something that isn't the library");
-    if (
-      items.some(
+export const spotifyLibraryHas = (uri: string, read: SpotifyPageRead): Promise<boolean> =>
+  readSpotifyPages<boolean>(
+    async (offset) => {
+      const library = at(await read(offset), "me", "libraryV3");
+      const items = at(library, "items");
+      const total = at(library, "totalCount");
+      if (!Array.isArray(items) || typeof total !== "number")
+        throw new Error("Spotify answered something that isn't the library");
+      const held = items.some(
         (entry) =>
           text(at(entry, "item", "_uri")) === uri || text(at(entry, "item", "data", "uri")) === uri,
-      )
-    )
-      return true;
-    offset += items.length;
-    if (items.length === 0 || offset >= total) return false;
-  }
-};
+      );
+      return held ? { done: true } : { items: items.length, total };
+    },
+    () => false,
+  );

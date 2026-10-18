@@ -656,6 +656,8 @@ export type {
 } from "./waveAccount.ts";
 export {
   SPOTIFY_ACCOUNT_SIGNED_OUT,
+  SPOTIFY_CHANGED_LINE,
+  SPOTIFY_SIGN_IN_FAILURE_LINES,
   spotifyAccountView,
   stepSpotifyAccount,
 } from "./spotifyAccount.ts";
@@ -1717,15 +1719,18 @@ export type {
   DuplicateCheckStep,
 } from "./replacementDuplicates.ts";
 export {
+  librarySearchSong,
   matchSharedSongs,
   PLAYLIST_SHARE_LABELS,
   playlistShareServices,
+  sharePlaylistFailureLine,
   shareSignInAlert,
   sharedEditBatches,
   sharedPlaylistChanges,
   sharedPlaylistMoves,
   sharedSongsLine,
   spotifyPlaylistUrl,
+  syncSharedPlaylist,
   ytMusicPlaylistUrl,
   ytShareMatch,
   ytShareSong,
@@ -1738,11 +1743,15 @@ export {
 } from "./spotifyShare.ts";
 export type { SpotifyPageRead, SpotifyShareItem } from "./spotifyShare.ts";
 export type {
+  LibrarySearchTrack,
   PlaylistShareService,
+  SharePlaylistFailure,
   ShareSong,
   SharedEntry,
   SharedMove,
+  SharedPlaylistChange,
   SharedPlaylistChanges,
+  SharedPlaylistService,
   SharedSongs,
   YtShareItem,
 } from "./playlistShare.ts";

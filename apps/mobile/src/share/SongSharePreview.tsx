@@ -1,23 +1,13 @@
 import { Canvas, LinearGradient, Rect, vec } from "@shopify/react-native-skia";
-import {
-  IconBrandInstagram,
-  IconBrandSpotify,
-  IconBrandWhatsapp,
-  IconBrandYoutube,
-  IconDots,
-  IconLink,
-  IconX,
-} from "@tabler/icons-react-native";
+import { IconBrandSpotify, IconBrandYoutube, IconLink, IconX } from "@tabler/icons-react-native";
 import {
   songCardColours,
   songCardFileName,
   songLinkView,
   songShareDestinations,
-  type LyricShareApps,
   type LyricStoryBackground,
   type SongLinkOption,
   type SongLinksState,
-  type SongShareDestination,
 } from "@wave/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PixelRatio, Share, StyleSheet, View } from "react-native";
@@ -31,16 +21,10 @@ import { addScreenBackHandler } from "@/overlay/back";
 import { showToast } from "@/overlay/toast";
 
 import { ShareDestinations, type ShareDestination } from "./ShareDestinations";
-import {
-  imageShareApps,
-  openImageShareSheet,
-  shareImageToInstagramStory,
-  shareImageToWhatsApp,
-  writeViewPng,
-  type ImageSource,
-} from "./shareImage";
+import type { ImageSource } from "./shareImage";
 import { SONG_CARD_ASPECT, SongCard } from "./SongCard";
 import { closeSongShare, useSongShare, type SongShareContent } from "./songShare";
+import { useDrawingCorners, useImageShare } from "./useImageShare";
 
 const LOG_TAG = "SongShare";
 
@@ -55,8 +39,6 @@ const STICKER_SHARE = 0.68;
 
 /** The preview's rounded corners, the Story's and the sticker's (exported with Instagram's). */
 const PREVIEW_RADIUS = CELL * 2;
-
-const NO_APPS: LyricShareApps = { instagramStories: false, whatsapp: false };
 
 /** The card's file name, stamped now. */
 const cardFileName = (title: string): string => songCardFileName(title, new Date());
@@ -94,6 +76,8 @@ const shareLink = async (url: string, title: string): Promise<void> => {
   }
 };
 
+const LOADING: SongLinksState = { status: "loading" };
+
 /** The link [option] as a destination while the song's links are [state] (Core's `songLinkView`). */
 const linkDestination = (option: SongLinkOption, state: SongLinksState): ShareDestination => {
   const { url, loading, note } = songLinkView(option, state);
@@ -111,9 +95,6 @@ const linkDestination = (option: SongLinkOption, state: SongLinksState): ShareDe
     },
   };
 };
-
-/** The apps the last sheet found: the row's layout while the next one checks again. */
-let lastApps: LyricShareApps | null = null;
 
 /** The Story's ground: [story]'s colours top to bottom, as Instagram draws them. */
 function StoryGround({
@@ -146,28 +127,9 @@ function SongSharePreview({ content }: { content: SongShareContent }) {
   // A cover still loading would be missing from the image.
   const [loaded, setLoaded] = useState<string | undefined>(undefined);
   const ready = content.artworkUri === undefined || loaded === content.artworkUri;
-  const [busy, setBusy] = useState(false);
-  // Two taps in one frame both see busy false; this sees the first.
-  const sending = useRef(false);
   const card: ImageSource = useRef(null);
-  // Null until this sheet's own check answers; the last answer lays the row out meanwhile.
-  const [apps, setApps] = useState<LyricShareApps | null>(null);
-  const [laidOutAs] = useState(lastApps);
   // The sticker keeps the preview's corners; WhatsApp and More get the card square.
-  const [square, setSquare] = useState(false);
-  const squareDrawn = useRef<(() => void) | null>(null);
-  useEffect(() => {
-    if (!square) return;
-    const drawn = squareDrawn.current;
-    squareDrawn.current = null;
-    // A frame, so the corners reach the native view the image is drawn from.
-    requestAnimationFrame(() => drawn?.());
-  }, [square]);
-  const squareCorners = (): Promise<void> =>
-    new Promise((resolve) => {
-      squareDrawn.current = resolve;
-      setSquare(true);
-    });
+  const square = useDrawingCorners();
 
   useEffect(
     () =>
@@ -178,81 +140,22 @@ function SongSharePreview({ content }: { content: SongShareContent }) {
     [],
   );
 
-  useEffect(() => {
-    let live = true;
-    void imageShareApps().then((found) => {
-      lastApps = found;
-      if (live) setApps(found);
-    });
-    return () => {
-      live = false;
-    };
-  }, []);
-
-  /** Draws the card into a PNG (square unless it's the [sticker]), then hands it to [send]. */
-  const sendCard = async (
-    what: string,
-    send: (path: string) => Promise<void>,
-    failed: string,
-    { sticker = false }: { readonly sticker?: boolean } = {},
-  ): Promise<void> => {
-    if (sending.current) return;
-    sending.current = true;
-    setBusy(true);
-    try {
-      if (!sticker) await squareCorners();
-      const path = await writeViewPng(card, cardFileName(content.title)).finally(() =>
-        setSquare(false),
-      );
-      await send(path);
-    } catch (error) {
-      appLog("warn", LOG_TAG, `Couldn't ${what}: ${String(error)}`);
-      void showToast(failed);
-    } finally {
-      sending.current = false;
-      setBusy(false);
-    }
-  };
-
   const links = content.links;
-  const all: Record<Exclude<SongShareDestination, SongLinkOption>, ShareDestination> = {
-    instagramStories: {
-      key: "instagramStories",
-      label: "Instagram Stories",
-      icon: IconBrandInstagram,
-      onPress: () =>
-        void sendCard(
-          "share the song to Instagram Stories",
-          (path) => shareImageToInstagramStory(path, colours.story),
-          "Couldn't open Instagram",
-          { sticker: true },
-        ),
-    },
-    whatsapp: {
-      key: "whatsapp",
-      label: "WhatsApp",
-      icon: IconBrandWhatsapp,
-      onPress: () =>
-        void sendCard("share the song to WhatsApp", shareImageToWhatsApp, "Couldn't open WhatsApp"),
-    },
-    more: {
-      key: "more",
-      label: "More",
-      icon: IconDots,
-      onPress: () =>
-        void sendCard(
-          "share the song",
-          (path) => openImageShareSheet(path, "Share Song"),
-          "Couldn't share the image",
-        ),
-    },
-  };
-  const shown = apps ?? laidOutAs;
-  const destinations = songShareDestinations(shown ?? NO_APPS, { links: links !== null }).map(
-    (key) =>
-      key === "copyLink" || key === "spotify" || key === "ytMusic"
-        ? linkDestination(key, links ?? { status: "loading" })
-        : all[key],
+  const share = useImageShare({
+    source: card,
+    fileName: () => cardFileName(content.title),
+    what: "the song",
+    sheetTitle: "Share Song",
+    logTag: LOG_TAG,
+    storyBackground: colours.story,
+    prepare: (destination) =>
+      destination === "instagramStories" ? Promise.resolve() : square.startDrawing(),
+    afterDraw: square.endDrawing,
+  });
+  const destinations = songShareDestinations(share.apps, { links: links !== null }).map((key) =>
+    key === "copyLink" || key === "spotify" || key === "ytMusic"
+      ? linkDestination(key, links ?? LOADING)
+      : share.image[key],
   );
 
   // The Story fitted into the area; the card laid out at the export's size, scaled down onto it.
@@ -311,7 +214,7 @@ function SongSharePreview({ content }: { content: SongShareContent }) {
                   content={content}
                   colours={colours}
                   width={exportWidth}
-                  cornerRadius={square ? 0 : PREVIEW_RADIUS / scale}
+                  cornerRadius={square.drawing ? 0 : PREVIEW_RADIUS / scale}
                   onReady={() => setLoaded(content.artworkUri)}
                 />
               </View>
@@ -320,8 +223,8 @@ function SongSharePreview({ content }: { content: SongShareContent }) {
         )}
       </View>
       {/* Hidden, not left out, until some answer is known: the row's height stays. */}
-      <View style={{ opacity: shown === null ? 0 : 1, marginTop: CELL * 2 }}>
-        <ShareDestinations destinations={destinations} disabled={busy || !ready || apps === null} />
+      <View style={{ opacity: share.known ? 1 : 0, marginTop: CELL * 2 }}>
+        <ShareDestinations destinations={destinations} disabled={share.disabled || !ready} />
       </View>
     </View>
   );

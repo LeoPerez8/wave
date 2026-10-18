@@ -22,7 +22,6 @@ import {
   ytLibraryFailure,
   ytLibraryPicker,
   ytLibraryPickerView,
-  type SpotifySignInFailure,
   type YtLibraryFailureView,
   type YtLibraryPicker as Picker,
   type YtLibraryPickerView,
@@ -54,9 +53,11 @@ import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { TextButton } from "@/components/TextButton";
 import { makeExternalStore } from "@/lib/externalStore";
-import { askSpotifyAccount, spotifySignInFailure, WaveSpotify } from "@/native/waveSpotify";
 import { Press } from "@/motion/Press";
-import { showError, showMessage } from "@/overlay/alert";
+import { showError } from "@/overlay/alert";
+import { signInToSpotify, spotifySignedIn } from "@/settings/spotifyAccount";
+import { signInToYtMusic, ytMusicSignedIn } from "@/settings/ytAccount";
+import { askSpotifyAccount } from "@/spotify/askSpotify";
 import { useThemeColor } from "@/theme/useThemeColor";
 import { askYtMusic } from "@/ytmusic/askYtMusic";
 
@@ -71,54 +72,12 @@ type LibraryService = "ytMusic" | "spotify";
 /** The picker that is up, if any (`YtLibraryPickerHost` draws it). */
 const shown = makeExternalStore<LibraryService | null>(null);
 
-const SIGN_IN_FAILED: Record<"offline" | "failed", string> = {
-  offline: "Couldn't sign in without a connection.",
-  failed: "YouTube didn't confirm the sign-in. Try again.",
-};
-
-/**
- * Opens YouTube Music's sign-in page; true once signed in. Backing out of it
- * is false with nothing said; a sign-in that didn't work says why.
- */
-const signIn = async (): Promise<boolean> => {
-  const result = await askYtMusic((ytMusic) => ytMusic.signIn);
-  if (Result.isFailure(result)) {
-    const reason = result.failure.reason === "offline" ? "offline" : "failed";
-    void showMessage("Couldn't sign in", SIGN_IN_FAILED[reason]);
-    return false;
-  }
-  return result.success?.status === "signedIn";
-};
-
 /**
  * From YT Music: the picker, once signed in. Signed out (or the session
  * expired), the sign-in opens first; leaving it opens nothing.
  */
 export const openYtLibraryImport = async (): Promise<void> => {
-  const session = await askYtMusic((ytMusic) => ytMusic.session);
-  const signedIn = Result.isSuccess(session) && session.success.status === "signedIn";
-  if (signedIn || (await signIn())) shown.set("ytMusic");
-};
-
-const SPOTIFY_SIGN_IN_FAILED: Record<SpotifySignInFailure, string> = {
-  offline: "Couldn't sign in without a connection.",
-  failed: "Spotify didn't confirm the sign-in. Try again.",
-  changed: "Spotify changed something. Try again after updating Wave.",
-};
-
-/**
- * Opens Spotify's sign-in page (Settings › Accounts' sign-in); true once
- * signed in. Backing out of it is false with nothing said; a sign-in that
- * didn't work says why.
- */
-const signInToSpotify = async (): Promise<boolean> => {
-  try {
-    const session = await WaveSpotify.signIn();
-    return session?.status === "signedIn";
-  } catch (error) {
-    void showMessage("Couldn't sign in", SPOTIFY_SIGN_IN_FAILED[spotifySignInFailure(error)]);
-    return false;
-  }
+  if ((await ytMusicSignedIn()) || (await signInToYtMusic())) shown.set("ytMusic");
 };
 
 /**
@@ -126,8 +85,7 @@ const signInToSpotify = async (): Promise<boolean> => {
  * session expired), Spotify's sign-in opens first; leaving it opens nothing.
  */
 export const openSpotifyLibraryImport = async (): Promise<void> => {
-  const session = await WaveSpotify.session().catch(() => null);
-  if (session?.status === "signedIn" || (await signInToSpotify())) shown.set("spotify");
+  if ((await spotifySignedIn()) || (await signInToSpotify())) shown.set("spotify");
 };
 
 /** Draws the picker while it's up; mounted once at the root. */
@@ -156,7 +114,7 @@ const readYtLibrary = async (): Promise<LibraryRead> => {
 
 const readSpotifyAccountLibrary = async (): Promise<LibraryRead> => {
   const answer = await readSpotifyLibrary((offset) =>
-    askSpotifyAccount(() => WaveSpotify.library(offset)),
+    askSpotifyAccount((spotify) => spotify.library(offset)),
   );
   return answer.ok
     ? {
@@ -180,7 +138,7 @@ const SERVICES: Record<
     title: "From YT Music",
     reading: "Reading your YouTube Music library",
     read: readYtLibrary,
-    signIn,
+    signIn: signInToYtMusic,
   },
   spotify: {
     title: "From Spotify",
