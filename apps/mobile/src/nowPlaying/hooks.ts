@@ -22,6 +22,7 @@ import {
 } from "@/playback/queueTracks";
 import { savedYtQueueTracks } from "@/playback/ytQueueTracks";
 import { useThemeColor } from "@/theme/useThemeColor";
+import { useLoadedLibraryFinder } from "@/ytmusic/libraryFinder";
 
 import { useNowPlayingShown } from "./sheet";
 
@@ -65,6 +66,17 @@ export const usePlayingYtSong = (trackId: string | null): NativeYtSong | null =>
     trackId === null ? null : (queueTracks.get().get(trackId) ?? null),
   );
   return useMemo(() => (track === null ? null : queuedYtSong(track)), [track]);
+};
+
+/**
+ * The file streamed song [ytSong] is in the Library as, once it's downloaded
+ * (the shared finder, followed while [active]); null for none, or until the
+ * Library is first read.
+ */
+export const useDownloadedPath = (ytSong: NativeYtSong | null, active: boolean): string | null => {
+  const find = useLoadedLibraryFinder(active);
+  if (ytSong === null || find === null) return null;
+  return find(ytSong)?.path ?? null;
 };
 
 /**

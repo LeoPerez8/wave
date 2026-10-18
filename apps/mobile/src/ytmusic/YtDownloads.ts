@@ -41,6 +41,7 @@ import {
   ytAudioRejection,
   ytAudioTrack,
   ytDownloadDestination,
+  ytDownloadHas,
   ytDownloadLookup,
   ytDownloadReport,
   ytDownloadSharedJob,
@@ -162,10 +163,14 @@ const optional = <A>(effect: Effect.Effect<A, unknown>): Effect.Effect<A | null>
 /**
  * Optional metadata cannot fail or indefinitely hold up valid audio acquisition. The watch page
  * is asked for at most once (for the album, then YT Music's lyrics), and YT Music's lyrics only
- * when LRCLIB has none.
+ * when LRCLIB has none. Lyrics the Lyrics view found for the song's video are reused, with no
+ * lyrics request at all (Core's `ytDownloadHas`, `ytDownloadTags`).
  */
 const metadata = (song: NativeYtSong) =>
   Effect.gen(function* () {
+    const store = yield* LibraryStore;
+    const saved = yield* optional(store.savedLyrics(song.videoId));
+    const has = ytDownloadHas(saved);
     let watchPage: Promise<NativeYtWatchSong> | undefined;
     const watch = () => native(() => (watchPage ??= WaveYtDownloads.watchSong(song.videoId)));
     const album = yield* optional(
@@ -175,9 +180,9 @@ const metadata = (song: NativeYtSong) =>
       }),
     );
     const lookup = ytDownloadLookup(song, album);
-    const found = lookup === null ? null : yield* optional(lookUpLyricsAndGenre(lookup));
+    const found = lookup === null ? null : yield* optional(lookUpLyricsAndGenre(lookup, has));
     const lyrics =
-      found !== null && found.lyrics !== null
+      has.hasLyrics || (found !== null && found.lyrics !== null)
         ? null
         : yield* optional(
             Effect.gen(function* () {
@@ -187,7 +192,7 @@ const metadata = (song: NativeYtSong) =>
                 : yield* native(() => WaveYtDownloads.lyrics(lyricsBrowseId));
             }),
           );
-    return ytDownloadTags(song, album, found, lyrics);
+    return ytDownloadTags(song, album, found, lyrics, saved);
   });
 
 /**
@@ -710,6 +715,17 @@ const youtubeReport = (claim: NativeDownloadDecision, audio: NativeYoutubeAudio)
   });
 };
 
+/**
+ * Drops the lyrics the Lyrics view saved for [claim]'s song, by its own video and the one its
+ * download named, once its file is in the Library. Never fails: a copy left over is harmless.
+ */
+const forgetLyricsSavedFor = (claim: NativeDownloadDecision) =>
+  Effect.gen(function* () {
+    const store = yield* LibraryStore;
+    const videoIds = [...new Set([claim.song.videoId, claim.video ?? claim.song.videoId])];
+    yield* store.forgetSavedLyrics(videoIds);
+  }).pipe(Effect.ignore);
+
 /** The answer to one decision the native journal leased to JS. */
 const answer = (claim: NativeDownloadDecision) =>
   Effect.gen(function* () {
@@ -760,7 +776,10 @@ const answer = (claim: NativeDownloadDecision) =>
           claim.source !== "youtube"
             ? null
             : (claim.video ?? (ownVideo ? claim.song.videoId : null));
-        return { path: yield* importDownload(claim.saved, videoId, fills) };
+        const path = yield* importDownload(claim.saved, videoId, fills);
+        // The file carries the song's lyrics now: what the Lyrics view saved for it isn't needed.
+        yield* forgetLyricsSavedFor(claim);
+        return { path };
       }
     }
   }).pipe(
