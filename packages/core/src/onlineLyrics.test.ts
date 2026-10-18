@@ -41,7 +41,7 @@ describe("lyrics for a non-D song", () => {
             { timeMs: 3500, text: "Again" },
           ],
         },
-        save: { kind: "found", lyrics: found },
+        save: { videoId: "crush", saved: { kind: "found", lyrics: found } },
       },
     );
   });
@@ -58,7 +58,7 @@ describe("lyrics for a non-D song", () => {
       {
         kind: "lyrics",
         lyrics: { kind: "unsynced", lines: ["Hello", "", "Again"] },
-        save: { kind: "found", lyrics: found },
+        save: { videoId: "crush", saved: { kind: "found", lyrics: found } },
       },
     );
   });
@@ -67,7 +67,7 @@ describe("lyrics for a non-D song", () => {
     const nothing = { ok: true, lyrics: null } as const;
     assert.deepEqual(nonDLyrics(song, { ...ON, saved: null, answers: [nothing, nothing] }), {
       kind: "notFound",
-      save: { kind: "miss", checkedAt: ON.now },
+      save: { videoId: "crush", saved: { kind: "miss", checkedAt: ON.now } },
     });
   });
 
@@ -86,7 +86,7 @@ describe("lyrics for a non-D song", () => {
       {
         kind: "lyrics",
         lyrics: { kind: "unsynced", lines: ["Hello"] },
-        save: { kind: "found", lyrics: found },
+        save: { videoId: "crush", saved: { kind: "found", lyrics: found } },
       },
     );
   });
@@ -133,7 +133,7 @@ describe("lyrics for a non-D song", () => {
     const nothing = { ok: true, lyrics: null } as const;
     assert.deepEqual(
       nonDLyrics(song, { ...ON, ytMusicOn: false, saved: null, answers: [nothing] }),
-      { kind: "notFound", save: { kind: "miss", checkedAt: ON.now } },
+      { kind: "notFound", save: { videoId: "crush", saved: { kind: "miss", checkedAt: ON.now } } },
     );
     const unknownArtist = { ...song, lookup: null };
     assert.deepEqual(nonDLyrics(unknownArtist, { ...ON, saved: null, answers: [] }), {

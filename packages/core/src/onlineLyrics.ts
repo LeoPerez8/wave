@@ -36,13 +36,19 @@ export type SavedLyrics =
 export type LyricsAnswer =
   { readonly ok: true; readonly lyrics: FoundLyrics | null } | { readonly ok: false };
 
+/** What to keep against a song's video. */
+export interface LyricsToSave {
+  readonly videoId: string;
+  readonly saved: SavedLyrics;
+}
+
 /** Where a non-D song's lyrics stand. */
 export type NonDLyrics =
   | { readonly kind: "searching"; readonly ask: LyricsSource }
   /** Lyrics to show, and what to save for the song's video (null: nothing new, or no video yet). */
-  | { readonly kind: "lyrics"; readonly lyrics: Lyrics; readonly save: SavedLyrics | null }
-  /** "No lyrics found", and the miss to remember (null: already remembered, or no video yet). */
-  | { readonly kind: "notFound"; readonly save: SavedLyrics | null }
+  | { readonly kind: "lyrics"; readonly lyrics: Lyrics; readonly save: LyricsToSave | null }
+  /** "No lyrics found", and the miss to remember (null: already remembered, no search made, or no video yet). */
+  | { readonly kind: "notFound"; readonly save: LyricsToSave | null }
   /** A source couldn't be reached and none had them: it says so and offers Try again; nothing is remembered. */
   | { readonly kind: "failed" }
   /** Settings turned online lookups off: "No lyrics", with no request. */
@@ -156,6 +162,7 @@ export const lyricsSearch = (
  */
 export const nonDLyrics = (song: LyricsSearchSong, state: NonDLyricsState): NonDLyrics => {
   const { saved } = state;
+  const { videoId } = song;
   if (saved?.kind === "found") {
     return { kind: "lyrics", lyrics: parseLyrics(saved.lyrics.text), save: null };
   }
@@ -172,16 +179,16 @@ export const nonDLyrics = (song: LyricsSearchSong, state: NonDLyricsState): NonD
       return {
         kind: "lyrics",
         lyrics: search.lyrics,
-        save: song.videoId === null ? null : { kind: "found", lyrics: search.found },
+        save: videoId === null ? null : { videoId, saved: { kind: "found", lyrics: search.found } },
       };
     case "miss":
       return {
         kind: "notFound",
         // A song no source could be asked about made no search to remember.
         save:
-          song.videoId === null || state.answers.length === 0
+          videoId === null || state.answers.length === 0
             ? null
-            : { kind: "miss", checkedAt: state.now },
+            : { videoId, saved: { kind: "miss", checkedAt: state.now } },
       };
   }
 };

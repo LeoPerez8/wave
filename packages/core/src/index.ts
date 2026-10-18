@@ -1414,3 +1414,4 @@ export type {
   MixPlaylistEntry,
   StreamedSong,
 } from "./mixKnownSongs.ts";
+export type { LyricsToSave } from "./onlineLyrics.ts";

@@ -68,15 +68,26 @@ export const usePlayingYtSong = (trackId: string | null): NativeYtSong | null =>
   return useMemo(() => (track === null ? null : queuedYtSong(track)), [track]);
 };
 
+/** A Library track and its file. */
+export interface LibraryFile {
+  readonly id: number;
+  readonly path: string;
+}
+
 /**
- * The file streamed song [ytSong] is in the Library as, once it's downloaded
- * (the shared finder, followed while [active]); null for none, or until the
- * Library is first read.
+ * The Library track and file streamed song [ytSong] is, once it's downloaded
+ * (the shared finder, followed while [active]); null for none (or no
+ * streamed song), undefined until the Library is first read.
  */
-export const useDownloadedPath = (ytSong: NativeYtSong | null, active: boolean): string | null => {
+export const useDownloadedFile = (
+  ytSong: NativeYtSong | null,
+  active: boolean,
+): LibraryFile | null | undefined => {
   const find = useLoadedLibraryFinder(active);
-  if (ytSong === null || find === null) return null;
-  return find(ytSong)?.path ?? null;
+  if (ytSong === null) return null;
+  if (find === null) return undefined;
+  const track = find(ytSong);
+  return track?.path == null ? null : { id: track.id, path: track.path };
 };
 
 /**

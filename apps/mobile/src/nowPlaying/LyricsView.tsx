@@ -35,7 +35,7 @@ import { closeLyricCard, openLyricCard } from "@/share/lyricCard";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { DismissArea } from "./DismissArea";
-import { usePlayhead } from "./hooks";
+import { usePlayhead, type LibraryFile } from "./hooks";
 import { TrackHeader } from "./TrackHeader";
 import { useLibraryLyrics, type LibraryLyricsShown } from "./useLibraryLyrics";
 import { useNonDLyrics, type NonDLyricsShown } from "./useNonDLyrics";
@@ -449,29 +449,31 @@ function LyricsBody({
 type Item = NonNullable<PlaybackState["item"]>;
 
 /**
- * The Lyrics view under what's playing [trackId], for the file at `path`
- * (a Library song's searched online when it has no lyrics,
- * `useLibraryLyrics`), or, with no file, for a non-D song, whose lyrics are
- * searched online (`useNonDLyrics`): synced lyrics that follow the song,
+ * The Lyrics view under what's playing, for the Library track's [file] (a
+ * Library song's, or a streamed song's downloaded since it was queued;
+ * searched online when it has no lyrics, `useLibraryLyrics`), or, with no
+ * file, for the non-D song [nonDTrackId] (null while it waits for the
+ * Library to be read), whose lyrics are searched online
+ * (`useNonDLyrics`): synced lyrics that follow the song,
  * unsynced lyrics as text, a skeleton while it searches, or an empty state
  * when the song has none. A song with lyrics gets Share, which picks up to
  * five lines (Core's `tapLyricLine`), then Next previews them as a card
  * (`LyricCardPreview`) in the cover's colours.
  */
 export function LyricsView({
-  path,
-  trackId,
+  file,
+  nonDTrackId,
   item,
   palette,
 }: {
-  path: string | null;
-  trackId: string | null;
+  file: LibraryFile | null;
+  nonDTrackId: string | null;
   item: Item;
   palette: ArtworkPalette | null;
 }) {
-  const library = useLibraryLyrics(trackId, path);
-  // A streamed song downloaded since it was queued reads its file instead.
-  const nonD = useNonDLyrics(path === null ? trackId : null);
+  const path = file?.path ?? null;
+  const library = useLibraryLyrics(file?.id ?? null, path);
+  const nonD = useNonDLyrics(file === null ? nonDTrackId : null);
   const shown: Shown | null =
     nonD.shown === null
       ? library.shown
@@ -482,7 +484,7 @@ export function LyricsView({
     shown !== null && (shown.kind === "synced" || shown.kind === "unsynced") ? shown : null;
   const lines = useMemo(() => shareableLyricLines(lyrics), [lyrics]);
   // The song whose lines are picked: its file, or a non-D song's track id.
-  const song = path ?? trackId;
+  const song = path ?? nonDTrackId;
   // The lines picked for that song; another song's lyrics start afresh.
   const [picked, setPicked] = useState<{
     readonly song: string | null;

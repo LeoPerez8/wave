@@ -1,13 +1,6 @@
-import {
-  libraryLyrics,
-  libraryLyricsSong,
-  parseTrackId,
-  type FoundLyrics,
-  type LyricsAnswer,
-  type Lyrics,
-} from "@wave/core";
+import { libraryLyrics, libraryLyricsSong, type FoundLyrics, type Lyrics } from "@wave/core";
 import * as Effect from "effect/Effect";
-import { useCallback, useEffect, useState } from "react";
+import { useMemo } from "react";
 
 import type { LyricsSearchTrack } from "@/library/db/lyricsMisses";
 import { LibraryStore } from "@/library/LibraryStore";
@@ -17,7 +10,7 @@ import { useLyricsAndGenreLookupsEnabled } from "@/settings/lyricsAndGenre";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
 import { useLyrics } from "./useLyrics";
-import { askLyrics } from "./useNonDLyrics";
+import { useLyricsSearch, type LyricsSearchPlan } from "./useLyricsSearch";
 
 /**
  * What the Lyrics view shows for a Library song: its file's lyrics (or
@@ -27,7 +20,7 @@ import { askLyrics } from "./useNonDLyrics";
 export type LibraryLyricsShown =
   Lyrics | { readonly kind: "searching" } | { readonly kind: "failed" };
 
-const NO_LYRICS: Lyrics = { kind: "none" };
+const NO_LYRICS: LibraryLyricsShown = { kind: "none" };
 const SEARCHING: LibraryLyricsShown = { kind: "searching" };
 const FAILED: LibraryLyricsShown = { kind: "failed" };
 
@@ -65,86 +58,70 @@ const writeIntoFile = (trackId: number, path: string, found: FoundLyrics): Promi
     .catch((cause: unknown) => console.warn("[wave] couldn't write the lyrics found", cause));
 
 /**
- * What the Lyrics view shows for the Library track [trackId] at [path], and
- * Try again (docs/spec.md, "Lyrics online"). Lyrics in its file or a sidecar
- * show and nothing is asked. A file without lyrics is searched online as a
- * non-D song is (Core's `libraryLyrics`): the skeleton while LRCLIB, then YT
- * Music for a song downloaded from a video, are asked; a hit is written into
- * the file and shows, and a miss shows today's "No lyrics" and is remembered
- * for a week. Nothing is asked while Fix songs online is off. Null while the
- * file is read, or for a track that isn't the Library's.
+ * What the Lyrics view shows for the Library track [libraryId] whose file is
+ * at [path], and Try again (docs/spec.md, "Lyrics online"). Lyrics in its
+ * file or a sidecar show and nothing is asked. A file without lyrics is
+ * searched online as a non-D song is (Core's `libraryLyrics`): the skeleton
+ * while LRCLIB, then YT Music for a song downloaded from a video, are asked;
+ * a hit is written into the file and shows, and a miss shows today's "No
+ * lyrics" and is remembered for a week. Nothing is asked while Fix songs
+ * online is off. Null while the file is read, or with no file.
  */
 export const useLibraryLyrics = (
-  trackId: string | null,
+  libraryId: number | null,
   path: string | null,
 ): { readonly shown: LibraryLyricsShown | null; readonly retry: () => void } => {
   const file = useLyrics(path);
   const lookupsOn = useLyricsAndGenreLookupsEnabled();
   const ytMusicOn = useYtMusicEnabled();
-  const track = trackId === null ? null : parseTrackId(trackId);
-  const libraryId = track?.kind === "library" ? track.id : null;
   // Only whether the file has none matters: reading it again finding none still doesn't search twice.
   const fileHasNone = file?.kind === "none";
-  const [attempt, setAttempt] = useState(0);
-  const [state, setState] = useState<{
-    readonly path: string;
-    readonly attempt: number;
-    readonly shown: LibraryLyricsShown;
-  } | null>(null);
 
-  useEffect(() => {
-    if (libraryId === null || path === null || !fileHasNone) return undefined;
-    let current = true;
-    const show = (shown: LibraryLyricsShown): void => {
-      if (current) setState({ path, attempt, shown });
-    };
-    void (async () => {
+  const begin = useMemo(() => {
+    if (!fileHasNone || libraryId === null || path === null) return null;
+    return async (): Promise<
+      LyricsSearchPlan<LibraryLyricsShown> | { shown: LibraryLyricsShown }
+    > => {
       const searchTrack = await readSearchTrack(libraryId);
-      if (searchTrack === null) {
-        show(NO_LYRICS);
-        return;
-      }
+      if (searchTrack === null) return { shown: NO_LYRICS };
       const song = libraryLyricsSong(searchTrack);
-      const answers: LyricsAnswer[] = [];
-      for (;;) {
-        const step = libraryLyrics(song, {
-          file: NO_LYRICS,
-          missedAt: searchTrack.missedAt,
-          answers,
-          lookupsOn,
-          ytMusicOn,
-          now: Date.now(),
-        });
-        switch (step.kind) {
-          case "searching":
-            break;
-          case "lyrics":
-            show(step.lyrics);
-            if (step.write !== null) await writeIntoFile(libraryId, path, step.write);
-            return;
-          case "none":
-            if (step.remember !== null) await keepMiss(libraryId, step.remember);
-            show(NO_LYRICS);
-            return;
-          case "failed":
-            show(FAILED);
-            return;
-        }
-        show(SEARCHING);
-        // Gone from the view (another song, closed): no more requests.
-        if (!current) return;
-        answers.push(await askLyrics(step.ask, song));
-      }
-    })();
-    return () => {
-      current = false;
+      return {
+        song,
+        step: (answers) => {
+          const step = libraryLyrics(song, {
+            missedAt: searchTrack.missedAt,
+            answers,
+            lookupsOn,
+            ytMusicOn,
+            now: Date.now(),
+          });
+          switch (step.kind) {
+            case "searching":
+              return { kind: "ask", source: step.ask };
+            case "lyrics":
+              return {
+                kind: "done",
+                shown: step.lyrics,
+                keep: () => writeIntoFile(libraryId, path, step.write),
+              };
+            case "none": {
+              const { remember } = step;
+              return {
+                kind: "done",
+                shown: NO_LYRICS,
+                keep: remember === null ? null : () => keepMiss(libraryId, remember),
+              };
+            }
+            case "failed":
+              return { kind: "done", shown: FAILED, keep: null };
+          }
+        },
+      };
     };
-  }, [libraryId, path, fileHasNone, lookupsOn, ytMusicOn, attempt]);
+  }, [fileHasNone, libraryId, path, lookupsOn, ytMusicOn]);
 
-  const retry = useCallback(() => setAttempt((n) => n + 1), []);
-  if (file === null || path === null) return { shown: null, retry };
-  if (file.kind !== "none" || libraryId === null) return { shown: file, retry };
-  if (state?.path !== path) return { shown: null, retry };
-  // Try again shows the skeleton at once, not the failure it's retrying.
-  return { shown: state.attempt === attempt ? state.shown : SEARCHING, retry };
+  const search = useLyricsSearch(begin === null ? null : path, begin, SEARCHING);
+  if (file === null || path === null) return { shown: null, retry: search.retry };
+  if (begin === null) return { shown: file, retry: search.retry };
+  return search;
 };
