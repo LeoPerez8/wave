@@ -90,14 +90,19 @@ const landings = createLandings({
 
 /**
  * Downloads landed Tracks [trackIds] in the Library (an import, a quality
- * replacement, a download's fill-in): lists hear of them together, as a
- * burst naming them, at most every 2 s, and at once for the run's [last]
- * song (Core's `createLandings`).
+ * replacement): lists hear of them together, as a burst naming them, at most
+ * every 2 s, and at once for the run's [last] song or when the run ends (no
+ * ids). [fillIn]: they wait for their fill-in (`songsFilledIn`), 2 s at most,
+ * so a song and its fill-in are one change (Core's `createLandings`).
  */
 export const songsLanded = (
   trackIds: readonly number[],
-  options?: { readonly last?: boolean },
+  options?: { readonly last?: boolean; readonly fillIn?: boolean },
 ): void => landings.land(trackIds, options);
+
+/** The fill-in of downloaded Tracks [trackIds] is done; [wrote]: it changed them (Core's `Landings.filled`). */
+export const songsFilledIn = (trackIds: readonly number[], options: { readonly wrote: boolean }) =>
+  landings.filled(trackIds, options);
 
 /** A track as the scanner read it, as the index stores it. */
 export const toIndexedTrack = (native: NativeScannedTrack): IndexedTrack => ({

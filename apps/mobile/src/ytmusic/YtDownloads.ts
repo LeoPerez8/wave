@@ -108,6 +108,7 @@ import { askForNotifications } from "@/lib/askForNotifications";
 import { persistedSetting } from "@/lib/persistedSetting";
 import {
   libraryVersion,
+  songsFilledIn,
   songsLanded,
   toIndexedArtwork,
   toIndexedTrack,
@@ -757,15 +758,22 @@ export const downloadPathIncluded = (path: string) =>
  * others (`songsLanded`), so what reads the Library to reconcile downloads follows both
  * (`downloadLibraryVersion`).
  */
-let landings = 0;
+let landedCount = 0;
 
-const landed = (trackIds: readonly number[], last: boolean): void => {
-  landings++;
-  songsLanded(trackIds, { last });
+/**
+ * The Tracks each imported file (by path) landed, until its fill-in is done (`answerJob`): they
+ * wait for it, so the song and its fill-in reach the lists as one change (`songsFilledIn`).
+ */
+const awaitingFillIn = new Map<string, readonly number[]>();
+
+const countAndLand = (path: string, trackIds: readonly number[], last: boolean): void => {
+  landedCount++;
+  awaitingFillIn.set(path, trackIds);
+  songsLanded(trackIds, { last, fillIn: true });
 };
 
 /** The Library as downloads' reconciliation knows it: every edit and every landing changes it. */
-const downloadLibraryVersion = (): string => `${libraryVersion.get()}:${landings}`;
+const downloadLibraryVersion = (): string => `${libraryVersion.get()}:${landedCount}`;
 
 /**
  * Transactional upsert preserves ids, favorites, playlists and history on
@@ -792,7 +800,7 @@ export const importDownload = (
         saved.artwork === null ? [] : [toIndexedArtwork(saved.artwork)],
       )
       .pipe(Effect.mapError(libraryFailure));
-    landed(trackIds, last);
+    countAndLand(saved.path, trackIds, last);
     // A liked song a pending favorite was waiting for has its star.
     publishSavedStars(starred);
     return saved.path;
@@ -828,7 +836,7 @@ export const importQualityReplacement = (
     // the new file finds the old one still recorded. The media scanner sees the old file go with
     // the new one, once its fill-in is done (`fillInLyricsAndGenre`).
     yield* finishFileDeletions("import", saved.path);
-    landed(replaced.kind === "gone" ? [] : [trackId], last);
+    countAndLand(saved.path, replaced.kind === "gone" ? [] : [trackId], last);
     if (replaced.kind === "replaced") publishSavedStars(replaced.starred);
     return saved.path;
   });
@@ -1038,10 +1046,21 @@ const answerJob = async (id: string): Promise<void> => {
       claim.decision,
       JSON.stringify(payload),
     );
-    if (accepted && claim.decision === "import" && claim.saved !== undefined && "path" in payload)
-      void appRuntime.runPromise(
-        fillInLyricsAndGenre(downloadedSong(claim.saved), downloadTagWriteOrigin(claim.id)),
-      );
+    if (claim.decision === "import" && claim.saved !== undefined) {
+      const { path } = claim.saved;
+      const landedIds = awaitingFillIn.get(path) ?? [];
+      awaitingFillIn.delete(path);
+      if (accepted && "path" in payload)
+        void appRuntime.runPromise(
+          fillInLyricsAndGenre(
+            downloadedSong(claim.saved),
+            downloadTagWriteOrigin(claim.id),
+            landedIds,
+          ),
+        );
+      // No fill-in follows: the song goes with its run's change now.
+      else songsFilledIn(landedIds, { wrote: false });
+    }
   } catch {
     // JS or the bridge went away mid-answer: the native lease expires and replays the decision.
   } finally {
@@ -1230,6 +1249,9 @@ const refresh = async (): Promise<void> => {
       removeFailedReplacementFiles(jobs);
       replacementJournalRead(jobs);
       const active = jobs.some(unfinished);
+      // The run is over (its last songs answered in one poll, or it ended in a failure or a
+      // cancel): what landed reaches the lists now, with any fill-in still on its way.
+      if (!active) songsLanded([], { last: true });
       if (active && poll === null) poll = setInterval(refreshQuietly, 5_000);
       if (!active && poll !== null) {
         clearInterval(poll);
