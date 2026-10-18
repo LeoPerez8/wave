@@ -1,28 +1,99 @@
 /**
  * The Magic Queue (docs/spec.md, Magic Queue): a queue that grows from a seed
- * (a song, playlist, album or artist) out of the Library, a batch at a time,
+ * (a song, playlist, album or artist) out of the Library and YouTube Music, a batch at a time,
  * and learns from what the owner skips, favorites, downloads, plays through
  * and edits. This module is the engine: the session, its batches, the
  * signals and the weights they move. The app feeds it the Library's songs
  * and what happens in the queue.
  */
 
+import { artistPhotoName } from "./artistPhoto.ts";
 import { mixRecordingOf, type DiscoverRadioSong } from "./discoverMixes.ts";
-import type { MixAffinity } from "./genreAffinity.ts";
-import type { PlayEndReason } from "./playEvents.ts";
+import {
+  mixAffinity,
+  type GenreProfile,
+  type GenreProfileOf,
+  type GenreTagged,
+} from "./genreAffinity.ts";
+import { songFamilies } from "./genreMixes.ts";
+import type { PlayEnd } from "./playEvents.ts";
 import type { QueueState } from "./queue.ts";
+import { isRecord } from "./storedJson.ts";
 import { pickWeighted, type RandomSource } from "./weightedPick.ts";
 import { parseTrackId, ytTrackId } from "./ytMusic.ts";
+
+/**
+ * An artist as the Magic Queue tells them apart, the same for the Library's
+ * songs and YouTube Music's: by name, as artist photos (and the YouTube
+ * Music artist finder) compare names (`magicArtistKey`).
+ */
+export type MagicArtistKey = string & { readonly magicArtist: true };
+
+/** [name]'s key as the Magic Queue tells artists apart. */
+export const magicArtistKey = (name: string): MagicArtistKey =>
+  artistPhotoName(name) as MagicArtistKey;
 
 /** A song as the Magic Queue weighs it. */
 export interface MagicSong {
   /** Its queue track id. */
   readonly trackId: string;
-  /** Who it's credited to, primary first, by any stable key (the Library's artist ids). */
-  readonly artists: readonly string[];
-  /** Its genre tag, or null without one. */
+  /** Who it's credited to, primary first. */
+  readonly artists: readonly MagicArtistKey[];
+  /** Its genre family's key (`genreFamily`), or null without a genre known. */
   readonly genre: string | null;
 }
+
+/** A Library song as `magicLibrarySongs` reads it. */
+export interface MagicLibrarySong extends GenreTagged {
+  readonly id: number;
+  /** Every artist it credits, primary first. */
+  readonly artistIds: readonly number[];
+}
+
+/**
+ * The Library's songs as the Magic Queue weighs them, the Library's
+ * [artists] naming each song's: by their artists' names and the family of
+ * their genre tag (its first value's, when it has several).
+ */
+export const magicLibrarySongs = (
+  artists: readonly { readonly id: number; readonly name: string }[],
+): ((song: MagicLibrarySong) => MagicSong) => {
+  const keys = new Map(artists.map((artist) => [artist.id, magicArtistKey(artist.name)]));
+  return (song) => ({
+    trackId: String(song.id),
+    artists: song.artistIds.flatMap((id) => keys.get(id) ?? []),
+    genre: songFamilies(song)[0]?.key ?? null,
+  });
+};
+
+/** The family that has the largest share of [profile] (the first on a tie), or null. */
+const dominantFamily = (profile: GenreProfile | null | undefined): string | null => {
+  let dominant: string | null = null;
+  let most = 0;
+  for (const [family, share] of profile ?? []) {
+    if (share <= most) continue;
+    dominant = family;
+    most = share;
+  }
+  return dominant;
+};
+
+/**
+ * A YouTube Music song as the Magic Queue weighs it: by its artists' names,
+ * and the dominant genre family of its first artist with a profile known
+ * ([profileOf]: the Library's, else Deezer's); none when no artist's is.
+ */
+export const magicYtSong = (
+  song: { readonly trackId: string; readonly artists: readonly string[] },
+  profileOf: GenreProfileOf,
+): MagicSong => {
+  let genre: string | null = null;
+  for (const artist of song.artists) {
+    genre = dominantFamily(profileOf(artist));
+    if (genre !== null) break;
+  }
+  return { trackId: song.trackId, artists: song.artists.map(magicArtistKey), genre };
+};
 
 /** What a Magic Queue was started from. */
 export interface MagicSeed {
@@ -41,9 +112,9 @@ export interface MagicSession {
   readonly used: readonly string[];
   /** How many batches followed the first song so far. */
   readonly batches: number;
-  /** How much each artist (by key) adds to its songs' weight; absent adds nothing. */
+  /** How much each artist (by `MagicArtistKey`) adds to its songs' weight; absent adds nothing. */
   readonly artistAffinity: Readonly<Record<string, number>>;
-  /** What each genre (by key) multiplies its songs' weight by; absent is 1. */
+  /** What each genre family (by key) multiplies its songs' weight by; absent is 1. */
   readonly genreAffinity: Readonly<Record<string, number>>;
   /** Artists skipped within the first 30 s: none of their songs comes for the rest of the session. */
   readonly excludedArtists: readonly string[];
@@ -52,7 +123,26 @@ export interface MagicSession {
    * the rest): 0.5 at the start, always between 0.2 and 0.8.
    */
   readonly ytShare: number;
+  /** The artists whose YouTube Music radios it draws on (`magicRadioArtists`); none without. */
+  readonly radioArtists: readonly string[];
+  /**
+   * The seed songs' genre profile, by family key, which its YouTube Music
+   * candidates are held to (`magicSeedProfile`); null when none has a genre.
+   */
+  readonly seedProfile: Readonly<Record<string, number>> | null;
 }
+
+/** What a Magic Queue's YouTube Music radio grows from, as `startMagicQueue` takes it. */
+export interface MagicRadioSeed {
+  /** Each seed song's primary artist, by name, as YouTube Music is asked for them. */
+  readonly artists: readonly string[];
+  /** The seed songs' genre profile (`genreProfile`), or null when none has a genre. */
+  readonly profile: GenreProfile | null;
+}
+
+/** The genre profile [session]'s YouTube Music candidates are held to; null keeps any genre. */
+export const magicSeedProfile = (session: MagicSession): GenreProfile | null =>
+  session.seedProfile === null ? null : new Map(Object.entries(session.seedProfile));
 
 /** The context kind of a Magic Queue's queue; its id is the session's. */
 export const MAGIC_QUEUE_CONTEXT = "magic";
@@ -70,8 +160,7 @@ const YT_SHARE_START = 0.5;
 const YT_SHARE_MIN = 0.2;
 const YT_SHARE_MAX = 0.8;
 
-const clampShare = (share: number): number =>
-  Math.min(YT_SHARE_MAX, Math.max(YT_SHARE_MIN, share));
+const clampShare = (share: number): number => Math.min(YT_SHARE_MAX, Math.max(YT_SHARE_MIN, share));
 
 /** A genre tag compared without case or surrounding spaces. */
 const genreKey = (genre: string | null): string | null => {
@@ -82,12 +171,21 @@ const genreKey = (genre: string | null): string | null => {
 /**
  * Starts a Magic Queue from [seed], whose songs are [seedSongs] (the song
  * itself for a song seed): it plays that song, or a random one of the
- * seed's otherwise. Null when the seed has no songs.
+ * seed's otherwise. Its YouTube Music radio grows from [radio] (none
+ * without). Null when the seed has no songs.
  */
 export const startMagicQueue = (
   seed: MagicSeed,
   seedSongs: readonly MagicSong[],
-  { id, random }: { readonly id: string; readonly random: RandomSource },
+  {
+    id,
+    random,
+    radio,
+  }: {
+    readonly id: string;
+    readonly random: RandomSource;
+    readonly radio?: MagicRadioSeed;
+  },
 ): { readonly session: MagicSession; readonly first: string } | null => {
   const pick =
     seed.kind === "track"
@@ -111,6 +209,9 @@ export const startMagicQueue = (
       genreAffinity,
       excludedArtists: [],
       ytShare: YT_SHARE_START,
+      radioArtists: radio === undefined ? [] : magicRadioArtists(seed, radio.artists),
+      seedProfile:
+        radio === undefined || radio.profile === null ? null : Object.fromEntries(radio.profile),
     },
     first: pick.trackId,
   };
@@ -251,10 +352,7 @@ const YT_SHARE_MOVE: { readonly [K in MagicSignalKind]?: number } = {
  * download moves YouTube Music's share of a batch up, its skip down, within
  * 20–80%.
  */
-export const magicSignal = (
-  learning: MagicSession,
-  { kind, song }: MagicSignal,
-): MagicSession => {
+export const magicSignal = (learning: MagicSession, { kind, song }: MagicSignal): MagicSession => {
   const move = parseTrackId(song.trackId)?.kind === "yt" ? (YT_SHARE_MOVE[kind] ?? 0) : 0;
   const session =
     move === 0 ? learning : { ...learning, ytShare: clampShare(learning.ytShare + move) };
@@ -282,16 +380,20 @@ export const magicSignal = (
 export const MAGIC_SKIP_MS = 30_000;
 
 /**
- * What a play's end tells a Magic Queue: skipped within its first 30 s is a
- * skip, played to the end is positive; anything else (skipped later,
- * stopped, cut short) says nothing (null).
+ * What a play's end tells a Magic Queue: Next (moving on to the following
+ * entry) within its first 30 s is a skip, played to the end is positive;
+ * anything else (Next later, Previous, picking another Up Next entry, a
+ * replay, stopped, cut short) says nothing (null).
  */
-export const magicPlaySignal = (play: {
-  readonly endReason: PlayEndReason;
-  readonly listenedMs: number;
+export const magicPlaySignal = ({
+  play,
+  byNext,
+}: {
+  readonly play: Pick<PlayEnd["play"], "endReason" | "listenedMs">;
+  readonly byNext: PlayEnd["byNext"];
 }): "skip" | "playedThrough" | null => {
   if (play.endReason === "completed") return "playedThrough";
-  return play.endReason === "skipped" && play.listenedMs < MAGIC_SKIP_MS ? "skip" : null;
+  return play.endReason === "skipped" && byNext && play.listenedMs < MAGIC_SKIP_MS ? "skip" : null;
 };
 
 /**
@@ -377,21 +479,25 @@ export type MagicYtCandidate<S extends DiscoverRadioSong> = MagicSong & { readon
 
 /**
  * The YouTube Music candidates in a seed's [radio], in its order: songs whose
- * artist suits the seed's genres ([affinity], `mixAffinity`: "match" only,
- * so an artist with no genre known stays out). Music videos, songs the
- * Library has ([inLibrary]) and a song the radio plays again are left out.
- * Each weighs by its YouTube Music artists, with no genre tag.
+ * artist suits the seed's genres ([seedProfile], `magicSeedProfile`, by the
+ * shared `mixAffinity` check over [profileOf]: a match only, so an artist
+ * with no genre known stays out; any song for a seed with no genre). Music
+ * videos, songs the Library has ([inLibrary]) and a song the radio plays
+ * again are left out. Each weighs as `magicYtSong` has it.
  */
 export const magicYtCandidates = <S extends DiscoverRadioSong>(
   radio: readonly S[],
   {
-    affinity,
+    seedProfile,
+    profileOf,
     inLibrary,
   }: {
-    readonly affinity: (song: S) => MixAffinity;
+    readonly seedProfile: GenreProfile | null;
+    readonly profileOf: GenreProfileOf;
     readonly inLibrary: (song: S) => boolean;
   },
 ): MagicYtCandidate<S>[] => {
+  const affinity = mixAffinity(seedProfile, profileOf);
   const seen = new Set<string>();
   const candidates: MagicYtCandidate<S>[] = [];
   for (const song of radio) {
@@ -400,7 +506,11 @@ export const magicYtCandidates = <S extends DiscoverRadioSong>(
     seen.add(song.videoId);
     seen.add(recording);
     if (inLibrary(song) || affinity(song) !== "match") continue;
-    candidates.push({ trackId: ytTrackId(song.videoId), artists: song.artists, genre: null, song });
+    const weighed = magicYtSong(
+      { trackId: ytTrackId(song.videoId), artists: song.artists },
+      profileOf,
+    );
+    candidates.push({ ...weighed, song });
   }
   return candidates;
 };
@@ -408,9 +518,6 @@ export const magicYtCandidates = <S extends DiscoverRadioSong>(
 /** What Up Next says over a Magic Queue: "Magic Queue · from <seed>". */
 export const magicQueueLabel = (session: MagicSession): string =>
   `Magic Queue · from ${session.seed.title}`;
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
 
 const isStrings = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((item) => typeof item === "string");
@@ -420,11 +527,25 @@ const isWeights = (value: unknown): value is Record<string, number> =>
 
 const SEED_KINDS: ReadonlySet<unknown> = new Set(["track", "album", "artist", "playlist"]);
 
-/** Reads a saved session (`JSON.parse` of one), or null when it isn't a valid one. */
+/**
+ * Reads a saved session (`JSON.parse` of one), or null when it isn't a valid
+ * one. A session saved before it kept its radio (or with an unreadable one)
+ * reads back with none.
+ */
 export const parseMagicSession = (value: unknown): MagicSession | null => {
   if (!isRecord(value)) return null;
-  const { id, seed, used, batches, artistAffinity, genreAffinity, excludedArtists, ytShare } =
-    value;
+  const {
+    id,
+    seed,
+    used,
+    batches,
+    artistAffinity,
+    genreAffinity,
+    excludedArtists,
+    ytShare,
+    radioArtists,
+    seedProfile,
+  } = value;
   if (typeof id !== "string" || !isRecord(seed)) return null;
   if (!SEED_KINDS.has(seed["kind"])) return null;
   if (typeof seed["id"] !== "string" || typeof seed["title"] !== "string") return null;
@@ -444,5 +565,7 @@ export const parseMagicSession = (value: unknown): MagicSession | null => {
       typeof ytShare === "number" && Number.isFinite(ytShare)
         ? clampShare(ytShare)
         : YT_SHARE_START,
+    radioArtists: isStrings(radioArtists) ? radioArtists : [],
+    seedProfile: isWeights(seedProfile) ? seedProfile : null,
   };
 };

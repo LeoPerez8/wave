@@ -5,7 +5,7 @@
  * song of 15 seconds or less counts when it's played to the end.
  */
 
-import { RESTART_THRESHOLD_MS, type QueueCommand } from "./queue.ts";
+import { RESTART_THRESHOLD_MS, type QueueCommand, type QueueState } from "./queue.ts";
 import { RECAP_PLAY_CONTEXT } from "./recapMusic.ts";
 import { parseTrackId } from "./ytMusic.ts";
 
@@ -95,6 +95,8 @@ export interface PlayTrack {
  * - `transition`: the player moved to another entry, or repeated the current one.
  *   `crossfade`: the current song ended on its own and fades out under the next
  *   one (Settings › Playback › Crossfade); it goes on until `fadeEnded`.
+ *   `toFollowing`: it moved on to the entry right after the one it left
+ *   (`movedToFollowing`), as Next does.
  * - `fadeEnded`: the song fading out under the current one went silent, or
  *   was cut off.
  * - `seek`: the player jumped within entry `key`, from `fromMs` to `toMs`. Back
@@ -117,6 +119,7 @@ export type PlaybackSignal =
       readonly at: number;
       readonly key: string | null;
       readonly reason: "auto" | "repeat" | "seek" | "playlist" | "sync" | "crossfade";
+      readonly toFollowing?: boolean;
     }
   | {
       readonly type: "seek";
@@ -140,6 +143,8 @@ const isReplay = (fromMs: number, toMs: number): boolean =>
 /** The play going on now. */
 interface OpenPlay extends PlayTrack {
   readonly key: string;
+  /** Whether it goes on record: a streamed song's play is only told to listeners as it ends. */
+  readonly onRecord: boolean;
   readonly startedAt: number;
   readonly durationMs: number | null;
   /** Listened before `playingSince`. */
@@ -156,10 +161,25 @@ export interface PlayTrackerState {
 
 export const EMPTY_PLAY_TRACKER: PlayTrackerState = { play: null, fading: null };
 
-/** A play starting (to be recorded at once) or ending (to be recorded as final). */
+/**
+ * How a play ended, for whoever listens (the Magic Queue): the play, and
+ * whether the owner ended it with Next, moving on to the following entry. A
+ * skip by Previous, by picking another entry or by a replay isn't one.
+ */
+export interface PlayEnd {
+  readonly play: PlayEvent;
+  readonly byNext: boolean;
+}
+
+/**
+ * A play starting (to be recorded at once), ending (to be recorded as
+ * final), or a streamed song's play ending (`heard`: never on record, as play
+ * history and stats are about the Library, but its listeners learn from it).
+ */
 export type PlayStep =
   | { readonly type: "started"; readonly play: PlayEvent }
-  | { readonly type: "ended"; readonly play: PlayEvent };
+  | ({ readonly type: "ended" } & PlayEnd)
+  | ({ readonly type: "heard" } & PlayEnd);
 
 export interface PlayTrackerResult {
   readonly state: PlayTrackerState;
@@ -183,8 +203,22 @@ const toEvent = (play: OpenPlay, at: number, endReason: PlayEndReason): PlayEven
   };
 };
 
-const open = (key: string, track: PlayTrack, at: number, durationMs: number | null): OpenPlay => ({
+/** [play]'s end at [at]: on record, or only heard for a streamed song. */
+const endOf = (play: OpenPlay, at: number, reason: PlayEndReason, byNext: boolean): PlayStep => ({
+  type: play.onRecord ? "ended" : "heard",
+  play: toEvent(play, at, reason),
+  byNext,
+});
+
+const open = (
+  key: string,
+  track: PlayTrack,
+  at: number,
+  durationMs: number | null,
+  onRecord: boolean,
+): OpenPlay => ({
   key,
+  onRecord,
   trackId: track.trackId,
   context: track.context,
   source: track.source,
@@ -204,14 +238,37 @@ const cutShort = (play: OpenPlay): PlayEndReason =>
 /**
  * The play going on now as it should be on record at `at`, in case it never
  * gets to end (Wave's process dies): interrupted while playing, stopped while
- * paused. Null when nothing is playing.
+ * paused. Null when nothing is playing, or only a streamed song (never on record).
  */
 export const playSoFar = (state: PlayTrackerState, at: number): PlayEvent | null =>
-  state.play === null ? null : toEvent(state.play, at, cutShort(state.play));
+  state.play?.onRecord === true ? toEvent(state.play, at, cutShort(state.play)) : null;
 
 /** The play of the song fading out during a crossfade as it should be on record at `at` (see `playSoFar`). */
 export const fadingPlaySoFar = (state: PlayTrackerState, at: number): PlayEvent | null =>
-  state.fading === null ? null : toEvent(state.fading, at, cutShort(state.fading));
+  state.fading?.onRecord === true ? toEvent(state.fading, at, cutShort(state.fading)) : null;
+
+/**
+ * Whether a play's end is still to come with the queue on [currentKey]: the
+ * play open is another entry's (the player's move hasn't reached the
+ * tracker yet), or a song is fading out under the current one.
+ */
+export const playEndPending = (state: PlayTrackerState, currentKey: string | null): boolean =>
+  state.fading !== null || (state.play !== null && state.play.key !== currentKey);
+
+/**
+ * Whether going from entry [fromKey] to [toKey] of [queue] moved on to the
+ * entry right after the one left, as Next does. Moving back, jumping
+ * further on, or leaving an entry no longer queued isn't.
+ */
+export const movedToFollowing = (
+  queue: QueueState,
+  fromKey: string | null,
+  toKey: string | null,
+): boolean => {
+  if (fromKey === null || toKey === null) return false;
+  const from = queue.entries.findIndex((entry) => entry.key === fromKey);
+  return from >= 0 && queue.entries[from + 1]?.key === toKey;
+};
 
 const sameContext = (a: PlayContext | null, b: PlayContext | null): boolean =>
   a === null || b === null ? a === b : a.kind === b.kind && a.id === b.id;
@@ -237,6 +294,7 @@ export const resumePlay = (
   return {
     play: {
       key,
+      onRecord: true,
       trackId: track.trackId,
       context: track.context,
       // The play on record keeps where it was started from.
@@ -274,9 +332,9 @@ const trackCurrentPlay = (
   play: OpenPlay | null,
   signal: Exclude<PlaybackSignal, { type: "fadeEnded" }>,
 ): PlayTrackerResult => {
-  const end = (ending: OpenPlay, reason: PlayEndReason): PlayTrackerResult => ({
+  const end = (ending: OpenPlay, reason: PlayEndReason, byNext = false): PlayTrackerResult => ({
     state: EMPTY_PLAY_TRACKER,
-    steps: [{ type: "ended", play: toEvent(ending, signal.at, reason) }],
+    steps: [endOf(ending, signal.at, reason, byNext)],
   });
   const unchanged: PlayTrackerResult = { state: { play, fading: null }, steps: [] };
 
@@ -284,7 +342,9 @@ const trackCurrentPlay = (
     case "transition": {
       if (play === null) return unchanged;
       const playedThrough = signal.reason === "auto" || signal.reason === "repeat";
-      return end(play, playedThrough ? "completed" : "skipped");
+      return playedThrough
+        ? end(play, "completed")
+        : end(play, "skipped", signal.toFollowing === true);
     }
     case "seek":
       if (play === null || signal.key !== play.key) return unchanged;
@@ -307,14 +367,16 @@ const trackCurrentPlay = (
         return next === play ? unchanged : { state: { play: next, fading: null }, steps: [] };
       }
       if (!signal.playing || signal.key === null || signal.track === null) return unchanged;
-      // Play history and stats are about the Library: streamed songs are never on record.
-      if (parseTrackId(signal.track.trackId)?.kind === "yt") return unchanged;
-      // Nor is a Recap's music: watching a Recap mustn't add to what it reports.
+      // A Recap's music is never followed: watching a Recap mustn't add to what it reports.
       if (signal.track.context?.kind === RECAP_PLAY_CONTEXT.kind) return unchanged;
-      const started = open(signal.key, signal.track, signal.at, signal.durationMs);
+      // Play history and stats are about the Library: streamed songs are never on record.
+      const onRecord = parseTrackId(signal.track.trackId)?.kind !== "yt";
+      const started = open(signal.key, signal.track, signal.at, signal.durationMs, onRecord);
       return {
         state: { play: started, fading: null },
-        steps: [{ type: "started", play: toEvent(started, signal.at, cutShort(started)) }],
+        steps: onRecord
+          ? [{ type: "started", play: toEvent(started, signal.at, cutShort(started)) }]
+          : [],
       };
     }
   }
@@ -332,7 +394,7 @@ const trackCurrentPlay = (
 export const trackPlays = (state: PlayTrackerState, signal: PlaybackSignal): PlayTrackerResult => {
   const { play, fading } = state;
   const fadeOut = (reason: PlayEndReason): PlayStep[] =>
-    fading === null ? [] : [{ type: "ended", play: toEvent(fading, signal.at, reason) }];
+    fading === null ? [] : [endOf(fading, signal.at, reason, false)];
 
   if (signal.type === "fadeEnded")
     return { state: { play, fading: null }, steps: fadeOut("completed") };

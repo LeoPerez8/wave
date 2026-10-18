@@ -1,13 +1,16 @@
 import {
   EMPTY_PLAY_TRACKER,
   fadingPlaySoFar,
+  movedToFollowing,
   parseTrackId,
   playSoFar,
   resumePlay,
   trackPlays,
   type PlaybackSignal,
+  type PlayEnd,
   type PlayTrack,
   type PlayEvent,
+  type PlayTrackerState,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -41,19 +44,26 @@ export const playHistoryChanged = (trackIds?: readonly number[]): void => {
   });
 };
 
-const playEndListeners = new Set<(play: PlayEvent) => void>();
+const playEndListeners = new Set<(end: PlayEnd) => void>();
 
 /**
  * Calls [listener] with every play as it ends (how long it was listened
- * to, how it ended): the Magic Queue learns skips and songs played through
+ * to, how it ended, whether by Next), a streamed song's too though it's
+ * never on record: the Magic Queue learns skips and songs played through
  * from them. Returns how to stop.
  */
-export const onPlayEnded = (listener: (play: PlayEvent) => void): (() => void) => {
+export const onPlayEnded = (listener: (end: PlayEnd) => void): (() => void) => {
   playEndListeners.add(listener);
   return () => {
     playEndListeners.delete(listener);
   };
 };
+
+/**
+ * The plays the tracker follows now, set once the listeners heard each end
+ * so far: with Core's `playEndPending`, whether a play's end is yet to come.
+ */
+export const playTracker = makeExternalStore<PlayTrackerState>(EMPTY_PLAY_TRACKER);
 
 /** How often a play still going on is brought up to date, should Wave's process die. */
 const SAVE_INTERVAL_MS = 15_000;
@@ -137,6 +147,11 @@ export const layer = Layer.effectDiscard(
       const result = trackPlays(tracker, signal);
       tracker = result.state;
       for (const step of result.steps) {
+        if (step.type === "heard") {
+          // A streamed song's play: never on record, but its listeners learn from it.
+          for (const listener of playEndListeners) listener(step);
+          continue;
+        }
         // The play's row, if it has one: a play the store couldn't record changed no history.
         let rowId: number | null | undefined;
         if (step.type === "started") {
@@ -147,13 +162,14 @@ export const layer = Layer.effectDiscard(
           rowId = rowIds.get(identity(step.play));
           if (rowId !== undefined) write(store.endPlay(rowId, step.play));
           rowIds.delete(identity(step.play));
-          for (const listener of playEndListeners) listener(step.play);
+          for (const listener of playEndListeners) listener(step);
         }
         if (rowId === null || rowId === undefined) continue;
         // Only a Library song has an id to name; a streamed play (`yt:<videoId>`) has none.
         const played = parseTrackId(step.play.trackId);
         playHistoryChanged(played?.kind === "library" ? [played.id] : undefined);
       }
+      playTracker.set(tracker);
     };
 
     /**
@@ -196,7 +212,14 @@ export const layer = Layer.effectDiscard(
     };
 
     yield* player.onItemTransition((event) =>
-      feed({ type: "transition", at: Date.now(), key: event.itemId, reason: event.reason }),
+      feed({
+        type: "transition",
+        at: Date.now(),
+        key: event.itemId,
+        reason: event.reason,
+        // Next, from Wave, the notification or a headset: on to the entry after the one left.
+        toFollowing: movedToFollowing(queueState.get(), tracker.play?.key ?? null, event.itemId),
+      }),
     );
     yield* player.onSeek((event) =>
       feed({
