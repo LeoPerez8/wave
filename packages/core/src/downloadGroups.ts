@@ -13,13 +13,17 @@ import type { YtDownloadJournalJob } from "./ytDownloads.ts";
 
 /**
  * Where a download was asked from: the playlist, album or Discover mix whose
- * Download queued it, with the name its group shows. The journal keeps it on
+ * Download queued it, or a quality replacement run (`QUALITY_ORIGINS`), with
+ * the name its group shows. The journal keeps it on
  * the job, so it survives a restart; a song a second source asks for keeps
  * the first one's.
  */
 export interface DownloadOrigin {
-  readonly kind: "playlist" | "album" | "mix";
-  /** The source's own id: a Library playlist's or album's id, a YT Music browse id, a mix's id. */
+  readonly kind: "playlist" | "album" | "mix" | "quality";
+  /**
+   * The source's own id: a Library playlist's or album's id, a YT Music
+   * browse id, a mix's id, a replacement run's direction.
+   */
   readonly id: string;
   readonly name: string;
 }
