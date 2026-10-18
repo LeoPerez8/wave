@@ -25,7 +25,8 @@ interface DurablePublication {
  *
  * Each job has a source (Core's `downloadSource`): `soulseek` (and jobs from before there was a
  * choice) transfers original MP3 320 from up to three peers in turn; `youtube` transfers the M4A
- * YouTube Music serves, from its one stream, started again when a transfer breaks off. The
+ * YouTube Music serves, from its one stream, tried again when a transfer breaks off or goes quiet
+ * for [YOUTUBE_STALL_MS], going on from the bytes its part file already holds ([keepsPart]). The
  * transport receives the current candidate (`peer`), which says which source it's from.
  *
  * What a failure leads to (trying again, the next peer, the end of the job, YouTube Music) is
@@ -446,11 +447,13 @@ class DurableDownloads(
         if (job.number("attempts") >= MAX_ATTEMPTS || job.number("candidateIndex") >= job.maps("candidates").size) { fail(job, exhausted(job)); persist(); continue }
         if (job.number("resumeAttemptDeadline") in 1..clock() || job.number("resumeQueueDeadline") in 1..clock()) { nextCandidate(job); persist(); continue }
         job["attempts"] = job.number("attempts") + 1
-        job["sourcePath"] = DownloadFiles.partFileFor(File(job["targetPath"] as String), "${job["id"]}-${job["generation"]}-${job["attempts"]}").path
+        // YouTube goes on in the part file its last attempt left (YtAudioDownload checks it's the same stream's).
+        val kept = (job["sourcePath"] as? String)?.takeIf { job["source"] == YOUTUBE && File(it).isFile }
+        job["sourcePath"] = kept ?: DownloadFiles.partFileFor(File(job["targetPath"] as String), "${job["id"]}-${job["generation"]}-${job["attempts"]}").path
         job["peer"] = job.maps("candidates")[job.number("candidateIndex").toInt()]
         job.remove("received"); job.remove("total")
         job["queuePosition"] = null; job["queueDeadline"] = job.remove("resumeQueueDeadline") ?: minOf(clock() + QUEUE_MS, job.number("deadline"))
-        job["attemptDeadline"] = job.remove("resumeAttemptDeadline") ?: minOf(clock() + ATTEMPT_MS, job.number("deadline"))
+        job["attemptDeadline"] = job.remove("resumeAttemptDeadline") ?: minOf(clock() + if (job["source"] == YOUTUBE) YOUTUBE_STALL_MS else ATTEMPT_MS, job.number("deadline"))
         transition(job, "transferring")
         persist()
       }
@@ -476,7 +479,8 @@ class DurableDownloads(
             synchronized(this) {
               val job = held(id, generation, "transferring") ?: return@synchronized
               // Arriving bytes keep a slow peer's turn; one that goes quiet for STALL_MS is replaced.
-              if (received > job.number("received")) job["attemptDeadline"] = minOf(clock() + STALL_MS, job.number("deadline"))
+              // YouTube's range retries get YOUTUBE_STALL_MS before the journal steps in.
+              if (received > job.number("received")) job["attemptDeadline"] = minOf(clock() + if (job["source"] == YOUTUBE) YOUTUBE_STALL_MS else STALL_MS, job.number("deadline"))
               // A peer's queue place is rare news a restart keeps; bytes are progress.
               val queueMoved = queue != job["queuePosition"]
               job["received"] = received; job["total"] = total; job["queuePosition"] = queue
@@ -514,7 +518,7 @@ class DurableDownloads(
           val reason = (error as? DurableFailure)?.reason ?: "unavailable"
           // The service stopping isn't the peer's fault: the next start retries the same peer.
           if (stopped) { cleanup(job); transition(job, "prepared"); job["attempts"] = maxOf(0L, job.number("attempts") - 1) }
-          else if (reason in plan(job).strings("retry") && job.number("attempts") < MAX_ATTEMPTS) { recordCause(job, reason, cause); cleanup(job); transition(job, "prepared"); job["retryAt"] = clock() + RETRY_PAUSE_MS * job.number("attempts") }
+          else if (reason in plan(job).strings("retry") && job.number("attempts") < MAX_ATTEMPTS) { recordCause(job, reason, cause); if (!keepsPart(job)) cleanup(job); transition(job, "prepared"); job["retryAt"] = clock() + RETRY_PAUSE_MS * job.number("attempts") }
           else if (reason in plan(job).strings("retry") || reason in plan(job).strings("end")) fail(job, reason, cause)
           else { recordCause(job, reason, cause); nextCandidate(job) }
         } else {
@@ -588,14 +592,19 @@ class DurableDownloads(
 
   private fun held(id: String, generation: Long, phase: String): MutableMap<String, Any?>? = jobs[id]?.takeIf { it.number("generation") == generation && it["phase"] == phase }
   private fun transition(job: MutableMap<String, Any?>, phase: String) { job["phase"] = phase; job["phaseAt"] = clock(); job.remove("token"); job["decisionAttempts"] = 0L; job.remove("retryAt") }
+  /**
+   * A YouTube transfer that broke off or stalled leaves its part file to the next attempt, which goes
+   * on from its last byte; a peer's next transfer starts afresh. [fail] and [end] still delete it.
+   */
+  private fun keepsPart(job: Map<String, Any?>) = job["source"] == YOUTUBE && job["phase"] == "transferring"
   /** The next peer, or for YouTube its one stream again; failing once there's none left to try. */
   private fun nextCandidate(job: MutableMap<String, Any?>) {
     job.remove("resumeAttemptDeadline"); job.remove("resumeQueueDeadline")
-    cleanup(job)
+    if (!keepsPart(job)) cleanup(job)
     if (job["source"] != YOUTUBE) job["candidateIndex"] = job.number("candidateIndex") + 1
     if (job.number("candidateIndex") >= job.maps("candidates").size || job.number("attempts") >= MAX_ATTEMPTS) { fail(job, exhausted(job)); return }
     transition(job, "prepared")
-    // YouTube's stream again means the whole song again: a pause, longer each time, comes first.
+    // YouTube's stream again: a pause, longer each time, comes first.
     if (job["source"] == YOUTUBE) job["retryAt"] = clock() + RETRY_PAUSE_MS * job.number("attempts")
   }
   /** The failure plan the prepare answer brought; without one, every failure ends the job. */
@@ -778,6 +787,12 @@ class DurableDownloads(
     const val ATTEMPT_MS = 180_000L
     /** How long a sending peer may go quiet. */
     const val STALL_MS = 60_000L
+    /**
+     * How long a YouTube transfer may go quiet, from its start or its last byte, before it's
+     * cancelled and tried again (in the same part file). Longer than the range downloader's own
+     * retries ([RangeDownload.RETRY_CYCLE_MS]): it retries ranges, the journal gives up on a dead transfer.
+     */
+    const val YOUTUBE_STALL_MS = 4 * 60_000L
     /** How long transfer progress may go unwritten: what a crash can lose of it. */
     const val PROGRESS_WRITE_MS = 5_000L
     /** How often readers (JS's rows, the notification) are shown a transfer's progress. */

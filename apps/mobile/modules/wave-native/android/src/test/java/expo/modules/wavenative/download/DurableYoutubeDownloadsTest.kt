@@ -127,7 +127,8 @@ class DurableYoutubeDownloadsTest {
       prepareYoutube(owner, File(folder, "Recording.m4a"))
       owner.advance(broken, Untouched)
       assertEquals("prepared", owner.snapshot().single()["phase"])
-      assertFalse(File(owner.snapshot().single()["sourcePath"] as String).exists())
+      // What arrived stays for the next attempt to go on from.
+      assertEquals("partial", File(owner.snapshot().single()["sourcePath"] as String).readText())
       now += DurableDownloads.RETRY_PAUSE_MS
       owner.advance(Served, Untouched)
       assertEquals("sourceReady", owner.snapshot().single()["phase"])
@@ -142,6 +143,69 @@ class DurableYoutubeDownloadsTest {
       assertEquals("failed", job["phase"])
       assertEquals("failed", job["reason"])
       assertEquals(1 + DurableDownloads.MAX_ATTEMPTS.toInt(), attempts)
+      // Out of attempts, nothing will go on from the part file.
+      assertEquals(emptyList<String>(), folder.walk().filter { it.isFile && it.name.contains(".part.") }.map { it.name }.toList())
+    }
+  }
+
+  @Test fun eachAttemptAtAYoutubeTransferGoesOnInThePartFileTheOneBeforeLeft() {
+    withFolder { folder ->
+      var now = 1_000L
+      val owner = DurableDownloads(File(folder, "jobs"), clock = { now })
+      val parts = mutableListOf<Pair<String, String>>()
+      val broken = transfer { _, _, source ->
+        parts += source.path to (if (source.isFile) source.readText() else "")
+        source.parentFile.mkdirs(); source.appendText("more ")
+        throw DurableFailure("offline")
+      }
+      owner.enqueue(song, null, emptyMap(), "youtube")
+      prepareYoutube(owner, File(folder, "Recording.m4a"))
+      repeat(3) { owner.advance(broken, Untouched); now += 15_000 }
+      assertEquals(3, parts.size)
+      assertEquals(1, parts.map { it.first }.distinct().size)
+      assertEquals(listOf("", "more ", "more more "), parts.map { it.second })
+    }
+  }
+
+  @Test fun aYoutubeTransferStillReceivingIsLeftToTheRangeRetriesItsSilenceLimitOutlasts() {
+    assertTrue(DurableDownloads.YOUTUBE_STALL_MS > RangeDownload.RETRY_CYCLE_MS)
+    withFolder { folder ->
+      var now = 1_000L
+      val owner = DurableDownloads(File(folder, "jobs"), clock = { now })
+      val wanted = mutableListOf<Boolean>()
+      var part: File? = null
+      val slow = object : DurableTransfer {
+        var cancels = 0
+        override fun cancel(id: String) { cancels++ }
+        override fun receive(id: String, candidate: Map<String, Any?>, source: File, durationMs: Long, progress: (Long, Long, Long?) -> Unit): Map<String, Any?> {
+          part = source; source.parentFile.mkdirs()
+          // Slow to start and then slow to go on, as while ranges are being retried: never quiet for the whole limit.
+          now += RangeDownload.RETRY_CYCLE_MS
+          owner.expire(this); wanted += owner.transferWanted(id)
+          source.writeText("first bytes"); progress(11, SERVED.size.toLong(), null)
+          now += RangeDownload.RETRY_CYCLE_MS
+          owner.expire(this); wanted += owner.transferWanted(id)
+          // Then truly dead: the journal steps in.
+          now += DurableDownloads.YOUTUBE_STALL_MS - RangeDownload.RETRY_CYCLE_MS
+          owner.expire(this); wanted += owner.transferWanted(id)
+          throw DurableFailure("cancelled")
+        }
+      }
+      owner.enqueue(song, null, emptyMap(), "youtube")
+      prepareYoutube(owner, File(folder, "Recording.m4a"))
+      owner.advance(slow, Untouched)
+      assertEquals(listOf(true, true, false), wanted)
+      assertEquals(1, slow.cancels)
+      val job = owner.snapshot().single()
+      assertEquals("prepared", job["phase"])
+      // The next attempt goes on from what the stalled one saved.
+      assertEquals(part!!.path, job["sourcePath"])
+      assertEquals("first bytes", part!!.readText())
+      now += DurableDownloads.RETRY_PAUSE_MS
+      var resumedFrom: String? = null
+      owner.advance(transfer { _, _, source -> resumedFrom = source.readText(); source.writeBytes(SERVED); audio(source) }, Untouched)
+      assertEquals("first bytes", resumedFrom)
+      assertEquals("sourceReady", owner.snapshot().single()["phase"])
     }
   }
 
