@@ -14,6 +14,11 @@ import {
   recapForward,
   recapId,
   recapSlides,
+  parseOpenedRecaps,
+  storedOpenedRecaps,
+  withRecapOpened,
+  recapTitle,
+  recapToAnnounce,
   recapWindow,
   type CountedListening,
   type PlayTotals,
@@ -90,6 +95,120 @@ const song = (
   countedPlays,
   listenedMs,
   latestPlayAt: at(2026, 9, 20),
+});
+
+const years = (periods: readonly RecapPeriod[]) =>
+  periods.filter((period) => period.kind === "year");
+const available = (now: number, ...plays: CountedListening[]) => availableRecaps(plays, now);
+
+describe("yearly Recaps", () => {
+  const year2026 = { kind: "year", year: 2026 } as const;
+
+  test("a year with 20 hours of counted plays is out on 1 December", () => {
+    const plays = [listened(at(2026, 3, 10), 10 * HOUR), listened(at(2026, 11, 2), 10 * HOUR)];
+    assert.deepEqual(years(availableRecaps(plays, at(2026, 11, 30, 23, 59))), []);
+    assert.deepEqual(years(availableRecaps(plays, at(2026, 12, 1, 0, 0))), [year2026]);
+  });
+
+  test("a year under 20 hours of counted plays has no Recap, even once it's over", () => {
+    const plays = [listened(at(2026, 3, 10), 20 * HOUR - 1)];
+    assert.deepEqual(years(availableRecaps(plays, at(2027, 6, 1))), []);
+  });
+
+  test("December's plays reach the year's minimum while it's out", () => {
+    const plays = [listened(at(2026, 6, 1), 19 * HOUR)];
+    assert.deepEqual(years(availableRecaps(plays, at(2026, 12, 20))), []);
+    plays.push(listened(at(2026, 12, 21), HOUR));
+    assert.deepEqual(years(availableRecaps(plays, at(2026, 12, 22))), [year2026]);
+  });
+
+  test("lists each year above the months of that year, newest first", () => {
+    const plays = [
+      listened(at(2025, 12, 5), 20 * HOUR),
+      listened(at(2026, 8, 5), 18 * HOUR),
+      listened(at(2026, 11, 5), 3 * HOUR),
+    ];
+    assert.deepEqual(availableRecaps(plays, at(2026, 12, 1)), [
+      year2026,
+      { kind: "month", year: 2026, month: 11 },
+      { kind: "month", year: 2026, month: 8 },
+      { kind: "year", year: 2025 },
+      { kind: "month", year: 2025, month: 12 },
+    ]);
+  });
+
+  test("covers the local year, and keeps covering it through December", () => {
+    assert.deepEqual(recapWindow(year2026), {
+      from: at(2026, 1, 1, 0, 0),
+      to: at(2027, 1, 1, 0, 0) - 1,
+    });
+  });
+
+  test("its minutes count the whole year's listening", () => {
+    const listening = [
+      listened(at(2025, 12, 31, 23, 59), HOUR),
+      listened(at(2026, 1, 1, 0, 0), HOUR),
+      listened(at(2026, 12, 31, 23, 30), HOUR),
+      listened(at(2027, 1, 1, 0, 0), HOUR),
+    ];
+    assert.equal(recap({ period: year2026, listening, songs: [] }).minutesListened, 120);
+  });
+
+  test("is titled and named by its year", () => {
+    assert.equal(recapTitle(year2026), "2026");
+    assert.equal(recapId(year2026), "2026");
+    assert.deepEqual(parseRecapId("2026"), year2026);
+  });
+});
+
+describe("recapToAnnounce", () => {
+  const october2026 = at(2026, 10, 18);
+
+  test("Home announces the newest Recap until it's opened", () => {
+    const recaps = available(october2026, listened(at(2026, 9, 5), 3 * HOUR));
+    assert.deepEqual(recapToAnnounce(recaps, []), { kind: "month", year: 2026, month: 9 });
+    assert.equal(recapToAnnounce(recaps, ["2026-09"]), null);
+  });
+
+  test("an older Recap left unopened isn't announced once a newer one is out", () => {
+    const recaps = available(
+      october2026,
+      listened(at(2026, 8, 5), 3 * HOUR),
+      listened(at(2026, 9, 5), 3 * HOUR),
+    );
+    assert.equal(recapToAnnounce(recaps, ["2026-09"]), null);
+  });
+
+  test("on 1 December the year and November are both new: the year first, then November", () => {
+    const recaps = available(
+      at(2026, 12, 1),
+      listened(at(2026, 6, 5), 17 * HOUR),
+      listened(at(2026, 11, 5), 3 * HOUR),
+    );
+    assert.deepEqual(recapToAnnounce(recaps, []), { kind: "year", year: 2026 });
+    assert.deepEqual(recapToAnnounce(recaps, ["2026"]), {
+      kind: "month",
+      year: 2026,
+      month: 11,
+    });
+    assert.equal(recapToAnnounce(recaps, ["2026", "2026-11"]), null);
+  });
+
+  test("nothing to announce without a Recap", () => {
+    assert.equal(recapToAnnounce([], []), null);
+  });
+});
+
+describe("opened Recaps", () => {
+  test("opening a Recap is kept, once, and read back", () => {
+    const opened = withRecapOpened(withRecapOpened([], "2026-09"), "2026-09");
+    assert.deepEqual(parseOpenedRecaps(storedOpenedRecaps(opened)), ["2026-09"]);
+  });
+
+  test("nothing stored, or anything unreadable, is no Recap opened", () => {
+    for (const stored of [null, "", "{", "{}"]) assert.deepEqual(parseOpenedRecaps(stored), []);
+    assert.deepEqual(parseOpenedRecaps('[1, "2026-09"]'), ["2026-09"]);
+  });
 });
 
 describe("recap", () => {

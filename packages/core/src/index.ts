@@ -206,7 +206,9 @@ export {
   RECAP_MONTH_MINIMUM_MS,
   RECAP_SLIDE_MS,
   RECAP_TOP_SONGS,
+  RECAP_YEAR_MINIMUM_MS,
   availableRecaps,
+  parseOpenedRecaps,
   parseRecapId,
   recap,
   recapBack,
@@ -215,7 +217,10 @@ export {
   recapId,
   recapSlides,
   recapTitle,
+  recapToAnnounce,
   recapWindow,
+  storedOpenedRecaps,
+  withRecapOpened,
 } from "./recap.ts";
 export type {
   CountedListening,
@@ -224,6 +229,7 @@ export type {
   RecapMonth,
   RecapPeriod,
   RecapSlide,
+  RecapYear,
 } from "./recap.ts";
 export { RECAP_PLAY_CONTEXT, recapSong } from "./recapMusic.ts";
 export type { RecapMusicSlide } from "./recapMusic.ts";

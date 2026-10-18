@@ -1,4 +1,10 @@
-import { STATS_TOP, parseRecapId, type RecapPeriod, type StatsPeriod } from "@wave/core";
+import {
+  STATS_TOP,
+  parseRecapId,
+  recapToAnnounce,
+  type RecapPeriod,
+  type StatsPeriod,
+} from "@wave/core";
 import * as Effect from "effect/Effect";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
@@ -8,6 +14,7 @@ import { useFocusedVersion } from "@/lib/useFocusedVersion";
 import { appRuntime } from "@/library/runtime";
 import { playHistoryVersion } from "@/playback/PlayHistory";
 
+import { useOpenedRecaps } from "./openedRecaps";
 import { Stats, type ArtistStats, type LoadedRecap, type Ranked } from "./Stats";
 
 /**
@@ -102,6 +109,13 @@ const readRecaps = (stats: Stats["Service"]) => stats.recaps;
 
 /** Every period with a Recap, newest first, or undefined while it first loads. */
 export const useRecaps = (): readonly RecapPeriod[] | undefined => useStatsRead(readRecaps);
+
+/** The new Recap Home's card announces until it's opened (Core's `recapToAnnounce`), or null. */
+export const useRecapToAnnounce = (): RecapPeriod | null => {
+  const recaps = useRecaps();
+  const opened = useOpenedRecaps();
+  return recaps === undefined ? null : recapToAnnounce(recaps, opened);
+};
 
 /**
  * The Recap a route's `id` names (Core's `recapId`), or undefined while it
