@@ -16,7 +16,7 @@ import { useScanRoots, useScanState } from "@/library/hooks";
 import { WaveAccount } from "@/native/waveAccount";
 import { WaveYtMusic } from "@/native/waveYtMusic";
 import { askYtMusic } from "@/ytmusic/askYtMusic";
-import { useFailedDownloads, useQueuedDownloads } from "@/ytmusic/YtDownloads";
+import { useDownloadCounts } from "@/ytmusic/YtDownloads";
 
 /**
  * The accounts this phone is signed into (Core's `accountsSummary`), from the
@@ -69,8 +69,8 @@ export const useSettingsSummaries = (): Record<SettingsPage, string | null> => {
   const scanning = useScanState().status === "scanning";
   const lookup = useLibraryLookup();
   const accounts = useAccountsSummary();
-  const failedDownloads = useFailedDownloads().length;
-  const queuedDownloads = useQueuedDownloads();
+  // Counts only: building the failed or queued lists here froze Settings with hundreds of songs.
+  const downloads = useDownloadCounts();
   return {
     library: scanning
       ? "Scanning…"
@@ -82,7 +82,7 @@ export const useSettingsSummaries = (): Record<SettingsPage, string | null> => {
     playback: null,
     lyricsAndTags:
       lookup.status === "running" ? libraryLookupProgress(lookup.done, lookup.total).line : null,
-    downloads: downloadsSummary(failedDownloads, queuedDownloads),
+    downloads: downloadsSummary(downloads.failed, downloads.queued),
     accounts,
     developer: null,
   };

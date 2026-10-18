@@ -738,10 +738,21 @@ export type {
   YtSongsDownloadAction,
   YtSongsDownloadRequest,
 } from "./ytSongsDownload.ts";
-export { failedDownloads, settledDownloadFailures } from "./failedDownloads.ts";
+export {
+  failedDownloadCount,
+  failedDownloadRows,
+  failedDownloads,
+  failedJobs,
+  sameFailedDownload,
+  settledDownloadFailures,
+} from "./failedDownloads.ts";
 export { ytDownloadsToForget } from "./forgottenDownloads.ts";
-export { queuedDownloads, queuedDownloadsSummary } from "./queuedDownloads.ts";
-export type { QueuedDownload } from "./queuedDownloads.ts";
+export {
+  queuedDownloadCounts,
+  queuedDownloads,
+  queuedDownloadsSummary,
+} from "./queuedDownloads.ts";
+export type { QueuedDownload, QueuedDownloadCounts } from "./queuedDownloads.ts";
 export {
   SONGS_GROUP_NAME,
   downloadingList,
@@ -756,6 +767,10 @@ export type {
   FailedDownload,
   FailedDownloadRetry,
   FailedDownloadsInput,
+  FailedGroupRow,
+  FailedHeaderRow,
+  FailedListRow,
+  FailedSongRow,
 } from "./failedDownloads.ts";
 export {
   YT_DOWNLOADS_NONE,
