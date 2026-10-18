@@ -622,6 +622,12 @@ export interface DiscoverMix {
     /** The Library genre the mix stands for (`DiscoverMixSeed.genre`); absent for the others. */
     readonly genre?: string;
     /**
+     * Which of its genre's mixes it is, from 2 ("Rock mix 2"), when an
+     * earlier mix of the build took the genre first; absent for the first.
+     * Worked out from the mixes' order whenever they're saved or read.
+     */
+    readonly part?: number;
+    /**
      * The seed's artists: the artist, or the artists a song seed credits.
      * Absent on mixes saved before they were kept.
      */
@@ -712,8 +718,10 @@ export const discoverMixCaption = (
     if (!artists.has(key)) artists.set(key, lead);
   }
   const cover = mix.songs.find((song) => song.source === "stream");
+  const { part } = mix.seed;
+  const name = genre === undefined ? mix.seed.name : genreTitle(genre);
   return {
-    title: `${genre ?? mix.seed.name} mix`,
+    title: `${name} mix${part === undefined ? "" : ` ${part}`}`,
     artists: [...artists.values()].join(", "),
     line: `${mix.songs.length} songs`,
     artworkUrl: cover?.source === "stream" ? cover.song.artworkUrl : null,
@@ -729,11 +737,37 @@ export interface DiscoverMixes {
   readonly mixes: readonly DiscoverMix[];
 }
 
+/** A genre as a mix's title names it: one typed all in lowercase gets capital initials. */
+const genreTitle = (genre: string): string =>
+  genre === genre.toLowerCase()
+    ? genre.replace(
+        /(^|[\s-])(\p{L})/gu,
+        (_, before: string, letter: string) => before + letter.toUpperCase(),
+      )
+    : genre;
+
+/**
+ * [mixes] with each mix of a genre an earlier one took numbered (`part`), so
+ * a reused genre's tiles and playlists don't share a name.
+ */
+const numberGenreMixes = (mixes: readonly DiscoverMix[]): DiscoverMix[] => {
+  const taken = new Map<string, number>();
+  return mixes.map((mix) => {
+    const { part, ...seed } = mix.seed;
+    const key = seed.genre === undefined ? null : identityKey(seed.genre.trim());
+    const count = key === null ? 1 : (taken.get(key) ?? 0) + 1;
+    if (key !== null) taken.set(key, count);
+    if (count > 1) return { ...mix, seed: { ...seed, part: count } };
+    return part === undefined ? mix : { ...mix, seed };
+  });
+};
+
 const built = (
   mixes: readonly DiscoverMix[],
   builtAt: number,
   playSeeds: boolean,
-): DiscoverMixes | null => (mixes.length === 0 ? null : { builtAt, playSeeds, mixes });
+): DiscoverMixes | null =>
+  mixes.length === 0 ? null : { builtAt, playSeeds, mixes: numberGenreMixes(mixes) };
 
 /**
  * What a build from [seeds] that made [mixes] saves. Only a build with usable
