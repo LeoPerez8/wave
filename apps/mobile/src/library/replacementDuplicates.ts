@@ -30,6 +30,9 @@ import { appRuntime } from "./runtime";
  */
 const KEY = "downloads.replacementDuplicatesCheck";
 
+/** The check's log lines go with the download service's own. */
+const TAG = "WaveDownloads";
+
 let due: DuplicateCheckWhen | null | undefined;
 const dueNow = (): DuplicateCheckWhen | null =>
   (due ??= duplicateCheckDue(Storage.getItemSync(KEY)));
@@ -43,13 +46,15 @@ let scanned = false;
 /** Whether the journal was read since launch: its first read tells an interrupted run. */
 let journalRead = false;
 let running = false;
+/** At most once a launch: one that failed stays due for the next. */
+let checked = false;
 
 /**
  * Finds the pairs a replacement left (Core's `replacementDuplicates`, in the direction Download
  * in best quality's switch calls for), reads how long both files play, and puts each pair back
  * to one song as Core decides (`replacementDuplicateFix`): the bare Track goes and the other
  * file is deleted through the recorded deletion (`finishFileDeletions`). Writes what it did
- * (tag `downloads`).
+ * (tag `WaveDownloads`, as the download service's own lines).
  */
 const checkReplacementDuplicates = (when: DuplicateCheckWhen) =>
   Effect.gen(function* () {
@@ -83,29 +88,26 @@ const checkReplacementDuplicates = (when: DuplicateCheckWhen) =>
       libraryEdited(changed);
     }
     const [summary, ...songs] = replacementDuplicateLines(when, outcomes);
-    if (summary !== undefined) appLog("info", "downloads", summary);
+    if (summary !== undefined) appLog("info", TAG, summary);
     for (const [i, line] of songs.entries())
-      appLog(outcomes[i]?.outcome.kind === "fix" ? "info" : "warn", "downloads", line);
+      appLog(outcomes[i]?.outcome.kind === "fix" ? "info" : "warn", TAG, line);
   });
 
 /** Runs the check when it's due, the launch scan is through and no replacement is on its way. */
 const checkWhenDue = (jobs: readonly YtDownloadJournalJob[] | null): void => {
   const when = dueNow();
-  if (when === null || !scanned || running) return;
+  if (when === null || !scanned || running || checked) return;
   running = true;
   void (async () => {
     try {
       if (replacementsUnderway(jobs ?? (await WaveSoulseek.jobsSnapshot()))) return;
+      checked = true;
       await appRuntime.runPromise(checkReplacementDuplicates(when));
       // Not again until another run is interrupted, however many pairs it left alone.
       if (dueNow() === when) setDue(null);
     } catch (error: unknown) {
       // Due still: the next launch tries again.
-      appLog(
-        "warn",
-        "downloads",
-        `Couldn't check for songs a replacement left twice: ${String(error)}`,
-      );
+      appLog("warn", TAG, `Couldn't check for songs a replacement left twice: ${String(error)}`);
     } finally {
       running = false;
     }
