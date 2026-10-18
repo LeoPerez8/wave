@@ -183,5 +183,6 @@ const details = (track: QueueTrack): NonDSongDetails => ({
   title: track.title,
   artists: track.artists ?? [track.artist],
   album: track.album,
-  durationMs: track.durationMs ?? null,
+  // The length YouTube Music listed, kept with the song it was queued from.
+  durationMs: track.ytSong?.durationMs ?? null,
 });

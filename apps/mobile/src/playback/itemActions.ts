@@ -18,10 +18,15 @@ import { useMemo } from "react";
 
 import { followArtistLink, followStreamedArtistLink } from "@/library/ArtistChoice";
 import { confirmDeleteSongs, confirmRemoveSongs } from "@/library/deleteSongs";
-import { songHasFile, type ArtistRow } from "@/library/LibraryStore";
+import { songHasFile, type ArtistRow, type SongRow } from "@/library/LibraryStore";
 import { setFavorites, useFavoriteIds } from "@/library/favorites";
 import { fixSongs } from "@/library/findLyricsAndGenre";
-import { useAlbumsMissingSongs, useLinkRows } from "@/library/hooks";
+import {
+  useAlbumsMissingSongs,
+  useCollectionSongs,
+  useLinkRows,
+  type SongsCollection,
+} from "@/library/hooks";
 import {
   changePlaylistImageFlow,
   confirmDeletePlaylists,
@@ -46,6 +51,7 @@ import { useLoadedLibraryFinder, type FindInLibrary } from "@/ytmusic/libraryFin
 import { useStreamedArtistContext } from "@/ytmusic/streamedArtist";
 
 import {
+  collectionSongFacts,
   targetCount,
   targetEntries,
   targetFacts,
@@ -100,6 +106,31 @@ const findsNothing: FindInLibrary = () => null;
 const useStreamedSongFinder = (streams: boolean): FindInLibrary =>
   useLoadedLibraryFinder(streams) ?? findsNothing;
 
+/**
+ * The one album, artist, playlist or genre [target]'s menu is about, while
+ * online lookups are on: its songs tell whether it offers Fix Songs.
+ */
+const menuCollection = (
+  target: ActionItems,
+  surface: ActionSurface,
+  onlineLookups: boolean,
+): { readonly kind: SongsCollection; readonly id: number } | null => {
+  if (surface !== "menu" || !onlineLookups || target.items.length !== 1) return null;
+  switch (target.kind) {
+    case "album":
+    case "artist":
+    case "playlist":
+    case "genre": {
+      const [only] = target.items;
+      return only === undefined ? null : { kind: target.kind, id: only.id };
+    }
+    default:
+      return null;
+  }
+};
+
+const NO_SONGS: readonly SongRow[] = [];
+
 interface PlanOptions {
   readonly surface: ActionSurface;
   readonly selectable: boolean;
@@ -119,6 +150,8 @@ function usePlan(
   readonly missingSongs: readonly number[];
   /** Each album's missing songs, in the albums' order. */
   readonly perAlbum: readonly (readonly number[])[];
+  /** The Library songs of the collection the menu is about (none otherwise): what Fix Songs runs on. */
+  readonly collectionSongs: readonly SongRow[];
 } {
   const here = usePathname();
   const onlineLookups = useLyricsAndGenreLookupsEnabled();
@@ -132,6 +165,9 @@ function usePlan(
   );
   const missingSongs = useMemo(() => perAlbum.flat(), [perAlbum]);
   const statuses = useMissingSongDownloadStatuses(missingSongs);
+  const collectionSongs =
+    useCollectionSongs(menuCollection(target, surface, onlineLookups)) ?? NO_SONGS;
+  const songFacts = useMemo(() => collectionSongFacts(collectionSongs), [collectionSongs]);
   // Each album's share of [statuses], in the albums' order.
   const albumStatuses = (index: number) => {
     const start = perAlbum.slice(0, index).reduce((sum, ids) => sum + ids.length, 0);
@@ -144,8 +180,10 @@ function usePlan(
       item.missing === true
         ? { ...item, download }
         : target.kind === "album"
-          ? { ...item, missingSongs: albumStatuses(index) }
-          : item,
+          ? { ...item, missingSongs: albumStatuses(index), songs: songFacts }
+          : songFacts.length > 0
+            ? { ...item, songs: songFacts }
+            : item,
     ),
     surface,
     selectable,
@@ -153,7 +191,7 @@ function usePlan(
     here,
     streamedArtists,
   });
-  return { planned, missingSongs, perAlbum };
+  return { planned, missingSongs, perAlbum, collectionSongs };
 }
 
 /**
@@ -257,7 +295,7 @@ export function useItemActions(
       : targetCount(target);
 
   // [missingSongs]: the albums' missing songs, which their download entries act on.
-  const { planned, missingSongs, perAlbum } = usePlan(target, favorites, {
+  const { planned, missingSongs, perAlbum, collectionSongs } = usePlan(target, favorites, {
     surface,
     selectable: onSelect !== undefined,
   });
@@ -328,8 +366,14 @@ export function useItemActions(
       }
       case "fixSong":
       case "fixSongs":
-        // Only the songs missing something are fixed (Core's `songsToFix`).
-        return run(() => void fixSongs(withFiles));
+        // Only the songs missing something are fixed (Core's `songsToFix`); a
+        // collection's are its Library files, the others counted as skipped.
+        return run(
+          () =>
+            void fixSongs(
+              target.kind === "track" ? withFiles : collectionSongs.filter(songHasFile),
+            ),
+        );
       case "select":
         return run(() => onSelect?.());
       case "delete":

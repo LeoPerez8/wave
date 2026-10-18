@@ -89,6 +89,12 @@ export interface ActionItem {
    * asked for): the album offers to download them.
    */
   readonly missingSongs?: readonly (YtDownloadStatus | null)[] | undefined;
+  /**
+   * A collection's songs (an album's, artist's, playlist's or genre's), each
+   * as a song's facts: Fix Songs runs on those that are files missing
+   * something, so one of them is enough to offer it.
+   */
+  readonly songs?: readonly ActionItem[] | undefined;
 }
 
 /** A Library artist, as streamed songs' artists resolve to them. */
@@ -294,6 +300,18 @@ const ALBUM_DOWNLOAD_ACTIONS: {
   cancel: "cancelDownload",
 };
 
+/** The kinds whose items hold songs Fix Songs can run on. */
+const COLLECTIONS: ReadonlySet<ItemKind> = new Set<ItemKind>([
+  "album",
+  "artist",
+  "playlist",
+  "genre",
+]);
+
+/** A song that's a Library file Fix Song can do something for. */
+const fixableFile = (song: ActionItem): boolean =>
+  song.fixable === true && song.missing !== true && song.streamed !== true;
+
 /** The entries to offer on [subject]'s items, in order. */
 export const itemActions = <A extends LibraryArtistRef = LibraryArtistRef>(
   subject: ActionSubject<A>,
@@ -351,9 +369,7 @@ export const itemActions = <A extends LibraryArtistRef = LibraryArtistRef>(
       entries.push({ action: "changeImage" });
       if (only?.hasImage === true) entries.push({ action: "removeImage" });
     }
-    entries.push({ action: "deletePlaylist" });
   }
-  if (kind === "playlist" && items.length > 1) entries.push({ action: "deletePlaylists" });
   // Looks up online what the songs lack and writes it into their files; it
   // works on the checked songs missing something, so one of them is enough.
   if (
@@ -363,6 +379,16 @@ export const itemActions = <A extends LibraryArtistRef = LibraryArtistRef>(
     items.some((item) => item.fixable === true)
   )
     entries.push({ action: items.length === 1 ? "fixSong" : "fixSongs" });
+  // A collection's songs the same way: only its Library files count (not its
+  // missing songs, nor a playlist's streamed entries), so it runs on those.
+  if (
+    COLLECTIONS.has(kind) &&
+    subject.onlineLookups === true &&
+    items.some((item) => (item.songs ?? []).some(fixableFile))
+  )
+    entries.push({ action: "fixSongs" });
+  if (kind === "playlist")
+    entries.push({ action: items.length === 1 ? "deletePlaylist" : "deletePlaylists" });
   if (surface === "menu" && subject.selectable === true) entries.push({ action: "select" });
   // Last, and destructive (after asking): deletes the songs' files from the
   // phone, or takes missing songs out of the Library.
