@@ -48,7 +48,7 @@ class AndroidDownloads private constructor(private val context: Context) {
   // and each transfer's speed, so it shows where a download's time went. Its budgets wait for the
   // download service (startWork): Wave opening before the service starts isn't charged.
   val jobs = DurableDownloads(
-    File(context.noBackupFilesDir, "soulseek-download-jobs-v1"),
+    journal(context),
     log = { WaveLog.w(TAG, it) },
     note = { WaveLog.i(TAG, it) },
     budgetRunning = false,
@@ -300,6 +300,8 @@ class AndroidDownloads private constructor(private val context: Context) {
     private const val NOTIFY_MS = 500L
     /** Less free space than this beside the part file means the write failed for want of room. */
     private const val MIN_FREE_BYTES = 8L shl 20
+    /** The journal's file, which the app log also reads at launch ([savedDownloadCounts]). */
+    fun journal(context: Context): File = File(context.noBackupFilesDir, "soulseek-download-jobs-v1")
     @Volatile private var instance: AndroidDownloads? = null
     fun get(context: Context): AndroidDownloads = instance ?: synchronized(this) { instance ?: AndroidDownloads(context.applicationContext).also { instance = it } }
   }
