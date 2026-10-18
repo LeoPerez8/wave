@@ -142,7 +142,19 @@ const FAMILIES: readonly (readonly [name: string, tags: readonly string[]])[] = 
       "Hardstyle",
     ],
   ],
-  ["R&B", ["RnB", "Rhythm and Blues", "Contemporary R&B", "Soul", "Neo Soul", "Funk", "Motown"]],
+  [
+    "R&B",
+    [
+      "RnB",
+      "Rhythm and Blues",
+      "Contemporary R&B",
+      "Soul",
+      "Neo Soul",
+      "Funk",
+      "Motown",
+      "Soul & Funk",
+    ],
+  ],
   ["Jazz", ["Smooth Jazz", "Bebop", "Swing", "Jazz Fusion", "Acid Jazz", "Big Band", "Bossa Nova"]],
   [
     "Classical",
@@ -151,9 +163,12 @@ const FAMILIES: readonly (readonly [name: string, tags: readonly string[]])[] = 
   ["Country", ["Alt-Country", "Americana", "Bluegrass", "Country Pop"]],
   ["Folk", ["Indie Folk", "Folk Rock", "Singer-Songwriter", "Acoustic"]],
   ["Reggae", ["Dancehall", "Dub", "Ska", "Roots Reggae"]],
-  ["Latin", ["Reggaeton", "Latin Pop", "Salsa", "Bachata", "Cumbia"]],
+  ["Latin", ["Reggaeton", "Latin Pop", "Salsa", "Bachata", "Cumbia", "Latin Music"]],
   ["Blues", ["Blues Rock", "Delta Blues", "Electric Blues"]],
-  ["Soundtrack", ["Score", "Film Score", "Original Soundtrack", "OST", "Video Game Music"]],
+  [
+    "Soundtrack",
+    ["Score", "Film Score", "Original Soundtrack", "OST", "Video Game Music", "Films/Games"],
+  ],
 ];
 
 /** A tag as the table compares it: lowercase letters and digits alone. */
@@ -223,7 +238,9 @@ export interface GenreMixLibrary {
  * its genre tag, a value joined with ";" or "/" ("Metalcore; Rock") counting
  * as each of its parts unless the table knows it whole ("Rap/Hip Hop").
  */
-const songFamilies = (song: DiscoverLibrarySong): GenreFamily[] => {
+export const songFamilies = (
+  song: Pick<DiscoverLibrarySong, "genre" | "genres">,
+): GenreFamily[] => {
   const families = new Map<string, GenreFamily>();
   const values = song.genres?.length ? song.genres : [song.genre ?? ""];
   for (const value of values) {

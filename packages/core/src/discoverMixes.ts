@@ -10,6 +10,7 @@
 import { splitCredit } from "./credits.ts";
 import type { BlendedDiscoverMix, DiscoverMixSong } from "./discoverMixLevels.ts";
 import type { ExplicitFlag } from "./explicit.ts";
+import type { MixAffinity } from "./genreAffinity.ts";
 import type { HomeSectionId } from "./homeSections.ts";
 import { identityKey } from "./library.ts";
 import { normalizeSearchText } from "./search.ts";
@@ -203,6 +204,13 @@ export interface DiscoverMixFilter<S extends DiscoverRadioSong> {
    * fewest songs, in the radio's order.
    */
   readonly avoid?: ReadonlySet<string>;
+  /**
+   * Whether the song's artist suits the seed's genres (Core's
+   * `mixAffinity`): a miss is left out, and a song whose artists have no
+   * genre known only makes up the mix's fewest songs, after every matching
+   * one. Absent: every song suits.
+   */
+  readonly affinity?: (song: S) => MixAffinity;
 }
 
 /** The most songs a mix has. */
@@ -216,8 +224,10 @@ const RADIO_PAGES = 3;
  * A mix's songs from its seed's radio, as read so far ([pages], in order):
  * the songs, in the radio's order, the owner doesn't know yet. Music videos,
  * songs the owner knows (the Library's, played, streamed or in a playlist),
- * songs an earlier mix has and a song the radio plays again are left out;
- * 50 at most. Reading a page at a time, pass the songs kept from the pages before as [before]:
+ * songs an earlier mix has, a song the radio plays again and songs whose
+ * artist misses the seed's genres (`DiscoverMixFilter.affinity`) are left
+ * out; 50 at most. Songs by artists with no genre known only make up the
+ * mix's ten songs, after every matching one (and the avoided ones). Reading a page at a time, pass the songs kept from the pages before as [before]:
  * they come first, and only the new pages' songs are looked at.
  */
 export const discoverMixSongs = <S extends DiscoverRadioSong>(
@@ -229,21 +239,30 @@ export const discoverMixSongs = <S extends DiscoverRadioSong>(
   for (const song of before) videos.add(song.videoId);
   const recordings = new Set(before.map(mixRecordingOf));
   const kept: S[] = [...before];
-  // Songs a refresh avoids, kept back in case the mix is short without them.
+  // Songs kept back in case the mix is short without them, in the order
+  // they come back: those a refresh avoids, then those by artists with no
+  // genre known (the avoided ones last).
   const held: S[] = [];
+  const unsure: S[] = [];
+  const unsureHeld: S[] = [];
   const radio = pages.flat();
   for (const song of radio) {
     if (kept.length >= MIX_MOST) break;
     const recording = mixRecordingOf(song);
     if (song.video || videos.has(song.videoId) || recordings.has(recording)) continue;
     if (filter.known(song)) continue;
+    const affinity = filter.affinity?.(song) ?? "match";
+    if (affinity === "miss") continue;
     videos.add(song.videoId);
     recordings.add(recording);
-    if (filter.avoid?.has(song.videoId) === true) held.push(song);
+    const avoided = filter.avoid?.has(song.videoId) === true;
+    if (affinity === "unknown") (avoided ? unsureHeld : unsure).push(song);
+    else if (avoided) held.push(song);
     else kept.push(song);
   }
-  if (kept.length >= MIX_FEWEST || held.length === 0) return kept;
-  const back = new Set(held.slice(0, MIX_FEWEST - kept.length));
+  const spare = [...held, ...unsure, ...unsureHeld];
+  if (kept.length >= MIX_FEWEST || spare.length === 0) return kept;
+  const back = new Set(spare.slice(0, MIX_FEWEST - kept.length));
   const fromPages = new Set(kept.slice(before.length));
   return [...before, ...radio.filter((song) => fromPages.has(song) || back.has(song))];
 };

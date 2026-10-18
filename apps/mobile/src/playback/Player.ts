@@ -1,4 +1,10 @@
-import { playerErrorNotice, type PlaySource, type RepeatMode, type SleepTimer } from "@wave/core";
+import {
+  playerErrorNotice,
+  type PlayerCoverUpdate,
+  type PlaySource,
+  type RepeatMode,
+  type SleepTimer,
+} from "@wave/core";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -77,6 +83,10 @@ export class Player extends Context.Service<
     /** Shows the queue's shuffle and repeat on Android Auto's player screen. */
     readonly setModes: (shuffle: boolean, repeat: RepeatMode) => Effect.Effect<void, PlayerError>;
     readonly getItemIds: Effect.Effect<NativeItemIds, PlayerError>;
+    /** Gives loaded items their cached cover (Core's `playerCoverUpdates`); playback goes on. */
+    readonly setItemArtwork: (
+      updates: readonly PlayerCoverUpdate[],
+    ) => Effect.Effect<void, PlayerError>;
     readonly saveQueue: (json: string, source: PlaySource) => Effect.Effect<void>;
     readonly savedQueue: Effect.Effect<string | null>;
     readonly savedQueueSource: Effect.Effect<PlaySource | null>;
@@ -163,6 +173,10 @@ export const layer = Layer.effect(
       setModes: (shuffle, repeat) =>
         call("show shuffle and repeat", () => WavePlayer.setModes(shuffle, repeat)),
       getItemIds: call("read the queue", () => WavePlayer.getItemIds()),
+      setItemArtwork: (updates) =>
+        updates.length === 0
+          ? Effect.void
+          : call("show the cached covers", () => WavePlayer.setItemArtwork(updates)),
       saveQueue: (json, source) => Effect.sync(() => WavePlayer.saveQueue(json, source)),
       savedQueue: Effect.sync(() => WavePlayer.savedQueue()),
       savedQueueSource: Effect.sync(() => WavePlayer.savedQueueSource()),

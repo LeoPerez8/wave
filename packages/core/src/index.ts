@@ -121,6 +121,12 @@ export type {
   SearchOptions,
   SearchResults,
 } from "./search.ts";
+export {
+  FIND_IN_PLAYLIST_NO_MATCH,
+  FIND_IN_PLAYLIST_PLACEHOLDER,
+  createPlaylistFinder,
+} from "./findInPlaylist.ts";
+export type { PlaylistFinder, PlaylistFindText } from "./findInPlaylist.ts";
 export { createSearchCatalog } from "./searchCatalog.ts";
 export type { SearchCatalog, SearchCatalogStats } from "./searchCatalog.ts";
 export { SEARCH_FOCUS_LIMITS, startSearchFocus, stepSearchFocus } from "./searchFocus.ts";
@@ -534,7 +540,13 @@ export type {
 export { pendingWriteDelay } from "./writePacing.ts";
 export type { WritePacing } from "./writePacing.ts";
 export { stepNowPlayingSheet } from "./sheetLifecycle.ts";
-export { QUEUE_COVER_FLUSH_MS, createQueueCoverBatcher, withQueueCovers } from "./queueCovers.ts";
+export {
+  QUEUE_COVER_FLUSH_MS,
+  createQueueCoverBatcher,
+  playerCoverUpdates,
+  withQueueCovers,
+} from "./queueCovers.ts";
+export type { PlayerCoverUpdate } from "./queueCovers.ts";
 export type { QueueCover, QueueCoverBatcher, QueueCoverBatcherOptions } from "./queueCovers.ts";
 export { MORE_FROM_ARTIST } from "./queue.ts";
 export { newQueueToast, noticeLine, queueUndo, undoneQueue } from "./queueUndo.ts";
@@ -1331,7 +1343,7 @@ export {
   lyricCardColours,
   lyricCardFileName,
   lyricCardInk,
-  lyricCardTextSize,
+  lyricCardLayout,
   lyricShareDestinations,
   lyricStoryBackground,
   nextLyricCardColour,
@@ -1340,6 +1352,7 @@ export {
   tapLyricLine,
 } from "./lyricsShare.ts";
 export type {
+  LyricCardShape,
   LyricSelection,
   LyricSelectionTap,
   LyricShareApps,
@@ -1397,6 +1410,32 @@ export { ARTIST_MIX_COUNT, artistMixSeeds, artistMixSimilarSource } from "./arti
 export type { ArtistMixPools, PlayedSeedArtist } from "./artistMixes.ts";
 export { GENRE_MIX_COUNT, genreFamily, genreMixSeeds, interleaveRadios } from "./genreMixes.ts";
 export type { GenreFamily, GenreMixLibrary } from "./genreMixes.ts";
+export {
+  DEEZER_GENRES_URL,
+  GENRE_AFFINITY_THRESHOLD,
+  artistProfilesKnown,
+  deezerArtistAlbumsUrl,
+  deezerArtistId,
+  deezerArtistProfile,
+  deezerGenreNames,
+  parseArtistProfiles,
+  storedArtistProfiles,
+  withArtistProfiles,
+  genreAffinity,
+  genreProfile,
+  libraryGenreProfiles,
+  mixAffinity,
+  mixProfileLookups,
+  mixSeedProfile,
+} from "./genreAffinity.ts";
+export type {
+  ArtistProfiles,
+  GenreProfile,
+  GenreProfileLibrary,
+  GenreProfileOf,
+  GenreTagged,
+  MixAffinity,
+} from "./genreAffinity.ts";
 export type { SearchOnline, YtPick } from "./onlineToggle.ts";
 export { readSearchOnline, writeSearchOnline } from "./onlineToggle.ts";
 export {
