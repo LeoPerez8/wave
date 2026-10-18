@@ -161,8 +161,7 @@ function ToastPill({ toast }: { toast: Toast }) {
   });
   const tap = useTapGesture({
     runOnJS: true,
-    onActivate: (event) =>
-      event.x >= actionStart.current ? runToastAction(id) : dismissToast(id),
+    onActivate: (event) => (event.x >= actionStart.current ? runToastAction(id) : dismissToast(id)),
   });
   const gesture = useExclusiveGestures(pan, tap);
 
