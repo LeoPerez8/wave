@@ -24,6 +24,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { CELL, grid } from "@/catalog/grid";
+import { SkeletonLine } from "@/catalog/SkeletonLine";
 import { EmptyState } from "@/components/EmptyState";
 import { IconButton } from "@/components/IconButton";
 import { TextButton } from "@/components/TextButton";
@@ -363,9 +364,9 @@ function LyricsSkeleton() {
         style={{ paddingTop: CELL * 2 }}
       >
         {SKELETON_LINES.map((width, at) => (
-          // A title2 line (28 high) with its padding, the bar half its height.
-          <View key={at} className="justify-center" style={{ height: 28 + CELL * 2 }}>
-            <View className="bg-fill" style={{ width, height: 14 }} />
+          // A title2 line (global.css's 28 line height) with a lyric line's padding.
+          <View key={at} style={{ paddingVertical: CELL }}>
+            <SkeletonLine lineHeight={28} width={width} />
           </View>
         ))}
       </View>
