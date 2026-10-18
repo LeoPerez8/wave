@@ -98,33 +98,33 @@ describe("ytSectionView", () => {
     assert.deepEqual(ytSectionView(results([]), library), {
       ...EMPTY,
       note: "noMatches",
+      loading: false,
       integrated: true,
     });
     const mine = results([song("mine")], [artist("Mine")], [album("Mine", "Me")]);
     assert.deepEqual(ytSectionView(mine, library), {
       ...EMPTY,
       note: "allInLibrary",
+      loading: false,
       integrated: true,
     });
   });
 
-  test("says it's searching until the first results arrive, then keeps them up", () => {
-    const first: YtSection = {
-      status: "loading",
-      query: "q",
-      songs: [],
-      ...NONE,
-      by: "user",
-      delayMs: 0,
-    };
+  test("while the query loads, it shows a skeleton and no line", () => {
+    const first: YtSection = { status: "loading", query: "q", by: "user", delayMs: 0 };
     assert.deepEqual(ytSectionView(first, library), {
       ...EMPTY,
-      note: "searching",
+      note: null,
+      loading: true,
       integrated: true,
     });
-    const next: YtSection = { ...first, artists: [artist("Daft Punk")] };
-    assert.deepEqual(ytSectionView(next, library)?.artists, [artist("Daft Punk")]);
-    assert.equal(ytSectionView(next, library)?.note, null);
+  });
+
+  test("results and outcomes show no skeleton", () => {
+    assert.equal(ytSectionView(results([song("a")]), library)?.loading, false);
+    assert.equal(ytSectionView(results([]), library)?.loading, false);
+    const quiet: YtSection = { status: "quiet", query: "q", reason: "failed", by: "user" };
+    assert.equal(ytSectionView(quiet, library)?.loading, false);
   });
 
   test("a failure is a quiet note, and Search isn't integrated", () => {
@@ -132,6 +132,7 @@ describe("ytSectionView", () => {
     assert.deepEqual(ytSectionView(quiet, library), {
       ...EMPTY,
       note: "offline",
+      loading: false,
       integrated: false,
     });
   });
@@ -141,6 +142,7 @@ describe("ytSectionView", () => {
     assert.deepEqual(ytSectionView(offered, library), {
       ...EMPTY,
       note: null,
+      loading: false,
       integrated: false,
     });
   });
@@ -189,18 +191,22 @@ describe("ytSectionView", () => {
     assert.deepEqual(view?.top, { kind: "artist", artist: artist("Minnie") });
   });
 
-  test("while the next query loads, YT Music has no best: the results kept up answer the last one", () => {
+  test("a changed query swaps the last query's results for a skeleton at once", () => {
     const dafto = { ...song("dafto"), title: "Dafto" };
     const shown = stepYtSection(typed(YT_SECTION_HIDDEN, "dafto"), {
       type: "found",
       query: "dafto",
       songs: [dafto],
-      ...NONE,
+      artists: [artist("Dafto")],
+      albums: [album("Dafto", "Dafto")],
     });
-    assert.deepEqual(ytSectionView(shown, library)?.top, { kind: "song", song: dafto });
-    const view = ytSectionView(typed(shown, "daft punk"), library);
-    assert.deepEqual(view?.songs, [dafto]);
-    assert.equal(view?.top, null);
+    assert.deepEqual(ytSectionView(shown, library)?.top, { kind: "artist", artist: artist("Dafto") });
+    assert.deepEqual(ytSectionView(typed(shown, "daft punk"), library), {
+      ...EMPTY,
+      note: null,
+      loading: true,
+      integrated: true,
+    });
   });
 });
 
@@ -229,14 +235,12 @@ describe("stepYtSection", () => {
     assert.deepEqual(asked, {
       status: "loading",
       query: "daft",
-      songs: [],
-      ...NONE,
       by: "user",
       delayMs: 0,
     });
   });
 
-  test("once asked, refining the query keeps YT Music's songs up and asks for the new one", () => {
+  test("once asked, refining the query drops YT Music's songs and asks for the new one", () => {
     const asked = stepYtSection(typedFound(YT_SECTION_HIDDEN, "daft"), ONLINE);
     const shown = stepYtSection(asked, {
       type: "found",
@@ -247,8 +251,6 @@ describe("stepYtSection", () => {
     assert.deepEqual(typedFound(shown, "daft punk"), {
       status: "loading",
       query: "daft punk",
-      songs: [song("a")],
-      ...NONE,
       by: "user",
       delayMs: 300,
     });
@@ -292,8 +294,6 @@ describe("stepYtSection", () => {
     assert.deepEqual(typed(YT_SECTION_HIDDEN, "daft"), {
       status: "loading",
       query: "daft",
-      songs: [],
-      ...NONE,
       by: "auto",
       delayMs: 300,
     });
@@ -335,9 +335,6 @@ describe("stepYtSection", () => {
     assert.deepEqual(typed(found, "daft p"), {
       status: "loading",
       query: "daft p",
-      songs: [song("a")],
-      artists: [artist("Daft Punk")],
-      albums: [album("Discovery", "Daft Punk")],
       by: "auto",
       delayMs: 300,
     });
@@ -360,7 +357,7 @@ describe("stepYtSection", () => {
     assert.equal(staleFailure, loading);
   });
 
-  test("while the next query loads, the last results stay", () => {
+  test("while the next query loads, the last results are gone", () => {
     const shown = stepYtSection(typed(YT_SECTION_HIDDEN, "daft"), {
       type: "found",
       query: "daft",
@@ -370,8 +367,6 @@ describe("stepYtSection", () => {
     assert.deepEqual(typed(shown, "daft punk"), {
       status: "loading",
       query: "daft punk",
-      songs: [song("a")],
-      ...NONE,
       by: "auto",
       delayMs: 300,
     });
@@ -406,8 +401,6 @@ describe("stepYtSection", () => {
     assert.deepEqual(typed(quiet, "daft p"), {
       status: "loading",
       query: "daft p",
-      songs: [],
-      ...NONE,
       by: "auto",
       delayMs: 300,
     });
