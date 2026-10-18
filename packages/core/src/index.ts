@@ -1215,3 +1215,19 @@ export type {
   YtLibraryReadState,
   YtLibraryReadView,
 } from "./ytLibraryBatch.ts";
+export {
+  LYRIC_CARD_FALLBACK,
+  LYRIC_CARD_LAYOUT,
+  LYRIC_CARD_TEXT_SIZES,
+  MAX_SHARED_LYRIC_LINES,
+  isLyricLineSelected,
+  lyricCardColours,
+  lyricCardFileName,
+  lyricCardInk,
+  lyricCardTextSize,
+  nextLyricCardColour,
+  shareableLyricLines,
+  sharedLyricLines,
+  tapLyricLine,
+} from "./lyricsShare.ts";
+export type { LyricSelection, LyricSelectionTap } from "./lyricsShare.ts";
