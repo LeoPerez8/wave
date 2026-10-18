@@ -1,4 +1,5 @@
 import {
+  showsExplicitBadge,
   ytDownloadLine,
   ytDownloadProgress,
   ytSongArtist,
@@ -58,6 +59,7 @@ export function YtSongRow({
         durationMs: song.durationMs,
         trackNumber,
         artworkUri: ytMusic ? (song.artworkUrl ?? undefined) : undefined,
+        explicit: showsExplicitBadge(song.explicit),
       }}
       state={playing ? "playing" : undefined}
       checked={checked}

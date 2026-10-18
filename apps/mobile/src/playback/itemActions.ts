@@ -10,6 +10,7 @@ import {
   type ActionSurface,
   type ItemAction,
   type ItemActionEntry,
+  albumDownloadOrigin,
 } from "@wave/core";
 import * as Haptics from "expo-haptics";
 import { router, usePathname } from "expo-router";
@@ -116,6 +117,8 @@ function usePlan(
 ): {
   readonly planned: readonly ItemActionEntry<ArtistRow>[];
   readonly missingSongs: readonly number[];
+  /** Each album's missing songs, in the albums' order. */
+  readonly perAlbum: readonly (readonly number[])[];
 } {
   const here = usePathname();
   const onlineLookups = useLyricsAndGenreLookupsEnabled();
@@ -150,7 +153,7 @@ function usePlan(
     here,
     streamedArtists,
   });
-  return { planned, missingSongs };
+  return { planned, missingSongs, perAlbum };
 }
 
 /**
@@ -254,7 +257,7 @@ export function useItemActions(
       : targetCount(target);
 
   // [missingSongs]: the albums' missing songs, which their download entries act on.
-  const { planned, missingSongs } = usePlan(target, favorites, {
+  const { planned, missingSongs, perAlbum } = usePlan(target, favorites, {
     surface,
     selectable: onSelect !== undefined,
   });
@@ -359,11 +362,18 @@ export function useItemActions(
           if (target.kind === "album") runMissingSongsDownloadAction("cancel", missingSongs);
           for (const { song } of tracks) cancelMissingSongDownload(song.id);
         });
-      // An album's missing songs, as Settings' Download All does them.
+      // An album's missing songs, as Settings' Download All does them; each album's remember it.
       case "downloadMissingSongs":
-        return run(() => runMissingSongsDownloadAction("downloadAll", missingSongs));
       case "retryFailed":
-        return run(() => runMissingSongsDownloadAction("retryFailed", missingSongs));
+        return run(() => {
+          if (target.kind !== "album") return;
+          const action = entry.action === "retryFailed" ? "retryFailed" : "downloadAll";
+          target.items.forEach((album, index) => {
+            const trackIds = perAlbum[index] ?? [];
+            if (trackIds.length === 0) return;
+            runMissingSongsDownloadAction(action, trackIds, albumDownloadOrigin(album));
+          });
+        });
       case "removeFromLibrary": {
         const songs = tracks.map(({ song }) => song);
         return asking(entry.action, (onConfirm) => {

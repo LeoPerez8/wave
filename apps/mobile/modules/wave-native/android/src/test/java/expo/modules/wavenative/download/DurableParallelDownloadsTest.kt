@@ -8,24 +8,24 @@ import kotlin.concurrent.thread
 import org.junit.Assert.*
 import org.junit.Test
 
-/** Several songs download at once: three at a time, and a song that waits never holds up the rest. */
+/** Several songs download at once: five at a time, and a song that waits never holds up the rest. */
 class DurableParallelDownloadsTest {
-  @Test fun twelveQueuedSongsStartThreeAtATimeAndTheRestStartAsSlotsFreeUp() = inFolder { folder ->
+  @Test fun twelveQueuedSongsStartFiveAtATimeAndTheRestStartAsSlotsFreeUp() = inFolder { folder ->
     val owner = DurableDownloads(File(folder, "jobs"))
     for (id in ids) owner.enqueue(song(id), null)
     owner.advance(NoTransfer, NoPublication)
-    assertEquals(List(3) { "preparing" } + List(9) { "queued" }, phases(owner))
+    assertEquals(List(5) { "preparing" } + List(7) { "queued" }, phases(owner))
     owner.cancel("song-2", NoTransfer)
     owner.advance(NoTransfer, NoPublication)
-    assertEquals(listOf("preparing", "cancelled", "preparing", "preparing") + List(8) { "queued" }, phases(owner))
+    assertEquals(listOf("preparing", "cancelled") + List(4) { "preparing" } + List(6) { "queued" }, phases(owner))
   }
 
-  @Test fun threeSongsTransferAtOnceAndTheFourthStartsOnceOneIsTagged() = inFolder { folder ->
+  @Test fun ofTenQueuedSongsFiveTransferAtOnceAndTheSixthStartsOnceOneIsTagged() = inFolder { folder ->
     val owner = DurableDownloads(File(folder, "jobs"))
-    for (id in ids) owner.enqueue(song(id), null)
+    for (id in ids.take(10)) owner.enqueue(song(id), null)
     owner.advance(NoTransfer, NoPublication)
-    for (id in ids.take(3)) prepare(owner, id, File(folder, "$id.mp3"))
-    val sending = CountDownLatch(3)
+    for (id in ids.take(5)) prepare(owner, id, File(folder, "$id.mp3"))
+    val sending = CountDownLatch(5)
     val finish = CountDownLatch(1)
     val slow = object : DurableTransfer {
       override fun cancel(id: String) {}
@@ -36,18 +36,18 @@ class DurableParallelDownloadsTest {
       }
     }
     val steps = generateSequence { owner.nextStep(slow, GoodPublication) }.toList()
-    assertEquals(3, steps.size)
+    assertEquals(5, steps.size)
     val workers = steps.map { thread { it() } }
     try {
       assertTrue(sending.await(2, TimeUnit.SECONDS))
-      assertEquals(List(3) { "transferring" } + List(9) { "queued" }, phases(owner))
+      assertEquals(List(5) { "transferring" } + List(5) { "queued" }, phases(owner))
     } finally { finish.countDown(); workers.forEach { it.join(5_000) } }
-    assertEquals(List(3) { "sourceReady" } + List(9) { "queued" }, phases(owner))
+    assertEquals(List(5) { "sourceReady" } + List(5) { "queued" }, phases(owner))
     answer(owner, "song-1", "confirm", mapOf("acceptable" to true))
     owner.advance(NoTransfer, GoodPublication)
     assertEquals("awaitingPublication", phases(owner)[0])
     owner.advance(NoTransfer, NoPublication)
-    assertEquals(listOf("awaitingPublication", "sourceReady", "sourceReady", "preparing") + List(8) { "queued" }, phases(owner))
+    assertEquals(listOf("awaitingPublication") + List(4) { "sourceReady" } + listOf("preparing") + List(4) { "queued" }, phases(owner))
   }
 
   @Test fun songsWaitingForJsDoNotHoldUpTheSongsBehindThem() = inFolder { folder ->
@@ -55,17 +55,17 @@ class DurableParallelDownloadsTest {
     val owner = DurableDownloads(File(folder, "jobs"), clock = { now })
     for (id in ids) owner.enqueue(song(id), null)
     owner.advance(NoTransfer, NoPublication)
-    // JS doesn't answer for the first three (a search that hangs): after a while they leave their slots.
+    // JS doesn't answer for the first five (a search that hangs): after a while they leave their slots.
     now += 31_000
     owner.advance(NoTransfer, NoPublication)
-    assertEquals(List(6) { "preparing" } + List(6) { "queued" }, phases(owner))
-    prepare(owner, "song-4", File(folder, "song-4.mp3"))
+    assertEquals(List(10) { "preparing" } + List(2) { "queued" }, phases(owner))
+    prepare(owner, "song-6", File(folder, "song-6.mp3"))
     owner.advance(GoodTransfer, NoPublication)
-    assertEquals("sourceReady", phases(owner)[3])
-    // However long they wait, no more than six songs are started at once.
+    assertEquals("sourceReady", phases(owner)[5])
+    // However long they wait, no more than ten songs are started at once.
     now += 31_000
     owner.advance(NoTransfer, NoPublication)
-    assertEquals(List(3) { "preparing" } + listOf("sourceReady", "preparing", "preparing") + List(6) { "queued" }, phases(owner))
+    assertEquals(List(5) { "preparing" } + listOf("sourceReady") + List(4) { "preparing" } + List(2) { "queued" }, phases(owner))
     // The first song's answer still counts once it comes.
     prepare(owner, "song-1", File(folder, "song-1.mp3"))
     owner.advance(GoodTransfer, NoPublication)
@@ -137,12 +137,12 @@ class DurableParallelDownloadsTest {
     for (id in ids) owner.enqueue(song(id), null)
     assertEquals(DownloadCounts(running = 0, left = 12), owner.counts())
     owner.advance(NoTransfer, NoPublication)
-    assertEquals(DownloadCounts(running = 3, left = 9), owner.counts())
+    assertEquals(DownloadCounts(running = 5, left = 7), owner.counts())
     owner.cancel("song-2", NoTransfer)
     owner.cancel("song-12", NoTransfer)
-    assertEquals(DownloadCounts(running = 2, left = 8), owner.counts())
+    assertEquals(DownloadCounts(running = 4, left = 6), owner.counts())
     owner.advance(NoTransfer, NoPublication)
-    assertEquals(DownloadCounts(running = 3, left = 7), owner.counts())
+    assertEquals(DownloadCounts(running = 5, left = 5), owner.counts())
   }
 
   @Test fun cancellingOneSongStopsOnlyItsTransferAndStoppingTheServiceStopsThemAll() = inFolder { folder ->

@@ -1,7 +1,7 @@
 /**
  * Settings › Downloads: the songs on their way, above the failed ones, each
  * with the progress line its row shows elsewhere and Cancel. The native
- * journal's queue starts up to three songs at once, in the order they were
+ * journal's queue downloads up to five songs at once, in the order they were
  * asked for; a song leaves this list for the failed one when it fails, and
  * for good once it's in the Library.
  */
@@ -22,8 +22,8 @@ export interface QueuedDownload<S extends YtSong = YtSong> {
   /** Where its download is, as the song's row says it elsewhere. */
   readonly line: string;
   /**
-   * Still in the queue, behind the songs downloading (up to three start at
-   * once); false from the moment it starts until it's in the Library.
+   * Still in the queue, behind the songs downloading (up to five at once,
+   * ten started); false from the moment it starts until it's in the Library.
    */
   readonly waiting: boolean;
   /**

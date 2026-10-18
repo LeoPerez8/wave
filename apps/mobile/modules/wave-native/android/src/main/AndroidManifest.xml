@@ -19,6 +19,15 @@
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+  <!--
+    The lyrics card's Instagram Stories and WhatsApp destinations show only when the app is
+    installed (ShareModule's shareApps); Android 11+ hides other packages unless they're queried.
+  -->
+  <queries>
+    <package android:name="com.instagram.android" />
+    <package android:name="com.whatsapp" />
+  </queries>
+
   <application>
     <!-- A media library service: Android Auto browses Wave through it (docs/auto-spike.md). -->
     <service
@@ -81,6 +90,17 @@
       <meta-data
         android:name="android.support.FILE_PROVIDER_PATHS"
         android:resource="@xml/wave_log_paths" />
+    </provider>
+
+    <!-- The lyrics card goes to the share sheet as an image (ShareImageProvider). -->
+    <provider
+      android:name="expo.modules.wavenative.share.ShareImageProvider"
+      android:authorities="${applicationId}.images"
+      android:exported="false"
+      android:grantUriPermissions="true">
+      <meta-data
+        android:name="android.support.FILE_PROVIDER_PATHS"
+        android:resource="@xml/wave_share_paths" />
     </provider>
 
     <!-- Lists Wave as a media app in Android Auto. -->

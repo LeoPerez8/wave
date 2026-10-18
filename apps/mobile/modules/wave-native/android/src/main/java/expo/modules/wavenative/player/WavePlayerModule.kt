@@ -219,6 +219,15 @@ class WavePlayerModule : Module() {
     }.runOnQueue(Queues.MAIN)
 
     /**
+     * The entry whose next song is an unsearched one still being searched (Core's
+     * `searchingAfter`), or null: a crossfade from it waits for the search.
+     */
+    AsyncFunction("setSearchingAfter") { key: String?, promise: Promise ->
+      CrossfadeLink.searchingAfter = key
+      promise.resolve(null)
+    }.runOnQueue(Queues.MAIN)
+
+    /**
      * Applies Core's sync plan. Items already loaded are reused by key, so JS
      * only sends [items] for keys new to the player; [QueueSync] reads loaded
      * ones only when a step re-inserts them, so a skip doesn't walk the list.

@@ -1,19 +1,17 @@
-import { IconMenu2, IconMinus, IconPlus } from "@tabler/icons-react-native";
-import { reorderShift, reorderTarget } from "@wave/core";
-import * as Haptics from "expo-haptics";
-import { useCallback, useMemo, useRef, useState, type ComponentType, type ReactNode } from "react";
+import { IconMinus, IconPlus } from "@tabler/icons-react-native";
+import type { ComponentType, ReactNode } from "react";
 import { ScrollView, Text, View, type AccessibilityActionEvent } from "react-native";
-import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  type SharedValue,
-} from "react-native-reanimated";
-import { scheduleOnRN } from "react-native-worklets";
+import Animated from "react-native-reanimated";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
+import {
+  ReorderHandle,
+  useReorderRow,
+  useRowReorder,
+  type RowReorder,
+} from "@/components/RowReorder";
 import { TextButton } from "@/components/TextButton";
 import { Press } from "@/motion/Press";
 import { useThemeColor } from "@/theme/useThemeColor";
@@ -119,12 +117,6 @@ export function FixedRow({
   );
 }
 
-/**
- * The drag going on among the shown items: from where, to where it would
- * land, and the dragged row's height (how far the rows it passes step aside).
- */
-type Drag = { readonly from: number; readonly to: number; readonly height: number };
-
 type ShownRowProps<Id> = {
   id: Id;
   title: string;
@@ -134,15 +126,8 @@ type ShownRowProps<Id> = {
   count: number;
   /** Draw a hairline under the last row too (a fixed row follows). */
   divideLast: boolean;
-  drag: Drag | null;
-  /** The dragged row's travel since it was picked up. */
-  travel: SharedValue<number>;
+  reorder: RowReorder<Id>;
   edit: (edit: ArrangementEdit<Id>) => void;
-  pickUp: (index: number) => void;
-  dragTo: (travel: number) => void;
-  drop: (canceled: boolean) => void;
-  /** Reports the row's laid-out height, which large text can grow. */
-  measure: (id: Id, height: number) => void;
 };
 
 /**
@@ -157,45 +142,10 @@ function ShownRow<Id>({
   index,
   count,
   divideLast,
-  drag,
-  travel,
+  reorder,
   edit,
-  pickUp,
-  dragTo,
-  drop,
-  measure,
 }: ShownRowProps<Id>) {
-  const secondary = useThemeColor("secondary");
-  const fill = useThemeColor("fill");
-  const dragged = drag?.from === index;
-  const shift = drag === null || dragged ? 0 : reorderShift({ index, ...drag }) * drag.height;
-
-  const style = useAnimatedStyle(() => ({
-    transform: [{ translateY: dragged ? travel.get() : shift }],
-  }));
-
-  const handle = usePanGesture(
-    useMemo(
-      () => ({
-        minDistance: 0,
-        onActivate: () => {
-          "worklet";
-          travel.set(0);
-          scheduleOnRN(pickUp, index);
-        },
-        onUpdate: (event: { translationY: number }) => {
-          "worklet";
-          travel.set(event.translationY);
-          scheduleOnRN(dragTo, event.translationY);
-        },
-        onDeactivate: (event: { canceled: boolean }) => {
-          "worklet";
-          scheduleOnRN(drop, event.canceled);
-        },
-      }),
-      [travel, pickUp, dragTo, drop, index],
-    ),
-  );
+  const { style, underline, handle } = useReorderRow({ index, reorder });
 
   const onAccessibilityAction = (event: AccessibilityActionEvent) => {
     const action = event.nativeEvent.actionName;
@@ -206,12 +156,8 @@ function ShownRow<Id>({
 
   return (
     <Animated.View
-      onLayout={(event) => measure(id, event.nativeEvent.layout.height)}
-      style={[
-        ROW_BOX,
-        { zIndex: dragged ? 1 : 0, backgroundColor: dragged ? fill : "transparent" },
-        style,
-      ]}
+      onLayout={(event) => reorder.measure(id, event.nativeEvent.layout.height)}
+      style={[ROW_BOX, style]}
     >
       <View
         accessible
@@ -231,19 +177,13 @@ function ShownRow<Id>({
           label={`Remove ${title} from ${place}`}
           onPress={() => edit({ remove: id })}
         />
-        <GestureDetector gesture={handle}>
-          <View
-            accessibilityElementsHidden
-            importantForAccessibility="no-hide-descendants"
-            className="items-center justify-center"
-            style={{ width: BUTTON, height: BUTTON, marginRight: -CELL * 1.5 }}
-          >
-            <IconMenu2 size={20} color={secondary} strokeWidth={1.5} />
-          </View>
-        </GestureDetector>
+        <ReorderHandle gesture={handle} />
       </View>
-      {/* Hidden rather than dropped while dragged, so the row keeps its height. */}
-      {(divideLast || index < count - 1) && <Hairline className={dragged ? "opacity-0" : ""} />}
+      {(divideLast || index < count - 1) && (
+        <Animated.View style={underline}>
+          <Hairline />
+        </Animated.View>
+      )}
     </Animated.View>
   );
 }
@@ -337,58 +277,13 @@ export function ArrangementEditor<Id extends string>({
   note,
   onDone,
 }: ArrangementEditorProps<Id>) {
-  const [drag, setDrag] = useState<Drag | null>(null);
-  // The drag as the gesture's callbacks last left it, ahead of a render.
-  const dragNow = useRef<Drag | null>(null);
-  const travel = useSharedValue(0);
-  // Each shown row's laid-out height, by item: large text makes rows taller, and unequal.
-  const heights = useRef(new Map<Id, number>());
-  const measure = useCallback((id: Id, height: number) => {
-    heights.current.set(id, height);
-  }, []);
-  const rowHeight = useCallback(
-    (id: Id | undefined) => (id === undefined ? ROW : (heights.current.get(id) ?? ROW)),
-    [],
-  );
+  const reorder = useRowReorder({
+    ids: shown,
+    rowHeight: ROW,
+    move: (from, to) => edit({ move: { from, to } }),
+  });
   const count = shown.length;
   const empty = count === 0 && first === undefined && last === undefined;
-
-  const follow = useCallback((next: Drag | null) => {
-    dragNow.current = next;
-    setDrag(next);
-  }, []);
-  const pickUp = useCallback(
-    (from: number) => {
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      follow({ from, to: from, height: rowHeight(shown[from]) });
-    },
-    [follow, rowHeight, shown],
-  );
-  const dragTo = useCallback(
-    (distance: number) => {
-      const current = dragNow.current;
-      if (current === null) return;
-      const to = reorderTarget({
-        from: current.from,
-        distance,
-        rowHeight: shown.map(rowHeight),
-        count,
-      });
-      if (to !== current.to) follow({ ...current, to });
-    },
-    [count, follow, rowHeight, shown],
-  );
-  const drop = useCallback(
-    (canceled: boolean) => {
-      const current = dragNow.current;
-      if (current !== null && !canceled && current.to !== current.from) {
-        edit({ move: { from: current.from, to: current.to } });
-      }
-      follow(null);
-      travel.set(0);
-    },
-    [edit, follow, travel],
-  );
 
   return (
     <>
@@ -396,7 +291,7 @@ export function ArrangementEditor<Id extends string>({
         <ScrollView
           bounces={false}
           overScrollMode="never"
-          scrollEnabled={drag === null}
+          scrollEnabled={!reorder.dragging}
           contentContainerStyle={onDone === undefined ? PAGE_CONTENT : undefined}
         >
           {first}
@@ -410,13 +305,8 @@ export function ArrangementEditor<Id extends string>({
               index={index}
               count={count}
               divideLast={last !== undefined}
-              drag={drag}
-              travel={travel}
+              reorder={reorder}
               edit={edit}
-              pickUp={pickUp}
-              dragTo={dragTo}
-              drop={drop}
-              measure={measure}
             />
           ))}
           {last}
