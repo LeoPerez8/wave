@@ -32,6 +32,7 @@ import { Press } from "@/motion/Press";
 import type { SongRow } from "@/library/LibraryStore";
 
 import type { LoadedRecap, LoadedRecapSlide, Ranked } from "./Stats";
+import { useRecapMusic } from "./recapMusic";
 import { playCount } from "./StatsViews";
 
 /** A tap on the screen's left third goes back; anywhere else goes forward. */
@@ -201,6 +202,7 @@ export function RecapStories({
   const width = useRef(1);
   const closed = useRef(false);
   const count = recap?.slides.length ?? 0;
+  useRecapMusic(recap, index, paused);
 
   const close = useCallback(() => {
     if (closed.current) return;

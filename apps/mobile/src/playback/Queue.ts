@@ -1,6 +1,7 @@
 import {
   EMPTY_QUEUE,
   REAL_SHUFFLE,
+  RECAP_PLAY_CONTEXT,
   answerPlayingWalk,
   applyPlayerSync,
   explicitPassOver,
@@ -121,8 +122,21 @@ export class Queue extends Context.Service<
     ) => Effect.Effect<QueueHandOver, PlayerError>;
     /** Serialises a queue change still settling right away (Wave is leaving the foreground). */
     readonly flush: Effect.Effect<void>;
+    /**
+     * Borrows the player for a Recap's music: notes the queue as it is now,
+     * where the player is in its current song, for the loan to give back.
+     */
+    readonly borrow: Effect.Effect<QueueLoan>;
   }
 >()("@wave/mobile/playback/Queue") {}
+
+/** The player borrowed from the queue (`Queue.borrow`). */
+export interface QueueLoan {
+  /** Plays [track] on its own, in place of the queue, offering no Undo and kept off the play history. */
+  readonly play: (track: QueueTrack) => Effect.Effect<void, PlayerError>;
+  /** Puts the queue back as it was borrowed, paused where it was in its current song. */
+  readonly giveBack: Effect.Effect<void, PlayerError>;
+}
 
 /** Starting playback of a list: the only command a session request hands over. */
 export type PlayCommand = Extract<QueueCommand, { readonly type: "play" }>;
@@ -565,22 +579,53 @@ export const layer = Layer.effect(
         Effect.gen(function* () {
           if (offered?.takeBack !== takeBack) return;
           offered = null;
-          const { undo, tracks, source } = takeBack;
-          waiting = null;
-          pausedForSearch = false;
-          learnQueueTracks([...tracks.values()], { forgetOthers: true });
-          queueSource.set(source);
-          const state = undoneQueue(undo, queueState.get());
-          queueState.set(state);
-          queueChanged();
-          // Paused while the player changes songs, so the old one doesn't play from its start first.
-          yield* player.pause;
-          yield* sync(state);
-          yield* applyRepeat(state);
-          yield* player.seekTo(undo.positionMs);
+          yield* putBack(takeBack);
           yield* player.play;
         }),
       );
+
+    /**
+     * Brings back a queue a play replaced (Core's `undoneQueue`), paused on
+     * its song where it was. A command still waiting for a search gives way.
+     * Runs in the lane.
+     */
+    const putBack = ({ undo, tracks, source }: Omit<TakeBack, "notice">) =>
+      Effect.gen(function* () {
+        waiting = null;
+        pausedForSearch = false;
+        learnQueueTracks([...tracks.values()], { forgetOthers: true });
+        queueSource.set(source);
+        const state = undoneQueue(undo, queueState.get());
+        queueState.set(state);
+        queueChanged();
+        // Paused while the player changes songs, so the old one doesn't play from its start first.
+        yield* player.pause;
+        yield* sync(state);
+        yield* applyRepeat(state);
+        if (state.index >= 0) yield* player.seekTo(undo.positionMs);
+      });
+
+    // A Recap's music plays without Undo (no source to put back) and gives the queue back itself.
+    const borrow = lane.withPermit(
+      Effect.sync((): QueueLoan => {
+        const lent = {
+          undo: { state: queueState.get(), positionMs: currentPositionMs() },
+          tracks: queueTracks.get(),
+          source: queueSource.get(),
+        };
+        return {
+          play: (track) =>
+            walkOut(
+              start(
+                { type: "play", trackIds: [track.id], context: RECAP_PLAY_CONTEXT, shuffle: false },
+                [track],
+              ),
+              apply,
+            ),
+          giveBack: lane.withPermit(putBack(lent)),
+        };
+      }),
+    );
 
     const dispatch = (command: QueueCommand, added: readonly QueueTrack[] = []) =>
       walkOut(
@@ -724,6 +769,6 @@ export const layer = Layer.effect(
 
     yield* Effect.addFinalizer(() => flush);
 
-    return Queue.of({ dispatch, handOver, restore: restoreSaved, flush });
+    return Queue.of({ dispatch, handOver, restore: restoreSaved, flush, borrow });
   }),
 );
