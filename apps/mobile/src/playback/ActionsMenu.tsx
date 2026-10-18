@@ -1,4 +1,9 @@
-import { YT_PLAYLIST_DOWNLOAD_ACTION_LABELS, entryDivider, type UnsearchedSong } from "@wave/core";
+import {
+  YT_PLAYLIST_DOWNLOAD_ACTION_LABELS,
+  entryDivider,
+  type DownloadOrigin,
+  type UnsearchedSong,
+} from "@wave/core";
 import type { ReactNode } from "react";
 import { Text, View } from "react-native";
 
@@ -165,10 +170,12 @@ interface MenuEntry {
 /**
  * A playlist's download entries (Core's `ytPlaylistDownload`): Download
  * Playlist, or Cancel Playlist Download while its songs are on their way,
- * then Retry Failed; none without YT Music or unsearched entries.
+ * then Retry Failed; none without YT Music or unsearched entries. The songs
+ * they queue remember [origin], the playlist.
  */
 function usePlaylistDownloadEntries(
   entries: readonly PlaylistEntryRow[],
+  origin: DownloadOrigin | null,
   close: () => void,
 ): MenuEntry[] {
   const inLibrary = useLoadedInLibrary();
@@ -178,7 +185,7 @@ function usePlaylistDownloadEntries(
     label: YT_PLAYLIST_DOWNLOAD_ACTION_LABELS[action],
     onPress: () => {
       close();
-      runYtPlaylistDownloadAction(action, entries, inLibrary);
+      runYtPlaylistDownloadAction(action, entries, inLibrary, origin);
     },
     destructive: false,
   }));
@@ -207,7 +214,14 @@ function ActionsMenu({
   playlistEntries: readonly PlaylistEntryRow[];
 }) {
   const actions = useItemActions(target, { surface: "menu", finish: close, onSelect });
-  const downloads = usePlaylistDownloadEntries(listed, close);
+  const playlist = target.kind === "playlist" ? target.items[0] : undefined;
+  const downloads = usePlaylistDownloadEntries(
+    listed,
+    playlist === undefined
+      ? null
+      : { kind: "playlist", id: String(playlist.id), name: playlist.name },
+    close,
+  );
   return (
     <ItemMenuCard
       target={target}

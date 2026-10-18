@@ -708,6 +708,8 @@ export { failedDownloads, settledDownloadFailures } from "./failedDownloads.ts";
 export { ytDownloadsToForget } from "./forgottenDownloads.ts";
 export { queuedDownloads, queuedDownloadsSummary } from "./queuedDownloads.ts";
 export type { QueuedDownload } from "./queuedDownloads.ts";
+export { SONGS_GROUP_NAME, downloadingList } from "./downloadGroups.ts";
+export type { DownloadGroup, DownloadingList, DownloadOrigin } from "./downloadGroups.ts";
 export type {
   FailedDownload,
   FailedDownloadRetry,
@@ -1241,3 +1243,22 @@ export type { DiscoverMixesSection } from "./discoverMixesSection.ts";
 export { streamedCoverUrl, streamedCoverUrls } from "./streamedCover.ts";
 export { advisoryTag, explicitFromAdvisory, isExplicit, showsExplicitBadge } from "./explicit.ts";
 export type { ExplicitFlag } from "./explicit.ts";
+export {
+  LYRIC_CARD_FALLBACK,
+  LYRIC_CARD_LAYOUT,
+  LYRIC_CARD_TEXT_SIZES,
+  MAX_SHARED_LYRIC_LINES,
+  isLyricLineSelected,
+  lyricCardColours,
+  lyricCardFileName,
+  lyricCardInk,
+  lyricCardTextSize,
+  nextLyricCardColour,
+  shareableLyricLines,
+  sharedLyricLines,
+  tapLyricLine,
+} from "./lyricsShare.ts";
+export type { LyricSelection, LyricSelectionTap } from "./lyricsShare.ts";
+export type { YtLibraryFavorites } from "./ytLibraryBatch.ts";
+export { pendingFavorite, settlePendingFavorites } from "./pendingFavorites.ts";
+export type { EnteringSong, PendingFavorite, SettledFavorites } from "./pendingFavorites.ts";
