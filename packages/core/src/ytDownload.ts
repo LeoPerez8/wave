@@ -53,7 +53,7 @@ export interface YtDownloadTags {
 }
 
 /** The side of the cover a download embeds, in pixels. */
-const COVER_SIZE = 1200;
+export const COVER_SIZE = 1200;
 
 /**
  * [url] asking YouTube Music's image server for a [COVER_SIZE] square: its

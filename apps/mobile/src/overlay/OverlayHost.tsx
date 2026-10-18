@@ -160,9 +160,10 @@ function OverlayCard({ entry, frontmost }: { entry: OverlayEntry; frontmost: boo
     margin: grid.margin,
     maxWidth: MAX_WIDTH,
     cardHeight: cardHeight ?? 0,
+    // Anchored or centred, the card may draw over the floating chrome: only the system bars bound it.
     ...(anchor === undefined
       ? {}
-      : { anchor: { rect: anchor, gap: CELL, minHeight: MIN_ANCHORED_HEIGHT }, chromeBottom }),
+      : { anchor: { rect: anchor, gap: CELL, minHeight: MIN_ANCHORED_HEIGHT } }),
     align: entry.request.align,
     keyboard: keyboard.keyboard,
     // Large system text draws a menu's heading and entries taller: it needs more room by its row.
