@@ -1,8 +1,8 @@
 /**
  * Home's Discover mixes (docs/spec.md, "Discover mixes"): YouTube Music
  * radios of the owner's most played artists and songs (the Library's when
- * plays are short, then artists similar to the Library's), with every song
- * the owner already knows left out. Which seeds, which artist pages to read
+ * plays are short, then artists similar to the Library's), then of the
+ * Library's genres' artists, with every song the owner already knows left out. Which seeds, which artist pages to read
  * for similar artists, which songs and when to build again are Core's
  * (`discoverMixSeeds`, `discoverSimilarSource`, `discoverMixSongs`,
  * `discoverMixesDue`); this asks YouTube Music and keeps the last mixes built,
@@ -25,6 +25,7 @@ import {
   parseDiscoverMixes,
   pickYtArtist,
   playedFinder,
+  statsWindow,
   storedDiscoverMixes,
   ytArtistLookup,
   type DiscoverMix,
@@ -177,6 +178,8 @@ const buildMixes = Effect.gen(function* () {
   const songs = yield* stats.topSongs("all", SEED_POOL);
   const librarySongs = yield* store.listSongs;
   const libraryArtists = yield* store.listArtists;
+  // Every song's all-time plays: Core ranks the Library's genres by them.
+  const songPlays = yield* store.trackPlayTotals(statsWindow("all", Date.now()));
   const seeds = discoverMixSeeds(
     yield* withSimilar({
       played: {
@@ -186,6 +189,7 @@ const buildMixes = Effect.gen(function* () {
       library: {
         artists: libraryArtists.map((artist) => ({ ...artist, songCount: artist.trackCount })),
         songs: librarySongs,
+        plays: songPlays,
       },
     }),
   );

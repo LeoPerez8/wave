@@ -45,6 +45,15 @@ export interface DiscoverLibraryArtist extends DiscoverSeedArtist {
 /** A Library song with when it entered the Library (ms since the epoch). */
 export interface DiscoverLibrarySong extends DiscoverSeedSong {
   readonly addedAt: number;
+  /** Its genre tag (the file's, or what Fix Song wrote); null or absent for none. */
+  readonly genre?: string | null;
+}
+
+/** A Library song's all-time counted plays. */
+export interface DiscoverSongPlays {
+  /** The song's id (`DiscoverSeedSong.id`). */
+  readonly id: number;
+  readonly countedPlays: number;
 }
 
 /**
@@ -78,6 +87,8 @@ export type DiscoverMixSeed =
       readonly from: DiscoverSeedSource;
       /** Their YouTube Music page, for a similar artist: their radio starts there. */
       readonly browseId?: string;
+      /** The Library genre the mix stands for; absent for the varied mix and artist fallbacks. */
+      readonly genre?: string;
     }
   | {
       readonly kind: "song";
@@ -86,6 +97,8 @@ export type DiscoverMixSeed =
       readonly name: string;
       readonly from: DiscoverSeedSource;
       readonly song: DiscoverSeedSong;
+      /** The Library genre the mix stands for; absent for the varied mix and artist fallbacks. */
+      readonly genre?: string;
     };
 
 /** What the seeds are picked from, each source filling what the ones before left short. */
@@ -99,6 +112,8 @@ export interface DiscoverSeedPools {
   readonly library?: {
     readonly artists: readonly DiscoverLibraryArtist[];
     readonly songs: readonly DiscoverLibrarySong[];
+    /** The Library songs' all-time counted plays (songs not listed have none): ranks the genres. */
+    readonly plays?: readonly DiscoverSongPlays[];
   };
   /**
    * The similar artists read so far, page by page, in the order
@@ -272,7 +287,7 @@ const libraryPool = (library: NonNullable<DiscoverSeedPools["library"]>): SeedPo
  * nothing.
  */
 export const discoverMixSeeds = (pools: DiscoverSeedPools): DiscoverMixSeed[] =>
-  seedsFrom(pools, similarOf(pools));
+  planFrom(pools, similarOf(pools));
 
 /**
  * The Library artist whose YouTube Music page to read next for similar
@@ -291,7 +306,7 @@ export const discoverSimilarSource = (pools: DiscoverSeedPools): DiscoverSeedArt
     name: "",
     browseId: "",
   }));
-  const seeds = seedsFrom(pools, [...known, ...standIns]);
+  const seeds = planFrom(pools, [...known, ...standIns]);
   if (seeds.filter((seed) => seed.from === "similar").length <= known.length) return null;
   const read = new Set(similar.map((page) => identityKey(page.of)));
   for (const { id, name } of [...played.artists, ...libraryPool(library).artists]) {
@@ -305,17 +320,22 @@ export const discoverSimilarSource = (pools: DiscoverSeedPools): DiscoverSeedArt
 const similarOf = ({ played, library, similar = [] }: DiscoverSeedPools): SeedArtist[] =>
   library === undefined ? [] : similarPool(similar, [...played.artists, ...library.artists]);
 
-/** The seeds from [pools], with [similar] (vetted, in order) after the Library's artists. */
+/**
+ * The seeds from [pools], with [similar] (vetted, in order) after the
+ * Library's artists; after [before] seeds already picked, whose artists and
+ * songs are [taken].
+ */
 const seedsFrom = (
   { played, library }: DiscoverSeedPools,
   similar: readonly SeedArtist[],
+  before = 0,
+  taken: SeedPool = { artists: [], songs: [] },
 ): DiscoverMixSeed[] => {
   const sources: [DiscoverSeedSource, SeedPool, readonly SeedArtist[]][] = [["plays", played, []]];
   if (library !== undefined) sources.push(["library", libraryPool(library), similar]);
   const seeds: DiscoverMixSeed[] = [];
-  let taken: SeedPool = { artists: [], songs: [] };
   for (const [from, pool, extra] of sources) {
-    const want = DISCOVER_MIX_COUNT - seeds.length;
+    const want = DISCOVER_MIX_COUNT - before - seeds.length;
     if (want === 0) break;
     const target = Math.max(0, ARTIST_SEEDS - taken.artists.length);
     const picked = pickSeeds(pool, taken, want, target, extra);
@@ -326,6 +346,138 @@ const seedsFrom = (
     };
   }
   return seeds;
+};
+
+/** How many Library songs a genre needs to seed a mix. */
+const GENRE_FEWEST = 5;
+
+/** A Library genre that may seed mixes, with its songs and artists in seeding order. */
+interface SeedGenre {
+  readonly name: string;
+  /** Its artists, the most listened in the genre first. */
+  readonly artists: readonly SeedArtist[];
+  /** Its songs, the most played first, then the newest. */
+  readonly songs: readonly DiscoverSeedSong[];
+}
+
+/**
+ * The Library's genres with at least five songs, the most listened first
+ * (counted plays of their songs), then the ones with more songs; each with
+ * its artists (by plays in the genre, then songs in it) and its songs.
+ */
+const seedGenres = (library: NonNullable<DiscoverSeedPools["library"]>): SeedGenre[] => {
+  const plays = new Map((library.plays ?? []).map((entry) => [entry.id, entry.countedPlays]));
+  const playsOf = (song: DiscoverSeedSong): number => plays.get(song.id) ?? 0;
+  const names = new Map(library.artists.map((artist) => [artist.id, artist.name]));
+  const byGenre = new Map<string, { name: string; songs: DiscoverLibrarySong[] }>();
+  for (const song of library.songs) {
+    const name = song.genre?.trim() ?? "";
+    if (name === "") continue;
+    const key = identityKey(name);
+    const genre = byGenre.get(key) ?? { name, songs: [] };
+    genre.songs.push(song);
+    byGenre.set(key, genre);
+  }
+  const ranked = [...byGenre.values()]
+    .filter((genre) => genre.songs.length >= GENRE_FEWEST)
+    .map((genre) => ({
+      ...genre,
+      listened: genre.songs.reduce((sum, song) => sum + playsOf(song), 0),
+    }))
+    .sort((a, b) => b.listened - a.listened || b.songs.length - a.songs.length);
+  return ranked.map(({ name, songs }) => {
+    const artists = new Map<number, { plays: number; songs: number; first: number }>();
+    songs.forEach((song, at) => {
+      for (const id of song.artistIds) {
+        const artist = artists.get(id) ?? { plays: 0, songs: 0, first: at };
+        artist.plays += playsOf(song);
+        artist.songs += 1;
+        artists.set(id, artist);
+      }
+    });
+    return {
+      name,
+      artists: [...artists.entries()]
+        .sort(([, a], [, b]) => b.plays - a.plays || b.songs - a.songs || a.first - b.first)
+        .flatMap(([id]) => {
+          const artist = names.get(id);
+          return artist === undefined ? [] : [{ id, name: artist }];
+        }),
+      songs: [...songs].sort((a, b) => playsOf(b) - playsOf(a) || b.addedAt - a.addedAt),
+    };
+  });
+};
+
+/**
+ * The mixes' seeds from [pools], with [similar] (vetted, in order) after the
+ * Library's artists. With no genre that may seed, they're today's seeds
+ * (`seedsFrom`). Else the first, varied, is today's first, and the genres
+ * seed the next, the most listened first, then again in that order with
+ * other seed artists: a genre's artist that no seed has (and no seed song
+ * credits), else a song of the genre by none of the seeds' artists. When no
+ * genre has a seed left, today's rules fill the six around the seeds taken.
+ */
+const planFrom = (pools: DiscoverSeedPools, similar: readonly SeedArtist[]): DiscoverMixSeed[] => {
+  const varied = seedsFrom(pools, similar);
+  const { played, library } = pools;
+  const genres = library === undefined ? [] : seedGenres(library);
+  const first = varied[0];
+  if (library === undefined || genres.length === 0 || first === undefined) return varied;
+  const names = new Map(
+    [...played.artists, ...library.artists].map((artist) => [artist.id, identityKey(artist.name)]),
+  );
+  const seeds: DiscoverMixSeed[] = [first];
+  const taken: { artists: SeedArtist[]; songs: DiscoverSeedSong[] } = { artists: [], songs: [] };
+  if (first.kind === "song") taken.songs.push(first.song);
+  else {
+    const key = identityKey(first.name);
+    const artist = [...played.artists, ...library.artists, ...similar].find(
+      (candidate) => identityKey(candidate.name) === key,
+    );
+    taken.artists.push(artist ?? { id: Number.NaN, name: first.name });
+  }
+  const artistTaken = (id: number): boolean => {
+    const key = names.get(id);
+    return (
+      taken.artists.some((artist) => artist.id === id || identityKey(artist.name) === key) ||
+      taken.songs.some((song) => song.artistIds.includes(id))
+    );
+  };
+  const seedOf = (genre: SeedGenre): DiscoverMixSeed | null => {
+    const artist = genre.artists.find(
+      (candidate) => ytArtistQuery(candidate.name) !== null && !artistTaken(candidate.id),
+    );
+    if (artist !== undefined) {
+      taken.artists.push(artist);
+      return { ...artistSeed(artist, "library"), genre: genre.name };
+    }
+    const recordings = new Set(taken.songs.map(songKey));
+    const song = genre.songs.find(
+      (candidate) => !recordings.has(songKey(candidate)) && !candidate.artistIds.some(artistTaken),
+    );
+    if (song === undefined) return null;
+    taken.songs.push(song);
+    return {
+      kind: "song",
+      id: `song:${song.id}`,
+      name: song.title,
+      from: "library",
+      song,
+      genre: genre.name,
+    };
+  };
+  // Round after round, each genre in turn, until the mixes are six or no genre has a seed left.
+  for (let more = true; more && seeds.length < DISCOVER_MIX_COUNT;) {
+    more = false;
+    for (const genre of genres) {
+      if (seeds.length === DISCOVER_MIX_COUNT) break;
+      const seed = seedOf(genre);
+      if (seed === null) continue;
+      seeds.push(seed);
+      more = true;
+    }
+  }
+  return [...seeds, ...seedsFrom(pools, similar, seeds.length, taken)];
 };
 
 const FIELD = "\u001f";
@@ -460,7 +612,17 @@ const MIX_FEWEST = 10;
 export interface DiscoverMix {
   /** Its seed's id (`DiscoverMixSeed`): the page's address. */
   readonly id: string;
-  readonly seed: { readonly kind: DiscoverMixSeed["kind"]; readonly name: string };
+  readonly seed: {
+    readonly kind: DiscoverMixSeed["kind"];
+    readonly name: string;
+    /** The Library genre the mix stands for (`DiscoverMixSeed.genre`); absent for the others. */
+    readonly genre?: string;
+    /**
+     * The seed's artists: the artist, or the artists a song seed credits.
+     * Absent on mixes saved before they were kept.
+     */
+    readonly artists?: readonly string[];
+  };
   readonly songs: readonly YtAlbumSong[];
 }
 
@@ -476,7 +638,12 @@ export const discoverMix = (
     ? null
     : {
         id: seed.id,
-        seed: { kind: seed.kind, name: seed.name },
+        seed: {
+          kind: seed.kind,
+          name: seed.name,
+          ...(seed.genre === undefined ? {} : { genre: seed.genre }),
+          artists: seed.kind === "artist" ? [seed.name] : splitCredit(seed.song.artist),
+        },
         songs: songs.map(({ video: _video, ...song }) => song),
       };
 
@@ -485,12 +652,17 @@ const CAPTION_ARTISTS = 3;
 
 /**
  * A mix's tile on Home: named after its seed, over the first three artists
- * it plays (each song's lead artist), with how many songs it has.
+ * it plays (each song's lead artist), with how many songs it has. A genre's
+ * mix is named after the genre, its seed's lead artist first among the three.
  */
 export const discoverMixCaption = (
   mix: DiscoverMix,
 ): { readonly title: string; readonly artists: string; readonly line: string } => {
+  const { genre } = mix.seed;
   const artists = new Map<string, string>();
+  const seedArtist = mix.seed.artists?.[0];
+  if (genre !== undefined && seedArtist !== undefined)
+    artists.set(identityKey(seedArtist), seedArtist);
   for (const song of mix.songs) {
     if (artists.size === CAPTION_ARTISTS) break;
     const lead = song.artists[0];
@@ -499,7 +671,7 @@ export const discoverMixCaption = (
     if (!artists.has(key)) artists.set(key, lead);
   }
   return {
-    title: `${mix.seed.name} mix`,
+    title: `${genre ?? mix.seed.name} mix`,
     artists: [...artists.values()].join(", "),
     line: `${mix.songs.length} songs`,
   };
@@ -568,11 +740,17 @@ const readSong = (value: unknown): YtAlbumSong | null => {
 
 const readMix = (value: unknown): DiscoverMix | null => {
   if (!isRecord(value) || !isString(value.id) || !isRecord(value.seed)) return null;
-  const { kind, name } = value.seed;
+  const { kind, name, genre, artists } = value.seed;
   if ((kind !== "artist" && kind !== "song") || !isString(name)) return null;
   if (!Array.isArray(value.songs)) return null;
   const songs = value.songs.flatMap((song) => readSong(song) ?? []);
-  return songs.length === 0 ? null : { id: value.id, seed: { kind, name }, songs };
+  const seed: DiscoverMix["seed"] = {
+    kind,
+    name,
+    ...(isString(genre) && genre !== "" ? { genre } : {}),
+    ...(Array.isArray(artists) && artists.every(isString) ? { artists } : {}),
+  };
+  return songs.length === 0 ? null : { id: value.id, seed, songs };
 };
 
 /**

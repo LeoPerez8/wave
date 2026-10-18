@@ -1100,7 +1100,17 @@ export type {
   HomeSection,
   HomeSectionId,
 } from "./homeSections.ts";
-export { CROSSFADE, crossfadeDuration, readCrossfade, snapCrossfade } from "./crossfade.ts";
+export {
+  CROSSFADE,
+  CROSSFADE_PREFETCH_LEAD_MS,
+  CROSSFADE_PRE_ROLL_MS,
+  crossfadeDuration,
+  crossfadePrefetchAt,
+  lateCrossfadeOverlap,
+  MIN_LATE_CROSSFADE_MS,
+  readCrossfade,
+  snapCrossfade,
+} from "./crossfade.ts";
 export {
   DISCOVER_MIX_COUNT,
   discoverMix,
@@ -1131,6 +1141,7 @@ export type {
   DiscoverSeedSource,
   DiscoverSimilarArtist,
   DiscoverSimilarArtists,
+  DiscoverSongPlays,
 } from "./discoverMixes.ts";
 export { discoverMixActions, discoverMixPlaylist } from "./discoverMixActions.ts";
 export type { DiscoverMixAction } from "./discoverMixActions.ts";
@@ -1227,6 +1238,7 @@ export type {
 } from "./ytLibraryBatch.ts";
 export { discoverMixesSection } from "./discoverMixesSection.ts";
 export type { DiscoverMixesSection } from "./discoverMixesSection.ts";
+export { streamedCoverUrl, streamedCoverUrls } from "./streamedCover.ts";
 export type { YtLibraryFavorites } from "./ytLibraryBatch.ts";
 export { pendingFavorite, settlePendingFavorites } from "./pendingFavorites.ts";
 export type { EnteringSong, PendingFavorite, SettledFavorites } from "./pendingFavorites.ts";

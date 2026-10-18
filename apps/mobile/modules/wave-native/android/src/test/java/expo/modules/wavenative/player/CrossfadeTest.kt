@@ -44,10 +44,15 @@ class CrossfadeTest {
     override var mainDurationMs: Long? = 180_000
     override var mainWantsToPlay = true
     override var movesOnNaturally = true
+    override var nextReady = true
     var tail: Deck? = null
     val opened = mutableListOf<Long>()
     var advanced = 0
     var fadesEnded = 0
+    var prefetches = 0
+
+    /** What the app log heard of late next songs: how late, and the overlap left (0: none). */
+    val late = mutableListOf<Pair<Long, Long>>()
 
     override fun openTail(positionMs: Long): CrossfadeDeck {
       opened += positionMs
@@ -65,6 +70,14 @@ class CrossfadeTest {
 
     override fun fadeEnded() {
       fadesEnded++
+    }
+
+    override fun prefetchNext() {
+      prefetches++
+    }
+
+    override fun nextLate(lateMs: Long, overlapMs: Long) {
+      late += lateMs to overlapMs
     }
   }
 
@@ -265,5 +278,110 @@ class CrossfadeTest {
     val crossfade = crossfade(service)
     crossfade.playTo(service, 179_000)
     assertTrue(service.opened.isEmpty())
+  }
+
+  @Test
+  fun theNextSongIsMadeReadyWellBeforeTheOverlap() {
+    // 3 minutes, a 10 s overlap: 30 s before the pre-roll (Core's crossfadePrefetchAt).
+    val service = Service()
+    val crossfade = crossfade(service, overlapMs = 10_000)
+    crossfade.playTo(service, 136_900)
+    assertEquals(0, service.prefetches)
+    crossfade.playTo(service, 137_000)
+    assertEquals(1, service.prefetches)
+    crossfade.playTo(service, 150_000)
+    assertEquals(1, service.prefetches)
+  }
+
+  @Test
+  fun aLateNextSongKeepsTheOutgoingOneAtFullVolumeThenOverlapsForWhatIsLeft() {
+    val service = Service().apply { nextReady = false }
+    val crossfade = crossfade(service, overlapMs = 10_000)
+    crossfade.playTo(service, 167_000)
+    val outgoing = service.tail!!
+
+    // The overlap should begin at 2:50, but the next song isn't buffered.
+    crossfade.playTo(service, 170_000)
+    crossfade.playTo(service, 172_000)
+    assertEquals(0, service.advanced)
+    assertEquals(1f, service.main.level)
+    assertEquals(0, service.fadesEnded)
+
+    // Buffered 4 s late: the two overlap for the 6 s left.
+    service.nextReady = true
+    crossfade.playTo(service, 174_000)
+    assertEquals(1, service.advanced)
+    assertEquals(1f, outgoing.level)
+
+    service.main.positionMs = 3000
+    outgoing.positionMs = 177_000
+    crossfade.tick()
+    assertEquals(0.707f, outgoing.level, 0.01f)
+    assertEquals(0.707f, service.main.level, 0.01f)
+    assertEquals(listOf(4000L to 6000L), service.late)
+  }
+
+  @Test
+  fun aNextSongNeverReadyBeforeTheEndPlaysGaplessWithNoFadeOut() {
+    val service = Service().apply { nextReady = false }
+    val crossfade = crossfade(service, overlapMs = 10_000)
+    crossfade.playTo(service, 167_000)
+    crossfade.playTo(service, 175_000)
+    crossfade.playTo(service, 179_100)
+    assertNull(service.tail)
+    assertEquals(0, service.advanced)
+    assertEquals(1f, service.main.level)
+    assertEquals(1, service.late.size)
+    assertEquals(0L, service.late.single().second)
+  }
+
+  @Test
+  fun aNextSongStillBufferingAfterTheMoveWaitsWithTheOutgoingOneAtFullVolume() {
+    val service = Service()
+    val crossfade = crossfade(service, overlapMs = 10_000)
+    crossfade.playTo(service, 167_000)
+    crossfade.playTo(service, 170_000)
+    assertEquals(1, service.advanced)
+    val outgoing = service.tail!!
+
+    // The session's player is on the next song, still buffering at its start.
+    service.main.sounding = false
+    outgoing.positionMs = 172_000
+    crossfade.tick()
+    assertEquals(1f, outgoing.level)
+    assertEquals(0f, service.main.level)
+
+    // It sounds 4 s late: the overlap is the 6 s left, both fading together.
+    service.main.sounding = true
+    outgoing.positionMs = 174_000
+    crossfade.tick()
+    assertEquals(1f, outgoing.level, 0.01f)
+    service.main.positionMs = 3000
+    outgoing.positionMs = 177_000
+    crossfade.tick()
+    assertEquals(0.707f, outgoing.level, 0.01f)
+    assertEquals(0.707f, service.main.level, 0.01f)
+    assertEquals(listOf(4000L to 6000L), service.late)
+  }
+
+  @Test
+  fun aNextSongThatSoundsOnlyAfterTheOutgoingOneEndedStartsAtFullVolume() {
+    val service = Service()
+    val crossfade = crossfade(service, overlapMs = 10_000)
+    crossfade.playTo(service, 167_000)
+    crossfade.playTo(service, 170_000)
+    val outgoing = service.tail!!
+    service.main.sounding = false
+    outgoing.positionMs = 179_000
+    crossfade.tick()
+    assertEquals(1f, outgoing.level)
+
+    outgoing.positionMs = 180_000
+    outgoing.ended = true
+    crossfade.tick()
+    assertNull(service.tail)
+    assertEquals(1, service.fadesEnded)
+    assertEquals(1f, service.main.level)
+    assertEquals(0L, service.late.single().second)
   }
 }
