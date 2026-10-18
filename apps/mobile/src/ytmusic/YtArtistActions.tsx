@@ -48,7 +48,7 @@ export const openYtArtistActions = (artist: YtArtistTarget): void => {
         artist.name,
         offline
           ? "You're offline. YT Music artists need the network."
-          : "No answer from YouTube Music. Try again in a moment.",
+          : "No answer online. Try again in a moment.",
       );
       return;
     }
@@ -56,7 +56,7 @@ export const openYtArtistActions = (artist: YtArtistTarget): void => {
     // With no songs to play (Core's empty layout), a message, as their page shows no Play.
     const layout = menuLayout("ytArtist", [], { empty: songs.length === 0 });
     if (layout.cards.length === 0 && layout.list.length === 0) {
-      await showMessage(artist.name, "YouTube Music has no songs for this artist.");
+      await showMessage(artist.name, "No songs online for this artist.");
       return;
     }
     openOverlay({

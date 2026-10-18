@@ -362,10 +362,13 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
     [context, currentId, favorites, mixed, downloaded, albumSelection, page, integrated],
   );
 
-  const line = [
-    detail.artist.albumCount > 0 ? albumsLine(detail.artist.albumCount) : null,
-    songCount(loaded ? songs.length : detail.artist.trackCount),
-  ]
+  // With Online and an answer found, the counts take in what YouTube Music adds to the page.
+  const local = {
+    albums: detail.artist.albumCount,
+    songs: loaded ? songs.length : detail.artist.trackCount,
+  };
+  const counts = loaded ? yt.counts(local) : local;
+  const line = [counts.albums > 0 ? albumsLine(counts.albums) : null, songCount(counts.songs)]
     .filter((part) => part !== null)
     .join(" · ");
 

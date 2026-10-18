@@ -400,8 +400,8 @@ export interface UnavailableEntryView {
 
 const UNAVAILABLE_VIEWS: { readonly [R in UnavailableReason]: UnavailableEntryView } = {
   notFound: {
-    line: "Not found on YouTube Music",
-    notice: "Wave couldn't find this song on YouTube Music or in your Library.",
+    line: "Not found online",
+    notice: "Wave couldn't find this song online or in your Library.",
   },
   localFile: {
     line: "Local file on Spotify",
@@ -414,7 +414,7 @@ export const unavailableEntryView = (song: UnavailableSong): UnavailableEntryVie
   UNAVAILABLE_VIEWS[song.reason];
 
 const UNPLAYABLE_NOTICES: { readonly [R in UnavailableReason]: string } = {
-  notFound: "Wave couldn't find these songs on YouTube Music or in your Library.",
+  notFound: "Wave couldn't find these songs online or in your Library.",
   localFile: "These songs are local files on Spotify, so Wave couldn't look for them.",
 };
 
@@ -432,7 +432,7 @@ export const playlistUnplayableNotice = <S extends YtSong, L>(
   if (songs.length === 1) return unavailableEntryView(first).notice;
   return songs.every((song) => song.reason === first.reason)
     ? UNPLAYABLE_NOTICES[first.reason]
-    : "Wave couldn't find these songs on YouTube Music or in your Library, or they're local files on Spotify.";
+    : "Wave couldn't find these songs online or in your Library, or they're local files on Spotify.";
 };
 
 /** What an unavailable entry's menu offers. */

@@ -10,8 +10,16 @@ import {
   ytSearchQuery,
   ytSectionToggle,
   ytSectionView,
+  ytSearchArtistReads,
+  ytSearchArtistSongs,
 } from "./index.ts";
-import type { YtArtistAlbum, YtArtistCandidate, YtSection, YtSong } from "./index.ts";
+import type {
+  YtArtistAlbum,
+  YtArtistCandidate,
+  YtArtistSaved,
+  YtSection,
+  YtSong,
+} from "./index.ts";
 
 const song = (videoId: string): YtSong => ({
   videoId,
@@ -609,5 +617,53 @@ describe("Search with Search online set to Always", () => {
     const cleared = typedAlways(libraryOnly, "");
     assert.equal(ytSectionToggle(cleared), "online");
     assert.equal(typedAlways(cleared, "daft").status, "loading");
+  });
+});
+
+describe("the top-hit Library artist's song count in Search", () => {
+  const NOW = 1_000 * 24 * 60 * 60 * 1000;
+  /** The Library has the song "mine"; the artist's online page lists it among theirs. */
+  const answer = (allSongs: YtSong[], checkedAt = NOW): YtArtistSaved => ({
+    outcome: "found",
+    checkedAt,
+    browseId: "UCbluestones",
+    page: { name: "Blue Stones", songs: [], allSongs, albums: [], singles: [] },
+  });
+  const ANSWER = answer([song("mine"), song("a"), song("b"), song("a")]);
+  const online = (): YtSection =>
+    found(pick(typedFound(YT_SECTION_HIDDEN, "blue"), "online"), "blue", []);
+  const count = (section: YtSection, saved: YtArtistSaved | null, now = NOW) =>
+    ytSearchArtistSongs(section, 2, saved, { now, inLibrary: library.hasSong });
+
+  test("with Online and the artist's answer, the Library's songs plus those it lacks, each once", () => {
+    assert.equal(count(online(), ANSWER), 4);
+  });
+
+  test("the Library's count until the answer comes, on no match or failure, and with Library", () => {
+    assert.equal(count(online(), null), 2);
+    assert.equal(count(online(), { outcome: "unmatched", checkedAt: NOW }), 2);
+    assert.equal(count(pick(online(), "library"), ANSWER), 2);
+    assert.equal(count(typedFound(YT_SECTION_HIDDEN, "blue"), ANSWER), 2);
+    assert.equal(count(YT_SECTION_HIDDEN, ANSWER), 2);
+  });
+
+  test("a saved answer a week old doesn't count", () => {
+    assert.equal(count(online(), answer([song("a")], NOW - 8 * 24 * 60 * 60 * 1000)), 2);
+  });
+
+  test("the artist's page is read once Search shows YouTube Music's answer to the query", () => {
+    assert.equal(ytSearchArtistReads(online(), "Blue Stones"), true);
+    // Asked and not answered yet: the top hit may still change as the query does.
+    assert.equal(
+      ytSearchArtistReads(pick(typedFound(YT_SECTION_HIDDEN, "blue"), "online"), "Blue Stones"),
+      false,
+    );
+    assert.equal(ytSearchArtistReads(pick(online(), "library"), "Blue Stones"), false);
+    assert.equal(ytSearchArtistReads(YT_SECTION_HIDDEN, "Blue Stones"), false);
+  });
+
+  test("only a Library artist on top, and not one whose name isn't an artist's", () => {
+    assert.equal(ytSearchArtistReads(online(), null), false);
+    assert.equal(ytSearchArtistReads(online(), "Various Artists"), false);
   });
 });

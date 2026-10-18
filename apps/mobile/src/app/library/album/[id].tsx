@@ -2,6 +2,7 @@ import { LegendList } from "@legendapp/list/react-native";
 import {
   artistLink,
   discoverTrackId,
+  ytAlbumSongCount,
   ytTrackId,
   type MixedSong,
   type YtAlbumEntry,
@@ -97,9 +98,9 @@ const itemKey = (item: Item): string => {
 
 const YT_NOTE: Readonly<Record<YtLibraryAlbumNote, string>> = {
   loading: "Looking on YouTube Music…",
-  notFound: "Not found on YouTube Music.",
+  notFound: "Not found online.",
   offline: "You're offline. Tap Online to try again when you're back online.",
-  failed: "YouTube Music didn't answer. Tap Online to try again.",
+  failed: "No answer online. Tap Online to try again.",
 };
 
 /** The entries as playback takes them: the Library's files, the rest streamed. */
@@ -115,6 +116,7 @@ function AlbumHead({
   mixed,
   ytSongs,
   toggle,
+  songs: songTotal,
 }: {
   shown: Shown;
   /** With YouTube Music's songs joined in, Play and Shuffle play them too. */
@@ -123,6 +125,8 @@ function AlbumHead({
   ytSongs: readonly NativeYtSong[];
   /** The Library | Online toggle ending the Play and Shuffle line, YT Music on. */
   toggle: LineToggle | null;
+  /** How many songs the page lists: with YouTube Music's joined in, the whole tracklist. */
+  songs: number;
 }) {
   const { width } = useWindowDimensions();
   const { album, genre, tracks } = shown;
@@ -151,7 +155,7 @@ function AlbumHead({
   const furniture = [
     genre,
     album.year,
-    songCount(album.trackCount),
+    songCount(songTotal),
     `${Math.max(1, Math.round(album.durationMs / 60_000))} min`,
   ]
     .filter((part) => part !== null)
@@ -367,6 +371,7 @@ function AlbumTracks({ shown, openedIntegrated }: { shown: Shown; openedIntegrat
           mixed={mixed}
           ytSongs={ytView?.songs ?? NO_SONGS}
           toggle={ytView === null ? null : yt.toggle}
+          songs={ytAlbumSongCount(shown.album.trackCount, ytView)}
         />
       }
       ListFooterComponent={
