@@ -9,10 +9,15 @@
  * queue with a notice naming the song. A failed search leaves the song
  * unsearched: it's asked again a while later, and the player passes over it
  * meanwhile. The queue waits for the playing song's own search through
- * `searchPlaying`, which joins the one going on.
+ * `searchPlaying`, which joins the one going on. With crossfade on, the
+ * next song is asked again at the playing one's prefetch point (Core's
+ * `crossfadePrefetchAt`) even if its last search failed a moment ago, so a
+ * found song reaches the player before the overlap.
  */
 import {
+  crossfadePrefetchAt,
   currentEntry,
+  extrapolatePosition,
   playingAnswerStep,
   playingSearches,
   readUnsearchedTrackId,
@@ -25,8 +30,10 @@ import {
 import { appRuntime } from "@/library/runtime";
 import { searchUnsearchedSong } from "@/library/unsearchedEntries";
 import { showToast } from "@/overlay/toast";
+import { crossfadeMs } from "@/settings/crossfade";
 import { ytMusicEnabled } from "@/settings/ytMusic";
 
+import { playbackState } from "./Player";
 import { setPlayingSearcher } from "./playingSearch";
 import { Queue, queueState } from "./Queue";
 import { learnQueueTracks, toYtQueueTrack } from "./queueTracks";
@@ -109,17 +116,46 @@ const retryLater = (): void => {
   retryTimer = setTimeout(lookAhead, PLAYING_SEARCH_RETRY_MS);
 };
 
-/** Searches what's due for the queue as it is now. */
-const lookAhead = (): void => {
+/**
+ * Searches what's due for the queue as it is now; [nextDue] once the playing
+ * song reached the crossfade's prefetch point.
+ */
+const lookAhead = (nextDue = false): void => {
   if (!ytMusicEnabled()) return;
   const state = queueState.get();
   const playing = currentEntry(state)?.trackId;
-  const searching = { asking: new Set(asking.keys()), failedAt };
+  const searching = { asking: new Set(asking.keys()), failedAt, nextDue };
   for (const { trackId } of playingSearches(state, searching, Date.now())) {
     // The playing song's search is the queue's own, which it waits for.
     if (trackId === playing) continue;
     void search(trackId).then((settled) => settleComingUp(trackId, settled));
   }
+};
+
+let prefetchTimer: ReturnType<typeof setTimeout> | undefined;
+/** The player entry playing, and whether its prefetch point was reached: asked once per play. */
+let playingKey: string | null = null;
+let prefetched = false;
+
+/** Asks for the next song at the playing one's crossfade prefetch point, as playback goes on. */
+const schedulePrefetch = (): void => {
+  clearTimeout(prefetchTimer);
+  const playback = playbackState.get();
+  const key = playback.item?.id ?? null;
+  if (key !== playingKey) {
+    playingKey = key;
+    prefetched = false;
+  }
+  if (key === null || prefetched || !playback.isPlaying) return;
+  const at = crossfadePrefetchAt(crossfadeMs(), playback.durationMs);
+  if (at === null) return;
+  const due = (): void => {
+    prefetched = true;
+    lookAhead(true);
+  };
+  const waitMs = at - extrapolatePosition(playback, Date.now());
+  if (waitMs <= 0) due();
+  else prefetchTimer = setTimeout(due, waitMs);
 };
 
 let scheduled = false;
@@ -149,4 +185,6 @@ export const startPlayingSearches = (): void => {
   });
   queueState.subscribe(schedule);
   schedule();
+  playbackState.subscribe(schedulePrefetch);
+  schedulePrefetch();
 };
