@@ -23,9 +23,13 @@ class AppLogModule : Module() {
   private val context: Context get() = appContext.reactContext ?: throw Exceptions.ReactContextLost()
   private val log: AppLogFile get() = AppLogFile.of(context)
   private var unwatchJs: (() -> Unit)? = null
+  private var unlisten: List<() -> Unit> = emptyList()
 
   override fun definition() = ModuleDefinition {
     Name("WaveAppLog")
+
+    // Asking this runtime for the Hermes heap (JsHeap), and to write what it holds at a memory warning.
+    Events("hermesHeapWanted", "memoryWarning")
 
     // The JS thread is watched for freezes while this runtime lives (NativeLog).
     OnCreate {
@@ -33,12 +37,21 @@ class AppLogModule : Module() {
       // Already started at Application.onCreate; this covers a host that didn't dispatch it.
       NativeLog.start(react)
       (react as? ReactContext)?.let { unwatchJs = NativeLog.watchJs(it) }
+      unlisten = listOf(
+        JsHeap.app.listen { sendEvent("hermesHeapWanted") },
+        NativeLog.onMemoryWarning { sendEvent("memoryWarning") },
+      )
     }
 
     OnDestroy {
       unwatchJs?.invoke()
       unwatchJs = null
+      unlisten.forEach { it() }
+      unlisten = emptyList()
     }
+
+    /** JS's answer to hermesHeapWanted: the Hermes heap in bytes. */
+    Function("reportHermesHeap") { bytes: Double -> JsHeap.app.reported(bytes.toLong()) }
 
     /** The route showing, which a freeze's entry names. */
     Function("setScreen") { path: String -> NativeLog.screen = path }
