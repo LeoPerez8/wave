@@ -160,7 +160,7 @@ const scanFolders = (roots: readonly string[]) =>
     if (!(yield* scanner.hasAllFilesAccess)) return;
     // Files recorded for deletion (a replaced song's old file) go first, at launch included;
     // one that couldn't be deleted is left out, so it never comes back as a second song.
-    const doomed = new Set(yield* finishFileDeletions("scan"));
+    const undeletedRecordedFiles = new Set(yield* finishFileDeletions("scan"));
     const excluded = yield* store.excludedFolders;
     const known = yield* store.knownFiles(roots);
     const kind = known.length === 0 ? "full" : "incremental";
@@ -200,9 +200,9 @@ const scanFolders = (roots: readonly string[]) =>
           case "Batch": {
             const changes = reconcileScan({
               missing,
-              read: (doomed.size === 0
+              read: (undeletedRecordedFiles.size === 0
                 ? event.tracks
-                : event.tracks.filter((track) => !doomed.has(track.path))
+                : event.tracks.filter((track) => !undeletedRecordedFiles.has(track.path))
               ).map(toIndexedTrack),
               isIndexed: (path) => indexed.has(path),
             });

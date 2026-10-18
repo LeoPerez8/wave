@@ -63,7 +63,7 @@ import expo.modules.wavenative.tags.TagDestination
 import expo.modules.wavenative.tags.TagWriteFailure
 import expo.modules.wavenative.tags.TagWriteFile
 import expo.modules.wavenative.tags.TagWriteStepException
-import expo.modules.wavenative.yt.AndroidM4aDuration
+import expo.modules.wavenative.yt.AndroidAudioDuration
 import java.io.File
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -295,7 +295,7 @@ class WaveNativeModule : Module() {
      * Runs off the main thread.
      */
     AsyncFunction("readAudioLengths") { paths: List<String> ->
-      AudioLengths { file -> AndroidM4aDuration.of(file) }.read(paths).map { it?.toDouble() }
+      AudioLengths { file -> AndroidAudioDuration.of(file) }.read(paths).map { it?.toDouble() }
     }
 
     /**

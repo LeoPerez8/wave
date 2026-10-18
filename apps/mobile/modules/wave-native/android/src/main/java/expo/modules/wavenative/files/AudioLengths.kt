@@ -5,7 +5,7 @@ import java.util.concurrent.CancellationException
 
 /**
  * How long Library files play, each read from its audio samples to their end ([readLength], the
- * phone's extractor: `AndroidM4aDuration`, which takes any audio file), which also proves the
+ * phone's extractor: `AndroidAudioDuration`), which also proves the
  * audio is there to its end. The check for songs a replacement left twice trusts only these.
  */
 class AudioLengths(private val readLength: (File) -> Long) {

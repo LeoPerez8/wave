@@ -60,12 +60,12 @@ object NativeLog {
   private var started = false
 
   /** Each JS runtime's way to write the log entries it holds at once (`WaveAppLog`'s memoryWarning event). */
-  private val memoryWarned = CopyOnWriteArrayList<() -> Unit>()
+  private val memoryWarningListeners = CopyOnWriteArrayList<() -> Unit>()
 
   private val memoryWarnings = MemoryWarnings(
     memory = AndroidMemory::read,
     warn = { WaveLog.w(MEMORY_TAG, it) },
-    warned = { for (listener in memoryWarned) runCatching(listener) },
+    warned = { for (listener in memoryWarningListeners) runCatching(listener) },
   )
 
   /**
@@ -76,8 +76,8 @@ object NativeLog {
 
   /** [listener] runs at each memory warning of Android's, until the returned function is called. */
   fun onMemoryWarning(listener: () -> Unit): () -> Unit {
-    memoryWarned.add(listener)
-    return { memoryWarned.remove(listener) }
+    memoryWarningListeners.add(listener)
+    return { memoryWarningListeners.remove(listener) }
   }
 
   @Synchronized
@@ -164,7 +164,15 @@ object NativeLog {
   private fun exits(context: Context): List<Exit> {
     val activities = context.getSystemService(ActivityManager::class.java) ?: return emptyList()
     return activities.getHistoricalProcessExitReasons(context.packageName, 0, MAX_EXITS).map { info ->
-      Exit(info.timestamp, reasonOf(info.reason), info.description, info.status, info.pss, info.rss, info.importance) {
+      Exit(
+        at = info.timestamp,
+        reason = reasonOf(info.reason),
+        description = info.description,
+        status = info.status,
+        pssKb = info.pss,
+        rssKb = info.rss,
+        importance = info.importance,
+      ) {
         if (info.reason == ApplicationExitInfo.REASON_ANR) readTrace(info) else null
       }
     }

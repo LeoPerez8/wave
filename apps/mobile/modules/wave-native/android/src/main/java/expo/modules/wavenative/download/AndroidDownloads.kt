@@ -24,7 +24,7 @@ import expo.modules.wavenative.tags.DownloadTagWriter
 import expo.modules.wavenative.tags.DownloadTags
 import expo.modules.wavenative.tags.JAudioTaggerReader
 import expo.modules.wavenative.tags.MediaRetrieverTagReader
-import expo.modules.wavenative.yt.AndroidM4aDuration
+import expo.modules.wavenative.yt.AndroidAudioDuration
 import expo.modules.wavenative.yt.AndroidYtAudioStreams
 import expo.modules.wavenative.yt.YtAudioDownload
 import expo.modules.wavenative.yt.YtDownloadService
@@ -100,7 +100,7 @@ class AndroidDownloads private constructor(private val context: Context) {
           WaveLog.i(TAG, if (from > 0) "A YouTube transfer goes on from byte $from of $total" else "A YouTube transfer starts over: its part file held another stream")
         },
       )
-      val durationMs = AndroidM4aDuration.of(source, cancelled)
+      val durationMs = AndroidAudioDuration.of(source, cancelled)
       // What YouTube answered with goes along, so the confirm decision logs it beside the lengths.
       mapOf(
         "partPath" to source.path, "bytes" to file.bytes, "mimeType" to file.mimeType, "itag" to file.itag.toLong(),

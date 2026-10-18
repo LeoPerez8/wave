@@ -64,11 +64,11 @@ class AndroidYtAudioStreams(context: Context) : YtAudioStreams {
 }
 
 /**
- * How long a downloaded M4A plays, read from its samples as the phone's extractor finds them. It
- * takes any audio file the extractor reads (an MP3 too): the duplicate check reads both files of a
- * pair with it (`AudioLengths`).
+ * How long an audio file plays (a downloaded M4A, a Library MP3), read from its samples as the
+ * phone's extractor finds them: downloads check their M4A with it, and the duplicate check reads
+ * both files of a pair with it (`AudioLengths`).
  */
-object AndroidM4aDuration {
+object AndroidAudioDuration {
   /**
    * The time of [file]'s last audio sample, in milliseconds: reading every sample through also
    * proves the container holds playable audio to its end. Throws [IOException] when it doesn't.
