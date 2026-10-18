@@ -1,4 +1,10 @@
-import type { AutoLyricsFrame, PlaySource, RepeatMode, SleepTimer } from "@wave/core";
+import type {
+  AutoLyricsFrame,
+  PlayerCoverUpdate,
+  PlaySource,
+  RepeatMode,
+  SleepTimer,
+} from "@wave/core";
 import { NativeModule, requireNativeModule } from "expo";
 
 /** One track handed to the native player (`modules/wave-native`, `WavePlayerModule`). */
@@ -183,6 +189,12 @@ declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
    */
   setNotificationAccent(light: string, dark: string): Promise<void>;
   getItemIds(): Promise<NativeItemIds>;
+  /**
+   * Gives loaded items new artwork (Core's `playerCoverUpdates`: a YT Music
+   * cover cached after its item was set), without touching playback. Keys
+   * the player doesn't hold are skipped.
+   */
+  setItemArtwork(updates: readonly PlayerCoverUpdate[]): Promise<void>;
   /**
    * Keeps the queue (JSON) in the native process, for when JS restarts, and on
    * disk with where it was started from, for a cold start (playback resumption).

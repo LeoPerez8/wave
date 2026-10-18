@@ -1,9 +1,17 @@
-import { currentEntry, queuedYtTracks, type QueueEntry, type YtSong } from "@wave/core";
+import {
+  currentEntry,
+  playerCoverUpdates,
+  queuedYtTracks,
+  type QueueCover,
+  type QueueEntry,
+  type YtSong,
+} from "@wave/core";
 import * as Effect from "effect/Effect";
 import { Storage } from "expo-sqlite/kv-store";
 
 import { YtMusic } from "@/ytmusic/YtMusic";
 
+import { Player } from "./Player";
 import { queueState } from "./Queue";
 import {
   cacheStreamedCover,
@@ -43,15 +51,22 @@ export const ytQueueTrack = (song: YtSong): Effect.Effect<QueueTrack, never, YtM
 
 /**
  * Caches [songs]' covers in the background, a few at a time, once their play
- * has started (`cacheYtCoversLater`); returns at once.
+ * has started (`cacheYtCoversLater`); returns at once. Each cover cached goes
+ * to the player's items for its song too, so Now Playing, the notification
+ * and Android Auto show the file instead of YouTube's address.
  */
 export const cacheYtCoversInBackground = (
   songs: readonly YtSong[],
-): Effect.Effect<void, never, YtMusic> =>
+): Effect.Effect<void, never, YtMusic | Player> =>
   Effect.gen(function* () {
     if (songs.every((song) => song.artworkUrl === null)) return;
     const ytMusic = yield* YtMusic;
-    yield* Effect.forkDetach(cacheYtCoversLater(songs, ytMusic.cacheArtwork, isPlaying));
+    const player = yield* Player;
+    const toPlayer = (covers: ReadonlyMap<string, QueueCover>): void => {
+      const updates = playerCoverUpdates(queueState.get().entries, covers);
+      Effect.runFork(player.setItemArtwork(updates).pipe(Effect.ignore));
+    };
+    yield* Effect.forkDetach(cacheYtCoversLater(songs, ytMusic.cacheArtwork, isPlaying, toPlayer));
   });
 
 /** Whether [trackId] is the queue's current entry's: its cover tints Now Playing straight away. */
