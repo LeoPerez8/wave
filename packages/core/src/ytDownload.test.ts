@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  listedSongTags,
   ytDownloadDestination,
   ytDownloadLookup,
   ytDownloadRoot,
@@ -84,6 +85,23 @@ describe("ytDownloadTags", () => {
   test("a song YT Music marks explicit gets an advisory tag of 1", () => {
     assert.equal(ytDownloadTags({ ...getLucky, explicit: true }, ram, null, null).advisory, 1);
     assert.equal(ytDownloadTags({ ...getLucky, explicit: true }, null, null, null).advisory, 1);
+  });
+
+  test("a song a listing gave (Spotify's) takes the flag Deezer's match gives, else none", () => {
+    const found = {
+      lyrics: null,
+      genre: "Dance",
+      trackNumber: 8,
+      discNumber: null,
+      year: 2013,
+      explicit: "explicit",
+    } as const;
+    // A listed song's own `explicit: false` is a placeholder: nothing checked it.
+    assert.equal(listedSongTags(getLucky, found).advisory, 1);
+    assert.equal(listedSongTags(getLucky, { ...found, explicit: "clean" }).advisory, 0);
+    assert.equal(listedSongTags(getLucky, { ...found, explicit: "unknown" }).advisory, null);
+    assert.equal(listedSongTags(getLucky, null).advisory, null);
+    assert.equal(listedSongTags(getLucky, found).genre, "Dance");
   });
 
   test("finds the song in its album by video id first", () => {

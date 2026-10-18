@@ -675,6 +675,7 @@ export {
   ytDownloadLookup,
   ytDownloadRoot,
   ytDownloadTags,
+  listedSongTags,
   ytDownloadTarget,
 } from "./ytDownload.ts";
 export type {

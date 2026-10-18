@@ -113,6 +113,18 @@ export const ytDownloadTags = (
 };
 
 /**
+ * The tags for a song downloaded as a listing gave it (Spotify's, an
+ * unsearched entry's), with no YouTube Music video: `ytDownloadTags` without
+ * an album page, its explicit flag the one Deezer's match [found] gives. The
+ * song's own flag is a placeholder nothing checked, so with no match it gets
+ * no advisory tag and Fix Song can still fill it in.
+ */
+export const listedSongTags = (song: YtSong, found: FoundTags | null): YtDownloadTags => ({
+  ...ytDownloadTags(song, null, found, null),
+  advisory: advisoryTag(found?.explicit ?? "unknown"),
+});
+
+/**
  * What Fix Song's lookup sends for a download: its title, its
  * first artist (the services credit features in the title), its album and
  * length. Null for a song that is never looked up (see `songLookup`).
