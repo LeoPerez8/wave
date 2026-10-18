@@ -13,7 +13,13 @@ import { useColorScheme } from "react-native";
 import { LibraryStore, type TrackDetails } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { playbackState } from "@/playback/Player";
-import { learnUnknownQueueTracks, queueTracks, type QueueTrack } from "@/playback/queueTracks";
+import type { NativeYtSong } from "@/native/waveYtMusic";
+import {
+  learnUnknownQueueTracks,
+  queuedYtSong,
+  queueTracks,
+  type QueueTrack,
+} from "@/playback/queueTracks";
 import { savedYtQueueTracks } from "@/playback/ytQueueTracks";
 import { useThemeColor } from "@/theme/useThemeColor";
 
@@ -48,6 +54,17 @@ export const useTrackDetails = (trackId: string | null): TrackDetails | null => 
     };
   }, [libraryId]);
   return details !== null && String(details.id) === trackId ? details : null;
+};
+
+/**
+ * The YT Music song [trackId] streams, as the queue keeps it (`queuedYtSong`):
+ * null for a Library track.
+ */
+export const usePlayingYtSong = (trackId: string | null): NativeYtSong | null => {
+  const track = useSyncExternalStore(queueTracks.subscribe, () =>
+    trackId === null ? null : (queueTracks.get().get(trackId) ?? null),
+  );
+  return useMemo(() => (track === null ? null : queuedYtSong(track)), [track]);
 };
 
 /**

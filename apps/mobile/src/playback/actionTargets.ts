@@ -378,6 +378,14 @@ export const targetFacts = (
 };
 
 /**
+ * A collection's Library [songs] as Core's `itemActions` sees them
+ * (`ActionItem.songs`): whether each is missing, and whether Fix Song can do
+ * something for it.
+ */
+export const collectionSongFacts = (songs: readonly SongRow[]): ActionItem[] =>
+  songs.map((song) => ({ missing: song.path === null, fixable: canFixSong(song) }));
+
+/**
  * What the actions act on when albums and songs are checked together, in page
  * order: all songs act as songs (Favorite, Delete), all albums as albums, and
  * a mix as `mixed` (the entries both share).

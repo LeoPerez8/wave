@@ -11,7 +11,7 @@ import {
   type UnavailableSong,
 } from "@wave/core";
 import { useMemo, type ComponentProps } from "react";
-import { Text, ToastAndroid, View } from "react-native";
+import { Text, View } from "react-native";
 
 import { Artwork } from "@/catalog/Artwork";
 import { CELL } from "@/catalog/grid";
@@ -24,6 +24,7 @@ import { showError } from "@/overlay/alert";
 import { useOverlayFlow } from "@/overlay/flow";
 import { MenuRow } from "@/overlay/MenuRow";
 import { openOverlay } from "@/overlay/overlay";
+import { showToast } from "@/overlay/toast";
 import { useSlideToChoose } from "@/overlay/useSlideToChoose";
 import { openSearch } from "@/search/queryRequest";
 import { useTabBar } from "@/settings/tabBar";
@@ -77,7 +78,7 @@ export function UnavailableSongRow({
 
 /** Tapping an unavailable entry says why it doesn't play (Core's `unavailableEntryView`). */
 export const explainUnavailable = (song: UnavailableSong): void => {
-  ToastAndroid.show(unavailableEntryView(song).notice, ToastAndroid.LONG);
+  void showToast(unavailableEntryView(song).notice);
 };
 
 /**

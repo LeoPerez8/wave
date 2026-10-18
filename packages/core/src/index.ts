@@ -1316,6 +1316,8 @@ export type { ExplicitPlayback } from "./explicitPlayback.ts";
 export type { PassOver } from "./queue.ts";
 export { discoverMixKeep } from "./discoverMixLevels.ts";
 export type { DiscoverMixKeep } from "./discoverMixLevels.ts";
+export { nowPlayingDownload } from "./nowPlayingDownload.ts";
+export type { NowPlayingDownload } from "./nowPlayingDownload.ts";
 export {
   FAVORITES_DOWNLOAD_ORIGIN,
   readStarDownloads,
