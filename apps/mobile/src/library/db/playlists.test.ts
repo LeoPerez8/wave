@@ -1093,11 +1093,10 @@ describe("migration 0025", () => {
       artworkUrl: null,
     };
     const unsearched: PlaylistSong = { source: "unsearched", song: lucky };
-    const id = old
-      .insert(schema.playlists)
-      .values({ name: "Imported", createdAt: 0, updatedAt: 0, changedAt: 0 })
-      .returning()
-      .get().id;
+    // Plain SQL: drizzle would name columns later migrations add.
+    old.run(sql`INSERT INTO playlists (sync_id, name, created_at, updated_at, changed_at, phone_id)
+      VALUES ('imported', 'Imported', 0, 0, 0, (SELECT phone_id FROM phone))`);
+    const id = old.select({ id: schema.playlists.id }).from(schema.playlists).get()?.id ?? -1;
     appendPlaylistSongs(
       old,
       id,

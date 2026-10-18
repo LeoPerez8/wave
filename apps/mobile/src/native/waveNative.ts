@@ -183,12 +183,23 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
   /** Deletes every downloaded artist photo. */
   clearArtistPhotos(): Promise<void>;
   /**
-   * Opens Android's photo picker for a playlist's image and saves the picked
-   * photo, cropped to a square, in Wave's storage (new files each time).
-   * Null when nothing was picked; rejects when the photo can't be read.
+   * Opens Android's photo picker for a playlist's image and keeps the picked
+   * photo, upright, in Wave's storage as the image's original (a new file
+   * each time). Null when nothing was picked; rejects when the photo can't be read.
    */
-  pickPlaylistImage(): Promise<PlaylistImageFiles | null>;
-  /** Deletes playlist image files `pickPlaylistImage` saved; other paths are left alone. */
+  pickPlaylistPhoto(): Promise<PlaylistPhoto | null>;
+  /**
+   * Saves the square [left], [top], [side] (px, Core's `framingSquare`) of
+   * the original at [path] as a playlist image (new files each time); rejects
+   * when [path] isn't a playlist image Wave saved or can't be read.
+   */
+  cropPlaylistImage(
+    path: string,
+    left: number,
+    top: number,
+    side: number,
+  ): Promise<PlaylistImageFiles>;
+  /** Deletes playlist images and originals Wave saved; other paths are left alone. */
   deletePlaylistImages(paths: readonly string[]): Promise<void>;
   /**
    * Makes `alias` (one of `aliases`, activity-alias names without the package)
@@ -272,6 +283,13 @@ export interface ArtistPhotoFiles {
 interface PlaylistImageFiles {
   readonly path: string;
   readonly thumbPath: string;
+}
+
+/** A photo kept as a playlist image's original, and its size in px. */
+export interface PlaylistPhoto {
+  readonly path: string;
+  readonly width: number;
+  readonly height: number;
 }
 
 /** What became of a file `deleteFiles` was asked to delete (Core's `SongDeleteFailureReason` otherwise). */

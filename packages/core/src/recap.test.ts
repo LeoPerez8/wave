@@ -7,12 +7,15 @@ import { describe, test } from "node:test";
 
 import {
   availableRecaps,
+  genreFamily,
   parseRecapId,
   recap,
   recapBack,
   recapBarFill,
   recapForward,
+  recapHourLabel,
   recapId,
+  recapWeekdayLabel,
   recapSlides,
   parseOpenedRecaps,
   storedOpenedRecaps,
@@ -239,6 +242,113 @@ describe("recap", () => {
     );
   });
 
+  test("the top 5 artists are the month's most counted plays, the top one first", () => {
+    const artists = [
+      song(11, 3),
+      song(12, 8),
+      song(13, 1),
+      song(14, 5),
+      song(15, 2),
+      song(16, 0),
+      song(17, 4),
+    ];
+    assert.deepEqual(
+      recap({ period: september, listening: [], songs: [], artists }).topArtists.map(
+        (entry) => entry.id,
+      ),
+      [12, 14, 17, 11, 15],
+    );
+  });
+
+  test("the top album is the month's most played, none without plays", () => {
+    const albums = [song(21, 2), song(22, 6), song(23, 6, 1)];
+    assert.equal(recap({ period: september, listening: [], songs: [], albums }).topAlbum?.id, 22);
+    assert.equal(recap({ period: september, listening: [], songs: [] }).topAlbum, null);
+  });
+
+  test("top genres rank families by counted plays, songs without a genre left out", () => {
+    const songs = [song(1, 4), song(2, 3), song(3, 2), song(4, 10), song(5, 1), song(6, 7)];
+    const songGenres = [
+      { id: 1, genre: "Metalcore" },
+      { id: 2, genre: "Rock" },
+      // A song in two families adds half its plays to each.
+      { id: 3, genre: "Hard Rock", genres: ["Hard Rock", "Pop"] },
+      { id: 4, genre: null },
+      { id: 5, genre: "Alternative Metal" },
+    ];
+    assert.deepEqual(
+      recap({ period: september, listening: [], songs, songGenres }).topGenres.map((entry) => [
+        entry.family.name,
+        entry.share,
+      ]),
+      [
+        ["Metal", 0.5],
+        ["Rock", 0.4],
+        ["Pop", 0.1],
+      ],
+    );
+  });
+
+  test("no top genres when none of the month's songs has a genre", () => {
+    const songs = [song(1, 4)];
+    assert.deepEqual(
+      recap({ period: september, listening: [], songs, songGenres: [{ id: 1, genre: "" }] })
+        .topGenres,
+      [],
+    );
+  });
+
+  test("habits: the local hour and weekday with the most counted listening", () => {
+    const listening = [
+      listened(at(2026, 8, 31, 8, 0), 5 * HOUR), // August: not this Recap's
+      listened(at(2026, 9, 3, 22, 0), 60 * 60_000), // Thursday
+      listened(at(2026, 9, 10, 22, 15), 50 * 60_000), // Thursday
+      listened(at(2026, 9, 4, 8, 0), 40 * 60_000), // Friday
+      listened(at(2026, 9, 11, 13, 0), 80 * 60_000), // Friday
+    ];
+    const habits = recap({ period: september, listening, songs: [] }).habits;
+    assert.equal(habits?.peakHour, 22);
+    assert.equal(habits?.peakWeekday, 5);
+  });
+
+  test("habits: the longest run of days with a counted play, within the month", () => {
+    const days = [
+      [8, 30],
+      [8, 31],
+      [9, 1],
+      [9, 2],
+      [9, 20],
+      [9, 21],
+      [9, 22],
+      [9, 30],
+    ] as const;
+    const listening = days.map(([month, day]) => listened(at(2026, month, day, 23, 45), HOUR));
+    assert.equal(recap({ period: september, listening, songs: [] }).habits?.longestStreakDays, 3);
+  });
+
+  test("no habits without counted listening in the month", () => {
+    assert.equal(recap({ period: september, listening: [], songs: [] }).habits, null);
+  });
+
+  test("discovered artists had their first counted play in the month, most played first", () => {
+    const artists = [song(11, 9), song(12, 2), song(13, 5), song(14, 4)];
+    const artistFirstPlays = [
+      { id: 11, firstPlayAt: at(2026, 8, 31, 23, 59) },
+      { id: 12, firstPlayAt: at(2026, 9, 1, 0, 0) },
+      { id: 13, firstPlayAt: at(2026, 9, 30, 23, 30) },
+    ];
+    assert.deepEqual(
+      recap({
+        period: september,
+        listening: [],
+        songs: [],
+        artists,
+        artistFirstPlays,
+      }).discoveredArtists.map((entry) => entry.id),
+      [13, 12],
+    );
+  });
+
   test("a Recap is titled by its month", () => {
     assert.equal(recap({ period: september, listening: [], songs: [] }).title, "September 2026");
   });
@@ -252,7 +362,7 @@ describe("recapSlides", () => {
     );
     assert.deepEqual(
       slides.map((slide) => slide.kind),
-      ["minutes", "topSongs"],
+      ["minutes", "topSongs", "habits"],
     );
     const [minutes, top] = slides;
     assert.deepEqual(minutes, { kind: "minutes", minutes: 180 });
@@ -265,8 +375,59 @@ describe("recapSlides", () => {
     );
     assert.deepEqual(
       slides.map((slide) => slide.kind),
-      ["minutes"],
+      ["minutes", "habits"],
     );
+  });
+
+  test("every slide in order: minutes, songs, artists, album, genres, habits, discoveries", () => {
+    const slides = recapSlides(
+      recap({
+        period: september,
+        listening: [listened(at(2026, 9, 3, 21, 0), 3 * HOUR)],
+        songs: [song(1, 4)],
+        artists: [song(11, 4)],
+        albums: [song(21, 4)],
+        songGenres: [{ id: 1, genre: "Rock" }],
+        artistFirstPlays: [{ id: 11, firstPlayAt: at(2026, 9, 3, 21, 0) }],
+      }),
+    );
+    assert.deepEqual(slides, [
+      { kind: "minutes", minutes: 180 },
+      { kind: "topSongs", songs: [song(1, 4)] },
+      { kind: "topArtists", artists: [song(11, 4)] },
+      { kind: "topAlbum", album: song(21, 4) },
+      { kind: "topGenres", genres: [{ family: genreFamily("Rock"), share: 1 }] },
+      { kind: "habits", peakHour: 21, peakWeekday: 4, longestStreakDays: 1 },
+      { kind: "discovered", artists: [song(11, 4)] },
+    ]);
+  });
+
+  test("a slide with nothing to show is skipped: no genres, nothing discovered", () => {
+    const slides = recapSlides(
+      recap({
+        period: september,
+        listening: [listened(at(2026, 9, 3), 3 * HOUR)],
+        songs: [song(1, 4)],
+        artists: [song(11, 4)],
+        albums: [song(21, 4)],
+        songGenres: [{ id: 1, genre: null }],
+        artistFirstPlays: [{ id: 11, firstPlayAt: at(2025, 1, 1) }],
+      }),
+    );
+    assert.deepEqual(
+      slides.map((slide) => slide.kind),
+      ["minutes", "topSongs", "topArtists", "topAlbum", "habits"],
+    );
+  });
+});
+
+describe("habit labels", () => {
+  test("an hour reads as a 12-hour clock hour", () => {
+    assert.deepEqual([0, 9, 12, 22].map(recapHourLabel), ["12 AM", "9 AM", "12 PM", "10 PM"]);
+  });
+
+  test("a weekday reads by name, its plural for habits", () => {
+    assert.deepEqual([0, 5].map(recapWeekdayLabel), ["Sundays", "Fridays"]);
   });
 });
 

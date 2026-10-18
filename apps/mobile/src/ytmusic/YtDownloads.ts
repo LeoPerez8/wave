@@ -118,7 +118,7 @@ import {
   toIndexedArtwork,
   toIndexedTrack,
 } from "@/library/LibraryScan";
-import { publishSavedStars } from "@/library/libraryChanges";
+import { publishSavedStars, publishYtSongSignal } from "@/library/libraryChanges";
 import { LibraryStore, type SongRow } from "@/library/LibraryStore";
 import { useLoadedMissingSongs, useMissingSongs } from "@/library/hooks";
 import { refreshDownloadPolicy } from "@/library/downloadPolicy";
@@ -1365,6 +1365,7 @@ const songRequest = (
 ): JobRequest => ({ song, recording: soulseekRecording(song), equivalentId, source, origin });
 
 export const downloadYtSong = (song: NativeYtSong): void => {
+  publishYtSongSignal("download", [song.videoId]);
   askForNotifications();
   startDownloads();
   // One at a time, so a second tap sees the first one's job in the journal.
@@ -1406,6 +1407,10 @@ const downloadYtSongs = (
   inLibrary: InLibrary,
   origin: DownloadOrigin | null,
 ): void => {
+  publishYtSongSignal(
+    "download",
+    songs.map((song) => song.videoId),
+  );
   askForNotifications();
   startDownloads();
   requests = requests
@@ -1884,7 +1889,7 @@ const failedJobsNow = (): readonly NativeDownloadJob[] => {
 
 /**
  * The Settings row's counts (Core's `failedDownloadCount`, `queuedDownloadCounts`): how many songs
- * failed, and how many are downloading and waiting, without building either list.
+ * failed, and how many are downloading, saving and waiting, without building either list.
  */
 export const useDownloadCounts = (): { failed: number; queued: QueuedDownloadCounts } => {
   const failedJobsList = useSyncExternalStore(journal.subscribe, failedJobsNow);
@@ -1897,7 +1902,7 @@ export const useDownloadCounts = (): { failed: number; queued: QueuedDownloadCou
 /** The journal's queued counts, the same object while they're the same. */
 let queuedShown: { jobs: readonly NativeDownloadJob[]; counts: QueuedDownloadCounts } = {
   jobs: [],
-  counts: { downloading: 0, waiting: 0 },
+  counts: { downloading: 0, saving: 0, waiting: 0 },
 };
 const queuedCountsNow = (): QueuedDownloadCounts => {
   const jobs = journal.get();
@@ -1905,6 +1910,7 @@ const queuedCountsNow = (): QueuedDownloadCounts => {
   const counts = queuedDownloadCounts(jobs);
   const same =
     counts.downloading === queuedShown.counts.downloading &&
+    counts.saving === queuedShown.counts.saving &&
     counts.waiting === queuedShown.counts.waiting;
   queuedShown = { jobs, counts: same ? queuedShown.counts : counts };
   return queuedShown.counts;

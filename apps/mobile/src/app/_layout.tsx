@@ -17,6 +17,7 @@ import { resumePlaylistImports } from "@/library/playlistImports";
 import { resumeYtLibraryImport } from "@/library/ytLibraryImport";
 import { primePlaylists } from "@/library/playlists";
 import { OverlayHost } from "@/overlay/OverlayHost";
+import { PhotoCropperHost } from "@/library/PhotoCropper";
 import { FollowCurrentRoute } from "@/library/routes";
 import { useOpenSharedText } from "@/library/sharedText";
 import { YtLibraryPickerHost } from "@/library/YtLibraryPicker";
@@ -116,6 +117,8 @@ export default function RootLayout() {
           {granted ? <NowPlayingSheet /> : null}
           {/* Library › Playlists › Import › From YT Music's sheet, while it's up. */}
           <YtLibraryPickerHost />
+          {/* A playlist image's crop screen (Change Image, Adjust Image), while it's up. */}
+          <PhotoCropperHost />
         </OverlayHost>
       </SafeAreaProvider>
     </GestureHandlerRootView>
