@@ -121,6 +121,12 @@ export type {
   SearchOptions,
   SearchResults,
 } from "./search.ts";
+export {
+  FIND_IN_PLAYLIST_NO_MATCH,
+  FIND_IN_PLAYLIST_PLACEHOLDER,
+  createPlaylistFinder,
+} from "./findInPlaylist.ts";
+export type { PlaylistFinder, PlaylistFindText } from "./findInPlaylist.ts";
 export { createSearchCatalog } from "./searchCatalog.ts";
 export type { SearchCatalog, SearchCatalogStats } from "./searchCatalog.ts";
 export { SEARCH_FOCUS_LIMITS, startSearchFocus, stepSearchFocus } from "./searchFocus.ts";
