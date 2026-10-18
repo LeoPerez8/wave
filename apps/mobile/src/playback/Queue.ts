@@ -557,7 +557,7 @@ export const layer = Layer.effect(
     );
 
     // Don't play explicit turning on takes the queue's explicit songs out, the playing one too.
-    onDontPlayExplicit((on) => {
+    const dropExplicit = (on: boolean): void => {
       if (!on) return;
       const trackIds = queuedPassedOver(queueState.get(), passOverNow());
       if (trackIds.length === 0) return;
@@ -566,7 +566,11 @@ export const layer = Layer.effect(
           Effect.catch((error) => Effect.sync(() => reportError(error))),
         ),
       );
-    });
+    };
+    yield* Effect.acquireRelease(
+      Effect.sync(() => onDontPlayExplicit(dropExplicit)),
+      (stop) => Effect.sync(stop),
+    );
 
     yield* lane.take(1);
     yield* Effect.forkScoped(restore.pipe(Effect.ensuring(lane.release(1))));
