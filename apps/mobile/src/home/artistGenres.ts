@@ -13,11 +13,13 @@ import {
   deezerArtistProfile,
   deezerArtistSearchUrl,
   deezerGenreNames,
+  libraryGenreProfiles,
   parseArtistProfiles,
   storedArtistProfiles,
   withArtistProfiles,
   type ArtistProfiles,
   type GenreProfile,
+  type GenreProfileLibrary,
   type GenreProfileOf,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
@@ -36,6 +38,19 @@ const profiles = persistedSetting<ArtistProfiles>({
 /** An outside artist's profile as looked up so far: undefined when never looked up. */
 export const lookedUpProfileOf: GenreProfileOf = (artist) =>
   artistProfilesKnown(profiles.get())(artist);
+
+/**
+ * Every artist's genre profile by name, as mixes and the Magic Queue weigh
+ * radio songs (Core's `libraryGenreProfiles`): a Library artist's from
+ * their songs in [library], an outside artist's as Deezer gave it.
+ */
+export const mixProfileOf = (library: GenreProfileLibrary): GenreProfileOf => {
+  const ofLibrary = libraryGenreProfiles(library);
+  return (artist) => {
+    const own = ofLibrary(artist);
+    return own === undefined ? lookedUpProfileOf(artist) : own;
+  };
+};
 
 /** Lookups running at once: gentle on Deezer, whose open API limits bursts. */
 const CONCURRENCY = 3;
