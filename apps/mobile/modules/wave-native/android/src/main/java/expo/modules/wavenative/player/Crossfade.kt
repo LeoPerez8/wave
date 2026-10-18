@@ -177,19 +177,31 @@ class Crossfade(private val host: CrossfadeHost) {
       is Fading -> fading(current)
     }
 
+  /** The entry the session's player last moved to ([moved]). */
+  private var movedTo: String? = null
+
   /**
    * The session's player moved to the entry [key], for any reason. The move
    * into the song being faded into (the overlap's own, or a queue sync
    * reporting it again) keeps the overlap going; any other ends it at once
-   * ([interrupt]): a skip, picking a song, or the next song replaced.
+   * ([interrupt]): a skip, picking a song, or the next song replaced. A
+   * queue sync reporting the song that plays again changes nothing (its next
+   * song stays asked for). [restarted]: the same entry again from its start
+   * (repeat). Returns whether the song changed, so the service only then
+   * turns the next song's preload off again.
    */
-  fun moved(key: String?) {
+  fun moved(key: String?, restarted: Boolean = false): Boolean {
+    val changed = key == null || key != movedTo || restarted
+    movedTo = key
     val expected = when (val current = phase) {
       Idle -> null
       is PreRoll -> current.outgoingKey
       is Fading -> current.incomingKey
     }
-    if (phase == Idle || key == null || key != expected) interrupt(CrossfadeEnd.Moved)
+    if (phase == Idle) {
+      if (changed) interrupt(CrossfadeEnd.Moved)
+    } else if (key == null || key != expected) interrupt(CrossfadeEnd.Moved)
+    return changed
   }
 
   /** The owner moved the session's player ([why]): no fade, the outgoing song stops now. */

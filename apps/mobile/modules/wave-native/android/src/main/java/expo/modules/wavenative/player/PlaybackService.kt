@@ -359,9 +359,12 @@ class PlaybackService : MediaLibraryService() {
   private val crossfadeListener = object : Player.Listener {
     @OptIn(UnstableApi::class)
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-      // The song after this one is preloaded only once this one nears its overlap.
-      exoPlayer?.preloadConfiguration = ExoPlayer.PreloadConfiguration.DEFAULT
-      crossfade.moved(mediaItem?.mediaId)
+      // The song after this one is preloaded only once this one nears its overlap; a queue sync
+      // reporting the same song again keeps a preload already asked for.
+      val restarted = reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT
+      if (crossfade.moved(mediaItem?.mediaId, restarted)) {
+        exoPlayer?.preloadConfiguration = ExoPlayer.PreloadConfiguration.DEFAULT
+      }
       scheduleCrossfade()
     }
 
