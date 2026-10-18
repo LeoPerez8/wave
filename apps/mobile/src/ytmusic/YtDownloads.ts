@@ -48,6 +48,8 @@ import {
   queuedDownloadCounts,
   queuedDownloads,
   settledDownloadFailures,
+  throttledFailures,
+  throttledFailuresLine,
   soulseekCandidates,
   soulseekQuery,
   soulseekReceivedMatches,
@@ -105,6 +107,7 @@ import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
+import { Storage } from "expo-sqlite/kv-store";
 import { useMemo, useSyncExternalStore } from "react";
 
 import { appLog } from "@/log/appLog";
@@ -1338,6 +1341,52 @@ const forgetSettledFailures = (): void => {
     .catch(() => undefined);
 };
 
+/** Set on this phone once the songs YouTube's Oct 18 limit failed went back to the queue. */
+const THROTTLED_REQUEUE_KEY = "downloads.throttledFailuresRequeued";
+
+/**
+ * Once an install, after the update that tells YouTube refusing a song from saying it's
+ * unavailable: asks again for the songs that failed as unavailable at their first attempt and
+ * were never tried again (Core's `throttledFailures`), as Retry would, so they follow the pause
+ * and try-again rules, and logs how many. Waits for YT Music to be on; a read or a request that
+ * fails leaves it for the next launch.
+ */
+const requeueThrottledFailures = (): void => {
+  if (Storage.getItemSync(THROTTLED_REQUEUE_KEY) !== null || !ytMusicEnabled()) return;
+  requests = requests
+    .then(async () => {
+      if (Storage.getItemSync(THROTTLED_REQUEUE_KEY) !== null) return;
+      const jobs = await WaveSoulseek.jobsSnapshot();
+      const session = await sessionNow();
+      const library = await appRuntime.runPromise(
+        Effect.gen(function* () {
+          const store = yield* LibraryStore;
+          return yield* Effect.all({
+            songs: store.listSongs,
+            missing: store.missingSongs(),
+            files: store.qualityFiles,
+            upgrade: store.noBetterCopies("upgrade"),
+            downgrade: store.noBetterCopies("downgrade"),
+          });
+        }),
+      );
+      const find = libraryFinder(library.songs);
+      const failed = throttledFailures(jobs, {
+        inLibrary: (song) => find(song) !== null,
+        missingTrackIds: new Set(library.missing.map((track) => track.id)),
+        files: library.files,
+        noBetterCopy: { upgrade: new Set(library.upgrade), downgrade: new Set(library.downgrade) },
+        direction: session.status === "off" ? "downgrade" : "upgrade",
+      });
+      const asked = failed.length === 0 ? [] : await retryRequests(failed);
+      if (asked.length > 0) await enqueueJobs(asked);
+      Storage.setItemSync(THROTTLED_REQUEUE_KEY, String(Date.now()));
+      appLog("info", "downloads", throttledFailuresLine(asked.length));
+      if (asked.length > 0) await refresh();
+    })
+    .catch(() => undefined);
+};
+
 let attached = false;
 /**
  * Follows the native journal. The app and the headless task (started by the
@@ -1356,6 +1405,7 @@ export const startDownloads = (resume = false): void => {
   if (resume) {
     void WaveSoulseek.resumeJobs().catch(() => undefined);
     forgetSettledFailures();
+    requeueThrottledFailures();
   }
 };
 
@@ -1928,33 +1978,40 @@ export const retryFailedDownloads = (failed: readonly FailedDownload<NativeYtSon
   startDownloads();
   requests = requests
     .then(async () => {
-      const trackIds = failed.flatMap(({ retry }) =>
-        retry.kind === "missingSong" ? [retry.trackId] : [],
-      );
-      const missing = new Map(
-        (trackIds.length === 0 ? [] : await missingSongJobs(trackIds)).map((job) => [
-          job.missing.trackId,
-          job,
-        ]),
-      );
-      const session = await sessionNow();
-      const ytMusicOn = ytMusicEnabled();
-      const asked: JobRequest[] = [];
-      for (const { retry } of failed) {
-        if (retry.kind === "quality") {
-          asked.push(...(await qualityReplacementRequests(retry.direction, [retry.trackId])));
-        } else if (retry.kind === "song") {
-          // Asked with no origin, the job keeps the one it was first asked from.
-          asked.push(songRequest(retry.song, null, currentSource(session, ytMusicOn), null));
-        } else {
-          const job = missing.get(retry.trackId);
-          if (job !== undefined) asked.push(missingSongRequest(job, session, ytMusicOn));
-        }
-      }
-      await enqueueJobs(asked);
+      await enqueueJobs(await retryRequests(failed));
       await refresh();
     })
     .catch(() => undefined);
+};
+
+/** What Retry asks the journal for again, for each of [failed] (`retryFailedDownloads`). */
+const retryRequests = async (
+  failed: readonly FailedDownload<NativeYtSong>[],
+): Promise<JobRequest[]> => {
+  const trackIds = failed.flatMap(({ retry }) =>
+    retry.kind === "missingSong" ? [retry.trackId] : [],
+  );
+  const missing = new Map(
+    (trackIds.length === 0 ? [] : await missingSongJobs(trackIds)).map((job) => [
+      job.missing.trackId,
+      job,
+    ]),
+  );
+  const session = await sessionNow();
+  const ytMusicOn = ytMusicEnabled();
+  const asked: JobRequest[] = [];
+  for (const { retry } of failed) {
+    if (retry.kind === "quality") {
+      asked.push(...(await qualityReplacementRequests(retry.direction, [retry.trackId])));
+    } else if (retry.kind === "song") {
+      // Asked with no origin, the job keeps the one it was first asked from.
+      asked.push(songRequest(retry.song, null, currentSource(session, ytMusicOn), null));
+    } else {
+      const job = missing.get(retry.trackId);
+      if (job !== undefined) asked.push(missingSongRequest(job, session, ytMusicOn));
+    }
+  }
+  return asked;
 };
 
 /**

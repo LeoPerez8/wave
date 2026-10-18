@@ -1675,3 +1675,5 @@ export {
   ytThrottleSucceeded,
 } from "./ytThrottle.ts";
 export type { YtThrottle, YtThrottleJob, YtThrottlePause } from "./ytThrottle.ts";
+export { throttledFailures, throttledFailuresLine } from "./throttledFailures.ts";
+export type { ThrottledFailureJob, ThrottledFailuresInput } from "./throttledFailures.ts";
