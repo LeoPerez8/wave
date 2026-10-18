@@ -1,6 +1,6 @@
 import { IconStack2, IconWorld } from "@tabler/icons-react-native";
 import type { OnlineToggleForm, YtPick } from "@wave/core";
-import { useMemo, type ComponentType } from "react";
+import { useMemo, useRef, type ComponentRef, type ComponentType, type RefObject } from "react";
 import { Text, View, type LayoutChangeEvent } from "react-native";
 
 import { CELL, widthOf } from "@/catalog/grid";
@@ -60,6 +60,9 @@ type Props = {
  * (`listActionsForms`), each still named for TalkBack.
  */
 export function OnlineToggle({ selected, onPick, form, onLongPress }: Props) {
+  // The drawn pill: a long press on either segment highlights all of it, in its own shape,
+  // and anchors the card to it (the toggle is one control).
+  const pill = useRef<ComponentRef<typeof View>>(null);
   return (
     // The group is as tall as the segments' targets, as Android delivers no touch outside a
     // parent's bounds; its negative margin keeps the row's layout at the drawn pill's height.
@@ -70,6 +73,8 @@ export function OnlineToggle({ selected, onPick, form, onLongPress }: Props) {
       style={{ height: TARGET, marginVertical: -SLOP, paddingHorizontal: INSET }}
     >
       <View
+        ref={pill}
+        collapsable={false}
         className="absolute left-0 right-0 bg-fill"
         style={{ top: SLOP, bottom: SLOP, borderRadius: RADIUS }}
       />
@@ -83,6 +88,7 @@ export function OnlineToggle({ selected, onPick, form, onLongPress }: Props) {
             if (segment.pick !== selected || segment.pick === "online") onPick(segment.pick);
           }}
           onLongPress={onLongPress}
+          pill={pill}
         />
       ))}
     </View>
@@ -97,6 +103,7 @@ function Segment({
   selected,
   onPress,
   onLongPress,
+  pill,
 }: {
   label: string;
   icon: ComponentType<IconProps>;
@@ -105,6 +112,8 @@ function Segment({
   selected: boolean;
   onPress: () => void;
   onLongPress: (() => void) | undefined;
+  /** The toggle's drawn pill, which the long press highlights. */
+  pill: RefObject<ComponentRef<typeof View> | null>;
 }) {
   return (
     <Press
@@ -116,6 +125,7 @@ function Segment({
       accessibilityState={{ checked: selected, selected }}
       onPress={onPress}
       onLongPress={onLongPress}
+      highlightAs={{ view: pill, radius: RADIUS }}
       haptic="selection"
       depth={0.1}
       className="justify-center"

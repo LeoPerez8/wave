@@ -8,6 +8,11 @@ export interface PressedElement {
   readonly rect: OverlayRect | undefined;
   /** It sits on the floating chrome (the selection bar), so the chrome never hides it. */
   readonly onChrome: boolean;
+  /**
+   * Corner radius of its highlight, in dp: a pill's half height for the
+   * Library | Online toggle. Undefined for the usual corners, square like the row.
+   */
+  readonly radius: number | undefined;
 }
 
 /**
@@ -31,16 +36,20 @@ export const pressedRect = (): OverlayRect | undefined => pressedElement()?.rect
 
 /**
  * Runs a press handler with `rect` as the pressed rect (of the `Press` known as
- * `key`, on the floating chrome or not). Returns whether the handler opened a
- * menu next to it (asked for it).
+ * `key`, on the floating chrome or not, its highlight's corners rounded by
+ * `radius` when given). Returns whether the handler opened a menu next to it
+ * (asked for it).
  */
 export const runPressedAt = (
   rect: OverlayRect | undefined,
   handler: () => void,
-  key = 0,
-  onChrome = false,
+  {
+    key = 0,
+    onChrome = false,
+    radius,
+  }: { key?: number; onChrome?: boolean; radius?: number | undefined } = {},
 ): boolean => {
-  current = { key, rect, onChrome };
+  current = { key, rect, onChrome, radius };
   read = false;
   try {
     handler();
