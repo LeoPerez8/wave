@@ -74,9 +74,11 @@ const lookupOf = (details: NonDSongDetails): SongLookup | null =>
 
 /**
  * What the lyrics search for the queue's track [trackId] goes by, when it's
- * a non-D song: a YT Music song by its [details] (null while they aren't
- * known) and its video, an unsearched one by what its listing says (its id
- * holds it) with no video yet. Null for a Library track.
+ * a non-D song: a YT Music song by its [details] and its video, an
+ * unsearched one by what its listing says (its id holds it) with no video
+ * yet. Null for a Library track, and for a YT Music song while its [details]
+ * aren't known: its search waits for them, as YT Music asked alone would
+ * save its plain lyrics (or a miss) before LRCLIB was ever asked.
  */
 export const nonDLyricsSong = (
   trackId: string,
@@ -86,7 +88,7 @@ export const nonDLyricsSong = (
   if (unsearched !== null) return { lookup: lookupOf(unsearched), videoId: null };
   const track = parseTrackId(trackId);
   if (track?.kind !== "yt") return null;
-  return { lookup: details === null ? null : lookupOf(details), videoId: track.videoId };
+  return details === null ? null : { lookup: lookupOf(details), videoId: track.videoId };
 };
 
 /** YT Music's lyrics for a video ([text], plain) as found lyrics: Unix line ends, no blank edges; null when blank. */
@@ -175,7 +177,11 @@ export const nonDLyrics = (song: LyricsSearchSong, state: NonDLyricsState): NonD
     case "miss":
       return {
         kind: "notFound",
-        save: song.videoId === null ? null : { kind: "miss", checkedAt: state.now },
+        // A song no source could be asked about made no search to remember.
+        save:
+          song.videoId === null || state.answers.length === 0
+            ? null
+            : { kind: "miss", checkedAt: state.now },
       };
   }
 };
