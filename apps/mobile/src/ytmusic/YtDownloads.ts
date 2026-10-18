@@ -118,7 +118,7 @@ import {
   toIndexedArtwork,
   toIndexedTrack,
 } from "@/library/LibraryScan";
-import { publishSavedStars } from "@/library/libraryChanges";
+import { publishSavedStars, publishYtSongSignal } from "@/library/libraryChanges";
 import { LibraryStore, type SongRow } from "@/library/LibraryStore";
 import { useLoadedMissingSongs, useMissingSongs } from "@/library/hooks";
 import { refreshDownloadPolicy } from "@/library/downloadPolicy";
@@ -1365,6 +1365,7 @@ const songRequest = (
 ): JobRequest => ({ song, recording: soulseekRecording(song), equivalentId, source, origin });
 
 export const downloadYtSong = (song: NativeYtSong): void => {
+  publishYtSongSignal("download", [song.videoId]);
   askForNotifications();
   startDownloads();
   // One at a time, so a second tap sees the first one's job in the journal.
@@ -1406,6 +1407,10 @@ const downloadYtSongs = (
   inLibrary: InLibrary,
   origin: DownloadOrigin | null,
 ): void => {
+  publishYtSongSignal(
+    "download",
+    songs.map((song) => song.videoId),
+  );
   askForNotifications();
   startDownloads();
   requests = requests

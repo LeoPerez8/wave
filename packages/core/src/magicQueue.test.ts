@@ -5,6 +5,8 @@ import {
   EMPTY_QUEUE,
   MAGIC_QUEUE_CONTEXT,
   magicBatch,
+  magicRadioArtists,
+  magicYtCandidates,
   magicQueueEdits,
   magicQueueLabel,
   magicSignal,
@@ -13,8 +15,11 @@ import {
   reduceQueue,
   startMagicQueue,
   wantsMagicBatch,
+  type DiscoverRadioSong,
   type MagicSeed,
+  type MixAffinity,
   type MagicSession,
+  type MagicSignalKind,
   type MagicSong,
   type QueueCommand,
   type QueueState,
@@ -240,5 +245,149 @@ describe("A Magic Queue in the queue", () => {
     assert.deepEqual(parseMagicSession(JSON.parse(JSON.stringify(learned))), learned);
     assert.equal(parseMagicSession({ id: "m1" }), null);
     assert.equal(parseMagicSession(null), null);
+  });
+});
+
+describe("A Magic Queue's YouTube Music share", () => {
+  const seedSong = song("s1", "Seed Artist");
+  const library = [seedSong, ...songsBy("x", "Other", 40)];
+  const yt = songsBy("yt:v", "Radio Artist", 40);
+  const start = () => startMagicQueue(SONG_SEED, [seedSong], { id: "m1", random: first })!.session;
+  /** How many of a 10-song batch (the second) come from YouTube Music. */
+  const ytInBatch = (session: MagicSession): number => {
+    const second = magicBatch(magicBatch(session, library, first, yt).session, library, first, yt);
+    return second.trackIds.filter((id) => id.startsWith("yt:")).length;
+  };
+
+  test("starts at half the batch", () => {
+    assert.equal(ytInBatch(start()), 5);
+  });
+
+  /** [session] having learned [kind] about [times] YouTube Music songs by different artists. */
+  const learnYt = (session: MagicSession, kind: MagicSignalKind, times: number): MagicSession =>
+    Array.from({ length: times }, (_, i) => song(`yt:s${i}`, `Learned ${i}`)).reduce(
+      (learned, ytSong) => magicSignal(learned, { kind, song: ytSong }),
+      session,
+    );
+
+  test("grows as YouTube Music songs get favorited or downloaded", () => {
+    const favorited = ytInBatch(learnYt(start(), "favorite", 1));
+    const downloaded = ytInBatch(learnYt(start(), "download", 1));
+    assert.ok(favorited > 5);
+    assert.ok(downloaded > 5);
+    assert.ok(favorited >= downloaded);
+  });
+
+  test("shrinks as YouTube Music songs get skipped or removed", () => {
+    assert.ok(ytInBatch(learnYt(start(), "skip", 1)) < 5);
+    assert.ok(ytInBatch(learnYt(start(), "removed", 1)) < 5);
+  });
+
+  test("always stays between 20% and 80%", () => {
+    assert.equal(ytInBatch(learnYt(start(), "favorite", 30)), 8);
+    assert.equal(ytInBatch(learnYt(start(), "skip", 30)), 2);
+  });
+
+  test("doesn't move with Library songs' signals, or YouTube Music songs played or added", () => {
+    let session = start();
+    session = magicSignal(session, { kind: "favorite", song: song("x1", "Other") });
+    session = magicSignal(session, { kind: "skip", song: song("x2", "Someone") });
+    session = learnYt(session, "playedThrough", 3);
+    session = learnYt(session, "added", 3);
+    assert.equal(session.ytShare, start().ytShare);
+  });
+
+  test("leaves the batch to the Library without YouTube Music candidates", () => {
+    const session = magicBatch(start(), library, first).session;
+    const batch = magicBatch(session, library, first);
+    assert.equal(batch.trackIds.length, 10);
+    assert.ok(batch.trackIds.every((id) => !id.startsWith("yt:")));
+  });
+
+  test("lets either source make up for the other running short", () => {
+    const fewYt = songsBy("yt:f", "Radio Artist", 2);
+    const batch = magicBatch(start(), library, first, fewYt);
+    assert.equal(batch.trackIds.length, 9);
+    assert.equal(batch.trackIds.filter((id) => id.startsWith("yt:")).length, 2);
+    const fewLibrary = [seedSong, song("l1", "Other")];
+    const ytHeavy = magicBatch(start(), fewLibrary, first, yt);
+    assert.equal(ytHeavy.trackIds.length, 9);
+    assert.equal(ytHeavy.trackIds.filter((id) => id.startsWith("yt:")).length, 8);
+  });
+
+  test("spreads YouTube Music's songs through the Library's", () => {
+    const session = magicBatch(start(), library, first, yt).session;
+    const sources = magicBatch(session, library, first, yt).trackIds.map((id) =>
+      id.startsWith("yt:") ? "yt" : "library",
+    );
+    assert.deepEqual(sources, ["library", "yt", "library", "yt", "library", "yt", "library", "yt", "library", "yt"]);
+  });
+
+  test("reads back as it was saved, and afresh from a session saved before it", () => {
+    const learned = learnYt(start(), "favorite", 2);
+    assert.deepEqual(parseMagicSession(JSON.parse(JSON.stringify(learned))), learned);
+    const { ytShare: _, ...older } = learned;
+    assert.equal(parseMagicSession(older)?.ytShare, 0.5);
+  });
+});
+
+describe("A Magic Queue's YouTube Music candidates", () => {
+  const radioSong = (videoId: string, artist: string, video = false): DiscoverRadioSong => ({
+    videoId,
+    title: `Song ${videoId}`,
+    artists: [artist],
+    album: null,
+    durationMs: null,
+    artworkUrl: null,
+    explicit: false,
+    video,
+  });
+  const affinity = (tagged: { readonly artists: readonly string[] }): MixAffinity =>
+    tagged.artists[0] === "Alike" ? "match" : tagged.artists[0] === "Unlike" ? "miss" : "unknown";
+  const none = () => false;
+
+  test("keep only songs whose artist passes the genre affinity check", () => {
+    const radio = [
+      radioSong("a", "Alike"),
+      radioSong("u", "Unlike"),
+      radioSong("n", "Nobody Knows"),
+      radioSong("b", "Alike"),
+    ];
+    const candidates = magicYtCandidates(radio, { affinity, inLibrary: none });
+    assert.deepEqual(
+      candidates.map((candidate) => candidate.trackId),
+      ["yt:a", "yt:b"],
+    );
+  });
+
+  test("are songs the Magic Queue weighs, by their YouTube Music artists", () => {
+    const [candidate] = magicYtCandidates([radioSong("a", "Alike")], { affinity, inLibrary: none });
+    assert.deepEqual(candidate?.artists, ["Alike"]);
+    assert.equal(candidate?.genre, null);
+    assert.equal(candidate?.song.videoId, "a");
+  });
+
+  test("leave out music videos, songs the Library has, and a song the radio plays again", () => {
+    const radio = [
+      radioSong("v", "Alike", true),
+      radioSong("l", "Alike"),
+      radioSong("a", "Alike"),
+      { ...radioSong("a2", "Alike"), title: "Song a" },
+      radioSong("a", "Alike"),
+    ];
+    const inLibrary = (played: DiscoverRadioSong) => played.videoId === "l";
+    const candidates = magicYtCandidates(radio, { affinity, inLibrary });
+    assert.deepEqual(
+      candidates.map((candidate) => candidate.trackId),
+      ["yt:a"],
+    );
+  });
+
+  test("come from the radio of the seed's artist, or its songs' most credited artists", () => {
+    const artistSeed: MagicSeed = { kind: "artist", id: "4", title: "The Seed" };
+    assert.deepEqual(magicRadioArtists(artistSeed, ["Someone"]), ["The Seed"]);
+    const playlist: MagicSeed = { kind: "playlist", id: "2", title: "Mine" };
+    assert.deepEqual(magicRadioArtists(playlist, ["B", "A", "C", "A", "B", "A"]), ["A", "B"]);
+    assert.deepEqual(magicRadioArtists(SONG_SEED, ["Solo"]), ["Solo"]);
   });
 });
