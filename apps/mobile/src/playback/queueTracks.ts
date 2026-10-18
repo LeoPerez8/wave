@@ -27,6 +27,7 @@ import * as Effect from "effect/Effect";
 
 import { makeExternalStore } from "../lib/externalStore.ts";
 import type { PlayableSongRow } from "../library/LibraryStore.ts";
+import type { NativeYtSong } from "../native/waveYtMusic.ts";
 
 /** What the player and the queue rows need to know about a track. */
 export interface QueueTrack {
@@ -118,9 +119,7 @@ export const toYtQueueTrack = (song: QueuedYtSong, artwork: CachedArtwork | null
  * track saved before the queue kept its song is rebuilt from what it shows,
  * without the length or cover YouTube Music gave it.
  */
-export const queuedYtSong = (
-  track: QueueTrack,
-): (YtSong & { readonly albumId: string | null }) | null => {
+export const queuedYtSong = (track: QueueTrack): NativeYtSong | null => {
   const ref = parseTrackId(track.id);
   if (ref?.kind !== "yt") return null;
   if (track.ytSong !== undefined) return { ...track.ytSong, albumId: track.ytSong.albumId ?? null };

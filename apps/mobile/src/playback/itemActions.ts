@@ -48,7 +48,7 @@ import {
   useMissingSongDownloadStatuses,
   downloadYtSong,
 } from "@/ytmusic/YtDownloads";
-import { useLoadedLibraryFinder, type FindInLibrary } from "@/ytmusic/libraryFinder";
+import { useLibraryFinder, type FindInLibrary } from "@/ytmusic/libraryFinder";
 import { useStreamedArtistContext } from "@/ytmusic/streamedArtist";
 
 import {
@@ -98,14 +98,11 @@ const onlyMissingSong = (target: ActionItems): number | null => {
     : only.song.id;
 };
 
-const findsNothing: FindInLibrary = () => null;
-
 /**
  * The Library finder, read only while YT Music songs are among the items
  * ([streams]): the Library song each is by now, if any.
  */
-const useStreamedSongFinder = (streams: boolean): FindInLibrary =>
-  useLoadedLibraryFinder(streams) ?? findsNothing;
+const useStreamedSongFinder = (streams: boolean): FindInLibrary => useLibraryFinder(streams);
 
 /**
  * The one album, artist, playlist or genre [target]'s menu is about, while
