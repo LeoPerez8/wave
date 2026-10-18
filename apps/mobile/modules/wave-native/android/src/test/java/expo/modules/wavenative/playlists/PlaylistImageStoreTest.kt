@@ -53,18 +53,44 @@ class PlaylistImageStoreTest {
   }
 
   @Test
-  fun theCropIsThePicturesCentreSquare() {
-    assertEquals(Square(left = 100, top = 0, side = 600), PlaylistImageStore.centreSquare(800, 600))
-    assertEquals(Square(left = 0, top = 150, side = 300), PlaylistImageStore.centreSquare(300, 601))
-    assertEquals(Square(left = 0, top = 0, side = 50), PlaylistImageStore.centreSquare(50, 50))
+  fun anOriginalPhotoIsKeptUnderANewNameDeletingTakes() {
+    val dir = File(Fixtures.tempDir(), "playlists")
+    val store = PlaylistImageStore(dir)
+    val image = store.save(large, thumb)
+    val original = store.saveOriginal(large)
+    assertArrayEquals(large, File(original).readBytes())
+    assertEquals(dir, File(original).parentFile)
+    assertNotEquals(image.path, original)
+    assertTrue(store.owns(original))
+    assertTrue(store.owns(image.thumbPath))
+    store.delete(listOf(original))
+    assertFalse(File(original).exists())
+    assertTrue(File(image.path).isFile)
   }
 
   @Test
-  fun aBigPhotoIsDecodedSmallerButNeverBelowTheLargeSize() {
-    assertEquals(1, PlaylistImageStore.sampleSize(1200, 1600, 1200))
-    assertEquals(2, PlaylistImageStore.sampleSize(4000, 3000, 1200))
-    assertEquals(8, PlaylistImageStore.sampleSize(12000, 9600, 1200))
-    assertEquals(4, PlaylistImageStore.sampleSize(12000, 9599, 1200))
-    assertEquals(1, PlaylistImageStore.sampleSize(200, 200, 1200))
+  fun onlyItsOwnImagesAreCroppedFrom() {
+    val root = Fixtures.tempDir()
+    val store = PlaylistImageStore(File(root, "playlists"))
+    val original = store.saveOriginal(large)
+    assertTrue(store.owns(original))
+    assertFalse(store.owns(File(root, "0123456789abcdef0123456789abcdef01234567.jpg").path))
+    assertFalse(store.owns("${File(root, "playlists")}/notes.txt"))
+    assertFalse(store.owns("${File(root, "playlists")}/../${File(original).name}"))
+  }
+
+  @Test
+  fun theOriginalKeepsItsShapeWithItsShortSideAtMostTheOriginalSize() {
+    assertEquals(4000 to 3000, PlaylistImageStore.originalSize(4000, 3000, 3000))
+    assertEquals(3200 to 2400, PlaylistImageStore.originalSize(4000, 3000, 2400))
+    assertEquals(2400 to 4266, PlaylistImageStore.originalSize(3000, 5333, 2400))
+    assertEquals(200 to 100, PlaylistImageStore.originalSize(200, 100, 2400))
+  }
+
+  @Test
+  fun theChosenSquareIsKeptInsideThePicture() {
+    assertEquals(Square(left = 100, top = 0, side = 600), PlaylistImageStore.fitSquare(800, 600, Square(100, 0, 600)))
+    assertEquals(Square(left = 200, top = 0, side = 600), PlaylistImageStore.fitSquare(800, 600, Square(250, -5, 601)))
+    assertEquals(Square(left = 0, top = 0, side = 1), PlaylistImageStore.fitSquare(800, 600, Square(-3, -3, 0)))
   }
 }

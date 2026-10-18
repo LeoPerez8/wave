@@ -91,9 +91,11 @@ import {
 import { listeningSums } from "./db/playTotals";
 import {
   removePlaylistImage,
+  selectPlaylistImageOriginal,
   setPlaylistImage,
   takeDeletedPlaylistImages,
   type PlaylistImageFiles,
+  type PlaylistImageOriginal,
 } from "./db/playlistImages";
 import {
   addToPlaylist,
@@ -659,13 +661,18 @@ export class LibraryStore extends Context.Service<
     readonly deletePlaylist: (id: number) => Effect.Effect<void, LibraryStoreError>;
     /**
      * Gives a playlist its own image (it stays on this phone); returns the
-     * files nothing shows any more: its old image's, or [files] when it's gone.
+     * files nothing shows or keeps any more: its old image's (but an original
+     * [files] keeps), or [files] when it's gone.
      */
     readonly setPlaylistImage: (
       id: number,
       files: PlaylistImageFiles,
     ) => Effect.Effect<readonly string[], LibraryStoreError>;
-    /** Brings a playlist's mosaic back; returns its image's files to delete. */
+    /** The original photo and last framing Adjust Image reframes; null without an image. */
+    readonly playlistImageOriginal: (
+      id: number,
+    ) => Effect.Effect<PlaylistImageOriginal | null, LibraryStoreError>;
+    /** Brings a playlist's mosaic back; returns its image's files (original too) to delete. */
     readonly removePlaylistImage: (
       id: number,
     ) => Effect.Effect<readonly string[], LibraryStoreError>;
@@ -1340,6 +1347,9 @@ const make = Effect.gen(function* () {
 
     setPlaylistImage: (id, files) =>
       attempt("change the playlist's image", () => setPlaylistImage(db, id, files)),
+
+    playlistImageOriginal: (id) =>
+      attempt("read the playlist's image", () => selectPlaylistImageOriginal(db, id)),
 
     removePlaylistImage: (id) =>
       attempt("remove the playlist's image", () => removePlaylistImage(db, id)),
