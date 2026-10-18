@@ -189,7 +189,7 @@ describe("the playing song's search answered", () => {
     for (const chosen of [true, false]) {
       assert.deepEqual(playingAnswerStep(touch, notFound, { chosen }), {
         kind: "skip",
-        notice: `Skipped "Touch": it isn't on YouTube Music.`,
+        notice: `Skipped "Touch": not found online.`,
       });
     }
   });
@@ -197,7 +197,7 @@ describe("the playing song's search answered", () => {
   test("a failed search plays the next song with a notice, the song staying unsearched", () => {
     assert.deepEqual(playingAnswerStep(touch, failed("failed"), { chosen: true }), {
       kind: "skip",
-      notice: `Skipped "Touch": YouTube Music didn't answer.`,
+      notice: `Skipped "Touch": no answer online.`,
     });
   });
 
@@ -228,13 +228,13 @@ describe("the player passing over a song still unsearched", () => {
   test("names the song it skipped, as a failed search does", () => {
     const before = play("1 u:Touch 2", 0);
     const after = reduceQueue(before, { type: "playerMoved", key: before.entries[2]!.key }).state;
-    assert.equal(passedOverNotice(before, after), `Skipped "Touch": YouTube Music didn't answer.`);
+    assert.equal(passedOverNotice(before, after), `Skipped "Touch": no answer online.`);
   });
 
   test("several are counted, and a move back or onto the next song names none", () => {
     const before = play("1 u:A u:B 2", 0);
     const after = reduceQueue(before, { type: "playerMoved", key: before.entries[3]!.key }).state;
-    assert.equal(passedOverNotice(before, after), "Skipped 2 songs: YouTube Music didn't answer.");
+    assert.equal(passedOverNotice(before, after), "Skipped 2 songs: no answer online.");
     assert.equal(passedOverNotice(after, before), null);
     const plain = play("1 2 3");
     assert.equal(passedOverNotice(plain, reduceQueue(plain, { type: "next" }).state), null);
@@ -387,7 +387,7 @@ describe("the queue going through unsearched songs as they come to play", () => 
   test("not found, the song leaves the queue with a notice, and the next one goes the same way", () => {
     assert.deepEqual(walk(play("1 u:A u:B 2"), { type: "next" }, { A: "notFound" }), {
       searched: ["A", "B"],
-      notices: [`Skipped "A": it isn't on YouTube Music.`],
+      notices: [`Skipped "A": not found online.`],
       kind: "go",
       queue: "1 [yt:b] 2",
       playback: "keep",
@@ -397,7 +397,7 @@ describe("the queue going through unsearched songs as they come to play", () => 
   test("failed, the song stays unsearched with a notice, and the next one goes the same way", () => {
     assert.deepEqual(walk(play("1 u:A u:B 2"), { type: "next" }, { A: "failed" }), {
       searched: ["A", "B"],
-      notices: [`Skipped "A": YouTube Music didn't answer.`],
+      notices: [`Skipped "A": no answer online.`],
       kind: "go",
       queue: "1 u:A [yt:b] 2",
       playback: "keep",
@@ -408,10 +408,7 @@ describe("the queue going through unsearched songs as they come to play", () => 
     const answers = { A: "failed", B: "notFound" } as const;
     assert.deepEqual(walk(play("1 u:A u:B"), { type: "next" }, answers), {
       searched: ["A", "B"],
-      notices: [
-        `Skipped "A": YouTube Music didn't answer.`,
-        `Skipped "B": it isn't on YouTube Music.`,
-      ],
+      notices: [`Skipped "A": no answer online.`, `Skipped "B": not found online.`],
       kind: "go",
       queue: "[1] u:A",
       playback: "stop",
@@ -478,7 +475,7 @@ describe("the queue going through unsearched songs as they come to play", () => 
     );
     assert.deepEqual(tapped, {
       searched: ["A", "B"],
-      notices: [`Skipped "A": it isn't on YouTube Music.`, "YT Music is off in Settings."],
+      notices: [`Skipped "A": not found online.`, "YT Music is off in Settings."],
       kind: "go",
       queue: "1 u:B [2]",
       playback: "stop",

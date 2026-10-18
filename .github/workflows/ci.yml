@@ -337,6 +337,14 @@ jobs:
           key: metro-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
           restore-keys: metro-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
 
+      # The label the app log names this build by, next to its version: `PR #<n> @ <commit>`,
+      # or the branch or tag and the commit (scripts/ci/build-label.ts). Metro inlines it into
+      # the bundle, so a repack carries this run's label, not the kept APK's.
+      - name: Label the build
+        run: |
+          label="$(node scripts/ci/build-label.ts)"
+          echo "$label" | tee -a "$GITHUB_ENV"
+
       # Expo + Hermes run once in either mode, before the key: Metro's assets are part of it.
       # The Gradle init script verifies its handoff below.
       - name: Bundle JavaScript
@@ -485,6 +493,9 @@ jobs:
           bundle="apps/mobile/android/app/build/generated/assets/react/release/index.android.bundle"
           unzip -p "$built" assets/index.android.bundle | cmp - "$bundle"
           echo "Packaged this run's bundle: $(sha256sum "$bundle")"
+          # Hermes keeps the inlined label as a plain string.
+          grep -qaF -- "${EXPO_PUBLIC_WAVE_BUILD_LABEL:?}" "$bundle"
+          echo "Labelled: $EXPO_PUBLIC_WAVE_BUILD_LABEL"
           cp "$built" "$RUNNER_TEMP/$name"
           echo "path=$RUNNER_TEMP/$name" >> "$GITHUB_OUTPUT"
           echo "name=$name" >> "$GITHUB_OUTPUT"

@@ -353,8 +353,8 @@ describe("playlistEntryLinks", () => {
 describe("an unavailable entry", () => {
   test("says why it's unavailable, on its row and when tapped", () => {
     assert.deepEqual(unavailableEntryView(unavailable("Within").song), {
-      line: "Not found on YouTube Music",
-      notice: "Wave couldn't find this song on YouTube Music or in your Library.",
+      line: "Not found online",
+      notice: "Wave couldn't find this song online or in your Library.",
     });
     assert.deepEqual(unavailableEntryView(unavailable("Untitled", { reason: "localFile" }).song), {
       line: "Local file on Spotify",
@@ -390,7 +390,7 @@ describe("playlistUnplayableNotice", () => {
   test("a playlist of one unavailable entry says why, as tapping it does", () => {
     assert.equal(
       playlistUnplayableNotice([unavailable("Within")]),
-      "Wave couldn't find this song on YouTube Music or in your Library.",
+      "Wave couldn't find this song online or in your Library.",
     );
     assert.equal(
       playlistUnplayableNotice([local("Untitled")]),
@@ -401,7 +401,7 @@ describe("playlistUnplayableNotice", () => {
   test("a playlist of several says why for them all", () => {
     assert.equal(
       playlistUnplayableNotice([unavailable("Within"), unavailable("Touch")]),
-      "Wave couldn't find these songs on YouTube Music or in your Library.",
+      "Wave couldn't find these songs online or in your Library.",
     );
     assert.equal(
       playlistUnplayableNotice([local("Untitled"), local("Demo")]),
@@ -409,7 +409,7 @@ describe("playlistUnplayableNotice", () => {
     );
     assert.equal(
       playlistUnplayableNotice([unavailable("Within"), local("Untitled")]),
-      "Wave couldn't find these songs on YouTube Music or in your Library, or they're local files on Spotify.",
+      "Wave couldn't find these songs online or in your Library, or they're local files on Spotify.",
     );
   });
 

@@ -1210,6 +1210,7 @@ export {
   logHeader,
   redactSecrets,
   trimLog,
+  appBuildName,
 } from "./appLog.ts";
 export type { LogDevice, LogEntry, LogLevel, LogLimits, LogTrim } from "./appLog.ts";
 export {
@@ -1424,3 +1425,5 @@ export type { CollectionKind } from "./itemActions.ts";
 export { mixSectionOfId, mixSeedArtists } from "./discoverMixes.ts";
 export { downloadJobKind } from "./downloadJobKind.ts";
 export type { DownloadJobKind } from "./downloadJobKind.ts";
+export { createLandings, LANDING_BURST_MS } from "./landings.ts";
+export type { Landings } from "./landings.ts";

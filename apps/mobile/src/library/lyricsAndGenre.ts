@@ -49,7 +49,7 @@ import * as Effect from "effect/Effect";
 import { WaveNative } from "@/native/waveNative";
 import { lyricsAndGenreLookupsEnabled } from "@/settings/lyricsAndGenre";
 
-import { libraryEdited, toIndexedArtwork, toIndexedTrack } from "./LibraryScan";
+import { libraryEdited, songsLanded, toIndexedArtwork, toIndexedTrack } from "./LibraryScan";
 import { publishSavedStars } from "./libraryChanges";
 import { LibraryStore } from "./LibraryStore";
 import { lyricsWritten } from "./lyricsEdits";
@@ -183,6 +183,9 @@ export const searchLrclibLyrics = (
   );
 };
 
+/** A download's fill-in saved [trackIds]: it lands as its import did. */
+const landedFillIn = (trackIds: readonly number[] = []): void => songsLanded(trackIds);
+
 /** A song with nothing yet (a download being tagged): everything is looked up. */
 const HAS_NOTHING: IndexedTags = {
   hasLyrics: false,
@@ -240,11 +243,14 @@ const NOTHING_WRITTEN: TagWriteReport = {
  * number, disc, year and advisory tag (Core's `advisoryTag`; the file keeps
  * any it has), then brings its index entry up to date so Genres, Search, the
  * album page, the Lyrics view and the E badge show the new values without a
- * rescan. Finding nothing leaves the file untouched.
+ * rescan. Finding nothing leaves the file untouched. [announce] tells the
+ * lists of the updated entry (its track, once saved): an edit by default, a
+ * landing for a download's fill-in (`songsLanded`).
  */
 export const writeLyricsAndGenre = (
   path: string,
   found: FoundTags,
+  announce: (trackIds?: readonly number[]) => void = libraryEdited,
 ): Effect.Effect<TagWriteReport, TagWriteFailed, LibraryStore> =>
   Effect.gen(function* () {
     const { lyrics, genre, trackNumber, discNumber, year } = found;
@@ -274,6 +280,7 @@ export const writeLyricsAndGenre = (
     if (written.lyrics !== "none") lyricsWritten(path);
     if (written.track !== null) {
       const store = yield* LibraryStore;
+      let saved: readonly number[] | undefined;
       yield* store
         .saveBatch(
           [toIndexedTrack(written.track)],
@@ -284,9 +291,14 @@ export const writeLyricsAndGenre = (
         )
         // Drops a genre no song has any more.
         .pipe(
-          Effect.tap(({ starred }) => Effect.sync(() => publishSavedStars(starred))),
+          Effect.tap(({ starred, trackIds }) =>
+            Effect.sync(() => {
+              saved = trackIds;
+              publishSavedStars(starred);
+            }),
+          ),
           Effect.andThen(store.filesGone([])),
-          Effect.ensuring(Effect.sync(libraryEdited)),
+          Effect.ensuring(Effect.sync(() => announce(saved))),
           // The file has its new tags; the next scan brings the index up to date.
           Effect.ignore,
         );
@@ -326,12 +338,15 @@ export const writeFoundLyrics = (
  * an explicit flag it has. A song with nothing missing (Core's `canFixSong`) makes no request. A
  * failure is an outcome (the file is left as it was); only `LookupsOff` fails.
  */
-const fixSong = (song: TaggableSong): Effect.Effect<SongTagOutcome, LookupsOff, LibraryStore> =>
+const fixSong = (
+  song: TaggableSong,
+  announce?: (trackIds?: readonly number[]) => void,
+): Effect.Effect<SongTagOutcome, LookupsOff, LibraryStore> =>
   Effect.gen(function* () {
     const lookup = canFixSong(song) ? songLookup(song) : null;
     if (lookup === null) return { kind: "notFound" } as const;
     const found = missingTags(yield* lookUpLyricsAndGenre(lookup, song), song);
-    const written = yield* writeLyricsAndGenre(song.path, found);
+    const written = yield* writeLyricsAndGenre(song.path, found, announce);
     return songTagOutcome(found, written);
   }).pipe(
     Effect.catchTags({
@@ -343,12 +358,13 @@ const fixSong = (song: TaggableSong): Effect.Effect<SongTagOutcome, LookupsOff, 
 /**
  * Fix Song on a song just added to the Library (a download), quietly: it
  * gets what its file still lacks. Never fails: a song left incomplete can
- * still be fixed from its menu.
+ * still be fixed from its menu. What it writes lands as the download did
+ * (`songsLanded`), joining its import's change while that still waits.
  */
 export const fillInLyricsAndGenre = (
   song: TaggableSong,
 ): Effect.Effect<void, never, LibraryStore> =>
-  fixSong(song).pipe(
+  fixSong(song, landedFillIn).pipe(
     Effect.flatMap((outcome) =>
       Effect.sync(() => {
         if (outcome.kind === "failed")

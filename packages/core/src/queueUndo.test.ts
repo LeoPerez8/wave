@@ -91,8 +91,8 @@ describe("newQueueToast", () => {
 
   test("says why a song was skipped on the way along with it", () => {
     assert.equal(
-      newQueueToast("play", [null, `Skipped "Airbag": it isn't on YouTube Music.`]),
-      `New queue playing · Skipped "Airbag": it isn't on YouTube Music.`,
+      newQueueToast("play", [null, `Skipped "Airbag": not found online.`]),
+      `New queue playing · Skipped "Airbag": not found online.`,
     );
   });
 

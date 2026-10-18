@@ -1,4 +1,5 @@
 import {
+  createLandings,
   explicitFromAdvisory,
   normalizeTrack,
   planAddRoot,
@@ -67,15 +68,35 @@ const ENTRIES_LINKED: LibraryChange = { kind: "playlists" };
 let linkedAtRevision: number | null = null;
 
 /**
- * The owner changed the library outside a scan (deleted songs, edited tags, a
- * download landed, the Wave account sent changes): lists over tracks re-read
- * straight away. [trackIds]: the tracks changed, when known.
+ * The owner changed the library outside a scan (deleted songs, edited tags,
+ * the Wave account sent changes): lists over tracks re-read straight away.
+ * [trackIds]: the tracks changed, when known. A download landing is
+ * `songsLanded`.
  */
 export const libraryEdited = (trackIds?: readonly number[]): void => {
   bumpLibraryVersion(
     trackIds === undefined ? { kind: "tracks" } : { kind: "tracks", ids: trackIds },
   );
 };
+
+const landings = createLandings({
+  schedule: (ms, run) => {
+    const timer = setTimeout(run, ms);
+    return () => clearTimeout(timer);
+  },
+  announce: (change) => bumpLibraryVersion(change),
+});
+
+/**
+ * Downloads landed Tracks [trackIds] in the Library (an import, a quality
+ * replacement, a download's fill-in): lists hear of them together, as a
+ * burst naming them, at most every 2 s, and at once for the run's [last]
+ * song (Core's `createLandings`).
+ */
+export const songsLanded = (
+  trackIds: readonly number[],
+  options?: { readonly last?: boolean },
+): void => landings.land(trackIds, options);
 
 /** A track as the scanner read it, as the index stores it. */
 export const toIndexedTrack = (native: NativeScannedTrack): IndexedTrack => ({

@@ -266,16 +266,16 @@ export const noLibraryResultsRow = (query: string): ResultRow => ({
   text: `Nothing in your library matches “${query.trim()}”.`,
 });
 
-/** YT Music's quiet lines. */
+/** Online's quiet lines. */
 const YT_NOTE: Readonly<Record<YtSectionNote, string>> = {
   searching: "Searching YT Music…",
-  noMatches: "Nothing on YT Music matches.",
-  allInLibrary: "What YT Music found is already in your library.",
+  noMatches: "Nothing online matches.",
+  allInLibrary: "Everything found online is already in your library.",
   offline: "You're offline. Tap Online to try again when you're back online.",
-  failed: "YT Music didn't answer. Tap Online to try again.",
+  failed: "Couldn't search online. Tap Online to try again.",
 };
 
-/** What follows the results for YT Music: its quiet line, if any. */
+/** What follows the results for Online: its quiet line, if any. */
 export const ytFooterRows = (view: YtSectionView<NativeYtSong> | null): ResultRow[] => {
   if (view === null) return [];
   return view.note === null ? [] : [{ type: "note", key: "note:yt", text: YT_NOTE[view.note] }];

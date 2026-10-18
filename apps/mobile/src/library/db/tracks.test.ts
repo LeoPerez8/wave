@@ -202,6 +202,28 @@ describe("explicit songs", () => {
   });
 });
 
+describe("saveBatch", () => {
+  test("names the tracks it saved, new and already indexed, so a download's landing can say which", async () => {
+    const db = await openTestDatabase();
+    const first = saveBatch(db, creditSplits(), [scanned("DNA.", "explicit")], [], [], 1);
+    const again = saveBatch(
+      db,
+      creditSplits(),
+      [scanned("DNA.", "explicit"), scanned("HUMBLE.", "explicit")],
+      [],
+      [],
+      2,
+    );
+    const ids = Object.fromEntries(
+      trackQuery(db)
+        .all()
+        .map(({ id, title }) => [title, id]),
+    );
+    assert.deepEqual(first.trackIds, [ids["DNA."]]);
+    assert.deepEqual(again.trackIds, [ids["DNA."], ids["HUMBLE."]]);
+  });
+});
+
 describe("selectKnownFiles", () => {
   test("gives an incremental scan the indexed files under the roots", async () => {
     const db = await openTestDatabase();
