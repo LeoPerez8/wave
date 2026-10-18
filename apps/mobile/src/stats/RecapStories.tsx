@@ -117,8 +117,12 @@ function MinutesSlide({ title, minutes }: { title: string; minutes: number }) {
   );
 }
 
-const artworkUri = (song: SongRow): string | undefined => {
-  const path = song.artworkPath ?? song.thumbPath;
+/** A song's or an album's cover as a file URI: its artwork, else its thumbnail. */
+const artworkUri = (item: {
+  readonly artworkPath: string | null;
+  readonly thumbPath: string | null;
+}): string | undefined => {
+  const path = item.artworkPath ?? item.thumbPath;
   return path === null ? undefined : `file://${path}`;
 };
 
@@ -127,9 +131,7 @@ function TopSongsSlide({ songs }: { songs: readonly Ranked<SongRow>[] }) {
   if (top === undefined) return null;
   return (
     <View className="flex-1 justify-center" style={{ gap: CELL * 3 }}>
-      <Rise step={0}>
-        <Text className="font-sans text-title3 text-on-recap">Your top songs</Text>
-      </Rise>
+      <Heading>Your top songs</Heading>
       <Rise step={1}>
         <View style={{ gap: CELL * 1.5 }}>
           <Artwork uri={artworkUri(top.item)} size={CELL * 26} radius={12} />
@@ -148,27 +150,13 @@ function TopSongsSlide({ songs }: { songs: readonly Ranked<SongRow>[] }) {
       </Rise>
       <View style={{ gap: CELL * 1.5 }}>
         {rest.map((entry, index) => (
-          <Rise key={entry.item.id} step={index + 2}>
-            <View className="flex-row items-center" style={{ gap: CELL * 2 }}>
-              <Text
-                className="font-sans text-title3 font-semibold text-on-recap"
-                style={{ width: CELL * 3, fontVariant: ["tabular-nums"] }}
-              >
-                {index + 2}
-              </Text>
-              <View className="flex-1">
-                <Text numberOfLines={1} className="font-sans text-body font-semibold text-on-recap">
-                  {entry.item.title}
-                </Text>
-                <Text
-                  numberOfLines={1}
-                  className="font-sans text-footnote text-on-recap opacity-80"
-                >
-                  {entry.item.artist} · {playCount(entry.countedPlays)}
-                </Text>
-              </View>
-            </View>
-          </Rise>
+          <RankedLine
+            key={entry.item.id}
+            rank={index + 2}
+            step={index + 2}
+            title={entry.item.title}
+            detail={`${entry.item.artist} · ${playCount(entry.countedPlays)}`}
+          />
         ))}
       </View>
     </View>
@@ -259,12 +247,11 @@ function TopArtistsSlide({ artists }: { artists: readonly Ranked<ArtistRow>[] })
 }
 
 function TopAlbumSlide({ album }: { album: Ranked<AlbumRow> }) {
-  const path = album.item.artworkPath ?? album.item.thumbPath;
   return (
     <View className="flex-1 justify-center" style={{ gap: CELL * 3 }}>
       <Heading>Your top album</Heading>
       <Rise step={1}>
-        <Artwork uri={path === null ? undefined : `file://${path}`} size={CELL * 32} radius={12} />
+        <Artwork uri={artworkUri(album.item)} size={CELL * 32} radius={12} />
       </Rise>
       <Rise step={2}>
         <View>

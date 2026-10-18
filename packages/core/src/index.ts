@@ -230,10 +230,12 @@ export {
   recapAutoForward,
   recapBack,
   recapBarFill,
+  recapCardFileName,
   recapForward,
   recapHourLabel,
   recapId,
   recapSlides,
+  recapStoryBackground,
   recapTitle,
   recapToAnnounce,
   recapWeekdayLabel,
@@ -242,6 +244,7 @@ export {
   withRecapOpened,
 } from "./recap.ts";
 export type {
+  ArtistFirstPlay,
   CountedListening,
   Recap,
   RecapGenre,

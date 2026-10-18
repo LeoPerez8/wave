@@ -1,5 +1,5 @@
 import { IconX } from "@tabler/icons-react-native";
-import { lyricCardFileName, lyricStoryBackground } from "@wave/core";
+import { recapCardFileName, recapStoryBackground } from "@wave/core";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { PixelRatio, StyleSheet, Text, View } from "react-native";
@@ -119,11 +119,11 @@ export function RecapSharePreview({
 
   const share = useImageShare({
     source: image,
-    fileName: () => lyricCardFileName(`Recap ${title}`, new Date()),
+    fileName: () => recapCardFileName(title, new Date()),
     what: "the Recap slide",
     sheetTitle: "Share Recap",
     logTag: LOG_TAG,
-    storyBackground: lyricStoryBackground(colour),
+    storyBackground: recapStoryBackground(colour),
   });
 
   const exportWidth = EXPORT_WIDTH_PX / PixelRatio.get();

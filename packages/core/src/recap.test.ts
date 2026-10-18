@@ -12,6 +12,8 @@ import {
   recap,
   recapAutoForward,
   recapBack,
+  recapCardFileName,
+  recapStoryBackground,
   recapBarFill,
   recapForward,
   recapHourLabel,
@@ -532,5 +534,18 @@ describe("recapId", () => {
     for (const id of ["2026-13", "2026-00", "2026-9", "september", "", "2026-09-01"]) {
       assert.equal(parseRecapId(id), null, id);
     }
+  });
+});
+
+describe("sharing a Recap slide", () => {
+  test("names the image after the Recap and when it was made", () => {
+    assert.equal(
+      recapCardFileName("September 2026", new Date(at(2026, 10, 18, 14, 5) + 9_000)),
+      "Wave - Recap September 2026 - 20261018-140509.png",
+    );
+  });
+
+  test("lays the image over the slide's colour, top and bottom, in an Instagram story", () => {
+    assert.deepEqual(recapStoryBackground("#3F43B8"), { top: "#3f43b8", bottom: "#3f43b8" });
   });
 });
