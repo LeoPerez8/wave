@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.Application
 import android.content.ActivityNotFoundException
+import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.ContentUris
 import android.content.Context
@@ -229,6 +230,13 @@ class WaveNativeModule : Module() {
     AsyncFunction("readClipboardText") {
       val clipboard = context.getSystemService(ClipboardManager::class.java)
       clipboard?.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString()
+    }.runOnQueue(Queues.MAIN)
+
+    /** Puts [text] on the clipboard, labelled [label] (Copy Link on the song share sheet). */
+    AsyncFunction("writeClipboardText") { label: String, text: String ->
+      val clipboard = context.getSystemService(ClipboardManager::class.java)
+        ?: throw IllegalStateException("No clipboard")
+      clipboard.setPrimaryClip(ClipData.newPlainText(label, text))
     }.runOnQueue(Queues.MAIN)
 
     /** The latest text shared to Wave from another app, once; null when nothing new was shared. */

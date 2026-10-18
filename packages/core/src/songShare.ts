@@ -7,16 +7,26 @@ import {
 } from "./lyricsShare.ts";
 import type { ArtworkPalette } from "./palette.ts";
 
-/** Where a song's card can go from its share sheet. */
-export type SongShareDestination = "instagramStories" | "whatsapp" | "more";
+/** Where a song can go from its share sheet: its card, or (`SongLinkOption`) its link. */
+export type SongShareDestination = "instagramStories" | "whatsapp" | SongLinkOption | "more";
+
+/** The song share sheet's link options: song.link's page, and the song on Spotify or YT Music. */
+export type SongLinkOption = "copyLink" | "spotify" | "ytMusic";
+
+const LINK_OPTIONS: readonly SongLinkOption[] = ["copyLink", "spotify", "ytMusic"];
 
 /**
  * The song share sheet's destinations, in order: the apps on hand first
- * (Instagram Stories, WhatsApp), as Spotify has them, then More, always.
+ * (Instagram Stories, WhatsApp), as Spotify has them, then the link options
+ * when [links] (YT Music is on), then More, always.
  */
-export const songShareDestinations = (apps: LyricShareApps): SongShareDestination[] => [
+export const songShareDestinations = (
+  apps: LyricShareApps,
+  { links = false }: { readonly links?: boolean } = {},
+): SongShareDestination[] => [
   ...(apps.instagramStories ? (["instagramStories"] as const) : []),
   ...(apps.whatsapp ? (["whatsapp"] as const) : []),
+  ...(links ? LINK_OPTIONS : []),
   "more",
 ];
 

@@ -1,4 +1,14 @@
-import { joinArtists, type ArtworkPalette } from "@wave/core";
+import {
+  joinArtists,
+  lookUpSongLinks,
+  spotifySearchQuery,
+  type ArtworkPalette,
+  type SongLinkAsk,
+  type SongLinkLookup,
+  type SongLinkSearch,
+  type SongLinksState,
+  type UnsearchedSong,
+} from "@wave/core";
 import * as Effect from "effect/Effect";
 import { useSyncExternalStore } from "react";
 
@@ -8,6 +18,7 @@ import { appRuntime } from "@/library/runtime";
 import { appLog } from "@/log/appLog";
 import { cacheStreamedCover } from "@/playback/queueTracks";
 import { ytMusicEnabled } from "@/settings/ytMusic";
+import { searchSongsInTurn } from "@/ytmusic/askYtMusic";
 import { YtMusic } from "@/ytmusic/YtMusic";
 
 const LOG_TAG = "SongShare";
@@ -20,31 +31,80 @@ export interface SongShareContent {
   readonly artworkUri: string | undefined;
   /** The cover's palette, which the card and the story's gradient take; null without one (yet). */
   readonly palette: ArtworkPalette | null;
+  /**
+   * Where the song's links stand (Copy Link, Spotify, YT Music); null with YT
+   * Music off, which hides the link options and asks nothing.
+   */
+  readonly links: SongLinksState | null;
 }
 
 /** The song whose share sheet is open, or null. */
 const shared = makeExternalStore<SongShareContent | null>(null);
 
+/** Which sheet is open: what arrives for an earlier one is dropped. */
+let opened = 0;
+
+/** How long Odesli gets before the links count as out of reach. */
+const ODESLI_TIMEOUT_MS = 15_000;
+
+/** Odesli asked through `fetch`, given up after `ODESLI_TIMEOUT_MS`; rejects when out of reach. */
+const askOdesli: SongLinkAsk = async (url) => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ODESLI_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    return { status: response.status, body: await response.text() };
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+/** One YouTube Music Songs search for a song without a video id, in the search allowance (as Share). */
+const searchForLinks: SongLinkSearch = async (song) =>
+  (await searchSongsInTurn("share", spotifySearchQuery(song))) ?? { ok: false, reason: "failed" };
+
 /**
  * Opens the song share sheet on [content]. [later], when given, finishes it
- * (the cover's palette, the cover cached on the phone); the sheet shows what
- * it has meanwhile and takes the rest if it's still open on that song.
+ * (the cover's palette, the cover cached on the phone), and [links] looks up
+ * the song's links while YT Music is on (Core's `lookUpSongLinks`); the sheet
+ * shows what it has meanwhile and takes the rest if it's still open on that
+ * song.
  */
 export const openSongShare = (
-  content: SongShareContent,
+  content: Omit<SongShareContent, "links">,
   later?: Promise<Partial<SongShareContent>>,
+  links?: () => Promise<SongLinkLookup>,
 ): void => {
-  shared.set(content);
+  const sheet = ++opened;
+  const withLinks = ytMusicEnabled() && links !== undefined;
+  shared.set({ ...content, links: withLinks ? { status: "loading" } : null });
+  const take = (more: Partial<SongShareContent>): void => {
+    const now = shared.get();
+    if (sheet === opened && now !== null) shared.set({ ...now, ...more });
+  };
   later
-    ?.then((more) => {
-      if (shared.get() === content) shared.set({ ...content, ...more });
-    })
+    ?.then(take)
     .catch((error: unknown) =>
       appLog("warn", LOG_TAG, `Couldn't read the cover: ${String(error)}`),
     );
+  if (!withLinks) return;
+  links()
+    .then((song) => lookUpSongLinks(song, searchForLinks, askOdesli))
+    .catch((error: unknown): SongLinksState => {
+      appLog("warn", LOG_TAG, `Couldn't look up the song's links: ${String(error)}`);
+      return { status: "failed" };
+    })
+    .then((state) => {
+      if (state.status !== "found")
+        appLog("info", LOG_TAG, `No links for the song: ${state.status}`);
+      take({ links: state });
+    });
 };
 
-export const closeSongShare = (): void => shared.set(null);
+export const closeSongShare = (): void => {
+  opened += 1;
+  shared.set(null);
+};
 
 export const useSongShare = (): SongShareContent | null =>
   useSyncExternalStore(shared.subscribe, shared.get);
@@ -52,7 +112,11 @@ export const useSongShare = (): SongShareContent | null =>
 const fileUri = (path: string | null): string | undefined =>
   path === null ? undefined : `file://${path}`;
 
-/** Shares a Library song: its cover, and its palette as the Library keeps it. */
+/**
+ * Shares a Library song: its cover, and its palette as the Library keeps it.
+ * Its links go by the video id it was downloaded from, else a search for its
+ * title and artist.
+ */
 export const shareLibrarySong = (song: SongRow): void =>
   openSongShare(
     {
@@ -68,19 +132,36 @@ export const shareLibrarySong = (song: SongRow): void =>
         return { palette: details?.palette ?? null };
       }),
     ),
+    () =>
+      appRuntime.runPromise(
+        Effect.gen(function* () {
+          const store = yield* LibraryStore;
+          const videoIds = yield* store.videoIds([song.id]);
+          return {
+            videoId: videoIds.get(song.id) ?? null,
+            search: {
+              title: song.title,
+              artists: [song.artist],
+              album: song.album,
+              durationMs: song.durationMs,
+            },
+          };
+        }),
+      ),
   );
 
-/** A song YouTube Music has (streamed, or a playlist's unsearched entry), as its card needs it. */
-export interface StreamedShareSong {
-  readonly title: string;
-  readonly artists: readonly string[];
-  readonly artworkUrl: string | null;
-}
+/**
+ * A song YouTube Music has (streamed, with its video id), or a playlist's
+ * unsearched entry (searched for its links), as its share sheet needs it.
+ */
+export type StreamedShareSong = UnsearchedSong & { readonly videoId?: string };
 
 /**
  * Shares a song that isn't a Library file: YouTube's cover, cached on the
- * phone as playback caches it, which gives its palette too. With YT Music
- * off nothing is asked of YouTube: the card has no cover.
+ * phone as playback caches it, which gives its palette too. Its links go by
+ * its video id, else (an unsearched entry) a search for its title and
+ * artists. With YT Music off nothing is asked of YouTube: the card has no
+ * cover, and there are no links.
  */
 export const shareStreamedSong = (song: StreamedShareSong): void => {
   const url = ytMusicEnabled() ? song.artworkUrl : null;
@@ -100,5 +181,15 @@ export const shareStreamedSong = (song: StreamedShareSong): void => {
             return { artworkUri: `file://${artwork.path}`, palette: artwork.palette };
           }),
         ),
+    () =>
+      Promise.resolve({
+        videoId: song.videoId ?? null,
+        search: {
+          title: song.title,
+          artists: song.artists,
+          album: song.album,
+          durationMs: song.durationMs,
+        },
+      }),
   );
 };
