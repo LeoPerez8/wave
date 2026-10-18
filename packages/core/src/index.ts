@@ -197,6 +197,29 @@ export type { CreditedPlayTotals } from "./stats.ts";
 export { STATS_RANKINGS, statsSeeAll } from "./statsSeeAll.ts";
 export type { StatsRanking, StatsSeeAll } from "./statsSeeAll.ts";
 export {
+  RECAP_MONTH_MINIMUM_MS,
+  RECAP_SLIDE_MS,
+  RECAP_TOP_SONGS,
+  availableRecaps,
+  parseRecapId,
+  recap,
+  recapBack,
+  recapBarFill,
+  recapForward,
+  recapId,
+  recapSlides,
+  recapTitle,
+  recapWindow,
+} from "./recap.ts";
+export type {
+  CountedListening,
+  Recap,
+  RecapInput,
+  RecapMonth,
+  RecapPeriod,
+  RecapSlide,
+} from "./recap.ts";
+export {
   AUTO_ROOT,
   AUTO_TABS,
   autoAlbumItem,

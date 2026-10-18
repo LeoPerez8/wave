@@ -11,6 +11,7 @@
  */
 import type {
   ArtistStatsInput,
+  CountedListening,
   CreditedPlayTotals,
   PlayTotals,
   SongListening,
@@ -232,6 +233,26 @@ const artistListening = (db: LibraryDatabase, artistId: number): SongListening[]
     } else known.artistIds.push(credited);
   }
   return [...songs.values()];
+};
+
+/** A quarter hour: every time zone's offset is a whole number of them. */
+const QUARTER_HOUR_MS = 15 * 60_000;
+
+/**
+ * The whole history's counted listening, summed per quarter hour (each row
+ * starts at its quarter hour), deleted songs included: what Core's
+ * `availableRecaps` and `recap` read. A quarter hour never straddles a local
+ * month or day, so the sums lose nothing a Recap needs, at a fraction of the rows.
+ */
+export const countedListening = (db: LibraryDatabase): CountedListening[] => {
+  const { playEvents } = schema;
+  const quarter = sql<number>`(${playEvents.startedAt} / ${QUARTER_HOUR_MS}) * ${QUARTER_HOUR_MS}`;
+  return db
+    .select({ startedAt: quarter, listenedMs: sql<number>`sum(${playEvents.listenedMs})` })
+    .from(playEvents)
+    .where(eq(playEvents.counted, true))
+    .groupBy(quarter)
+    .all();
 };
 
 /**
