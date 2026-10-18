@@ -145,8 +145,8 @@ export type PlayingAnswerStep =
   | { readonly kind: "stop"; readonly notice: string };
 
 const SKIPPED_BECAUSE: Readonly<Record<SearchFailure | "notFound", string>> = {
-  notFound: "it isn't on YouTube Music",
-  failed: "YouTube Music didn't answer",
+  notFound: "not found online",
+  failed: "no answer online",
   offline: "you're offline",
   disabled: "YT Music is off",
 };

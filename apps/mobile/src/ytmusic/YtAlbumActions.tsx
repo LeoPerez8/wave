@@ -45,7 +45,7 @@ export const openYtAlbumActions = (album: YtAlbumTarget): void => {
         album.title,
         result.failure.reason === "offline"
           ? "You're offline. YT Music albums need the network."
-          : "No answer from YouTube Music. Try again in a moment.",
+          : "No answer online. Try again in a moment.",
       );
       return;
     }

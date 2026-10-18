@@ -313,7 +313,7 @@ export interface YtLibraryFailureView {
 const FAILURES: Record<YtLibraryFailure, YtLibraryFailureView> = {
   offline: { line: "You're offline. Try again when you're back online.", action: "tryAgain" },
   failed: {
-    line: "Couldn't read your YouTube Music library. YouTube Music didn't answer.",
+    line: "Couldn't read your YouTube Music library. No answer online.",
     action: "tryAgain",
   },
   signedOut: {
