@@ -639,6 +639,14 @@ describe("canFixSong", () => {
     assert.equal(canFixSong(complete("Clean", "clean")), false);
   });
 
+  test("a song in a format Wave can't write tags to (Opus, raw AAC) never lacks the flag", () => {
+    const at = (path: string) => ({ ...complete("Unknown", "unknown"), path });
+    assert.equal(canFixSong(at("/Music/Airbag.opus")), false);
+    assert.equal(canFixSong(at("/Music/Airbag.AAC")), false);
+    assert.equal(canFixSong(at("/Music/Airbag.mp3")), true);
+    assert.equal(canFixSong({ ...at("/Music/Airbag.opus"), hasLyrics: false }), true);
+  });
+
   test("counts a blank genre and a track number or year of 0 as none", () => {
     assert.equal(canFixSong(indexed("Blank", true, "  ")), true);
     assert.equal(canFixSong(indexed("Zeros", true, "Rock", { trackNumber: 0, year: 1 })), true);
@@ -675,6 +683,11 @@ describe("songsToFix", () => {
       ["Unchecked"],
     );
     assert.equal(run.skipped, 2);
+  });
+
+  test("skips an Opus song with everything Wave can write, so a second run doesn't search it again", () => {
+    const run = songsToFix([{ ...complete("Opus", "unknown"), path: "/Music/Opus.opus" }]);
+    assert.deepEqual(run, { fix: [], skipped: 1 });
   });
 
   test("hands back the songs as given, for the run to fix them", () => {

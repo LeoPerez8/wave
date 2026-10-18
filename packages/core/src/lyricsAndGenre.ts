@@ -520,15 +520,28 @@ export interface IndexedTags extends IndexedLyricsAndGenre, IndexedPlace {
    * was never checked, which Fix Song fills in from Deezer's match.
    */
   readonly explicit: ExplicitFlag;
+  /**
+   * Its file, when known: one in a format Wave can't write tags to (`.opus`,
+   * raw `.aac`) can't take the flag, so it never lacks one. An Opus stream in
+   * an `.ogg` file isn't told apart by its name and still counts as lacking it.
+   */
+  readonly path?: string | null;
 }
+
+/** Extensions of the formats Wave can't write tags to (`SongTagWriter.takesTags`). */
+const UNTAGGABLE = /\.(?:opus|aac)$/i;
 
 /** Whether a track number or year is missing (0 counts as missing). */
 const lacks = (value: number | null): boolean => value === null || value <= 0;
 
 const lacksGenre = (song: IndexedLyricsAndGenre): boolean => (song.genre ?? "").trim() === "";
 
-/** Whether [song]'s explicit flag was never checked (no advisory tag). */
-const lacksFlag = (song: IndexedTags): boolean => song.explicit === "unknown";
+/**
+ * Whether [song]'s explicit flag was never checked (no advisory tag) and its
+ * file can take one: Fix Song would write it.
+ */
+const lacksFlag = (song: IndexedTags): boolean =>
+  song.explicit === "unknown" && !UNTAGGABLE.test(song.path ?? "");
 
 /**
  * Whether Fix Song can do something for [song]: it lacks lyrics, a genre, a
