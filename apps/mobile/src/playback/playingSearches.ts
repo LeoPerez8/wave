@@ -13,9 +13,9 @@
  * next song is asked again at the playing one's prefetch point (Core's
  * `crossfadePrefetchAt`) even if its last search failed a moment ago, so a
  * found song reaches the player before the overlap. While the song after the
- * playing one is still searched, the playback service knows (Core's
- * `searchingAfter`), so a crossfade waits for it at full volume rather than
- * fade into the song after it.
+ * playing one is still searched, or its search failed and is queued to be
+ * asked again, the playback service knows (Core's `searchingAfter`), so a
+ * crossfade waits for it at full volume rather than fade into the song after it.
  */
 import {
   crossfadePrefetchAt,
@@ -57,7 +57,10 @@ let toldSearchingAfter: string | null = null;
 
 /** Tells the playback service which entry's next song is still searched, when that changed. */
 const tellSearching = (): void => {
-  const after = searchingAfter(queueState.get(), new Set(asking.keys()));
+  // With YT Music off nothing searches the queue's songs, now or later.
+  const after = ytMusicEnabled()
+    ? searchingAfter(queueState.get(), { asking: new Set(asking.keys()), failedAt })
+    : null;
   if (after === toldSearchingAfter) return;
   toldSearchingAfter = after;
   WavePlayer.setSearchingAfter(after).catch(() => {
@@ -154,7 +157,10 @@ const retryLater = (): void => {
  * song reached the crossfade's prefetch point.
  */
 const lookAhead = (nextDue = false): void => {
-  if (!ytMusicEnabled()) return;
+  if (!ytMusicEnabled()) {
+    tellSearching();
+    return;
+  }
   const state = queueState.get();
   const playing = currentEntry(state)?.trackId;
   const searching = { asking: new Set(asking.keys()), failedAt, nextDue };
