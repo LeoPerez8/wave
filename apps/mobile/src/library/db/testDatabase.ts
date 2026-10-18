@@ -235,6 +235,8 @@ export interface FixtureTrack {
   readonly genre?: string;
   /** Lyrics in its tags or a sidecar (not recorded by databases from before 0011). */
   readonly hasLyrics?: boolean;
+  /** What its advisory tag says (not recorded by databases from before 0026). */
+  readonly explicit?: "explicit" | "clean" | "unknown";
 }
 
 /** Stars a track at `addedAt` (as the Wave of the database's schema did). */
@@ -347,6 +349,8 @@ export const addTrack = (db: TestDatabase, track: FixtureTrack): number => {
   ).id;
   if (track.hasLyrics !== undefined)
     db.update(tracks).set({ hasLyrics: track.hasLyrics }).where(eq(tracks.id, id)).run();
+  if (track.explicit !== undefined)
+    db.update(tracks).set({ explicit: track.explicit }).where(eq(tracks.id, id)).run();
   if (track.year !== undefined || track.trackNumber !== undefined)
     db.update(tracks)
       .set({ year: track.year ?? null, trackNumber: track.trackNumber ?? null })
