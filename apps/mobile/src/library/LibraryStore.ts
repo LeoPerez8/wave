@@ -21,6 +21,8 @@ import {
   type YtArtistSaved,
   type ExplicitFlag,
   type SavedLyrics,
+  type MixPlaylistEntry,
+  type StreamedSong,
 } from "@wave/core";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { drizzle, type ExpoSQLiteDatabase } from "drizzle-orm/expo-sqlite";
@@ -116,6 +118,12 @@ import {
   selectPendingFavorites,
 } from "./db/pendingFavorites";
 import { forgetSavedLyrics, keepSavedLyrics, selectSavedLyrics } from "./db/savedLyrics";
+import {
+  noteStreamedSong,
+  selectKnownVideos,
+  selectPlaylistedSongs,
+  selectStreamedSongs,
+} from "./db/mixKnown";
 import { hasUnscannedRoot, pruneOrphans, saveBatch, type SavedBatch } from "./db/save";
 import * as schema from "./db/schema";
 import {
@@ -825,6 +833,24 @@ export class LibraryStore extends Context.Service<
     readonly forgetSavedLyrics: (
       videoIds: readonly string[],
     ) => Effect.Effect<void, LibraryStoreError>;
+    /**
+     * Notes that the owner started streaming [song] at [at] (streamed plays
+     * aren't play history; Home's mixes read them). This phone only.
+     */
+    readonly noteStreamedSong: (
+      song: YtAlbumSong,
+      at: number,
+    ) => Effect.Effect<void, LibraryStoreError>;
+    /** Every YT Music song the owner streamed, with how often and when first. */
+    readonly streamedSongs: Effect.Effect<readonly StreamedSong[], LibraryStoreError>;
+    /** The playlists' entries that aren't Library songs, with when each was added (Home's mixes). */
+    readonly playlistedSongs: Effect.Effect<readonly MixPlaylistEntry[], LibraryStoreError>;
+    /**
+     * The videos of the songs streamed, in a playlist, or downloaded and
+     * played or in a playlist: a mix's re-blend leaves its new songs among
+     * them out (Core's `discoverMixKeep`).
+     */
+    readonly knownVideos: Effect.Effect<readonly string[], LibraryStoreError>;
   }
 >()("@wave/mobile/library/LibraryStore") {}
 
@@ -1362,6 +1388,15 @@ const make = Effect.gen(function* () {
 
     forgetSavedLyrics: (videoIds) =>
       attempt("forget saved lyrics", () => forgetSavedLyrics(db, videoIds)),
+
+    noteStreamedSong: (song, at) =>
+      attempt("note a streamed song", () => noteStreamedSong(db, song, at)),
+
+    streamedSongs: attempt("read the songs streamed", () => selectStreamedSongs(db)),
+
+    playlistedSongs: attempt("read the playlists' songs", () => selectPlaylistedSongs(db)),
+
+    knownVideos: attempt("read the videos the owner knows", () => selectKnownVideos(db)),
   });
 });
 

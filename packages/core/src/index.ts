@@ -1140,6 +1140,7 @@ export {
 export type {
   DiscoverMix,
   DiscoverMixFilter,
+  DiscoverMixFamiliarSong,
   DiscoverMixLibrarySong,
   DiscoverMixSeed,
   DiscoverMixes,
@@ -1257,7 +1258,7 @@ export {
   DEFAULT_DISCOVER_MIX_LEVEL,
   DISCOVER_MIX_LEVELS,
   blendDiscoverMix,
-  discoverMixLibraryPool,
+  discoverMixFamiliarPool,
   placeDiscoverMixSongs,
   readDiscoverMixLevel,
 } from "./discoverMixLevels.ts";
@@ -1266,6 +1267,7 @@ export type {
   DiscoverMixBlend,
   DiscoverMixLevel,
   DiscoverMixPoolSources,
+  DiscoverMixTaken,
   DiscoverMixSong,
 } from "./discoverMixLevels.ts";
 export {
@@ -1339,3 +1341,11 @@ export { pickWeighted, playsWeight } from "./weightedPick.ts";
 export type { RandomSource } from "./weightedPick.ts";
 export { ARTIST_MIX_COUNT, artistMixSeeds, artistMixSimilarSource } from "./artistMixes.ts";
 export type { ArtistMixPools, PlayedSeedArtist } from "./artistMixes.ts";
+export { mixKnownSongs } from "./mixKnownSongs.ts";
+export type {
+  KnownNonDSong,
+  MixKnownSongs,
+  MixKnownSources,
+  MixPlaylistEntry,
+  StreamedSong,
+} from "./mixKnownSongs.ts";

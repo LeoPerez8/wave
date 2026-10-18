@@ -2,12 +2,14 @@
  * Home's Artist mixes (docs/spec.md, "Artist mixes"): YouTube Music radios of
  * the owner's most played artists, picked at random each build but leaning
  * towards the most played (the Library's artists when plays are short, then
- * artists similar to the Library's): the radio's new songs, and a pool of
- * Library songs the owner's level blends in (`blendDiscoverMix`). Which
- * seeds, which artist pages to read for similar artists, which songs, which
- * Library songs and when to build again are Core's (`artistMixSeeds`,
- * `artistMixSimilarSource`, `discoverMixSongs`, `discoverMixLibraryPool`,
- * `discoverMixesDue`); this asks YouTube Music and keeps the last mixes built,
+ * artists similar to the Library's): the radio's songs the owner doesn't
+ * know, and a familiar share (Library songs, and songs the owner played or
+ * has in a playlist that stream) the owner's level blends in
+ * (`blendDiscoverMix`). Which seeds, which artist pages to read for similar
+ * artists, which songs are new, which are familiar and when to build again
+ * are Core's (`artistMixSeeds`, `artistMixSimilarSource`, `mixKnownSongs`,
+ * `discoverMixSongs`, `discoverMixFamiliarPool`, `discoverMixesDue`); this
+ * asks YouTube Music and keeps the last mixes built,
  * so Home shows them at once (and what the section shows meanwhile is Core's
  * `discoverMixesSection`).
  */
@@ -16,19 +18,16 @@ import {
   artistMixSimilarSource,
   discoverMixKeep,
   discoverMix,
-  discoverMixLibraryPool,
+  discoverMixFamiliarPool,
   discoverMixReadsMore,
   discoverMixSongs,
   discoverMixesBuilt,
   discoverMixesDue,
   discoverMixesSection,
   identityKey,
-  libraryFinder,
   parseDiscoverMixes,
   pickYtArtist,
-  playedFinder,
   savedDiscoverMix,
-  statsWindow,
   storedDiscoverMixes,
   ytArtistLookup,
   type ArtistMixPools,
@@ -45,8 +44,9 @@ import {
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { useFocusEffect } from "expo-router";
-import { useCallback, useMemo, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 
+import { freeTurnEffect } from "@/lib/backgroundWork";
 import { makeExternalStore } from "@/lib/externalStore";
 import { persistedSetting } from "@/lib/persistedSetting";
 import { libraryListQueries } from "@/library/hooks";
@@ -61,6 +61,7 @@ import { withSearchTurn } from "@/ytmusic/searchAllowance";
 import { YtMusic } from "@/ytmusic/YtMusic";
 
 import { useDiscoverMixLevel } from "./discoverMixLevel";
+import { mixIndexes, refreshKnownVideos, useKnownVideos } from "./mixKnown";
 
 /** How many of the most played artists the seeds are picked from. */
 const SEED_POOL = 20;
@@ -147,7 +148,7 @@ type Filter = Omit<DiscoverMixFilter<NativeYtRadioSong>, "seedVideo">;
  * [seed]'s radio, page after page while Core asks for more (a later page
  * that fails ends it with what was read): the new songs it keeps
  * (`discoverMixSongs`, enough for level 5) and every song it played, for the
- * mix's Library pool. Null when YouTube Music has no radio for it; fails when
+ * mix's familiar share. Null when YouTube Music has no radio for it; fails when
  * the radio can't be started.
  */
 const readRadio = (seed: DiscoverMixSeed, filter: Filter) =>
@@ -180,18 +181,22 @@ const readRadio = (seed: DiscoverMixSeed, filter: Filter) =>
  * random (`Math.random`) leaning towards the most played, and the Library's
  * when plays are short, then artists similar to the Library's when its
  * artists are too few, one seed after another so no song is in two mixes.
- * "nothing-to-build-from" when there are no seeds (no plays and an empty
- * Library), null when no seed made a usable mix: either way what was saved
- * stays, and a later visit can try again.
+ * What the owner knows is indexed once and shared with the other sections'
+ * builds (`mixIndexes`), and the build gives the JavaScript thread back
+ * between mixes, so Home stays smooth. "nothing-to-build-from" when there
+ * are no seeds (no plays and an empty Library), null when no seed made a
+ * usable mix: either way what was saved stays, and a later visit can try
+ * again.
  */
 const buildMixes = Effect.gen(function* () {
   const stats = yield* Stats;
-  const store = yield* LibraryStore;
   const artists = yield* stats.topArtists("all", SEED_POOL);
-  const librarySongs = yield* store.listSongs;
-  const libraryArtists = yield* store.listArtists;
-  // Every song's all-time plays: a mix's Library pool takes the most played first.
-  const songPlays = yield* store.trackPlayTotals(statsWindow("all", Date.now()));
+  const {
+    songs: librarySongs,
+    artists: libraryArtists,
+    plays: songPlays,
+    known,
+  } = yield* mixIndexes;
   const seeds = artistMixSeeds(
     yield* withSimilar({
       played: artists.map(({ item, countedPlays }) => ({
@@ -204,30 +209,30 @@ const buildMixes = Effect.gen(function* () {
     Math.random,
   );
   if (seeds.length === 0) return "nothing-to-build-from" as const;
-  const inLibrary = libraryFinder(librarySongs);
-  const played = playedFinder(yield* store.playedRecordingKeys);
   const taken = new Set<string>();
-  // Each Library song is in one mix's pool at most, as each new song is in one mix.
-  const takenLibrary = new Set<number>();
+  // Each familiar song is in one mix's share at most, as each new song is in one mix.
+  const takenFamiliar = { tracks: new Set<number>(), videos: new Set<string>() };
   const mixes: DiscoverMix[] = [];
   for (const seed of seeds) {
-    const read = yield* Effect.result(
-      readRadio(seed, { inLibrary: (song) => inLibrary(song) !== null, played, taken }),
-    );
+    const read = yield* Effect.result(readRadio(seed, { known: known.known, taken }));
     if (Result.isFailure(read) || read.success === null) continue;
+    yield* freeTurnEffect;
     const { kept, radio } = read.success;
-    const pool = discoverMixLibraryPool(seed, {
+    const familiar = discoverMixFamiliarPool(seed, {
       radio,
-      find: inLibrary,
+      known,
       library: { artists: libraryArtists, songs: librarySongs, plays: songPlays },
-      taken: takenLibrary,
+      taken: takenFamiliar,
       length: kept.length,
     });
-    const mix = discoverMix(seed, kept, pool);
+    const mix = discoverMix(seed, kept, familiar);
     if (mix === null) continue;
     mixes.push(mix);
     for (const song of mix.songs) taken.add(song.videoId);
-    for (const song of pool) takenLibrary.add(song.id);
+    for (const song of familiar) {
+      if (song.source === "library") takenFamiliar.tracks.add(song.track.id);
+      else takenFamiliar.videos.add(song.song.videoId);
+    }
   }
   return discoverMixesBuilt(mixes, Date.now(), seeds);
 });
@@ -273,21 +278,34 @@ const refresh = (played: boolean): void => {
 
 /**
  * How the saved mixes are blended now: the owner's level, leaving out Library
- * songs [tracks] (the Library's songs by id) doesn't have, and explicit songs
- * while Don't play explicit is on (Core's `discoverMixKeep`). Without
- * [tracks] (Home, which doesn't read every song; or the Library not read
- * yet), every one counts as there, flagged as the build saw it.
+ * songs [tracks] (the Library's songs by id) doesn't have, new songs the
+ * owner streamed or put in a playlist since the build (as of the last
+ * re-blend, `refreshKnownVideos`), and explicit songs while Don't play
+ * explicit is on (Core's `discoverMixKeep`). Without [tracks] (Home, which
+ * doesn't read every song; or the Library not read yet), every one counts as
+ * there, flagged as the build saw it.
  */
 const useBlend = (tracks: ReadonlyMap<number, SongRow> | null): DiscoverMixBlend => {
   const level = useDiscoverMixLevel();
   const dontPlayExplicit = useDontPlayExplicit();
+  const knownVideos = useKnownVideos();
   return useMemo(
-    () => ({ level, keep: discoverMixKeep({ dontPlayExplicit, library: tracks }) }),
-    [level, tracks, dontPlayExplicit],
+    () => ({
+      level,
+      keep: discoverMixKeep({
+        dontPlayExplicit,
+        library: tracks,
+        ...(knownVideos === null ? {} : { knownVideos }),
+      }),
+    }),
+    [level, tracks, dontPlayExplicit, knownVideos],
   );
 };
 
-/** [mix]'s new songs, in its order: what its Download downloads. */
+/**
+ * [mix]'s songs that stream, in its order: its new songs and its familiar
+ * songs the phone has no file for. What its Download downloads.
+ */
 export const newSongsOf = (mix: BlendedDiscoverMix): YtAlbumSong[] =>
   mix.songs.flatMap((song) => (song.source === "stream" ? [song.song] : []));
 
@@ -315,7 +333,9 @@ export const useDiscoverMixes = (played: boolean): DiscoverMixesSection => {
   const nothing = useSyncExternalStore(nothingToBuildFrom.subscribe, nothingToBuildFrom.get);
   useFocusEffect(
     useCallback(() => {
-      if (enabled) refresh(played);
+      if (!enabled) return;
+      refreshKnownVideos();
+      refresh(played);
     }, [enabled, played]),
   );
   return useMemo(
@@ -337,6 +357,8 @@ export const useDiscoverMix = (
   const enabled = useYtMusicEnabled();
   const mixes = saved.useValue();
   const blend = useBlend(tracks);
+  // Opening a mix's page or menu re-blends it with what the owner knows now.
+  useEffect(refreshKnownVideos, []);
   return useMemo(
     () => (enabled ? savedDiscoverMix(mixes, id, blend) : null),
     [enabled, mixes, id, blend],

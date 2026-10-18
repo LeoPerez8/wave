@@ -32,9 +32,9 @@ const saved: DiscoverMixes = {
       id: "artist:portishead",
       seed: { kind: "artist", name: "Portishead" },
       songs: ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"].map((id) => song(id)),
-      library: [
-        { id: 1, title: "Roads", artist: "Portishead" },
-        { id: 2, title: "Teardrop", artist: "Massive Attack" },
+      familiar: [
+        { source: "library", track: { id: 1, title: "Roads", artist: "Portishead" } },
+        { source: "library", track: { id: 2, title: "Teardrop", artist: "Massive Attack" } },
       ],
     },
   ],
