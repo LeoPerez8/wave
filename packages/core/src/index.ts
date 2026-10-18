@@ -1459,3 +1459,19 @@ export type {
   TagWriteOrigin,
   TagWriteStep,
 } from "./failureCause.ts";
+export {
+  duplicateCheckDue,
+  replacementDuplicateFix,
+  replacementDuplicateLines,
+  replacementDuplicates,
+  replacementsUnderway,
+  storedDuplicateCheck,
+} from "./replacementDuplicates.ts";
+export type {
+  DuplicateCheckFile,
+  DuplicateCheckWhen,
+  DuplicateFix,
+  DuplicateOutcome,
+  DuplicateLengths,
+  ReplacementDuplicate,
+} from "./replacementDuplicates.ts";

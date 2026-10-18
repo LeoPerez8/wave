@@ -6,13 +6,15 @@ import { WaveNative, type FileDeleteOutcome } from "@/native/waveNative";
 import { LibraryStore } from "./LibraryStore";
 
 /** Why the recorded deletions are being finished, as the log line says it. */
-export type FileDeletionsWhen = "scan" | "import" | "replacementRun" | "failedReplacement";
+export type FileDeletionsWhen =
+  "scan" | "import" | "replacementRun" | "failedReplacement" | "duplicateCheck";
 
 const WHEN: Record<FileDeletionsWhen, string> = {
   scan: "before a scan",
   import: "after an import",
   replacementRun: "as a replacement run started",
   failedReplacement: "after a failed replacement",
+  duplicateCheck: "after the check for songs a replacement left twice",
 };
 
 /**
