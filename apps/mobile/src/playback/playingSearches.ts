@@ -17,6 +17,7 @@
 import {
   crossfadePrefetchAt,
   currentEntry,
+  explicitSkipNotice,
   extrapolatePosition,
   playingAnswerStep,
   playingSearches,
@@ -31,6 +32,7 @@ import { appRuntime } from "@/library/runtime";
 import { searchUnsearchedSong } from "@/library/unsearchedEntries";
 import { showToast } from "@/overlay/toast";
 import { crossfadeMs } from "@/settings/crossfade";
+import { dontPlayExplicit } from "@/settings/dontPlayExplicit";
 import { ytMusicEnabled } from "@/settings/ytMusic";
 
 import { playbackState } from "./Player";
@@ -98,11 +100,15 @@ const settleComingUp = (trackId: string, settled: Settlement | null): void => {
   }
   const { entries, index } = queueState.get();
   if (!entries.some((entry, at) => at !== index && entry.trackId === trackId)) return;
+  const song = readUnsearchedTrackId(trackId);
   if (settled.kind === "found") {
+    // Found as an explicit song, it leaves the queue (Core's `reduceQueue` passes it over).
+    if (song !== null && dontPlayExplicit() && settled.becomes.song.explicit) {
+      void showToast(explicitSkipNotice(song.title));
+    }
     void dispatch(trackId, ytTrackId(settled.becomes.song.videoId));
     return;
   }
-  const song = readUnsearchedTrackId(trackId);
   const step = song === null ? null : playingAnswerStep(song, settled, { chosen: false });
   if (step !== null && step.kind !== "play") void showToast(step.notice);
   void dispatch(trackId, null);

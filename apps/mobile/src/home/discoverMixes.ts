@@ -13,6 +13,7 @@
  */
 import {
   blendDiscoverMix,
+  discoverMixKeep,
   discoverMix,
   discoverMixLibraryPool,
   discoverMixReadsMore,
@@ -55,6 +56,7 @@ import { LibraryStore, type SongRow } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { useLibraryQuery } from "@/library/sharedQueries";
 import type { NativeYtRadioSong } from "@/native/waveYtMusic";
+import { useDontPlayExplicit } from "@/settings/dontPlayExplicit";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 import { Stats } from "@/stats/Stats";
 import { withSearchTurn } from "@/ytmusic/searchAllowance";
@@ -271,18 +273,17 @@ const refresh = (played: boolean): void => {
 
 /**
  * How the saved mixes are blended now: the owner's level, leaving out Library
- * songs [tracks] (the Library's songs by id) doesn't have. Without [tracks]
- * (Home, which doesn't read every song; or the Library not read yet), every
- * one counts as there.
+ * songs [tracks] (the Library's songs by id) doesn't have, and explicit songs
+ * while Don't play explicit is on (Core's `discoverMixKeep`). Without
+ * [tracks] (Home, which doesn't read every song; or the Library not read
+ * yet), every one counts as there, flagged as the build saw it.
  */
 const useBlend = (tracks: ReadonlyMap<number, SongRow> | null): DiscoverMixBlend => {
   const level = useDiscoverMixLevel();
+  const dontPlayExplicit = useDontPlayExplicit();
   return useMemo(
-    () => ({
-      level,
-      keep: (song) => song.source === "stream" || tracks === null || tracks.has(song.track.id),
-    }),
-    [level, tracks],
+    () => ({ level, keep: discoverMixKeep({ dontPlayExplicit, library: tracks }) }),
+    [level, tracks, dontPlayExplicit],
   );
 };
 

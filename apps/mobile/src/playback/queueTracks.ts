@@ -7,6 +7,7 @@
  */
 import {
   createQueueCoverBatcher,
+  isExplicit,
   isUnsearchedTrackId,
   joinArtists,
   libraryTrackIds,
@@ -48,6 +49,12 @@ export interface QueueTrack {
    * track's comes from the Library).
    */
   readonly palette?: ArtworkPalette | null;
+  /**
+   * Whether it's explicit (a Library song's flag, a YT Music song's mark):
+   * the queue passes it over while Don't play explicit is on. Absent counts
+   * as clean (unknown, or saved before it was kept).
+   */
+  readonly explicit?: boolean;
 }
 
 /** A library song as the queue needs it. */
@@ -59,6 +66,7 @@ export const toQueueTrack = (song: PlayableSongRow): QueueTrack => ({
   album: song.album,
   artworkPath: song.artworkPath,
   thumbPath: song.thumbPath,
+  explicit: isExplicit(song.explicit),
 });
 
 /** A YT Music song's artwork, cached on the phone like a Library track's. */
@@ -87,6 +95,7 @@ export const toYtQueueTrack = (song: YtSong, artwork: CachedArtwork | null): Que
       artwork?.path ?? (song.artworkUrl === null ? null : streamedCoverUrl(song.artworkUrl)),
     thumbPath: artwork?.thumbPath ?? null,
     palette: artwork?.palette ?? null,
+    explicit: song.explicit,
   };
 };
 
