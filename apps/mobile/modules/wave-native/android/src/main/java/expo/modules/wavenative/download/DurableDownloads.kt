@@ -1,5 +1,6 @@
 package expo.modules.wavenative.download
 
+import expo.modules.wavenative.log.LogUnits
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -49,6 +50,8 @@ class DurableDownloads(
   private val journal: File,
   private val clock: () -> Long = System::currentTimeMillis,
   private val log: (String) -> Unit = {},
+  /** News rather than trouble (a transfer that finished, its speed); [log] unless told otherwise. */
+  private val note: (String) -> Unit = log,
   private val slots: Int = SLOTS,
 ) {
   private val jobs = LinkedHashMap<String, MutableMap<String, Any?>>()
@@ -56,6 +59,8 @@ class DurableDownloads(
   @Volatile private var stopped = false
   /** The jobs a worker is on (under the lock), so no job's step ever runs twice at once. */
   private val running = HashSet<String>()
+  /** Why the journal ended a job's transfer (out of time, silence), for the attempt's line when its worker returns. */
+  private val endings = HashMap<String, String>()
   /** The transfers under way, which [stopWork] cancels without the lock. */
   private val transfers = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
   /**
@@ -432,6 +437,7 @@ class DurableDownloads(
       if (job["phase"] == "publishing" && job["id"] in running) continue
       if (stopAll || outOfTime(job)) {
         changed = true
+        if (job["phase"] == "transferring") endings[job["id"] as String] = if (stopAll) "stopped" else "out of time"
         val cause = if (stopAll) stopCause ?: "Android stopped the download service" else "Out of time while ${job["phase"]}"
         if (job["phase"] == "completed") { importFailed(job, "failed", cause); job.remove("token") }
         // Android stopping the work isn't the source's fault; running out of time is.
@@ -444,6 +450,9 @@ class DurableDownloads(
       } else if (job["phase"] == "transferring" && (job.number("attemptDeadline") <= budgetNow() || (job["queuePosition"] != null && job.number("queueDeadline") <= budgetNow()))) {
         changed = true
         transport.cancel(job["id"] as String)
+        // Said here: the worker's failure, once the transfer stops, no longer counts.
+        val (ending, cause) = silence(job)
+        recordCause(job, ending, cause); endings[job["id"] as String] = ending
         nextCandidate(job)
         job["generation"] = job.number("generation") + 1
       } else if (job["token"] != null && job.number("leaseUntil") < clock()) {
@@ -478,10 +487,11 @@ class DurableDownloads(
       val id = job["id"] as String
       if (id in running || job.number("retryAt") > clock()) continue
       if (job["phase"] == "prepared") {
-        if (job.number("attempts") >= MAX_ATTEMPTS || job.number("candidateIndex") >= job.maps("candidates").size) { fail(job, exhausted(job)); persist(); continue }
+        if (job.number("attempts") >= MAX_ATTEMPTS || job.number("candidateIndex") >= job.maps("candidates").size) { fail(job, exhausted(job), exhaustion(job)); persist(); continue }
         if (soulseekTurnOver(job)) { fail(job, "timedOut", SOULSEEK_OUT_OF_TIME); persist(); continue }
         if (job.number("resumeAttemptDeadline") in 1..budgetNow() || job.number("resumeQueueDeadline") in 1..budgetNow()) { nextCandidate(job); persist(); continue }
         job["attempts"] = job.number("attempts") + 1
+        endings.remove(id)
         // YouTube goes on in the part file its last attempt left (YtAudioDownload checks it's the same stream's).
         val kept = (job["sourcePath"] as? String)?.takeIf { job["source"] == YOUTUBE && File(it).isFile }
         job["sourcePath"] = kept ?: DownloadFiles.partFileFor(File(job["targetPath"] as String), "${job["id"]}-${job["generation"]}-${job["attempts"]}").path
@@ -504,13 +514,17 @@ class DurableDownloads(
   private fun run(work: Map<String, Any?>, transport: DurableTransfer, publication: DurablePublication) {
     val id = work["id"] as String
     val generation = work.number("generation")
+    /** The transfer's attempt, for its line when it ends. */
+    var attempt: Attempt? = null
     try {
       when (work["phase"]) {
         "transferring" -> {
           val source = File(work["sourcePath"] as String)
           transfers += id
+          val transfer = Attempt(work, clock(), source.length()).also { attempt = it }
           val durationMs = work.map("song").number("durationMs").takeIf { it > 0 } ?: work.map("peer").number("durationMs")
           val audio = transport.receive(id, work.map("peer"), source, durationMs) { received, total, queue ->
+            transfer.progressed(received)
             synchronized(this) {
               val job = held(id, generation, "transferring") ?: return@synchronized
               // Arriving bytes keep a slow peer's turn; one that goes quiet for STALL_MS is replaced.
@@ -526,8 +540,9 @@ class DurableDownloads(
             }
           }
           synchronized(this) {
-            val job = held(id, generation, "transferring") ?: run { source.delete(); return }
-            if (stopped) { cleanup(job); transition(job, "prepared"); persist(); return }
+            val job = held(id, generation, "transferring") ?: run { transfer.ended(endings.remove(id) ?: "cancelled"); source.delete(); return }
+            if (stopped) { transfer.ended("stopped"); cleanup(job); transition(job, "prepared"); persist(); return }
+            transfer.ended("finished", audio.number("bytes"))
             job["audio"] = clean(audio); job["receiptId"] = UUID.randomUUID().toString(); job.remove("soulseekDeadline"); transition(job, "sourceReady"); persist()
           }
         }
@@ -546,17 +561,23 @@ class DurableDownloads(
       }
     } catch (error: Exception) {
       synchronized(this) {
-        val job = held(id, generation, work["phase"] as String) ?: run { if (work["phase"] == "tagging") File(work["sourcePath"] as String).delete(); return }
+        val job = held(id, generation, work["phase"] as String) ?: run {
+          attempt?.ended(endings.remove(id) ?: "cancelled")
+          if (work["phase"] == "tagging") File(work["sourcePath"] as String).delete()
+          return
+        }
         val cause = describe(error)
         if (work["phase"] == "publishing" && job["finalPath"] != null && File(job["finalPath"] as String).isFile && job.number("publicationAttempts") < 3) {
           job["publicationAttempts"] = job.number("publicationAttempts") + 1
           recordCause(job, "publishing again", cause)
         } else if (work["phase"] == "transferring") {
           val reason = (error as? DurableFailure)?.reason ?: "unavailable"
+          attempt?.ended(if (stopped) "stopped" else "failed ($reason)")
           // The service stopping isn't the peer's fault: the next start retries the same peer.
           if (stopped) { cleanup(job); transition(job, "prepared"); job["attempts"] = maxOf(0L, job.number("attempts") - 1) }
           else if (reason in plan(job).strings("retry") && job.number("attempts") < MAX_ATTEMPTS) { recordCause(job, reason, cause); if (!keepsPart(job)) cleanup(job); transition(job, "prepared"); job["retryAt"] = clock() + RETRY_PAUSE_MS * job.number("attempts") }
-          else if (reason in plan(job).strings("retry") || reason in plan(job).strings("end")) fail(job, reason, cause)
+          else if (reason in plan(job).strings("retry")) fail(job, reason, exhaustion(job, cause))
+          else if (reason in plan(job).strings("end")) fail(job, reason, cause)
           else { recordCause(job, reason, cause); nextCandidate(job) }
         } else {
           // Tagging or publication: storage only when storage is what failed.
@@ -627,6 +648,45 @@ class DurableDownloads(
     onJob { job -> job["saved"] = saved; transition(job, "completed"); cleanup(job); persist() }
   }
 
+  /**
+   * One transfer of job [work], started at [startedAt] ([clock]) with [fromByte] already in its
+   * part file (a YouTube attempt going on from the one before): what the log says when it ends,
+   * the bytes this attempt added to the file, its time and its speed.
+   */
+  private inner class Attempt(private val work: Map<String, Any?>, private val startedAt: Long, @Volatile private var fromByte: Long) {
+    /** How far into the file the transfer last said it was. */
+    @Volatile private var received = fromByte
+    /** The transfer is [at] bytes into its file; back to an earlier byte when it started over. */
+    fun progressed(at: Long) { if (at < fromByte) fromByte = at; received = at }
+    /** The attempt ended, the reason given ([how]), with its part file [bytes] long. */
+    fun ended(how: String, bytes: Long = received) {
+      val received = LogUnits.transfer(maxOf(0L, bytes - fromByte), clock() - startedAt)
+      if (work["source"] == YOUTUBE) note("Download ${work["id"]} (youtube) attempt ${work.number("attempts")} $how: $received")
+      // A peer's failures have lines of their own (the transport's, the cause's); its success is told apart from YouTube's here.
+      else if (how == "finished") note("Download ${work["id"]} (${work["source"] ?: SOULSEEK}) finished from ${work.map("peer")["username"] ?: "a peer"}: $received")
+    }
+  }
+
+  /**
+   * Why the journal cancels [job]'s transfer at its attempt or queue deadline, and the cause it
+   * keeps: a YouTube stream or a peer that went quiet, or a peer that never started or kept the
+   * job queued.
+   */
+  private fun silence(job: Map<String, Any?>): Pair<String, String> {
+    val attempt = "Attempt ${job.number("attempts")}"
+    val received = job.number("received")
+    if (job["source"] == YOUTUBE) {
+      val quiet = LogUnits.duration(YOUTUBE_STALL_MS)
+      return "cancelled for silence" to if (received > 0) "$attempt went quiet for $quiet after ${LogUnits.size(received)}" else "$attempt got no audio for $quiet"
+    }
+    val peer = job.map("peer")["username"] ?: "the peer"
+    return when {
+      job["queuePosition"] != null && job.number("queueDeadline") <= budgetNow() -> "cancelled in a queue" to "$attempt: $peer kept it queued for ${LogUnits.duration(QUEUE_MS)}"
+      received > 0 -> "cancelled for silence" to "$attempt: $peer went quiet for ${LogUnits.duration(STALL_MS)} after ${LogUnits.size(received)}"
+      else -> "cancelled for silence" to "$attempt: $peer didn't start sending within ${LogUnits.duration(ATTEMPT_MS)}"
+    }
+  }
+
   private fun held(id: String, generation: Long, phase: String): MutableMap<String, Any?>? = jobs[id]?.takeIf { it.number("generation") == generation && it["phase"] == phase }
   private fun transition(job: MutableMap<String, Any?>, phase: String) { job["phase"] = phase; job["phaseAt"] = clock(); job.remove("token"); job["decisionAttempts"] = 0L; job.remove("retryAt") }
   /**
@@ -639,13 +699,21 @@ class DurableDownloads(
     job.remove("resumeAttemptDeadline"); job.remove("resumeQueueDeadline")
     if (!keepsPart(job)) cleanup(job)
     if (job["source"] != YOUTUBE) job["candidateIndex"] = job.number("candidateIndex") + 1
-    if (job.number("candidateIndex") >= job.maps("candidates").size || job.number("attempts") >= MAX_ATTEMPTS) { fail(job, exhausted(job)); return }
+    if (job.number("candidateIndex") >= job.maps("candidates").size || job.number("attempts") >= MAX_ATTEMPTS) { fail(job, exhausted(job), exhaustion(job)); return }
     transition(job, "prepared")
     // YouTube's stream again: a pause, longer each time, comes first.
     if (job["source"] == YOUTUBE) job["retryAt"] = clock() + RETRY_PAUSE_MS * job.number("attempts")
   }
   /** The failure plan the prepare answer brought; without one, every failure ends the job. */
   private fun plan(job: Map<String, Any?>) = job.map("failurePlan")
+  /**
+   * The cause of [job] failing with its attempts used up, with what went wrong last ([lastError],
+   * else the cause it keeps). Null when it's every peer tried: the last one's error stays the cause.
+   */
+  private fun exhaustion(job: Map<String, Any?>, lastError: String? = job["cause"] as? String): String? {
+    val attempts = job.number("attempts")
+    return if (attempts >= MAX_ATTEMPTS) "Out of attempts ($attempts of $MAX_ATTEMPTS); last error: ${lastError ?: "none"}" else null
+  }
   /** What the job fails with once nothing is left to try. */
   private fun exhausted(job: Map<String, Any?>) = plan(job)["exhausted"] as? String ?: "failed"
   private fun setSource(job: MutableMap<String, Any?>, source: String?) {

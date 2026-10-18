@@ -13,7 +13,10 @@ import android.os.PowerManager
 import android.os.SystemClock
 import expo.modules.wavenative.R
 import expo.modules.wavenative.download.AndroidDownloads
+import expo.modules.wavenative.download.DownloadServiceLines
+import expo.modules.wavenative.download.DownloadServiceStop
 import expo.modules.wavenative.download.DurableDownloads
+import expo.modules.wavenative.download.describe
 import expo.modules.wavenative.launcher.LauncherIconSwitcher
 import expo.modules.wavenative.log.ServiceTimeout
 import expo.modules.wavenative.log.WaveLog
@@ -33,6 +36,8 @@ class YtDownloadService : Service() {
   private var wifiLock: WifiManager.WifiLock? = null
   /** When it started (elapsed realtime), for the log line if Android ends it on its time limit. */
   private var startedAt = 0L
+  /** Why it's stopping, once it asked to ([onIdle]); otherwise Android stopped it. */
+  private var stopping: DownloadServiceStop? = null
   override fun onBind(intent: Intent?): IBinder? = null
 
   override fun onCreate() {
@@ -58,6 +63,7 @@ class YtDownloadService : Service() {
       startForeground(NOTIFICATION_ID, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
     } catch (e: RuntimeException) {
       // A sticky restart Android won't let into the foreground: the journal waits for Wave's next launch.
+      WaveLog.w(TAG, DownloadServiceLines.refused(restart = intent == null, describe(e)))
       stopSelf()
       return START_NOT_STICKY
     }
@@ -65,19 +71,20 @@ class YtDownloadService : Service() {
       // Tagging or publication may hold the journal; the main thread never waits for it.
       thread(name = "Wave download cancel") { runCatching { downloads.jobs.cancelJob(id, downloads.transport); downloads.changed() } }
     }
-    downloads.start(onIdle = { stopSelf() }, refresh = { refresh() })
+    // A null intent is Android's sticky restart, after Wave's process was gone.
+    downloads.start(onIdle = { stopping = DownloadServiceStop.QUEUE_EMPTY; stopSelf() }, refresh = { refresh() }, restarted = intent == null)
     return START_STICKY
   }
 
   override fun onTimeout(startId: Int, fgsType: Int) {
-    WaveLog.w("WaveDownloads", ServiceTimeout.line("the downloads service", SystemClock.elapsedRealtime() - startedAt))
-    downloads.stop(timedOut = true)
+    WaveLog.w(TAG, ServiceTimeout.line("the downloads service", SystemClock.elapsedRealtime() - startedAt))
+    downloads.stop(DownloadServiceStop.TIME_LIMIT, timedOut = true)
     stopForeground(STOP_FOREGROUND_REMOVE)
     stopSelf()
   }
 
   override fun onDestroy() {
-    downloads.stop()
+    downloads.stop(stopping ?: DownloadServiceStop.ANDROID)
     wakeLock?.let { if (it.isHeld) it.release() }; wakeLock = null
     wifiLock?.let { if (it.isHeld) it.release() }; wifiLock = null
     super.onDestroy()
@@ -128,6 +135,7 @@ class YtDownloadService : Service() {
   }
 
   private companion object {
+    const val TAG = "WaveDownloads"
     const val CHANNEL = "wave_downloads"
     const val NOTIFICATION_ID = 0x5759
     const val CANCEL = "wave.download.CANCEL"

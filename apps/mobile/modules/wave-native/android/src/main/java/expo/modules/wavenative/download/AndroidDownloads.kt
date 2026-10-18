@@ -42,13 +42,16 @@ import java.util.concurrent.TimeUnit
 
 /** Application-context owner, independent of Expo module and Activity lifetimes. */
 class AndroidDownloads private constructor(private val context: Context) {
-  // Each failure's cause also goes to Logcat, so a device run shows why a download stopped.
-  val jobs = DurableDownloads(File(context.noBackupFilesDir, "soulseek-download-jobs-v1"), log = { WaveLog.w(TAG, it) })
+  // Each failure's cause also goes to the app log, so a device run shows why a download stopped;
+  // and each transfer's speed, so it shows where a download's time went.
+  val jobs = DurableDownloads(File(context.noBackupFilesDir, "soulseek-download-jobs-v1"), log = { WaveLog.w(TAG, it) }, note = { WaveLog.i(TAG, it) })
   private val soulseek = AndroidSoulseek.get(context)
   private val main = Handler(Looper.getMainLooper())
   private var worker: ScheduledExecutorService? = null
   private var steps: ExecutorService? = null
   private var deadlines: ScheduledExecutorService? = null
+  /** When the work last started ([SystemClock.elapsedRealtime]), for the stop line. */
+  private var startedAt = 0L
   private val listeners = CopyOnWriteArrayList<() -> Unit>()
   private val ytStreams by lazy { AndroidYtAudioStreams(context) }
   private val ytAudio by lazy { YtAudioDownload(ytStreams) }
@@ -187,12 +190,18 @@ class AndroidDownloads private constructor(private val context: Context) {
     try { context.startForegroundService(Intent(context, YtDownloadService::class.java)) }
     catch (error: Exception) {
       // Never unprotected work: started jobs fail with Retry; queued ones wait for the next launch.
-      if (synchronized(this) { worker == null }) { jobs.expire(transport, stopAll = true); changed() }
+      if (synchronized(this) { worker == null }) {
+        WaveLog.w(TAG, DownloadServiceLines.refused(restart = false, describe(error)))
+        jobs.expire(transport, stopAll = true); changed()
+      } else WaveLog.w(TAG, "Android refused to start the download service again; it goes on", error)
     }
   }
 
-  @Synchronized fun start(onIdle: () -> Unit, refresh: () -> Unit) {
+  /** Starts the work, unless it runs already; [restarted] when Android restarted the service after Wave was closed. */
+  @Synchronized fun start(onIdle: () -> Unit, refresh: () -> Unit, restarted: Boolean = false) {
     if (worker != null) return
+    WaveLog.i(TAG, DownloadServiceLines.started(restarted, jobs.counts()))
+    startedAt = SystemClock.elapsedRealtime()
     jobs.startWork()
     main.post { JsRuntime.ensureStarted(context, OWNER) }
     deadlines = Executors.newSingleThreadScheduledExecutor().also { executor ->
@@ -225,7 +234,8 @@ class AndroidDownloads private constructor(private val context: Context) {
   }
 
   /** Android's time limit stops actual socket work before removing foreground protection. */
-  @Synchronized fun stop(timedOut: Boolean = false) {
+  @Synchronized fun stop(why: DownloadServiceStop, timedOut: Boolean = false) {
+    if (worker != null) WaveLog.i(TAG, DownloadServiceLines.stopped(why, SystemClock.elapsedRealtime() - startedAt, jobs.counts()))
     jobs.stopWork(transport)
     worker?.shutdownNow(); worker = null
     steps?.shutdownNow(); steps = null
