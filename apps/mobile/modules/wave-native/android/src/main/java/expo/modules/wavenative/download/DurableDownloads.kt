@@ -491,7 +491,8 @@ class DurableDownloads(
       transition(job, "queued")
       changed = true
     }
-    if (changed) persist()
+    // Written at once: the service is going, and the process may go with it.
+    if (changed) persistNow()
   }
 
   /**
