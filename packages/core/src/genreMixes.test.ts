@@ -279,6 +279,14 @@ describe("A song with several genres", () => {
     );
   });
 
+  test("make up a family's five songs in thirds", () => {
+    const library = libraryOf(songsOf(15, "Metal; Rock; Pop", 1));
+    assert.deepEqual(
+      genreMixSeeds(library, always(0)).map((seed) => seed.name),
+      ["Metal", "Rock", "Pop"],
+    );
+  });
+
   test("inflates no family when most of the Library has several", () => {
     const library = libraryOf([
       ...songsOf(4, "Metalcore; Rock", 1),

@@ -199,6 +199,13 @@ export const GENRE_MIX_COUNT = 4;
 /** How many Library songs a family needs to have a mix. */
 const FAMILY_FEWEST = 5;
 
+/**
+ * What a family's song count may fall short of [FAMILY_FEWEST] by and still
+ * count: songs in several families add shares (1/3, 1/7…) that don't add up
+ * to a whole number exactly in floating point.
+ */
+const SHARES_ROUNDING = 1e-9;
+
 /** How many of a family's artists a mix grows from at most. */
 const SEED_ARTISTS = 3;
 
@@ -333,7 +340,7 @@ export const genreMixSeeds = (
 ): DiscoverMixSeed[] => {
   const seeds: DiscoverMixSeed[] = [];
   const ranked = libraryFamilies(library)
-    .filter((family) => family.songs >= FAMILY_FEWEST && seedableArtists(family).length > 0)
+    .filter((family) => family.songs >= FAMILY_FEWEST - SHARES_ROUNDING && seedableArtists(family).length > 0)
     // oxlint-disable-next-line unicorn/no-array-sort -- sorts the fresh array filter made; Hermes lacks toSorted
     .sort((a, b) => b.plays - a.plays || b.songs - a.songs);
   const { fresh, shown } = freshFirst(
