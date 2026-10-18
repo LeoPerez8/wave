@@ -7,6 +7,7 @@ import {
   accountsSummary,
   downloadsSummary,
   queuedDownloadCounts,
+  type SpotifySession,
   type WaveSession,
   type YtSession,
 } from "./index.ts";
@@ -95,6 +96,22 @@ describe("Accounts row summary", () => {
     assert.equal(accountsSummary(YT_SIGNED_IN, WAVE_SIGNED_IN), "YT Music: Leo Perez · Wave: Leo");
   });
 
+  test("names the Spotify account between YT Music's and Wave's", () => {
+    const spotify: SpotifySession = {
+      status: "signedIn",
+      account: { name: "leo.perez", photoUrl: null },
+    };
+    assert.equal(accountsSummary(YT_SIGNED_OUT, WAVE_SIGNED_OUT, spotify), "Spotify: leo.perez");
+    assert.equal(
+      accountsSummary(YT_SIGNED_IN, WAVE_SIGNED_IN, spotify),
+      "YT Music: Leo Perez · Spotify: leo.perez · Wave: Leo",
+    );
+    assert.equal(
+      accountsSummary(YT_SIGNED_OUT, WAVE_SIGNED_OUT, { status: "expired", account: null }),
+      null,
+    );
+  });
+
   test("an expired or ended session isn't named, and with nothing signed in there's no summary", () => {
     assert.equal(accountsSummary(YT_SIGNED_OUT, WAVE_SIGNED_OUT), null);
     assert.equal(
@@ -135,6 +152,6 @@ describe("the Downloads row's line", () => {
     ]);
     assert.equal(downloadsSummary(0, queued), "2 downloading · 5 waiting");
     assert.equal(downloadsSummary(3, queued), "2 downloading · 5 waiting · 3 songs failed");
-    assert.equal(downloadsSummary(1, { downloading: 0, waiting: 0 }), "1 song failed");
+    assert.equal(downloadsSummary(1, { downloading: 0, saving: 0, waiting: 0 }), "1 song failed");
   });
 });

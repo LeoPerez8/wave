@@ -146,6 +146,7 @@ export type ItemAction =
   | "goToArtist"
   | "renamePlaylist"
   | "changeImage"
+  | "adjustImage"
   | "removeImage"
   | "deletePlaylist"
   | "deletePlaylists"
@@ -196,6 +197,7 @@ export const ITEM_ACTION_LABELS: { readonly [A in ItemAction]: string } = {
   goToArtist: "Go to Artist",
   renamePlaylist: "Rename Playlist",
   changeImage: "Change Image",
+  adjustImage: "Adjust Image",
   removeImage: "Remove Image",
   deletePlaylist: "Delete Playlist",
   deletePlaylists: "Delete Playlists",
@@ -398,7 +400,9 @@ export const itemActions = <A extends LibraryArtistRef = LibraryArtistRef>(
     // Its own image is set from its menu (the selection bar leaves it out); the mosaic shows without one.
     if (surface === "menu") {
       entries.push({ action: "changeImage" });
-      if (only?.hasImage === true) entries.push({ action: "removeImage" });
+      // Adjust Image reframes it from the original photo, at the last framing.
+      if (only?.hasImage === true)
+        entries.push({ action: "adjustImage" }, { action: "removeImage" });
     }
   }
   // Looks up online what the songs lack and writes it into their files; it

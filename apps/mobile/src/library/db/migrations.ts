@@ -912,6 +912,14 @@ CREATE TABLE \`file_deletions\` (
 );
 `;
 
+// A playlist image's original photo and framing (\`schema.ts\`'s \`imageOriginalPath\`),
+// for Adjust Image. Self-contained, so it can take any number when merged.
+const mPlaylistImageOriginals = `
+ALTER TABLE \`playlists\` ADD \`image_original_path\` text;
+--> statement-breakpoint
+ALTER TABLE \`playlists\` ADD \`image_framing\` text;
+`;
+
 export default {
   journal: {
     entries: [
@@ -949,6 +957,12 @@ export default {
       { idx: 31, when: 1_794_484_800_000, tag: "0031_streamed_songs", breakpoints: true },
       { idx: 32, when: 1_794_571_200_000, tag: "0032_genre_tags", breakpoints: true },
       { idx: 33, when: 1_794_657_600_000, tag: "0033_file_deletions", breakpoints: true },
+      {
+        idx: 34,
+        when: 1_794_744_000_000,
+        tag: "0034_playlist_image_originals",
+        breakpoints: true,
+      },
     ],
   },
   migrations: {
@@ -986,5 +1000,6 @@ export default {
     m0031: mStreamedSongs,
     m0032: mGenreTags,
     m0033: mFileDeletions,
+    m0034: mPlaylistImageOriginals,
   },
 };

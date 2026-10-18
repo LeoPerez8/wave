@@ -4,6 +4,7 @@ import {
   downloadsSummary,
   libraryLookupProgress,
   type SettingsPage,
+  type SpotifySession,
   type WaveSession,
   type YtSession,
 } from "@wave/core";
@@ -14,6 +15,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useLibraryLookup } from "@/library/findLyricsAndGenre";
 import { useScanRoots, useScanState } from "@/library/hooks";
 import { WaveAccount } from "@/native/waveAccount";
+import { WaveSpotify } from "@/native/waveSpotify";
 import { WaveYtMusic } from "@/native/waveYtMusic";
 import { askYtMusic } from "@/ytmusic/askYtMusic";
 import { useDownloadCounts } from "@/ytmusic/YtDownloads";
@@ -27,13 +29,16 @@ import { useDownloadCounts } from "@/ytmusic/YtDownloads";
 const useAccountsSummary = (): string | null => {
   const [yt, setYt] = useState<YtSession>({ status: "signedOut" });
   const [wave, setWave] = useState<WaveSession>({ status: "signedOut" });
+  const [spotify, setSpotify] = useState<SpotifySession>({ status: "signedOut" });
 
   useEffect(() => {
     const ytChanged = WaveYtMusic.addListener("onSessionChanged", setYt);
     const waveChanged = WaveAccount.addListener("onSessionChanged", setWave);
+    const spotifyChanged = WaveSpotify.addListener("onSessionChanged", setSpotify);
     return () => {
       ytChanged.remove();
       waveChanged.remove();
+      spotifyChanged.remove();
     };
   }, []);
 
@@ -49,13 +54,19 @@ const useAccountsSummary = (): string | null => {
         },
         () => {},
       );
+      void WaveSpotify.session().then(
+        (session) => {
+          if (current) setSpotify(session);
+        },
+        () => {},
+      );
       return () => {
         current = false;
       };
     }, []),
   );
 
-  return accountsSummary(yt, wave);
+  return accountsSummary(yt, wave, spotify);
 };
 
 /**

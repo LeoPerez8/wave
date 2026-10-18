@@ -93,6 +93,17 @@ export { restorePlayback } from "./playbackRestore.ts";
 export type { RestoredPlayback } from "./playbackRestore.ts";
 export { extrapolatePosition, scrubPosition } from "./position.ts";
 export type { PositionReport, ScrubTouch } from "./position.ts";
+export {
+  CENTRE_FRAMING,
+  framingSquare,
+  framingText,
+  framingView,
+  MAX_FRAMING_ZOOM,
+  panFraming,
+  pinchFraming,
+  readFraming,
+} from "./imageFraming.ts";
+export type { FramingSquare, FramingView, ImageFraming, ImageSize } from "./imageFraming.ts";
 export { elapsedWavePath } from "./elapsedWave.ts";
 export type { ElapsedWave } from "./elapsedWave.ts";
 export { contrastRatio, paletteGradient } from "./palette.ts";
@@ -205,6 +216,8 @@ export type { StatsRanking, StatsSeeAll } from "./statsSeeAll.ts";
 export {
   RECAP_MONTH_MINIMUM_MS,
   RECAP_SLIDE_MS,
+  RECAP_TOP_ARTISTS,
+  RECAP_TOP_GENRES,
   RECAP_TOP_SONGS,
   availableRecaps,
   parseRecapId,
@@ -212,19 +225,26 @@ export {
   recapBack,
   recapBarFill,
   recapForward,
+  recapHourLabel,
   recapId,
   recapSlides,
   recapTitle,
+  recapWeekdayLabel,
   recapWindow,
 } from "./recap.ts";
 export type {
   CountedListening,
   Recap,
+  RecapGenre,
+  RecapHabits,
   RecapInput,
   RecapMonth,
   RecapPeriod,
   RecapSlide,
+  RecapSongGenre,
 } from "./recap.ts";
+export { RECAP_PLAY_CONTEXT, recapSong } from "./recapMusic.ts";
+export type { RecapMusicSlide } from "./recapMusic.ts";
 export {
   AUTO_ROOT,
   AUTO_TABS,
@@ -556,6 +576,8 @@ export {
   MAGIC_SKIP_MS,
   isMagicQueue,
   magicBatch,
+  magicRadioArtists,
+  magicYtCandidates,
   magicPlaySignal,
   magicQueueEdits,
   magicQueueLabel,
@@ -571,6 +593,7 @@ export type {
   MagicSignal,
   MagicSignalKind,
   MagicSong,
+  MagicYtCandidate,
 } from "./magicQueue.ts";
 export { artistRanking } from "./moreFromArtist.ts";
 export type { ArtistRankingInput, ArtistRankingSong } from "./moreFromArtist.ts";
@@ -606,6 +629,20 @@ export type {
   WaveAccountView,
   WaveSession,
 } from "./waveAccount.ts";
+export {
+  SPOTIFY_ACCOUNT_SIGNED_OUT,
+  spotifyAccountView,
+  stepSpotifyAccount,
+} from "./spotifyAccount.ts";
+export type {
+  SpotifyAccount,
+  SpotifyAccountEvent,
+  SpotifyAccountNote,
+  SpotifyAccountState,
+  SpotifyAccountView,
+  SpotifySession,
+  SpotifySignInFailure,
+} from "./spotifyAccount.ts";
 export { YT_ACCOUNT_SIGNED_OUT, stepYtAccount, ytAccountView } from "./ytAccount.ts";
 export type {
   YtAccount,

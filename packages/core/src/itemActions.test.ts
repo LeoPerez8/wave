@@ -523,18 +523,27 @@ describe("itemActions", () => {
     assert.ok(!two.includes("renamePlaylist"));
   });
 
-  test("a playlist's menu changes its image, and removes it once it has one", () => {
+  test("a playlist's menu changes its image, and adjusts or removes it once it has one", () => {
     const menu = (hasImage?: boolean) =>
-      names(itemActions({ kind: "playlist", items: [{ hasImage }], here: "/" })).slice(-4);
-    assert.deepEqual(menu(), ["addToPlaylist", "renamePlaylist", "changeImage", "deletePlaylist"]);
-    assert.deepEqual(menu(true), [
+      names(itemActions({ kind: "playlist", items: [{ hasImage }], here: "/" }));
+    assert.deepEqual(menu().slice(-4), [
+      "addToPlaylist",
       "renamePlaylist",
       "changeImage",
+      "deletePlaylist",
+    ]);
+    assert.deepEqual(menu(true).slice(-5), [
+      "renamePlaylist",
+      "changeImage",
+      "adjustImage",
       "removeImage",
       "deletePlaylist",
     ]);
     assert.equal(ITEM_ACTION_LABELS.changeImage, "Change Image");
+    assert.equal(ITEM_ACTION_LABELS.adjustImage, "Adjust Image");
     assert.equal(ITEM_ACTION_LABELS.removeImage, "Remove Image");
+    assert.ok(!isDestructiveAction("adjustImage"));
+    assert.ok(!confirmsFirst("adjustImage"));
     assert.ok(!isDestructiveAction("removeImage"));
     assert.ok(!confirmsFirst("removeImage"));
   });
@@ -549,6 +558,7 @@ describe("itemActions", () => {
       }),
     );
     assert.ok(!bar.includes("changeImage"));
+    assert.ok(!bar.includes("adjustImage"));
     assert.ok(!bar.includes("removeImage"));
   });
 
