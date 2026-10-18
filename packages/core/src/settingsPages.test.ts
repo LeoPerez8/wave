@@ -135,6 +135,6 @@ describe("the Downloads row's line", () => {
     ]);
     assert.equal(downloadsSummary(0, queued), "2 downloading · 5 waiting");
     assert.equal(downloadsSummary(3, queued), "2 downloading · 5 waiting · 3 songs failed");
-    assert.equal(downloadsSummary(1, { downloading: 0, waiting: 0 }), "1 song failed");
+    assert.equal(downloadsSummary(1, { downloading: 0, saving: 0, waiting: 0 }), "1 song failed");
   });
 });

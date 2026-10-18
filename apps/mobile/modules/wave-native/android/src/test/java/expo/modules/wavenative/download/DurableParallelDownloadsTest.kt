@@ -48,6 +48,34 @@ class DurableParallelDownloadsTest {
     assertEquals("awaitingPublication", phases(owner)[0])
     owner.advance(NoTransfer, NoPublication)
     assertEquals(listOf("awaitingPublication") + List(4) { "sourceReady" } + listOf("preparing") + List(4) { "queued" }, phases(owner))
+    // The tagged song gave up its slot: it waits its turn to be saved, and isn't counted downloading (#466).
+    assertEquals(DownloadCounts(running = 5, left = 4, saving = 1), owner.counts())
+  }
+
+  @Test fun songsDownloadedAndWaitingToBeSavedAreNotCountedDownloading() {
+    val jobs = List(5) { mapOf("phase" to "transferring") } + List(3) { mapOf("phase" to "tagging") } +
+      List(600) { mapOf("phase" to "awaitingPublication") } + listOf(mapOf("phase" to "publishing"), mapOf("phase" to "completed")) +
+      List(1325) { mapOf("phase" to "completed", "acknowledged" to true) } + List(428) { mapOf("phase" to "queued") }
+    assertEquals(DownloadCounts(running = 8, left = 428, saving = 602), DownloadCounts.of(jobs))
+  }
+
+  @Test fun songsStartedBeforeWaveWasKilledWaitAgainUntilTheQueueTakesThemUp() = inFolder { folder ->
+    val first = DurableDownloads(File(folder, "jobs"))
+    for (id in ids) first.enqueue(song(id), null)
+    first.advance(NoTransfer, NoPublication)
+    assertEquals(DownloadCounts(running = 5, left = 7), first.counts())
+    first.flush()
+
+    // Wave was killed: the journal opens again before the download service starts.
+    val owner = DurableDownloads(File(folder, "jobs"), budgetRunning = false)
+    assertEquals(DownloadCounts(running = 0, left = 12), owner.counts())
+    assertEquals(List(5) { true } + List(7) { null }, owner.snapshot().map { it["resumed"] })
+    // They keep their place at the front: JS taking one up gives it its slot back.
+    owner.advance(NoTransfer, NoPublication)
+    assertEquals(List(5) { "preparing" } + List(7) { "queued" }, phases(owner))
+    owner.claim("song-1")!!
+    assertEquals(DownloadCounts(running = 1, left = 11), owner.counts())
+    assertEquals(null, owner.snapshot().first()["resumed"])
   }
 
   @Test fun songsWaitingForJsDoNotHoldUpTheSongsBehindThem() = inFolder { folder ->
