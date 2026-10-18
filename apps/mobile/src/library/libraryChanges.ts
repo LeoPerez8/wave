@@ -25,6 +25,22 @@ export const onLibraryChange = (listener: (change: LibraryChange) => void): (() 
   };
 };
 
+const starredListeners = new Set<(trackIds: readonly number[]) => void>();
+
+/** Tells what follows stars (the Magic Queue) that the owner starred [trackIds]. */
+export const publishStarred = (trackIds: readonly number[]): void => {
+  if (trackIds.length === 0) return;
+  for (const listener of starredListeners) listener(trackIds);
+};
+
+/** Calls [listener] with the tracks each star by the owner starred (`publishStarred`); returns how to stop. */
+export const onStarred = (listener: (trackIds: readonly number[]) => void): (() => void) => {
+  starredListeners.add(listener);
+  return () => {
+    starredListeners.delete(listener);
+  };
+};
+
 const starListeners = new Set<(trackIds: readonly number[]) => void>();
 
 /**

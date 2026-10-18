@@ -551,6 +551,27 @@ export type { QueueCover, QueueCoverBatcher, QueueCoverBatcherOptions } from "./
 export { MORE_FROM_ARTIST } from "./queue.ts";
 export { newQueueToast, noticeLine, queueUndo, undoneQueue } from "./queueUndo.ts";
 export type { PlayerAt, QueueUndo } from "./queueUndo.ts";
+export {
+  MAGIC_QUEUE_CONTEXT,
+  MAGIC_SKIP_MS,
+  isMagicQueue,
+  magicBatch,
+  magicPlaySignal,
+  magicQueueEdits,
+  magicQueueLabel,
+  magicSignal,
+  parseMagicSession,
+  startMagicQueue,
+  wantsMagicBatch,
+} from "./magicQueue.ts";
+export type {
+  MagicQueueEdits,
+  MagicSeed,
+  MagicSession,
+  MagicSignal,
+  MagicSignalKind,
+  MagicSong,
+} from "./magicQueue.ts";
 export { artistRanking } from "./moreFromArtist.ts";
 export type { ArtistRankingInput, ArtistRankingSong } from "./moreFromArtist.ts";
 export { artistPageItems } from "./artistPage.ts";

@@ -64,6 +64,12 @@ export type QueueCommand =
   | { readonly type: "playNext"; readonly trackIds: readonly string[] }
   | { readonly type: "addToQueue"; readonly trackIds: readonly string[] }
   /**
+   * More of the playing context: a Magic Queue's batch. The songs join the
+   * end of the queue as context entries, after everything lined up, so they
+   * aren't taken for songs lined up by hand. Nothing joins an empty queue.
+   */
+  | { readonly type: "append"; readonly trackIds: readonly string[] }
+  /**
    * More from this artist: the next `MORE_FROM_ARTIST` songs of the artist's
    * [ranking] (Core's `artistRanking`) go right after the current track.
    */
@@ -423,6 +429,14 @@ const enqueue = (
   return result({ ...state, entries, nextKey });
 };
 
+/** Adds [trackIds] at the end of the queue as context entries, after the context's last. */
+const append = (state: QueueState, trackIds: readonly string[]): QueueResult => {
+  if (state.index < 0 || trackIds.length === 0) return result(state);
+  const last = state.entries.reduce((most, entry) => Math.max(most, entry.contextIndex ?? -1), -1);
+  const { entries: added, nextKey } = makeEntries(trackIds, state.nextKey, (i) => last + 1 + i);
+  return result({ ...state, entries: [...state.entries, ...added], nextKey });
+};
+
 /** How many songs a tap on More from this artist adds. */
 export const MORE_FROM_ARTIST = 3;
 
@@ -572,6 +586,8 @@ export const reduceQueue = (
       return enqueue(state, playing(command.trackIds, passOver), "next");
     case "addToQueue":
       return enqueue(state, playing(command.trackIds, passOver), "last");
+    case "append":
+      return append(state, playing(command.trackIds, passOver));
     case "moreFromArtist":
       return moreFromArtist(state, playing(command.ranking, passOver));
     case "jumpTo":

@@ -69,6 +69,7 @@ describe("menuLayout", () => {
     const library = menuLayout("track", menu("track", { albumId: 1, artistIds: [3] }));
     assert.deepEqual(library.cards, ["playNext", "addToQueue"]);
     assert.deepEqual(names(library.list), [
+      "magicQueue",
       "addToPlaylist",
       "favorite",
       "goToAlbum",
