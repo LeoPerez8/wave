@@ -186,7 +186,11 @@ class PlaybackService : MediaLibraryService() {
     val dataSources = YtDataSource.Factory(
       DefaultDataSource.Factory(this, DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true)),
     ) { YtClient.get(this) }
-    return ExoPlayer.Builder(this, WaveRenderersFactory(this))
+    val builder = ExoPlayer.Builder(this, WaveRenderersFactory(this))
+    // The session's player keeps the Buffer setting's streamed audio ahead (StreamBuffer);
+    // the tail only plays the outgoing song's last seconds.
+    if (forSession) builder.setLoadControl(StreamLoadControl())
+    return builder
       .setMediaSourceFactory(DefaultMediaSourceFactory(dataSources))
       // The tail follows the session's player, which alone holds audio focus.
       .setAudioAttributes(
@@ -419,6 +423,8 @@ class PlaybackService : MediaLibraryService() {
   override fun onCreate() {
     super.onCreate()
     ResumeStore.init(this)
+    // The stored Buffer setting, before JS (if any) sends it again.
+    StreamBuffer.init(this)
     val player = buildPlayer(forSession = true)
     player.addListener(sleepTimerListener)
     player.addListener(resumeListener)
