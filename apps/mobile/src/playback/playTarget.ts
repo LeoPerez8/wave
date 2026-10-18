@@ -1,8 +1,8 @@
 import type { LibrarySectionSlug, QueueContext } from "@wave/core";
-import { ToastAndroid } from "react-native";
 
 import { playlistEntries } from "@/library/sectionSongs";
 import { showError } from "@/overlay/alert";
+import { showToast } from "@/overlay/toast";
 
 import { targetEntries, type ActionItems } from "./actionTargets";
 import { playPlaylist, playSongs } from "./actions";
@@ -30,7 +30,7 @@ export const playTarget = (target: ActionItems, shuffle: boolean): void => {
         const entries = await playlistEntries(playlist.id);
         const context = { kind: "playlist", id: String(playlist.id) };
         const notice = await playPlaylist(entries, undefined, context, { shuffle });
-        if (notice !== null) ToastAndroid.show(notice, ToastAndroid.LONG);
+        if (notice !== null) void showToast(notice);
         return;
       }
       case "album":
