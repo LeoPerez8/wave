@@ -70,7 +70,54 @@ class SpotifyModule : Module() {
       }
       client.session.state.toMap()
     }
+
+    // Sharing a playlist (#487, `SpotifyPlaylistWrites`): reads answer GraphQL `data` as JSON for Core.
+
+    /** A `searchTracks` for [term]: its data as JSON. */
+    AsyncFunction("searchTracks") Coroutine { term: String ->
+      coded { writes.search(term) }
+    }
+
+    /** A page of the playlist [uri] from [offset] (`fetchPlaylist`): its data as JSON. */
+    AsyncFunction("playlistPage") Coroutine { uri: String, offset: Int ->
+      coded { writes.playlistPage(uri, offset) }
+    }
+
+    /** A page of the account's playlists from [offset] (`libraryV3`): its data as JSON. */
+    AsyncFunction("libraryPage") Coroutine { offset: Int ->
+      coded { writes.libraryPage(offset) }
+    }
+
+    /** Makes a public playlist [name] in the account's library: its URI. */
+    AsyncFunction("createPlaylist") Coroutine { name: String ->
+      coded { writes.create(name) }
+    }
+
+    /** Shows the playlist [uri] on the profile and lets anyone with its link open it. */
+    AsyncFunction("makePlaylistPublic") Coroutine { uri: String ->
+      coded { writes.makePublic(uri) }
+    }
+
+    AsyncFunction("renamePlaylist") Coroutine { uri: String, name: String ->
+      coded { writes.rename(uri, name) }
+    }
+
+    AsyncFunction("addToPlaylist") Coroutine { uri: String, trackUris: List<String> ->
+      coded { writes.add(uri, trackUris) }
+    }
+
+    AsyncFunction("removeFromPlaylist") Coroutine { uri: String, uids: List<String> ->
+      coded { writes.remove(uri, uids) }
+    }
+
+    /** Moves the entry [uid] right before the entry [before], or to the end for null. */
+    AsyncFunction("movePlaylistEntry") Coroutine { uri: String, uid: String, before: String? ->
+      coded { writes.move(uri, uid, before) }
+    }
   }
+
+  private val writes: SpotifyPlaylistWrites
+    get() = SpotifyPlaylistWrites(client)
 
   private suspend fun <T> coded(block: suspend () -> T): T =
     try {

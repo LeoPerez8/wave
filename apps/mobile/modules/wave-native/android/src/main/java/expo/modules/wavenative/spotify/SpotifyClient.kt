@@ -8,6 +8,7 @@ import java.net.UnknownHostException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -125,6 +126,35 @@ class SpotifyClient(
       throw SpotifyException(SpotifyFailure.SIGNED_OUT)
     }
     send(token, operation, variables, retryToken = { token(current.credentials, fresh = true) })
+  }
+
+  /**
+   * Sends [method] [path] to the web player's `spclient` REST host as the
+   * signed-in account, with [body] as JSON, and answers the response body
+   * (#487 makes and changes playlists through this). A 401 gets one new
+   * token; any other refusal fails ([SpotifyFailure.FAILED]).
+   */
+  suspend fun spclient(method: String, path: String, body: JsonElement? = null): String = request {
+    val current = session.state as? SpotifySessionState.SignedIn ?: throw SpotifyException(SpotifyFailure.SIGNED_OUT)
+    val token = try {
+      token(current.credentials)
+    } catch (_: Rejected) {
+      session.expire(current.credentials)
+      throw SpotifyException(SpotifyFailure.SIGNED_OUT)
+    }
+    fun send(token: SpotifyToken): SpotifyResponse {
+      val headers = buildMap {
+        put("Authorization", "Bearer ${token.accessToken}")
+        put("Accept", "application/json")
+        put("User-Agent", USER_AGENT)
+        if (body != null) put("Content-Type", "application/json")
+      }
+      return http.send(SpotifyRequest(method, "$SPCLIENT$path", headers, body?.toString()))
+    }
+    var response = send(token)
+    if (response.status == 401) response = send(token(current.credentials, fresh = true))
+    if (response.status !in 200..299) throw SpotifyException(SpotifyFailure.FAILED)
+    response.body
   }
 
   /** The cookie no longer buys a signed-in token. */
@@ -275,6 +305,7 @@ class SpotifyClient(
   companion object {
     private const val WEB = "https://open.spotify.com"
     private const val PATHFINDER = "https://api-partner.spotify.com/pathfinder/v2/query"
+    private const val SPCLIENT = "https://spclient.wg.spotify.com"
     private val BUNDLE_URL = Regex("""https://open\.spotifycdn\.com/cdn/build/web-player/web-player\.[0-9a-f]+\.js""")
     private val EMPTY = JsonObject(emptyMap())
 

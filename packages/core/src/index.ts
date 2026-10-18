@@ -1671,10 +1671,18 @@ export {
   sharedPlaylistChanges,
   sharedPlaylistMoves,
   sharedSongsLine,
+  spotifyPlaylistUrl,
   ytMusicPlaylistUrl,
   ytShareMatch,
   ytShareSong,
 } from "./playlistShare.ts";
+export {
+  readSpotifySharedPlaylist,
+  spotifyLibraryHas,
+  spotifyShareMatch,
+  spotifyShareSong,
+} from "./spotifyShare.ts";
+export type { SpotifyPageRead, SpotifyShareItem } from "./spotifyShare.ts";
 export type {
   PlaylistShareService,
   ShareSong,

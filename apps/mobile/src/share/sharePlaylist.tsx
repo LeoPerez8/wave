@@ -1,27 +1,35 @@
 /**
- * Sharing a playlist on YT Music (docs/spec.md, "Sharing playlists"): its
- * menu's Share opens a card of services; YT Music makes an unlisted playlist
- * on the signed-in account with the songs it matches (Core's
- * `matchSharedSongs`, `ytShareSong`), or brings the one it made before up to
- * date (`sharedPlaylistChanges`, `sharedPlaylistMoves`), then opens Android's
- * share sheet with its link and says how many songs were found.
+ * Sharing a playlist on YT Music or Spotify (docs/spec.md, "Sharing
+ * playlists"): its menu's Share opens a card of services; each makes a
+ * playlist anyone with its link can open on the signed-in account (unlisted
+ * on YT Music, public on Spotify) with the songs it matches (Core's
+ * `matchSharedSongs`, `ytShareSong`, `spotifyShareSong`), or brings the one
+ * it made before up to date (`sharedPlaylistChanges`, `sharedPlaylistMoves`),
+ * then opens Android's share sheet with its link and says how many songs
+ * were found.
  */
 import {
   entryDivider,
   matchSharedSongs,
   PLAYLIST_SHARE_LABELS,
   playlistShareServices,
+  readSpotifySharedPlaylist,
   shareSignInAlert,
   sharedEditBatches,
   sharedPlaylistChanges,
   sharedPlaylistMoves,
   sharedSongsLine,
+  spotifyLibraryHas,
+  spotifyPlaylistUrl,
   spotifySearchQuery,
+  spotifyShareMatch,
+  spotifyShareSong,
   ytMusicPlaylistUrl,
   ytShareMatch,
   ytShareSong,
   type PlaylistShareService,
   type SharedEntry,
+  type SpotifyShareItem,
   type SpotifySong,
   type YtShareItem,
 } from "@wave/core";
@@ -44,6 +52,12 @@ import { useOverlayFlow } from "@/overlay/flow";
 import { followUp, openOverlay } from "@/overlay/overlay";
 import { showToast } from "@/overlay/toast";
 import { ytMusicEnabled } from "@/settings/ytMusic";
+import {
+  WaveSpotify,
+  spotifyErrorCode,
+  spotifySignInFailure,
+  type SpotifyErrorCode,
+} from "@/native/waveSpotify";
 import type { NativeYtPlaylistEdit } from "@/native/waveYtMusic";
 import { askYtMusic, searchSongsInTurn } from "@/ytmusic/askYtMusic";
 import { YtLibraryError, YtMusic } from "@/ytmusic/YtMusic";
@@ -225,8 +239,177 @@ const shareOnYtMusic = async (playlist: NamedPlaylist): Promise<void> => {
   }
 };
 
+// ---------------------------------------------------------------------------
+// Spotify
+
+/** Where the Spotify playlist made for the Wave playlist [id] is remembered (this phone only). */
+const spotifySharedKey = (id: number): string => `share.spotify.${id}`;
+
+/** A Spotify request that failed, with the native module's reason. */
+class SpotifyShareError extends Error {
+  constructor(readonly code: SpotifyErrorCode) {
+    super(code);
+  }
+}
+
+/** Runs the Spotify request [send], failing with a `SpotifyShareError`. */
+const spotify = async <A,>(send: () => Promise<A>): Promise<A> => {
+  try {
+    return await send();
+  } catch (error) {
+    throw new SpotifyShareError(spotifyErrorCode(error));
+  }
+};
+
+/** The answer data a read resolved, as JSON. */
+const parsed = async (read: Promise<string>): Promise<unknown> => JSON.parse(await read) as unknown;
+
+/** The playlist [id]'s entries as sharing on Spotify sees them. */
+const readSpotifyItems = (id: number) =>
+  // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+  LibraryStore.use((store) =>
+    Effect.map(store.getPlaylist(id, "library"), (detail) =>
+      (detail?.items ?? []).map((item): SpotifyShareItem => {
+        if (item.source !== "library") return item;
+        const { title, artist, album, durationMs } = item.track;
+        return { source: "library", song: { title, artists: [artist], album, durationMs } };
+      }),
+    ),
+  );
+
+/** One Spotify search for [song]'s title and artists, and the track that is the same recording. */
+const searchSpotifyTrack = async (song: SpotifySong): Promise<string | null> => {
+  const data = await spotify(() => parsed(WaveSpotify.searchTracks(spotifySearchQuery(song))));
+  const uri = spotifyShareMatch(song, data);
+  if (uri === undefined) throw new SearchFailed();
+  return uri;
+};
+
+/** The account's Spotify playlist [uri]'s entries, read back; null when it's gone. */
+const readSpotifyEntries = (uri: string) =>
+  spotify(() =>
+    readSpotifySharedPlaylist((offset) => parsed(WaveSpotify.playlistPage(uri, offset))),
+  );
+
+/** Adds [ids] at the end of the Spotify playlist [uri], a request's worth at a time. */
+const addSpotifyTracks = async (uri: string, ids: readonly string[]): Promise<void> => {
+  for (const batch of sharedEditBatches(ids))
+    await spotify(() => WaveSpotify.addToPlaylist(uri, batch));
+};
+
+/**
+ * Makes the account's Spotify playlist [uri] (made by sharing before) hold
+ * [ids] in order under [name], open to anyone with its link; false when it's
+ * gone (deleted on Spotify, so out of the account's library, or not the
+ * account's to edit).
+ */
+const updateSpotifyShared = async (
+  uri: string,
+  name: string,
+  ids: readonly string[],
+): Promise<boolean> => {
+  const inLibrary = await spotify(() =>
+    spotifyLibraryHas(uri, (offset) => parsed(WaveSpotify.libraryPage(offset))),
+  );
+  if (!inLibrary) return false;
+  const before = await readSpotifyEntries(uri);
+  if (before === null) return false;
+  await spotify(() => WaveSpotify.renamePlaylist(uri, name));
+  await spotify(() => WaveSpotify.makePlaylistPublic(uri));
+  const { removes, adds } = sharedPlaylistChanges(before, ids);
+  for (const batch of sharedEditBatches(removes))
+    await spotify(() =>
+      WaveSpotify.removeFromPlaylist(
+        uri,
+        batch.map(({ entryId }) => entryId),
+      ),
+    );
+  await addSpotifyTracks(uri, adds);
+  // Added songs go at the end, and only Spotify knows their uids: read it again to order them.
+  const after = removes.length + adds.length === 0 ? before : await readSpotifyEntries(uri);
+  if (after === null) return false;
+  for (const { entryId, before: next } of sharedPlaylistMoves(after, ids))
+    await spotify(() => WaveSpotify.movePlaylistEntry(uri, entryId, next));
+  return true;
+};
+
+/** Makes a public playlist [name] on the account holding [ids] in order: its URI. */
+const createSpotifyShared = async (name: string, ids: readonly string[]): Promise<string> => {
+  const uri = await spotify(() => WaveSpotify.createPlaylist(name));
+  await addSpotifyTracks(uri, ids);
+  return uri;
+};
+
+/** Whether Wave has the Spotify account's session; signed out, asks to sign in first. */
+const ensureSpotifySignedIn = async (): Promise<boolean> => {
+  const session = await WaveSpotify.session().catch(() => null);
+  if (session?.status === "signedIn") return true;
+  if (!(await confirmAction(shareSignInAlert("spotify")))) return false;
+  try {
+    const signedIn = await WaveSpotify.signIn();
+    return signedIn?.status === "signedIn";
+  } catch (error) {
+    const failure = spotifySignInFailure(error);
+    void showMessage(
+      "Couldn't sign in",
+      failure === "offline"
+        ? "Couldn't sign in without a connection."
+        : failure === "changed"
+          ? "Spotify changed something. Try again after updating Wave."
+          : "Spotify didn't confirm the sign-in. Try again.",
+    );
+    return false;
+  }
+};
+
+/** Why sharing on Spotify stopped, as its message says it. */
+const spotifyFailureMessage = (error: unknown): string => {
+  if (error instanceof SearchFailed) return "Spotify didn't answer a search. Try again.";
+  if (error instanceof SpotifyShareError)
+    switch (error.code) {
+      case "ERR_SPOTIFY_OFFLINE":
+        return "Sharing needs a connection.";
+      case "ERR_SPOTIFY_SIGNED_OUT":
+        return "Spotify signed you out. Sign in and share again.";
+      case "ERR_SPOTIFY_CHANGED":
+        return "Spotify changed something. Try again after updating Wave.";
+      case "ERR_SPOTIFY_FAILED":
+        return "Spotify didn't take the playlist. Try again.";
+    }
+  return error instanceof Error ? error.message : String(error);
+};
+
+/**
+ * Shares [playlist] on Spotify: signed in (asked first when not), it
+ * searches each song with Spotify's search, makes or updates the account's
+ * public copy, opens the share sheet with its link and says how many songs
+ * were found.
+ */
+const shareOnSpotify = async (playlist: NamedPlaylist): Promise<void> => {
+  if (!(await ensureSpotifySignedIn())) return;
+  void showToast(`Sharing ${playlist.name} on Spotify…`);
+  try {
+    const items = await appRuntime.runPromise(readSpotifyItems(playlist.id));
+    const shared = await matchSharedSongs(items.map(spotifyShareSong), searchSpotifyTrack);
+    if (shared.ids.length === 0) {
+      await showMessage("Nothing to share", "None of the playlist's songs are on Spotify.");
+      return;
+    }
+    const remembered = await Storage.getItem(spotifySharedKey(playlist.id));
+    let uri = remembered;
+    if (uri === null || !(await updateSpotifyShared(uri, playlist.name, shared.ids)))
+      uri = await createSpotifyShared(playlist.name, shared.ids);
+    if (uri !== remembered) await Storage.setItem(spotifySharedKey(playlist.id), uri);
+    void showToast(sharedSongsLine(shared));
+    await Share.share({ message: spotifyPlaylistUrl(uri), title: playlist.name });
+  } catch (error) {
+    await showError("Couldn't share the playlist", new Error(spotifyFailureMessage(error)));
+  }
+};
+
 const SHARE_ON: Record<PlaylistShareService, (playlist: NamedPlaylist) => Promise<void>> = {
   ytMusic: shareOnYtMusic,
+  spotify: shareOnSpotify,
 };
 
 /** The Share card: one entry per service, each handed to [choose]. */
@@ -264,7 +447,8 @@ function ShareMenu({
 
 /**
  * A playlist menu's Share: a card of the services it can be shared on (YT
- * Music while it's on), next to the entry pressed; choosing one shares it.
+ * Music while it's on, and Spotify), next to the entry pressed; choosing one
+ * shares it.
  */
 export const openSharePlaylist = (playlist: NamedPlaylist): void => {
   const services = playlistShareServices({ ytMusic: ytMusicEnabled() });

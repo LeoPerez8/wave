@@ -33,6 +33,27 @@ declare class WaveSpotifyModule extends NativeModule<{
   signIn(): Promise<SpotifySession | null>;
   /** Forgets the session and clears the sign-in web view's cookies and storage. */
   signOut(): Promise<SpotifySession>;
+
+  // Sharing a playlist (docs/spec.md, "Sharing playlists"). Reads resolve the
+  // GraphQL answer's `data` as JSON, for Core to read (`spotifyShare.ts`).
+
+  /** A `searchTracks` for [term]. */
+  searchTracks(term: string): Promise<string>;
+  /** A page of the playlist [uri] (`spotify:playlist:<id>`) from [offset] (`fetchPlaylist`). */
+  playlistPage(uri: string, offset: number): Promise<string>;
+  /** A page of the account's playlists from [offset] (`libraryV3`). */
+  libraryPage(offset: number): Promise<string>;
+  /** Makes a public playlist [name] in the account's library, anyone with its link can open: its URI. */
+  createPlaylist(name: string): Promise<string>;
+  /** Shows the playlist [uri] on the profile and lets anyone with its link open it. */
+  makePlaylistPublic(uri: string): Promise<void>;
+  renamePlaylist(uri: string, name: string): Promise<void>;
+  /** Adds [trackUris] at the end of the playlist [uri], in order. */
+  addToPlaylist(uri: string, trackUris: readonly string[]): Promise<void>;
+  /** Takes the entries [uids] out of the playlist [uri]. */
+  removeFromPlaylist(uri: string, uids: readonly string[]): Promise<void>;
+  /** Moves the entry [uid] right before the entry [before], or to the end for null. */
+  movePlaylistEntry(uri: string, uid: string, before: string | null): Promise<void>;
 }
 
 export const WaveSpotify = requireNativeModule<WaveSpotifyModule>("WaveSpotify");
