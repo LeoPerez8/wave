@@ -1333,3 +1333,11 @@ export type {
   NonDLyricsState,
   SavedLyrics,
 } from "./onlineLyrics.ts";
+export {
+  FAVORITES_DOWNLOAD_ORIGIN,
+  readStarDownloads,
+  starredDownload,
+  unstarredDownload,
+  writeStarDownloads,
+} from "./starDownloads.ts";
+export type { StarredDownload, UnstarredDownload } from "./starDownloads.ts";
