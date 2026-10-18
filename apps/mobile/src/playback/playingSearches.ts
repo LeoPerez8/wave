@@ -12,7 +12,10 @@
  * `searchPlaying`, which joins the one going on. With crossfade on, the
  * next song is asked again at the playing one's prefetch point (Core's
  * `crossfadePrefetchAt`) even if its last search failed a moment ago, so a
- * found song reaches the player before the overlap.
+ * found song reaches the player before the overlap. While the song after the
+ * playing one is still searched, the playback service knows (Core's
+ * `searchingAfter`), so a crossfade waits for it at full volume rather than
+ * fade into the song after it.
  */
 import {
   crossfadePrefetchAt,
@@ -22,6 +25,7 @@ import {
   playingAnswerStep,
   playingSearches,
   readUnsearchedTrackId,
+  searchingAfter,
   ytTrackId,
   PLAYING_SEARCH_RETRY_MS,
   type UnsearchedSettlement,
@@ -29,6 +33,7 @@ import {
 } from "@wave/core";
 
 import { appRuntime } from "@/library/runtime";
+import { WavePlayer } from "@/native/wavePlayer";
 import { searchUnsearchedSong } from "@/library/unsearchedEntries";
 import { showToast } from "@/overlay/toast";
 import { crossfadeMs } from "@/settings/crossfade";
@@ -47,6 +52,19 @@ const asking = new Map<string, Promise<Settlement | null>>();
 /** When each song's last search failed, by its queue id: asked again only a while later. */
 const failedAt = new Map<string, number>();
 
+/** What the playback service was last told (`setSearchingAfter`). */
+let toldSearchingAfter: string | null = null;
+
+/** Tells the playback service which entry's next song is still searched, when that changed. */
+const tellSearching = (): void => {
+  const after = searchingAfter(queueState.get(), new Set(asking.keys()));
+  if (after === toldSearchingAfter) return;
+  toldSearchingAfter = after;
+  WavePlayer.setSearchingAfter(after).catch(() => {
+    toldSearchingAfter = null;
+  });
+};
+
 /**
  * Searches the unsearched song [trackId] stands for with the playing
  * priority and settles it, or joins the search for it going on. Found, the
@@ -58,6 +76,9 @@ const search = (trackId: string): Promise<Settlement | null> => {
   const song = readUnsearchedTrackId(trackId);
   if (song === null) return Promise.resolve(null);
   const searched = (async (): Promise<Settlement | null> => {
+    // Found, the service hears it once the queue holds the song (lookAhead), not before: in
+    // between, its next song would still be the one after.
+    let found = false;
     try {
       const settled = await searchUnsearchedSong(song, "playing").catch((): Settlement => ({
         kind: "failed",
@@ -66,16 +87,19 @@ const search = (trackId: string): Promise<Settlement | null> => {
       if (settled?.kind === "failed") failedAt.set(trackId, Date.now());
       else failedAt.delete(trackId);
       if (settled?.kind === "found") {
-        const found = settled.becomes.song;
-        learnQueueTracks([toYtQueueTrack(found, null)]);
-        appRuntime.runFork(cacheYtCoversInBackground([found]));
+        found = true;
+        const ytSong = settled.becomes.song;
+        learnQueueTracks([toYtQueueTrack(ytSong, null)]);
+        appRuntime.runFork(cacheYtCoversInBackground([ytSong]));
       }
       return settled;
     } finally {
       asking.delete(trackId);
+      if (!found) tellSearching();
     }
   })();
   asking.set(trackId, searched);
+  tellSearching();
   return searched;
 };
 
@@ -98,7 +122,10 @@ const settleComingUp = (trackId: string, settled: Settlement | null): void => {
     return;
   }
   const { entries, index } = queueState.get();
-  if (!entries.some((entry, at) => at !== index && entry.trackId === trackId)) return;
+  if (!entries.some((entry, at) => at !== index && entry.trackId === trackId)) {
+    tellSearching();
+    return;
+  }
   const song = readUnsearchedTrackId(trackId);
   if (settled.kind === "found") {
     // Found as a song the queue passes over (explicit), it leaves the queue (Core's `reduceQueue`).
@@ -136,6 +163,7 @@ const lookAhead = (nextDue = false): void => {
     if (trackId === playing) continue;
     void search(trackId).then((settled) => settleComingUp(trackId, settled));
   }
+  tellSearching();
 };
 
 let prefetchTimer: ReturnType<typeof setTimeout> | undefined;

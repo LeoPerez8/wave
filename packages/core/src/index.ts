@@ -911,6 +911,7 @@ export {
   keptQueue,
   passedOverNotice,
   playerQueueList,
+  searchingAfter,
   playingAnswerStep,
   playingSearches,
   startPlayingWalk,

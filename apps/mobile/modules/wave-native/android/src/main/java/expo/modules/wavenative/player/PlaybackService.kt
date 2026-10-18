@@ -251,6 +251,8 @@ class PlaybackService : MediaLibraryService() {
       override val nextReady: Boolean
         get() {
           val player = exoPlayer ?: return false
+          // The next song is an unsearched one JS is still searching: the player's next isn't it.
+          if (searchingNext()) return false
           val durationMs = mainDurationMs ?: return false
           return player.totalBufferedDuration - (durationMs - player.currentPosition) >= NEXT_READY_MS
         }
@@ -274,7 +276,9 @@ class PlaybackService : MediaLibraryService() {
       }
 
       override fun nextLate(lateMs: Long, overlapMs: Long) {
-        val late = "the next song was ${seconds(lateMs)} late"
+        val late =
+          if (searchingNext()) "the next song was still being searched after ${seconds(lateMs)}"
+          else "the next song was ${seconds(lateMs)} late"
         WaveLog.i(
           CROSSFADE_LOG_TAG,
           if (overlapMs > 0) "Crossfade shortened to ${seconds(overlapMs)}: $late"
@@ -341,6 +345,12 @@ class PlaybackService : MediaLibraryService() {
   )
 
   private val crossfadeTick: Runnable = Runnable { scheduleCrossfade(crossfade.tick()) }
+
+  /** Whether JS is still searching the song after the one playing (`CrossfadeLink.searchingAfter`). */
+  private fun searchingNext(): Boolean {
+    val after = CrossfadeLink.searchingAfter ?: return false
+    return after == exoPlayer?.currentMediaItem?.mediaId
+  }
 
   /** Runs the crossfade's next tick after [delayMs] (null: none until playback changes). */
   private fun scheduleCrossfade(delayMs: Long? = 0L) {
