@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { downloadGroupDrop, downloadingList, downloadListRows } from "./index.ts";
+import { dropDownload, downloadingList, downloadListRows, movableGroups } from "./index.ts";
 import type { DownloadOrigin, YtDownloadJournalJob, YtSong } from "./index.ts";
 
 const song = (videoId: string): YtSong => ({
@@ -28,8 +28,9 @@ const focus: DownloadOrigin = { kind: "playlist", id: "9", name: "Focus" };
 const rowsOf = (jobs: readonly YtDownloadJournalJob[]) =>
   downloadListRows(downloadingList(jobs)).map((row) => {
     if (row.kind === "downloading") return `downloading ${row.queued.id}`;
+    if (row.kind === "startedHeader") return `started ${row.group.name}`;
     if (row.kind === "header") return `header ${row.group.name} ${row.index}/${row.count}`;
-    return `waiting ${row.queued.id} in ${row.groupKey} ${row.index}/${row.count}`;
+    return `waiting ${row.queued.id} in ${row.groupKey} (group ${row.groupIndex}) ${row.index}/${row.count}`;
   });
 
 describe("Settings › Downloads › Downloading as one virtualized list's rows", () => {
@@ -43,23 +44,23 @@ describe("Settings › Downloads › Downloading as one virtualized list's rows"
     assert.deepEqual(rowsOf(jobs), [
       "downloading now",
       "header Road Trip 0/2",
-      "waiting a in playlist:7 0/2",
-      "waiting b in playlist:7 1/2",
+      "waiting a in playlist:7 (group 0) 0/2",
+      "waiting b in playlist:7 (group 0) 1/2",
       "header Focus 1/2",
-      "waiting c in playlist:9 0/1",
+      "waiting c in playlist:9 (group 1) 0/1",
     ]);
   });
 
-  test("a group whose songs have all started has a header with no place to move, and no songs under it", () => {
+  test("a group whose songs have all started has a header of its own kind, with no songs under it", () => {
     const jobs = [
       job("now", { phase: "transferring", origin: focus }),
       job("a", { origin: roadTrip }),
     ];
     assert.deepEqual(rowsOf(jobs), [
       "downloading now",
-      "header Focus -1/0",
+      "started Focus",
       "header Road Trip 0/1",
-      "waiting a in playlist:7 0/1",
+      "waiting a in playlist:7 (group 0) 0/1",
     ]);
   });
 
@@ -72,27 +73,47 @@ describe("Settings › Downloads › Downloading as one virtualized list's rows"
   });
 });
 
-describe("Settings › Downloads: where a dragged group lands", () => {
-  // Three groups 100, 300 and 50 dp tall: their edges sit at 0, 100, 400 and 450.
-  const heights = [100, 300, 50];
+describe("Settings › Downloads: what a drag or a Move up / Move down drops", () => {
+  const jobs = [
+    job("now", { phase: "transferring", origin: focus }),
+    job("a", { origin: roadTrip }),
+    job("b", { origin: roadTrip }),
+    job("c", { origin: roadTrip }),
+    job("d"),
+  ];
+  const list = downloadingList(jobs);
 
-  test("held near its own place, the first group stays first, its line at its own edge", () => {
-    assert.deepEqual(downloadGroupDrop({ from: 0, at: 40, heights }), { to: 0, edge: 0 });
-    assert.deepEqual(downloadGroupDrop({ from: 0, at: 130, heights }), { to: 0, edge: 100 });
+  test("only the groups with waiting songs move, among themselves", () => {
+    assert.deepEqual(
+      movableGroups(list).map((group) => group.key),
+      ["playlist:7", "songs"],
+    );
   });
 
-  test("carried past the middle of the next group, it lands after it", () => {
-    assert.deepEqual(downloadGroupDrop({ from: 0, at: 300, heights }), { to: 1, edge: 400 });
-    assert.deepEqual(downloadGroupDrop({ from: 0, at: 440, heights }), { to: 2, edge: 450 });
+  test("a song dropped on another of its group's songs takes its place there", () => {
+    assert.deepEqual(
+      dropDownload(list, { kind: "song", groupKey: "playlist:7", from: "a", to: "c" }),
+      ["b", "c", "a"],
+    );
   });
 
-  test("carried up from the last place, it lands before the group whose top edge is nearest", () => {
-    assert.deepEqual(downloadGroupDrop({ from: 2, at: 10, heights }), { to: 0, edge: 0 });
-    assert.deepEqual(downloadGroupDrop({ from: 2, at: 200, heights }), { to: 1, edge: 100 });
+  test("a group dropped on another moving group takes its place", () => {
+    assert.deepEqual(dropDownload(list, { kind: "group", from: "songs", to: "playlist:7" }), [
+      "d",
+      "a",
+      "b",
+      "c",
+    ]);
   });
 
-  test("carried past either end of the list, it lands first or last", () => {
-    assert.deepEqual(downloadGroupDrop({ from: 1, at: -500, heights }), { to: 0, edge: 0 });
-    assert.deepEqual(downloadGroupDrop({ from: 1, at: 9000, heights }), { to: 2, edge: 450 });
+  test("nothing moves when it's dropped where it was, or what it names left the list meanwhile", () => {
+    const song = (groupKey: string, from: string, to: string) =>
+      dropDownload(list, { kind: "song", groupKey, from, to });
+    assert.equal(song("playlist:7", "b", "b"), null);
+    // "now" started: it's no waiting song any more.
+    assert.equal(song("playlist:7", "now", "a"), null);
+    assert.equal(song("playlist:9", "a", "b"), null);
+    // Focus's songs have all started: it doesn't move.
+    assert.equal(dropDownload(list, { kind: "group", from: "playlist:9", to: "songs" }), null);
   });
 });

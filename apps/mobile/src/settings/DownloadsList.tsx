@@ -31,6 +31,7 @@ import { TextButton } from "@/components/TextButton";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { DownloadSongRow } from "@/settings/DownloadSongRow";
 import {
+  DOWNLOAD_ROW_ESTIMATE,
   useDownloadsDrag,
   useDragGrip,
   type DownloadDrag,
@@ -172,7 +173,11 @@ function DownloadGroupHeader({
   );
 }
 
-/** A song row stepping aside while another song of its group is dragged past it. */
+/**
+ * A row stepping aside while what it's part of is passed: a song by another song of its group
+ * ([index]: its place among them), a group's header or song by another group ([index]: its
+ * group's place among the groups that move).
+ */
 function SteppingAside({
   index,
   rowDrag: { from, to, step },
@@ -190,29 +195,47 @@ function SteppingAside({
   return <Animated.View style={style}>{children}</Animated.View>;
 }
 
-/** A dragged row's place in the list: hidden (a song, its lifted copy moves) or dimmed (a group). */
-const LIFTED_SONG = { opacity: 0 } as const;
-const LIFTED_GROUP = { opacity: 0.35 } as const;
+/** A dragged row's place in the list (a dragged group's songs too): hidden, as its lifted copy moves. */
+const LIFTED = { opacity: 0 } as const;
+
+/** [content], stepping aside as [stepsAs] when that's a place, else as it is. */
+function MaybeSteppingAside({
+  stepsAs,
+  rowDrag,
+  children,
+}: {
+  stepsAs: number | null;
+  rowDrag: DownloadRowDrag;
+  children: ReactElement;
+}) {
+  return stepsAs === null ? (
+    children
+  ) : (
+    <SteppingAside index={stepsAs} rowDrag={rowDrag}>
+      {children}
+    </SteppingAside>
+  );
+}
 
 /**
  * A waiting song, dragged by its handle within its group, never into another. A plain view,
- * except while a song of its group is dragged past it.
+ * except while a song of its group, or a group, is dragged past it.
  */
 const WaitingDownloadRow = memo(
   function WaitingDownloadRow({
     row,
     covers,
     lifted,
-    steps,
+    stepsAs,
     rowDrag,
     moveSong,
   }: {
     row: WaitingSongRow<NativeYtSong>;
     covers: boolean;
-    /** Being dragged: its lifted copy shows instead. */
+    /** Being dragged, or its group is: the lifted copy shows instead. */
     lifted: boolean;
-    /** Another song of its group is being dragged. */
-    steps: boolean;
+    /** The place it steps aside as while another song of its group, or a group, is dragged; else null. */
+    stepsAs: number | null;
     rowDrag: DownloadRowDrag;
     moveSong: (groupKey: string, from: number, to: number) => void;
   }) {
@@ -222,7 +245,7 @@ const WaitingDownloadRow = memo(
       moveSong(row.groupKey, from, to),
     );
     const content = (
-      <View ref={view} collapsable={false} style={lifted ? LIFTED_SONG : undefined}>
+      <View ref={view} collapsable={false} style={lifted ? LIFTED : undefined}>
         <QueuedDownloadRow
           queued={row.queued}
           covers={covers}
@@ -233,18 +256,16 @@ const WaitingDownloadRow = memo(
         />
       </View>
     );
-    return steps ? (
-      <SteppingAside index={row.index} rowDrag={rowDrag}>
+    return (
+      <MaybeSteppingAside stepsAs={stepsAs} rowDrag={rowDrag}>
         {content}
-      </SteppingAside>
-    ) : (
-      content
+      </MaybeSteppingAside>
     );
   },
   (before, after) =>
     before.covers === after.covers &&
     before.lifted === after.lifted &&
-    before.steps === after.steps &&
+    before.stepsAs === after.stepsAs &&
     before.rowDrag === after.rowDrag &&
     before.moveSong === after.moveSong &&
     before.row.key === after.row.key &&
@@ -256,16 +277,22 @@ const WaitingDownloadRow = memo(
     before.row.queued.cancel?.join() === after.row.queued.cancel?.join(),
 );
 
-/** A header of a group with waiting songs: its handle drags the whole group among the others. */
+/**
+ * A header of a group with waiting songs: its handle drags the whole group among the others,
+ * which step aside for it (its songs hidden in place while its lifted header moves).
+ */
 const MovableGroupHeader = memo(
   function MovableGroupHeader({
     row,
     lifted,
+    steps,
     rowDrag,
     moveGroup,
   }: {
     row: DownloadHeaderRow<NativeYtSong>;
     lifted: boolean;
+    /** Another group is being dragged. */
+    steps: boolean;
     rowDrag: DownloadRowDrag;
     moveGroup: (from: number, to: number) => void;
   }) {
@@ -277,19 +304,22 @@ const MovableGroupHeader = memo(
     );
     const onAccessibilityAction = useMoveAction(row.index, moveGroup);
     return (
-      <View ref={view} collapsable={false} style={lifted ? LIFTED_GROUP : undefined}>
-        <DownloadGroupHeader
-          group={row.group}
-          handle={grip}
-          index={row.index}
-          count={row.count}
-          onAccessibilityAction={onAccessibilityAction}
-        />
-      </View>
+      <MaybeSteppingAside stepsAs={steps ? row.index : null} rowDrag={rowDrag}>
+        <View ref={view} collapsable={false} style={lifted ? LIFTED : undefined}>
+          <DownloadGroupHeader
+            group={row.group}
+            handle={grip}
+            index={row.index}
+            count={row.count}
+            onAccessibilityAction={onAccessibilityAction}
+          />
+        </View>
+      </MaybeSteppingAside>
     );
   },
   (before, after) =>
     before.lifted === after.lifted &&
+    before.steps === after.steps &&
     before.rowDrag === after.rowDrag &&
     before.moveGroup === after.moveGroup &&
     before.row.key === after.row.key &&
@@ -319,7 +349,7 @@ function LiftedCopy({
   covers: boolean;
 }) {
   const row = rows.find((each) => each.key === drag.key);
-  if (row === undefined || row.kind === "downloading") return null;
+  if (row === undefined || row.kind === "downloading" || row.kind === "startedHeader") return null;
   return row.kind === "header" ? (
     <DownloadGroupHeader group={row.group} handle="drawn" />
   ) : (
@@ -354,41 +384,40 @@ export function DownloadsList({ header, footer }: { header: ReactElement; footer
     [list],
   );
   const listRef = useRef<LegendListRef>(null);
-  const {
-    drag,
-    rowDrag,
-    moveSong,
-    moveGroup,
-    liftedStyle,
-    edgeStyle,
-    scrollRef,
-    container,
-    onLayout,
-  } = useDownloadsDrag({ list, rows, listRef });
+  const { drag, rowDrag, moveSong, moveGroup, liftedStyle, scrollRef, container, onLayout } =
+    useDownloadsDrag({ list, rows, listRef });
 
   const renderItem = useCallback(
     ({ item }: { item: DownloadListRow<NativeYtSong> }) => {
       if (item.kind === "downloading") {
         return <QueuedDownloadRow queued={item.queued} covers={covers} handle="room" />;
       }
+      if (item.kind === "startedHeader") return <StartedGroupHeader group={item.group} />;
+      const groupDragged = drag?.kind === "group" ? drag.groupKey : null;
       if (item.kind === "header") {
-        return item.index < 0 ? (
-          <StartedGroupHeader group={item.group} />
-        ) : (
+        return (
           <MovableGroupHeader
             row={item}
             lifted={drag?.key === item.key}
+            steps={groupDragged !== null && groupDragged !== item.group.key}
             rowDrag={rowDrag}
             moveGroup={moveGroup}
           />
         );
       }
+      const ownGroupDragged = groupDragged === item.groupKey;
+      const stepsAs =
+        drag?.kind === "song" && drag.groupKey === item.groupKey && drag.key !== item.key
+          ? item.index
+          : groupDragged !== null && !ownGroupDragged
+            ? item.groupIndex
+            : null;
       return (
         <WaitingDownloadRow
           row={item}
           covers={covers}
-          lifted={drag?.key === item.key}
-          steps={drag?.kind === "song" && drag.groupKey === item.groupKey && drag.key !== item.key}
+          lifted={drag?.key === item.key || ownGroupDragged}
+          stepsAs={stepsAs}
           rowDrag={rowDrag}
           moveSong={moveSong}
         />
@@ -428,7 +457,7 @@ export function DownloadsList({ header, footer }: { header: ReactElement; footer
         getItemType={typeOf}
         renderItem={renderItem}
         extraData={rowState}
-        estimatedItemSize={CELL * 10}
+        estimatedItemSize={DOWNLOAD_ROW_ESTIMATE}
         recycleItems={false}
         // The dragged row stays mounted however far auto-scroll takes the list: its handle holds the drag.
         alwaysRender={drag === null ? undefined : { keys: [drag.key] }}
@@ -439,27 +468,15 @@ export function DownloadsList({ header, footer }: { header: ReactElement; footer
         ListFooterComponent={footer}
       />
       {drag !== null && (
-        <>
-          {drag.kind === "group" && (
-            <Animated.View
-              pointerEvents="none"
-              className="absolute top-0 rounded-full bg-accent"
-              style={[
-                { left: grid.margin, right: grid.margin, height: 2, marginTop: -1 },
-                edgeStyle,
-              ]}
-            />
-          )}
-          <Animated.View
-            pointerEvents="none"
-            accessibilityElementsHidden
-            importantForAccessibility="no-hide-descendants"
-            className="absolute top-0 bg-fill"
-            style={[{ left: grid.margin, right: grid.margin }, liftedStyle]}
-          >
-            <LiftedCopy drag={drag} rows={rows} covers={covers} />
-          </Animated.View>
-        </>
+        <Animated.View
+          pointerEvents="none"
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          className="absolute top-0 bg-fill"
+          style={[{ left: grid.margin, right: grid.margin }, liftedStyle]}
+        >
+          <LiftedCopy drag={drag} rows={rows} covers={covers} />
+        </Animated.View>
       )}
     </View>
   );

@@ -1441,12 +1441,13 @@ export type { CollectionKind } from "./itemActions.ts";
 export { mixSectionOfId, mixSeedArtists } from "./discoverMixes.ts";
 export { downloadJobKind } from "./downloadJobKind.ts";
 export type { DownloadJobKind } from "./downloadJobKind.ts";
-export { downloadGroupDrop, downloadListRows } from "./downloadRows.ts";
+export { downloadListRows, dropDownload, movableGroups } from "./downloadRows.ts";
 export type {
-  DownloadGroupDrag,
+  DownloadDrop,
   DownloadHeaderRow,
   DownloadingSongRow,
   DownloadListRow,
+  StartedHeaderRow,
   WaitingSongRow,
 } from "./downloadRows.ts";
 export { createLandings, LANDING_BURST_MS } from "./landings.ts";

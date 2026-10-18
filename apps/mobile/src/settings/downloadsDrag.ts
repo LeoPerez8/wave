@@ -1,10 +1,10 @@
 import type { LegendListRef } from "@legendapp/list/react-native";
 import {
-  downloadGroupDrop,
-  moveDownloadGroup,
-  moveDownloadInGroup,
+  dropDownload,
+  movableGroups,
   reorderScrollSpeed,
   reorderTarget,
+  type DownloadDrop,
   type DownloadingList,
   type DownloadListRow,
 } from "@wave/core";
@@ -43,26 +43,26 @@ import { moveQueuedDownloads } from "@/ytmusic/YtDownloads";
  * list: a waiting song among its group's songs, or a group (its header) among
  * the groups.
  *
- * A lifted copy of the row follows the finger over the list, and the list
- * scrolls near its edges. The row itself stays in place, hidden (a song) or
- * dimmed (a group), and mounted however far the list scrolls, so its handle's
- * gesture lives on. Only a dragged song's group steps aside for it, its
- * mounted rows alone carrying an animated style while it's dragged. A group
- * can be hundreds of rows tall, more than the list mounts, so the groups
- * don't step aside: a line shows where it would land (Core's
- * `downloadGroupDrop`).
+ * A lifted copy of the row (a group's header) follows the finger over the
+ * list, and the list scrolls near its edges. The row itself stays in place,
+ * hidden (a dragged group's songs with it), and mounted however far the list
+ * scrolls, so its handle's gesture lives on. What it passes steps aside for
+ * it, as the list did before it was virtualized: a dragged song's group's
+ * other songs by its height, the other groups (header and songs) by the
+ * dragged group's. Only the rows of the dragged song's group, or of the
+ * groups, carry an animated style while it's dragged, and only those mounted.
+ * What lands is Core's (`dropDownload`).
  */
 
 /** Distance from the list's top or bottom edge where a dragged row starts scrolling it, in dp. */
 const AUTOSCROLL_EDGE = grid.row;
 /** Auto-scroll speed at the very edge, in dp per second. */
 const AUTOSCROLL_SPEED = grid.row * 12;
-/** A row's height until the list has measured it or one like it. */
-const ROW_GUESS: Record<DownloadListRow["kind"], number> = {
-  downloading: CELL * 10,
-  header: CELL * 7,
-  waiting: CELL * 10,
-};
+/**
+ * A row's height until the list has measured it or one like it: what the list
+ * assumes too (its `estimatedItemSize`), so drag maths and layout agree.
+ */
+export const DOWNLOAD_ROW_ESTIMATE = CELL * 10;
 
 /** What's being dragged, for rendering: the lifted copy, the hidden row, the rows stepping aside. */
 export type DownloadDrag = {
@@ -82,9 +82,6 @@ type Session = {
   readonly ids: readonly string[];
   /** Their heights: a song row's, or a group's header and songs together. */
   readonly heights: readonly number[];
-  /** A group's top below the first moving group's, and its header's height. */
-  readonly top: number;
-  readonly header: number;
   /** The id at the drop target, resolved again when it lands (the list may change under it). */
   over: string;
 };
@@ -111,7 +108,7 @@ const rowHeights = (list: LegendListRef | null) => {
   const state = list?.getState();
   const averages = state?.getAverageItemSizes() ?? {};
   return (row: DownloadListRow): number =>
-    state?.sizes.get(row.key) ?? averages[row.kind]?.average ?? ROW_GUESS[row.kind];
+    state?.sizes.get(row.key) ?? averages[row.kind]?.average ?? DOWNLOAD_ROW_ESTIMATE;
 };
 
 /** A dragged song's scope: its group's waiting songs, with their heights. */
@@ -126,7 +123,6 @@ const songScope = (
     keys: songs.map((row) => row.key),
     ids: songs.map((row) => (row.kind === "waiting" ? row.queued.id : "")),
     heights: songs.map(heightOf),
-    headers: [] as readonly number[],
   };
 };
 
@@ -135,26 +131,23 @@ const groupScope = (rows: readonly DownloadListRow<NativeYtSong>[], list: Legend
   const keys: string[] = [];
   const ids: string[] = [];
   const heights: number[] = [];
-  const headers: number[] = [];
   const heightOf = rowHeights(list);
   for (const row of rows) {
-    if (row.kind === "header" && row.index >= 0) {
-      const header = heightOf(row);
+    if (row.kind === "header") {
       keys.push(row.key);
       ids.push(row.group.key);
-      headers.push(header);
-      heights.push(header);
+      heights.push(heightOf(row));
     } else if (row.kind === "waiting" && heights.length > 0) {
       heights[heights.length - 1]! += heightOf(row);
     }
   }
-  return { keys, ids, heights, headers };
+  return { keys, ids, heights };
 };
 
 /**
  * The list's side of the drag over [list]'s [rows], shown by [listRef]: the
- * shared state the rows' handles drive, the lifted copy's and the drop line's
- * styles, and the moves screen readers' Move up / Move down make.
+ * shared state the rows' handles drive, the lifted copy's style, and the moves
+ * screen readers' Move up / Move down make.
  */
 export function useDownloadsDrag({
   list,
@@ -179,8 +172,6 @@ export function useDownloadsDrag({
   // The dragged row's top in the list's viewport when it was picked up, and its height.
   const anchor = useSharedValue(0);
   const lifted = useSharedValue(0);
-  // Where a dragged group would land, below its own top.
-  const edge = useSharedValue(0);
 
   const [drag, setDrag] = useState<DownloadDrag | null>(null);
   const session = useRef<Session | null>(null);
@@ -189,18 +180,28 @@ export function useDownloadsDrag({
     latest.current = { list, rows };
   });
 
-  const moveSong = useCallback((groupKey: string, start: number, end: number) => {
-    const group = latest.current.list.groups.find((each) => each.key === groupKey);
-    const count = group?.queued.length ?? 0;
-    if (group === undefined || start < 0 || end < 0 || end >= count || start === end) return;
-    moveQueuedDownloads(moveDownloadInGroup(group, start, end));
+  /** Lands [drop] on the list as it is now (Core's `dropDownload`). */
+  const land = useCallback((drop: DownloadDrop) => {
+    const order = dropDownload(latest.current.list, drop);
+    if (order !== null) moveQueuedDownloads(order);
   }, []);
-  const moveGroup = useCallback((start: number, end: number) => {
-    const { downloading, groups } = latest.current.list;
-    const movable = groups.filter((group) => group.queued.length > 0);
-    if (start < 0 || end < 0 || end >= movable.length || start === end) return;
-    moveQueuedDownloads(moveDownloadGroup({ downloading, groups: movable }, start, end));
-  }, []);
+  // Move up / Move down: a row's place in its scope, to the place next to it.
+  const moveSong = useCallback(
+    (groupKey: string, start: number, end: number) => {
+      const group = latest.current.list.groups.find((each) => each.key === groupKey);
+      const [from, to] = [group?.queued[start]?.id, group?.queued[end]?.id];
+      if (from !== undefined && to !== undefined) land({ kind: "song", groupKey, from, to });
+    },
+    [land],
+  );
+  const moveGroup = useCallback(
+    (start: number, end: number) => {
+      const groups = movableGroups(latest.current.list);
+      const [from, to] = [groups[start]?.key, groups[end]?.key];
+      if (from !== undefined && to !== undefined) land({ kind: "group", from, to });
+    },
+    [land],
+  );
 
   const begin = useCallback(
     (target: DownloadDrag, view: Measurable | null) => {
@@ -213,22 +214,17 @@ export function useDownloadsDrag({
       const index = scope.keys.indexOf(target.key);
       const id = scope.ids[index];
       if (id === undefined) return;
-      const top = scope.heights.slice(0, index).reduce((sum, height) => sum + height, 0);
-      const header = scope.headers[index] ?? 0;
       const started: Session = {
         drag: target,
         from: index,
         to: index,
         ids: scope.ids,
         heights: scope.heights,
-        top,
-        header,
         over: id,
       };
       session.current = started;
       content.set(listRef.current?.getState().contentLength ?? 0);
       step.set(scope.heights[index] ?? 0);
-      edge.set(0);
       to.set(index);
       from.set(index);
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -247,7 +243,7 @@ export function useDownloadsDrag({
         setDrag(started.drag);
       });
     },
-    [listRef, content, step, edge, to, from, anchor, lifted],
+    [listRef, content, step, to, from, anchor, lifted],
   );
 
   const dragTo = useCallback(
@@ -255,18 +251,13 @@ export function useDownloadsDrag({
       const current = session.current;
       if (current === null) return;
       const count = current.heights.length;
-      let next: number;
-      if (current.drag.kind === "song") {
-        next = reorderTarget({ from: current.from, distance, rowHeight: current.heights, count });
-      } else {
-        const drop = downloadGroupDrop({
-          from: current.from,
-          at: current.top + distance + current.header / 2,
-          heights: current.heights,
-        });
-        next = drop.to;
-        edge.set(drop.edge - current.top);
-      }
+      // A song among its group's songs, a group among the groups: what it passes steps aside.
+      const next = reorderTarget({
+        from: current.from,
+        distance,
+        rowHeight: current.heights,
+        count,
+      });
       content.set(listRef.current?.getState().contentLength ?? content.get());
       if (next === current.to) return;
       current.to = next;
@@ -274,7 +265,7 @@ export function useDownloadsDrag({
       to.set(next);
       void Haptics.selectionAsync();
     },
-    [edge, content, listRef, to],
+    [content, listRef, to],
   );
 
   // Rows drop into place in the same frame the new order renders.
@@ -293,20 +284,15 @@ export function useDownloadsDrag({
       session.current = null;
       resetAfterRender.current = true;
       setDrag(null);
-      if (current === null || canceled || current.over === current.ids[current.from]) return;
-      const id = current.ids[current.from] ?? "";
-      if (current.drag.kind === "song") {
-        const group = latest.current.list.groups.find((each) => each.key === current.drag.groupKey);
-        const ids = group?.queued.map((queued) => queued.id) ?? [];
-        moveSong(current.drag.groupKey, ids.indexOf(id), ids.indexOf(current.over));
-      } else {
-        const keys = latest.current.list.groups
-          .filter((group) => group.queued.length > 0)
-          .map((group) => group.key);
-        moveGroup(keys.indexOf(id), keys.indexOf(current.over));
-      }
+      if (current === null || canceled) return;
+      const from = current.ids[current.from] ?? "";
+      land(
+        current.drag.kind === "song"
+          ? { kind: "song", groupKey: current.drag.groupKey, from, to: current.over }
+          : { kind: "group", from, to: current.over },
+      );
     },
-    [moveSong, moveGroup],
+    [land],
   );
 
   // The dragged row left the list under the drag (its song started, or was cancelled): its
@@ -360,11 +346,6 @@ export function useDownloadsDrag({
       },
     ],
   }));
-  // A dragged group's drop line, at the edge between groups it would land on.
-  const edgeStyle = useAnimatedStyle(() => ({
-    opacity: from.get() !== -1 && to.get() !== from.get() ? 1 : 0,
-    transform: [{ translateY: anchor.get() + edge.get() - (scroll.get() - startScroll.get()) }],
-  }));
 
   const rowDrag = useMemo<DownloadRowDrag>(
     () => ({ from, to, step, travel, scroll, startScroll, begin, dragTo, drop }),
@@ -377,7 +358,6 @@ export function useDownloadsDrag({
     moveSong,
     moveGroup,
     liftedStyle,
-    edgeStyle,
     scrollRef: scrollRef as AnimatedRef<ScrollView> & RefObject<ScrollView | null>,
     container,
     onLayout: (height: number) => viewport.set(height),
