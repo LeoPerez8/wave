@@ -22,7 +22,7 @@ export interface MenuChoice {
   readonly destructive?: boolean | undefined;
 }
 
-/** One of the play cards at the top of a menu (Core's `menuLayout`). */
+/** One of a menu's play cards, in their row nearest the finger (Core's `menuLayout`). */
 export interface PlayCardChoice {
   readonly action: PlayCard;
   readonly onPress: () => void;
@@ -75,9 +75,12 @@ function PlayCardButton({
 /**
  * What a long-press menu offers under its heading: its play [cards] in one
  * row of equal-width cards, then its [entries] as list rows (Shuffle drawn as
- * the shuffle kind chosen names it). The finger that long-pressed the row can
- * slide onto a card or an entry and lift to run it; the one under it shows
- * pressed meanwhile.
+ * the shuffle kind chosen names it), all run from the edge nearest the finger
+ * that opened the card: the cards on top and the entries down from them, or,
+ * when the card opened above the finger, the cards at its bottom edge and the
+ * entries up from them. The finger that long-pressed the row can slide onto a
+ * card or an entry and lift to run it; the one under it shows pressed
+ * meanwhile.
  */
 export function MenuChoices({
   cards,
@@ -94,7 +97,12 @@ export function MenuChoices({
   const shuffle = useShuffleControl();
 
   return (
-    <View ref={trackList} collapsable={false} style={{ flexShrink: 1 }}>
+    <View
+      ref={trackList}
+      collapsable={false}
+      // Reversed on screen only: the views (and so screen readers) keep cards, then entries.
+      style={{ flexShrink: 1, flexDirection: flow === "up" ? "column-reverse" : "column" }}
+    >
       {cards.length > 0 && (
         <View className="flex-row" style={{ gap: CELL, paddingVertical: CELL }}>
           {cards.map((card, index) => (
