@@ -1374,6 +1374,32 @@ export { ARTIST_MIX_COUNT, artistMixSeeds, artistMixSimilarSource } from "./arti
 export type { ArtistMixPools, PlayedSeedArtist } from "./artistMixes.ts";
 export { GENRE_MIX_COUNT, genreFamily, genreMixSeeds, interleaveRadios } from "./genreMixes.ts";
 export type { GenreFamily, GenreMixLibrary } from "./genreMixes.ts";
+export {
+  DEEZER_GENRES_URL,
+  GENRE_AFFINITY_THRESHOLD,
+  artistProfilesKnown,
+  deezerArtistAlbumsUrl,
+  deezerArtistId,
+  deezerArtistProfile,
+  deezerGenreNames,
+  parseArtistProfiles,
+  storedArtistProfiles,
+  withArtistProfiles,
+  genreAffinity,
+  genreProfile,
+  libraryGenreProfiles,
+  mixAffinity,
+  mixProfileLookups,
+  mixSeedProfile,
+} from "./genreAffinity.ts";
+export type {
+  ArtistProfiles,
+  GenreProfile,
+  GenreProfileLibrary,
+  GenreProfileOf,
+  GenreTagged,
+  MixAffinity,
+} from "./genreAffinity.ts";
 export type { SearchOnline, YtPick } from "./onlineToggle.ts";
 export { readSearchOnline, writeSearchOnline } from "./onlineToggle.ts";
 export {
