@@ -174,6 +174,12 @@ declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
    */
   setCrossfadeDuration(durationMs: number): Promise<void>;
   /**
+   * How much streamed audio to keep loaded ahead, in ms (Core's
+   * `streamBufferMs`). Kept natively, so it holds without JS too; library
+   * files keep the player's default.
+   */
+  setStreamBuffer(aheadMs: number): Promise<void>;
+  /**
    * The player entry whose next song is an unsearched one still being searched (Core's
    * `searchingAfter`), or null: a crossfade from it waits for the search at full volume.
    */

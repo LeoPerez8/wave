@@ -41,6 +41,20 @@ export const playHistoryChanged = (trackIds?: readonly number[]): void => {
   });
 };
 
+const playEndListeners = new Set<(play: PlayEvent) => void>();
+
+/**
+ * Calls [listener] with every play as it ends (how long it was listened
+ * to, how it ended): the Magic Queue learns skips and songs played through
+ * from them. Returns how to stop.
+ */
+export const onPlayEnded = (listener: (play: PlayEvent) => void): (() => void) => {
+  playEndListeners.add(listener);
+  return () => {
+    playEndListeners.delete(listener);
+  };
+};
+
 /** How often a play still going on is brought up to date, should Wave's process die. */
 const SAVE_INTERVAL_MS = 15_000;
 
@@ -133,6 +147,7 @@ export const layer = Layer.effectDiscard(
           rowId = rowIds.get(identity(step.play));
           if (rowId !== undefined) write(store.endPlay(rowId, step.play));
           rowIds.delete(identity(step.play));
+          for (const listener of playEndListeners) listener(step.play);
         }
         if (rowId === null || rowId === undefined) continue;
         // Only a Library song has an id to name; a streamed play (`yt:<videoId>`) has none.

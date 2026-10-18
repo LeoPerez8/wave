@@ -82,9 +82,9 @@ describe("downloading a list of YT Music songs", () => {
   });
 });
 
-type Entry = PlaylistItem<YtSong, { readonly path: string }>;
+type Entry = PlaylistItem<YtSong, { readonly path: string | null }>;
 const stream = (videoId: string): Entry => ({ source: "stream", song: song(videoId) });
-const file = (path: string): Entry => ({ source: "library", track: { path } });
+const file = (path: string | null): Entry => ({ source: "library", track: { path } });
 const unavailable = (title: string): Entry => ({
   source: "unavailable",
   song: {
@@ -210,10 +210,15 @@ describe("downloading a playlist's YT Music entries", () => {
   });
 
   test("a page knows every label its button can say, to measure them ahead", () => {
-    assert.deepEqual(YT_DOWNLOAD_BUTTON_LABELS, ["Download", "Retry Failed", "Cancel"]);
+    assert.deepEqual(YT_DOWNLOAD_BUTTON_LABELS, [
+      "Download",
+      "Retry Failed",
+      "Cancel",
+      "Downloaded",
+    ]);
   });
 
-  test("the playlist page's button cycles Download, Cancel, Retry Failed, then goes", () => {
+  test("the playlist page's button cycles Download, Cancel, Retry Failed, then Downloaded", () => {
     const playlist = [file("/Music/x.mp3"), stream("a"), stream("b")];
     const button = (jobs: YtDownloadJournalJob[], inLibrary = nothingInLibrary) =>
       ytPlaylistDownloadButton(ytPlaylistDownload(playlist, { inLibrary, jobs }));
@@ -230,17 +235,40 @@ describe("downloading a playlist's YT Music entries", () => {
       { action: "retryFailed", label: "Retry Failed" },
     );
     // Every entry is the Library's song now.
-    assert.equal(
+    assert.deepEqual(
       ytPlaylistDownloadButton(
         ytPlaylistDownload([file("/Music/x.mp3"), file("/Music/a.mp3")], {
           inLibrary: nothingInLibrary,
           jobs: [],
         }),
       ),
-      null,
+      { action: "downloaded", label: "Downloaded" },
     );
   });
+
+  test("a playlist whose YT Music entries the Library has says Downloaded", () => {
+    assert.deepEqual(
+      ytPlaylistDownloadButton(
+        ytPlaylistDownload([file("/Music/x.mp3"), stream("a")], {
+          inLibrary: () => true,
+          jobs: [],
+        }),
+      ),
+      { action: "downloaded", label: "Downloaded" },
+    );
+  });
+
+  test("a playlist with a song this phone has no file for isn't Downloaded", () => {
+    assert.equal(everyStreamInLibraryButton([stream("a"), file(null)]), null);
+    assert.equal(everyStreamInLibraryButton([stream("a"), unavailable("Gone")]), null);
+    assert.equal(everyStreamInLibraryButton([]), null);
+  });
 });
+
+/** The playlist page's button for [entries] when the Library has every YT Music song. */
+function everyStreamInLibraryButton(entries: Entry[]) {
+  return ytPlaylistDownloadButton(ytPlaylistDownload(entries, { inLibrary: () => true, jobs: [] }));
+}
 
 const listed = (title: string) => ({
   title,

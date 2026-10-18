@@ -3,14 +3,17 @@ import { Text, View } from "react-native";
 import { Hairline } from "@/catalog/Hairline";
 import { SettingsSlider } from "@/components/SettingsSlider";
 import { SettingsSwitch } from "@/components/SettingsSwitch";
+import { ChoiceSection } from "@/settings/ChoiceRow";
 import { CROSSFADE, setCrossfadeSeconds, useCrossfadeSeconds } from "@/settings/crossfade";
 import { setDontPlayExplicit, useDontPlayExplicit } from "@/settings/dontPlayExplicit";
 import { SettingsPageScreen } from "@/settings/SettingsPage";
+import { streamBufferChoice } from "@/settings/streamBuffer";
 
-/** Settings › Playback: how one song gives way to the next, and which songs play. */
+/** Settings › Playback: how one song gives way to the next, which songs play, and how much streamed audio is loaded ahead. */
 export default function PlaybackSettingsScreen() {
   const seconds = useCrossfadeSeconds();
   const skipExplicit = useDontPlayExplicit();
+  const bufferMinutes = streamBufferChoice.setting.useValue();
   return (
     <SettingsPageScreen page="playback">
       <View>
@@ -40,6 +43,11 @@ export default function PlaybackSettingsScreen() {
           Skips songs marked explicit by YouTube Music or Deezer.
         </Text>
       </View>
+      <ChoiceSection
+        choice={streamBufferChoice}
+        current={bufferMinutes}
+        note="How much of a streamed song Wave loads ahead, carrying on into the next songs in Up Next, so playback keeps going through a dead zone. Longer uses more memory: about 50 MB at 30 minutes. Downloaded songs play from the phone either way."
+      />
     </SettingsPageScreen>
   );
 }

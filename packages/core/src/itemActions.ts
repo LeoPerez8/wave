@@ -142,6 +142,7 @@ export interface ActionSubject<A extends LibraryArtistRef = LibraryArtistRef> {
 export type ItemAction =
   | "playNext"
   | "addToQueue"
+  | "magicQueue"
   | "addToPlaylist"
   | "favorite"
   | "unfavorite"
@@ -150,6 +151,7 @@ export type ItemAction =
   | "goToArtist"
   | "renamePlaylist"
   | "changeImage"
+  | "adjustImage"
   | "removeImage"
   | "share"
   | "deletePlaylist"
@@ -191,6 +193,7 @@ export type ItemActionEntry<A extends LibraryArtistRef = LibraryArtistRef> =
 export const ITEM_ACTION_LABELS: { readonly [A in ItemAction]: string } = {
   playNext: "Play Next",
   addToQueue: "Add to Queue",
+  magicQueue: "Magic Queue",
   addToPlaylist: "Add to Playlist",
   favorite: "Favorite",
   unfavorite: "Remove from Favorites",
@@ -199,6 +202,7 @@ export const ITEM_ACTION_LABELS: { readonly [A in ItemAction]: string } = {
   goToArtist: "Go to Artist",
   renamePlaylist: "Rename Playlist",
   changeImage: "Change Image",
+  adjustImage: "Adjust Image",
   removeImage: "Remove Image",
   share: "Share",
   deletePlaylist: "Delete Playlist",
@@ -329,6 +333,22 @@ export const isCollectionKind = (kind: ItemKind): kind is CollectionKind => COLL
 const fixableFile = (song: ActionItem): boolean =>
   song.fixable === true && song.missing !== true && song.streamed !== true;
 
+/**
+ * Whether a menu starts a Magic Queue from its item: one Library song with a
+ * file here, album, artist or playlist (the seeds a Magic Queue grows from
+ * the Library); not a genre, nor the selection bar.
+ */
+const offersMagicQueue = (
+  kind: ItemKind,
+  items: readonly ActionItem[],
+  surface: ActionSurface,
+): boolean => {
+  const [only] = items;
+  if (surface !== "menu" || items.length !== 1 || only === undefined) return false;
+  if (kind === "track") return only.missing !== true && only.streamed !== true;
+  return kind === "album" || kind === "artist" || kind === "playlist";
+};
+
 /** The entries to offer on [subject]'s items, in order. */
 export const itemActions = <A extends LibraryArtistRef = LibraryArtistRef>(
   subject: ActionSubject<A>,
@@ -352,6 +372,7 @@ export const itemActions = <A extends LibraryArtistRef = LibraryArtistRef>(
     ...(missing < items.length
       ? [{ action: "playNext" } as const, { action: "addToQueue" } as const]
       : []),
+    ...(offersMagicQueue(kind, items, surface) ? [{ action: "magicQueue" } as const] : []),
     { action: "addToPlaylist" },
   ];
   // Albums' missing songs download as Settings' Download All does them, only theirs.
@@ -384,7 +405,9 @@ export const itemActions = <A extends LibraryArtistRef = LibraryArtistRef>(
     // Its own image is set from its menu (the selection bar leaves it out); the mosaic shows without one.
     if (surface === "menu") {
       entries.push({ action: "changeImage" });
-      if (only?.hasImage === true) entries.push({ action: "removeImage" });
+      // Adjust Image reframes it from the original photo, at the last framing.
+      if (only?.hasImage === true)
+        entries.push({ action: "adjustImage" }, { action: "removeImage" });
       // Shared as a playlist on another service, from its menu alone (#483).
       if (subject.sharing === true) entries.push({ action: "share" });
     }

@@ -225,6 +225,17 @@ class WavePlayerModule : Module() {
     }.runOnQueue(Queues.MAIN)
 
     /**
+     * How much streamed audio the session's player keeps loaded ahead, in ms
+     * (Core's `streamBufferMs`). Kept natively, so the service follows it
+     * without JS too; it applies from the player's next buffering decision.
+     */
+    AsyncFunction("setStreamBuffer") { aheadMs: Double, promise: Promise ->
+      StreamBuffer.init(context)
+      StreamBuffer.setChosen(aheadMs.toLong())
+      promise.resolve(null)
+    }.runOnQueue(Queues.MAIN)
+
+    /**
      * The entry whose next song is an unsearched one still being searched (Core's
      * `searchingAfter`), or null: a crossfade from it waits for the search.
      */

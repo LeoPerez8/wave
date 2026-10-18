@@ -186,7 +186,11 @@ class PlaybackService : MediaLibraryService() {
     val dataSources = YtDataSource.Factory(
       DefaultDataSource.Factory(this, DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true)),
     ) { YtClient.get(this) }
-    return ExoPlayer.Builder(this, WaveRenderersFactory(this))
+    val builder = ExoPlayer.Builder(this, WaveRenderersFactory(this))
+    // The session's player keeps the Buffer setting's streamed audio ahead (StreamBuffer);
+    // the tail only plays the outgoing song's last seconds.
+    if (forSession) builder.setLoadControl(StreamLoadControl())
+    return builder
       .setMediaSourceFactory(DefaultMediaSourceFactory(dataSources))
       // The tail follows the session's player, which alone holds audio focus.
       .setAudioAttributes(
@@ -275,23 +279,14 @@ class PlaybackService : MediaLibraryService() {
         exoPlayer?.preloadConfiguration = ExoPlayer.PreloadConfiguration(Util.msToUs(PRELOAD_MS))
       }
 
-      override fun nextLate(lateMs: Long, overlapMs: Long) {
-        val late =
-          if (searchingNext()) "the next song was still being searched after ${seconds(lateMs)}"
-          else "the next song was ${seconds(lateMs)} late"
-        WaveLog.i(
-          CROSSFADE_LOG_TAG,
-          if (overlapMs > 0) "Crossfade shortened to ${seconds(overlapMs)}: $late"
-          else "Crossfade dropped, the song ended gapless: $late",
-        )
-      }
+      override val nowMs: Long
+        get() = SystemClock.elapsedRealtime()
 
-      override fun endedEarly(why: CrossfadeEnd, overlapping: Boolean) {
-        WaveLog.i(
-          CROSSFADE_LOG_TAG,
-          if (overlapping) "Crossfade ended early: ${why.reason}"
-          else "Crossfade called off before the overlap: ${why.reason}",
-        )
+      override val nextSearching: Boolean
+        get() = searchingNext()
+
+      override fun outcome(outcome: CrossfadeOutcome) {
+        WaveLog.i(CROSSFADE_LOG_TAG, describe(outcome))
       }
 
       override fun openTail(positionMs: Long): CrossfadeDeck {
@@ -343,6 +338,36 @@ class PlaybackService : MediaLibraryService() {
       }
     },
   )
+
+  /** One app-log line for a song change's crossfade outcome. */
+  private fun describe(outcome: CrossfadeOutcome): String =
+    when (outcome) {
+      is CrossfadeOutcome.Skipped ->
+        "Crossfade skipped: ${outcome.why.reason}" +
+          if (outcome.lateMs > 0) " (${seconds(outcome.lateMs)} late)" else ""
+      is CrossfadeOutcome.Done ->
+        "Crossfade done: ${seconds(outcome.overlapMs)} overlap" +
+          if (outcome.lateMs > LATE_REPORT_MS) " (${seconds(outcome.lateMs)} short, the next song was late)" else ""
+      is CrossfadeOutcome.Cut -> {
+        val of = outcome.overlapMs?.let { "of ${seconds(it)}" } ?: "before the next song sounded"
+        "Crossfade cut ${seconds(outcome.elapsedMs)} in $of: ${outcome.why.reason}; " +
+          "main ${deckState(exoPlayer)}; tail ${deckState(tailPlayer)}"
+      }
+    }
+
+  /** A player's position, playback state, isPlaying and suppression reason, for the app log. */
+  private fun deckState(player: Player?): String {
+    if (player == null) return "none"
+    val state = when (player.playbackState) {
+      Player.STATE_IDLE -> "idle"
+      Player.STATE_BUFFERING -> "buffering"
+      Player.STATE_READY -> "ready"
+      Player.STATE_ENDED -> "ended"
+      else -> "state ${player.playbackState}"
+    }
+    return "at ${player.currentPosition} ms, $state, isPlaying=${player.isPlaying}, " +
+      "suppression=${player.playbackSuppressionReason}"
+  }
 
   private val crossfadeTick: Runnable = Runnable { scheduleCrossfade(crossfade.tick()) }
 
@@ -419,6 +444,8 @@ class PlaybackService : MediaLibraryService() {
   override fun onCreate() {
     super.onCreate()
     ResumeStore.init(this)
+    // The stored Buffer setting, before JS (if any) sends it again.
+    StreamBuffer.init(this)
     val player = buildPlayer(forSession = true)
     player.addListener(sleepTimerListener)
     player.addListener(resumeListener)
@@ -813,6 +840,9 @@ class PlaybackService : MediaLibraryService() {
     const val RESUME_SAVE_INTERVAL_MS = 10_000L
 
     const val CROSSFADE_LOG_TAG = "WaveCrossfade"
+
+    /** A done overlap shorter than the song's whole one by more than this says it was late. */
+    const val LATE_REPORT_MS = 500L
 
     /** Buffered of the next song for it to sound at once (ExoPlayer's default to start playing). */
     const val NEXT_READY_MS = 2500L
