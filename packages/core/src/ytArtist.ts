@@ -209,6 +209,15 @@ const standsOnArtistPage = (saved: YtArtistSaved, now: number): boolean =>
   isFresh(saved, now) && (saved.outcome === "unmatched" || saved.page.allSongs !== undefined);
 
 /**
+ * Whether the artist's saved online answer [saved] stands on their page at
+ * [now] (a week, read with every song of theirs): reused rather than read again.
+ */
+export const ytArtistSavedStands = <S extends YtSong>(
+  saved: YtArtistSaved<S> | null,
+  now: number,
+): saved is YtArtistSaved<S> => saved !== null && standsOnArtistPage(saved, now);
+
+/**
  * What's saved for the artist once [answer] comes at [now], given what's
  * saved meanwhile ([current]): the answer, unless it was read without the
  * artist's full list (a Library album's ask reads their page only) while

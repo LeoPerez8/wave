@@ -568,8 +568,14 @@ export {
   ytSectionView,
   ytSearchArtistReads,
   ytSearchArtistSongs,
+  YT_SEARCH_ARTISTS_UNKNOWN,
+  ytSearchArtistToRead,
+  ytSearchArtistsKnownAfter,
+  ytSearchTopArtistSongs,
 } from "./ytSearch.ts";
 export type {
+  YtSearchArtistsKnown,
+  YtSearchArtistsEvent,
   YtKeptAnswer,
   YtAskedBy,
   YtQuietReason,
@@ -810,6 +816,7 @@ export {
   ytArtistFullPage,
   ytArtistLookup,
   ytArtistPageAsks,
+  ytArtistSavedStands,
   ytArtistPageView,
   ytArtistQuery,
   ytArtistRelease,

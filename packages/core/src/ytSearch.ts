@@ -14,6 +14,7 @@
  */
 
 import type { YtPick } from "./onlineToggle.ts";
+import { identityKey } from "./library.ts";
 import { createSearchIndex, type SearchEntry } from "./search.ts";
 import {
   ytArtistMergedCounts,
@@ -384,6 +385,85 @@ export const stepYtSection = <S extends YtSong>(
  */
 export const ytSearchArtistReads = (section: YtSection<YtSong>, name: string | null): boolean =>
   section.status === "results" && name !== null && ytArtistQuery(name) !== null;
+
+/** What a Search visit knows of its top-hit artists' online pages, by artist key (`identityKey`). */
+export interface YtSearchArtistsKnown<S extends YtSong = YtSong> {
+  /** The answers read, and when. */
+  readonly answers: ReadonlyMap<string, { readonly saved: YtArtistSaved<S>; readonly at: number }>;
+  /** The artists whose read failed: not read again until Online is tapped. */
+  readonly failed: ReadonlySet<string>;
+}
+
+export const YT_SEARCH_ARTISTS_UNKNOWN: YtSearchArtistsKnown<never> = {
+  answers: new Map(),
+  failed: new Set(),
+};
+
+/** What happened to an artist's read, or Online was tapped (a failed read may be tried again). */
+export type YtSearchArtistsEvent<S extends YtSong = YtSong> =
+  | {
+      readonly kind: "read";
+      readonly key: string;
+      readonly saved: YtArtistSaved<S>;
+      readonly at: number;
+    }
+  | { readonly kind: "failed"; readonly key: string }
+  | { readonly kind: "onlineTapped" };
+
+/** What the visit knows after [event]. */
+export const ytSearchArtistsKnownAfter = <S extends YtSong>(
+  known: YtSearchArtistsKnown<S>,
+  event: YtSearchArtistsEvent<S>,
+): YtSearchArtistsKnown<S> => {
+  switch (event.kind) {
+    case "read":
+      return {
+        answers: new Map(known.answers).set(event.key, { saved: event.saved, at: event.at }),
+        failed: known.failed,
+      };
+    case "failed":
+      return { answers: known.answers, failed: new Set(known.failed).add(event.key) };
+    case "onlineTapped":
+      return known.failed.size === 0 ? known : { answers: known.answers, failed: new Set() };
+  }
+};
+
+/**
+ * The artist key whose online page Search reads now for its top-hit Library
+ * artist [name] (`ytSearchArtistReads`), or null: not one read this visit,
+ * nor one whose read failed (a refined query doesn't spend another request on
+ * it; tapping Online does).
+ */
+export const ytSearchArtistToRead = (
+  section: YtSection<YtSong>,
+  name: string | null,
+  known: YtSearchArtistsKnown,
+): string | null => {
+  if (name === null || !ytSearchArtistReads(section, name)) return null;
+  const key = identityKey(name);
+  return known.answers.has(key) || known.failed.has(key) ? null : key;
+};
+
+/**
+ * The song count Search's row reads for its top-hit Library artist
+ * ([artist]: their key and the Library's count): the merged count
+ * (`ytSearchArtistSongs`) once their answer was read this visit, or null
+ * while the Library's stands (no answer, Library selected, nothing it lacks).
+ */
+export const ytSearchTopArtistSongs = <S extends YtSong>(
+  section: YtSection<S>,
+  artist: { readonly artistKey: string; readonly songs: number },
+  known: YtSearchArtistsKnown<S>,
+  context: { readonly inLibrary: (song: S) => boolean },
+): number | null => {
+  const read = known.answers.get(artist.artistKey);
+  if (read === undefined) return null;
+  const songs = ytSearchArtistSongs(section, artist.songs, read.saved, {
+    now: read.at,
+    inLibrary: context.inLibrary,
+  });
+  return songs === artist.songs ? null : songs;
+};
 
 /** Search counts songs only: releases don't count. */
 const libraryRelease = (): boolean => true;
