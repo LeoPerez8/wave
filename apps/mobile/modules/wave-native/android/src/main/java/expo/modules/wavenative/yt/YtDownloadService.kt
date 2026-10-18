@@ -94,7 +94,7 @@ class YtDownloadService : Service() {
     wakeLock?.acquire(LOCK_MS)
     val current = downloads.jobs.current()
     // Android drops notifications posted too often; only post what changed.
-    val shown = listOf(current?.get("id"), current?.get("phase"), current?.get("queuePosition"), percent(current), downloads.jobs.counts())
+    val shown = listOf(current?.get("id"), current?.get("phase"), current?.get("queuePosition"), percent(current), downloads.jobs.counts(), downloads.jobs.youtubePause())
     if (shown == lastShown) return
     lastShown = shown
     getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification(current))
@@ -120,8 +120,16 @@ class YtDownloadService : Service() {
     // As the rows say: YouTube has no peer to connect to, so its job waits until the audio flows.
     val waiting = if (current?.get("source") == DurableDownloads.YOUTUBE) listOf("queued", "preparing", "prepared") else listOf("queued", "preparing")
     val queued = current?.get("queuePosition") != null || current?.get("phase") in waiting
-    builder.setContentTitle(if (saving) "Saving to the Library" else if (queued) "Waiting to download" else "Downloading")
-      .setContentText(song?.get("title") as? String ?: "A YT Music song")
+    // While YouTube limits downloads, its songs wait for the next try, which the notification counts down to.
+    val pause = downloads.jobs.youtubePause()?.takeIf { current?.get("source") == DurableDownloads.YOUTUBE && current["phase"] == "prepared" }
+    val title = when {
+      saving -> "Saving to the Library"
+      pause != null -> "Paused: YouTube is limiting downloads"
+      queued -> "Waiting to download"
+      else -> "Downloading"
+    }
+    builder.setContentTitle(title).setContentText(song?.get("title") as? String ?: "A YT Music song")
+    if (pause != null) builder.setWhen(pause.until).setShowWhen(true).setUsesChronometer(true).setChronometerCountDown(true)
     // Several songs (an album, or songs asked for one after another): how many download now and how many are left.
     val (running, left) = downloads.jobs.counts()
     if (running + left > 1) builder.setSubText(listOfNotNull("$running downloading".takeIf { running > 0 }, "$left left".takeIf { left > 0 }).joinToString(" · "))

@@ -40,6 +40,7 @@ import {
 import { SECTION_GAP } from "@/settings/SettingsPage";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 import { cancelQueuedDownload, useDownloadingList } from "@/ytmusic/YtDownloads";
+import { useYoutubePauseNotice } from "@/ytmusic/youtubeThrottle";
 
 type Grip = ReturnType<typeof usePanGesture>;
 /** A row's handle: one to drag it by, one only drawn (a lifted copy), or room for one. */
@@ -385,6 +386,7 @@ export function DownloadsList({ header, footer }: { header: ReactElement; footer
       ]),
     [list],
   );
+  const pauseNotice = useYoutubePauseNotice();
   const listRef = useRef<LegendListRef>(null);
   const { drag, rowDrag, moveSong, moveGroup, liftedStyle, scrollRef, container, onLayout } =
     useDownloadsDrag({ list, rows, listRef });
@@ -437,6 +439,14 @@ export function DownloadsList({ header, footer }: { header: ReactElement; footer
         <View>
           <CatalogLine className="mb-1">Downloading</CatalogLine>
           <Text className="mb-2 font-sans text-footnote text-secondary">{summary}</Text>
+          {pauseNotice !== null && (
+            <Text
+              accessibilityLiveRegion="polite"
+              className="mb-2 font-sans text-footnote text-foreground"
+            >
+              {pauseNotice}
+            </Text>
+          )}
           <Hairline />
         </View>
       )}

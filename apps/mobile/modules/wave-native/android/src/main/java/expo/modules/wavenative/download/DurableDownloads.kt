@@ -88,6 +88,8 @@ class DurableDownloads(
    * notification reads it on the main thread without waiting for the lock.
    */
   @Volatile private var view = JournalView(emptyList(), 0L, 0L)
+  /** The pause on YouTube downloads as readers see it ([youtubePause]). */
+  @Volatile private var pauseView: YoutubePause? = null
   private val published get() = view.jobs
   /** What jobs' budgets are charged on ([budgetNow]). */
   private val budget: BudgetClock
@@ -111,6 +113,7 @@ class DurableDownloads(
         jobs[id] = record.toMutableMap()
       }
       policy = saved.map("libraryPolicy").toMutableMap()
+      policy.map(YOUTUBE_PAUSE).takeIf { it.isNotEmpty() }?.let { pauseView = YoutubePause(it.number("until"), it.number("level")) }
       // Imported and cancelled jobs have nothing left to show; a failure keeps Retry until it's
       // retried or cleared (Settings › Downloads cancels it). The app cancels one that settled
       // another way (the song reached the Library) at launch, so failures don't pile up here.
@@ -257,7 +260,7 @@ class DurableDownloads(
         } else {
           cleanup(existing)
           for (key in PUBLICATION_KEYS + "replaces") existing.remove(key)
-          existing["phase"] = "queued"; existing["attempts"] = 0L; existing["candidateIndex"] = 0L
+          existing["phase"] = "queued"; existing["attempts"] = 0L; existing["candidateIndex"] = 0L; existing.remove("refusals")
           setSource(existing, source)
         }
       } else if (existing.map("song")["videoId"] != id && existing.maps("aliases").none { it["videoId"] == id }) {
@@ -376,10 +379,63 @@ class DurableDownloads(
 
   @Synchronized fun refreshPolicy(roots: List<String>, excluded: List<String>): Long {
     if (policy["roots"] != roots || policy["excluded"] != excluded) {
+      val pause = policy[YOUTUBE_PAUSE]
       policy = mutableMapOf("roots" to roots.toList(), "excluded" to excluded.toList(), "revision" to policy.number("revision") + 1)
+      if (pause != null) policy[YOUTUBE_PAUSE] = pause
       persist()
     }
     return policy.number("revision")
+  }
+
+  /** A pause on YouTube downloads while YouTube limits them: until when (epoch ms), and the burst it came from. */
+  data class YoutubePause(val until: Long, val level: Long)
+
+  /**
+   * Pauses YouTube downloads until [until], as JS decided from the journal's `refusedAt` and
+   * `servedAt` marks (Core's `ytThrottle`), with the backoff [level] it's at, kept across
+   * restarts. Until then no YouTube transfer starts and the songs waiting for one leave their
+   * slots to Soulseek's; their budget isn't charged for the pause, and a new pause gives back the
+   * refusals they counted ([refused]). A pause already over (a download that worked, which
+   * resets the [level]) only keeps the level.
+   */
+  @Synchronized fun pauseYoutube(until: Long, level: Long) {
+    val before = policy.map(YOUTUBE_PAUSE)
+    val starts = until > clock() && before.number("until") <= clock()
+    val budgetAt = if (starts) budgetNow() else before["budgetAt"]
+    policy[YOUTUBE_PAUSE] = listOfNotNull("until" to until, "level" to level, budgetAt?.let { "budgetAt" to it }).toMap()
+    if (until > before.number("until") && until > clock()) {
+      // The pause holds them now: each goes again, with every try, as soon as it ends.
+      for (job in jobs.values) if (job["source"] == YOUTUBE && job["phase"] !in TERMINAL) {
+        job.remove("refusals")
+        if (job["phase"] == "prepared") job.remove("retryAt")
+      }
+    }
+    pauseView = YoutubePause(until, level)
+    persist()
+  }
+
+  /**
+   * The pause on YouTube downloads ([pauseYoutube]); null when there's none now. Read without
+   * the journal's lock, as the notification does on the main thread.
+   */
+  fun youtubePause(): YoutubePause? = pauseView?.takeIf { it.until > clock() }
+
+  /** A YouTube song waiting for its transfer while YouTube is paused: it neither starts nor holds a slot. */
+  private fun youtubeHeld(job: Map<String, Any?>) =
+    job["source"] == YOUTUBE && job["phase"] == "prepared" && policy.map(YOUTUBE_PAUSE).number("until") > clock()
+
+  /**
+   * Once a pause is over, gives YouTube's jobs back the budget its time charged them: the
+   * deadline moves on by the pause. Run before the journal checks deadlines or starts work.
+   */
+  private fun endYoutubePause() {
+    val pause = policy.map(YOUTUBE_PAUSE)
+    val budgetAt = pause["budgetAt"] as? Number ?: return
+    if (pause.number("until") > clock()) return
+    val paused = budgetNow() - budgetAt.toLong()
+    for (job in jobs.values) if (job["source"] == YOUTUBE && charged(job)) job["deadline"] = job.number("deadline") + paused
+    policy[YOUTUBE_PAUSE] = pause - "budgetAt"
+    persist()
   }
 
   fun hasWork(): Boolean = published.any(::pending)
@@ -403,7 +459,7 @@ class DurableDownloads(
   /** Started and not yet accepted and tagged: the part of a download that takes a slot. */
   private fun started(job: Map<String, Any?>) = job["phase"] in ACQUIRING || job["phase"] == "tagging"
   /** A started song that only waits for now, so it leaves its slot to the next one. */
-  private fun waits(job: Map<String, Any?>) = job["queuePosition"] != null || job.number("retryAt") > clock() ||
+  private fun waits(job: Map<String, Any?>) = job["queuePosition"] != null || job.number("retryAt") > clock() || youtubeHeld(job) ||
     (job["phase"] in DECISIONS && clock() - job.number("phaseAt") >= DECISION_WAIT_MS)
 
   /** Starts queued songs, in order, while a slot is free. A song's time starts when it does. */
@@ -596,10 +652,11 @@ class DurableDownloads(
     // Checked twice a second: the journal is only written when something was due.
     var changed = false
     var charging = false
+    endYoutubePause()
     for (job in jobs.values) {
       if (job["phase"] in TERMINAL || job["acknowledged"] == true || job["importFailure"] != null) continue
-      // A queued job's time starts when it gets a slot.
-      if (job["phase"] == "queued") continue
+      // A queued job's time starts when it gets a slot; a YouTube song held by a pause gets the pause back.
+      if (job["phase"] == "queued" || (!stopAll && youtubeHeld(job))) continue
       charging = charging || charged(job)
       // A song being saved (outside the lock: [save]) is left alone until its save is done.
       if (job["phase"] == "publishing" && job["id"] in running) continue
@@ -652,10 +709,11 @@ class DurableDownloads(
    */
   @Synchronized fun nextStep(transport: DurableTransfer, publication: DurablePublication): (() -> Unit)? {
     if (stopped) return null
+    endYoutubePause()
     admit()
     for (job in jobs.values) {
       val id = job["id"] as String
-      if (id in running || job.number("retryAt") > clock()) continue
+      if (id in running || job.number("retryAt") > clock() || youtubeHeld(job)) continue
       if (job["phase"] == "prepared") {
         if (job.number("attempts") >= MAX_ATTEMPTS || job.number("candidateIndex") >= job.maps("candidates").size) { fail(job, exhausted(job), exhaustion(job)); persist(); continue }
         if (soulseekTurnOver(job)) { fail(job, "timedOut", SOULSEEK_OUT_OF_TIME); persist(); continue }
@@ -718,6 +776,8 @@ class DurableDownloads(
             }
             if (stopped) { transfer.ended("stopped"); cleanup(job); transition(job, "prepared"); persist(); return }
             transfer.ended("finished", audio.number("bytes"))
+            // A stream YouTube served: JS's throttle reads it as YouTube no longer limiting downloads.
+            if (job["source"] == YOUTUBE) job["servedAt"] = clock()
             job["audio"] = clean(audio); job["receiptId"] = UUID.randomUUID().toString(); job.remove("soulseekDeadline"); transition(job, "sourceReady"); persist()
           }
         }
@@ -752,6 +812,7 @@ class DurableDownloads(
           attempt?.ended(if (stopped) "stopped" else "failed ($reason)")
           // The service stopping isn't the peer's fault: the next start retries the same peer.
           if (stopped) { cleanup(job); transition(job, "prepared"); job["attempts"] = maxOf(0L, job.number("attempts") - 1) }
+          else if (reason == plan(job).map("refused")["failure"]) refused(job, reason, cause)
           else if (reason in plan(job).strings("retry") && job.number("attempts") < MAX_ATTEMPTS) { recordCause(job, reason, cause); if (!keepsPart(job)) cleanup(job); transition(job, "prepared"); job["retryAt"] = clock() + RETRY_PAUSE_MS * job.number("attempts") }
           else if (reason in plan(job).strings("retry")) fail(job, reason, exhaustion(job, cause))
           else if (reason in plan(job).strings("end")) fail(job, reason, cause)
@@ -903,6 +964,29 @@ class DurableDownloads(
     transition(job, "prepared")
     // YouTube's stream again: a pause, longer each time, comes first.
     if (job["source"] == YOUTUBE) job["retryAt"] = clock() + RETRY_PAUSE_MS * job.number("attempts")
+  }
+  /**
+   * YouTube refused [job]'s song without a clear reason (Core's `refused` plan): the transfer is
+   * tried again after the plan's next pause, from the part file it has, until the pauses run out
+   * and the song is unavailable. Refusals count apart from the job's attempts. One while YouTube
+   * is paused ([pauseYoutube]) doesn't count: the song waits for the pause to end. `refusedAt` is
+   * what JS's throttle reads.
+   */
+  private fun refused(job: MutableMap<String, Any?>, reason: String, cause: String) {
+    val refusal = plan(job).map("refused")
+    job["refusedAt"] = clock()
+    job["attempts"] = maxOf(0L, job.number("attempts") - 1)
+    recordCause(job, reason, cause)
+    val pause = youtubePause()
+    val pauses = (refusal["pausesMs"] as? List<*>).orEmpty().map { (it as Number).toLong() }
+    val count = job.number("refusals")
+    if (pause == null && count >= pauses.size) {
+      fail(job, refusal["exhausted"] as? String ?: "ytUnavailable", "YouTube refused the song ${count + 1} times; last: $cause")
+      return
+    }
+    transition(job, "prepared")
+    if (pause != null) job["retryAt"] = pause.until
+    else { job["refusals"] = count + 1; job["retryAt"] = clock() + pauses[count.toInt()] }
   }
   /** The failure plan the prepare answer brought; without one, every failure ends the job. */
   private fun plan(job: Map<String, Any?>) = job.map("failurePlan")
@@ -1214,6 +1298,8 @@ class DurableDownloads(
     /** A cause is a line for the Downloads page and the log, not a stack trace. */
     const val MAX_CAUSE = 1_000
     const val SOULSEEK = "soulseek"
+    /** Where the journal keeps the pause on YouTube downloads ([pauseYoutube]), beside the Library policy. */
+    private const val YOUTUBE_PAUSE = "youtubePause"
     const val YOUTUBE = "youtube"
     /** What a job saves: Soulseek's original MP3 320, or YouTube's M4A as served. */
     private const val MP3_320 = "mp3-320"

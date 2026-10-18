@@ -94,7 +94,32 @@ export interface DownloadFailurePlan {
   readonly rejected: YtDownloadFailure | null;
   /** Failures that hand the download over to YouTube Music instead of ending it (`downloadFallback`). */
   readonly fallsBack: readonly YtDownloadFailure[];
+  /** What YouTube refusing the song leads to; null for Soulseek, which YouTube never refuses. */
+  readonly refused: DownloadRefusalPlan | null;
 }
+
+/**
+ * What the journal does when YouTube refuses a song without a clear reason (an UNPLAYABLE
+ * answer, a bot check, no answer at all), which a limit on the session looks like: the
+ * transfer is tried again after each pause in turn, then the song is unavailable. Refusals
+ * count apart from the job's other attempts, and none counts while YouTube is paused
+ * (`ytThrottle`). A clear answer (removed, private, age-restricted) is `ytUnavailable`,
+ * which ends the download at once.
+ */
+export interface DownloadRefusalPlan {
+  /** The native failure a refusal comes as. */
+  readonly failure: "ytRefused";
+  /** The pause before each try again, in order. */
+  readonly pausesMs: readonly number[];
+  /** The failure once every try was refused. */
+  readonly exhausted: YtDownloadFailure;
+}
+
+const YOUTUBE_REFUSED: DownloadRefusalPlan = {
+  failure: "ytRefused",
+  pausesMs: [30_000, 90_000, 240_000],
+  exhausted: "ytUnavailable",
+};
 
 /**
  * Failures no other peer, nor YouTube's stream started again, would get
@@ -127,6 +152,7 @@ export const downloadFailurePlan = (
       exhausted: "failed",
       rejected: "ytUnavailable",
       fallsBack: [],
+      refused: YOUTUBE_REFUSED,
     };
   const fallsBack = FALLS_BACK.filter((failure) => downloadFallback(failure, setup) !== null);
   return {
@@ -135,6 +161,7 @@ export const downloadFailurePlan = (
     exhausted: "unavailable",
     rejected: null,
     fallsBack,
+    refused: null,
   };
 };
 

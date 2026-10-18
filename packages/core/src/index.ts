@@ -685,6 +685,7 @@ export {
 } from "./downloadSource.ts";
 export type {
   DownloadFailurePlan,
+  DownloadRefusalPlan,
   DownloadFallbackSetup,
   DownloadSource,
   DownloadSourceSetup,
@@ -1490,3 +1491,13 @@ export type {
   DuplicateCheckEvent,
   DuplicateCheckStep,
 } from "./replacementDuplicates.ts";
+export {
+  YT_THROTTLE_START,
+  ytThrottleNotice,
+  ytThrottlePauseMs,
+  ytThrottleRead,
+  ytThrottleRefused,
+  ytThrottleRestored,
+  ytThrottleSucceeded,
+} from "./ytThrottle.ts";
+export type { YtThrottle, YtThrottleJob, YtThrottlePause } from "./ytThrottle.ts";
