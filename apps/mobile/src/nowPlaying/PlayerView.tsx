@@ -21,6 +21,7 @@ import { Press } from "@/motion/Press";
 import { useRenderCount } from "@/perf/perf";
 import { useCurrentTrackId } from "@/playback/hooks";
 import { playbackState, type PlaybackState } from "@/playback/Player";
+import { queueState } from "@/playback/Queue";
 import { queueTracks, type QueueTrack } from "@/playback/queueTracks";
 import { useThemeColor } from "@/theme/useThemeColor";
 import { useLoadedLibraryFinder } from "@/ytmusic/libraryFinder";
@@ -40,8 +41,20 @@ const SPRING = { damping: 18, stiffness: 180, mass: 1 } as const;
  */
 let lastBox = { width: 0, height: 0 };
 
+type ArtworkProps = {
+  uri: string | null;
+  playing: boolean;
+  /**
+   * A streamed song's own cover: its player item's key, which the full-size
+   * image is keyed to so it never shows the previous song's picture, and its
+   * small thumbnail (cached by the list rows), shown until the full-size one
+   * loads, and for good if that fails. Null for a Library track.
+   */
+  streamed: StreamedCover | null;
+};
+
 /** Album art at the largest square the space allows; it shrinks back while paused. */
-function NowPlayingArtwork({ uri, playing }: { uri: string | null; playing: boolean }) {
+function NowPlayingArtwork({ uri, playing, streamed }: ArtworkProps) {
   const [box, setBox] = useState(lastBox);
   const reduceMotion = useReducedMotion();
   const fill = useThemeColor("fill");
@@ -78,12 +91,23 @@ function NowPlayingArtwork({ uri, playing }: { uri: string | null; playing: bool
       }}
     >
       <Animated.View style={[{ width: size, height: size, backgroundColor: fill }, style]}>
-        {uri === null ? (
-          <View className="flex-1 items-center justify-center">
+        {streamed !== null && streamed.thumb !== null ? (
+          <Image
+            key={`thumb-${streamed.key}`}
+            source={{ uri: streamed.thumb }}
+            style={{ position: "absolute", width: size, height: size }}
+            contentFit="cover"
+            accessibilityIgnoresInvertColors
+          />
+        ) : uri === null || streamed !== null ? (
+          <View className="absolute inset-0 items-center justify-center">
             <IconMusic size={size / 4} color={tertiary} strokeWidth={1.25} />
           </View>
-        ) : (
+        ) : null}
+        {uri === null ? null : (
           <Image
+            // A new song's full-size cover starts over from its own thumbnail.
+            key={streamed?.key}
             source={{ uri }}
             style={{ width: size, height: size }}
             contentFit="cover"
@@ -175,6 +199,34 @@ function FavoriteStar({ title }: { title: string }) {
   );
 }
 
+type StreamedCover = { key: string; thumb: string | null };
+
+const subscribeQueueAndTracks = (listener: () => void): (() => void) => {
+  const stopQueue = queueState.subscribe(listener);
+  const stopTracks = queueTracks.subscribe(listener);
+  return () => {
+    stopQueue();
+    stopTracks();
+  };
+};
+
+/**
+ * A streamed song's cover for Now Playing: the player item [itemKey]'s key and
+ * its song's small thumbnail (the cached one, else the list's cover, which
+ * the rows cached), found by the queue entry the item is; null for a Library
+ * track.
+ */
+const useStreamedCover = (itemKey: string): StreamedCover | null => {
+  const track = useSyncExternalStore(subscribeQueueAndTracks, () => {
+    const trackId = queueState.get().entries.find((entry) => entry.key === itemKey)?.trackId;
+    if (trackId === undefined || parseTrackId(trackId)?.kind !== "yt") return null;
+    return queueTracks.get().get(trackId) ?? null;
+  });
+  const streamed = track !== null;
+  const thumb = track === null ? null : (track.thumbPath ?? track.ytSong?.artworkUrl ?? null);
+  return useMemo(() => (streamed ? { key: itemKey, thumb } : null), [streamed, itemKey, thumb]);
+};
+
 /** The queue's details of the current track when it's a YT Music song (streamed), else null. */
 const useStreamedTrack = (): QueueTrack | null => {
   const trackId = useCurrentTrackId();
@@ -223,9 +275,10 @@ export function PlayerView({ item, details, playing }: Props) {
     [streamed],
   );
   const streamedTo = useStreamedArtistLink(streamedArtists, shown);
+  const streamedCover = useStreamedCover(item.id);
   return (
     <View className="flex-1" style={{ gap: CELL * 4 }}>
-      <NowPlayingArtwork uri={item.artworkUri} playing={playing} />
+      <NowPlayingArtwork uri={item.artworkUri} playing={playing} streamed={streamedCover} />
       <View className="flex-row items-center" style={{ gap: CELL }}>
         <View className="flex-1">
           <Text

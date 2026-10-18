@@ -121,6 +121,12 @@ export type {
   SearchOptions,
   SearchResults,
 } from "./search.ts";
+export {
+  FIND_IN_PLAYLIST_NO_MATCH,
+  FIND_IN_PLAYLIST_PLACEHOLDER,
+  createPlaylistFinder,
+} from "./findInPlaylist.ts";
+export type { PlaylistFinder, PlaylistFindText } from "./findInPlaylist.ts";
 export { createSearchCatalog } from "./searchCatalog.ts";
 export type { SearchCatalog, SearchCatalogStats } from "./searchCatalog.ts";
 export { SEARCH_FOCUS_LIMITS, startSearchFocus, stepSearchFocus } from "./searchFocus.ts";
@@ -511,7 +517,13 @@ export type {
 export { pendingWriteDelay } from "./writePacing.ts";
 export type { WritePacing } from "./writePacing.ts";
 export { stepNowPlayingSheet } from "./sheetLifecycle.ts";
-export { QUEUE_COVER_FLUSH_MS, createQueueCoverBatcher, withQueueCovers } from "./queueCovers.ts";
+export {
+  QUEUE_COVER_FLUSH_MS,
+  createQueueCoverBatcher,
+  playerCoverUpdates,
+  withQueueCovers,
+} from "./queueCovers.ts";
+export type { PlayerCoverUpdate } from "./queueCovers.ts";
 export type { QueueCover, QueueCoverBatcher, QueueCoverBatcherOptions } from "./queueCovers.ts";
 export { MORE_FROM_ARTIST } from "./queue.ts";
 export { newQueueToast, noticeLine, queueUndo, undoneQueue } from "./queueUndo.ts";
@@ -1308,7 +1320,7 @@ export {
   lyricCardColours,
   lyricCardFileName,
   lyricCardInk,
-  lyricCardTextSize,
+  lyricCardLayout,
   lyricShareDestinations,
   lyricStoryBackground,
   nextLyricCardColour,
@@ -1317,6 +1329,7 @@ export {
   tapLyricLine,
 } from "./lyricsShare.ts";
 export type {
+  LyricCardShape,
   LyricSelection,
   LyricSelectionTap,
   LyricShareApps,
