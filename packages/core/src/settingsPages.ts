@@ -8,6 +8,7 @@
 
 import { counted } from "./listening.ts";
 import { queuedDownloadsSummary, type QueuedDownload } from "./queuedDownloads.ts";
+import type { SpotifySession } from "./spotifyAccount.ts";
 import type { WaveSession } from "./waveAccount.ts";
 import type { YtSession } from "./ytAccount.ts";
 
@@ -120,13 +121,18 @@ export const LAYOUT_PAGES: readonly LayoutPageEntry[] = [
 ];
 
 /**
- * The Accounts row's line: the YT Music and Wave accounts this phone is
- * signed into, by name (a Wave account without one by its email); null when
- * neither is. A session that ended counts as signed out, as its page says.
+ * The Accounts row's line: the YT Music, Spotify and Wave accounts this phone
+ * is signed into, by name (a Wave account without one by its email); null
+ * when none is. A session that ended counts as signed out, as its page says.
  */
-export const accountsSummary = (yt: YtSession, wave: WaveSession): string | null => {
+export const accountsSummary = (
+  yt: YtSession,
+  wave: WaveSession,
+  spotify: SpotifySession = { status: "signedOut" },
+): string | null => {
   const parts: string[] = [];
   if (yt.status === "signedIn") parts.push(`YT Music: ${yt.account.name}`);
+  if (spotify.status === "signedIn") parts.push(`Spotify: ${spotify.account.name}`);
   if (wave.status === "signedIn") parts.push(`Wave: ${wave.account.name ?? wave.account.email}`);
   return parts.length === 0 ? null : parts.join(" · ");
 };
