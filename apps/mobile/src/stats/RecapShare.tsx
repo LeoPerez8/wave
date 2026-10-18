@@ -13,6 +13,7 @@ import { WaveMark } from "@/share/LyricCard";
 import { ShareDestinations } from "@/share/ShareDestinations";
 import type { ImageSource } from "@/share/shareImage";
 import { useImageShare } from "@/share/useImageShare";
+import { useThemeColor } from "@/theme/useThemeColor";
 
 const LOG_TAG = "RecapShare";
 
@@ -41,6 +42,7 @@ function RecapImage({
   children: ReactNode;
 }) {
   const unit = width / 100;
+  const ink = useThemeColor("on-recap");
   return (
     <View
       ref={imageRef}
@@ -55,17 +57,17 @@ function RecapImage({
         paddingBottom: CELL * 3,
       }}
     >
-      <Text numberOfLines={1} className="font-sans text-subheadline font-semibold text-on-tile">
+      <Text numberOfLines={1} className="font-sans text-subheadline font-semibold text-on-recap">
         {title} · Recap
       </Text>
       <View className="flex-1" style={{ paddingVertical: CELL * 2 }}>
         {children}
       </View>
       <View className="flex-row items-center" style={{ gap: unit * 1.5 }}>
-        <WaveMark size={unit * 6} colour="#ffffff" />
+        <WaveMark size={unit * 6} colour={ink} />
         <Text
           allowFontScaling={false}
-          className="font-sans font-semibold text-on-tile"
+          className="font-sans font-semibold text-on-recap"
           style={{ fontSize: unit * 3.6 }}
         >
           Wave

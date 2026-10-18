@@ -352,6 +352,8 @@ export {
   NIGHT_SLATE,
   TONES,
   themeContrastIssues,
+  RECAP_COLOURS,
+  RECAP_INK,
   SETTINGS_TILE_COLOURS,
   SETTINGS_TILE_GLYPH,
 } from "./theme.ts";
@@ -365,7 +367,7 @@ export {
 } from "./colourPicker.ts";
 export type { ColourPickerLayout, ColourPickerTarget } from "./colourPicker.ts";
 export { overlayDivider } from "./overlayDivider.ts";
-export type { ContrastIssue, Theme, ThemeColors } from "./theme.ts";
+export type { ContrastIssue, RecapColour, Theme, ThemeColors } from "./theme.ts";
 export {
   CUSTOM_INK,
   DEFAULT_THEME_CHOICE,
