@@ -708,6 +708,8 @@ export { failedDownloads, settledDownloadFailures } from "./failedDownloads.ts";
 export { ytDownloadsToForget } from "./forgottenDownloads.ts";
 export { queuedDownloads, queuedDownloadsSummary } from "./queuedDownloads.ts";
 export type { QueuedDownload } from "./queuedDownloads.ts";
+export { SONGS_GROUP_NAME, downloadingList } from "./downloadGroups.ts";
+export type { DownloadGroup, DownloadingList, DownloadOrigin } from "./downloadGroups.ts";
 export type {
   FailedDownload,
   FailedDownloadRetry,
@@ -1257,3 +1259,6 @@ export {
   tapLyricLine,
 } from "./lyricsShare.ts";
 export type { LyricSelection, LyricSelectionTap } from "./lyricsShare.ts";
+export type { YtLibraryFavorites } from "./ytLibraryBatch.ts";
+export { pendingFavorite, settlePendingFavorites } from "./pendingFavorites.ts";
+export type { EnteringSong, PendingFavorite, SettledFavorites } from "./pendingFavorites.ts";

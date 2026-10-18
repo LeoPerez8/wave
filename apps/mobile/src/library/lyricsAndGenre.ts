@@ -49,6 +49,7 @@ import { WaveNative } from "@/native/waveNative";
 import { lyricsAndGenreLookupsEnabled } from "@/settings/lyricsAndGenre";
 
 import { libraryEdited, toIndexedArtwork, toIndexedTrack } from "./LibraryScan";
+import { publishSavedStars } from "./libraryChanges";
 import { LibraryStore } from "./LibraryStore";
 import { lyricsWritten } from "./lyricsEdits";
 
@@ -259,6 +260,7 @@ export const writeLyricsAndGenre = (
         )
         // Drops a genre no song has any more.
         .pipe(
+          Effect.tap(({ starred }) => Effect.sync(() => publishSavedStars(starred))),
           Effect.andThen(store.filesGone([])),
           Effect.ensuring(Effect.sync(libraryEdited)),
           // The file has its new tags; the next scan brings the index up to date.

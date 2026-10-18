@@ -651,3 +651,19 @@ export const playTotals = sqliteTable(
     index("play_totals_last_played_idx").on(t.lastPlayedAt),
   ],
 );
+
+/**
+ * Pending favorites (Core's `PendingFavorite`): liked songs Also add to
+ * Favorites couldn't star because the Library didn't have them, each by its
+ * YouTube Music video and its recording (title, artists, length). A download
+ * or scan that brings one in stars it and deletes its row (`saveBatch`).
+ * This phone only, never synced, and never listed in Favorites.
+ */
+export const pendingFavorites = sqliteTable("pending_favorites", {
+  videoId: text("video_id").primaryKey(),
+  title: text("title").notNull(),
+  /** The song's artists, a JSON array of names. */
+  artists: text("artists").notNull(),
+  durationMs: integer("duration_ms"),
+  addedAt: integer("added_at").notNull(),
+});

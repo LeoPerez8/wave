@@ -838,6 +838,18 @@ ALTER TABLE \`tracks\` ADD \`explicit\` text DEFAULT 'unknown' NOT NULL;
 UPDATE \`tracks\` SET \`modified_at\` = 0;
 `;
 
+// The liked songs Also add to Favorites stars once they enter the Library
+// (\`schema.ts\`'s \`pendingFavorites\`).
+const mPendingFavorites = `
+CREATE TABLE \`pending_favorites\` (
+	\`video_id\` text PRIMARY KEY NOT NULL,
+	\`title\` text NOT NULL,
+	\`artists\` text NOT NULL,
+	\`duration_ms\` integer,
+	\`added_at\` integer NOT NULL
+);
+`;
+
 export default {
   journal: {
     entries: [
@@ -868,6 +880,7 @@ export default {
       { idx: 24, when: 1_793_880_000_000, tag: "0024_play_contexts", breakpoints: true },
       { idx: 25, when: 1_793_966_400_000, tag: "0025_unsearched_titles", breakpoints: true },
       { idx: 26, when: 1_794_052_800_000, tag: "0026_explicit", breakpoints: true },
+      { idx: 27, when: 1_794_139_200_000, tag: "0027_pending_favorites", breakpoints: true },
     ],
   },
   migrations: {
@@ -898,5 +911,6 @@ export default {
     m0024: mPlayContexts,
     m0025: mUnsearchedTitles,
     m0026: mExplicit,
+    m0027: mPendingFavorites,
   },
 };
