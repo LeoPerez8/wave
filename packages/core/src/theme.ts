@@ -6,6 +6,7 @@
  */
 
 import { contrastRatio } from "./palette.ts";
+import type { SettingsTileColour } from "./settingsPages.ts";
 
 /**
  * The tone ramp, lightest (`tone-0`) to darkest. Light mode uses `tone-0`–`tone-10`
@@ -113,6 +114,41 @@ export const DEFAULT_THEME: Theme = {
     scrim: TRUE_BLACK,
   },
 };
+
+/**
+ * The tiles in front of Settings' rows (Core's `SETTINGS_PAGES` names each
+ * page's), by colour and scheme; global.css declares them as
+ * `--color-tile-<name>`. They are fixed: the chosen theme doesn't recolour
+ * them. Each keeps its white glyph legible and, in dark mode, a little
+ * brighter so it stands off the black ground.
+ */
+export const SETTINGS_TILE_COLOURS: {
+  readonly [S in keyof Theme]: Readonly<Record<SettingsTileColour, string>>;
+} = {
+  light: {
+    red: "#d4382e",
+    orange: "#c25700",
+    green: "#2b8a3e",
+    blue: "#1f6fd1",
+    indigo: "#4c50c6",
+    purple: "#8a45c2",
+    pink: "#c93370",
+    grey: TONES[6],
+  },
+  dark: {
+    red: "#e0463b",
+    orange: "#cc6106",
+    green: "#31944a",
+    blue: "#2f7ce0",
+    indigo: "#5b5fd6",
+    purple: "#9853cf",
+    pink: "#d6427d",
+    grey: TONES[5],
+  },
+};
+
+/** The glyph on every Settings tile, in both schemes. */
+export const SETTINGS_TILE_GLYPH = "#ffffff";
 
 type Token = keyof ThemeColors;
 

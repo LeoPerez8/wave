@@ -34,6 +34,8 @@ data class RawTags(
   val artists: List<String> = listOfNotNull(artist),
   /** Every value of a multi-value album artist tag, as [artists]. */
   val albumArtists: List<String> = listOfNotNull(albumArtist),
+  /** The advisory tag as tagged ([Advisory]): Core's `explicitFromAdvisory` reads it. */
+  val advisory: String? = null,
 )
 
 /** Reads tags from an audio file. Implementations throw when the file can't be parsed. */

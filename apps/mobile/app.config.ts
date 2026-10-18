@@ -57,6 +57,10 @@ const config: ExpoConfig = {
   extra: {
     syncUrl: "https://wave-sync.leonardolp2424.workers.dev",
     googleWebClientId: "334515982590-tq2ks7u11rt4708ifaotkumjfakgodk8.apps.googleusercontent.com",
+    // The Facebook App ID Instagram's Stories intent requires as its source application (a Meta
+    // app's id from developers.facebook.com; not a secret). Empty, the lyrics card has no
+    // Instagram Stories destination (docs/spec.md, "Sharing lyrics").
+    facebookAppId: "",
   },
   plugins: [
     "expo-router",

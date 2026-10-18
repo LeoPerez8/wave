@@ -7,11 +7,14 @@
  */
 import {
   createQueueCoverBatcher,
+  isExplicit,
   isUnsearchedTrackId,
   joinArtists,
   libraryTrackIds,
   withQueueCovers,
   parseTrackId,
+  streamedCoverUrl,
+  streamedCoverUrls,
   unsearchedTrackId,
   ytSongArtist,
   ytTrackId,
@@ -46,6 +49,12 @@ export interface QueueTrack {
    * track's comes from the Library).
    */
   readonly palette?: ArtworkPalette | null;
+  /**
+   * Whether it's explicit (a Library song's flag, a YT Music song's mark):
+   * the queue passes it over while Don't play explicit is on. Absent counts
+   * as clean (unknown, or saved before it was kept).
+   */
+  readonly explicit?: boolean;
 }
 
 /** A library song as the queue needs it. */
@@ -57,6 +66,7 @@ export const toQueueTrack = (song: PlayableSongRow): QueueTrack => ({
   album: song.album,
   artworkPath: song.artworkPath,
   thumbPath: song.thumbPath,
+  explicit: isExplicit(song.explicit),
 });
 
 /** A YT Music song's artwork, cached on the phone like a Library track's. */
@@ -69,7 +79,8 @@ export interface CachedArtwork {
 /**
  * A YT Music song as the queue needs it: it goes by its `yt:` track id, which
  * the player streams it by. Without its artwork cached, the player shows
- * YouTube's cover and the queue rows none.
+ * YouTube's cover at the large size (Core's `streamedCoverUrl`) and the queue
+ * rows none.
  */
 export const toYtQueueTrack = (song: YtSong, artwork: CachedArtwork | null): QueueTrack => {
   const id = ytTrackId(song.videoId);
@@ -80,9 +91,11 @@ export const toYtQueueTrack = (song: YtSong, artwork: CachedArtwork | null): Que
     artist: ytSongArtist(song),
     artists: song.artists,
     album: song.album,
-    artworkPath: artwork?.path ?? song.artworkUrl,
+    artworkPath:
+      artwork?.path ?? (song.artworkUrl === null ? null : streamedCoverUrl(song.artworkUrl)),
     thumbPath: artwork?.thumbPath ?? null,
     palette: artwork?.palette ?? null,
+    explicit: song.explicit,
   };
 };
 
@@ -105,6 +118,24 @@ export const toUnsearchedQueueTrack = (song: UnsearchedSong): QueueTrack => {
     thumbPath: null,
     palette: null,
   };
+};
+
+/**
+ * Caches a streamed song's cover from YouTube's [url] at the size playback
+ * shows it (Core's `streamedCoverUrls`): the first address that caches, so a
+ * video without its largest thumbnail gets the next. Fails as the last one
+ * does. Lists keep the small cover; only playback and the cache take this one.
+ */
+export const cacheStreamedCover = <E, R>(
+  url: string,
+  cacheArtwork: (url: string) => Effect.Effect<CachedArtwork, E, R>,
+): Effect.Effect<CachedArtwork, E, R> => {
+  const [first, ...rest] = streamedCoverUrls(url);
+  if (first === undefined) return cacheArtwork(url);
+  return rest.reduce<Effect.Effect<CachedArtwork, E, R>>(
+    (cached, next) => Effect.catch(cached, () => cacheArtwork(next)),
+    cacheArtwork(first),
+  );
 };
 
 /** The queued tracks by id. Kept for the app's lifetime, so every queue open reads it. */
@@ -161,7 +192,7 @@ export const cacheYtCoversLater = <E, R>(
       (song) => {
         const id = ytTrackId(song.videoId);
         if (song.artworkUrl === null || !queueTracks.get().has(id)) return Effect.void;
-        return cacheArtwork(song.artworkUrl).pipe(
+        return cacheStreamedCover(song.artworkUrl, cacheArtwork).pipe(
           Effect.tap(({ path, thumbPath, palette }) =>
             Effect.sync(() => batcher.add(id, { artworkPath: path, thumbPath, palette })),
           ),

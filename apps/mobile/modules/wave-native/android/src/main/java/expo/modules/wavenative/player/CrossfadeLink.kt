@@ -37,6 +37,13 @@ object CrossfadeLink {
 
   /** The module tells JS when the song fading out went silent or was cut off (wall-clock ms). */
   var onFadeEnded: ((Long) -> Unit)? = null
+
+  /**
+   * The entry whose next song JS is still searching (an unsearched queue entry the player doesn't
+   * hold, Core's `searchingAfter`), or null. While the player is on it, its next song isn't ready:
+   * the crossfade keeps it at full volume rather than fade into the song after the one searched.
+   */
+  var searchingAfter: String? = null
 }
 
 /**

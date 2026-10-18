@@ -7,7 +7,8 @@ import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
-import kotlinx.coroutines.runBlocking
+import expo.modules.wavenative.download.RangeDownload
+import expo.modules.wavenative.download.interruptibly
 
 /**
  * YouTube for downloads on the phone: the process-wide resolver ([YtClient.streams]), so
@@ -20,8 +21,8 @@ class AndroidYtAudioStreams(context: Context) : YtAudioStreams {
   override fun resolve(videoId: String): YtStream {
     // A cached address skips the resolver's own check; a download still needs YT Music on.
     if (!client.enabled) throw YtException(YtFailure.DISABLED)
-    // Called from the download worker's thread, as playback's data source does.
-    return runBlocking { client.streams.resolve(videoId, preferM4a = true) }
+    // Called from the download worker's thread; cancelling the job interrupts it, which stops the wait at once.
+    return interruptibly { client.streams.resolve(videoId, preferM4a = true) }
   }
 
   override fun reject(videoId: String) = client.streams.reject(videoId)
@@ -57,7 +58,8 @@ class AndroidYtAudioStreams(context: Context) : YtAudioStreams {
     }
 
   private companion object {
-    const val TIMEOUT_MS = 20_000
+    /** What the range downloader's retries and the journal's silence limit are worked out from. */
+    const val TIMEOUT_MS = RangeDownload.REQUEST_TIMEOUT_MS
   }
 }
 

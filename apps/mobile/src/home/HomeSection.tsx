@@ -1,4 +1,9 @@
-import { discoverMixCaption, homeSectionTitle, type HomeSectionId } from "@wave/core";
+import {
+  discoverMixCaption,
+  homeSectionTitle,
+  type BlendedDiscoverMix,
+  type HomeSectionId,
+} from "@wave/core";
 import { router } from "expo-router";
 import type { ComponentType } from "react";
 import { View } from "react-native";
@@ -17,6 +22,8 @@ import { openDiscoverMix } from "@/ytmusic/routes";
 
 import { useDiscoverMixes } from "./discoverMixes";
 import { openDiscoverMixActions } from "./DiscoverMixActions";
+import { DiscoverMixLevelButton } from "./DiscoverMixLevelButton";
+import { DiscoverMixesSkeleton } from "./DiscoverMixesSkeleton";
 import { useMostPlayedOfAllTime } from "./mostPlayedOfAllTime";
 
 import { AlbumShelf, ArtistShelf, SongRows } from "./HomeSections";
@@ -56,35 +63,50 @@ function MostPlayedAlbums({ title }: SectionProps) {
   );
 }
 
-/** The mixes as covers, each opening its page; nothing until some are built, or with YT Music off. */
+/**
+ * The mixes as covers, each opening its page; placeholder tiles while the
+ * first ones build; nothing with YT Music off (Core's `discoverMixesSection`).
+ * The header's control sets how much of every mix is new.
+ */
 function DiscoverMixes({ home, title }: SectionProps) {
-  const mixes = useDiscoverMixes(home.mostPlayed.length > 0);
-  if (mixes.length === 0) return null;
+  const section = useDiscoverMixes(home.mostPlayed.length > 0);
+  if (section.kind === "hidden") return null;
   return (
-    <TitledSection title={title}>
-      <CoverRow>
-        {mixes.map((mix) => {
-          const caption = discoverMixCaption(mix);
-          return (
-            <AlbumTile
-              key={mix.id}
-              album={{
-                id: mix.id,
-                title: caption.title,
-                albumArtist: caption.artists,
-                trackCount: mix.songs.length,
-                durationMs: 0,
-                artworkUri: mix.songs[0]?.artworkUrl ?? undefined,
-              }}
-              size={COVER_ROW_TILE}
-              detail={caption.line}
-              onPress={() => openDiscoverMix(mix.id)}
-              onLongPress={() => openDiscoverMixActions(mix)}
-            />
-          );
-        })}
-      </CoverRow>
+    <TitledSection title={title} control={<DiscoverMixLevelButton />}>
+      {section.kind === "skeleton" ? (
+        <DiscoverMixesSkeleton />
+      ) : (
+        <DiscoverMixRow mixes={section.mixes} />
+      )}
     </TitledSection>
+  );
+}
+
+/** The mixes' row of covers. */
+function DiscoverMixRow({ mixes }: { mixes: readonly BlendedDiscoverMix[] }) {
+  return (
+    <CoverRow>
+      {mixes.map((mix) => {
+        const caption = discoverMixCaption(mix);
+        return (
+          <AlbumTile
+            key={mix.id}
+            album={{
+              id: mix.id,
+              title: caption.title,
+              albumArtist: caption.artists,
+              trackCount: mix.songs.length,
+              durationMs: 0,
+              artworkUri: caption.artworkUrl ?? undefined,
+            }}
+            size={COVER_ROW_TILE}
+            detail={caption.line}
+            onPress={() => openDiscoverMix(mix.id)}
+            onLongPress={() => openDiscoverMixActions(mix)}
+          />
+        );
+      })}
+    </CoverRow>
   );
 }
 

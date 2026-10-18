@@ -5,7 +5,11 @@
  * Wave then reads them one at a time, in the picker's order, and fills each
  * as a YouTube Music link import does (`readYtPlaylist`, `planLinkImport`,
  * `finishPlaylistImport`), Liked Songs whole and the others up to the cap.
- * Nothing is downloaded or searched; there's no notification and no service.
+ * Nothing is searched; there's no notification and no service. Import &
+ * Download keeps that choice on each playlist it made (Core's
+ * `YtLibraryRead.download`), so once one is read and filled its downloads
+ * are queued as its Download Playlist would queue them; a read that failed
+ * loses it, so Try Again imports without downloading.
  * The batch is kept on the phone (Core's `writeYtLibraryBatch`), so the
  * playlists not read when Android stopped Wave are read once it starts again,
  * in the same order. Offline or with YT Music off the batch pauses, every
@@ -13,8 +17,9 @@
  * the foreground or imports again. A read that fails otherwise leaves its
  * playlist empty, with a line and Try Again on its page. With Also add to Favorites on, Liked Songs'
  * read stars its songs the Library has (Core's `ytLibraryFavorites`), kept
- * in the batch so a resumed read or Try Again still stars; the star syncs
- * like any other, and the import never takes one away.
+ * in the batch so a resumed read or Try Again still stars; the others are
+ * kept as pending favorites, each starred once a download or scan brings
+ * it in. The star syncs like any other, and the import never takes one away.
  *
  * Each playlist's origin (the YouTube Music playlist it came from) is kept
  * on this phone, unsynced: the picker marks those rows Imported, and ticking
@@ -34,14 +39,18 @@ import {
   writeYtLibraryOrigins,
   ytLibraryFavorites,
   ytLibraryPauseLogLine,
+  ytLibraryDownloadsQueued,
+  ytLibraryDownloadsToQueue,
   ytLibraryReadDone,
   ytLibraryReadFailed,
   ytLibraryReadLogLine,
   ytLibraryReadView,
+  type PendingFavorite,
   type YtLibraryBatch,
   type YtLibraryOrigins,
   type YtLibraryPicker,
   type YtLibraryRead,
+  playlistDownloadOrigin,
 } from "@wave/core";
 import * as Result from "effect/Result";
 import { useSyncExternalStore } from "react";
@@ -51,11 +60,15 @@ import { makeExternalStore } from "@/lib/externalStore";
 import { persistedSetting } from "@/lib/persistedSetting";
 import { appLog } from "@/log/appLog";
 import { askYtMusic } from "@/ytmusic/askYtMusic";
+import { currentLibraryFinder } from "@/ytmusic/libraryFinder";
+import { runYtPlaylistDownloadAction } from "@/ytmusic/YtDownloads";
 
 import { setFavorites } from "./favorites";
+import { LibraryStore } from "./LibraryStore";
 import { listLibrary } from "./playlistImports";
-import { cancelPlaylistImport, startLinkImport } from "./playlistImports";
+import { cancelPlaylistImport, settlePlaylistImport, startLinkImport } from "./playlistImports";
 import { createPlaylist, currentPlaylists, replacePlaylistSongs } from "./playlists";
+import { appRuntime } from "./runtime";
 
 const LOG_TAG = "WaveImport";
 
@@ -105,6 +118,52 @@ export const useReadingAgain = (playlistId: number): boolean =>
 let reading = false;
 
 /**
+ * Import & Download, once [playlistId] is filled: its downloads join the
+ * queue as its Download Playlist would queue them, the songs the Library
+ * doesn't have, in playlist order. A playlist deleted meanwhile queues nothing.
+ */
+const downloadPlaylist = async (playlistId: number): Promise<void> => {
+  const [detail, find] = await Promise.all([
+    // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+    appRuntime.runPromise(LibraryStore.use((store) => store.getPlaylist(playlistId))),
+    currentLibraryFinder(),
+  ]);
+  if (detail === null || detail.items.length === 0) return;
+  const { playlist } = detail;
+  runYtPlaylistDownloadAction(
+    "downloadPlaylist",
+    detail.items,
+    (song) => find(song) !== null,
+    playlistDownloadOrigin(playlist),
+  );
+};
+
+/**
+ * Queues filled [read]'s downloads (`downloadPlaylist`), then lets it leave
+ * the batch: until then it's kept, so Wave stopping in between still queues
+ * them as the batch resumes (Core's `ytLibraryDownloadsToQueue`).
+ */
+const queueDownloads = async (read: YtLibraryRead): Promise<void> => {
+  await downloadPlaylist(read.playlistId).catch((error: unknown) => {
+    const why = error instanceof Error ? error.message : String(error);
+    appLog("warn", LOG_TAG, `Import of "${read.name}" couldn't queue its downloads: ${why}`);
+  });
+  batch.set(ytLibraryDownloadsQueued(batch.get(), read));
+};
+
+/**
+ * Keeps the liked songs the Library hasn't as pending favorites: each gets
+ * its star once a download or scan brings it in (the store's `saveBatch`).
+ */
+const keepPendingFavorites = async (songs: readonly PendingFavorite[]): Promise<void> => {
+  if (songs.length === 0) return;
+  await appRuntime.runPromise(
+    // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+    LibraryStore.use((store) => store.addPendingFavorites(songs)),
+  );
+};
+
+/**
  * Reads [read]'s playlist and gives its Wave playlist the songs, as a link
  * import does (whose line goes to the app log), starring the Library's songs
  * when it was asked to. A read whose playlist was refreshed or deleted
@@ -126,13 +185,18 @@ const fill = async (read: YtLibraryRead): Promise<string | null> => {
         await listLibrary(),
       );
       // Before it leaves the batch: Wave stopped in between stars again, which changes nothing.
-      await setFavorites(ytLibraryFavorites(read, plan), true);
+      const favorites = ytLibraryFavorites(read, plan);
+      await setFavorites(favorites.star, true);
+      // Before any download is queued, so each one's landing finds its pending favorite.
+      await keepPendingFavorites(favorites.pending);
       // Checked again with no wait before the link import starts: a refresh from here on
       // empties the playlist and ends that import.
       if (!isYtLibraryReadQueued(batch.get(), read)) return null;
-      // Read: the link import, kept on its own, gives it its songs from here.
+      // Read: the link import, kept on its own, gives it its songs from here. Import &
+      // Download's read stays, filled, until its downloads are queued.
       batch.set(ytLibraryReadDone(batch.get(), read));
       await startLinkImport(plan, { playlistId: read.playlistId, name: read.name });
+      if (read.download) await queueDownloads(read);
       return null;
     }
     reason = answer.failure.reason;
@@ -168,13 +232,21 @@ const prune = async (): Promise<void> => {
  * or until a read finds Wave offline or YT Music off: the batch then waits
  * for its next turn (Wave starting again, coming back to the foreground, or
  * another Import). The playlists deleted are dropped once, as it starts; one
- * deleted while it runs is read, and its link import ends at once.
+ * deleted while it runs is read, and its link import ends at once. First, the
+ * playlists Import & Download filled before Wave stopped queue their downloads.
  */
 const readBatch = async (): Promise<void> => {
-  if (reading || nextYtLibraryRead(batch.get()) === undefined) return;
+  const left = batch.get();
+  if (reading) return;
+  if (nextYtLibraryRead(left) === undefined && ytLibraryDownloadsToQueue(left).length === 0) return;
   reading = true;
   try {
     await prune();
+    // Filled before Wave stopped, their downloads not queued yet: once their import is done.
+    for (const read of ytLibraryDownloadsToQueue(batch.get())) {
+      await settlePlaylistImport(read.playlistId);
+      await queueDownloads(read);
+    }
     for (;;) {
       const next = nextYtLibraryRead(batch.get());
       if (next === undefined) return;
@@ -209,12 +281,16 @@ const emptyPlaylist = async (
 /**
  * Import in the From YT Music picker: makes a playlist of each ticked row
  * now, in its order, or empties the one an earlier import made, each kept in
- * the batch as it's made, then reads them in the background. Resolves once
- * the playlists exist.
+ * the batch as it's made, then reads them in the background. Import &
+ * Download ([download]) also queues each one's downloads once it's read.
+ * Resolves once the playlists exist.
  */
-export const importYtLibrary = async (picker: YtLibraryPicker): Promise<void> => {
+export const importYtLibrary = async (
+  picker: YtLibraryPicker,
+  { download }: { readonly download: boolean },
+): Promise<void> => {
   try {
-    await makeYtLibraryPlaylists(picker);
+    await makeYtLibraryPlaylists(picker, download);
   } finally {
     // The playlists queued before one that couldn't be made are read all the same.
     void readBatch();
@@ -222,7 +298,10 @@ export const importYtLibrary = async (picker: YtLibraryPicker): Promise<void> =>
 };
 
 /** Makes or empties each ticked row's playlist, in order, queuing each as it's made. */
-const makeYtLibraryPlaylists = async (picker: YtLibraryPicker): Promise<void> => {
+const makeYtLibraryPlaylists = async (
+  picker: YtLibraryPicker,
+  download: boolean,
+): Promise<void> => {
   const items = planYtLibraryImport(picker, await currentPlaylists());
   for (const item of items) {
     const made =
@@ -237,6 +316,7 @@ const makeYtLibraryPlaylists = async (picker: YtLibraryPicker): Promise<void> =>
           name: made.name,
           capped: !item.uncapped,
           favorites: item.favorites,
+          download,
         },
       ]),
     );

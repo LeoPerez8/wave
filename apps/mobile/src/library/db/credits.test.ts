@@ -43,6 +43,7 @@ const indexed = (raw: Omit<RawTrack, "path">): IndexedTrack => ({
   bitrateKbps: null,
   artworkHash: null,
   hasLyrics: false,
+  explicit: "unknown",
 });
 
 /** Saves [tracks] as a scan does: in a batch each ([batches]), then completing the scan. */

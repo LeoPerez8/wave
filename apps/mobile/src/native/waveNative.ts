@@ -25,6 +25,8 @@ export interface NativeScannedTrack {
   readonly artworkHash: string | null;
   /** Lyrics in its tags or a sidecar `.lrc` beside it. */
   readonly hasLyrics: boolean;
+  /** The advisory tag as tagged (`ITUNESADVISORY`, MP4 `rtng`); null without one. */
+  readonly advisory?: string | null;
 }
 
 /** Colours picked from an artwork, as signed ARGB ints. */
@@ -188,10 +190,11 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
   setNavigationBarScheme(dark: boolean): Promise<void>;
   /**
    * Writes found lyrics (LRC or plain text) and genre into a song's file,
-   * replacing what's there, and fills in its track number (with `discNumber`)
-   * and year, keeping any the file has; null leaves a field alone. A format
-   * Wave can't write tags to gets the lyrics in a sidecar `.lrc` and nothing
-   * else. Rejects when the file can't be written.
+   * replacing what's there, and fills in its track number (with `discNumber`),
+   * year and advisory tag (Core's `advisoryTag`: 1 explicit, 0 clean), keeping
+   * any the file has; null leaves a field alone. A format Wave can't write
+   * tags to gets the lyrics in a sidecar `.lrc` and nothing else. Rejects when
+   * the file can't be written.
    */
   writeLyricsAndGenre(
     path: string,
@@ -200,6 +203,7 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
     trackNumber: number | null,
     discNumber: number | null,
     year: number | null,
+    advisory: 0 | 1 | null,
   ): Promise<NativeTagWrite>;
 }
 
@@ -213,6 +217,7 @@ export interface NativeTagWrite {
   readonly genre: TagDestination;
   readonly trackNumber: TagDestination;
   readonly year: TagDestination;
+  readonly explicit: TagDestination;
   readonly track: NativeScannedTrack | null;
   readonly artwork: NativeArtwork | null;
 }

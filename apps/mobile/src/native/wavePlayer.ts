@@ -167,6 +167,11 @@ declare class WavePlayerModule extends NativeModule<WavePlayerEvents> {
    * JS is suspended too.
    */
   setCrossfadeDuration(durationMs: number): Promise<void>;
+  /**
+   * The player entry whose next song is an unsearched one still being searched (Core's
+   * `searchingAfter`), or null: a crossfade from it waits for the search at full volume.
+   */
+  setSearchingAfter(key: string | null): Promise<void>;
   /** Edits the item list per the plan; `items` holds only the keys new to the player. */
   applySync(steps: readonly NativeSyncStep[], items: readonly PlayerItem[]): Promise<void>;
   setRepeatMode(mode: RepeatMode): Promise<void>;

@@ -12,6 +12,7 @@ import org.jaudiotagger.audio.exceptions.InvalidAudioFrameException
 import org.jaudiotagger.audio.mp3.MP3File
 import org.jaudiotagger.tag.FieldKey
 import org.jaudiotagger.tag.Tag
+import org.jaudiotagger.tag.id3.AbstractID3v2Tag
 import org.jaudiotagger.tag.id3.ID3v24Tag
 import org.jaudiotagger.tag.wav.WavTag
 
@@ -23,9 +24,9 @@ enum class LyricsDestination(val id: String) {
 }
 
 /**
- * Where a found genre, track number or year went: the file's tags, nowhere for
- * a format without tag writing, or none (nothing found, or a track number or
- * year the file already has and keeps).
+ * Where a found genre, track number, year or advisory went: the file's tags,
+ * nowhere for a format without tag writing, or none (nothing found, or a track
+ * number, year or advisory the file already has and keeps).
  */
 enum class TagDestination(val id: String) {
   TAGS("tags"),
@@ -42,21 +43,30 @@ data class TagWriteReport(
   /** The track number, with the disc. */
   val trackNumber: TagDestination = TagDestination.NONE,
   val year: TagDestination = TagDestination.NONE,
+  /** The advisory tag ([Advisory]), whether the song is explicit. */
+  val explicit: TagDestination = TagDestination.NONE,
 ) {
   fun toMap(): Map<String, String> =
-    mapOf("lyrics" to lyrics.id, "genre" to genre.id, "trackNumber" to trackNumber.id, "year" to year.id)
+    mapOf(
+      "lyrics" to lyrics.id,
+      "genre" to genre.id,
+      "trackNumber" to trackNumber.id,
+      "year" to year.id,
+      "explicit" to explicit.id,
+    )
 }
 
 /**
  * Writes a song's lyrics and genre into its file, replacing what is there, and
- * fills in its track number, disc number and year, keeping any the file
- * already has, with jaudiotagger (MP3, FLAC, M4A, Ogg Vorbis and WAV). Only
- * those fields change: the audio and every other tag are left as they were.
- * The disc number is written only with the track number it belongs to.
+ * fills in its track number, disc number, year and advisory tag ([Advisory]:
+ * 1 explicit, 0 clean), keeping any the file already has, with jaudiotagger
+ * (MP3, FLAC, M4A, Ogg Vorbis and WAV). Only those fields change: the audio
+ * and every other tag are left as they were. The disc number is written only
+ * with the track number it belongs to.
  *
  * A format it can't write tags to (Opus, raw AAC) gets the lyrics in a
- * sidecar `.lrc` beside it instead, and its genre, track number and year
- * aren't written. A sidecar that is already there is replaced too, since the
+ * sidecar `.lrc` beside it instead, and its genre, track number, year and
+ * advisory aren't written. A sidecar that is already there is replaced too, since the
  * Lyrics view would show it over the tags. With nothing to write the file
  * isn't touched at all.
  *
@@ -68,8 +78,14 @@ class SongTagWriter {
     JAudioTaggerReader.configure()
   }
 
-  fun write(file: File, lyrics: String?, genre: String?, place: AlbumPlace = AlbumPlace()): TagWriteReport {
-    if (lyrics == null && genre == null && place.trackNumber == null && place.year == null) {
+  fun write(
+    file: File,
+    lyrics: String?,
+    genre: String?,
+    place: AlbumPlace = AlbumPlace(),
+    advisory: Int? = null,
+  ): TagWriteReport {
+    if (lyrics == null && genre == null && place.trackNumber == null && place.year == null && advisory == null) {
       return TagWriteReport(LyricsDestination.NONE, TagDestination.NONE)
     }
     val audio = if (takesTags(file)) readForWriting(file) else null
@@ -80,13 +96,15 @@ class SongTagWriter {
         genre = notWritten(genre),
         trackNumber = notWritten(place.trackNumber),
         year = notWritten(place.year),
+        explicit = notWritten(advisory),
       )
     }
     // What the file has, as a scan reads it, is kept.
     val trackNumber = place.trackNumber?.takeUnless { audio.has(FieldKey.TRACK) }
     val discNumber = place.discNumber?.takeIf { trackNumber != null && !audio.has(FieldKey.DISC_NO) }
     val year = place.year?.takeUnless { audio.has(FieldKey.YEAR) }
-    if (lyrics == null && genre == null && trackNumber == null && year == null) {
+    val newAdvisory = advisory?.takeUnless { audio.hasAdvisory() }
+    if (lyrics == null && genre == null && trackNumber == null && year == null && newAdvisory == null) {
       return TagWriteReport(LyricsDestination.NONE, TagDestination.NONE)
     }
     val tag = tagToWrite(audio)
@@ -106,6 +124,7 @@ class SongTagWriter {
       tag.setField(FieldKey.YEAR, it.toString())
       info?.setField(FieldKey.YEAR, it.toString())
     }
+    newAdvisory?.let { Advisory.write(tag, it) }
     AudioFileIO.write(audio)
     if (lyrics != null) Sidecars.find(file)?.let { writeSidecar(file, lyrics, it) }
     return TagWriteReport(
@@ -113,6 +132,7 @@ class SongTagWriter {
       genre = writtenIf(genre),
       trackNumber = writtenIf(trackNumber),
       year = writtenIf(year),
+      explicit = writtenIf(newAdvisory),
     )
   }
 
@@ -128,6 +148,12 @@ class SongTagWriter {
   private fun AudioFile.has(key: FieldKey): Boolean {
     val tags = (tag as? WavTag)?.let { listOfNotNull(it.iD3Tag, it.infoTag) } ?: listOfNotNull(tag)
     return tags.any { runCatching { it.getFirst(key) }.getOrNull()?.isNotBlank() == true }
+  }
+
+  /** Whether the file has an advisory tag where a scan reads it (`JAudioTaggerReader`). */
+  private fun AudioFile.hasAdvisory(): Boolean {
+    val id3 = (tag as? AbstractID3v2Tag) ?: (this as? MP3File)?.iD3v2Tag ?: (tag as? WavTag)?.iD3Tag
+    return Advisory.read(tag, id3) != null
   }
 
   /** The file read for writing, or null when jaudiotagger can't parse it (a sidecar does instead). */

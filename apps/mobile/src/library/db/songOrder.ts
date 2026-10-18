@@ -8,6 +8,7 @@ import {
   songOrderTerms,
   songSpineField,
   spineEntries,
+  type ExplicitFlag,
   type IndexEntry,
   type LibrarySongSort,
   type SongOrderField,
@@ -40,6 +41,8 @@ export interface SongSummary {
   readonly thumbPath: string | null;
   /** False for a missing song, which the row shows dimmed. */
   readonly hasFile: boolean;
+  /** Whether it's explicit, as its file's advisory tag says: the row shows the E badge for it. */
+  readonly explicit: ExplicitFlag;
 }
 
 /** Where each field Core's order terms name lives. */
@@ -133,6 +136,7 @@ export const selectSongSummaries = (
         durationMs: tracks.durationMs,
         thumbPath: artwork.thumbPath,
         hasFile: sql<boolean>`${tracks.path} IS NOT NULL`.mapWith((value) => value === 1),
+        explicit: tracks.explicit,
       })
       .from(tracks)
       .leftJoin(artwork, eq(tracks.artworkHash, artwork.hash))

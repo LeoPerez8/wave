@@ -79,6 +79,7 @@ export const songColumns = {
   year: schema.tracks.year,
   genre: trackGenre,
   hasLyrics: schema.tracks.hasLyrics,
+  explicit: schema.tracks.explicit,
 };
 
 /** The Tracks in [scope], with their `songColumns`. */
@@ -113,8 +114,8 @@ export const BY_TITLE = [
 
 /**
  * Every song with what a lyrics and genre lookup sends, its genre, whether it
- * has lyrics, its track number and year, by title: the whole-Library run
- * picks from these (Core's `songsToFix`).
+ * has lyrics, its track number, year and explicit flag, by title: the
+ * whole-Library run picks from these (Core's `songsToFix`).
  */
 export const selectLibraryLookupSongs = (db: LibraryDatabase) => {
   const { tracks, artists, albums, genres } = schema;
@@ -129,6 +130,7 @@ export const selectLibraryLookupSongs = (db: LibraryDatabase) => {
       hasLyrics: tracks.hasLyrics,
       trackNumber: tracks.trackNumber,
       year: tracks.year,
+      explicit: tracks.explicit,
     })
     .from(tracks)
     .innerJoin(artists, eq(tracks.artistId, artists.id))

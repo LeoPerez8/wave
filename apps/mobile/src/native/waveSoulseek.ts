@@ -1,6 +1,8 @@
 import type {
   DownloadFailurePlan,
+  DownloadOrigin,
   DownloadSource,
+  JournalChanges,
   SoulseekCandidate,
   SoulseekReceivedTags,
   SoulseekRecording,
@@ -43,6 +45,7 @@ export interface NativeDownloadDecision extends NativeDownloadJob {
   readonly token: string;
   readonly decision: "prepare" | "confirm" | "publish" | "import";
   readonly leaseUntil: number;
+  /** The job's budget, on the journal's own clock (it stands still while Wave is closed), not `Date.now()`'s. */
   readonly deadline: number;
 }
 
@@ -90,8 +93,19 @@ declare class WaveSoulseekModule extends NativeModule<{
     equivalentId: string | null,
     /** Core's `downloadSource`; null fails the job as `noSource` when it's prepared. */
     source: DownloadSource | null,
+    /**
+     * The playlist, album or Discover mix whose Download asks, null for a song asked for on its
+     * own. A job keeps the first one it was asked from.
+     */
+    origin: DownloadOrigin | null,
   ): Promise<string>;
   jobsSnapshot(): Promise<NativeDownloadJob[]>;
+  /**
+   * What changed in the journal since [revision], one it answered before (0 for everything):
+   * each job changed since, and every id in order when the order changed. Core's
+   * `applyJournalChanges` keeps the rest.
+   */
+  jobsChangedSince(revision: number): Promise<JournalChanges<NativeDownloadJob>>;
   /** Forgets an imported job Core found absent from the Library, if it hasn't been retried since. */
   forgetCompletedJob(id: string, generation: number): Promise<boolean>;
   resumeJobs(): Promise<void>;
@@ -111,6 +125,11 @@ declare class WaveSoulseekModule extends NativeModule<{
   ): Promise<boolean>;
   refreshDownloadPolicy(roots: readonly string[], excluded: readonly string[]): Promise<number>;
   cancelJob(id: string): Promise<void>;
+  /**
+   * Settings › Downloads' drag: the waiting jobs [ids] take the places they held, in this order,
+   * so they start in it (Core's `moveQueuedJobs`); kept across a restart.
+   */
+  moveQueuedJobs(ids: readonly string[]): Promise<void>;
   session(): Promise<SoulseekSession>;
   /** Download in best quality: connects the phone's Soulseek account, making one when it has none. */
   turnOn(): Promise<SoulseekSession>;

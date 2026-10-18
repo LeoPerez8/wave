@@ -1,4 +1,5 @@
-import { discoverMixCaption, type DiscoverMix } from "./discoverMixes.ts";
+import { discoverMixCaption } from "./discoverMixes.ts";
+import type { BlendedDiscoverMix } from "./discoverMixLevels.ts";
 import { ITEM_ACTION_LABELS } from "./itemActions.ts";
 import { importedPlaylistName } from "./m3u.ts";
 import type { PlaylistSong } from "./playlistEntries.ts";
@@ -31,10 +32,17 @@ export const discoverMixActions = (
   return actions.map((action) => ({ action, label: LABELS[action] }));
 };
 
-/** A one-time playlist copy, kept as YT Music entries in the cached mix's order. */
+/**
+ * A one-time playlist copy of the mix as the owner's level blends it, in its
+ * order: its Library songs as Library entries, its new ones as YT Music entries.
+ */
 export const discoverMixPlaylist = (
-  mix: DiscoverMix,
+  mix: BlendedDiscoverMix,
 ): { readonly name: string; readonly songs: readonly PlaylistSong<YtAlbumSong>[] } => ({
   name: importedPlaylistName(discoverMixCaption(mix).title),
-  songs: mix.songs.map((song) => ({ source: "stream", song })),
+  songs: mix.songs.map((song) =>
+    song.source === "stream"
+      ? { source: "stream", song: song.song }
+      : { source: "library", trackId: song.track.id },
+  ),
 });

@@ -42,20 +42,31 @@ import java.util.concurrent.TimeUnit
 
 /** Application-context owner, independent of Expo module and Activity lifetimes. */
 class AndroidDownloads private constructor(private val context: Context) {
-  // Each failure's cause also goes to Logcat, so a device run shows why a download stopped.
-  val jobs = DurableDownloads(File(context.noBackupFilesDir, "soulseek-download-jobs-v1"), log = { WaveLog.w(TAG, it) })
+  // Each failure's cause also goes to the app log, so a device run shows why a download stopped;
+  // and each transfer's speed, so it shows where a download's time went. Its budgets wait for the
+  // download service (startWork): Wave opening before the service starts isn't charged.
+  val jobs = DurableDownloads(
+    File(context.noBackupFilesDir, "soulseek-download-jobs-v1"),
+    log = { WaveLog.w(TAG, it) },
+    note = { WaveLog.i(TAG, it) },
+    budgetRunning = false,
+  )
   private val soulseek = AndroidSoulseek.get(context)
   private val main = Handler(Looper.getMainLooper())
   private var worker: ScheduledExecutorService? = null
   private var steps: ExecutorService? = null
   private var deadlines: ScheduledExecutorService? = null
+  /** When the work last started ([SystemClock.elapsedRealtime]), for the stop line. */
+  private var startedAt = 0L
   private val listeners = CopyOnWriteArrayList<() -> Unit>()
   private val ytStreams by lazy { AndroidYtAudioStreams(context) }
   private val ytAudio by lazy { YtAudioDownload(ytStreams) }
+  /** Where cancelling a job reaches its YouTube attempt: resolving, pausing or reading. */
+  private val ytAttempts = TransferThreads()
   /** Each transfer goes to the source of the job's current candidate: a Soulseek peer or YouTube. */
   val transport = object : DurableTransfer {
-    // A YouTube transfer stops as soon as the journal no longer wants it (`transferWanted`).
-    override fun cancel(id: String) = soulseek.client.cancel(id)
+    // A YouTube transfer also stops as soon as the journal no longer wants it (`transferWanted`).
+    override fun cancel(id: String) { soulseek.client.cancel(id); ytAttempts.cancel(id) }
     override fun receive(id: String, candidate: Map<String, Any?>, source: File, durationMs: Long, progress: (Long, Long, Long?) -> Unit): Map<String, Any?> =
       if (candidate["source"] == DurableDownloads.YOUTUBE) fromYoutube(id, candidate, source, progress)
       else fromSoulseek(id, candidate, source, durationMs, progress)
@@ -65,15 +76,24 @@ class AndroidDownloads private constructor(private val context: Context) {
    * The M4A YouTube serves, saved as it is, then read through to its last sample for its length,
    * which the journal's confirm decision checks against the song's (Core's `ytAudioMatches`) and
    * logs with the video YouTube answered for (Core's `ytDownloadReport`).
+   *
+   * The attempt goes on from the bytes [source] already holds (an earlier attempt's that broke off
+   * or stalled), and leaves what arrived there when it fails or is cancelled: the journal deletes
+   * the part file once nothing will go on from it. Cancelling the job ([transport]'s cancel)
+   * interrupts the attempt wherever it waits, so the job's next attempt isn't held up behind it.
+   * The attempt ends at the `return` (the audio) or one of the `throw`s (what ended it).
    */
-  private fun fromYoutube(id: String, candidate: Map<String, Any?>, source: File, progress: (Long, Long, Long?) -> Unit): Map<String, Any?> {
+  private fun fromYoutube(id: String, candidate: Map<String, Any?>, source: File, progress: (Long, Long, Long?) -> Unit): Map<String, Any?> = ytAttempts.run(id) {
     val videoId = candidate["videoId"] as? String ?: throw DurableFailure("failed")
     val cancelled = { Thread.currentThread().isInterrupted || !jobs.transferWanted(id) }
-    return try {
+    try {
       source.parentFile?.mkdirs()
       val file = ytAudio.download(videoId, source,
-        onProgress = { received, total -> progress(received, total, null); changedSoon() },
+        onProgress = { received, total -> progress(received, total, null); changed() },
         isCancelled = cancelled,
+        onResume = { from, total ->
+          WaveLog.i(TAG, if (from > 0) "A YouTube transfer goes on from byte $from of $total" else "A YouTube transfer starts over: its part file held another stream")
+        },
       )
       val durationMs = AndroidM4aDuration.of(source, cancelled)
       // What YouTube answered with goes along, so the confirm decision logs it beside the lengths.
@@ -83,8 +103,11 @@ class AndroidDownloads private constructor(private val context: Context) {
         "resolved" to file.source.videoId, "client" to file.source.client, "videoType" to file.source.videoType,
         "announcedMs" to file.source.lengthMs,
       )
+    } catch (error: InterruptedException) {
+      // Cancelled while resolving or pausing.
+      throw DurableFailure("cancelled", error)
     } catch (error: YtException) {
-      source.delete()
+      if (cancelled()) throw DurableFailure("cancelled", error)
       val reason = when (YtStreamResolver.failureOf(error)) {
         YtStreamFailure.OFFLINE -> "offline"
         // YT Music was turned off: with Download in best quality off too, there's no source left.
@@ -95,10 +118,10 @@ class AndroidDownloads private constructor(private val context: Context) {
       WaveLog.w(TAG, "A YouTube transfer failed ($reason)")
       throw DurableFailure(reason, error)
     } catch (error: CancellationException) {
-      source.delete(); throw DurableFailure("cancelled", error)
+      throw DurableFailure("cancelled", error)
     } catch (error: java.io.IOException) {
-      source.delete()
-      // The part file couldn't be written, the network went, or YouTube broke off: the journal starts it again.
+      if (cancelled()) throw DurableFailure("cancelled", error)
+      // The part file couldn't be written, the network went, or YouTube broke off: the journal tries again.
       val folder = source.parentFile
       val reason = when {
         error is java.io.FileNotFoundException || folder == null || !folder.isDirectory || folder.usableSpace < MIN_FREE_BYTES -> "storage"
@@ -112,7 +135,7 @@ class AndroidDownloads private constructor(private val context: Context) {
 
   private fun fromSoulseek(id: String, candidate: Map<String, Any?>, source: File, durationMs: Long, progress: (Long, Long, Long?) -> Unit): Map<String, Any?> = try {
       soulseek.download(id, SoulseekCandidate.fromJs(candidate), source, durationMs,
-        onProgress = { received, total -> progress(received, total, null); changedSoon() },
+        onProgress = { received, total -> progress(received, total, null); changed() },
         onQueued = { place -> progress(0, 0, place); changed() },
         // The journal's start, queue and stall rules bound the wait, even if a cancel goes missing.
         isCancelled = { Thread.currentThread().isInterrupted || !jobs.transferWanted(id) },
@@ -155,10 +178,17 @@ class AndroidDownloads private constructor(private val context: Context) {
   }
 
   fun subscribe(listener: () -> Unit): () -> Unit { listeners.add(listener); return { listeners.remove(listener) } }
-  fun changed() { lastChangedAt = SystemClock.elapsedRealtime(); for (listener in listeners) runCatching(listener) }
-  @Volatile private var lastChangedAt = 0L
-  /** Transfer progress arrives per chunk; JS and the notification only need a few updates a second. */
-  private fun changedSoon() { if (SystemClock.elapsedRealtime() - lastChangedAt >= 500) changed() }
+  /**
+   * The journal may have changed. Listeners (JS, which then asks for what changed since its
+   * revision) only hear of it when it did, at most every [NOTIFY_MS]: transfer progress arrives
+   * per chunk, and the deadline thread and the worker call this twice a second.
+   */
+  fun changed() = notices.changed()
+  private val notices = JournalNotices(
+    revision = { jobs.revision }, clock = SystemClock::elapsedRealtime, intervalMs = NOTIFY_MS,
+    later = { delay, run -> main.postDelayed(run, delay) },
+    notify = { for (listener in listeners) runCatching(listener) },
+  )
 
   /** Called from the user's tap or the resumed Activity. Failure never starts unprotected work. */
   fun requestService() {
@@ -166,12 +196,18 @@ class AndroidDownloads private constructor(private val context: Context) {
     try { context.startForegroundService(Intent(context, YtDownloadService::class.java)) }
     catch (error: Exception) {
       // Never unprotected work: started jobs fail with Retry; queued ones wait for the next launch.
-      if (synchronized(this) { worker == null }) { jobs.expire(transport, stopAll = true); changed() }
+      if (synchronized(this) { worker == null }) {
+        WaveLog.w(TAG, DownloadServiceLines.refused(restart = false, describe(error)))
+        jobs.expire(transport, stopAll = true); changed()
+      } else WaveLog.w(TAG, "Android refused to start the download service again; it goes on", error)
     }
   }
 
-  @Synchronized fun start(onIdle: () -> Unit, refresh: () -> Unit) {
+  /** Starts the work, unless it runs already; [restarted] when Android restarted the service after Wave was closed. */
+  @Synchronized fun start(onIdle: () -> Unit, refresh: () -> Unit, restarted: Boolean = false) {
     if (worker != null) return
+    WaveLog.i(TAG, DownloadServiceLines.started(restarted, jobs.counts()))
+    startedAt = SystemClock.elapsedRealtime()
     jobs.startWork()
     main.post { JsRuntime.ensureStarted(context, OWNER) }
     deadlines = Executors.newSingleThreadScheduledExecutor().also { executor ->
@@ -204,7 +240,8 @@ class AndroidDownloads private constructor(private val context: Context) {
   }
 
   /** Android's time limit stops actual socket work before removing foreground protection. */
-  @Synchronized fun stop(timedOut: Boolean = false) {
+  @Synchronized fun stop(why: DownloadServiceStop, timedOut: Boolean = false) {
+    if (worker != null) WaveLog.i(TAG, DownloadServiceLines.stopped(why, SystemClock.elapsedRealtime() - startedAt, jobs.counts()))
     jobs.stopWork(transport)
     worker?.shutdownNow(); worker = null
     steps?.shutdownNow(); steps = null
@@ -231,6 +268,8 @@ class AndroidDownloads private constructor(private val context: Context) {
   companion object {
     private const val OWNER = "downloads"
     private const val TAG = "WaveDownloads"
+    /** How often, at most, JS hears that the journal changed. */
+    private const val NOTIFY_MS = 500L
     /** Less free space than this beside the part file means the write failed for want of room. */
     private const val MIN_FREE_BYTES = 8L shl 20
     @Volatile private var instance: AndroidDownloads? = null

@@ -4,7 +4,13 @@
  * place (docs/spec.md, Playback).
  */
 
-import type { QueueCommand, QueuePlayback, QueueState } from "./queue.ts";
+import {
+  playReplacesQueue,
+  type PassOver,
+  type QueueCommand,
+  type QueuePlayback,
+  type QueueState,
+} from "./queue.ts";
 
 /** What the toast says when a play replaced a queue that was playing. */
 const NEW_QUEUE_NOTICE = "New queue playing";
@@ -25,15 +31,20 @@ export interface PlayerAt {
  * The Undo [command] offers over [before], the queue the player holds, with
  * the player at [player]: a play replacing a queue with a song current goes
  * back to it, where the player is in that song (from its start, when the
- * player went on to another one). Anything else offers none (null), as does
- * a play of nothing, which leaves nothing playing.
+ * player went on to another one). Anything else offers none (null), as do
+ * a play of nothing, which leaves nothing playing, and one whose every song
+ * [passOver] passes over, which leaves the queue as it was
+ * (`playReplacesQueue`).
  */
 export const queueUndo = (
   before: QueueState,
   command: QueueCommand,
   player: PlayerAt,
+  passOver?: PassOver,
 ): QueueUndo | null => {
-  if (command.type !== "play" || command.trackIds.length === 0 || before.index < 0) return null;
+  const replaces = playReplacesQueue(command, passOver);
+  if (!replaces || command.type !== "play" || command.trackIds.length === 0 || before.index < 0)
+    return null;
   const onIt = before.entries[before.index]?.key === player.key;
   return { state: before, positionMs: onIt ? player.positionMs : 0 };
 };
@@ -48,13 +59,19 @@ export const undoneQueue = (undo: QueueUndo, now: QueueState): QueueState => ({
   nextKey: Math.max(undo.state.nextKey, now.nextKey),
 });
 
+/** Each of [notices] there is, on one line in order; null when there's none. */
+export const noticeLine = (notices: readonly (string | null)[]): string | null => {
+  const said = notices.filter((notice) => notice !== null);
+  return said.length === 0 ? null : said.join(" · ");
+};
+
 /**
  * The line on the toast offering Undo once a new queue went with [playback]:
- * "New queue playing", followed by [notice] (a song skipped on the way) when
- * there is one. Null when nothing plays (every song was skipped): the notice
- * shows on its own, without Undo.
+ * "New queue playing", followed by each of [notices] there is (a song
+ * skipped on the way), in order. Null when nothing plays (every song was
+ * skipped): the notices show on their own (`noticeLine`), without Undo.
  */
-export const newQueueToast = (playback: QueuePlayback, notice: string | null): string | null => {
-  if (playback === "stop") return null;
-  return notice === null ? NEW_QUEUE_NOTICE : `${NEW_QUEUE_NOTICE} · ${notice}`;
-};
+export const newQueueToast = (
+  playback: QueuePlayback,
+  notices: readonly (string | null)[],
+): string | null => (playback === "stop" ? null : noticeLine([NEW_QUEUE_NOTICE, ...notices]));

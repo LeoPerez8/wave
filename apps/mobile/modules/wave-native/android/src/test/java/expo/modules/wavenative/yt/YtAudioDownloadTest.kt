@@ -90,19 +90,50 @@ class YtAudioDownloadTest {
         assertTrue(part.readBytes().contentEquals(AUDIO) || part.readBytes().contentEquals(other))
       } else {
         assertTrue(saved.exceptionOrNull() is IOException)
-        assertFalse(part.exists())
+        // What's kept for the next attempt is only the first stream's.
+        assertArrayEquals(AUDIO.copyOfRange(0, part.length().toInt()), part.readBytes())
       }
       assertFalse(youtube.asked.any { it.first == "b" && it.second > 0 })
     }
   }
 
-  @Test fun anAddressRefusedAgainAndAgainFailsWithoutLeavingPartialAudio() {
+  @Test fun anAddressRefusedAgainAndAgainFailsKeepingWhatArrivedForTheNextAttempt() {
     withPart { part ->
       val youtube = FakeYoutube(stream("a", AUDIO.size.toLong()) to AUDIO)
       youtube.expiresFrom["a"] = CHUNK
       assertThrows(IOException::class.java) { download(youtube).download("song", part) }
-      assertFalse(part.exists())
+      assertArrayEquals(AUDIO.copyOfRange(0, CHUNK.toInt()), part.readBytes())
       assertTrue(youtube.resolved <= 1 + YtAudioDownload.MAX_REFRESHES)
+    }
+  }
+
+  @Test fun anAttemptCutOffHalfwayIsContinuedByTheNextFromWhereItStopped() {
+    withPart { part ->
+      val youtube = FakeYoutube(stream("a", AUDIO.size.toLong()) to AUDIO)
+      youtube.breaksFrom["a"] = 2 * CHUNK + 1_000
+      assertThrows(IOException::class.java) { download(youtube).download("song", part) }
+      assertEquals(2 * CHUNK + 1_000, part.length())
+
+      youtube.breaksFrom.clear(); youtube.asked.clear()
+      val resumed = mutableListOf<Pair<Long, Long>>()
+      val file = download(youtube).download("song", part, onResume = { from, total -> resumed += from to total })
+      assertArrayEquals(AUDIO, part.readBytes())
+      assertEquals(AUDIO.size.toLong(), file.bytes)
+      assertEquals(listOf((2 * CHUNK + 1_000) to AUDIO.size.toLong()), resumed)
+      assertTrue(youtube.asked.none { it.second == 0L })
+    }
+  }
+
+  @Test fun aKeptPartFileOfAnotherStreamIsStartedOver() {
+    withPart { part ->
+      val premium = ByteArray(AUDIO.size * 2) { (it % 7).toByte() }
+      part.writeBytes(AUDIO.copyOfRange(0, 3 * CHUNK.toInt()))
+      val youtube = FakeYoutube(stream("b", premium.size.toLong(), itag = 141, bitrate = 256_000) to premium)
+      val resumed = mutableListOf<Long>()
+      val file = download(youtube).download("song", part, onResume = { from, _ -> resumed += from })
+      assertArrayEquals(premium, part.readBytes())
+      assertEquals(141, file.itag)
+      assertEquals(listOf(0L), resumed)
     }
   }
 
@@ -151,8 +182,16 @@ class YtAudioDownloadTest {
       asked += stream.url to start
       if ((expiresFrom[stream.url] ?: Long.MAX_VALUE) <= start) return YtRange(403, null)
       val data = bytes.getValue(stream.url)
-      return YtRange(206, ByteArrayInputStream(data, start.toInt(), (end - start + 1).toInt()))
+      val breaks = breaksFrom[stream.url] ?: return YtRange(206, ByteArrayInputStream(data, start.toInt(), (end - start + 1).toInt()))
+      if (start >= breaks) throw IOException("Connection reset")
+      // The connection goes once the bytes before [breaks] have arrived.
+      val served = ByteArrayInputStream(data, start.toInt(), (minOf(end + 1, breaks) - start).toInt())
+      return YtRange(206, object : java.io.InputStream() {
+        override fun read(): Int = served.read().takeIf { it >= 0 || end + 1 <= breaks } ?: throw IOException("Connection reset")
+      })
     }
+    /** The addresses whose connection breaks off at this byte, every time. */
+    val breaksFrom = mutableMapOf<String, Long>()
     override fun headLength(stream: YtStream): Long? = if (headAnswers) bytes[stream.url]?.size?.toLong() else null
   }
 }

@@ -10,6 +10,7 @@ import {
   playingSearches,
   queuedYtTracks,
   restorableTrack,
+  searchingAfter,
   settleUnsearched,
   readUnsearchedTrackId,
   reduceQueue,
@@ -115,6 +116,21 @@ describe("what the player holds of a queue with unsearched songs", () => {
 
   test("with an unsearched song playing, the player waits for its search", () => {
     assert.equal(playerQueueList(play("1 u:A 2", 1)), null);
+  });
+
+  test("while the song after the playing one is still searched, a crossfade waits on it", () => {
+    // The player, which doesn't hold it, would fade into the song after it.
+    const state = play("1 u:A 2", 0);
+    const playing = state.entries[0]!.key;
+    assert.equal(searchingAfter(state, new Set([id("u:A")])), playing);
+    // Not being searched (it failed a moment ago): the player passes over it, as it plays along.
+    assert.equal(searchingAfter(state, new Set()), null);
+    // A song searched further on, or a held next song, doesn't hold this one's overlap.
+    assert.equal(searchingAfter(play("1 2 u:A", 0), new Set([id("u:A")])), null);
+    // Repeat all: the first song comes after the last.
+    const last = { ...play("u:A 1", 1), repeat: "all" as const };
+    assert.equal(searchingAfter(last, new Set([id("u:A")])), last.entries[1]!.key);
+    assert.equal(searchingAfter({ ...last, repeat: "off" }, new Set([id("u:A")])), null);
   });
 
   test("an empty queue is an empty player", () => {
@@ -287,6 +303,18 @@ describe("the songs a queue searches as they're about to play", () => {
     const failedAt = new Map([[id("u:B"), 1000]]);
     assert.deepEqual(searched(state, 5000, { failedAt }), [id("u:A"), id("u:C")]);
     assert.deepEqual(searched(state, 31_000, { failedAt }), [id("u:A"), id("u:B"), id("u:C")]);
+  });
+
+  test("at the crossfade's prefetch point the next song is asked again at once, the others still wait", () => {
+    const state = play("1 u:B u:C");
+    const failedAt = new Map([
+      [id("u:B"), 1000],
+      [id("u:C"), 1000],
+    ]);
+    assert.deepEqual(searched(state, 5000, { failedAt, nextDue: true }), [id("u:B")]);
+    // Being searched already, it isn't asked twice.
+    const asking = new Set([id("u:B")]);
+    assert.deepEqual(searched(state, 5000, { failedAt, asking, nextDue: true }), []);
   });
 
   test("an empty queue, or one with nothing unsearched near, searches nothing", () => {

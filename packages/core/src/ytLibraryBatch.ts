@@ -6,12 +6,17 @@
  * playlist's line and Try Again.
  */
 
+import { pendingFavorite, type PendingFavorite } from "./pendingFavorites.ts";
 import type { LinkImportPlan } from "./playlistImport.ts";
 import { readStoredRecord } from "./storedJson.ts";
 import type { YtSong } from "./ytMusic.ts";
 
-/** Waiting its turn to be read, or read and failed (its playlist stays empty). */
-export type YtLibraryReadState = "waiting" | "failed";
+/**
+ * Waiting its turn to be read, read and failed (its playlist stays empty),
+ * or read and filled with its downloads still to queue (Import & Download):
+ * kept until they're queued, so Wave stopping in between still queues them.
+ */
+export type YtLibraryReadState = "waiting" | "failed" | "filled";
 
 /** A playlist Import made, to be read from YouTube Music. */
 export interface YtLibraryRead {
@@ -34,6 +39,12 @@ export interface YtLibraryRead {
    * (Liked Songs with Also add to Favorites on; `ytLibraryFavorites`).
    */
   readonly favorites: boolean;
+  /**
+   * Whether its downloads are queued once it's read and filled, as its
+   * Download Playlist would (Import & Download). A read that failed loses it:
+   * Try Again imports it without downloading.
+   */
+  readonly download: boolean;
   readonly state: YtLibraryReadState;
 }
 
@@ -46,6 +57,11 @@ export interface YtLibraryBatch {
 /** A batch with nothing to read. */
 export const NO_YT_LIBRARY_READS: YtLibraryBatch = { reads: [], lastToken: 0 };
 
+/** A playlist an Import queues: Import & Download's with `download`, Import's without. */
+export type YtLibraryReadToQueue = Omit<YtLibraryRead, "state" | "token" | "download"> & {
+  readonly download?: boolean;
+};
+
 /**
  * [batch] with [reads] (the playlists an Import just made or refreshed, in
  * its order) waiting after it, each with a new token. A refreshed playlist
@@ -54,17 +70,18 @@ export const NO_YT_LIBRARY_READS: YtLibraryBatch = { reads: [], lastToken: 0 };
  */
 export const queueYtLibraryReads = (
   batch: YtLibraryBatch,
-  reads: readonly Omit<YtLibraryRead, "state" | "token">[],
+  reads: readonly YtLibraryReadToQueue[],
 ): YtLibraryBatch => ({
   reads: [
     ...batch.reads.filter((queued) => !reads.some((read) => read.playlistId === queued.playlistId)),
-    ...reads.map(({ source, playlistId, name, capped, favorites }, index) => ({
+    ...reads.map(({ source, playlistId, name, capped, favorites, download }, index) => ({
       token: batch.lastToken + index + 1,
       source,
       playlistId,
       name,
       capped,
       favorites,
+      download: download === true,
       state: "waiting" as const,
     })),
   ],
@@ -88,13 +105,39 @@ export const isYtLibraryReadQueued = (batch: YtLibraryBatch, read: YtLibraryRead
 
 /**
  * [batch] once [read]'s playlist was read (its songs go to the link import
- * from then on): it's no longer in the batch. A newer read of the same
- * playlist stays.
+ * from then on): it's no longer waiting. One that downloads stays, filled,
+ * until its downloads are queued (`ytLibraryDownloadsQueued`); any other
+ * leaves the batch. A newer read of the same playlist stays.
  */
 export const ytLibraryReadDone = (batch: YtLibraryBatch, read: YtLibraryRead): YtLibraryBatch =>
+  read.download
+    ? {
+        ...batch,
+        reads: batch.reads.map((queued) =>
+          queued.token === read.token ? { ...queued, state: "filled" as const } : queued,
+        ),
+      }
+    : withoutRead(batch, read);
+
+/** [batch] without [read], by its token. */
+const withoutRead = (batch: YtLibraryBatch, read: YtLibraryRead): YtLibraryBatch =>
   isYtLibraryReadQueued(batch, read)
     ? { ...batch, reads: batch.reads.filter((queued) => queued.token !== read.token) }
     : batch;
+
+/**
+ * The playlists read and filled whose downloads still need queuing: Wave
+ * stopped between filling them and queuing them, so it queues them as it
+ * resumes the batch.
+ */
+export const ytLibraryDownloadsToQueue = (batch: YtLibraryBatch): YtLibraryRead[] =>
+  batch.reads.filter((read) => read.state === "filled");
+
+/** [batch] once filled [read]'s downloads were queued: it leaves the batch. */
+export const ytLibraryDownloadsQueued = (
+  batch: YtLibraryBatch,
+  read: YtLibraryRead,
+): YtLibraryBatch => withoutRead(batch, read);
 
 /** [batch] without the playlists deleted meanwhile: those not among [playlistIds], here or on another phone. */
 export const pruneYtLibraryBatch = (
@@ -121,8 +164,9 @@ const PAUSING_REASONS: ReadonlySet<string> = new Set(["offline", "disabled"]);
  * (`offline`) or with YT Music off (`disabled`), nothing changes and the
  * batch pauses: its playlist and the rest keep waiting, in order, and a
  * failed one Try Again read keeps its line. Refused, or an answer Wave
- * can't read, marks its playlist failed (it stays empty, with Try Again)
- * and the rest goes on. A newer read of the same playlist stays as it was.
+ * can't read, marks its playlist failed (it stays empty, with Try Again,
+ * which imports it without downloading) and the rest goes on. A newer read
+ * of the same playlist stays as it was.
  */
 export const ytLibraryReadFailed = (
   batch: YtLibraryBatch,
@@ -135,27 +179,46 @@ export const ytLibraryReadFailed = (
     batch: {
       ...batch,
       reads: batch.reads.map((queued) =>
-        queued.token === read.token ? { ...queued, state: "failed" as const } : queued,
+        queued.token === read.token
+          ? { ...queued, download: false, state: "failed" as const }
+          : queued,
       ),
     },
     pause: false,
   };
 };
 
+/** What Also add to Favorites does once Liked Songs is read (`ytLibraryFavorites`). */
+export interface YtLibraryFavorites {
+  /** The Library tracks starred at once. */
+  readonly star: readonly number[];
+  /** The liked songs the Library hasn't: each starred once it enters the Library. */
+  readonly pending: readonly PendingFavorite[];
+}
+
+const NO_FAVORITES: YtLibraryFavorites = { star: [], pending: [] };
+
 /**
- * The tracks to star once [read]'s playlist is read as [plan]: with Also add
- * to Favorites on, each of its songs that goes in as a Library track
- * (`libraryFinder`, as `planLinkImport` matched it), once. A song that goes
- * in as a YT Music entry gets none, even downloaded later. Only stars: the
- * import never takes one away.
+ * What [read]'s playlist, read as [plan], stars: with Also add to Favorites
+ * on, each of its songs that goes in as a Library track (`libraryFinder`, as
+ * `planLinkImport` matched it) at once, and each that goes in as a YT Music
+ * entry becomes a pending favorite (`pendingFavorite`), starred once a
+ * download or a scan brings it into the Library (`settlePendingFavorites`).
+ * Each once. Only stars: the import never takes one away.
  */
 export const ytLibraryFavorites = (
   read: YtLibraryRead,
   plan: Pick<LinkImportPlan<YtSong>, "finds">,
-): readonly number[] =>
-  read.favorites
-    ? plan.finds.flatMap((found) => (found.kind === "library" ? [found.trackId] : []))
-    : [];
+): YtLibraryFavorites => {
+  if (!read.favorites) return NO_FAVORITES;
+  const star: number[] = [];
+  const pending: PendingFavorite[] = [];
+  for (const found of plan.finds) {
+    if (found.kind === "library") star.push(found.trackId);
+    else if (found.kind === "ytMusic") pending.push(pendingFavorite(found.song));
+  }
+  return { star, pending };
+};
 
 /** What a playlist's page shows when its read failed: the line, and the read Try Again makes. */
 export interface YtLibraryReadView {
@@ -194,28 +257,45 @@ export const writeYtLibraryBatch = (batch: YtLibraryBatch): string | null =>
     ? null
     : JSON.stringify({
         version: KEPT_VERSION,
-        batch: batch.reads.map(({ source, playlistId, name, capped, favorites, state }) => ({
-          source,
-          playlistId,
-          name,
-          capped,
-          favorites,
-          state,
-        })),
+        batch: batch.reads.map(
+          ({ source, playlistId, name, capped, favorites, download, state }) => ({
+            source,
+            playlistId,
+            name,
+            capped,
+            favorites,
+            download,
+            state,
+          }),
+        ),
       });
 
 /**
  * A kept playlist, given [token]; null when unreadable. One kept by a Wave
- * from before Also add to Favorites stars nothing.
+ * from before Also add to Favorites stars nothing, and one from before
+ * Import & Download downloads nothing.
  */
 const readRead = (value: unknown, token: number): YtLibraryRead | null => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
-  const { source, playlistId, name, capped, favorites, state } = value as Record<string, unknown>;
+  const { source, playlistId, name, capped, favorites, download, state } = value as Record<
+    string,
+    unknown
+  >;
   if (typeof source !== "string" || typeof playlistId !== "number" || typeof name !== "string") {
     return null;
   }
-  if (typeof capped !== "boolean" || (state !== "waiting" && state !== "failed")) return null;
-  return { token, source, playlistId, name, capped, favorites: favorites === true, state };
+  if (typeof capped !== "boolean") return null;
+  if (state !== "waiting" && state !== "failed" && state !== "filled") return null;
+  return {
+    token,
+    source,
+    playlistId,
+    name,
+    capped,
+    favorites: favorites === true,
+    download: download === true,
+    state,
+  };
 };
 
 /**

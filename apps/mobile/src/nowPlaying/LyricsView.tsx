@@ -1,6 +1,20 @@
-import { IconQuoteOff } from "@tabler/icons-react-native";
-import { currentLyricIndex, type LyricLine } from "@wave/core";
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { IconQuoteOff, IconShare3 } from "@tabler/icons-react-native";
+import {
+  MAX_SHARED_LYRIC_LINES,
+  currentLyricIndex,
+  isLyricLineSelected,
+  lyricCardColours,
+  shareableLyricLines,
+  sharedLyricLines,
+  tapLyricLine,
+  withOpacity,
+  type ArtworkPalette,
+  type LyricLine,
+  type LyricSelection,
+  type Lyrics,
+} from "@wave/core";
+import * as Haptics from "expo-haptics";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ScrollView, Text, View, type ScrollViewInstance } from "react-native";
 import Animated, {
   interpolateColor,
@@ -10,14 +24,20 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 
-import { CELL } from "@/catalog/grid";
+import { CELL, grid } from "@/catalog/grid";
 import { EmptyState } from "@/components/EmptyState";
+import { IconButton } from "@/components/IconButton";
+import { TextButton } from "@/components/TextButton";
 import { Press } from "@/motion/Press";
+import { addScreenBackHandler } from "@/overlay/back";
 import { seekTo } from "@/playback/actions";
+import type { PlaybackState } from "@/playback/Player";
+import { closeLyricCard, openLyricCard } from "@/share/lyricCard";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { DismissArea } from "./DismissArea";
 import { usePlayhead } from "./hooks";
+import { TrackHeader } from "./TrackHeader";
 import { useLyrics } from "./useLyrics";
 
 /** Where the sung line rests, as a fraction of the view's height from its top. */
@@ -26,6 +46,25 @@ const ANCHOR = 0.3;
 const RESUME_FOLLOW_MS = 3000;
 /** The sung line's tint eases in over this long. */
 const HIGHLIGHT_MS = 240;
+
+/**
+ * Room either side of a line for its selected backdrop, taken back by a
+ * negative margin so the words stay where they were.
+ */
+const LINE_INSET = {
+  marginHorizontal: -CELL,
+  paddingHorizontal: CELL,
+  borderRadius: CELL,
+} as const;
+
+/** While Share picks lines: whether each shows as selected, and what a tap on one does. */
+interface Picking {
+  readonly isSelected: (index: number) => boolean;
+  readonly onTap: (index: number) => void;
+}
+
+/** The backdrop of a selected line: the ink, faint. */
+const useSelectedFill = (): string => withOpacity(useThemeColor("foreground"), 0.12);
 
 /** The square dots standing in for a pause between sung lines. */
 function PauseDots({ current }: { current: boolean }) {
@@ -46,27 +85,40 @@ type LineProps = {
   line: LyricLine;
   index: number;
   current: boolean;
+  /** Share is picking lines: a tap selects instead of seeking. */
+  picking: boolean;
+  selected: boolean;
   onSeek: (line: LyricLine, index: number) => void;
+  onPick: (index: number) => void;
   onLayoutLine: (index: number, y: number) => void;
 };
 
-/** One synced line: ink while it's sung, graphite otherwise. Tap it to play from there. */
+/**
+ * One synced line: ink while it's sung, graphite otherwise. Tap it to play
+ * from there. While Share picks lines, ink on a faint backdrop marks the
+ * selected ones, and a tap picks instead.
+ */
 const SyncedLine = memo(function SyncedLine({
   line,
   index,
   current,
+  picking,
+  selected,
   onSeek,
+  onPick,
   onLayoutLine,
 }: LineProps) {
   const foreground = useThemeColor("foreground");
   const secondary = useThemeColor("secondary");
+  const selectedFill = useSelectedFill();
   const reduceMotion = useReducedMotion();
-  const lit = useSharedValue(current ? 1 : 0);
+  const on = picking ? selected : current;
+  const lit = useSharedValue(on ? 1 : 0);
 
   useEffect(() => {
-    const to = current ? 1 : 0;
+    const to = on ? 1 : 0;
     lit.set(reduceMotion ? to : withTiming(to, { duration: HIGHLIGHT_MS }));
-  }, [current, reduceMotion, lit]);
+  }, [on, reduceMotion, lit]);
 
   const tint = useAnimatedStyle(() => ({
     color: interpolateColor(lit.get(), [0, 1], [secondary, foreground]),
@@ -77,15 +129,20 @@ const SyncedLine = memo(function SyncedLine({
       <Press
         accessibilityRole="button"
         accessibilityLabel={line.text === "" ? "Instrumental" : line.text}
-        accessibilityHint="Plays from this line"
-        accessibilityState={{ selected: current }}
-        onPress={() => onSeek(line, index)}
-        haptic="selection"
+        accessibilityHint={picking ? "Selects this line to share" : "Plays from this line"}
+        accessibilityState={{ selected: on }}
+        onPress={() => (picking ? onPick(index) : onSeek(line, index))}
+        // Picking gives its own haptic, another one for a tap that can't select.
+        haptic={picking ? undefined : "selection"}
         depth={0.015}
-        style={{ paddingVertical: CELL }}
+        style={[
+          LINE_INSET,
+          { paddingVertical: CELL },
+          picking && selected && { backgroundColor: selectedFill },
+        ]}
       >
         {line.text === "" ? (
-          <PauseDots current={current} />
+          <PauseDots current={!picking && current} />
         ) : (
           <Animated.Text className="font-sans text-title2 font-medium" style={tint}>
             {line.text}
@@ -99,9 +156,16 @@ const SyncedLine = memo(function SyncedLine({
 /**
  * Synced lyrics: the sung line lights up and rests a third of the way down,
  * scrolling along with the song. Scrolling by hand stops the follow until a
- * few seconds after the finger lifts; tapping a line seeks there.
+ * few seconds after the finger lifts; tapping a line seeks there. While Share
+ * picks lines they don't follow the song.
  */
-function SyncedLyrics({ lines }: { lines: readonly LyricLine[] }) {
+function SyncedLyrics({
+  lines,
+  picking,
+}: {
+  lines: readonly LyricLine[];
+  picking: Picking | null;
+}) {
   const { positionMs } = usePlayhead();
   const index = currentLyricIndex(lines, positionMs);
   const reduceMotion = useReducedMotion();
@@ -112,6 +176,8 @@ function SyncedLyrics({ lines }: { lines: readonly LyricLine[] }) {
   const resume = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The sung line, for scrolls that start outside a render (timers, layout callbacks).
   const currentIndex = useRef(index);
+  const isPicking = picking !== null;
+  const pickingNow = useRef(isPicking);
 
   const scrollToCurrent = useCallback(
     (animated: boolean) => {
@@ -123,6 +189,14 @@ function SyncedLyrics({ lines }: { lines: readonly LyricLine[] }) {
     },
     [height],
   );
+
+  // Picking stops the follow; done picking, the sung line comes back to rest.
+  useEffect(() => {
+    if (pickingNow.current === isPicking) return;
+    pickingNow.current = isPicking;
+    following.current = !isPicking;
+    if (!isPicking) scrollToCurrent(!reduceMotion);
+  }, [isPicking, scrollToCurrent, reduceMotion]);
 
   // Follow the song from line to line.
   useEffect(() => {
@@ -152,6 +226,13 @@ function SyncedLyrics({ lines }: { lines: readonly LyricLine[] }) {
     offsets.current[at] = y;
   }, []);
 
+  // Stable across selections, so only the lines whose selection changed render again.
+  const pick = useRef(picking?.onTap);
+  useEffect(() => {
+    pick.current = picking?.onTap;
+  });
+  const onPick = useCallback((at: number) => pick.current?.(at), []);
+
   return (
     <ScrollView
       ref={scroll}
@@ -167,6 +248,7 @@ function SyncedLyrics({ lines }: { lines: readonly LyricLine[] }) {
       onScrollEndDrag={() => {
         stopResume();
         resume.current = setTimeout(() => {
+          if (pickingNow.current) return;
           following.current = true;
           scrollToCurrent(!reduceMotion);
         }, RESUME_FOLLOW_MS);
@@ -180,7 +262,10 @@ function SyncedLyrics({ lines }: { lines: readonly LyricLine[] }) {
           line={line}
           index={at}
           current={at === index}
+          picking={isPicking}
+          selected={picking?.isSelected(at) ?? false}
           onSeek={onSeek}
+          onPick={onPick}
           onLayoutLine={onLayoutLine}
         />
       ))}
@@ -188,35 +273,80 @@ function SyncedLyrics({ lines }: { lines: readonly LyricLine[] }) {
   );
 }
 
-/** Unsynced lyrics: the words as tagged, to scroll through at your own pace. */
-function UnsyncedLyrics({ lines }: { lines: readonly string[] }) {
+/**
+ * Unsynced lyrics: the words as tagged, to scroll through at your own pace.
+ * While Share picks lines each is a tap target, the selected ones in ink on a
+ * faint backdrop and the rest in graphite.
+ */
+function UnsyncedLyrics({ lines, picking }: { lines: readonly string[]; picking: Picking | null }) {
+  const selectedFill = useSelectedFill();
   return (
     <ScrollView
       className="flex-1"
       showsVerticalScrollIndicator={false}
       contentContainerStyle={{ paddingTop: CELL * 2, paddingBottom: CELL * 6 }}
     >
-      {lines.map((line, at) =>
-        line === "" ? (
+      {lines.map((line, at) => {
+        if (line === "") {
           // A blank line between stanzas.
-          <View key={at} style={{ height: CELL * 2 }} />
-        ) : (
-          <Text key={at} className="font-sans text-title2 font-medium text-foreground">
-            {line}
-          </Text>
-        ),
-      )}
+          return <View key={at} style={{ height: CELL * 2 }} />;
+        }
+        if (picking === null) {
+          return (
+            <View key={at} style={LINE_INSET}>
+              <Text className="font-sans text-title2 font-medium text-foreground">{line}</Text>
+            </View>
+          );
+        }
+        const selected = picking.isSelected(at);
+        return (
+          <Press
+            key={at}
+            accessibilityRole="button"
+            accessibilityLabel={line}
+            accessibilityHint="Selects this line to share"
+            accessibilityState={{ selected }}
+            onPress={() => picking.onTap(at)}
+            depth={0.015}
+            style={[LINE_INSET, selected && { backgroundColor: selectedFill }]}
+          >
+            <Text
+              className={`font-sans text-title2 font-medium ${selected ? "text-foreground" : "text-secondary"}`}
+            >
+              {line}
+            </Text>
+          </Press>
+        );
+      })}
     </ScrollView>
   );
 }
 
-/**
- * The Lyrics view's body for the file at `path`: synced lyrics that follow
- * the song, unsynced lyrics as text, or an empty state when the song has none.
- */
-export function LyricsView({ path }: { path: string | null }) {
-  const lyrics = useLyrics(path);
+/** The row above the lyrics while Share picks lines: Cancel, how many, and Next. */
+function PickingBar({
+  count,
+  onCancel,
+  onNext,
+}: {
+  count: number;
+  onCancel: () => void;
+  onNext: () => void;
+}) {
+  return (
+    <View className="flex-row items-center justify-between" style={{ height: grid.row + CELL * 2 }}>
+      <TextButton label="Cancel" onPress={onCancel} />
+      <Text className="font-sans text-subheadline text-secondary" accessibilityLiveRegion="polite">
+        {count === 0
+          ? `Select up to ${MAX_SHARED_LYRIC_LINES} lines`
+          : `${count} of ${MAX_SHARED_LYRIC_LINES}`}
+      </Text>
+      <TextButton label="Next" onPress={onNext} disabled={count === 0} />
+    </View>
+  );
+}
 
+/** The lyrics themselves, or the empty state. */
+function LyricsBody({ lyrics, picking }: { lyrics: Lyrics | null; picking: Picking | null }) {
   // Reading takes a moment; an empty field avoids flashing the empty state.
   if (lyrics === null) {
     return (
@@ -228,9 +358,9 @@ export function LyricsView({ path }: { path: string | null }) {
 
   switch (lyrics.kind) {
     case "synced":
-      return <SyncedLyrics lines={lyrics.lines} />;
+      return <SyncedLyrics lines={lyrics.lines} picking={picking} />;
     case "unsynced":
-      return <UnsyncedLyrics lines={lyrics.lines} />;
+      return <UnsyncedLyrics lines={lyrics.lines} picking={picking} />;
     case "none":
       return (
         <DismissArea style={{ flex: 1 }}>
@@ -242,4 +372,108 @@ export function LyricsView({ path }: { path: string | null }) {
         </DismissArea>
       );
   }
+}
+
+type Item = NonNullable<PlaybackState["item"]>;
+
+/**
+ * The Lyrics view under what's playing, for the file at `path`: synced
+ * lyrics that follow the song, unsynced lyrics as text, or an empty state
+ * when the song has none. A song with lyrics gets Share, which picks up to
+ * five lines (Core's `tapLyricLine`), then Next previews them as a card
+ * (`LyricCardPreview`) in the cover's colours.
+ */
+export function LyricsView({
+  path,
+  item,
+  palette,
+}: {
+  path: string | null;
+  item: Item;
+  palette: ArtworkPalette | null;
+}) {
+  const lyrics = useLyrics(path);
+  const lines = useMemo(() => shareableLyricLines(lyrics), [lyrics]);
+  // The lines picked for the song at `path`; another song's lyrics start afresh.
+  const [picked, setPicked] = useState<{
+    readonly path: string | null;
+    readonly selection: LyricSelection | null;
+  } | null>(null);
+  const isPicking = picked !== null && picked.path === path && lines !== null;
+  const selection = isPicking ? picked.selection : null;
+
+  // Back leaves picking (the card's preview, over it, takes Back first).
+  useEffect(() => {
+    if (!isPicking) return undefined;
+    return addScreenBackHandler(() => {
+      setPicked(null);
+      return true;
+    });
+  }, [isPicking]);
+
+  // Leaving the lyrics (another view, Now Playing closing) closes the card too.
+  useEffect(() => closeLyricCard, []);
+
+  const onTap = useCallback(
+    (index: number) => {
+      if (lines === null) return;
+      const tap = tapLyricLine(lines, selection, index);
+      if (!tap.accepted) {
+        // It would break the block or go past five lines.
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        return;
+      }
+      void Haptics.selectionAsync();
+      setPicked({ path, selection: tap.selection });
+    },
+    [lines, selection, path],
+  );
+
+  const picking = useMemo<Picking | null>(
+    () =>
+      isPicking && lines !== null
+        ? { isSelected: (at) => isLyricLineSelected(lines, selection, at), onTap }
+        : null,
+    [isPicking, lines, selection, onTap],
+  );
+
+  const shared = lines === null ? [] : sharedLyricLines(lines, selection);
+
+  const next = (): void => {
+    if (shared.length === 0) return;
+    openLyricCard({
+      title: item.title ?? "Unknown title",
+      artist: item.artist ?? "Unknown Artist",
+      artworkUri: item.artworkUri ?? undefined,
+      lines: shared,
+      colours: lyricCardColours(palette),
+    });
+  };
+
+  return (
+    <View className="flex-1">
+      <DismissArea>
+        {isPicking ? (
+          <PickingBar count={shared.length} onCancel={() => setPicked(null)} onNext={next} />
+        ) : (
+          <View className="flex-row items-center">
+            <View className="flex-1">
+              <TrackHeader item={item} />
+            </View>
+            {lines !== null && (
+              // The icon's 48dp target reaches past the margin, so the glyph lines up with it.
+              <View style={{ marginRight: -12 }}>
+                <IconButton
+                  icon={IconShare3}
+                  label="Share Lyrics"
+                  onPress={() => setPicked({ path, selection: null })}
+                />
+              </View>
+            )}
+          </View>
+        )}
+      </DismissArea>
+      <LyricsBody lyrics={lyrics} picking={picking} />
+    </View>
+  );
 }

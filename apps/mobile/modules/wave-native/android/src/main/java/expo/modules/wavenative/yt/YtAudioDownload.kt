@@ -44,20 +44,28 @@ interface YtAudioStreams {
  * goes on from the last byte that arrived. An address YouTube stops accepting (403/410) is
  * resolved again and the download goes on from where it was, or starts over when the fresh
  * address serves another stream ([YtStreams.resumesDownload]). The file is complete, the length
- * YouTube announced (clen, or a HEAD request; the fresh stream's once it starts over), or the part
- * file is deleted: [RangeDownload] asks for ranges until exactly that many bytes are written.
+ * YouTube announced (clen, or a HEAD request; the fresh stream's once it starts over):
+ * [RangeDownload] asks for ranges until exactly that many bytes are written.
+ *
+ * A download that fails or is cancelled keeps the bytes that arrived in the part file, and the next
+ * one into the same part file goes on from there (once the bytes just before are checked to be the
+ * same stream's; else it starts over), so an attempt the journal retries doesn't start from byte 0.
+ * Deleting a part file nothing will continue is the journal's.
  */
 class YtAudioDownload(private val streams: YtAudioStreams, private val ranges: RangeDownload = RangeDownload()) {
   /**
    * Downloads [videoId]'s audio into [part], reporting bytes received and the total, until
    * [isCancelled]. Throws [YtException] when YouTube won't give a stream, [IOException] when the
-   * bytes don't arrive, and a `CancellationException` once cancelled.
+   * bytes don't arrive, and a `CancellationException` once cancelled. When [part] holds bytes from
+   * an earlier attempt, [onResume] says the byte it went on from and the total (0 when those bytes
+   * were another stream's and it started over).
    */
   fun download(
     videoId: String,
     part: File,
     onProgress: (Long, Long) -> Unit = { _, _ -> },
     isCancelled: () -> Boolean = { false },
+    onResume: (Long, Long) -> Unit = { _, _ -> },
   ): YtAudioFile {
     var stream = m4a(streams.resolve(videoId))
     var length = lengthOf(stream) ?: throw IOException("YouTube didn't say how long the file is")
@@ -88,7 +96,10 @@ class YtAudioDownload(private val streams: YtAudioStreams, private val ranges: R
       }
     }
     // Returns only once the part file holds the announced length, the fresh stream's after a start over.
-    val bytes = ranges.download(source, length, part, onProgress = { onProgress(it, length) }, isCancelled = isCancelled)
+    val bytes = ranges.download(
+      source, length, part, onProgress = { onProgress(it, length) }, isCancelled = isCancelled,
+      resume = true, onResume = { onResume(it, length) },
+    )
     // The stream the file came from: the last one resolved, whichever that was.
     return YtAudioFile(stream.itag, stream.bitrate, stream.mimeType, bytes, stream.source)
   }

@@ -19,9 +19,11 @@ data class DownloadTags(
   /** LRC for synced lyrics, plain text otherwise. */
   val lyrics: String?,
   val discNumber: Int? = null,
+  /** The advisory tag ([Advisory]): 1 explicit, 0 checked and clean; null writes none. */
+  val advisory: Int? = null,
 ) {
   companion object {
-    /** From JS: `{ title, artist, album, albumArtist, year, trackNumber, genre, lyrics }`. */
+    /** From JS: `{ title, artist, album, albumArtist, year, trackNumber, genre, lyrics, advisory }`. */
     fun fromJs(map: Map<String, Any?>): DownloadTags? {
       fun text(key: String): String? = (map[key] as? String)?.takeIf(String::isNotBlank)
       fun number(key: String): Int? = (map[key] as? Number)?.toInt()?.takeIf { it > 0 }
@@ -35,6 +37,7 @@ data class DownloadTags(
         genre = text("genre"),
         lyrics = text("lyrics"),
         discNumber = number("discNumber"),
+        advisory = (map["advisory"] as? Number)?.toInt()?.takeIf { it == 0 || it == 1 },
       )
     }
   }
@@ -63,6 +66,7 @@ class DownloadTagWriter {
     tags.discNumber?.let { tag.setField(FieldKey.DISC_NO, it.toString()) }
     tags.genre?.let { tag.setField(FieldKey.GENRE, it) }
     tags.lyrics?.let { tag.setField(FieldKey.LYRICS, it) }
+    tags.advisory?.let { Advisory.write(tag, it) }
     if (artwork != null && artwork.isNotEmpty()) {
       tag.setField(
         ArtworkFactory.getNew().apply {

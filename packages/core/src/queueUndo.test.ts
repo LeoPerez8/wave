@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { EMPTY_QUEUE, newQueueToast, queueUndo, reduceQueue, undoneQueue } from "./index.ts";
+import {
+  EMPTY_QUEUE,
+  newQueueToast,
+  noticeLine,
+  queueUndo,
+  reduceQueue,
+  undoneQueue,
+} from "./index.ts";
 import type { QueueCommand, QueueState } from "./index.ts";
 
 const album = { kind: "album", id: "7" } as const;
@@ -42,6 +49,16 @@ describe("queueUndo", () => {
     assert.equal(queueUndo(playing, { type: "play", trackIds: [], context: album }, onB), null);
   });
 
+  test("a play whose every song is passed over offers nothing: the queue stays", () => {
+    const explicit = (trackId: string): boolean => trackId === "x" || trackId === "y";
+    assert.equal(queueUndo(playing, playAlbum, onB, explicit), null);
+    const one = (trackId: string): boolean => trackId === "x";
+    assert.deepEqual(queueUndo(playing, playAlbum, onB, one), {
+      state: playing,
+      positionMs: 73_000,
+    });
+  });
+
   test("only a play offers it, not changes to the same queue", () => {
     assert.equal(queueUndo(playing, { type: "next" }, onB), null);
     assert.equal(queueUndo(playing, { type: "playNext", trackIds: ["x"] }, onB), null);
@@ -68,17 +85,39 @@ describe("undoneQueue", () => {
 
 describe("newQueueToast", () => {
   test("says a new queue is playing", () => {
-    assert.equal(newQueueToast("play", null), "New queue playing");
+    assert.equal(newQueueToast("play", []), "New queue playing");
+    assert.equal(newQueueToast("play", [null, null]), "New queue playing");
   });
 
   test("says why a song was skipped on the way along with it", () => {
     assert.equal(
-      newQueueToast("play", `Skipped "Airbag": it isn't on YouTube Music.`),
+      newQueueToast("play", [null, `Skipped "Airbag": it isn't on YouTube Music.`]),
       `New queue playing · Skipped "Airbag": it isn't on YouTube Music.`,
     );
   });
 
   test("says nothing of a new queue when nothing plays: every song was skipped", () => {
-    assert.equal(newQueueToast("stop", `Skipped "Airbag": you're offline.`), null);
+    assert.equal(newQueueToast("stop", [`Skipped "Airbag": you're offline.`]), null);
+  });
+
+  test("says every notice of the way, in order", () => {
+    assert.equal(
+      newQueueToast("play", [
+        "Skipped “Airbag”: it's explicit.",
+        "Skipped “Lucky”: you're offline.",
+      ]),
+      "New queue playing · Skipped “Airbag”: it's explicit. · Skipped “Lucky”: you're offline.",
+    );
+  });
+});
+
+describe("noticeLine", () => {
+  test("says each notice there is on one line, in order, or nothing", () => {
+    assert.equal(
+      noticeLine([null, "Skipped “Lucky”: you're offline."]),
+      "Skipped “Lucky”: you're offline.",
+    );
+    assert.equal(noticeLine(["A.", null, "B."]), "A. · B.");
+    assert.equal(noticeLine([null]), null);
   });
 });
