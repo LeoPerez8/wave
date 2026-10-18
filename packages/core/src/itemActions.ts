@@ -132,11 +132,6 @@ export interface ActionSubject<A extends LibraryArtistRef = LibraryArtistRef> {
    * artists they share with the other items; without it, they offer none.
    */
   readonly streamedArtists?: StreamedArtists<A> | undefined;
-  /**
-   * A service a playlist can be shared on is on (`playlistShareServices`):
-   * a playlist's menu offers Share.
-   */
-  readonly sharing?: boolean | undefined;
 }
 
 export type ItemAction =
@@ -408,8 +403,8 @@ export const itemActions = <A extends LibraryArtistRef = LibraryArtistRef>(
       // Adjust Image reframes it from the original photo, at the last framing.
       if (only?.hasImage === true)
         entries.push({ action: "adjustImage" }, { action: "removeImage" });
-      // Shared as a playlist on another service, from its menu alone (#483).
-      if (subject.sharing === true) entries.push({ action: "share" });
+      // Shared as a playlist on another service, from its menu alone (#483): Spotify always can.
+      entries.push({ action: "share" });
     }
   }
   // Looks up online what the songs lack and writes it into their files; it
