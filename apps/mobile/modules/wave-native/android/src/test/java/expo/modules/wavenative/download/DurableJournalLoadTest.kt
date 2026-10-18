@@ -84,12 +84,12 @@ class DurableJournalLoadTest {
     val retried = owner.changesSince(cancelled.revision)
     assertEquals(listOf("song-5"), retried.jobs.map { it["id"] })
     assertEquals(ids - "song-5" + "song-5", retried.ids)
-    // Starting three songs changes those three.
+    // Starting five songs (song-5 now waits at the end) changes those five.
     owner.advance(NoTransfer, NoPublication)
     val started = owner.changesSince(retried.revision)
-    assertEquals(listOf("song-1", "song-2", "song-3"), started.jobs.map { it["id"] })
+    assertEquals(listOf("song-1", "song-2", "song-3", "song-4", "song-6"), started.jobs.map { it["id"] })
     // A reader that missed several changes gets each changed job once, as it is now.
-    assertEquals(listOf("song-1", "song-2", "song-3", "song-5"), owner.changesSince(quiet.revision).jobs.map { it["id"] }.sortedBy { ids.indexOf(it) })
+    assertEquals(listOf("song-1", "song-2", "song-3", "song-4", "song-5", "song-6"), owner.changesSince(quiet.revision).jobs.map { it["id"] }.sortedBy { ids.indexOf(it) })
   }
 
   /** Chunks arrive many times a second; readers (JS, the notification) see progress about once a second. */
