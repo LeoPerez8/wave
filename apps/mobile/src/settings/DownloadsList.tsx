@@ -72,6 +72,14 @@ function HandleSlot({ handle }: { handle: Handle }) {
   return <ReorderHandle gesture={handle === "drawn" ? undefined : handle} />;
 }
 
+/** Two songs on their way show the same: the song, its progress line and its Cancel. */
+const sameQueued = (a: QueuedDownload<NativeYtSong>, b: QueuedDownload<NativeYtSong>) =>
+  a.song === b.song && a.line === b.line && a.cancel?.join() === b.cancel?.join();
+
+/** Two group headers show the same name and line. */
+const sameGroupLine = (a: DownloadGroup<NativeYtSong>, b: DownloadGroup<NativeYtSong>) =>
+  a.name === b.name && a.line === b.line;
+
 /**
  * One song on its way: its artwork, title and artists, the progress line its row shows
  * elsewhere, Cancel until it's saving to the Library, and a waiting song's drag handle (one
@@ -113,9 +121,7 @@ const QueuedDownloadRow = memo(
   },
   (before, after) =>
     before.covers === after.covers &&
-    before.queued.song === after.queued.song &&
-    before.queued.line === after.queued.line &&
-    before.queued.cancel?.join() === after.queued.cancel?.join() &&
+    sameQueued(before.queued, after.queued) &&
     before.handle === after.handle &&
     before.index === after.index &&
     before.count === after.count &&
@@ -272,9 +278,7 @@ const WaitingDownloadRow = memo(
     before.row.groupKey === after.row.groupKey &&
     before.row.index === after.row.index &&
     before.row.count === after.row.count &&
-    before.row.queued.song === after.row.queued.song &&
-    before.row.queued.line === after.row.queued.line &&
-    before.row.queued.cancel?.join() === after.row.queued.cancel?.join(),
+    sameQueued(before.row.queued, after.row.queued),
 );
 
 /**
@@ -325,8 +329,7 @@ const MovableGroupHeader = memo(
     before.row.key === after.row.key &&
     before.row.index === after.row.index &&
     before.row.count === after.row.count &&
-    before.row.group.name === after.row.group.name &&
-    before.row.group.line === after.row.group.line,
+    sameGroupLine(before.row.group, after.row.group),
 );
 
 /** The header of a group whose songs have all started: nothing to drag. */
@@ -334,8 +337,7 @@ const StartedGroupHeader = memo(
   function StartedGroupHeader({ group }: { group: DownloadGroup<NativeYtSong> }) {
     return <DownloadGroupHeader group={group} handle="room" />;
   },
-  (before, after) =>
-    before.group.name === after.group.name && before.group.line === after.group.line,
+  (before, after) => sameGroupLine(before.group, after.group),
 );
 
 /** The dragged row as it lifts over the list: on the fill colour, under the finger. */
