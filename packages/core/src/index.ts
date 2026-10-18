@@ -517,7 +517,13 @@ export type {
 export { pendingWriteDelay } from "./writePacing.ts";
 export type { WritePacing } from "./writePacing.ts";
 export { stepNowPlayingSheet } from "./sheetLifecycle.ts";
-export { QUEUE_COVER_FLUSH_MS, createQueueCoverBatcher, withQueueCovers } from "./queueCovers.ts";
+export {
+  QUEUE_COVER_FLUSH_MS,
+  createQueueCoverBatcher,
+  playerCoverUpdates,
+  withQueueCovers,
+} from "./queueCovers.ts";
+export type { PlayerCoverUpdate } from "./queueCovers.ts";
 export type { QueueCover, QueueCoverBatcher, QueueCoverBatcherOptions } from "./queueCovers.ts";
 export { MORE_FROM_ARTIST } from "./queue.ts";
 export { newQueueToast, noticeLine, queueUndo, undoneQueue } from "./queueUndo.ts";
@@ -1314,7 +1320,7 @@ export {
   lyricCardColours,
   lyricCardFileName,
   lyricCardInk,
-  lyricCardTextSize,
+  lyricCardLayout,
   lyricShareDestinations,
   lyricStoryBackground,
   nextLyricCardColour,
@@ -1323,6 +1329,7 @@ export {
   tapLyricLine,
 } from "./lyricsShare.ts";
 export type {
+  LyricCardShape,
   LyricSelection,
   LyricSelectionTap,
   LyricShareApps,

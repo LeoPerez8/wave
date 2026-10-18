@@ -146,7 +146,12 @@ const dispatchWithYt = (
         ...firstTrack,
         ...rest.map((song) => toYtQueueTrack(song, null)),
       ]);
-      yield* cacheYtCoversInBackground(nowPlayingFirst(rest));
+      // The first song's cover, if it didn't cache in time, is cached with the others.
+      const firstUncached =
+        first !== undefined && first.artworkUrl !== null && firstTrack[0]?.thumbPath === null
+          ? [first]
+          : [];
+      yield* cacheYtCoversInBackground([...firstUncached, ...nowPlayingFirst(rest)]);
     }),
   );
 
