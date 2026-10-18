@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import {
   NO_DOWNLOAD_RUN,
   downloadRunLines,
+  downloadRunNotice,
   downloadRunProgress,
   downloadTimeLeft,
   downloadTimeLeftLine,
@@ -161,5 +162,33 @@ describe("Settings › Downloads: the run's time left", () => {
     assert.equal(downloadTimeLeftLine(84 * 60_000), "About 1 h 20 min left");
     assert.equal(downloadTimeLeftLine(118 * 60_000), "About 2 h left");
     assert.equal(downloadTimeLeftLine(7.6 * 3_600_000), "About 8 h left");
+  });
+});
+
+describe("the download notification: the run", () => {
+  test("a run of several songs shows done of all, failed, left and the time left", () => {
+    assert.deepEqual(
+      downloadRunNotice({ done: 1234, failed: 12, left: 1254, total: 2500 }, 118 * 60_000),
+      {
+        title: "Downloading 1,234 of 2,500",
+        text: "12 failed · 1,254 left · About 2 h left",
+        finished: 1246,
+        total: 2500,
+      },
+    );
+  });
+
+  test("no time left until Core has an estimate, and no failed when none did", () => {
+    assert.deepEqual(downloadRunNotice({ done: 3, failed: 0, left: 7, total: 10 }, null), {
+      title: "Downloading 3 of 10",
+      text: "7 left",
+      finished: 3,
+      total: 10,
+    });
+  });
+
+  test("a one-song run, or none, keeps the per-song notification", () => {
+    assert.equal(downloadRunNotice({ done: 0, failed: 0, left: 1, total: 1 }, 60_000), null);
+    assert.equal(downloadRunNotice(null, null), null);
   });
 });

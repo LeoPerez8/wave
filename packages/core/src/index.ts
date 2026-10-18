@@ -859,6 +859,7 @@ export {
   DOWNLOAD_PACE_WINDOW_MS,
   NO_DOWNLOAD_RUN,
   downloadRunLines,
+  downloadRunNotice,
   downloadRunProgress,
   downloadTimeLeft,
   downloadTimeLeftLine,
@@ -869,6 +870,7 @@ export type {
   DownloadRun,
   DownloadRunCounts,
   DownloadRunLines,
+  DownloadRunNotice,
   DownloadRunProgress,
 } from "./downloadRun.ts";
 export type {

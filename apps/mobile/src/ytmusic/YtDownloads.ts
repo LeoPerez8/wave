@@ -8,6 +8,7 @@ import {
   FAVORITES_DOWNLOAD_ORIGIN,
   NO_DOWNLOAD_RUN,
   YT_DOWNLOADS_NONE,
+  downloadRunNotice,
   downloadRunProgress,
   downloadTimeLeft,
   downloadsPaused,
@@ -1983,7 +1984,27 @@ const queuedCountsNow = (): QueuedDownloadCounts => {
 let downloadRun: DownloadRun = NO_DOWNLOAD_RUN;
 journal.subscribe(() => {
   downloadRun = followDownloadRun(downloadRun, journal.get(), Date.now());
+  runNoticeTimer ??= setTimeout(showRunNotice, RUN_NOTICE_MS);
 });
+
+/** How often the download notification hears of the run: at most about once a second. */
+const RUN_NOTICE_MS = 1_000;
+let runNoticeTimer: ReturnType<typeof setTimeout> | null = null;
+let runNoticeShown = "null";
+
+/**
+ * Tells the download notification how the run goes (Core's `downloadRunNotice`), when that
+ * changed: a run's journal changes many times a second, so this follows them about once a second.
+ */
+const showRunNotice = () => {
+  runNoticeTimer = null;
+  const { progress, timeLeft } = downloadRunNow();
+  const notice = downloadRunNotice(progress.overall, timeLeft);
+  const key = JSON.stringify(notice);
+  if (key === runNoticeShown) return;
+  runNoticeShown = key;
+  WaveSoulseek.showDownloadRun(notice);
+};
 
 /** Settings › Downloads' run panel: the run's counts, overall and per group, and its time left. */
 export interface DownloadRunState {

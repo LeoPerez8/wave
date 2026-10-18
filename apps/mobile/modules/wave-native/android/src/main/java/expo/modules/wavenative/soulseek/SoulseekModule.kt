@@ -8,6 +8,7 @@ import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.wavenative.account.WaveAccountException
 import expo.modules.wavenative.download.AndroidDownloads
+import expo.modules.wavenative.download.DownloadRunNotice
 import expo.modules.wavenative.download.DurableDownloads
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -91,6 +92,8 @@ class SoulseekModule : Module() {
     AsyncFunction("youtubePause") Coroutine { ->
       withContext(Dispatchers.IO) { downloads.jobs.youtubePause()?.let { mapOf("until" to it.until.toDouble(), "level" to it.level.toDouble()) } }
     }
+    // The run for the download notification (Core's `downloadRunNotice`), about once a second; null with none.
+    Function("showDownloadRun") { notice: Map<String, Any?>? -> downloads.runNotice = DownloadRunNotice.of(notice) }
     AsyncFunction("cancelJob") Coroutine { id: String -> withContext(Dispatchers.IO) { downloads.jobs.cancel(id, downloads.transport); downloads.changed() } }
     // Settings › Downloads' drag: the waiting jobs [ids] start in this order (Core's `moveQueuedJobs`).
     AsyncFunction("moveQueuedJobs") Coroutine { ids: List<String> -> withContext(Dispatchers.IO) { downloads.jobs.moveQueued(ids); downloads.changed() } }
