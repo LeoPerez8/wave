@@ -263,8 +263,15 @@ const refresh = (played: boolean): void => {
         saved.set(built);
         return;
       }
+      // Nothing to build from (an empty Library, no plays) costs no request, so it doesn't
+      // wait: the next visit after an import builds at once.
+      if (built === "nothing-to-build-from") {
+        failedAt = null;
+        nothingToBuildFrom.set(true);
+        return;
+      }
       failedAt = Date.now();
-      if (Result.isSuccess(result)) nothingToBuildFrom.set(built !== null);
+      if (Result.isSuccess(result)) nothingToBuildFrom.set(false);
     })
     .finally(() => {
       building = false;
