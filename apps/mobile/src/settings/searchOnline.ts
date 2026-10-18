@@ -20,13 +20,16 @@ const searchOnline = persistedSetting<SearchOnline>({
 /** Whether Search online is set to Always; re-renders when it changes. */
 export const useSearchOnlineAlways = (): boolean => searchOnline.useValue() === "always";
 
+/** Search online's choices, as Settings and the toggle's long-press card both label them. */
+const CHOICES: ChoiceSetting<SearchOnline>["choices"] = [
+  { value: "always", label: "Always search online" },
+  { value: "onDemand", label: "Only on demand" },
+];
+
 /** Search online as Settings › Accounts lists it, under YT Music. */
 export const searchOnlineChoice: ChoiceSetting<SearchOnline> = {
   label: "Search online",
-  choices: [
-    { value: "always", label: "Always" },
-    { value: "onDemand", label: "On demand" },
-  ],
+  choices: CHOICES,
   setting: searchOnline,
 };
 
@@ -38,10 +41,7 @@ export const searchOnlineChoice: ChoiceSetting<SearchOnline> = {
 export const openSearchOnlineChoices = (): void =>
   openTitleChoices({
     label: "Search online",
-    choices: [
-      { value: "always", label: "Always search online" },
-      { value: "onDemand", label: "Only on demand" },
-    ],
+    choices: CHOICES,
     current: searchOnline.get(),
     choose: searchOnline.set,
   });
