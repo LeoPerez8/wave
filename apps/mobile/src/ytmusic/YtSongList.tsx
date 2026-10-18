@@ -22,6 +22,7 @@ import {
   type YtPlaylistRest,
   type YtQuietReason,
 } from "@wave/core";
+import type { DownloadOrigin } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -200,10 +201,13 @@ export const listDownloadAction = (download: YtListDownloadButton | null): LastL
 
 /**
  * Downloading the YT Music album whose songs are [songs] (none: no album):
- * its progress line ("Downloading · 3 of 10") and its button, or null.
+ * its progress line ("Downloading · 3 of 10") and its button, or null. The
+ * songs it queues remember [origin], the album or mix (Settings › Downloads
+ * groups them by it).
  */
 export const useYtAlbumDownloadButton = (
   songs: readonly NativeYtSong[],
+  origin: DownloadOrigin | null,
 ): { readonly progress: string | null; readonly button: YtListDownloadButton | null } => {
   const inLibrary = useLoadedInLibrary();
   const download = useYtAlbumDownload(songs, inLibrary);
@@ -213,16 +217,21 @@ export const useYtAlbumDownloadButton = (
     button:
       button === null || songs.length === 0
         ? null
-        : { ...button, onPress: () => runYtDownloadAction(button.action, songs, inLibrary) },
+        : {
+            ...button,
+            onPress: () => runYtDownloadAction(button.action, songs, inLibrary, origin),
+          },
   };
 };
 
 /**
  * Downloading a playlist's YT Music and unsearched entries, the playlist holding [entries]:
- * its progress line ("Downloading · 3 of 10") and its button, or null.
+ * its progress line ("Downloading · 3 of 10") and its button, or null. The songs it queues
+ * remember [origin], the playlist.
  */
 export const useYtPlaylistDownloadButton = (
   entries: readonly PlaylistItem<NativeYtSong, { readonly path: string | null }>[],
+  origin: DownloadOrigin | null,
 ): { readonly progress: string | null; readonly button: YtListDownloadButton | null } => {
   const inLibrary = useLoadedInLibrary();
   const download = useYtPlaylistDownload(entries, inLibrary);
@@ -234,7 +243,7 @@ export const useYtPlaylistDownloadButton = (
         ? null
         : {
             ...button,
-            onPress: () => runYtPlaylistDownloadAction(button.action, entries, inLibrary),
+            onPress: () => runYtPlaylistDownloadAction(button.action, entries, inLibrary, origin),
           },
   };
 };
@@ -312,7 +321,7 @@ export function YtSongList({
   load,
   context,
   numbered,
-  albumDownload = false,
+  albumDownload,
 }: {
   /** What the tapped cover knew, shown until the page arrives. */
   known: YtListHead | undefined;
@@ -320,14 +329,27 @@ export function YtSongList({
   context: QueueContext;
   /** An album's songs lead with their number; a playlist's with their cover. */
   numbered: boolean;
-  /** An album downloads as a whole: Download beside Play and Shuffle, and its progress. */
-  albumDownload?: boolean;
+  /**
+   * An album or a Discover mix downloads as a whole: Download beside Play and Shuffle, and its
+   * progress. Its songs remember it, by [context]'s id and its title.
+   */
+  albumDownload?: "album" | "mix";
 }) {
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
   const find = useLibraryFinder();
   const page = load.status === "loaded" ? load.page : null;
-  const download = useYtAlbumDownloadButton(albumDownload && page !== null ? page.songs : NO_SONGS);
+  const origin = useMemo(
+    (): DownloadOrigin | null =>
+      albumDownload === undefined || page === null || context.id === null
+        ? null
+        : { kind: albumDownload, id: context.id, name: page.head.title },
+    [albumDownload, page, context.id],
+  );
+  const download = useYtAlbumDownloadButton(
+    albumDownload !== undefined && page !== null ? page.songs : NO_SONGS,
+    origin,
+  );
   const songs = useMemo(() => (page === null ? [] : discoverSongs(page.songs, find)), [page, find]);
   const selectable = useMemo(() => songs.map(listedTrackItem), [songs]);
   const selection = useListSelection({

@@ -129,7 +129,11 @@ function AlbumHead({
     [mixed, tracks],
   );
   const play = usePlayPage(songs, context);
-  const download = useYtAlbumDownloadButton(ytSongs);
+  const origin = useMemo(
+    () => ({ kind: "album", id: String(album.id), name: album.title }) as const,
+    [album.id, album.title],
+  );
+  const download = useYtAlbumDownloadButton(ytSongs, origin);
   // Several album artists: the line opens Go to Artist's choice (Core's `artistLink`). The
   // head is on the album's page, where no artist is left out; it doesn't follow the route,
   // which would render it on every navigation while the album stays in a stack.
