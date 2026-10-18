@@ -26,22 +26,28 @@ import {
   lookupsUnreachable,
   lrclibCandidates,
   lrclibSearchUrl,
+  lookupFailureLine,
   missingTags,
   pickDeezerTrack,
   pickFoundLyrics,
   settledTags,
   songLookup,
   songTagOutcome,
+  tagWriteFailureLine,
   type DeezerAlbum,
   type DeezerAlbumTrack,
   type DeezerTags,
   type FoundLyrics,
   type FoundTags,
   type IndexedTags,
+  type LookupService,
   type SongLookup,
   type SongTagOutcome,
   type TagLookup,
+  type TagWriteFile,
+  type TagWriteOrigin,
   type TagWriteReport,
+  type TagWriteStep,
 } from "@wave/core";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -61,10 +67,33 @@ export class LookupFailed extends Data.TaggedError("LookupFailed")<{ readonly ca
 // oxlint-disable-next-line typescript/no-empty-object-type -- Effect TaggedError uses {} for a tag-only error with no fields.
 export class LookupsOff extends Data.TaggedError("LookupsOff")<{}> {}
 
-/** The file couldn't be written; it is left as it was. */
+/**
+ * The file couldn't be written; it is left as it was. [step] and [file] are
+ * what the native writer said (Core's `TagWriteFailure`), null when it didn't.
+ */
 export class TagWriteFailed extends Data.TaggedError("TagWriteFailed")<{
   readonly cause: unknown;
+  readonly step: TagWriteStep | null;
+  readonly file: TagWriteFile | null;
 }> {}
+
+/** The native exception a tag write failed with: its Java class is its name. */
+class NativeTagWriteError extends Error {
+  constructor(exception: string, message: string) {
+    super(message);
+    this.name = exception;
+  }
+}
+
+/** A request answered with an HTTP error: the log line says its status. */
+class HttpStatusError extends Error {
+  readonly status: number;
+  constructor(status: number, url: string) {
+    super(`HTTP ${status} for ${url}`);
+    this.name = "HttpStatusError";
+    this.status = status;
+  }
+}
 
 /** A song to fix: its file, what is sent about it, and what it already has. */
 export interface TaggableSong extends IndexedTags {
@@ -84,7 +113,7 @@ const getJson = async (
   headers?: Record<string, string>,
 ): Promise<unknown> => {
   const response = await fetch(url, { signal, headers });
-  if (!response.ok) throw new Error(`HTTP ${response.status} for ${url}`);
+  if (!response.ok) throw new HttpStatusError(response.status, url);
   return response.json();
 };
 
@@ -121,7 +150,7 @@ const findTracklist = async (
     return tracklist;
   } catch (cause) {
     if (signal.aborted) throw cause;
-    console.warn("[wave] Deezer album tracklist lookup failed", cause);
+    console.warn(`[wave] ${lookupFailureLine("Deezer album tracklist lookup", "Deezer", cause)}`);
     return null;
   }
 };
@@ -147,14 +176,20 @@ const findDeezerTags = async (
   return deezerTags(match, album, tracklist);
 };
 
-/** One service's lookup, settled: what it answered, or that it failed (or took too long). */
-const settle = <A>(find: (signal: AbortSignal) => Promise<A>): Effect.Effect<TagLookup<A>> =>
+/**
+ * One service's lookup, settled: what it answered, or that it failed (or took
+ * too long), logged with the service and the original error.
+ */
+const settle = <A>(
+  service: LookupService,
+  find: (signal: AbortSignal) => Promise<A>,
+): Effect.Effect<TagLookup<A>> =>
   Effect.tryPromise(find).pipe(
     Effect.timeout(LOOKUP_TIMEOUT),
     Effect.match({
       onSuccess: (value): TagLookup<A> => ({ ok: true, value }),
       onFailure: (cause): TagLookup<A> => {
-        console.warn("[wave] Fix Song lookup failed", cause);
+        console.warn(`[wave] ${lookupFailureLine("Fix Song lookup", service, cause)}`);
         return { ok: false };
       },
     }),
@@ -215,8 +250,10 @@ export const lookUpLyricsAndGenre = (
   const ask = fixLookups(has);
   return Effect.all(
     [
-      ask.lyrics ? settle((signal) => findLyrics(song, signal)) : Effect.succeed(null),
-      ask.deezer ? settle((signal) => findDeezerTags(song, has, signal)) : Effect.succeed(null),
+      ask.lyrics ? settle("LRCLIB", (signal) => findLyrics(song, signal)) : Effect.succeed(null),
+      ask.deezer
+        ? settle("Deezer", (signal) => findDeezerTags(song, has, signal))
+        : Effect.succeed(null),
     ],
     { concurrency: "unbounded" },
   ).pipe(
@@ -245,11 +282,15 @@ const NOTHING_WRITTEN: TagWriteReport = {
  * album page, the Lyrics view and the E badge show the new values without a
  * rescan. Finding nothing leaves the file untouched. [announce] tells the
  * lists of the updated entry (its track, once saved): an edit by default, a
- * landing for a download's fill-in (`songsLanded`).
+ * landing for a download's fill-in (`songsLanded`). A failure is logged with
+ * why (Core's `tagWriteFailureLine`: the step, the file, the song's [origin]
+ * and the native exception); an index update failing is logged and left to
+ * the next scan.
  */
 export const writeLyricsAndGenre = (
   path: string,
   found: FoundTags,
+  origin: TagWriteOrigin,
   announce: (trackIds?: readonly number[]) => void = libraryEdited,
 ): Effect.Effect<TagWriteReport, TagWriteFailed, LibraryStore> =>
   Effect.gen(function* () {
@@ -275,8 +316,16 @@ export const writeLyricsAndGenre = (
           year,
           advisory,
         ),
-      catch: (cause) => new TagWriteFailed({ cause }),
+      catch: (cause) => new TagWriteFailed({ cause, step: null, file: null }),
     });
+    if ("failed" in written) {
+      const { step, exception, message, fileExists, fileBytes } = written.failed;
+      return yield* new TagWriteFailed({
+        cause: new NativeTagWriteError(exception, message),
+        step,
+        file: { exists: fileExists, bytes: fileBytes },
+      });
+    }
     if (written.lyrics !== "none") lyricsWritten(path);
     if (written.track !== null) {
       const store = yield* LibraryStore;
@@ -300,7 +349,15 @@ export const writeLyricsAndGenre = (
           Effect.andThen(store.filesGone([])),
           Effect.ensuring(Effect.sync(() => announce(saved))),
           // The file has its new tags; the next scan brings the index up to date.
-          Effect.ignore,
+          Effect.catch((cause) =>
+            Effect.sync(() =>
+              logTagWriteFailure(
+                path,
+                origin,
+                new TagWriteFailed({ cause, step: "reindex", file: null }),
+              ),
+            ),
+          ),
         );
     }
     return {
@@ -310,7 +367,14 @@ export const writeLyricsAndGenre = (
       year: written.year,
       explicit: written.explicit,
     };
-  });
+  }).pipe(
+    Effect.tapError((failure) => Effect.sync(() => logTagWriteFailure(path, origin, failure))),
+  );
+
+const logTagWriteFailure = (path: string, origin: TagWriteOrigin, failure: TagWriteFailed): void =>
+  console.warn(
+    `[wave] ${tagWriteFailureLine({ path, origin, step: failure.step, file: failure.file, cause: failure.cause })}`,
+  );
 
 /** What Deezer adds when nothing is written but lyrics. */
 const NOTHING_FROM_DEEZER = {
@@ -330,23 +394,25 @@ export const writeFoundLyrics = (
   path: string,
   lyrics: FoundLyrics,
 ): Effect.Effect<TagWriteReport, TagWriteFailed, LibraryStore> =>
-  writeLyricsAndGenre(path, { lyrics, ...NOTHING_FROM_DEEZER });
+  writeLyricsAndGenre(path, { lyrics, ...NOTHING_FROM_DEEZER }, "lyricsSearch");
 
 /**
  * Fix Song for one song: looks up what it lacks and writes only that (Core's
  * `missingTags`), never replacing lyrics, a genre, a track number, a year or
  * an explicit flag it has. A song with nothing missing (Core's `canFixSong`) makes no request. A
- * failure is an outcome (the file is left as it was); only `LookupsOff` fails.
+ * failure is an outcome (the file is left as it was; a failed write is logged
+ * with the song's [origin]); only `LookupsOff` fails.
  */
 const fixSong = (
   song: TaggableSong,
+  origin: TagWriteOrigin,
   announce?: (trackIds?: readonly number[]) => void,
 ): Effect.Effect<SongTagOutcome, LookupsOff, LibraryStore> =>
   Effect.gen(function* () {
     const lookup = canFixSong(song) ? songLookup(song) : null;
     if (lookup === null) return { kind: "notFound" } as const;
     const found = missingTags(yield* lookUpLyricsAndGenre(lookup, song), song);
-    const written = yield* writeLyricsAndGenre(song.path, found, announce);
+    const written = yield* writeLyricsAndGenre(song.path, found, origin, announce);
     return songTagOutcome(found, written);
   }).pipe(
     Effect.catchTags({
@@ -356,19 +422,23 @@ const fixSong = (
   );
 
 /**
- * Fix Song on a song just added to the Library (a download), quietly: it
- * gets what its file still lacks. Never fails: a song left incomplete can
- * still be fixed from its menu. What it writes lands as the download did
- * (`songsLanded`), joining its import's change while that still waits.
+ * Fix Song on a song just added to the Library (a download, or a quality
+ * replacement's new copy: [origin], Core's `downloadTagWriteOrigin`),
+ * quietly: it gets what its file still lacks. Never fails: a song left
+ * incomplete can still be fixed from its menu. What it writes lands as the
+ * download did (`songsLanded`), joining its import's change while that still
+ * waits. A failed write is logged with why (`writeLyricsAndGenre`); a failed
+ * lookup, by each service's line and this.
  */
 export const fillInLyricsAndGenre = (
   song: TaggableSong,
+  origin: TagWriteOrigin,
 ): Effect.Effect<void, never, LibraryStore> =>
-  fixSong(song, landedFillIn).pipe(
+  fixSong(song, origin, landedFillIn).pipe(
     Effect.flatMap((outcome) =>
       Effect.sync(() => {
-        if (outcome.kind === "failed")
-          console.warn(`[wave] couldn't fill in ${song.path} (${outcome.reason})`);
+        if (outcome.kind === "failed" && outcome.reason === "lookup")
+          console.warn(`[wave] couldn't fill in ${song.path} (lookup)`);
       }),
     ),
     Effect.catch((error) =>
@@ -396,7 +466,7 @@ export const fixEachSong = <S extends TaggableSong>(
     const outcomes: SongTagOutcome[] = [];
     for (const song of songs) {
       const startedAt = Date.now();
-      const outcome = yield* fixSong(song);
+      const outcome = yield* fixSong(song, "fixSong");
       outcomes.push(outcome);
       onResult(song, outcome);
       if (lookupsUnreachable(outcomes)) return "unreachable" as const;

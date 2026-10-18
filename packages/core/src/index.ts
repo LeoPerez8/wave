@@ -1435,3 +1435,18 @@ export { downloadJobKind } from "./downloadJobKind.ts";
 export type { DownloadJobKind } from "./downloadJobKind.ts";
 export { createLandings, LANDING_BURST_MS } from "./landings.ts";
 export type { Landings } from "./landings.ts";
+export {
+  describeCause,
+  downloadTagWriteOrigin,
+  failureCause,
+  lookupFailureLine,
+  tagWriteFailureLine,
+} from "./failureCause.ts";
+export type {
+  FailureCause,
+  LookupService,
+  TagWriteFailure,
+  TagWriteFile,
+  TagWriteOrigin,
+  TagWriteStep,
+} from "./failureCause.ts";

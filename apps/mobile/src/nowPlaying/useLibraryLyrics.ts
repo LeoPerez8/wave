@@ -4,7 +4,7 @@ import { useMemo } from "react";
 
 import type { LyricsSearchTrack } from "@/library/db/lyricsMisses";
 import { LibraryStore } from "@/library/LibraryStore";
-import { writeFoundLyrics } from "@/library/lyricsAndGenre";
+import { TagWriteFailed, writeFoundLyrics } from "@/library/lyricsAndGenre";
 import { appRuntime } from "@/library/runtime";
 import { useLyricsAndGenreLookupsEnabled } from "@/settings/lyricsAndGenre";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
@@ -55,7 +55,11 @@ const writeIntoFile = (trackId: number, path: string, found: FoundLyrics): Promi
   appRuntime
     .runPromise(writeFoundLyrics(path, found))
     .then(() => keepMiss(trackId, null))
-    .catch((cause: unknown) => console.warn("[wave] couldn't write the lyrics found", cause));
+    .catch((cause: unknown) => {
+      // A failed write is logged with why where it failed.
+      if (!(cause instanceof TagWriteFailed))
+        console.warn("[wave] couldn't write the lyrics found", cause);
+    });
 
 /**
  * What the Lyrics view shows for the Library track [libraryId] whose file is
