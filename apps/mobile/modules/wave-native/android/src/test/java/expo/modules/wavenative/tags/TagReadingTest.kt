@@ -119,6 +119,23 @@ class TagReadingTest {
     assertNull(reader.read(Fixtures.file("untagged.mp3")).lyrics)
   }
 
+  private fun advisoryOf(name: String): String? = reader.read(Fixtures.file(name)).advisory
+
+  @Test fun advisoryFromAnId3UserTextFrame() = assertEquals("1", advisoryOf("explicit.mp3"))
+
+  @Test fun advisoryFromFlac() = assertEquals("1", advisoryOf("explicit.flac"))
+
+  @Test fun advisoryFromOggVorbis() = assertEquals("0", advisoryOf("clean.ogg"))
+
+  @Test fun advisoryFromAnMp4RtngAtom() = assertEquals("1", advisoryOf("explicit.m4a"))
+
+  @Test
+  fun noAdvisoryWhenNoneIsTagged() {
+    for (name in listOf("tagged.mp3", "tagged.flac", "tagged.ogg", "tagged-aac.m4a", "tagged.opus", "untagged.mp3")) {
+      assertNull(name, advisoryOf(name))
+    }
+  }
+
   private companion object {
     /** What every `lyrics.*` fixture carries (see `generate.sh`). */
     const val FIXTURE_LYRICS = "[00:00.50]Olá, onda\n[00:01.00]Second line"

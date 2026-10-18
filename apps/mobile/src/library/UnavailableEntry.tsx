@@ -14,7 +14,6 @@ import { useMemo, type ComponentProps } from "react";
 import { Text, ToastAndroid, View } from "react-native";
 
 import { Artwork } from "@/catalog/Artwork";
-import { EntryRow } from "@/catalog/EntryRow";
 import { CELL } from "@/catalog/grid";
 import { TrackRow } from "@/catalog/TrackRow";
 import { TextButton } from "@/components/TextButton";
@@ -23,6 +22,7 @@ import { CardEntries } from "@/overlay/CardEntries";
 import { CardHeading } from "@/overlay/CardHeading";
 import { showError } from "@/overlay/alert";
 import { useOverlayFlow } from "@/overlay/flow";
+import { MenuRow } from "@/overlay/MenuRow";
 import { openOverlay } from "@/overlay/overlay";
 import { useSlideToChoose } from "@/overlay/useSlideToChoose";
 import { openSearch } from "@/search/queryRequest";
@@ -155,7 +155,8 @@ function UnavailableEntryMenu({
       <CardEntries listRef={trackList}>
         {entries.map((action, index) => (
           <View key={action} ref={trackEntry(index)} collapsable={false}>
-            <EntryRow
+            <MenuRow
+              action={action}
               label={UNAVAILABLE_ENTRY_ACTION_LABELS[action]}
               onPress={() => choose(index)}
               divider={entryDivider(index, entries.length, flow)}

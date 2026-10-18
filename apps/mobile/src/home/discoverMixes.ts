@@ -1,12 +1,13 @@
 /**
  * Home's Discover mixes (docs/spec.md, "Discover mixes"): YouTube Music
  * radios of the owner's most played artists and songs (the Library's when
- * plays are short, then artists similar to the Library's), with every song
- * the owner already knows left out. Which seeds, which artist pages to read
+ * plays are short, then artists similar to the Library's), then of the
+ * Library's genres' artists, with every song the owner already knows left out. Which seeds, which artist pages to read
  * for similar artists, which songs and when to build again are Core's
  * (`discoverMixSeeds`, `discoverSimilarSource`, `discoverMixSongs`,
  * `discoverMixesDue`); this asks YouTube Music and keeps the last mixes built,
- * so Home shows them at once.
+ * so Home shows them at once (and what the section shows meanwhile is Core's
+ * `discoverMixesSection`).
  */
 import {
   discoverMix,
@@ -15,6 +16,7 @@ import {
   discoverMixSongs,
   discoverMixesBuilt,
   discoverMixesDue,
+  discoverMixesSection,
   discoverSeedQuery,
   discoverSeedVideo,
   discoverSimilarSource,
@@ -23,20 +25,23 @@ import {
   parseDiscoverMixes,
   pickYtArtist,
   playedFinder,
+  statsWindow,
   storedDiscoverMixes,
   ytArtistLookup,
   type DiscoverMix,
   type DiscoverMixFilter,
   type DiscoverMixSeed,
   type DiscoverMixes,
+  type DiscoverMixesSection,
   type DiscoverSeedPools,
   type DiscoverSimilarArtists,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { useFocusEffect } from "expo-router";
-import { useCallback } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 
+import { makeExternalStore } from "@/lib/externalStore";
 import { persistedSetting } from "@/lib/persistedSetting";
 import { LibraryStore } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
@@ -162,9 +167,9 @@ const readMix = (seed: DiscoverMixSeed, filter: Filter) =>
  * Builds the mixes from the owner's all-time most played artists and songs,
  * and the Library's when plays are short, then artists similar to the
  * Library's when its artists are too few, one seed after another so no song
- * is in two mixes. Null when there's nothing to build from (an empty
- * Library) or no seed made a usable mix: what was saved stays, and a later
- * visit can try again.
+ * is in two mixes. "nothing-to-build-from" when there are no seeds (no plays
+ * and an empty Library), null when no seed made a usable mix: either way what
+ * was saved stays, and a later visit can try again.
  */
 const buildMixes = Effect.gen(function* () {
   const stats = yield* Stats;
@@ -173,6 +178,8 @@ const buildMixes = Effect.gen(function* () {
   const songs = yield* stats.topSongs("all", SEED_POOL);
   const librarySongs = yield* store.listSongs;
   const libraryArtists = yield* store.listArtists;
+  // Every song's all-time plays: Core ranks the Library's genres by them.
+  const songPlays = yield* store.trackPlayTotals(statsWindow("all", Date.now()));
   const seeds = discoverMixSeeds(
     yield* withSimilar({
       played: {
@@ -182,10 +189,11 @@ const buildMixes = Effect.gen(function* () {
       library: {
         artists: libraryArtists.map((artist) => ({ ...artist, songCount: artist.trackCount })),
         songs: librarySongs,
+        plays: songPlays,
       },
     }),
   );
-  if (seeds.length === 0) return null;
+  if (seeds.length === 0) return "nothing-to-build-from" as const;
   const inLibrary = libraryFinder(librarySongs);
   const played = playedFinder(yield* store.playedRecordingKeys);
   const taken = new Set<string>();
@@ -207,6 +215,8 @@ let building = false;
 /** When a build last made no mixes: try again after a while, not on every visit. */
 let failedAt: number | null = null;
 const RETRY_MS = 10 * 60 * 1000;
+/** Whether the last build found no seeds at all: no skeleton while there's nothing to build. */
+const nothingToBuildFrom = makeExternalStore(false);
 
 /** Builds the mixes again when Core says they're due; [played]: the owner has counted plays. */
 const refresh = (played: boolean): void => {
@@ -217,10 +227,15 @@ const refresh = (played: boolean): void => {
   void appRuntime
     .runPromise(Effect.result(buildMixes))
     .then((result) => {
-      if (Result.isSuccess(result) && result.success !== null) {
+      const built = Result.isSuccess(result) ? result.success : null;
+      if (built !== null && built !== "nothing-to-build-from") {
         failedAt = null;
-        saved.set(result.success);
-      } else failedAt = Date.now();
+        nothingToBuildFrom.set(false);
+        saved.set(built);
+        return;
+      }
+      failedAt = Date.now();
+      if (Result.isSuccess(result)) nothingToBuildFrom.set(built !== null);
     })
     .finally(() => {
       building = false;
@@ -228,20 +243,23 @@ const refresh = (played: boolean): void => {
 };
 
 /**
- * The mixes Home shows: the last ones built, or none while YT Music is off.
- * Each time Home comes into focus with YT Music on, they're built again if
- * they weren't today, and while it's in focus once [played] turns true (the
- * first counted plays) if the last build had no seeds from plays.
+ * What Home's Discover mixes section shows (`discoverMixesSection`): the last
+ * mixes built, a skeleton while the first ones build, or nothing while YT
+ * Music is off. Each time Home comes into focus with YT Music on, they're
+ * built again if they weren't today, and while it's in focus once [played]
+ * turns true (the first counted plays) if the last build had no seeds from
+ * plays.
  */
-export const useDiscoverMixes = (played: boolean): readonly DiscoverMix[] => {
+export const useDiscoverMixes = (played: boolean): DiscoverMixesSection => {
   const enabled = useYtMusicEnabled();
   const mixes = saved.useValue();
+  const nothing = useSyncExternalStore(nothingToBuildFrom.subscribe, nothingToBuildFrom.get);
   useFocusEffect(
     useCallback(() => {
       if (enabled) refresh(played);
     }, [enabled, played]),
   );
-  return enabled && mixes !== null ? mixes.mixes : [];
+  return discoverMixesSection(mixes, { ytMusic: enabled, nothingToBuildFrom: nothing });
 };
 
 /** The mix [id] as last built, or null when there's none (YT Music off, or rebuilt without it). */

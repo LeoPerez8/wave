@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, test } from "node:test";
 
-import { DEFAULT_THEME, TONES } from "@wave/core";
+import { DEFAULT_THEME, SETTINGS_TILE_COLOURS, TONES } from "@wave/core";
 
 const read = (path: string): string => readFileSync(new URL(path, import.meta.url), "utf8");
 
@@ -26,9 +26,16 @@ const variant = (scheme: "light" | "dark"): Record<string, string> => {
 };
 
 describe("global.css colour tokens", () => {
-  test("each scheme declares exactly Core's default theme", () => {
-    assert.deepEqual(variant("light"), DEFAULT_THEME.light);
-    assert.deepEqual(variant("dark"), DEFAULT_THEME.dark);
+  test("each scheme declares exactly Core's default theme, and the Settings tiles", () => {
+    for (const scheme of ["light", "dark"] as const) {
+      const tiles = Object.fromEntries(
+        Object.entries(SETTINGS_TILE_COLOURS[scheme]).map(([name, value]) => [
+          `tile-${name}`,
+          value,
+        ]),
+      );
+      assert.deepEqual(variant(scheme), { ...DEFAULT_THEME[scheme], ...tiles });
+    }
   });
 
   test("the tone ramp matches Core's, step for step", () => {

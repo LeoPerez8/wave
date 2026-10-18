@@ -255,6 +255,8 @@ export type {
   LayoutPageEntry,
   SettingsPage,
   SettingsPageEntry,
+  SettingsIcon,
+  SettingsTileColour,
 } from "./settingsPages.ts";
 export { PLAYLIST_LAYOUTS, parsePlaylistLayout, storedPlaylistLayout } from "./playlistLayout.ts";
 export type { PlaylistLayout } from "./playlistLayout.ts";
@@ -278,7 +280,14 @@ export { planAlert } from "./alert.ts";
 export type { AlertButton, AlertChoice, AlertPlan, AlertSpec } from "./alert.ts";
 export { APPEARANCES, appearanceAccent, readAppearance, storedAppearance } from "./appearance.ts";
 export type { Appearance } from "./appearance.ts";
-export { DEFAULT_THEME, NIGHT_SLATE, TONES, themeContrastIssues } from "./theme.ts";
+export {
+  DEFAULT_THEME,
+  NIGHT_SLATE,
+  TONES,
+  themeContrastIssues,
+  SETTINGS_TILE_COLOURS,
+  SETTINGS_TILE_GLYPH,
+} from "./theme.ts";
 export { hexToHsv, hsvToHex, parseHexColour, withOpacity } from "./colour.ts";
 export type { Hsv } from "./colour.ts";
 export {
@@ -1091,7 +1100,17 @@ export type {
   HomeSection,
   HomeSectionId,
 } from "./homeSections.ts";
-export { CROSSFADE, crossfadeDuration, readCrossfade, snapCrossfade } from "./crossfade.ts";
+export {
+  CROSSFADE,
+  CROSSFADE_PREFETCH_LEAD_MS,
+  CROSSFADE_PRE_ROLL_MS,
+  crossfadeDuration,
+  crossfadePrefetchAt,
+  lateCrossfadeOverlap,
+  MIN_LATE_CROSSFADE_MS,
+  readCrossfade,
+  snapCrossfade,
+} from "./crossfade.ts";
 export {
   DISCOVER_MIX_COUNT,
   discoverMix,
@@ -1122,6 +1141,7 @@ export type {
   DiscoverSeedSource,
   DiscoverSimilarArtist,
   DiscoverSimilarArtists,
+  DiscoverSongPlays,
 } from "./discoverMixes.ts";
 export { discoverMixActions, discoverMixPlaylist } from "./discoverMixActions.ts";
 export type { DiscoverMixAction } from "./discoverMixActions.ts";
@@ -1214,6 +1234,28 @@ export type {
   YtLibraryReadFailure,
   YtLibraryReadState,
   YtLibraryReadView,
+  YtLibraryReadToQueue,
 } from "./ytLibraryBatch.ts";
+export { discoverMixesSection } from "./discoverMixesSection.ts";
+export type { DiscoverMixesSection } from "./discoverMixesSection.ts";
+export { streamedCoverUrl, streamedCoverUrls } from "./streamedCover.ts";
+export { advisoryTag, explicitFromAdvisory, isExplicit, showsExplicitBadge } from "./explicit.ts";
+export type { ExplicitFlag } from "./explicit.ts";
+export {
+  LYRIC_CARD_FALLBACK,
+  LYRIC_CARD_LAYOUT,
+  LYRIC_CARD_TEXT_SIZES,
+  MAX_SHARED_LYRIC_LINES,
+  isLyricLineSelected,
+  lyricCardColours,
+  lyricCardFileName,
+  lyricCardInk,
+  lyricCardTextSize,
+  nextLyricCardColour,
+  shareableLyricLines,
+  sharedLyricLines,
+  tapLyricLine,
+} from "./lyricsShare.ts";
+export type { LyricSelection, LyricSelectionTap } from "./lyricsShare.ts";
 export { applyJournalChanges } from "./journalChanges.ts";
 export type { JournalChanges } from "./journalChanges.ts";

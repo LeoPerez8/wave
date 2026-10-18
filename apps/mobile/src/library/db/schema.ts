@@ -156,6 +156,13 @@ export const tracks = sqliteTable(
      * whole-Library lyrics and genre run skips songs that have them and a genre.
      */
     hasLyrics: integer("has_lyrics", { mode: "boolean" }).notNull().default(false),
+    /**
+     * Whether the song is explicit, as its file's advisory tag says (Core's
+     * `explicitFromAdvisory`): unknown when it has none.
+     */
+    explicit: text("explicit", { enum: ["explicit", "clean", "unknown"] })
+      .notNull()
+      .default("unknown"),
     /** When the file first entered the library (drives Recently Added). */
     addedAt: integer("added_at").notNull(),
     /** When a scan last saw the file. */

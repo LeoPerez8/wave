@@ -14,6 +14,7 @@ import { useRenderCount } from "@/perf/perf";
 import type { TrackDetails } from "@/library/LibraryStore";
 import { useCurrentTrackId } from "@/playback/hooks";
 import { playbackState, type PlaybackState } from "@/playback/Player";
+import { LyricCardLayer } from "@/share/LyricCardPreview";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { Background } from "./Background";
@@ -31,7 +32,6 @@ import {
   useNowPlayingShown,
 } from "./sheet";
 import { SleepTimerButton } from "./SleepTimer";
-import { TrackHeader } from "./TrackHeader";
 import { Transport } from "./Transport";
 
 /** What fills the space above the controls. */
@@ -158,7 +158,8 @@ export function NowPlayingSheet() {
   );
   const trackId = useCurrentTrackId();
   const details = useTrackDetails(trackId);
-  const gradient = useNowPlayingGradient(useNowPlayingPalette(trackId, details));
+  const palette = useNowPlayingPalette(trackId, details);
+  const gradient = useNowPlayingGradient(palette);
   const [view, setView] = useState<NowPlayingView>("player");
   // The Queue, once shown, stays mounted while another view shows (`QueuePane`).
   const [queueWarm, setQueueWarm] = useState(false);
@@ -226,12 +227,7 @@ export function NowPlayingSheet() {
               </Activity>
             )}
             {view === "lyrics" && (
-              <View className="flex-1">
-                <DismissArea>
-                  <TrackHeader item={item} />
-                </DismissArea>
-                <LyricsView path={details?.path ?? null} />
-              </View>
+              <LyricsView path={details?.path ?? null} item={item} palette={palette} />
             )}
             <Activity mode={view === "player" ? "visible" : "hidden"} name="Player">
               <PlayerPane item={item} details={details} playing={playing} />
@@ -260,6 +256,8 @@ export function NowPlayingSheet() {
           </View>
         </DismissArea>
       </View>
+      {/* The lyrics card's preview, over the whole sheet (Share in the Lyrics view). */}
+      <LyricCardLayer />
     </Animated.View>
   );
 }

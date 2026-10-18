@@ -2,6 +2,7 @@ import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
 import { useScrollToTop } from "expo-router";
 import {
   counted,
+  showsExplicitBadge,
   songSpineKeys,
   type MixedSong,
   type QueueContext,
@@ -38,6 +39,7 @@ export const toTrackSummary = (song: SongRow): TrackSummary => ({
   artworkUri: song.thumbPath === null ? undefined : `file://${song.thumbPath}`,
   // A missing song: dimmed, as a YT Music song not downloaded is.
   missingTrackId: song.path === null ? song.id : undefined,
+  explicit: showsExplicitBadge(song.explicit),
 });
 
 export const songCount = (count: number): string => counted(count, "song");

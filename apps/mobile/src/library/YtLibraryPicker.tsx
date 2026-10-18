@@ -5,8 +5,9 @@
  * playlists in the account's YouTube Music library. Core decides the rows,
  * the ticks, Select All and the Also add to Favorites switch under Liked
  * Songs (`ytLibraryPicker`); Import makes the playlists and reads them in
- * the background (`importYtLibrary`). Cancel, Back or
- * dragging the sheet down imports nothing.
+ * the background (`importYtLibrary`), and Import & Download beside it also
+ * queues each playlist's downloads once it's read. Cancel, Back or dragging
+ * the sheet down imports nothing.
  */
 import {
   pressYtLibrarySelectAll,
@@ -158,7 +159,7 @@ function PickerSheet({ onClosed }: { onClosed: () => void }) {
   }, [attempt]);
 
   /**
-   * Slides the sheet away, then runs [then] (Import) once it has gone. A drag
+   * Slides the sheet away, then runs [then] (Import or Import & Download) once it has gone. A drag
    * can't take the sheet back while it closes, and a spring cut short all the
    * same still closes it, so the sheet never stays part-open.
    */
@@ -219,11 +220,12 @@ function PickerSheet({ onClosed }: { onClosed: () => void }) {
 
   const view = read.status === "read" ? ytLibraryPickerView(read.picker) : null;
 
-  const importTicked = () => {
+  /** Import, or Import & Download with [download]; nothing while no row is ticked. */
+  const importTicked = (download: boolean) => {
     if (read.status !== "read" || view?.canImport !== true) return;
     const picker = read.picker;
     leave(() => {
-      void importYtLibrary(picker).catch((error: unknown) =>
+      void importYtLibrary(picker, { download }).catch((error: unknown) =>
         showError("Couldn't import the playlists", error),
       );
     });
@@ -323,8 +325,20 @@ function PickerSheet({ onClosed }: { onClosed: () => void }) {
           </View>
 
           <Hairline />
-          <View className="items-center" style={{ paddingVertical: CELL }}>
-            <TextButton label="Import" onPress={importTicked} disabled={view?.canImport !== true} />
+          <View
+            className="flex-row items-center justify-center"
+            style={{ paddingVertical: CELL, paddingHorizontal: grid.margin, gap: CELL * 4 }}
+          >
+            <TextButton
+              label="Import"
+              onPress={() => importTicked(false)}
+              disabled={view?.canImport !== true}
+            />
+            <TextButton
+              label="Import & Download"
+              onPress={() => importTicked(true)}
+              disabled={view?.canImport !== true}
+            />
           </View>
         </Animated.View>
       </GestureHandlerRootView>

@@ -5,7 +5,13 @@ import { Storage } from "expo-sqlite/kv-store";
 import { YtMusic } from "@/ytmusic/YtMusic";
 
 import { queueState } from "./Queue";
-import { cacheYtCoversLater, queueTracks, toYtQueueTrack, type QueueTrack } from "./queueTracks";
+import {
+  cacheStreamedCover,
+  cacheYtCoversLater,
+  queueTracks,
+  toYtQueueTrack,
+  type QueueTrack,
+} from "./queueTracks";
 
 /**
  * YT Music songs in the queue: the details the queue keeps of them (they
@@ -19,15 +25,16 @@ const KEY = "playback.ytTracks";
 const ARTWORK_WAIT_MS = 1500;
 
 /**
- * [song] as the queue needs it, with its cover cached on the phone (so the
- * notification, Auto and Now Playing's tint work as for a Library track).
- * Offline, or when the cover is slow, it goes on with YouTube's address.
+ * [song] as the queue needs it, with its cover cached on the phone at the
+ * size playback shows it (`cacheStreamedCover`), so the notification, Auto
+ * and Now Playing's tint work as for a Library track. Offline, or when the
+ * cover is slow, it goes on with YouTube's address.
  */
 export const ytQueueTrack = (song: YtSong): Effect.Effect<QueueTrack, never, YtMusic> =>
   Effect.gen(function* () {
     if (song.artworkUrl === null) return toYtQueueTrack(song, null);
     const ytMusic = yield* YtMusic;
-    const artwork = yield* ytMusic.cacheArtwork(song.artworkUrl).pipe(
+    const artwork = yield* cacheStreamedCover(song.artworkUrl, ytMusic.cacheArtwork).pipe(
       Effect.timeout(ARTWORK_WAIT_MS),
       Effect.orElseSucceed(() => null),
     );

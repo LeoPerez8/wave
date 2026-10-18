@@ -9,7 +9,6 @@ import {
 import { Text, View } from "react-native";
 
 import { Artwork } from "@/catalog/Artwork";
-import { EntryRow } from "@/catalog/EntryRow";
 import { CELL } from "@/catalog/grid";
 import { saveImportedPlaylist } from "@/library/importPlaylists";
 import { pressedRect } from "@/motion/pressedRect";
@@ -17,6 +16,7 @@ import { showError } from "@/overlay/alert";
 import { CardEntries } from "@/overlay/CardEntries";
 import { CardHeading } from "@/overlay/CardHeading";
 import { useOverlayFlow } from "@/overlay/flow";
+import { MenuRow } from "@/overlay/MenuRow";
 import { followUp, openOverlay } from "@/overlay/overlay";
 import { showToast } from "@/overlay/toast";
 import { useSlideToChoose } from "@/overlay/useSlideToChoose";
@@ -99,7 +99,8 @@ function DiscoverMixActionsMenu({ mix, close }: { mix: DiscoverMix; close: () =>
       <CardEntries listRef={trackList}>
         {entries.map((entry, index) => (
           <View key={entry.action} ref={trackEntry(index)} collapsable={false}>
-            <EntryRow
+            <MenuRow
+              action={entry.action}
               label={entry.label}
               onPress={() => choose(index)}
               divider={entryDivider(index, entries.length, flow)}

@@ -133,6 +133,7 @@ class OggOpusReader : TagReader {
         lyrics = first("LYRICS", "UNSYNCEDLYRICS", "UNSYNCED LYRICS"),
         artists = all("ARTIST"),
         albumArtists = all("ALBUMARTIST", "ALBUM ARTIST", "ALBUM_ARTIST"),
+        advisory = first(Advisory.KEY),
       )
     }
 

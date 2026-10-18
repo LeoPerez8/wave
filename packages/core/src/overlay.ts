@@ -35,11 +35,6 @@ export interface OverlayCardInput {
    * inset (Android reports it without the navigation bar). 0 or absent when closed.
    */
   readonly keyboard?: number;
-  /**
-   * Floating app chrome along the bottom (tab bar, mini player) an anchored
-   * card stays clear of: its height above the system inset, in dp.
-   */
-  readonly chromeBottom?: number | undefined;
   /** Open next to this (a menu next to its row) rather than centred. */
   readonly anchor?: OverlayAnchor | undefined;
   /**
@@ -135,21 +130,14 @@ export const placeOverlayCard = (input: OverlayCardInput): OverlayCardFrame => {
 
 /**
  * Below the anchor, or above it when the card wouldn't fit below; always a
- * margin clear of the system bars and the floating chrome. Too tall for
+ * margin clear of the system bars, but free to draw over the floating chrome
+ * (tab bar, mini player, selection bar), as a centred card does. Too tall for
  * either side, it shrinks into the roomier one (down to the anchor's
  * `minHeight`, scaled with the text), so it never covers the anchor, nor the
  * finger holding it.
  */
 const placeNextTo = (
-  {
-    window,
-    insets,
-    margin,
-    maxWidth,
-    cardHeight,
-    chromeBottom = 0,
-    textScale = 1,
-  }: OverlayCardInput,
+  { window, insets, margin, maxWidth, cardHeight, textScale = 1 }: OverlayCardInput,
   { rect, gap, minHeight: leastHeight = 0 }: OverlayAnchor,
 ): OverlayCardFrame => {
   // A heading and a few entries, however large the text draws them (never smaller than usual).
@@ -157,10 +145,10 @@ const placeNextTo = (
   const areaWidth = window.width - insets.left - insets.right;
   const width = Math.min(areaWidth - margin * 2, maxWidth);
   const highest = insets.top + margin;
-  const lowest = window.height - insets.bottom - chromeBottom - margin;
-  // The card's edges beside the anchor, kept within the space it may use: an anchor on the
-  // floating chrome (a tab) leaves no more room above it than the chrome's top does, and a
-  // row scrolled up under the status bar no more below it than the bar's foot does.
+  const lowest = window.height - insets.bottom - margin;
+  // The card's edges beside the anchor, kept within the space it may use: a row reaching
+  // into the gesture bar leaves no more room above it than the bar's top does, and a row
+  // scrolled up under the status bar no more below it than the bar's foot does.
   const below = Math.max(rect.bottom + gap, highest);
   const above = Math.min(rect.top - gap, lowest);
   const roomBelow = lowest - below;

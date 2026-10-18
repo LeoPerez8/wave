@@ -47,6 +47,8 @@ export interface PlayingSearch {
 export interface PlayingSearching {
   readonly asking?: ReadonlySet<string>;
   readonly failedAt?: ReadonlyMap<string, number>;
+  /** The playing song reached the crossfade's prefetch point: the next song is due now. */
+  readonly nextDue?: boolean;
 }
 
 /**
@@ -338,22 +340,26 @@ const nearEntries = (state: QueueState): QueueEntry[] => {
  * order when shuffle is on, the top again after the end with repeat all),
  * each once, the playing one first, all with the playing priority. A song
  * being searched ([searching].asking) isn't asked again, nor is one whose
- * search failed in the last `PLAYING_SEARCH_RETRY_MS`.
+ * search failed in the last `PLAYING_SEARCH_RETRY_MS`, except the next
+ * song once [searching].nextDue: the playing song reached the crossfade's
+ * prefetch point (`crossfadePrefetchAt`), and the next must reach the player
+ * before the overlap.
  */
 export const playingSearches = (
   state: QueueState,
-  { asking, failedAt }: PlayingSearching,
+  { asking, failedAt, nextDue = false }: PlayingSearching,
   now: number,
 ): PlayingSearch[] => {
   const seen = new Set<string>();
   const searches: PlayingSearch[] = [];
-  for (const { trackId } of nearEntries(state)) {
+  for (const [at, { trackId }] of nearEntries(state).entries()) {
     if (seen.has(trackId)) continue;
     seen.add(trackId);
     const song = readUnsearchedTrackId(trackId);
     if (song === null || asking?.has(trackId) === true) continue;
     const failed = failedAt?.get(trackId);
-    if (failed !== undefined && now - failed < PLAYING_SEARCH_RETRY_MS) continue;
+    const due = nextDue && at === 1;
+    if (!due && failed !== undefined && now - failed < PLAYING_SEARCH_RETRY_MS) continue;
     searches.push({ trackId, song, query: unsearchedSearchQuery(song), asker: "playing" });
   }
   return searches;

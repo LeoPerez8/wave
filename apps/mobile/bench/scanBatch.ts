@@ -67,6 +67,7 @@ const file = (): IndexedTrack => {
     bitrateKbps: 900,
     artworkHash: null,
     hasLyrics: false,
+    explicit: "unknown",
   };
 };
 const files = (count: number): IndexedTrack[] => Array.from({ length: count }, file);

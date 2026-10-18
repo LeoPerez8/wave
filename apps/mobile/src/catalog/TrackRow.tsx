@@ -8,6 +8,7 @@ import { useMissingSongDownloadStatus } from "@/ytmusic/YtDownloads";
 
 import { Artwork } from "./Artwork";
 import { CheckCell } from "./CheckCell";
+import { ExplicitBadge } from "./ExplicitBadge";
 import { CELL, grid } from "./grid";
 import { RankNumber } from "./RankNumber";
 import { WavyUnderline } from "./WavyUnderline";
@@ -28,6 +29,8 @@ export type TrackSummary = {
    * downloads, its line and progress show as a YT Music song's do.
    */
   missingTrackId?: number | undefined;
+  /** An explicit song (Core's `showsExplicitBadge`): an E badge follows its title. */
+  explicit?: boolean | undefined;
 };
 
 /** A row playing now, or one whose file a scan no longer finds ("File not found"). */
@@ -81,7 +84,7 @@ const THUMB = CELL * 5;
  * wavy underline under its visible text. A file not found shows its icon (in
  * place of the number in numbered lists, trailing in artwork lists). Title and
  * artist share one size; rank is weight and tint. In selection mode a check
- * cell leads the row. A missing song (`missingTrackId`) is dimmed (as docs/spec.md,
+ * cell leads the row. An explicit song's E badge follows its title. A missing song (`missingTrackId`) is dimmed (as docs/spec.md,
  * "Missing songs", says), its long press still open, and shows its download as it goes.
  */
 export function TrackRow({
@@ -119,6 +122,7 @@ export function TrackRow({
       accessibilityLabel={[
         track.title,
         track.artist,
+        ...(track.explicit === true ? ["explicit"] : []),
         ...(plays === undefined ? [] : [trailing]),
         ...(downloaded && !missingSong ? ["downloaded"] : []),
         ...(missingSong ? [downloadLine ?? "not downloaded"] : []),
@@ -152,17 +156,20 @@ export function TrackRow({
           </View>
         )}
         <View className="flex-1">
-          {/* Hugs the title's visible (possibly truncated) text, so the underline spans just that. */}
-          <View style={{ alignSelf: "flex-start", maxWidth: "100%" }}>
-            <Text
-              numberOfLines={1}
-              className={`font-sans text-body font-medium ${
-                playing ? "text-highlight" : fileNotFound ? "text-secondary" : "text-foreground"
-              }`}
-            >
-              {track.title}
-            </Text>
-            {playing && <WavyUnderline />}
+          <View className="flex-row items-center" style={{ gap: CELL / 2 }}>
+            {/* Hugs the title's visible (possibly truncated) text, so the underline spans just that. */}
+            <View style={{ flexShrink: 1 }}>
+              <Text
+                numberOfLines={1}
+                className={`font-sans text-body font-medium ${
+                  playing ? "text-highlight" : fileNotFound ? "text-secondary" : "text-foreground"
+                }`}
+              >
+                {track.title}
+              </Text>
+              {playing && <WavyUnderline />}
+            </View>
+            {track.explicit === true && <ExplicitBadge />}
           </View>
           <View className="flex-row items-center" style={{ gap: CELL / 2 }}>
             {downloaded && !fileNotFound && !missingSong && (

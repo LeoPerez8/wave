@@ -425,3 +425,76 @@ describe("ytLibraryFavorites", () => {
     assert.deepEqual(ytLibraryFavorites(likedRead(false), plan), []);
   });
 });
+
+/** Each playlist in [batch], and whether it downloads once it's read. */
+const choices = (batch: YtLibraryBatch) =>
+  batch.reads.map((read) => [read.playlistId, read.download]);
+
+describe("Import & Download's choice to download", () => {
+  const road = { source: "PLroad", playlistId: 41, name: "Road trip", capped: true };
+  const gym = { source: "PLgym", playlistId: 42, name: "Gym 2", capped: true };
+  const chill = { source: "PLchill", playlistId: 43, name: "Chill", capped: true };
+  /** Two playlists Import & Download just made, and one Import made after them. */
+  const downloading = queueYtLibraryReads(
+    queueYtLibraryReads(NO_YT_LIBRARY_READS, [
+      { ...road, favorites: false, download: true },
+      { ...gym, favorites: false, download: true },
+    ]),
+    [{ ...chill, favorites: false }],
+  );
+
+  test("is each playlist's own: Import's playlists download nothing", () => {
+    assert.deepEqual(choices(downloading), [
+      [41, true],
+      [42, true],
+      [43, false],
+    ]);
+  });
+
+  test("survives Wave closing: the playlists read after the restart still download", () => {
+    const resumed = keptAndRead(readDone(downloading, 41));
+    assert.deepEqual(choices(resumed), [
+      [42, true],
+      [43, false],
+    ]);
+    assert.equal(nextYtLibraryRead(resumed)?.download, true);
+  });
+
+  test("a playlist kept by a Wave from before Import & Download downloads nothing", () => {
+    const stored = JSON.stringify({
+      version: 1,
+      batch: [{ ...road, favorites: false, state: "waiting" }],
+    });
+    assert.equal(readYtLibraryBatch(stored).reads[0]?.download, false);
+  });
+
+  test("a playlist whose read fails downloads nothing: Try Again imports it without downloading", () => {
+    const gymFailed = readFailed(downloading, 42);
+    assert.equal(ytLibraryReadView(gymFailed, 42)?.read.download, false);
+    assert.equal(ytLibraryReadView(keptAndRead(gymFailed), 42)?.read.download, false);
+    assert.equal(readOf(gymFailed, 41).download, true, "the others still download");
+  });
+
+  for (const reason of ["offline", "disabled"]) {
+    test(`a batch paused (${reason}) still downloads its playlists once they're read`, () => {
+      const { batch } = ytLibraryReadFailed(downloading, readOf(downloading, 41), reason);
+      assert.deepEqual(choices(batch), [
+        [41, true],
+        [42, true],
+        [43, false],
+      ]);
+    });
+  }
+
+  test("a playlist refreshed while still in the batch takes the new Import's choice", () => {
+    const refreshed = queueYtLibraryReads(downloading, [
+      { ...gym, favorites: false },
+      { ...chill, favorites: false, download: true },
+    ]);
+    assert.deepEqual(choices(refreshed), [
+      [41, true],
+      [42, false],
+      [43, true],
+    ]);
+  });
+});
