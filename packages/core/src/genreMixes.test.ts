@@ -7,6 +7,7 @@ import {
   discoverMixCaption,
   discoverMixFamiliarPool,
   discoverMixesBuilt,
+  discoverMixesDue,
   genreFamily,
   genreMixSeeds,
   interleaveRadios,
@@ -352,6 +353,26 @@ describe("A genre mix", () => {
     const again = parseDiscoverMixes(storedDiscoverMixes(built!));
     assert.deepEqual(again?.mixes[0]?.seed, mix.seed);
     assert.equal(again?.mixes[0]?.id, "genre:metal");
+  });
+
+  test("built once the owner has plays isn't due again that day, though none of its families was played", () => {
+    const now = new Date(2026, 9, 18, 12).getTime();
+    const library = libraryOf([...songsOf(5, "Metalcore", 1), ...songsOf(2, null, 4, 30)]);
+    const seeds = genreMixSeeds(library, always(0));
+    const mix = discoverMix(seeds[0]!, radioSongs(12));
+    assert.ok(mix !== null);
+    const built = discoverMixesBuilt([mix], now, seeds);
+    assert.equal(discoverMixesDue(built, { now: now + 60_000, played: true }), false);
+  });
+
+  test("built before the owner had plays is due once plays arrive", () => {
+    const now = new Date(2026, 9, 18, 12).getTime();
+    const library = libraryOf(songsOf(5, "Metalcore", 1));
+    const seeds = genreMixSeeds(library, always(0));
+    const mix = discoverMix(seeds[0]!, radioSongs(12));
+    assert.ok(mix !== null);
+    const built = discoverMixesBuilt([mix], now, seeds);
+    assert.equal(discoverMixesDue(built, { now: now + 60_000, played: true }), true);
   });
 
   test("takes its Library pool from its family's songs, the most played first", () => {

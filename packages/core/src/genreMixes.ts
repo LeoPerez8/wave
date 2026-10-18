@@ -327,6 +327,8 @@ const seedableArtists = (family: RankedFamily): FamilyArtist[] =>
  * five or more Library songs, most played first (their songs' counted
  * plays), then those with more songs. Each grows from up to three of its
  * artists (`seedArtists`); a family with none that may seed has no mix.
+ * Every seed is from "plays" once any Library song has counted plays (the
+ * ranking used them), else from "library".
  *
  * A refresh ([avoid], `mixRefreshAvoid`) keeps the families while there are
  * four at most, growing them from other artists; with more, it brings in the
@@ -340,7 +342,10 @@ export const genreMixSeeds = (
 ): DiscoverMixSeed[] => {
   const seeds: DiscoverMixSeed[] = [];
   const ranked = libraryFamilies(library)
-    .filter((family) => family.songs >= FAMILY_FEWEST - SHARES_ROUNDING && seedableArtists(family).length > 0)
+    .filter(
+      (family) =>
+        family.songs >= FAMILY_FEWEST - SHARES_ROUNDING && seedableArtists(family).length > 0,
+    )
     // oxlint-disable-next-line unicorn/no-array-sort -- sorts the fresh array filter made; Hermes lacks toSorted
     .sort((a, b) => b.plays - a.plays || b.songs - a.songs);
   const { fresh, shown } = freshFirst(
@@ -348,6 +353,10 @@ export const genreMixSeeds = (
     avoid === undefined ? null : ({ family }) => avoid.mixes.get(`genre:${family.key}`),
   );
   const chosen = new Set([...fresh, ...shown].slice(0, GENRE_MIX_COUNT));
+  // The families are ranked by plays once there are any, whichever families
+  // they fell in: a build then counts as from plays, so the first plays
+  // (`discoverMixesDue`) bring one rebuild, not one on every visit.
+  const played = (library.plays ?? []).some((entry) => entry.countedPlays > 0);
   for (const family of ranked) {
     if (!chosen.has(family)) continue;
     const artists = seedArtists(family, random, avoid);
@@ -356,7 +365,7 @@ export const genreMixSeeds = (
       kind: "genre",
       id: `genre:${key}`,
       name,
-      from: family.plays > 0 ? "plays" : "library",
+      from: played ? "plays" : "library",
       genre: name,
       artists,
     });
