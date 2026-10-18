@@ -244,8 +244,20 @@ describe("downloading a YT Music album", () => {
       action: "retryFailed",
       label: "Retry Failed",
     });
-    assert.equal(
+  });
+
+  test("with every song in the Library, the album page's button says Downloaded", () => {
+    assert.deepEqual(
       button([], () => true),
+      { action: "downloaded", label: "Downloaded" },
+    );
+  });
+
+  test("an album with nothing to offer that isn't all in the Library has no button", () => {
+    // The last song is being saved: nothing to cancel, nothing downloaded yet.
+    assert.equal(button([job("a", { phase: "publishing" })], allBut("a")), null);
+    assert.equal(
+      ytAlbumDownloadButton(ytAlbumDownload([], { inLibrary: () => true, jobs: [] })),
       null,
     );
   });
