@@ -34,6 +34,11 @@ data class RawTags(
   val artists: List<String> = listOfNotNull(artist),
   /** Every value of a multi-value album artist tag, as [artists]. */
   val albumArtists: List<String> = listOfNotNull(albumArtist),
+  /**
+   * Every value of a multi-value genre tag, where [genre] holds the first: the Library
+   * files the song under [genre], Genre mixes count each (Core's `genreMixSeeds`).
+   */
+  val genres: List<String> = listOfNotNull(genre),
   /** The advisory tag as tagged ([Advisory]): Core's `explicitFromAdvisory` reads it. */
   val advisory: String? = null,
 )

@@ -105,6 +105,29 @@ export const selectPlayableSongs = (db: LibraryDatabase, ids: readonly number[])
     trackQuery(db, "files").where(inArray(schema.tracks.id, some)).all(),
   );
 
+/** How a track's genre tag values are stored: null for one or none, else each of them. */
+export const storedGenres = (genres: readonly string[]): string | null =>
+  genres.length > 1 ? JSON.stringify(genres) : null;
+
+/** A song whose genre tag has several values, with each of them. */
+export interface SongGenres {
+  readonly id: number;
+  readonly genres: readonly string[];
+}
+
+/**
+ * The songs whose genre tag has several values, with every value (the first
+ * is the genre the Library files them under): what Genre mixes count.
+ */
+export const selectSongGenres = (db: LibraryDatabase): SongGenres[] =>
+  db
+    .select({ id: schema.tracks.id, genres: schema.tracks.genres })
+    .from(schema.tracks)
+    .where(isNotNull(schema.tracks.genres))
+    .orderBy(asc(schema.tracks.id))
+    .all()
+    .map((row) => ({ id: row.id, genres: JSON.parse(row.genres ?? "[]") as string[] }));
+
 /** The order of song lists (Songs, an artist's or a genre's songs): by title, then artist. */
 export const BY_TITLE = [
   asc(schema.tracks.titleSort),

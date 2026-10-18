@@ -210,8 +210,17 @@ const readRadios = (seed: DiscoverMixSeed, filter: Filter) =>
 /** What a section's mixes are built from: the Library and its plays, read once per build. */
 const readLibrary = Effect.gen(function* () {
   const store = yield* LibraryStore;
+  // Every value of the songs' multi-value genre tags, which Genre mixes count.
+  const genres = new Map((yield* store.listSongGenres).map((song) => [song.id, song.genres]));
+  const songs = yield* store.listSongs;
   return {
-    songs: yield* store.listSongs,
+    songs:
+      genres.size === 0
+        ? songs
+        : songs.map((song) => {
+            const values = genres.get(song.id);
+            return values === undefined ? song : { ...song, genres: values };
+          }),
     artists: yield* store.listArtists,
     // Every song's all-time plays: a mix's Library pool takes the most played first.
     plays: yield* store.trackPlayTotals(statsWindow("all", Date.now())),

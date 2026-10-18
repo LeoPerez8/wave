@@ -18,6 +18,8 @@ interface Fixture {
   readonly genre: string | null;
   readonly artist: number;
   readonly plays?: number;
+  /** Every value of a multi-value genre tag, where [genre] is the first. */
+  readonly genres?: readonly string[];
 }
 
 const ARTISTS = [
@@ -42,6 +44,7 @@ const libraryOf = (songs: readonly Fixture[]) => ({
     durationMs: 200_000,
     addedAt: at,
     genre: song.genre,
+    ...(song.genres === undefined ? {} : { genres: song.genres }),
   })),
   plays: songs.map((song, at) => ({ id: at + 1, countedPlays: song.plays ?? 0 })),
 });
@@ -193,6 +196,92 @@ describe("Genre mixes' families", () => {
     const library = libraryOf([...songsOf(5, "Rock", 4), ...songsOf(5, "Metal", 1)]);
     const ids = genreMixSeeds(library, always(0)).map((seed) => seed.id);
     assert.equal(new Set(ids).size, 2);
+  });
+});
+
+describe("A song with several genres", () => {
+  test("adds half of itself and of its plays to each of two families", () => {
+    const library = libraryOf([
+      ...songsOf(6, "Metalcore; Pop", 1, 10),
+      ...songsOf(3, "Metal", 2),
+      ...songsOf(2, "Pop", 5),
+      ...songsOf(1, "Rock", 4, 31),
+      ...songsOf(4, "Rock", 4),
+      ...songsOf(1, "House", 8, 29),
+      ...songsOf(4, "House", 8),
+    ]);
+    assert.deepEqual(
+      genreMixSeeds(library, always(0)).map((seed) => seed.name),
+      ["Rock", "Metal", "Pop", "Electronic"],
+    );
+  });
+
+  test("counts once, fully, in a family two of its genres share", () => {
+    const library = libraryOf([
+      ...songsOf(5, "Rap/Hip Hop", 5),
+      ...songsOf(5, "Metalcore / Deathcore", 1),
+    ]);
+    assert.deepEqual(
+      genreMixSeeds(library, always(0)).map((seed) => seed.name),
+      ["Hip-Hop", "Metal"],
+    );
+  });
+
+  test('splits a tag joined with "/"', () => {
+    const library = libraryOf([...songsOf(4, "Rock/Pop", 4), ...songsOf(3, "Rock", 4, 1)]);
+    assert.deepEqual(
+      genreMixSeeds(library, always(0)).map((seed) => seed.name),
+      ["Rock"],
+    );
+  });
+
+  test("counts every value of a multi-value tag", () => {
+    const library = libraryOf([
+      ...songsOf(4, null, 1).map((song) => ({
+        ...song,
+        genre: "Metalcore",
+        genres: ["Metalcore", "Electronic"],
+      })),
+      ...songsOf(3, "Techno", 8, 1),
+      ...songsOf(3, "Metal", 2),
+    ]);
+    assert.deepEqual(
+      genreMixSeeds(library, always(0)).map((seed) => seed.name),
+      ["Electronic", "Metal"],
+    );
+  });
+
+  test("may join the Library pool of any of its families", () => {
+    const library = libraryOf([
+      ...songsOf(5, "Metal", 1),
+      ...songsOf(5, "Rock", 4),
+      ...songsOf(1, "Metalcore; Indie Rock", 2, 5),
+    ]);
+    const pools = genreMixSeeds(library, always(0)).map((seed) =>
+      discoverMixLibraryPool(seed, {
+        radio: [],
+        find: () => null,
+        library,
+        taken: new Set(),
+        length: 20,
+      }).map((song) => song.id),
+    );
+    assert.deepEqual(
+      pools.map((pool) => pool[0]),
+      [11, 11],
+    );
+  });
+
+  test("inflates no family when most of the Library has several", () => {
+    const library = libraryOf([
+      ...songsOf(4, "Metalcore; Rock", 1),
+      ...songsOf(4, "Rock; Pop", 4),
+      ...songsOf(4, "Pop; Metalcore", 5),
+    ]);
+    assert.deepEqual(
+      genreMixSeeds(library, always(0)).map((seed) => seed.name),
+      [],
+    );
   });
 });
 

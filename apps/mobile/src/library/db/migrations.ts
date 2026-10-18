@@ -881,6 +881,18 @@ CREATE TABLE \`lyrics_misses\` (
 );
 `;
 
+// A song tagged with several genres counts in each of their families for
+// Genre mixes (docs/spec.md, "Genre mixes"): tracks keep every value of a
+// multi-value genre tag (\`schema.ts\`'s \`genres\`), while the Library still
+// files them under the first. Only a scan reads a tag's every value, so every
+// indexed file is marked as changed (modified_at 0) as in 0015: the next scan
+// reads them all again. Self-contained, so it can take any number when merged.
+const mGenreTags = `
+ALTER TABLE \`tracks\` ADD \`genres\` text;
+--> statement-breakpoint
+UPDATE \`tracks\` SET \`modified_at\` = 0;
+`;
+
 export default {
   journal: {
     entries: [
@@ -915,6 +927,7 @@ export default {
       { idx: 28, when: 1_794_225_600_000, tag: "0028_saved_lyrics", breakpoints: true },
       { idx: 29, when: 1_794_312_000_000, tag: "0029_no_better_copies", breakpoints: true },
       { idx: 30, when: 1_794_398_400_000, tag: "0030_lyrics_misses", breakpoints: true },
+      { idx: 31, when: 1_794_484_800_000, tag: "0031_genre_tags", breakpoints: true },
     ],
   },
   migrations: {
@@ -949,5 +962,6 @@ export default {
     m0028: mSavedLyrics,
     m0029: mNoBetterCopies,
     m0030: mLyricsMisses,
+    m0031: mGenreTags,
   },
 };

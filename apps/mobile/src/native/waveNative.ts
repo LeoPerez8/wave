@@ -15,6 +15,8 @@ export interface NativeScannedTrack {
   /** Every value of a multi-value album artist tag, as [artists]. */
   readonly albumArtists?: readonly string[] | null;
   readonly genre: string | null;
+  /** Every value of a multi-value genre tag, as [artists]; [genre] is the first. */
+  readonly genres?: readonly string[] | null;
   readonly year: string | null;
   readonly trackNumber: string | null;
   readonly discNumber: string | null;
