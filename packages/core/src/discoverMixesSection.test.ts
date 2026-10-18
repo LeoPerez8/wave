@@ -94,7 +94,9 @@ describe("Home's Discover mixes section", () => {
   });
 
   test("shows a skeleton when the saved mixes can't be read", () => {
-    const unreadable = parseDiscoverMixes(JSON.stringify({ builtAt: 1, mixes: [{ id: 1 }] }));
+    const unreadable = parseDiscoverMixes(
+      JSON.stringify({ version: 2, builtAt: 1, mixes: [{ id: 1 }] }),
+    );
     assert.deepEqual(
       discoverMixesSection(unreadable, { ytMusic: true, nothingToBuildFrom: false, blend }),
       { kind: "skeleton" },
