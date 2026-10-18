@@ -7,7 +7,7 @@
 import { snapSliderValue } from "./slider.ts";
 
 /** The Crossfade slider, in seconds. Zero, the default, keeps playback gapless. */
-export const CROSSFADE = { min: 0, max: 10, step: 0.5, default: 0 } as const;
+export const CROSSFADE = { min: 0, max: 15, step: 0.5, default: 0 } as const;
 
 /** The setting nearest `seconds` the slider can hold. */
 export const snapCrossfade = (seconds: number): number => snapSliderValue(seconds, CROSSFADE);

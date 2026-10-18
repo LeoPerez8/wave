@@ -1215,3 +1215,5 @@ export type {
   YtLibraryReadState,
   YtLibraryReadView,
 } from "./ytLibraryBatch.ts";
+export { discoverMixesSection } from "./discoverMixesSection.ts";
+export type { DiscoverMixesSection } from "./discoverMixesSection.ts";
