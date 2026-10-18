@@ -12,6 +12,7 @@ import type { FindInLibrary } from "@/ytmusic/libraryFinder";
 import { cancelUnstarredDownloads, downloadStarredSongs } from "@/ytmusic/YtDownloads";
 
 import { currentFavoriteIds, setFavorites, setPendingFavorites } from "./favorites";
+import { publishYtSongSignal } from "./libraryChanges";
 import { LibraryStore, songHasFile, type SongRow } from "./LibraryStore";
 import { appRuntime } from "./runtime";
 
@@ -67,6 +68,11 @@ export const starSongs = (
     else library.set(track.id, track);
   }
   const missing = [...library.values()].flatMap((song) => (songHasFile(song) ? [] : [song.id]));
+  if (on)
+    publishYtSongSignal(
+      "favorite",
+      ytSongs.map((song) => song.videoId),
+    );
   const stars = setFavorites([...library.keys()], on);
   // Unstarring takes back the songs' pending favorites too, the ones the Library has by now
   // included, so none stars them later.

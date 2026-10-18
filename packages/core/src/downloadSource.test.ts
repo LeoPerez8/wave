@@ -150,6 +150,20 @@ describe("downloadFailurePlan", () => {
     assert.equal(plan.exhausted, "failed");
   });
 
+  test("YouTube refusing a song is tried again after 30 s, 90 s and 4 min, then the song is unavailable", () => {
+    const { refused } = downloadFailurePlan("youtube", on);
+    assert.deepEqual(refused, {
+      failure: "ytRefused",
+      pausesMs: [30_000, 90_000, 240_000],
+      exhausted: "ytUnavailable",
+    });
+  });
+
+  test("a refusal is YouTube's: a Soulseek download has no refusal to retry", () => {
+    assert.equal(downloadFailurePlan("soulseek", on).refused, null);
+    assert.equal(downloadFailurePlan("soulseek", off).refused, null);
+  });
+
   test("a YouTube download has nothing to fall back to", () => {
     assert.deepEqual(downloadFailurePlan("youtube", on).fallsBack, []);
     assert.deepEqual(downloadFailurePlan("youtube", off).fallsBack, []);

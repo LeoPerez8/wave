@@ -1,4 +1,9 @@
-import { IconChevronDown, IconListNumbers, IconQuote } from "@tabler/icons-react-native";
+import {
+  IconChevronDown,
+  IconListNumbers,
+  IconQuote,
+  IconShare3,
+} from "@tabler/icons-react-native";
 import type { ComponentType, ReactNode } from "react";
 import { Activity, memo, useEffect, useState, useSyncExternalStore } from "react";
 import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
@@ -15,6 +20,7 @@ import type { TrackDetails } from "@/library/LibraryStore";
 import { useCurrentTrackId } from "@/playback/hooks";
 import { playbackState, type PlaybackState } from "@/playback/Player";
 import { LyricCardLayer } from "@/share/LyricCardPreview";
+import { openSongShare } from "@/share/songShare";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { Background } from "./Background";
@@ -225,8 +231,22 @@ export function NowPlayingSheet() {
         <DismissArea
           style={{ marginHorizontal: -grid.margin, paddingHorizontal: grid.margin - 12 }}
         >
-          <View className="flex-row items-center" style={{ height: CELL * 7 }}>
+          <View className="flex-row items-center justify-between" style={{ height: CELL * 7 }}>
             <IconButton icon={IconChevronDown} label="Close Now Playing" onPress={close} />
+            {item !== null && (
+              <IconButton
+                icon={IconShare3}
+                label="Share Song"
+                onPress={() =>
+                  openSongShare({
+                    title: item.title ?? "Unknown title",
+                    artist: item.artist ?? "Unknown Artist",
+                    artworkUri: item.artworkUri ?? undefined,
+                    palette,
+                  })
+                }
+              />
+            )}
           </View>
         </DismissArea>
 

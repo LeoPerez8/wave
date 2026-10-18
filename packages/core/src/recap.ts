@@ -14,8 +14,14 @@ export interface RecapMonth {
   readonly month: number;
 }
 
+/** A calendar year, local time. */
+export interface RecapYear {
+  readonly kind: "year";
+  readonly year: number;
+}
+
 /** A period a Recap covers. */
-export type RecapPeriod = RecapMonth;
+export type RecapPeriod = RecapMonth | RecapYear;
 
 /**
  * Counted listening that started at `startedAt`: one counted play, or the
@@ -33,6 +39,12 @@ const HOUR_MS = 60 * 60 * 1000;
 /** The counted listening a month needs for a Recap. */
 export const RECAP_MONTH_MINIMUM_MS = 3 * HOUR_MS;
 
+/** The counted listening a year needs for a Recap. */
+export const RECAP_YEAR_MINIMUM_MS = 20 * HOUR_MS;
+
+/** The month (1-12) a year's Recap is out in, covering the year so far. */
+const YEAR_RECAP_OUT_MONTH = 12;
+
 /** The local month `time` falls in. */
 const monthOf = (time: number): RecapMonth => {
   const date = new Date(time);
@@ -41,17 +53,32 @@ const monthOf = (time: number): RecapMonth => {
 
 /** When `period` starts, local time. */
 const periodStart = (period: RecapPeriod): number =>
-  new Date(period.year, period.month - 1, 1).getTime();
+  new Date(period.year, period.kind === "month" ? period.month - 1 : 0, 1).getTime();
 
 /** When `period` ends: the start of the next one, local time. */
-const periodEnd = (period: RecapPeriod): number => new Date(period.year, period.month, 1).getTime();
+const periodEnd = (period: RecapPeriod): number =>
+  period.kind === "month"
+    ? new Date(period.year, period.month, 1).getTime()
+    : new Date(period.year + 1, 0, 1).getTime();
 
-/** `period`'s id, as routes carry it: "2026-09" for September 2026. */
+/**
+ * When `period`'s Recap is out: a month's once it has ended, a year's on
+ * 1 December (it then covers the year so far, and is final from 1 January).
+ */
+const periodOut = (period: RecapPeriod): number =>
+  period.kind === "month"
+    ? periodEnd(period)
+    : new Date(period.year, YEAR_RECAP_OUT_MONTH - 1, 1).getTime();
+
+/** `period`'s id, as routes carry it: "2026-09" for September 2026, "2026" for the year. */
 export const recapId = (period: RecapPeriod): string =>
-  `${period.year}-${String(period.month).padStart(2, "0")}`;
+  period.kind === "month"
+    ? `${period.year}-${String(period.month).padStart(2, "0")}`
+    : String(period.year);
 
 /** The period a `recapId` names, or null for anything else. */
 export const parseRecapId = (id: string): RecapPeriod | null => {
+  if (/^\d{4}$/.test(id)) return { kind: "year", year: Number(id) };
   const match = /^(\d{4})-(\d{2})$/.exec(id);
   if (match === null) return null;
   const month = Number(match[2]);
@@ -83,9 +110,9 @@ const MONTHS = [
   "December",
 ];
 
-/** `period` as a Recap's title: "September 2026". */
+/** `period` as a Recap's title: "September 2026", or "2026" for the year. */
 export const recapTitle = (period: RecapPeriod): string =>
-  `${MONTHS[period.month - 1]} ${period.year}`;
+  period.kind === "month" ? `${MONTHS[period.month - 1]} ${period.year}` : String(period.year);
 
 /** How many songs a Recap's top songs list. */
 export const RECAP_TOP_SONGS = 5;
@@ -262,37 +289,86 @@ export const recap = ({
   };
 };
 
+const minimumMs = (period: RecapPeriod): number =>
+  period.kind === "month" ? RECAP_MONTH_MINIMUM_MS : RECAP_YEAR_MINIMUM_MS;
+
 /**
- * Every period with a Recap at `now`, newest first: each month that has
- * ended and holds at least `RECAP_MONTH_MINIMUM_MS` of counted listening.
+ * Newest first, each year above the months of that year: by year, then the
+ * year before its months, then months newest first.
+ */
+const newestFirst = (a: RecapPeriod, b: RecapPeriod): number =>
+  b.year - a.year || (b.kind === "month" ? b.month : 13) - (a.kind === "month" ? a.month : 13);
+
+/**
+ * Every period with a Recap at `now`, newest first with each year above its
+ * months: each month that has ended and holds at least
+ * `RECAP_MONTH_MINIMUM_MS` of counted listening, and each year from
+ * 1 December that holds at least `RECAP_YEAR_MINIMUM_MS`.
  */
 export const availableRecaps = (
   listening: readonly CountedListening[],
   now: number,
 ): RecapPeriod[] => {
-  const byMonth = new Map<string, { period: RecapMonth; listenedMs: number }>();
-  for (const entry of listening) {
-    const period = monthOf(entry.startedAt);
+  const sums = new Map<string, { period: RecapPeriod; listenedMs: number }>();
+  const add = (period: RecapPeriod, listenedMs: number): void => {
     const id = recapId(period);
-    const sum = byMonth.get(id);
-    byMonth.set(id, { period, listenedMs: (sum?.listenedMs ?? 0) + entry.listenedMs });
+    const sum = sums.get(id);
+    sums.set(id, { period, listenedMs: (sum?.listenedMs ?? 0) + listenedMs });
+  };
+  for (const entry of listening) {
+    const month = monthOf(entry.startedAt);
+    add(month, entry.listenedMs);
+    add({ kind: "year", year: month.year }, entry.listenedMs);
   }
   return (
-    [...byMonth.values()]
+    [...sums.values()]
       .filter(
-        ({ period, listenedMs }) =>
-          periodEnd(period) <= now && listenedMs >= RECAP_MONTH_MINIMUM_MS,
+        ({ period, listenedMs }) => periodOut(period) <= now && listenedMs >= minimumMs(period),
       )
       .map(({ period }) => period)
       // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
-      .sort((a, b) => periodStart(b) - periodStart(a))
+      .sort(newestFirst)
   );
 };
 
+/** The `recapId`s opened so far, from what's stored for them (null: none). */
+export const parseOpenedRecaps = (stored: string | null): string[] => {
+  if (stored === null) return [];
+  try {
+    const value: unknown = JSON.parse(stored);
+    return Array.isArray(value) ? value.filter((id): id is string => typeof id === "string") : [];
+  } catch {
+    return [];
+  }
+};
+
+/** What to store for the `recapId`s opened so far. */
+export const storedOpenedRecaps = (opened: readonly string[]): string => JSON.stringify(opened);
+
+/** `opened` with the Recap `id` opened too. */
+export const withRecapOpened = (opened: readonly string[], id: string): readonly string[] =>
+  opened.includes(id) ? opened : [...opened, id];
+
 /**
- * One slide of a Recap's stories. Each kind carries what it shows; later
- * slides (the summary card) join as new kinds.
+ * The Recap Home's card announces, or null: among `available` (as
+ * `availableRecaps` lists them), those out most recently, the first not yet
+ * opened (`opened` holds `recapId`s). On 1 December that's the year, then
+ * November once the year is opened; an older Recap left unopened isn't
+ * announced once a newer one is out.
  */
+export const recapToAnnounce = (
+  available: readonly RecapPeriod[],
+  opened: readonly string[],
+): RecapPeriod | null => {
+  let latest = Number.NEGATIVE_INFINITY;
+  for (const period of available) latest = Math.max(latest, periodOut(period));
+  return (
+    available.find((period) => periodOut(period) === latest && !opened.includes(recapId(period))) ??
+    null
+  );
+};
+
+/** One slide of a Recap's stories. Each kind carries what it shows. */
 export type RecapSlide =
   | { readonly kind: "minutes"; readonly minutes: number }
   | {
@@ -308,12 +384,24 @@ export type RecapSlide =
       readonly kind: "discovered";
       /** Every artist discovered in the period, the most played first. */
       readonly artists: readonly PlayTotals[];
+    }
+  | {
+      /** The summary card, always last: the Recap on one slide, as Wrapped's is. */
+      readonly kind: "summary";
+      readonly minutes: number;
+      /** The top songs (up to 5), the top one first. */
+      readonly songs: readonly PlayTotals[];
+      /** The top artists (up to 5), the top one first. */
+      readonly artists: readonly PlayTotals[];
+      /** The top genre family; null with no song with a genre. */
+      readonly genre: GenreFamily | null;
     };
 
 /**
  * A Recap's slides, in the order the stories play them: minutes, top songs,
- * top artists, top album, top genres, habits, discovered artists. A slide
- * with nothing to show is left out.
+ * top artists, top album, top genres, habits, discovered artists, then the
+ * summary card. A slide with nothing to show is left out; the summary card
+ * always closes the stories.
  */
 export const recapSlides = (shown: Recap): RecapSlide[] => {
   const slides: RecapSlide[] = [{ kind: "minutes", minutes: shown.minutesListened }];
@@ -325,6 +413,13 @@ export const recapSlides = (shown: Recap): RecapSlide[] => {
   if (shown.discoveredArtists.length > 0) {
     slides.push({ kind: "discovered", artists: shown.discoveredArtists });
   }
+  slides.push({
+    kind: "summary",
+    minutes: shown.minutesListened,
+    songs: shown.topSongs,
+    artists: shown.topArtists,
+    genre: shown.topGenres[0]?.family ?? null,
+  });
   return slides;
 };
 

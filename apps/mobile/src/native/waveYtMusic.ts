@@ -68,6 +68,20 @@ type WaveYtMusicEvents = {
   onSessionChanged: (session: YtSession) => void;
 };
 
+/** An entry of a playlist the account made: the song's video id and the entry's own id. */
+export interface NativeYtOwnEntry {
+  readonly videoId: string;
+  readonly setVideoId: string;
+}
+
+/** One change to a playlist the account made, applied in order (`editPlaylist`). */
+export type NativeYtPlaylistEdit =
+  | { readonly kind: "add"; readonly videoId: string }
+  | { readonly kind: "remove"; readonly videoId: string; readonly setVideoId: string }
+  /** Moves the entry right before the entry [before], or to the end for null. */
+  | { readonly kind: "move"; readonly setVideoId: string; readonly before: string | null }
+  | { readonly kind: "rename"; readonly title: string };
+
 declare class WaveYtMusicModule extends NativeModule<WaveYtMusicEvents> {
   /**
    * Turns YT Music on or off. Off, every request rejects with
@@ -94,6 +108,16 @@ declare class WaveYtMusicModule extends NativeModule<WaveYtMusicEvents> {
    * signed out, or when YouTube no longer accepts the session (which then expires).
    */
   libraryPlaylists(): Promise<readonly YtLibraryPlaylist[]>;
+  /**
+   * The entries of the account's playlist [playlistId], every page; null
+   * when it was deleted or isn't the account's. Rejects with
+   * `ERR_YT_SIGNED_OUT` without a session YouTube accepts.
+   */
+  ownPlaylist(playlistId: string): Promise<readonly NativeYtOwnEntry[] | null>;
+  /** Makes an unlisted playlist [title] on the account holding [videoIds] in order; resolves its id. */
+  createPlaylist(title: string, videoIds: readonly string[]): Promise<string>;
+  /** Applies [edits] to the account's playlist [playlistId], in order, in one request. */
+  editPlaylist(playlistId: string, edits: readonly NativeYtPlaylistEdit[]): Promise<void>;
   /** The first page of the radio YouTube Music plays after the song [videoId] (it first). */
   songRadio(videoId: string): Promise<NativeYtRadioPage>;
   /** The first page of the radio of the artist whose page is [browseId] (`UC…`). */

@@ -29,9 +29,9 @@ export const readCrossfade = (stored: string | null): number => {
 export const crossfadeDuration = (seconds: number): number => snapCrossfade(seconds) * 1000;
 
 /**
- * How long before the overlap the playback service opens its second copy of
- * the outgoing song, to get it in step (Kotlin `CrossfadeTiming.PREROLL_MS`).
- * The playback service keeps a copy of this timing; its `CrossfadeTimingTest`
+ * The pre-roll: with `CROSSFADE_PREFETCH_LEAD_MS`, how far ahead of the
+ * overlap the playback service makes the next song ready and opens it on its
+ * second player (Kotlin `CrossfadeTiming.PREROLL_MS`). The playback service keeps a copy of this timing; its `CrossfadeTimingTest`
  * runs this file's test cases, so change both together.
  */
 export const CROSSFADE_PRE_ROLL_MS = 3000;

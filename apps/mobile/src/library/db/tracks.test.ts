@@ -14,6 +14,7 @@ import {
   selectKnownFiles,
   selectLibraryLookupSongs,
   selectSongGenres,
+  selectVideoIds,
   trackQuery,
 } from "./tracks.ts";
 import { addTrack, migrateTestDatabase, openTestDatabase } from "./testDatabase.ts";
@@ -272,5 +273,15 @@ describe("selectKnownFiles", () => {
     assert.equal(known?.path, "/Music/OK Computer/Airbag.mp3");
     assert.notEqual(known?.modifiedAt, 1_234);
     assert.deepEqual(selectSongGenres(old), []);
+  });
+});
+
+describe("selectVideoIds", () => {
+  test("gives the YouTube video id each song was downloaded from, leaving out those without one", async () => {
+    const db = await openTestDatabase();
+    const lucky = addTrack(db, { title: "Get Lucky" });
+    const local = addTrack(db, { title: "Ripped" });
+    db.update(schema.tracks).set({ videoId: "abc" }).where(eq(schema.tracks.id, lucky)).run();
+    assert.deepEqual(selectVideoIds(db, [lucky, local, 999]), new Map([[lucky, "abc"]]));
   });
 });

@@ -159,6 +159,7 @@ import {
   trackArtistIds,
   selectPlayableSongs,
   selectSongGenres,
+  selectVideoIds,
   trackQuery,
   type SongGenres,
   type TrackScope,
@@ -633,6 +634,10 @@ export class LibraryStore extends Context.Service<
     readonly songsByIds: (
       ids: readonly number[],
     ) => Effect.Effect<readonly PlayableSongRow[], LibraryStoreError>;
+    /** The YouTube video id each of the songs [ids] was downloaded from, by song id (those with one). */
+    readonly videoIds: (
+      ids: readonly number[],
+    ) => Effect.Effect<ReadonlyMap<number, string>, LibraryStoreError>;
     readonly loadPlayback: Effect.Effect<SavedPlayback | null, LibraryStoreError>;
     /** Saves the queue with where its current entry is. */
     readonly saveQueue: (
@@ -1313,6 +1318,8 @@ const make = Effect.gen(function* () {
 
     songsByIds: (ids) =>
       attempt("read queued songs", () => selectPlayableSongs(db, ids).filter(songHasFile)),
+
+    videoIds: (ids) => attempt("read the songs' video ids", () => selectVideoIds(db, ids)),
 
     loadPlayback: attempt(
       "read the saved queue",
