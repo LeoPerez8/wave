@@ -1,20 +1,32 @@
 import { Canvas, LinearGradient, Rect, vec } from "@shopify/react-native-skia";
-import { IconBrandInstagram, IconBrandWhatsapp, IconDots, IconX } from "@tabler/icons-react-native";
+import {
+  IconBrandInstagram,
+  IconBrandSpotify,
+  IconBrandWhatsapp,
+  IconBrandYoutube,
+  IconDots,
+  IconLink,
+  IconX,
+} from "@tabler/icons-react-native";
 import {
   songCardColours,
   songCardFileName,
+  songLinkView,
   songShareDestinations,
   type LyricShareApps,
   type LyricStoryBackground,
+  type SongLinkOption,
+  type SongLinksState,
   type SongShareDestination,
 } from "@wave/core";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { PixelRatio, StyleSheet, View } from "react-native";
+import { PixelRatio, Share, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CELL, grid } from "@/catalog/grid";
 import { IconButton } from "@/components/IconButton";
 import { appLog } from "@/log/appLog";
+import { WaveNative } from "@/native/waveNative";
 import { addScreenBackHandler } from "@/overlay/back";
 import { showToast } from "@/overlay/toast";
 
@@ -48,6 +60,57 @@ const NO_APPS: LyricShareApps = { instagramStories: false, whatsapp: false };
 
 /** The card's file name, stamped now. */
 const cardFileName = (title: string): string => songCardFileName(title, new Date());
+
+const LINK_LABELS: Record<SongLinkOption, string> = {
+  copyLink: "Copy Link",
+  spotify: "Spotify",
+  ytMusic: "YT Music",
+};
+
+const LINK_ICONS: Record<SongLinkOption, ShareDestination["icon"]> = {
+  copyLink: IconLink,
+  spotify: IconBrandSpotify,
+  ytMusic: IconBrandYoutube,
+};
+
+/** Copies [url] (song.link's page) and says so. */
+const copyLink = async (url: string): Promise<void> => {
+  try {
+    await WaveNative.writeClipboardText("Song link", url);
+    void showToast("Link copied");
+  } catch (error) {
+    appLog("warn", LOG_TAG, `Couldn't copy the song's link: ${String(error)}`);
+    void showToast("Couldn't copy the link");
+  }
+};
+
+/** Opens Android's share sheet with [url], the song's link on [title]'s platform. */
+const shareLink = async (url: string, title: string): Promise<void> => {
+  try {
+    await Share.share({ message: url, title });
+  } catch (error) {
+    appLog("warn", LOG_TAG, `Couldn't share the song's link: ${String(error)}`);
+    void showToast("Couldn't share the link");
+  }
+};
+
+/** The link [option] as a destination while the song's links are [state] (Core's `songLinkView`). */
+const linkDestination = (option: SongLinkOption, state: SongLinksState): ShareDestination => {
+  const { url, loading, note } = songLinkView(option, state);
+  const label = LINK_LABELS[option];
+  return {
+    key: option,
+    label,
+    icon: LINK_ICONS[option],
+    disabled: url === null,
+    loading,
+    note,
+    onPress: () => {
+      if (url === null) return;
+      void (option === "copyLink" ? copyLink(url) : shareLink(url, label));
+    },
+  };
+};
 
 /** The apps the last sheet found: the row's layout while the next one checks again. */
 let lastApps: LyricShareApps | null = null;
@@ -151,7 +214,8 @@ function SongSharePreview({ content }: { content: SongShareContent }) {
     }
   };
 
-  const all: Record<SongShareDestination, ShareDestination> = {
+  const links = content.links;
+  const all: Record<Exclude<SongShareDestination, SongLinkOption>, ShareDestination> = {
     instagramStories: {
       key: "instagramStories",
       label: "Instagram Stories",
@@ -184,7 +248,12 @@ function SongSharePreview({ content }: { content: SongShareContent }) {
     },
   };
   const shown = apps ?? laidOutAs;
-  const destinations = songShareDestinations(shown ?? NO_APPS).map((key) => all[key]);
+  const destinations = songShareDestinations(shown ?? NO_APPS, { links: links !== null }).map(
+    (key) =>
+      key === "copyLink" || key === "spotify" || key === "ytMusic"
+        ? linkDestination(key, links ?? { status: "loading" })
+        : all[key],
+  );
 
   // The Story fitted into the area; the card laid out at the export's size, scaled down onto it.
   const storyWidth = area === null ? 0 : Math.min(area.width, area.height / STORY_ASPECT);
