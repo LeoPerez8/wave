@@ -42,8 +42,20 @@ export type ArtistStats =
 
 /** A Recap slide with the rows it shows loaded. */
 export type LoadedRecapSlide =
-  | Exclude<RecapSlide, { kind: "topSongs" }>
-  | { readonly kind: "topSongs"; readonly songs: readonly Ranked<SongRow>[] };
+  | Exclude<RecapSlide, { kind: "topSongs" | "topArtists" | "topAlbum" | "discovered" }>
+  | { readonly kind: "topSongs"; readonly songs: readonly Ranked<SongRow>[] }
+  | { readonly kind: "topArtists"; readonly artists: readonly Ranked<ArtistRow>[] }
+  | { readonly kind: "topAlbum"; readonly album: Ranked<AlbumRow> }
+  | {
+      readonly kind: "discovered";
+      /** How many artists the period discovered. */
+      readonly count: number;
+      /** The most played of them, the top one first. */
+      readonly artists: readonly Ranked<ArtistRow>[];
+    };
+
+/** How many discovered artists a Recap's slide names. */
+const DISCOVERED_SHOWN = 5;
 
 /** A Recap as its stories show it: Core's slides, their songs loaded. */
 export interface LoadedRecap {
@@ -134,7 +146,7 @@ export const topAlbumsAndArtists = (
       }),
   );
 
-/** Loads a slide's rows; a top-songs slide whose songs all left the library is dropped. */
+/** Loads a slide's rows; a slide whose songs, artists or album all left the library is dropped. */
 const loadSlide = (
   store: LibraryStore["Service"],
   slide: RecapSlide,
@@ -146,6 +158,25 @@ const loadSlide = (
       return Effect.map(withRows(slide.songs, store.songsByIds), (songs) =>
         songs.length === 0 ? [] : [{ kind: "topSongs", songs }],
       );
+    case "topArtists":
+      return Effect.map(withRows(slide.artists, store.artistsByIds), (artists) =>
+        artists.length === 0 ? [] : [{ kind: "topArtists", artists }],
+      );
+    case "topAlbum":
+      return Effect.map(withRows([slide.album], store.albumsByIds), ([album]) =>
+        album === undefined ? [] : [{ kind: "topAlbum", album }],
+      );
+    case "discovered":
+      return Effect.map(
+        withRows(slide.artists.slice(0, DISCOVERED_SHOWN), store.artistsByIds),
+        (artists) =>
+          artists.length === 0
+            ? []
+            : [{ kind: "discovered", count: slide.artists.length, artists }],
+      );
+    case "topGenres":
+    case "habits":
+      return Effect.succeed([slide]);
   }
 };
 
@@ -161,8 +192,23 @@ const loadRecap = (
     if (!availableRecaps(listening, now).some((available) => recapId(available) === id)) {
       return null;
     }
-    const songs = yield* store.trackPlayTotals(recapWindow(period));
-    const computed = recap({ period, listening, songs });
+    const window = recapWindow(period);
+    const songs = yield* store.trackPlayTotals(window);
+    const credits = yield* store.creditedPlayTotals(window);
+    const artists = artistPlayTotals(credits);
+    const played = songs.filter((song) => song.countedPlays > 0).map((song) => song.id);
+    const songGenres = played.length === 0 ? [] : yield* store.songGenres(played);
+    const artistFirstPlays =
+      artists.length === 0 ? [] : yield* store.artistFirstPlays(artists.map((artist) => artist.id));
+    const computed = recap({
+      period,
+      listening,
+      songs,
+      artists,
+      albums: albumPlayTotals(credits),
+      songGenres,
+      artistFirstPlays,
+    });
     const slides = yield* Effect.forEach(recapSlides(computed), (slide) => loadSlide(store, slide));
     return { period, title: computed.title, slides: slides.flat() };
   });
