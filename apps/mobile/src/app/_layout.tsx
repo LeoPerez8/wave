@@ -102,6 +102,11 @@ export default function RootLayout() {
             >
               <Stack.Protected guard={granted}>
                 <Stack.Screen name="(tabs)" />
+                {/* A Recap's stories cover the whole screen, mini player and tab bar too. */}
+                <Stack.Screen
+                  name="recap/[id]"
+                  options={{ animation: "fade_from_bottom", gestureEnabled: false }}
+                />
               </Stack.Protected>
               <Stack.Protected guard={!granted}>
                 <Stack.Screen name="access" options={{ animation: "fade" }} />

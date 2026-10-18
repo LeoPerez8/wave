@@ -10,6 +10,7 @@ import {
   type LibraryTrack,
   type MissingTrack,
   type PendingFavorite,
+  type CountedListening,
   type CreditedPlayTotals,
   type PlayEvent,
   type PlayTotals,
@@ -162,7 +163,13 @@ import {
   type TrackScope,
   withFile,
 } from "./db/tracks";
-import { artistPlays, creditedPlayTotals, trackPlayTotals, type ArtistPlays } from "./db/stats";
+import {
+  artistPlays,
+  countedListening,
+  creditedPlayTotals,
+  trackPlayTotals,
+  type ArtistPlays,
+} from "./db/stats";
 import { keyRecordings, stampPreference } from "./db/sync";
 import {
   filesGone,
@@ -855,6 +862,11 @@ export class LibraryStore extends Context.Service<
      */
     readonly listeningSums: Effect.Effect<ListeningSums, LibraryStoreError>;
     /**
+     * The whole history's counted listening, summed per quarter hour (deleted
+     * songs included): what Core's `availableRecaps` and `recap` read.
+     */
+    readonly countedListening: Effect.Effect<readonly CountedListening[], LibraryStoreError>;
+    /**
      * What [artistId]'s page needs for its stats block (Core's `artistStats`),
      * read from that artist's songs and their plays alone: the songs in the
      * library whose credit names them, those songs' all-time listening
@@ -1468,6 +1480,8 @@ const make = Effect.gen(function* () {
     linkRows: (ids) => attempt("read linked rows", () => selectLinkRows(db, ids)),
 
     listeningSums: attempt("sum up listening", () => listeningSums(db)),
+
+    countedListening: attempt("sum up counted listening", () => countedListening(db)),
 
     artistPlays: (artistId, now) =>
       attempt("sum up the artist's plays", () => artistPlays(db, artistId, now)),

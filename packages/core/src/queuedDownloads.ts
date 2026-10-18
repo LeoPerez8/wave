@@ -69,14 +69,35 @@ export const queuedDownloads = <S extends YtSong>(
   return [...rows.filter((row) => !row.waiting), ...rows.filter((row) => row.waiting)];
 };
 
+/** How many songs on their way are downloading (or saving) and how many wait. */
+export interface QueuedDownloadCounts {
+  readonly downloading: number;
+  readonly waiting: number;
+}
+
+/** How many of [jobs] are on their way (`queuedDownloads`), without listing them. */
+export const queuedDownloadCounts = <S extends YtSong>(
+  jobs: readonly YtDownloadJournalJob<S>[],
+): QueuedDownloadCounts => {
+  let downloading = 0;
+  let waiting = 0;
+  for (const job of jobs) {
+    if (!onItsWay(statusOf(job))) continue;
+    if (job.phase === "queued") waiting += 1;
+    else downloading += 1;
+  }
+  return { downloading, waiting };
+};
+
 /**
- * How many of [queued] are downloading and how many wait, as the Downloading
- * section and the Settings row say it ("2 downloading · 5 waiting"); null
- * with nothing on its way.
+ * How many songs are downloading and how many wait ([counts]), as the
+ * Downloading section and the Settings row say it ("2 downloading · 5
+ * waiting"); null with nothing on its way.
  */
-export const queuedDownloadsSummary = (queued: readonly QueuedDownload[]): string | null => {
-  const waiting = queued.filter((row) => row.waiting).length;
-  const downloading = queued.length - waiting;
+export const queuedDownloadsSummary = ({
+  downloading,
+  waiting,
+}: QueuedDownloadCounts): string | null => {
   const parts = [
     ...(downloading === 0 ? [] : [`${downloading.toLocaleString("en")} downloading`]),
     ...(waiting === 0 ? [] : [`${waiting.toLocaleString("en")} waiting`]),
