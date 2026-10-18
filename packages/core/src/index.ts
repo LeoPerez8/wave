@@ -859,13 +859,17 @@ export {
   DOWNLOAD_PACE_MIN_SPAN_MS,
   DOWNLOAD_PACE_WINDOW_MS,
   NO_DOWNLOAD_RUN,
+  downloadRunGroupLine,
   downloadRunLines,
   downloadRunNotice,
+  downloadRunPanelLine,
   downloadRunProgress,
   downloadTimeLeft,
   downloadTimeLeftLine,
   downloadsPaused,
   followDownloadRun,
+  keptDownloadRun,
+  restoredDownloadRun,
 } from "./downloadRun.ts";
 export type {
   DownloadRun,
@@ -873,6 +877,7 @@ export type {
   DownloadRunLines,
   DownloadRunNotice,
   DownloadRunProgress,
+  YoutubePauseNow,
 } from "./downloadRun.ts";
 export type {
   FailedDownload,

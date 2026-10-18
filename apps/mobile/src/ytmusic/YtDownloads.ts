@@ -6,16 +6,8 @@
  */
 import {
   FAVORITES_DOWNLOAD_ORIGIN,
-  NO_DOWNLOAD_RUN,
-  qualityDirection,
   YT_DOWNLOADS_NONE,
-  downloadRunNotice,
-  downloadRunProgress,
-  downloadTimeLeft,
-  downloadsPaused,
-  followDownloadRun,
-  type DownloadRun,
-  type DownloadRunProgress,
+  qualityDirection,
   applyJournalChanges,
   readStarDownloads,
   starAskedAfter,
@@ -30,7 +22,6 @@ import {
   downloadStorageFull,
   failedDownloadCount,
   failedDownloads,
-  failedJobs,
   isWithin,
   libraryFinder,
   listedSongTags,
@@ -54,7 +45,6 @@ import {
   qualityReplacementJob,
   qualityReplacementTags,
   qualityReplacementTarget,
-  queuedDownloadCounts,
   queuedDownloads,
   settledDownloadFailures,
   throttledFailures,
@@ -117,7 +107,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { Storage } from "expo-sqlite/kv-store";
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 
 import { appLog } from "@/log/appLog";
 
@@ -161,6 +151,8 @@ import {
 import { ytMusicEnabled } from "@/settings/ytMusic";
 
 import { readYtAlbum } from "./albumPages";
+import { failedJobsNow, journal, queuedCountsNow } from "./downloadJournal";
+import { followDownloadRuns } from "./downloadRun";
 import { useLoadedLibraryFinder } from "./libraryFinder";
 import { followYoutubeThrottle } from "./youtubeThrottle";
 import { withSearchTurn } from "./searchAllowance";
@@ -864,8 +856,6 @@ export const importQualityReplacement = (
   });
 
 const downloads = makeExternalStore<YtDownloads<NativeYtSong>>(YT_DOWNLOADS_NONE);
-/** The journal's last snapshot as it came, for album and playlist views (Core's `ytSongsDownload`). */
-const journal = makeExternalStore<readonly NativeDownloadJob[]>([]);
 
 /** Re-reads folder policy so a publication never lands outside the current Library folders. */
 const publicationTarget = (claim: NativeDownloadDecision) =>
@@ -1406,6 +1396,7 @@ let attached = false;
 export const startDownloads = (resume = false): void => {
   if (!attached) {
     attached = true;
+    followDownloadRuns();
     WaveSoulseek.addListener("onJobsChanged", refreshQuietly);
     libraryVersion.subscribe(refreshQuietly);
   }
@@ -1935,21 +1926,6 @@ const useFailedDownloadsInput = (active: boolean): FailedDownloadsInput<NativeYt
 };
 
 /**
- * The journal's failed jobs (Core's `failedJobs`): the same array until a failure comes, goes or
- * changes, so the failed rows aren't built again on each tick of the songs on their way.
- */
-let failedShown: { jobs: readonly NativeDownloadJob[]; failed: readonly NativeDownloadJob[] } = {
-  jobs: [],
-  failed: [],
-};
-const failedJobsNow = (): readonly NativeDownloadJob[] => {
-  const jobs = journal.get();
-  if (jobs !== failedShown.jobs)
-    failedShown = { jobs, failed: failedJobs(jobs, failedShown.failed) };
-  return failedShown.failed;
-};
-
-/**
  * The Settings row's counts (Core's `failedDownloadCount`, `queuedDownloadCounts`): how many songs
  * failed, and how many are downloading, saving and waiting, without building either list.
  */
@@ -1959,103 +1935,6 @@ export const useDownloadCounts = (): { failed: number; queued: QueuedDownloadCou
   const input = useFailedDownloadsInput(failedJobsList.length > 0);
   const failed = useMemo(() => failedDownloadCount(failedJobsList, input), [failedJobsList, input]);
   return useMemo(() => ({ failed, queued }), [failed, queued]);
-};
-
-/** The journal's queued counts, the same object while they're the same. */
-let queuedShown: { jobs: readonly NativeDownloadJob[]; counts: QueuedDownloadCounts } = {
-  jobs: [],
-  counts: { downloading: 0, saving: 0, waiting: 0 },
-};
-const queuedCountsNow = (): QueuedDownloadCounts => {
-  const jobs = journal.get();
-  if (jobs === queuedShown.jobs) return queuedShown.counts;
-  const counts = queuedDownloadCounts(jobs);
-  const same =
-    counts.downloading === queuedShown.counts.downloading &&
-    counts.saving === queuedShown.counts.saving &&
-    counts.waiting === queuedShown.counts.waiting;
-  queuedShown = { jobs, counts: same ? queuedShown.counts : counts };
-  return queuedShown.counts;
-};
-
-/**
- * The run (Core's `followDownloadRun`): the songs queued since the queue was last empty,
- * followed through every journal change from launch, whether Settings › Downloads is open or not.
- */
-let downloadRun: DownloadRun = NO_DOWNLOAD_RUN;
-journal.subscribe(() => {
-  downloadRun = followDownloadRun(downloadRun, journal.get(), Date.now());
-  runNoticeTimer ??= setTimeout(showRunNotice, RUN_NOTICE_MS);
-});
-
-/** How often the download notification hears of the run: at most about once a second. */
-const RUN_NOTICE_MS = 1_000;
-let runNoticeTimer: ReturnType<typeof setTimeout> | null = null;
-let runNoticeShown = "null";
-
-/**
- * Tells the download notification how the run goes (Core's `downloadRunNotice`), when that
- * changed: a run's journal changes many times a second, so this follows them about once a second.
- */
-const showRunNotice = () => {
-  runNoticeTimer = null;
-  const { progress, timeLeft } = downloadRunNow();
-  const notice = downloadRunNotice(progress.overall, timeLeft);
-  const key = JSON.stringify(notice);
-  if (key === runNoticeShown) return;
-  runNoticeShown = key;
-  WaveSoulseek.showDownloadRun(notice);
-};
-
-/** Settings › Downloads' run panel: the run's counts, overall and per group, and its time left. */
-export interface DownloadRunState {
-  readonly progress: DownloadRunProgress;
-  /** Ms, or null until there's a pace and while paused (Core's `downloadTimeLeft`). */
-  readonly timeLeft: number | null;
-  /** Songs are left but none is downloading or saving (Core's `downloadsPaused`). */
-  readonly paused: boolean;
-}
-
-/** How often the run panel reads the run again: at most about once a second. */
-const RUN_PANEL_MS = 1_000;
-
-const downloadRunNow = (): DownloadRunState => {
-  const paused = downloadsPaused(queuedCountsNow());
-  return {
-    progress: downloadRunProgress(downloadRun),
-    timeLeft: downloadTimeLeft(downloadRun, { now: Date.now(), paused }),
-    paused,
-  };
-};
-
-/** What the panel shows of [state], to skip a render when a second changed nothing. */
-const runStateKey = ({ progress, timeLeft, paused }: DownloadRunState): string =>
-  JSON.stringify([
-    progress.overall,
-    [...progress.groups],
-    timeLeft === null ? null : Math.round(timeLeft / 60_000),
-    paused,
-  ]);
-
-/**
- * The run as Settings › Downloads' panel shows it, read again about once a second (not on each
- * journal change, which a big run makes many times a second) and only rendered when it changed.
- */
-export const useDownloadRun = (): DownloadRunState => {
-  const [state, setState] = useState(downloadRunNow);
-  useEffect(() => {
-    // The first tick renders once more at most: it may follow a change since the first render.
-    let key = "";
-    const timer = setInterval(() => {
-      const next = downloadRunNow();
-      const nextKey = runStateKey(next);
-      if (nextKey === key) return;
-      key = nextKey;
-      setState(next);
-    }, RUN_PANEL_MS);
-    return () => clearInterval(timer);
-  }, []);
-  return state;
 };
 
 /**

@@ -68,7 +68,7 @@ export const ytThrottleRead = (state: YtThrottle, jobs: readonly YtThrottleJob[]
   const read = marks.reduce(
     (next, mark) =>
       mark.refused === null
-        ? ytThrottleSucceeded(next, mark.at)
+        ? ytThrottleSucceeded(next)
         : ytThrottleRefused(next, mark.refused, mark.at),
     state,
   );
@@ -82,13 +82,25 @@ export interface YtThrottlePause {
 }
 
 /**
- * The throttle as Wave starts at [now], from the [pause] the journal kept (null for none): a
- * backoff under way carries on, and only marks from now on are read.
+ * The throttle as Wave starts at [now], from the [pause] the journal kept (null for none) and its
+ * [jobs]: a backoff under way carries on, even once its pause is over (YouTube may still be
+ * limiting downloads, and the next burst pauses longer); a stream the journal shows served
+ * means downloads had worked; and only marks from now on are read.
  */
-export const ytThrottleRestored = (pause: YtThrottlePause | null, now: number): YtThrottle =>
-  pause === null || pause.level <= 0
-    ? { ...YT_THROTTLE_START, readUpTo: now }
-    : { ...YT_THROTTLE_START, level: pause.level, pausedUntil: pause.until, readUpTo: now };
+export const ytThrottleRestored = (
+  pause: YtThrottlePause | null,
+  now: number,
+  jobs: readonly YtThrottleJob[],
+): YtThrottle => {
+  const start = {
+    ...YT_THROTTLE_START,
+    succeeded: jobs.some((job) => job.servedAt !== undefined),
+    readUpTo: now,
+  };
+  return pause === null || pause.level <= 0
+    ? start
+    : { ...start, level: pause.level, pausedUntil: pause.until };
+};
 
 /** How long the pause after a burst at [level] (1 for the first) lasts. */
 export const ytThrottlePauseMs = (level: number): number =>
@@ -122,8 +134,8 @@ export const ytThrottleNotice = (pausedUntil: number | null, now: number): strin
   return `Paused: YouTube is limiting downloads. Next try in ${minutes} min`;
 };
 
-/** [state] once a YouTube download worked at [_at]: the backoff starts over. */
-export const ytThrottleSucceeded = (state: YtThrottle, _at: number): YtThrottle => ({
+/** [state] once a YouTube download worked: the backoff starts over. */
+export const ytThrottleSucceeded = (state: YtThrottle): YtThrottle => ({
   ...state,
   recent: [],
   level: 0,
