@@ -10,6 +10,10 @@ import java.util.concurrent.TimeUnit
  * `WaveAppLog`); [read] asks them all and waits up to [timeoutMs] for the first to answer
  * ([reported]). No runtime, or none answering in time (a frozen JS thread), reads as null: the
  * line is written without it. Never call [read] on the main thread or the JS thread.
+ *
+ * One request at a time: a [read] replaces the pending ask, so a second reader running at once
+ * would make the first time out. Only the download service's minute tick (`WaveDownloadMinutes`)
+ * reads it today; a new reader must share that thread or make the asks a list.
  */
 class JsHeap(private val timeoutMs: Long = 500L) {
   private val askers = CopyOnWriteArrayList<() -> Unit>()
