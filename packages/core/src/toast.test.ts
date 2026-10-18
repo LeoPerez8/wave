@@ -16,6 +16,12 @@ describe("toastDuration", () => {
   test("never keeps a line up past eight seconds", () => {
     assert.equal(toastDuration("x".repeat(400)), 8_000);
   });
+
+  test("gives a line with an action two seconds more, to reach the button", () => {
+    assert.equal(toastDuration("New queue playing", { withAction: true }), 6_000);
+    assert.equal(toastDuration("x".repeat(80), { withAction: true }), 8_000);
+    assert.equal(toastDuration("x".repeat(400), { withAction: true }), 8_000);
+  });
 });
 
 describe("toastSwipeDismisses", () => {

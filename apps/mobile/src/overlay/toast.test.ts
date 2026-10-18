@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { currentToast, dismissToast, removeToast, showToast } from "./toast.ts";
+import { currentToast, dismissToast, removeToast, runToastAction, showToast } from "./toast.ts";
 
 /** Whether [promise] has settled, after pending callbacks run. */
 const settled = async (promise: Promise<unknown>): Promise<boolean> => {
@@ -48,5 +48,34 @@ describe("showToast", () => {
     assert.equal(shown().text, "Nothing to fix");
     removeToast(shown().id);
     assert.equal(await settled(second), true);
+  });
+
+  test("runs the toast's action once, and the toast leaves", () => {
+    let runs = 0;
+    void showToast("New queue playing", { label: "Undo", run: () => (runs += 1) });
+    const toast = shown();
+    assert.equal(toast.action?.label, "Undo");
+
+    runToastAction(toast.id);
+    assert.equal(runs, 1);
+    assert.equal(shown().leaving, true);
+
+    runToastAction(toast.id);
+    assert.equal(runs, 1);
+    removeToast(toast.id);
+  });
+
+  test("doesn't run an action once the toast is leaving or another took its place", () => {
+    let runs = 0;
+    void showToast("New queue playing", { label: "Undo", run: () => (runs += 1) });
+    const first = shown().id;
+    dismissToast(first);
+    runToastAction(first);
+
+    void showToast("Saved Mix");
+    assert.equal(shown().action, null);
+    runToastAction(first);
+    assert.equal(runs, 0);
+    removeToast(shown().id);
   });
 });
