@@ -667,3 +667,18 @@ export const pendingFavorites = sqliteTable("pending_favorites", {
   durationMs: integer("duration_ms"),
   addedAt: integer("added_at").notNull(),
 });
+
+/**
+ * Lyrics the Lyrics view found online for non-D songs (Core's `SavedLyrics`),
+ * by YouTube video: the lyrics, or a miss ([lyrics] null) remembered for a
+ * week (`LYRICS_MISS_RETRY_MS`). Reopening one shows them at once, offline
+ * too. This phone only, never synced.
+ */
+export const savedLyrics = sqliteTable("saved_lyrics", {
+  videoId: text("video_id").primaryKey(),
+  /** LRC when [synced], plain text otherwise; null for a miss. */
+  lyrics: text("lyrics"),
+  synced: integer("synced", { mode: "boolean" }).notNull().default(false),
+  /** When the search was made (ms since the epoch). */
+  checkedAt: integer("checked_at").notNull(),
+});

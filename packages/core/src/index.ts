@@ -1318,3 +1318,18 @@ export { discoverMixKeep } from "./discoverMixLevels.ts";
 export type { DiscoverMixKeep } from "./discoverMixLevels.ts";
 export { nowPlayingDownload } from "./nowPlayingDownload.ts";
 export type { NowPlayingDownload } from "./nowPlayingDownload.ts";
+export {
+  LYRICS_MISS_RETRY_MS,
+  nonDLyrics,
+  nonDLyricsSong,
+  ytMusicFoundLyrics,
+} from "./onlineLyrics.ts";
+export type {
+  NonDSongDetails,
+  LyricsAnswer,
+  LyricsSearchSong,
+  LyricsSource,
+  NonDLyrics,
+  NonDLyricsState,
+  SavedLyrics,
+} from "./onlineLyrics.ts";
