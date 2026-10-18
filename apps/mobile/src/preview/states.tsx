@@ -206,6 +206,7 @@ const songRow = (item: SyntheticTrack): SongRow => {
     year: null,
     genre: null,
     hasLyrics: false,
+    explicit: "unknown",
   };
 };
 

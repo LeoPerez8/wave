@@ -24,6 +24,7 @@ internal fun trackToMap(track: ScannedTrack): Map<String, Any?> =
     "bitrateKbps" to track.tags.bitrateKbps,
     "artworkHash" to track.artworkHash,
     "hasLyrics" to track.hasLyrics,
+    "advisory" to track.tags.advisory,
   )
 
 /** Stored artwork as JS receives it (`NativeArtwork`). */

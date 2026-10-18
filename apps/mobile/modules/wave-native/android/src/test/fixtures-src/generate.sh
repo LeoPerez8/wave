@@ -109,6 +109,44 @@ cp "$out/tagged.opus" "$out/opus-in-ogg.ogg"
 ff -i "$tmp/tone.wav" -c:a pcm_s16le -metadata "title=Wave Fixture" -metadata "artist=Fixture Artist" \
   -metadata "album=Fixture Album" -metadata "genre=Ambient" -metadata "date=2024" "$out/tagged.wav"
 
+# The advisory tag (explicit or clean), as taggers write it: ITUNESADVISORY in an ID3
+# TXXX frame and in Vorbis comments, and MP4's rtng atom.
+advisory_fixtures() { # <tmp> <out>
+  local tmp="$1" out="$2"
+  ff -i "$tmp/tone44k.wav" -c:a libmp3lame -b:a 32k -id3v2_version 4 \
+    -metadata "title=Explicit Fixture" -metadata "ITUNESADVISORY=1" "$out/explicit.mp3"
+  ff -i "$tmp/tone.wav" -c:a flac -metadata "title=Explicit Fixture" -metadata "ITUNESADVISORY=1" \
+    "$out/explicit.flac"
+  ff -i "$tmp/tone.wav" -c:a libvorbis -q:a 0 -metadata "title=Clean Fixture" \
+    -metadata "ITUNESADVISORY=0" "$out/clean.ogg"
+  # ffmpeg doesn't write rtng, so it goes at the end of the ilst (moov comes after mdat,
+  # so no chunk offset moves).
+  ff -i "$tmp/tone.wav" -c:a aac -b:a 16k -metadata "title=Explicit Fixture" "$out/explicit.m4a"
+  python3 - "$out/explicit.m4a" <<'PY'
+import struct, sys
+path = sys.argv[1]
+d = bytearray(open(path, "rb").read())
+def find(start, end, kind):
+    i = start
+    while i < end:
+        size, found = struct.unpack(">I4s", d[i:i + 8])
+        if found == kind:
+            return i, size
+        i += size
+    raise SystemExit(f"no {kind.decode()} box")
+moov, moov_size = find(0, len(d), b"moov")
+udta, udta_size = find(moov + 8, moov + moov_size, b"udta")
+meta, meta_size = find(udta + 8, udta + udta_size, b"meta")
+ilst, ilst_size = find(meta + 12, meta + meta_size, b"ilst")
+rtng = struct.pack(">I4s", 25, b"rtng") + struct.pack(">I4sII", 17, b"data", 0x15, 0) + bytes([1])
+d[ilst + ilst_size:ilst + ilst_size] = rtng
+for box in (moov, udta, meta, ilst):
+    d[box:box + 4] = struct.pack(">I", struct.unpack(">I", d[box:box + 4])[0] + len(rtng))
+open(path, "wb").write(d)
+PY
+}
+
 lyrics_fixtures "$tmp" "$out"
+advisory_fixtures "$tmp" "$out"
 
 ls -l "$out"

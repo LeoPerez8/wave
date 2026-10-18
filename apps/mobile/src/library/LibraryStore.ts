@@ -18,6 +18,7 @@ import {
   type UnsearchedSong,
   type YtAlbumSong,
   type YtArtistSaved,
+  type ExplicitFlag,
 } from "@wave/core";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { drizzle, type ExpoSQLiteDatabase } from "drizzle-orm/expo-sqlite";
@@ -161,6 +162,8 @@ export interface IndexedTrack extends LibraryTrack {
   readonly artworkHash: string | null;
   /** Lyrics in its tags or a sidecar `.lrc`. */
   readonly hasLyrics: boolean;
+  /** What its advisory tag says (Core's `explicitFromAdvisory`). */
+  readonly explicit: ExplicitFlag;
   /**
    * The YouTube video id of a song just downloaded from YouTube Music. Saving
    * the file again without one (a rescan) keeps the one it has.
@@ -240,6 +243,8 @@ export interface SongRow {
   readonly genre: string | null;
   /** Lyrics in the file's tags or in a sidecar `.lrc`. */
   readonly hasLyrics: boolean;
+  /** Whether it's explicit, as its file's advisory tag says: rows show the E badge for it. */
+  readonly explicit: ExplicitFlag;
 }
 
 /** A song that can play: one with a file (the queue's, Android Auto's). */

@@ -196,6 +196,8 @@ export const missingSongTags = (
     genre: missing.genre ?? found?.genre ?? null,
     lyrics: found?.lyrics?.text ?? null,
     artworkUrl: artworkUrl === null ? null : largeCover(artworkUrl),
+    // A Track doesn't say whether it's explicit: nothing has checked it.
+    advisory: null,
   };
 };
 

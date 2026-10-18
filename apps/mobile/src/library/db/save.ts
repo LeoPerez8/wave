@@ -361,6 +361,7 @@ export const saveBatch = (
             bitrateKbps: track.bitrateKbps,
             artworkHash: track.artworkHash,
             hasLyrics: track.hasLyrics,
+            explicit: track.explicit,
             addedAt: now,
             scannedAt: now,
           })),
@@ -393,6 +394,7 @@ export const saveBatch = (
             bitrateKbps: excluded(t.bitrateKbps),
             artworkHash: excluded(t.artworkHash),
             hasLyrics: excluded(t.hasLyrics),
+            explicit: excluded(t.explicit),
             scannedAt: excluded(t.scannedAt),
           },
         })
