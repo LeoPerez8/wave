@@ -1,11 +1,13 @@
 import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
 import {
   downloadListRows,
+  failedDownloadRows,
   queuedDownloadsSummary,
   reorderShift,
   type DownloadGroup,
   type DownloadHeaderRow,
   type DownloadListRow,
+  type FailedListRow,
   type QueuedDownload,
   type WaitingSongRow,
 } from "@wave/core";
@@ -15,6 +17,7 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
   type ComponentRef,
   type ReactElement,
   type ReactNode,
@@ -27,7 +30,7 @@ import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import { REORDER_HANDLE_ROOM, ReorderHandle } from "@/components/RowReorder";
-import { TextButton } from "@/components/TextButton";
+import { PlainTextButton } from "@/components/PlainTextButton";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { DownloadSongRow } from "@/settings/DownloadSongRow";
 import {
@@ -38,8 +41,17 @@ import {
   type DownloadRowDrag,
 } from "@/settings/downloadsDrag";
 import { SECTION_GAP } from "@/settings/SettingsPage";
+import {
+  FailedDownloadRow,
+  FailedGroupHeader,
+  FailedSectionHeader,
+} from "@/settings/FailedDownloadsSection";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
-import { cancelQueuedDownload, useDownloadingList } from "@/ytmusic/YtDownloads";
+import {
+  cancelQueuedDownload,
+  useDownloadingList,
+  useFailedDownloads,
+} from "@/ytmusic/YtDownloads";
 import { useYoutubePauseNotice } from "@/ytmusic/youtubeThrottle";
 
 type Grip = ReturnType<typeof usePanGesture>;
@@ -114,7 +126,7 @@ const QueuedDownloadRow = memo(
         onAccessibilityAction={onAccessibilityAction}
       >
         {cancel !== null && (
-          <TextButton label="Cancel" onPress={() => cancelQueuedDownload(queued)} />
+          <PlainTextButton label="Cancel" onPress={() => cancelQueuedDownload(queued)} />
         )}
         <HandleSlot handle={handle} />
       </DownloadSongRow>
@@ -360,39 +372,55 @@ function LiftedCopy({
   );
 }
 
-const keyOf = (row: DownloadListRow) => row.key;
-const typeOf = (row: DownloadListRow) => row.kind;
+/** A row of the page's list: the songs on their way (and their groups), then the failed section. */
+type PageRow = DownloadListRow<NativeYtSong> | FailedListRow<NativeYtSong>;
+
+const keyOf = (row: PageRow) => row.key;
+const typeOf = (row: PageRow) => row.kind;
 
 /**
  * Settings › Downloads as one virtualized list (as the Library's song lists are): [header]
  * (the download settings) above, then the Downloading section (Core's `downloadingList`), the
  * songs downloading now first, then the waiting ones grouped by the playlist, album or mix
- * they were asked from, in queue order, under how many of each there are; then [footer] (the
- * failed songs). Groups and songs are rows of the list (Core's `downloadListRows`), so only
- * the rows around the screen are mounted however long the queue is. Dragging a group's header
+ * they were asked from, in queue order, under how many of each there are; then the failed
+ * songs, collapsed to how many with Retry All until shown, then grouped by why they failed.
+ * Groups and songs, waiting or failed, are rows of the list (Core's `downloadListRows`,
+ * `failedDownloadRows`), so only the rows around the screen are mounted however long the
+ * queue is or however many failed. Dragging a group's header
  * changes which group downloads first; dragging a song changes its order in its group (Core's
  * `moveDownloadGroup` / `moveDownloadInGroup`, which the journal then runs; `downloadsDrag.ts`).
  */
-export function DownloadsList({ header, footer }: { header: ReactElement; footer: ReactElement }) {
+export function DownloadsList({ header }: { header: ReactElement }) {
   const list = useDownloadingList();
+  const failed = useFailedDownloads();
+  const [failedShown, setFailedShown] = useState(false);
+  const toggleFailed = useCallback(() => setFailedShown((shown) => !shown), []);
   // With YT Music off Wave asks YouTube for nothing, covers included.
   const covers = useYtMusicEnabled();
   const rows = useMemo(() => downloadListRows(list), [list]);
-  const summary = useMemo(
-    () =>
-      queuedDownloadsSummary([
-        ...list.downloading,
-        ...list.groups.flatMap((group) => group.queued),
-      ]),
-    [list],
+  const failedRows = useMemo(
+    () => failedDownloadRows(failed, { expanded: failedShown }),
+    [failed, failedShown],
   );
+  const pageRows = useMemo<readonly PageRow[]>(
+    () => (failedRows.length === 0 ? rows : [...rows, ...failedRows]),
+    [rows, failedRows],
+  );
+  const summary = useMemo(() => queuedDownloadsSummary(list.counts), [list]);
   const pauseNotice = useYoutubePauseNotice();
   const listRef = useRef<LegendListRef>(null);
   const { drag, rowDrag, moveSong, moveGroup, liftedStyle, scrollRef, container, onLayout } =
     useDownloadsDrag({ list, rows, listRef });
 
   const renderItem = useCallback(
-    ({ item }: { item: DownloadListRow<NativeYtSong> }) => {
+    ({ item }: { item: PageRow }) => {
+      if (item.kind === "failedHeader") {
+        return <FailedSectionHeader row={item} failed={failed} onToggle={toggleFailed} />;
+      }
+      if (item.kind === "failedGroup") return <FailedGroupHeader row={item} />;
+      if (item.kind === "failedSong") {
+        return <FailedDownloadRow failed={item.failed} covers={covers} />;
+      }
       if (item.kind === "downloading") {
         return <QueuedDownloadRow queued={item.queued} covers={covers} handle="room" />;
       }
@@ -427,10 +455,10 @@ export function DownloadsList({ header, footer }: { header: ReactElement; footer
         />
       );
     },
-    [covers, drag, rowDrag, moveSong, moveGroup],
+    [covers, drag, rowDrag, moveSong, moveGroup, failed, toggleFailed],
   );
   // Legend List renders a row again only when its item or extraData changes.
-  const rowState = useMemo(() => ({ covers, drag }), [covers, drag]);
+  const rowState = useMemo(() => ({ covers, drag, failed }), [covers, drag, failed]);
 
   const listHeader = (
     <View style={{ gap: SECTION_GAP }}>
@@ -464,7 +492,7 @@ export function DownloadsList({ header, footer }: { header: ReactElement; footer
         ref={listRef}
         refScrollView={scrollRef}
         className="flex-1"
-        data={rows}
+        data={pageRows}
         keyExtractor={keyOf}
         getItemType={typeOf}
         renderItem={renderItem}
@@ -477,7 +505,6 @@ export function DownloadsList({ header, footer }: { header: ReactElement; footer
         scrollEventThrottle={16}
         contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: SECTION_GAP }}
         ListHeaderComponent={listHeader}
-        ListFooterComponent={footer}
       />
       {drag !== null && (
         <Animated.View

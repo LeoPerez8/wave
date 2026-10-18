@@ -140,6 +140,9 @@ class DurableDownloads(
         job["generation"] = job.number("generation") + 1
         transition(job, "preparing")
       }
+      // Nothing of theirs runs any more: they wait, at the front of the line, until the queue
+      // takes each up again (its next step, or JS's decision), and aren't counted downloading.
+      for (job in jobs.values) if (job["phase"] in ACQUIRING) job["resumed"] = true
       sweepParts()
       // A full disk mustn't stop Wave or the download service from opening the journal: the
       // jobs stay in memory (and readable), and the next change that can be written saves them.
@@ -286,6 +289,8 @@ class DurableDownloads(
     if (job["phase"] == "awaitingPublication" && jobs.values.any { it !== job && saving(it) }) return null
     if (outOfTime(job)) { fail(job, "timedOut", "Out of time before the ${DECISIONS[job["phase"]]} decision"); persist(); return null }
     job["decisionAttempts"] = job.number("decisionAttempts") + 1
+    // JS takes it up: a song started before Wave was killed is downloading again.
+    job.remove("resumed")
     job["token"] = UUID.randomUUID().toString()
     job["leaseUntil"] = clock() + minOf(LEASE_MS, budgetLeft(job))
     persist()
@@ -946,7 +951,7 @@ class DurableDownloads(
   }
 
   private fun held(id: String, generation: Long, phase: String): MutableMap<String, Any?>? = jobs[id]?.takeIf { it.number("generation") == generation && it["phase"] == phase }
-  private fun transition(job: MutableMap<String, Any?>, phase: String) { job["phase"] = phase; job["phaseAt"] = clock(); job.remove("token"); job["decisionAttempts"] = 0L; job.remove("retryAt") }
+  private fun transition(job: MutableMap<String, Any?>, phase: String) { job["phase"] = phase; job["phaseAt"] = clock(); job.remove("token"); job["decisionAttempts"] = 0L; job.remove("retryAt"); job.remove("resumed") }
   /**
    * A YouTube transfer that broke off or stalled leaves its part file to the next attempt, which goes
    * on from its last byte; a peer's next transfer starts afresh. [fail] and [end] still delete it.
@@ -1340,18 +1345,42 @@ private class JournalView(val entries: List<PublishedJob>, val revision: Long, v
   val jobs: List<Map<String, Any?>> = entries.map { it.job }
 }
 
-/** What the download notification counts: songs on their way ([running]) and songs not started yet ([left]). */
-data class DownloadCounts(val running: Int, val left: Int) {
+/**
+ * What the download notification counts (Core's `queuedDownloadCounts`, the same rule): songs
+ * started, which hold the queue's slots ([running]: never more than twice [DurableDownloads.SLOTS]);
+ * songs not started yet ([left]), those started before Wave was killed and not taken up again
+ * included; and songs downloaded that wait their turn to be saved to the Library, one at a time
+ * ([saving]), which pile up in a big run (#466).
+ */
+data class DownloadCounts(val running: Int, val left: Int, val saving: Int = 0) {
+  /** The counts as the app log says them: "5 downloading, 600 saving, 1000 waiting" (saving only when any are). */
+  fun line(): String = "$running downloading, " + (if (saving > 0) "$saving saving, " else "") + "$left waiting"
+
   companion object {
     /** Whether [job] is still on its way: not failed or cancelled, nor imported (or failed to import). */
     fun pending(job: Map<*, *>): Boolean =
       job["phase"] != "failed" && job["phase"] != "cancelled" &&
         !(job["phase"] == "completed" && (job["acknowledged"] == true || job["importFailure"] != null))
 
-    /** [jobs] counted: those on their way that started, and those waiting. The one rule, for the notification and the app log. */
+    /** Until the audio is accepted ([DurableDownloads] resumes these after Wave was killed). */
+    private val ACQUIRING = setOf("preparing", "prepared", "transferring", "sourceReady")
+    /** Started and not yet tagged: what holds a slot. */
+    private val STARTED = ACQUIRING + "tagging"
+
+    /** [jobs] counted: those holding a slot, those waiting, and those waiting to be saved. The one rule, for the notification and the app log. */
     fun of(jobs: Collection<Map<*, *>>): DownloadCounts {
-      val left = jobs.count { it["phase"] == "queued" }
-      return DownloadCounts(running = jobs.count(::pending) - left, left = left)
+      var running = 0
+      var left = 0
+      var saving = 0
+      for (job in jobs) {
+        if (!pending(job)) continue
+        when {
+          job["phase"] == "queued" || (job["resumed"] == true && job["phase"] in ACQUIRING) -> left++
+          job["phase"] in STARTED -> running++
+          else -> saving++
+        }
+      }
+      return DownloadCounts(running = running, left = left, saving = saving)
     }
   }
 }

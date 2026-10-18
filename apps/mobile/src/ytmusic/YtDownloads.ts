@@ -19,7 +19,9 @@ import {
   downloadFailurePlan,
   downloadSource,
   downloadStorageFull,
+  failedDownloadCount,
   failedDownloads,
+  failedJobs,
   isWithin,
   libraryFinder,
   listedSongTags,
@@ -43,6 +45,7 @@ import {
   qualityReplacementJob,
   qualityReplacementTags,
   qualityReplacementTarget,
+  queuedDownloadCounts,
   queuedDownloads,
   settledDownloadFailures,
   soulseekCandidates,
@@ -73,6 +76,7 @@ import {
   type DownloadSource,
   type DownloadingList,
   type FailedDownload,
+  type FailedDownloadsInput,
   type MissingSongJob,
   type MissingSongVideo,
   type MissingSongsDownload,
@@ -81,6 +85,7 @@ import {
   type PlaylistItem,
   type QualityDirection,
   type QueuedDownload,
+  type QueuedDownloadCounts,
   type ReplacedTrack,
   type SoulseekCandidate,
   type UnsearchedSong,
@@ -113,7 +118,7 @@ import {
   toIndexedArtwork,
   toIndexedTrack,
 } from "@/library/LibraryScan";
-import { publishSavedStars } from "@/library/libraryChanges";
+import { publishSavedStars, publishYtSongSignal } from "@/library/libraryChanges";
 import { LibraryStore, type SongRow } from "@/library/LibraryStore";
 import { useLoadedMissingSongs, useMissingSongs } from "@/library/hooks";
 import { refreshDownloadPolicy } from "@/library/downloadPolicy";
@@ -1363,6 +1368,7 @@ const songRequest = (
 ): JobRequest => ({ song, recording: soulseekRecording(song), equivalentId, source, origin });
 
 export const downloadYtSong = (song: NativeYtSong): void => {
+  publishYtSongSignal("download", [song.videoId]);
   askForNotifications();
   startDownloads();
   // One at a time, so a second tap sees the first one's job in the journal.
@@ -1404,6 +1410,10 @@ const downloadYtSongs = (
   inLibrary: InLibrary,
   origin: DownloadOrigin | null,
 ): void => {
+  publishYtSongSignal(
+    "download",
+    songs.map((song) => song.videoId),
+  );
   askForNotifications();
   startDownloads();
   requests = requests
@@ -1789,15 +1799,6 @@ export const useMissingSongsDownload = (): MissingSongsDownload<MissingSongJob> 
 };
 
 /**
- * Settings › Downloads' songs on their way (Core's `queuedDownloads`), following the journal: the
- * ones downloading first, then the waiting ones in queue order, each with its progress line.
- */
-export const useQueuedDownloads = (): readonly QueuedDownload<NativeYtSong>[] => {
-  const jobs = useSyncExternalStore(journal.subscribe, journal.get);
-  return useMemo(() => queuedDownloads(jobs), [jobs]);
-};
-
-/**
  * Settings › Downloads' Downloading list (Core's `downloadingList`), following the journal: the
  * songs downloading now, then the waiting ones grouped by the playlist, album or mix they're from.
  */
@@ -1852,23 +1853,70 @@ export const moveQueuedDownloads = (ids: readonly string[]): void => {
  * in or taken out leaves too).
  */
 export const useFailedDownloads = (): readonly FailedDownload<NativeYtSong>[] => {
-  const jobs = useSyncExternalStore(journal.subscribe, journal.get);
-  // The Library is read for the finder only while some download has failed.
-  const find = useLoadedLibraryFinder(jobs.some(hasFailed));
+  const failed = useSyncExternalStore(journal.subscribe, failedJobsNow);
+  const input = useFailedDownloadsInput(failed.length > 0);
+  return useMemo(() => failedDownloads(failed, input), [failed, input]);
+};
+
+/**
+ * What tells whether a failure settled another way: the Library (read for the finder only
+ * while [active], some download having failed) and its missing songs.
+ */
+const useFailedDownloadsInput = (active: boolean): FailedDownloadsInput<NativeYtSong> => {
+  const find = useLoadedLibraryFinder(active);
   const missing = useLoadedMissingSongs();
-  const missingTrackIds = useMemo(
-    () => (missing === null ? null : new Set(missing.map((track) => track.id))),
-    [missing],
-  );
   return useMemo(
-    () =>
-      failedDownloads(jobs, {
-        // Nothing has settled until the Library is read.
-        inLibrary: (song) => find !== null && find(song) !== null,
-        missingTrackIds,
-      }),
-    [jobs, find, missingTrackIds],
+    () => ({
+      // Nothing has settled until the Library is read.
+      inLibrary: (song: NativeYtSong) => find !== null && find(song) !== null,
+      missingTrackIds: missing === null ? null : new Set(missing.map((track) => track.id)),
+    }),
+    [find, missing],
   );
+};
+
+/**
+ * The journal's failed jobs (Core's `failedJobs`): the same array until a failure comes, goes or
+ * changes, so the failed rows aren't built again on each tick of the songs on their way.
+ */
+let failedShown: { jobs: readonly NativeDownloadJob[]; failed: readonly NativeDownloadJob[] } = {
+  jobs: [],
+  failed: [],
+};
+const failedJobsNow = (): readonly NativeDownloadJob[] => {
+  const jobs = journal.get();
+  if (jobs !== failedShown.jobs)
+    failedShown = { jobs, failed: failedJobs(jobs, failedShown.failed) };
+  return failedShown.failed;
+};
+
+/**
+ * The Settings row's counts (Core's `failedDownloadCount`, `queuedDownloadCounts`): how many songs
+ * failed, and how many are downloading, saving and waiting, without building either list.
+ */
+export const useDownloadCounts = (): { failed: number; queued: QueuedDownloadCounts } => {
+  const failedJobsList = useSyncExternalStore(journal.subscribe, failedJobsNow);
+  const queued = useSyncExternalStore(journal.subscribe, queuedCountsNow);
+  const input = useFailedDownloadsInput(failedJobsList.length > 0);
+  const failed = useMemo(() => failedDownloadCount(failedJobsList, input), [failedJobsList, input]);
+  return useMemo(() => ({ failed, queued }), [failed, queued]);
+};
+
+/** The journal's queued counts, the same object while they're the same. */
+let queuedShown: { jobs: readonly NativeDownloadJob[]; counts: QueuedDownloadCounts } = {
+  jobs: [],
+  counts: { downloading: 0, saving: 0, waiting: 0 },
+};
+const queuedCountsNow = (): QueuedDownloadCounts => {
+  const jobs = journal.get();
+  if (jobs === queuedShown.jobs) return queuedShown.counts;
+  const counts = queuedDownloadCounts(jobs);
+  const same =
+    counts.downloading === queuedShown.counts.downloading &&
+    counts.saving === queuedShown.counts.saving &&
+    counts.waiting === queuedShown.counts.waiting;
+  queuedShown = { jobs, counts: same ? queuedShown.counts : counts };
+  return queuedShown.counts;
 };
 
 /**

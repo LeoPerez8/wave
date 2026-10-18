@@ -130,9 +130,10 @@ class YtDownloadService : Service() {
     }
     builder.setContentTitle(title).setContentText(song?.get("title") as? String ?: "A YT Music song")
     if (pause != null) builder.setWhen(pause.until).setShowWhen(true).setUsesChronometer(true).setChronometerCountDown(true)
-    // Several songs (an album, or songs asked for one after another): how many download now and how many are left.
-    val (running, left) = downloads.jobs.counts()
-    if (running + left > 1) builder.setSubText(listOfNotNull("$running downloading".takeIf { running > 0 }, "$left left".takeIf { left > 0 }).joinToString(" · "))
+    // Several songs (an album, or songs asked for one after another): how many download now (hold a slot), how many
+    // wait their turn to be saved, and how many are left (Core's `queuedDownloadCounts`, the same rule).
+    val (running, left, toSave) = downloads.jobs.counts()
+    if (running + left + toSave > 1) builder.setSubText(listOfNotNull("$running downloading".takeIf { running > 0 }, "$toSave saving".takeIf { toSave > 0 }, "$left left".takeIf { left > 0 }).joinToString(" · "))
     val percent = percent(current)
     if (percent != null && !saving && !queued) builder.setProgress(100, percent, false) else builder.setProgress(0, 0, true)
     if (current != null && !saving) {

@@ -6,6 +6,7 @@ import * as ManagedRuntime from "effect/ManagedRuntime";
 import { AppState } from "react-native";
 
 import { whenFree } from "@/lib/backgroundWork";
+import * as MagicQueue from "@/playback/MagicQueue";
 import * as PlaybackPersistence from "@/playback/PlaybackPersistence";
 import * as PlayHistory from "@/playback/PlayHistory";
 import * as Player from "@/playback/Player";
@@ -33,6 +34,8 @@ import * as NativeScanner from "./NativeScanner";
 /** Every app service, built once and shared by the whole app. */
 const services = Layer.mergeAll(
   NativeScanner.layer,
+  // The Magic Queue reads YouTube Music's radios.
+  YtMusic.layer,
   // The queue reads play counts for Smart Shuffle.
   Queue.layer.pipe(Layer.provideMerge(Player.layer)),
 ).pipe(Layer.provideMerge(LibraryStore.layer));
@@ -40,9 +43,9 @@ const services = Layer.mergeAll(
 export const appLayer = Layer.mergeAll(
   PlaybackPersistence.layer,
   PlayHistory.layer,
+  MagicQueue.layer,
   Stats.layer,
   Auto.layer,
-  YtMusic.layer,
   WaveSync.layer,
 ).pipe(Layer.provideMerge(services));
 

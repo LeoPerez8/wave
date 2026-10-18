@@ -89,6 +89,11 @@ export interface YtDownloadJournalJob<S extends YtSong = YtSong> {
   /** Other result ids positively matched to the same recording. */
   readonly aliases?: readonly S[];
   readonly phase: YtDownloadJournalPhase;
+  /**
+   * Started before Wave was killed, and not taken up again since: it waits
+   * (it isn't downloading) until the queue hands it its next step.
+   */
+  readonly resumed?: boolean;
   /** Where the audio comes from; a job from before YouTube Music downloads is Soulseek's. */
   readonly source?: DownloadSource;
   readonly received?: number;
@@ -130,6 +135,9 @@ const downloading = (phase: YtDownloadPhase): YtDownloadStatus => ({
 
 const journalStatus = (job: YtDownloadJournalJob): YtDownloadStatus => {
   if (job.importFailure !== undefined) return { kind: "failed", reason: job.importFailure };
+  if (job.resumed === true && job.phase !== "failed" && job.phase !== "cancelled") {
+    return { kind: "queued" };
+  }
   // YouTube Music has no recording to find or peer to reach: the job waits until the audio flows.
   const youtube = job.source === "youtube";
   switch (job.phase) {

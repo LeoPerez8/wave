@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import {
   QUEUE_COVER_FLUSH_MS,
   createQueueCoverBatcher,
+  playerCoverUpdates,
   withQueueCovers,
   type QueueCover,
 } from "./index.ts";
@@ -154,5 +155,28 @@ describe("handing covers over to the queue", () => {
     batcher.add("yt:a", cover("a2"));
     batcher.flush();
     assert.deepEqual(handed, [cover("a2")]);
+  });
+});
+
+const entry = (key: string, trackId: string) => ({ key, trackId, contextIndex: null });
+
+describe("covers reaching the player", () => {
+  test("every entry of a covered song gets its cached file, in queue order", () => {
+    const entries = [entry("1", "yt:a"), entry("2", "yt:b"), entry("3", "yt:a"), entry("4", "7")];
+    const updates = playerCoverUpdates(
+      entries,
+      new Map([
+        ["yt:a", cover("a")],
+        ["yt:c", cover("c")],
+      ]),
+    );
+    assert.deepEqual(updates, [
+      { key: "1", artworkPath: "/artwork/a.jpg" },
+      { key: "3", artworkPath: "/artwork/a.jpg" },
+    ]);
+  });
+
+  test("nothing when no cover is for a queued song", () => {
+    assert.deepEqual(playerCoverUpdates([entry("1", "yt:a")], new Map([["yt:b", cover("b")]])), []);
   });
 });

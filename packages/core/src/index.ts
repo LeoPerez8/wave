@@ -93,6 +93,17 @@ export { restorePlayback } from "./playbackRestore.ts";
 export type { RestoredPlayback } from "./playbackRestore.ts";
 export { extrapolatePosition, scrubPosition } from "./position.ts";
 export type { PositionReport, ScrubTouch } from "./position.ts";
+export {
+  CENTRE_FRAMING,
+  framingSquare,
+  framingText,
+  framingView,
+  MAX_FRAMING_ZOOM,
+  panFraming,
+  pinchFraming,
+  readFraming,
+} from "./imageFraming.ts";
+export type { FramingSquare, FramingView, ImageFraming, ImageSize } from "./imageFraming.ts";
 export { elapsedWavePath } from "./elapsedWave.ts";
 export type { ElapsedWave } from "./elapsedWave.ts";
 export { contrastRatio, paletteGradient } from "./palette.ts";
@@ -121,6 +132,12 @@ export type {
   SearchOptions,
   SearchResults,
 } from "./search.ts";
+export {
+  FIND_IN_PLAYLIST_NO_MATCH,
+  FIND_IN_PLAYLIST_PLACEHOLDER,
+  createPlaylistFinder,
+} from "./findInPlaylist.ts";
+export type { PlaylistFinder, PlaylistFindText } from "./findInPlaylist.ts";
 export { createSearchCatalog } from "./searchCatalog.ts";
 export type { SearchCatalog, SearchCatalogStats } from "./searchCatalog.ts";
 export { SEARCH_FOCUS_LIMITS, startSearchFocus, stepSearchFocus } from "./searchFocus.ts";
@@ -196,6 +213,38 @@ export { albumPlayTotals, artistPlayTotals } from "./stats.ts";
 export type { CreditedPlayTotals } from "./stats.ts";
 export { STATS_RANKINGS, statsSeeAll } from "./statsSeeAll.ts";
 export type { StatsRanking, StatsSeeAll } from "./statsSeeAll.ts";
+export {
+  RECAP_MONTH_MINIMUM_MS,
+  RECAP_SLIDE_MS,
+  RECAP_TOP_ARTISTS,
+  RECAP_TOP_GENRES,
+  RECAP_TOP_SONGS,
+  availableRecaps,
+  parseRecapId,
+  recap,
+  recapBack,
+  recapBarFill,
+  recapForward,
+  recapHourLabel,
+  recapId,
+  recapSlides,
+  recapTitle,
+  recapWeekdayLabel,
+  recapWindow,
+} from "./recap.ts";
+export type {
+  CountedListening,
+  Recap,
+  RecapGenre,
+  RecapHabits,
+  RecapInput,
+  RecapMonth,
+  RecapPeriod,
+  RecapSlide,
+  RecapSongGenre,
+} from "./recap.ts";
+export { RECAP_PLAY_CONTEXT, recapSong } from "./recapMusic.ts";
+export type { RecapMusicSlide } from "./recapMusic.ts";
 export {
   AUTO_ROOT,
   AUTO_TABS,
@@ -511,11 +560,41 @@ export type {
 export { pendingWriteDelay } from "./writePacing.ts";
 export type { WritePacing } from "./writePacing.ts";
 export { stepNowPlayingSheet } from "./sheetLifecycle.ts";
-export { QUEUE_COVER_FLUSH_MS, createQueueCoverBatcher, withQueueCovers } from "./queueCovers.ts";
+export {
+  QUEUE_COVER_FLUSH_MS,
+  createQueueCoverBatcher,
+  playerCoverUpdates,
+  withQueueCovers,
+} from "./queueCovers.ts";
+export type { PlayerCoverUpdate } from "./queueCovers.ts";
 export type { QueueCover, QueueCoverBatcher, QueueCoverBatcherOptions } from "./queueCovers.ts";
 export { MORE_FROM_ARTIST } from "./queue.ts";
 export { newQueueToast, noticeLine, queueUndo, undoneQueue } from "./queueUndo.ts";
 export type { PlayerAt, QueueUndo } from "./queueUndo.ts";
+export {
+  MAGIC_QUEUE_CONTEXT,
+  MAGIC_SKIP_MS,
+  isMagicQueue,
+  magicBatch,
+  magicRadioArtists,
+  magicYtCandidates,
+  magicPlaySignal,
+  magicQueueEdits,
+  magicQueueLabel,
+  magicSignal,
+  parseMagicSession,
+  startMagicQueue,
+  wantsMagicBatch,
+} from "./magicQueue.ts";
+export type {
+  MagicQueueEdits,
+  MagicSeed,
+  MagicSession,
+  MagicSignal,
+  MagicSignalKind,
+  MagicSong,
+  MagicYtCandidate,
+} from "./magicQueue.ts";
 export { artistRanking } from "./moreFromArtist.ts";
 export type { ArtistRankingInput, ArtistRankingSong } from "./moreFromArtist.ts";
 export { artistPageItems } from "./artistPage.ts";
@@ -550,6 +629,20 @@ export type {
   WaveAccountView,
   WaveSession,
 } from "./waveAccount.ts";
+export {
+  SPOTIFY_ACCOUNT_SIGNED_OUT,
+  spotifyAccountView,
+  stepSpotifyAccount,
+} from "./spotifyAccount.ts";
+export type {
+  SpotifyAccount,
+  SpotifyAccountEvent,
+  SpotifyAccountNote,
+  SpotifyAccountState,
+  SpotifyAccountView,
+  SpotifySession,
+  SpotifySignInFailure,
+} from "./spotifyAccount.ts";
 export { YT_ACCOUNT_SIGNED_OUT, stepYtAccount, ytAccountView } from "./ytAccount.ts";
 export type {
   YtAccount,
@@ -721,16 +814,28 @@ export type {
   YtAlbumDownload,
   YtAlbumDownloadAction,
   YtAlbumDownloadRequest,
+  YtListDownloadButtonState,
   YtPlaylistDownload,
   YtPlaylistDownloadAction,
   YtSongsDownload,
   YtSongsDownloadAction,
   YtSongsDownloadRequest,
 } from "./ytSongsDownload.ts";
-export { failedDownloads, settledDownloadFailures } from "./failedDownloads.ts";
+export {
+  failedDownloadCount,
+  failedDownloadRows,
+  failedDownloads,
+  failedJobs,
+  sameFailedDownload,
+  settledDownloadFailures,
+} from "./failedDownloads.ts";
 export { ytDownloadsToForget } from "./forgottenDownloads.ts";
-export { queuedDownloads, queuedDownloadsSummary } from "./queuedDownloads.ts";
-export type { QueuedDownload } from "./queuedDownloads.ts";
+export {
+  queuedDownloadCounts,
+  queuedDownloads,
+  queuedDownloadsSummary,
+} from "./queuedDownloads.ts";
+export type { QueuedDownload, QueuedDownloadCounts } from "./queuedDownloads.ts";
 export {
   SONGS_GROUP_NAME,
   downloadingList,
@@ -745,6 +850,10 @@ export type {
   FailedDownload,
   FailedDownloadRetry,
   FailedDownloadsInput,
+  FailedGroupRow,
+  FailedHeaderRow,
+  FailedListRow,
+  FailedSongRow,
 } from "./failedDownloads.ts";
 export {
   YT_DOWNLOADS_NONE,
@@ -1155,6 +1264,15 @@ export {
   snapCrossfade,
 } from "./crossfade.ts";
 export {
+  bufferAheadMs,
+  LIBRARY_BUFFER_MS,
+  readStreamBuffer,
+  STREAM_BUFFER_DEFAULT,
+  STREAM_BUFFER_MINUTES,
+  streamBufferMs,
+} from "./streamBuffer.ts";
+export type { StreamBufferMinutes } from "./streamBuffer.ts";
+export {
   discoverMix,
   discoverMixCaption,
   discoverMixReadsMore,
@@ -1376,6 +1494,32 @@ export { ARTIST_MIX_COUNT, artistMixSeeds, artistMixSimilarSource } from "./arti
 export type { ArtistMixPools, PlayedSeedArtist } from "./artistMixes.ts";
 export { GENRE_MIX_COUNT, genreFamily, genreMixSeeds, interleaveRadios } from "./genreMixes.ts";
 export type { GenreFamily, GenreMixLibrary } from "./genreMixes.ts";
+export {
+  DEEZER_GENRES_URL,
+  GENRE_AFFINITY_THRESHOLD,
+  artistProfilesKnown,
+  deezerArtistAlbumsUrl,
+  deezerArtistId,
+  deezerArtistProfile,
+  deezerGenreNames,
+  parseArtistProfiles,
+  storedArtistProfiles,
+  withArtistProfiles,
+  genreAffinity,
+  genreProfile,
+  libraryGenreProfiles,
+  mixAffinity,
+  mixProfileLookups,
+  mixSeedProfile,
+} from "./genreAffinity.ts";
+export type {
+  ArtistProfiles,
+  GenreProfile,
+  GenreProfileLibrary,
+  GenreProfileOf,
+  GenreTagged,
+  MixAffinity,
+} from "./genreAffinity.ts";
 export type { SearchOnline, YtPick } from "./onlineToggle.ts";
 export { readSearchOnline, writeSearchOnline } from "./onlineToggle.ts";
 export {

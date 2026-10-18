@@ -4,6 +4,7 @@ import {
   artistPlayTotals,
   artistStats,
   statsWindow,
+  storedGenres,
   type PlayEvent,
   type SongListening,
 } from "@wave/core";
@@ -16,8 +17,11 @@ import { recordPlay } from "./playHistory.ts";
 import { removeTracks } from "./save.ts";
 import * as schema from "./schema.ts";
 import {
+  artistFirstPlays,
   artistPlays,
+  countedListening,
   creditedPlayTotals,
+  songGenres,
   songListening,
   songsCrediting,
   trackPlayTotals,
@@ -718,5 +722,81 @@ describe("One artist's plays", () => {
       before.queries.map((query) => query.rows),
     );
     assert.equal(after.queries.length, 3);
+  });
+});
+
+describe("Recap genres and discoveries", () => {
+  test("each song's genre tag, every value of a multi-value one; no genre is null", () => {
+    const [rock, multi, none] = addCredited(
+      { title: "Rock song", genre: "Rock" },
+      { title: "Multi song", genre: "Metalcore" },
+      { title: "No genre" },
+    );
+    if (rock === undefined || multi === undefined || none === undefined) {
+      throw new Error("tracks not added");
+    }
+    db.update(schema.tracks)
+      .set({ genres: storedGenres(["Metalcore", "Rock"]) })
+      .where(eq(schema.tracks.id, multi))
+      .run();
+
+    assert.deepEqual(
+      songGenres(db, [rock, multi, none]).toSorted((a, b) => a.id - b.id),
+      [
+        { id: rock, genre: "Rock", genres: null },
+        { id: multi, genre: "Metalcore", genres: ["Metalcore", "Rock"] },
+        { id: none, genre: null, genres: null },
+      ].toSorted((a, b) => a.id - b.id),
+    );
+  });
+
+  test("each artist's first counted play ever, deleted songs' credits included", () => {
+    const [early, late, gone] = addCredited(
+      { title: "Early", artist: "A" },
+      { title: "Late", artist: "B" },
+      { title: "Gone", artist: "A" },
+    );
+    if (early === undefined || late === undefined || gone === undefined) {
+      throw new Error("tracks not added");
+    }
+    recordPlay(db, play(gone, 1_000));
+    recordPlay(db, play(early, 5_000));
+    recordPlay(db, play(late, 2_000, skip));
+    recordPlay(db, play(late, 9_000));
+    deleteSongs(gone);
+    const [a, b] = [artistNamed("A"), artistNamed("B")];
+
+    assert.deepEqual(
+      artistFirstPlays(db, [a, b]).toSorted((x, y) => x.id - y.id),
+      [
+        { id: a, firstPlayAt: 1_000 },
+        { id: b, firstPlayAt: 9_000 },
+      ].toSorted((x, y) => x.id - y.id),
+    );
+  });
+});
+
+describe("Counted listening for Recaps", () => {
+  const QUARTER = 15 * 60_000;
+
+  test("sums counted plays per quarter hour, deleted songs included, skips left out", () => {
+    const [kept, gone] = addCredited(
+      { title: "Kept", artist: "A" },
+      { title: "Gone", artist: "B" },
+    );
+    if (kept === undefined || gone === undefined) throw new Error("tracks not added");
+    recordPlay(db, play(kept, 10 * QUARTER + 1_000, { listenedMs: 100_000 }));
+    recordPlay(db, play(gone, 10 * QUARTER + 5_000, { listenedMs: 200_000 }));
+    recordPlay(db, play(kept, 10 * QUARTER + 9_000, skip));
+    recordPlay(db, play(kept, 12 * QUARTER, { listenedMs: 50_000 }));
+    deleteSongs(gone);
+
+    assert.deepEqual(
+      countedListening(db).toSorted((a, b) => a.startedAt - b.startedAt),
+      [
+        { startedAt: 10 * QUARTER, listenedMs: 300_000 },
+        { startedAt: 12 * QUARTER, listenedMs: 50_000 },
+      ],
+    );
   });
 });

@@ -5,7 +5,10 @@ import {
   elapsedWavePath,
   formatDuration,
   formatRemaining,
+  framingView,
   mixPull,
+  panFraming,
+  pinchFraming,
   reorderGridShift,
   reorderGridTarget,
   reorderScrollSpeed,
@@ -15,7 +18,8 @@ import {
 } from "./index.ts";
 
 // The app calls these on the UI thread, inside Reanimated worklets: the
-// scrubber while a finger drags it, and Up Next or the Playlists list while a
+// scrubber while a finger drags it, the crop screen while fingers frame a
+// photo, and Up Next or the Playlists list while a
 // row or tile is dragged. The worklets Babel plugin copies a function to the
 // UI thread only when its body starts with the "worklet" directive; calling
 // any other function there throws. Node ignores the directive, so these tests
@@ -24,7 +28,10 @@ const onUiThread = {
   elapsedWavePath,
   formatDuration,
   formatRemaining,
+  framingView,
   mixPull,
+  panFraming,
+  pinchFraming,
   reorderGridShift,
   reorderGridTarget,
   reorderScrollSpeed,
