@@ -1,7 +1,7 @@
 /**
- * Wave's toast: one line on a small glass pill above the mini player, drawn
- * by `ToastHost` at the app root. It goes away on its own (Core's
- * `toastDuration`), or sooner on a tap or a swipe. It can offer one action
+ * Wave's toast: one line on a small glass pill at the top of the screen, just
+ * under the status bar, drawn by `ToastHost` at the app root. It goes away on
+ * its own (Core's `toastDuration`), or sooner on a tap or a swipe up. It can offer one action
  * (Undo) at its end. Show one from anywhere, React or not; a newer one takes
  * the place of the one showing.
  */

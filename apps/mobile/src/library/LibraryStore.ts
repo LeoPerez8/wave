@@ -20,6 +20,7 @@ import {
   type YtAlbumSong,
   type YtArtistSaved,
   type ExplicitFlag,
+  type SavedLyrics,
 } from "@wave/core";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { drizzle, type ExpoSQLiteDatabase } from "drizzle-orm/expo-sqlite";
@@ -109,7 +110,12 @@ import {
   type PlaylistUnsearched,
   type UnsearchedEntriesSettled,
 } from "./db/playlists";
-import { addPendingFavorites } from "./db/pendingFavorites";
+import {
+  addPendingFavorites,
+  removePendingFavorites,
+  selectPendingFavorites,
+} from "./db/pendingFavorites";
+import { forgetSavedLyrics, keepSavedLyrics, selectSavedLyrics } from "./db/savedLyrics";
 import { hasUnscannedRoot, pruneOrphans, saveBatch, type SavedBatch } from "./db/save";
 import * as schema from "./db/schema";
 import {
@@ -701,6 +707,12 @@ export class LibraryStore extends Context.Service<
     readonly addPendingFavorites: (
       songs: readonly PendingFavorite[],
     ) => Effect.Effect<void, LibraryStoreError>;
+    /** Every pending favorite kept, starred songs waiting for their files. */
+    readonly listPendingFavorites: Effect.Effect<readonly PendingFavorite[], LibraryStoreError>;
+    /** Forgets the pending favorites of videos [videoIds]: unstarred before their files arrived. */
+    readonly removePendingFavorites: (
+      videoIds: readonly string[],
+    ) => Effect.Effect<void, LibraryStoreError>;
     /** Records a play as it starts (Core's `PlayEvent`); returns its id, to update it as it goes on. */
     readonly recordPlay: (
       play: PlayEvent,
@@ -799,6 +811,20 @@ export class LibraryStore extends Context.Service<
      * anew) and its missing songs go (`signOut`).
      */
     readonly leaveAccount: Effect.Effect<void, LibraryStoreError>;
+    /**
+     * What the Lyrics view saved for a non-D song's video (Core's
+     * `SavedLyrics`): lyrics it found online, or a miss; null for nothing.
+     */
+    readonly savedLyrics: (videoId: string) => Effect.Effect<SavedLyrics | null, LibraryStoreError>;
+    /** Saves [saved] for [videoId], replacing what was saved before. This phone only. */
+    readonly keepSavedLyrics: (
+      videoId: string,
+      saved: SavedLyrics,
+    ) => Effect.Effect<void, LibraryStoreError>;
+    /** Drops what was saved for [videoIds] (their lyrics are in a file now). */
+    readonly forgetSavedLyrics: (
+      videoIds: readonly string[],
+    ) => Effect.Effect<void, LibraryStoreError>;
   }
 >()("@wave/mobile/library/LibraryStore") {}
 
@@ -1260,6 +1286,11 @@ const make = Effect.gen(function* () {
     addPendingFavorites: (songs) =>
       attempt("keep pending favorites", () => addPendingFavorites(db, songs, Date.now())),
 
+    listPendingFavorites: attempt("read pending favorites", () => selectPendingFavorites(db)),
+
+    removePendingFavorites: (videoIds) =>
+      attempt("forget pending favorites", () => removePendingFavorites(db, videoIds)),
+
     recordPlay: (play, overlapping) =>
       attempt("record the play", () => recordPlay(db, play, overlapping)),
 
@@ -1323,6 +1354,14 @@ const make = Effect.gen(function* () {
       }),
 
     leaveAccount: attempt("leave the Wave account", () => signOut(db, splits)),
+
+    savedLyrics: (videoId) => attempt("read saved lyrics", () => selectSavedLyrics(db, videoId)),
+
+    keepSavedLyrics: (videoId, saved) =>
+      attempt("save lyrics", () => keepSavedLyrics(db, videoId, saved, Date.now())),
+
+    forgetSavedLyrics: (videoIds) =>
+      attempt("forget saved lyrics", () => forgetSavedLyrics(db, videoIds)),
   });
 });
 

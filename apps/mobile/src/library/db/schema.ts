@@ -654,7 +654,8 @@ export const playTotals = sqliteTable(
 
 /**
  * Pending favorites (Core's `PendingFavorite`): liked songs Also add to
- * Favorites couldn't star because the Library didn't have them, each by its
+ * Favorites couldn't star because the Library didn't have them, and YT Music
+ * songs starred anywhere (a star means downloaded), each by its
  * YouTube Music video and its recording (title, artists, length). A download
  * or scan that brings one in stars it and deletes its row (`saveBatch`).
  * This phone only, never synced, and never listed in Favorites.
@@ -666,4 +667,19 @@ export const pendingFavorites = sqliteTable("pending_favorites", {
   artists: text("artists").notNull(),
   durationMs: integer("duration_ms"),
   addedAt: integer("added_at").notNull(),
+});
+
+/**
+ * Lyrics the Lyrics view found online for non-D songs (Core's `SavedLyrics`),
+ * by YouTube video: the lyrics, or a miss ([lyrics] null) remembered for a
+ * week (`LYRICS_MISS_RETRY_MS`). Reopening one shows them at once, offline
+ * too. This phone only, never synced.
+ */
+export const savedLyrics = sqliteTable("saved_lyrics", {
+  videoId: text("video_id").primaryKey(),
+  /** LRC when [synced], plain text otherwise; null for a miss. */
+  lyrics: text("lyrics"),
+  synced: integer("synced", { mode: "boolean" }).notNull().default(false),
+  /** When the search was made (ms since the epoch). */
+  checkedAt: integer("checked_at").notNull(),
 });
