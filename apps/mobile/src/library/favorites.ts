@@ -1,4 +1,12 @@
-import { favoriteStar, starWriteSettled, starWriteStarted, type FavoriteStar } from "@wave/core";
+import {
+  favoriteStar,
+  parseTrackId,
+  starWriteSettled,
+  starWriteStarted,
+  ytSongStarred,
+  type FavoriteStar,
+  type PendingFavorite,
+} from "@wave/core";
 import { useEffect, useSyncExternalStore } from "react";
 
 import { makeExternalStore } from "@/lib/externalStore";
@@ -144,21 +152,34 @@ const useFavoritesState = (): FavoritesState => {
 /** The ids of every starred track (for marking rows in a list). */
 export const useFavoriteIds = (): ReadonlySet<number> => useFavoritesState().ids;
 
-/** Whether a track is starred; takes a SongRow id or a queue track id (Now Playing). */
+/**
+ * Whether a track is starred; takes a SongRow id or a queue track id (Now
+ * Playing). A YT Music song's (`yt:<videoId>`) is its pending favorite:
+ * starred, its file on its way.
+ */
 export const useIsFavorite = (trackId: number | string | null): boolean => {
-  useEffect(loadFavorites, []);
-  return useSyncExternalStore(favorites.subscribe, () =>
-    trackId === null ? false : favorites.get().ids.has(Number(trackId)),
+  const ref = typeof trackId === "string" ? parseTrackId(trackId) : null;
+  const video = ref?.kind === "yt" ? ref.videoId : null;
+  const pendingStar = video !== null;
+  useEffect(() => {
+    if (pendingStar) loadPendingFavorites();
+    else loadFavorites();
+  }, [pendingStar]);
+  return useSyncExternalStore(
+    video === null ? favorites.subscribe : pendingFavorites.subscribe,
+    () =>
+      video !== null
+        ? pendingFavorites.get().videos.has(video)
+        : trackId !== null && favorites.get().ids.has(Number(trackId)),
   );
 };
 
 /**
- * Reads the stars again after they changed outside this phone's own toggles
- * (the Wave account sent some): stars with a write in flight keep showing
- * what was asked, and lists over favorites re-run.
+ * The starred tracks as the store holds them now, read afresh, with the stars
+ * whose writes are still in flight showing what was asked.
  */
-export const reloadFavorites = (): void => {
-  void appRuntime
+export const currentFavoriteIds = (): Promise<ReadonlySet<number>> =>
+  appRuntime
     // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
     .runPromise(LibraryStore.use((store) => store.favoriteTrackIds))
     .then((ids) => {
@@ -167,6 +188,17 @@ export const reloadFavorites = (): void => {
         if (star.shown) shown.add(id);
         else shown.delete(id);
       }
+      return shown;
+    });
+
+/**
+ * Reads the stars again after they changed outside this phone's own toggles
+ * (the Wave account sent some): stars with a write in flight keep showing
+ * what was asked, and lists over favorites re-run.
+ */
+export const reloadFavorites = (): void => {
+  void currentFavoriteIds()
+    .then((shown) => {
       favorites.update((state) => ({
         ...state,
         ids: shown,
@@ -179,8 +211,111 @@ export const reloadFavorites = (): void => {
     .catch(() => {});
 };
 
+/**
+ * Pending favorites (a star means downloaded, docs/spec.md): starred YT
+ * Music songs this phone has no file for yet, by video, held in memory so
+ * their stars flip at once everywhere (Now Playing, menus, the selection
+ * bar). The store keeps them (`pending_favorites`, this phone only); the
+ * save that brings a song in settles its pending favorite into the Library
+ * track's star.
+ */
+interface PendingFavoritesState {
+  readonly videos: ReadonlySet<string>;
+  readonly loaded: boolean;
+  /** Bumped when stars are set, so a read that raced them reads again. */
+  readonly edits: number;
+}
+
+const pendingFavorites = makeExternalStore<PendingFavoritesState>({
+  videos: new Set(),
+  loaded: false,
+  edits: 0,
+});
+
+let readingPending = false;
+
+/** Reads the pending favorites from the store: at first use, and after a save settled some. */
+const readPendingFavorites = (): void => {
+  if (readingPending) return;
+  readingPending = true;
+  const edits = pendingFavorites.get().edits;
+  void appRuntime
+    // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+    .runPromise(LibraryStore.use((store) => store.listPendingFavorites))
+    .then((songs) => {
+      readingPending = false;
+      // A star set while reading may not be in the result; read again.
+      if (pendingFavorites.get().edits !== edits) return readPendingFavorites();
+      pendingFavorites.update((state) => ({
+        ...state,
+        videos: new Set(songs.map((song) => song.videoId)),
+        loaded: true,
+      }));
+    })
+    .catch(() => {
+      readingPending = false;
+    });
+};
+
+const loadPendingFavorites = (): void => {
+  if (!pendingFavorites.get().loaded) readPendingFavorites();
+};
+
+/**
+ * Stars ([on]) YT Music [songs] as pending favorites, or unstars them: their
+ * stars flip at once, and the store keeps them until their files arrive.
+ * Should the write fail, the stars go back to what the store holds. Their
+ * downloads are `starSongs`'s.
+ */
+export const setPendingFavorites = (
+  songs: readonly PendingFavorite[],
+  on: boolean,
+): Promise<void> => {
+  if (songs.length === 0) return Promise.resolve();
+  const videoIds = songs.map((song) => song.videoId);
+  pendingFavorites.update((state) => {
+    const videos = new Set(state.videos);
+    for (const id of videoIds) {
+      if (on) videos.add(id);
+      else videos.delete(id);
+    }
+    return { ...state, videos, edits: state.edits + 1 };
+  });
+  return (
+    appRuntime
+      .runPromise(
+        // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+        LibraryStore.use((store) =>
+          on ? store.addPendingFavorites(songs) : store.removePendingFavorites(videoIds),
+        ),
+      )
+      // The store holds what was asked; on failure, its stars as they are show again.
+      .catch(readPendingFavorites)
+  );
+};
+
+/** The videos of every pending favorite (for marking YT Music songs starred). */
+export const usePendingFavoriteVideos = (): ReadonlySet<string> => {
+  useEffect(loadPendingFavorites, []);
+  return useSyncExternalStore(pendingFavorites.subscribe, () => pendingFavorites.get().videos);
+};
+
+/**
+ * Whether YT Music song [videoId] shows starred (Core's `ytSongStarred`): its pending favorite,
+ * or [track]'s star, the Library song it is by now. The one rule for every star a YT Music
+ * song shows (Now Playing, its menu).
+ */
+export const useYtSongStarred = (videoId: string | null, track: { id: number } | null): boolean => {
+  const favoriteIds = useFavoriteIds();
+  const pending = usePendingFavoriteVideos();
+  return videoId !== null && ytSongStarred(videoId, track, favoriteIds, pending);
+};
+
 // A download or scan that brought in a pending favorite starred it as it saved the song.
-onSavedStars(reloadFavorites);
+onSavedStars(() => {
+  reloadFavorites();
+  readPendingFavorites();
+});
 
 /** Calls [listener] whenever a star has been saved; returns how to stop. */
 export const onFavoritesSaved = (listener: () => void): (() => void) => {

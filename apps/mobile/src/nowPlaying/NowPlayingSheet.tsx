@@ -19,7 +19,14 @@ import { useThemeColor } from "@/theme/useThemeColor";
 
 import { Background } from "./Background";
 import { DismissArea } from "./DismissArea";
-import { useNowPlayingGradient, useNowPlayingPalette, useTrackDetails } from "./hooks";
+import {
+  useDownloadedFile,
+  type LibraryFile,
+  useNowPlayingGradient,
+  useNowPlayingPalette,
+  usePlayingYtSong,
+  useTrackDetails,
+} from "./hooks";
 import { LyricsView } from "./LyricsView";
 import { PlayerView } from "./PlayerView";
 import { QueueHeader, UpNextList } from "./QueueView";
@@ -32,6 +39,7 @@ import {
   useNowPlayingShown,
 } from "./sheet";
 import { SleepTimerButton } from "./SleepTimer";
+import { AddToPlaylistButton, DownloadButton } from "./SongButtons";
 import { Transport } from "./Transport";
 
 /** What fills the space above the controls. */
@@ -80,8 +88,10 @@ type Item = NonNullable<PlaybackState["item"]>;
  * shows its rows as they were, re-rendering only what changed meanwhile.
  * Hidden, it follows nothing (its store subscriptions, gestures and frame
  * callbacks are effects, which `Activity` tears down) and holds only the
- * rows Legend List had drawn. Memoized, so the sheet's renders (the playing
- * state) don't reach it while it's hidden.
+ * rows Legend List had drawn; each showing places Up Next again through the
+ * list (`UpNextList`), so the rows show at once even if the queue changed out
+ * of sight. Memoized, so the sheet's renders (the playing state) don't reach
+ * it while it's hidden.
  */
 const QueuePane = memo(function QueuePane({ item }: { item: Item }) {
   return (
@@ -158,11 +168,18 @@ export function NowPlayingSheet() {
   );
   const trackId = useCurrentTrackId();
   const details = useTrackDetails(trackId);
+  const ytSong = usePlayingYtSong(trackId);
   const palette = useNowPlayingPalette(trackId, details);
   const gradient = useNowPlayingGradient(palette);
   const [view, setView] = useState<NowPlayingView>("player");
   // The Queue, once shown, stays mounted while another view shows (`QueuePane`).
   const [queueWarm, setQueueWarm] = useState(false);
+  // A streamed song downloaded since it was queued: Lyrics reads its file, as for a Library song.
+  const downloaded = useDownloadedFile(ytSong, shown && view === "lyrics");
+  const lyricsFile: LibraryFile | null =
+    details === null ? (downloaded ?? null) : { id: details.id, path: details.path };
+  // A non-D song's search waits until the Library is read: a song with a file reads it instead.
+  const nonDTrackId = lyricsFile === null && downloaded !== undefined ? trackId : null;
 
   useEffect(() => resizeNowPlaying(height), [height]);
 
@@ -227,7 +244,12 @@ export function NowPlayingSheet() {
               </Activity>
             )}
             {view === "lyrics" && (
-              <LyricsView path={details?.path ?? null} item={item} palette={palette} />
+              <LyricsView
+                file={lyricsFile}
+                nonDTrackId={nonDTrackId}
+                item={item}
+                palette={palette}
+              />
             )}
             <Activity mode={view === "player" ? "visible" : "hidden"} name="Player">
               <PlayerPane item={item} details={details} playing={playing} />
@@ -238,7 +260,8 @@ export function NowPlayingSheet() {
         <DismissArea style={{ paddingTop: CELL * 3, gap: CELL * 2 }}>
           <Scrubber />
           <Transport />
-          <View className="flex-row items-center">
+          {/* Evenly spaced, with or without Download (a non-D song's alone). */}
+          <View className="flex-row items-center justify-between">
             <ViewToggle
               icon={IconQuote}
               label="Lyrics"
@@ -246,7 +269,16 @@ export function NowPlayingSheet() {
               onPress={toggleLyrics}
             />
             <SleepTimerButton />
-            <View className="flex-1" />
+            {item !== null && (
+              <>
+                <AddToPlaylistButton
+                  trackId={trackId}
+                  ytSong={ytSong}
+                  title={item.title ?? "Unknown title"}
+                />
+                <DownloadButton ytSong={ytSong} />
+              </>
+            )}
             <ViewToggle
               icon={IconListNumbers}
               label="Queue"

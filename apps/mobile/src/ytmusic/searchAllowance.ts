@@ -9,6 +9,7 @@
 import {
   readSearchAllowance,
   searchFailedLine,
+  searchRoomAt,
   searchTurnWanted,
   searchTurnWithdrawn,
   searchTurns,
@@ -89,6 +90,13 @@ export const searchTurn = (asker: SearchAsker, signal?: AbortSignal): Promise<bo
     decide();
   });
 };
+
+/**
+ * When the allowance has room for a search of [asker]'s again (ms since the
+ * epoch), or null when it has room now (Core's `searchRoomAt`).
+ */
+export const searchAllowanceFreeAt = (asker: SearchAsker): number | null =>
+  searchRoomAt(current(), asker, Date.now());
 
 /** Notes in the app log that [asker]'s search [query] failed ([reason]); native code logs what it saw. */
 export const logSearchFailure = (

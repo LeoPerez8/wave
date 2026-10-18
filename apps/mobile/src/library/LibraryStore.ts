@@ -20,6 +20,13 @@ import {
   type YtAlbumSong,
   type YtArtistSaved,
   type ExplicitFlag,
+  type SavedLyrics,
+  type NoBetterCopy,
+  type QualityDirection,
+  type QualityFile,
+  type ReplacedTrack,
+  type MixPlaylistEntry,
+  type StreamedSong,
 } from "@wave/core";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { drizzle, type ExpoSQLiteDatabase } from "drizzle-orm/expo-sqlite";
@@ -109,7 +116,27 @@ import {
   type PlaylistUnsearched,
   type UnsearchedEntriesSettled,
 } from "./db/playlists";
-import { addPendingFavorites } from "./db/pendingFavorites";
+import {
+  addPendingFavorites,
+  removePendingFavorites,
+  selectPendingFavorites,
+} from "./db/pendingFavorites";
+import { forgetSavedLyrics, keepSavedLyrics, selectSavedLyrics } from "./db/savedLyrics";
+import {
+  rememberNoBetterCopies,
+  replaceTrackFile,
+  selectNoBetterCopies,
+  selectQualityFiles,
+  selectReplacedTrack,
+  type ReplacedFile,
+} from "./db/qualityReplacement";
+import { keepLyricsMiss, selectLyricsSearchTrack, type LyricsSearchTrack } from "./db/lyricsMisses";
+import {
+  noteStreamedSong,
+  selectKnownVideos,
+  selectPlaylistedSongs,
+  selectStreamedSongs,
+} from "./db/mixKnown";
 import { hasUnscannedRoot, pruneOrphans, saveBatch, type SavedBatch } from "./db/save";
 import * as schema from "./db/schema";
 import {
@@ -120,7 +147,9 @@ import {
   selectLibraryLookupSongs,
   trackArtistIds,
   selectPlayableSongs,
+  selectSongGenres,
   trackQuery,
+  type SongGenres,
   type TrackScope,
   withFile,
 } from "./db/tracks";
@@ -487,6 +516,11 @@ export class LibraryStore extends Context.Service<
      * whether it has lyrics, for the whole-Library run.
      */
     readonly listLibraryLookupSongs: Effect.Effect<readonly LibraryLookupSong[], LibraryStoreError>;
+    /**
+     * The songs whose genre tag has several values, with every value (the
+     * Library files them under the first): what Genre mixes count.
+     */
+    readonly listSongGenres: Effect.Effect<readonly SongGenres[], LibraryStoreError>;
     /** Every album by title, then album artist, for Library › Albums. */
     readonly listAlbums: Effect.Effect<readonly AlbumRow[], LibraryStoreError>;
     /**
@@ -701,6 +735,35 @@ export class LibraryStore extends Context.Service<
     readonly addPendingFavorites: (
       songs: readonly PendingFavorite[],
     ) => Effect.Effect<void, LibraryStoreError>;
+    /** Every pending favorite kept, starred songs waiting for their files. */
+    readonly listPendingFavorites: Effect.Effect<readonly PendingFavorite[], LibraryStoreError>;
+    /** Forgets the pending favorites of videos [videoIds]: unstarred before their files arrived. */
+    readonly removePendingFavorites: (
+      videoIds: readonly string[],
+    ) => Effect.Effect<void, LibraryStoreError>;
+    /** Every Library file with its length, bitrate and size (Core's `qualityUpgradeSongs` weighs them). */
+    readonly qualityFiles: Effect.Effect<readonly QualityFile[], LibraryStoreError>;
+    /** The Tracks recorded as having no better copy in [direction]. This phone only. */
+    readonly noBetterCopies: (
+      direction: QualityDirection,
+    ) => Effect.Effect<readonly number[], LibraryStoreError>;
+    /** Records songs as having no better copy (Core's `noBetterCopies`), each once. */
+    readonly rememberNoBetterCopies: (
+      songs: readonly NoBetterCopy[],
+    ) => Effect.Effect<void, LibraryStoreError>;
+    /** Library song [trackId] as its replacement takes it; null when gone or without a file. */
+    readonly replacedTrack: (
+      trackId: number,
+    ) => Effect.Effect<ReplacedTrack | null, LibraryStoreError>;
+    /**
+     * A replacement's new file takes over Track [trackId] in place, keeping its id, favorites,
+     * plays, playlist entries and recording key; "gone" when the Track was removed meanwhile.
+     */
+    readonly replaceTrackFile: (
+      trackId: number,
+      track: IndexedTrack,
+      artworkRows: readonly IndexedArtwork[],
+    ) => Effect.Effect<ReplacedFile, LibraryStoreError>;
     /** Records a play as it starts (Core's `PlayEvent`); returns its id, to update it as it goes on. */
     readonly recordPlay: (
       play: PlayEvent,
@@ -799,6 +862,50 @@ export class LibraryStore extends Context.Service<
      * anew) and its missing songs go (`signOut`).
      */
     readonly leaveAccount: Effect.Effect<void, LibraryStoreError>;
+    /**
+     * What the Lyrics view saved for a non-D song's video (Core's
+     * `SavedLyrics`): lyrics it found online, or a miss; null for nothing.
+     */
+    readonly savedLyrics: (videoId: string) => Effect.Effect<SavedLyrics | null, LibraryStoreError>;
+    /** Saves [saved] for [videoId], replacing what was saved before. This phone only. */
+    readonly keepSavedLyrics: (
+      videoId: string,
+      saved: SavedLyrics,
+    ) => Effect.Effect<void, LibraryStoreError>;
+    /** Drops what was saved for [videoIds] (their lyrics are in a file now). */
+    readonly forgetSavedLyrics: (
+      videoIds: readonly string[],
+    ) => Effect.Effect<void, LibraryStoreError>;
+    /**
+     * What the Lyrics view's online search for the Library track [trackId]
+     * goes by, and when it last found nothing; null for no such track.
+     */
+    readonly lyricsSearchTrack: (
+      trackId: number,
+    ) => Effect.Effect<LyricsSearchTrack | null, LibraryStoreError>;
+    /** Remembers that the search for [trackId] found nothing at [checkedAt]; null forgets it. This phone only. */
+    readonly keepLyricsMiss: (
+      trackId: number,
+      checkedAt: number | null,
+    ) => Effect.Effect<void, LibraryStoreError>;
+    /**
+     * Notes that the owner started streaming [song] at [at] (streamed plays
+     * aren't play history; Home's mixes read them). This phone only.
+     */
+    readonly noteStreamedSong: (
+      song: YtAlbumSong,
+      at: number,
+    ) => Effect.Effect<void, LibraryStoreError>;
+    /** Every YT Music song the owner streamed, with how often and when first. */
+    readonly streamedSongs: Effect.Effect<readonly StreamedSong[], LibraryStoreError>;
+    /** The playlists' entries that aren't Library songs, with when each was added (Home's mixes). */
+    readonly playlistedSongs: Effect.Effect<readonly MixPlaylistEntry[], LibraryStoreError>;
+    /**
+     * The videos of the songs streamed, in a playlist, or downloaded and
+     * played or in a playlist: a mix's re-blend leaves its new songs among
+     * them out (Core's `discoverMixKeep`).
+     */
+    readonly knownVideos: Effect.Effect<readonly string[], LibraryStoreError>;
   }
 >()("@wave/mobile/library/LibraryStore") {}
 
@@ -1022,6 +1129,8 @@ const make = Effect.gen(function* () {
     songsWithIds: (ids) => attempt("read songs", () => selectSongsWithIds(db, ids)),
 
     listLibraryLookupSongs: attempt("list songs to look up", () => selectLibraryLookupSongs(db)),
+
+    listSongGenres: attempt("list song genres", () => selectSongGenres(db)),
 
     trackDetails: (id) =>
       attempt(
@@ -1260,6 +1369,23 @@ const make = Effect.gen(function* () {
     addPendingFavorites: (songs) =>
       attempt("keep pending favorites", () => addPendingFavorites(db, songs, Date.now())),
 
+    listPendingFavorites: attempt("read pending favorites", () => selectPendingFavorites(db)),
+
+    removePendingFavorites: (videoIds) =>
+      attempt("forget pending favorites", () => removePendingFavorites(db, videoIds)),
+
+    qualityFiles: attempt("read the files' quality", () => selectQualityFiles(db)),
+    noBetterCopies: (direction) =>
+      attempt("read the songs with no better copy", () => selectNoBetterCopies(db, direction)),
+    rememberNoBetterCopies: (songs) =>
+      attempt("remember the songs with no better copy", () => rememberNoBetterCopies(db, songs)),
+    replacedTrack: (trackId) =>
+      attempt("read a song to replace", () => selectReplacedTrack(db, trackId)),
+    replaceTrackFile: (trackId, track, artworkRows) =>
+      attempt("replace a song's file", () =>
+        replaceTrackFile(db, splits, trackId, track, artworkRows, Date.now()),
+      ),
+
     recordPlay: (play, overlapping) =>
       attempt("record the play", () => recordPlay(db, play, overlapping)),
 
@@ -1323,6 +1449,29 @@ const make = Effect.gen(function* () {
       }),
 
     leaveAccount: attempt("leave the Wave account", () => signOut(db, splits)),
+
+    savedLyrics: (videoId) => attempt("read saved lyrics", () => selectSavedLyrics(db, videoId)),
+
+    keepSavedLyrics: (videoId, saved) =>
+      attempt("save lyrics", () => keepSavedLyrics(db, videoId, saved, Date.now())),
+
+    forgetSavedLyrics: (videoIds) =>
+      attempt("forget saved lyrics", () => forgetSavedLyrics(db, videoIds)),
+
+    lyricsSearchTrack: (trackId) =>
+      attempt("read the song's lyrics search", () => selectLyricsSearchTrack(db, trackId)),
+
+    keepLyricsMiss: (trackId, checkedAt) =>
+      attempt("remember the lyrics search", () => keepLyricsMiss(db, trackId, checkedAt)),
+
+    noteStreamedSong: (song, at) =>
+      attempt("note a streamed song", () => noteStreamedSong(db, song, at)),
+
+    streamedSongs: attempt("read the songs streamed", () => selectStreamedSongs(db)),
+
+    playlistedSongs: attempt("read the playlists' songs", () => selectPlaylistedSongs(db)),
+
+    knownVideos: attempt("read the videos the owner knows", () => selectKnownVideos(db)),
   });
 });
 

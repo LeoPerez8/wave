@@ -32,9 +32,9 @@ const saved: DiscoverMixes = {
       id: "artist:portishead",
       seed: { kind: "artist", name: "Portishead" },
       songs: ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"].map((id) => song(id)),
-      library: [
-        { id: 1, title: "Roads", artist: "Portishead" },
-        { id: 2, title: "Teardrop", artist: "Massive Attack" },
+      familiar: [
+        { source: "library", track: { id: 1, title: "Roads", artist: "Portishead" } },
+        { source: "library", track: { id: 2, title: "Teardrop", artist: "Massive Attack" } },
       ],
     },
   ],
@@ -84,6 +84,31 @@ describe("Home's Discover mixes section", () => {
     assert.deepEqual(at(1), ["a", "b", "c", "d", 1, "e", "f", "g", "h", 2]);
   });
 
+  test("says it's updating while a rebuild runs, over the saved mixes, and not otherwise", () => {
+    const updating = (building: boolean) => {
+      const shown = discoverMixesSection(saved, {
+        ytMusic: true,
+        nothingToBuildFrom: false,
+        blend,
+        building,
+      });
+      return shown.kind === "mixes" ? shown.updating : null;
+    };
+    assert.deepEqual([updating(true), updating(false)], [true, false]);
+  });
+
+  test("shows its skeleton, not the saved-mixes' updating line, while the first build runs", () => {
+    assert.deepEqual(
+      discoverMixesSection(null, {
+        ytMusic: true,
+        nothingToBuildFrom: false,
+        blend,
+        building: true,
+      }),
+      { kind: "skeleton" },
+    );
+  });
+
   test("shows a skeleton while no mixes are saved: the first build, or after a failed one", () => {
     assert.deepEqual(
       discoverMixesSection(null, { ytMusic: true, nothingToBuildFrom: false, blend }),
@@ -94,7 +119,9 @@ describe("Home's Discover mixes section", () => {
   });
 
   test("shows a skeleton when the saved mixes can't be read", () => {
-    const unreadable = parseDiscoverMixes(JSON.stringify({ builtAt: 1, mixes: [{ id: 1 }] }));
+    const unreadable = parseDiscoverMixes(
+      JSON.stringify({ version: 2, builtAt: 1, mixes: [{ id: 1 }] }),
+    );
     assert.deepEqual(
       discoverMixesSection(unreadable, { ytMusic: true, nothingToBuildFrom: false, blend }),
       { kind: "skeleton" },

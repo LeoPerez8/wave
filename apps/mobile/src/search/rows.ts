@@ -79,9 +79,7 @@ export type ResultRow =
       readonly top: boolean;
     }
   /** A quiet line in place of results: nothing in the library, YT Music offline… */
-  | { readonly type: "note"; readonly key: string; readonly text: string }
-  /** Search YouTube Music: asks YT Music for the query and merges its songs in. */
-  | { readonly type: "askYt"; readonly key: string };
+  | { readonly type: "note"; readonly key: string; readonly text: string };
 
 /** The most results of one type the search returns (and a song tap queues). */
 export const RESULT_LIMIT = 200;
@@ -273,13 +271,12 @@ const YT_NOTE: Readonly<Record<YtSectionNote, string>> = {
   searching: "Searching YT Music…",
   noMatches: "Nothing on YT Music matches.",
   allInLibrary: "What YT Music found is already in your library.",
-  offline: "You're offline. Results from YT Music show here when you're back online.",
-  failed: "YT Music didn't answer. Try again in a moment.",
+  offline: "You're offline. Tap Online to try again when you're back online.",
+  failed: "YT Music didn't answer. Tap Online to try again.",
 };
 
-/** What follows the results for YT Music: Search YouTube Music, or its quiet line. */
+/** What follows the results for YT Music: its quiet line, if any. */
 export const ytFooterRows = (view: YtSectionView<NativeYtSong> | null): ResultRow[] => {
   if (view === null) return [];
-  if (view.offer) return [{ type: "askYt", key: "ask:yt" }];
   return view.note === null ? [] : [{ type: "note", key: "note:yt", text: YT_NOTE[view.note] }];
 };

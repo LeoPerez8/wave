@@ -2,6 +2,8 @@ package expo.modules.wavenative.tags
 
 import expo.modules.wavenative.Fixtures
 import java.io.File
+import org.jaudiotagger.audio.AudioFileIO
+import org.jaudiotagger.tag.FieldKey
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -155,6 +157,60 @@ class DownloadTagWriterTest {
     val file = Fixtures.libraryOf("soulseek-320.mp3" to "a.mp3").resolve("a.mp3")
     DownloadTagWriter().write(file, DownloadTags.fromJs(mapOf("title" to "Halo", "artist" to "Beyoncé"))!!, null)
     assertNull(reader.read(file).advisory)
+  }
+
+  /** A copy of [fixture] standing in for the Library file a quality replacement replaces, with tags the Library doesn't keep. */
+  private fun replacedFile(fixture: String, name: String): File {
+    val file = Fixtures.libraryOf(fixture to name).resolve(name)
+    val audio = AudioFileIO.read(file)
+    val tag = audio.tagOrCreateAndSetDefault
+    tag.setField(FieldKey.COMPOSER, "Nile Rodgers")
+    tag.setField(FieldKey.COMMENT, "Owner's note")
+    tag.setField(FieldKey.BPM, "116")
+    tag.setField(FieldKey.GENRE, "Disco")
+    tag.addField(FieldKey.GENRE, "Funk")
+    AudioFileIO.write(audio)
+    return file
+  }
+
+  private fun assertKeepsTheReplacedFilesOtherTags(replaced: File, file: File) {
+    val audioBefore = AudioPayload.of(file)
+    val fields = DownloadTags.fromJs(mapOf(
+      "title" to "Get Lucky", "artist" to "Daft Punk", "genre" to "Disco", "keepTagsOf" to replaced.path,
+    ))!!
+
+    DownloadTagWriter().write(file, fields, null)
+
+    val tag = AudioFileIO.read(file).tag
+    assertEquals("${file.name} composer", "Nile Rodgers", tag.getFirst(FieldKey.COMPOSER))
+    assertEquals("${file.name} comment", "Owner's note", tag.getFirst(FieldKey.COMMENT))
+    assertEquals("${file.name} BPM", "116", tag.getFirst(FieldKey.BPM))
+    val read = reader.read(file)
+    assertEquals("${file.name} title", "Get Lucky", read.title)
+    assertEquals("${file.name} genres", listOf("Disco", "Funk"), read.genres)
+    assertArrayEquals("${file.name} audio", audioBefore, AudioPayload.of(file))
+  }
+
+  @Test
+  fun anUpgradesMp3KeepsTheReplacedM4asOtherTags() = assertKeepsTheReplacedFilesOtherTags(
+    replacedFile("tagged-aac.m4a", "Get Lucky.m4a"),
+    Fixtures.libraryOf("soulseek-320.mp3" to ".upgrade.part.mp3").resolve(".upgrade.part.mp3"),
+  )
+
+  @Test
+  fun aDowngradesFragmentedM4aKeepsTheReplacedMp3sOtherTags() = assertKeepsTheReplacedFilesOtherTags(
+    replacedFile("tagged.mp3", "Get Lucky.mp3"),
+    youtubeDownload(),
+  )
+
+  @Test
+  fun aReplacedFileGoneMeanwhileLeavesJustTheGivenTags() {
+    val file = youtubeDownload()
+    val fields = DownloadTags.fromJs(
+      mapOf("title" to "Get Lucky", "artist" to "Daft Punk", "keepTagsOf" to "/nowhere/gone.mp3"),
+    )!!
+    DownloadTagWriter().write(file, fields, null)
+    assertEquals("Get Lucky", reader.read(file).title)
   }
 
   @Test

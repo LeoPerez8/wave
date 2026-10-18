@@ -18,10 +18,17 @@ import { useMemo } from "react";
 
 import { followArtistLink, followStreamedArtistLink } from "@/library/ArtistChoice";
 import { confirmDeleteSongs, confirmRemoveSongs } from "@/library/deleteSongs";
-import { songHasFile, type ArtistRow } from "@/library/LibraryStore";
-import { setFavorites, useFavoriteIds } from "@/library/favorites";
+import { songHasFile, type ArtistRow, type SongRow } from "@/library/LibraryStore";
+import { useFavoriteIds, usePendingFavoriteVideos } from "@/library/favorites";
+import { starSongs } from "@/library/starSongs";
 import { fixSongs } from "@/library/findLyricsAndGenre";
-import { useAlbumsMissingSongs, useLinkRows } from "@/library/hooks";
+import {
+  readCollectionSongs,
+  useAlbumsMissingSongs,
+  useCollectionSongs,
+  useLinkRows,
+  type SongsCollection,
+} from "@/library/hooks";
 import {
   changePlaylistImageFlow,
   confirmDeletePlaylists,
@@ -32,7 +39,10 @@ import {
 import { removePlaylistItems } from "@/library/playlists";
 import { openAlbum } from "@/library/routes";
 import { showError } from "@/overlay/alert";
-import { useLyricsAndGenreLookupsEnabled } from "@/settings/lyricsAndGenre";
+import {
+  lyricsAndGenreLookupsEnabled,
+  useLyricsAndGenreLookupsEnabled,
+} from "@/settings/lyricsAndGenre";
 import { ytMusicEnabled } from "@/settings/ytMusic";
 import {
   cancelMissingSongDownload,
@@ -42,10 +52,11 @@ import {
   useMissingSongDownloadStatuses,
   downloadYtSong,
 } from "@/ytmusic/YtDownloads";
-import { useLoadedLibraryFinder, type FindInLibrary } from "@/ytmusic/libraryFinder";
+import { useLibraryFinder, type FindInLibrary } from "@/ytmusic/libraryFinder";
 import { useStreamedArtistContext } from "@/ytmusic/streamedArtist";
 
 import {
+  collectionSongFacts,
   targetCount,
   targetEntries,
   targetFacts,
@@ -81,6 +92,8 @@ export interface ActionOptions {
   readonly finish: () => void;
   /** The menu's list can select: offers Select, which calls this. */
   readonly onSelect?: (() => void) | undefined;
+  /** The songs of the collection the menu is about, read before it opened (`readMenuSongs`). */
+  readonly collectionSongs?: readonly SongRow[] | undefined;
 }
 
 /** The one missing song [target] is, if it is one: its menu offers its download. */
@@ -91,18 +104,55 @@ const onlyMissingSong = (target: ActionItems): number | null => {
     : only.song.id;
 };
 
-const findsNothing: FindInLibrary = () => null;
-
 /**
  * The Library finder, read only while YT Music songs are among the items
  * ([streams]): the Library song each is by now, if any.
  */
-const useStreamedSongFinder = (streams: boolean): FindInLibrary =>
-  useLoadedLibraryFinder(streams) ?? findsNothing;
+const useStreamedSongFinder = (streams: boolean): FindInLibrary => useLibraryFinder(streams);
+
+/**
+ * The one album, artist, playlist or genre [target]'s menu is about, while
+ * online lookups are on: its songs tell whether it offers Fix Songs.
+ */
+const menuCollection = (
+  target: ActionItems,
+  surface: ActionSurface,
+  onlineLookups: boolean,
+): { readonly kind: SongsCollection; readonly id: number } | null => {
+  if (surface !== "menu" || !onlineLookups || target.items.length !== 1) return null;
+  switch (target.kind) {
+    case "album":
+    case "artist":
+    case "playlist":
+    case "genre": {
+      const [only] = target.items;
+      return only === undefined ? null : { kind: target.kind, id: only.id };
+    }
+    default:
+      return null;
+  }
+};
+
+const NO_SONGS: readonly SongRow[] = [];
+
+/**
+ * What [target]'s menu reads before it opens: the songs of the collection
+ * it's about, while online lookups are on, so Fix Songs is there from the
+ * first frame instead of joining later and moving the entries under a
+ * sliding finger. Undefined for other menus, or when they can't be read.
+ */
+export const readMenuSongs = (target: ActionItems): Promise<readonly SongRow[] | undefined> => {
+  const collection = menuCollection(target, "menu", lyricsAndGenreLookupsEnabled());
+  return collection === null
+    ? Promise.resolve(undefined)
+    : readCollectionSongs(collection.kind, collection.id).catch(() => undefined);
+};
 
 interface PlanOptions {
   readonly surface: ActionSurface;
   readonly selectable: boolean;
+  /** The collection's songs, read before the menu opened. */
+  readonly collectionSongs?: readonly SongRow[] | undefined;
 }
 
 /**
@@ -113,12 +163,14 @@ interface PlanOptions {
 function usePlan(
   target: ActionItems,
   favorites: ReadonlySet<number>,
-  { surface, selectable }: PlanOptions,
+  { surface, selectable, collectionSongs: readFirst }: PlanOptions,
 ): {
   readonly planned: readonly ItemActionEntry<ArtistRow>[];
   readonly missingSongs: readonly number[];
   /** Each album's missing songs, in the albums' order. */
   readonly perAlbum: readonly (readonly number[])[];
+  /** The Library songs of the collection the menu is about (none otherwise): what Fix Songs runs on. */
+  readonly collectionSongs: readonly SongRow[];
 } {
   const here = usePathname();
   const onlineLookups = useLyricsAndGenreLookupsEnabled();
@@ -132,20 +184,28 @@ function usePlan(
   );
   const missingSongs = useMemo(() => perAlbum.flat(), [perAlbum]);
   const statuses = useMissingSongDownloadStatuses(missingSongs);
+  // Kept current while the menu shows; the songs read before it opened stand in until then.
+  const collectionSongs =
+    useCollectionSongs(menuCollection(target, surface, onlineLookups)) ?? readFirst ?? NO_SONGS;
+  const songFacts = useMemo(() => collectionSongFacts(collectionSongs), [collectionSongs]);
   // Each album's share of [statuses], in the albums' order.
   const albumStatuses = (index: number) => {
     const start = perAlbum.slice(0, index).reduce((sum, ids) => sum + ids.length, 0);
     return statuses.slice(start, start + (perAlbum[index]?.length ?? 0));
   };
-  const facts = targetFacts(target, favorites, find);
+  // Starred YT Music songs waiting for their files: their Favorite reads Remove from Favorites.
+  const pending = usePendingFavoriteVideos();
+  const facts = targetFacts(target, favorites, find, pending);
   const planned = itemActions({
     kind: target.kind,
     items: facts.map((item, index) =>
       item.missing === true
         ? { ...item, download }
         : target.kind === "album"
-          ? { ...item, missingSongs: albumStatuses(index) }
-          : item,
+          ? { ...item, missingSongs: albumStatuses(index), songs: songFacts }
+          : songFacts.length > 0
+            ? { ...item, songs: songFacts }
+            : item,
     ),
     surface,
     selectable,
@@ -153,7 +213,7 @@ function usePlan(
     here,
     streamedArtists,
   });
-  return { planned, missingSongs, perAlbum };
+  return { planned, missingSongs, perAlbum, collectionSongs };
 }
 
 /**
@@ -192,7 +252,7 @@ export const actionEntries = <A extends { readonly id: number; readonly name: st
  */
 export function useItemActions(
   target: ActionItems,
-  { surface, finish, onSelect }: ActionOptions,
+  { surface, finish, onSelect, collectionSongs: readFirst }: ActionOptions,
 ): readonly ActionEntry[] {
   const here = usePathname();
   const favorites = useFavoriteIds();
@@ -244,9 +304,14 @@ export function useItemActions(
   const star = (on: boolean) =>
     run(() => {
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      void setFavorites(
-        tracks.map(({ song }) => song.id),
+      // A star means downloaded: songs with no file here join the download queue with it.
+      void starSongs(
+        {
+          tracks: tracks.map(({ song }) => song),
+          ytSongs: allTracks.flatMap((item) => ("ytSong" in item ? [item.ytSong] : [])),
+        },
         on,
+        find,
       );
     });
 
@@ -257,9 +322,10 @@ export function useItemActions(
       : targetCount(target);
 
   // [missingSongs]: the albums' missing songs, which their download entries act on.
-  const { planned, missingSongs, perAlbum } = usePlan(target, favorites, {
+  const { planned, missingSongs, perAlbum, collectionSongs } = usePlan(target, favorites, {
     surface,
     selectable: onSelect !== undefined,
+    collectionSongs: readFirst,
   });
 
   // Read ahead, so Go to Album / Go to Artist open header-first.
@@ -328,8 +394,14 @@ export function useItemActions(
       }
       case "fixSong":
       case "fixSongs":
-        // Only the songs missing something are fixed (Core's `songsToFix`).
-        return run(() => void fixSongs(withFiles));
+        // Only the songs missing something are fixed (Core's `songsToFix`); a
+        // collection's are its Library files, the others counted as skipped.
+        return run(
+          () =>
+            void fixSongs(
+              target.kind === "track" ? withFiles : collectionSongs.filter(songHasFile),
+            ),
+        );
       case "select":
         return run(() => onSelect?.());
       case "delete":

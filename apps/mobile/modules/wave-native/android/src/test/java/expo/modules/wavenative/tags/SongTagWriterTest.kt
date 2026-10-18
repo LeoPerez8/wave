@@ -39,10 +39,11 @@ class SongTagWriterTest {
     val tagsAfter = reader.read(file)
     assertEquals("$fixture lyrics", NEW_LYRICS, tagsAfter.lyrics)
     assertEquals("$fixture genre", "Post-Rock", tagsAfter.genre)
+    assertEquals("$fixture genres", listOf("Post-Rock"), tagsAfter.genres)
     assertEquals(
       "$fixture other tags",
-      tagsBefore.copy(genre = null, lyrics = null, artwork = null),
-      tagsAfter.copy(genre = null, lyrics = null, artwork = null),
+      tagsBefore.copy(genre = null, genres = emptyList(), lyrics = null, artwork = null),
+      tagsAfter.copy(genre = null, genres = emptyList(), lyrics = null, artwork = null),
     )
     assertArrayEquals("$fixture artwork", tagsBefore.artwork, tagsAfter.artwork)
     assertEquals("$fixture every other tag field", fieldsBefore, OtherTagFields.of(file))

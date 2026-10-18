@@ -16,7 +16,9 @@ export type LibraryDataKind =
   /** Playlists and their entries. */
   | "playlists"
   /** The play history. */
-  | "plays";
+  | "plays"
+  /** The YT Music songs streamed (not play history: Home's mixes read them). */
+  | "streamed";
 
 /**
  * What changed in the Library. Every write that other screens should see

@@ -27,6 +27,7 @@ import * as Effect from "effect/Effect";
 
 import { makeExternalStore } from "../lib/externalStore.ts";
 import type { PlayableSongRow } from "../library/LibraryStore.ts";
+import type { NativeYtSong } from "../native/waveYtMusic.ts";
 
 /** What the player and the queue rows need to know about a track. */
 export interface QueueTrack {
@@ -55,7 +56,19 @@ export interface QueueTrack {
    * as clean (unknown, or saved before it was kept).
    */
   readonly explicit?: boolean;
+  /**
+   * The YT Music song it was queued from, whole, so Now Playing can download
+   * it or add it to a playlist. Missing from a Library track's, and from a YT
+   * Music song's saved before it was kept (`queuedYtSong` rebuilds that one).
+   */
+  readonly ytSong?: QueuedYtSong;
 }
+
+/**
+ * A YT Music song as the queue keeps it: with its album's browse id when the
+ * list it was played from had one (a native list's `NativeYtSong`).
+ */
+export type QueuedYtSong = YtSong & { readonly albumId?: string | null };
 
 /** A library song as the queue needs it. */
 export const toQueueTrack = (song: PlayableSongRow): QueueTrack => ({
@@ -82,7 +95,7 @@ export interface CachedArtwork {
  * YouTube's cover at the large size (Core's `streamedCoverUrl`) and the queue
  * rows none.
  */
-export const toYtQueueTrack = (song: YtSong, artwork: CachedArtwork | null): QueueTrack => {
+export const toYtQueueTrack = (song: QueuedYtSong, artwork: CachedArtwork | null): QueueTrack => {
   const id = ytTrackId(song.videoId);
   return {
     id,
@@ -96,6 +109,29 @@ export const toYtQueueTrack = (song: YtSong, artwork: CachedArtwork | null): Que
     thumbPath: artwork?.thumbPath ?? null,
     palette: artwork?.palette ?? null,
     explicit: song.explicit,
+    ytSong: song,
+  };
+};
+
+/**
+ * The YT Music song a queue track was queued from, as a native list gives
+ * it (its album's browse id null when unknown); null for any other track. A
+ * track saved before the queue kept its song is rebuilt from what it shows,
+ * without the length or cover YouTube Music gave it.
+ */
+export const queuedYtSong = (track: QueueTrack): NativeYtSong | null => {
+  const ref = parseTrackId(track.id);
+  if (ref?.kind !== "yt") return null;
+  if (track.ytSong !== undefined) return { ...track.ytSong, albumId: track.ytSong.albumId ?? null };
+  return {
+    videoId: ref.videoId,
+    title: track.title,
+    artists: track.artists ?? [track.artist],
+    album: track.album,
+    durationMs: null,
+    artworkUrl: null,
+    explicit: track.explicit ?? false,
+    albumId: null,
   };
 };
 

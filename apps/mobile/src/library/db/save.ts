@@ -6,6 +6,7 @@
 import {
   fillMissingSongs,
   recordingKey,
+  storedGenres,
   type LibraryTrack,
   type MissingSongSave,
 } from "@wave/core";
@@ -195,6 +196,7 @@ const tagColumns = (filing: Filing, track: FiledTrack) => ({
   artistCredits: storedCredits(track.artistCredits),
   albumId: filing.albumId(track),
   genreId: filing.genreId(track),
+  genres: storedGenres(track.genres),
   year: track.year,
   trackNumber: track.trackNumber,
   trackTotal: track.trackTotal,
@@ -388,6 +390,7 @@ export const saveBatch = (
             artistCredits: excluded(t.artistCredits),
             albumId: excluded(t.albumId),
             genreId: excluded(t.genreId),
+            genres: excluded(t.genres),
             year: excluded(t.year),
             trackNumber: excluded(t.trackNumber),
             trackTotal: excluded(t.trackTotal),

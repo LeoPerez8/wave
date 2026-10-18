@@ -7,8 +7,10 @@
   compareByTitle,
   identityKey,
   normalizeTrack,
+  readStoredGenres,
   resolveAlbumArtist,
   sortKey,
+  storedGenres,
 } from "./library.ts";
 export type { LibraryTrack, RawTrack } from "./library.ts";
 export { creditSplitter, respreadDeletedSongs, splitCredit } from "./credits.ts";
@@ -28,8 +30,13 @@ export type {
 } from "./designPreview.ts";
 export { trackRowTrailing } from "./trackRowTrailing.ts";
 export type { TrackRowTrailingInput } from "./trackRowTrailing.ts";
-export { lastListActionForm } from "./listActions.ts";
-export type { ListActionForm, ListActionsRoom } from "./listActions.ts";
+export { lastListActionForm, listActionsForms } from "./listActions.ts";
+export type {
+  ListActionForm,
+  ListActionsForms,
+  ListActionsRoom,
+  OnlineToggleForm,
+} from "./listActions.ts";
 export { describeFolder, filesLeavingWithRoot, isWithin, planAddRoot } from "./scanRoots.ts";
 export type { AddRootPlan, FolderLabel, ScanRootState } from "./scanRoots.ts";
 export { resolveSkipSwipe } from "./swipe.ts";
@@ -557,9 +564,11 @@ export {
   YT_SECTION_HIDDEN,
   stepYtSection,
   ytSearchQuery,
+  ytSectionToggle,
   ytSectionView,
 } from "./ytSearch.ts";
 export type {
+  YtKeptAnswer,
   YtAskedBy,
   YtQuietReason,
   YtSearchAnswer,
@@ -680,6 +689,7 @@ export {
   ytDownloadTags,
   listedSongTags,
   ytDownloadTarget,
+  ytDownloadHas,
 } from "./ytDownload.ts";
 export type {
   YtAlbum,
@@ -807,6 +817,7 @@ export {
   ytArtistShelves,
   ytAlbumTracklist,
   ytLibraryAlbumView,
+  ytArtistToggle,
 } from "./ytArtist.ts";
 export type {
   LibraryAlbumKey,
@@ -836,6 +847,7 @@ export type {
   YtLibraryAlbumNote,
   YtLibraryAlbumView,
   YtReleaseLoad,
+  YtArtistToggleContext,
 } from "./ytArtist.ts";
 export { streamedArtistLink } from "./streamedArtist.ts";
 export type {
@@ -1127,17 +1139,12 @@ export {
   snapCrossfade,
 } from "./crossfade.ts";
 export {
-  DISCOVER_MIX_COUNT,
   discoverMix,
   discoverMixCaption,
   discoverMixReadsMore,
-  discoverMixSeeds,
   discoverMixSongs,
   discoverMixesBuilt,
   discoverMixesDue,
-  discoverSeedQuery,
-  discoverSeedVideo,
-  discoverSimilarSource,
   parseDiscoverMixes,
   playedFinder,
   storedDiscoverMixes,
@@ -1145,6 +1152,7 @@ export {
 export type {
   DiscoverMix,
   DiscoverMixFilter,
+  DiscoverMixFamiliarSong,
   DiscoverMixLibrarySong,
   DiscoverMixSeed,
   DiscoverMixes,
@@ -1152,7 +1160,6 @@ export type {
   DiscoverLibrarySong,
   DiscoverRadioSong,
   DiscoverSeedArtist,
-  DiscoverSeedPools,
   DiscoverSeedSong,
   DiscoverSeedSource,
   DiscoverSimilarArtist,
@@ -1263,7 +1270,7 @@ export {
   DEFAULT_DISCOVER_MIX_LEVEL,
   DISCOVER_MIX_LEVELS,
   blendDiscoverMix,
-  discoverMixLibraryPool,
+  discoverMixFamiliarPool,
   placeDiscoverMixSongs,
   readDiscoverMixLevel,
 } from "./discoverMixLevels.ts";
@@ -1272,6 +1279,7 @@ export type {
   DiscoverMixBlend,
   DiscoverMixLevel,
   DiscoverMixPoolSources,
+  DiscoverMixTaken,
   DiscoverMixSong,
 } from "./discoverMixLevels.ts";
 export {
@@ -1316,3 +1324,103 @@ export type { ExplicitPlayback } from "./explicitPlayback.ts";
 export type { PassOver } from "./queue.ts";
 export { discoverMixKeep } from "./discoverMixLevels.ts";
 export type { DiscoverMixKeep } from "./discoverMixLevels.ts";
+export { nowPlayingDownload } from "./nowPlayingDownload.ts";
+export type { NowPlayingDownload } from "./nowPlayingDownload.ts";
+export {
+  LYRICS_MISS_RETRY_MS,
+  nonDLyrics,
+  nonDLyricsSong,
+  ytMusicFoundLyrics,
+} from "./onlineLyrics.ts";
+export type {
+  NonDSongDetails,
+  LyricsAnswer,
+  LyricsSearchSong,
+  LyricsSource,
+  NonDLyrics,
+  NonDLyricsState,
+  SavedLyrics,
+} from "./onlineLyrics.ts";
+export {
+  FAVORITES_DOWNLOAD_ORIGIN,
+  readStarDownloads,
+  starredDownload,
+  unstarredDownload,
+  writeStarDownloads,
+  syncedStarDownloads,
+  readSyncedStars,
+  writeSyncedStars,
+} from "./starDownloads.ts";
+export type { StarredDownload, UnstarredDownload } from "./starDownloads.ts";
+export { pickWeighted, playsWeight } from "./weightedPick.ts";
+export type { RandomSource } from "./weightedPick.ts";
+export { ARTIST_MIX_COUNT, artistMixSeeds, artistMixSimilarSource } from "./artistMixes.ts";
+export type { ArtistMixPools, PlayedSeedArtist } from "./artistMixes.ts";
+export { GENRE_MIX_COUNT, genreFamily, genreMixSeeds, interleaveRadios } from "./genreMixes.ts";
+export type { GenreFamily, GenreMixLibrary } from "./genreMixes.ts";
+export type { SearchOnline, YtPick } from "./onlineToggle.ts";
+export { readSearchOnline, writeSearchOnline } from "./onlineToggle.ts";
+export {
+  BEST_QUALITY_KBPS,
+  LOW_QUALITY_BELOW_KBPS,
+  NO_BETTER_COPY_FOUND,
+  QUALITY_ORIGINS,
+  formatStorageSize,
+  foundNoBetterCopy,
+  isLosslessFile,
+  noBetterCopies,
+  qualityJobId,
+  qualityJobOf,
+  qualityJobsToCancel,
+  qualityReplacementJob,
+  qualityReplacementTags,
+  qualityReplacementTarget,
+  qualityDowngradeOffer,
+  qualityDowngradeSearch,
+  qualityDowngradeSongs,
+  qualityDowngradeVideo,
+  qualityUpgradeOffer,
+  qualityUpgradeSongs,
+  youTubeCopyKbps,
+} from "./qualityReplacement.ts";
+export type {
+  NoBetterCopy,
+  QualityDirection,
+  QualityFile,
+  QualityJobId,
+  QualityMemory,
+  QualityOffer,
+  QualityReplacementTarget,
+  ReplacedTrack,
+} from "./qualityReplacement.ts";
+export { libraryLyrics, libraryLyricsSong } from "./libraryLyrics.ts";
+export type { LibraryLyrics, LibraryLyricsState, LibraryLyricsTrack } from "./libraryLyrics.ts";
+export type { SyncedStarDownloads } from "./starDownloads.ts";
+export {
+  MIX_PULL_THRESHOLD,
+  mixesShown,
+  mixPull,
+  mixRefreshAvoid,
+  mixRefreshWaitNotice,
+  parseMixesShown,
+  storedMixesShown,
+  undoneMixRefresh,
+} from "./mixRefresh.ts";
+export type { MixPull, MixRefreshAvoid, ShownMixes } from "./mixRefresh.ts";
+export { searchRoomAt } from "./searchAllowance.ts";
+export { mixKnownSongs } from "./mixKnownSongs.ts";
+export type {
+  KnownNonDSong,
+  MixKnownSongs,
+  MixKnownSources,
+  MixPlaylistEntry,
+  StreamedSong,
+} from "./mixKnownSongs.ts";
+export { starAskedAfter, starredHere, ytSongStarred } from "./starDownloads.ts";
+export type { StarAskedChange } from "./starDownloads.ts";
+export type { LyricsToSave } from "./onlineLyrics.ts";
+export { isCollectionKind } from "./itemActions.ts";
+export type { CollectionKind } from "./itemActions.ts";
+export { mixSectionOfId, mixSeedArtists } from "./discoverMixes.ts";
+export { downloadJobKind } from "./downloadJobKind.ts";
+export type { DownloadJobKind } from "./downloadJobKind.ts";

@@ -19,17 +19,21 @@ import {
   type YtArtistSectionView,
   type YtArtistShelf,
   type YtArtistSongsRead,
+  type YtPick,
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 
+import type { LineToggle } from "@/catalog/PlayShuffle";
 import { LibraryStore, type AlbumRow } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import type { NativeYtSong } from "@/native/waveYtMusic";
+import { useSearchOnlineAlways } from "@/settings/searchOnline";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
 import { useLoadedLibraryFinder } from "./libraryFinder";
+import { useLineToggle } from "./OnlineToggle";
 import { YtMusic, YtMusicError } from "./YtMusic";
 
 type Saved = YtArtistSaved<NativeYtSong>;
@@ -155,7 +159,7 @@ export interface YtArtistAnswer {
   readonly enabled: boolean;
   /** When the screen opened: whether a saved answer still stands is decided then. */
   readonly openedAt: number;
-  /** Show on YouTube Music: asks YouTube Music, once. */
+  /** Asks YouTube Music, once (Online picked, or the page opened integrated). */
   readonly show: () => void;
 }
 
@@ -248,20 +252,23 @@ export interface YtArtistSectionShown {
    * Library albums open integrated too.
    */
   readonly integrated: boolean;
-  /** Show on YouTube Music: asks YouTube Music, once. */
-  readonly show: () => void;
+  /** The page's Library | Online toggle, or null when it has none (YT Music off…). */
+  readonly toggle: LineToggle | null;
 }
 
 /**
- * The YT Music section at the end of [name]'s artist page. It reads what was
- * saved and hides with YT Music off (Core's `stepYtArtistSection`). It never
- * asks YouTube Music until `show` is called unless the page was opened
- * integrated ([openedIntegrated], from a streamed song's artist): then, with
- * nothing standing for the artist, it asks once on its own (Core's
- * `ytArtistSectionAsks`). [artistId] and the page's Library [albums] tell
- * which of the artist's releases the Library already has. The songs the page
- * [held] in place this visit stay among the section's, downloaded or not
- * (Core's `inLibraryUnlessHeld`).
+ * The YT Music section of [name]'s artist page and its Library | Online
+ * toggle. It reads what was saved and hides with YT Music off (Core's
+ * `stepYtArtistSection`). It asks YouTube Music only once Online is selected
+ * with nothing standing for the artist: picked, or the page opened integrated
+ * ([openedIntegrated], from a streamed song's artist) or with Search online
+ * set to Always (Core's `ytArtistSectionAsks`); after a failure, picking
+ * Online asks again. A long press on the toggle opens the Search online
+ * card (`openSearchOnlineChoices`). Library
+ * hides what YouTube Music added, with no request. [artistId] and the page's
+ * Library [albums] tell which of the artist's releases the Library already
+ * has. The songs the page [held] in place this visit stay among the
+ * section's, downloaded or not (Core's `inLibraryUnlessHeld`).
  */
 export const useYtArtistSection = (
   name: string,
@@ -271,11 +278,16 @@ export const useYtArtistSection = (
   held: HeldSongs<NativeYtSong>,
 ): YtArtistSectionShown => {
   const { state, enabled, openedAt, show } = useYtArtistAnswer(name, { allSongs: true });
+  const always = useSearchOnlineAlways();
+  // The toggle's segment picked while the page is open; null until one is.
+  const [pick, setPick] = useState<YtPick | null>(null);
   const asks = ytArtistSectionAsks(state, {
     name,
     enabled,
     now: openedAt,
     integrated: openedIntegrated,
+    always,
+    pick,
   });
   // Once per state: a remounted effect doesn't send the request twice.
   const askedFor = useRef<unknown>(null);
@@ -298,14 +310,26 @@ export const useYtArtistSection = (
             enabled,
             now: openedAt,
             integrated: openedIntegrated,
+            always,
+            pick,
             inLibrary: inLibraryUnlessHeld(held, (song) => find(song) !== null),
           }),
-    [find, state, name, enabled, openedAt, openedIntegrated, held],
+    [find, state, name, enabled, openedAt, openedIntegrated, always, pick, held],
   );
   const shelves = useMemo(
-    () => ytArtistShelves(state, { name, enabled, now: openedAt, libraryAlbum: findAlbum }),
-    [state, name, enabled, openedAt, findAlbum],
+    () => ytArtistShelves(state, { name, enabled, now: openedAt, libraryAlbum: findAlbum, pick }),
+    [state, name, enabled, openedAt, findAlbum, pick],
   );
-  const integrated = ytArtistIntegrated(state, { name, enabled, now: openedAt });
-  return { view, shelves, integrated, show };
+  const integrated = ytArtistIntegrated(state, { name, enabled, now: openedAt, pick });
+  const retry = view?.retry === true;
+  const onPick = useCallback(
+    (next: YtPick) => {
+      setPick(next);
+      // Online after an ask that got no answer asks again.
+      if (next === "online" && retry) show();
+    },
+    [retry, show],
+  );
+  const toggle = useLineToggle(view?.toggle, onPick);
+  return { view, shelves, integrated, toggle };
 };

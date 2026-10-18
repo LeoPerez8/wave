@@ -7,7 +7,8 @@
  */
 
 import { advisoryTag } from "./explicit.ts";
-import { songLookup, type FoundTags, type SongLookup } from "./lyricsAndGenre.ts";
+import { songLookup, type FoundTags, type IndexedTags, type SongLookup } from "./lyricsAndGenre.ts";
+import type { SavedLyrics } from "./onlineLyrics.ts";
 import type { DownloadSource } from "./downloadSource.ts";
 import { normalizeSearchText } from "./search.ts";
 import { joinArtists, type YtSong } from "./ytMusic.ts";
@@ -50,6 +51,11 @@ export interface YtDownloadTags {
    * explicit, 0 checked and clean; null writes none.
    */
   readonly advisory: 0 | 1 | null;
+  /**
+   * A quality replacement's old file: the new one keeps every other tag it
+   * has (composer, comments, BPM, every genre value…) under the ones above.
+   */
+  readonly keepTagsOf?: string;
 }
 
 /** The side of the cover a download embeds, in pixels. */
@@ -82,13 +88,17 @@ const tidyLyrics = (text: string | null): string | null => {
  * album and artists without the page), and the genre and lyrics [found] the
  * way Fix Song finds them, whose track number and year stand in
  * for what the page doesn't give. YouTube Music's own lyrics ([ytLyrics],
- * plain text) are the fallback.
+ * plain text) are the fallback. Lyrics the Lyrics view found for the song's
+ * video ([saved]) come first, and the download doesn't ask for them again
+ * (`ytDownloadHas`); a remembered miss leaves them to the download's own
+ * search.
  */
 export const ytDownloadTags = (
   song: YtSong,
   album: YtAlbum | null,
   found: FoundTags | null,
   ytLyrics: string | null,
+  saved: SavedLyrics | null = null,
 ): YtDownloadTags => {
   const artist = joinArtists(song.artists);
   const cover = album?.artworkUrl ?? song.artworkUrl;
@@ -106,7 +116,10 @@ export const ytDownloadTags = (
     year: album?.year ?? found?.year ?? null,
     ...place,
     genre: found?.genre ?? null,
-    lyrics: found?.lyrics?.text ?? tidyLyrics(ytLyrics),
+    lyrics:
+      (saved?.kind === "found" ? saved.lyrics.text : null) ??
+      found?.lyrics?.text ??
+      tidyLyrics(ytLyrics),
     artworkUrl: cover === null ? null : largeCover(cover),
     advisory: advisoryTag(song.explicit),
   };
@@ -122,6 +135,20 @@ export const ytDownloadTags = (
 export const listedSongTags = (song: YtSong, found: FoundTags | null): YtDownloadTags => ({
   ...ytDownloadTags(song, null, found, null),
   advisory: advisoryTag(found?.explicit ?? "unknown"),
+});
+
+/**
+ * What a download already has when it's looked up (Fix Song's `fixLookups`
+ * decides what's asked): nothing, but the lyrics the Lyrics view found for
+ * its video ([saved]), which aren't asked for again on LRCLIB or YT Music. A
+ * remembered miss isn't lyrics: the download searches as it would.
+ */
+export const ytDownloadHas = (saved: SavedLyrics | null): IndexedTags => ({
+  hasLyrics: saved?.kind === "found",
+  genre: null,
+  trackNumber: null,
+  year: null,
+  explicit: "unknown",
 });
 
 /**

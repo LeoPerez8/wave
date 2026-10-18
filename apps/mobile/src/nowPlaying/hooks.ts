@@ -13,9 +13,16 @@ import { useColorScheme } from "react-native";
 import { LibraryStore, type TrackDetails } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import { playbackState } from "@/playback/Player";
-import { learnUnknownQueueTracks, queueTracks, type QueueTrack } from "@/playback/queueTracks";
+import type { NativeYtSong } from "@/native/waveYtMusic";
+import {
+  learnUnknownQueueTracks,
+  queuedYtSong,
+  queueTracks,
+  type QueueTrack,
+} from "@/playback/queueTracks";
 import { savedYtQueueTracks } from "@/playback/ytQueueTracks";
 import { useThemeColor } from "@/theme/useThemeColor";
+import { useLoadedLibraryFinder } from "@/ytmusic/libraryFinder";
 
 import { useNowPlayingShown } from "./sheet";
 
@@ -48,6 +55,39 @@ export const useTrackDetails = (trackId: string | null): TrackDetails | null => 
     };
   }, [libraryId]);
   return details !== null && String(details.id) === trackId ? details : null;
+};
+
+/**
+ * The YT Music song [trackId] streams, as the queue keeps it (`queuedYtSong`):
+ * null for a Library track.
+ */
+export const usePlayingYtSong = (trackId: string | null): NativeYtSong | null => {
+  const track = useSyncExternalStore(queueTracks.subscribe, () =>
+    trackId === null ? null : (queueTracks.get().get(trackId) ?? null),
+  );
+  return useMemo(() => (track === null ? null : queuedYtSong(track)), [track]);
+};
+
+/** A Library track and its file. */
+export interface LibraryFile {
+  readonly id: number;
+  readonly path: string;
+}
+
+/**
+ * The Library track and file streamed song [ytSong] is, once it's downloaded
+ * (the shared finder, followed while [active]); null for none (or no
+ * streamed song), undefined until the Library is first read.
+ */
+export const useDownloadedFile = (
+  ytSong: NativeYtSong | null,
+  active: boolean,
+): LibraryFile | null | undefined => {
+  const find = useLoadedLibraryFinder(active);
+  if (ytSong === null) return null;
+  if (find === null) return undefined;
+  const track = find(ytSong);
+  return track?.path == null ? null : { id: track.id, path: track.path };
 };
 
 /**

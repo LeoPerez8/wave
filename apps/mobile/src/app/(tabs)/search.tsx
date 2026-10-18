@@ -1,5 +1,11 @@
 import { IconSearch } from "@tabler/icons-react-native";
-import { heldTracks, inLibraryUnlessHeld, type SearchKind, ytSectionView } from "@wave/core";
+import {
+  heldTracks,
+  inLibraryUnlessHeld,
+  type SearchKind,
+  ytSectionToggle,
+  ytSectionView,
+} from "@wave/core";
 import {
   type ComponentRef,
   useCallback,
@@ -42,9 +48,11 @@ import { useSearchRequests } from "@/search/queryRequest";
 import { useYtMusicSection } from "@/search/ytMusicSearch";
 import { useSearchFieldFocus } from "@/search/fieldFocus";
 import { SearchField } from "@/search/SearchField";
+import { SearchFieldRow } from "@/search/SearchFieldRow";
 import { useSearchIndex } from "@/search/searchIndex";
 import { SearchResultsList } from "@/search/SearchResultsList";
 import { useListSelection } from "@/selection/useListSelection";
+import { useLineToggle } from "@/ytmusic/OnlineToggle";
 import { useHeldSongs, useSongsInPlace } from "@/ytmusic/songsInPlace";
 
 const NO_KINDS: ReadonlySet<SearchKind> = new Set();
@@ -86,9 +94,10 @@ function RecentSearches({ onPick }: { onPick: (query: string) => void }) {
 
 /**
  * The Search tab: results update as you type, grouped by type under a top
- * result. Typing searches the library only; Search YouTube Music below the
- * results (or a query the library has nothing for) merges YT Music's songs,
- * artists and albums in. With nothing typed it shows the recent searches.
+ * result. Typing searches the library only; Online on the Library | Online
+ * toggle at the end of the field's row (or a query the library has nothing
+ * for) merges YT Music's songs, artists and albums in, and Library hides them
+ * again. With nothing typed it shows the recent searches.
  * Tapping the tab raises the keyboard; leaving it puts the keyboard away.
  * Switching between recents and results rises the new content in.
  */
@@ -128,11 +137,13 @@ export default function SearchScreen() {
     [index, deferredQuery, downloads],
   );
   const libraryEmpty = results !== null && results.groups.length === 0;
-  // YT Music is asked on Search YouTube Music, or on its own when the library
-  // has nothing; it answers on its own time, and its songs, artists and albums
-  // the library doesn't have join the library's. Until the library is ready,
-  // nothing is asked.
-  const [ytSection, askYt] = useYtMusicSection(deferredQuery, !libraryEmpty);
+  // YT Music is asked once Online is picked on the toggle beside the field, or on
+  // its own when the library has nothing, or as you type with Search online set to
+  // Always (the toggle's long press chooses it); it answers on its own time, and its
+  // songs, artists and albums the library doesn't have join the library's.
+  // Until the library is ready, nothing is asked.
+  const [ytSection, pickYt] = useYtMusicSection(deferredQuery, !libraryEmpty);
+  const toggle = useLineToggle(ytSectionToggle(ytSection), pickYt);
   const inLibrary = library?.library;
   const ytView = useMemo(
     () =>
@@ -215,13 +226,18 @@ export default function SearchScreen() {
         >
           Search
         </Text>
-        <SearchField
-          ref={field}
-          value={query}
-          onChange={changeQuery}
-          onSubmit={remember}
-          onLayout={focus.onLayout}
-          onFocusChange={focus.onFocusChange}
+        <SearchFieldRow
+          toggle={toggle}
+          field={
+            <SearchField
+              ref={field}
+              value={query}
+              onChange={changeQuery}
+              onSubmit={remember}
+              onLayout={focus.onLayout}
+              onFocusChange={focus.onFocusChange}
+            />
+          }
         />
       </View>
       {/* Only a change of kind rises in; the screen's first content doesn't. */}
@@ -251,7 +267,6 @@ export default function SearchScreen() {
               rows={rows}
               onOpen={remember}
               onShowAll={showAll}
-              onAskYt={askYt}
               integrated={ytView?.integrated ?? false}
               selection={selection}
             />

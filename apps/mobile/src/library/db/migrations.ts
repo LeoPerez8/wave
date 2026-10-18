@@ -850,6 +850,60 @@ CREATE TABLE \`pending_favorites\` (
 );
 `;
 
+// Lyrics the Lyrics view found online for non-D songs, and its misses, by
+// video (\`schema.ts\`'s \`savedLyrics\`).
+const mSavedLyrics = `
+CREATE TABLE \`saved_lyrics\` (
+	\`video_id\` text PRIMARY KEY NOT NULL,
+	\`lyrics\` text,
+	\`synced\` integer DEFAULT false NOT NULL,
+	\`checked_at\` integer NOT NULL
+);
+`;
+
+// The songs a quality replacement found no better copy of (\`schema.ts\`'s \`noBetterCopies\`).
+const mNoBetterCopies = `
+CREATE TABLE \`no_better_copies\` (
+	\`track_id\` integer NOT NULL,
+	\`direction\` text NOT NULL,
+	PRIMARY KEY(\`track_id\`, \`direction\`),
+	FOREIGN KEY (\`track_id\`) REFERENCES \`tracks\`(\`id\`) ON UPDATE no action ON DELETE cascade
+);
+`;
+
+// Library songs the Lyrics view's online search found no lyrics for
+// (\`schema.ts\`'s \`lyricsMisses\`).
+const mLyricsMisses = `
+CREATE TABLE \`lyrics_misses\` (
+	\`track_id\` integer PRIMARY KEY NOT NULL,
+	\`checked_at\` integer NOT NULL,
+	FOREIGN KEY (\`track_id\`) REFERENCES \`tracks\`(\`id\`) ON UPDATE no action ON DELETE cascade
+);
+`;
+
+// YT Music songs the owner streamed (\`schema.ts\`'s \`streamedSongs\`), for Home's mixes.
+const mStreamedSongs = `
+CREATE TABLE \`streamed_songs\` (
+	\`video_id\` text PRIMARY KEY NOT NULL,
+	\`song\` text NOT NULL,
+	\`plays\` integer NOT NULL,
+	\`first_played_at\` integer NOT NULL,
+	\`last_played_at\` integer NOT NULL
+);
+`;
+
+// A song tagged with several genres counts in each of their families for
+// Genre mixes (docs/spec.md, "Genre mixes"): tracks keep every value of a
+// multi-value genre tag (\`schema.ts\`'s \`genres\`), while the Library still
+// files them under the first. Only a scan reads a tag's every value, so every
+// indexed file is marked as changed (modified_at 0) as in 0015: the next scan
+// reads them all again. Self-contained, so it can take any number when merged.
+const mGenreTags = `
+ALTER TABLE \`tracks\` ADD \`genres\` text;
+--> statement-breakpoint
+UPDATE \`tracks\` SET \`modified_at\` = 0;
+`;
+
 export default {
   journal: {
     entries: [
@@ -881,6 +935,11 @@ export default {
       { idx: 25, when: 1_793_966_400_000, tag: "0025_unsearched_titles", breakpoints: true },
       { idx: 26, when: 1_794_052_800_000, tag: "0026_explicit", breakpoints: true },
       { idx: 27, when: 1_794_139_200_000, tag: "0027_pending_favorites", breakpoints: true },
+      { idx: 28, when: 1_794_225_600_000, tag: "0028_saved_lyrics", breakpoints: true },
+      { idx: 29, when: 1_794_312_000_000, tag: "0029_no_better_copies", breakpoints: true },
+      { idx: 30, when: 1_794_398_400_000, tag: "0030_lyrics_misses", breakpoints: true },
+      { idx: 31, when: 1_794_484_800_000, tag: "0031_streamed_songs", breakpoints: true },
+      { idx: 32, when: 1_794_571_200_000, tag: "0032_genre_tags", breakpoints: true },
     ],
   },
   migrations: {
@@ -912,5 +971,10 @@ export default {
     m0025: mUnsearchedTitles,
     m0026: mExplicit,
     m0027: mPendingFavorites,
+    m0028: mSavedLyrics,
+    m0029: mNoBetterCopies,
+    m0030: mLyricsMisses,
+    m0031: mStreamedSongs,
+    m0032: mGenreTags,
   },
 };

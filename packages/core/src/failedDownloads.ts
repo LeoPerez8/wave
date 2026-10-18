@@ -8,7 +8,8 @@
  * (`settledDownloadFailures`).
  */
 
-import { missingSongTrackId } from "./missingSongDownload.ts";
+import { downloadJobKind } from "./downloadJobKind.ts";
+import { foundNoBetterCopy, type QualityDirection } from "./qualityReplacement.ts";
 import type { YtSong } from "./ytMusic.ts";
 import {
   ytDownloadLine,
@@ -30,7 +31,10 @@ export interface FailedDownload<S extends YtSong = YtSong> {
    * otherwise.
    */
   readonly detail: string | null;
-  /** What Retry asks for again: the song, or for a missing song its Track. */
+  /**
+   * What Retry asks for again: the song, for a missing song its Track, and
+   * for a replacement its Track's replacement.
+   */
   readonly retry: FailedDownloadRetry<S>;
   /**
    * The video ids Clear cancels: every one asked for on the job, since each
@@ -41,7 +45,8 @@ export interface FailedDownload<S extends YtSong = YtSong> {
 
 export type FailedDownloadRetry<S extends YtSong> =
   | { readonly kind: "song"; readonly song: S }
-  | { readonly kind: "missingSong"; readonly trackId: number };
+  | { readonly kind: "missingSong"; readonly trackId: number }
+  | { readonly kind: "quality"; readonly direction: QualityDirection; readonly trackId: number };
 
 export interface FailedDownloadsInput<S extends YtSong> {
   /** Whether the Library has a YT Music song now (`libraryFinder`). */
@@ -96,13 +101,19 @@ const causeLine = (cause: string): string | null => {
   return lines.length === 0 ? null : lines.join(" <- ");
 };
 
-/** Whether [job]'s song came into the Library some other way since it failed. */
+/**
+ * Whether [job]'s song came into the Library some other way since it failed.
+ * A replacement's song is in the Library all along: it settles only when no
+ * better copy was found, which keeps its file and isn't a failure.
+ */
 const settled = <S extends YtSong>(
   job: YtDownloadJournalJob<S>,
   { inLibrary, missingTrackIds }: FailedDownloadsInput<S>,
 ): boolean => {
-  const trackId = missingSongTrackId(job.id);
-  if (trackId !== null) return missingTrackIds !== null && !missingTrackIds.has(trackId);
+  const kind = downloadJobKind(job.id);
+  if (kind.kind === "quality") return foundNoBetterCopy(job);
+  if (kind.kind === "missing")
+    return missingTrackIds !== null && !missingTrackIds.has(kind.trackId);
   return [job.song, ...(job.aliases ?? [])].some(inLibrary);
 };
 
@@ -124,7 +135,7 @@ export const failedDownloads = <S extends YtSong>(
   jobs.flatMap((job) => {
     const status = failureOf(job);
     if (status === null || settled(job, input)) return [];
-    const trackId = missingSongTrackId(job.id);
+    const kind = downloadJobKind(job.id);
     return [
       {
         id: job.id,
@@ -135,7 +146,11 @@ export const failedDownloads = <S extends YtSong>(
             ? null
             : causeLine(job.cause),
         retry:
-          trackId === null ? { kind: "song", song: job.song } : { kind: "missingSong", trackId },
+          kind.kind === "quality"
+            ? { kind: "quality", direction: kind.direction, trackId: kind.trackId }
+            : kind.kind === "missing"
+              ? { kind: "missingSong", trackId: kind.trackId }
+              : { kind: "song", song: job.song },
         clear: videosOf(job),
       },
     ];

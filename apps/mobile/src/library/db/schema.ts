@@ -141,7 +141,14 @@ export const tracks = sqliteTable(
     albumId: integer("album_id")
       .notNull()
       .references(() => albums.id),
+    /** The genre the Library files the song under: its genre tag's first value. */
     genreId: integer("genre_id").references(() => genres.id),
+    /**
+     * Every value of a multi-value genre tag ("Metalcore", "Electronic"), as
+     * a JSON array; null for one or none (see `storedGenres`). Only Genre
+     * mixes read them.
+     */
+    genres: text("genres"),
     year: integer("year"),
     trackNumber: integer("track_number"),
     trackTotal: integer("track_total"),
@@ -654,7 +661,8 @@ export const playTotals = sqliteTable(
 
 /**
  * Pending favorites (Core's `PendingFavorite`): liked songs Also add to
- * Favorites couldn't star because the Library didn't have them, each by its
+ * Favorites couldn't star because the Library didn't have them, and YT Music
+ * songs starred anywhere (a star means downloaded), each by its
  * YouTube Music video and its recording (title, artists, length). A download
  * or scan that brings one in stars it and deletes its row (`saveBatch`).
  * This phone only, never synced, and never listed in Favorites.
@@ -666,4 +674,66 @@ export const pendingFavorites = sqliteTable("pending_favorites", {
   artists: text("artists").notNull(),
   durationMs: integer("duration_ms"),
   addedAt: integer("added_at").notNull(),
+});
+
+/**
+ * Lyrics the Lyrics view found online for non-D songs (Core's `SavedLyrics`),
+ * by YouTube video: the lyrics, or a miss ([lyrics] null) remembered for a
+ * week (`LYRICS_MISS_RETRY_MS`). Reopening one shows them at once, offline
+ * too. This phone only, never synced.
+ */
+export const savedLyrics = sqliteTable("saved_lyrics", {
+  videoId: text("video_id").primaryKey(),
+  /** LRC when [synced], plain text otherwise; null for a miss. */
+  lyrics: text("lyrics"),
+  synced: integer("synced", { mode: "boolean" }).notNull().default(false),
+  /** When the search was made (ms since the epoch). */
+  checkedAt: integer("checked_at").notNull(),
+});
+
+/**
+ * The songs a quality replacement found no better copy of (Core's
+ * `noBetterCopies`): no Soulseek 320 for an upgrade, no YouTube Music match
+ * for a downgrade, or a failure after retries. Each keeps its file and isn't
+ * offered in that direction again. Goes with its Track; this phone only.
+ */
+export const noBetterCopies = sqliteTable(
+  "no_better_copies",
+  {
+    trackId: integer("track_id")
+      .notNull()
+      .references(() => tracks.id, { onDelete: "cascade" }),
+    /** Core's `QualityDirection`: "upgrade" or "downgrade". */
+    direction: text("direction").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.trackId, t.direction] })],
+);
+
+/**
+ * Library songs whose file has no lyrics and for which the Lyrics view's
+ * online search found none (Core's `libraryLyrics`): not searched again for
+ * a week (`LYRICS_MISS_RETRY_MS`). Lyrics it finds go into the file, so only
+ * misses are kept. This phone only, never synced.
+ */
+export const lyricsMisses = sqliteTable("lyrics_misses", {
+  trackId: integer("track_id")
+    .primaryKey()
+    .references(() => tracks.id, { onDelete: "cascade" }),
+  /** When the search found nothing (ms since the epoch). */
+  checkedAt: integer("checked_at").notNull(),
+});
+
+/**
+ * YT Music songs the owner streamed (`writePlaylistYtSong`'s JSON, by video):
+ * how many times and when first and last. Streamed plays aren't play history
+ * (Stats stays about the Library); Home's mixes read this to keep songs the
+ * owner knows out of their new songs and to stream them in their familiar
+ * share (Core's `mixKnownSongs`). This phone only, never synced.
+ */
+export const streamedSongs = sqliteTable("streamed_songs", {
+  videoId: text("video_id").primaryKey(),
+  song: text("song").notNull(),
+  plays: integer("plays").notNull(),
+  firstPlayedAt: integer("first_played_at").notNull(),
+  lastPlayedAt: integer("last_played_at").notNull(),
 });

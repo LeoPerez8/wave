@@ -11,8 +11,8 @@ export const YT_ARTIST_NOTE: Readonly<Record<YtArtistSectionNote, string>> = {
   allInLibrary: "Your library already has every song of this artist.",
   noSongs: "YouTube Music lists no songs for this artist.",
   notFound: "Not found on YouTube Music.",
-  offline: "You're offline. Try again when you're back online.",
-  failed: "YouTube Music didn't answer. Try again in a moment.",
+  offline: "You're offline. Tap Online to try again when you're back online.",
+  failed: "YouTube Music didn't answer. Tap Online to try again.",
 };
 
 /** A tile's furniture line when YouTube Music gives no year. */

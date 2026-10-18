@@ -8,6 +8,7 @@ import {
   isDestructiveAction,
   ITEM_ACTION_LABELS,
   commonKind,
+  isCollectionKind,
   itemActions,
   splitActionBar,
   ytSongActions,
@@ -172,6 +173,61 @@ describe("itemActions", () => {
     assert.ok(!bar([false, false]).some((action) => action.startsWith("fix")));
     // One checked song is Fix Song, as in its menu.
     assert.ok(bar([true]).includes("fixSong"));
+  });
+
+  test("an album with a song missing something offers Fix Songs in its menu", () => {
+    const menu = itemActions({
+      kind: "album",
+      items: [{ artistIds: [10], songs: [{ fixable: false }, { fixable: true }] }],
+      here: "/library/albums",
+      onlineLookups: true,
+    });
+    assert.ok(names(menu).includes("fixSongs"));
+  });
+
+  test("a collection whose songs have everything, or with online lookups off, offers no Fix Songs", () => {
+    const offers = (kind: "album" | "artist" | "genre", fixable: boolean, onlineLookups: boolean) =>
+      names(
+        itemActions({
+          kind,
+          items: [{ songs: [{ fixable: false }, { fixable }] }],
+          here: "/",
+          onlineLookups,
+        }),
+      ).some((action) => action.startsWith("fix"));
+    for (const kind of ["album", "artist", "genre"] as const) {
+      assert.ok(offers(kind, true, true), kind);
+      assert.ok(!offers(kind, false, true), kind);
+      assert.ok(!offers(kind, true, false), kind);
+    }
+  });
+
+  test("a collection's missing songs and a playlist's streamed entries don't count for Fix Songs", () => {
+    const offers = (songs: ActionSubject["items"]) =>
+      names(
+        itemActions({ kind: "playlist", items: [{ songs }], here: "/", onlineLookups: true }),
+      ).includes("fixSongs");
+    assert.ok(!offers([{ missing: true, fixable: true }]));
+    assert.ok(!offers([{ streamed: true, fixable: true }]));
+    assert.ok(!offers([{ streamed: true, unsearched: true, fixable: true }]));
+    assert.ok(offers([{ streamed: true }, { missing: true, fixable: true }, { fixable: true }]));
+  });
+
+  test("a playlist's Fix Songs comes after its other entries, before Delete Playlist and Select", () => {
+    const menu = itemActions({
+      kind: "playlist",
+      items: [{ songs: [{ fixable: true }] }],
+      here: "/",
+      selectable: true,
+      onlineLookups: true,
+    });
+    assert.deepEqual(names(menu).slice(-5), [
+      "renamePlaylist",
+      "changeImage",
+      "fixSongs",
+      "deletePlaylist",
+      "select",
+    ]);
   });
 
   test("a starred song offers Remove from Favorites instead", () => {
@@ -607,14 +663,29 @@ describe("itemActions on albums and songs checked together", () => {
 const streamed = (...artistNames: string[]) => ({ streamed: true, artistNames });
 
 describe("itemActions on YT Music songs checked with the Library's", () => {
-  test("they join the queue and playlists and download; Favorite, Fix Songs and Delete are the files'", () => {
+  test("they join the queue and playlists, star and download; Fix Songs and Delete are the files'", () => {
     const bar = itemActions(
       tracks([{ ...song({ favorite: true }), fixable: true }, streamed("Justice")], {
         surface: "selection",
         onlineLookups: true,
       }),
     );
-    assert.deepEqual(names(bar), ["playNext", "addToQueue", "addToPlaylist", "download"]);
+    assert.deepEqual(names(bar), [
+      "playNext",
+      "addToQueue",
+      "addToPlaylist",
+      "favorite",
+      "download",
+    ]);
+  });
+
+  test("a streamed song starred (its download asked for) counts as a favorite", () => {
+    const starred = { ...streamed("Justice"), favorite: true };
+    const bar = (...items: ActionSubject["items"]) =>
+      names(itemActions(tracks(items, { surface: "selection" })));
+    assert.ok(bar(song({ favorite: true }), starred).includes("unfavorite"));
+    assert.ok(bar(song({ favorite: true }), streamed("Justice")).includes("favorite"));
+    assert.ok(names(itemActions(tracks([starred]))).includes("unfavorite"));
   });
 
   test("a playlist's YT Music entries checked with its Library songs can be removed from it", () => {
@@ -633,6 +704,7 @@ describe("itemActions on YT Music songs checked with the Library's", () => {
       "playNext",
       "addToQueue",
       "addToPlaylist",
+      "favorite",
       "removeFromPlaylist",
       "download",
     ]);
@@ -642,7 +714,13 @@ describe("itemActions on YT Music songs checked with the Library's", () => {
     const bar = itemActions(
       tracks([streamed("Justice"), streamed("Daft Punk")], { surface: "selection" }),
     );
-    assert.deepEqual(names(bar), ["playNext", "addToQueue", "addToPlaylist", "download"]);
+    assert.deepEqual(names(bar), [
+      "playNext",
+      "addToQueue",
+      "addToPlaylist",
+      "favorite",
+      "download",
+    ]);
   });
 
   test("Download shows only while a checked song isn't downloaded", () => {
@@ -655,7 +733,7 @@ describe("itemActions on YT Music songs checked with the Library's", () => {
     assert.ok(!names(itemActions(tracks([streamed("Justice")]))).includes("download"));
   });
 
-  test("a playlist's unsearched entries take what a YT Music entry takes, the selection bar's Download too", () => {
+  test("a playlist's unsearched entries take what a YT Music entry takes but the star, which needs its video", () => {
     const unsearched = { ...streamed("Justice"), unsearched: true, inPlaylist: true };
     const bar = itemActions(tracks([unsearched, unsearched], { surface: "selection" }));
     assert.deepEqual(names(bar), [
@@ -876,6 +954,24 @@ describe("ytSongActions", () => {
     );
   });
 
+  test("it can be starred, which downloads it, as a Library song's menu stars it", () => {
+    const actions = (options: YtSongActionOptions) =>
+      ytSongActions(undefined, options).map((entry) => entry.action);
+    assert.deepEqual(actions({ favorite: false, inPlaylist: true }), [
+      "playNext",
+      "addToQueue",
+      "addToPlaylist",
+      "favorite",
+      "removeFromPlaylist",
+    ]);
+    assert.deepEqual(actions({ favorite: true }), [
+      "playNext",
+      "addToQueue",
+      "addToPlaylist",
+      "unfavorite",
+    ]);
+  });
+
   test("shown in a playlist, it can be removed from it, as a Library song can", () => {
     const artists = { kind: "open", target: { kind: "yt", name: "Justice" } } as const;
     assert.deepEqual(
@@ -930,5 +1026,16 @@ describe("ytSongActions", () => {
       ...queue,
       "removeFromPlaylist",
     ]);
+  });
+});
+
+describe("isCollectionKind", () => {
+  test("albums, artists, playlists and genres hold songs; tracks, Library entries and mixed checks don't", () => {
+    for (const kind of ["album", "artist", "playlist", "genre"] as const) {
+      assert.equal(isCollectionKind(kind), true, kind);
+    }
+    for (const kind of ["track", "section", "mixed"] as const) {
+      assert.equal(isCollectionKind(kind), false, kind);
+    }
   });
 });

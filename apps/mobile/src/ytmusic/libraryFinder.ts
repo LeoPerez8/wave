@@ -49,9 +49,11 @@ export const useLoadedLibraryFinder = (active = true): FindInLibrary | null => {
 /**
  * Finds the Library song a YT Music song already is, so a YT Music list plays the
  * file instead of streaming it and a song's menu knows whether it's still in
- * the Library. Finds nothing until the Library is first read.
+ * the Library. Finds nothing until the Library is first read. Follows the
+ * Library only while [active] (`useLoadedLibraryFinder`).
  */
-export const useLibraryFinder = (): FindInLibrary => useLoadedLibraryFinder() ?? nothing;
+export const useLibraryFinder = (active = true): FindInLibrary =>
+  useLoadedLibraryFinder(active) ?? nothing;
 
 /** Whether the Library already has a YT Music song. */
 export type InLibrary = (song: YtSong) => boolean;

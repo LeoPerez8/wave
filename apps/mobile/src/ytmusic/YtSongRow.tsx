@@ -9,6 +9,7 @@ import {
 import type { ComponentProps } from "react";
 
 import { TrackRow } from "@/catalog/TrackRow";
+import { useIsFavorite } from "@/library/favorites";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
@@ -18,7 +19,9 @@ import { openYtSongActions } from "./YtSongActions";
 /**
  * A YT Music song as a Songs-list row: YouTube's cover, the artists and
  * album, the length (on an album's tracklist, its number and the artists
- * only). Its long-press menu queues or downloads it. While it downloads, the
+ * only), and its star once starred (a pending favorite: the Library doesn't
+ * have it, or the list would show the Library's row). Its long-press menu
+ * queues or downloads it. While it downloads, the
  * second line says how far along it is, over a progress rule.
  */
 export function YtSongRow({
@@ -46,6 +49,7 @@ export function YtSongRow({
   onAccessibilityAction?: ComponentProps<typeof TrackRow>["onAccessibilityAction"];
 }) {
   const download = useYtDownloadStatus(song.videoId);
+  const favorite = useIsFavorite(ytTrackId(song.videoId));
   // With YT Music off (a playlist's entries still show) Wave asks YouTube for nothing, covers included.
   const ytMusic = useYtMusicEnabled();
   return (
@@ -62,6 +66,7 @@ export function YtSongRow({
         explicit: showsExplicitBadge(song.explicit),
       }}
       state={playing ? "playing" : undefined}
+      favorite={favorite}
       checked={checked}
       leading={trackNumber === undefined ? "artwork" : "number"}
       progress={ytDownloadProgress(download)}
