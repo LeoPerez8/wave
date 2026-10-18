@@ -3,6 +3,7 @@ import {
   libraryAlbumFinder,
   libraryArtistFinder,
   ytArtistPageAsks,
+  ytArtistSavedStands,
   ytArtistPageView,
   type YtArtistAlbum,
   type YtArtistPageView,
@@ -57,9 +58,7 @@ export const ytArtistPageSongs = (browseId: string, find: FindInLibrary) =>
       .ytArtist(savedKey(browseId))
       .pipe(Effect.orElseSucceed((): Saved | null => null));
     const context = { enabled: true, now };
-    const stands =
-      saved !== null && !ytArtistPageAsks({ status: "ready", saved, failure: null }, context);
-    const answer = stands ? saved : yield* fetchPage(browseId);
+    const answer = ytArtistSavedStands(saved, now) ? saved : yield* fetchPage(browseId);
     return ytArtistPageView(
       { status: "ready", saved: answer, failure: null },
       { ...context, librarySong: find, libraryAlbum: nowhere },

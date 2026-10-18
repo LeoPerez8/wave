@@ -335,7 +335,7 @@ export const saveBatch = (
         })
         .run();
     }
-    if (tracks.length === 0) return NOTHING_STARRED;
+    if (tracks.length === 0) return NOTHING_SAVED;
 
     const keptKeys = fillMissing(tx, tracks);
     const keys = new Map(
@@ -436,7 +436,7 @@ export const saveBatch = (
       })),
       now,
     );
-    return starred.length === 0 ? NOTHING_STARRED : { starred };
+    return { starred, trackIds: [...trackIds.values()] };
   });
 };
 
@@ -444,9 +444,11 @@ export const saveBatch = (
 export interface SavedBatch {
   /** The saved tracks starred as pending favorites (`settlePendingFavorites`). */
   readonly starred: readonly number[];
+  /** The saved tracks' ids, in the batch's order (a download's landing names them). */
+  readonly trackIds: readonly number[];
 }
 
-const NOTHING_STARRED: SavedBatch = { starred: [] };
+const NOTHING_SAVED: SavedBatch = { starred: [], trackIds: [] };
 
 /** Where missing songs are filed: they have no folder on this phone. */
 const NO_FOLDER = "";

@@ -185,6 +185,13 @@ describe("what a YouTube Music artist page shows", () => {
     }
   });
 
+  test("while what was saved is still being read, it's looking too: no empty wait", () => {
+    const shown = view(YT_ARTIST_SECTION_START);
+    assert.equal(shown.note, "loading");
+    assert.equal(shown.retry, false);
+    assert.deepEqual(shown.songs, []);
+  });
+
   test("offline or failing, a quiet line with Try Again, and nothing saved shows", () => {
     for (const reason of ["offline", "failed"] as const) {
       const failed = step(restored(null), { type: "requested" }, { type: "failed", reason });

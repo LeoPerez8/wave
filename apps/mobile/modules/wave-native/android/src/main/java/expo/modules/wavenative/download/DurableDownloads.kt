@@ -1,14 +1,12 @@
 package expo.modules.wavenative.download
 
+import expo.modules.wavenative.files.FileDigest
 import expo.modules.wavenative.log.LogUnits
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
-import java.io.ObjectInputStream
-import java.io.ObjectOutputStream
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
-import java.security.MessageDigest
 import java.util.UUID
 
 interface DurableTransfer {
@@ -17,7 +15,12 @@ interface DurableTransfer {
 }
 
 interface DurablePublication {
-  fun tag(source: File, tags: Map<String, Any?>)
+  /**
+   * Writes [tags] into [source]. Returns the file's SHA-256 (lowercase hex) as the writer wrote
+   * it, taken while writing every byte (#455), or null when it didn't write every byte: the
+   * journal reads the file for it then.
+   */
+  fun tag(source: File, tags: Map<String, Any?>): String?
   fun index(file: File): Map<String, Any?>
 }
 
@@ -45,6 +48,10 @@ interface DurablePublication {
  * again, or for JS's answer longer than [DECISION_WAIT_MS]) doesn't hold a slot, so it never
  * holds up the songs behind it; at most twice [slots] are started at once all the same. Saving to
  * the Library goes one song at a time: the publish and import decisions, and publication itself.
+ *
+ * The journal is written in small, coalesced writes (#452): the changes of a second share one
+ * write ([WRITE_MS]), which appends only what changed to a log beside a snapshot ([JournalStore]),
+ * so a big queue's tags and lyrics aren't rewritten on every change. See "Persistence" below.
  */
 class DurableDownloads(
   private val journal: File,
@@ -58,6 +65,11 @@ class DurableDownloads(
    * before its download service does, passes false: its clock waits for [startWork].
    */
   budgetRunning: Boolean = true,
+  /**
+   * Runs a write that waits for [WRITE_MS] to pass ([persist]) after the delay it's given, on
+   * another thread. Without one, the deadline thread's [expire] writes it.
+   */
+  private val later: ((delayMs: Long, run: () -> Unit) -> Unit)? = null,
 ) {
   private val jobs = LinkedHashMap<String, MutableMap<String, Any?>>()
   private var policy = mutableMapOf<String, Any?>("roots" to emptyList<String>(), "excluded" to emptyList<String>(), "revision" to 0L)
@@ -86,12 +98,11 @@ class DurableDownloads(
    */
   private var budgetWrittenAt = 0L
 
+  /** The journal's files: a snapshot and a log of what changed since ([JournalStore]). */
+  private val store = JournalStore(journal)
+
   init {
-    // An unreadable journal (never expected: writes are atomic) must not crash every launch.
-    @Suppress("UNCHECKED_CAST")
-    val saved = if (journal.isFile) runCatching {
-      FileInputStream(journal).use { ObjectInputStream(it).readObject() } as Map<String, Any?>
-    }.getOrNull() else null
+    val saved = store.load()
     budget = BudgetClock(clock, (saved?.get("budgetClock") as? Number)?.toLong(), running = budgetRunning)
     if (saved != null) {
       for ((id, job) in saved.map("jobs")) {
@@ -103,6 +114,7 @@ class DurableDownloads(
       // Imported and cancelled jobs have nothing left to show; a failure keeps Retry until it's
       // retried or cleared (Settings › Downloads cancels it). The app cancels one that settled
       // another way (the song reached the Library) at launch, so failures don't pile up here.
+      carryForgottenReplacements()
       jobs.values.removeAll { it["phase"] == "cancelled" || it["acknowledged"] == true }
       // A socket cannot survive process recreation. Counts and deadlines do, on the budget's clock,
       // which stood still while Wave was closed: a peer keeps what was left of its turn. Across a
@@ -125,9 +137,26 @@ class DurableDownloads(
         job["generation"] = job.number("generation") + 1
         transition(job, "preparing")
       }
+      sweepParts()
       // A full disk mustn't stop Wave or the download service from opening the journal: the
       // jobs stay in memory (and readable), and the next change that can be written saves them.
-      try { persist() } catch (_: java.io.IOException) {}
+      try { persistNow() } catch (_: java.io.IOException) {}
+    }
+  }
+
+  /**
+   * Deletes the part files no job holds in the folders its started jobs download to: a step the
+   * last write didn't record (a transfer started within [WRITE_MS] of a crash) may have left one.
+   * Only Wave's own part files (`.wave-<uuid>.part.<ext>`, [DownloadFiles.partFileFor]); nothing
+   * runs while the journal opens, so none is in use.
+   */
+  private fun sweepParts() {
+    val held = jobs.values.flatMap { job -> listOf("sourcePath", "outputPath", "publishSource", "finalPath").mapNotNull { job[it] as? String } }.toSet()
+    val folders = jobs.values.filter { it["phase"] != "queued" && pending(it) }
+      .flatMap { job -> listOfNotNull(job["targetPath"] as? String, job.map("fallback")["targetPath"] as? String) }
+      .mapNotNull { File(it).parentFile }.toSet()
+    for (folder in folders) {
+      folder.listFiles { file -> DownloadFiles.isWavePartFile(file) && file.path !in held }?.forEach { it.delete() }
     }
   }
 
@@ -174,13 +203,37 @@ class DurableDownloads(
    * `name`; Core's `DownloadOrigin`), null for a song asked for on its own. A job keeps the first
    * origin it was asked from; asked again after it ended, it takes the new one, or keeps its own
    * when asked with none (Settings › Downloads' Retry).
+   *
+   * The journal is written before it returns, so a crash loses no song asked for. Many songs at
+   * once go through [enqueueAll]: one write for them all.
    */
-  @Synchronized fun enqueue(song: Map<String, Any?>, equivalentId: String?, recording: Map<String, Any?> = emptyMap(), source: String? = null, origin: Map<String, Any?>? = null): String {
+  @Synchronized fun enqueue(song: Map<String, Any?>, equivalentId: String?, recording: Map<String, Any?> = emptyMap(), source: String? = null, origin: Map<String, Any?>? = null): String =
+    add(Request(song, equivalentId, recording, source, origin)).also { persistNow() }
+
+  /** One song asked for: [enqueue]'s arguments. */
+  data class Request(
+    val song: Map<String, Any?>,
+    val equivalentId: String?,
+    val recording: Map<String, Any?> = emptyMap(),
+    val source: String? = null,
+    val origin: Map<String, Any?>? = null,
+  )
+
+  /** [enqueue] for each of [requests], in order, written in one write; the jobs' ids. */
+  @Synchronized fun enqueueAll(requests: List<Request>): List<String> {
+    if (requests.isEmpty()) return emptyList()
+    return requests.map(::add).also { persistNow() }
+  }
+
+  private fun add(request: Request): String {
+    val (song, equivalentId, recording, source, origin) = request
     val id = song["videoId"] as String
     val existing = jobs.values.firstOrNull { it["id"] == id || it.maps("aliases").any { alias -> alias["videoId"] == id } }
       ?: equivalentId?.let { jobs[it] }?.takeIf { it["phase"] !in TERMINAL && it["importFailure"] == null }
     if (existing != null) {
-      val deletedCompletion = existing["acknowledged"] == true && !(existing.map("saved")["path"] as? String)?.let { File(it).isFile }.orFalse()
+      // Its saved file is gone: deleted from the Library, or a failed replacement's new file removed.
+      val savedGone = existing["saved"] != null && !(existing.map("saved")["path"] as? String)?.let { File(it).isFile }.orFalse()
+      val deletedCompletion = existing["acknowledged"] == true && savedGone
       if (existing["phase"] == "failed" || existing["phase"] == "cancelled" || existing["importFailure"] != null || deletedCompletion) {
         existing["generation"] = existing.number("generation") + 1
         existing.remove("token"); existing.remove("reason"); existing.remove("importFailure"); existing.remove("cause")
@@ -191,8 +244,11 @@ class DurableDownloads(
         jobs.remove(key); jobs[key] = existing
         if (origin != null) existing["origin"] = clean(origin)
         existing["decisionAttempts"] = 0L; startBudget(existing)
-        if (deletedCompletion) {
-          for (key in listOf("saved", "acknowledged", "finalPath", "digest", "publishSource", "replaces")) existing.remove(key)
+        // Retried, it joins the run under way, or starts one.
+        for (key in listOf("replacementRun", RUN_REPLACED, RUN_KEPT, RUN_CANCELLED)) existing.remove(key)
+        joinRun(existing)
+        if (savedGone) {
+          for (key in listOf("saved", "acknowledged", "replaces") + PUBLICATION_KEYS) existing.remove(key)
         }
         if (existing["saved"] != null) existing["phase"] = "completed"
         // Only while the file there is still this download's: one replaced since downloads again.
@@ -200,14 +256,13 @@ class DurableDownloads(
           existing["phase"] = "awaitingPublication"; existing["publicationAttempts"] = 0L
         } else {
           cleanup(existing)
-          for (key in listOf("finalPath", "digest", "publishSource", "replaces")) existing.remove(key)
+          for (key in PUBLICATION_KEYS + "replaces") existing.remove(key)
           existing["phase"] = "queued"; existing["attempts"] = 0L; existing["candidateIndex"] = 0L
           setSource(existing, source)
         }
       } else if (existing.map("song")["videoId"] != id && existing.maps("aliases").none { it["videoId"] == id }) {
         existing["aliases"] = existing.maps("aliases") + clean(song)
       }
-      persist()
       return existing["id"] as String
     }
     jobs[id] = mutableMapOf(
@@ -217,7 +272,7 @@ class DurableDownloads(
     )
     setSource(jobs.getValue(id), source)
     if (origin != null) jobs.getValue(id)["origin"] = clean(origin)
-    persist()
+    joinRun(jobs.getValue(id))
     return id
   }
 
@@ -312,6 +367,7 @@ class DurableDownloads(
       "import" -> {
         if (payload["path"] != job.map("saved")["path"] || !included(File(payload["path"] as String))) return false
         job["acknowledged"] = true; job.remove("token"); lastEnd = "imported"
+        replacementEnded(job)
       }
       else -> return false
     }
@@ -333,17 +389,13 @@ class DurableDownloads(
     if (lastEnd == "cancelled") DownloadServiceStop.CANCELLED else DownloadServiceStop.QUEUE_EMPTY
 
   /** The songs started and not yet in the Library, and those still waiting to start; the notification shows both. */
-  fun counts(): DownloadCounts {
-    val all = published
-    val left = all.count { it["phase"] == "queued" }
-    return DownloadCounts(running = all.count(::pending) - left, left = left)
-  }
+  fun counts(): DownloadCounts = DownloadCounts.of(published)
 
   /** The first song started, else the next one waiting; what the notification shows. */
   fun current(): Map<String, Any?>? =
     published.firstOrNull { it["phase"] != "queued" && pending(it) } ?: published.firstOrNull { it["phase"] == "queued" }
 
-  private fun pending(job: Map<String, Any?>) = job["phase"] !in TERMINAL && !(job["phase"] == "completed" && (job["acknowledged"] == true || job["importFailure"] != null))
+  private fun pending(job: Map<String, Any?>) = DownloadCounts.pending(job)
 
   /** Between its publish decision and its import: what only one song does at a time. */
   private fun saving(job: Map<String, Any?>) = pending(job) &&
@@ -436,8 +488,107 @@ class DurableDownloads(
 
   private fun end(job: MutableMap<String, Any?>, transport: DurableTransfer) {
     lastEnd = "cancelled"
+    // A failure the owner clears was the run's already.
+    val ending = pending(job)
     job["phase"] = "cancelled"; job["generation"] = job.number("generation") + 1; job.remove("token")
+    if (ending) replacementEnded(job)
     persist(); transport.cancel(job["id"] as String); cleanup(job)
+  }
+
+  /**
+   * Android stopped the download service (its time limit) or refused to start it: that isn't the
+   * songs' fault, and nothing runs until the next start. Songs not downloaded yet go back in line
+   * in their places, uncharged, so the run keeps its order and goes on from there; a decision
+   * leased before no longer counts. A song already downloaded keeps its step (tagging, saving,
+   * its import) for the next start. Stops the work first, as [stopWork] does.
+   */
+  @Synchronized fun interrupt(transport: DurableTransfer) {
+    stopWork(transport)
+    var changed = false
+    for (job in jobs.values) {
+      if (job["phase"] !in CHARGED || job["importFailure"] != null) continue
+      val id = job["id"] as String
+      if (job["phase"] == "transferring") endings[id] = "stopped"
+      transport.cancel(id)
+      cleanup(job)
+      for (key in listOf("candidates", "peer", "received", "total", "queuePosition", "queueDeadline", "attemptDeadline", "resumeAttemptDeadline", "resumeQueueDeadline", "soulseekDeadline", "leaseUntil")) job.remove(key)
+      job["generation"] = job.number("generation") + 1
+      job["attempts"] = 0L; job["candidateIndex"] = 0L
+      transition(job, "queued")
+      changed = true
+    }
+    // Written at once: the service is going, and the process may go with it.
+    if (changed) persistNow()
+  }
+
+  /**
+   * What the journal's quality replacements (jobs `upgrade:<id>`, `downgrade:<id>`) did since it
+   * was opened, as a run's stop line says it; null when it holds none.
+   */
+  @Synchronized fun replacementRun(): ReplacementRun? {
+    val all = jobs.values.filter { replacement(it) }
+    if (all.isEmpty()) return null
+    // The latest run only: an earlier run's songs aren't counted again.
+    val latest = all.maxOf(::runOf)
+    val replacements = all.filter { runOf(it) == latest }
+    // What the run's jobs the journal forgot as it opened (imported, cancelled) counted, carried on its others.
+    fun carried(key: String) = replacements.maxOf { it.number(key) }.toInt()
+    return ReplacementRun(
+      replaced = replacements.count { it["acknowledged"] == true } + carried(RUN_REPLACED),
+      kept = replacements.count { kept(it) } + carried(RUN_KEPT),
+      failed = replacements.count { it["importFailure"] != null || (it["phase"] == "failed" && it["reason"] != NO_BETTER_COPY) },
+      waiting = replacements.count(::pending),
+      cancelled = replacements.count { cancelledReplacement(it) } + carried(RUN_CANCELLED),
+    )
+  }
+
+  /** The replacement run [job] belongs to (when its run started; 0 for a job from before runs were kept). */
+  private fun runOf(job: Map<String, Any?>): Long = job.number("replacementRun")
+
+  private fun kept(job: Map<String, Any?>) = job["reason"] == NO_BETTER_COPY && job["phase"] in TERMINAL
+  private fun cancelledReplacement(job: Map<String, Any?>) = job["phase"] == "cancelled" && job["reason"] != NO_BETTER_COPY
+
+  /**
+   * Stamps [job], a quality replacement just asked for, with its run: the one under way (a
+   * replacement still on its way), else a new one starting now.
+   */
+  private fun joinRun(job: MutableMap<String, Any?>) {
+    if (!replacement(job)) return
+    val underway = jobs.values.firstOrNull { it !== job && replacement(it) && pending(it) }
+    job["replacementRun"] = underway?.let(::runOf) ?: clock()
+  }
+
+  /**
+   * As the journal opens and forgets its imported and cancelled jobs, each run with jobs left
+   * carries what the forgotten ones counted on those, so its line still counts them ([replacementRun]).
+   */
+  private fun carryForgottenReplacements() {
+    for ((_, run) in jobs.values.filter { replacement(it) }.groupBy(::runOf)) {
+      val forgotten = run.filter { it["phase"] == "cancelled" || it["acknowledged"] == true }
+      val left = run - forgotten.toSet()
+      if (forgotten.isEmpty() || left.isEmpty()) continue
+      val counts = mapOf(
+        RUN_REPLACED to forgotten.count { it["acknowledged"] == true },
+        RUN_KEPT to forgotten.count { kept(it) },
+        RUN_CANCELLED to forgotten.count { cancelledReplacement(it) },
+      )
+      for ((key, count) in counts) {
+        val total = run.maxOf { it.number(key) } + count
+        for (job in left) job[key] = total
+      }
+    }
+  }
+
+  /** A quality replacement's counts ([replacementRun]): what its stop line says. */
+  data class ReplacementRun(val replaced: Int, val kept: Int, val failed: Int, val waiting: Int, val cancelled: Int)
+
+  private fun replacement(job: Map<String, Any?>) = (job["id"] as String).let { id -> REPLACEMENT_PREFIXES.any { id.startsWith(it) } }
+
+  /** Once [job], a quality replacement, ends: the run's line when it was the last one left. */
+  private fun replacementEnded(job: Map<String, Any?>) {
+    if (!replacement(job)) return
+    val run = replacementRun() ?: return
+    if (run.waiting == 0) note(DownloadServiceLines.replacementRun(run, stopped = null))
   }
 
   /** Called by Android's deadline thread, including the dataSync timeout callback. */
@@ -483,7 +634,8 @@ class DurableDownloads(
         }
       }
     }
-    if (changed || (charging && budgetNow() - budgetWrittenAt >= BUDGET_WRITE_MS)) persist() else writeProgressIfDue()
+    if (changed) persist()
+    if (charging && budgetNow() - budgetWrittenAt >= BUDGET_WRITE_MS) persistNow() else writeIfDue()
   }
 
   /** Expires what's out of time, then runs the next native step, if there is one, on this thread. */
@@ -572,11 +724,13 @@ class DurableDownloads(
         "tagging" -> {
           // The cover comes over the network: other songs' steps and decisions go on meanwhile.
           val source = File(work["sourcePath"] as String)
-          publication.tag(source, work.map("tags"))
+          val written = publication.tag(source, work.map("tags"))
           synchronized(this) {
             // Cancelled while it was tagged: the file it tagged goes with it.
             val job = held(id, generation, "tagging") ?: run { source.delete(); return }
             if (stopped) return
+            // The digest the tag writer took as it wrote the file: publication needn't read it again.
+            if (written != null) job["taggedDigest"] = written else job.remove("taggedDigest")
             transition(job, "awaitingPublication"); persist()
           }
         }
@@ -634,19 +788,22 @@ class DurableDownloads(
     val target = File(start["targetPath"] as String)
     if (start["finalPath"] == null) {
       var source = File(start["sourcePath"] as String)
+      // Taken as the file was written (#455): by the tag writer, or by the copy below.
+      var written = start["taggedDigest"] as? String
       target.parentFile.mkdirs()
       if (!target.parentFile.isDirectory) throw DurableFailure("storage", java.io.IOException("Couldn't make the folder ${target.parentFile.path}"))
       // A changed root requires a new hidden file on the destination filesystem.
       if (source.parentFile.canonicalFile != target.parentFile.canonicalFile) {
         val local = DownloadFiles.partFileFor(target, "$id-$generation-publication")
-        onJob { job -> job["outputPath"] = local.path; persist() } ?: return
-        FileInputStream(source).use { input -> FileOutputStream(local).use { out -> input.copyTo(out); out.fd.sync() } }
+        onJob { job -> job["outputPath"] = local.path; persistNow() } ?: return
+        written = copyWithDigest(source, local)
         source = local
       }
       // A replacement overwrites the file it replaces; anything else gets a free name beside it.
       val chosen = if (start["replaces"] == target.path) target.path else DownloadFiles.freeName(target).path
-      val sum = digest(source)
-      onJob { job -> job["finalPath"] = chosen; job["digest"] = sum; job["publishSource"] = source.path; persist() } ?: return
+      // Only a file whose tag writer didn't write every byte (jaudiotagger's MP3s) is read for it.
+      val sum = written ?: digest(source)
+      onJob { job -> job["finalPath"] = chosen; job["digest"] = sum; job["publishSource"] = source.path; persistNow() } ?: return
     }
     val chosen = onJob { job ->
       val final = File(job["finalPath"] as String)
@@ -657,15 +814,28 @@ class DurableDownloads(
     // Another file took the chosen name before this one was moved there: the next free one.
     if (!replacing && final.exists() && publishSource.isFile && digest(final) != sum) {
       final = DownloadFiles.freeName(target)
-      onJob { job -> job["finalPath"] = final.path; persist() } ?: return
+      onJob { job -> job["finalPath"] = final.path; persistNow() } ?: return
     }
-    // The replaced file goes in the same step the new one arrives, never before.
-    if (replacing && publishSource.isFile) Files.move(publishSource.toPath(), final.toPath(), StandardCopyOption.REPLACE_EXISTING)
-    else if (!final.exists()) Files.move(publishSource.toPath(), final.toPath())
-    if (digest(final) != sum) {
+    // The replaced file goes in the same step the new one arrives, never before, and only for the
+    // very copy whose digest was taken: the rename over it keeps that copy's bytes.
+    val moving = replacing && publishSource.isFile
+    if (moving) {
+      if (digest(publishSource) != sum) {
+        onJob { job ->
+          for (key in PUBLICATION_KEYS) job.remove(key)
+          fail(job, "failed", "The copy to publish changed after its digest was taken; ${final.path} was left as it was"); persist()
+        }
+        return
+      }
+      Files.move(publishSource.toPath(), final.toPath(), StandardCopyOption.REPLACE_EXISTING)
+    }
+    // A rename keeps the bytes whose digest was taken: only a file found there already (a save
+    // taken up again after a crash, or another file) is read to tell whose it is.
+    val movedHere = moving || (!final.exists()).also { free -> if (free) Files.move(publishSource.toPath(), final.toPath()) }
+    if (!movedHere && digest(final) != sum) {
       onJob { job ->
         // Wave's own copy is gone and another file holds its name: Retry downloads the song again.
-        for (key in listOf("finalPath", "digest", "publishSource")) job.remove(key)
+        for (key in PUBLICATION_KEYS) job.remove(key)
         fail(job, "failed", "Another file took ${final.path} before it was imported"); persist()
       }
       return
@@ -819,11 +989,13 @@ class DurableDownloads(
     } else job["reason"] = reason
     job["endedAt"] = clock(); transition(job, "failed"); job["generation"] = job.number("generation") + 1; cleanup(job)
     lastEnd = "failed"
+    replacementEnded(job)
   }
   /** A published file the Library couldn't import, with what went wrong. */
   private fun importFailed(job: MutableMap<String, Any?>, reason: String, cause: String?) {
     job["importFailure"] = reason
     if (cause != null) recordCause(job, reason, cause)
+    replacementEnded(job)
   }
   /** Keeps [cause] as what last went wrong with [job], in the journal and the log. */
   private fun recordCause(job: MutableMap<String, Any?>, reason: String, cause: String) {
@@ -890,11 +1062,16 @@ class DurableDownloads(
     job["soulseekDeadline"] != null && job.number("soulseekDeadline") <= budgetNow() && job["source"] != YOUTUBE &&
       charged(job) && fallsBack(job, "timedOut")
 
-  // Persistence. A change a restart must keep (a job enqueued, a phase, a decision, a failure, a
-  // cancel, a peer's queue place) is written at once by [persist]. Transfer progress only marks
-  // the journal [progressed]: it's written with the next change, or once [PROGRESS_WRITE_MS] has
-  // passed (the deadline thread's [expire] sees to that), so a crash loses a few seconds of
-  // progress, never a job.
+  // Persistence (#452). A change a restart must keep (a phase, a decision, a failure, a cancel, a
+  // peer's queue place) is shown to readers at once and written by [persist] with the changes
+  // around it, at most every [WRITE_MS]; a write appends only what changed ([JournalStore]). Only
+  // new jobs ([enqueue], [enqueueAll]: one write for a whole run) and the publication write at
+  // once ([persistNow]), the latter before a file is copied into or moved to the Library folder.
+  // So a crash loses no job, and at most the last [WRITE_MS] of changes to one: the
+  // job goes on from the step it last wrote, which can only redo a step, and a part file that step
+  // had made is swept as the journal opens ([sweepParts]). Transfer progress only marks the journal
+  // [progressed]: it's written with the next change, or once [PROGRESS_WRITE_MS] has passed (the
+  // deadline thread's [expire] sees to that), so a crash loses a few seconds of progress.
 
   /** When the journal file was last written ([clock]). */
   private var writtenAt = 0L
@@ -912,7 +1089,7 @@ class DurableDownloads(
     progressUnwritten = true
     val id = job["id"] as String
     if (clock() - (progressShownAt[id] ?: Long.MIN_VALUE / 2) >= PROGRESS_SHOW_MS) { progressShownAt[id] = clock(); publishJob(job) }
-    writeProgressIfDue()
+    writeIfDue()
   }
 
   /** Copies only [job] for readers, with a new revision if it changed. */
@@ -928,22 +1105,69 @@ class DurableDownloads(
     view = JournalView(entries, revision, before.orderRevision)
   }
 
-  private fun writeProgressIfDue() { if (progressUnwritten && clock() - writtenAt >= PROGRESS_WRITE_MS) persist() }
+  /** Whether a change ([persist]) is waiting for its write. */
+  private var unwritten = false
+  /** Whether [later] will see to the waiting change. */
+  private var writeScheduled = false
 
-  /** Publishes the journal to readers and writes it to its file, atomically and synced. */
+  /**
+   * Publishes the journal to readers at once, and writes it with the changes around it: at once
+   * when the last write was [WRITE_MS] ago or more, else once that's over ([later], or the
+   * deadline thread's [expire]).
+   */
   private fun persist() {
     publish()
-    writtenAt = clock(); progressUnwritten = false; budgetWrittenAt = budgetNow()
-    journal.parentFile?.mkdirs()
-    val temp = File(journal.path + ".tmp")
-    FileOutputStream(temp).use { output ->
-      val stream = ObjectOutputStream(output)
-      stream.writeObject(clean(mapOf("jobs" to jobs, "libraryPolicy" to policy, "budgetClock" to budgetWrittenAt)))
-      stream.flush()
-      output.fd.sync()
-    }
-    Files.move(temp.toPath(), journal.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+    unwritten = true
+    if (clock() - writtenAt >= WRITE_MS) write() else scheduleWrite()
   }
+
+  /**
+   * Publishes and writes the journal now, with every change waiting: only before file work a
+   * restart must find in the journal (a file copied into or moved to the Library folder), for new
+   * jobs ([enqueue], [enqueueAll]: a crash loses no song asked for), and as the journal opens.
+   */
+  private fun persistNow() { publish(); write() }
+
+  /** Writes what's due: a waiting change once [WRITE_MS] passed since the last write, progress once [PROGRESS_WRITE_MS] did. */
+  private fun writeIfDue() {
+    val since = clock() - writtenAt
+    if ((unwritten && since >= WRITE_MS) || (progressUnwritten && since >= PROGRESS_WRITE_MS)) persistNow()
+    else if (unwritten) scheduleWrite()
+  }
+
+  private fun scheduleWrite() {
+    val later = later ?: return
+    if (writeScheduled) return
+    writeScheduled = true
+    later(maxOf(0L, writtenAt + WRITE_MS - clock())) {
+      synchronized(this) {
+        writeScheduled = false
+        // A full disk: the next change, or the next write that's due, tries again.
+        try { writeIfDue() } catch (_: java.io.IOException) {}
+      }
+    }
+  }
+
+  /** Writes what changed since the last write ([JournalStore]); readers' copies are what it writes. */
+  private fun write() {
+    @Suppress("UNCHECKED_CAST")
+    store.write(view.jobs, clean(policy) as Map<String, Any?>, budgetNow())
+    writtenAt = clock(); unwritten = false; progressUnwritten = false; budgetWrittenAt = budgetNow()
+  }
+
+  /** Writes whatever changed and isn't written yet: the download service stopping, say. */
+  @Synchronized fun flush() { if (unwritten || progressUnwritten) persistNow() }
+
+  /** When [takeWriteStats] was last called ([clock]). */
+  private var statsSince = clock()
+
+  /** What writing the journal cost since the last call ([JournalWrites]): the download service's journal line. */
+  fun takeWriteStats(): JournalWrites {
+    val now = clock()
+    val span = synchronized(statsLock) { (now - statsSince).also { statsSince = now } }
+    return store.takeStats(span)
+  }
+  private val statsLock = Any()
 
   companion object {
     /** How many songs download at once (three measured for #239; five since #395, as Soulseek rarely delivers behind mobile NAT). */
@@ -969,6 +1193,11 @@ class DurableDownloads(
      * retries ([RangeDownload.RETRY_CYCLE_MS]): it retries ranges, the journal gives up on a dead transfer.
      */
     const val YOUTUBE_STALL_MS = 4 * 60_000L
+    /**
+     * How often, at most, the journal writes the changes that come between (#452): what a crash
+     * can lose of them, the publication's own writes aside ([persistNow]).
+     */
+    const val WRITE_MS = 1_000L
     /** How long transfer progress may go unwritten: what a crash can lose of it. */
     const val PROGRESS_WRITE_MS = 5_000L
     /**
@@ -990,6 +1219,16 @@ class DurableDownloads(
     private const val MP3_320 = "mp3-320"
     private const val YOUTUBE_M4A = "youtube-m4a"
     private val TERMINAL = setOf("failed", "cancelled")
+    /** What a publication writes on its job: where it goes, the digests that tell it, the copy it moves. Every reset clears them all. */
+    /** What a replacement run's jobs the journal forgot as it opened counted, carried on the run's others. */
+    private const val RUN_REPLACED = "runReplaced"
+    private const val RUN_KEPT = "runKept"
+    private const val RUN_CANCELLED = "runCancelled"
+    private val PUBLICATION_KEYS = listOf("finalPath", "digest", "taggedDigest", "publishSource")
+    /** Quality replacements' job ids (Core's `qualityJobId`). */
+    private val REPLACEMENT_PREFIXES = listOf("upgrade:", "downgrade:")
+    /** A replacement's failure for finding no better copy (Core's `NO_BETTER_COPY_FOUND`): the song keeps its file. */
+    private const val NO_BETTER_COPY = "notFound"
     /** Until the audio is accepted; afterwards a failure is the save's, which YouTube would share. */
     private val ACQUIRING = setOf("preparing", "prepared", "transferring", "sourceReady")
     /** Where a job's budget is charged: until its file is downloaded. */
@@ -1016,7 +1255,20 @@ private class JournalView(val entries: List<PublishedJob>, val revision: Long, v
 }
 
 /** What the download notification counts: songs on their way ([running]) and songs not started yet ([left]). */
-data class DownloadCounts(val running: Int, val left: Int)
+data class DownloadCounts(val running: Int, val left: Int) {
+  companion object {
+    /** Whether [job] is still on its way: not failed or cancelled, nor imported (or failed to import). */
+    fun pending(job: Map<*, *>): Boolean =
+      job["phase"] != "failed" && job["phase"] != "cancelled" &&
+        !(job["phase"] == "completed" && (job["acknowledged"] == true || job["importFailure"] != null))
+
+    /** [jobs] counted: those on their way that started, and those waiting. The one rule, for the notification and the app log. */
+    fun of(jobs: Collection<Map<*, *>>): DownloadCounts {
+      val left = jobs.count { it["phase"] == "queued" }
+      return DownloadCounts(running = jobs.count(::pending) - left, left = left)
+    }
+  }
+}
 
 /**
  * What went wrong, as `<exception class>: <message>`, then what caused it (`<-`). A
@@ -1038,10 +1290,11 @@ private fun Map<String, Any?>.maps(key: String): List<Map<String, Any?>> = get(k
 @Suppress("UNCHECKED_CAST")
 private fun Map<String, Any?>.strings(key: String): List<String> = get(key) as? List<String> ?: emptyList()
 
-private fun digest(file: File): String {
-  val sha = MessageDigest.getInstance("SHA-256")
-  file.inputStream().use { input -> val buffer = ByteArray(64 * 1024); while (true) { val count = input.read(buffer); if (count < 0) break; sha.update(buffer, 0, count) } }
-  return sha.digest().joinToString("") { "%02x".format(it) }
+private fun digest(file: File): String = file.inputStream().use { input -> FileDigest.of(input) }
+
+/** Copies [from] to [to], synced, and returns the copy's digest, taken as its bytes go by. */
+private fun copyWithDigest(from: File, to: File): String = FileInputStream(from).use { input ->
+  FileOutputStream(to).use { out -> FileDigest.of(input) { buffer, count -> out.write(buffer, 0, count) }.also { out.fd.sync() } }
 }
 
 /** Persist only standard JDK maps (in order)/lists/scalars; no app classes or credentials enter the journal. */

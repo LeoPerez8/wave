@@ -11,7 +11,8 @@ import org.junit.Test
 
 /**
  * A big queue mustn't starve Wave: the journal is written when a job changes in a way a restart
- * must keep, and at a bounded rate for progress, never on every deadline check or chunk.
+ * must keep, with the changes around it ([DurableDownloads.WRITE_MS]), and at a bounded rate for
+ * progress, never on every deadline check or chunk.
  */
 class DurableJournalLoadTest {
   @Test fun checkingDeadlinesWithNothingDueLeavesTheJournalFileAlone() = inFolder { folder ->
@@ -20,17 +21,19 @@ class DurableJournalLoadTest {
     val owner = DurableDownloads(journal, clock = { now })
     for (id in ids) owner.enqueue(song(id), null)
     owner.advance(NoTransfer, NoPublication)
-    assertTrue(journal.delete())
+    owner.flush()
+    owner.takeWriteStats()
     // Android's deadline thread and the worker check twice a second; nothing is due.
     repeat(10) { now += 500; owner.expire(NoTransfer); owner.advance(NoTransfer, NoPublication) }
-    assertFalse(journal.exists())
-    // A change a restart must keep is written at once.
+    assertEquals(0, owner.takeWriteStats().writes)
+    // A change a restart must keep is written within a second.
     owner.enqueue(song("song-13"), null)
+    now += DurableDownloads.WRITE_MS; owner.expire(NoTransfer)
     assertEquals(ids + "song-13", reopened(journal).map { it["id"] })
   }
 
   /** A crash loses at most [DurableDownloads.PROGRESS_WRITE_MS] of progress, never a job or its phase. */
-  @Test fun progressIsWrittenAtABoundedRateAndAPhaseChangeAtOnce() = inFolder { folder ->
+  @Test fun progressIsWrittenAtABoundedRateAndAPhaseChangeWithinASecond() = inFolder { folder ->
     var now = 1_000L
     val journal = File(folder, "jobs")
     val owner = DurableDownloads(journal, clock = { now })
@@ -54,6 +57,7 @@ class DurableJournalLoadTest {
     // Four seconds of chunks: written about once in [PROGRESS_WRITE_MS], not forty times.
     assertTrue("written ${distinct.size} times: $distinct", distinct.size in 2..3)
     assertEquals(40L, written.last())
+    now += DurableDownloads.WRITE_MS; owner.expire(NoTransfer)
     assertEquals("sourceReady", reopened(journal).single()["phase"])
   }
 
@@ -116,8 +120,8 @@ class DurableJournalLoadTest {
     }
     owner.advance(trickle, NoPublication)
     assertTrue(owner.revision > before)
-    // Four seconds of chunks: about four updates, not forty.
-    assertTrue("seen ${seen.distinct().size} updates", seen.distinct().size in 3..5)
+    // Four seconds of chunks: about four updates (one more as progress is written), not forty.
+    assertTrue("seen ${seen.distinct().size} updates", seen.distinct().size in 3..6)
   }
 
   /**
@@ -183,7 +187,7 @@ class DurableJournalLoadTest {
 
   private fun reopened(journal: File): List<Map<String, Any?>> {
     val copy = File(journal.parentFile, "reopened-${System.nanoTime()}")
-    journal.copyTo(copy)
+    for ((file, to) in JournalStore.files(journal).zip(JournalStore.files(copy))) if (file.exists()) file.copyTo(to)
     return DurableDownloads(copy).snapshot()
   }
   private val GoodTransfer = object : DurableTransfer {
@@ -194,7 +198,7 @@ class DurableJournalLoadTest {
     }
   }
   private val GoodPublication = object : DurablePublication {
-    override fun tag(source: File, tags: Map<String, Any?>) { source.appendText(" trusted tags") }
+    override fun tag(source: File, tags: Map<String, Any?>): String? { source.appendText(" trusted tags"); return null }
     override fun index(file: File): Map<String, Any?> = mapOf("path" to file.path, "track" to mapOf("path" to file.path), "artwork" to null)
   }
   private fun phases(owner: DurableDownloads) = owner.snapshot().map { it["phase"] }

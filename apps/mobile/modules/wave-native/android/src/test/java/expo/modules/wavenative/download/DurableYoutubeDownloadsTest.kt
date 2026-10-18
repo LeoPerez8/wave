@@ -271,6 +271,7 @@ class DurableYoutubeDownloadsTest {
       owner.enqueue(song, null, emptyMap(), "youtube")
       prepareYoutube(owner, File(folder, "Recording.m4a"))
       assertThrows(ProcessDeath::class.java) { owner.advance(transfer { _, _, _ -> throw ProcessDeath() }, Untouched) }
+      owner.flush()
       now += DurableDownloads.ATTEMPT_MS - 10_000
       owner = DurableDownloads(journal, clock = { now })
       val restored = owner
@@ -299,6 +300,7 @@ class DurableYoutubeDownloadsTest {
       owner.enqueue(song, null, emptyMap(), "youtube")
       prepareYoutube(owner, File(folder, "Recording.m4a"))
       assertThrows(ProcessDeath::class.java) { owner.advance(dying, Untouched) }
+      owner.flush()
       val before = owner.snapshot().single()
       now += 10_000
       owner = DurableDownloads(journal, clock = { now })
@@ -378,7 +380,7 @@ class DurableYoutubeDownloadsTest {
   }
   /** Tagging leaves the audio as it is, so the published file can be compared with what YouTube served. */
   private object Untouched : DurablePublication {
-    override fun tag(source: File, tags: Map<String, Any?>) {}
+    override fun tag(source: File, tags: Map<String, Any?>): String? = null
     override fun index(file: File): Map<String, Any?> = mapOf("path" to file.path, "track" to mapOf("path" to file.path), "artwork" to null)
   }
   private fun prepareYoutube(owner: DurableDownloads, target: File) {

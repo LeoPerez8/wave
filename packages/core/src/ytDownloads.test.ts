@@ -196,7 +196,7 @@ describe("a YT Music song's download, as its row and menu show it", () => {
 
   test("a missing song YouTube Music's search has no match for says so, and keeps Retry", () => {
     const status = { kind: "failed", reason: "notFound" } as const;
-    assert.equal(ytDownloadLine(status), "Not found on YouTube Music");
+    assert.equal(ytDownloadLine(status), "Not found online");
     assert.deepEqual(actions(status), ["retryDownload"]);
   });
 

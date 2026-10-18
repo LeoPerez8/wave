@@ -17,6 +17,7 @@ import { AlbumTile } from "@/catalog/AlbumTile";
 import { SECTION_HEAD, SectionHead } from "@/catalog/CatalogLine";
 import { COVER_ROW_TILE, CoverRow } from "@/catalog/CoverRow";
 import { CELL, grid } from "@/catalog/grid";
+import { SKELETON_TILES, SkeletonGroup, TileSkeleton, TrackSkeletons } from "@/catalog/Skeletons";
 import { TrackRow } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { playPage } from "@/playback/actions";
@@ -48,7 +49,11 @@ import { openYtSongActions } from "@/ytmusic/YtSongActions";
 /** A cover on one of the page's album shelves: a Library album, or a release only YouTube Music has. */
 type AlbumCell =
   | { readonly kind: "library"; readonly album: AlbumRow }
-  | { readonly kind: "yt"; readonly album: YtArtistAlbum; readonly shelf: "albums" | "singles" };
+  | { readonly kind: "yt"; readonly album: YtArtistAlbum; readonly shelf: "albums" | "singles" }
+  /** Skeleton tiles where YouTube Music's releases will go, while it's asked. */
+  | { readonly kind: "skeleton" };
+
+const SKELETON_CELL: AlbumCell = { kind: "skeleton" };
 
 /** A row of the Songs section: the Library's song, or a song of the artist YouTube Music adds. */
 type PageSong =
@@ -71,14 +76,31 @@ const NO_ADDITIONS: YtAdditions = { albums: [], singles: [], songs: [] };
 
 const libraryCell = (album: AlbumRow): AlbumCell => ({ kind: "library", album });
 
-const cellKey = (cell: AlbumCell): string =>
-  cell.kind === "library" ? `album-${cell.album.id}` : `yt-${cell.album.browseId}`;
+const cellKey = (cell: AlbumCell): string => {
+  switch (cell.kind) {
+    case "library":
+      return `album-${cell.album.id}`;
+    case "yt":
+      return `yt-${cell.album.browseId}`;
+    case "skeleton":
+      return "skeleton";
+  }
+};
 
 /** A song YouTube Music added: streamed, or the Library's file once its download finished. */
 const placedSong = (row: PlacedSongs["songs"][number]): PageSong =>
   row.source === "library" ? { kind: "library", song: row.track } : { kind: "yt", song: row.song };
 
-const artistItems = (detail: ArtistDetail, songs: readonly PageSong[], yt: YtAdditions): Item[] =>
+/**
+ * The page's shelves and songs. While YouTube Music is asked ([loading]),
+ * skeleton tiles follow the Library's albums where its releases will go.
+ */
+const artistItems = (
+  detail: ArtistDetail,
+  songs: readonly PageSong[],
+  yt: YtAdditions,
+  loading: boolean,
+): Item[] =>
   artistPageItems(
     [
       // YouTube Music's releases the Library lacks follow the Library's own, on one shelf.
@@ -87,6 +109,7 @@ const artistItems = (detail: ArtistDetail, songs: readonly PageSong[], yt: YtAdd
         covers: [
           ...detail.albums.map(libraryCell),
           ...yt.albums.map((album): AlbumCell => ({ kind: "yt", album, shelf: "albums" })),
+          ...(loading ? [SKELETON_CELL] : []),
         ],
       },
       {
@@ -155,29 +178,44 @@ function AlbumShelfRow({
   return (
     <View style={{ height: SHELF_ROW }}>
       <CoverRow>
-        {cells.map((cell) =>
-          cell.kind === "library" ? (
-            <AlbumTile
-              key={cellKey(cell)}
-              album={toAlbumSummary(cell.album)}
-              size={COVER_ROW_TILE}
-              {...selectableRow(
-                cell.album,
-                selection,
-                () => openAlbum(cell.album.id, cell.album, { integrated }),
-                (options) => openAlbumActions(cell.album, options),
-              )}
-            />
-          ) : (
-            <YtReleaseTile
-              key={cellKey(cell)}
-              album={cell.album}
-              kind={cell.shelf}
-              size={COVER_ROW_TILE}
-              selecting={selection.selecting}
-            />
-          ),
-        )}
+        {cells.map((cell) => {
+          switch (cell.kind) {
+            case "library":
+              return (
+                <AlbumTile
+                  key={cellKey(cell)}
+                  album={toAlbumSummary(cell.album)}
+                  size={COVER_ROW_TILE}
+                  {...selectableRow(
+                    cell.album,
+                    selection,
+                    () => openAlbum(cell.album.id, cell.album, { integrated }),
+                    (options) => openAlbumActions(cell.album, options),
+                  )}
+                />
+              );
+            case "yt":
+              return (
+                <YtReleaseTile
+                  key={cellKey(cell)}
+                  album={cell.album}
+                  kind={cell.shelf}
+                  size={COVER_ROW_TILE}
+                  selecting={selection.selecting}
+                />
+              );
+            case "skeleton":
+              return (
+                <SkeletonGroup key={cellKey(cell)} label="Loading albums">
+                  <View className="flex-row" style={{ gap: grid.gutter }}>
+                    {Array.from({ length: SKELETON_TILES }, (_, index) => (
+                      <TileSkeleton key={index} size={COVER_ROW_TILE} />
+                    ))}
+                  </View>
+                </SkeletonGroup>
+              );
+          }
+        })}
       </CoverRow>
     </View>
   );
@@ -291,9 +329,11 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
   // on the page (an integrated view) the mixed list, the Library's files and the artist's songs
   // streamed, and the Library's rows are marked downloaded; otherwise the Library's songs alone.
   const downloaded = additions.songs.length > 0;
+  // While YouTube Music is asked, skeletons stand where its releases and songs will go.
+  const ytLoading = ytView?.note === "loading";
   const items = useMemo(
-    () => artistItems(detail, pageSongs, additions),
-    [detail, pageSongs, additions],
+    () => artistItems(detail, pageSongs, additions, ytLoading),
+    [detail, pageSongs, additions, ytLoading],
   );
   // Albums and songs select together; the bar acts on them in page order.
   const selectable = useMemo(() => selectableItems(detail, pageSongs), [detail, pageSongs]);
@@ -362,10 +402,13 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
     [context, currentId, favorites, mixed, downloaded, albumSelection, page, integrated],
   );
 
-  const line = [
-    detail.artist.albumCount > 0 ? albumsLine(detail.artist.albumCount) : null,
-    songCount(loaded ? songs.length : detail.artist.trackCount),
-  ]
+  // With Online and an answer found, the counts take in what YouTube Music adds to the page.
+  const local = {
+    albums: detail.artist.albumCount,
+    songs: loaded ? songs.length : detail.artist.trackCount,
+  };
+  const counts = loaded ? yt.counts(local) : local;
+  const line = [counts.albums > 0 ? albumsLine(counts.albums) : null, songCount(counts.songs)]
     .filter((part) => part !== null)
     .join(" · ");
 
@@ -399,7 +442,9 @@ function ArtistContent({ shown, openedIntegrated }: { shown: Shown; openedIntegr
         </>
       }
       ListFooterComponent={
-        ytView === null ? null : (
+        ytView === null ? null : ytView.note === "loading" ? (
+          <TrackSkeletons />
+        ) : (
           <YtLookupFooter note={ytView.note === null ? null : YT_ARTIST_NOTE[ytView.note]} />
         )
       }

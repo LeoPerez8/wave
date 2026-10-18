@@ -22,6 +22,8 @@ class DurableJobBudgetTest {
       override fun receive(id: String, candidate: Map<String, Any?>, source: File, durationMs: Long, progress: (Long, Long, Long?) -> Unit): Map<String, Any?> {
         source.parentFile.mkdirs(); source.writeText("part")
         progress(4, 8, null)
+        owner.flush()
+        // More than a second into the transfer: the journal wrote its start.
         // Android kills Wave here; it opens again long after the job's budget.
         now += 6 * HOUR
         reopened = DurableDownloads(copyOf(journal), clock = { now })
@@ -140,7 +142,9 @@ class DurableJobBudgetTest {
     assertTrue(owner.submit("song", lease["generation"] as Long, lease["token"] as String, decision, payload + if (decision == "confirm") mapOf("receiptId" to lease["receiptId"]) else emptyMap()))
   }
   /** The journal as a process opening it now finds it; the first owner may go on writing its own. */
-  private fun copyOf(journal: File): File = File(journal.parentFile, "reopened-${System.nanoTime()}").also { journal.copyTo(it) }
+  private fun copyOf(journal: File): File = File(journal.parentFile, "reopened-${System.nanoTime()}").also { copy ->
+    for ((file, to) in JournalStore.files(journal).zip(JournalStore.files(copy))) if (file.exists()) file.copyTo(to)
+  }
   private fun inFolder(test: (File) -> Unit) {
     val folder = Files.createTempDirectory("wave-job-budget").toFile()
     try { test(folder) } finally { folder.deleteRecursively() }
@@ -153,7 +157,7 @@ class DurableJobBudgetTest {
     }
   }
   private val GoodPublication = object : DurablePublication {
-    override fun tag(source: File, tags: Map<String, Any?>) { source.appendText(" trusted tags") }
+    override fun tag(source: File, tags: Map<String, Any?>): String? { source.appendText(" trusted tags"); return null }
     override fun index(file: File): Map<String, Any?> = mapOf("path" to file.path, "track" to mapOf("path" to file.path), "artwork" to null)
   }
   private object NoTransfer : DurableTransfer {

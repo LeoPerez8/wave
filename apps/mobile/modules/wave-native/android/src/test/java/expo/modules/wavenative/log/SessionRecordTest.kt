@@ -1,5 +1,7 @@
 package expo.modules.wavenative.log
 
+import android.app.ActivityManager
+import expo.modules.wavenative.download.DownloadCounts
 import expo.modules.wavenative.log.SessionRecord.Exit
 import expo.modules.wavenative.log.SessionRecord.ExitReason
 import java.io.File
@@ -121,8 +123,271 @@ class SessionRecordTest {
   }
 
   @Test
-  fun anOrdinaryEndSaysNothing() {
-    nextLaunch(Exit(at - 60_000, ExitReason.USER_REQUESTED, null), Exit(at - 120_000, ExitReason.OTHER, "swiped away"))
+  fun aLowMemoryKillIsReportedWithWavesMemoryAndWhatItWasDoing() {
+    nextLaunch(
+      Exit(
+        at - 60_000, ExitReason.LOW_MEMORY, "lmk", pssKb = 312 * 1024, rssKb = 401 * 1024,
+        importance = ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND_SERVICE,
+      ),
+    )
+
+    assertEquals(
+      listOf(
+        "2026-10-16T14:03:22.415Z E app: The previous session was killed for low memory (Android's record " +
+          "of 2026-10-16T14:02:22.415Z): lmk\n" +
+          "  Wave was a foreground service (playing or downloading); PSS 312 MB, RSS 401 MB",
+      ),
+      entries(),
+    )
+  }
+
+  @Test
+  fun aKillBySignalNamesTheSignal() {
+    nextLaunch(Exit(at - 60_000, ExitReason.SIGNALED, null, status = 9))
+
+    assertEquals(
+      listOf(
+        "2026-10-16T14:03:22.415Z E app: The previous session was killed by signal 9, SIGKILL (Android's record " +
+          "of 2026-10-16T14:02:22.415Z)",
+      ),
+      entries(),
+    )
+  }
+
+  /** The line the next launch writes for the previous session ending as [exit] says, with its record's time cut. */
+  private fun reported(exit: Exit): List<String> {
+    nextLaunch(exit)
+    return entries().map {
+      it.removePrefix("2026-10-16T14:03:22.415Z E app: ")
+        .replace(Regex(" \\(Android's record of [^)]*\\)"), "")
+        .replace(Regex(", Android's record of [^)]*"), "")
+    }
+  }
+
+  @Test
+  fun aSessionThatFrozeInTheBackgroundIsReported() {
+    assertEquals(
+      listOf("The previous session was killed while frozen in the background: freezer binder"),
+      reported(Exit(at - 60_000, ExitReason.FREEZER, "freezer binder")),
+    )
+  }
+
+  @Test
+  fun aSessionWhoseDependencyDiedIsReported() {
+    assertEquals(
+      listOf("The previous session was closed because a process it depends on died"),
+      reported(Exit(at - 60_000, ExitReason.DEPENDENCY_DIED, null)),
+    )
+  }
+
+  @Test
+  fun aSessionClosedForAChangedPermissionIsReported() {
+    assertEquals(
+      listOf("The previous session was closed because a permission changed: permissions revoked"),
+      reported(Exit(at - 60_000, ExitReason.PERMISSION_CHANGE, "permissions revoked")),
+    )
+  }
+
+  @Test
+  fun aSessionClosedForAChangeInWavesPackageIsReported() {
+    assertEquals(
+      listOf("The previous session was closed because Wave's package changed state"),
+      reported(Exit(at - 60_000, ExitReason.PACKAGE_STATE_CHANGE, null)),
+    )
+  }
+
+  @Test
+  fun aSessionThatExitedOnItsOwnIsReportedWithItsStatus() {
+    assertEquals(
+      listOf("The previous session exited on its own with status 10"),
+      reported(Exit(at - 60_000, ExitReason.EXIT_SELF, null, status = 10)),
+    )
+  }
+
+  @Test
+  fun aSessionAndroidClosedForAnotherReasonIsReportedWithAndroidsWords() {
+    assertEquals(
+      listOf("The previous session was closed by Android: too many cached"),
+      reported(Exit(at - 60_000, ExitReason.OTHER, "too many cached")),
+    )
+  }
+
+  @Test
+  fun aSessionThatEndedForAnUnrecordedReasonIsReported() {
+    assertEquals(
+      listOf("The previous session ended for a reason Android didn't record"),
+      reported(Exit(at - 60_000, ExitReason.UNKNOWN, null)),
+    )
+  }
+
+  @Test
+  fun crashAndAnrLinesCarryWavesMemoryAndWhatItWasDoing() {
+    val onScreen = ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
+    assertEquals(
+      listOf("The previous session ended in a crash (native): signal 11 (SIGSEGV)\n  Wave was on screen; PSS 200 MB, RSS 250 MB"),
+      reported(Exit(at - 60_000, ExitReason.CRASH_NATIVE, "signal 11 (SIGSEGV)", pssKb = 200 * 1024, rssKb = 250 * 1024, importance = onScreen)),
+    )
+    assertEquals(
+      listOf(
+        "The previous session stopped responding and Android closed it (ANR): Input dispatching timed out\n" +
+          "  Wave was on screen; PSS 300 MB, RSS 350 MB\n" +
+          "  Main thread:\n" +
+          "  \"main\" prio=5 tid=1 Native\n" +
+          "    at android.os.MessageQueue.nativePollOnce(Native method)",
+      ),
+      reported(
+        Exit(at - 30_000, ExitReason.ANR, "Input dispatching timed out", pssKb = 300 * 1024, rssKb = 350 * 1024, importance = onScreen) {
+          "\"main\" prio=5 tid=1 Native\n  at android.os.MessageQueue.nativePollOnce(Native method)\n"
+        },
+      ),
+    )
+  }
+
+  @Test
+  fun theLaunchAfterACrashGivesWavesMemoryFromAndroidsRecord() {
+    record.crashed(Thread("main"), RuntimeException("boom"))
+
+    nextLaunch(
+      Exit(
+        at - 1_000, ExitReason.CRASH, "crash", pssKb = 180 * 1024, rssKb = 240 * 1024,
+        importance = ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND,
+      ),
+    )
+
+    assertEquals(
+      listOf("2026-10-16T14:03:22.415Z E app: The previous session ended in a crash\n  Wave was on screen; PSS 180 MB, RSS 240 MB"),
+      entries(),
+    )
+  }
+
+  @Test
+  fun whatWaveWasDoingIsSaidInPlainWords() {
+    val words = mapOf(
+      ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE to "visible behind another app",
+      ActivityManager.RunningAppProcessInfo.IMPORTANCE_PERCEPTIBLE to "in the background, noticeably",
+      ActivityManager.RunningAppProcessInfo.IMPORTANCE_SERVICE to "in the background (a service)",
+      ActivityManager.RunningAppProcessInfo.IMPORTANCE_TOP_SLEEPING to "on screen with the screen off",
+      ActivityManager.RunningAppProcessInfo.IMPORTANCE_CANT_SAVE_STATE to "in the background",
+    )
+    for ((importance, doing) in words) {
+      assertEquals(
+        listOf("The previous session was killed for low memory\n  Wave was $doing; PSS 80 MB"),
+        reported(Exit(at - 60_000 + importance, ExitReason.LOW_MEMORY, null, pssKb = 80 * 1024, importance = importance)),
+      )
+    }
+  }
+
+  /** Android trimming a cached Wave is routine: reported, but as information, not an error (#449). */
+  @Test
+  fun aCachedWavesEndIsInformation() {
+    val cached = ActivityManager.RunningAppProcessInfo.IMPORTANCE_CACHED
+    nextLaunch(Exit(at - 600_000, ExitReason.USER_REQUESTED, null))
+    nextLaunch(
+      Exit(at - 120_000, ExitReason.OTHER, "empty for 1800s", importance = cached),
+      Exit(at - 60_000, ExitReason.LOW_MEMORY, null, importance = cached),
+    )
+
+    assertEquals(
+      listOf(
+        "2026-10-16T14:03:22.415Z I app: An earlier session was closed by Android (Android's record of 2026-10-16T14:01:22.415Z): empty for 1800s\n  Wave was cached",
+        "2026-10-16T14:03:22.415Z I app: The previous session was killed for low memory (Android's record of 2026-10-16T14:02:22.415Z)\n  Wave was cached",
+      ),
+      entries(),
+    )
+  }
+
+  @Test
+  fun aCachedWavesCrashIsStillAnError() {
+    val cached = ActivityManager.RunningAppProcessInfo.IMPORTANCE_CACHED
+    nextLaunch(Exit(at - 60_000, ExitReason.CRASH_NATIVE, "signal 11 (SIGSEGV)", importance = cached))
+
+    assertTrue(entries().single().contains(" E app: The previous session ended in a crash (native"))
+  }
+
+  /** The journal is read before anything else, ANR traces included: a restarted service may rewrite it meanwhile. */
+  @Test
+  fun theDownloadCountsAreReadBeforeAnyTrace() {
+    nextLaunch(Exit(at - 600_000, ExitReason.USER_REQUESTED, null))
+    val order = mutableListOf<String>()
+    SessionRecord(folder).reportPrevious(
+      listOf(
+        Exit(at - 120_000, ExitReason.ANR, "Input dispatching timed out", trace = { order += "trace"; null }),
+        Exit(at - 60_000, ExitReason.LOW_MEMORY, null),
+      ),
+    ) { order += "journal"; DownloadCounts(running = 1, left = 0) }
+
+    assertEquals(listOf("journal", "trace"), order)
+  }
+
+  @Test
+  fun thePreviousSessionsLineNotesTheDownloadsTheJournalHadInProgress() {
+    nextLaunch(Exit(at - 600_000, ExitReason.USER_REQUESTED, null))
+    WaveLog.flush()
+    file.dropHead(Long.MAX_VALUE)
+
+    SessionRecord(folder).reportPrevious(
+      listOf(Exit(at - 120_000, ExitReason.ANR, "Input dispatching timed out"), Exit(at - 60_000, ExitReason.LOW_MEMORY, null)),
+    ) { DownloadCounts(running = 5, left = 659) }
+
+    val written = entries()
+    assertEquals(2, written.size)
+    assertFalse(written[0], written[0].contains("Downloads"))
+    assertEquals(
+      "2026-10-16T14:03:22.415Z E app: The previous session was killed for low memory (Android's record of " +
+        "2026-10-16T14:02:22.415Z)\n" +
+        "  Downloads were in progress: 5 downloading, 659 waiting",
+      written[1],
+    )
+  }
+
+  @Test
+  fun noDownloadsInProgressAddsNothing() {
+    nextLaunch(Exit(at - 600_000, ExitReason.USER_REQUESTED, null))
+    WaveLog.flush()
+    file.dropHead(Long.MAX_VALUE)
+
+    SessionRecord(folder).reportPrevious(listOf(Exit(at - 60_000, ExitReason.LOW_MEMORY, null))) { DownloadCounts(running = 0, left = 0) }
+
+    assertEquals(
+      listOf("2026-10-16T14:03:22.415Z E app: The previous session was killed for low memory (Android's record of 2026-10-16T14:02:22.415Z)"),
+      entries(),
+    )
+  }
+
+  @Test
+  fun theLaunchAfterACrashNotesTheDownloadsInProgress() {
+    record.crashed(Thread("main"), RuntimeException("boom"))
+    WaveLog.flush()
+    file.dropHead(Long.MAX_VALUE)
+
+    SessionRecord(folder).reportPrevious(listOf(Exit(at - 1_000, ExitReason.CRASH, "crash"))) { DownloadCounts(running = 2, left = 0) }
+
+    assertEquals(
+      listOf("2026-10-16T14:03:22.415Z E app: The previous session ended in a crash\n  Downloads were in progress: 2 downloading, 0 waiting"),
+      entries(),
+    )
+  }
+
+  @Test
+  fun anOrdinaryEndNeverReadsTheJournal() {
+    nextLaunch(Exit(at - 600_000, ExitReason.USER_REQUESTED, null))
+
+    SessionRecord(folder).reportPrevious(listOf(Exit(at - 60_000, ExitReason.USER_REQUESTED, null))) { error("The journal isn't read") }
+
+    assertEquals(emptyList<String>(), entries())
+  }
+
+  @Test
+  fun quittingSwipingAwayAndAPackageUpdateSayNothing() {
+    nextLaunch(Exit(at - 600_000, ExitReason.USER_REQUESTED, null))
+
+    nextLaunch(
+      Exit(at - 60_000, ExitReason.USER_REQUESTED, "remove task"),
+      Exit(at - 120_000, ExitReason.OTHER, "remove task"),
+      Exit(at - 180_000, ExitReason.USER_STOPPED, null),
+      Exit(at - 240_000, ExitReason.PACKAGE_UPDATED, "package updated"),
+      Exit(at - 300_000, ExitReason.USER_REQUESTED, "stop dev.leoperez.wave"),
+    )
 
     assertEquals(emptyList<String>(), entries())
   }

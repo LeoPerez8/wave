@@ -2,6 +2,7 @@ import { LegendList } from "@legendapp/list/react-native";
 import {
   artistLink,
   discoverTrackId,
+  ytAlbumSongCount,
   ytTrackId,
   type MixedSong,
   type YtAlbumEntry,
@@ -17,6 +18,7 @@ import { Artwork } from "@/catalog/Artwork";
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { PlayShuffle, type LineToggle } from "@/catalog/PlayShuffle";
+import { TrackSkeletons } from "@/catalog/Skeletons";
 import { TrackRow } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { Press } from "@/motion/Press";
@@ -95,11 +97,11 @@ const itemKey = (item: Item): string => {
   }
 };
 
-const YT_NOTE: Readonly<Record<YtLibraryAlbumNote, string>> = {
-  loading: "Looking on YouTube Music…",
-  notFound: "Not found on YouTube Music.",
+/** The quiet line under the tracks about the album online: an outcome (loading shows skeleton rows). */
+const YT_NOTE: Readonly<Record<Exclude<YtLibraryAlbumNote, "loading">, string>> = {
+  notFound: "Not found online.",
   offline: "You're offline. Tap Online to try again when you're back online.",
-  failed: "YouTube Music didn't answer. Tap Online to try again.",
+  failed: "No answer online. Tap Online to try again.",
 };
 
 /** The entries as playback takes them: the Library's files, the rest streamed. */
@@ -115,6 +117,7 @@ function AlbumHead({
   mixed,
   ytSongs,
   toggle,
+  songs: songTotal,
 }: {
   shown: Shown;
   /** With YouTube Music's songs joined in, Play and Shuffle play them too. */
@@ -123,6 +126,8 @@ function AlbumHead({
   ytSongs: readonly NativeYtSong[];
   /** The Library | Online toggle ending the Play and Shuffle line, YT Music on. */
   toggle: LineToggle | null;
+  /** How many songs the page lists: with YouTube Music's joined in, the whole tracklist. */
+  songs: number;
 }) {
   const { width } = useWindowDimensions();
   const { album, genre, tracks } = shown;
@@ -151,7 +156,7 @@ function AlbumHead({
   const furniture = [
     genre,
     album.year,
-    songCount(album.trackCount),
+    songCount(songTotal),
     `${Math.max(1, Math.round(album.durationMs / 60_000))} min`,
   ]
     .filter((part) => part !== null)
@@ -367,10 +372,14 @@ function AlbumTracks({ shown, openedIntegrated }: { shown: Shown; openedIntegrat
           mixed={mixed}
           ytSongs={ytView?.songs ?? NO_SONGS}
           toggle={ytView === null ? null : yt.toggle}
+          songs={ytAlbumSongCount(shown.album.trackCount, ytView)}
         />
       }
       ListFooterComponent={
-        ytView === null ? null : (
+        // Until the combined tracklist arrives, skeleton rows follow the Library's tracks.
+        ytView === null ? null : ytView.note === "loading" ? (
+          <TrackSkeletons leading="number" />
+        ) : (
           <YtLookupFooter note={ytView.note === null ? null : YT_NOTE[ytView.note]} />
         )
       }

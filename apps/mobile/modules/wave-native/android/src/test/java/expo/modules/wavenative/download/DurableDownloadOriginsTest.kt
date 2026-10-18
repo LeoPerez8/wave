@@ -14,6 +14,7 @@ class DurableDownloadOriginsTest {
       val owner = DurableDownloads(journal)
       owner.enqueue(song, null, origin = roadTrip)
       owner.enqueue(song + ("videoId" to "own"), null)
+      owner.flush()
       val restored = DurableDownloads(journal)
       assertEquals(listOf(roadTrip, null), restored.snapshot().map { it["origin"] })
     } finally { folder.deleteRecursively() }

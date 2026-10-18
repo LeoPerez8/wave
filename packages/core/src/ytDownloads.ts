@@ -115,6 +115,10 @@ export interface YtDownloadJournalJob<S extends YtSong = YtSong> {
    * its own, and for jobs queued before downloads remembered it.
    */
   readonly origin?: DownloadOrigin | null;
+  /** Where publication put (or was putting) the file, once it chose. */
+  readonly finalPath?: string;
+  /** The file a quality replacement's new one takes the very path of, when it does. */
+  readonly replaces?: string;
 }
 
 const downloading = (phase: YtDownloadPhase): YtDownloadStatus => ({
@@ -262,7 +266,7 @@ const FAILURE_LINES: { readonly [F in YtDownloadFailure]: string } = {
   unavailable: "This recording is unavailable in 320 kbps",
   noSource: "Turn on YT Music or Download in best quality in Settings",
   ytUnavailable: "This song is unavailable on YouTube Music",
-  notFound: "Not found on YouTube Music",
+  notFound: "Not found online",
 };
 
 /** The fraction of the file that has arrived, or null when there's no size to measure against. */

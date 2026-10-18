@@ -566,8 +566,16 @@ export {
   ytSearchQuery,
   ytSectionToggle,
   ytSectionView,
+  ytSearchArtistReads,
+  ytSearchArtistSongs,
+  YT_SEARCH_ARTISTS_UNKNOWN,
+  ytSearchArtistToRead,
+  ytSearchArtistsKnownAfter,
+  ytSearchTopArtistSongs,
 } from "./ytSearch.ts";
 export type {
+  YtSearchArtistsKnown,
+  YtSearchArtistsEvent,
   YtKeptAnswer,
   YtAskedBy,
   YtQuietReason,
@@ -808,6 +816,7 @@ export {
   ytArtistFullPage,
   ytArtistLookup,
   ytArtistPageAsks,
+  ytArtistSavedStands,
   ytArtistPageView,
   ytArtistQuery,
   ytArtistRelease,
@@ -818,6 +827,9 @@ export {
   ytAlbumTracklist,
   ytLibraryAlbumView,
   ytArtistToggle,
+  ytArtistCounts,
+  ytArtistMergedCounts,
+  ytAlbumSongCount,
 } from "./ytArtist.ts";
 export type {
   LibraryAlbumKey,
@@ -848,6 +860,9 @@ export type {
   YtLibraryAlbumView,
   YtReleaseLoad,
   YtArtistToggleContext,
+  YtArtistCounts,
+  YtArtistCountsContext,
+  YtArtistCountsLibrary,
 } from "./ytArtist.ts";
 export { streamedArtistLink } from "./streamedArtist.ts";
 export type {
@@ -1210,6 +1225,7 @@ export {
   logHeader,
   redactSecrets,
   trimLog,
+  appBuildName,
 } from "./appLog.ts";
 export type { LogDevice, LogEntry, LogLevel, LogLimits, LogTrim } from "./appLog.ts";
 export {
@@ -1382,6 +1398,7 @@ export {
   qualityUpgradeOffer,
   qualityUpgradeSongs,
   youTubeCopyKbps,
+  failedReplacementFiles,
 } from "./qualityReplacement.ts";
 export type {
   NoBetterCopy,
@@ -1424,3 +1441,51 @@ export type { CollectionKind } from "./itemActions.ts";
 export { mixSectionOfId, mixSeedArtists } from "./discoverMixes.ts";
 export { downloadJobKind } from "./downloadJobKind.ts";
 export type { DownloadJobKind } from "./downloadJobKind.ts";
+export { downloadListRows, dropDownload, movableGroups } from "./downloadRows.ts";
+export type {
+  DownloadDrop,
+  DownloadHeaderRow,
+  DownloadingSongRow,
+  DownloadListRow,
+  StartedHeaderRow,
+  WaitingSongRow,
+} from "./downloadRows.ts";
+export { createLandings, LANDING_BURST_MS } from "./landings.ts";
+export type { Landings } from "./landings.ts";
+export {
+  describeCause,
+  downloadTagWriteOrigin,
+  failureCause,
+  lookupFailureLine,
+  tagWriteFailureLine,
+} from "./failureCause.ts";
+export type {
+  FailureCause,
+  LookupService,
+  TagWriteFailure,
+  TagWriteFile,
+  TagWriteOrigin,
+  TagWriteStep,
+} from "./failureCause.ts";
+export {
+  duplicateCheckDue,
+  replacementDuplicateFix,
+  replacementDuplicateLines,
+  replacementDuplicates,
+  replacementsUnderway,
+  storedDuplicateCheck,
+  duplicateCheckOpened,
+  duplicateCheckStep,
+} from "./replacementDuplicates.ts";
+export type {
+  DuplicateCheckFile,
+  DuplicateCheckWhen,
+  DuplicateFix,
+  DuplicateOutcome,
+  DuplicateLengths,
+  ReplacementDuplicate,
+  DuplicateMerge,
+  DuplicateCheck,
+  DuplicateCheckEvent,
+  DuplicateCheckStep,
+} from "./replacementDuplicates.ts";

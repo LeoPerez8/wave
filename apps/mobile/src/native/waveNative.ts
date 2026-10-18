@@ -1,4 +1,4 @@
-import type { Appearance, LaunchTheme, TagDestination } from "@wave/core";
+import type { Appearance, LaunchTheme, TagDestination, TagWriteStep } from "@wave/core";
 import { NativeModule, requireNativeModule } from "expo";
 
 /** One audio file as read by the native scanner (`modules/wave-native`). Tag values are raw. */
@@ -157,9 +157,24 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
   readLyrics(path: string): Promise<NativeLyrics>;
   /**
    * Deletes audio files and their sidecar `.lrc`; one outcome per path, in
-   * order. MediaStore is told about the deleted ones.
+   * order. MediaStore is told about the deleted ones with the media scanner's
+   * next batch: along with `scanWith`, a download whose fill-in isn't done yet
+   * (a quality replacement's new file), when given.
    */
-  deleteFiles(paths: readonly string[]): Promise<readonly FileDeleteOutcome[]>;
+  deleteFiles(
+    paths: readonly string[],
+    scanWith: string | null,
+  ): Promise<readonly FileDeleteOutcome[]>;
+  /**
+   * A download's fill-in is done, whatever it wrote: its file goes to the
+   * media scanner with the next batch, with the file it replaced.
+   */
+  downloadFilledIn(path: string): Promise<void>;
+  /**
+   * How long each file plays (ms), read from its audio samples to their end, which proves the
+   * audio is there to its end; one per path, in order, null for a file missing or unreadable.
+   */
+  readAudioLengths(paths: readonly string[]): Promise<readonly (number | null)[]>;
   /**
    * Downloads an artist's photo in both sizes beside the album artwork (files
    * named after [artistKey]); rejects when a download fails or isn't an image.
@@ -197,8 +212,9 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
    * replacing what's there, and fills in its track number (with `discNumber`),
    * year and advisory tag (Core's `advisoryTag`: 1 explicit, 0 clean), keeping
    * any the file has; null leaves a field alone. A format Wave can't write
-   * tags to gets the lyrics in a sidecar `.lrc` and nothing else. Rejects when
-   * the file can't be written.
+   * tags to gets the lyrics in a sidecar `.lrc` and nothing else. A file that
+   * can't be written resolves `{ failed }`: which step failed, why, and the
+   * file as it was then.
    */
   writeLyricsAndGenre(
     path: string,
@@ -208,7 +224,7 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
     discNumber: number | null,
     year: number | null,
     advisory: 0 | 1 | null,
-  ): Promise<NativeTagWrite>;
+  ): Promise<NativeTagWrite | NativeTagWriteFailed>;
 }
 
 /**
@@ -224,6 +240,26 @@ export interface NativeTagWrite {
   readonly explicit: TagDestination;
   readonly track: NativeScannedTrack | null;
   readonly artwork: NativeArtwork | null;
+  /**
+   * The tags are written but the file couldn't be read again for the index (`track` is null):
+   * the native exception's class and message. The next scan brings the index up to date.
+   */
+  readonly reindexFailed?: { readonly exception: string; readonly message: string } | null;
+}
+
+/**
+ * A `writeLyricsAndGenre` that failed (Core's `TagWriteFailure`): the step,
+ * the native exception's class and message, and whether the file was there
+ * then, with its size.
+ */
+export interface NativeTagWriteFailed {
+  readonly failed: {
+    readonly step: TagWriteStep;
+    readonly exception: string;
+    readonly message: string;
+    readonly fileExists: boolean;
+    readonly fileBytes: number | null;
+  };
 }
 
 /** A saved artist photo: the large image (artist page) and the thumbnail (lists). */

@@ -86,6 +86,7 @@ class DurableFailurePlanTest {
       owner.advance(NoTransfer, Untouched)
       answer(owner, "prepare", mapOf("candidates" to listOf(peer), "targetPath" to File(folder, "Recording.mp3").path, "tags" to emptyMap<String, Any?>()))
       assertEquals("prepared", owner.snapshot().single()["phase"])
+      owner.flush()
       val updated = DurableDownloads(journal)
       assertEquals("preparing", updated.snapshot().single()["phase"])
       assertEquals("prepare", updated.claim("song")!!["decision"])
@@ -115,7 +116,7 @@ class DurableFailurePlanTest {
     override fun cancel(id: String) {}
   }
   private object Untouched : DurablePublication {
-    override fun tag(source: File, tags: Map<String, Any?>) {}
+    override fun tag(source: File, tags: Map<String, Any?>): String? = null
     override fun index(file: File): Map<String, Any?> = mapOf("path" to file.path, "track" to mapOf("path" to file.path), "artwork" to null)
   }
   private fun prepare(owner: DurableDownloads, target: File, plan: Map<String, Any?>, peers: List<Map<String, Any?>> = listOf(peer), source: String = "soulseek") {
