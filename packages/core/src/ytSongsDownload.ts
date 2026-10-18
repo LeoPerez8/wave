@@ -48,8 +48,14 @@ const BUTTON_LABELS: { readonly [A in YtSongsDownloadAction]: string } = {
   cancel: "Cancel",
 };
 
+/** What the page's button says once every song of the list is downloaded. */
+const DOWNLOADED_LABEL = "Downloaded";
+
 /** Every label an album's or a playlist's page button can say, so a page can measure them ahead. */
-export const YT_DOWNLOAD_BUTTON_LABELS: readonly string[] = Object.values(BUTTON_LABELS);
+export const YT_DOWNLOAD_BUTTON_LABELS: readonly string[] = [
+  ...Object.values(BUTTON_LABELS),
+  DOWNLOADED_LABEL,
+];
 
 /** A song Download or Retry Failed adds to the queue, and the job it shares (null for a job of its own). */
 export interface YtSongsDownloadRequest<S extends YtSong = YtSong> {
@@ -74,6 +80,8 @@ export interface YtSongsDownload<
   readonly toRetry: readonly YtSongsDownloadRequest<S>[];
   /** The video ids Cancel cancels: songs queued or downloading, not yet saving. */
   readonly toCancel: readonly string[];
+  /** The list has songs and the Library has every one of them. */
+  readonly downloaded: boolean;
 }
 
 /** Where an album's download stands, and what acting on it does. */
@@ -160,6 +168,7 @@ const songsDownload = <S extends YtSong>(
     toDownload,
     toRetry,
     toCancel,
+    downloaded: songs.length > 0 && songs.every(inLibrary),
   };
 };
 
@@ -268,7 +277,15 @@ export const ytPlaylistDownload = <S extends YtSong>(
       }),
     ),
   ];
-  return named({ ...view, toCancel }, PLAYLIST_ACTIONS);
+  // Downloaded: every entry is a Library song with a file, or a YT Music song the Library has.
+  const downloaded =
+    entries.length > 0 &&
+    entries.every((entry) =>
+      entry.source === "library"
+        ? entry.track.path !== null
+        : entry.source === "stream" && input.inLibrary(entry.song),
+    );
+  return named({ ...view, toCancel, downloaded }, PLAYLIST_ACTIONS);
 };
 
 /** What each playlist entry says in the playlist's long-press menu. */
@@ -291,20 +308,31 @@ const GENERIC_ACTIONS: {
   cancelPlaylistDownload: "cancel",
 };
 
-/** A page's download button: [view]'s first entry, named short, or null when it offers none. */
+/** What a list page's download button shows: an entry to act on, or that the list is downloaded. */
+export interface YtListDownloadButtonState<A extends string> {
+  readonly action: A | "downloaded";
+  readonly label: string;
+}
+
+/**
+ * A page's download button: [view]'s first entry, named short; Downloaded
+ * (tinted, a tap only says so) once every song is downloaded; null when it
+ * offers neither.
+ */
 const button = <A extends YtAlbumDownloadAction | YtPlaylistDownloadAction>(
   view: YtSongsDownload<YtSong, A>,
-): { readonly action: A; readonly label: string } | null => {
+): YtListDownloadButtonState<A> | null => {
   const action = view.actions[0];
-  return action === undefined ? null : { action, label: BUTTON_LABELS[GENERIC_ACTIONS[action]] };
+  if (action !== undefined) return { action, label: BUTTON_LABELS[GENERIC_ACTIONS[action]] };
+  return view.downloaded ? { action: "downloaded", label: DOWNLOADED_LABEL } : null;
 };
 
-/** The album page's download button: the album's first entry, or null when it offers none. */
+/** The album page's download button: the album's first entry, Downloaded, or null. */
 export const ytAlbumDownloadButton = (
   view: YtAlbumDownload,
-): { readonly action: YtAlbumDownloadAction; readonly label: string } | null => button(view);
+): YtListDownloadButtonState<YtAlbumDownloadAction> | null => button(view);
 
-/** The playlist page's download button: the playlist's first entry, or null when it offers none. */
+/** The playlist page's download button: the playlist's first entry, Downloaded, or null. */
 export const ytPlaylistDownloadButton = (
   view: YtPlaylistDownload,
-): { readonly action: YtPlaylistDownloadAction; readonly label: string } | null => button(view);
+): YtListDownloadButtonState<YtPlaylistDownloadAction> | null => button(view);

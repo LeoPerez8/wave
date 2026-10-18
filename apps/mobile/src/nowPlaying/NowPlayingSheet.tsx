@@ -260,7 +260,7 @@ export function NowPlayingSheet() {
         <DismissArea style={{ paddingTop: CELL * 3, gap: CELL * 2 }}>
           <Scrubber />
           <Transport />
-          {/* Evenly spaced, with or without Download (a non-D song's alone). */}
+          {/* Evenly spaced, with or without Download (absent until the Library is first read). */}
           <View className="flex-row items-center justify-between">
             <ViewToggle
               icon={IconQuote}
@@ -276,7 +276,7 @@ export function NowPlayingSheet() {
                   ytSong={ytSong}
                   title={item.title ?? "Unknown title"}
                 />
-                <DownloadButton ytSong={ytSong} />
+                <DownloadButton trackId={trackId} ytSong={ytSong} />
               </>
             )}
             <ViewToggle
