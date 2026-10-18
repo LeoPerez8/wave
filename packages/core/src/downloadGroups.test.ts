@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  albumDownloadOrigin,
   applyJournalChanges,
   downloadingList,
   moveDownloadGroup,
   moveDownloadInGroup,
   moveQueuedJobs,
+  playlistDownloadOrigin,
 } from "./index.ts";
 import type { DownloadOrigin, YtDownloadJournalJob, YtSong } from "./index.ts";
 
@@ -131,6 +133,18 @@ describe("Settings › Downloads › Downloading: waiting songs grouped by where
       ],
     );
     assert.equal(new Set(groups.map((group) => group.key)).size, 2);
+  });
+
+  test("a Library playlist or album asked from anywhere (its page, its menu, an import) is the same source", () => {
+    const fromPage = playlistDownloadOrigin({ id: 7, name: "Road Trip" });
+    const fromImport = playlistDownloadOrigin({ id: 7, name: "Road Trip" });
+    assert.deepEqual(fromPage, roadTrip);
+    assert.deepEqual(fromImport, fromPage);
+    assert.deepEqual(albumDownloadOrigin({ id: 3, title: "Dummy" }), {
+      kind: "album",
+      id: "3",
+      name: "Dummy",
+    });
   });
 
   test("a group is gone once its last song finishes, fails or is cancelled", () => {

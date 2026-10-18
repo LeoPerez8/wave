@@ -24,6 +24,21 @@ export interface DownloadOrigin {
   readonly name: string;
 }
 
+/**
+ * A Library playlist as the source of its songs' downloads, the same from its
+ * page, its menu and a YT Music import, so they group together.
+ */
+export const playlistDownloadOrigin = (playlist: {
+  readonly id: number;
+  readonly name: string;
+}): DownloadOrigin => ({ kind: "playlist", id: String(playlist.id), name: playlist.name });
+
+/** A Library album as the source of its songs' downloads (its page, its missing songs). */
+export const albumDownloadOrigin = (album: {
+  readonly id: number;
+  readonly title: string;
+}): DownloadOrigin => ({ kind: "album", id: String(album.id), name: album.title });
+
 /** One source's songs on their way, under a header with its name and how many are left. */
 export interface DownloadGroup<S extends YtSong = YtSong> {
   /** Stable across renames: what the source is, not what it's called. */

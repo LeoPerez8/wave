@@ -48,6 +48,7 @@ import {
   type YtLibraryOrigins,
   type YtLibraryPicker,
   type YtLibraryRead,
+  playlistDownloadOrigin,
 } from "@wave/core";
 import * as Result from "effect/Result";
 import { useSyncExternalStore } from "react";
@@ -127,11 +128,12 @@ const downloadPlaylist = async (playlistId: number): Promise<void> => {
   ]);
   if (detail === null || detail.items.length === 0) return;
   const { playlist } = detail;
-  runYtPlaylistDownloadAction("downloadPlaylist", detail.items, (song) => find(song) !== null, {
-    kind: "playlist",
-    id: String(playlist.id),
-    name: playlist.name,
-  });
+  runYtPlaylistDownloadAction(
+    "downloadPlaylist",
+    detail.items,
+    (song) => find(song) !== null,
+    playlistDownloadOrigin(playlist),
+  );
 };
 
 /**

@@ -4,6 +4,7 @@ import {
   menuLayout,
   type DownloadOrigin,
   type UnsearchedSong,
+  playlistDownloadOrigin,
 } from "@wave/core";
 import type { ReactNode } from "react";
 import { Text, View } from "react-native";
@@ -207,9 +208,7 @@ function ActionsMenu({
   const playlist = target.kind === "playlist" ? target.items[0] : undefined;
   const downloads = usePlaylistDownloadEntries(
     listed,
-    playlist === undefined
-      ? null
-      : { kind: "playlist", id: String(playlist.id), name: playlist.name },
+    playlist === undefined ? null : playlistDownloadOrigin(playlist),
     close,
   );
   return (

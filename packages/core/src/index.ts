@@ -715,6 +715,8 @@ export {
   moveDownloadGroup,
   moveDownloadInGroup,
   moveQueuedJobs,
+  playlistDownloadOrigin,
+  albumDownloadOrigin,
 } from "./downloadGroups.ts";
 export type { DownloadGroup, DownloadingList, DownloadOrigin } from "./downloadGroups.ts";
 export type {
