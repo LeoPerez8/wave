@@ -1349,4 +1349,5 @@ export { pickWeighted, playsWeight } from "./weightedPick.ts";
 export type { RandomSource } from "./weightedPick.ts";
 export { ARTIST_MIX_COUNT, artistMixSeeds, artistMixSimilarSource } from "./artistMixes.ts";
 export type { ArtistMixPools, PlayedSeedArtist } from "./artistMixes.ts";
-export type { YtPick } from "./onlineToggle.ts";
+export type { SearchOnline, YtPick } from "./onlineToggle.ts";
+export { readSearchOnline, writeSearchOnline } from "./onlineToggle.ts";

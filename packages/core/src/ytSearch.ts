@@ -93,6 +93,12 @@ export type YtSectionEvent<S extends YtSong = YtSong> =
       readonly query: string;
       readonly enabled: boolean;
       readonly libraryHasResults: boolean;
+      /**
+       * Whether Search online is set to Always (`SearchOnline`): with nothing
+       * picked since the field was last cleared, Online is, and every query
+       * is asked once typing pauses. Undefined: Only on demand.
+       */
+      readonly always?: boolean;
     }
   /** A segment of the Library | Online toggle was tapped. */
   | { readonly type: "picked"; readonly pick: YtPick }
@@ -343,8 +349,10 @@ export const stepYtSection = <S extends YtSong>(
   switch (event.type) {
     case "typed": {
       if (!event.enabled) return YT_SECTION_HIDDEN;
-      // Clearing the field puts the toggle back; a pick holds until then.
-      const pick = event.query.trim() === "" ? null : pickOf(state);
+      // Clearing the field puts the toggle back (on Online under Always); a pick holds until then.
+      const pick =
+        (event.query.trim() === "" ? null : pickOf(state)) ??
+        (event.always === true ? "online" : null);
       const query = ytSearchQuery(event.query);
       if (query === null)
         return state.status === "idle" && state.pick === pick ? state : { status: "idle", pick };
