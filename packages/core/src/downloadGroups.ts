@@ -6,6 +6,7 @@
  * came from, wait under Songs.
  */
 
+import { moveItem } from "./playlists.ts";
 import { queuedDownloads, type QueuedDownload } from "./queuedDownloads.ts";
 import type { YtSong } from "./ytMusic.ts";
 import type { YtDownloadJournalJob } from "./ytDownloads.ts";
@@ -107,3 +108,54 @@ export const downloadingList = <S extends YtSong>(
     })),
   };
 };
+
+/**
+ * The waiting jobs in their new order once the group at [from] in [list]'s
+ * groups is dragged to [to] (both 0-based): every group's waiting songs, group
+ * after group as the list then shows them, for the journal's move
+ * (`moveQueuedJobs`). The moved group's songs keep their order inside it.
+ */
+export const moveDownloadGroup = (
+  list: DownloadingList,
+  from: number,
+  to: number,
+): readonly string[] =>
+  moveItem(list.groups, from, to).flatMap((group) => group.queued.map((queued) => queued.id));
+
+/**
+ * What the journal's move does to its [jobs]: the waiting jobs named in
+ * [order] take the places those same jobs held, in [order]'s order, so they
+ * start in that order. Every other job keeps its place, and so does a job
+ * [order] names that is no longer waiting (it started meanwhile). Native's
+ * `DurableDownloads.moveQueued` does the same to the journal it keeps.
+ */
+export const moveQueuedJobs = <J extends Pick<YtDownloadJournalJob, "id" | "phase">>(
+  jobs: readonly J[],
+  order: readonly string[],
+): J[] => {
+  const named = new Set(order);
+  const moving = new Map(
+    jobs.filter((job) => job.phase === "queued" && named.has(job.id)).map((job) => [job.id, job]),
+  );
+  const next = [...order].flatMap((id) => {
+    const job = moving.get(id);
+    moving.delete(id);
+    return job === undefined ? [] : [job];
+  });
+  let place = 0;
+  return jobs.map((job) =>
+    job.phase === "queued" && named.has(job.id) ? (next[place++] ?? job) : job,
+  );
+};
+
+/**
+ * [group]'s waiting songs in their new order once the one at [from] is
+ * dragged to [to] (both 0-based, among its waiting songs), for the journal's
+ * move (`moveQueuedJobs`). A song stays in its group: a drop past either end
+ * lands it first or last there, and the other groups' songs keep their places.
+ */
+export const moveDownloadInGroup = (
+  group: DownloadGroup,
+  from: number,
+  to: number,
+): readonly string[] => moveItem(group.queued, from, to).map((queued) => queued.id);

@@ -64,6 +64,8 @@ class SoulseekModule : Module() {
       withContext(Dispatchers.IO) { downloads.jobs.refreshPolicy(roots, excluded) }
     }
     AsyncFunction("cancelJob") Coroutine { id: String -> withContext(Dispatchers.IO) { downloads.jobs.cancel(id, downloads.transport); downloads.changed() } }
+    // Settings › Downloads' drag: the waiting jobs [ids] start in this order (Core's `moveQueuedJobs`).
+    AsyncFunction("moveQueuedJobs") Coroutine { ids: List<String> -> withContext(Dispatchers.IO) { downloads.jobs.moveQueued(ids); downloads.changed() } }
 
     AsyncFunction("session") Coroutine { -> coded { withContext(Dispatchers.IO) { owner.client.session() } } }
     // Download in best quality. The account it makes or reuses never leaves native code.
