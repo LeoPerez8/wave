@@ -1,13 +1,14 @@
 /**
  * How a long-press menu lays out what it offers: the play actions as one row
- * of cards at its top, the rest as its list under them. Each menu's entries
- * come from its own planner (`itemActions`, `ytSongActions`,
- * `discoverMixActions`…); this decides which become cards.
+ * of cards, the rest as its list after them (the app draws both from the
+ * edge nearest the finger, so the cards sit at the bottom of a menu opened
+ * above it). Each menu's entries come from its own planner (`itemActions`,
+ * `ytSongActions`, `discoverMixActions`…); this decides which become cards.
  */
 
 import { ITEM_ACTION_LABELS, type ItemKind } from "./itemActions.ts";
 
-/** A play action shown as a card at the top of a menu, in this order. */
+/** A play action shown as a card in a menu's row of cards, in this order. */
 export type PlayCard = "play" | "playNext" | "addToQueue";
 
 /** What a menu's Shuffle row does: plays the collection shuffled, as its page's Shuffle does. */
