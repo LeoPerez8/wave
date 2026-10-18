@@ -24,3 +24,23 @@ export const onLibraryChange = (listener: (change: LibraryChange) => void): (() 
     listeners.delete(listener);
   };
 };
+
+const starListeners = new Set<(trackIds: readonly number[]) => void>();
+
+/**
+ * Tells the favorites that a save starred [trackIds] itself: pending
+ * favorites a download or scan settled (`SavedBatch.starred`). Kept here,
+ * free of the runtime, so the scan and downloads can say it.
+ */
+export const publishSavedStars = (trackIds: readonly number[]): void => {
+  if (trackIds.length === 0) return;
+  for (const listener of starListeners) listener(trackIds);
+};
+
+/** Calls [listener] with the tracks each save starred (`publishSavedStars`); returns how to stop. */
+export const onSavedStars = (listener: (trackIds: readonly number[]) => void): (() => void) => {
+  starListeners.add(listener);
+  return () => {
+    starListeners.delete(listener);
+  };
+};

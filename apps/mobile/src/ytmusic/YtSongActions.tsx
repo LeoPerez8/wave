@@ -1,7 +1,7 @@
 import {
   ITEM_ACTION_LABELS,
   YT_DOWNLOAD_ACTION_LABELS,
-  entryDivider,
+  menuLayout,
   ytDownloadActions,
   ytSongActions,
   ytSongCredit,
@@ -16,7 +16,6 @@ import { useState } from "react";
 import { Text, View } from "react-native";
 
 import { Artwork } from "@/catalog/Artwork";
-import { EntryRow } from "@/catalog/EntryRow";
 import { CELL } from "@/catalog/grid";
 import { followStreamedArtistLink } from "@/library/ArtistChoice";
 import type { ArtistRow } from "@/library/LibraryStore";
@@ -24,11 +23,9 @@ import { openAddToPlaylist } from "@/library/PlaylistSheets";
 import { removePlaylistItems } from "@/library/playlists";
 import { pressedRect } from "@/motion/pressedRect";
 import type { NativeYtSong } from "@/native/waveYtMusic";
-import { CardEntries } from "@/overlay/CardEntries";
 import { CardHeading } from "@/overlay/CardHeading";
-import { useOverlayFlow } from "@/overlay/flow";
+import { MenuChoices, type MenuChoice, type PlayCardChoice } from "@/overlay/MenuChoices";
 import { followUp, openOverlay } from "@/overlay/overlay";
-import { useSlideToChoose } from "@/overlay/useSlideToChoose";
 import { addYtToQueue, playYtNext } from "@/playback/actions";
 import type { MenuOptions } from "@/playback/ActionsMenu";
 import { showError } from "@/overlay/alert";
@@ -45,8 +42,8 @@ export interface YtSongMenuOptions extends MenuOptions {
 }
 
 /**
- * Opens a YT Music song's long-press menu next to its row: Play Next, Add to
- * Queue, Add to Playlist (Remove from Playlist for a playlist's entry), Go to
+ * Opens a YT Music song's long-press menu next to its row: Play Next and Add
+ * to Queue as cards, then Add to Playlist (Remove from Playlist for a playlist's entry), Go to
  * Album and Go to Artist (Core's `ytSongActions`), then Download, or Cancel Download /
  * Retry Download while one is on its way or has failed. It opens once the
  * Library's artists are read, so Go to Artist is there from its first frame
@@ -208,14 +205,19 @@ function YtSongActionsMenu({
       action,
     })),
   ];
-  const choose = (index: number) => {
-    const entry = entries[index];
-    if (entry === undefined) return;
+  const choose = (entry: Entry) => () => {
     close();
     run(entry, song, { find, playlistItem, onSelect });
   };
-  const { underFinger, trackEntry, trackList } = useSlideToChoose(choose);
-  const flow = useOverlayFlow();
+  // Play Next and Add to Queue are its cards; a tap already plays it (Core's `menuLayout`).
+  const layout = menuLayout("ytSong", entries);
+  const cards = layout.cards.flatMap((card): PlayCardChoice[] => {
+    const entry = entries.find(({ action }) => action === card);
+    return entry === undefined ? [] : [{ action: card, onPress: choose(entry) }];
+  });
+  const list = layout.list.flatMap((entry): MenuChoice[] =>
+    "kind" in entry ? [{ action: entry.action, label: label(entry), onPress: choose(entry) }] : [],
+  );
 
   return (
     <>
@@ -230,18 +232,7 @@ function YtSongActionsMenu({
           </Text>
         </View>
       </CardHeading>
-      <CardEntries listRef={trackList}>
-        {entries.map((entry, index) => (
-          <View key={entry.action} ref={trackEntry(index)} collapsable={false}>
-            <EntryRow
-              label={label(entry)}
-              onPress={() => choose(index)}
-              divider={entryDivider(index, entries.length, flow)}
-              highlighted={index === underFinger}
-            />
-          </View>
-        ))}
-      </CardEntries>
+      <MenuChoices cards={cards} entries={list} />
     </>
   );
 }

@@ -43,6 +43,7 @@ const song = (
   year: null,
   genre: null,
   hasLyrics: false,
+  explicit: "unknown",
 });
 
 const ytSong = (videoId: string): YtSong => ({
@@ -86,8 +87,16 @@ describe("queue tracks", () => {
       album: "Album 7",
       artworkPath: "/covers/7.jpg",
       thumbPath: "/covers/7.thumb.jpg",
+      explicit: false,
     });
     assert.equal(toQueueTrack(song(8, null)).thumbPath, null);
+  });
+
+  test("a queued song carries whether it's explicit, unknown counting as clean", () => {
+    assert.equal(toQueueTrack({ ...song(1), explicit: "explicit" }).explicit, true);
+    assert.equal(toQueueTrack({ ...song(2), explicit: "clean" }).explicit, false);
+    assert.equal(toQueueTrack(song(3)).explicit, false);
+    assert.equal(toYtQueueTrack({ ...ytSong("x"), explicit: true }, null).explicit, true);
   });
 
   test("a YT Music song plays by its track id, with its credit and cached artwork", () => {
@@ -117,10 +126,11 @@ describe("queue tracks", () => {
       artworkPath: "/files/artwork/abc.jpg",
       thumbPath: "/files/artwork/abc_thumb.jpg",
       palette: { dominant: "#203040" },
+      explicit: false,
     });
   });
 
-  test("without cached artwork, a YT Music song shows YouTube's cover", () => {
+  test("without cached artwork, a YT Music song shows YouTube's cover at the large size", () => {
     const track = toYtQueueTrack(
       {
         videoId: "kJQP7kiw5Fk",
@@ -128,12 +138,15 @@ describe("queue tracks", () => {
         artists: ["Luis Fonsi"],
         album: null,
         durationMs: null,
-        artworkUrl: "https://lh3.googleusercontent.com/despacito=w544-h544",
+        artworkUrl: "https://lh3.googleusercontent.com/despacito=w120-h120-l90-rj",
         explicit: false,
       },
       null,
     );
-    assert.equal(track.artworkPath, "https://lh3.googleusercontent.com/despacito=w544-h544");
+    assert.equal(
+      track.artworkPath,
+      "https://lh3.googleusercontent.com/despacito=w1200-h1200-l90-rj",
+    );
     assert.equal(track.thumbPath, null);
     assert.equal(track.palette, null);
   });
@@ -265,6 +278,45 @@ describe("queue tracks", () => {
     await Effect.runPromise(cacheYtCoversLater([ytSong("a")], () => Effect.fail("offline")));
 
     assert.equal(queueTracks.get().get("yt:a")?.artworkPath, "https://covers/a");
+  });
+
+  test("a YT Music row's small cover is cached at the large size", async () => {
+    const small = {
+      ...ytSong("a"),
+      artworkUrl: "https://lh3.googleusercontent.com/a=w120-h120-l90-rj",
+    };
+    learnQueueTracks([toYtQueueTrack(small, null)], { forgetOthers: true });
+    const cached: string[] = [];
+    const cache = (url: string) => Effect.sync(() => (cached.push(url), cover(url)));
+
+    await Effect.runPromise(cacheYtCoversLater([small], cache));
+
+    assert.deepEqual(cached, ["https://lh3.googleusercontent.com/a=w1200-h1200-l90-rj"]);
+  });
+
+  test("a video thumbnail is cached at the largest size the video has", async () => {
+    const video = {
+      ...ytSong("a"),
+      artworkUrl: "https://i.ytimg.com/vi/vid/hqdefault.jpg?sqp=abc",
+    };
+    learnQueueTracks([toYtQueueTrack(video, null)], { forgetOthers: true });
+    const asked: string[] = [];
+    const cache = (url: string) =>
+      Effect.suspend(() => {
+        asked.push(url);
+        return url.includes("maxres") ? Effect.fail("HTTP 404") : Effect.succeed(cover(url));
+      });
+
+    await Effect.runPromise(cacheYtCoversLater([video], cache));
+
+    assert.deepEqual(asked, [
+      "https://i.ytimg.com/vi/vid/maxresdefault.jpg",
+      "https://i.ytimg.com/vi/vid/sddefault.jpg",
+    ]);
+    assert.equal(
+      queueTracks.get().get("yt:a")?.artworkPath,
+      "https://i.ytimg.com/vi/vid/sddefault.jpg.jpg",
+    );
   });
 
   test("nothing to learn leaves the tracks as they were", () => {

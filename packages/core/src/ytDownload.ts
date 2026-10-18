@@ -6,6 +6,7 @@
  * and scanner publish it. Optional catalog metadata never establishes quality.
  */
 
+import { advisoryTag } from "./explicit.ts";
 import { songLookup, type FoundTags, type SongLookup } from "./lyricsAndGenre.ts";
 import type { DownloadSource } from "./downloadSource.ts";
 import { normalizeSearchText } from "./search.ts";
@@ -44,10 +45,15 @@ export interface YtDownloadTags {
   /** LRC for synced lyrics, plain text otherwise. */
   readonly lyrics: string | null;
   readonly artworkUrl: string | null;
+  /**
+   * The advisory tag (`ITUNESADVISORY`, MP4 `rtng`, Core's `advisoryTag`): 1
+   * explicit, 0 checked and clean; null writes none.
+   */
+  readonly advisory: 0 | 1 | null;
 }
 
 /** The side of the cover a download embeds, in pixels. */
-const COVER_SIZE = 1200;
+export const COVER_SIZE = 1200;
 
 /**
  * [url] asking YouTube Music's image server for a [COVER_SIZE] square: its
@@ -102,8 +108,21 @@ export const ytDownloadTags = (
     genre: found?.genre ?? null,
     lyrics: found?.lyrics?.text ?? tidyLyrics(ytLyrics),
     artworkUrl: cover === null ? null : largeCover(cover),
+    advisory: advisoryTag(song.explicit),
   };
 };
+
+/**
+ * The tags for a song downloaded as a listing gave it (Spotify's, an
+ * unsearched entry's), with no YouTube Music video: `ytDownloadTags` without
+ * an album page, its explicit flag the one Deezer's match [found] gives. The
+ * song's own flag is a placeholder nothing checked, so with no match it gets
+ * no advisory tag and Fix Song can still fill it in.
+ */
+export const listedSongTags = (song: YtSong, found: FoundTags | null): YtDownloadTags => ({
+  ...ytDownloadTags(song, null, found, null),
+  advisory: advisoryTag(found?.explicit ?? "unknown"),
+});
 
 /**
  * What Fix Song's lookup sends for a download: its title, its

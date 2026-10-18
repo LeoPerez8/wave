@@ -11,10 +11,12 @@ import {
   readUnsearchedTrackId,
   type UnsearchedSong,
 } from "./playlistEntries.ts";
+import { explicitSkipNotice } from "./explicitPlayback.ts";
 import { counted } from "./listening.ts";
 import type { QueueList } from "./playerSync.ts";
 import {
   reduceQueue,
+  type PassOver,
   type QueueCommand,
   type QueueEntry,
   type QueuePlayback,
@@ -47,6 +49,8 @@ export interface PlayingSearch {
 export interface PlayingSearching {
   readonly asking?: ReadonlySet<string>;
   readonly failedAt?: ReadonlyMap<string, number>;
+  /** The playing song reached the crossfade's prefetch point: the next song is due now. */
+  readonly nextDue?: boolean;
 }
 
 /**
@@ -69,6 +73,25 @@ export const playerQueueList = (state: QueueState): QueueList | null => {
 
 /** Whether the player can hold [entry]: anything but an unsearched song. */
 const held = (entry: QueueEntry): boolean => !isUnsearchedTrackId(entry.trackId);
+
+/**
+ * The player entry whose next song is still being searched: the playing
+ * entry's key when the entry after it (the first, after the last with repeat
+ * all) is an unsearched song [asking] is searching now; else null. The
+ * player doesn't hold that song, so a crossfade would fade into the one
+ * after it: the playback service holds the overlap at full volume while it
+ * waits (its late-song path), and it begins once the song found joins the
+ * player, or the song ends gapless. One not being searched (its search
+ * failed a moment ago) is passed over, as the player plays along.
+ */
+export const searchingAfter = (state: QueueState, asking: ReadonlySet<string>): string | null => {
+  const current = state.entries[state.index];
+  if (current === undefined || !held(current) || state.repeat === "one") return null;
+  const after = state.index + 1 < state.entries.length ? state.index + 1 : null;
+  const nextIndex = after ?? (state.repeat === "all" && state.entries.length > 1 ? 0 : null);
+  const next = nextIndex === null ? undefined : state.entries[nextIndex];
+  return next !== undefined && !held(next) && asking.has(next.trackId) ? current.key : null;
+};
 
 /**
  * [state] with its playing entry one the player holds, for a queue that
@@ -250,13 +273,23 @@ const chosenBy = (command: QueueCommand, before: QueueState): boolean =>
   command.type === "jumpTo" ||
   ((command.type === "playNext" || command.type === "addToQueue") && before.index < 0);
 
-/** What the queue does once [walk]'s playing song's search answered [settlement]. */
+/**
+ * What the queue does once [walk]'s playing song's search answered
+ * [settlement]. Found as a song [passOver] passes over (an explicit one,
+ * while Don't play explicit is on), it's skipped as one not found is, and
+ * the notice says it's explicit (`explicitSkipNotice`).
+ */
 export const answerPlayingWalk = <S extends YtSong>(
   walk: PlayingWalk,
   settlement: UnsearchedSettlement<S>,
+  passOver: PassOver = () => false,
 ): PlayingStep => {
   const current = walk.state.entries[walk.state.index]!;
-  if (settlement.kind === "found") {
+  const song = readUnsearchedTrackId(current.trackId)!;
+  // Found as a song that doesn't play (an explicit one): it goes as one not found does.
+  const passed =
+    settlement.kind === "found" && passOver(ytTrackId(settlement.becomes.song.videoId));
+  if (settlement.kind === "found" && !passed) {
     const becomes = ytTrackId(settlement.becomes.song.videoId);
     const { state } = reduceQueue(walk.state, {
       type: "settled",
@@ -267,7 +300,9 @@ export const answerPlayingWalk = <S extends YtSong>(
   }
   // Only the song the command made current was chosen; those after it come as skips do.
   const chosen = walk.chosen && walk.asked.length === 1;
-  const step = playingAnswerStep(readUnsearchedTrackId(current.trackId)!, settlement, { chosen });
+  const step: PlayingAnswerStep = passed
+    ? { kind: "skip", notice: explicitSkipNotice(song.title) }
+    : playingAnswerStep(song, settlement, { chosen });
   if (step.kind === "stay") return { kind: "stay", state: walk.before, notice: step.notice };
   // The songs after it can't be searched either: none is asked, nor named.
   if (step.kind === "stop") {
@@ -281,7 +316,7 @@ export const answerPlayingWalk = <S extends YtSong>(
     walk.way === "back" ? { type: "previous", positionMs: 0 } : { type: "next" },
   );
   const next =
-    settlement.kind === "notFound"
+    settlement.kind === "notFound" || passed
       ? reduceQueue(walk.way === "back" ? moved.state : walk.state, {
           type: "settled",
           trackId: current.trackId,
@@ -338,22 +373,26 @@ const nearEntries = (state: QueueState): QueueEntry[] => {
  * order when shuffle is on, the top again after the end with repeat all),
  * each once, the playing one first, all with the playing priority. A song
  * being searched ([searching].asking) isn't asked again, nor is one whose
- * search failed in the last `PLAYING_SEARCH_RETRY_MS`.
+ * search failed in the last `PLAYING_SEARCH_RETRY_MS`, except the next
+ * song once [searching].nextDue: the playing song reached the crossfade's
+ * prefetch point (`crossfadePrefetchAt`), and the next must reach the player
+ * before the overlap.
  */
 export const playingSearches = (
   state: QueueState,
-  { asking, failedAt }: PlayingSearching,
+  { asking, failedAt, nextDue = false }: PlayingSearching,
   now: number,
 ): PlayingSearch[] => {
   const seen = new Set<string>();
   const searches: PlayingSearch[] = [];
-  for (const { trackId } of nearEntries(state)) {
+  for (const [at, { trackId }] of nearEntries(state).entries()) {
     if (seen.has(trackId)) continue;
     seen.add(trackId);
     const song = readUnsearchedTrackId(trackId);
     if (song === null || asking?.has(trackId) === true) continue;
     const failed = failedAt?.get(trackId);
-    if (failed !== undefined && now - failed < PLAYING_SEARCH_RETRY_MS) continue;
+    const due = nextDue && at === 1;
+    if (!due && failed !== undefined && now - failed < PLAYING_SEARCH_RETRY_MS) continue;
     searches.push({ trackId, song, query: unsearchedSearchQuery(song), asker: "playing" });
   }
   return searches;

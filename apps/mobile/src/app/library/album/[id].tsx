@@ -7,6 +7,7 @@ import {
   type YtAlbumEntry,
   type YtLibraryAlbumNote,
   type YtSong,
+  albumDownloadOrigin,
 } from "@wave/core";
 import { useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo } from "react";
@@ -129,7 +130,11 @@ function AlbumHead({
     [mixed, tracks],
   );
   const play = usePlayPage(songs, context);
-  const download = useYtAlbumDownloadButton(ytSongs);
+  const origin = useMemo(
+    () => albumDownloadOrigin({ id: album.id, title: album.title }),
+    [album.id, album.title],
+  );
+  const download = useYtAlbumDownloadButton(ytSongs, origin);
   // Several album artists: the line opens Go to Artist's choice (Core's `artistLink`). The
   // head is on the album's page, where no artist is left out; it doesn't follow the route,
   // which would render it on every navigation while the album stays in a stack.

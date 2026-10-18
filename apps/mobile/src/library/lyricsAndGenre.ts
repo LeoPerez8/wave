@@ -1,6 +1,7 @@
 /**
  * Fix Song (docs/spec.md, "Lyrics and genre"): looks up online what a song
- * lacks (lyrics on LRCLIB; genre, track number and year on Deezer), writes
+ * lacks (lyrics on LRCLIB; genre, track number, year and explicit flag on
+ * Deezer), writes
  * what it finds into the file (the native `writeLyricsAndGenre`) and updates
  * its index entry. Which songs it's for, which requests are made, which
  * result is the song, what gets written and how a run went are Core's
@@ -11,6 +12,7 @@
  */
 import {
   LRCLIB_HEADERS,
+  advisoryTag,
   deezerAlbum,
   deezerAlbumTracks,
   deezerAlbumTracksUrl,
@@ -47,6 +49,7 @@ import { WaveNative } from "@/native/waveNative";
 import { lyricsAndGenreLookupsEnabled } from "@/settings/lyricsAndGenre";
 
 import { libraryEdited, toIndexedArtwork, toIndexedTrack } from "./LibraryScan";
+import { publishSavedStars } from "./libraryChanges";
 import { LibraryStore } from "./LibraryStore";
 import { lyricsWritten } from "./lyricsEdits";
 
@@ -157,12 +160,19 @@ const settle = <A>(find: (signal: AbortSignal) => Promise<A>): Effect.Effect<Tag
   );
 
 /** A song with nothing yet (a download being tagged): everything is looked up. */
-const HAS_NOTHING: IndexedTags = { hasLyrics: false, genre: null, trackNumber: null, year: null };
+const HAS_NOTHING: IndexedTags = {
+  hasLyrics: false,
+  genre: null,
+  trackNumber: null,
+  year: null,
+  explicit: "unknown",
+};
 
 /**
  * Looks [song] up online for what a song with [has] lacks (Core's
  * `fixLookups`): its lyrics on LRCLIB (synced preferred) and, on Deezer, its
- * album's genre and year and its track number there, matched by Core. A
+ * album's genre and year, its track number there and whether it's explicit
+ * (the matched track's flag, from the search itself), matched by Core. A
  * service whose answer couldn't fill anything isn't asked. Only the title,
  * artist, album and length are sent. Each service is settled on its own, so
  * lyrics found survive Deezer failing and the other way round (Core's
@@ -197,14 +207,16 @@ const NOTHING_WRITTEN: TagWriteReport = {
   genre: "none",
   trackNumber: "none",
   year: "none",
+  explicit: "none",
 };
 
 /**
  * Writes [found] into the file at [path], replacing its lyrics and genre (a
  * format without tag writing gets a sidecar `.lrc`) and filling in its track
- * number, disc and year (the file keeps any it has), then brings its index
- * entry up to date so Genres, Search, the album page and the Lyrics view show
- * the new values without a rescan. Finding nothing leaves the file untouched.
+ * number, disc, year and advisory tag (Core's `advisoryTag`; the file keeps
+ * any it has), then brings its index entry up to date so Genres, Search, the
+ * album page, the Lyrics view and the E badge show the new values without a
+ * rescan. Finding nothing leaves the file untouched.
  */
 export const writeLyricsAndGenre = (
   path: string,
@@ -212,7 +224,14 @@ export const writeLyricsAndGenre = (
 ): Effect.Effect<TagWriteReport, TagWriteFailed, LibraryStore> =>
   Effect.gen(function* () {
     const { lyrics, genre, trackNumber, discNumber, year } = found;
-    if (lyrics === null && genre === null && trackNumber === null && year === null)
+    const advisory = advisoryTag(found.explicit);
+    if (
+      lyrics === null &&
+      genre === null &&
+      trackNumber === null &&
+      year === null &&
+      advisory === null
+    )
       return NOTHING_WRITTEN;
     const written = yield* Effect.tryPromise({
       try: () =>
@@ -224,6 +243,7 @@ export const writeLyricsAndGenre = (
           // The disc goes with the number it belongs to.
           trackNumber === null ? null : discNumber,
           year,
+          advisory,
         ),
       catch: (cause) => new TagWriteFailed({ cause }),
     });
@@ -240,6 +260,7 @@ export const writeLyricsAndGenre = (
         )
         // Drops a genre no song has any more.
         .pipe(
+          Effect.tap(({ starred }) => Effect.sync(() => publishSavedStars(starred))),
           Effect.andThen(store.filesGone([])),
           Effect.ensuring(Effect.sync(libraryEdited)),
           // The file has its new tags; the next scan brings the index up to date.
@@ -251,13 +272,14 @@ export const writeLyricsAndGenre = (
       genre: written.genre,
       trackNumber: written.trackNumber,
       year: written.year,
+      explicit: written.explicit,
     };
   });
 
 /**
  * Fix Song for one song: looks up what it lacks and writes only that (Core's
- * `missingTags`), never replacing lyrics, a genre, a track number or a year it
- * has. A song with nothing missing (Core's `canFixSong`) makes no request. A
+ * `missingTags`), never replacing lyrics, a genre, a track number, a year or
+ * an explicit flag it has. A song with nothing missing (Core's `canFixSong`) makes no request. A
  * failure is an outcome (the file is left as it was); only `LookupsOff` fails.
  */
 const fixSong = (song: TaggableSong): Effect.Effect<SongTagOutcome, LookupsOff, LibraryStore> =>
@@ -297,7 +319,7 @@ export const fillInLyricsAndGenre = (
 /**
  * The least time one song takes in a run: keeps Deezer's requests under its
  * rate limit (50 every 5 seconds) with up to three per song (search, album,
- * tracklist).
+ * tracklist; the explicit flag comes with the search).
  */
 const SONG_MIN_MS = 400;
 

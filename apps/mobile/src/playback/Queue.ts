@@ -3,21 +3,30 @@ import {
   REAL_SHUFFLE,
   answerPlayingWalk,
   applyPlayerSync,
+  explicitPassOver,
+  explicitPlayNotice,
   extrapolatePosition,
   keptPlayingEntry,
   keptQueue,
   keysToLoad,
+  newQueueToast,
+  noticeLine,
   parseQueueState,
   passedOverNotice,
   planPlayerSync,
   playerQueueList,
   queueSourceAfter,
+  playReplacesQueue,
+  queuedPassedOver,
+  queueUndo,
   reduceQueue,
   shuffledTrackIds,
   shufflesQueue,
   startPlayingWalk,
   statsWindow,
+  undoneQueue,
   withHeldCurrent,
+  type PassOver,
   type PlayerList,
   type PlayingStep,
   type PlayingWalk,
@@ -26,6 +35,7 @@ import {
   type QueueEntry,
   type QueuePlayback,
   type QueueState,
+  type QueueUndo,
   type RepeatMode,
   type Shuffle,
   type SyncStep,
@@ -40,8 +50,9 @@ import * as Semaphore from "effect/Semaphore";
 import { makeExternalStore } from "@/lib/externalStore";
 import { LibraryStore } from "@/library/LibraryStore";
 import type { NativeSyncStep, PlayerItem } from "@/native/wavePlayer";
-import { showToast } from "@/overlay/toast";
+import { currentToast, dismissToast, showToast } from "@/overlay/toast";
 import { perfMark } from "@/perf/perf";
+import { dontPlayExplicit, onDontPlayExplicit } from "@/settings/dontPlayExplicit";
 import { shuffleKind } from "@/settings/shuffleKind";
 
 import { Player, PlayerError, playbackState } from "./Player";
@@ -143,6 +154,24 @@ const askPlaying = (trackId: string): Promise<PlayingSettlement> =>
     (settled): PlayingSettlement => settled ?? { kind: "failed", reason: "failed" },
   );
 
+/**
+ * A play's way back to the queue it replaced (Core's `QueueUndo`), with the
+ * tracks that queue knew and where its playback was started from.
+ */
+interface TakeBack {
+  readonly undo: QueueUndo;
+  readonly tracks: ReadonlyMap<string, QueueTrack>;
+  readonly source: PlaySource;
+  /** The play's own notice (a tapped explicit song skipped), said once the walk ends. */
+  readonly notice: string | null;
+}
+
+/** The toast a new queue shows (Core's `newQueueToast`), with its Undo. */
+interface NewQueue {
+  readonly text: string;
+  readonly takeBack: TakeBack;
+}
+
 /** A command waiting, outside the queue's lane, for its playing song's search (Core's `PlayingWalk`). */
 interface Waiting {
   readonly walk: PlayingWalk;
@@ -150,11 +179,19 @@ interface Waiting {
   readonly answer: Promise<PlayingSettlement>;
   /** The tracks the queue knew before the command: going back, the queue knows them again. */
   readonly knownBefore: ReadonlyMap<string, QueueTrack>;
+  /** The Undo the new queue offers once it plays, if the command was a play. */
+  readonly takeBack: TakeBack | null;
 }
 
 /** Where a command got to in the lane: done (go, stay, or another command took its place) or waiting. */
 type Outcome =
-  | { readonly kind: "go"; readonly state: QueueState; readonly playback: QueuePlayback }
+  | {
+      readonly kind: "go";
+      readonly state: QueueState;
+      readonly playback: QueuePlayback;
+      /** Going there shows "New queue playing" with Undo. */
+      readonly newQueue: NewQueue | null;
+    }
   | { readonly kind: "stay" }
   | { readonly kind: "superseded" }
   | { readonly kind: "wait"; readonly waiting: Waiting };
@@ -177,17 +214,43 @@ const itemFor = (entry: QueueEntry): Effect.Effect<PlayerItem, PlayerError> => {
 };
 
 /**
- * Learns the tracks a command adds, before the queue changes, so Up Next
- * shows them on its first frame; a new play forgets the old queue's.
+ * The songs the queue passes over now (Core's `explicitPassOver`): explicit
+ * ones while Don't play explicit is on, by what the queue knows of them and
+ * of the tracks a command adds ([added]).
  */
-const learnTracks = (command: QueueCommand, added: readonly QueueTrack[]): void =>
-  learnQueueTracks(added, { forgetOthers: command.type === "play" });
+export const passOverNow = (added: readonly QueueTrack[] = []): PassOver => {
+  if (!dontPlayExplicit()) return () => false;
+  const adding = new Map(added.map((track) => [track.id, track]));
+  return explicitPassOver({
+    on: true,
+    flagOf: (trackId) => (adding.get(trackId) ?? queueTracks.get().get(trackId))?.explicit,
+  });
+};
+
+/**
+ * Learns the tracks a command adds, before the queue changes, so Up Next
+ * shows them on its first frame; a play that replaces the queue (Core's
+ * `playReplacesQueue`: not one whose every song [passOver] passes over)
+ * forgets the old queue's.
+ */
+const learnTracks = (
+  command: QueueCommand,
+  added: readonly QueueTrack[],
+  passOver: PassOver,
+): void => learnQueueTracks(added, { forgetOthers: playReplacesQueue(command, passOver) });
+
+/** A song's title for a notice, from what the queue knows of it. */
+const titleOf = (trackId: string): string => queueTracks.get().get(trackId)?.title ?? "This song";
 
 const reportError = (error: unknown): void =>
   playbackState.update((previous) => ({
     ...previous,
     error: error instanceof Error ? error.message : String(error),
   }));
+
+/** [effect], its failure shown as the playback error rather than failing. */
+const reported = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A | void> =>
+  effect.pipe(Effect.catch((error) => Effect.sync(() => reportError(error))));
 
 /** Where the current track is now, extrapolated from the last position report. */
 export const currentPositionMs = (): number => extrapolatePosition(playbackState.get(), Date.now());
@@ -290,10 +353,13 @@ export const layer = Layer.effect(
         return { kind: "smart", plays } satisfies Shuffle;
       });
 
-    /** [command] applied to [state], shuffling the way the owner chose. */
-    const reduce = (state: QueueState, command: QueueCommand) =>
+    /**
+     * [command] applied to [state], shuffling the way the owner chose and
+     * passing over the songs [passOver] does.
+     */
+    const reduce = (state: QueueState, command: QueueCommand, passOver: PassOver) =>
       Effect.map(shuffleFor(state, command), (shuffle) =>
-        reduceQueue(state, command, Math.random, shuffle),
+        reduceQueue(state, command, Math.random, shuffle, passOver),
       );
 
     // The command waiting for its playing song's search, if any: the next
@@ -308,15 +374,22 @@ export const layer = Layer.effect(
      * waits for the playing song's search (the song shows as playing, and the
      * song before it pauses), goes back to the queue as it was, or goes on.
      * [rejoin] is the command waiting before, whose search for the same song
-     * is joined rather than asked again.
+     * is joined rather than asked again. [takeBack] is the Undo a new queue
+     * offers once it goes (its toast says the notice too); staying, there's none.
      */
     const take = (
       step: PlayingStep,
       knownBefore: ReadonlyMap<string, QueueTrack>,
       rejoin: Waiting | null,
+      takeBack: TakeBack | null,
     ) =>
       Effect.gen(function* () {
-        if (step.notice !== null) void showToast(step.notice);
+        // The play's own notice waits, while a search goes on, for how the walk ends.
+        const notices = [takeBack?.notice ?? null, step.notice];
+        const text =
+          step.kind === "go" && takeBack !== null ? newQueueToast(step.playback, notices) : null;
+        const said = noticeLine(step.kind === "search" ? [step.notice] : notices);
+        if (said !== null && text === null) void showToast(said);
         switch (step.kind) {
           case "search": {
             queueState.set(step.state);
@@ -326,7 +399,7 @@ export const layer = Layer.effect(
             }
             const answer =
               rejoin?.trackId === step.trackId ? rejoin.answer : askPlaying(step.trackId);
-            waiting = { walk: step.walk, trackId: step.trackId, answer, knownBefore };
+            waiting = { walk: step.walk, trackId: step.trackId, answer, knownBefore, takeBack };
             return { kind: "wait", waiting } satisfies Outcome;
           }
           case "stay":
@@ -342,28 +415,57 @@ export const layer = Layer.effect(
           case "go": {
             const playback = pausedForSearch && step.playback === "keep" ? "play" : step.playback;
             pausedForSearch = false;
-            return { kind: "go", state: step.state, playback } satisfies Outcome;
+            const newQueue = text === null || takeBack === null ? null : { text, takeBack };
+            return { kind: "go", state: step.state, playback, newQueue } satisfies Outcome;
           }
         }
       });
 
-    /** Runs [command] in the lane, up to its end or its wait for a search. */
-    const start = (command: QueueCommand, added: readonly QueueTrack[]) =>
+    /**
+     * Runs [command] in the lane, up to its end or its wait for a search.
+     * [source] is where the queue's playback was started from before the
+     * command, which Undo puts back; null when a play offers no Undo (one
+     * from Android Auto).
+     */
+    const start = (
+      command: QueueCommand,
+      added: readonly QueueTrack[],
+      source: PlaySource | null = null,
+    ) =>
       Effect.gen(function* () {
         const pending = waiting;
         waiting = null;
         const knownBefore = pending?.knownBefore ?? queueTracks.get();
-        learnTracks(command, added);
+        const passOver = passOverNow(added);
+        learnTracks(command, added, passOver);
+        // A tapped explicit song skipped, or nothing played or queued: say why.
+        const passed = explicitPlayNotice(command, passOver, titleOf);
         if (command.type === "playerMoved") native = { ...native, currentKey: command.key };
         const before = queueState.get();
-        const reduced = yield* reduce(before, command);
+        // A play offers going back to the queue the player holds (a walk's
+        // goes back there too) and withdraws an earlier Undo; a command
+        // taking a walk's place keeps its Undo.
+        let takeBack = pending?.takeBack ?? null;
+        if (command.type === "play") {
+          withdrawUndo();
+          const player = { key: native.currentKey, positionMs: currentPositionMs() };
+          const undo = queueUndo(pending?.walk.before ?? before, command, player, passOver);
+          const from = takeBack?.source ?? source;
+          takeBack =
+            undo === null || from === null
+              ? null
+              : { undo, tracks: knownBefore, source: from, notice: passed };
+        }
+        // A play offering Undo says its notice on the new queue's toast.
+        if (passed !== null && takeBack?.notice !== passed) void showToast(passed);
+        const reduced = yield* reduce(before, command, passOver);
         const step = startPlayingWalk(before, command, reduced, pending?.walk ?? null);
         // The player went on past songs still unsearched: they're skipped, as a failed search skips them.
         if (command.type === "playerMoved" && step.kind === "go") {
           const notice = passedOverNotice(before, step.state);
           if (notice !== null) void showToast(notice);
         }
-        return yield* take(step, knownBefore, pending);
+        return yield* take(step, knownBefore, pending, takeBack);
       });
 
     /** Takes [answer], [w]'s search's, in the lane, unless a newer command took its place. */
@@ -371,7 +473,8 @@ export const layer = Layer.effect(
       Effect.gen(function* () {
         if (waiting !== w) return { kind: "superseded" } satisfies Outcome;
         waiting = null;
-        return yield* take(answerPlayingWalk(w.walk, answer), w.knownBefore, null);
+        const step = answerPlayingWalk(w.walk, answer, passOverNow());
+        return yield* take(step, w.knownBefore, null, w.takeBack);
       });
 
     /**
@@ -410,7 +513,7 @@ export const layer = Layer.effect(
     const apply = (done: Done) =>
       Effect.gen(function* () {
         if (done.kind !== "go") return;
-        const { state, playback } = done;
+        const { state, playback, newQueue } = done;
         const shown = queueState.get();
         if (state === shown && playback === "keep") return;
         queueState.set(state);
@@ -432,13 +535,59 @@ export const layer = Layer.effect(
           case "keep":
             break;
         }
+        if (newQueue !== null) offerUndo(newQueue);
       });
+
+    // The Undo on show, and its toast: a newer play withdraws it.
+    let offered: { readonly takeBack: TakeBack; readonly toastId: number | null } | null = null;
+
+    const offerUndo = ({ text, takeBack }: NewQueue): void => {
+      void showToast(text, {
+        label: "Undo",
+        run: () => Effect.runFork(reported(undoPlay(takeBack))),
+      });
+      offered = { takeBack, toastId: currentToast.get()?.id ?? null };
+    };
+
+    const withdrawUndo = (): void => {
+      if (offered !== null && offered.toastId !== null) dismissToast(offered.toastId);
+      offered = null;
+    };
+
+    /**
+     * Undo on "New queue playing": the queue the play replaced comes back as
+     * it was (Core's `undoneQueue`), on its song where it was, playing. A
+     * command still waiting for a search gives way. Does nothing once a newer
+     * play withdrew it.
+     */
+    const undoPlay = (takeBack: TakeBack) =>
+      lane.withPermit(
+        Effect.gen(function* () {
+          if (offered?.takeBack !== takeBack) return;
+          offered = null;
+          const { undo, tracks, source } = takeBack;
+          waiting = null;
+          pausedForSearch = false;
+          learnQueueTracks([...tracks.values()], { forgetOthers: true });
+          queueSource.set(source);
+          const state = undoneQueue(undo, queueState.get());
+          queueState.set(state);
+          queueChanged();
+          // Paused while the player changes songs, so the old one doesn't play from its start first.
+          yield* player.pause;
+          yield* sync(state);
+          yield* applyRepeat(state);
+          yield* player.seekTo(undo.positionMs);
+          yield* player.play;
+        }),
+      );
 
     const dispatch = (command: QueueCommand, added: readonly QueueTrack[] = []) =>
       walkOut(
         Effect.suspend(() => {
-          queueSource.update((source) => queueSourceAfter(source, command, "phone"));
-          return start(command, added);
+          const source = queueSource.get();
+          queueSource.set(queueSourceAfter(source, command, "phone"));
+          return start(command, added, source);
         }),
         apply,
       );
@@ -520,6 +669,18 @@ export const layer = Layer.effect(
       (stop) => Effect.sync(stop),
     );
 
+    // Don't play explicit turning on takes the queue's explicit songs out, the playing one too.
+    const dropExplicit = (on: boolean): void => {
+      if (!on) return;
+      const trackIds = queuedPassedOver(queueState.get(), passOverNow());
+      if (trackIds.length === 0) return;
+      Effect.runFork(reported(dispatch({ type: "removeTracks", trackIds })));
+    };
+    yield* Effect.acquireRelease(
+      Effect.sync(() => onDontPlayExplicit(dropExplicit)),
+      (stop) => Effect.sync(stop),
+    );
+
     yield* lane.take(1);
     yield* Effect.forkScoped(restore.pipe(Effect.ensuring(lane.release(1))));
 
@@ -538,11 +699,7 @@ export const layer = Layer.effect(
       }
       if (event.reason !== "auto" && event.reason !== "seek" && event.reason !== "crossfade")
         return;
-      Effect.runFork(
-        dispatch({ type: "playerMoved", key: event.itemId }).pipe(
-          Effect.catch((error) => Effect.sync(() => reportError(error))),
-        ),
-      );
+      Effect.runFork(reported(dispatch({ type: "playerMoved", key: event.itemId })));
     });
 
     const restoreSaved = (saved: QueueState, added: readonly QueueTrack[], positionMs: number) =>

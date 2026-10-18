@@ -55,11 +55,15 @@ describe("itemActions", () => {
   test("Delete comes last for songs, after Select, and is the destructive one", () => {
     const menu = itemActions(tracks([song()], { selectable: true }));
     assert.deepEqual(names(menu).slice(-2), ["select", "delete"]);
+    assert.ok(isDestructiveAction("delete"));
+    assert.ok(!names(itemActions({ kind: "album", items: [{}], here: "/" })).includes("delete"));
+  });
+
+  test("Delete Playlist and Delete Playlists are red like Delete and Remove from Library, and no other entry is", () => {
     assert.deepEqual(
       Object.keys(ITEM_ACTION_LABELS).filter((action) => isDestructiveAction(action as ItemAction)),
-      ["delete", "removeFromLibrary"],
+      ["deletePlaylist", "deletePlaylists", "delete", "removeFromLibrary"],
     );
-    assert.ok(!names(itemActions({ kind: "album", items: [{}], here: "/" })).includes("delete"));
   });
 
   test("Delete and Remove from Library ask first, so the selection only ends once it's confirmed", () => {

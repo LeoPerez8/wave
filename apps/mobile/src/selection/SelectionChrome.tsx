@@ -1,30 +1,9 @@
-import {
-  IconArrowForwardUp,
-  IconDisc,
-  IconDots,
-  IconDownload,
-  IconListCheck,
-  IconMicrophone2,
-  IconMusicSearch,
-  IconPencil,
-  IconPhotoEdit,
-  IconPhotoOff,
-  IconPlaylistAdd,
-  IconPlaylistX,
-  IconRefresh,
-  IconRowInsertBottom,
-  IconStar,
-  IconStarOff,
-  IconTrash,
-  IconTrashX,
-  IconX,
-} from "@tabler/icons-react-native";
-import { actionBarLabel, entryDivider, splitActionBar, type ItemAction } from "@wave/core";
-import { memo, type ComponentType } from "react";
+import { IconDots } from "@tabler/icons-react-native";
+import { actionBarLabel, entryDivider, splitActionBar } from "@wave/core";
+import { memo } from "react";
 import { Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { EntryRow } from "@/catalog/EntryRow";
 import { grid } from "@/catalog/grid";
 import { chrome } from "@/chrome/chrome";
 import { OnFloatingChrome } from "@/chrome/onFloatingChrome";
@@ -34,40 +13,14 @@ import { Press } from "@/motion/Press";
 import { pressedRect } from "@/motion/pressedRect";
 import { CardEntries } from "@/overlay/CardEntries";
 import { useOverlayFlow } from "@/overlay/flow";
+import { MenuRow } from "@/overlay/MenuRow";
 import { openOverlay } from "@/overlay/overlay";
+import { ACTION_ICONS, type ActionIcon } from "@/playback/actionIcons";
 import { targetCount, type ActionItems } from "@/playback/actionTargets";
 import { useItemActions, type ActionEntry } from "@/playback/itemActions";
 import { useThemeColor } from "@/theme/useThemeColor";
 
 import { endSelection, selectAllInList, useSelectedTarget, useSelectionSummary } from "./selection";
-
-type IconProps = { size?: number; color?: string; strokeWidth?: number };
-
-const ICONS: { readonly [A in ItemAction]: ComponentType<IconProps> } = {
-  playNext: IconArrowForwardUp,
-  addToQueue: IconRowInsertBottom,
-  addToPlaylist: IconPlaylistAdd,
-  favorite: IconStar,
-  unfavorite: IconStarOff,
-  removeFromPlaylist: IconPlaylistX,
-  goToAlbum: IconDisc,
-  goToArtist: IconMicrophone2,
-  renamePlaylist: IconPencil,
-  changeImage: IconPhotoEdit,
-  removeImage: IconPhotoOff,
-  deletePlaylist: IconTrash,
-  deletePlaylists: IconTrash,
-  fixSong: IconMusicSearch,
-  fixSongs: IconMusicSearch,
-  select: IconListCheck,
-  delete: IconTrash,
-  removeFromLibrary: IconTrashX,
-  download: IconDownload,
-  cancelDownload: IconX,
-  retryDownload: IconRefresh,
-  downloadMissingSongs: IconDownload,
-  retryFailed: IconRefresh,
-};
 
 /**
  * Buttons the bar has room for, More included. Primary actions and Delete may
@@ -87,7 +40,7 @@ function BarButton({
   opensMenu = false,
   destructive = false,
 }: {
-  icon: ComponentType<IconProps>;
+  icon: ActionIcon;
   label: string;
   /** What the button says under its icon, when shorter than [label]. */
   caption?: string;
@@ -130,8 +83,9 @@ function MoreCard({ entries, close }: { entries: readonly ActionEntry[]; close: 
   return (
     <CardEntries>
       {entries.map((entry, index) => (
-        <EntryRow
+        <MenuRow
           key={entry.action}
+          action={entry.action}
           label={entry.label}
           onPress={() => {
             close();
@@ -167,7 +121,7 @@ function ActionBar({ target, backdropId }: { target: ActionItems; backdropId: st
         {bar.map((entry) => (
           <BarButton
             key={entry.action}
-            icon={ICONS[entry.action]}
+            icon={ACTION_ICONS[entry.action]}
             label={entry.label}
             caption={actionBarLabel(entry.action)}
             onPress={entry.onPress}

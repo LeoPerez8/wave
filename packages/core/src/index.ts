@@ -44,6 +44,7 @@ export {
   nextRepeatMode,
   parseQueueState,
   readShuffleKind,
+  playReplacesQueue,
   reduceQueue,
   shuffledTrackIds,
   shufflesQueue,
@@ -255,6 +256,8 @@ export type {
   LayoutPageEntry,
   SettingsPage,
   SettingsPageEntry,
+  SettingsIcon,
+  SettingsTileColour,
 } from "./settingsPages.ts";
 export { PLAYLIST_LAYOUTS, parsePlaylistLayout, storedPlaylistLayout } from "./playlistLayout.ts";
 export type { PlaylistLayout } from "./playlistLayout.ts";
@@ -278,7 +281,14 @@ export { planAlert } from "./alert.ts";
 export type { AlertButton, AlertChoice, AlertPlan, AlertSpec } from "./alert.ts";
 export { APPEARANCES, appearanceAccent, readAppearance, storedAppearance } from "./appearance.ts";
 export type { Appearance } from "./appearance.ts";
-export { DEFAULT_THEME, NIGHT_SLATE, TONES, themeContrastIssues } from "./theme.ts";
+export {
+  DEFAULT_THEME,
+  NIGHT_SLATE,
+  TONES,
+  themeContrastIssues,
+  SETTINGS_TILE_COLOURS,
+  SETTINGS_TILE_GLYPH,
+} from "./theme.ts";
 export { hexToHsv, hsvToHex, parseHexColour, withOpacity } from "./colour.ts";
 export type { Hsv } from "./colour.ts";
 export {
@@ -497,6 +507,8 @@ export { stepNowPlayingSheet } from "./sheetLifecycle.ts";
 export { QUEUE_COVER_FLUSH_MS, createQueueCoverBatcher, withQueueCovers } from "./queueCovers.ts";
 export type { QueueCover, QueueCoverBatcher, QueueCoverBatcherOptions } from "./queueCovers.ts";
 export { MORE_FROM_ARTIST } from "./queue.ts";
+export { newQueueToast, noticeLine, queueUndo, undoneQueue } from "./queueUndo.ts";
+export type { PlayerAt, QueueUndo } from "./queueUndo.ts";
 export { artistRanking } from "./moreFromArtist.ts";
 export type { ArtistRankingInput, ArtistRankingSong } from "./moreFromArtist.ts";
 export { artistPageItems } from "./artistPage.ts";
@@ -666,6 +678,7 @@ export {
   ytDownloadLookup,
   ytDownloadRoot,
   ytDownloadTags,
+  listedSongTags,
   ytDownloadTarget,
 } from "./ytDownload.ts";
 export type {
@@ -699,6 +712,16 @@ export { failedDownloads, settledDownloadFailures } from "./failedDownloads.ts";
 export { ytDownloadsToForget } from "./forgottenDownloads.ts";
 export { queuedDownloads, queuedDownloadsSummary } from "./queuedDownloads.ts";
 export type { QueuedDownload } from "./queuedDownloads.ts";
+export {
+  SONGS_GROUP_NAME,
+  downloadingList,
+  moveDownloadGroup,
+  moveDownloadInGroup,
+  moveQueuedJobs,
+  playlistDownloadOrigin,
+  albumDownloadOrigin,
+} from "./downloadGroups.ts";
+export type { DownloadGroup, DownloadingList, DownloadOrigin } from "./downloadGroups.ts";
 export type {
   FailedDownload,
   FailedDownloadRetry,
@@ -890,6 +913,7 @@ export {
   keptQueue,
   passedOverNotice,
   playerQueueList,
+  searchingAfter,
   playingAnswerStep,
   playingSearches,
   startPlayingWalk,
@@ -1091,7 +1115,17 @@ export type {
   HomeSection,
   HomeSectionId,
 } from "./homeSections.ts";
-export { CROSSFADE, crossfadeDuration, readCrossfade, snapCrossfade } from "./crossfade.ts";
+export {
+  CROSSFADE,
+  CROSSFADE_PREFETCH_LEAD_MS,
+  CROSSFADE_PRE_ROLL_MS,
+  crossfadeDuration,
+  crossfadePrefetchAt,
+  lateCrossfadeOverlap,
+  MIN_LATE_CROSSFADE_MS,
+  readCrossfade,
+  snapCrossfade,
+} from "./crossfade.ts";
 export {
   DISCOVER_MIX_COUNT,
   discoverMix,
@@ -1111,6 +1145,7 @@ export {
 export type {
   DiscoverMix,
   DiscoverMixFilter,
+  DiscoverMixLibrarySong,
   DiscoverMixSeed,
   DiscoverMixes,
   DiscoverLibraryArtist,
@@ -1122,6 +1157,7 @@ export type {
   DiscoverSeedSource,
   DiscoverSimilarArtist,
   DiscoverSimilarArtists,
+  DiscoverSongPlays,
 } from "./discoverMixes.ts";
 export { discoverMixActions, discoverMixPlaylist } from "./discoverMixActions.ts";
 export type { DiscoverMixAction } from "./discoverMixActions.ts";
@@ -1204,6 +1240,8 @@ export {
   ytLibraryFavorites,
   ytLibraryPauseLogLine,
   ytLibraryReadDone,
+  ytLibraryDownloadsToQueue,
+  ytLibraryDownloadsQueued,
   ytLibraryReadFailed,
   ytLibraryReadLogLine,
   ytLibraryReadView,
@@ -1214,4 +1252,67 @@ export type {
   YtLibraryReadFailure,
   YtLibraryReadState,
   YtLibraryReadView,
+  YtLibraryReadToQueue,
 } from "./ytLibraryBatch.ts";
+export { discoverMixesSection, savedDiscoverMix } from "./discoverMixesSection.ts";
+export type { DiscoverMixesSection } from "./discoverMixesSection.ts";
+export { streamedCoverUrl, streamedCoverUrls } from "./streamedCover.ts";
+export { advisoryTag, explicitFromAdvisory, isExplicit, showsExplicitBadge } from "./explicit.ts";
+export type { ExplicitFlag } from "./explicit.ts";
+export {
+  DEFAULT_DISCOVER_MIX_LEVEL,
+  DISCOVER_MIX_LEVELS,
+  blendDiscoverMix,
+  discoverMixLibraryPool,
+  placeDiscoverMixSongs,
+  readDiscoverMixLevel,
+} from "./discoverMixLevels.ts";
+export type {
+  BlendedDiscoverMix,
+  DiscoverMixBlend,
+  DiscoverMixLevel,
+  DiscoverMixPoolSources,
+  DiscoverMixSong,
+} from "./discoverMixLevels.ts";
+export {
+  LYRIC_CARD_FALLBACK,
+  LYRIC_CARD_LAYOUT,
+  LYRIC_CARD_TEXT_SIZES,
+  MAX_SHARED_LYRIC_LINES,
+  instagramStoriesAppId,
+  isLyricLineSelected,
+  lyricCardColours,
+  lyricCardFileName,
+  lyricCardInk,
+  lyricCardTextSize,
+  lyricShareDestinations,
+  lyricStoryBackground,
+  nextLyricCardColour,
+  shareableLyricLines,
+  sharedLyricLines,
+  tapLyricLine,
+} from "./lyricsShare.ts";
+export type {
+  LyricSelection,
+  LyricSelectionTap,
+  LyricShareApps,
+  LyricShareDestination,
+  LyricStoryBackground,
+} from "./lyricsShare.ts";
+export type { YtLibraryFavorites } from "./ytLibraryBatch.ts";
+export { pendingFavorite, settlePendingFavorites } from "./pendingFavorites.ts";
+export type { EnteringSong, PendingFavorite, SettledFavorites } from "./pendingFavorites.ts";
+export { applyJournalChanges } from "./journalChanges.ts";
+export type { JournalChanges } from "./journalChanges.ts";
+export { PLAY_ACTION_LABELS, menuLayout } from "./menuLayout.ts";
+export type { MenuLayout, MenuSubject, PlayAction, PlayCard } from "./menuLayout.ts";
+export {
+  explicitPassOver,
+  explicitPlayNotice,
+  explicitSkipNotice,
+  queuedPassedOver,
+} from "./explicitPlayback.ts";
+export type { ExplicitPlayback } from "./explicitPlayback.ts";
+export type { PassOver } from "./queue.ts";
+export { discoverMixKeep } from "./discoverMixLevels.ts";
+export type { DiscoverMixKeep } from "./discoverMixLevels.ts";

@@ -7,6 +7,7 @@
  * fills that Track in.
  */
 
+import { advisoryTag } from "./explicit.ts";
 import { UNKNOWN_ALBUM } from "./library.ts";
 import { songLookup, type FoundTags, type SongLookup } from "./lyricsAndGenre.ts";
 import { spotifySearchQuery, spotifyYtMatch } from "./spotifyImport.ts";
@@ -172,7 +173,7 @@ export const missingSongLookup = (job: MissingSongJob): SongLookup | null =>
  * The tags missing song [job]'s file gets: its Track's, so the file is the
  * same recording for the Wave account (Core's `recordingKey`), with what
  * the Track has no tag for from the lookup's [found] (lyrics, and a genre,
- * year or track number) and the cover of the video it comes from
+ * year or track number, and its explicit flag) and the cover of the video it comes from
  * ([artworkUrl], asked for large), when there is one.
  */
 export const missingSongTags = (
@@ -196,6 +197,8 @@ export const missingSongTags = (
     genre: missing.genre ?? found?.genre ?? null,
     lyrics: found?.lyrics?.text ?? null,
     artworkUrl: artworkUrl === null ? null : largeCover(artworkUrl),
+    // A Track doesn't say whether it's explicit: Deezer's match does, when there is one.
+    advisory: advisoryTag(found?.explicit ?? "unknown"),
   };
 };
 

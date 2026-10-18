@@ -8,6 +8,7 @@ import { applySyncedSetting, syncedSettingValue } from "@/lib/persistedSetting";
 /* oxlint-disable import/no-unassigned-import */
 import "@/settings/artistPhotos";
 import "@/settings/bestQuality";
+import "@/settings/dontPlayExplicit";
 import "@/settings/glass";
 import "@/settings/longPressDelay";
 import "@/settings/lyricsAndGenre";

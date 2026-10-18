@@ -380,6 +380,7 @@ const scanned = (
   bitrateKbps: null,
   artworkHash: null,
   hasLyrics: false,
+  explicit: "unknown",
 });
 
 const identityOf = (db: TestDatabase, path: string) =>

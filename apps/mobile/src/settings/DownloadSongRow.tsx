@@ -1,6 +1,11 @@
 import { ytSongArtist } from "@wave/core";
 import type { ReactNode } from "react";
-import { Text, View } from "react-native";
+import {
+  Text,
+  View,
+  type AccessibilityActionEvent,
+  type AccessibilityActionInfo,
+} from "react-native";
 
 import { Artwork } from "@/catalog/Artwork";
 import { CELL, grid } from "@/catalog/grid";
@@ -17,6 +22,8 @@ export function DownloadSongRow({
   covers,
   line,
   detail = null,
+  accessibilityActions,
+  onAccessibilityAction,
   children,
 }: {
   song: NativeYtSong;
@@ -24,6 +31,9 @@ export function DownloadSongRow({
   covers: boolean;
   line: string;
   detail?: string | null;
+  /** What screen readers can do with the song besides its buttons: Move up / Move down. */
+  accessibilityActions?: readonly AccessibilityActionInfo[];
+  onAccessibilityAction?: (event: AccessibilityActionEvent) => void;
   children?: ReactNode;
 }) {
   const artist = ytSongArtist(song);
@@ -35,6 +45,8 @@ export function DownloadSongRow({
           className="flex-1"
           accessible
           accessibilityLabel={[song.title, artist, line, detail].filter(Boolean).join(", ")}
+          accessibilityActions={accessibilityActions}
+          onAccessibilityAction={onAccessibilityAction}
         >
           <Text className="font-sans text-body font-medium text-foreground">{song.title}</Text>
           <Text numberOfLines={1} className="font-sans text-body text-secondary">

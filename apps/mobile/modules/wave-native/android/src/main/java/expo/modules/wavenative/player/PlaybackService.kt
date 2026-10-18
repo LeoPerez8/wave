@@ -21,6 +21,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.common.util.Util
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
@@ -42,6 +43,7 @@ import expo.modules.wavenative.yt.YtClient
 import expo.modules.wavenative.yt.YtDataSource
 import expo.modules.wavenative.yt.YtMedia
 import expo.modules.wavenative.yt.YtStreamFailure
+import java.util.Locale
 
 /**
  * Hosts the player. Media3 provides the media notification, lock-screen and
@@ -202,9 +204,6 @@ class PlaybackService : MediaLibraryService() {
   /** The player the outgoing song fades out on during a crossfade; null otherwise. */
   private var tailPlayer: ExoPlayer? = null
 
-  /** The entry the session's player moved to as the overlap started, until it reports the move. */
-  private var crossfadeTarget: String? = null
-
   private val crossfade = Crossfade(
     object : CrossfadeHost {
       override val main: CrossfadeDeck = object : CrossfadeDeck {
@@ -246,6 +245,55 @@ class PlaybackService : MediaLibraryService() {
             next != C.INDEX_UNSET && next != player.currentMediaItemIndex
         }
 
+      // The player loads the next song once this one is loaded (a preload
+      // started it earlier, [prefetchNext]), so what's buffered past this
+      // song's end is the next one's start.
+      override val nextReady: Boolean
+        get() {
+          val player = exoPlayer ?: return false
+          // The next song is an unsearched one JS is still searching: the player's next isn't it.
+          if (searchingNext()) return false
+          val durationMs = mainDurationMs ?: return false
+          return player.totalBufferedDuration - (durationMs - player.currentPosition) >= NEXT_READY_MS
+        }
+
+      override val currentKey: String?
+        get() = exoPlayer?.currentMediaItem?.mediaId
+
+      override val nextKey: String?
+        get() {
+          val player = exoPlayer ?: return null
+          val next = player.nextMediaItemIndex
+          return if (next == C.INDEX_UNSET) null else player.getMediaItemAt(next).mediaId
+        }
+
+      // Preloads the next playlist item while this one plays: a YT Music
+      // song's address is resolved (YtDataSource) and its start buffered.
+      // Off again once the player moves (crossfadeListener).
+      @OptIn(UnstableApi::class)
+      override fun prefetchNext() {
+        exoPlayer?.preloadConfiguration = ExoPlayer.PreloadConfiguration(Util.msToUs(PRELOAD_MS))
+      }
+
+      override fun nextLate(lateMs: Long, overlapMs: Long) {
+        val late =
+          if (searchingNext()) "the next song was still being searched after ${seconds(lateMs)}"
+          else "the next song was ${seconds(lateMs)} late"
+        WaveLog.i(
+          CROSSFADE_LOG_TAG,
+          if (overlapMs > 0) "Crossfade shortened to ${seconds(overlapMs)}: $late"
+          else "Crossfade dropped, the song ended gapless: $late",
+        )
+      }
+
+      override fun endedEarly(why: CrossfadeEnd, overlapping: Boolean) {
+        WaveLog.i(
+          CROSSFADE_LOG_TAG,
+          if (overlapping) "Crossfade ended early: ${why.reason}"
+          else "Crossfade called off before the overlap: ${why.reason}",
+        )
+      }
+
       override fun openTail(positionMs: Long): CrossfadeDeck {
         closeTail()
         val tail = buildPlayer(forSession = false)
@@ -286,7 +334,6 @@ class PlaybackService : MediaLibraryService() {
         val next = player.nextMediaItemIndex
         if (next == C.INDEX_UNSET) return
         val key = player.getMediaItemAt(next).mediaId
-        crossfadeTarget = key
         CrossfadeLink.handoff.mark(key, SystemClock.elapsedRealtime())
         player.seekTo(next, 0)
       }
@@ -299,6 +346,12 @@ class PlaybackService : MediaLibraryService() {
 
   private val crossfadeTick: Runnable = Runnable { scheduleCrossfade(crossfade.tick()) }
 
+  /** Whether JS is still searching the song after the one playing (`CrossfadeLink.searchingAfter`). */
+  private fun searchingNext(): Boolean {
+    val after = CrossfadeLink.searchingAfter ?: return false
+    return after == exoPlayer?.currentMediaItem?.mediaId
+  }
+
   /** Runs the crossfade's next tick after [delayMs] (null: none until playback changes). */
   private fun scheduleCrossfade(delayMs: Long? = 0L) {
     main.removeCallbacks(crossfadeTick)
@@ -306,16 +359,22 @@ class PlaybackService : MediaLibraryService() {
   }
 
   /**
-   * Hands the crossfade play and pause, and switches at once when anything
-   * but the crossfade itself moves the player: skip, previous, picking a song,
-   * a seek, the list changing, an error. Ticks are posted, never run inside a
-   * listener, so the crossfade's own move is reported before the next tick.
+   * Hands the crossfade play and pause, and every move of the player: one to
+   * another song than the one being faded into (skip, previous, picking a
+   * song, the next song replaced), a seek or an error switches at once, while
+   * the crossfade's own move and queue syncs around it don't. Ticks are
+   * posted, never run inside a listener, so the crossfade's own move is
+   * reported before the next tick.
    */
   private val crossfadeListener = object : Player.Listener {
+    @OptIn(UnstableApi::class)
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-      val own = reason == Player.MEDIA_ITEM_TRANSITION_REASON_SEEK && mediaItem?.mediaId == crossfadeTarget
-      crossfadeTarget = null
-      if (!own) crossfade.interrupt()
+      // The song after this one is preloaded only once this one nears its overlap; a queue sync
+      // reporting the same song again keeps a preload already asked for.
+      val restarted = reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT
+      if (crossfade.moved(mediaItem?.mediaId, restarted)) {
+        exoPlayer?.preloadConfiguration = ExoPlayer.PreloadConfiguration.DEFAULT
+      }
       scheduleCrossfade()
     }
 
@@ -325,7 +384,7 @@ class PlaybackService : MediaLibraryService() {
       reason: Int,
     ) {
       val within = PlayerEvents.isSeekWithinItem(reason, oldPosition.mediaItem?.mediaId, newPosition.mediaItem?.mediaId)
-      if (within) crossfade.interrupt()
+      if (within) crossfade.interrupt(CrossfadeEnd.Seek)
     }
 
     override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
@@ -343,7 +402,7 @@ class PlaybackService : MediaLibraryService() {
     }
 
     override fun onPlayerError(error: PlaybackException) {
-      crossfade.interrupt()
+      crossfade.interrupt(CrossfadeEnd.Error)
     }
   }
 
@@ -482,7 +541,7 @@ class PlaybackService : MediaLibraryService() {
     main.removeCallbacks(resumePositionSave)
     main.removeCallbacks(crossfadeTick)
     CrossfadeLink.onOverlapChanged = null
-    crossfade.interrupt()
+    crossfade.interrupt(CrossfadeEnd.Stopped)
     exoPlayer?.let { ResumeStore.savePlayer(it, withItems = false) }
     exoPlayer = null
     session?.run {
@@ -752,5 +811,15 @@ class PlaybackService : MediaLibraryService() {
     )
 
     const val RESUME_SAVE_INTERVAL_MS = 10_000L
+
+    const val CROSSFADE_LOG_TAG = "WaveCrossfade"
+
+    /** Buffered of the next song for it to sound at once (ExoPlayer's default to start playing). */
+    const val NEXT_READY_MS = 2500L
+
+    /** How much of the next song a crossfade preloads. */
+    const val PRELOAD_MS = 10_000L
+
+    fun seconds(ms: Long) = String.format(Locale.ROOT, "%.1f s", ms / 1000.0)
   }
 }

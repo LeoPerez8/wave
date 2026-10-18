@@ -146,7 +146,8 @@ describe("missingSongTags", () => {
     discNumber: 2,
     year: 2009,
     lyrics: { synced: true, text: "[00:01.00] Remember" },
-  };
+    explicit: "explicit",
+  } as const;
 
   test("the file is tagged as the Track is, so it's the same recording for the Wave account", () => {
     const missing = track();
@@ -184,6 +185,14 @@ describe("missingSongTags", () => {
     assert.equal(tags.album, null);
     assert.equal(tags.artworkUrl, "https://lh3.googleusercontent.com/x=w1200-h1200-l90-rj");
     assert.equal(tags.lyrics, null);
+  });
+
+  test("a Track doesn't say whether it's explicit: its file takes the flag Deezer's match gives, else none", () => {
+    const job = missingSongJob(track());
+    assert.equal(missingSongTags(job, found, null).advisory, 1);
+    assert.equal(missingSongTags(job, { ...found, explicit: "clean" }, null).advisory, 0);
+    assert.equal(missingSongTags(job, { ...found, explicit: "unknown" }, null).advisory, null);
+    assert.equal(missingSongTags(job, null, null).advisory, null);
   });
 
   test("lyrics and genre are looked up by the Track's title, artist, album and length", () => {

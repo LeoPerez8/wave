@@ -85,6 +85,7 @@ const scanned = (song: Song): IndexedTrack => ({
   bitrateKbps: null,
   artworkHash: null,
   hasLyrics: false,
+  explicit: "unknown",
 });
 
 /** A phone signed in to the account [service] holds: its Library, its preferences and its clock. */
