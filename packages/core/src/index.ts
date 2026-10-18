@@ -28,8 +28,13 @@ export type {
 } from "./designPreview.ts";
 export { trackRowTrailing } from "./trackRowTrailing.ts";
 export type { TrackRowTrailingInput } from "./trackRowTrailing.ts";
-export { lastListActionForm } from "./listActions.ts";
-export type { ListActionForm, ListActionsRoom } from "./listActions.ts";
+export { lastListActionForm, listActionsForms } from "./listActions.ts";
+export type {
+  ListActionForm,
+  ListActionsForms,
+  ListActionsRoom,
+  OnlineToggleForm,
+} from "./listActions.ts";
 export { describeFolder, filesLeavingWithRoot, isWithin, planAddRoot } from "./scanRoots.ts";
 export type { AddRootPlan, FolderLabel, ScanRootState } from "./scanRoots.ts";
 export { resolveSkipSwipe } from "./swipe.ts";
@@ -557,9 +562,11 @@ export {
   YT_SECTION_HIDDEN,
   stepYtSection,
   ytSearchQuery,
+  ytSectionToggle,
   ytSectionView,
 } from "./ytSearch.ts";
 export type {
+  YtKeptAnswer,
   YtAskedBy,
   YtQuietReason,
   YtSearchAnswer,
@@ -807,6 +814,7 @@ export {
   ytArtistShelves,
   ytAlbumTracklist,
   ytLibraryAlbumView,
+  ytArtistToggle,
 } from "./ytArtist.ts";
 export type {
   LibraryAlbumKey,
@@ -836,6 +844,7 @@ export type {
   YtLibraryAlbumNote,
   YtLibraryAlbumView,
   YtReleaseLoad,
+  YtArtistToggleContext,
 } from "./ytArtist.ts";
 export { streamedArtistLink } from "./streamedArtist.ts";
 export type {
@@ -1316,3 +1325,4 @@ export type { ExplicitPlayback } from "./explicitPlayback.ts";
 export type { PassOver } from "./queue.ts";
 export { discoverMixKeep } from "./discoverMixLevels.ts";
 export type { DiscoverMixKeep } from "./discoverMixLevels.ts";
+export type { YtPick } from "./onlineToggle.ts";
