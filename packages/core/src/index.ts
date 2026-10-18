@@ -255,6 +255,8 @@ export type {
   LayoutPageEntry,
   SettingsPage,
   SettingsPageEntry,
+  SettingsIcon,
+  SettingsTileColour,
 } from "./settingsPages.ts";
 export { PLAYLIST_LAYOUTS, parsePlaylistLayout, storedPlaylistLayout } from "./playlistLayout.ts";
 export type { PlaylistLayout } from "./playlistLayout.ts";
@@ -278,7 +280,14 @@ export { planAlert } from "./alert.ts";
 export type { AlertButton, AlertChoice, AlertPlan, AlertSpec } from "./alert.ts";
 export { APPEARANCES, appearanceAccent, readAppearance, storedAppearance } from "./appearance.ts";
 export type { Appearance } from "./appearance.ts";
-export { DEFAULT_THEME, NIGHT_SLATE, TONES, themeContrastIssues } from "./theme.ts";
+export {
+  DEFAULT_THEME,
+  NIGHT_SLATE,
+  TONES,
+  themeContrastIssues,
+  SETTINGS_TILE_COLOURS,
+  SETTINGS_TILE_GLYPH,
+} from "./theme.ts";
 export { hexToHsv, hsvToHex, parseHexColour, withOpacity } from "./colour.ts";
 export type { Hsv } from "./colour.ts";
 export {
@@ -1215,4 +1224,7 @@ export type {
   YtLibraryReadFailure,
   YtLibraryReadState,
   YtLibraryReadView,
+  YtLibraryReadToQueue,
 } from "./ytLibraryBatch.ts";
+export { discoverMixesSection } from "./discoverMixesSection.ts";
+export type { DiscoverMixesSection } from "./discoverMixesSection.ts";

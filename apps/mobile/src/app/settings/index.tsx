@@ -11,11 +11,12 @@ import { useSettingsSummaries } from "@/settings/settingsSummaries";
 
 /** A row for each page, in Core's order; a handful, so a plain list. */
 function SettingsPageRows({ summaries }: { summaries: Record<SettingsPage, string | null> }) {
-  return SETTINGS_PAGES.map(({ page, title, route }) => (
+  return SETTINGS_PAGES.map(({ page, title, route, icon, colour }) => (
     <SettingsPageRow
       key={page}
       title={title}
       summary={summaries[page]}
+      tile={{ icon, colour }}
       onPress={() => router.push(route)}
     />
   ));

@@ -299,7 +299,7 @@ What Go to Artist opens on a song or album credited to several artists, and what
 
 ### Entry Row
 
-The Library's entries (Playlists, Artists, Albums, Songs, Genres, Folders, Favorites) and settings links. One quiet line of Entry type, 56dp tall, with a right-aligned tabular count in Subheadline graphite whose column stays reserved when the count is unknown. A hairline below each; the list opens with a hairline above. No icon, no chevron.
+The Library's entries (Playlists, Artists, Albums, Songs, Genres, Folders, Favorites) and settings links. One quiet line of Entry type, 56dp tall, with a right-aligned tabular count in Subheadline graphite whose column stays reserved when the count is unknown. A hairline below each; the list opens with a hairline above. No icon, no chevron, except that Settings' own rows lead with their page's tile: a 32dp square with 8dp continuous corners in the page's `tile-*` colour, a 20dp white line glyph (1.75 stroke) centred in it, 16dp before the title and summary, which keep one left edge (`src/settings/SettingsTile.tsx`).
 
 ### Track Row
 
