@@ -34,6 +34,8 @@ import {
   mixesShown,
   mixRefreshAvoid,
   mixRefreshWaitNotice,
+  mixSectionOfId,
+  mixSeedArtists,
   parseDiscoverMixes,
   parseMixesShown,
   pickYtArtist,
@@ -153,12 +155,7 @@ const firstRadioPage = (artist: { readonly name: string; readonly browseId?: str
     return yield* (yield* YtMusic).radio({ browseId });
   });
 
-/** The artists whose radios [seed]'s mix grows from: a genre's seed artists, else its artist. */
-const radioArtists = (
-  seed: DiscoverMixSeed,
-): readonly { readonly name: string; readonly browseId?: string }[] => seed.artists ?? [seed];
-
-type Filter = Omit<DiscoverMixFilter<NativeYtRadioSong>, "seedVideo">;
+type Filter = DiscoverMixFilter<NativeYtRadioSong>;
 
 interface ReadingRadio {
   readonly songs: NativeYtRadioSong[];
@@ -177,7 +174,7 @@ const readRadios = (seed: DiscoverMixSeed, filter: Filter) =>
   Effect.gen(function* () {
     const ytMusic = yield* YtMusic;
     const firstPages = yield* Effect.all(
-      radioArtists(seed).map((artist) => Effect.result(firstRadioPage(artist))),
+      mixSeedArtists(seed).map((artist) => Effect.result(firstRadioPage(artist))),
       { concurrency: "unbounded" },
     );
     const radios: ReadingRadio[] = firstPages.flatMap((page) =>
@@ -186,13 +183,15 @@ const readRadios = (seed: DiscoverMixSeed, filter: Filter) =>
         : [],
     );
     if (radios.length === 0) return null;
-    const mixFilter = { ...filter, seedVideo: null };
-    const keep = () => discoverMixSongs([interleaveRadios(radios.map((r) => r.songs))], mixFilter);
+    const keep = () => discoverMixSongs([interleaveRadios(radios.map((r) => r.songs))], filter);
     let pages = 1;
     let kept = keep();
     while (
-      radios.some((radio) => radio.continuation !== null) &&
-      discoverMixReadsMore({ pages, kept: kept.length, more: true })
+      discoverMixReadsMore({
+        pages,
+        kept: kept.length,
+        more: radios.some((radio) => radio.continuation !== null),
+      })
     ) {
       yield* Effect.all(
         radios.map((radio) =>
@@ -216,13 +215,6 @@ const readRadios = (seed: DiscoverMixSeed, filter: Filter) =>
     }
     return { kept, radio: interleaveRadios(radios.map((r) => r.songs)) };
   });
-
-/**
- * What a section's mixes are built from: the Library, its plays and what the
- * owner knows, indexed once and shared by the sections' builds
- * (`mixIndexes`).
- */
-const readLibrary = mixIndexes;
 
 /**
  * The mixes [seeds] make, one seed after another so no new song is in two
@@ -281,7 +273,7 @@ const buildArtistMixes = (avoid?: MixRefreshAvoid) =>
   Effect.gen(function* () {
     const stats = yield* Stats;
     const artists = yield* stats.topArtists("all", SEED_POOL);
-    const library = yield* readLibrary;
+    const library = yield* mixIndexes;
     const seeds = artistMixSeeds(
       yield* withSimilar({
         played: artists.map(({ item, countedPlays }) => ({
@@ -308,7 +300,7 @@ const buildArtistMixes = (avoid?: MixRefreshAvoid) =>
  */
 const buildGenreMixes = (avoid?: MixRefreshAvoid) =>
   Effect.gen(function* () {
-    const library = yield* readLibrary;
+    const library = yield* mixIndexes;
     const seeds = genreMixSeeds(library, Math.random, avoid);
     if (seeds.length === 0) return "nothing-to-build-from" as const;
     return yield* mixesOf(seeds, library, avoid);
@@ -387,13 +379,6 @@ const SECTIONS: Record<MixSectionId, MixSection> = {
   "artist-mixes": section("home.discoverMixes", buildArtistMixes, 0),
   "genre-mixes": section("home.genreMixes", buildGenreMixes, RETRY_MS),
 };
-
-/**
- * The section a mix [id] is of: Genre mixes' ids are Core's `genre:<family>`
- * (`genreMixSeeds`), Artist mixes' `artist:<name>`.
- */
-const sectionOfMix = (id: string): MixSectionId =>
-  id.startsWith("genre:") ? "genre-mixes" : "artist-mixes";
 
 /** Builds [id]'s mixes again when Core says they're due; [played]: the owner has counted plays. */
 const refresh = (id: MixSectionId, played: boolean): void => {
@@ -573,7 +558,7 @@ export const useDiscoverMix = (
   id: string,
   tracks: ReadonlyMap<number, SongRow> | null,
 ): BlendedDiscoverMix | null => {
-  const sectionId = sectionOfMix(id);
+  const sectionId = mixSectionOfId(id);
   const enabled = useYtMusicEnabled();
   const mixes = SECTIONS[sectionId].saved.useValue();
   const blend = useBlend(sectionId, tracks);

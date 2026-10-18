@@ -4,9 +4,12 @@ import { describe, test } from "node:test";
 
 import { normalizeTrack, type ExplicitFlag } from "@wave/core";
 
+import { eq } from "drizzle-orm";
+
 import type { IndexedTrack } from "../LibraryStore.ts";
 import { creditSplits } from "./credits.ts";
 import { saveBatch } from "./save.ts";
+import * as schema from "./schema.ts";
 import {
   selectKnownFiles,
   selectLibraryLookupSongs,
@@ -83,6 +86,33 @@ describe("selectSongGenres", () => {
     saveBatch(db, creditSplits(), [genreTagged("Song", ["Metalcore", "Rock"])], [], [], 1_000);
     saveBatch(db, creditSplits(), [genreTagged("Song", ["Rock"])], [], [], 2_000);
     assert.deepEqual(selectSongGenres(db), []);
+  });
+  test("leaves out a song whose stored values can't be read, and reads the others", async () => {
+    const db = await openTestDatabase();
+    saveBatch(
+      db,
+      creditSplits(),
+      [
+        genreTagged("Broken", ["Metalcore", "Rock"]),
+        genreTagged("Not a list", ["Metalcore", "Rock"]),
+        genreTagged("Not text", ["Metalcore", "Rock"]),
+        genreTagged("Fine", ["Rock", "Pop"]),
+      ],
+      [],
+      [],
+      1_000,
+    );
+    const ids = Object.fromEntries(
+      trackQuery(db)
+        .all()
+        .map(({ id, title }) => [title, id]),
+    );
+    const corrupt = (title: string, genres: string) =>
+      db.update(schema.tracks).set({ genres }).where(eq(schema.tracks.id, ids[title]!)).run();
+    corrupt("Broken", '["Metalcore",');
+    corrupt("Not a list", '{"genre":"Rock"}');
+    corrupt("Not text", "[1, 2]");
+    assert.deepEqual(selectSongGenres(db), [{ id: ids["Fine"], genres: ["Rock", "Pop"] }]);
   });
 });
 

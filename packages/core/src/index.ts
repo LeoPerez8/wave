@@ -7,8 +7,10 @@
   compareByTitle,
   identityKey,
   normalizeTrack,
+  readStoredGenres,
   resolveAlbumArtist,
   sortKey,
+  storedGenres,
 } from "./library.ts";
 export type { LibraryTrack, RawTrack } from "./library.ts";
 export { creditSplitter, respreadDeletedSongs, splitCredit } from "./credits.ts";
@@ -1419,3 +1421,4 @@ export type { StarAskedChange } from "./starDownloads.ts";
 export type { LyricsToSave } from "./onlineLyrics.ts";
 export { isCollectionKind } from "./itemActions.ts";
 export type { CollectionKind } from "./itemActions.ts";
+export { mixSectionOfId, mixSeedArtists } from "./discoverMixes.ts";

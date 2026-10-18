@@ -881,6 +881,17 @@ CREATE TABLE \`lyrics_misses\` (
 );
 `;
 
+// YT Music songs the owner streamed (\`schema.ts\`'s \`streamedSongs\`), for Home's mixes.
+const mStreamedSongs = `
+CREATE TABLE \`streamed_songs\` (
+	\`video_id\` text PRIMARY KEY NOT NULL,
+	\`song\` text NOT NULL,
+	\`plays\` integer NOT NULL,
+	\`first_played_at\` integer NOT NULL,
+	\`last_played_at\` integer NOT NULL
+);
+`;
+
 // A song tagged with several genres counts in each of their families for
 // Genre mixes (docs/spec.md, "Genre mixes"): tracks keep every value of a
 // multi-value genre tag (\`schema.ts\`'s \`genres\`), while the Library still
@@ -891,17 +902,6 @@ const mGenreTags = `
 ALTER TABLE \`tracks\` ADD \`genres\` text;
 --> statement-breakpoint
 UPDATE \`tracks\` SET \`modified_at\` = 0;
-`;
-
-// YT Music songs the owner streamed (\`schema.ts\`'s \`streamedSongs\`), for Home's mixes.
-const mStreamedSongs = `
-CREATE TABLE \`streamed_songs\` (
-	\`video_id\` text PRIMARY KEY NOT NULL,
-	\`song\` text NOT NULL,
-	\`plays\` integer NOT NULL,
-	\`first_played_at\` integer NOT NULL,
-	\`last_played_at\` integer NOT NULL
-);
 `;
 
 export default {

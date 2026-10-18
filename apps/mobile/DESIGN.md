@@ -364,7 +364,11 @@ Sign In opens Google's own page full screen over Wave (a plain web view in the s
 
 ### Discover
 
-Discover is Home's Discover mixes section: one row of mix covers like Home's other shelves, with YT Music on and no sign-in needed. The Library has no Discover entry, and an old link to the former Discover screen (`src/app/library/discover.tsx`) lands on Home.
+Discover is Home's two mix sections, **Artist mixes** and **Genre mixes**, each one row of mix covers like Home's other shelves, with YT Music on and no sign-in needed. Each header carries its own compact "% new" control after the title, opening a card of the five levels; changing it re-blends the saved mixes with no wait. The Library has no Discover entry, and an old link to the former Discover screen (`src/app/library/discover.tsx`) lands on Home.
+
+- **Building:** with no mixes saved yet, the row is a still skeleton (fill boxes at the tiles' size, no pulse). With mixes saved, a rebuild keeps them on screen and the header says a quiet "Updating…" in Footnote graphite after the title (read out by screen readers); nothing pulses or shimmers.
+- **Tile crossfade:** a tile whose mix changes (a rebuild, a pull, a level change) crossfades its cover and caption to the new ones in place (`src/motion/Crossfade.tsx`, one 300 ms fade, never on first show); under reduce motion it is a plain swap.
+- **Pull for new mixes:** pulling a carousel right from its start, past its edge, shows a graphite refresh arrow at the left edge that fades in and turns as it is pulled; past the threshold it becomes a teal spinner with a light haptic tick, and letting go rebuilds that section alone (`src/catalog/PullRefreshRow.tsx`). Let go before, it springs back. Under reduce motion the arrow doesn't turn and the spinner is a still teal arrow; TalkBack offers it as the row's action ("Get new artist mixes"). A "New mixes" toast offers Undo.
 
 ### YT Music list pages
 
