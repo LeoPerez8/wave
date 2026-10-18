@@ -96,39 +96,80 @@ export const lyricCardInk = (background: string): string => {
 };
 
 /**
- * The card's proportions, as fractions of its width: 9:16, with [margin] on
- * every side, the lines set [lineHeight] times their size and given at most
- * [linesHeight] of room.
+ * The card's proportions, as fractions of its width (which is fixed): [margin]
+ * on every side; the header (the cover, the title and artist) [header] tall
+ * and [headerGap] above the lines; the Wave mark [footer] tall, at least
+ * [footerGap] below them; the lines set [lineHeight] times their size,
+ * [lineGap] times their size apart. Its height follows the lines, between
+ * [minAspect] (square) and [maxAspect] (9:16) times its width.
  */
 export const LYRIC_CARD_LAYOUT = {
-  aspect: 16 / 9,
   margin: 0.08,
+  header: 0.17,
+  headerGap: 0.08,
+  footer: 0.06,
+  footerGap: 0.08,
   lineHeight: 1.25,
-  linesHeight: 0.95,
+  lineGap: 0.3,
+  minAspect: 1,
+  maxAspect: 16 / 9,
 } as const;
 
 /** The sizes the lines can take, as fractions of the card's width, largest first. */
-export const LYRIC_CARD_TEXT_SIZES = [0.08, 0.07, 0.06, 0.052, 0.045] as const;
+export const LYRIC_CARD_TEXT_SIZES = [
+  0.12, 0.105, 0.092, 0.08, 0.07, 0.062, 0.055, 0.048, 0.042,
+] as const;
 
 /** About how wide a character of the bold face is, as a fraction of its size. */
 const CHARACTER_WIDTH = 0.56;
 
+/** The card's shape for some lines: its height and its lines' size, as fractions of its width. */
+export interface LyricCardShape {
+  readonly aspect: number;
+  readonly textSize: number;
+}
+
+/** How many rows [line] wraps to at [perRow] characters a row, breaking between words. */
+const wrappedRows = (line: string, perRow: number): number => {
+  let rows = 0;
+  for (const row of line.split("\n")) {
+    rows += 1;
+    let used = 0;
+    for (const word of row.split(/\s+/).filter((w) => w !== "")) {
+      if (used > 0 && used + 1 + word.length <= perRow) {
+        used += 1 + word.length;
+        continue;
+      }
+      // A new row for the word (unless it's the row's first), and more for a word longer than one.
+      if (used > 0) rows += 1;
+      rows += Math.ceil(word.length / perRow) - 1;
+      used = word.length % perRow || perRow;
+    }
+  }
+  return rows;
+};
+
 /**
- * The size the card's [lines] are set in, as a fraction of its width: the
- * largest of [LYRIC_CARD_TEXT_SIZES] whose wrapped rows fit their room (the
- * smallest when none does).
+ * The card's shape for [lines] (docs/spec.md, "Sharing lyrics"): the largest
+ * of [LYRIC_CARD_TEXT_SIZES] whose wrapped rows fit a 9:16 card (the smallest
+ * when none does), and the height those rows need, never shorter than square
+ * nor taller than 9:16. A few words get a large size on a square card; more
+ * text, a smaller size on a taller card.
  */
-export const lyricCardTextSize = (lines: readonly string[]): number => {
-  const { margin, lineHeight, linesHeight } = LYRIC_CARD_LAYOUT;
+export const lyricCardLayout = (lines: readonly string[]): LyricCardShape => {
+  const { margin, header, headerGap, footer, footerGap, lineHeight, lineGap } = LYRIC_CARD_LAYOUT;
+  const { minAspect, maxAspect } = LYRIC_CARD_LAYOUT;
   const width = 1 - 2 * margin;
-  const fits = (size: number): boolean => {
+  const chrome = 2 * margin + header + headerGap + footerGap + footer;
+  const needed = (size: number): number => {
     const perRow = Math.max(1, Math.floor(width / (CHARACTER_WIDTH * size)));
-    const rows = lines
-      .flatMap((line) => line.split("\n"))
-      .reduce((total, row) => total + Math.max(1, Math.ceil(row.length / perRow)), 0);
-    return rows * size * lineHeight <= linesHeight;
+    const rows = lines.reduce((total, line) => total + wrappedRows(line, perRow), 0);
+    return chrome + rows * size * lineHeight + Math.max(0, lines.length - 1) * size * lineGap;
   };
-  return LYRIC_CARD_TEXT_SIZES.find(fits) ?? LYRIC_CARD_TEXT_SIZES.at(-1)!;
+  const textSize =
+    LYRIC_CARD_TEXT_SIZES.find((size) => needed(size) <= maxAspect) ??
+    LYRIC_CARD_TEXT_SIZES.at(-1)!;
+  return { aspect: Math.min(maxAspect, Math.max(minAspect, needed(textSize))), textSize };
 };
 
 /** What a file name can't hold (or shouldn't, in a gallery), with control characters. */

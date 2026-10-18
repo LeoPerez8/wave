@@ -7,8 +7,8 @@ import {
 } from "@tabler/icons-react-native";
 import {
   LYRIC_CARD_FALLBACK,
-  LYRIC_CARD_LAYOUT,
   lyricCardFileName,
+  lyricCardLayout,
   lyricShareDestinations,
   lyricStoryBackground,
   nextLyricCardColour,
@@ -41,7 +41,10 @@ import {
 
 const LOG_TAG = "LyricsShare";
 
-/** The exported card's width in pixels: a Story's (1080 × 1920). */
+/**
+ * The exported card's width in pixels, a Story's; its height follows the
+ * lines (Core's `lyricCardLayout`), from 1080 (square) to 1920 (9:16).
+ */
 const EXPORT_PX = 1080;
 
 /**
@@ -59,8 +62,8 @@ const cardFileName = (title: string): string => lyricCardFileName(title, new Dat
 let lastApps: LyricShareApps | null = null;
 
 /**
- * The card, fitted into [size] and drawn at the export's size scaled down, so
- * what's previewed is the very view that becomes the image.
+ * The card, fitted into [area] in its own shape and drawn at the export's size
+ * scaled down, so what's previewed is the very view that becomes the image.
  */
 function FittedCard({
   content,
@@ -80,10 +83,11 @@ function FittedCard({
   onReady: () => void;
   onPress: () => void;
 }) {
+  const { aspect } = lyricCardLayout(content.lines);
   const exportWidth = EXPORT_PX / PixelRatio.get();
-  const exportHeight = exportWidth * LYRIC_CARD_LAYOUT.aspect;
-  const width = Math.min(area.width, area.height / LYRIC_CARD_LAYOUT.aspect);
-  const height = width * LYRIC_CARD_LAYOUT.aspect;
+  const exportHeight = exportWidth * aspect;
+  const width = Math.min(area.width, area.height / aspect);
+  const height = width * aspect;
   const scale = width / exportWidth;
   return (
     <Press
