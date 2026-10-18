@@ -20,6 +20,7 @@ import { OverlayHost } from "@/overlay/OverlayHost";
 import { FollowCurrentRoute } from "@/library/routes";
 import { useOpenSharedText } from "@/library/sharedText";
 import { YtLibraryPickerHost } from "@/library/YtLibraryPicker";
+import { launchScanDone } from "@/library/replacementDuplicates";
 import { startInitialScan } from "@/library/runtime";
 import { ErrorScreen } from "@/log/ErrorScreen";
 import { NowPlayingSheet, UnderNowPlaying } from "@/nowPlaying/NowPlayingSheet";
@@ -59,8 +60,9 @@ export default function RootLayout() {
   // (src/lib/backgroundWork.ts), in this order.
   useEffect(() => {
     if (granted) {
-      // The scan, incremental after the first: new files show up, gone ones leave.
-      afterFirstContent("scan", startInitialScan);
+      // The scan, incremental after the first: new files show up, gone ones leave. Then, when
+      // it's due, the check for songs a replacement left twice (src/library/replacementDuplicates.ts).
+      afterFirstContent("scan", () => void startInitialScan().then(launchScanDone));
       // Link imports kept when Wave last closed go on filling their playlists.
       afterFirstContent("imports", resumePlaylistImports);
       // A From YT Music batch Android stopped reads the playlists it hadn't, in order.

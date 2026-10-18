@@ -117,6 +117,7 @@ import { LibraryStore, type SongRow } from "@/library/LibraryStore";
 import { useLoadedMissingSongs, useMissingSongs } from "@/library/hooks";
 import { refreshDownloadPolicy } from "@/library/downloadPolicy";
 import { finishFileDeletions } from "@/library/fileDeletions";
+import { replacementJournalRead } from "@/library/replacementDuplicates";
 import { fillInLyricsAndGenre, lookUpLyricsAndGenre } from "@/library/lyricsAndGenre";
 import { appRuntime } from "@/library/runtime";
 import { settleUnsearchedSong } from "@/library/unsearchedEntries";
@@ -1225,6 +1226,7 @@ const refresh = async (): Promise<void> => {
       for (const job of jobs) if (awaitsAnswer(job)) void answerJob(job.id);
       void rememberNoBetterCopies(jobs);
       removeFailedReplacementFiles(jobs);
+      replacementJournalRead(jobs);
       const active = jobs.some(unfinished);
       if (active && poll === null) poll = setInterval(refreshQuietly, 5_000);
       if (!active && poll !== null) {

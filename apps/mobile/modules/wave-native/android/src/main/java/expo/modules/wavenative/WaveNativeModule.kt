@@ -32,6 +32,7 @@ import expo.modules.wavenative.artwork.ArtworkProvider
 import expo.modules.wavenative.artwork.ArtworkStore
 import expo.modules.wavenative.download.AndroidMediaScans
 import expo.modules.wavenative.download.BackgroundThreads
+import expo.modules.wavenative.files.AudioLengths
 import expo.modules.wavenative.files.DeleteOutcome
 import expo.modules.wavenative.files.TrackFileDeleter
 import expo.modules.wavenative.folders.TreeUris
@@ -63,6 +64,7 @@ import expo.modules.wavenative.tags.TagWriteFailure
 import expo.modules.wavenative.tags.TagWriteStep
 import expo.modules.wavenative.tags.TagWriteStepException
 import expo.modules.wavenative.tags.attempt
+import expo.modules.wavenative.yt.AndroidM4aDuration
 import java.io.File
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -287,6 +289,15 @@ class WaveNativeModule : Module() {
      * media scanner with the next batch, with the file it replaced (#455).
      */
     AsyncFunction("downloadFilledIn") { path: String -> AndroidMediaScans.get(context).release(path) }
+
+    /**
+     * How long each file plays in milliseconds, read from its audio samples to their end (which
+     * proves the audio is there to its end), in order; null for a file missing or unreadable.
+     * Runs off the main thread.
+     */
+    AsyncFunction("readAudioLengths") { paths: List<String> ->
+      AudioLengths { file -> AndroidM4aDuration.of(file) }.read(paths).map { it?.toDouble() }
+    }
 
     /**
      * Downloads an artist's photo in both sizes beside the album artwork and

@@ -171,6 +171,11 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
    */
   downloadFilledIn(path: string): Promise<void>;
   /**
+   * How long each file plays (ms), read from its audio samples to their end, which proves the
+   * audio is there to its end; one per path, in order, null for a file missing or unreadable.
+   */
+  readAudioLengths(paths: readonly string[]): Promise<readonly (number | null)[]>;
+  /**
    * Downloads an artist's photo in both sizes beside the album artwork (files
    * named after [artistKey]); rejects when a download fails or isn't an image.
    */

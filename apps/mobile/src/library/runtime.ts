@@ -92,18 +92,19 @@ export const startRescan = (): Promise<void> => startScan(runRescan);
 /**
  * Scans the library on launch (in full the first time, incrementally after)
  * and again whenever Wave comes back to the foreground a while later.
- * Safe to call repeatedly.
+ * Safe to call repeatedly. Resolves once the launch scan is through.
  */
-export const startInitialScan = (): void => {
+export const startInitialScan = (): Promise<void> => {
   // Cached artist photos show at once; new lookups wait for the scan.
   void appRuntime.runPromiseExit(loadArtistPhotos);
-  void startRescan();
+  const launchScan = startRescan();
   rescanOnReturn ??= AppState.addEventListener("change", (state) => {
     if (state === "active" && Date.now() - lastScanStartedAt >= RESCAN_ON_RETURN_AFTER_MS) {
       // Its first read (every indexed file) waits until the owner's first tap back is through.
       whenFree(() => void startRescan());
     }
   });
+  return launchScan;
 };
 
 /** Opens the folder picker and, when a new folder is added, starts scanning it. */
