@@ -4,6 +4,13 @@
  */
 
 /**
+ * The context a Recap's music plays from. Its plays are never on record
+ * (`trackPlays`): neither play history nor counted plays, so watching a
+ * Recap never adds to what it reports.
+ */
+export const RECAP_PLAY_CONTEXT = { kind: "recap", id: null } as const;
+
+/**
  * A slide as the music reads it: a Recap's slides (`RecapSlide`), or the app's
  * with their songs loaded. A top-songs slide features its #1.
  */

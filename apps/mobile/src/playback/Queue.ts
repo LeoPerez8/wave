@@ -1,6 +1,7 @@
 import {
   EMPTY_QUEUE,
   REAL_SHUFFLE,
+  RECAP_PLAY_CONTEXT,
   answerPlayingWalk,
   applyPlayerSync,
   explicitPassOver,
@@ -131,14 +132,11 @@ export class Queue extends Context.Service<
 
 /** The player borrowed from the queue (`Queue.borrow`). */
 export interface QueueLoan {
-  /** Plays [track] on its own, in place of the queue, offering no Undo. */
+  /** Plays [track] on its own, in place of the queue, offering no Undo and kept off the play history. */
   readonly play: (track: QueueTrack) => Effect.Effect<void, PlayerError>;
   /** Puts the queue back as it was borrowed, paused where it was in its current song. */
   readonly giveBack: Effect.Effect<void, PlayerError>;
 }
-
-/** What a Recap's music plays from. */
-const RECAP_CONTEXT = { kind: "recap", id: null } as const;
 
 /** Starting playback of a list: the only command a session request hands over. */
 export type PlayCommand = Extract<QueueCommand, { readonly type: "play" }>;
@@ -619,7 +617,7 @@ export const layer = Layer.effect(
           play: (track) =>
             walkOut(
               start(
-                { type: "play", trackIds: [track.id], context: RECAP_CONTEXT, shuffle: false },
+                { type: "play", trackIds: [track.id], context: RECAP_PLAY_CONTEXT, shuffle: false },
                 [track],
               ),
               apply,

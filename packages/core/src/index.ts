@@ -225,7 +225,7 @@ export type {
   RecapPeriod,
   RecapSlide,
 } from "./recap.ts";
-export { recapSong } from "./recapMusic.ts";
+export { RECAP_PLAY_CONTEXT, recapSong } from "./recapMusic.ts";
 export type { RecapMusicSlide } from "./recapMusic.ts";
 export {
   AUTO_ROOT,
