@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- What ShareImageProvider shares: the images Wave draws to share (SharedImages), in the cache. -->
+<paths>
+  <cache-path name="images" path="shared-images/" />
+</paths>
