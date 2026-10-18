@@ -19,7 +19,8 @@ import kotlin.coroutines.resume
 /**
  * YT Music for JS (`WaveYtMusic`): the switch in Settings, song, artist and
  * album search (Search; the artist page's section finds artists too), the
- * artist page, playlists, the account and caching a played song's cover.
+ * artist page, playlists (and, for sharing one, making and editing the
+ * account's own, [YtPlaylistWrites]), the account and caching a played song's cover.
  * (Album pages are `WaveYtDownloads.album`.) (Playing is the playback
  * service's: it streams `yt:` queue items, see [YtDataSource].) Requests go
  * through the process-wide [YtClient]; failures reject with the codes of
@@ -128,6 +129,29 @@ class YtMusicModule : Module() {
     /** The radio page a `continuation` leads to, as [songRadio]. */
     AsyncFunction("radioMore") Coroutine { continuation: String ->
       coded { YtPages(client).radioMore(continuation).toMap() }
+    }
+
+    /**
+     * The entries of the account's playlist [playlistId]: `[{ videoId,
+     * setVideoId }]`, every page; null when it's gone or isn't the account's.
+     * An `ERR_YT_*` rejection otherwise (`ERR_YT_SIGNED_OUT` without a session).
+     */
+    AsyncFunction("ownPlaylist") Coroutine { playlistId: String ->
+      coded { YtPlaylistWrites(client).ownPlaylist(playlistId)?.map(YtOwnEntry::toMap) }
+    }
+
+    /** Makes an unlisted playlist on the account with [videoIds] in order; resolves its id. */
+    AsyncFunction("createPlaylist") Coroutine { title: String, videoIds: List<String> ->
+      coded { YtPlaylistWrites(client).create(title, videoIds) }
+    }
+
+    /**
+     * Applies [edits] (`{ kind: "add" | "remove" | "move" | "rename", … }`)
+     * to the account's playlist [playlistId], in order, in one request.
+     */
+    AsyncFunction("editPlaylist") Coroutine { playlistId: String, edits: List<Map<String, Any?>> ->
+      val known = edits.map { YtPlaylistEdit.of(it) ?: throw IllegalArgumentException("Unknown playlist edit: $it") }
+      coded { YtPlaylistWrites(client).edit(playlistId, known) }
     }
 
     /** The saved session, without asking YouTube. */

@@ -1,5 +1,13 @@
 import { IconX } from "@tabler/icons-react-native";
-import { RECAP_SLIDE_MS, recapBack, recapBarFill, recapForward } from "@wave/core";
+import {
+  RECAP_SLIDE_MS,
+  recapBack,
+  recapBarFill,
+  recapForward,
+  recapHourLabel,
+  recapWeekdayLabel,
+  type RecapGenre,
+} from "@wave/core";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Text, View } from "react-native";
@@ -26,12 +34,14 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
 
+import { ArtistImage } from "@/catalog/ArtistImage";
 import { Artwork } from "@/catalog/Artwork";
 import { CELL, grid } from "@/catalog/grid";
 import { Press } from "@/motion/Press";
-import type { SongRow } from "@/library/LibraryStore";
+import type { AlbumRow, ArtistRow, SongRow } from "@/library/LibraryStore";
 
 import type { LoadedRecap, LoadedRecapSlide, Ranked } from "./Stats";
+import { useRecapMusic } from "./recapMusic";
 import { playCount } from "./StatsViews";
 
 /** A tap on the screen's left third goes back; anywhere else goes forward. */
@@ -65,6 +75,11 @@ function Rise({ step, children }: { step: number; children: ReactNode }) {
 const BACKDROP: Record<LoadedRecapSlide["kind"], string> = {
   minutes: "bg-tile-indigo",
   topSongs: "bg-tile-pink",
+  topArtists: "bg-tile-purple",
+  topAlbum: "bg-tile-blue",
+  topGenres: "bg-tile-orange",
+  habits: "bg-tile-green",
+  discovered: "bg-tile-red",
 };
 
 function MinutesSlide({ title, minutes }: { title: string; minutes: number }) {
@@ -147,12 +162,244 @@ function TopSongsSlide({ songs }: { songs: readonly Ranked<SongRow>[] }) {
   );
 }
 
+/** A slide's heading: the first line to rise in. */
+function Heading({ children }: { children: ReactNode }) {
+  return (
+    <Rise step={0}>
+      <Text className="font-sans text-title3 text-on-tile">{children}</Text>
+    </Rise>
+  );
+}
+
+/** A numbered line under a slide's #1: rank, an optional image, a title over its detail. */
+function RankedLine({
+  rank,
+  step,
+  image,
+  title,
+  detail,
+}: {
+  rank: number;
+  step: number;
+  image?: ReactNode;
+  title: string;
+  detail?: string;
+}) {
+  return (
+    <Rise step={step}>
+      <View className="flex-row items-center" style={{ gap: CELL * 2 }}>
+        <Text
+          className="font-sans text-title3 font-semibold text-on-tile"
+          style={{ width: CELL * 3, fontVariant: ["tabular-nums"] }}
+        >
+          {rank}
+        </Text>
+        {image}
+        <View className="flex-1">
+          <Text numberOfLines={1} className="font-sans text-body font-semibold text-on-tile">
+            {title}
+          </Text>
+          {detail !== undefined && (
+            <Text numberOfLines={1} className="font-sans text-footnote text-on-tile opacity-80">
+              {detail}
+            </Text>
+          )}
+        </View>
+      </View>
+    </Rise>
+  );
+}
+
+function TopArtistsSlide({ artists }: { artists: readonly Ranked<ArtistRow>[] }) {
+  const [top, ...rest] = artists;
+  if (top === undefined) return null;
+  return (
+    <View className="flex-1 justify-center" style={{ gap: CELL * 3 }}>
+      <Heading>Your top artists</Heading>
+      <Rise step={1}>
+        <View style={{ gap: CELL * 1.5 }}>
+          <ArtistImage artist={top.item} size={CELL * 22} large />
+          <View>
+            <Text className="font-sans text-footnote font-semibold text-on-tile opacity-80">
+              #1 · {playCount(top.countedPlays)}
+            </Text>
+            <Text numberOfLines={2} className="font-sans text-title1 font-bold text-on-tile">
+              {top.item.name}
+            </Text>
+          </View>
+        </View>
+      </Rise>
+      <View style={{ gap: CELL * 1.5 }}>
+        {rest.map((entry, index) => (
+          <RankedLine
+            key={entry.item.id}
+            rank={index + 2}
+            step={index + 2}
+            image={<ArtistImage artist={entry.item} size={CELL * 5} />}
+            title={entry.item.name}
+            detail={playCount(entry.countedPlays)}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function TopAlbumSlide({ album }: { album: Ranked<AlbumRow> }) {
+  const path = album.item.artworkPath ?? album.item.thumbPath;
+  return (
+    <View className="flex-1 justify-center" style={{ gap: CELL * 3 }}>
+      <Heading>Your top album</Heading>
+      <Rise step={1}>
+        <Artwork uri={path === null ? undefined : `file://${path}`} size={CELL * 32} radius={12} />
+      </Rise>
+      <Rise step={2}>
+        <View>
+          <Text numberOfLines={2} className="font-sans text-title1 font-bold text-on-tile">
+            {album.item.title}
+          </Text>
+          <Text numberOfLines={1} className="font-sans text-body text-on-tile opacity-80">
+            {album.item.albumArtist} · {playCount(album.countedPlays)}
+          </Text>
+        </View>
+      </Rise>
+    </View>
+  );
+}
+
+const percent = (share: number): string => `${Math.round(share * 100)}%`;
+
+function TopGenresSlide({ genres }: { genres: readonly RecapGenre[] }) {
+  const [top, ...rest] = genres;
+  if (top === undefined) return null;
+  return (
+    <View className="flex-1 justify-center" style={{ gap: CELL * 3 }}>
+      <Heading>Your top genres</Heading>
+      <Rise step={1}>
+        <View>
+          <Text className="font-sans text-footnote font-semibold text-on-tile opacity-80">
+            #1 · {percent(top.share)} of your plays
+          </Text>
+          <Text
+            adjustsFontSizeToFit
+            numberOfLines={1}
+            className="font-sans font-bold text-on-tile"
+            style={{ fontSize: 56, lineHeight: 64 }}
+          >
+            {top.family.name}
+          </Text>
+        </View>
+      </Rise>
+      <View style={{ gap: CELL * 1.5 }}>
+        {rest.map((entry, index) => (
+          <RankedLine
+            key={entry.family.key}
+            rank={index + 2}
+            step={index + 2}
+            title={entry.family.name}
+            detail={percent(entry.share)}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function HabitsSlide({
+  peakHour,
+  peakWeekday,
+  longestStreakDays,
+}: {
+  peakHour: number;
+  peakWeekday: number;
+  longestStreakDays: number;
+}) {
+  return (
+    <View className="flex-1 justify-center" style={{ gap: CELL * 4 }}>
+      <Heading>You listened most</Heading>
+      <Rise step={1}>
+        <Text className="font-sans text-title1 font-bold text-on-tile">
+          on {recapWeekdayLabel(peakWeekday)}
+        </Text>
+        <Text className="font-sans text-title1 font-bold text-on-tile">
+          around {recapHourLabel(peakHour)}
+        </Text>
+      </Rise>
+      <Rise step={2}>
+        <Text className="font-sans text-title3 text-on-tile">Your longest streak</Text>
+        <Text
+          className="font-sans font-bold text-on-tile"
+          style={{ fontSize: 56, lineHeight: 64, fontVariant: ["tabular-nums"] }}
+        >
+          {longestStreakDays}
+        </Text>
+        <Text className="font-sans text-title3 font-semibold text-on-tile">
+          {longestStreakDays === 1 ? "day" : "days in a row"}
+        </Text>
+      </Rise>
+    </View>
+  );
+}
+
+function DiscoveredSlide({
+  count,
+  artists,
+}: {
+  count: number;
+  artists: readonly Ranked<ArtistRow>[];
+}) {
+  return (
+    <View className="flex-1 justify-center" style={{ gap: CELL * 3 }}>
+      <Heading>You discovered</Heading>
+      <Rise step={1}>
+        <Text
+          className="font-sans font-bold text-on-tile"
+          style={{ fontSize: 72, lineHeight: 80, fontVariant: ["tabular-nums"] }}
+        >
+          {count.toLocaleString("en")}
+        </Text>
+        <Text className="font-sans text-title1 font-semibold text-on-tile">
+          {count === 1 ? "new artist" : "new artists"}
+        </Text>
+      </Rise>
+      <View style={{ gap: CELL * 1.5 }}>
+        {artists.map((entry, index) => (
+          <RankedLine
+            key={entry.item.id}
+            rank={index + 1}
+            step={index + 2}
+            image={<ArtistImage artist={entry.item} size={CELL * 5} />}
+            title={entry.item.name}
+            detail={playCount(entry.countedPlays)}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
 function Slide({ recap, slide }: { recap: LoadedRecap; slide: LoadedRecapSlide }) {
   switch (slide.kind) {
     case "minutes":
       return <MinutesSlide title={recap.title} minutes={slide.minutes} />;
     case "topSongs":
       return <TopSongsSlide songs={slide.songs} />;
+    case "topArtists":
+      return <TopArtistsSlide artists={slide.artists} />;
+    case "topAlbum":
+      return <TopAlbumSlide album={slide.album} />;
+    case "topGenres":
+      return <TopGenresSlide genres={slide.genres} />;
+    case "habits":
+      return (
+        <HabitsSlide
+          peakHour={slide.peakHour}
+          peakWeekday={slide.peakWeekday}
+          longestStreakDays={slide.longestStreakDays}
+        />
+      );
+    case "discovered":
+      return <DiscoveredSlide count={slide.count} artists={slide.artists} />;
   }
 }
 
@@ -201,6 +448,7 @@ export function RecapStories({
   const width = useRef(1);
   const closed = useRef(false);
   const count = recap?.slides.length ?? 0;
+  useRecapMusic(recap, index, paused);
 
   const close = useCallback(() => {
     if (closed.current) return;

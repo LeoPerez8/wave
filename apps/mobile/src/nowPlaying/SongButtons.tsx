@@ -12,6 +12,7 @@ import { CELL } from "@/catalog/grid";
 import { openAddToPlaylist } from "@/library/PlaylistSheets";
 import { songHasFile } from "@/library/LibraryStore";
 import { Press } from "@/motion/Press";
+import { showToast } from "@/overlay/toast";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { useThemeColor } from "@/theme/useThemeColor";
 import { currentLibraryFinder, useLoadedLibraryFinder } from "@/ytmusic/libraryFinder";
@@ -112,21 +113,34 @@ function ProgressRing({ fraction }: { fraction: number }) {
  * Download, for a song this phone has no file for: it starts the song's
  * download as its menu's Download does (into its Library entry when the
  * Library lists it as missing), then shows it waiting and a progress ring
- * while it downloads. A failed one shows so, and a tap retries. It's gone once
- * the song is in the Library (Core's `nowPlayingDownload`).
+ * while it downloads. A failed one shows so, and a tap retries. Once the song
+ * is in the Library (and for a Library song playing) it stays, tinted with
+ * the primary colour, and a tap only says "Downloaded" (Core's
+ * `nowPlayingDownload`).
  */
-export function DownloadButton({ ytSong }: { ytSong: NativeYtSong | null }) {
+export function DownloadButton({
+  trackId,
+  ytSong,
+}: {
+  trackId: string | null;
+  ytSong: NativeYtSong | null;
+}) {
   const secondary = useThemeColor("secondary");
+  const accent = useThemeColor("accent");
   const shown = useNowPlayingShown();
-  // Null until the Library is first read: no Download that would only go away.
+  // Null until the Library is first read: no button that would only change.
   const find = useLoadedLibraryFinder(shown);
+  // A Library song in the queue plays its file.
+  const librarySong = trackId !== null && parseTrackId(trackId)?.kind === "library";
   const track = ytSong === null || find === null ? null : find(ytSong);
   const missingId = track !== null && !songHasFile(track) ? track.id : null;
   const ytStatus = useYtDownloadStatus(ytSong?.videoId ?? "");
   const missingStatus = useMissingSongDownloadStatus(missingId);
-  const hasFile = ytSong === null || find === null || (track !== null && missingId === null);
+  const hasFile = librarySong || (track !== null && missingId === null);
   const state = nowPlayingDownload(missingId === null ? ytStatus : missingStatus, { hasFile });
-  if (state === null || ytSong === null) return null;
+  if (!librarySong && (ytSong === null || find === null)) return null;
+  if (state.kind === "downloaded") return <DownloadedButton color={accent} />;
+  if (ytSong === null) return null;
 
   if (state.kind === "waiting" || state.kind === "progress") {
     const percent = state.kind === "progress" ? Math.round(state.fraction * 100) : null;
@@ -166,6 +180,23 @@ export function DownloadButton({ ytSong }: { ytSong: NativeYtSong | null }) {
       style={BOX}
     >
       <Icon size={ICON} color={secondary} strokeWidth={1.5} />
+    </Press>
+  );
+}
+
+/** Download, tinted, for a song this phone has the file of: a tap only says so. */
+function DownloadedButton({ color }: { color: string }) {
+  return (
+    <Press
+      accessibilityRole="button"
+      accessibilityLabel="Downloaded"
+      onPress={() => void showToast("Downloaded")}
+      haptic="selection"
+      depth={0.1}
+      className="items-center justify-center"
+      style={BOX}
+    >
+      <IconDownload size={ICON} color={color} strokeWidth={1.5} />
     </Press>
   );
 }

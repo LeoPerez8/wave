@@ -4,8 +4,8 @@ import { describe, test } from "node:test";
 import { nowPlayingDownload } from "./index.ts";
 
 describe("Now Playing's Download button", () => {
-  test("a song with a file in the Library has none", () => {
-    assert.equal(nowPlayingDownload(null, { hasFile: true }), null);
+  test("a song with a file in the Library shows it's downloaded", () => {
+    assert.deepEqual(nowPlayingDownload(null, { hasFile: true }), { kind: "downloaded" });
   });
 
   test("a streamed song not on its way offers Download", () => {
@@ -42,10 +42,10 @@ describe("Now Playing's Download button", () => {
     );
   });
 
-  test("a finished download hides it while the Library catches up", () => {
-    assert.equal(
+  test("a finished download shows it's downloaded while the Library catches up", () => {
+    assert.deepEqual(
       nowPlayingDownload({ kind: "done", path: "/music/a.m4a" }, { hasFile: false }),
-      null,
+      { kind: "downloaded" },
     );
   });
 });

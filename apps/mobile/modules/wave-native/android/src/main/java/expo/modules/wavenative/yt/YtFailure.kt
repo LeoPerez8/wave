@@ -67,4 +67,7 @@ private val YtFailure.logName: String
 
 /** A YT Music request that failed, carrying the code JS reads. */
 class YtException(val failure: YtFailure, cause: Throwable? = null) :
-  Exception("YT Music request failed: ${failure.name.lowercase()}", cause)
+  Exception("YT Music request failed: ${failure.name.lowercase()}", cause) {
+  /** For a stream lookup, what each player client answered ([YtStreamResolver.refused]). */
+  @Volatile var answers: List<YtPlayerAttempt> = emptyList()
+}

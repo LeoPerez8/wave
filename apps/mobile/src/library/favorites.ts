@@ -11,7 +11,7 @@ import { useEffect, useSyncExternalStore } from "react";
 
 import { makeExternalStore } from "@/lib/externalStore";
 
-import { onSavedStars, publishLibraryChange } from "./libraryChanges";
+import { onSavedStars, publishLibraryChange, publishStarred } from "./libraryChanges";
 import { LibraryStore } from "./LibraryStore";
 import { appRuntime } from "./runtime";
 
@@ -95,6 +95,7 @@ export const setFavorites = (
   const ids = [...new Set(trackIds.map(Number))];
   if (ids.length === 0) return Promise.resolve();
   const current = favorites.get().ids;
+  if (on) publishStarred(ids.filter((id) => !current.has(id)));
   showStars(
     new Map(
       ids.map((id) => [id, starWriteStarted(writing.get(id) ?? favoriteStar(current.has(id)), on)]),

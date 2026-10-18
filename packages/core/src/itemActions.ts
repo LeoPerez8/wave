@@ -132,11 +132,17 @@ export interface ActionSubject<A extends LibraryArtistRef = LibraryArtistRef> {
    * artists they share with the other items; without it, they offer none.
    */
   readonly streamedArtists?: StreamedArtists<A> | undefined;
+  /**
+   * A service a playlist can be shared on is on (YT Music): a playlist's
+   * menu offers Share.
+   */
+  readonly sharing?: boolean | undefined;
 }
 
 export type ItemAction =
   | "playNext"
   | "addToQueue"
+  | "magicQueue"
   | "addToPlaylist"
   | "favorite"
   | "unfavorite"
@@ -145,7 +151,9 @@ export type ItemAction =
   | "goToArtist"
   | "renamePlaylist"
   | "changeImage"
+  | "adjustImage"
   | "removeImage"
+  | "share"
   | "deletePlaylist"
   | "deletePlaylists"
   | "fixSong"
@@ -185,6 +193,7 @@ export type ItemActionEntry<A extends LibraryArtistRef = LibraryArtistRef> =
 export const ITEM_ACTION_LABELS: { readonly [A in ItemAction]: string } = {
   playNext: "Play Next",
   addToQueue: "Add to Queue",
+  magicQueue: "Magic Queue",
   addToPlaylist: "Add to Playlist",
   favorite: "Favorite",
   unfavorite: "Remove from Favorites",
@@ -193,7 +202,9 @@ export const ITEM_ACTION_LABELS: { readonly [A in ItemAction]: string } = {
   goToArtist: "Go to Artist",
   renamePlaylist: "Rename Playlist",
   changeImage: "Change Image",
+  adjustImage: "Adjust Image",
   removeImage: "Remove Image",
+  share: "Share",
   deletePlaylist: "Delete Playlist",
   deletePlaylists: "Delete Playlists",
   fixSong: "Fix Song",
@@ -322,6 +333,22 @@ export const isCollectionKind = (kind: ItemKind): kind is CollectionKind => COLL
 const fixableFile = (song: ActionItem): boolean =>
   song.fixable === true && song.missing !== true && song.streamed !== true;
 
+/**
+ * Whether a menu starts a Magic Queue from its item: one Library song with a
+ * file here, album, artist or playlist (the seeds a Magic Queue grows from
+ * the Library); not a genre, nor the selection bar.
+ */
+const offersMagicQueue = (
+  kind: ItemKind,
+  items: readonly ActionItem[],
+  surface: ActionSurface,
+): boolean => {
+  const [only] = items;
+  if (surface !== "menu" || items.length !== 1 || only === undefined) return false;
+  if (kind === "track") return only.missing !== true && only.streamed !== true;
+  return kind === "album" || kind === "artist" || kind === "playlist";
+};
+
 /** The entries to offer on [subject]'s items, in order. */
 export const itemActions = <A extends LibraryArtistRef = LibraryArtistRef>(
   subject: ActionSubject<A>,
@@ -345,6 +372,7 @@ export const itemActions = <A extends LibraryArtistRef = LibraryArtistRef>(
     ...(missing < items.length
       ? [{ action: "playNext" } as const, { action: "addToQueue" } as const]
       : []),
+    ...(offersMagicQueue(kind, items, surface) ? [{ action: "magicQueue" } as const] : []),
     { action: "addToPlaylist" },
   ];
   // Albums' missing songs download as Settings' Download All does them, only theirs.
@@ -377,7 +405,11 @@ export const itemActions = <A extends LibraryArtistRef = LibraryArtistRef>(
     // Its own image is set from its menu (the selection bar leaves it out); the mosaic shows without one.
     if (surface === "menu") {
       entries.push({ action: "changeImage" });
-      if (only?.hasImage === true) entries.push({ action: "removeImage" });
+      // Adjust Image reframes it from the original photo, at the last framing.
+      if (only?.hasImage === true)
+        entries.push({ action: "adjustImage" }, { action: "removeImage" });
+      // Shared as a playlist on another service, from its menu alone (#483).
+      if (subject.sharing === true) entries.push({ action: "share" });
     }
   }
   // Looks up online what the songs lack and writes it into their files; it
@@ -399,6 +431,9 @@ export const itemActions = <A extends LibraryArtistRef = LibraryArtistRef>(
     entries.push({ action: "fixSongs" });
   if (kind === "playlist")
     entries.push({ action: items.length === 1 ? "deletePlaylist" : "deletePlaylists" });
+  // One song's menu shares it as a card (the song share sheet), whatever kind of song it is.
+  if (surface === "menu" && kind === "track" && items.length === 1)
+    entries.push({ action: "share" });
   if (surface === "menu" && subject.selectable === true) entries.push({ action: "select" });
   // Last, and destructive (after asking): deletes the songs' files from the
   // phone, or takes missing songs out of the Library.
@@ -417,6 +452,7 @@ export type YtSongActionEntry<A> =
         | "favorite"
         | "unfavorite"
         | "removeFromPlaylist"
+        | "share"
         | "select";
     }
   /** The song's YT Music album page, by its browse id (`MPREb_…`). */
@@ -480,6 +516,7 @@ export const ytSongActions = <A>(
   ...(artists === undefined || artists.kind === "here"
     ? []
     : [{ action: "goToArtist", artists } as const]),
+  { action: "share" },
   ...(selectable ? [{ action: "select" } as const] : []),
 ];
 
