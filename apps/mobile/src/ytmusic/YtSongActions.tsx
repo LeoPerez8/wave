@@ -16,7 +16,6 @@ import { useState } from "react";
 import { Text, View } from "react-native";
 
 import { Artwork } from "@/catalog/Artwork";
-import { EntryRow } from "@/catalog/EntryRow";
 import { CELL } from "@/catalog/grid";
 import { followStreamedArtistLink } from "@/library/ArtistChoice";
 import type { ArtistRow } from "@/library/LibraryStore";
@@ -27,6 +26,7 @@ import type { NativeYtSong } from "@/native/waveYtMusic";
 import { CardEntries } from "@/overlay/CardEntries";
 import { CardHeading } from "@/overlay/CardHeading";
 import { useOverlayFlow } from "@/overlay/flow";
+import { MenuRow } from "@/overlay/MenuRow";
 import { followUp, openOverlay } from "@/overlay/overlay";
 import { useSlideToChoose } from "@/overlay/useSlideToChoose";
 import { addYtToQueue, playYtNext } from "@/playback/actions";
@@ -233,7 +233,8 @@ function YtSongActionsMenu({
       <CardEntries listRef={trackList}>
         {entries.map((entry, index) => (
           <View key={entry.action} ref={trackEntry(index)} collapsable={false}>
-            <EntryRow
+            <MenuRow
+              action={entry.action}
               label={label(entry)}
               onPress={() => choose(index)}
               divider={entryDivider(index, entries.length, flow)}

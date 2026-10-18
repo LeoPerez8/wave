@@ -289,6 +289,18 @@ describe("the songs a queue searches as they're about to play", () => {
     assert.deepEqual(searched(state, 31_000, { failedAt }), [id("u:A"), id("u:B"), id("u:C")]);
   });
 
+  test("at the crossfade's prefetch point the next song is asked again at once, the others still wait", () => {
+    const state = play("1 u:B u:C");
+    const failedAt = new Map([
+      [id("u:B"), 1000],
+      [id("u:C"), 1000],
+    ]);
+    assert.deepEqual(searched(state, 5000, { failedAt, nextDue: true }), [id("u:B")]);
+    // Being searched already, it isn't asked twice.
+    const asking = new Set([id("u:B")]);
+    assert.deepEqual(searched(state, 5000, { failedAt, asking, nextDue: true }), []);
+  });
+
   test("an empty queue, or one with nothing unsearched near, searches nothing", () => {
     assert.deepEqual(searched(EMPTY_QUEUE), []);
     assert.deepEqual(searched(play("1 2 3 4 5 u:A")), []);

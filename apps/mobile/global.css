@@ -19,6 +19,10 @@
  * these with useThemeColor(). These are the defaults: Settings › Theme
  * overrides every value at runtime (src/settings/theme.ts, derived in Core's
  * themeChoice.ts).
+ *
+ * The `tile-*` colours are the rounded squares in front of Settings' rows
+ * (Core's SETTINGS_TILE_COLOURS, each page naming its own in SETTINGS_PAGES).
+ * The chosen theme leaves them as they are; each keeps a white glyph legible.
  */
 @layer theme {
   :root {
@@ -36,6 +40,14 @@
       --color-highlight: #a14f09;
       --color-destructive: #b3261e;
       --color-scrim: #121b1d;
+      --color-tile-red: #d4382e;
+      --color-tile-orange: #c25700;
+      --color-tile-green: #2b8a3e;
+      --color-tile-blue: #1f6fd1;
+      --color-tile-indigo: #4c50c6;
+      --color-tile-purple: #8a45c2;
+      --color-tile-pink: #c93370;
+      --color-tile-grey: #606b6e;
     }
 
     @variant dark {
@@ -52,6 +64,14 @@
       --color-highlight: #ec9d53;
       --color-destructive: #f2867a;
       --color-scrim: #000000;
+      --color-tile-red: #e0463b;
+      --color-tile-orange: #cc6106;
+      --color-tile-green: #31944a;
+      --color-tile-blue: #2f7ce0;
+      --color-tile-indigo: #5b5fd6;
+      --color-tile-purple: #9853cf;
+      --color-tile-pink: #d6427d;
+      --color-tile-grey: #6b7679;
     }
   }
 }

@@ -8,7 +8,6 @@ import type { ReactNode } from "react";
 import { Text, View } from "react-native";
 
 import { ArtistImage } from "@/catalog/ArtistImage";
-import { EntryRow } from "@/catalog/EntryRow";
 import { CELL } from "@/catalog/grid";
 import { Mosaic } from "@/catalog/Mosaic";
 import type { LibrarySection } from "@/catalog/sections";
@@ -27,11 +26,13 @@ import { pressedRect } from "@/motion/pressedRect";
 import { CardEntries } from "@/overlay/CardEntries";
 import { CardHeading } from "@/overlay/CardHeading";
 import { useOverlayFlow } from "@/overlay/flow";
+import { MenuRow } from "@/overlay/MenuRow";
 import { followUp, openOverlay } from "@/overlay/overlay";
 import { useSlideToChoose } from "@/overlay/useSlideToChoose";
 import { useLoadedInLibrary } from "@/ytmusic/libraryFinder";
 import { runYtPlaylistDownloadAction, useYtPlaylistDownload } from "@/ytmusic/YtDownloads";
 
+import type { MenuAction } from "./actionIcons";
 import { targetHeading, type ActionItems, type Heading, type PlaylistPlace } from "./actionTargets";
 import { useItemActions, type ActionEntry } from "./itemActions";
 
@@ -159,7 +160,8 @@ function SectionActionsMenu({ target, close }: { target: ActionItems; close: () 
 
 /** One row of the menu card. */
 interface MenuEntry {
-  readonly key: string;
+  /** What it does, which picks its icon. */
+  readonly action: MenuAction;
   readonly label: string;
   readonly onPress: () => void;
   readonly destructive: boolean;
@@ -179,7 +181,7 @@ function usePlaylistDownloadEntries(
   const inLibrary = useLoadedInLibrary();
   const download = useYtPlaylistDownload(entries, inLibrary);
   return download.actions.map((action) => ({
-    key: action,
+    action,
     label: YT_PLAYLIST_DOWNLOAD_ACTION_LABELS[action],
     onPress: () => {
       close();
@@ -250,7 +252,7 @@ export function ItemMenuCard({
 }) {
   // A playlist's download entries follow Add to Playlist, before Rename and Delete.
   const entries: MenuEntry[] = actions.flatMap((entry): MenuEntry[] => [
-    { key: entry.action, ...entry },
+    entry,
     ...(entry.action === "addToPlaylist" ? downloads : []),
   ]);
 
@@ -304,8 +306,9 @@ function MenuCard({
       {/* Play Next sits nearest the finger, whichever side of the row the card opened on. */}
       <CardEntries listRef={trackList}>
         {entries.map((entry, index) => (
-          <View key={entry.key} ref={trackEntry(index)} collapsable={false}>
-            <EntryRow
+          <View key={entry.action} ref={trackEntry(index)} collapsable={false}>
+            <MenuRow
+              action={entry.action}
               label={entry.label}
               onPress={entry.onPress}
               divider={entryDivider(index, entries.length, flow)}

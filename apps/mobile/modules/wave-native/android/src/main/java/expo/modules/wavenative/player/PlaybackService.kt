@@ -21,6 +21,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.common.util.Util
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
@@ -42,6 +43,7 @@ import expo.modules.wavenative.yt.YtClient
 import expo.modules.wavenative.yt.YtDataSource
 import expo.modules.wavenative.yt.YtMedia
 import expo.modules.wavenative.yt.YtStreamFailure
+import java.util.Locale
 
 /**
  * Hosts the player. Media3 provides the media notification, lock-screen and
@@ -246,6 +248,33 @@ class PlaybackService : MediaLibraryService() {
             next != C.INDEX_UNSET && next != player.currentMediaItemIndex
         }
 
+      // The player loads the next song once this one is loaded (a preload
+      // started it earlier, [prefetchNext]), so what's buffered past this
+      // song's end is the next one's start.
+      override val nextReady: Boolean
+        get() {
+          val player = exoPlayer ?: return false
+          val durationMs = mainDurationMs ?: return false
+          return player.totalBufferedDuration - (durationMs - player.currentPosition) >= NEXT_READY_MS
+        }
+
+      // Preloads the next playlist item while this one plays: a YT Music
+      // song's address is resolved (YtDataSource) and its start buffered.
+      // Off again once the player moves (crossfadeListener).
+      @OptIn(UnstableApi::class)
+      override fun prefetchNext() {
+        exoPlayer?.preloadConfiguration = ExoPlayer.PreloadConfiguration(Util.msToUs(PRELOAD_MS))
+      }
+
+      override fun nextLate(lateMs: Long, overlapMs: Long) {
+        val late = "the next song was ${seconds(lateMs)} late"
+        WaveLog.i(
+          CROSSFADE_LOG_TAG,
+          if (overlapMs > 0) "Crossfade shortened to ${seconds(overlapMs)}: $late"
+          else "Crossfade dropped, the song ended gapless: $late",
+        )
+      }
+
       override fun openTail(positionMs: Long): CrossfadeDeck {
         closeTail()
         val tail = buildPlayer(forSession = false)
@@ -312,9 +341,12 @@ class PlaybackService : MediaLibraryService() {
    * listener, so the crossfade's own move is reported before the next tick.
    */
   private val crossfadeListener = object : Player.Listener {
+    @OptIn(UnstableApi::class)
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
       val own = reason == Player.MEDIA_ITEM_TRANSITION_REASON_SEEK && mediaItem?.mediaId == crossfadeTarget
       crossfadeTarget = null
+      // The song after this one is preloaded only once this one nears its overlap.
+      exoPlayer?.preloadConfiguration = ExoPlayer.PreloadConfiguration.DEFAULT
       if (!own) crossfade.interrupt()
       scheduleCrossfade()
     }
@@ -752,5 +784,15 @@ class PlaybackService : MediaLibraryService() {
     )
 
     const val RESUME_SAVE_INTERVAL_MS = 10_000L
+
+    const val CROSSFADE_LOG_TAG = "WaveCrossfade"
+
+    /** Buffered of the next song for it to sound at once (ExoPlayer's default to start playing). */
+    const val NEXT_READY_MS = 2500L
+
+    /** How much of the next song a crossfade preloads. */
+    const val PRELOAD_MS = 10_000L
+
+    fun seconds(ms: Long) = String.format(Locale.ROOT, "%.1f s", ms / 1000.0)
   }
 }
