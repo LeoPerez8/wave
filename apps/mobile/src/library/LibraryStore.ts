@@ -11,6 +11,7 @@ import {
   type MissingTrack,
   type PendingFavorite,
   type CountedListening,
+  type RecapSongGenre,
   type CreditedPlayTotals,
   type PlayEvent,
   type PlayTotals,
@@ -162,9 +163,11 @@ import {
   withFile,
 } from "./db/tracks";
 import {
+  artistFirstPlays,
   artistPlays,
   countedListening,
   creditedPlayTotals,
+  songGenres,
   trackPlayTotals,
   type ArtistPlays,
 } from "./db/stats";
@@ -859,6 +862,20 @@ export class LibraryStore extends Context.Service<
      * songs included): what Core's `availableRecaps` and `recap` read.
      */
     readonly countedListening: Effect.Effect<readonly CountedListening[], LibraryStoreError>;
+    /** The genre tags of these songs still in the library, in no order (Core's `recap` reads them). */
+    readonly songGenres: (
+      ids: readonly number[],
+    ) => Effect.Effect<readonly RecapSongGenre[], LibraryStoreError>;
+    /**
+     * When each of these artists had their first counted play ever, deleted
+     * songs included, in no order; artists never played are left out.
+     */
+    readonly artistFirstPlays: (
+      ids: readonly number[],
+    ) => Effect.Effect<
+      readonly { readonly id: number; readonly firstPlayAt: number }[],
+      LibraryStoreError
+    >;
     /**
      * What [artistId]'s page needs for its stats block (Core's `artistStats`),
      * read from that artist's songs and their plays alone: the songs in the
@@ -1472,6 +1489,11 @@ const make = Effect.gen(function* () {
     listeningSums: attempt("sum up listening", () => listeningSums(db)),
 
     countedListening: attempt("sum up counted listening", () => countedListening(db)),
+
+    songGenres: (ids) => attempt("read the songs' genres", () => songGenres(db, ids)),
+
+    artistFirstPlays: (ids) =>
+      attempt("read the artists' first plays", () => artistFirstPlays(db, ids)),
 
     artistPlays: (artistId, now) =>
       attempt("sum up the artist's plays", () => artistPlays(db, artistId, now)),

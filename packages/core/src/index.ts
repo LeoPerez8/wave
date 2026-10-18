@@ -205,6 +205,8 @@ export type { StatsRanking, StatsSeeAll } from "./statsSeeAll.ts";
 export {
   RECAP_MONTH_MINIMUM_MS,
   RECAP_SLIDE_MS,
+  RECAP_TOP_ARTISTS,
+  RECAP_TOP_GENRES,
   RECAP_TOP_SONGS,
   availableRecaps,
   parseRecapId,
@@ -212,18 +214,23 @@ export {
   recapBack,
   recapBarFill,
   recapForward,
+  recapHourLabel,
   recapId,
   recapSlides,
   recapTitle,
+  recapWeekdayLabel,
   recapWindow,
 } from "./recap.ts";
 export type {
   CountedListening,
   Recap,
+  RecapGenre,
+  RecapHabits,
   RecapInput,
   RecapMonth,
   RecapPeriod,
   RecapSlide,
+  RecapSongGenre,
 } from "./recap.ts";
 export {
   AUTO_ROOT,
