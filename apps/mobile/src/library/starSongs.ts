@@ -48,7 +48,9 @@ export const starSongs = (
   }
   const missing = [...library.values()].flatMap((song) => (songHasFile(song) ? [] : [song.id]));
   const stars = setFavorites([...library.keys()], on);
-  const pending = setPendingFavorites(streamed.map(pendingFavorite), on);
+  // Unstarring takes back the songs' pending favorites too, the ones the Library has by now
+  // included, so none stars them later.
+  const pending = setPendingFavorites((on ? streamed : ytSongs).map(pendingFavorite), on);
   // Downloads follow once the pending favorites are kept, so each download's landing finds its
   // own; in the order the stars were set, so a star taken straight back cancels what it asked.
   downloads = downloads

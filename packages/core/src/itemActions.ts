@@ -467,9 +467,7 @@ export const ytSongActions = <A>(
   { action: "playNext" },
   { action: "addToQueue" },
   { action: "addToPlaylist" },
-  ...(favorite === undefined
-    ? []
-    : [{ action: favorite ? "unfavorite" : "favorite" } as const]),
+  ...(favorite === undefined ? [] : [{ action: favorite ? "unfavorite" : "favorite" } as const]),
   ...(inPlaylist ? [{ action: "removeFromPlaylist" } as const] : []),
   ...(ytMusic && album !== undefined && album !== null && album !== "" && album !== ytAlbumHere
     ? [{ action: "goToAlbum", album } as const]

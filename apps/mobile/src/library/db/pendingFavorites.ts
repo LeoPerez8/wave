@@ -65,10 +65,7 @@ export const addPendingFavorites = (
  * Forgets the pending favorites of videos [videoIds]: their stars were taken
  * off before their files arrived, so the songs come in unstarred.
  */
-export const removePendingFavorites = (
-  db: LibraryDatabase,
-  videoIds: readonly string[],
-): void => {
+export const removePendingFavorites = (db: LibraryDatabase, videoIds: readonly string[]): void => {
   const t = schema.pendingFavorites;
   const ids = [...new Set(videoIds)];
   if (ids.length === 0) return;

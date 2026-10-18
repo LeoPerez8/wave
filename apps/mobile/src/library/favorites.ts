@@ -159,7 +159,11 @@ export const useFavoriteIds = (): ReadonlySet<number> => useFavoritesState().ids
 export const useIsFavorite = (trackId: number | string | null): boolean => {
   const ref = typeof trackId === "string" ? parseTrackId(trackId) : null;
   const video = ref?.kind === "yt" ? ref.videoId : null;
-  useEffect(video === null ? loadFavorites : loadPendingFavorites, [video]);
+  const pendingStar = video !== null;
+  useEffect(() => {
+    if (pendingStar) loadPendingFavorites();
+    else loadFavorites();
+  }, [pendingStar]);
   return useSyncExternalStore(
     video === null ? favorites.subscribe : pendingFavorites.subscribe,
     () =>
