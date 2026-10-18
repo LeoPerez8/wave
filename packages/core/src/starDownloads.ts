@@ -7,6 +7,7 @@
  */
 
 import type { DownloadOrigin } from "./downloadGroups.ts";
+import { readStoredSet, writeStoredSet } from "./storedJson.ts";
 import type { YtDownloadStatus } from "./ytDownloads.ts";
 
 /**
@@ -77,17 +78,51 @@ export const unstarredDownload = (
  * phone: a JSON array, or nothing when there are none. What can't be read
  * counts as none.
  */
-export const readStarDownloads = (stored: string | null): ReadonlySet<string> => {
-  if (stored === null) return new Set();
-  try {
-    const value: unknown = JSON.parse(stored);
-    return new Set(
-      Array.isArray(value) ? value.filter((id): id is string => typeof id === "string") : [],
-    );
-  } catch {
-    return new Set();
+export const readStarDownloads = (stored: string | null): ReadonlySet<string> =>
+  readStoredSet(stored, (id): id is string => typeof id === "string");
+
+/**
+ * How the downloads only a star asked for change: `starred`, the star queued
+ * [queued] (the songs `starredDownload` said `queue` for); `unstarred`, the
+ * stars of [ids] came off, their downloads cancelled or kept
+ * (`unstarredDownload`); `ownerAsked`, the owner asked for [ids] themselves
+ * (Download, an album's, a playlist's, Download All), which takes them from
+ * the star, so they carry on whatever happens to the star.
+ */
+export type StarAskedChange =
+  | { readonly kind: "starred"; readonly queued: readonly string[] }
+  | { readonly kind: "unstarred"; readonly ids: readonly string[] }
+  | { readonly kind: "ownerAsked"; readonly ids: readonly string[] };
+
+/**
+ * The downloads only a star asked for ([asked], by job id) after [change];
+ * [asked] itself when nothing changes.
+ */
+export const starAskedAfter = (
+  asked: ReadonlySet<string>,
+  change: StarAskedChange,
+): ReadonlySet<string> => {
+  if (change.kind === "starred") {
+    if (change.queued.every((id) => asked.has(id))) return asked;
+    return new Set([...asked, ...change.queued]);
   }
+  if (!change.ids.some((id) => asked.has(id))) return asked;
+  const gone = new Set(change.ids);
+  return new Set([...asked].filter((id) => !gone.has(id)));
 };
+
+/**
+ * Whether a YT Music song (by [videoId]) shows starred: its pending favorite,
+ * or the Library song's star once the Library has it ([track]). Either, so the
+ * star stays lit while the arriving file settles its pending favorite into the
+ * Library song's star.
+ */
+export const ytSongStarred = (
+  videoId: string,
+  track: { readonly id: number } | null,
+  favorites: ReadonlySet<number>,
+  pending: ReadonlySet<string>,
+): boolean => pending.has(videoId) || (track !== null && favorites.has(track.id));
 
 /** What the stars of missing songs ask of this phone's downloads (`syncedStarDownloads`). */
 export interface SyncedStarDownloads {
@@ -127,26 +162,36 @@ export const syncedStarDownloads = (
 };
 
 /** [ids] as `readStarDownloads` reads them back; null (nothing stored) for none. */
-export const writeStarDownloads = (ids: ReadonlySet<string>): string | null =>
-  ids.size === 0 ? null : JSON.stringify([...ids]);
+export const writeStarDownloads = (ids: ReadonlySet<string>): string | null => writeStoredSet(ids);
+
+/**
+ * The starred missing songs this phone has seen ([seen], `syncedStarDownloads`'s), after
+ * missing songs [trackIds] were starred ([on]) or unstarred here. A star set here has asked for
+ * its download already, so it counts as seen: should another phone take it off before the file
+ * arrives, the next sync takes the download back. An unstar here took its download back
+ * itself, so the song is seen no more.
+ */
+export const starredHere = (
+  seen: ReadonlySet<number>,
+  trackIds: readonly number[],
+  on: boolean,
+): ReadonlySet<number> => {
+  if (trackIds.every((id) => seen.has(id) === on)) return seen;
+  const next = new Set(seen);
+  for (const id of trackIds) {
+    if (on) next.add(id);
+    else next.delete(id);
+  }
+  return next;
+};
 
 /**
  * The starred missing songs this phone has seen (`syncedStarDownloads`'s
  * [seen]), by track id, as the key-value store keeps them: a JSON array, or
  * nothing when there are none. What can't be read counts as none.
  */
-export const readSyncedStars = (stored: string | null): ReadonlySet<number> => {
-  if (stored === null) return new Set();
-  try {
-    const value: unknown = JSON.parse(stored);
-    return new Set(
-      Array.isArray(value) ? value.filter((id): id is number => Number.isInteger(id)) : [],
-    );
-  } catch {
-    return new Set();
-  }
-};
+export const readSyncedStars = (stored: string | null): ReadonlySet<number> =>
+  readStoredSet(stored, (id): id is number => Number.isInteger(id));
 
 /** [ids] as `readSyncedStars` reads them back; null (nothing stored) for none. */
-export const writeSyncedStars = (ids: ReadonlySet<number>): string | null =>
-  ids.size === 0 ? null : JSON.stringify([...ids]);
+export const writeSyncedStars = (ids: ReadonlySet<number>): string | null => writeStoredSet(ids);

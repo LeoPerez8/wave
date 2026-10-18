@@ -9,6 +9,7 @@ import {
   YT_DOWNLOADS_NONE,
   applyJournalChanges,
   readStarDownloads,
+  starAskedAfter,
   starredDownload,
   unstarredDownload,
   writeStarDownloads,
@@ -1206,14 +1207,12 @@ const starAsked = persistedSetting<ReadonlySet<string>>({
 
 /**
  * The owner asked for the downloads [jobIds] themselves (Download, an album's, a playlist's,
- * Download All): they carry on whatever happens to the songs' stars.
+ * Download All): they carry on whatever happens to the songs' stars. Run inside the request
+ * that queues them, on the `requests` chain, so a star's request queued before it has claimed
+ * its downloads by then, and none queued after it claims them back.
  */
-const ownerAsked = (jobIds: readonly string[]): void => {
-  const asked = starAsked.get();
-  if (!jobIds.some((id) => asked.has(id))) return;
-  const owners = new Set(jobIds);
-  starAsked.set(new Set([...asked].filter((id) => !owners.has(id))));
-};
+const ownerAsked = (jobIds: readonly string[]): void =>
+  starAsked.set(starAskedAfter(starAsked.get(), { kind: "ownerAsked", ids: jobIds }));
 
 let forgotSettled = false;
 /**
@@ -1272,10 +1271,10 @@ export const startDownloads = (resume = false): void => {
 export const downloadYtSong = (song: NativeYtSong): void => {
   askForNotifications();
   startDownloads();
-  ownerAsked([song.videoId]);
   // One at a time, so a second tap sees the first one's job in the journal.
   requests = requests
     .then(async () => {
+      ownerAsked([song.videoId]);
       const shared = ytDownloadSharedJob(await WaveSoulseek.jobsSnapshot(), song);
       await WaveSoulseek.enqueueJob(
         song,
@@ -1313,9 +1312,9 @@ const downloadYtSongs = (
 ): void => {
   askForNotifications();
   startDownloads();
-  ownerAsked(songs.map((song) => song.videoId));
   requests = requests
     .then(async () => {
+      ownerAsked(songs.map((song) => song.videoId));
       const jobs = await WaveSoulseek.jobsSnapshot();
       const source = await requestedSource();
       for (const { song, sharedJob } of ytSongsDownload(songs, { inLibrary, jobs }).toDownload)
@@ -1511,9 +1510,9 @@ const missingSongJobs = (trackIds?: readonly number[]): Promise<MissingSongJob[]
 export const downloadMissingSongs = (trackIds: readonly number[]): void => {
   askForNotifications();
   startDownloads();
-  ownerAsked(trackIds.map(missingSongJobId));
   requests = requests
     .then(async () => {
+      ownerAsked(trackIds.map(missingSongJobId));
       await enqueueMissingSongs(await missingSongJobs(trackIds));
       await refresh();
     })
@@ -1838,7 +1837,7 @@ export const downloadStarredSongs = (
         trackIds.length === 0 ? Promise.resolve([]) : missingSongJobs(trackIds),
       ]);
       const state = ytDownloadsFromJournal(jobs);
-      const asked = new Set(starAsked.get());
+      const queued: string[] = [];
       const session = await sessionNow();
       const ytMusicOn = ytMusicEnabled();
       for (const song of songs) {
@@ -1855,7 +1854,7 @@ export const downloadStarredSongs = (
           currentSource(session, ytMusicOn),
           step === "queue" ? FAVORITES_DOWNLOAD_ORIGIN : null,
         );
-        if (step === "queue") asked.add(song.videoId);
+        if (step === "queue") queued.push(song.videoId);
       }
       for (const job of inOrder(missing, trackIds)) {
         const step = starredDownload(ytDownloadStatus(state, job.videoId));
@@ -1866,9 +1865,9 @@ export const downloadStarredSongs = (
           ytMusicOn,
           step === "queue" ? FAVORITES_DOWNLOAD_ORIGIN : null,
         );
-        if (step === "queue") asked.add(job.videoId);
+        if (step === "queue") queued.push(job.videoId);
       }
-      starAsked.set(asked);
+      starAsked.set(starAskedAfter(starAsked.get(), { kind: "starred", queued }));
       await refresh();
     })
     .catch(() => undefined);
@@ -1891,13 +1890,12 @@ export const cancelUnstarredDownloads = (
     .then(async () => {
       if (!ids.some((id) => starAsked.get().has(id))) return;
       const state = ytDownloadsFromJournal(await WaveSoulseek.jobsSnapshot());
-      const asked = new Set(starAsked.get());
+      const asked = starAsked.get();
       for (const id of ids) {
         const step = unstarredDownload(ytDownloadStatus(state, id), { starAsked: asked.has(id) });
-        asked.delete(id);
         if (step === "cancel") await WaveSoulseek.cancelJob(id);
       }
-      starAsked.set(asked);
+      starAsked.set(starAskedAfter(starAsked.get(), { kind: "unstarred", ids }));
       await refresh();
     })
     .catch(() => undefined);

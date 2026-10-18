@@ -1414,3 +1414,5 @@ export type {
   MixPlaylistEntry,
   StreamedSong,
 } from "./mixKnownSongs.ts";
+export { starAskedAfter, starredHere, ytSongStarred } from "./starDownloads.ts";
+export type { StarAskedChange } from "./starDownloads.ts";

@@ -6,11 +6,14 @@ import {
   downloadingList,
   readStarDownloads,
   readSyncedStars,
+  starAskedAfter,
   starredDownload,
+  starredHere,
   syncedStarDownloads,
   unstarredDownload,
   writeStarDownloads,
   writeSyncedStars,
+  ytSongStarred,
   type YtDownloadJournalJob,
   type YtDownloadStatus,
 } from "./index.ts";
@@ -143,6 +146,69 @@ describe("syncedStarDownloads", () => {
     const starred = syncedStarDownloads({ starred: new Set([1, 3]), missing }, new Set());
     const after = syncedStarDownloads({ starred: new Set([1, 3]), missing: [2] }, starred.seen);
     assert.deepEqual([...after.seen], []);
+  });
+});
+
+describe("starredHere", () => {
+  const missing = [3, 1, 2];
+
+  test("a missing song starred here has asked already: the next sync doesn't ask again", () => {
+    const seen = starredHere(new Set(), [1], true);
+    const { download } = syncedStarDownloads({ starred: new Set([1]), missing }, seen);
+    assert.deepEqual(download, []);
+  });
+
+  test("starred here, then unstarred on another phone before the file arrives: the sync takes the download back", () => {
+    const seen = starredHere(new Set([3]), [1], true);
+    const { cancel } = syncedStarDownloads({ starred: new Set([3]), missing }, seen);
+    assert.deepEqual(cancel, [1]);
+  });
+
+  test("unstarred here, the unstar took the download back already: the sync has nothing to cancel", () => {
+    const seen = starredHere(new Set([1, 3]), [1], false);
+    const { cancel } = syncedStarDownloads({ starred: new Set([3]), missing }, seen);
+    assert.deepEqual(cancel, []);
+  });
+});
+
+describe("starAskedAfter", () => {
+  test("the downloads a star queued are the star's", () => {
+    const asked = starAskedAfter(new Set(["a"]), { kind: "starred", queued: ["b", "missing:4"] });
+    assert.deepEqual([...asked].toSorted(), ["a", "b", "missing:4"]);
+  });
+
+  test("the owner asking for a download takes it from the star: unstarring then keeps it", () => {
+    const starred = starAskedAfter(new Set(), { kind: "starred", queued: ["b"] });
+    const owned = starAskedAfter(starred, { kind: "ownerAsked", ids: ["b"] });
+    assert.deepEqual([...owned], []);
+    assert.equal(unstarredDownload(waiting, { starAsked: owned.has("b") }), "keep");
+  });
+
+  test("unstarring lets go of the songs' downloads, whether cancelled or kept", () => {
+    const asked = starAskedAfter(new Set(["a", "b"]), { kind: "unstarred", ids: ["b", "c"] });
+    assert.deepEqual([...asked], ["a"]);
+  });
+
+  test("a change that touches nothing gives back the same set", () => {
+    const asked = new Set(["a"]);
+    assert.equal(starAskedAfter(asked, { kind: "ownerAsked", ids: ["b"] }), asked);
+    assert.equal(starAskedAfter(asked, { kind: "starred", queued: [] }), asked);
+  });
+});
+
+describe("ytSongStarred", () => {
+  test("a YT Music song is starred as its pending favorite", () => {
+    assert.equal(ytSongStarred("v1", null, new Set(), new Set(["v1"])), true);
+    assert.equal(ytSongStarred("v1", null, new Set([7]), new Set()), false);
+  });
+
+  test("once the Library has it, the Library song's star counts", () => {
+    assert.equal(ytSongStarred("v1", { id: 7 }, new Set([7]), new Set()), true);
+    assert.equal(ytSongStarred("v1", { id: 7 }, new Set(), new Set()), false);
+  });
+
+  test("while the arriving file settles its pending favorite, the star stays lit", () => {
+    assert.equal(ytSongStarred("v1", { id: 7 }, new Set(), new Set(["v1"])), true);
   });
 });
 
