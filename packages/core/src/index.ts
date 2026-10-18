@@ -576,6 +576,8 @@ export {
   MAGIC_SKIP_MS,
   isMagicQueue,
   magicBatch,
+  magicRadioArtists,
+  magicYtCandidates,
   magicPlaySignal,
   magicQueueEdits,
   magicQueueLabel,
@@ -591,6 +593,7 @@ export type {
   MagicSignal,
   MagicSignalKind,
   MagicSong,
+  MagicYtCandidate,
 } from "./magicQueue.ts";
 export { artistRanking } from "./moreFromArtist.ts";
 export type { ArtistRankingInput, ArtistRankingSong } from "./moreFromArtist.ts";

@@ -7,9 +7,12 @@
  * and what happens in the queue.
  */
 
+import { mixRecordingOf, type DiscoverRadioSong } from "./discoverMixes.ts";
+import type { MixAffinity } from "./genreAffinity.ts";
 import type { PlayEndReason } from "./playEvents.ts";
 import type { QueueState } from "./queue.ts";
 import { pickWeighted, type RandomSource } from "./weightedPick.ts";
+import { parseTrackId, ytTrackId } from "./ytMusic.ts";
 
 /** A song as the Magic Queue weighs it. */
 export interface MagicSong {
@@ -44,6 +47,11 @@ export interface MagicSession {
   readonly genreAffinity: Readonly<Record<string, number>>;
   /** Artists skipped within the first 30 s: none of their songs comes for the rest of the session. */
   readonly excludedArtists: readonly string[];
+  /**
+   * The share of each batch YouTube Music's candidates get (the Library's is
+   * the rest): 0.5 at the start, always between 0.2 and 0.8.
+   */
+  readonly ytShare: number;
 }
 
 /** The context kind of a Magic Queue's queue; its id is the session's. */
@@ -56,6 +64,14 @@ const BATCH = 10;
 /** What the seed's artists add, and its genres multiply, from the start. */
 const SEED_ARTIST = 3;
 const SEED_GENRE = 3;
+
+/** YouTube Music's share of a batch: where it starts, and how far it can go either way. */
+const YT_SHARE_START = 0.5;
+const YT_SHARE_MIN = 0.2;
+const YT_SHARE_MAX = 0.8;
+
+const clampShare = (share: number): number =>
+  Math.min(YT_SHARE_MAX, Math.max(YT_SHARE_MIN, share));
 
 /** A genre tag compared without case or surrounding spaces. */
 const genreKey = (genre: string | null): string | null => {
@@ -94,6 +110,7 @@ export const startMagicQueue = (
       artistAffinity,
       genreAffinity,
       excludedArtists: [],
+      ytShare: YT_SHARE_START,
     },
     first: pick.trackId,
   };
@@ -110,21 +127,21 @@ const weightOf = (session: MagicSession, song: MagicSong): number => {
 };
 
 /**
- * [session]'s next batch out of [library]: 9 songs after the first one, then
- * 10 at a time, each picked at random from [random], the heavier more often.
- * A song the session queued already never comes back, nor one by an artist
- * it excluded; fewer (or none) when the Library runs dry.
+ * [count] of [songs] picked at random from [random], the heavier more often;
+ * a song [session] queued already, or one by an artist it excluded, never.
  */
-export const magicBatch = (
+const pick = (
   session: MagicSession,
-  library: readonly MagicSong[],
+  songs: readonly MagicSong[],
+  count: number,
   random: RandomSource,
-): { readonly session: MagicSession; readonly trackIds: readonly string[] } => {
+): MagicSong[] => {
+  if (count <= 0) return [];
   const used = new Set(session.used);
   const excluded = new Set(session.excludedArtists);
   const seen = new Set<string>();
   const candidates: { song: MagicSong; weight: number }[] = [];
-  for (const candidate of library) {
+  for (const candidate of songs) {
     if (used.has(candidate.trackId) || seen.has(candidate.trackId)) continue;
     if (candidate.artists.some((artist) => excluded.has(artist))) continue;
     seen.add(candidate.trackId);
@@ -133,10 +150,53 @@ export const magicBatch = (
   // Heaviest first, so the luckiest draw lands on the heaviest song.
   // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
   candidates.sort((a, b) => b.weight - a.weight);
-  const size = session.batches === 0 ? FIRST_BATCH : BATCH;
-  const trackIds = pickWeighted(candidates, size, (entry) => entry.weight, random).map(
-    (entry) => entry.song.trackId,
+  return pickWeighted(candidates, count, (entry) => entry.weight, random).map(
+    (entry) => entry.song,
   );
+};
+
+/** [a] and [b] spread evenly through each other, each in its own order. */
+const interleave = <T>(a: readonly T[], b: readonly T[]): T[] => {
+  const total = a.length + b.length;
+  const out: T[] = [];
+  let fromA = 0;
+  let fromB = 0;
+  for (let i = 0; i < total; i += 1) {
+    // [b] goes next whenever it's behind its share so far.
+    const bDue = Math.floor(((i + 1) * b.length) / total);
+    const next = fromB < bDue ? b[fromB++] : a[fromA++];
+    if (next !== undefined) out.push(next);
+  }
+  return out;
+};
+
+/**
+ * [session]'s next batch: 9 songs after the first one, then 10 at a time,
+ * out of [library] and YouTube Music's candidates [yt] (none offline or
+ * with the YT Music switch off). YouTube Music gets its share of the batch
+ * (`ytShare`) and the Library the rest, either making up for the other
+ * running short; the two's songs are spread through each other. Each song
+ * is picked at random from [random], the heavier more often. A song the
+ * session queued already never comes back, nor one by an artist it
+ * excluded; fewer (or none) when both run dry.
+ */
+export const magicBatch = (
+  session: MagicSession,
+  library: readonly MagicSong[],
+  random: RandomSource,
+  yt: readonly MagicSong[] = [],
+): { readonly session: MagicSession; readonly trackIds: readonly string[] } => {
+  const size = session.batches === 0 ? FIRST_BATCH : BATCH;
+  const fromYt = pick(session, yt, Math.round(size * session.ytShare), random);
+  const fromLibrary = pick(session, library, size - fromYt.length, random);
+  const taken = new Set(fromYt.map((song) => song.trackId));
+  const moreYt = pick(
+    session,
+    yt.filter((song) => !taken.has(song.trackId)),
+    size - fromYt.length - fromLibrary.length,
+    random,
+  );
+  const trackIds = interleave(fromLibrary, [...fromYt, ...moreYt]).map((song) => song.trackId);
   return {
     session: { ...session, used: [...session.used, ...trackIds], batches: session.batches + 1 },
     trackIds,
@@ -173,15 +233,31 @@ const GENRE_GAIN = 0.5;
 const GENRE_SKIP = 0.5;
 const GENRE_FLOOR = 0.05;
 
+/** How a YouTube Music song's signal moves YouTube Music's share of a batch; others leave it. */
+const YT_SHARE_MOVE: { readonly [K in MagicSignalKind]?: number } = {
+  favorite: 0.1,
+  download: 0.05,
+  skip: -0.1,
+  removed: -0.1,
+};
+
 /**
  * [session] having learned [signal]: a skip (or a removed recommendation)
  * excludes the song's primary artist for the rest of the session and lowers
  * its genre's weight, never to nothing, so a one-genre seed doesn't run dry;
  * a positive signal adds to its artists' weight and its genre's, a favorite
  * most, then a download, then a song played to the end or added. Either way
- * the song itself never comes back.
+ * the song itself never comes back. A YouTube Music song's favorite or
+ * download moves YouTube Music's share of a batch up, its skip down, within
+ * 20–80%.
  */
-export const magicSignal = (session: MagicSession, { kind, song }: MagicSignal): MagicSession => {
+export const magicSignal = (
+  learning: MagicSession,
+  { kind, song }: MagicSignal,
+): MagicSession => {
+  const move = parseTrackId(song.trackId)?.kind === "yt" ? (YT_SHARE_MOVE[kind] ?? 0) : 0;
+  const session =
+    move === 0 ? learning : { ...learning, ytShare: clampShare(learning.ytShare + move) };
   const used = session.used.includes(song.trackId) ? session.used : [...session.used, song.trackId];
   const genre = genreKey(song.genre);
   const genreAffinity = { ...session.genreAffinity };
@@ -274,6 +350,61 @@ export const magicQueueEdits = (
   return added.length === 0 && removed.length === 0 ? NO_EDITS : { added, removed };
 };
 
+/** How many artists' radios a Magic Queue's YouTube Music candidates come from. */
+const RADIO_ARTISTS = 2;
+
+/**
+ * The artists whose YouTube Music radio a Magic Queue started from [seed]
+ * draws on: an artist seed's own; else the most credited of its songs'
+ * artists ([seedArtists], one name per song), two at most, the most
+ * credited first (the first credited on a tie).
+ */
+export const magicRadioArtists = (
+  seed: MagicSeed,
+  seedArtists: readonly string[],
+): readonly string[] => {
+  if (seed.kind === "artist") return [seed.title];
+  const counts = new Map<string, number>();
+  for (const artist of seedArtists) counts.set(artist, (counts.get(artist) ?? 0) + 1);
+  const ranked = [...counts.entries()];
+  // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh array; Hermes lacks toSorted
+  ranked.sort((a, b) => b[1] - a[1]);
+  return ranked.slice(0, RADIO_ARTISTS).map(([artist]) => artist);
+};
+
+/** A YouTube Music candidate of a Magic Queue: a song it weighs, with the radio's [song] it is. */
+export type MagicYtCandidate<S extends DiscoverRadioSong> = MagicSong & { readonly song: S };
+
+/**
+ * The YouTube Music candidates in a seed's [radio], in its order: songs whose
+ * artist suits the seed's genres ([affinity], `mixAffinity`: "match" only,
+ * so an artist with no genre known stays out). Music videos, songs the
+ * Library has ([inLibrary]) and a song the radio plays again are left out.
+ * Each weighs by its YouTube Music artists, with no genre tag.
+ */
+export const magicYtCandidates = <S extends DiscoverRadioSong>(
+  radio: readonly S[],
+  {
+    affinity,
+    inLibrary,
+  }: {
+    readonly affinity: (song: S) => MixAffinity;
+    readonly inLibrary: (song: S) => boolean;
+  },
+): MagicYtCandidate<S>[] => {
+  const seen = new Set<string>();
+  const candidates: MagicYtCandidate<S>[] = [];
+  for (const song of radio) {
+    const recording = mixRecordingOf(song);
+    if (song.video || seen.has(song.videoId) || seen.has(recording)) continue;
+    seen.add(song.videoId);
+    seen.add(recording);
+    if (inLibrary(song) || affinity(song) !== "match") continue;
+    candidates.push({ trackId: ytTrackId(song.videoId), artists: song.artists, genre: null, song });
+  }
+  return candidates;
+};
+
 /** What Up Next says over a Magic Queue: "Magic Queue · from <seed>". */
 export const magicQueueLabel = (session: MagicSession): string =>
   `Magic Queue · from ${session.seed.title}`;
@@ -292,7 +423,8 @@ const SEED_KINDS: ReadonlySet<unknown> = new Set(["track", "album", "artist", "p
 /** Reads a saved session (`JSON.parse` of one), or null when it isn't a valid one. */
 export const parseMagicSession = (value: unknown): MagicSession | null => {
   if (!isRecord(value)) return null;
-  const { id, seed, used, batches, artistAffinity, genreAffinity, excludedArtists } = value;
+  const { id, seed, used, batches, artistAffinity, genreAffinity, excludedArtists, ytShare } =
+    value;
   if (typeof id !== "string" || !isRecord(seed)) return null;
   if (!SEED_KINDS.has(seed["kind"])) return null;
   if (typeof seed["id"] !== "string" || typeof seed["title"] !== "string") return null;
@@ -307,5 +439,10 @@ export const parseMagicSession = (value: unknown): MagicSession | null => {
     artistAffinity,
     genreAffinity,
     excludedArtists,
+    // A session saved before YouTube Music joined starts its share afresh.
+    ytShare:
+      typeof ytShare === "number" && Number.isFinite(ytShare)
+        ? clampShare(ytShare)
+        : YT_SHARE_START,
   };
 };
