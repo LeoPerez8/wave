@@ -62,6 +62,8 @@ class JAudioTaggerReader : TagReader {
       lyrics = field(FieldKey.LYRICS) ?: id3.userText(USER_LYRICS_KEYS) ?: tag.vorbisField(USER_LYRICS_KEYS),
       artists = fields(FieldKey.ARTIST),
       albumArtists = fields(FieldKey.ALBUM_ARTIST),
+      // A single genre stays as [genre] reads it (ID3v1 genre numbers turned into names).
+      genres = fields(FieldKey.GENRE).takeIf { it.size > 1 } ?: listOfNotNull(field(FieldKey.GENRE)),
       advisory = Advisory.read(tag, id3),
     )
   }

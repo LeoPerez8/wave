@@ -210,10 +210,22 @@ export interface GenreMixLibrary {
   readonly plays?: readonly DiscoverSongPlays[];
 }
 
-/** The families a Library song counts in. */
+/**
+ * The families a Library song counts in, each once: those of every value of
+ * its genre tag, a value joined with ";" or "/" ("Metalcore; Rock") counting
+ * as each of its parts unless the table knows it whole ("Rap/Hip Hop").
+ */
 const songFamilies = (song: DiscoverLibrarySong): GenreFamily[] => {
-  const family = genreFamily(song.genre ?? "");
-  return family === null ? [] : [family];
+  const families = new Map<string, GenreFamily>();
+  const values = song.genres?.length ? song.genres : [song.genre ?? ""];
+  for (const value of values) {
+    const parts = BY_TAG.has(compact(value)) ? [value] : value.split(/[;/]/);
+    for (const part of parts) {
+      const family = genreFamily(part);
+      if (family !== null && !families.has(family.key)) families.set(family.key, family);
+    }
+  }
+  return [...families.values()];
 };
 
 /**

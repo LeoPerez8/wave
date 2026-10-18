@@ -141,7 +141,14 @@ export const tracks = sqliteTable(
     albumId: integer("album_id")
       .notNull()
       .references(() => albums.id),
+    /** The genre the Library files the song under: its genre tag's first value. */
     genreId: integer("genre_id").references(() => genres.id),
+    /**
+     * Every value of a multi-value genre tag ("Metalcore", "Electronic"), as
+     * a JSON array; null for one or none (see `storedGenres`). Only Genre
+     * mixes read them.
+     */
+    genres: text("genres"),
     year: integer("year"),
     trackNumber: integer("track_number"),
     trackTotal: integer("track_total"),

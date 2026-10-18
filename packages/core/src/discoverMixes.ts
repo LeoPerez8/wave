@@ -47,6 +47,11 @@ export interface DiscoverLibrarySong extends DiscoverSeedSong {
   readonly addedAt: number;
   /** Its genre tag (the file's, or what Fix Song wrote); null or absent for none. */
   readonly genre?: string | null;
+  /**
+   * Every value of a multi-value genre tag (Vorbis comments, ID3v2.4), where
+   * [genre] is the first; absent for a single one. Only Genre mixes read them.
+   */
+  readonly genres?: readonly string[] | null;
 }
 
 /** A Library song's all-time counted plays. */

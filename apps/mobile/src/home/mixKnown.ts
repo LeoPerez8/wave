@@ -13,9 +13,25 @@ import { makeExternalStore } from "@/lib/externalStore";
 import { LibraryStore, type ArtistRow, type SongRow } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 
+/** A Library song as a mix build reads it: with every value of its genre tag when it has several. */
+export type MixSong = SongRow & { readonly genres?: readonly string[] };
+
+/** [songs] with every value of their multi-value genre tags ([genres], by song id). */
+const withGenres = (
+  songs: readonly SongRow[],
+  genres: ReadonlyMap<number, readonly string[]>,
+): readonly MixSong[] =>
+  genres.size === 0
+    ? songs
+    : songs.map((song) => {
+        const values = genres.get(song.id);
+        return values === undefined ? song : { ...song, genres: values };
+      });
+
 /** What a mix build reads of the Library and of what the owner knows. */
 export interface MixIndexes {
-  readonly songs: readonly SongRow[];
+  /** The Library's songs, each with every value of a multi-value genre tag (Genre mixes count each). */
+  readonly songs: readonly MixSong[];
   readonly artists: readonly ArtistRow[];
   /** Every Library song's all-time counted plays. */
   readonly plays: readonly PlayTotals[];
@@ -29,7 +45,8 @@ export interface MixIndexes {
  */
 const readIndexes = Effect.gen(function* () {
   const store = yield* LibraryStore;
-  const songs = yield* store.listSongs;
+  const genres = new Map((yield* store.listSongGenres).map((song) => [song.id, song.genres]));
+  const songs = withGenres(yield* store.listSongs, genres);
   yield* freeTurnEffect;
   const artists = yield* store.listArtists;
   const plays = yield* store.trackPlayTotals(statsWindow("all", Date.now()));

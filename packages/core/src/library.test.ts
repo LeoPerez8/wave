@@ -100,6 +100,28 @@ describe("multi-value artist tags", () => {
   });
 });
 
+describe("multi-value genre tags", () => {
+  test("keep every value, while the Library files the song under the first", () => {
+    const track = normalizeTrack({
+      path: `${MUSIC}/x.flac`,
+      genre: "Metalcore",
+      genres: ["Metalcore", " (17)Rock ", "", "Electronic"],
+    });
+    assert.equal(track.genre, "Metalcore");
+    assert.deepEqual(track.genres, ["Metalcore", "Rock", "Electronic"]);
+  });
+
+  test("a single genre is the only value; none is none", () => {
+    assert.deepEqual(normalizeTrack({ path: `${MUSIC}/x.mp3`, genre: "Metalcore; Rock" }).genres, [
+      "Metalcore; Rock",
+    ]);
+    assert.deepEqual(normalizeTrack({ path: `${MUSIC}/x.mp3`, genre: "Rock", genres: [] }).genres, [
+      "Rock",
+    ]);
+    assert.deepEqual(normalizeTrack({ path: `${MUSIC}/x.mp3` }).genres, []);
+  });
+});
+
 describe("credits with no tag", () => {
   test("an untagged file has one credit, Unknown Artist", () => {
     const track = normalizeTrack({ path: `${MUSIC}/x.mp3` });
