@@ -6,6 +6,7 @@
  * and scanner publish it. Optional catalog metadata never establishes quality.
  */
 
+import { advisoryTag } from "./explicit.ts";
 import { songLookup, type FoundTags, type SongLookup } from "./lyricsAndGenre.ts";
 import type { DownloadSource } from "./downloadSource.ts";
 import { normalizeSearchText } from "./search.ts";
@@ -44,6 +45,11 @@ export interface YtDownloadTags {
   /** LRC for synced lyrics, plain text otherwise. */
   readonly lyrics: string | null;
   readonly artworkUrl: string | null;
+  /**
+   * The advisory tag (`ITUNESADVISORY`, MP4 `rtng`, Core's `advisoryTag`): 1
+   * explicit, 0 checked and clean; null writes none.
+   */
+  readonly advisory: 0 | 1 | null;
 }
 
 /** The side of the cover a download embeds, in pixels. */
@@ -102,6 +108,7 @@ export const ytDownloadTags = (
     genre: found?.genre ?? null,
     lyrics: found?.lyrics?.text ?? tidyLyrics(ytLyrics),
     artworkUrl: cover === null ? null : largeCover(cover),
+    advisory: advisoryTag(song.explicit),
   };
 };
 

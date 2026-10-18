@@ -25,6 +25,8 @@ export interface NativeScannedTrack {
   readonly artworkHash: string | null;
   /** Lyrics in its tags or a sidecar `.lrc` beside it. */
   readonly hasLyrics: boolean;
+  /** The advisory tag as tagged (`ITUNESADVISORY`, MP4 `rtng`); null without one. */
+  readonly advisory?: string | null;
 }
 
 /** Colours picked from an artwork, as signed ARGB ints. */

@@ -81,7 +81,11 @@ function DiscoverMixActionsMenu({ mix, close }: { mix: DiscoverMix; close: () =>
         saveAsPlaylist(mix);
         return;
       default:
-        runYtDownloadAction(action, mix.songs, inLibrary);
+        runYtDownloadAction(action, mix.songs, inLibrary, {
+          kind: "mix",
+          id: mix.id,
+          name: caption.title,
+        });
     }
   };
   const layout = menuLayout("discoverMix", discoverMixActions(download));

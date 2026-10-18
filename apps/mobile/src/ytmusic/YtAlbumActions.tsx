@@ -95,7 +95,13 @@ function YtAlbumActionsMenu({
       : {
           action,
           label: YT_ALBUM_DOWNLOAD_ACTION_LABELS[action],
-          onPress: closing(() => runYtDownloadAction(action, songs, inLibrary)),
+          onPress: closing(() =>
+            runYtDownloadAction(action, songs, inLibrary, {
+              kind: "album",
+              id: album.browseId,
+              name: album.title,
+            }),
+          ),
         },
   );
 

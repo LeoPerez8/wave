@@ -91,6 +91,7 @@ describe("selectSongSummaries", () => {
       artist: "Radiohead",
       durationMs: 284_000,
       artworkHash: "ok",
+      explicit: "explicit",
     });
     const gone = addMissingSong(db, { title: "Gone", artist: "Nobody" });
     assert.deepEqual(selectSongSummaries(db, [gone, 999, airbag]), [
@@ -101,6 +102,7 @@ describe("selectSongSummaries", () => {
         durationMs: 180_000,
         thumbPath: null,
         hasFile: false,
+        explicit: "unknown",
       },
       {
         id: airbag,
@@ -109,6 +111,7 @@ describe("selectSongSummaries", () => {
         durationMs: 284_000,
         thumbPath: "/covers/ok.thumb.jpg",
         hasFile: true,
+        explicit: "explicit",
       },
     ]);
   });

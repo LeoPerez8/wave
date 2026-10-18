@@ -9,6 +9,7 @@ import {
   type PlaylistSong,
   type LibraryTrack,
   type MissingTrack,
+  type PendingFavorite,
   type CreditedPlayTotals,
   type PlayEvent,
   type PlayTotals,
@@ -18,6 +19,7 @@ import {
   type UnsearchedSong,
   type YtAlbumSong,
   type YtArtistSaved,
+  type ExplicitFlag,
 } from "@wave/core";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { drizzle, type ExpoSQLiteDatabase } from "drizzle-orm/expo-sqlite";
@@ -107,7 +109,8 @@ import {
   type PlaylistUnsearched,
   type UnsearchedEntriesSettled,
 } from "./db/playlists";
-import { hasUnscannedRoot, pruneOrphans, saveBatch } from "./db/save";
+import { addPendingFavorites } from "./db/pendingFavorites";
+import { hasUnscannedRoot, pruneOrphans, saveBatch, type SavedBatch } from "./db/save";
 import * as schema from "./db/schema";
 import {
   BY_TITLE,
@@ -161,6 +164,8 @@ export interface IndexedTrack extends LibraryTrack {
   readonly artworkHash: string | null;
   /** Lyrics in its tags or a sidecar `.lrc`. */
   readonly hasLyrics: boolean;
+  /** What its advisory tag says (Core's `explicitFromAdvisory`). */
+  readonly explicit: ExplicitFlag;
   /**
    * The YouTube video id of a song just downloaded from YouTube Music. Saving
    * the file again without one (a rescan) keeps the one it has.
@@ -240,6 +245,8 @@ export interface SongRow {
   readonly genre: string | null;
   /** Lyrics in the file's tags or in a sidecar `.lrc`. */
   readonly hasLyrics: boolean;
+  /** Whether it's explicit, as its file's advisory tag says: rows show the E badge for it. */
+  readonly explicit: ExplicitFlag;
 }
 
 /** A song that can play: one with a file (the queue's, Android Auto's). */
@@ -422,13 +429,15 @@ export class LibraryStore extends Context.Service<
      * found under, so they keep their id (and with it history and favorites).
      * Playlists' YT Music entries the saved tracks are become them, unless
      * [linkEntries] is false (a scan's batches: `linkPlaylistEntries` once it ends).
+     * The saved tracks that are pending favorites get their star
+     * (`SavedBatch.starred`; `showSavedStars` shows them).
      */
     readonly saveBatch: (
       tracks: readonly IndexedTrack[],
       artwork: readonly IndexedArtwork[],
       moves?: readonly PathMove[],
       options?: { readonly linkEntries?: boolean },
-    ) => Effect.Effect<void, LibraryStoreError>;
+    ) => Effect.Effect<SavedBatch, LibraryStoreError>;
     /**
      * Turns playlists' YT Music entries the Library now has into its songs, in
      * the same place, matched against the whole Library; a scan runs it once
@@ -682,6 +691,14 @@ export class LibraryStore extends Context.Service<
     ) => Effect.Effect<void, LibraryStoreError>;
     /** Starred tracks, most recently starred first, for Library › Favorites. */
     readonly listFavorites: Effect.Effect<readonly FavoriteRow[], LibraryStoreError>;
+    /**
+     * Keeps liked songs the Library hasn't as pending favorites (Core's
+     * `PendingFavorite`), each starred once a download or scan brings it in
+     * (`saveBatch`). This phone only.
+     */
+    readonly addPendingFavorites: (
+      songs: readonly PendingFavorite[],
+    ) => Effect.Effect<void, LibraryStoreError>;
     /** Records a play as it starts (Core's `PlayEvent`); returns its id, to update it as it goes on. */
     readonly recordPlay: (
       play: PlayEvent,
@@ -1237,6 +1254,9 @@ const make = Effect.gen(function* () {
       ),
 
     listFavorites: attempt("list favorites", () => listFavorites(db)),
+
+    addPendingFavorites: (songs) =>
+      attempt("keep pending favorites", () => addPendingFavorites(db, songs, Date.now())),
 
     recordPlay: (play, overlapping) =>
       attempt("record the play", () => recordPlay(db, play, overlapping)),

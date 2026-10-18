@@ -1,5 +1,6 @@
 import type {
   DownloadFailurePlan,
+  DownloadOrigin,
   DownloadSource,
   SoulseekCandidate,
   SoulseekReceivedTags,
@@ -90,6 +91,11 @@ declare class WaveSoulseekModule extends NativeModule<{
     equivalentId: string | null,
     /** Core's `downloadSource`; null fails the job as `noSource` when it's prepared. */
     source: DownloadSource | null,
+    /**
+     * The playlist, album or Discover mix whose Download asks, null for a song asked for on its
+     * own. A job keeps the first one it was asked from.
+     */
+    origin: DownloadOrigin | null,
   ): Promise<string>;
   jobsSnapshot(): Promise<NativeDownloadJob[]>;
   /** Forgets an imported job Core found absent from the Library, if it hasn't been retried since. */

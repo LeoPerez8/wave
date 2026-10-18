@@ -83,6 +83,17 @@
         android:resource="@xml/wave_log_paths" />
     </provider>
 
+    <!-- The lyrics card goes to the share sheet as an image (ShareImageProvider). -->
+    <provider
+      android:name="expo.modules.wavenative.share.ShareImageProvider"
+      android:authorities="${applicationId}.images"
+      android:exported="false"
+      android:grantUriPermissions="true">
+      <meta-data
+        android:name="android.support.FILE_PROVIDER_PATHS"
+        android:resource="@xml/wave_share_paths" />
+    </provider>
+
     <!-- Lists Wave as a media app in Android Auto. -->
     <meta-data
       android:name="com.google.android.gms.car.application"
