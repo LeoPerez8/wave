@@ -3,6 +3,8 @@
  * show, without interrupting what was already playing (docs/spec.md, Recap).
  */
 
+import type { RecapSlide } from "./recap.ts";
+
 /**
  * The context a Recap's music plays from. Its plays are never on record
  * (`trackPlays`): neither play history nor counted plays, so watching a
@@ -15,7 +17,7 @@ export const RECAP_PLAY_CONTEXT = { kind: "recap", id: null } as const;
  * with their songs loaded. A top-songs slide features its #1.
  */
 export interface RecapMusicSlide<Song> {
-  readonly kind: string;
+  readonly kind: RecapSlide["kind"];
   readonly songs?: readonly Song[];
 }
 

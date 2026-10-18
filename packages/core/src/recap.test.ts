@@ -10,7 +10,10 @@ import {
   genreFamily,
   parseRecapId,
   recap,
+  recapAutoForward,
   recapBack,
+  recapCardFileName,
+  recapStoryBackground,
   recapBarFill,
   recapForward,
   recapHourLabel,
@@ -482,6 +485,16 @@ describe("recap viewer", () => {
     assert.equal(recapForward(1, 2), null);
   });
 
+  test("a slide's time running out moves on to the next slide", () => {
+    assert.equal(recapAutoForward(0, 3), 1);
+    assert.equal(recapAutoForward(1, 3), 2);
+  });
+
+  test("the summary card (the last slide) stays when its time runs out: only a tap, a swipe or close end it", () => {
+    assert.equal(recapAutoForward(2, 3), null);
+    assert.equal(recapAutoForward(0, 1), null);
+  });
+
   test("tapping left goes to the previous slide, and restarts the first", () => {
     assert.equal(recapBack(1), 0);
     assert.equal(recapBack(0), 0);
@@ -521,5 +534,18 @@ describe("recapId", () => {
     for (const id of ["2026-13", "2026-00", "2026-9", "september", "", "2026-09-01"]) {
       assert.equal(parseRecapId(id), null, id);
     }
+  });
+});
+
+describe("sharing a Recap slide", () => {
+  test("names the image after the Recap and when it was made", () => {
+    assert.equal(
+      recapCardFileName("September 2026", new Date(at(2026, 10, 18, 14, 5) + 9_000)),
+      "Wave - Recap September 2026 - 20261018-140509.png",
+    );
+  });
+
+  test("lays the image over the slide's colour, top and bottom, in an Instagram story", () => {
+    assert.deepEqual(recapStoryBackground("#3F43B8"), { top: "#3f43b8", bottom: "#3f43b8" });
   });
 });

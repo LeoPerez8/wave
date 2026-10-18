@@ -3,14 +3,19 @@ import { describe, test } from "node:test";
 
 import {
   NO_DOWNLOAD_RUN,
+  downloadRunGroupLine,
   downloadRunLines,
   downloadRunNotice,
+  downloadRunPanelLine,
   downloadRunProgress,
   downloadTimeLeft,
   downloadTimeLeftLine,
   downloadsPaused,
   followDownloadRun,
+  keptDownloadRun,
   playlistDownloadOrigin,
+  qualityJobId,
+  restoredDownloadRun,
 } from "./index.ts";
 import type { DownloadRun, YtDownloadJournalJob, YtSong } from "./index.ts";
 
@@ -85,6 +90,16 @@ describe("Settings › Downloads: the run", () => {
     assert.deepEqual(counts(run), { done: 1, failed: 0, left: 1, total: 2 });
   });
 
+  test("a replacement that found no better copy keeps its file: it's done, not failed", () => {
+    const upgrade = qualityJobId("upgrade", 7);
+    const other = qualityJobId("upgrade", 8);
+    const run = follow(
+      [job(upgrade), job(other), job("c")],
+      [failed(upgrade, { reason: "notFound" }), failed(other, { reason: "unavailable" }), job("c")],
+    );
+    assert.deepEqual(counts(run), { done: 1, failed: 1, left: 1, total: 3 });
+  });
+
   test("each group counts its own songs", () => {
     const mix = playlistDownloadOrigin({ id: 7, name: "Road trip" });
     const run = follow(
@@ -103,6 +118,55 @@ describe("Settings › Downloads: the run", () => {
       fraction: 0.4984,
     });
     assert.equal(downloadRunLines({ done: 1, failed: 0, left: 3, total: 4 }).detail, "3 left");
+  });
+});
+
+/** [run] kept at a restart an hour in, as the kv-store gives it back. */
+const restarted = (run: DownloadRun): DownloadRun =>
+  restoredDownloadRun(keptDownloadRun(run), 3_600_000);
+
+describe("Settings › Downloads: the run across a restart", () => {
+  const mix = playlistDownloadOrigin({ id: 7, name: "Road trip" });
+  const before = follow(
+    [job("a", { origin: mix }), job("b", { origin: mix }), job("c"), job("d"), failed("old")],
+    [done("a", { origin: mix }), done("b", { origin: mix }), failed("c"), job("d"), failed("old")],
+  );
+
+  test("keeps the songs done, per group, that the journal forgets at the restart", () => {
+    // The journal drops the songs in the Library when it loads; the failures stay.
+    const run = followDownloadRun(
+      restarted(before),
+      [failed("c"), job("d"), failed("old")],
+      3_600_000,
+    );
+    assert.deepEqual(counts(run), { done: 2, failed: 1, left: 1, total: 4 });
+    const { groups } = downloadRunProgress(run);
+    assert.deepEqual(groups.get("playlist:7"), { done: 2, failed: 0, left: 0, total: 2 });
+    assert.deepEqual(groups.get("songs"), { done: 0, failed: 1, left: 1, total: 2 });
+  });
+
+  test("the pace starts over at the restart", () => {
+    const run = restarted(before);
+    assert.equal(run.startedAt, 3_600_000);
+    assert.deepEqual(run.finishes, []);
+  });
+
+  test("songs the journal still holds aren't counted twice", () => {
+    const journal = [done("a", { origin: mix }), done("b", { origin: mix }), failed("c"), job("d")];
+    const run = followDownloadRun(restarted(before), journal, 3_600_000);
+    assert.deepEqual(counts(run), { done: 2, failed: 1, left: 1, total: 4 });
+  });
+
+  test("a restored run still resets once everything finishes", () => {
+    const run = followDownloadRun(restarted(before), [failed("c"), done("d")], 3_600_000);
+    assert.equal(counts(run), null);
+    assert.equal(keptDownloadRun(run), null);
+  });
+
+  test("with no run kept, or anything else, there's no run", () => {
+    assert.equal(keptDownloadRun(NO_DOWNLOAD_RUN), null);
+    const stored = [null, "run", "5", "{}", '{"done":{"songs":"x"},"failed":{}}'];
+    for (const kept of stored) assert.equal(counts(restoredDownloadRun(kept, 0)), null);
   });
 });
 
@@ -156,12 +220,45 @@ describe("Settings › Downloads: the run's time left", () => {
     assert.equal(downloadsPaused({ downloading: 0, saving: 0, waiting: 0 }), false);
   });
 
+  test("paused while YouTube is limiting downloads, even with songs held in their slots", () => {
+    const held = { downloading: 5, saving: 0, waiting: 300 };
+    assert.equal(downloadsPaused(held, { youtubePausedUntil: 5 * 60_000, now: 60_000 }), true);
+    assert.equal(downloadsPaused(held, { youtubePausedUntil: 5 * 60_000, now: 5 * 60_000 }), false);
+    assert.equal(downloadsPaused(held, { youtubePausedUntil: null, now: 60_000 }), false);
+  });
+
   test("time left in words", () => {
     assert.equal(downloadTimeLeftLine(20_000), "Less than a minute left");
     assert.equal(downloadTimeLeftLine(15 * 60_000), "About 15 min left");
     assert.equal(downloadTimeLeftLine(84 * 60_000), "About 1 h 20 min left");
     assert.equal(downloadTimeLeftLine(118 * 60_000), "About 2 h left");
     assert.equal(downloadTimeLeftLine(7.6 * 3_600_000), "About 8 h left");
+  });
+});
+
+/** A big run's panel line under its bar. */
+const panelLine = (timeLeft: number | null, paused = false, throttled = false) =>
+  downloadRunPanelLine(
+    { done: 1234, failed: 12, left: 1254, total: 2500 },
+    { timeLeft, paused, throttled },
+  );
+
+describe("Settings › Downloads: the run panel's lines", () => {
+  test("what's left, then the time left once there's a pace", () => {
+    assert.equal(panelLine(118 * 60_000), "12 failed · 1,254 left · About 2 h left");
+    assert.equal(panelLine(null), "12 failed · 1,254 left");
+  });
+
+  test("Paused while nothing moves; nothing more while YouTube's pause says when it tries again", () => {
+    assert.equal(panelLine(null, true), "12 failed · 1,254 left · Paused");
+    assert.equal(panelLine(null, true, true), "12 failed · 1,254 left");
+  });
+
+  test("a group header's line: done of all, then what's left", () => {
+    assert.equal(
+      downloadRunGroupLine({ done: 40, failed: 2, left: 78, total: 120 }),
+      "40 of 120 · 2 failed · 78 left",
+    );
   });
 });
 

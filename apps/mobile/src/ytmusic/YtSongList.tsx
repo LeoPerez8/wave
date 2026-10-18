@@ -1,5 +1,6 @@
 import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
 import {
+  IconCircleCheck,
   IconCloudOff,
   IconDownload,
   IconRefresh,
@@ -45,9 +46,7 @@ import { ScreenHeader } from "@/components/ScreenHeader";
 import {
   entryText,
   FIND_FIELD_HEIGHT,
-  FindInPlaylistField,
-  foundSongs,
-  NoSongsMatch,
+  FindHead,
   useFindInLegendList,
 } from "@/library/FindInPlaylist";
 import type { SongRow } from "@/library/LibraryStore";
@@ -192,8 +191,9 @@ const totalMinutes = (songs: readonly Song[]): string | null => {
 /** What a list's download button can show: an entry to act on, or that every song is downloaded. */
 type YtListDownloadButtonAction = YtListDownloadAction | "downloaded";
 
+/** Downloaded has a check of its own, so an icon-only button doesn't look like Download. */
 const DOWNLOAD_ICONS: { readonly [A in YtListDownloadButtonAction]: typeof IconDownload } = {
-  downloaded: IconDownload,
+  downloaded: IconCircleCheck,
   downloadAlbum: IconDownload,
   downloadPlaylist: IconDownload,
   retryFailed: IconRefresh,
@@ -410,7 +410,8 @@ export function YtSongList({
   albumDownload?: "album" | "mix";
   /**
    * Find in Playlist (a playlist): its field waits above the head until the
-   * list is pulled down, and narrows the songs read so far as you type.
+   * list is pulled down, and narrows the songs read so far as you type; while
+   * more pages come, their skeleton rows stay and "No songs match" waits for them.
    */
   findable?: boolean;
 }) {
@@ -446,10 +447,11 @@ export function YtSongList({
   );
   const list = useRef<LegendListRef>(null);
   const findInList = useFindInLegendList(list, songs, entryText, findable);
-  const { found } = findInList;
-  const shown = useMemo(() => foundSongs(songs, found), [songs, found]);
+  const { shown, placeOf } = findInList;
   const head = page?.head ?? known;
   const loading = load.status === "loading";
+  // More of a playlist's pages on their way.
+  const reading = load.status === "loaded" && load.rest === "reading";
   const restLine = load.status === "loaded" ? ytPlaylistRestLine(load.rest) : null;
   const furniture =
     page === null
@@ -463,12 +465,38 @@ export function YtSongList({
       <DiscoverSongRow
         song={item}
         selection={selection}
-        trackNumber={numbered ? (found?.[index] ?? index) + 1 : undefined}
+        trackNumber={numbered ? placeOf(index) + 1 : undefined}
         // A found song plays the whole playlist from its own place in it.
-        onPress={() => play(found?.[index] ?? index)}
+        onPress={() => play(placeOf(index))}
       />
     ),
-    [numbered, play, selection, found],
+    [numbered, play, selection, placeOf],
+  );
+
+  const pageHead = (
+    <>
+      {(head !== undefined || loading) && (
+        <Head
+          head={head}
+          loading={loading}
+          furniture={furniture}
+          progress={download.progress}
+          onPlay={songs.length === 0 ? null : (shuffle) => play(undefined, shuffle)}
+          download={download.button}
+        />
+      )}
+      {load.status === "quiet" && (
+        <EmptyState
+          icon={load.reason === "offline" ? IconWifiOff : IconCloudOff}
+          title={load.reason === "offline" ? "You're offline" : "No answer online"}
+          message={
+            load.reason === "offline"
+              ? "These songs need the network."
+              : "Go back and open it again to try once more."
+          }
+        />
+      )}
+    </>
   );
 
   return (
@@ -492,36 +520,17 @@ export function YtSongList({
         }}
         initialScrollOffset={findable ? FIND_FIELD_HEIGHT : undefined}
         ListHeaderComponent={
-          <>
-            {findable && <FindInPlaylistField find={findInList} />}
-            {found !== null && found.length === 0 && <NoSongsMatch />}
-            {found === null && (head !== undefined || loading) && (
-              <Head
-                head={head}
-                loading={loading}
-                furniture={furniture}
-                progress={download.progress}
-                onPlay={songs.length === 0 ? null : (shuffle) => play(undefined, shuffle)}
-                download={download.button}
-              />
-            )}
-            {found === null && load.status === "quiet" && (
-              <EmptyState
-                icon={load.reason === "offline" ? IconWifiOff : IconCloudOff}
-                title={load.reason === "offline" ? "You're offline" : "No answer online"}
-                message={
-                  load.reason === "offline"
-                    ? "These songs need the network."
-                    : "Go back and open it again to try once more."
-                }
-              />
-            )}
-          </>
+          findable ? (
+            // Pages still on their way may hold matches: no "No songs match" until they're all in.
+            <FindHead find={findInList} header={pageHead} allRead={!reading} />
+          ) : (
+            pageHead
+          )
         }
         ListFooterComponent={
           loading ? (
             <TrackSkeletons count={PAGE_SKELETON_ROWS} leading={numbered ? "number" : "artwork"} />
-          ) : load.status === "loaded" && load.rest === "reading" ? (
+          ) : reading ? (
             // More pages coming: skeleton rows at the list's end, where their songs will go.
             <TrackSkeletons leading={numbered ? "number" : "artwork"} />
           ) : (

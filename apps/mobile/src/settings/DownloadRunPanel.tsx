@@ -1,8 +1,8 @@
-import { downloadRunLines, downloadTimeLeftLine, type DownloadRunCounts } from "@wave/core";
+import { downloadRunLines, downloadRunPanelLine } from "@wave/core";
 import { Text, View } from "react-native";
 
 import { CELL } from "@/catalog/grid";
-import type { DownloadRunState } from "@/ytmusic/YtDownloads";
+import type { DownloadRunState } from "@/ytmusic/downloadRun";
 
 const TABULAR = { fontVariant: ["tabular-nums" as const] };
 
@@ -21,12 +21,6 @@ export function RunBar({ fraction }: { fraction: number }) {
   );
 }
 
-/** A group header's line: "40 of 120 · 2 failed · 80 left" (Core's `downloadRunLines`). */
-export const groupRunLine = (counts: DownloadRunCounts): string => {
-  const { count, detail } = downloadRunLines(counts);
-  return `${count} · ${detail}`;
-};
-
 /** The line saying YouTube's downloads are paused and when they try again (`useYoutubePauseNotice`). */
 function PauseNotice({ notice }: { notice: string | null }) {
   return notice === null ? null : (
@@ -43,7 +37,7 @@ function PauseNotice({ notice }: { notice: string | null }) {
 /**
  * Settings › Downloads' run panel, atop the Downloading section: a bar, "1,234 of 2,500", how
  * many failed and are left, and "About 2 h left" once there's a pace (Core's
- * `downloadTimeLeft`). While downloads are paused there's no time left: [pauseNotice] says
+ * `downloadRunPanelLine`). While downloads are paused there's no time left: [pauseNotice] says
  * when YouTube's try again, else "Paused" while nothing downloads or saves. [summary] is the
  * section's "2 downloading · 5 waiting". Without a run, the summary and notice alone.
  */
@@ -68,16 +62,8 @@ export function DownloadRunPanel({
       </View>
     );
   }
-  const { count, detail, fraction } = downloadRunLines(overall);
-  const time =
-    pauseNotice !== null
-      ? null
-      : paused
-        ? "Paused"
-        : timeLeft === null
-          ? null
-          : downloadTimeLeftLine(timeLeft);
-  const line = time === null ? detail : `${detail} · ${time}`;
+  const { count, fraction } = downloadRunLines(overall);
+  const line = downloadRunPanelLine(overall, { timeLeft, paused, throttled: pauseNotice !== null });
   return (
     <View style={lines}>
       <View

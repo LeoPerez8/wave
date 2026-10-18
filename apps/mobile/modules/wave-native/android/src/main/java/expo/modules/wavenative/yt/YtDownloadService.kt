@@ -95,7 +95,7 @@ class YtDownloadService : Service() {
     wakeLock?.acquire(LOCK_MS)
     val current = downloads.jobs.current()
     // Android drops notifications posted too often; only post what changed.
-    val shown = listOf(current?.get("id"), current?.get("phase"), current?.get("queuePosition"), percent(current), downloads.jobs.counts(), downloads.jobs.youtubePause(), downloads.runNotice)
+    val shown = listOf(current?.get("id"), current?.get("phase"), current?.get("queuePosition"), percent(current), downloads.jobs.counts(), downloads.jobs.youtubePausedNow(), downloads.runNotice)
     if (shown == lastShown) return
     // A run's songs change many times a second; its notification follows at most about once a second (the tick reposts).
     val now = SystemClock.elapsedRealtime()
@@ -127,7 +127,7 @@ class YtDownloadService : Service() {
     val waiting = if (current?.get("source") == DurableDownloads.YOUTUBE) listOf("queued", "preparing", "prepared") else listOf("queued", "preparing")
     val queued = current?.get("queuePosition") != null || current?.get("phase") in waiting
     // While YouTube limits downloads, its songs wait for the next try, which the notification counts down to.
-    val pause = downloads.jobs.youtubePause()?.takeIf { current?.get("source") == DurableDownloads.YOUTUBE && current["phase"] == "prepared" }
+    val pause = downloads.jobs.youtubePausedNow()?.takeIf { current?.get("source") == DurableDownloads.YOUTUBE && current["phase"] == "prepared" }
     // With several songs on their way, the whole run (Core's `downloadRunNotice`, as Settings › Downloads counts it).
     val run = downloads.runNotice
     val title = when {

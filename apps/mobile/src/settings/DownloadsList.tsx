@@ -1,6 +1,7 @@
 import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
 import {
   downloadListRows,
+  downloadRunGroupLine,
   downloadRunLines,
   failedDownloadRows,
   queuedDownloadsSummary,
@@ -34,7 +35,7 @@ import { Hairline } from "@/catalog/Hairline";
 import { REORDER_HANDLE_ROOM, ReorderHandle } from "@/components/RowReorder";
 import { PlainTextButton } from "@/components/PlainTextButton";
 import type { NativeYtSong } from "@/native/waveYtMusic";
-import { DownloadRunPanel, groupRunLine, RunBar } from "@/settings/DownloadRunPanel";
+import { DownloadRunPanel, RunBar } from "@/settings/DownloadRunPanel";
 import { DownloadSongRow } from "@/settings/DownloadSongRow";
 import {
   DOWNLOAD_ROW_ESTIMATE,
@@ -50,9 +51,9 @@ import {
   FailedSectionHeader,
 } from "@/settings/FailedDownloadsSection";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
+import { useDownloadRun } from "@/ytmusic/downloadRun";
 import {
   cancelQueuedDownload,
-  useDownloadRun,
   useDownloadingList,
   useFailedDownloads,
 } from "@/ytmusic/YtDownloads";
@@ -177,7 +178,7 @@ function DownloadGroupHeader({
   count?: number;
   onAccessibilityAction?: (event: AccessibilityActionEvent) => void;
 }) {
-  const line = progress === undefined ? group.line : groupRunLine(progress);
+  const line = progress === undefined ? group.line : downloadRunGroupLine(progress);
   return (
     <View>
       <View className="flex-row items-center" style={{ gap: CELL * 1.5, paddingTop: CELL }}>

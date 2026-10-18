@@ -26,7 +26,7 @@ describe("recapSong", () => {
   });
 
   test("a slide that features a song plays that one while it shows", () => {
-    const featuring = [...slides, { kind: "topSongs", songs: [song(2)] }];
+    const featuring: RecapSlide[] = [...slides, { kind: "topSongs", songs: [song(2)] }];
     assert.equal(recapSong(featuring, 2, { playingBefore: false })?.id, 2);
   });
 

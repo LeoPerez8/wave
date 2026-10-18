@@ -13,15 +13,26 @@ let state: YtThrottle | null = null;
 let restoring: Promise<YtThrottle> | null = null;
 const pausedUntil = makeExternalStore<number | null>(null);
 
-/** The throttle as the journal kept it across restarts. */
-const restored = (): Promise<YtThrottle> =>
-  (restoring ??= WaveSoulseek.youtubePause()
-    .catch(() => null)
-    .then((pause) => {
-      state ??= ytThrottleRestored(pause, Date.now());
-      pausedUntil.set(state.pausedUntil);
-      return state;
-    }));
+/**
+ * The throttle as the journal kept it across restarts: its pause and backoff, and whether a
+ * stream it holds was served, read from [jobs] or else a snapshot of the journal.
+ */
+const restored = (jobs?: readonly NativeDownloadJob[]): Promise<YtThrottle> =>
+  (restoring ??= Promise.all([
+    WaveSoulseek.youtubePause().catch(() => null),
+    jobs ?? WaveSoulseek.jobsSnapshot().catch((): readonly NativeDownloadJob[] => []),
+  ]).then(([pause, journal]) => {
+    state ??= ytThrottleRestored(pause, Date.now(), journal);
+    pausedUntil.set(state.pausedUntil);
+    return state;
+  }));
+
+/** Until when YouTube's downloads are paused (epoch ms), as last decided; null before any pause. */
+export const youtubePausedUntil = (): number | null => pausedUntil.get();
+
+/** Calls [listener] whenever YouTube's pause changes; returns how to stop. */
+export const onYoutubePauseChanged = (listener: () => void): (() => void) =>
+  pausedUntil.subscribe(listener);
 
 let following = Promise.resolve();
 
@@ -32,7 +43,7 @@ let following = Promise.resolve();
 export const followYoutubeThrottle = (jobs: readonly NativeDownloadJob[]): Promise<void> =>
   (following = following
     .then(async () => {
-      const before = state ?? (await restored());
+      const before = state ?? (await restored(jobs));
       const next = ytThrottleRead(before, jobs);
       state = next;
       if (next.pausedUntil === before.pausedUntil && next.level === before.level) return;

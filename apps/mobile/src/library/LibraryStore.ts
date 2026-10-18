@@ -1,6 +1,7 @@
 import {
   filesLeavingWithRoot,
   rememberSearch,
+  type ArtistFirstPlay,
   type BlackPlayerPlay,
   type BlackPlayerTrack,
   type ImportedPlays,
@@ -884,10 +885,7 @@ export class LibraryStore extends Context.Service<
      */
     readonly artistFirstPlays: (
       ids: readonly number[],
-    ) => Effect.Effect<
-      readonly { readonly id: number; readonly firstPlayAt: number }[],
-      LibraryStoreError
-    >;
+    ) => Effect.Effect<readonly ArtistFirstPlay[], LibraryStoreError>;
     /**
      * What [artistId]'s page needs for its stats block (Core's `artistStats`),
      * read from that artist's songs and their plays alone: the songs in the
