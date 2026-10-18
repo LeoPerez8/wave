@@ -65,7 +65,7 @@ const artistMixes = (builtAt: number, names: readonly string[]): DiscoverMixes =
   return built;
 };
 
-const at = (day: number, hour: number) => new Date(2026, 9, day, hour).getTime();
+const on = (day: number, hour: number) => new Date(2026, 9, day, hour).getTime();
 
 const seedNames = (seeds: readonly DiscoverMixSeed[]) =>
   seeds.map((seed) => `${seed.from}: ${seed.name}`);
@@ -96,8 +96,8 @@ describe("A refreshed mix's new songs", () => {
   const ids = (songs: readonly { videoId: string }[]) => songs.map((song) => song.videoId);
 
   test("leave out the new songs of every set shown today", () => {
-    const shown = artistMixes(at(18, 9), ["Dayseeker"]);
-    const avoid = mixRefreshAvoid(mixesShown([], shown, at(18, 9)), at(18, 10)).songs;
+    const shown = artistMixes(on(18, 9), ["Dayseeker"]);
+    const avoid = mixRefreshAvoid(mixesShown([], shown, on(18, 9)), on(18, 10)).songs;
     const songs = discoverMixSongs([[yt("Dayseeker-3", "Dayseeker"), ...radio]], filter(avoid));
     assert.deepEqual(ids(songs), ids(radio));
   });
@@ -111,8 +111,8 @@ describe("A refreshed mix's new songs", () => {
 
 describe("A refresh of Artist mixes", () => {
   test("picks other seed artists than the set just shown", () => {
-    const now = at(18, 10);
-    const shown = artistMixes(at(18, 9), [
+    const now = on(18, 10);
+    const shown = artistMixes(on(18, 9), [
       "Bad Omens",
       "Sleep Token",
       "Spiritbox",
@@ -129,20 +129,20 @@ describe("A refresh of Artist mixes", () => {
   });
 
   test("with nothing different left, brings back the least recently shown artists first", () => {
-    const first = artistMixes(at(18, 9), [
+    const first = artistMixes(on(18, 9), [
       "Bad Omens",
       "Sleep Token",
       "Spiritbox",
       "Bring Me the Horizon",
     ]);
-    const second = artistMixes(at(18, 10), [
+    const second = artistMixes(on(18, 10), [
       "Nothing But Thieves",
       "Architects",
       "Bad Omens",
       "Sleep Token",
     ]);
-    const memory = mixesShown(mixesShown([], first, at(18, 9)), second, at(18, 10));
-    const avoid = mixRefreshAvoid(memory, at(18, 11));
+    const memory = mixesShown(mixesShown([], first, on(18, 9)), second, on(18, 10));
+    const avoid = mixRefreshAvoid(memory, on(18, 11));
     const seeds = artistMixSeeds({ played: MOST_PLAYED, avoid }, always(0));
     assert.deepEqual(seedNames(seeds), [
       "plays: Spiritbox",
@@ -153,25 +153,25 @@ describe("A refresh of Artist mixes", () => {
   });
 
   test("forgets the sets shown on an earlier day", () => {
-    const yesterday = artistMixes(at(17, 21), ["Nothing But Thieves", "Architects"]);
-    const today = artistMixes(at(18, 9), [
+    const yesterday = artistMixes(on(17, 21), ["Nothing But Thieves", "Architects"]);
+    const today = artistMixes(on(18, 9), [
       "Bad Omens",
       "Sleep Token",
       "Spiritbox",
       "Bring Me the Horizon",
     ]);
-    const memory = mixesShown(mixesShown([], yesterday, at(17, 21)), today, at(18, 9));
-    const avoid = mixRefreshAvoid(memory, at(18, 10));
+    const memory = mixesShown(mixesShown([], yesterday, on(17, 21)), today, on(18, 9));
+    const avoid = mixRefreshAvoid(memory, on(18, 10));
     assert.deepEqual(
       seedNames(artistMixSeeds({ played: MOST_PLAYED, avoid }, always(0))).slice(0, 2),
       ["plays: Nothing But Thieves", "plays: Architects"],
     );
-    assert.deepEqual(mixRefreshAvoid(memory, at(19, 8)).artists.size, 0);
+    assert.deepEqual(mixRefreshAvoid(memory, on(19, 8)).artists.size, 0);
   });
 
   test("reads similar artists' pages when the Library's other artists are too few", () => {
-    const shown = artistMixes(at(18, 9), ["Bad Omens", "Sleep Token"]);
-    const avoid = mixRefreshAvoid(mixesShown([], shown, at(18, 9)), at(18, 10));
+    const shown = artistMixes(on(18, 9), ["Bad Omens", "Sleep Token"]);
+    const avoid = mixRefreshAvoid(mixesShown([], shown, on(18, 9)), on(18, 10));
     const pools = {
       played: [played(1, "Bad Omens", 600), played(2, "Sleep Token", 500)],
       library: [library(1, "Bad Omens", 30), library(2, "Sleep Token", 20)],
@@ -207,7 +207,9 @@ describe("A refresh of Artist mixes", () => {
 
 describe("A refresh of Genre mixes", () => {
   /** A Library where each of [families] has five songs per artist, the earlier more played. */
-  const libraryOf = (families: readonly (readonly [genre: string, artists: readonly string[]])[]) => {
+  const libraryOf = (
+    families: readonly (readonly [genre: string, artists: readonly string[]])[],
+  ) => {
     const names = families.flatMap(([, artists]) => artists);
     const artists = names.map((name, at) => ({ id: at + 1, name }));
     const songs = families.flatMap(([genre, of], family) =>
@@ -260,16 +262,16 @@ describe("A refresh of Genre mixes", () => {
     seeds.map((seed) => `${seed.name}: ${(seed.artists ?? []).map((a) => a.name).join(", ")}`);
 
   test("keep their families but grow from other family artists", () => {
-    const library = libraryOf([
+    const songs = libraryOf([
       ["Metal", ["Bad Omens", "Sleep Token", "Spiritbox", "Architects", "Loathe"]],
       ["Rock", ["Nothing But Thieves", "Muse"]],
     ]);
-    const shown = genreMixes(at(18, 9), [
+    const shown = genreMixes(on(18, 9), [
       ["Metal", ["Bad Omens", "Sleep Token", "Spiritbox"]],
       ["Rock", ["Nothing But Thieves", "Muse"]],
     ]);
-    const avoid = mixRefreshAvoid(mixesShown([], shown, at(18, 9)), at(18, 10));
-    assert.deepEqual(seedArtists(genreMixSeeds(library, always(0), avoid)), [
+    const avoid = mixRefreshAvoid(mixesShown([], shown, on(18, 9)), on(18, 10));
+    assert.deepEqual(seedArtists(genreMixSeeds(songs, always(0), avoid)), [
       "Metal: Architects, Loathe, Bad Omens",
       "Rock: Nothing But Thieves, Muse",
     ]);
@@ -284,15 +286,15 @@ describe("A refresh of Genre mixes", () => {
       ["Jazz", ["Kamasi Washington"]],
       ["Folk", ["Bon Iver"]],
     ] as const;
-    const library = libraryOf(families);
+    const songs = libraryOf(families);
     assert.deepEqual(
-      genreMixSeeds(library, always(0)).map((seed) => seed.name),
+      genreMixSeeds(songs, always(0)).map((seed) => seed.name),
       ["Metal", "Rock", "Hip-Hop", "Electronic"],
     );
-    const shown = genreMixes(at(18, 9), families.slice(0, 4));
-    const avoid = mixRefreshAvoid(mixesShown([], shown, at(18, 9)), at(18, 10));
+    const shown = genreMixes(on(18, 9), families.slice(0, 4));
+    const avoid = mixRefreshAvoid(mixesShown([], shown, on(18, 9)), on(18, 10));
     assert.deepEqual(
-      genreMixSeeds(library, always(0), avoid).map((seed) => seed.name),
+      genreMixSeeds(songs, always(0), avoid).map((seed) => seed.name),
       ["Metal", "Rock", "Jazz", "Folk"],
     );
   });
@@ -300,24 +302,24 @@ describe("A refresh of Genre mixes", () => {
 
 describe("Undo after a refresh", () => {
   test("puts the previous set back, as the day's build", () => {
-    const previous = artistMixes(at(17, 21), ["Bad Omens", "Sleep Token"]);
-    const refreshed = artistMixes(at(18, 10), ["Spiritbox", "Architects"]);
-    const undone = undoneMixRefresh(previous, refreshed, at(18, 10) + 5_000);
+    const previous = artistMixes(on(17, 21), ["Bad Omens", "Sleep Token"]);
+    const refreshed = artistMixes(on(18, 10), ["Spiritbox", "Architects"]);
+    const undone = undoneMixRefresh(previous, refreshed, on(18, 10) + 5_000);
     assert.deepEqual(undone.mixes, previous.mixes);
-    assert.equal(discoverMixesDue(undone, { now: at(18, 12), played: true }), false);
-    assert.equal(discoverMixesDue(undone, { now: at(19, 8), played: true }), true);
+    assert.equal(discoverMixesDue(undone, { now: on(18, 12), played: true }), false);
+    assert.equal(discoverMixesDue(undone, { now: on(19, 8), played: true }), true);
   });
 
   test("keeps both sets in the memory, the one put back the most recently shown", () => {
-    const previous = artistMixes(at(18, 9), ["Bad Omens", "Sleep Token"]);
-    const refreshed = artistMixes(at(18, 10), ["Spiritbox", "Architects"]);
-    const undone = undoneMixRefresh(previous, refreshed, at(18, 11));
+    const previous = artistMixes(on(18, 9), ["Bad Omens", "Sleep Token"]);
+    const refreshed = artistMixes(on(18, 10), ["Spiritbox", "Architects"]);
+    const undone = undoneMixRefresh(previous, refreshed, on(18, 11));
     const memory = mixesShown(
-      mixesShown(mixesShown([], previous, at(18, 9)), refreshed, at(18, 10)),
+      mixesShown(mixesShown([], previous, on(18, 9)), refreshed, on(18, 10)),
       undone,
-      at(18, 11),
+      on(18, 11),
     );
-    const avoid = mixRefreshAvoid(memory, at(18, 12));
+    const avoid = mixRefreshAvoid(memory, on(18, 12));
     assert.deepEqual(
       new Set(avoid.artists.keys()),
       new Set(["architects", "bad omens", "sleep token", "spiritbox"]),
@@ -333,8 +335,8 @@ describe("Undo after a refresh", () => {
 
 describe("What a section showed today", () => {
   test("is saved and read back", () => {
-    const shown = artistMixes(at(18, 9), ["Bad Omens", "Sleep Token"]);
-    const memory = mixesShown([], shown, at(18, 9));
+    const shown = artistMixes(on(18, 9), ["Bad Omens", "Sleep Token"]);
+    const memory = mixesShown([], shown, on(18, 9));
     assert.deepEqual(parseMixesShown(storedMixesShown(memory)), memory);
   });
 

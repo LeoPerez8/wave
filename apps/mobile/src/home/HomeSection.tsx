@@ -9,10 +9,11 @@ import type { ComponentType } from "react";
 import { View } from "react-native";
 
 import { AlbumTile } from "@/catalog/AlbumTile";
-import { COVER_ROW_TILE, CoverRow } from "@/catalog/CoverRow";
+import { COVER_ROW_TILE } from "@/catalog/CoverRow";
 import { EntryRow } from "@/catalog/EntryRow";
 import { CELL } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
+import { PullRefreshRow } from "@/catalog/PullRefreshRow";
 import { TitledSection } from "@/catalog/TitledSection";
 import type { HomeSections, MostPlayedRow } from "@/library/db/playHistory";
 import { openStats, openStatsSeeAll } from "@/library/routes";
@@ -21,7 +22,7 @@ import type { Ranked } from "@/stats/Stats";
 import { playCount } from "@/stats/StatsViews";
 import { openDiscoverMix } from "@/ytmusic/routes";
 
-import { useDiscoverMixes, type MixSectionId } from "./discoverMixes";
+import { refreshMixes, useDiscoverMixes, type MixSectionId } from "./discoverMixes";
 import { openDiscoverMixActions } from "./DiscoverMixActions";
 import { DiscoverMixLevelButton } from "./DiscoverMixLevelButton";
 import { DiscoverMixesSkeleton } from "./DiscoverMixesSkeleton";
@@ -86,7 +87,12 @@ function DiscoverMixes({ home, title, id }: SectionProps & { id: MixSectionId })
       {section.kind === "skeleton" ? (
         <DiscoverMixesSkeleton />
       ) : (
-        <DiscoverMixRow mixes={section.mixes} />
+        <DiscoverMixRow
+          mixes={section.mixes}
+          onRefresh={() => refreshMixes(id)}
+          refreshing={section.updating}
+          refreshLabel={`Get new ${title.toLowerCase()}`}
+        />
       )}
     </TitledSection>
   );
@@ -97,11 +103,22 @@ function DiscoverMixes({ home, title, id }: SectionProps & { id: MixSectionId })
  * the row crossfades its tile when what it shows changes: the level
  * re-blending the mix, or a rebuild saving new mixes (a plain swap with
  * reduce motion). Keyed by place, not by mix, so a new set fades over the
- * old one tile by tile.
+ * old one tile by tile. Pulled right past its start, the row asks for new
+ * mixes ([onRefresh], `refreshMixes`), except while [refreshing].
  */
-function DiscoverMixRow({ mixes }: { mixes: readonly BlendedDiscoverMix[] }) {
+function DiscoverMixRow({
+  mixes,
+  onRefresh,
+  refreshing,
+  refreshLabel,
+}: {
+  mixes: readonly BlendedDiscoverMix[];
+  onRefresh: () => void;
+  refreshing: boolean;
+  refreshLabel: string;
+}) {
   return (
-    <CoverRow>
+    <PullRefreshRow onRefresh={onRefresh} enabled={!refreshing} refreshLabel={refreshLabel}>
       {mixes.map((mix, place) => {
         const caption = discoverMixCaption(mix);
         const shows = [mix.id, caption.artworkUrl, caption.title, caption.artists, caption.line];
@@ -125,7 +142,7 @@ function DiscoverMixRow({ mixes }: { mixes: readonly BlendedDiscoverMix[] }) {
           </Crossfade>
         );
       })}
-    </CoverRow>
+    </PullRefreshRow>
   );
 }
 

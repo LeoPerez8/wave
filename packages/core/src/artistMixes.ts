@@ -98,8 +98,10 @@ const pickSeeds = (pools: ArtistMixPools, random: RandomSource): SeedPick => {
   const chosen = new Set([...picked].map((artist) => identityKey(artist.name)));
   const library = freshFirst(
     seedable(
-      // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
-      [...(pools.library ?? [])].sort((a, b) => b.songCount - a.songCount).slice(0, LIBRARY_ARTISTS),
+      [...(pools.library ?? [])]
+        // oxlint-disable-next-line unicorn/no-array-sort -- sorts a fresh copy; Hermes lacks toSorted
+        .sort((a, b) => b.songCount - a.songCount)
+        .slice(0, LIBRARY_ARTISTS),
       chosen,
     ),
     shownAt,
