@@ -15,5 +15,5 @@ export default function YtAlbumScreen() {
   const known = useYtListHead("yt-album", browseId);
   const load = useYtListPage("yt-album", browseId);
   const context = useMemo(() => ({ kind: "ytAlbum", id: browseId }) as const, [browseId]);
-  return <YtSongList known={known} load={load} context={context} numbered albumDownload />;
+  return <YtSongList known={known} load={load} context={context} numbered albumDownload="album" />;
 }

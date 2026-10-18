@@ -123,8 +123,13 @@ class DurableDownloads(
   /**
    * Asks for [song], from the [source] Core decided for it (null when there's none, which the
    * prepare decision then reports). A Retry takes the source decided again.
+   *
+   * [origin] is the playlist, album or Discover mix whose Download asked for it (`kind`, `id`,
+   * `name`; Core's `DownloadOrigin`), null for a song asked for on its own. A job keeps the first
+   * origin it was asked from; asked again after it ended, it takes the new one, or keeps its own
+   * when asked with none (Settings › Downloads' Retry).
    */
-  @Synchronized fun enqueue(song: Map<String, Any?>, equivalentId: String?, recording: Map<String, Any?> = emptyMap(), source: String? = null): String {
+  @Synchronized fun enqueue(song: Map<String, Any?>, equivalentId: String?, recording: Map<String, Any?> = emptyMap(), source: String? = null, origin: Map<String, Any?>? = null): String {
     val id = song["videoId"] as String
     val existing = jobs.values.firstOrNull { it["id"] == id || it.maps("aliases").any { alias -> alias["videoId"] == id } }
       ?: equivalentId?.let { jobs[it] }?.takeIf { it["phase"] !in TERMINAL && it["importFailure"] == null }
@@ -138,6 +143,7 @@ class DurableDownloads(
         // Asked for again: it waits behind what's already queued.
         val key = existing["id"] as String
         jobs.remove(key); jobs[key] = existing
+        if (origin != null) existing["origin"] = clean(origin)
         existing["decisionAttempts"] = 0L; existing["deadline"] = clock() + JOB_MS
         if (deletedCompletion) {
           for (key in listOf("saved", "acknowledged", "finalPath", "digest", "publishSource")) existing.remove(key)
@@ -164,6 +170,7 @@ class DurableDownloads(
       "aliases" to emptyList<Map<String, Any?>>(), "attempts" to 0L, "candidateIndex" to 0L,
     )
     setSource(jobs.getValue(id), source)
+    if (origin != null) jobs.getValue(id)["origin"] = clean(origin)
     persist()
     return id
   }
