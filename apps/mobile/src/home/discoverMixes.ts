@@ -232,8 +232,11 @@ const buildMixes = Effect.gen(function* () {
   return discoverMixesBuilt(mixes, Date.now(), seeds);
 });
 
-/** A build going on, so Home coming back into focus meanwhile doesn't start another. */
-let building = false;
+/**
+ * A build going on: Home coming back into focus meanwhile doesn't start
+ * another, and the section says it's updating over the saved mixes.
+ */
+const building = makeExternalStore(false);
 /** When a build last made no mixes: try again after a while, not on every visit. */
 let failedAt: number | null = null;
 const RETRY_MS = 10 * 60 * 1000;
@@ -243,9 +246,9 @@ const nothingToBuildFrom = makeExternalStore(false);
 /** Builds the mixes again when Core says they're due; [played]: the owner has counted plays. */
 const refresh = (played: boolean): void => {
   const now = Date.now();
-  if (building || !discoverMixesDue(saved.get(), { now, played })) return;
+  if (building.get() || !discoverMixesDue(saved.get(), { now, played })) return;
   if (failedAt !== null && now - failedAt < RETRY_MS) return;
-  building = true;
+  building.set(true);
   void appRuntime
     .runPromise(Effect.result(buildMixes))
     .then((result) => {
@@ -267,7 +270,7 @@ const refresh = (played: boolean): void => {
       if (Result.isSuccess(result)) nothingToBuildFrom.set(false);
     })
     .finally(() => {
-      building = false;
+      building.set(false);
     });
 };
 
@@ -302,8 +305,9 @@ export const useLibraryTracks = (): ReadonlyMap<number, SongRow> | null => {
 
 /**
  * What Home's Discover mixes section shows (`discoverMixesSection`): the last
- * mixes built, blended by the owner's level, a skeleton while the first ones
- * build, or nothing while YT Music is off. Each time Home comes into focus
+ * mixes built, blended by the owner's level (saying they're updating while a
+ * rebuild runs), a skeleton while the first ones build, or nothing while YT
+ * Music is off. Each time Home comes into focus
  * with YT Music on, they're built again if they weren't today, and while
  * it's in focus once [played] turns true (the first counted plays) if the
  * last build had no seeds from plays.
@@ -313,14 +317,21 @@ export const useDiscoverMixes = (played: boolean): DiscoverMixesSection => {
   const mixes = saved.useValue();
   const blend = useBlend(null);
   const nothing = useSyncExternalStore(nothingToBuildFrom.subscribe, nothingToBuildFrom.get);
+  const rebuilding = useSyncExternalStore(building.subscribe, building.get);
   useFocusEffect(
     useCallback(() => {
       if (enabled) refresh(played);
     }, [enabled, played]),
   );
   return useMemo(
-    () => discoverMixesSection(mixes, { ytMusic: enabled, nothingToBuildFrom: nothing, blend }),
-    [mixes, enabled, nothing, blend],
+    () =>
+      discoverMixesSection(mixes, {
+        ytMusic: enabled,
+        nothingToBuildFrom: nothing,
+        blend,
+        building: rebuilding,
+      }),
+    [mixes, enabled, nothing, blend, rebuilding],
   );
 };
 

@@ -16,6 +16,7 @@ import { Hairline } from "@/catalog/Hairline";
 import { TitledSection } from "@/catalog/TitledSection";
 import type { HomeSections, MostPlayedRow } from "@/library/db/playHistory";
 import { openStats, openStatsSeeAll } from "@/library/routes";
+import { Crossfade } from "@/motion/Crossfade";
 import type { Ranked } from "@/stats/Stats";
 import { playCount } from "@/stats/StatsViews";
 import { openDiscoverMix } from "@/ytmusic/routes";
@@ -63,16 +64,24 @@ function MostPlayedAlbums({ title }: SectionProps) {
   );
 }
 
+/** The header's quiet line while a section's mixes rebuild over the saved ones. */
+const MIXES_UPDATING = "Updating…";
+
 /**
  * The mixes as covers, each opening its page; placeholder tiles while the
  * first ones build; nothing with YT Music off (Core's `discoverMixesSection`).
- * The header's control sets how much of every mix is new.
+ * The header's control sets how much of every mix is new, and says
+ * "Updating…" while a rebuild runs.
  */
 function DiscoverMixes({ home, title }: SectionProps) {
   const section = useDiscoverMixes(home.mostPlayed.length > 0);
   if (section.kind === "hidden") return null;
   return (
-    <TitledSection title={title} control={<DiscoverMixLevelButton />}>
+    <TitledSection
+      title={title}
+      control={<DiscoverMixLevelButton />}
+      status={section.kind === "mixes" && section.updating ? MIXES_UPDATING : undefined}
+    >
       {section.kind === "skeleton" ? (
         <DiscoverMixesSkeleton />
       ) : (
@@ -82,28 +91,37 @@ function DiscoverMixes({ home, title }: SectionProps) {
   );
 }
 
-/** The mixes' row of covers. */
+/**
+ * A mixes section's row of covers (Artist mixes, Genre mixes). Each place in
+ * the row crossfades its tile when what it shows changes: the level
+ * re-blending the mix, or a rebuild saving new mixes (a plain swap with
+ * reduce motion). Keyed by place, not by mix, so a new set fades over the
+ * old one tile by tile.
+ */
 function DiscoverMixRow({ mixes }: { mixes: readonly BlendedDiscoverMix[] }) {
   return (
     <CoverRow>
-      {mixes.map((mix) => {
+      {mixes.map((mix, place) => {
         const caption = discoverMixCaption(mix);
+        const shows = [mix.id, caption.artworkUrl, caption.title, caption.artists, caption.line];
         return (
-          <AlbumTile
-            key={mix.id}
-            album={{
-              id: mix.id,
-              title: caption.title,
-              albumArtist: caption.artists,
-              trackCount: mix.songs.length,
-              durationMs: 0,
-              artworkUri: caption.artworkUrl ?? undefined,
-            }}
-            size={COVER_ROW_TILE}
-            detail={caption.line}
-            onPress={() => openDiscoverMix(mix.id)}
-            onLongPress={() => openDiscoverMixActions(mix)}
-          />
+          // oxlint-disable-next-line react/no-array-index-key -- a place crossfades from the mix it had to the one it has now
+          <Crossfade key={place} swapKey={shows.join("\n")}>
+            <AlbumTile
+              album={{
+                id: mix.id,
+                title: caption.title,
+                albumArtist: caption.artists,
+                trackCount: mix.songs.length,
+                durationMs: 0,
+                artworkUri: caption.artworkUrl ?? undefined,
+              }}
+              size={COVER_ROW_TILE}
+              detail={caption.line}
+              onPress={() => openDiscoverMix(mix.id)}
+              onLongPress={() => openDiscoverMixActions(mix)}
+            />
+          </Crossfade>
         );
       })}
     </CoverRow>
