@@ -31,6 +31,7 @@ import {
   missingSongVideo,
   missingSongsDownload,
   downloadingList,
+  failedReplacementFiles,
   moveQueuedJobs,
   NO_BETTER_COPY_FOUND,
   noBetterCopies,
@@ -115,6 +116,7 @@ import { publishSavedStars } from "@/library/libraryChanges";
 import { LibraryStore, type SongRow } from "@/library/LibraryStore";
 import { useLoadedMissingSongs, useMissingSongs } from "@/library/hooks";
 import { refreshDownloadPolicy } from "@/library/downloadPolicy";
+import { finishFileDeletions } from "@/library/fileDeletions";
 import { fillInLyricsAndGenre, lookUpLyricsAndGenre } from "@/library/lyricsAndGenre";
 import { appRuntime } from "@/library/runtime";
 import { settleUnsearchedSong } from "@/library/unsearchedEntries";
@@ -796,7 +798,8 @@ export const importDownload = (
 /**
  * A quality replacement's file takes over Track [trackId] in place (the store's
  * `replaceTrackFile`): the same Track id, favorites, plays, playlist entries and recording key.
- * Only then is the old file deleted, unless the new one took its very path. A Track removed
+ * Only then is the old file deleted (recorded with the swap: `finishFileDeletions`), unless the
+ * new one took its very path. A Track removed
  * meanwhile takes its new file with it. YouTube Music's copy carries its [videoId]. The Track
  * lands as an import does (`songsLanded`).
  */
@@ -817,22 +820,10 @@ export const importQualityReplacement = (
         saved.artwork === null ? [] : [toIndexedArtwork(saved.artwork)],
       )
       .pipe(Effect.mapError(libraryFailure));
-    const leftOver =
-      replaced.kind === "gone"
-        ? saved.path
-        : replaced.oldPath === saved.path
-          ? null
-          : replaced.oldPath;
-    if (leftOver !== null)
-      yield* Effect.tryPromise(() => WaveNative.deleteFiles([leftOver])).pipe(
-        Effect.tap((outcomes) =>
-          Effect.sync(() => {
-            if (outcomes.some((outcome) => outcome !== "deleted" && outcome !== "missing"))
-              appLog("warn", "downloads", `A replaced file wasn't deleted: ${leftOver}`);
-          }),
-        ),
-        Effect.orElseSucceed(() => undefined),
-      );
+    // The swap recorded the old file's deletion (or the new file's, the Track gone): finished
+    // now, and by the next launch if Wave dies first. A replayed import whose Track already has
+    // the new file finds the old one still recorded.
+    yield* finishFileDeletions("import");
     landed(replaced.kind === "gone" ? [] : [trackId], last);
     if (replaced.kind === "replaced") publishSavedStars(replaced.starred);
     return saved.path;
@@ -1177,6 +1168,32 @@ const rememberNoBetterCopies = (jobs: readonly NativeDownloadJob[]): Promise<boo
   return recordingNoBetterCopies;
 };
 
+/** The failed replacements' new files already recorded for deletion this launch. */
+const removedReplacementFiles = new Set<string>();
+
+/**
+ * Removes the new files failed replacements left in the Library's folders (Core's
+ * `failedReplacementFiles`), each once a launch: the song keeps its old file, and a scan
+ * mustn't make the new one a second song. Recorded first (a file a Track holds is never
+ * deleted), then deleted; a Retry downloads the song again.
+ */
+const removeFailedReplacementFiles = (jobs: readonly NativeDownloadJob[]): void => {
+  const fresh = failedReplacementFiles(jobs).filter((path) => !removedReplacementFiles.has(path));
+  if (fresh.length === 0) return;
+  for (const path of fresh) removedReplacementFiles.add(path);
+  void appRuntime
+    .runPromise(
+      Effect.gen(function* () {
+        const store = yield* LibraryStore;
+        yield* store.recordFileDeletions(fresh);
+        yield* finishFileDeletions("failedReplacement");
+      }),
+    )
+    .catch(() => {
+      for (const path of fresh) removedReplacementFiles.delete(path);
+    });
+};
+
 /** Calls [listener] once songs were recorded as having no better copy; returns how to stop. */
 export const onNoBetterCopies = (listener: () => void): (() => void) => {
   noBetterCopyListeners.add(listener);
@@ -1206,6 +1223,7 @@ const refresh = async (): Promise<void> => {
       }
       for (const job of jobs) if (awaitsAnswer(job)) void answerJob(job.id);
       void rememberNoBetterCopies(jobs);
+      removeFailedReplacementFiles(jobs);
       const active = jobs.some(unfinished);
       if (active && poll === null) poll = setInterval(refreshQuietly, 5_000);
       if (!active && poll !== null) {
@@ -1644,6 +1662,8 @@ const enqueueQualityReplacements = async (
 ): Promise<void> => {
   const tracks = await appRuntime.runPromise(
     Effect.gen(function* () {
+      // An earlier run's old files still recorded go first.
+      yield* finishFileDeletions("replacementRun");
       const store = yield* LibraryStore;
       return yield* Effect.forEach(trackIds, (id) => store.replacedTrack(id));
     }),

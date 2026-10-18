@@ -904,6 +904,14 @@ ALTER TABLE \`tracks\` ADD \`genres\` text;
 UPDATE \`tracks\` SET \`modified_at\` = 0;
 `;
 
+// Files Wave must delete (\`schema.ts\`'s \`fileDeletions\`): a quality replacement's old file.
+const mFileDeletions = `
+CREATE TABLE \`file_deletions\` (
+	\`path\` text PRIMARY KEY NOT NULL,
+	\`recorded_at\` integer NOT NULL
+);
+`;
+
 export default {
   journal: {
     entries: [
@@ -940,6 +948,7 @@ export default {
       { idx: 30, when: 1_794_398_400_000, tag: "0030_lyrics_misses", breakpoints: true },
       { idx: 31, when: 1_794_484_800_000, tag: "0031_streamed_songs", breakpoints: true },
       { idx: 32, when: 1_794_571_200_000, tag: "0032_genre_tags", breakpoints: true },
+      { idx: 33, when: 1_794_657_600_000, tag: "0033_file_deletions", breakpoints: true },
     ],
   },
   migrations: {
@@ -976,5 +985,6 @@ export default {
     m0030: mLyricsMisses,
     m0031: mStreamedSongs,
     m0032: mGenreTags,
+    m0033: mFileDeletions,
   },
 };

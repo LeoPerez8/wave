@@ -115,6 +115,10 @@ export interface YtDownloadJournalJob<S extends YtSong = YtSong> {
    * its own, and for jobs queued before downloads remembered it.
    */
   readonly origin?: DownloadOrigin | null;
+  /** Where publication put (or was putting) the file, once it chose. */
+  readonly finalPath?: string;
+  /** The file a quality replacement's new one takes the very path of, when it does. */
+  readonly replaces?: string;
 }
 
 const downloading = (phase: YtDownloadPhase): YtDownloadStatus => ({
