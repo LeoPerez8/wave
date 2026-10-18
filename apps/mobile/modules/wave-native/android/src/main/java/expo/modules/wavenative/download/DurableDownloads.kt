@@ -30,7 +30,8 @@ interface DurablePublication {
  *
  * What a failure leads to (trying again, the next peer, the end of the job, YouTube Music) is
  * Core's `downloadFailurePlan` for the job's source, which the prepare answer brings
- * (`failurePlan`). The journal only carries it out, with its own counts and deadlines.
+ * (`failurePlan`). The journal only carries it out, with its own counts and deadlines. Each job has
+ * [JOB_MS] until its file is downloaded, charged only while the download work runs ([BudgetClock]).
  *
  * Every failure keeps what actually went wrong as the job's `cause` (an exception's class and
  * message, or what JS reported with its answer) and writes it to [log]. The cause belongs to the
@@ -345,9 +346,12 @@ class DurableDownloads(
     if (changed) persist()
   }
 
-  fun startWork() { stopped = false }
-  /** Stops socket work immediately, without waiting for an IO operation's journal lock. */
-  fun stopWork(transport: DurableTransfer) { stopped = true; for (id in transfers) transport.cancel(id) }
+  fun startWork() { stopped = false; budget.resume() }
+  /**
+   * Stops socket work immediately, without waiting for an IO operation's journal lock. No budget
+   * is charged until the work starts again.
+   */
+  fun stopWork(transport: DurableTransfer) { stopped = true; budget.pause(); for (id in transfers) transport.cancel(id) }
 
   /**
    * Whether [id]'s transfer still has its turn: it is the job's current step and within its start,

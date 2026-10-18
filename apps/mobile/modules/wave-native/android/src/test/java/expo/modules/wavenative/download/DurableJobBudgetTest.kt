@@ -91,6 +91,23 @@ class DurableJobBudgetTest {
     assertTrue(target.isFile)
   }
 
+  /** Android can stop the download service and leave Wave running: no download runs meanwhile either. */
+  @Test fun noBudgetIsChargedWhileTheDownloadServiceIsStopped() = inFolder { folder ->
+    var now = 1_000L
+    val owner = DurableDownloads(File(folder, "jobs"), clock = { now })
+    owner.enqueue(song, null)
+    owner.advance(NoTransfer, NoPublication)
+    now += 10 * MINUTE
+    owner.stopWork(NoTransfer)
+    now += 3 * HOUR
+    owner.startWork()
+    owner.expire(NoTransfer)
+    assertEquals("preparing", owner.snapshot().single()["phase"])
+    now += 10 * MINUTE
+    owner.expire(NoTransfer)
+    assertEquals("timedOut", owner.snapshot().single()["reason"])
+  }
+
   private val song = mapOf("videoId" to "song", "title" to "Recording", "durationMs" to 12_000L)
   private val candidate = mapOf("username" to "peer", "filename" to "Recording.mp3", "bitrateKbps" to 320)
   private fun prepare(owner: DurableDownloads, target: File) {
