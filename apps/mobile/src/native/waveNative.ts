@@ -1,4 +1,10 @@
-import type { Appearance, LaunchTheme, TagDestination, TagWriteStep } from "@wave/core";
+import type {
+  Appearance,
+  FramingSquare,
+  LaunchTheme,
+  TagDestination,
+  TagWriteStep,
+} from "@wave/core";
 import { NativeModule, requireNativeModule } from "expo";
 
 /** One audio file as read by the native scanner (`modules/wave-native`). Tag values are raw. */
@@ -191,16 +197,11 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
    */
   pickPlaylistPhoto(): Promise<PlaylistPhoto | null>;
   /**
-   * Saves the square [left], [top], [side] (px, Core's `framingSquare`) of
-   * the original at [path] as a playlist image (new files each time); rejects
-   * when [path] isn't a playlist image Wave saved or can't be read.
+   * Saves [square] (px, Core's `framingSquare`) of the original at [path] as
+   * a playlist image (new files each time); rejects when [path] isn't a
+   * playlist image Wave saved or can't be read.
    */
-  cropPlaylistImage(
-    path: string,
-    left: number,
-    top: number,
-    side: number,
-  ): Promise<PlaylistImageFiles>;
+  cropPlaylistImage(path: string, square: FramingSquare): Promise<PlaylistImageFiles>;
   /** Deletes playlist images and originals Wave saved; other paths are left alone. */
   deletePlaylistImages(paths: readonly string[]): Promise<void>;
   /**
