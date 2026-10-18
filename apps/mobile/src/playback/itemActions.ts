@@ -46,7 +46,9 @@ import {
   lyricsAndGenreLookupsEnabled,
   useLyricsAndGenreLookupsEnabled,
 } from "@/settings/lyricsAndGenre";
-import { ytMusicEnabled } from "@/settings/ytMusic";
+import { useYtMusicEnabled, ytMusicEnabled } from "@/settings/ytMusic";
+import { openSharePlaylist } from "@/share/sharePlaylist";
+import { shareLibrarySong, shareStreamedSong } from "@/share/songShare";
 import {
   cancelMissingSongDownload,
   downloadMissingSongs,
@@ -203,6 +205,8 @@ function usePlan(
 } {
   const here = usePathname();
   const onlineLookups = useLyricsAndGenreLookupsEnabled();
+  // A playlist can be shared on YT Music while it's on.
+  const ytMusic = useYtMusicEnabled();
   const download = useMissingSongDownloadStatus(onlyMissingSong(target));
   // YT Music songs among the items: whether each is a file by now, and who their artists are.
   const streams = hasStreamedSongs(target);
@@ -241,6 +245,7 @@ function usePlan(
     onlineLookups,
     here,
     streamedArtists,
+    sharing: ytMusic,
   });
   return { planned, missingSongs, perAlbum, collectionSongs };
 }
@@ -448,6 +453,16 @@ export function useItemActions(
               target.kind === "track" ? withFiles : collectionSongs.filter(songHasFile),
             ),
         );
+      case "share":
+        // A playlist goes out as a playlist on another service (#483); one song, as a card on
+        // the song share sheet: a Library song, a YT Music one or an unsearched entry (#481).
+        if (playlist !== undefined) return run(() => openSharePlaylist(playlist));
+        return run(() => {
+          const [only] = allTracks;
+          if (only === undefined) return;
+          if (isLibraryTrack(only)) shareLibrarySong(only.song);
+          else shareStreamedSong(isUnsearchedTrack(only) ? only.unsearched : only.ytSong);
+        });
       case "select":
         return run(() => onSelect?.());
       case "delete":

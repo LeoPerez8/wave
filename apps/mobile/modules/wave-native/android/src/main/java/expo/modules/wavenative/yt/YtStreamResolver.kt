@@ -105,7 +105,10 @@ class YtStreamResolver(context: Context) {
       throw e
     } finally {
       val attempts = client.lookups.take(videoId)
-      failure?.let { logFailure(videoId, it, now() - startedAt, attempts) }
+      failure?.let {
+        it.answers = attempts
+        logFailure(videoId, it, now() - startedAt, attempts)
+      }
     }
   }
 
@@ -122,6 +125,17 @@ class YtStreamResolver(context: Context) {
       LOG_TAG,
       YtLookupLog.failedLine(videoId, failure.name.lowercase(), resolve?.reason?.name, elapsedMs, attempts, outcomes),
     )
+  }
+
+  /**
+   * Starts YouTube's session afresh, as a pause while YouTube limits downloads begins
+   * (docs/spec.md, Downloads): new visitor data, and with it new proof-of-origin tokens, minted
+   * in a new web view. The lookups after the pause go out with them.
+   */
+  suspend fun renewSession() {
+    visitorData.forget(client.innerTube)
+    poTokens.close()
+    WaveLog.i(LOG_TAG, "YouTube's visitor data and proof-of-origin tokens renewed")
   }
 
   /**
@@ -174,6 +188,20 @@ class YtStreamResolver(context: Context) {
         ?.reason
         ?.name
       return YtStreamFailure.of(error.failure, reason)
+    }
+
+    /**
+     * Whether [error] (from [resolve]) is YouTube refusing the song rather than saying it's
+     * unavailable ([YtRefusal]): what a download tries again, as YouTube limiting it looks so.
+     */
+    fun refused(error: YtException): Boolean {
+      if (failureOf(error) != YtStreamFailure.UNAVAILABLE) return false
+      val reason = generateSequence(error as Throwable) { it.cause }
+        .filterIsInstance<StreamResolveException>()
+        .firstOrNull()
+        ?.reason
+        ?.name
+      return YtRefusal.refused(reason, error.answers)
     }
 
     /**

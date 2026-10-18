@@ -219,7 +219,9 @@ export {
   RECAP_TOP_ARTISTS,
   RECAP_TOP_GENRES,
   RECAP_TOP_SONGS,
+  RECAP_YEAR_MINIMUM_MS,
   availableRecaps,
+  parseOpenedRecaps,
   parseRecapId,
   recap,
   recapBack,
@@ -229,8 +231,11 @@ export {
   recapId,
   recapSlides,
   recapTitle,
+  recapToAnnounce,
   recapWeekdayLabel,
   recapWindow,
+  storedOpenedRecaps,
+  withRecapOpened,
 } from "./recap.ts";
 export type {
   CountedListening,
@@ -242,6 +247,7 @@ export type {
   RecapPeriod,
   RecapSlide,
   RecapSongGenre,
+  RecapYear,
 } from "./recap.ts";
 export { RECAP_PLAY_CONTEXT, recapSong } from "./recapMusic.ts";
 export type { RecapMusicSlide } from "./recapMusic.ts";
@@ -576,6 +582,8 @@ export {
   MAGIC_SKIP_MS,
   isMagicQueue,
   magicBatch,
+  magicRadioArtists,
+  magicYtCandidates,
   magicPlaySignal,
   magicQueueEdits,
   magicQueueLabel,
@@ -591,6 +599,7 @@ export type {
   MagicSignal,
   MagicSignalKind,
   MagicSong,
+  MagicYtCandidate,
 } from "./magicQueue.ts";
 export { artistRanking } from "./moreFromArtist.ts";
 export type { ArtistRankingInput, ArtistRankingSong } from "./moreFromArtist.ts";
@@ -775,6 +784,7 @@ export {
 } from "./downloadSource.ts";
 export type {
   DownloadFailurePlan,
+  DownloadRefusalPlan,
   DownloadFallbackSetup,
   DownloadSource,
   DownloadSourceSetup,
@@ -1439,6 +1449,8 @@ export type {
   LyricShareDestination,
   LyricStoryBackground,
 } from "./lyricsShare.ts";
+export { songCardColours, songCardFileName, songShareDestinations } from "./songShare.ts";
+export type { SongCardColours, SongShareDestination } from "./songShare.ts";
 export type { YtLibraryFavorites } from "./ytLibraryBatch.ts";
 export { pendingFavorite, settlePendingFavorites } from "./pendingFavorites.ts";
 export type { EnteringSong, PendingFavorite, SettledFavorites } from "./pendingFavorites.ts";
@@ -1631,3 +1643,35 @@ export type {
   DuplicateCheckEvent,
   DuplicateCheckStep,
 } from "./replacementDuplicates.ts";
+export {
+  matchSharedSongs,
+  PLAYLIST_SHARE_LABELS,
+  playlistShareServices,
+  shareSignInAlert,
+  sharedEditBatches,
+  sharedPlaylistChanges,
+  sharedPlaylistMoves,
+  sharedSongsLine,
+  ytMusicPlaylistUrl,
+  ytShareMatch,
+  ytShareSong,
+} from "./playlistShare.ts";
+export type {
+  PlaylistShareService,
+  ShareSong,
+  SharedEntry,
+  SharedMove,
+  SharedPlaylistChanges,
+  SharedSongs,
+  YtShareItem,
+} from "./playlistShare.ts";
+export {
+  YT_THROTTLE_START,
+  ytThrottleNotice,
+  ytThrottlePauseMs,
+  ytThrottleRead,
+  ytThrottleRefused,
+  ytThrottleRestored,
+  ytThrottleSucceeded,
+} from "./ytThrottle.ts";
+export type { YtThrottle, YtThrottleJob, YtThrottlePause } from "./ytThrottle.ts";

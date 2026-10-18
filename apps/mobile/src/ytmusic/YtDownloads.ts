@@ -118,7 +118,7 @@ import {
   toIndexedArtwork,
   toIndexedTrack,
 } from "@/library/LibraryScan";
-import { publishSavedStars } from "@/library/libraryChanges";
+import { publishSavedStars, publishYtSongSignal } from "@/library/libraryChanges";
 import { LibraryStore, type SongRow } from "@/library/LibraryStore";
 import { useLoadedMissingSongs, useMissingSongs } from "@/library/hooks";
 import { refreshDownloadPolicy } from "@/library/downloadPolicy";
@@ -150,6 +150,7 @@ import { ytMusicEnabled } from "@/settings/ytMusic";
 
 import { readYtAlbum } from "./albumPages";
 import { useLoadedLibraryFinder } from "./libraryFinder";
+import { followYoutubeThrottle } from "./youtubeThrottle";
 import { withSearchTurn } from "./searchAllowance";
 import { YtMusic, type YtMusicError } from "./YtMusic";
 
@@ -1246,6 +1247,8 @@ const refresh = async (): Promise<void> => {
       const snapshotJobs = applyJournalChanges(followed, changes);
       followed = snapshotJobs;
       followedRevision = changes.revision;
+      // YouTube refusing songs in a burst pauses its downloads (Core's `ytThrottle`).
+      void followYoutubeThrottle(snapshotJobs);
       // A failed Library read keeps the journal intact and mustn't hide new progress or decisions.
       const jobs = await forgetDeletedDownloads(snapshotJobs).catch(() => snapshotJobs);
       if (jobs !== shown) {
@@ -1365,6 +1368,7 @@ const songRequest = (
 ): JobRequest => ({ song, recording: soulseekRecording(song), equivalentId, source, origin });
 
 export const downloadYtSong = (song: NativeYtSong): void => {
+  publishYtSongSignal("download", [song.videoId]);
   askForNotifications();
   startDownloads();
   // One at a time, so a second tap sees the first one's job in the journal.
@@ -1406,6 +1410,10 @@ const downloadYtSongs = (
   inLibrary: InLibrary,
   origin: DownloadOrigin | null,
 ): void => {
+  publishYtSongSignal(
+    "download",
+    songs.map((song) => song.videoId),
+  );
   askForNotifications();
   startDownloads();
   requests = requests
