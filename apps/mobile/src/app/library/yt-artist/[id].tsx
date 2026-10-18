@@ -19,6 +19,7 @@ import { SECTION_HEAD, SectionHead } from "@/catalog/CatalogLine";
 import { COVER_ROW_TILE, CoverRow } from "@/catalog/CoverRow";
 import { CELL, grid } from "@/catalog/grid";
 import { PlayShuffle } from "@/catalog/PlayShuffle";
+import { PlayShuffleSkeleton, TrackSkeletons } from "@/catalog/Skeletons";
 import { useChromeInset } from "@/chrome/chrome";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { TextButton } from "@/components/TextButton";
@@ -55,9 +56,8 @@ const NO_SONGS: readonly Song[] = [];
 
 const SHELF_LABEL = { albums: "Albums", singles: "Singles & EPs" } as const;
 
-/** The quiet line in place of what the page can't show. */
-const NOTE: Readonly<Record<YtArtistPageNote, string>> = {
-  loading: YT_ARTIST_NOTE.loading,
+/** The quiet line in place of what the page can't show (while it loads, skeletons show). */
+const NOTE: Readonly<Record<Exclude<YtArtistPageNote, "loading">, string>> = {
   offline: YT_ARTIST_NOTE.offline,
   failed: YT_ARTIST_NOTE.failed,
   off: "YT Music is off. Turn it on in Settings to see this artist.",
@@ -154,14 +154,21 @@ function YtArtistImage({ name, uri, size }: { name: string; uri: string | null; 
   );
 }
 
-/** The page's head, as the Library artist page's: image, name, then Play and Shuffle. */
+/**
+ * The page's head, as the Library artist page's: image, name, then Play and
+ * Shuffle. While the page loads ([loading]) a still circle stands in for an
+ * image not known yet, a line for a name not known yet, and Play and Shuffle
+ * have their skeleton.
+ */
 function Head({
   name,
   artworkUrl,
+  loading,
   onPlay,
 }: {
-  name: string;
+  name: string | null;
   artworkUrl: string | null;
+  loading: boolean;
   onPlay: ((shuffle: boolean) => void) | null;
 }) {
   const { width } = useWindowDimensions();
@@ -170,24 +177,49 @@ function Head({
   return (
     <View style={{ gap: CELL * 2, paddingBottom: CELL * 2 }}>
       <View className="items-center" style={{ gap: CELL * 2 }}>
-        <YtArtistImage name={name} uri={artworkUrl} size={size} />
-        <Text
-          accessibilityRole="header"
-          numberOfLines={2}
-          className="text-center font-sans text-title1 font-light text-foreground"
-          style={{ letterSpacing: -0.4 }}
-        >
-          {name}
-        </Text>
+        {loading && artworkUrl === null ? (
+          <View
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            className="bg-fill"
+            style={{ width: size, height: size, borderRadius: size / 2 }}
+          />
+        ) : (
+          <YtArtistImage name={name ?? ""} uri={artworkUrl} size={size} />
+        )}
+        {name === null ? (
+          // A title line's height (global.css's title1), its bar centred under the circle.
+          <View
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            className="justify-center"
+            style={{ height: 34 }}
+          >
+            <View className="bg-fill" style={{ width: size * 0.8, height: 17 }} />
+          </View>
+        ) : (
+          <Text
+            accessibilityRole="header"
+            numberOfLines={2}
+            className="text-center font-sans text-title1 font-light text-foreground"
+            style={{ letterSpacing: -0.4 }}
+          >
+            {name}
+          </Text>
+        )}
       </View>
-      {onPlay !== null && (
-        <PlayShuffle onPlay={() => onPlay(false)} onShuffle={() => onPlay(true)} />
+      {loading ? (
+        <PlayShuffleSkeleton />
+      ) : (
+        onPlay !== null && (
+          <PlayShuffle onPlay={() => onPlay(false)} onShuffle={() => onPlay(true)} />
+        )
       )}
     </View>
   );
 }
 
-/** A quiet line (looking, offline, YT Music off…) and Try Again when it can be asked again. */
+/** A quiet line (offline, YT Music off…) and Try Again when it can be asked again. */
 function QuietLine({
   note,
   retry,
@@ -214,7 +246,7 @@ function QuietLine({
  * A YouTube Music artist the Library doesn't have, opened by their browse id
  * (`/library/yt-artist/<UC…>?name=<name>`) or, from a streamed song, by their
  * name (`/library/yt-artist/by-name?name=<name>`, found with an Artists
- * search; "Not found on YouTube Music" when nobody matches): their image and
+ * search; "Not found online." when nobody matches): their image and
  * name, Play and Shuffle, their Albums and Singles & EPs (a release the Library has opens
  * the Library album) and every song of theirs, their songs playlist read
  * whole (the Library's play its files, the rest stream). It's read as it opens and saved for a week; offline or
@@ -243,6 +275,8 @@ export default function YtArtistScreen() {
     [songs, context],
   );
   const name = view?.name ?? knownName;
+  // Until the artist's page is in, skeletons hold its place (the view waits on the Library first).
+  const loading = view === null || view.note === "loading";
 
   const renderItem = useCallback(
     ({ item }: { item: Item }) => {
@@ -285,16 +319,19 @@ export default function YtArtistScreen() {
         recycleItems
         contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottomInset }}
         ListHeaderComponent={
-          name === null ? null : (
+          name === null && !loading ? null : (
             <Head
               name={name}
               artworkUrl={view?.artworkUrl ?? null}
+              loading={loading}
               onPlay={songs.length === 0 ? null : (shuffle) => play(undefined, shuffle)}
             />
           )
         }
         ListFooterComponent={
-          view === null ? null : (
+          loading ? (
+            <TrackSkeletons />
+          ) : view === null ? null : (
             <QuietLine
               note={view.note === null ? null : NOTE[view.note]}
               retry={view.retry}

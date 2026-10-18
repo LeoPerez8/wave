@@ -1,6 +1,13 @@
-import { restingRect } from "@wave/core";
 import * as Haptics from "expo-haptics";
-import { useContext, useEffect, useRef, useState, type ComponentRef, type ReactNode } from "react";
+import {
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentRef,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import {
   Pressable,
   type GestureResponderEvent,
@@ -25,7 +32,7 @@ import { useLongPressDelayMs } from "@/settings/longPressDelay";
 import { useTapAnimationMs } from "@/settings/tapAnimation";
 
 import { cancelHeldTouch, holdTouch, moveHeldTouch, releaseHeldTouch } from "./heldTouch";
-import { measureRect } from "./measureRect";
+import { measurePressed, type Measurable } from "./measureRect";
 import { runPressedAt } from "./pressedRect";
 import { HandOverPress } from "./pressHandle";
 
@@ -52,6 +59,12 @@ type Props = Omit<PressableProps, "children" | "style"> & {
   opensMenu?: boolean;
   /** Looks pressed without a touch of its own (e.g. the menu entry a sliding finger is over). */
   highlighted?: boolean;
+  /**
+   * A card it opens anchors to this view, which is highlighted in its place with
+   * corners rounded by `radius` (the Library | Online toggle's whole pill for either
+   * segment). The view mustn't sink with the press feedback.
+   */
+  highlightAs?: { readonly view: RefObject<Measurable | null>; readonly radius: number };
 };
 
 /** Where a touch event's finger is in the window, if it carries one. */
@@ -77,6 +90,7 @@ export function Press({
   delayLongPress,
   opensMenu = false,
   highlighted = false,
+  highlightAs,
   onTouchMove,
   onTouchEnd,
   onTouchCancel,
@@ -106,14 +120,18 @@ export function Press({
     [],
   );
 
-  // Runs a handler that may open a menu, measuring where this sits first so the
-  // menu can float next to it. It measures sunk by its press feedback, so the rect
-  // is grown back to its resting size. Resolves with whether it opened one.
+  // Runs a handler that may open a menu, measuring where this sits first (or the
+  // view it highlights as) so the menu can float next to it. It measures sunk by its
+  // press feedback, so the rect is grown back to its resting size. Resolves with
+  // whether it opened one.
   const runAnchored = (handler: () => void): Promise<boolean> =>
-    measureRect(view.current).then((rect) => {
-      const scale = reduceMotion ? 1 : 1 - Math.max(pressed.get(), lit.get()) * depth;
-      return runPressedAt(rect && restingRect(rect, scale), handler, key, onChrome);
-    });
+    measurePressed(view.current, {
+      scale: reduceMotion ? 1 : 1 - Math.max(pressed.get(), lit.get()) * depth,
+      highlight:
+        highlightAs === undefined
+          ? undefined
+          : { view: highlightAs.view.current, radius: highlightAs.radius },
+    }).then(({ rect, radius }) => runPressedAt(rect, handler, { key, onChrome, radius }));
 
   // Hands itself to the view around it that asked (a Design preview state), as it is now.
   const latestRunAnchored = useRef(runAnchored);

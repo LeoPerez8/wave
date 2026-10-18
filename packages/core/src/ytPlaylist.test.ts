@@ -220,8 +220,8 @@ describe("readYtPlaylist", () => {
 });
 
 describe("ytPlaylistRestLine", () => {
-  test("says more songs are coming while the pages are read", () => {
-    assert.equal(ytPlaylistRestLine("reading"), "Loading more songs…");
+  test("says nothing while the pages are read: skeleton rows stand at the end instead", () => {
+    assert.equal(ytPlaylistRestLine("reading"), null);
   });
 
   test("says nothing once every page is in", () => {

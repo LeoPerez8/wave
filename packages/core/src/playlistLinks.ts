@@ -294,7 +294,7 @@ const FAILURES: Record<LinkReadFailure, { readonly line: string; readonly retry:
   // YouTube Music answers a private or missing playlist as it answers a page it can't
   // serve, so the two share a message.
   failed: {
-    line: "Couldn't read this playlist. It may be private or deleted, or YouTube Music didn't answer.",
+    line: "Couldn't read this playlist. It may be private or deleted, or there was no answer online.",
     retry: true,
   },
   disabled: { line: "YT Music is off in Settings.", retry: false },

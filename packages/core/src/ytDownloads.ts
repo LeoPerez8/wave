@@ -266,7 +266,7 @@ const FAILURE_LINES: { readonly [F in YtDownloadFailure]: string } = {
   unavailable: "This recording is unavailable in 320 kbps",
   noSource: "Turn on YT Music or Download in best quality in Settings",
   ytUnavailable: "This song is unavailable on YouTube Music",
-  notFound: "Not found on YouTube Music",
+  notFound: "Not found online",
 };
 
 /** The fraction of the file that has arrived, or null when there's no size to measure against. */

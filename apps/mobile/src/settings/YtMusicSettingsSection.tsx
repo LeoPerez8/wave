@@ -87,7 +87,7 @@ export function YtMusicSettingsSection() {
           <ChoiceSection
             choice={searchOnlineChoice}
             current={searchOnline}
-            note="Always opens albums and artists with Online selected and searches YouTube Music as you type. On demand waits for Online to be tapped. Long-press the Library | Online toggle to change it there."
+            note="Always search online opens albums and artists with Online selected and has Search look online as you type. Only on demand waits for Online to be tapped. Long-press the Library | Online toggle to change it there."
           />
         </View>
       )}

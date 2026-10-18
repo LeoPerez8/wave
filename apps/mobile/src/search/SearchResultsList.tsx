@@ -13,6 +13,7 @@ import { Text, View } from "react-native";
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { NameRow } from "@/catalog/NameRow";
+import { SKELETON_ROWS, TrackSkeletons } from "@/catalog/Skeletons";
 import { TrackRow } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { TextButton } from "@/components/TextButton";
@@ -54,6 +55,7 @@ const HEIGHT: Readonly<Record<ResultRow["type"], number>> = {
   ytArtist: grid.row,
   ytAlbum: grid.row,
   note: CELL * 6,
+  skeleton: grid.row * SKELETON_ROWS,
 };
 
 /** Non-song results stay in place while selecting. */
@@ -133,6 +135,7 @@ function Hit({
   top,
   songs,
   downloaded,
+  artistSongs,
   integrated,
   playing,
   onOpen,
@@ -143,6 +146,8 @@ function Hit({
   songs: readonly ResultSong[];
   /** A song among YT Music's: marked downloaded. */
   downloaded: boolean;
+  /** An artist's song count with what Online adds; null: the Library's. */
+  artistSongs: number | null;
   /** An album opens integrated. */
   integrated: boolean;
   playing: boolean;
@@ -164,7 +169,7 @@ function Hit({
         <NameRow
           name={hit.name}
           artist={hit.artist}
-          detail={top ? "Artist" : counted(hit.artist.trackCount, "song")}
+          detail={top ? "Artist" : counted(artistSongs ?? hit.artist.trackCount, "song")}
           onPress={open(() => openArtist(hit.artist.id, hit.artist))}
           onLongPress={menu(() => openArtistActions(hit.artist))}
         />
@@ -254,6 +259,7 @@ export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selecti
               top={item.top}
               songs={item.songs}
               downloaded={item.downloaded}
+              artistSongs={item.artistSongs}
               integrated={integrated}
               playing={item.hit.kind === "song" && String(item.hit.song.id) === currentId}
               onOpen={onOpen}
@@ -340,6 +346,8 @@ export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selecti
               </Text>
             </View>
           );
+        case "skeleton":
+          return <TrackSkeletons label="Loading online results" />;
       }
     },
     [currentId, onOpen, onShowAll, integrated, selection],
