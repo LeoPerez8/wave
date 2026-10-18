@@ -368,15 +368,17 @@ const coverOf = (song: DiscoverMixSong): string | null => {
   return path === undefined ? null : `file://${path}`;
 };
 
+/** The covers [songs] have, in order. */
+const coversOf = (songs: readonly DiscoverMixSong[]): string[] =>
+  songs.flatMap((song) => coverOf(song) ?? []);
+
 /** The cover of the first song of the share [mix] mostly plays (`discoverMixCaption`). */
 const mixCover = (mix: BlendedDiscoverMix): string | null => {
   const familiar = mix.songs.filter((song) => song.source === "library").length;
   const leaning = familiar > mix.songs.length - familiar ? "library" : "stream";
-  const covers = (songs: readonly DiscoverMixSong[]) =>
-    songs.flatMap((song) => coverOf(song) ?? []);
   return (
-    covers(mix.songs.filter((song) => song.source === leaning))[0] ??
-    covers(mix.songs)[0] ??
+    coversOf(mix.songs.filter((song) => song.source === leaning))[0] ??
+    coversOf(mix.songs)[0] ??
     null
   );
 };

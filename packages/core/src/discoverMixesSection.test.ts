@@ -84,6 +84,31 @@ describe("Home's Discover mixes section", () => {
     assert.deepEqual(at(1), ["a", "b", "c", "d", 1, "e", "f", "g", "h", 2]);
   });
 
+  test("says it's updating while a rebuild runs, over the saved mixes, and not otherwise", () => {
+    const updating = (building: boolean) => {
+      const shown = discoverMixesSection(saved, {
+        ytMusic: true,
+        nothingToBuildFrom: false,
+        blend,
+        building,
+      });
+      return shown.kind === "mixes" ? shown.updating : null;
+    };
+    assert.deepEqual([updating(true), updating(false)], [true, false]);
+  });
+
+  test("shows its skeleton, not the saved-mixes' updating line, while the first build runs", () => {
+    assert.deepEqual(
+      discoverMixesSection(null, {
+        ytMusic: true,
+        nothingToBuildFrom: false,
+        blend,
+        building: true,
+      }),
+      { kind: "skeleton" },
+    );
+  });
+
   test("shows a skeleton while no mixes are saved: the first build, or after a failed one", () => {
     assert.deepEqual(
       discoverMixesSection(null, { ytMusic: true, nothingToBuildFrom: false, blend }),
