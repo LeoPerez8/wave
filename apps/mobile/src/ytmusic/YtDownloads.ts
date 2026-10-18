@@ -22,6 +22,7 @@ import {
   missingSongTrackId,
   missingSongVideo,
   missingSongsDownload,
+  downloadingList,
   queuedDownloads,
   settledDownloadFailures,
   soulseekCandidates,
@@ -47,7 +48,9 @@ import {
   ytPlaylistDownload,
   ytSongsDownload,
   type DownloadFailurePlan,
+  type DownloadOrigin,
   type DownloadSource,
+  type DownloadingList,
   type FailedDownload,
   type MissingSongJob,
   type MissingSongVideo,
@@ -547,7 +550,7 @@ const shareUnsearchedJob = async (jobId: string, found: NativeYtSong): Promise<v
     (job) =>
       job.id === found.videoId || job.aliases?.some((alias) => alias.videoId === found.videoId),
   );
-  if (!held) await WaveSoulseek.enqueueJob(found, soulseekRecording(found), jobId, null);
+  if (!held) await WaveSoulseek.enqueueJob(found, soulseekRecording(found), jobId, null, null);
   await refresh();
 };
 
@@ -1000,7 +1003,13 @@ export const downloadYtSong = (song: NativeYtSong): void => {
   requests = requests
     .then(async () => {
       const shared = ytDownloadSharedJob(await WaveSoulseek.jobsSnapshot(), song);
-      await WaveSoulseek.enqueueJob(song, soulseekRecording(song), shared, await requestedSource());
+      await WaveSoulseek.enqueueJob(
+        song,
+        soulseekRecording(song),
+        shared,
+        await requestedSource(),
+        null,
+      );
       await refresh();
     })
     .catch(() => undefined);
@@ -1021,9 +1030,13 @@ type InLibrary = (song: NativeYtSong) => boolean;
  * Download Album / Download Playlist: every song of the list the Library
  * doesn't have joins the queue, in list order, sharing jobs already on their
  * way (Core's `ytSongsDownload`, decided on a fresh snapshot of the journal).
- * Each goes through the single-song pipeline.
+ * Each goes through the single-song pipeline, remembering [origin], the album or mix it's from.
  */
-const downloadYtSongs = (songs: readonly NativeYtSong[], inLibrary: InLibrary): void => {
+const downloadYtSongs = (
+  songs: readonly NativeYtSong[],
+  inLibrary: InLibrary,
+  origin: DownloadOrigin | null,
+): void => {
   askForNotifications();
   startDownloads();
   requests = requests
@@ -1031,7 +1044,7 @@ const downloadYtSongs = (songs: readonly NativeYtSong[], inLibrary: InLibrary): 
       const jobs = await WaveSoulseek.jobsSnapshot();
       const source = await requestedSource();
       for (const { song, sharedJob } of ytSongsDownload(songs, { inLibrary, jobs }).toDownload)
-        await WaveSoulseek.enqueueJob(song, soulseekRecording(song), sharedJob, source);
+        await WaveSoulseek.enqueueJob(song, soulseekRecording(song), sharedJob, source, origin);
       await refresh();
     })
     .catch(() => undefined);
@@ -1041,7 +1054,11 @@ const downloadYtSongs = (songs: readonly NativeYtSong[], inLibrary: InLibrary): 
  * Retry Failed: asks again for each of the list's songs whose download
  * failed, in list order, sharing jobs already on their way as Download does.
  */
-const retryYtSongs = (songs: readonly NativeYtSong[], inLibrary: InLibrary): void => {
+const retryYtSongs = (
+  songs: readonly NativeYtSong[],
+  inLibrary: InLibrary,
+  origin: DownloadOrigin | null,
+): void => {
   askForNotifications();
   startDownloads();
   requests = requests
@@ -1049,7 +1066,7 @@ const retryYtSongs = (songs: readonly NativeYtSong[], inLibrary: InLibrary): voi
       const jobs = await WaveSoulseek.jobsSnapshot();
       const source = await requestedSource();
       for (const { song, sharedJob } of ytSongsDownload(songs, { inLibrary, jobs }).toRetry)
-        await WaveSoulseek.enqueueJob(song, soulseekRecording(song), sharedJob, source);
+        await WaveSoulseek.enqueueJob(song, soulseekRecording(song), sharedJob, source, origin);
       await refresh();
     })
     .catch(() => undefined);
@@ -1070,19 +1087,23 @@ const cancelYtSongs = (songs: readonly NativeYtSong[], inLibrary: InLibrary): vo
 /** An album's or a playlist's download entry (Core's `ytAlbumDownload`, `ytPlaylistDownload`). */
 export type YtListDownloadAction = YtAlbumDownloadAction | YtPlaylistDownloadAction;
 
-/** Runs an album's or a playlist's download entry on its YT Music [songs]. */
+/**
+ * Runs an album's or a playlist's download entry on its YT Music [songs]; the songs it queues
+ * remember [origin], the album, playlist or mix they're from (Settings › Downloads groups them).
+ */
 export const runYtDownloadAction = (
   action: YtListDownloadAction,
   songs: readonly NativeYtSong[],
   inLibrary: InLibrary,
+  origin: DownloadOrigin | null,
 ): void => {
   switch (action) {
     case "downloadAlbum":
     case "downloadPlaylist":
-      downloadYtSongs(songs, inLibrary);
+      downloadYtSongs(songs, inLibrary, origin);
       return;
     case "retryFailed":
-      retryYtSongs(songs, inLibrary);
+      retryYtSongs(songs, inLibrary, origin);
       return;
     case "cancelAlbumDownload":
     case "cancelPlaylistDownload":
@@ -1114,12 +1135,13 @@ type PlaylistEntry = PlaylistItem<NativeYtSong, { readonly path: string | null }
  * [entries], decided on a fresh snapshot of the journal (Core's `ytPlaylistDownload`): its YT
  * Music and unsearched entries join the queue in playlist order, an unsearched one as the job
  * named after what Spotify listed, which searches it when it's prepared. Each goes through the
- * single-song pipeline.
+ * single-song pipeline, remembering [origin], the playlist.
  */
 export const runYtPlaylistDownloadAction = (
   action: YtPlaylistDownloadAction,
   entries: readonly PlaylistEntry[],
   inLibrary: InLibrary,
+  origin: DownloadOrigin | null,
 ): void => {
   if (action !== "cancelPlaylistDownload") {
     askForNotifications();
@@ -1135,7 +1157,7 @@ export const runYtPlaylistDownloadAction = (
         const source = await requestedSource();
         const asked = action === "downloadPlaylist" ? download.toDownload : download.toRetry;
         for (const { song, sharedJob } of asked)
-          await WaveSoulseek.enqueueJob(song, soulseekRecording(song), sharedJob, source);
+          await WaveSoulseek.enqueueJob(song, soulseekRecording(song), sharedJob, source, origin);
       }
       await refresh();
     })
@@ -1172,24 +1194,32 @@ const journalSong = (job: MissingSongJob): NativeYtSong => ({
   albumId: null,
 });
 
-/** Asks the journal for missing song [job], from the source Core picks for it now. */
+/**
+ * Asks the journal for missing song [job], from the source Core picks for it now, remembering
+ * [origin] (a Library album's Download Missing Songs; none for a song on its own).
+ */
 const enqueueMissingSong = (
   job: MissingSongJob,
   session: SoulseekSession,
   ytMusicOn: boolean,
+  origin: DownloadOrigin | null = null,
 ): Promise<string> =>
   WaveSoulseek.enqueueJob(
     journalSong(job),
     soulseekRecording(job),
     null,
     currentSource(session, ytMusicOn, job.missing.videoId !== null),
+    origin,
   );
 
 /** Asks the journal for missing songs [jobs], in order, each from the source Core picks for it. */
-const enqueueMissingSongs = async (jobs: readonly MissingSongJob[]): Promise<void> => {
+const enqueueMissingSongs = async (
+  jobs: readonly MissingSongJob[],
+  origin: DownloadOrigin | null = null,
+): Promise<void> => {
   const session = await sessionNow();
   const ytMusicOn = ytMusicEnabled();
-  for (const job of jobs) await enqueueMissingSong(job, session, ytMusicOn);
+  for (const job of jobs) await enqueueMissingSong(job, session, ytMusicOn, origin);
 };
 
 /** The missing songs as they are now ([trackIds] only, when given), as download jobs. */
@@ -1256,11 +1286,13 @@ const inOrder = (
 /**
  * Settings › Wave Account's Download All, Retry Failed and Cancel, decided on the missing songs
  * and the journal as they are now (Core's `missingSongsDownload`). With [trackIds] (an album's
- * Download Missing Songs, Retry Failed and Cancel Download), only those songs, in that order.
+ * Download Missing Songs, Retry Failed and Cancel Download), only those songs, in that order,
+ * and the songs it queues remember [origin], the album.
  */
 export const runMissingSongsDownloadAction = (
   action: MissingSongsDownloadAction,
   trackIds?: readonly number[],
+  origin: DownloadOrigin | null = null,
 ): void => {
   if (action !== "cancel") {
     askForNotifications();
@@ -1276,10 +1308,10 @@ export const runMissingSongsDownloadAction = (
       const download = missingSongsDownload(missing, jobs);
       switch (action) {
         case "downloadAll":
-          await enqueueMissingSongs(download.toDownload);
+          await enqueueMissingSongs(download.toDownload, origin);
           break;
         case "retryFailed":
-          await enqueueMissingSongs(download.toRetry);
+          await enqueueMissingSongs(download.toRetry, origin);
           break;
         case "cancel":
           for (const id of download.toCancel) await WaveSoulseek.cancelJob(id);
@@ -1305,6 +1337,15 @@ export const useMissingSongsDownload = (): MissingSongsDownload<MissingSongJob> 
 export const useQueuedDownloads = (): readonly QueuedDownload<NativeYtSong>[] => {
   const jobs = useSyncExternalStore(journal.subscribe, journal.get);
   return useMemo(() => queuedDownloads(jobs), [jobs]);
+};
+
+/**
+ * Settings › Downloads' Downloading list (Core's `downloadingList`), following the journal: the
+ * songs downloading now, then the waiting ones grouped by the playlist, album or mix they're from.
+ */
+export const useDownloadingList = (): DownloadingList<NativeYtSong> => {
+  const jobs = useSyncExternalStore(journal.subscribe, journal.get);
+  return useMemo(() => downloadingList(jobs), [jobs]);
 };
 
 /** Whether any download is queued or downloading (Core's `queuedDownloads`), as the journal last said. */
@@ -1376,11 +1417,13 @@ export const retryFailedDownloads = (failed: readonly FailedDownload<NativeYtSon
       for (const { retry } of failed) {
         if (retry.kind === "song") {
           const { song } = retry;
+          // Asked with no origin, the job keeps the one it was first asked from.
           await WaveSoulseek.enqueueJob(
             song,
             soulseekRecording(song),
             null,
             currentSource(session, ytMusicOn),
+            null,
           );
         } else {
           const job = missing.get(retry.trackId);
