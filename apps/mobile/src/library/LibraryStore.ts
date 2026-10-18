@@ -207,6 +207,8 @@ export interface LibraryLookupSong {
   readonly hasLyrics: boolean;
   readonly trackNumber: number | null;
   readonly year: number | null;
+  /** Unknown (never checked) counts as missing: Fix Song fills it in from Deezer. */
+  readonly explicit: ExplicitFlag;
 }
 
 /** One row of the Songs list. */

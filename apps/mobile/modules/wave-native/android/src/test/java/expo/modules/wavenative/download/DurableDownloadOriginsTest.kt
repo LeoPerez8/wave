@@ -54,6 +54,26 @@ class DurableDownloadOriginsTest {
     } finally { folder.deleteRecursively() }
   }
 
+  /** JS follows the journal by its changes (`jobsChangedSince`): each changed job comes with its origin. */
+  @Test fun readersFollowingChangesGetEachJobsOrigin() {
+    val folder = Files.createTempDirectory("wave-origin-changes").toFile()
+    try {
+      val owner = DurableDownloads(File(folder, "jobs"))
+      owner.enqueue(song, null, origin = roadTrip)
+      owner.enqueue(song + ("videoId" to "own"), null)
+      val first = owner.changesSince(0)
+      assertEquals(listOf(roadTrip, null), first.jobs.map { it["origin"] })
+      owner.cancel("song", NoTransfer)
+      val cancelled = owner.changesSince(first.revision)
+      assertEquals(listOf(roadTrip), cancelled.jobs.map { it["origin"] })
+      // Another playlist's Retry Failed: the job comes again with its new origin, at the queue's end.
+      owner.enqueue(song, null, origin = focus)
+      val retried = owner.changesSince(cancelled.revision)
+      assertEquals(listOf(focus), retried.jobs.map { it["origin"] })
+      assertEquals(listOf("own", "song"), retried.ids)
+    } finally { folder.deleteRecursively() }
+  }
+
   private val song = mapOf("videoId" to "song", "title" to "Recording", "durationMs" to 12_000L)
   private val roadTrip = mapOf("kind" to "playlist", "id" to "7", "name" to "Road Trip")
   private val focus = mapOf("kind" to "playlist", "id" to "9", "name" to "Focus")

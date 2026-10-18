@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  applyJournalChanges,
   downloadingList,
   moveDownloadGroup,
   moveDownloadInGroup,
@@ -216,5 +217,35 @@ describe("Settings › Downloads › Downloading: dragging changes what download
       ["a1", "b1", "b2", "a2"],
     );
     assert.deepEqual(downloadingList(moved).downloading.map((row) => row.id), ["a1"]);
+  });
+});
+
+describe("Downloading groups while following the journal by its changes", () => {
+  test("a job's source survives the changes it's followed by, so its group stays", () => {
+    const first = applyJournalChanges([], {
+      revision: 2,
+      jobs: [job("a", { origin: roadTrip }), job("b", { origin: focus })],
+      ids: ["a", "b"],
+    });
+    // Progress on "b" comes as that job alone, still carrying where it was asked from.
+    const started = applyJournalChanges(first, {
+      revision: 3,
+      jobs: [job("b", { origin: focus, phase: "transferring", received: 10, total: 100 })],
+      ids: null,
+    });
+    assert.deepEqual(groupsOf(started), [
+      ["Focus", "1 song left", []],
+      ["Road Trip", "1 song left", ["a"]],
+    ]);
+    // Another playlist's Retry Failed moves "a" to the end of the queue under its new source.
+    const retried = applyJournalChanges(started, {
+      revision: 4,
+      jobs: [job("a", { origin: mix })],
+      ids: ["b", "a"],
+    });
+    assert.deepEqual(groupsOf(retried), [
+      ["Focus", "1 song left", []],
+      ["Discover Mix 1", "1 song left", ["a"]],
+    ]);
   });
 });

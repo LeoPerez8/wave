@@ -46,6 +46,7 @@ describe("selectLibraryLookupSongs", () => {
       hasLyrics: true,
       trackNumber: 3,
       year: 1998,
+      explicit: "clean",
     });
     addTrack(db, { title: "Airbag", artist: "Radiohead", album: "OK Computer" });
     assert.deepEqual(selectLibraryLookupSongs(db), [
@@ -59,6 +60,7 @@ describe("selectLibraryLookupSongs", () => {
         hasLyrics: false,
         trackNumber: null,
         year: null,
+        explicit: "unknown",
       },
       {
         path: "/Music/Mezzanine/Teardrop.mp3",
@@ -70,6 +72,7 @@ describe("selectLibraryLookupSongs", () => {
         hasLyrics: true,
         trackNumber: 3,
         year: 1998,
+        explicit: "clean",
       },
     ]);
   });

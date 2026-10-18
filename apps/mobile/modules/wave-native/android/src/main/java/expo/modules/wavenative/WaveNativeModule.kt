@@ -294,9 +294,10 @@ class WaveNativeModule : Module() {
 
     /**
      * Writes found lyrics (LRC or plain text) and genre into a song's file,
-     * replacing what is there, and fills in its track number (with the disc)
-     * and year, keeping any the file has; null leaves that field alone (see
-     * [SongTagWriter]). Resolves `{ lyrics, genre, trackNumber, year }`, where
+     * replacing what is there, and fills in its track number (with the disc),
+     * year and advisory tag (1 explicit, 0 clean), keeping any the file has;
+     * null leaves that field alone (see [SongTagWriter]). Resolves
+     * `{ lyrics, genre, trackNumber, year, explicit }`, where
      * each went (`tags`, `sidecar`, `notWritten` or `none`), and, when the tags
      * changed, the file read again as a scan reads it (`track`, `artwork`) so
      * the index can be updated. Rejects when the file can't be written. Off the
@@ -309,12 +310,20 @@ class WaveNativeModule : Module() {
         trackNumber: Int?,
         discNumber: Int?,
         year: Int?,
+        advisory: Int?,
       ->
       val file = File(path)
-      val report = SongTagWriter().write(file, lyrics, genre, AlbumPlace(trackNumber, discNumber, year))
+      val report =
+        SongTagWriter().write(
+          file,
+          lyrics,
+          genre,
+          AlbumPlace(trackNumber, discNumber, year),
+          advisory?.takeIf { it == 0 || it == 1 },
+        )
       val tagsChanged =
         report.lyrics == LyricsDestination.TAGS ||
-          listOf(report.genre, report.trackNumber, report.year).any { it == TagDestination.TAGS }
+          listOf(report.genre, report.trackNumber, report.year, report.explicit).any { it == TagDestination.TAGS }
       // A sidecar alone leaves the tags as they were, but the index learns the song has lyrics.
       val reindex = tagsChanged || report.lyrics == LyricsDestination.SIDECAR
       val (track, artwork) = if (reindex) singleFileScanner().index(file) else null to null

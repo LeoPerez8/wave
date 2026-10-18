@@ -6,6 +6,7 @@
  */
 import {
   YT_DOWNLOADS_NONE,
+  applyJournalChanges,
   downloadFailureAnswer,
   downloadFailurePlan,
   downloadSource,
@@ -787,8 +788,8 @@ const answer = (claim: NativeDownloadDecision) =>
 
 /** A download as Fix Song sees it: what its file says once tagged and saved. */
 const downloadedSong = ({ path, track }: NativeSavedDownload) => {
-  // The track number and year as the index reads them ("3/12" is 3).
-  const { trackNumber, year } = toIndexedTrack(track);
+  // The track number, year and explicit flag as the index reads them ("3/12" is 3).
+  const { trackNumber, year, explicit } = toIndexedTrack(track);
   return {
     path,
     title: track.title ?? "",
@@ -799,6 +800,7 @@ const downloadedSong = ({ path, track }: NativeSavedDownload) => {
     genre: track.genre,
     trackNumber,
     year,
+    explicit,
   };
 };
 
@@ -855,8 +857,15 @@ const unfinished = (job: NativeDownloadJob): boolean =>
   job.acknowledged !== true &&
   job.importFailure === undefined;
 
-/** The last snapshot rows were given, so an unchanged one doesn't re-render them. */
-let shown = "";
+/**
+ * The journal as JS follows it, and the journal revision that is at: each refresh asks only for
+ * what changed since (Core's `applyJournalChanges`), so a big queue isn't copied over the bridge
+ * and compared whole for every bit of progress.
+ */
+let followed: readonly NativeDownloadJob[] = [];
+let followedRevision = 0;
+/** The jobs rows were last given; an unchanged journal keeps the same list and doesn't re-render them. */
+let shown: readonly NativeDownloadJob[] | null = null;
 /** A slow re-read while downloads are unfinished, in case an event was missed. */
 let poll: ReturnType<typeof setInterval> | null = null;
 
@@ -918,12 +927,14 @@ const refresh = async (): Promise<void> => {
   try {
     do {
       refreshAgain = false;
-      const snapshotJobs = await WaveSoulseek.jobsSnapshot();
+      const changes = await WaveSoulseek.jobsChangedSince(followedRevision);
+      const snapshotJobs = applyJournalChanges(followed, changes);
+      followed = snapshotJobs;
+      followedRevision = changes.revision;
       // A failed Library read keeps the journal intact and mustn't hide new progress or decisions.
       const jobs = await forgetDeletedDownloads(snapshotJobs).catch(() => snapshotJobs);
-      const snapshot = JSON.stringify(jobs);
-      if (snapshot !== shown) {
-        shown = snapshot;
+      if (jobs !== shown) {
+        shown = jobs;
         downloads.set(ytDownloadsFromJournal(jobs));
         journal.set(jobs);
       }
