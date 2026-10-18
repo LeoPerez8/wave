@@ -122,7 +122,7 @@ Cookie: sp_dc=<cookie>            (omit for an anonymous token)
 - **Lifetime:** `accessTokenExpirationTimestampMs` was about 55 minutes ahead. Repeating the
   request inside that window returns the same token. `reason=transport` (what the player sends on
   refresh) behaves the same. Refresh a minute before expiry, or on any `401
-  Missing/invalid/expired access token` from pathfinder.
+Missing/invalid/expired access token` from pathfinder.
 - **Without the TOTP:** `400 {"error":{"code":400,"message":"Unauthorized request",…}}`. A wrong
   code gets the same.
 - **TOTP:** RFC 6238, SHA-1, 6 digits, 30 s. `totp` is computed from the device clock and
@@ -138,13 +138,19 @@ Cookie: sp_dc=<cookie>            (omit for an anonymous token)
   The first entry (version 61 today) is the one in use. Code that worked:
 
   ```js
-  const key = Buffer.from(raw.split('').map((c, i) => c.charCodeAt(0) ^ ((i % 33) + 9)).join(''), 'utf8')
+  const key = Buffer.from(
+    raw
+      .split("")
+      .map((c, i) => c.charCodeAt(0) ^ ((i % 33) + 9))
+      .join(""),
+    "utf8",
+  );
   function totp(ms) {
-    const b = Buffer.alloc(8)
-    b.writeBigUInt64BE(BigInt(Math.floor(ms / 30000)))
-    const h = crypto.createHmac('sha1', key).update(b).digest()
-    const o = h[19] & 15
-    return String((h.readUInt32BE(o) & 0x7fffffff) % 1e6).padStart(6, '0')
+    const b = Buffer.alloc(8);
+    b.writeBigUInt64BE(BigInt(Math.floor(ms / 30000)));
+    const h = crypto.createHmac("sha1", key).update(b).digest();
+    const o = h[19] & 15;
+    return String((h.readUInt32BE(o) & 0x7fffffff) % 1e6).padStart(6, "0");
   }
   ```
 
@@ -168,12 +174,12 @@ All are `POST https://api-partner.spotify.com/pathfinder/v2/query` with
 `{"variables":{…},"operationName":"<op>","extensions":{"persistedQuery":{"version":1,"sha256Hash":"<hash>"}}}`.
 They answer `200` even on errors: check `errors[]` and the `__typename` of each result.
 
-| Operation              | Hash (2026-10-18)                                                  | Variables                                                                                                                                                                                                                      |
-| ---------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `profileAttributes`    | `08ffb4730af3746e04a8301396f20875dbbce10c75243803091a9274eacc8ac0` | `{}`                                                                                                                                                                                                                           |
-| `libraryV3`            | `390c78e5b951029bad359785e69b07b536a509c581cbcd0aded5e5067f187455` | `{"filters":["Playlists"],"order":null,"textFilter":null,"features":["LIKED_SONGS"],"limit":50,"offset":0,"flatten":true,"expandedFolders":[],"folderUri":null,"includeFoldersWhenFlattening":true}` |
-| `fetchLibraryTracks`   | `087278b20b743578a6262c2b0b4bcd20d879c503cc359a2285baf083ef944240` | `{"offset":0,"limit":50}`                                                                                                                                                                                                      |
-| `fetchPlaylist`        | `21ea11a6ac75a5f3e01fd365d29c18e0a4a8b7dc09f89bbb5d73910190c6acaf` | `{"uri":"spotify:playlist:<id>","offset":0,"limit":500,"enableWatchFeedEntrypoint":false}`                                                                                                                                  |
+| Operation            | Hash (2026-10-18)                                                  | Variables                                                                                                                                                                                            |
+| -------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `profileAttributes`  | `08ffb4730af3746e04a8301396f20875dbbce10c75243803091a9274eacc8ac0` | `{}`                                                                                                                                                                                                 |
+| `libraryV3`          | `390c78e5b951029bad359785e69b07b536a509c581cbcd0aded5e5067f187455` | `{"filters":["Playlists"],"order":null,"textFilter":null,"features":["LIKED_SONGS"],"limit":50,"offset":0,"flatten":true,"expandedFolders":[],"folderUri":null,"includeFoldersWhenFlattening":true}` |
+| `fetchLibraryTracks` | `087278b20b743578a6262c2b0b4bcd20d879c503cc359a2285baf083ef944240` | `{"offset":0,"limit":50}`                                                                                                                                                                            |
+| `fetchPlaylist`      | `21ea11a6ac75a5f3e01fd365d29c18e0a4a8b7dc09f89bbb5d73910190c6acaf` | `{"uri":"spotify:playlist:<id>","offset":0,"limit":500,"enableWatchFeedEntrypoint":false}`                                                                                                           |
 
 Anonymous, `profileAttributes`, `libraryV3` and `fetchLibraryTracks` answer (verified):
 
@@ -277,11 +283,11 @@ GraphQL mutations, all sharing one hash today
 accepted (`"Exception while fetching data (/addItemsToPlaylist) : User is not authorized"`,
 service `oxygen-playlists`).
 
-| Operation             | Variables                                                                                                                                                  |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Operation             | Variables                                                                                                                                                                 |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `addToPlaylist`       | `{"playlistUri":"spotify:playlist:<id>","playlistItemUris":["spotify:track:<id>",…],"newPosition":{"moveType":"BOTTOM_OF_PLAYLIST","fromUid":null},"interactionId":null}` |
-| `removeFromPlaylist`  | `{"playlistUri":"spotify:playlist:<id>","uids":["<uid>",…]}`                                                                                               |
-| `moveItemsInPlaylist` | `{"playlistUri":"spotify:playlist:<id>","uids":["<uid>",…],"newPosition":{"moveType":"BEFORE_UID","fromUid":"<uid>"}}`                                    |
+| `removeFromPlaylist`  | `{"playlistUri":"spotify:playlist:<id>","uids":["<uid>",…]}`                                                                                                              |
+| `moveItemsInPlaylist` | `{"playlistUri":"spotify:playlist:<id>","uids":["<uid>",…],"newPosition":{"moveType":"BEFORE_UID","fromUid":"<uid>"}}`                                                    |
 
 `moveType` is `TOP_OF_PLAYLIST`, `BOTTOM_OF_PLAYLIST`, `BEFORE_UID` or `AFTER_UID` (`fromUid`
 only for the last two). Uids come from `fetchPlaylist`. The player's own "remove all" fetches up
@@ -321,13 +327,13 @@ once and is heavier. Use `searchTracks`.
 ## Risks
 
 - **Terms.** `/api/token` answers every request with `"_notes": "Usage of this endpoint is not
-  permitted under the Spotify Developer Terms and Developer Policy, and applicable law"`, and
+permitted under the Spotify Developer Terms and Developer Policy, and applicable law"`, and
   Spotify's User Guidelines forbid automated access (#156). Signing in raises the stakes over
   the link import: if Spotify acts, it's against the owner's own account. The owner should
   accept that knowingly. Writing (export) is more visible than reading.
 - **TOTP secret rotation.** The bundle carries versions 59–61, so it has rotated at least that
   often. A stale version shows as `totpVerExpired` and a rotated secret as `400 Unauthorized
-  request`. Re-read from the bundle, as above. This is the most likely breakage.
+request`. Re-read from the bundle, as above. This is the most likely breakage.
 - **Persisted-query hashes.** `fetchPlaylist` changed between 2026-10-14 and 2026-10-18
   (`8964e8ea…` → `21ea11a6…`), though the old one still works. A removed hash answers
   `412 "Invalid query hash"`. Same remedy. Variables can change too: they show up as `errors[]`
@@ -376,39 +382,198 @@ statuses (not the cookie or tokens) into #484.
 
 ```js
 // SP_DC=… [WRITE=1] node probe.mjs
-import crypto from 'node:crypto'
-const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36'
-const raw = ',7/*F("rLJ2oxaKL^f+E1xvP@N', ver = 61
-const key = Buffer.from(raw.split('').map((c, i) => c.charCodeAt(0) ^ ((i % 33) + 9)).join(''), 'utf8')
-const totp = (ms) => { const b = Buffer.alloc(8); b.writeBigUInt64BE(BigInt(Math.floor(ms / 30000))); const h = crypto.createHmac('sha1', key).update(b).digest(); return String((h.readUInt32BE(h[19] & 15) & 0x7fffffff) % 1e6).padStart(6, '0') }
-const st = await (await fetch('https://open.spotify.com/api/server-time', { headers: { 'user-agent': UA } })).json()
-const q = new URLSearchParams({ reason: 'init', productType: 'web-player', totp: totp(Date.now()), totpServer: totp(st.serverTime * 1000), totpVer: String(ver) })
-const tr = await fetch('https://open.spotify.com/api/token?' + q, { headers: { 'user-agent': UA, cookie: 'sp_dc=' + process.env.SP_DC } })
-const tok = await tr.json(); console.log('token', tr.status, 'isAnonymous', tok.isAnonymous, 'expires in s', Math.round((tok.accessTokenExpirationTimestampMs - Date.now()) / 1000))
-const H = { authorization: 'Bearer ' + tok.accessToken, 'content-type': 'application/json', 'user-agent': UA }
-const gql = async (op, hash, variables) => { const r = await fetch('https://api-partner.spotify.com/pathfinder/v2/query', { method: 'POST', headers: H, body: JSON.stringify({ variables, operationName: op, extensions: { persistedQuery: { version: 1, sha256Hash: hash } } }) }); const j = await r.json(); console.log(op, r.status, j.errors?.[0]?.message ?? 'ok'); return j }
-const sp = async (method, path, body) => { const r = await fetch('https://spclient.wg.spotify.com' + path, { method, headers: H, body: body && JSON.stringify(body) }); const t = await r.text(); console.log(method, path.replace(/[A-Za-z0-9]{22}/g, '<id>'), r.status); return t ? JSON.parse(t) : null }
-const me = (await gql('profileAttributes', '08ffb4730af3746e04a8301396f20875dbbce10c75243803091a9274eacc8ac0', {})).data?.me?.profile
-console.log('profile', me && { username: !!me.username, name: !!me.name, photo: !!me.avatar?.sources?.length })
-const lib = (await gql('libraryV3', '390c78e5b951029bad359785e69b07b536a509c581cbcd0aded5e5067f187455', { filters: ['Playlists'], order: null, textFilter: null, features: ['LIKED_SONGS'], limit: 50, offset: 0, flatten: true, expandedFolders: [], folderUri: null, includeFoldersWhenFlattening: true })).data?.me?.libraryV3
-console.log('library', lib?.totalCount, [...new Set(lib?.items.map((i) => i.item.__typename))])
-const liked = (await gql('fetchLibraryTracks', '087278b20b743578a6262c2b0b4bcd20d879c503cc359a2285baf083ef944240', { offset: 0, limit: 5 })).data?.me?.library?.tracks
-console.log('liked', liked?.totalCount, liked?.items[0] && Object.keys(liked.items[0].track.data))
-if (process.env.WRITE === '1') {
-  const delta = (ops) => ({ deltas: [{ ops, info: { source: { client: 'WEBPLAYER' } } }], wantResultingRevisions: false, wantSyncResult: false, nonces: [] })
-  const { uri } = await sp('POST', '/playlist/v2/playlist', { ops: [{ kind: 'UPDATE_LIST_ATTRIBUTES', updateListAttributes: { newAttributes: { values: { name: 'Wave probe', formatAttributes: [], pictureSize: [] }, noValue: [] } } }], info: { source: { client: 'WEBPLAYER' } } })
-  const root = `/playlist/v2/user/${encodeURIComponent(me.username)}/rootlist/changes`
-  await sp('POST', root, delta([{ kind: 'ADD', add: { addFirst: true, items: [{ uri, attributes: { timestamp: String(Date.now()), formatAttributes: [], availableSignals: [] } }] } }]))
-  await sp('POST', root, delta([{ kind: 'UPDATE_ITEM_ATTRIBUTES', updateItemAttributes: { item: { uri }, newAttributes: { values: { public: true, formatAttributes: [], availableSignals: [] }, noValue: [] } } }]))
-  const permPath = `/playlist-permission/v1/playlist/${uri.split(':')[2]}/permission/base`
-  const perm = await sp('GET', permPath); console.log('base permission', perm?.permissionLevel)
-  await sp('POST', permPath, { ...perm, permissionLevel: 'VIEWER' })
-  const M = 'b907ad6b088d5bf7680fa81198996d58398c2d55dfcdf59fcc959e0be98a418a'
-  await gql('addToPlaylist', M, { playlistUri: uri, playlistItemUris: ['spotify:track:0VjIjW4GlUZAMYd2vXMi3b', 'spotify:track:7qiZfU4dY1lWllzX7mPBI3'], newPosition: { moveType: 'BOTTOM_OF_PLAYLIST', fromUid: null }, interactionId: null })
-  const items = (await gql('fetchPlaylist', '21ea11a6ac75a5f3e01fd365d29c18e0a4a8b7dc09f89bbb5d73910190c6acaf', { uri, offset: 0, limit: 10, enableWatchFeedEntrypoint: false })).data.playlistV2.content.items
-  await gql('moveItemsInPlaylist', M, { playlistUri: uri, uids: [items[1].uid], newPosition: { moveType: 'TOP_OF_PLAYLIST', fromUid: null } })
-  await gql('removeFromPlaylist', M, { playlistUri: uri, uids: items.map((i) => i.uid) })
-  await sp('POST', root, delta([{ kind: 'REM', rem: { itemsAsKey: true, items: [{ uri }] } }]))
+import crypto from "node:crypto";
+const UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
+const raw = ',7/*F("rLJ2oxaKL^f+E1xvP@N',
+  ver = 61;
+const key = Buffer.from(
+  raw
+    .split("")
+    .map((c, i) => c.charCodeAt(0) ^ ((i % 33) + 9))
+    .join(""),
+  "utf8",
+);
+const totp = (ms) => {
+  const b = Buffer.alloc(8);
+  b.writeBigUInt64BE(BigInt(Math.floor(ms / 30000)));
+  const h = crypto.createHmac("sha1", key).update(b).digest();
+  return String((h.readUInt32BE(h[19] & 15) & 0x7fffffff) % 1e6).padStart(6, "0");
+};
+const st = await (
+  await fetch("https://open.spotify.com/api/server-time", { headers: { "user-agent": UA } })
+).json();
+const q = new URLSearchParams({
+  reason: "init",
+  productType: "web-player",
+  totp: totp(Date.now()),
+  totpServer: totp(st.serverTime * 1000),
+  totpVer: String(ver),
+});
+const tr = await fetch("https://open.spotify.com/api/token?" + q, {
+  headers: { "user-agent": UA, cookie: "sp_dc=" + process.env.SP_DC },
+});
+const tok = await tr.json();
+console.log(
+  "token",
+  tr.status,
+  "isAnonymous",
+  tok.isAnonymous,
+  "expires in s",
+  Math.round((tok.accessTokenExpirationTimestampMs - Date.now()) / 1000),
+);
+const H = {
+  authorization: "Bearer " + tok.accessToken,
+  "content-type": "application/json",
+  "user-agent": UA,
+};
+const gql = async (op, hash, variables) => {
+  const r = await fetch("https://api-partner.spotify.com/pathfinder/v2/query", {
+    method: "POST",
+    headers: H,
+    body: JSON.stringify({
+      variables,
+      operationName: op,
+      extensions: { persistedQuery: { version: 1, sha256Hash: hash } },
+    }),
+  });
+  const j = await r.json();
+  console.log(op, r.status, j.errors?.[0]?.message ?? "ok");
+  return j;
+};
+const sp = async (method, path, body) => {
+  const r = await fetch("https://spclient.wg.spotify.com" + path, {
+    method,
+    headers: H,
+    body: body && JSON.stringify(body),
+  });
+  const t = await r.text();
+  console.log(method, path.replace(/[A-Za-z0-9]{22}/g, "<id>"), r.status);
+  return t ? JSON.parse(t) : null;
+};
+const me = (
+  await gql(
+    "profileAttributes",
+    "08ffb4730af3746e04a8301396f20875dbbce10c75243803091a9274eacc8ac0",
+    {},
+  )
+).data?.me?.profile;
+console.log(
+  "profile",
+  me && { username: !!me.username, name: !!me.name, photo: !!me.avatar?.sources?.length },
+);
+const lib = (
+  await gql("libraryV3", "390c78e5b951029bad359785e69b07b536a509c581cbcd0aded5e5067f187455", {
+    filters: ["Playlists"],
+    order: null,
+    textFilter: null,
+    features: ["LIKED_SONGS"],
+    limit: 50,
+    offset: 0,
+    flatten: true,
+    expandedFolders: [],
+    folderUri: null,
+    includeFoldersWhenFlattening: true,
+  })
+).data?.me?.libraryV3;
+console.log("library", lib?.totalCount, [...new Set(lib?.items.map((i) => i.item.__typename))]);
+const liked = (
+  await gql(
+    "fetchLibraryTracks",
+    "087278b20b743578a6262c2b0b4bcd20d879c503cc359a2285baf083ef944240",
+    { offset: 0, limit: 5 },
+  )
+).data?.me?.library?.tracks;
+console.log("liked", liked?.totalCount, liked?.items[0] && Object.keys(liked.items[0].track.data));
+if (process.env.WRITE === "1") {
+  const delta = (ops) => ({
+    deltas: [{ ops, info: { source: { client: "WEBPLAYER" } } }],
+    wantResultingRevisions: false,
+    wantSyncResult: false,
+    nonces: [],
+  });
+  const { uri } = await sp("POST", "/playlist/v2/playlist", {
+    ops: [
+      {
+        kind: "UPDATE_LIST_ATTRIBUTES",
+        updateListAttributes: {
+          newAttributes: {
+            values: { name: "Wave probe", formatAttributes: [], pictureSize: [] },
+            noValue: [],
+          },
+        },
+      },
+    ],
+    info: { source: { client: "WEBPLAYER" } },
+  });
+  const root = `/playlist/v2/user/${encodeURIComponent(me.username)}/rootlist/changes`;
+  await sp(
+    "POST",
+    root,
+    delta([
+      {
+        kind: "ADD",
+        add: {
+          addFirst: true,
+          items: [
+            {
+              uri,
+              attributes: {
+                timestamp: String(Date.now()),
+                formatAttributes: [],
+                availableSignals: [],
+              },
+            },
+          ],
+        },
+      },
+    ]),
+  );
+  await sp(
+    "POST",
+    root,
+    delta([
+      {
+        kind: "UPDATE_ITEM_ATTRIBUTES",
+        updateItemAttributes: {
+          item: { uri },
+          newAttributes: {
+            values: { public: true, formatAttributes: [], availableSignals: [] },
+            noValue: [],
+          },
+        },
+      },
+    ]),
+  );
+  const permPath = `/playlist-permission/v1/playlist/${uri.split(":")[2]}/permission/base`;
+  const perm = await sp("GET", permPath);
+  console.log("base permission", perm?.permissionLevel);
+  await sp("POST", permPath, { ...perm, permissionLevel: "VIEWER" });
+  const M = "b907ad6b088d5bf7680fa81198996d58398c2d55dfcdf59fcc959e0be98a418a";
+  await gql("addToPlaylist", M, {
+    playlistUri: uri,
+    playlistItemUris: [
+      "spotify:track:0VjIjW4GlUZAMYd2vXMi3b",
+      "spotify:track:7qiZfU4dY1lWllzX7mPBI3",
+    ],
+    newPosition: { moveType: "BOTTOM_OF_PLAYLIST", fromUid: null },
+    interactionId: null,
+  });
+  const items = (
+    await gql("fetchPlaylist", "21ea11a6ac75a5f3e01fd365d29c18e0a4a8b7dc09f89bbb5d73910190c6acaf", {
+      uri,
+      offset: 0,
+      limit: 10,
+      enableWatchFeedEntrypoint: false,
+    })
+  ).data.playlistV2.content.items;
+  await gql("moveItemsInPlaylist", M, {
+    playlistUri: uri,
+    uids: [items[1].uid],
+    newPosition: { moveType: "TOP_OF_PLAYLIST", fromUid: null },
+  });
+  await gql("removeFromPlaylist", M, { playlistUri: uri, uids: items.map((i) => i.uid) });
+  await sp("POST", root, delta([{ kind: "REM", rem: { itemsAsKey: true, items: [{ uri }] } }]));
 }
 ```
 
