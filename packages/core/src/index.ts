@@ -1391,6 +1391,7 @@ export {
   qualityUpgradeOffer,
   qualityUpgradeSongs,
   youTubeCopyKbps,
+  failedReplacementFiles,
 } from "./qualityReplacement.ts";
 export type {
   NoBetterCopy,
@@ -1433,6 +1434,14 @@ export type { CollectionKind } from "./itemActions.ts";
 export { mixSectionOfId, mixSeedArtists } from "./discoverMixes.ts";
 export { downloadJobKind } from "./downloadJobKind.ts";
 export type { DownloadJobKind } from "./downloadJobKind.ts";
+export { downloadGroupDrop, downloadListRows } from "./downloadRows.ts";
+export type {
+  DownloadGroupDrag,
+  DownloadHeaderRow,
+  DownloadingSongRow,
+  DownloadListRow,
+  WaitingSongRow,
+} from "./downloadRows.ts";
 export { createLandings, LANDING_BURST_MS } from "./landings.ts";
 export type { Landings } from "./landings.ts";
 export {

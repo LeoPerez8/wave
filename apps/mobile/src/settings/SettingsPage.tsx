@@ -6,7 +6,7 @@ import {
   type SettingsPage,
   type SettingsTileColour,
 } from "@wave/core";
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { ScrollView, Text, View } from "react-native";
 
 import { CELL, grid } from "@/catalog/grid";
@@ -17,7 +17,7 @@ import { Press } from "@/motion/Press";
 import { SettingsTile } from "./SettingsTile";
 
 /** Room between a page's sections. */
-const SECTION_GAP = 48;
+export const SECTION_GAP = 48;
 
 /** A page of Settings, or one of Settings › Layout's. */
 type PageId = { readonly page: SettingsPage } | { readonly layoutPage: LayoutPage };
@@ -28,41 +28,22 @@ const pageTitle = (id: PageId): string =>
     : LAYOUT_PAGES.find((entry) => entry.page === id.layoutPage)
   )?.title ?? "";
 
-/** Holds a Settings page's scrolling still; returns how to let go. */
-const HoldPageScroll = createContext<() => () => void>(() => () => undefined);
-
-/**
- * Holds the Settings page's scrolling still while [held] (a row of it being
- * dragged), so the drag isn't taken for a scroll.
- */
-export const useHoldPageScroll = (held: boolean): void => {
-  const hold = useContext(HoldPageScroll);
-  useEffect(() => (held ? hold() : undefined), [held, hold]);
-};
-
 /**
  * A Settings page: back, its title, then its sections (each one element) with
- * room between them. It scrolls, except while a section holds it still
- * (`useHoldPageScroll`).
+ * room between them, scrolling.
  */
 export function SettingsPageScreen({ children, ...id }: PageId & { children: ReactNode }) {
-  const [holds, setHolds] = useState(0);
-  const hold = useCallback(() => {
-    setHolds((count) => count + 1);
-    return () => setHolds((count) => count - 1);
-  }, []);
   return (
     <View className="flex-1 bg-background">
       <ScreenHeader title={pageTitle(id)} />
       <ScrollView
-        scrollEnabled={holds === 0}
         contentContainerStyle={{
           paddingHorizontal: grid.margin,
           paddingBottom: SECTION_GAP,
           gap: SECTION_GAP,
         }}
       >
-        <HoldPageScroll.Provider value={hold}>{children}</HoldPageScroll.Provider>
+        {children}
       </ScrollView>
     </View>
   );
@@ -70,18 +51,13 @@ export function SettingsPageScreen({ children, ...id }: PageId & { children: Rea
 
 /**
  * A Settings page whose content scrolls itself, filling the page under the
- * header: an arrangement editor, whose drag holds the scrolling still.
+ * header: an arrangement editor, whose drag holds the scrolling still, or
+ * Settings › Downloads' virtualized list.
  */
-export function SettingsEditorScreen({
-  layoutPage,
-  children,
-}: {
-  layoutPage: LayoutPage;
-  children: ReactNode;
-}) {
+export function SettingsEditorScreen({ children, ...id }: PageId & { children: ReactNode }) {
   return (
     <View className="flex-1 bg-background">
-      <ScreenHeader title={pageTitle({ layoutPage })} />
+      <ScreenHeader title={pageTitle(id)} />
       {children}
     </View>
   );

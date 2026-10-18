@@ -217,10 +217,10 @@ class AndroidDownloads private constructor(private val context: Context) {
     if (!jobs.hasWork()) return
     try { context.startForegroundService(Intent(context, YtDownloadService::class.java)) }
     catch (error: Exception) {
-      // Never unprotected work: started jobs fail with Retry; queued ones wait for the next launch.
+      // Never unprotected work: started jobs go back in line, and all wait for the next launch.
       if (synchronized(this) { worker == null }) {
         WaveLog.w(TAG, DownloadServiceLines.refused(restart = false, describe(error)))
-        jobs.expire(transport, stopAll = true); changed()
+        jobs.interrupt(transport); changed()
       } else WaveLog.w(TAG, "Android refused to start the download service again; it goes on", error)
     }
   }
@@ -264,9 +264,16 @@ class AndroidDownloads private constructor(private val context: Context) {
     runCatching { jobs.expire(transport, true, stopCause = describe(error)) }
   }
 
-  /** Android's time limit stops actual socket work before removing foreground protection. */
+  /**
+   * Android's time limit stops actual socket work before removing foreground protection; the
+   * songs it stopped go back in line for the next start. A replacement run stopped under it says
+   * what it did.
+   */
   @Synchronized fun stop(why: DownloadServiceStop, timedOut: Boolean = false) {
-    if (worker != null) WaveLog.i(TAG, DownloadServiceLines.stopped(why, SystemClock.elapsedRealtime() - startedAt, jobs.counts(), AndroidMemory.read()))
+    if (worker != null) {
+      WaveLog.i(TAG, DownloadServiceLines.stopped(why, SystemClock.elapsedRealtime() - startedAt, jobs.counts(), AndroidMemory.read()))
+      jobs.replacementRun()?.takeIf { it.waiting > 0 }?.let { WaveLog.i(TAG, DownloadServiceLines.replacementRun(it, why)) }
+    }
     jobs.stopWork(transport)
     minutes.stop()
     // What waits for its second is written now, off the main thread (a full disk keeps it for the next write).
@@ -275,7 +282,7 @@ class AndroidDownloads private constructor(private val context: Context) {
     steps?.shutdownNow(); steps = null
     deadlines?.shutdownNow(); deadlines = null
     if (timedOut) Executors.newSingleThreadExecutor().also { executor ->
-      executor.execute { try { jobs.expire(transport, true); changed() } finally { executor.shutdown() } }
+      executor.execute { try { jobs.interrupt(transport); changed() } finally { executor.shutdown() } }
     }
     main.post { JsRuntime.release(OWNER) }
   }
