@@ -180,7 +180,9 @@ class DurableDownloads(
     val existing = jobs.values.firstOrNull { it["id"] == id || it.maps("aliases").any { alias -> alias["videoId"] == id } }
       ?: equivalentId?.let { jobs[it] }?.takeIf { it["phase"] !in TERMINAL && it["importFailure"] == null }
     if (existing != null) {
-      val deletedCompletion = existing["acknowledged"] == true && !(existing.map("saved")["path"] as? String)?.let { File(it).isFile }.orFalse()
+      // Its saved file is gone: deleted from the Library, or a failed replacement's new file removed.
+      val savedGone = existing["saved"] != null && !(existing.map("saved")["path"] as? String)?.let { File(it).isFile }.orFalse()
+      val deletedCompletion = existing["acknowledged"] == true && savedGone
       if (existing["phase"] == "failed" || existing["phase"] == "cancelled" || existing["importFailure"] != null || deletedCompletion) {
         existing["generation"] = existing.number("generation") + 1
         existing.remove("token"); existing.remove("reason"); existing.remove("importFailure"); existing.remove("cause")
@@ -191,7 +193,7 @@ class DurableDownloads(
         jobs.remove(key); jobs[key] = existing
         if (origin != null) existing["origin"] = clean(origin)
         existing["decisionAttempts"] = 0L; startBudget(existing)
-        if (deletedCompletion) {
+        if (savedGone) {
           for (key in listOf("saved", "acknowledged", "finalPath", "digest", "publishSource", "replaces")) existing.remove(key)
         }
         if (existing["saved"] != null) existing["phase"] = "completed"
@@ -312,6 +314,7 @@ class DurableDownloads(
       "import" -> {
         if (payload["path"] != job.map("saved")["path"] || !included(File(payload["path"] as String))) return false
         job["acknowledged"] = true; job.remove("token"); lastEnd = "imported"
+        replacementEnded(job)
       }
       else -> return false
     }
@@ -436,8 +439,64 @@ class DurableDownloads(
 
   private fun end(job: MutableMap<String, Any?>, transport: DurableTransfer) {
     lastEnd = "cancelled"
+    // A failure the owner clears was the run's already.
+    val ending = pending(job)
     job["phase"] = "cancelled"; job["generation"] = job.number("generation") + 1; job.remove("token")
+    if (ending) replacementEnded(job)
     persist(); transport.cancel(job["id"] as String); cleanup(job)
+  }
+
+  /**
+   * Android stopped the download service (its time limit) or refused to start it: that isn't the
+   * songs' fault, and nothing runs until the next start. Songs not downloaded yet go back in line
+   * in their places, uncharged, so the run keeps its order and goes on from there; a decision
+   * leased before no longer counts. A song already downloaded keeps its step (tagging, saving,
+   * its import) for the next start. Stops the work first, as [stopWork] does.
+   */
+  @Synchronized fun interrupt(transport: DurableTransfer) {
+    stopWork(transport)
+    var changed = false
+    for (job in jobs.values) {
+      if (job["phase"] !in CHARGED || job["importFailure"] != null) continue
+      val id = job["id"] as String
+      if (job["phase"] == "transferring") endings[id] = "stopped"
+      transport.cancel(id)
+      cleanup(job)
+      for (key in listOf("candidates", "peer", "received", "total", "queuePosition", "queueDeadline", "attemptDeadline", "resumeAttemptDeadline", "resumeQueueDeadline", "soulseekDeadline", "leaseUntil")) job.remove(key)
+      job["generation"] = job.number("generation") + 1
+      job["attempts"] = 0L; job["candidateIndex"] = 0L
+      transition(job, "queued")
+      changed = true
+    }
+    if (changed) persist()
+  }
+
+  /**
+   * What the journal's quality replacements (jobs `upgrade:<id>`, `downgrade:<id>`) did since it
+   * was opened, as a run's stop line says it; null when it holds none.
+   */
+  @Synchronized fun replacementRun(): ReplacementRun? {
+    val replacements = jobs.values.filter { replacement(it) }
+    if (replacements.isEmpty()) return null
+    return ReplacementRun(
+      replaced = replacements.count { it["acknowledged"] == true },
+      kept = replacements.count { it["reason"] == NO_BETTER_COPY && it["phase"] in TERMINAL },
+      failed = replacements.count { it["importFailure"] != null || (it["phase"] == "failed" && it["reason"] != NO_BETTER_COPY) },
+      waiting = replacements.count(::pending),
+      cancelled = replacements.count { it["phase"] == "cancelled" && it["reason"] != NO_BETTER_COPY },
+    )
+  }
+
+  /** A quality replacement's counts ([replacementRun]): what its stop line says. */
+  data class ReplacementRun(val replaced: Int, val kept: Int, val failed: Int, val waiting: Int, val cancelled: Int)
+
+  private fun replacement(job: Map<String, Any?>) = (job["id"] as String).let { id -> REPLACEMENT_PREFIXES.any { id.startsWith(it) } }
+
+  /** Once [job], a quality replacement, ends: the run's line when it was the last one left. */
+  private fun replacementEnded(job: Map<String, Any?>) {
+    if (!replacement(job)) return
+    val run = replacementRun() ?: return
+    if (run.waiting == 0) note(DownloadServiceLines.replacementRun(run, stopped = null))
   }
 
   /** Called by Android's deadline thread, including the dataSync timeout callback. */
@@ -659,10 +718,22 @@ class DurableDownloads(
       final = DownloadFiles.freeName(target)
       onJob { job -> job["finalPath"] = final.path; persist() } ?: return
     }
-    // The replaced file goes in the same step the new one arrives, never before.
-    if (replacing && publishSource.isFile) Files.move(publishSource.toPath(), final.toPath(), StandardCopyOption.REPLACE_EXISTING)
+    // The replaced file goes in the same step the new one arrives, never before, and only for the
+    // very copy whose digest was taken: the rename over it keeps that copy's bytes.
+    val moving = replacing && publishSource.isFile
+    if (moving) {
+      if (digest(publishSource) != sum) {
+        onJob { job ->
+          for (key in listOf("finalPath", "digest", "publishSource")) job.remove(key)
+          fail(job, "failed", "The copy to publish changed after its digest was taken; ${final.path} was left as it was"); persist()
+        }
+        return
+      }
+      Files.move(publishSource.toPath(), final.toPath(), StandardCopyOption.REPLACE_EXISTING)
+    }
     else if (!final.exists()) Files.move(publishSource.toPath(), final.toPath())
-    if (digest(final) != sum) {
+    // Checked again unless it was just checked before the move over the replaced file.
+    if (!moving && digest(final) != sum) {
       onJob { job ->
         // Wave's own copy is gone and another file holds its name: Retry downloads the song again.
         for (key in listOf("finalPath", "digest", "publishSource")) job.remove(key)
@@ -819,11 +890,13 @@ class DurableDownloads(
     } else job["reason"] = reason
     job["endedAt"] = clock(); transition(job, "failed"); job["generation"] = job.number("generation") + 1; cleanup(job)
     lastEnd = "failed"
+    replacementEnded(job)
   }
   /** A published file the Library couldn't import, with what went wrong. */
   private fun importFailed(job: MutableMap<String, Any?>, reason: String, cause: String?) {
     job["importFailure"] = reason
     if (cause != null) recordCause(job, reason, cause)
+    replacementEnded(job)
   }
   /** Keeps [cause] as what last went wrong with [job], in the journal and the log. */
   private fun recordCause(job: MutableMap<String, Any?>, reason: String, cause: String) {
@@ -990,6 +1063,10 @@ class DurableDownloads(
     private const val MP3_320 = "mp3-320"
     private const val YOUTUBE_M4A = "youtube-m4a"
     private val TERMINAL = setOf("failed", "cancelled")
+    /** Quality replacements' job ids (Core's `qualityJobId`). */
+    private val REPLACEMENT_PREFIXES = listOf("upgrade:", "downgrade:")
+    /** A replacement's failure for finding no better copy (Core's `NO_BETTER_COPY_FOUND`): the song keeps its file. */
+    private const val NO_BETTER_COPY = "notFound"
     /** Until the audio is accepted; afterwards a failure is the save's, which YouTube would share. */
     private val ACQUIRING = setOf("preparing", "prepared", "transferring", "sourceReady")
     /** Where a job's budget is charged: until its file is downloaded. */

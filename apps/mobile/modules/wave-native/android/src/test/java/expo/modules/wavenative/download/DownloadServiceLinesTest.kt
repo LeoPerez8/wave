@@ -34,8 +34,19 @@ class DownloadServiceLinesTest {
       DownloadServiceLines.refused(restart = true, "android.app.ForegroundServiceStartNotAllowedException: not allowed"),
     )
     assertEquals(
-      "Android refused to start the download service (java.lang.SecurityException: denied); started downloads fail with Retry, waiting ones wait for Wave's next launch",
+      "Android refused to start the download service (java.lang.SecurityException: denied); the downloads wait for Wave's next launch, started ones back in line",
       DownloadServiceLines.refused(restart = false, "java.lang.SecurityException: denied"),
+    )
+  }
+
+  @Test fun aReplacementRunsStopSaysWhatItDidAndWhy() {
+    assertEquals(
+      "A quality replacement run ended: 170 replaced, 12 kept with no better copy, 3 failed, 0 waiting",
+      DownloadServiceLines.replacementRun(DurableDownloads.ReplacementRun(replaced = 170, kept = 12, failed = 3, waiting = 0, cancelled = 0), stopped = null),
+    )
+    assertEquals(
+      "A quality replacement run stopped (Android's time limit): 170 replaced, 12 kept with no better copy, 3 failed, 540 waiting, 2 cancelled",
+      DownloadServiceLines.replacementRun(DurableDownloads.ReplacementRun(replaced = 170, kept = 12, failed = 3, waiting = 540, cancelled = 2), DownloadServiceStop.TIME_LIMIT),
     )
   }
 }

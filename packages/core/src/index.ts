@@ -1382,6 +1382,7 @@ export {
   qualityUpgradeOffer,
   qualityUpgradeSongs,
   youTubeCopyKbps,
+  failedReplacementFiles,
 } from "./qualityReplacement.ts";
 export type {
   NoBetterCopy,

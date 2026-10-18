@@ -5,6 +5,7 @@ import {
   QUALITY_ORIGINS,
   downloadingList,
   failedDownloads,
+  failedReplacementFiles,
   formatStorageSize,
   noBetterCopies,
   qualityJobsToCancel,
@@ -446,6 +447,37 @@ describe("qualityReplacementTags", () => {
     assert.equal(tags.album, null);
     assert.equal(tags.advisory, null);
     assert.equal(tags.artworkUrl, null);
+  });
+});
+
+describe("failedReplacementFiles", () => {
+  test("a replacement that failed after publishing leaves its new file to delete", () => {
+    const jobs = [
+      job("upgrade:1", { phase: "failed", reason: "failed", finalPath: "/Music/A.mp3" }),
+      job("upgrade:2", {
+        phase: "completed",
+        importFailure: "failed",
+        saved: { path: "/Music/B.mp3" },
+      }),
+      job("downgrade:3", { phase: "failed", reason: "storage", finalPath: "/Music/C.m4a" }),
+    ];
+    assert.deepEqual(failedReplacementFiles(jobs), ["/Music/A.mp3", "/Music/B.mp3", "/Music/C.m4a"]);
+  });
+
+  test("keeps a file that took the old one's very path, and anything that didn't fail", () => {
+    const jobs = [
+      job("upgrade:1", {
+        phase: "failed",
+        reason: "failed",
+        finalPath: "/Music/A.mp3",
+        replaces: "/Music/A.mp3",
+      }),
+      job("upgrade:2", { phase: "failed", reason: "notFound" }),
+      job("upgrade:3", { phase: "completed", saved: { path: "/Music/B.mp3" } }),
+      job("upgrade:4", { phase: "publishing", finalPath: "/Music/D.mp3" }),
+      job("videoId", { phase: "failed", reason: "failed", finalPath: "/Music/E.m4a" }),
+    ];
+    assert.deepEqual(failedReplacementFiles(jobs), []);
   });
 });
 

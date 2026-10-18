@@ -35,5 +35,15 @@ object DownloadServiceLines {
    */
   fun refused(restart: Boolean, error: String): String =
     if (restart) "Android refused to restart the download service after Wave was closed ($error); the downloads wait for Wave's next launch"
-    else "Android refused to start the download service ($error); started downloads fail with Retry, waiting ones wait for Wave's next launch"
+    else "Android refused to start the download service ($error); the downloads wait for Wave's next launch, started ones back in line"
+
+  /**
+   * A quality replacement run stopped: it [ended] (its last song finished, failed or was
+   * cancelled), or the download service [stopped] under it, for that reason. Says what it did.
+   */
+  fun replacementRun(run: DurableDownloads.ReplacementRun, stopped: DownloadServiceStop?): String {
+    val how = if (stopped == null) "ended" else "stopped (${stopped.line})"
+    val cancelled = if (run.cancelled > 0) ", ${run.cancelled} cancelled" else ""
+    return "A quality replacement run $how: ${run.replaced} replaced, ${run.kept} kept with no better copy, ${run.failed} failed, ${run.waiting} waiting$cancelled"
+  }
 }

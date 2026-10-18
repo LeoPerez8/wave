@@ -11,6 +11,7 @@ import { and, eq, isNotNull, ne } from "drizzle-orm";
 import type { IndexedArtwork, IndexedTrack } from "../LibraryStore.ts";
 import type { CreditSplits } from "./credits.ts";
 import type { LibraryDatabase } from "./database.ts";
+import { recordFileDeletions } from "./fileDeletions.ts";
 import { saveBatch, type SavedBatch } from "./save.ts";
 import * as schema from "./schema.ts";
 import { deleteTracksById } from "./tracks.ts";
@@ -132,7 +133,11 @@ export const replaceTrackFile = (
   const t = schema.tracks;
   return db.transaction((tx): ReplacedFile => {
     const old = tx.select({ path: t.path }).from(t).where(eq(t.id, trackId)).get();
-    if (old === undefined || old.path === null) return { kind: "gone" };
+    if (old === undefined || old.path === null) {
+      // Nothing takes the new file: it goes, never to come back as a song of its own.
+      recordFileDeletions(tx, [track.path], now);
+      return { kind: "gone" };
+    }
     const oldPath = old.path;
     if (oldPath !== track.path) {
       const stray = tx
@@ -151,6 +156,8 @@ export const replaceTrackFile = (
       oldPath === track.path ? [] : [{ from: oldPath, to: track.path }],
       now,
     );
+    // The old file must go: recorded with the swap, so a kill before it's deleted can't leave it.
+    if (oldPath !== track.path) recordFileDeletions(tx, [oldPath], now);
     return { kind: "replaced", oldPath, starred };
   });
 };
