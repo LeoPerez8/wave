@@ -1,6 +1,8 @@
 import {
   joinArtists,
+  librarySearchSong,
   lookUpSongLinks,
+  parseTrackId,
   spotifySearchQuery,
   type ArtworkPalette,
   type SongLinkAsk,
@@ -113,6 +115,24 @@ const fileUri = (path: string | null): string | undefined =>
   path === null ? undefined : `file://${path}`;
 
 /**
+ * The links lookup of the Library song [id]: by the video id it was
+ * downloaded from, else a search for its title and artist (Core's
+ * `librarySearchSong`); nothing to search for a song no longer indexed.
+ */
+const librarySongLinks = (id: number) => (): Promise<SongLinkLookup> =>
+  appRuntime.runPromise(
+    Effect.gen(function* () {
+      const store = yield* LibraryStore;
+      const [song] = yield* store.songsWithIds([id]);
+      const videoIds = yield* store.videoIds([id]);
+      return {
+        videoId: videoIds.get(id) ?? null,
+        search: song === undefined ? null : librarySearchSong(song),
+      };
+    }),
+  );
+
+/**
  * Shares a Library song: its cover, and its palette as the Library keeps it.
  * Its links go by the video id it was downloaded from, else a search for its
  * title and artist.
@@ -132,22 +152,7 @@ export const shareLibrarySong = (song: SongRow): void =>
         return { palette: details?.palette ?? null };
       }),
     ),
-    () =>
-      appRuntime.runPromise(
-        Effect.gen(function* () {
-          const store = yield* LibraryStore;
-          const videoIds = yield* store.videoIds([song.id]);
-          return {
-            videoId: videoIds.get(song.id) ?? null,
-            search: {
-              title: song.title,
-              artists: [song.artist],
-              album: song.album,
-              durationMs: song.durationMs,
-            },
-          };
-        }),
-      ),
+    librarySongLinks(song.id),
   );
 
 /**
@@ -155,6 +160,12 @@ export const shareLibrarySong = (song: SongRow): void =>
  * unsearched entry (searched for its links), as its share sheet needs it.
  */
 export type StreamedShareSong = UnsearchedSong & { readonly videoId?: string };
+
+/** The links lookup of streamed [song]: by its video id, else a search for its title and artists. */
+const streamedSongLinks =
+  ({ videoId, title, artists, album, durationMs }: StreamedShareSong) =>
+  (): Promise<SongLinkLookup> =>
+    Promise.resolve({ videoId: videoId ?? null, search: { title, artists, album, durationMs } });
 
 /**
  * Shares a song that isn't a Library file: YouTube's cover, cached on the
@@ -181,15 +192,29 @@ export const shareStreamedSong = (song: StreamedShareSong): void => {
             return { artworkUri: `file://${artwork.path}`, palette: artwork.palette };
           }),
         ),
-    () =>
-      Promise.resolve({
-        videoId: song.videoId ?? null,
-        search: {
-          title: song.title,
-          artists: song.artists,
-          album: song.album,
-          durationMs: song.durationMs,
-        },
-      }),
+    streamedSongLinks(song),
+  );
+};
+
+/**
+ * Shares what Now Playing plays, as it shows it ([content]: its cover and
+ * palette), with the song's links as its menu's Share looks them up: a
+ * Library track ([trackId]) by its id, a streamed song ([ytSong], the
+ * queue's) by its video id.
+ */
+export const shareNowPlaying = (
+  content: Omit<SongShareContent, "links">,
+  trackId: string | null,
+  ytSong: StreamedShareSong | null,
+): void => {
+  const track = trackId === null ? null : parseTrackId(trackId);
+  openSongShare(
+    content,
+    undefined,
+    track?.kind === "library"
+      ? librarySongLinks(track.id)
+      : ytSong === null
+        ? undefined
+        : streamedSongLinks(ytSong),
   );
 };
