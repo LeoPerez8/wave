@@ -122,6 +122,8 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
   requestAllFilesAccess(): Promise<void>;
   /** Absolute path of the shared `Music` folder. */
   getDefaultMusicFolder(): string;
+  /** Whether the phone is on mobile data rather than Wi-Fi (a quality replacement's card says so). */
+  onMobileData(): boolean;
   /** Opens the system folder picker and resolves the picked folder's absolute path. */
   pickFolder(): Promise<FolderPick>;
   /** Opens the system file picker for M3U playlists; one result per picked file, none when cancelled. */

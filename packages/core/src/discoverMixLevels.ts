@@ -18,7 +18,9 @@ import type {
   DiscoverSeedSong,
   DiscoverSongPlays,
 } from "./discoverMixes.ts";
+import { mixLibrarySong } from "./discoverMixes.ts";
 import { isExplicit, type ExplicitFlag } from "./explicit.ts";
+import { ofGenreFamily } from "./genreMixes.ts";
 import { identityKey } from "./library.ts";
 import type { MixKnownSongs } from "./mixKnownSongs.ts";
 import { normalizeSearchText } from "./search.ts";
@@ -209,8 +211,8 @@ const recordingOf = (song: Pick<YtAlbumSong, "title" | "artists">): string =>
  * share takes them: first the songs the owner knows that its radio played,
  * in the radio's order (music videos aside), the Library's as Library songs
  * and the others streamed as the radio has them; then the Library's songs of
- * its genre, or, for a mix without one, of its seed artist, the most played
- * and then the newest first; then the non-D songs the owner knows
+ * its genre family, or, for a mix without one, of its seed artist, the most
+ * played and then the newest first; then the non-D songs the owner knows
  * (streamed or in a playlist) by its seed artists, the most streamed and
  * then the newest first. Never a song twice or one an earlier mix's share
  * has ([taken]); as many as level 1 takes at most.
@@ -229,14 +231,7 @@ export const discoverMixFamiliarPool = <L extends DiscoverLibrarySong>(
   const addTrack = (song: DiscoverSeedSong): void => {
     if (pool.length >= most || tracks.has(song.id)) return;
     tracks.add(song.id);
-    const { id, title, artist, explicit } = song;
-    pool.push({
-      source: "library",
-      track:
-        explicit === undefined || explicit === "unknown"
-          ? { id, title, artist }
-          : { id, title, artist, explicit },
-    });
+    pool.push({ source: "library", track: mixLibrarySong(song) });
   };
   const addStream = (song: YtAlbumSong): void => {
     const recording = recordingOf(song);
@@ -256,7 +251,9 @@ export const discoverMixFamiliarPool = <L extends DiscoverLibrarySong>(
     // oxlint-disable-next-line unicorn/no-array-sort -- sorts the fresh array filter made; Hermes lacks toSorted
     .sort((a, b) => playsOf(b) - playsOf(a) || b.addedAt - a.addedAt);
   for (const song of rest) addTrack(song);
-  const seedArtists = new Set((seed.artists ?? [seed.name]).map(identityKey));
+  const seedArtists = new Set(
+    (seed.artists?.map((artist) => artist.name) ?? [seed.name]).map(identityKey),
+  );
   for (const { song } of known.nonD) {
     const artists = song.artists.flatMap((artist) => splitCredit(artist)).map(identityKey);
     if (artists.some((artist) => seedArtists.has(artist))) addStream(song);
@@ -264,15 +261,12 @@ export const discoverMixFamiliarPool = <L extends DiscoverLibrarySong>(
   return pool;
 };
 
-/** Whether a Library song is of [seed]'s mix: of its genre, else by one of its seed's artists. */
+/** Whether a Library song is of [seed]'s mix: of its genre family (`ofGenreFamily`), else by one of its seed's artists. */
 const mixSongFilter = (
   seed: DiscoverMixSeed,
   artists: readonly DiscoverSeedArtist[],
 ): ((song: DiscoverLibrarySong) => boolean) => {
-  if (seed.genre !== undefined) {
-    const genre = identityKey(seed.genre.trim());
-    return (song) => genre !== "" && identityKey(song.genre?.trim() ?? "") === genre;
-  }
+  if (seed.genre !== undefined) return ofGenreFamily(seed.genre);
   const name = identityKey(seed.name);
   const ids = new Set(
     artists.filter((artist) => identityKey(artist.name) === name).map((artist) => artist.id),

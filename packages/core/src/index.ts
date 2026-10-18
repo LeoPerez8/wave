@@ -28,8 +28,13 @@ export type {
 } from "./designPreview.ts";
 export { trackRowTrailing } from "./trackRowTrailing.ts";
 export type { TrackRowTrailingInput } from "./trackRowTrailing.ts";
-export { lastListActionForm } from "./listActions.ts";
-export type { ListActionForm, ListActionsRoom } from "./listActions.ts";
+export { lastListActionForm, listActionsForms } from "./listActions.ts";
+export type {
+  ListActionForm,
+  ListActionsForms,
+  ListActionsRoom,
+  OnlineToggleForm,
+} from "./listActions.ts";
 export { describeFolder, filesLeavingWithRoot, isWithin, planAddRoot } from "./scanRoots.ts";
 export type { AddRootPlan, FolderLabel, ScanRootState } from "./scanRoots.ts";
 export { resolveSkipSwipe } from "./swipe.ts";
@@ -557,9 +562,11 @@ export {
   YT_SECTION_HIDDEN,
   stepYtSection,
   ytSearchQuery,
+  ytSectionToggle,
   ytSectionView,
 } from "./ytSearch.ts";
 export type {
+  YtKeptAnswer,
   YtAskedBy,
   YtQuietReason,
   YtSearchAnswer,
@@ -680,6 +687,7 @@ export {
   ytDownloadTags,
   listedSongTags,
   ytDownloadTarget,
+  ytDownloadHas,
 } from "./ytDownload.ts";
 export type {
   YtAlbum,
@@ -807,6 +815,7 @@ export {
   ytArtistShelves,
   ytAlbumTracklist,
   ytLibraryAlbumView,
+  ytArtistToggle,
 } from "./ytArtist.ts";
 export type {
   LibraryAlbumKey,
@@ -836,6 +845,7 @@ export type {
   YtLibraryAlbumNote,
   YtLibraryAlbumView,
   YtReleaseLoad,
+  YtArtistToggleContext,
 } from "./ytArtist.ts";
 export { streamedArtistLink } from "./streamedArtist.ts";
 export type {
@@ -1335,12 +1345,49 @@ export {
   starredDownload,
   unstarredDownload,
   writeStarDownloads,
+  syncedStarDownloads,
+  readSyncedStars,
+  writeSyncedStars,
 } from "./starDownloads.ts";
 export type { StarredDownload, UnstarredDownload } from "./starDownloads.ts";
 export { pickWeighted, playsWeight } from "./weightedPick.ts";
 export type { RandomSource } from "./weightedPick.ts";
 export { ARTIST_MIX_COUNT, artistMixSeeds, artistMixSimilarSource } from "./artistMixes.ts";
 export type { ArtistMixPools, PlayedSeedArtist } from "./artistMixes.ts";
+export { GENRE_MIX_COUNT, genreFamily, genreMixSeeds, interleaveRadios } from "./genreMixes.ts";
+export type { GenreFamily, GenreMixLibrary } from "./genreMixes.ts";
+export type { YtPick } from "./onlineToggle.ts";
+export {
+  BEST_QUALITY_KBPS,
+  LOW_QUALITY_BELOW_KBPS,
+  NO_BETTER_COPY_FOUND,
+  QUALITY_ORIGINS,
+  formatStorageSize,
+  foundNoBetterCopy,
+  isLosslessFile,
+  noBetterCopies,
+  qualityJobId,
+  qualityJobOf,
+  qualityJobsToCancel,
+  qualityReplacementJob,
+  qualityReplacementTags,
+  qualityReplacementTarget,
+  qualityUpgradeOffer,
+  qualityUpgradeSongs,
+} from "./qualityReplacement.ts";
+export type {
+  NoBetterCopy,
+  QualityDirection,
+  QualityFile,
+  QualityJobId,
+  QualityMemory,
+  QualityOffer,
+  QualityReplacementTarget,
+  ReplacedTrack,
+} from "./qualityReplacement.ts";
+export { libraryLyrics, libraryLyricsSong } from "./libraryLyrics.ts";
+export type { LibraryLyrics, LibraryLyricsState, LibraryLyricsTrack } from "./libraryLyrics.ts";
+export type { SyncedStarDownloads } from "./starDownloads.ts";
 export { mixKnownSongs } from "./mixKnownSongs.ts";
 export type {
   KnownNonDSong,

@@ -178,7 +178,7 @@ const legacyModel = (clock: Clock): Model => {
           if (!shape.edits.includes("plays")) continue;
           if (consumer.visible) effect(consumer, true);
           else consumer.missedPlays = true;
-        } else if (shape.edits.includes(change.kind)) {
+        } else if (change.kind !== "streamed" && shape.edits.includes(change.kind)) {
           effect(consumer, true);
         }
       }

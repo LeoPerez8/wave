@@ -101,7 +101,7 @@ const integratedQuery = (from: DetailOpening | undefined): string =>
 /**
  * Opens a Library album. Opened from an integrated view ([from]), it reads
  * its release on YouTube Music on its own (Core's `ytLibraryAlbumView`);
- * otherwise it waits for Show on YouTube Music.
+ * otherwise it opens on Library and waits for Online to be picked.
  */
 export const openAlbum = (id: number, known?: AlbumRow | null, from?: DetailOpening): void =>
   open("album", id, known, integratedQuery(from));
@@ -109,8 +109,8 @@ export const openAlbum = (id: number, known?: AlbumRow | null, from?: DetailOpen
 /**
  * Opens a Library artist. Opened integrated ([from], from a streamed song's
  * artist), their page asks YouTube Music on its own when nothing stands for
- * them (Core's `ytArtistSectionAsks`); otherwise it waits for Show on YouTube
- * Music.
+ * them (Core's `ytArtistSectionAsks`); otherwise it opens on Library and waits
+ * for Online to be picked.
  */
 export const openArtist = (id: number, known?: ArtistRow | null, from?: DetailOpening): void =>
   open("artist", id, known, integratedQuery(from));

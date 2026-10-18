@@ -8,7 +8,7 @@
  */
 
 import { splitCredit } from "./credits.ts";
-import type { BlendedDiscoverMix } from "./discoverMixLevels.ts";
+import type { BlendedDiscoverMix, DiscoverMixSong } from "./discoverMixLevels.ts";
 import type { ExplicitFlag } from "./explicit.ts";
 import { identityKey } from "./library.ts";
 import { normalizeSearchText } from "./search.ts";
@@ -33,6 +33,8 @@ export interface DiscoverSeedSong {
   readonly durationMs: number;
   /** Its explicit flag, for a mix's Library pool (Don't play explicit); absent counts as unknown. */
   readonly explicit?: ExplicitFlag;
+  /** Its cached artwork file, for a mix's tile; null or absent for none. */
+  readonly artworkPath?: string | null;
 }
 
 /** A Library artist with how many of the Library's songs credit them. */
@@ -75,22 +77,27 @@ export interface DiscoverSimilarArtists {
   readonly artists: readonly DiscoverSimilarArtist[];
 }
 
-/** What a mix starts from: an artist (`artistMixSeeds`). */
+/**
+ * What a mix starts from: an artist (`artistMixSeeds`), or a genre family
+ * and up to three of its artists, whose radios are interleaved
+ * (`genreMixSeeds`).
+ */
 export interface DiscoverMixSeed {
-  readonly kind: "artist";
+  readonly kind: "artist" | "genre";
   /** Tells the mix apart from the others, and from itself on another day. */
   readonly id: string;
+  /** The artist's name, or the genre family's ("Metal"). */
   readonly name: string;
   readonly from: DiscoverSeedSource;
   /** Their YouTube Music page, for a similar artist: their radio starts there. */
   readonly browseId?: string;
-  /** The Library genre the mix stands for; absent for an artist's mix. */
+  /** The genre family the mix stands for (Core's `genreFamily` name); absent for an artist's mix. */
   readonly genre?: string;
   /**
-   * The artists the mix grows from, when they aren't [name] alone (a genre's
-   * mix): its familiar share takes their non-D songs. Absent: [name].
+   * A genre mix's seed artists, whose radios it grows from, in the radios'
+   * turn order; its familiar share takes their non-D songs. Absent: [name].
    */
-  readonly artists?: readonly string[];
+  readonly artists?: readonly DiscoverSeedArtist[];
 }
 
 const FIELD = "\u001f";
@@ -273,7 +280,32 @@ export interface DiscoverMixLibrarySong {
    * play explicit is on without reading the Library; absent for unknown.
    */
   readonly explicit?: ExplicitFlag;
+  /**
+   * Its cached artwork file as the build saw it, for the mix's tile when the
+   * level leans familiar (`discoverMixCaption`); absent for none.
+   */
+  readonly artworkPath?: string;
 }
+
+/**
+ * A pool song as a mix saves it: [song]'s id, title, credit, and its
+ * explicit flag and artwork file when it has them.
+ */
+export const mixLibrarySong = ({
+  id,
+  title,
+  artist,
+  explicit,
+  artworkPath,
+}: DiscoverSeedSong | DiscoverMixLibrarySong): DiscoverMixLibrarySong => ({
+  id,
+  title,
+  artist,
+  ...(explicit === undefined || explicit === "unknown" ? {} : { explicit }),
+  ...(artworkPath === undefined || artworkPath === null || artworkPath === ""
+    ? {}
+    : { artworkPath }),
+});
 
 /**
  * The mix [seed] makes of [songs] (`discoverMixSongs`) and its [familiar]
@@ -293,17 +325,14 @@ export const discoverMix = (
           kind: seed.kind,
           name: seed.name,
           ...(seed.genre === undefined ? {} : { genre: seed.genre }),
-          artists: [seed.name],
+          artists: seed.artists?.map((artist) => artist.name) ?? [seed.name],
         },
         songs: songs.map(({ video: _video, ...song }) => song),
-        familiar: familiar.map((song): DiscoverMixFamiliarSong => {
-          if (song.source === "stream") return song;
-          const { id, title, artist, explicit } = song.track;
-          return {
-            source: "library",
-            track: explicit === undefined ? { id, title, artist } : { id, title, artist, explicit },
-          };
-        }),
+        familiar: familiar.map((song): DiscoverMixFamiliarSong =>
+          song.source === "stream"
+            ? song
+            : { source: "library", track: mixLibrarySong(song.track) },
+        ),
       };
 
 /** How many of a mix's artists its tile names. */
@@ -313,8 +342,14 @@ const CAPTION_ARTISTS = 3;
  * A mix's tile on Home, as the owner's level blends it (`blendDiscoverMix`):
  * named after its seed, over the first three artists it plays (each song's
  * lead artist, the familiar songs' too), with how many songs it has, under
- * its first new song's cover (none when it plays no new song). A genre's mix
- * is named after the genre, its seed's lead artist first among the three.
+ * the cover of the first song of the share it mostly plays: its first
+ * familiar song's (a Library song's, or one that streams) when familiar
+ * songs outnumber new ones (20% and 40% new), else its
+ * first new song's. A song without a cover passes to the next of that share,
+ * then to the mix's first song with one. So changing the level changes the
+ * tile. [artworkUrl] is an address the image loads from: YouTube Music's, or
+ * a Library song's cached artwork file as a `file://` URI. A genre's mix is
+ * named after the genre, its seed's lead artist first among the three.
  */
 export const discoverMixCaption = (
   mix: BlendedDiscoverMix,
@@ -337,15 +372,40 @@ export const discoverMixCaption = (
     const key = identityKey(lead);
     if (!artists.has(key)) artists.set(key, lead);
   }
-  const cover = mix.songs.find((song) => song.source === "stream" && song.familiar !== true);
   const { part } = mix.seed;
   const name = genre === undefined ? mix.seed.name : genreTitle(genre);
   return {
     title: `${name} mix${part === undefined ? "" : ` ${part}`}`,
     artists: [...artists.values()].join(", "),
     line: `${mix.songs.length} songs`,
-    artworkUrl: cover?.source === "stream" ? cover.song.artworkUrl : null,
+    artworkUrl: mixCover(mix),
   };
+};
+
+/** Where [song]'s cover loads from, or null when it has none. */
+const coverOf = (song: DiscoverMixSong): string | null => {
+  if (song.source === "stream") return song.song.artworkUrl;
+  const path = song.track.artworkPath;
+  return path === undefined ? null : `file://${path}`;
+};
+
+/** The covers [songs] have, in order. */
+const coversOf = (songs: readonly DiscoverMixSong[]): string[] =>
+  songs.flatMap((song) => coverOf(song) ?? []);
+
+/** Whether [song] is of a mix's familiar share: a Library song, or a familiar one that streams. */
+const isFamiliar = (song: DiscoverMixSong): boolean =>
+  song.source === "library" || song.familiar === true;
+
+/** The cover of the first song of the share [mix] mostly plays (`discoverMixCaption`). */
+const mixCover = (mix: BlendedDiscoverMix): string | null => {
+  const familiar = mix.songs.filter(isFamiliar).length;
+  const leansFamiliar = familiar > mix.songs.length - familiar;
+  return (
+    coversOf(mix.songs.filter((song) => isFamiliar(song) === leansFamiliar))[0] ??
+    coversOf(mix.songs)[0] ??
+    null
+  );
 };
 
 /** The mixes as last built, saved so Home shows them without waiting on YouTube Music. */
@@ -446,7 +506,7 @@ const readSong = (value: unknown): YtAlbumSong | null => {
 const readMix = (value: unknown): DiscoverMix | null => {
   if (!isRecord(value) || !isString(value.id) || !isRecord(value.seed)) return null;
   const { kind, name, genre, artists } = value.seed;
-  if (kind !== "artist" || !isString(name)) return null;
+  if ((kind !== "artist" && kind !== "genre") || !isString(name)) return null;
   if (!Array.isArray(value.songs)) return null;
   const songs = value.songs.flatMap((song) => readSong(song) ?? []);
   const seed: DiscoverMix["seed"] = {
@@ -467,15 +527,18 @@ const readFamiliarSong = (value: unknown): DiscoverMixFamiliarSong[] => {
     return song === null ? [] : [{ source: "stream", song }];
   }
   if (value.source !== "library" || !isRecord(value.track)) return [];
-  const { id, title, artist, explicit } = value.track;
+  const { id, title, artist, explicit, artworkPath } = value.track;
   if (!isNumber(id) || !isString(title) || !isString(artist)) return [];
   return [
     {
       source: "library",
-      track:
-        explicit === "explicit" || explicit === "clean"
-          ? { id, title, artist, explicit }
-          : { id, title, artist },
+      track: mixLibrarySong({
+        id,
+        title,
+        artist,
+        ...(explicit === "explicit" || explicit === "clean" ? { explicit } : {}),
+        ...(isString(artworkPath) ? { artworkPath } : {}),
+      }),
     },
   ];
 };
