@@ -30,7 +30,7 @@ type Props = {
 };
 
 /** Wave's logo, its two waves stroked in [colour], in a [size] square. */
-function WaveMark({ size, colour }: { size: number; colour: string }) {
+export function WaveMark({ size, colour }: { size: number; colour: string }) {
   const paths = logoIconPaths({ size, inset: 0 });
   return (
     <Svg width={size} height={size}>

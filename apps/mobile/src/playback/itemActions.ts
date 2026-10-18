@@ -48,6 +48,7 @@ import {
 } from "@/settings/lyricsAndGenre";
 import { useYtMusicEnabled, ytMusicEnabled } from "@/settings/ytMusic";
 import { openSharePlaylist } from "@/share/sharePlaylist";
+import { shareLibrarySong, shareStreamedSong } from "@/share/songShare";
 import {
   cancelMissingSongDownload,
   downloadMissingSongs,
@@ -431,8 +432,6 @@ export function useItemActions(
         return run(() => playlist !== undefined && void adjustPlaylistImageFlow(playlist));
       case "removeImage":
         return run(() => playlist !== undefined && void removePlaylistImageFlow(playlist));
-      case "share":
-        return run(() => playlist !== undefined && openSharePlaylist(playlist));
       case "deletePlaylist":
       case "deletePlaylists": {
         const playlists = target.kind === "playlist" ? target.items : [];
@@ -454,6 +453,16 @@ export function useItemActions(
               target.kind === "track" ? withFiles : collectionSongs.filter(songHasFile),
             ),
         );
+      case "share":
+        // A playlist goes out as a playlist on another service (#483); one song, as a card on
+        // the song share sheet: a Library song, a YT Music one or an unsearched entry (#481).
+        if (playlist !== undefined) return run(() => openSharePlaylist(playlist));
+        return run(() => {
+          const [only] = allTracks;
+          if (only === undefined) return;
+          if (isLibraryTrack(only)) shareLibrarySong(only.song);
+          else shareStreamedSong(isUnsearchedTrack(only) ? only.unsearched : only.ytSong);
+        });
       case "select":
         return run(() => onSelect?.());
       case "delete":

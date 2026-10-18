@@ -431,6 +431,9 @@ export const itemActions = <A extends LibraryArtistRef = LibraryArtistRef>(
     entries.push({ action: "fixSongs" });
   if (kind === "playlist")
     entries.push({ action: items.length === 1 ? "deletePlaylist" : "deletePlaylists" });
+  // One song's menu shares it as a card (the song share sheet), whatever kind of song it is.
+  if (surface === "menu" && kind === "track" && items.length === 1)
+    entries.push({ action: "share" });
   if (surface === "menu" && subject.selectable === true) entries.push({ action: "select" });
   // Last, and destructive (after asking): deletes the songs' files from the
   // phone, or takes missing songs out of the Library.
@@ -449,6 +452,7 @@ export type YtSongActionEntry<A> =
         | "favorite"
         | "unfavorite"
         | "removeFromPlaylist"
+        | "share"
         | "select";
     }
   /** The song's YT Music album page, by its browse id (`MPREb_…`). */
@@ -512,6 +516,7 @@ export const ytSongActions = <A>(
   ...(artists === undefined || artists.kind === "here"
     ? []
     : [{ action: "goToArtist", artists } as const]),
+  { action: "share" },
   ...(selectable ? [{ action: "select" } as const] : []),
 ];
 

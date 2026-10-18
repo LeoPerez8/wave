@@ -50,8 +50,35 @@ describe("itemActions", () => {
       "favorite",
       "goToAlbum",
       "goToArtist",
+      "share",
       "delete",
     ]);
+  });
+
+  test("every song's menu offers Share, before Select; several songs, and other items, don't", () => {
+    const offers = (subject: ActionSubject) => names(itemActions(subject)).includes("share");
+    assert.equal(ITEM_ACTION_LABELS.share, "Share");
+    assert.deepEqual(names(itemActions(tracks([song()], { selectable: true }))).slice(-3), [
+      "share",
+      "select",
+      "delete",
+    ]);
+    // A missing song, a YT Music song checked beside the Library's, and an unsearched one too.
+    assert.ok(offers(tracks([{ ...song(), missing: true }])));
+    assert.ok(offers(tracks([{ streamed: true, artistNames: ["A"] }])));
+    assert.ok(offers(tracks([{ streamed: true, unsearched: true, artistNames: ["A"] }])));
+    assert.ok(!offers(tracks([song(), song()])));
+    assert.ok(!offers(tracks([song()], { surface: "selection" })));
+    for (const kind of ["album", "artist", "playlist", "genre"] as const)
+      assert.ok(!offers({ kind, items: [{}], here: "/" }), kind);
+  });
+
+  test("a YT Music song's menu offers Share, before Select", () => {
+    assert.deepEqual(ytSongActions(undefined, { selectable: true }).slice(-2), [
+      { action: "share" },
+      { action: "select" },
+    ]);
+    assert.deepEqual(ytSongActions().at(-1), { action: "share" });
   });
 
   test("the menu of a Library song, album, artist or playlist starts a Magic Queue", () => {
@@ -103,6 +130,7 @@ describe("itemActions", () => {
         "favorite",
         "goToAlbum",
         "goToArtist",
+        "share",
         "select",
         "removeFromLibrary",
       ],
@@ -162,10 +190,10 @@ describe("itemActions", () => {
     ]);
   });
 
-  test("a song missing something offers Fix Song while online lookups are on, before Select and Delete", () => {
+  test("a song missing something offers Fix Song while online lookups are on, before Share, Select and Delete", () => {
     const fixable = { ...song(), fixable: true };
     const menu = itemActions(tracks([fixable], { selectable: true, onlineLookups: true }));
-    assert.deepEqual(names(menu).slice(-3), ["fixSong", "select", "delete"]);
+    assert.deepEqual(names(menu).slice(-4), ["fixSong", "share", "select", "delete"]);
     assert.equal(ITEM_ACTION_LABELS.fixSong, "Fix Song");
     assert.ok(!names(itemActions(tracks([fixable]))).includes("fixSong"));
     const album = itemActions({ kind: "album", items: [{}], here: "/", onlineLookups: true });
@@ -266,13 +294,12 @@ describe("itemActions", () => {
     );
   });
 
-  test("for one song the selection bar offers exactly the menu's entries, Select and Magic Queue aside", () => {
+  test("for one song the selection bar offers exactly the menu's entries, Select, Magic Queue and Share aside", () => {
     const subject = tracks([song({ favorite: true })], { selectable: true });
+    const menuOnly = new Set(["select", "magicQueue", "share"]);
     assert.deepEqual(
       itemActions({ ...subject, surface: "selection" }),
-      itemActions(subject).filter(
-        (entry) => entry.action !== "select" && entry.action !== "magicQueue",
-      ),
+      itemActions(subject).filter((entry) => !menuOnly.has(entry.action)),
     );
   });
 
@@ -814,6 +841,7 @@ describe("itemActions on YT Music songs checked with the Library's", () => {
       "addToQueue",
       "addToPlaylist",
       "removeFromPlaylist",
+      "share",
       "select",
     ]);
   });
@@ -998,7 +1026,7 @@ describe("ytSongActions", () => {
   test("a YT Music song can join the queue and playlists, mixed with the Library's songs", () => {
     assert.deepEqual(
       ytSongActions().map((entry) => entry.action),
-      ["playNext", "addToQueue", "addToPlaylist"],
+      ["playNext", "addToQueue", "addToPlaylist", "share"],
     );
   });
 
@@ -1009,13 +1037,14 @@ describe("ytSongActions", () => {
       { action: "addToQueue" },
       { action: "addToPlaylist" },
       { action: "goToArtist", artists },
+      { action: "share" },
     ]);
   });
 
   test("its only artist being the page you're on, there's no Go to Artist", () => {
     assert.deepEqual(
       ytSongActions({ kind: "here" }).map((entry) => entry.action),
-      ["playNext", "addToQueue", "addToPlaylist"],
+      ["playNext", "addToQueue", "addToPlaylist", "share"],
     );
   });
 
@@ -1028,12 +1057,14 @@ describe("ytSongActions", () => {
       "addToPlaylist",
       "favorite",
       "removeFromPlaylist",
+      "share",
     ]);
     assert.deepEqual(actions({ favorite: true }), [
       "playNext",
       "addToQueue",
       "addToPlaylist",
       "unfavorite",
+      "share",
     ]);
   });
 
@@ -1041,7 +1072,7 @@ describe("ytSongActions", () => {
     const artists = { kind: "open", target: { kind: "yt", name: "Justice" } } as const;
     assert.deepEqual(
       ytSongActions(artists, { inPlaylist: true }).map((entry) => entry.action),
-      ["playNext", "addToQueue", "addToPlaylist", "removeFromPlaylist", "goToArtist"],
+      ["playNext", "addToQueue", "addToPlaylist", "removeFromPlaylist", "goToArtist", "share"],
     );
   });
 
@@ -1053,6 +1084,7 @@ describe("ytSongActions", () => {
       { action: "addToPlaylist" },
       { action: "goToAlbum", album: "MPREb_cross" },
       { action: "goToArtist", artists },
+      { action: "share" },
     ]);
   });
 
@@ -1061,12 +1093,13 @@ describe("ytSongActions", () => {
       ytSongActions(undefined, { album: "MPREb_cross", ytAlbumHere, ytMusic: true }).map(
         (entry) => entry.action,
       );
-    assert.deepEqual(actions("MPREb_cross"), ["playNext", "addToQueue", "addToPlaylist"]);
+    assert.deepEqual(actions("MPREb_cross"), ["playNext", "addToQueue", "addToPlaylist", "share"]);
     assert.deepEqual(actions("MPREb_other"), [
       "playNext",
       "addToQueue",
       "addToPlaylist",
       "goToAlbum",
+      "share",
     ]);
   });
 
@@ -1074,7 +1107,7 @@ describe("ytSongActions", () => {
     const artists = { kind: "open", target: { kind: "yt", name: "Justice" } } as const;
     assert.deepEqual(
       ytSongActions(artists, { selectable: true }).map((entry) => entry.action),
-      ["playNext", "addToQueue", "addToPlaylist", "goToArtist", "select"],
+      ["playNext", "addToQueue", "addToPlaylist", "goToArtist", "share", "select"],
     );
     assert.ok(!ytSongActions(artists).some((entry) => entry.action === "select"));
   });
@@ -1082,14 +1115,17 @@ describe("ytSongActions", () => {
   test("a song without an album, or with YT Music off (a playlist's entry), has no Go to Album", () => {
     const actions = (options: YtSongActionOptions) =>
       ytSongActions(undefined, options).map((entry) => entry.action);
-    const queue = ["playNext", "addToQueue", "addToPlaylist"];
+    const queue = ["playNext", "addToQueue", "addToPlaylist", "share"];
     assert.deepEqual(actions({ album: null, ytMusic: true }), queue);
     assert.deepEqual(actions({ album: "", ytMusic: true }), queue);
     assert.deepEqual(actions({ ytMusic: true }), queue);
     assert.deepEqual(actions({ album: "MPREb_cross", ytMusic: false }), queue);
     assert.deepEqual(actions({ album: "MPREb_cross", inPlaylist: true }), [
-      ...queue,
+      "playNext",
+      "addToQueue",
+      "addToPlaylist",
       "removeFromPlaylist",
+      "share",
     ]);
   });
 });
