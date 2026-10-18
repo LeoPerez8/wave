@@ -150,7 +150,7 @@ const findTracklist = async (
     return tracklist;
   } catch (cause) {
     if (signal.aborted) throw cause;
-    console.warn(`[wave] ${lookupFailureLine("Deezer album tracklist lookup", "Deezer", cause)}`);
+    logLookupFailure("Deezer album tracklist lookup", "Deezer", cause);
     return null;
   }
 };
@@ -189,7 +189,7 @@ const settle = <A>(
     Effect.match({
       onSuccess: (value): TagLookup<A> => ({ ok: true, value }),
       onFailure: (cause): TagLookup<A> => {
-        console.warn(`[wave] ${lookupFailureLine("Fix Song lookup", service, cause)}`);
+        logLookupFailure("Fix Song lookup", service, cause);
         return { ok: false };
       },
     }),
@@ -324,6 +324,20 @@ export const writeLyricsAndGenre = (
       });
     }
     if (written.lyrics !== "none") lyricsWritten(path);
+    // The file has its new tags; the next scan brings the index up to date, as when saving it fails.
+    if (written.reindexFailed != null)
+      logTagWriteFailure(
+        path,
+        origin,
+        new TagWriteFailed({
+          cause: new NativeTagWriteError(
+            written.reindexFailed.exception,
+            written.reindexFailed.message,
+          ),
+          step: "reindex",
+          file: null,
+        }),
+      );
     if (written.track !== null) {
       const store = yield* LibraryStore;
       let saved: readonly number[] | undefined;
@@ -367,6 +381,10 @@ export const writeLyricsAndGenre = (
   }).pipe(
     Effect.tapError((failure) => Effect.sync(() => logTagWriteFailure(path, origin, failure))),
   );
+
+/** Logs a lookup ([what], from [service]) that failed, with why (Core's `lookupFailureLine`). */
+export const logLookupFailure = (what: string, service: LookupService, cause: unknown): void =>
+  console.warn(`[wave] ${lookupFailureLine(what, service, cause)}`);
 
 const logTagWriteFailure = (path: string, origin: TagWriteOrigin, failure: TagWriteFailed): void =>
   console.warn(

@@ -240,6 +240,11 @@ export interface NativeTagWrite {
   readonly explicit: TagDestination;
   readonly track: NativeScannedTrack | null;
   readonly artwork: NativeArtwork | null;
+  /**
+   * The tags are written but the file couldn't be read again for the index (`track` is null):
+   * the native exception's class and message. The next scan brings the index up to date.
+   */
+  readonly reindexFailed?: { readonly exception: string; readonly message: string } | null;
 }
 
 /**
