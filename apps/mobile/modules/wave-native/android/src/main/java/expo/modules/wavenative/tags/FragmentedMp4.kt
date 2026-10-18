@@ -7,6 +7,10 @@ import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import org.jaudiotagger.audio.AudioFile
+import org.jaudiotagger.audio.AudioFileIO
+import org.jaudiotagger.tag.mp4.Mp4Tag
+import org.jaudiotagger.tag.mp4.Mp4TagCreator
 
 /**
  * Tags a fragmented MP4, what YouTube serves: the moov has an empty sample
@@ -18,6 +22,21 @@ import java.nio.file.StandardCopyOption
  * Offsets relative to a moof or a `sidx` need nothing.
  */
 internal object FragmentedMp4 {
+  /**
+   * Writes [audio]'s tag into [file], read from it: through [writeIlst] for a
+   * fragmented M4A (a YouTube download, a quality replacement's copy),
+   * jaudiotagger's writer otherwise. Every tag writer goes through here.
+   */
+  fun writeTag(audio: AudioFile, file: File) {
+    val tag = audio.tag
+    if (tag is Mp4Tag && isFragmented(file)) {
+      val ilst = Mp4TagCreator().convertMetadata(tag)
+      writeIlst(file, ByteArray(ilst.remaining()).also(ilst::get))
+    } else {
+      AudioFileIO.write(audio)
+    }
+  }
+
   private class Box(val type: String, val offset: Long, val header: Int, val size: Long) {
     val end: Long get() = offset + size
   }

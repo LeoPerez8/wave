@@ -5,8 +5,6 @@ import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
 import org.jaudiotagger.tag.Tag
 import org.jaudiotagger.tag.images.ArtworkFactory
-import org.jaudiotagger.tag.mp4.Mp4Tag
-import org.jaudiotagger.tag.mp4.Mp4TagCreator
 
 /** The tags a YT Music download gets (Core's `ytDownloadTags`); null fields are left out. */
 data class DownloadTags(
@@ -89,13 +87,8 @@ class DownloadTagWriter {
         },
       )
     }
-    if (tag is Mp4Tag && FragmentedMp4.isFragmented(file)) {
-      val ilst = Mp4TagCreator().convertMetadata(tag)
-      FragmentedMp4.writeIlst(file, ByteArray(ilst.remaining()).also(ilst::get))
-    } else {
-      audio.tag = tag
-      AudioFileIO.write(audio)
-    }
+    audio.tag = tag
+    FragmentedMp4.writeTag(audio, file)
   }
 
   /** The tag of the file a replacement replaces; null when it's gone or can't be read. */

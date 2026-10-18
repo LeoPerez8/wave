@@ -423,6 +423,72 @@ class SongTagWriterTest {
     assertArrayEquals("audio file untouched", before, file.readBytes())
   }
 
+  /**
+   * A quality replacement's new copy (#454): YouTube's fragmented M4A, tagged at download with
+   * the replaced file's tags ([DownloadTagWriter], `keepTagsOf`), which can lack lyrics, a genre,
+   * a track number or a year. The fill-in then writes those into it. jaudiotagger can't grow a
+   * fragmented file's moov ("incorrect offsets written"), so this failed at the write step.
+   */
+  private fun replacementCopy(lyrics: String?): File {
+    val file = copyOf("fragmented-aac.m4a", "Get Lucky.m4a")
+    val tags = DownloadTags(
+      title = "Get Lucky",
+      artist = "Daft Punk, Pharrell Williams",
+      album = "Random Access Memories",
+      albumArtist = null,
+      year = null,
+      trackNumber = null,
+      genre = null,
+      lyrics = lyrics,
+    )
+    DownloadTagWriter().write(file, tags, Fixtures.cover())
+    return file
+  }
+
+  /** What the fill-in must leave as it was: the replacement's tags, the audio, and every fragment the index finds. */
+  private fun assertKeepsTheReplacementCopy(file: File, write: () -> Unit) {
+    val before = reader.read(file)
+    val audioBefore = AudioPayload.of(file)
+    val fragmentsBefore = Mp4Boxes.of(file).count { it.type == "moof" }
+
+    write()
+
+    val after = reader.read(file)
+    assertEquals(
+      listOf(before.title, before.artist, before.album),
+      listOf(after.title, after.artist, after.album),
+    )
+    assertArrayEquals("cover", Fixtures.cover(), after.artwork)
+    assertArrayEquals("audio", audioBefore, AudioPayload.of(file))
+    val boxes = Mp4Boxes.of(file)
+    assertEquals(fragmentsBefore, boxes.count { it.type == "moof" })
+    assertEquals(boxes.filter { it.type == "moof" }.map { it.offset }.toSet(), Mp4Boxes.fragmentIndex(file).toSet())
+  }
+
+  @Test
+  fun fillsInTheLyricsAndGenreOfAReplacementsFragmentedM4a() {
+    val file = replacementCopy(lyrics = null)
+    assertKeepsTheReplacementCopy(file) {
+      val report = writer.write(file, lyrics = NEW_LYRICS, genre = "Dance")
+      assertEquals(TagWriteReport(LyricsDestination.TAGS, TagDestination.TAGS), report)
+    }
+    val tags = reader.read(file)
+    assertEquals(NEW_LYRICS, tags.lyrics)
+    assertEquals(listOf("Dance"), tags.genres)
+    assertFalse("sidecar", File(file.parentFile, "Get Lucky.lrc").exists())
+  }
+
+  @Test
+  fun aReplacementsFragmentedM4aKeepsItsLyricsWhenTheRestIsFilledIn() {
+    val file = replacementCopy(lyrics = FIXTURE_LYRICS)
+    assertKeepsTheReplacementCopy(file) {
+      writer.write(file, lyrics = null, genre = "Dance", place = PLACE, advisory = 1)
+    }
+    val tags = reader.read(file)
+    assertEquals(FIXTURE_LYRICS, tags.lyrics)
+    assertEquals(listOf("Dance", "6", "1997", "1"), listOf(tags.genre, tags.trackNumber, tags.year, tags.advisory))
+  }
+
   @Test
   fun reportsWhereTheAdvisoryWentToJs() {
     val report = TagWriteReport(LyricsDestination.NONE, TagDestination.NONE, explicit = TagDestination.TAGS)

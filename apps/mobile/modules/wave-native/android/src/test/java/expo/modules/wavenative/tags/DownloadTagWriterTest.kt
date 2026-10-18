@@ -232,7 +232,7 @@ class DownloadTagWriterTest {
 }
 
 /** Top-level MP4 boxes and the `mfra` fragment index, parsed independently of the writer. */
-private object Mp4Boxes {
+internal object Mp4Boxes {
   data class Box(val type: String, val offset: Long, val size: Long)
 
   fun of(file: File): List<Box> {
