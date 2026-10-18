@@ -32,6 +32,7 @@ import { Text, useWindowDimensions, View } from "react-native";
 import { Artwork } from "@/catalog/Artwork";
 import { CELL, grid } from "@/catalog/grid";
 import { PlayShuffle, type LastListAction } from "@/catalog/PlayShuffle";
+import { HiddenSkeletonLine, PlayShuffleSkeleton, TrackSkeletons } from "@/catalog/Skeletons";
 import { useChromeInset } from "@/chrome/chrome";
 import { EmptyState } from "@/components/EmptyState";
 import { ScreenHeader } from "@/components/ScreenHeader";
@@ -258,14 +259,22 @@ export const useYtPlaylistDownloadButton = (
   };
 };
 
+/**
+ * The page's head: cover, title, maker, furniture, Play / Shuffle. While the
+ * page loads ([loading]) it keeps what the tapped cover knew ([head]; a
+ * still cover and title line when nothing is known), with a skeleton detail
+ * line and Play / Shuffle.
+ */
 function Head({
   head,
+  loading,
   furniture,
   progress,
   onPlay,
   download,
 }: {
-  head: YtListHead;
+  head: YtListHead | undefined;
+  loading: boolean;
   furniture: string | null;
   /** An album's download progress ("Downloading · 3 of 10"). */
   progress: string | null;
@@ -274,20 +283,35 @@ function Head({
   download: YtListDownloadButton | null;
 }) {
   const { width } = useWindowDimensions();
+  const cover = width - grid.margin * 2;
   return (
     <View style={{ gap: CELL * 2, paddingBottom: CELL }}>
-      <Artwork uri={head.artworkUrl ?? undefined} size={width - grid.margin * 2} />
+      {head === undefined ? (
+        <View
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          className="bg-fill"
+          style={{ width: cover, height: cover }}
+        />
+      ) : (
+        <Artwork uri={head.artworkUrl ?? undefined} size={cover} />
+      )}
       <View style={{ gap: CELL / 2 }}>
-        <Text
-          accessibilityRole="header"
-          className="font-sans text-title1 font-light text-foreground"
-          style={{ letterSpacing: -0.4 }}
-        >
-          {head.title}
-        </Text>
-        {head.line !== "" && (
+        {head === undefined ? (
+          <HiddenSkeletonLine lineHeight={34} width="70%" />
+        ) : (
+          <Text
+            accessibilityRole="header"
+            className="font-sans text-title1 font-light text-foreground"
+            style={{ letterSpacing: -0.4 }}
+          >
+            {head.title}
+          </Text>
+        )}
+        {head !== undefined && head.line !== "" && (
           <Text className="font-sans text-body font-medium text-secondary">{head.line}</Text>
         )}
+        {loading && <HiddenSkeletonLine lineHeight={18} width="40%" />}
         {furniture !== null && (
           <Text
             className="font-sans text-footnote text-secondary"
@@ -305,16 +329,23 @@ function Head({
           </Text>
         )}
       </View>
-      {onPlay !== null && (
-        <PlayShuffle
-          onPlay={() => onPlay(false)}
-          onShuffle={() => onPlay(true)}
-          last={listDownloadAction(download)}
-        />
+      {loading ? (
+        <PlayShuffleSkeleton />
+      ) : (
+        onPlay !== null && (
+          <PlayShuffle
+            onPlay={() => onPlay(false)}
+            onShuffle={() => onPlay(true)}
+            last={listDownloadAction(download)}
+          />
+        )
       )}
     </View>
   );
 }
+
+/** Skeleton rows for a page's songs while it loads: enough to fill the screen under the head. */
+const PAGE_SKELETON_ROWS = 6;
 
 const keyOf = (song: Song, index: number): string => `${index}-${discoverTrackId(song)}`;
 
@@ -322,9 +353,10 @@ const keyOf = (song: Song, index: number): string => `${index}-${discoverTrackId
  * A YT Music album, playlist or Discover mix: its cover, title, maker
  * and furniture, Play / Shuffle, then its songs. Songs the Library has play
  * its files; the rest stream. Offline, or when YouTube fails, a quiet empty
- * state takes the songs' place. A playlist's songs show page by page, with a
- * line under them while more come or when the rest didn't load; Play, Shuffle
- * and taps play the songs shown.
+ * state takes the songs' place. While the page loads, still skeletons stand
+ * for its detail line, Play / Shuffle and songs. A playlist's songs show page
+ * by page, with skeleton rows under them while more come and a line when the
+ * rest didn't load; Play, Shuffle and taps play the songs shown.
  */
 export function YtSongList({
   known,
@@ -376,6 +408,7 @@ export function YtSongList({
     [songs, context],
   );
   const head = page?.head ?? known;
+  const loading = load.status === "loading";
   const restLine = load.status === "loaded" ? ytPlaylistRestLine(load.rest) : null;
   const furniture =
     page === null
@@ -412,9 +445,10 @@ export function YtSongList({
         contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottomInset }}
         ListHeaderComponent={
           <>
-            {head !== undefined && (
+            {(head !== undefined || loading) && (
               <Head
                 head={head}
+                loading={loading}
                 furniture={furniture}
                 progress={download.progress}
                 onPlay={songs.length === 0 ? null : (shuffle) => play(undefined, shuffle)}
@@ -436,13 +470,22 @@ export function YtSongList({
             )}
           </>
         }
-        ListFooterComponent={<RestLine line={restLine} />}
+        ListFooterComponent={
+          loading ? (
+            <TrackSkeletons count={PAGE_SKELETON_ROWS} leading={numbered ? "number" : "artwork"} />
+          ) : load.status === "loaded" && load.rest === "reading" ? (
+            // More pages coming: skeleton rows at the list's end, where their songs will go.
+            <TrackSkeletons leading={numbered ? "number" : "artwork"} />
+          ) : (
+            <RestLine line={restLine} />
+          )
+        }
       />
     </View>
   );
 }
 
-/** Under a playlist's songs while the rest is read, or when it couldn't be. */
+/** Under a playlist's songs when the rest couldn't be read. */
 function RestLine({ line }: { line: string | null }) {
   if (line === null) return null;
   return (

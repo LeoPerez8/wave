@@ -200,7 +200,10 @@ describe("ytSectionView", () => {
       artists: [artist("Dafto")],
       albums: [album("Dafto", "Dafto")],
     });
-    assert.deepEqual(ytSectionView(shown, library)?.top, { kind: "artist", artist: artist("Dafto") });
+    assert.deepEqual(ytSectionView(shown, library)?.top, {
+      kind: "artist",
+      artist: artist("Dafto"),
+    });
     assert.deepEqual(ytSectionView(typed(shown, "daft punk"), library), {
       ...EMPTY,
       note: null,

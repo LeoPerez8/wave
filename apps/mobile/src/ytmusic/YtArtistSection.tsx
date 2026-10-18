@@ -5,9 +5,11 @@ import { AlbumTile } from "@/catalog/AlbumTile";
 import { openYtAlbum } from "./routes";
 import { openYtAlbumActions } from "./YtAlbumActions";
 
-/** The quiet line under an artist's page while it shows what YouTube Music has. */
-export const YT_ARTIST_NOTE: Readonly<Record<YtArtistSectionNote, string>> = {
-  loading: "Looking on YouTube Music…",
+/**
+ * The quiet line under an artist's page about what YouTube Music has: an
+ * outcome. While it loads, skeletons show instead.
+ */
+export const YT_ARTIST_NOTE: Readonly<Record<Exclude<YtArtistSectionNote, "loading">, string>> = {
   allInLibrary: "Your library already has every song of this artist.",
   noSongs: "YouTube Music lists no songs for this artist.",
   notFound: "Not found on YouTube Music.",

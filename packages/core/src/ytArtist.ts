@@ -884,8 +884,8 @@ export const ytArtistPageView = <S extends YtSong, L, A>(
     retry,
   });
   if (!context.enabled) return quiet("off");
-  if (state.status === "reading") return quiet(null);
-  if (state.status === "loading") return quiet("loading");
+  // Reading what was saved is part of the wait: it looks the same as asking.
+  if (state.status === "reading" || state.status === "loading") return quiet("loading");
   if (saved !== null && standsOnArtistPage(saved, context.now)) {
     if (saved.outcome === "unmatched") return quiet("notFound");
     return {
