@@ -22,6 +22,7 @@ import type {
   YtArtistAlbum,
   YtArtistCandidate,
   YtArtistSaved,
+  YtSearchArtistsKnown,
   YtSection,
   YtSong,
 } from "./index.ts";
@@ -686,7 +687,10 @@ describe("what Search knows of its top-hit artists' online pages during a visit"
   const online = (query = "blue"): YtSection =>
     found(pick(typedFound(YT_SECTION_HIDDEN, query), "online"), query, []);
   const after = (...events: Parameters<typeof ytSearchArtistsKnownAfter>[1][]) =>
-    events.reduce(ytSearchArtistsKnownAfter, YT_SEARCH_ARTISTS_UNKNOWN);
+    events.reduce<YtSearchArtistsKnown>(
+      (known, event) => ytSearchArtistsKnownAfter(known, event),
+      YT_SEARCH_ARTISTS_UNKNOWN,
+    );
 
   test("reads a Library artist on top once YouTube Music's answer shows, once a visit", () => {
     assert.equal(
