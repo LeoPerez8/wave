@@ -242,7 +242,7 @@ export const ytLibraryReadView = (
   playlistId: number,
 ): YtLibraryReadView | null => {
   const read = batch.reads.find((queued) => queued.playlistId === playlistId);
-  return read?.state === "failed" ? { line: "Couldn't read it from YouTube Music", read } : null;
+  return read?.state === "failed" ? { line: "Couldn't read it online", read } : null;
 };
 
 /** The app log's line for [read] that failed because of [reason]; no song titles. */

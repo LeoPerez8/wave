@@ -5,7 +5,14 @@ import { NativeModule, requireOptionalNativeModule } from "expo";
  * The app log's file (`modules/wave-native`, `log/AppLogFile.kt`): `files/logs/wave.log`,
  * which native code writes to as well. Core's `appLog.ts` decides what goes in it.
  */
-declare class WaveAppLogModule extends NativeModule {
+type WaveAppLogEvents = {
+  /** Native code wants the Hermes heap for a memory line: answer with `reportHermesHeap`. */
+  hermesHeapWanted: () => void;
+  /** Android warned that memory is short: write the waiting log entries now. */
+  memoryWarning: () => void;
+};
+
+declare class WaveAppLogModule extends NativeModule<WaveAppLogEvents> {
   /** Appends formatted entries off the JS thread; resolves the log's size in bytes. */
   append(text: string): Promise<number>;
   /** Appends at once, on the JS thread, for a fatal error; returns the log's size in bytes. */
@@ -19,6 +26,8 @@ declare class WaveAppLogModule extends NativeModule {
   share(header: string, fileName: string): Promise<void>;
   /** The route showing, which a freeze's entry names (`log/NativeLog.kt`). */
   setScreen(path: string): void;
+  /** Answers `hermesHeapWanted` with the Hermes heap in bytes (`log/JsHeap.kt`). Missing in older builds. */
+  reportHermesHeap?(bytes: number): void;
   /** Throws an uncaught Kotlin exception on the main thread: Settings › Developer's debug trigger. */
   crash(): void;
 }

@@ -1,4 +1,4 @@
-import type { Appearance, LaunchTheme, TagDestination } from "@wave/core";
+import type { Appearance, LaunchTheme, TagDestination, TagWriteStep } from "@wave/core";
 import { NativeModule, requireNativeModule } from "expo";
 
 /** One audio file as read by the native scanner (`modules/wave-native`). Tag values are raw. */
@@ -197,8 +197,9 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
    * replacing what's there, and fills in its track number (with `discNumber`),
    * year and advisory tag (Core's `advisoryTag`: 1 explicit, 0 clean), keeping
    * any the file has; null leaves a field alone. A format Wave can't write
-   * tags to gets the lyrics in a sidecar `.lrc` and nothing else. Rejects when
-   * the file can't be written.
+   * tags to gets the lyrics in a sidecar `.lrc` and nothing else. A file that
+   * can't be written resolves `{ failed }`: which step failed, why, and the
+   * file as it was then.
    */
   writeLyricsAndGenre(
     path: string,
@@ -208,7 +209,7 @@ declare class WaveNativeModule extends NativeModule<WaveNativeEvents> {
     discNumber: number | null,
     year: number | null,
     advisory: 0 | 1 | null,
-  ): Promise<NativeTagWrite>;
+  ): Promise<NativeTagWrite | NativeTagWriteFailed>;
 }
 
 /**
@@ -224,6 +225,21 @@ export interface NativeTagWrite {
   readonly explicit: TagDestination;
   readonly track: NativeScannedTrack | null;
   readonly artwork: NativeArtwork | null;
+}
+
+/**
+ * A `writeLyricsAndGenre` that failed (Core's `TagWriteFailure`): the step,
+ * the native exception's class and message, and whether the file was there
+ * then, with its size.
+ */
+export interface NativeTagWriteFailed {
+  readonly failed: {
+    readonly step: TagWriteStep;
+    readonly exception: string;
+    readonly message: string;
+    readonly fileExists: boolean;
+    readonly fileBytes: number | null;
+  };
 }
 
 /** A saved artist photo: the large image (artist page) and the thumbnail (lists). */

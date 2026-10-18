@@ -17,6 +17,8 @@ import {
   ytAlbumTracklist,
   ytArtistShelves,
   ytLibraryAlbumView,
+  ytArtistCounts,
+  ytAlbumSongCount,
 } from "./index.ts";
 import type {
   YtArtistAlbum,
@@ -1022,6 +1024,20 @@ describe("a Library album's YT Music songs", () => {
     // Opened integrated, the failure stays under Online.
     assert.equal(albumView(offline, { integrated: true, always: true }).shown?.toggle, "online");
   });
+
+  test("the song count is the combined tracklist's once it arrives, the Library's until then", () => {
+    const count = (state: Section, context: Parameters<typeof albumView>[1] = {}) =>
+      ytAlbumSongCount(tracks.length, albumView(state, context).shown);
+    assert.equal(count(restored(found(NOW))), 4);
+    assert.equal(count(restored(found(NOW)), { releasePage: { status: "loading" } }), 2);
+    assert.equal(count(restored(found(NOW)), { pick: "library" }), 2);
+    assert.equal(
+      count(restored(found(NOW)), { releasePage: { status: "quiet", reason: "failed" } }),
+      2,
+    );
+    assert.equal(count(restored(unmatched(NOW))), 2);
+    assert.equal(count(YT_ARTIST_SECTION_START), 2);
+  });
 });
 
 describe("the artist page's Library | Online toggle", () => {
@@ -1149,5 +1165,71 @@ describe("an artist page with Search online set to Always", () => {
     assert.equal(asksAlways(offline), false);
     assert.equal(shown(offline, "online")?.toggle, "online");
     assert.equal(shown(offline, "library")?.note, null);
+  });
+});
+
+describe("the artist page's header counts", () => {
+  const LOCAL = { albums: 2, songs: 2 };
+  /** The Library has the songs and releases whose id starts with "mine". */
+  const answer = (): YtArtistSaved => ({
+    outcome: "found",
+    checkedAt: NOW,
+    browseId: "UCdaftpunk",
+    page: {
+      name: "Daft Punk",
+      songs: [],
+      allSongs: [song("mine1"), song("a"), song("b"), song("a"), song("mine2")],
+      albums: [release("mineAlbum", 2001), release("discovery", 2001), release("ram", 2013)],
+      singles: [release("mineSingle", 2013), release("getLucky", 2013), release("ram", 2013)],
+    },
+  });
+  const counts = (
+    state: Section,
+    context: { pick?: YtPick | null; enabled?: boolean; now?: number } = {},
+  ) =>
+    ytArtistCounts(state, {
+      name: "Daft Punk",
+      enabled: context.enabled ?? true,
+      now: context.now ?? NOW,
+      pick: context.pick ?? null,
+      local: LOCAL,
+      inLibrary,
+      libraryRelease: (album) => album.browseId.startsWith("mine"),
+    });
+
+  test("with Online and a found answer, add what the Library lacks, each once", () => {
+    assert.deepEqual(counts(restored(answer()), { pick: "online" }), { albums: 5, songs: 4 });
+  });
+
+  test("a standing answer opens with Online, so the header counts it at once", () => {
+    assert.deepEqual(counts(restored(answer())), { albums: 5, songs: 4 });
+  });
+
+  test("Library picked restores the Library's counts", () => {
+    assert.deepEqual(counts(restored(answer()), { pick: "library" }), LOCAL);
+  });
+
+  test("until the answer arrives, the Library's counts", () => {
+    assert.deepEqual(counts(YT_ARTIST_SECTION_START, { pick: "online" }), LOCAL);
+    const asking = step(restored(null), { type: "requested" });
+    assert.deepEqual(counts(asking, { pick: "online" }), LOCAL);
+  });
+
+  test("not found, offline or failed leave the Library's counts", () => {
+    assert.deepEqual(counts(restored(unmatched(NOW)), { pick: "online" }), LOCAL);
+    for (const reason of ["offline", "failed"] as const) {
+      const failed = step(restored(null), { type: "requested" }, { type: "failed", reason });
+      assert.deepEqual(counts(failed, { pick: "online" }), LOCAL, reason);
+    }
+  });
+
+  test("an answer a week old, or saved without the full list, doesn't count", () => {
+    const old = { ...answer(), checkedAt: NOW - 8 * DAY };
+    assert.deepEqual(counts(restored(old), { pick: "online" }), LOCAL);
+    assert.deepEqual(counts(restored(savedBefore(NOW)), { pick: "online" }), LOCAL);
+  });
+
+  test("YT Music off, the Library's counts", () => {
+    assert.deepEqual(counts(restored(answer()), { pick: "online", enabled: false }), LOCAL);
   });
 });

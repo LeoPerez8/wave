@@ -70,8 +70,10 @@ data class TagWriteReport(
  * Lyrics view would show it over the tags. With nothing to write the file
  * isn't touched at all.
  *
- * Lyrics are LRC for synced lyrics, plain text otherwise. Throws when the file
- * can't be written (it is then left as it was, or as jaudiotagger left it).
+ * Lyrics are LRC for synced lyrics, plain text otherwise. Throws a
+ * [TagWriteStepException] naming the step that failed (reading the file or
+ * writing it) when the file can't be written; it is then left as it was, or as
+ * jaudiotagger left it.
  */
 class SongTagWriter {
   init {
@@ -88,9 +90,9 @@ class SongTagWriter {
     if (lyrics == null && genre == null && place.trackNumber == null && place.year == null && advisory == null) {
       return TagWriteReport(LyricsDestination.NONE, TagDestination.NONE)
     }
-    val audio = if (takesTags(file)) readForWriting(file) else null
+    val audio = TagWriteStep.READ.attempt { if (takesTags(file)) readForWriting(file) else null }
     if (audio == null) {
-      lyrics?.let { writeSidecar(file, it, Sidecars.find(file)) }
+      lyrics?.let { TagWriteStep.WRITE.attempt { writeSidecar(file, it, Sidecars.find(file)) } }
       return TagWriteReport(
         lyrics = if (lyrics != null) LyricsDestination.SIDECAR else LyricsDestination.NONE,
         genre = notWritten(genre),
@@ -107,6 +109,26 @@ class SongTagWriter {
     if (lyrics == null && genre == null && trackNumber == null && year == null && newAdvisory == null) {
       return TagWriteReport(LyricsDestination.NONE, TagDestination.NONE)
     }
+    TagWriteStep.WRITE.attempt { writeInto(audio, file, lyrics, genre, trackNumber, discNumber, year, newAdvisory) }
+    return TagWriteReport(
+      lyrics = if (lyrics != null) LyricsDestination.TAGS else LyricsDestination.NONE,
+      genre = writtenIf(genre),
+      trackNumber = writtenIf(trackNumber),
+      year = writtenIf(year),
+      explicit = writtenIf(newAdvisory),
+    )
+  }
+
+  private fun writeInto(
+    audio: AudioFile,
+    file: File,
+    lyrics: String?,
+    genre: String?,
+    trackNumber: Int?,
+    discNumber: Int?,
+    year: Int?,
+    newAdvisory: Int?,
+  ) {
     val tag = tagToWrite(audio)
     // A WAV file's RIFF INFO chunk, when it has one, gets what it has a field for (no lyrics, no disc).
     val info = (audio.tag as? WavTag)?.takeIf { it.isExistingInfoTag }?.infoTag
@@ -127,13 +149,6 @@ class SongTagWriter {
     newAdvisory?.let { Advisory.write(tag, it) }
     AudioFileIO.write(audio)
     if (lyrics != null) Sidecars.find(file)?.let { writeSidecar(file, lyrics, it) }
-    return TagWriteReport(
-      lyrics = if (lyrics != null) LyricsDestination.TAGS else LyricsDestination.NONE,
-      genre = writtenIf(genre),
-      trackNumber = writtenIf(trackNumber),
-      year = writtenIf(year),
-      explicit = writtenIf(newAdvisory),
-    )
   }
 
   private fun notWritten(value: Any?): TagDestination =

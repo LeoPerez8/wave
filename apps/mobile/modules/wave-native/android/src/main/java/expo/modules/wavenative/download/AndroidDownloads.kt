@@ -8,6 +8,8 @@ import android.os.Looper
 import android.os.SystemClock
 import expo.modules.wavenative.artwork.AndroidArtworkProcessor
 import expo.modules.wavenative.artwork.ArtworkStore
+import expo.modules.wavenative.log.AndroidMemory
+import expo.modules.wavenative.log.JsHeap
 import expo.modules.wavenative.log.WaveLog
 import expo.modules.wavenative.player.JsRuntime
 import expo.modules.wavenative.scan.LibraryScanner
@@ -180,6 +182,23 @@ class AndroidDownloads private constructor(private val context: Context) {
     }
   }
 
+  /**
+   * The lines written about once a minute while the service runs, on a thread of their own (the
+   * memory line waits up to half a second for JS's heap). Another line takes the same beat with
+   * `minutes.add { WaveLog.i(TAG, …) }` here.
+   */
+  private val minutes = MinuteLines(SystemClock::elapsedRealtime, every = { period, tick ->
+    val ticking = minuteTicker.scheduleWithFixedDelay({ tick() }, period, period, TimeUnit.MILLISECONDS)
+    ({ ticking.cancel(false) })
+  }).also { minutes ->
+    minutes.add { WaveLog.i(TAG, DownloadServiceLines.memory(jobs.counts(), AndroidMemory.read(), JsHeap.app.read())) }
+    // What the journal's writes cost since the last line (#452).
+    minutes.add { WaveLog.i(TAG, jobs.takeWriteStats().line()) }
+  }
+  private val minuteTicker by lazy {
+    Executors.newSingleThreadScheduledExecutor { tick -> Thread(tick, "WaveDownloadMinutes").apply { isDaemon = true } }
+  }
+
   fun subscribe(listener: () -> Unit): () -> Unit { listeners.add(listener); return { listeners.remove(listener) } }
   /**
    * The journal may have changed. Listeners (JS, which then asks for what changed since its
@@ -209,16 +228,16 @@ class AndroidDownloads private constructor(private val context: Context) {
   /** Starts the work, unless it runs already; [restarted] when Android restarted the service after Wave was closed. */
   @Synchronized fun start(onIdle: () -> Unit, refresh: () -> Unit, restarted: Boolean = false) {
     if (worker != null) return
-    WaveLog.i(TAG, DownloadServiceLines.started(restarted, jobs.counts()))
+    WaveLog.i(TAG, DownloadServiceLines.started(restarted, jobs.counts(), AndroidMemory.read()))
     startedAt = SystemClock.elapsedRealtime()
     jobs.startWork()
+    minutes.start()
+    // The journal's line counts its writes from the service's start.
+    jobs.takeWriteStats()
     main.post { JsRuntime.ensureStarted(context, OWNER) }
     deadlines = Executors.newSingleThreadScheduledExecutor().also { executor ->
       // Also refreshes the notification and the rows while transfers go on.
       executor.scheduleWithFixedDelay({ runCatching { jobs.expire(transport); changed(); main.post(refresh) } }, 1, 1, TimeUnit.SECONDS)
-      // What the journal's writes cost, once a minute while the service runs.
-      jobs.takeWriteStats()
-      executor.scheduleWithFixedDelay({ runCatching { WaveLog.i(TAG, jobs.takeWriteStats().line()) } }, JOURNAL_LINE_MS, JOURNAL_LINE_MS, TimeUnit.MILLISECONDS)
     }
     // Each song's transfer, tagging or publication runs on a thread of its own, several songs at once.
     val pool = Executors.newCachedThreadPool().also { steps = it }
@@ -247,8 +266,9 @@ class AndroidDownloads private constructor(private val context: Context) {
 
   /** Android's time limit stops actual socket work before removing foreground protection. */
   @Synchronized fun stop(why: DownloadServiceStop, timedOut: Boolean = false) {
-    if (worker != null) WaveLog.i(TAG, DownloadServiceLines.stopped(why, SystemClock.elapsedRealtime() - startedAt, jobs.counts()))
+    if (worker != null) WaveLog.i(TAG, DownloadServiceLines.stopped(why, SystemClock.elapsedRealtime() - startedAt, jobs.counts(), AndroidMemory.read()))
     jobs.stopWork(transport)
+    minutes.stop()
     // What waits for its second is written now, off the main thread (a full disk keeps it for the next write).
     journalWriter.execute { runCatching { jobs.flush() } }
     worker?.shutdownNow(); worker = null
@@ -287,8 +307,6 @@ class AndroidDownloads private constructor(private val context: Context) {
     private const val TAG = "WaveDownloads"
     /** How often, at most, JS hears that the journal changed. */
     private const val NOTIFY_MS = 500L
-    /** How often the journal's line ([JournalWrites]) is written while the service runs. */
-    private const val JOURNAL_LINE_MS = 60_000L
     /** Less free space than this beside the part file means the write failed for want of room. */
     private const val MIN_FREE_BYTES = 8L shl 20
     @Volatile private var instance: AndroidDownloads? = null

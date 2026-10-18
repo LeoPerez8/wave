@@ -77,7 +77,10 @@ const SCRIM_OPACITY = 0.25;
  */
 const ORIGIN_TINT_OPACITY = 0.16;
 
-/** Rounded corners of the veil's hole and the wash that fills it. */
+/**
+ * Rounded corners of the veil's hole and the wash that fills it, square like the
+ * row, unless the origin brings its own (the Library | Online toggle's pill).
+ */
 const ORIGIN_RADIUS = CELL;
 
 /**
@@ -147,6 +150,7 @@ function OverlayCard({ entry, frontmost }: { entry: OverlayEntry; frontmost: boo
   const [veil, setVeil] = useState<{ width: number; height: number } | null>(null);
   // What shows of the origin: never drawn over the floating chrome.
   const highlight = visibleHighlight({ window: veil ?? window, ...origin });
+  const highlightRadius = entry.origin?.radius ?? ORIGIN_RADIUS;
   // Settled as the card opens, from the veil's frame like the highlight: its heading never
   // comes or goes under a sliding finger. Null until the veil is measured.
   const [settledHeading, setSettledHeading] = useState<boolean | null>(null);
@@ -250,7 +254,7 @@ function OverlayCard({ entry, frontmost }: { entry: OverlayEntry; frontmost: boo
             style={StyleSheet.absoluteFill}
           >
             <Path
-              d={veilPath(veil ?? window, highlight, ORIGIN_RADIUS)}
+              d={veilPath(veil ?? window, highlight, highlightRadius)}
               fill={withOpacity(scrim, SCRIM_OPACITY)}
               fillRule="evenodd"
             />
@@ -261,7 +265,7 @@ function OverlayCard({ entry, frontmost }: { entry: OverlayEntry; frontmost: boo
               pointerEvents="none"
               style={{
                 ...frameOf(highlight),
-                borderRadius: ORIGIN_RADIUS,
+                borderRadius: highlightRadius,
                 backgroundColor: withOpacity(accent, ORIGIN_TINT_OPACITY),
               }}
             />

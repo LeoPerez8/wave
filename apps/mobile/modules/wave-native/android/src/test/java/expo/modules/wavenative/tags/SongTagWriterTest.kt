@@ -152,6 +152,50 @@ class SongTagWriterTest {
     }
   }
 
+  /** A failure says its step (the app log's line, #448): a file it can't write fails writing. */
+  @Test
+  fun aFileThatCantBeWrittenFailsAtTheWriteStep() {
+    val file = copyOf("tagged.mp3")
+    assertTrue(file.setReadOnly())
+    try {
+      val failure = assertThrows(TagWriteStepException::class.java) {
+        writer.write(file, lyrics = NEW_LYRICS, genre = "Post-Rock")
+      }
+      assertEquals(TagWriteStep.WRITE, failure.step)
+    } finally {
+      file.setWritable(true)
+    }
+  }
+
+  @Test
+  fun aFileGoneFailsAtTheReadStep() {
+    val file = File(copyOf("tagged.mp3").parentFile, "gone.mp3")
+    val failure = assertThrows(TagWriteStepException::class.java) {
+      writer.write(file, lyrics = NEW_LYRICS, genre = null)
+    }
+    assertEquals(TagWriteStep.READ, failure.step)
+  }
+
+  /** What JS logs of a failure: the step, the original exception, and the file as it was then. */
+  @Test
+  fun aFailureTellsJsTheStepTheExceptionAndTheFile() {
+    val file = copyOf("tagged.mp3")
+    val failure = TagWriteStepException(TagWriteStep.WRITE, java.io.IOException("No space left on device"))
+    assertEquals(
+      mapOf(
+        "step" to "write",
+        "exception" to "java.io.IOException",
+        "message" to "No space left on device",
+        "fileExists" to true,
+        "fileBytes" to file.length().toDouble(),
+      ),
+      TagWriteFailure.of(failure, file).toMap(),
+    )
+    val gone = TagWriteFailure.of(failure, File(file.parentFile, "gone.mp3")).toMap()
+    assertEquals(false, gone["fileExists"])
+    assertNull(gone["fileBytes"])
+  }
+
   /** A copy of [fixture] without its track number, disc and year, as a file never numbered. */
   private fun unnumberedCopyOf(fixture: String): File {
     val file = copyOf(fixture)

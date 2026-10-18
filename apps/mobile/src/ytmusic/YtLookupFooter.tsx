@@ -4,7 +4,7 @@ import { CELL } from "@/catalog/grid";
 
 /**
  * The end of a Library page that also shows what YouTube Music has (an
- * artist's, an album's): a quiet line (looking, not found, offline…). The
+ * artist's, an album's): a quiet line (not found, offline…). The
  * page's Library | Online toggle, at its top, is what asks.
  */
 export function YtLookupFooter({ note }: { note: string | null }) {

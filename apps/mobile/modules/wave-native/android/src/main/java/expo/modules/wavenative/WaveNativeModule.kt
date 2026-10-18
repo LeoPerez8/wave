@@ -58,6 +58,10 @@ import expo.modules.wavenative.tags.LyricsDestination
 import expo.modules.wavenative.tags.MediaRetrieverTagReader
 import expo.modules.wavenative.tags.SongTagWriter
 import expo.modules.wavenative.tags.TagDestination
+import expo.modules.wavenative.tags.TagWriteFailure
+import expo.modules.wavenative.tags.TagWriteStep
+import expo.modules.wavenative.tags.TagWriteStepException
+import expo.modules.wavenative.tags.attempt
 import java.io.File
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -304,8 +308,9 @@ class WaveNativeModule : Module() {
      * `{ lyrics, genre, trackNumber, year, explicit }`, where
      * each went (`tags`, `sidecar`, `notWritten` or `none`), and, when the tags
      * changed, the file read again as a scan reads it (`track`, `artwork`) so
-     * the index can be updated. Rejects when the file can't be written. Off the
-     * main thread.
+     * the index can be updated. A failure resolves `{ failed }` instead
+     * ([TagWriteFailure]: the step, the exception, and the file as it was then),
+     * so the app log can say why. Off the main thread.
      */
     AsyncFunction("writeLyricsAndGenre") {
         path: String,
@@ -317,23 +322,28 @@ class WaveNativeModule : Module() {
         advisory: Int?,
       ->
       val file = File(path)
-      val report =
-        SongTagWriter().write(
-          file,
-          lyrics,
-          genre,
-          AlbumPlace(trackNumber, discNumber, year),
-          advisory?.takeIf { it == 0 || it == 1 },
-        )
-      val tagsChanged =
-        report.lyrics == LyricsDestination.TAGS ||
-          listOf(report.genre, report.trackNumber, report.year, report.explicit).any { it == TagDestination.TAGS }
-      // A sidecar alone leaves the tags as they were, but the index learns the song has lyrics.
-      val reindex = tagsChanged || report.lyrics == LyricsDestination.SIDECAR
-      val (track, artwork) = if (reindex) singleFileScanner().index(file) else null to null
-      if (tagsChanged) MediaScannerConnection.scanFile(context, arrayOf(path), null, null)
-      report.toMap() +
-        mapOf("track" to track?.let(::trackToMap), "artwork" to artwork?.let(::artworkToMap))
+      try {
+        val report =
+          SongTagWriter().write(
+            file,
+            lyrics,
+            genre,
+            AlbumPlace(trackNumber, discNumber, year),
+            advisory?.takeIf { it == 0 || it == 1 },
+          )
+        val tagsChanged =
+          report.lyrics == LyricsDestination.TAGS ||
+            listOf(report.genre, report.trackNumber, report.year, report.explicit).any { it == TagDestination.TAGS }
+        // A sidecar alone leaves the tags as they were, but the index learns the song has lyrics.
+        val reindex = tagsChanged || report.lyrics == LyricsDestination.SIDECAR
+        val (track, artwork) =
+          if (reindex) TagWriteStep.REINDEX.attempt { singleFileScanner().index(file) } else null to null
+        if (tagsChanged) MediaScannerConnection.scanFile(context, arrayOf(path), null, null)
+        report.toMap() +
+          mapOf("track" to track?.let(::trackToMap), "artwork" to artwork?.let(::artworkToMap))
+      } catch (e: TagWriteStepException) {
+        mapOf("failed" to TagWriteFailure.of(e, file).toMap())
+      }
     }
 
     /** Saves Core's `launchTheme` for the next cold start and picks its splash (Android 13+). */

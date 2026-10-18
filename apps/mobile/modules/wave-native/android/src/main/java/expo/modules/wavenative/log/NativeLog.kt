@@ -4,7 +4,9 @@ import android.app.Activity
 import android.app.ActivityManager
 import android.app.Application
 import android.app.ApplicationExitInfo
+import android.content.ComponentCallbacks2
 import android.content.Context
+import android.content.res.Configuration
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -13,6 +15,7 @@ import android.os.SystemClock
 import com.facebook.react.bridge.ReactContext
 import expo.modules.wavenative.log.SessionRecord.Exit
 import expo.modules.wavenative.log.SessionRecord.ExitReason
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import kotlin.system.exitProcess
@@ -23,12 +26,15 @@ import kotlin.system.exitProcess
  * the file, an uncaught exception is written before the process dies, the
  * launch says how the previous session ended ([SessionRecord], Android's
  * `ApplicationExitInfo`), and, while Wave is on screen, a watchdog notes when
- * the main thread or the JS thread stops responding ([FreezeWatchdog]).
+ * the main thread or the JS thread stops responding ([FreezeWatchdog]). Android's memory
+ * warnings are written with Wave's memory, and make JS write what it holds ([MemoryWarnings]).
  */
 object NativeLog {
   /** How long a thread may not respond before it's a freeze. */
   private const val FREEZE_MS = 3_000L
   private const val TICK_MS = 1_000L
+
+  private const val MEMORY_TAG = "WaveMemory"
 
   /** Android's records read at launch; only the latest and the unreported ones are reported. */
   private const val MAX_EXITS = 16
@@ -51,6 +57,21 @@ object NativeLog {
 
   private var started = false
 
+  /** Each JS runtime's way to write the log entries it holds at once (`WaveAppLog`'s memoryWarning event). */
+  private val memoryWarned = CopyOnWriteArrayList<() -> Unit>()
+
+  private val memoryWarnings = MemoryWarnings(
+    memory = AndroidMemory::read,
+    warn = { WaveLog.w(MEMORY_TAG, it) },
+    warned = { for (listener in memoryWarned) runCatching(listener) },
+  )
+
+  /** [listener] runs at each memory warning of Android's, until the returned function is called. */
+  fun onMemoryWarning(listener: () -> Unit): () -> Unit {
+    memoryWarned.add(listener)
+    return { memoryWarned.remove(listener) }
+  }
+
   @Synchronized
   fun start(context: Context) {
     if (started) return
@@ -63,6 +84,7 @@ object NativeLog {
     val main = Handler(Looper.getMainLooper())
     watchdog.watch(FreezeWatch("main", FREEZE_MS, SystemClock::uptimeMillis, main::post, { screen }, ::mainThreadStack))
     (app as? Application)?.registerActivityLifecycleCallbacks(OnScreen)
+    app.registerComponentCallbacks(OnTrimMemory)
     // Started late, by the JS module (a host that didn't dispatch Application.onCreate): Wave's activity already started.
     if ((context as? ReactContext)?.hasCurrentActivity() == true) watchdog.activityStarted()
   }
@@ -89,6 +111,25 @@ object NativeLog {
     override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
 
     override fun onActivityDestroyed(activity: Activity) = Unit
+  }
+
+  /** Reads the memory for a warning off the main thread: the PSS reads `/proc`, slower when memory is short. */
+  private val memoryThread by lazy {
+    Executors.newSingleThreadExecutor { run -> Thread(run, "WaveMemory").apply { isDaemon = true } }
+  }
+
+  /** Android's memory warnings, which come on the main thread. */
+  private object OnTrimMemory : ComponentCallbacks2 {
+    override fun onTrimMemory(level: Int) {
+      runCatching { memoryThread.execute { memoryWarnings.trimmed(level) } }
+    }
+
+    @Deprecated("Android's older call; still sent")
+    override fun onLowMemory() {
+      runCatching { memoryThread.execute { memoryWarnings.lowMemory() } }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) = Unit
   }
 
   private fun catchUncaught(record: SessionRecord) {
