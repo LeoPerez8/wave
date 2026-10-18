@@ -126,11 +126,7 @@ describe("Home's arrangement", () => {
       shown: ["favorites", "discover-mixes"],
       hidden: before.filter((id) => id !== "artist-mixes" && id !== "favorites"),
     });
-    assert.deepEqual(parseHomeArrangement(discover), [
-      "favorites",
-      "artist-mixes",
-      "genre-mixes",
-    ]);
+    assert.deepEqual(parseHomeArrangement(discover), ["favorites", "artist-mixes", "genre-mixes"]);
   });
 
   test("Artist mixes and Genre mixes join a Home arranged before them, after Most played artists", () => {
@@ -245,7 +241,10 @@ describe("what Home lists", () => {
 
   test("with YT Music off, sections that need it aren't listed", () => {
     assert.deepEqual(
-      homeItems(["favorites", "artist-mixes", "genre-mixes", "stats"], { nothingPlayed: false, ytMusic: false }),
+      homeItems(["favorites", "artist-mixes", "genre-mixes", "stats"], {
+        nothingPlayed: false,
+        ytMusic: false,
+      }),
       sections("favorites", "stats"),
     );
     assert.deepEqual(
@@ -259,7 +258,10 @@ describe("what Home lists", () => {
 
   test("with YT Music on and nothing played, the mixes don't wait for a play (the Library seeds them)", () => {
     assert.deepEqual(
-      homeItems(["favorites", "artist-mixes", "genre-mixes"], { nothingPlayed: true, ytMusic: true }),
+      homeItems(["favorites", "artist-mixes", "genre-mixes"], {
+        nothingPlayed: true,
+        ytMusic: true,
+      }),
       sections("favorites", "artist-mixes", "genre-mixes"),
     );
     assert.deepEqual(

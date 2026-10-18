@@ -139,18 +139,7 @@ const FAMILIES: readonly (readonly [name: string, tags: readonly string[]])[] = 
       "Hardstyle",
     ],
   ],
-  [
-    "R&B",
-    [
-      "RnB",
-      "Rhythm and Blues",
-      "Contemporary R&B",
-      "Soul",
-      "Neo Soul",
-      "Funk",
-      "Motown",
-    ],
-  ],
+  ["R&B", ["RnB", "Rhythm and Blues", "Contemporary R&B", "Soul", "Neo Soul", "Funk", "Motown"]],
   ["Jazz", ["Smooth Jazz", "Bebop", "Swing", "Jazz Fusion", "Acid Jazz", "Big Band", "Bossa Nova"]],
   [
     "Classical",
