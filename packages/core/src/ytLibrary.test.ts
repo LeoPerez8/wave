@@ -432,7 +432,7 @@ describe("ytLibraryFailure", () => {
       action: "tryAgain",
     });
     assert.deepEqual(ytLibraryFailure("failed"), {
-      line: "Couldn't read your YouTube Music library. YouTube Music didn't answer.",
+      line: "Couldn't read your YouTube Music library. No answer online.",
       action: "tryAgain",
     });
   });

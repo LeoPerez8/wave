@@ -14,7 +14,13 @@
 
 import type { YtPick } from "./onlineToggle.ts";
 import { createSearchIndex, type SearchEntry } from "./search.ts";
-import type { YtArtistAlbum, YtArtistCandidate } from "./ytArtist.ts";
+import {
+  ytArtistMergedCounts,
+  ytArtistQuery,
+  type YtArtistAlbum,
+  type YtArtistCandidate,
+  type YtArtistSaved,
+} from "./ytArtist.ts";
 import type { YtSong } from "./ytMusic.ts";
 
 /** Why the section shows a quiet line instead of results. */
@@ -385,4 +391,34 @@ export const stepYtSection = <S extends YtSong>(
       if (state.status !== "loading" || state.query !== event.query) return state;
       return { status: "quiet", query: event.query, reason: event.reason, by: state.by };
   }
+};
+
+/**
+ * Whether Search reads the online page of the Library artist [name] that is
+ * its top hit (null: the top hit isn't a Library artist), for that row's song
+ * count: once YouTube Music's answer to the query shows, so a query still
+ * being typed reads nothing. Not for names that aren't an artist's.
+ */
+export const ytSearchArtistReads = (section: YtSection<YtSong>, name: string | null): boolean =>
+  section.status === "results" && name !== null && ytArtistQuery(name) !== null;
+
+/** Search counts songs only: releases don't count. */
+const libraryRelease = (): boolean => true;
+
+/**
+ * The song count Search's row for its top-hit Library artist reads: with
+ * Online selected and the artist's online answer [saved] standing (as their
+ * page counts it, `ytArtistMergedCounts`), the Library's [local] count plus
+ * every song of theirs it lacks, each once; otherwise (Library selected, no
+ * answer yet, no match, a failure) [local].
+ */
+export const ytSearchArtistSongs = <S extends YtSong>(
+  section: YtSection<S>,
+  local: number,
+  saved: YtArtistSaved<S> | null,
+  context: { readonly now: number; readonly inLibrary: (song: S) => boolean },
+): number => {
+  if (ytSectionToggle(section) !== "online") return local;
+  return ytArtistMergedCounts({ albums: 0, songs: local }, saved, { ...context, libraryRelease })
+    .songs;
 };

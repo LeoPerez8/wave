@@ -24,9 +24,9 @@ describe("runPressedAt", () => {
       () => {
         seen = pressedElement();
       },
-      7,
+      { key: 7 },
     );
-    assert.deepEqual(seen, { key: 7, rect: row, onChrome: false });
+    assert.deepEqual(seen, { key: 7, rect: row, onChrome: false, radius: undefined });
     assert.equal(opened, true);
     assert.equal(pressedElement(), undefined);
   });
@@ -38,10 +38,22 @@ describe("runPressedAt", () => {
       () => {
         seen = pressedElement();
       },
-      3,
-      true,
+      { key: 3, onChrome: true },
     );
-    assert.deepEqual(seen, { key: 3, rect: row, onChrome: true });
+    assert.deepEqual(seen, { key: 3, rect: row, onChrome: true, radius: undefined });
+  });
+
+  test("a handler run for a Press highlighted as a pill sees the pill's radius", () => {
+    const pill = { left: 100, top: 90, right: 260, bottom: 122 };
+    let seen;
+    runPressedAt(
+      pill,
+      () => {
+        seen = pressedElement();
+      },
+      { key: 5, radius: 16 },
+    );
+    assert.deepEqual(seen, { key: 5, rect: pill, onChrome: false, radius: 16 });
   });
 
   test("a handler that doesn't open a menu (a tab's long-press) says it didn't", () => {

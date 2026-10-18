@@ -214,7 +214,7 @@ function QuietLine({
  * A YouTube Music artist the Library doesn't have, opened by their browse id
  * (`/library/yt-artist/<UC…>?name=<name>`) or, from a streamed song, by their
  * name (`/library/yt-artist/by-name?name=<name>`, found with an Artists
- * search; "Not found on YouTube Music" when nobody matches): their image and
+ * search; "Not found online." when nobody matches): their image and
  * name, Play and Shuffle, their Albums and Singles & EPs (a release the Library has opens
  * the Library album) and every song of theirs, their songs playlist read
  * whole (the Library's play its files, the rest stream). It's read as it opens and saved for a week; offline or
