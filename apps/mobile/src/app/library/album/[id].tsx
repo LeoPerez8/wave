@@ -18,6 +18,7 @@ import { Artwork } from "@/catalog/Artwork";
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { PlayShuffle, type LineToggle } from "@/catalog/PlayShuffle";
+import { TrackSkeletons } from "@/catalog/Skeletons";
 import { TrackRow } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { Press } from "@/motion/Press";
@@ -96,8 +97,8 @@ const itemKey = (item: Item): string => {
   }
 };
 
-const YT_NOTE: Readonly<Record<YtLibraryAlbumNote, string>> = {
-  loading: "Looking on YouTube Music…",
+/** The quiet line under the tracks about the album online: an outcome (loading shows skeleton rows). */
+const YT_NOTE: Readonly<Record<Exclude<YtLibraryAlbumNote, "loading">, string>> = {
   notFound: "Not found online.",
   offline: "You're offline. Tap Online to try again when you're back online.",
   failed: "No answer online. Tap Online to try again.",
@@ -375,7 +376,10 @@ function AlbumTracks({ shown, openedIntegrated }: { shown: Shown; openedIntegrat
         />
       }
       ListFooterComponent={
-        ytView === null ? null : (
+        // Until the combined tracklist arrives, skeleton rows follow the Library's tracks.
+        ytView === null ? null : ytView.note === "loading" ? (
+          <TrackSkeletons leading="number" />
+        ) : (
           <YtLookupFooter note={ytView.note === null ? null : YT_NOTE[ytView.note]} />
         )
       }

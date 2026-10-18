@@ -13,6 +13,7 @@ import { Text, View } from "react-native";
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
 import { NameRow } from "@/catalog/NameRow";
+import { SKELETON_ROWS, TrackSkeletons } from "@/catalog/Skeletons";
 import { TrackRow } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { TextButton } from "@/components/TextButton";
@@ -54,6 +55,7 @@ const HEIGHT: Readonly<Record<ResultRow["type"], number>> = {
   ytArtist: grid.row,
   ytAlbum: grid.row,
   note: CELL * 6,
+  skeleton: grid.row * SKELETON_ROWS,
 };
 
 /** Non-song results stay in place while selecting. */
@@ -344,6 +346,8 @@ export function SearchResultsList({ rows, onOpen, onShowAll, integrated, selecti
               </Text>
             </View>
           );
+        case "skeleton":
+          return <TrackSkeletons label="Loading online results" />;
       }
     },
     [currentId, onOpen, onShowAll, integrated, selection],

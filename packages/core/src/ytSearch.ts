@@ -6,9 +6,10 @@
  * Library wasn't picked); once Online is picked the view follows the query
  * until the field is cleared. Library hides YouTube Music's results with no
  * new request, and Online shows them again without asking when the query is
- * the one they answer. It loads in the background, keeps the last results up
- * while the next query loads, drops answers to queries that are no longer
- * typed, and turns a failure into a quiet line. Off in Settings, it stays
+ * the one they answer. It loads in the background, shows a skeleton in place
+ * of the last query's results while the next one loads, drops answers to
+ * queries that are no longer typed, and turns a failure into a quiet line.
+ * Off in Settings, it stays
  * hidden, with no toggle, and nothing is requested.
  */
 
@@ -67,16 +68,16 @@ export type YtSection<S extends YtSong = YtSong> =
       readonly kept: YtKeptAnswer<S> | null;
     }
   /**
-   * [songs], [artists] and [albums] are the last results, kept up until the
-   * new ones arrive. YT Music is asked [delayMs] from now: at once when
-   * tapped, once typing pauses.
+   * YT Music is asked for [query] [delayMs] from now: at once when tapped,
+   * once typing pauses. A skeleton stands where its results will go; the
+   * last query's are gone.
    */
-  | ({
+  | {
       readonly status: "loading";
       readonly query: string;
       readonly by: YtAskedBy;
       readonly delayMs: number;
-    } & YtSearchAnswer<S>)
+    }
   | ({
       readonly status: "results";
       readonly query: string;
@@ -125,8 +126,8 @@ export const ytSearchQuery = (text: string): string | null => {
   return query.length < MIN_QUERY_LENGTH ? null : query;
 };
 
-/** A line the section shows instead of (or until) results. */
-export type YtSectionNote = "searching" | "noMatches" | "allInLibrary" | YtQuietReason;
+/** A line the section shows instead of results: an outcome (while loading, a skeleton shows). */
+export type YtSectionNote = "noMatches" | "allInLibrary" | YtQuietReason;
 
 /** What the Library already has of YT Music's results, so Search doesn't repeat it. */
 export interface YtSearchLibrary<S extends YtSong> {
@@ -147,11 +148,15 @@ export type YtSearchTop<S extends YtSong> =
 export interface YtSectionView<S extends YtSong> extends YtSearchAnswer<S> {
   /**
    * YT Music's best match, from what's shown: the top result when the Library
-   * has nothing for the query. Null while the query loads, since what's shown
-   * then answers the last one.
+   * has nothing for the query. Null while the query loads.
    */
   readonly top: YtSearchTop<S> | null;
   readonly note: YtSectionNote | null;
+  /**
+   * The query is being asked: skeleton rows stand where YT Music's results
+   * will go (after the Library's), with nothing of the last query's shown.
+   */
+  readonly loading: boolean;
   /**
    * Search shows YouTube Music's results (an integrated view): a Library
    * album opened from it opens integrated.
@@ -233,41 +238,26 @@ export const ytSectionView = <S extends YtSong>(
     case "idle":
       return null;
     case "offered":
-      return { ...QUIET, note: null, integrated: false };
+      return { ...QUIET, note: null, loading: false, integrated: false };
     case "quiet":
-      return { ...QUIET, note: section.reason, integrated: false };
+      return { ...QUIET, note: section.reason, loading: false, integrated: false };
     case "loading":
+      return { ...QUIET, note: null, loading: true, integrated: true };
     case "results": {
       const shown: YtSearchAnswer<S> = {
         songs: section.songs.filter((song) => !library.hasSong(song)),
         artists: section.artists.filter((artist) => !library.hasArtist(artist)),
         albums: section.albums.filter((album) => !library.hasAlbum(album)),
       };
-      // Loading, what's shown answers the last query, not this one: it has no best yet.
-      const top = section.status === "results" ? ytTop(section.query, shown) : null;
-      const view = { ...shown, top, integrated: true };
-      if (isEmpty(shown)) {
-        const note =
-          section.status === "loading"
-            ? "searching"
-            : isEmpty(section)
-              ? "noMatches"
-              : "allInLibrary";
-        return { ...view, note };
-      }
-      return { ...view, note: null };
+      const top = ytTop(section.query, shown);
+      const note = !isEmpty(shown) ? null : isEmpty(section) ? "noMatches" : "allInLibrary";
+      return { ...shown, top, note, loading: false, integrated: true };
     }
   }
 };
 
 const isEmpty = (answer: YtSearchAnswer<YtSong>): boolean =>
   answer.songs.length === 0 && answer.artists.length === 0 && answer.albums.length === 0;
-
-/** What's shown of the last answer, kept up while the next query loads. */
-const shownAnswer = <S extends YtSong>(state: YtSection<S>): YtSearchAnswer<S> =>
-  state.status === "loading" || state.status === "results"
-    ? { songs: state.songs, artists: state.artists, albums: state.albums }
-    : NO_ANSWER;
 
 /** Who asked YT Music, or null when it isn't asked (hidden, idle, or the Library's alone). */
 const askedBy = <S extends YtSong>(state: YtSection<S>): YtAskedBy | null =>
@@ -318,7 +308,6 @@ const offered = <S extends YtSong>(
 const askedNow = <S extends YtSong>(query: string): YtSection<S> => ({
   status: "loading",
   query,
-  ...NO_ANSWER,
   by: "user",
   delayMs: 0,
 });
@@ -367,13 +356,7 @@ export const stepYtSection = <S extends YtSong>(
       const by = pick === "online" ? "user" : event.libraryHasResults ? null : "auto";
       if (by === null) return offered(state, query, false);
       if (askedBy(state) === by && "query" in state && state.query === query) return state;
-      return {
-        status: "loading",
-        query,
-        ...shownAnswer(state),
-        by,
-        delayMs: YT_SEARCH_DEBOUNCE_MS,
-      };
+      return { status: "loading", query, by, delayMs: YT_SEARCH_DEBOUNCE_MS };
     }
     case "picked":
       return picked(state, event.pick);
