@@ -170,9 +170,9 @@ export interface DiscoverMixPoolSources<S extends DiscoverRadioSong> {
  * The Library songs [seed]'s mix may play as its familiar share, in the order
  * the share takes them: first the ones its radio played, in the radio's
  * order (music videos aside), then the Library's songs of its genre, or, for
- * a mix without one, of its seed's artists, the most played and then the
- * newest first. Never the seed song, a song twice or one an earlier mix's
- * pool has ([taken]); as many as level 1 takes at most.
+ * a mix without one, of its seed artist, the most played and then the
+ * newest first. Never a song twice or one an earlier mix's pool has
+ * ([taken]); as many as level 1 takes at most.
  */
 export const discoverMixLibraryPool = <S extends DiscoverRadioSong>(
   seed: DiscoverMixSeed,
@@ -182,7 +182,6 @@ export const discoverMixLibraryPool = <S extends DiscoverRadioSong>(
   const plays = new Map((library.plays ?? []).map((entry) => [entry.id, entry.countedPlays]));
   const playsOf = (song: DiscoverSeedSong): number => plays.get(song.id) ?? 0;
   const seen = new Set(taken);
-  if (seed.kind === "song") seen.add(seed.song.id);
   const pool: DiscoverMixLibrarySong[] = [];
   const add = (song: DiscoverSeedSong): void => {
     if (pool.length >= most || seen.has(song.id)) return;
@@ -218,9 +217,7 @@ const mixSongFilter = (
   }
   const name = identityKey(seed.name);
   const ids = new Set(
-    seed.kind === "song"
-      ? seed.song.artistIds
-      : artists.filter((artist) => identityKey(artist.name) === name).map((artist) => artist.id),
+    artists.filter((artist) => identityKey(artist.name) === name).map((artist) => artist.id),
   );
   return (song) => song.artistIds.some((id) => ids.has(id));
 };

@@ -6,7 +6,11 @@ import { normalizeTrack, type PendingFavorite } from "@wave/core";
 
 import type { IndexedTrack } from "../LibraryStore.ts";
 import { creditSplits } from "./credits.ts";
-import { addPendingFavorites } from "./pendingFavorites.ts";
+import {
+  addPendingFavorites,
+  removePendingFavorites,
+  selectPendingFavorites,
+} from "./pendingFavorites.ts";
 import { selectFavoriteTrackIds, setFavorites } from "./playHistory.ts";
 import { saveBatch } from "./save.ts";
 import { migrateTestDatabase, openTestDatabase, type TestDatabase } from "./testDatabase.ts";
@@ -81,6 +85,21 @@ describe("pending favorites", () => {
     addPendingFavorites(db, [liked("crush", "Instant Crush", 337_000)], 0);
     addPendingFavorites(db, [liked("crush", "Instant Crush", 337_000)], 500);
     assert.equal(save([file("Instant Crush", 337_000)]).starred.length, 1);
+  });
+
+  test("a pending favorite unstarred before its file arrives stars nothing when it does", () => {
+    addPendingFavorites(
+      db,
+      [liked("crush", "Instant Crush", 337_000), liked("touch", "Touch", 498_000)],
+      0,
+    );
+    removePendingFavorites(db, ["crush"]);
+    assert.deepEqual(
+      selectPendingFavorites(db).map((favorite) => favorite.videoId),
+      ["touch"],
+    );
+    assert.deepEqual(save([file("Instant Crush", 337_000, "crush")]).starred, []);
+    assert.deepEqual(selectFavoriteTrackIds(db), []);
   });
 
   test("a database from before pending favorites records them once upgraded", async () => {

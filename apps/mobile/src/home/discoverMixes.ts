@@ -1,29 +1,27 @@
 /**
- * Home's Discover mixes (docs/spec.md, "Discover mixes"): YouTube Music
- * radios of the owner's most played artists and songs (the Library's when
- * plays are short, then artists similar to the Library's), then of the
- * Library's genres' artists: the radio's new songs, and a pool of Library
- * songs the owner's level blends in (`blendDiscoverMix`). Which seeds, which
- * artist pages to read for similar artists, which songs, which Library songs
- * and when to build again are Core's (`discoverMixSeeds`,
- * `discoverSimilarSource`, `discoverMixSongs`, `discoverMixLibraryPool`,
+ * Home's Artist mixes (docs/spec.md, "Artist mixes"): YouTube Music radios of
+ * the owner's most played artists, picked at random each build but leaning
+ * towards the most played (the Library's artists when plays are short, then
+ * artists similar to the Library's): the radio's new songs, and a pool of
+ * Library songs the owner's level blends in (`blendDiscoverMix`). Which
+ * seeds, which artist pages to read for similar artists, which songs, which
+ * Library songs and when to build again are Core's (`artistMixSeeds`,
+ * `artistMixSimilarSource`, `discoverMixSongs`, `discoverMixLibraryPool`,
  * `discoverMixesDue`); this asks YouTube Music and keeps the last mixes built,
  * so Home shows them at once (and what the section shows meanwhile is Core's
  * `discoverMixesSection`).
  */
 import {
+  artistMixSeeds,
+  artistMixSimilarSource,
   discoverMixKeep,
   discoverMix,
   discoverMixLibraryPool,
   discoverMixReadsMore,
-  discoverMixSeeds,
   discoverMixSongs,
   discoverMixesBuilt,
   discoverMixesDue,
   discoverMixesSection,
-  discoverSeedQuery,
-  discoverSeedVideo,
-  discoverSimilarSource,
   identityKey,
   libraryFinder,
   parseDiscoverMixes,
@@ -33,6 +31,7 @@ import {
   statsWindow,
   storedDiscoverMixes,
   ytArtistLookup,
+  type ArtistMixPools,
   type BlendedDiscoverMix,
   type DiscoverMix,
   type DiscoverMixBlend,
@@ -40,7 +39,6 @@ import {
   type DiscoverMixSeed,
   type DiscoverMixes,
   type DiscoverMixesSection,
-  type DiscoverSeedPools,
   type DiscoverSimilarArtists,
   type YtAlbumSong,
 } from "@wave/core";
@@ -64,10 +62,14 @@ import { YtMusic } from "@/ytmusic/YtMusic";
 
 import { useDiscoverMixLevel } from "./discoverMixLevel";
 
-/** How many of the most played artists and songs the seeds are picked from. */
+/** How many of the most played artists the seeds are picked from. */
 const SEED_POOL = 20;
 
-/** The mixes last built, kept on this phone (not synced: they're built from its plays). */
+/**
+ * The mixes last built, kept on this phone (not synced: they're built from
+ * its plays). Mixes saved before Artist mixes read as none (Core's
+ * `parseDiscoverMixes`), so they're built again on the next Home visit.
+ */
 const saved = persistedSetting<DiscoverMixes | null>({
   key: "home.discoverMixes",
   read: parseDiscoverMixes,
@@ -114,17 +116,17 @@ const similarArtists = (name: string) =>
   });
 
 /**
- * [pools] with the similar artists Core asks for (`discoverSimilarSource`),
+ * [pools] with the similar artists Core asks for (`artistMixSimilarSource`),
  * one Library artist's page at a time. A page that can't be read counts as
  * one with no similar artists, so the other seeds stand as they are.
  */
-const withSimilar = (pools: DiscoverSeedPools) =>
+const withSimilar = (pools: ArtistMixPools) =>
   Effect.gen(function* () {
     const similar: DiscoverSimilarArtists[] = [];
     for (
-      let source = discoverSimilarSource(pools);
+      let source = artistMixSimilarSource(pools);
       source !== null;
-      source = discoverSimilarSource({ ...pools, similar })
+      source = artistMixSimilarSource({ ...pools, similar })
     ) {
       const artists = yield* similarArtists(source.name).pipe(Effect.orElseSucceed(() => []));
       similar.push({ of: source.name, artists });
@@ -132,18 +134,11 @@ const withSimilar = (pools: DiscoverSeedPools) =>
     return { ...pools, similar };
   });
 
-/** Where [seed]'s radio starts, or null when YouTube Music doesn't have the artist or the song. */
+/** Where [seed]'s radio starts (their artist page), or null when YouTube Music doesn't have the artist. */
 const radioStart = (seed: DiscoverMixSeed) =>
   Effect.gen(function* () {
-    if (seed.kind === "artist") {
-      const browseId = seed.browseId ?? (yield* artistPage(seed.name));
-      return browseId === null ? null : { seed: { browseId }, video: null };
-    }
-    const ytMusic = yield* YtMusic;
-    const query = discoverSeedQuery(seed.song);
-    const results = yield* withSearchTurn("discover", query, ytMusic.searchSongs(query));
-    const videoId = discoverSeedVideo(seed.song, results.songs);
-    return videoId === null ? null : { seed: { videoId }, video: videoId };
+    const browseId = seed.browseId ?? (yield* artistPage(seed.name));
+    return browseId === null ? null : { seed: { browseId }, video: null };
   });
 
 type Filter = Omit<DiscoverMixFilter<NativeYtRadioSong>, "seedVideo">;
@@ -181,34 +176,32 @@ const readRadio = (seed: DiscoverMixSeed, filter: Filter) =>
   });
 
 /**
- * Builds the mixes from the owner's all-time most played artists and songs,
- * and the Library's when plays are short, then artists similar to the
- * Library's when its artists are too few, one seed after another so no song
- * is in two mixes. "nothing-to-build-from" when there are no seeds (no plays
- * and an empty Library), null when no seed made a usable mix: either way what
- * was saved stays, and a later visit can try again.
+ * Builds the mixes from the owner's all-time most played artists, picked at
+ * random (`Math.random`) leaning towards the most played, and the Library's
+ * when plays are short, then artists similar to the Library's when its
+ * artists are too few, one seed after another so no song is in two mixes.
+ * "nothing-to-build-from" when there are no seeds (no plays and an empty
+ * Library), null when no seed made a usable mix: either way what was saved
+ * stays, and a later visit can try again.
  */
 const buildMixes = Effect.gen(function* () {
   const stats = yield* Stats;
   const store = yield* LibraryStore;
   const artists = yield* stats.topArtists("all", SEED_POOL);
-  const songs = yield* stats.topSongs("all", SEED_POOL);
   const librarySongs = yield* store.listSongs;
   const libraryArtists = yield* store.listArtists;
-  // Every song's all-time plays: Core ranks the Library's genres by them.
+  // Every song's all-time plays: a mix's Library pool takes the most played first.
   const songPlays = yield* store.trackPlayTotals(statsWindow("all", Date.now()));
-  const seeds = discoverMixSeeds(
+  const seeds = artistMixSeeds(
     yield* withSimilar({
-      played: {
-        artists: artists.map((entry) => entry.item),
-        songs: songs.map((entry) => entry.item),
-      },
-      library: {
-        artists: libraryArtists.map((artist) => ({ ...artist, songCount: artist.trackCount })),
-        songs: librarySongs,
-        plays: songPlays,
-      },
+      played: artists.map(({ item, countedPlays }) => ({
+        id: item.id,
+        name: item.name,
+        countedPlays,
+      })),
+      library: libraryArtists.map((artist) => ({ ...artist, songCount: artist.trackCount })),
     }),
+    Math.random,
   );
   if (seeds.length === 0) return "nothing-to-build-from" as const;
   const inLibrary = libraryFinder(librarySongs);

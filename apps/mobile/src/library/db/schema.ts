@@ -654,7 +654,8 @@ export const playTotals = sqliteTable(
 
 /**
  * Pending favorites (Core's `PendingFavorite`): liked songs Also add to
- * Favorites couldn't star because the Library didn't have them, each by its
+ * Favorites couldn't star because the Library didn't have them, and YT Music
+ * songs starred anywhere (a star means downloaded), each by its
  * YouTube Music video and its recording (title, artists, length). A download
  * or scan that brings one in stars it and deletes its row (`saveBatch`).
  * This phone only, never synced, and never listed in Favorites.

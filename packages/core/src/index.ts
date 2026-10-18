@@ -28,8 +28,13 @@ export type {
 } from "./designPreview.ts";
 export { trackRowTrailing } from "./trackRowTrailing.ts";
 export type { TrackRowTrailingInput } from "./trackRowTrailing.ts";
-export { lastListActionForm } from "./listActions.ts";
-export type { ListActionForm, ListActionsRoom } from "./listActions.ts";
+export { lastListActionForm, listActionsForms } from "./listActions.ts";
+export type {
+  ListActionForm,
+  ListActionsForms,
+  ListActionsRoom,
+  OnlineToggleForm,
+} from "./listActions.ts";
 export { describeFolder, filesLeavingWithRoot, isWithin, planAddRoot } from "./scanRoots.ts";
 export type { AddRootPlan, FolderLabel, ScanRootState } from "./scanRoots.ts";
 export { resolveSkipSwipe } from "./swipe.ts";
@@ -557,9 +562,11 @@ export {
   YT_SECTION_HIDDEN,
   stepYtSection,
   ytSearchQuery,
+  ytSectionToggle,
   ytSectionView,
 } from "./ytSearch.ts";
 export type {
+  YtKeptAnswer,
   YtAskedBy,
   YtQuietReason,
   YtSearchAnswer,
@@ -807,6 +814,7 @@ export {
   ytArtistShelves,
   ytAlbumTracklist,
   ytLibraryAlbumView,
+  ytArtistToggle,
 } from "./ytArtist.ts";
 export type {
   LibraryAlbumKey,
@@ -836,6 +844,7 @@ export type {
   YtLibraryAlbumNote,
   YtLibraryAlbumView,
   YtReleaseLoad,
+  YtArtistToggleContext,
 } from "./ytArtist.ts";
 export { streamedArtistLink } from "./streamedArtist.ts";
 export type {
@@ -1127,17 +1136,12 @@ export {
   snapCrossfade,
 } from "./crossfade.ts";
 export {
-  DISCOVER_MIX_COUNT,
   discoverMix,
   discoverMixCaption,
   discoverMixReadsMore,
-  discoverMixSeeds,
   discoverMixSongs,
   discoverMixesBuilt,
   discoverMixesDue,
-  discoverSeedQuery,
-  discoverSeedVideo,
-  discoverSimilarSource,
   parseDiscoverMixes,
   playedFinder,
   storedDiscoverMixes,
@@ -1152,7 +1156,6 @@ export type {
   DiscoverLibrarySong,
   DiscoverRadioSong,
   DiscoverSeedArtist,
-  DiscoverSeedPools,
   DiscoverSeedSong,
   DiscoverSeedSource,
   DiscoverSimilarArtist,
@@ -1333,5 +1336,18 @@ export type {
   NonDLyricsState,
   SavedLyrics,
 } from "./onlineLyrics.ts";
+export {
+  FAVORITES_DOWNLOAD_ORIGIN,
+  readStarDownloads,
+  starredDownload,
+  unstarredDownload,
+  writeStarDownloads,
+} from "./starDownloads.ts";
+export type { StarredDownload, UnstarredDownload } from "./starDownloads.ts";
+export { pickWeighted, playsWeight } from "./weightedPick.ts";
+export type { RandomSource } from "./weightedPick.ts";
+export { ARTIST_MIX_COUNT, artistMixSeeds, artistMixSimilarSource } from "./artistMixes.ts";
+export type { ArtistMixPools, PlayedSeedArtist } from "./artistMixes.ts";
+export type { YtPick } from "./onlineToggle.ts";
 export { libraryLyrics, libraryLyricsSong } from "./libraryLyrics.ts";
 export type { LibraryLyrics, LibraryLyricsState, LibraryLyricsTrack } from "./libraryLyrics.ts";
