@@ -11,12 +11,13 @@ import {
   YT_DOWNLOAD_BUTTON_LABELS,
   YT_PLAYLIST_DOWNLOAD_ACTION_LABELS,
   discoverSongs,
+  discoverTrackId,
   joinArtists,
   ytAlbumDownloadButton,
   ytAlbumSongs,
   ytPlaylistDownloadButton,
   ytPlaylistRestLine,
-  type DiscoverSong,
+  type MixedSong,
   type PlaylistItem,
   type QueueContext,
   type YtPlaylistRest,
@@ -62,6 +63,11 @@ export interface YtListPage {
   /** "Album · 2013", "Playlist": what the page is, before its count and length. */
   readonly kind: string;
   readonly songs: readonly NativeYtSong[];
+  /**
+   * The list as it shows and plays, when it isn't [songs] alone: a Discover
+   * mix's Library songs among its new ones. [songs] are still what downloads.
+   */
+  readonly listed?: readonly Song[];
 }
 
 /**
@@ -155,10 +161,14 @@ export const useYtListPage = (screen: YtListScreen, id: string): YtListLoad => {
   return answer?.key === key ? answer.load : LOADING;
 };
 
-type Song = DiscoverSong<NativeYtSong, SongRow>;
+type Song = MixedSong<NativeYtSong, SongRow>;
 
-const totalMinutes = (songs: readonly NativeYtSong[]): string | null => {
-  const ms = songs.reduce((total, song) => total + (song.durationMs ?? 0), 0);
+const totalMinutes = (songs: readonly Song[]): string | null => {
+  const ms = songs.reduce(
+    (total, song) =>
+      total + ((song.source === "library" ? song.track.durationMs : song.song.durationMs) ?? 0),
+    0,
+  );
   return ms === 0 ? null : `${Math.max(1, Math.round(ms / 60_000))} min`;
 };
 
@@ -297,7 +307,7 @@ function Head({
   );
 }
 
-const keyOf = (song: Song, index: number): string => `${index}-${song.song.videoId}`;
+const keyOf = (song: Song, index: number): string => `${index}-${discoverTrackId(song)}`;
 
 /**
  * A YT Music album, playlist or Discover mix: its cover, title, maker
@@ -328,7 +338,10 @@ export function YtSongList({
   const find = useLibraryFinder();
   const page = load.status === "loaded" ? load.page : null;
   const download = useYtAlbumDownloadButton(albumDownload && page !== null ? page.songs : NO_SONGS);
-  const songs = useMemo(() => (page === null ? [] : discoverSongs(page.songs, find)), [page, find]);
+  const songs = useMemo(
+    (): readonly Song[] => (page === null ? [] : (page.listed ?? discoverSongs(page.songs, find))),
+    [page, find],
+  );
   const selectable = useMemo(() => songs.map(listedTrackItem), [songs]);
   const selection = useListSelection({
     items: selectable,
@@ -345,7 +358,7 @@ export function YtSongList({
   const furniture =
     page === null
       ? null
-      : [page.kind, songCount(page.songs.length), totalMinutes(page.songs)]
+      : [page.kind, songCount(songs.length), totalMinutes(songs)]
           .filter((part) => part !== null)
           .join(" · ");
 

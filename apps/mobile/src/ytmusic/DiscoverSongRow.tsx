@@ -1,4 +1,4 @@
-import { discoverTrackId, type DiscoverSong } from "@wave/core";
+import { discoverTrackId, type MixedSong } from "@wave/core";
 
 import { TrackRow } from "@/catalog/TrackRow";
 import { useFavoriteIds } from "@/library/favorites";
@@ -14,7 +14,7 @@ import type { ListSelection } from "@/selection/useListSelection";
 import { openYtSongActions } from "./YtSongActions";
 import { YtSongRow } from "./YtSongRow";
 
-type Song = DiscoverSong<NativeYtSong, SongRow>;
+type Song = MixedSong<NativeYtSong, SongRow>;
 
 /**
  * A YT Music song as a Songs-list row: the Library track (its star, its

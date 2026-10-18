@@ -165,8 +165,8 @@ describe("A mix's Library pool", () => {
       explicit: false,
       video: video.includes(title),
     }));
-  const find = (radioSong: { title: string }) =>
-    songs.find((candidate) => candidate.title === radioSong.title) ?? null;
+  const find = (heard: { title: string }) =>
+    songs.find((candidate) => candidate.title === heard.title) ?? null;
   const ids = (pool: readonly { id: number }[]) => pool.map((entry) => entry.id);
   const tripHop = {
     kind: "artist" as const,
