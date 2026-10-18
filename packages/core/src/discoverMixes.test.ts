@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  artistMixSeeds,
   blendDiscoverMix,
   discoverMix,
   discoverMixCaption,
@@ -10,460 +11,10 @@ import {
   discoverMixesBuilt,
   parseDiscoverMixes,
   storedDiscoverMixes,
-  discoverMixSeeds,
   discoverMixSongs,
-  discoverSeedQuery,
-  discoverSeedVideo,
-  discoverSimilarSource,
   playedFinder,
   recordingKey,
 } from "./index.ts";
-
-const seedArtist = (id: number, name: string) => ({ id, name });
-const seedSong = (id: number, title: string, artist: string, artistIds: number[] = []) => ({
-  id,
-  title,
-  artist,
-  artistIds,
-  durationMs: 200_000,
-});
-
-/** The seeds from plays alone, with nothing in the Library to fill from. */
-const playSeeds = (played: Parameters<typeof discoverMixSeeds>[0]["played"]) =>
-  discoverMixSeeds({ played });
-
-const seedNames = (seeds: ReturnType<typeof discoverMixSeeds>) =>
-  seeds.map((seed) => `${seed.kind}: ${seed.name}`);
-
-describe("Discover mixes' seeds", () => {
-  test("are the three most played artists and the three most played songs, taking turns", () => {
-    const seeds = playSeeds({
-      artists: [
-        seedArtist(1, "Massive Attack"),
-        seedArtist(2, "Portishead"),
-        seedArtist(3, "Björk"),
-        seedArtist(4, "Tricky"),
-      ],
-      songs: [
-        seedSong(10, "Glory Box", "Portishead", [2]),
-        seedSong(11, "Hyperballad", "Björk", [3]),
-        seedSong(12, "Windowlicker", "Aphex Twin", [5]),
-        seedSong(13, "Midnight City", "M83", [6]),
-        seedSong(14, "Teardrop", "Massive Attack", [1]),
-        seedSong(15, "Kids", "MGMT", [7]),
-        seedSong(16, "Breathe", "Telepopmusik", [8]),
-      ],
-    });
-    assert.deepEqual(seedNames(seeds), [
-      "artist: Massive Attack",
-      "song: Windowlicker",
-      "artist: Portishead",
-      "song: Midnight City",
-      "artist: Björk",
-      "song: Kids",
-    ]);
-  });
-
-  test("with too few songs, more artists make up the six, and the other way round", () => {
-    assert.deepEqual(
-      seedNames(
-        playSeeds({
-          artists: [
-            seedArtist(1, "Air"),
-            seedArtist(2, "Moby"),
-            seedArtist(3, "Daft Punk"),
-            seedArtist(4, "Justice"),
-            seedArtist(5, "Phoenix"),
-            seedArtist(6, "Cassius"),
-          ],
-          songs: [seedSong(10, "Sing It Back", "Moloko", [9])],
-        }),
-      ),
-      [
-        "artist: Air",
-        "song: Sing It Back",
-        "artist: Moby",
-        "artist: Daft Punk",
-        "artist: Justice",
-        "artist: Phoenix",
-      ],
-    );
-    assert.deepEqual(
-      seedNames(
-        playSeeds({
-          artists: [seedArtist(1, "Air")],
-          songs: [
-            seedSong(10, "Sexy Boy", "Air", [1]),
-            seedSong(11, "Porcelain", "Moby", [2]),
-            seedSong(12, "One More Time", "Daft Punk", [3]),
-            seedSong(13, "D.A.N.C.E.", "Justice", [4]),
-            seedSong(14, "1901", "Phoenix", [5]),
-            seedSong(15, "Feeling for You", "Cassius", [6]),
-            seedSong(16, "Around the World", "Daft Punk", [3]),
-          ],
-        }),
-      ),
-      [
-        "artist: Air",
-        "song: Porcelain",
-        "song: One More Time",
-        "song: D.A.N.C.E.",
-        "song: 1901",
-        "song: Feeling for You",
-      ],
-    );
-  });
-
-  test("are still six when an artist added for want of songs takes one of the songs", () => {
-    assert.deepEqual(
-      seedNames(
-        playSeeds({
-          artists: [
-            seedArtist(1, "Air"),
-            seedArtist(2, "Moby"),
-            seedArtist(3, "Daft Punk"),
-            seedArtist(4, "Justice"),
-            seedArtist(5, "Phoenix"),
-            seedArtist(6, "Cassius"),
-          ],
-          songs: [seedSong(10, "D.A.N.C.E.", "Justice", [4]), seedSong(11, "1901", "Phoenix", [5])],
-        }),
-      ),
-      [
-        "artist: Air",
-        "artist: Moby",
-        "artist: Daft Punk",
-        "artist: Justice",
-        "artist: Phoenix",
-        "artist: Cassius",
-      ],
-    );
-  });
-
-  test("short of six either way, are as many as fewer artists make", () => {
-    assert.deepEqual(
-      seedNames(
-        playSeeds({
-          artists: [
-            seedArtist(1, "Air"),
-            seedArtist(2, "Moby"),
-            seedArtist(3, "Daft Punk"),
-            seedArtist(4, "Justice"),
-          ],
-          songs: [
-            seedSong(10, "D.A.N.C.E.", "Justice", [4]),
-            seedSong(11, "Genesis", "Justice", [4]),
-          ],
-        }),
-      ),
-      ["artist: Air", "song: D.A.N.C.E.", "artist: Moby", "song: Genesis", "artist: Daft Punk"],
-    );
-  });
-
-  test("leave out names that aren't an artist's, and each song seeds one mix", () => {
-    assert.deepEqual(
-      seedNames(
-        playSeeds({
-          artists: [
-            seedArtist(1, "Various Artists"),
-            seedArtist(2, "Unknown Artist"),
-            seedArtist(3, "Air"),
-          ],
-          songs: [
-            seedSong(10, "Porcelain", "Moby", [4]),
-            seedSong(11, "porcelain", "MOBY", [4]),
-            seedSong(12, "Sing It Back", "Moloko", [5]),
-          ],
-        }),
-      ),
-      ["artist: Air", "song: Porcelain", "song: Sing It Back"],
-    );
-  });
-
-  test("are none with nothing played", () => {
-    assert.deepEqual(discoverMixSeeds({ played: { artists: [], songs: [] } }), []);
-  });
-});
-
-describe("Discover mixes' seeds from the Library", () => {
-  const nothingPlayed = { artists: [], songs: [] };
-  const libraryArtist = (id: number, name: string, songCount: number) => ({ id, name, songCount });
-  const librarySong = (
-    id: number,
-    title: string,
-    artist: string,
-    artistIds: number[],
-    addedAt: number,
-  ) => ({ ...seedSong(id, title, artist, artistIds), addedAt });
-
-  test("with nothing played, are its artists with the most songs and its newest songs", () => {
-    const seeds = discoverMixSeeds({
-      played: nothingPlayed,
-      library: {
-        artists: [
-          libraryArtist(1, "Air", 4),
-          libraryArtist(2, "Moby", 30),
-          libraryArtist(3, "Daft Punk", 12),
-          libraryArtist(4, "Justice", 20),
-          libraryArtist(5, "Phoenix", 2),
-          libraryArtist(6, "Cassius", 1),
-        ],
-        songs: [
-          librarySong(10, "Sexy Boy", "Air", [1], 100),
-          librarySong(11, "Porcelain", "Moby", [2], 900),
-          librarySong(12, "1901", "Phoenix", [5], 300),
-          librarySong(13, "Feeling for You", "Cassius", [6], 500),
-          librarySong(14, "One More Time", "Daft Punk", [3], 800),
-          librarySong(15, "Kelly Watch the Stars", "Air", [1], 400),
-        ],
-      },
-    });
-    assert.deepEqual(seedNames(seeds), [
-      "artist: Moby",
-      "song: Feeling for You",
-      "artist: Justice",
-      "song: Kelly Watch the Stars",
-      "artist: Daft Punk",
-      "song: 1901",
-    ]);
-  });
-
-  test("with every song by its few artists, are fewer artists and more songs", () => {
-    const seeds = discoverMixSeeds({
-      played: nothingPlayed,
-      library: {
-        artists: [libraryArtist(1, "Air", 60), libraryArtist(2, "Moby", 44)],
-        songs: [
-          librarySong(10, "Sexy Boy", "Air", [1], 700),
-          librarySong(11, "Porcelain", "Moby", [2], 600),
-          librarySong(12, "Natural Blues", "Moby", [2], 500),
-          librarySong(13, "Why Does My Heart Feel So Bad?", "Moby", [2], 400),
-          librarySong(14, "Extreme Ways", "Moby", [2], 300),
-          librarySong(15, "Lift Me Up", "Moby", [2], 200),
-          librarySong(16, "In This World", "Moby", [2], 100),
-        ],
-      },
-    });
-    assert.deepEqual(seedNames(seeds), [
-      "artist: Air",
-      "song: Porcelain",
-      "song: Natural Blues",
-      "song: Why Does My Heart Feel So Bad?",
-      "song: Extreme Ways",
-      "song: Lift Me Up",
-    ]);
-  });
-
-  test("with some plays, fill in after the seeds plays make, under the same rules", () => {
-    const seeds = discoverMixSeeds({
-      played: {
-        artists: [seedArtist(1, "Air")],
-        songs: [
-          seedSong(10, "Sexy Boy", "Air", [1]),
-          seedSong(20, "Porcelain", "Moby feat. Daft Punk", [2, 3]),
-        ],
-      },
-      library: {
-        artists: [
-          libraryArtist(1, "Air", 50),
-          libraryArtist(2, "Moby", 40),
-          libraryArtist(3, "Daft Punk", 30),
-          libraryArtist(4, "Various Artists", 25),
-          libraryArtist(5, "Justice", 20),
-          libraryArtist(6, "Phoenix", 10),
-        ],
-        songs: [
-          librarySong(20, "Porcelain", "Moby feat. Daft Punk", [2, 3], 900),
-          librarySong(21, "Talisman", "Air", [1], 800),
-          librarySong(22, "Genesis", "Justice", [5], 700),
-          librarySong(23, "1901", "Phoenix", [6], 600),
-          librarySong(24, "Feeling for You", "Cassius", [7], 500),
-          librarySong(25, "Sing It Back", "Moloko", [8], 400),
-        ],
-      },
-    });
-    assert.deepEqual(
-      seeds.map((seed) => `${seed.from} ${seed.kind}: ${seed.name}`),
-      [
-        "plays artist: Air",
-        "plays song: Porcelain",
-        "library artist: Justice",
-        "library song: Feeling for You",
-        "library artist: Phoenix",
-        "library song: Sing It Back",
-      ],
-    );
-  });
-
-  test("with plays enough for six, are the plays' seeds alone", () => {
-    const played = {
-      artists: [seedArtist(1, "Air"), seedArtist(2, "Moby"), seedArtist(3, "Daft Punk")],
-      songs: [
-        seedSong(10, "D.A.N.C.E.", "Justice", [4]),
-        seedSong(11, "1901", "Phoenix", [5]),
-        seedSong(12, "Feeling for You", "Cassius", [6]),
-      ],
-    };
-    const seeds = discoverMixSeeds({
-      played,
-      library: {
-        artists: [libraryArtist(7, "Moloko", 99)],
-        songs: [librarySong(30, "Sing It Back", "Moloko", [7], 900)],
-      },
-    });
-    assert.deepEqual(seeds, discoverMixSeeds({ played }));
-    assert.ok(seeds.every((seed) => seed.from === "plays"));
-    assert.equal(seeds.length, 6);
-  });
-});
-
-describe("Discover mixes' seeds from artists similar to the Library's", () => {
-  const nothingPlayed = { artists: [], songs: [] };
-  const libraryArtist = (id: number, name: string, songCount: number) => ({ id, name, songCount });
-  const librarySong = (id: number, title: string, artist: string, artistIds: number[]) => ({
-    ...seedSong(id, title, artist, artistIds),
-    addedAt: 1000 - id,
-  });
-  const ytArtist = (name: string, browseId: string) => ({ name, browseId });
-  /** A Library of two artists, Air and Moby, every song by one of them. */
-  const twoArtists = {
-    artists: [libraryArtist(1, "Air", 60), libraryArtist(2, "Moby", 44)],
-    songs: [
-      librarySong(10, "Sexy Boy", "Air", [1]),
-      librarySong(11, "Porcelain", "Moby", [2]),
-      librarySong(12, "Natural Blues", "Moby", [2]),
-      librarySong(13, "Extreme Ways", "Moby", [2]),
-      librarySong(14, "Lift Me Up", "Moby", [2]),
-      librarySong(15, "In This World", "Moby", [2]),
-    ],
-  };
-  const withSource = (seeds: ReturnType<typeof discoverMixSeeds>) =>
-    seeds.map((seed) => `${seed.from} ${seed.kind}: ${seed.name}`);
-
-  test("fill the six after the Library's, leaving out artists the Library has", () => {
-    const seeds = discoverMixSeeds({
-      played: nothingPlayed,
-      library: twoArtists,
-      similar: [
-        {
-          of: "Air",
-          artists: [
-            ytArtist("Moby", "UCmoby"),
-            ytArtist("Zero 7", "UCzero7"),
-            ytArtist("Röyksopp", "UCroyksopp"),
-          ],
-        },
-        {
-          of: "Moby",
-          artists: [
-            ytArtist("Faithless", "UCfaithless"),
-            ytArtist("zero 7", "UCzero7b"),
-            ytArtist("Various Artists", "UCvarious"),
-            ytArtist("Groove Armada", "UCgroove"),
-            ytArtist("Lemon Jelly", "UClemon"),
-          ],
-        },
-      ],
-    });
-    assert.deepEqual(withSource(seeds), [
-      "library artist: Air",
-      "library artist: Moby",
-      "similar artist: Zero 7",
-      "similar artist: Faithless",
-      "similar artist: Röyksopp",
-      "similar artist: Groove Armada",
-    ]);
-    const zero7 = seeds[2];
-    assert.ok(zero7?.kind === "artist" && zero7.browseId === "UCzero7");
-  });
-
-  test("too few for the six, stay while fewer of the Library's artists make room for songs", () => {
-    const seeds = discoverMixSeeds({
-      played: nothingPlayed,
-      library: twoArtists,
-      similar: [{ of: "Air", artists: [ytArtist("Zero 7", "UCzero7")] }],
-    });
-    assert.deepEqual(withSource(seeds), [
-      "library artist: Air",
-      "library song: Porcelain",
-      "library song: Natural Blues",
-      "library song: Extreme Ways",
-      "library song: Lift Me Up",
-      "similar artist: Zero 7",
-    ]);
-  });
-
-  test("none read, the Library's seeds are as they were", () => {
-    const without = discoverMixSeeds({ played: nothingPlayed, library: twoArtists });
-    assert.deepEqual(
-      discoverMixSeeds({
-        played: nothingPlayed,
-        library: twoArtists,
-        similar: [
-          { of: "Air", artists: [] },
-          { of: "Moby", artists: [ytArtist("Air", "UCair")] },
-        ],
-      }),
-      without,
-    );
-    assert.ok(without.every((seed) => seed.from === "library"));
-  });
-
-  test("are read from the Library's artist pages one at a time, while the seeds have room", () => {
-    const air = { of: "Air", artists: [ytArtist("Zero 7", "UCzero7")] };
-    assert.deepEqual(discoverSimilarSource({ played: nothingPlayed, library: twoArtists }), {
-      id: 1,
-      name: "Air",
-    });
-    assert.deepEqual(
-      discoverSimilarSource({ played: nothingPlayed, library: twoArtists, similar: [air] }),
-      { id: 2, name: "Moby" },
-    );
-    const plenty = {
-      of: "Air",
-      artists: ["Zero 7", "Röyksopp", "Lemon Jelly", "Groove Armada"].map((name) =>
-        ytArtist(name, `UC${name}`),
-      ),
-    };
-    assert.equal(
-      discoverSimilarSource({ played: nothingPlayed, library: twoArtists, similar: [plenty] }),
-      null,
-    );
-  });
-
-  test("start from the most played artists, and stop after three pages", () => {
-    const library = {
-      artists: [...twoArtists.artists, libraryArtist(3, "Moloko", 2), libraryArtist(4, "Bent", 1)],
-      songs: twoArtists.songs,
-    };
-    const played = { artists: [seedArtist(3, "Moloko")], songs: [] };
-    assert.equal(discoverSimilarSource({ played, library })?.name, "Moloko");
-    const none = (of: string) => ({ of, artists: [] });
-    assert.equal(
-      discoverSimilarSource({ played, library, similar: [none("Moloko")] })?.name,
-      "Air",
-    );
-    assert.equal(
-      discoverSimilarSource({
-        played,
-        library,
-        similar: [none("Moloko"), none("Air"), none("Moby")],
-      }),
-      null,
-    );
-  });
-
-  test("aren't looked for when the Library's own seeds fill the six", () => {
-    const library = {
-      artists: ["Air", "Moby", "Moloko"].map((name, at) => libraryArtist(at + 1, name, 10)),
-      songs: ["Justice", "Phoenix", "Cassius"].map((artist, at) =>
-        librarySong(20 + at, `Song ${at}`, artist, [10 + at]),
-      ),
-    };
-    assert.equal(discoverSimilarSource({ played: nothingPlayed, library }), null);
-    assert.equal(discoverSimilarSource({ played: nothingPlayed }), null);
-  });
-});
 
 const yt = (
   videoId: string,
@@ -480,248 +31,6 @@ const yt = (
   artworkUrl: null,
   explicit: false,
   video: extra.video ?? false,
-});
-
-describe("Discover mixes across the Library's genres", () => {
-  const nothingPlayed = { artists: [], songs: [] };
-  const artistsById: Record<number, string> = {
-    1: "Foo Fighters",
-    2: "Muse",
-    3: "Radiohead",
-    4: "Dua Lipa",
-    5: "Robyn",
-    6: "Miles Davis",
-    7: "John Coltrane",
-    8: "Massive Attack",
-    9: "Various Artists",
-  };
-  /** [count] songs of [genre] by the artists [by] in turn, ids from [first]. */
-  const genreSongs = (genre: string | null, first: number, count: number, by: number[]) =>
-    Array.from({ length: count }, (_, n) => {
-      const artistId = by[n % by.length]!;
-      return {
-        ...seedSong(first + n, `${genre ?? "Untagged"} ${n}`, artistsById[artistId]!, [artistId]),
-        addedAt: first + n,
-        genre,
-      };
-    });
-  const library = (
-    songs: ReturnType<typeof genreSongs>,
-    plays: { id: number; countedPlays: number }[] = [],
-  ) => ({
-    artists: Object.entries(artistsById)
-      .map(([id, name]) => ({
-        id: Number(id),
-        name,
-        songCount: songs.filter((song) => song.artistIds.includes(Number(id))).length,
-      }))
-      .filter((artist) => artist.songCount > 0),
-    songs,
-    plays,
-  });
-  const plan = (seeds: ReturnType<typeof discoverMixSeeds>) =>
-    seeds.map((seed) => `${seed.genre ?? "varied"} ${seed.kind}: ${seed.name}`);
-  const rockPopJazz = [
-    ...genreSongs("Rock", 100, 9, [1, 2, 3]),
-    ...genreSongs("Pop", 200, 6, [4, 5]),
-    ...genreSongs("Jazz", 300, 5, [6, 7]),
-  ];
-
-  test("start with a varied mix, then one per genre, the most listened first", () => {
-    const seeds = discoverMixSeeds({
-      played: { artists: [seedArtist(8, "Massive Attack")], songs: [] },
-      library: library(rockPopJazz, [
-        { id: 300, countedPlays: 9 },
-        { id: 301, countedPlays: 4 },
-        { id: 200, countedPlays: 6 },
-        { id: 100, countedPlays: 2 },
-      ]),
-    });
-    assert.deepEqual(plan(seeds).slice(0, 4), [
-      "varied artist: Massive Attack",
-      "Jazz artist: Miles Davis",
-      "Pop artist: Dua Lipa",
-      "Rock artist: Foo Fighters",
-    ]);
-  });
-
-  test("leave out a genre with fewer than five Library songs, however much it's played", () => {
-    const seeds = discoverMixSeeds({
-      played: nothingPlayed,
-      library: library(
-        [...genreSongs("Rock", 100, 9, [1, 2, 3]), ...genreSongs("Pop", 200, 4, [4, 5])],
-        [200, 201, 202, 203].map((id) => ({ id, countedPlays: 50 })),
-      ),
-    });
-    assert.ok(seeds.every((seed) => seed.genre !== "Pop"));
-    // Foo Fighters, with the most Library songs, seeds the varied mix.
-    assert.deepEqual(plan(seeds).slice(0, 2), ["varied artist: Foo Fighters", "Rock artist: Muse"]);
-  });
-
-  test("with only two genres, reuse them with other seed artists, the most listened first", () => {
-    const seeds = discoverMixSeeds({
-      played: { artists: [seedArtist(8, "Massive Attack")], songs: [] },
-      library: library([
-        ...genreSongs("Rock", 100, 9, [1, 2, 3]),
-        ...genreSongs("Jazz", 300, 5, [6, 7]),
-      ]),
-    });
-    assert.deepEqual(plan(seeds), [
-      "varied artist: Massive Attack",
-      "Rock artist: Foo Fighters",
-      "Jazz artist: Miles Davis",
-      "Rock artist: Muse",
-      "Jazz artist: John Coltrane",
-      "Rock artist: Radiohead",
-    ]);
-  });
-
-  test("seed from a genre's song when none of its artists can seed", () => {
-    const seeds = discoverMixSeeds({
-      played: { artists: [seedArtist(8, "Massive Attack")], songs: [] },
-      library: library(genreSongs("Soundtrack", 400, 5, [9])),
-    });
-    assert.deepEqual(plan(seeds).slice(0, 2), [
-      "varied artist: Massive Attack",
-      "Soundtrack song: Soundtrack 4",
-    ]);
-  });
-
-  test("when the genres have no seed left, fill the six as before, around the seeds taken", () => {
-    const seeds = discoverMixSeeds({
-      played: { artists: [seedArtist(8, "Massive Attack")], songs: [] },
-      library: library([
-        ...genreSongs(null, 100, 9, [1, 2, 3]),
-        ...genreSongs("Jazz", 300, 5, [6, 7]),
-      ]),
-    });
-    assert.deepEqual(plan(seeds), [
-      "varied artist: Massive Attack",
-      "Jazz artist: Miles Davis",
-      "Jazz artist: John Coltrane",
-      "varied song: Untagged 8",
-      "varied song: Untagged 7",
-      "varied song: Untagged 6",
-    ]);
-  });
-
-  test("with no genre tags, or none with five songs, are the seeds as before", () => {
-    const songs = [
-      { ...seedSong(10, "Sexy Boy", "Air", [1]), addedAt: 100 },
-      { ...seedSong(11, "Porcelain", "Moby", [2]), addedAt: 900 },
-      { ...seedSong(12, "1901", "Phoenix", [5]), addedAt: 300 },
-      { ...seedSong(13, "Feeling for You", "Cassius", [6]), addedAt: 500 },
-      { ...seedSong(14, "One More Time", "Daft Punk", [3]), addedAt: 800 },
-      { ...seedSong(15, "Kelly Watch the Stars", "Air", [1]), addedAt: 400 },
-    ];
-    const artists = [
-      { id: 1, name: "Air", songCount: 4 },
-      { id: 2, name: "Moby", songCount: 30 },
-      { id: 3, name: "Daft Punk", songCount: 12 },
-      { id: 4, name: "Justice", songCount: 20 },
-      { id: 5, name: "Phoenix", songCount: 2 },
-      { id: 6, name: "Cassius", songCount: 1 },
-    ];
-    const asBefore = [
-      "varied artist: Moby",
-      "varied song: Feeling for You",
-      "varied artist: Justice",
-      "varied song: Kelly Watch the Stars",
-      "varied artist: Daft Punk",
-      "varied song: 1901",
-    ];
-    const untagged = songs.map((song) => ({ ...song, genre: null }));
-    const tooFew = songs.map((song, at) => ({ ...song, genre: at < 4 ? "French House" : "Pop" }));
-    for (const tagged of [untagged, tooFew])
-      assert.deepEqual(
-        plan(
-          discoverMixSeeds({
-            played: nothingPlayed,
-            library: { artists, songs: tagged, plays: [{ id: 10, countedPlays: 3 }] },
-          }),
-        ),
-        asBefore,
-      );
-  });
-
-  test("tell a genre by its name, whatever its case", () => {
-    const songs = genreSongs("Rock", 100, 5, [1, 2, 3]).map((song, at) => ({
-      ...song,
-      genre: at % 2 === 0 ? "Rock" : " rock",
-    }));
-    const seeds = discoverMixSeeds({ played: nothingPlayed, library: library(songs) });
-    // Five songs between the two spellings: one genre that may seed.
-    assert.deepEqual(plan(seeds).slice(0, 2), ["varied song: Rock 4", "Rock artist: Foo Fighters"]);
-  });
-
-  test("with too few Library artists, end with artists similar to the Library's", () => {
-    const pools = {
-      played: nothingPlayed,
-      library: library(genreSongs("Rock", 100, 5, [1, 2])),
-      similar: [
-        {
-          of: "Foo Fighters",
-          artists: ["Nirvana", "Pearl Jam", "Soundgarden", "Alice in Chains"].map((name) => ({
-            name,
-            browseId: `UC${name}`,
-          })),
-        },
-      ],
-    };
-    assert.deepEqual(
-      discoverMixSeeds(pools).map((seed) => `${seed.from} ${plan([seed])[0]}`),
-      [
-        "library varied artist: Foo Fighters",
-        "library Rock artist: Muse",
-        "similar varied artist: Nirvana",
-        "similar varied artist: Pearl Jam",
-        "similar varied artist: Soundgarden",
-        "similar varied artist: Alice in Chains",
-      ],
-    );
-    assert.equal(discoverSimilarSource(pools), null);
-    assert.deepEqual(discoverSimilarSource({ ...pools, similar: [] }), {
-      id: 1,
-      name: "Foo Fighters",
-    });
-  });
-
-  test("never seed two mixes from the same seed", () => {
-    const seeds = discoverMixSeeds({
-      played: {
-        artists: [seedArtist(8, "Massive Attack"), seedArtist(6, "Miles Davis")],
-        songs: [seedSong(100, "Rock 0", "Foo Fighters", [1])],
-      },
-      library: library(rockPopJazz, [{ id: 100, countedPlays: 9 }]),
-    });
-    assert.equal(seeds.length, 6);
-    assert.equal(new Set(seeds.map((seed) => seed.id)).size, 6);
-  });
-});
-
-describe("A song seed's radio", () => {
-  const gloryBox = seedSong(10, "Glory Box", "Portishead", [2]);
-
-  test("is searched for by title and artist", () => {
-    assert.equal(discoverSeedQuery(gloryBox), "Glory Box Portishead");
-  });
-
-  test("starts from the first search result that is the song", () => {
-    assert.equal(
-      discoverSeedVideo(gloryBox, [
-        yt("a", "Glory Box (Live)", ["Portishead"]),
-        yt("b", "Glory Box", ["Bunny Rugs"]),
-        yt("c", "Glory Box", ["Portishead"], { durationMs: 301_000 }),
-        yt("d", "Glory Box", ["Portishead"]),
-        yt("e", "Glory Box", ["Portishead"]),
-      ]),
-      "d",
-    );
-  });
-
-  test("has nothing to start from when no result is the song", () => {
-    assert.equal(discoverSeedVideo(gloryBox, [yt("a", "Roads", ["Portishead"])]), null);
-  });
 });
 
 const key = (
@@ -869,43 +178,31 @@ describe("A mix", () => {
     name: "Portishead",
     from: "plays" as const,
   };
-  const gloryBox = {
-    kind: "song" as const,
-    id: "song:10",
-    name: "Glory Box",
-    from: "plays" as const,
-    song: seedSong(10, "Glory Box", "Portishead", [2]),
-  };
-
   test("is named after its seed and says how many songs it has", () => {
     const mix = discoverMix(portishead, songs(12));
     assert.deepEqual(mix && { id: mix.id, caption: captionOf(mix) }, {
       id: "artist:portishead",
       caption: { title: "Portishead mix", artists: "X", line: "12 songs", artworkUrl: null },
     });
-    const songMix = discoverMix(gloryBox, songs(30));
-    assert.deepEqual(songMix && captionOf(songMix), {
-      title: "Glory Box mix",
-      artists: "X",
-      line: "30 songs",
-      artworkUrl: null,
-    });
   });
 
   test("from a similar artist, is named after that artist", () => {
-    const [seed] = discoverMixSeeds({
-      played: { artists: [], songs: [] },
-      library: { artists: [{ id: 1, name: "Air", songCount: 1 }], songs: [] },
-      similar: [
-        {
-          of: "Air",
-          artists: [
-            { name: "Air", browseId: "UCair" },
-            { name: "Zero 7", browseId: "UCzero7" },
-          ],
-        },
-      ],
-    }).filter((candidate) => candidate.from === "similar");
+    const [seed] = artistMixSeeds(
+      {
+        played: [],
+        library: [{ id: 1, name: "Air", songCount: 1 }],
+        similar: [
+          {
+            of: "Air",
+            artists: [
+              { name: "Air", browseId: "UCair" },
+              { name: "Zero 7", browseId: "UCzero7" },
+            ],
+          },
+        ],
+      },
+      () => 0,
+    ).filter((candidate) => candidate.from === "similar");
     const mix = seed && discoverMix(seed, songs(12));
     assert.deepEqual(mix && { id: mix.id, title: captionOf(mix).title }, {
       id: "artist:zero 7",
@@ -928,16 +225,6 @@ describe("A mix", () => {
     assert.deepEqual(mix && captionOf(mix), {
       title: "Rock mix",
       artists: "Foo Fighters, Muse, Queen",
-      line: "12 songs",
-      artworkUrl: null,
-    });
-    const songMix = discoverMix(
-      { ...gloryBox, genre: "Trip Hop", song: seedSong(10, "Glory Box", "Portishead", [2]) },
-      songs(12),
-    );
-    assert.deepEqual(songMix && captionOf(songMix), {
-      title: "Trip Hop mix",
-      artists: "Portishead, X",
       line: "12 songs",
       artworkUrl: null,
     });
@@ -973,20 +260,12 @@ describe("A mix", () => {
   });
 
   test("keeps its genre and its seed's artists", () => {
-    assert.deepEqual(
-      discoverMix(
-        {
-          kind: "song",
-          id: "song:20",
-          name: "Porcelain",
-          from: "library",
-          song: seedSong(20, "Porcelain", "Moby feat. Daft Punk", [2, 3]),
-          genre: "Electronic",
-        },
-        songs(10),
-      )?.seed,
-      { kind: "song", name: "Porcelain", genre: "Electronic", artists: ["Moby", "Daft Punk"] },
-    );
+    assert.deepEqual(discoverMix({ ...portishead, genre: "Trip Hop" }, songs(10))?.seed, {
+      kind: "artist",
+      name: "Portishead",
+      genre: "Trip Hop",
+      artists: ["Portishead"],
+    });
     assert.deepEqual(discoverMix(portishead, songs(10))?.seed, {
       kind: "artist",
       name: "Portishead",
@@ -1041,9 +320,10 @@ describe("The saved mixes", () => {
     assert.deepEqual(parseDiscoverMixes(storedDiscoverMixes(saved)), saved);
   });
 
-  const playSeed = discoverMixSeeds({
-    played: { artists: [seedArtist(1, "Portishead")], songs: [] },
-  });
+  const playSeed = artistMixSeeds(
+    { played: [{ id: 1, name: "Portishead", countedPlays: 3 }] },
+    () => 0,
+  );
 
   test("read back as they were saved", () => {
     assert.deepEqual(parseDiscoverMixes(storedDiscoverMixes(saved)), saved);
@@ -1067,6 +347,7 @@ describe("The saved mixes", () => {
     };
     assert.deepEqual(parseDiscoverMixes(storedDiscoverMixes(rock)), rock);
     const garbled = JSON.stringify({
+      version: 2,
       ...rock,
       mixes: [
         {
@@ -1081,9 +362,11 @@ describe("The saved mixes", () => {
     });
   });
 
-  test("saved before seeds came from the Library, read back as built from plays", () => {
-    const { playSeeds: _playSeeds, ...older } = saved;
-    assert.deepEqual(parseDiscoverMixes(JSON.stringify(older)), saved);
+  test("saved before Artist mixes (Discover mixes' song, varied and genre seeds), are none, so the next visit builds", () => {
+    const now = new Date(2026, 9, 18, 12).getTime();
+    const before = JSON.stringify({ ...saved, builtAt: now });
+    assert.equal(parseDiscoverMixes(before), null);
+    assert.equal(discoverMixesDue(parseDiscoverMixes(before), { now, played: true }), true);
   });
 
   test("a refresh with no usable mixes cannot replace the saved mixes", () => {
@@ -1101,26 +384,28 @@ describe("The saved mixes", () => {
   test("are none when nothing, or nothing readable, is saved", () => {
     assert.equal(parseDiscoverMixes(null), null);
     assert.equal(parseDiscoverMixes("{"), null);
-    assert.equal(parseDiscoverMixes(JSON.stringify({ mixes: [] })), null);
+    assert.equal(parseDiscoverMixes(JSON.stringify({ version: 2, mixes: [] })), null);
   });
 
   test("an empty cache doesn't postpone rebuilding until tomorrow", () => {
     const now = new Date(2026, 9, 16, 12).getTime();
-    const cached = parseDiscoverMixes(JSON.stringify({ builtAt: now, mixes: [] }));
+    const cached = parseDiscoverMixes(JSON.stringify({ version: 2, builtAt: now, mixes: [] }));
     assert.equal(discoverMixesDue(cached, { now, played: true }), true);
   });
 
   test("a cache whose mixes are all unreadable is rebuilt too", () => {
     const now = new Date(2026, 9, 16, 12).getTime();
     const cached = parseDiscoverMixes(
-      JSON.stringify({ builtAt: now, mixes: [{ ...saved.mixes[0], songs: [] }] }),
+      JSON.stringify({ version: 2, builtAt: now, mixes: [{ ...saved.mixes[0], songs: [] }] }),
     );
     assert.equal(discoverMixesDue(cached, { now, played: true }), true);
   });
 
   test("leave out a song or a mix that can't be read", () => {
     const stored = JSON.stringify({
+      version: 2,
       builtAt: 5,
+      playSeeds: true,
       mixes: [
         { ...saved.mixes[0], songs: [angel, { ...angel, videoId: 7 }, { title: "x" }] },
         { id: "song:3", seed: { kind: "album", name: "x" }, songs: [angel] },
@@ -1167,10 +452,10 @@ describe("The mixes are built again", () => {
   test("a build seeded from the Library alone had no seeds from plays", () => {
     const now = at(16, 9);
     const mixes = [{ id: "artist:air", seed: { kind: "artist" as const, name: "Air" }, songs: [] }];
-    const fromTheLibrary = discoverMixSeeds({
-      played: { artists: [], songs: [] },
-      library: { artists: [{ id: 1, name: "Air", songCount: 9 }], songs: [] },
-    });
+    const fromTheLibrary = artistMixSeeds(
+      { played: [], library: [{ id: 1, name: "Air", songCount: 9 }] },
+      () => 0,
+    );
     const built = discoverMixesBuilt(mixes, now, fromTheLibrary);
     assert.equal(built?.playSeeds, false);
     assert.equal(discoverMixesDue(built ?? null, { now: at(16, 10), played: true }), true);

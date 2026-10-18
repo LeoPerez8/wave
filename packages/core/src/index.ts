@@ -1127,17 +1127,12 @@ export {
   snapCrossfade,
 } from "./crossfade.ts";
 export {
-  DISCOVER_MIX_COUNT,
   discoverMix,
   discoverMixCaption,
   discoverMixReadsMore,
-  discoverMixSeeds,
   discoverMixSongs,
   discoverMixesBuilt,
   discoverMixesDue,
-  discoverSeedQuery,
-  discoverSeedVideo,
-  discoverSimilarSource,
   parseDiscoverMixes,
   playedFinder,
   storedDiscoverMixes,
@@ -1152,7 +1147,6 @@ export type {
   DiscoverLibrarySong,
   DiscoverRadioSong,
   DiscoverSeedArtist,
-  DiscoverSeedPools,
   DiscoverSeedSong,
   DiscoverSeedSource,
   DiscoverSimilarArtist,
@@ -1341,3 +1335,7 @@ export {
   writeStarDownloads,
 } from "./starDownloads.ts";
 export type { StarredDownload, UnstarredDownload } from "./starDownloads.ts";
+export { pickWeighted, playsWeight } from "./weightedPick.ts";
+export type { RandomSource } from "./weightedPick.ts";
+export { ARTIST_MIX_COUNT, artistMixSeeds, artistMixSimilarSource } from "./artistMixes.ts";
+export type { ArtistMixPools, PlayedSeedArtist } from "./artistMixes.ts";
