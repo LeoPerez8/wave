@@ -120,7 +120,7 @@ class AndroidDownloads private constructor(private val context: Context) {
         YtStreamFailure.UNAVAILABLE -> "ytUnavailable"
         YtStreamFailure.FAILED -> "failed"
       }
-      WaveLog.w(TAG, "A YouTube transfer failed ($reason)")
+      // The lookup already wrote its one line, with the song and YouTube's answer (YtStreamResolver).
       throw DurableFailure(reason, error)
     } catch (error: CancellationException) {
       throw DurableFailure("cancelled", error)
