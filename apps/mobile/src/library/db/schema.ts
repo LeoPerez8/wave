@@ -701,3 +701,17 @@ export const noBetterCopies = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.trackId, t.direction] })],
 );
+
+/**
+ * Library songs whose file has no lyrics and for which the Lyrics view's
+ * online search found none (Core's `libraryLyrics`): not searched again for
+ * a week (`LYRICS_MISS_RETRY_MS`). Lyrics it finds go into the file, so only
+ * misses are kept. This phone only, never synced.
+ */
+export const lyricsMisses = sqliteTable("lyrics_misses", {
+  trackId: integer("track_id")
+    .primaryKey()
+    .references(() => tracks.id, { onDelete: "cascade" }),
+  /** When the search found nothing (ms since the epoch). */
+  checkedAt: integer("checked_at").notNull(),
+});

@@ -128,6 +128,7 @@ import {
   selectReplacedTrack,
   type ReplacedFile,
 } from "./db/qualityReplacement";
+import { keepLyricsMiss, selectLyricsSearchTrack, type LyricsSearchTrack } from "./db/lyricsMisses";
 import { hasUnscannedRoot, pruneOrphans, saveBatch, type SavedBatch } from "./db/save";
 import * as schema from "./db/schema";
 import {
@@ -860,6 +861,18 @@ export class LibraryStore extends Context.Service<
     readonly forgetSavedLyrics: (
       videoIds: readonly string[],
     ) => Effect.Effect<void, LibraryStoreError>;
+    /**
+     * What the Lyrics view's online search for the Library track [trackId]
+     * goes by, and when it last found nothing; null for no such track.
+     */
+    readonly lyricsSearchTrack: (
+      trackId: number,
+    ) => Effect.Effect<LyricsSearchTrack | null, LibraryStoreError>;
+    /** Remembers that the search for [trackId] found nothing at [checkedAt]; null forgets it. This phone only. */
+    readonly keepLyricsMiss: (
+      trackId: number,
+      checkedAt: number | null,
+    ) => Effect.Effect<void, LibraryStoreError>;
   }
 >()("@wave/mobile/library/LibraryStore") {}
 
@@ -1409,6 +1422,12 @@ const make = Effect.gen(function* () {
 
     forgetSavedLyrics: (videoIds) =>
       attempt("forget saved lyrics", () => forgetSavedLyrics(db, videoIds)),
+
+    lyricsSearchTrack: (trackId) =>
+      attempt("read the song's lyrics search", () => selectLyricsSearchTrack(db, trackId)),
+
+    keepLyricsMiss: (trackId, checkedAt) =>
+      attempt("remember the lyrics search", () => keepLyricsMiss(db, trackId, checkedAt)),
   });
 });
 

@@ -174,12 +174,11 @@ export const useIsFavorite = (trackId: number | string | null): boolean => {
 };
 
 /**
- * Reads the stars again after they changed outside this phone's own toggles
- * (the Wave account sent some): stars with a write in flight keep showing
- * what was asked, and lists over favorites re-run.
+ * The starred tracks as the store holds them now, read afresh, with the stars
+ * whose writes are still in flight showing what was asked.
  */
-export const reloadFavorites = (): void => {
-  void appRuntime
+export const currentFavoriteIds = (): Promise<ReadonlySet<number>> =>
+  appRuntime
     // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
     .runPromise(LibraryStore.use((store) => store.favoriteTrackIds))
     .then((ids) => {
@@ -188,6 +187,17 @@ export const reloadFavorites = (): void => {
         if (star.shown) shown.add(id);
         else shown.delete(id);
       }
+      return shown;
+    });
+
+/**
+ * Reads the stars again after they changed outside this phone's own toggles
+ * (the Wave account sent some): stars with a write in flight keep showing
+ * what was asked, and lists over favorites re-run.
+ */
+export const reloadFavorites = (): void => {
+  void currentFavoriteIds()
+    .then((shown) => {
       favorites.update((state) => ({
         ...state,
         ids: shown,

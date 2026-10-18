@@ -426,8 +426,37 @@ describe("ytLibraryFavorites", () => {
     ]);
   });
 
+  test("each pending favorite's download is asked for as a star asks, the song as YT Music found it", () => {
+    assert.deepEqual(ytLibraryFavorites(likedRead(true), plan).download, [
+      likedSong("x", "Instant Crush", 337_000),
+    ]);
+  });
+
+  test("Import & Download asks for no star downloads: the playlist's own Download queues the songs", () => {
+    const downloading = readOf(
+      queueYtLibraryReads(NO_YT_LIBRARY_READS, [
+        {
+          source: "LM",
+          playlistId: 40,
+          name: "Liked Songs",
+          capped: false,
+          favorites: true,
+          download: true,
+        },
+      ]),
+      40,
+    );
+    const { pending, download } = ytLibraryFavorites(downloading, plan);
+    assert.equal(pending.length, 1, "the liked song the Library hasn't is still pending");
+    assert.deepEqual(download, []);
+  });
+
   test("with it off, stars nothing and keeps nothing pending", () => {
-    assert.deepEqual(ytLibraryFavorites(likedRead(false), plan), { star: [], pending: [] });
+    assert.deepEqual(ytLibraryFavorites(likedRead(false), plan), {
+      star: [],
+      pending: [],
+      download: [],
+    });
   });
 });
 

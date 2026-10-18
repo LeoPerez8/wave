@@ -21,6 +21,7 @@ const TODAYS_HOME = [
   "most-played-albums",
   "most-played-artists",
   "artist-mixes",
+  "genre-mixes",
   "favorites",
   "stats",
   "listening-overview",
@@ -39,6 +40,7 @@ describe("Home's section catalogue", () => {
         ["most-played-albums", "Most played albums"],
         ["most-played-artists", "Most played artists"],
         ["artist-mixes", "Artist mixes"],
+        ["genre-mixes", "Genre mixes"],
         ["favorites", "Favorites"],
         ["stats", "Stats"],
         ["listening-overview", "Listening overview"],
@@ -93,6 +95,7 @@ describe("Home's arrangement", () => {
         "most-played-albums",
         "most-played-artists",
         "artist-mixes",
+        "genre-mixes",
         "stats",
       ],
     });
@@ -104,7 +107,29 @@ describe("Home's arrangement", () => {
     ]);
   });
 
-  test("Artist mixes joins a Home arranged before it, after Most played artists", () => {
+  test("Genre mixes joins a Home arranged before it, right after Artist mixes", () => {
+    // Saved by a Wave whose catalogue had no Genre mixes.
+    const before = TODAYS_HOME.filter((id) => id !== "genre-mixes");
+    const moved = JSON.stringify({
+      shown: ["artist-mixes", "favorites", "recently-added"],
+      hidden: before.filter(
+        (id) => id !== "artist-mixes" && id !== "favorites" && id !== "recently-added",
+      ),
+    });
+    assert.deepEqual(parseHomeArrangement(moved), [
+      "artist-mixes",
+      "genre-mixes",
+      "favorites",
+      "recently-added",
+    ]);
+    const discover = JSON.stringify({
+      shown: ["favorites", "discover-mixes"],
+      hidden: before.filter((id) => id !== "artist-mixes" && id !== "favorites"),
+    });
+    assert.deepEqual(parseHomeArrangement(discover), ["favorites", "artist-mixes", "genre-mixes"]);
+  });
+
+  test("Artist mixes and Genre mixes join a Home arranged before them, after Most played artists", () => {
     const stored = JSON.stringify({
       shown: ["favorites", "most-played-artists", "recently-added"],
       hidden: [
@@ -119,6 +144,7 @@ describe("Home's arrangement", () => {
       "favorites",
       "most-played-artists",
       "artist-mixes",
+      "genre-mixes",
       "recently-added",
     ]);
   });
@@ -190,6 +216,7 @@ describe("what Home lists", () => {
           "most-played-albums",
           "most-played-artists",
           "artist-mixes",
+          "genre-mixes",
           "favorites",
           "stats",
           "listening-overview",
@@ -214,7 +241,10 @@ describe("what Home lists", () => {
 
   test("with YT Music off, sections that need it aren't listed", () => {
     assert.deepEqual(
-      homeItems(["favorites", "artist-mixes", "stats"], { nothingPlayed: false, ytMusic: false }),
+      homeItems(["favorites", "artist-mixes", "genre-mixes", "stats"], {
+        nothingPlayed: false,
+        ytMusic: false,
+      }),
       sections("favorites", "stats"),
     );
     assert.deepEqual(
@@ -226,10 +256,13 @@ describe("what Home lists", () => {
     );
   });
 
-  test("with YT Music on and nothing played, Artist mixes doesn't wait for a play (the Library seeds it)", () => {
+  test("with YT Music on and nothing played, the mixes don't wait for a play (the Library seeds them)", () => {
     assert.deepEqual(
-      homeItems(["favorites", "artist-mixes"], { nothingPlayed: true, ytMusic: true }),
-      sections("favorites", "artist-mixes"),
+      homeItems(["favorites", "artist-mixes", "genre-mixes"], {
+        nothingPlayed: true,
+        ytMusic: true,
+      }),
+      sections("favorites", "artist-mixes", "genre-mixes"),
     );
     assert.deepEqual(
       homeItems(["artist-mixes", "most-played"], { nothingPlayed: true, ytMusic: true }),
@@ -250,6 +283,7 @@ describe("Home's editor", () => {
       "most-played-albums",
       "most-played-artists",
       "artist-mixes",
+      "genre-mixes",
       "listening-overview",
     ]);
     assert.deepEqual(hiddenHomeSections(TODAYS_HOME as HomeArrangement), []);
@@ -258,6 +292,7 @@ describe("Home's editor", () => {
   test("says which sections show only with YT Music on, while it's off", () => {
     assert.equal(homeSectionNote("artist-mixes", { ytMusic: false }), "Needs YT Music");
     assert.equal(homeSectionNote("artist-mixes", { ytMusic: true }), null);
+    assert.equal(homeSectionNote("genre-mixes", { ytMusic: false }), "Needs YT Music");
     assert.equal(homeSectionNote("favorites", { ytMusic: false }), null);
   });
 

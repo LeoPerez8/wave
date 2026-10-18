@@ -16,7 +16,9 @@ import type {
   DiscoverSeedSong,
   DiscoverSongPlays,
 } from "./discoverMixes.ts";
+import { mixLibrarySong } from "./discoverMixes.ts";
 import { isExplicit, type ExplicitFlag } from "./explicit.ts";
+import { ofGenreFamily } from "./genreMixes.ts";
 import { identityKey } from "./library.ts";
 import type { MixedSong, YtAlbumSong } from "./ytDiscover.ts";
 
@@ -169,7 +171,7 @@ export interface DiscoverMixPoolSources<S extends DiscoverRadioSong> {
 /**
  * The Library songs [seed]'s mix may play as its familiar share, in the order
  * the share takes them: first the ones its radio played, in the radio's
- * order (music videos aside), then the Library's songs of its genre, or, for
+ * order (music videos aside), then the Library's songs of its genre family, or, for
  * a mix without one, of its seed artist, the most played and then the
  * newest first. Never a song twice or one an earlier mix's pool has
  * ([taken]); as many as level 1 takes at most.
@@ -186,12 +188,7 @@ export const discoverMixLibraryPool = <S extends DiscoverRadioSong>(
   const add = (song: DiscoverSeedSong): void => {
     if (pool.length >= most || seen.has(song.id)) return;
     seen.add(song.id);
-    const { id, title, artist, explicit } = song;
-    pool.push(
-      explicit === undefined || explicit === "unknown"
-        ? { id, title, artist }
-        : { id, title, artist, explicit },
-    );
+    pool.push(mixLibrarySong(song));
   };
   for (const song of radio) {
     if (song.video) continue;
@@ -206,15 +203,12 @@ export const discoverMixLibraryPool = <S extends DiscoverRadioSong>(
   return pool;
 };
 
-/** Whether a Library song is of [seed]'s mix: of its genre, else by one of its seed's artists. */
+/** Whether a Library song is of [seed]'s mix: of its genre family (`ofGenreFamily`), else by one of its seed's artists. */
 const mixSongFilter = (
   seed: DiscoverMixSeed,
   artists: readonly DiscoverSeedArtist[],
 ): ((song: DiscoverLibrarySong) => boolean) => {
-  if (seed.genre !== undefined) {
-    const genre = identityKey(seed.genre.trim());
-    return (song) => genre !== "" && identityKey(song.genre?.trim() ?? "") === genre;
-  }
+  if (seed.genre !== undefined) return ofGenreFamily(seed.genre);
   const name = identityKey(seed.name);
   const ids = new Set(
     artists.filter((artist) => identityKey(artist.name) === name).map((artist) => artist.id),

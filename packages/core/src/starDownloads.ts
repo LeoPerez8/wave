@@ -89,6 +89,64 @@ export const readStarDownloads = (stored: string | null): ReadonlySet<string> =>
   }
 };
 
+/** What the stars of missing songs ask of this phone's downloads (`syncedStarDownloads`). */
+export interface SyncedStarDownloads {
+  /** The missing songs whose downloads their stars ask for, in the Library's order. */
+  readonly download: readonly number[];
+  /**
+   * The songs seen starred and missing before that aren't now: unstarred, on
+   * this phone or another, or gone from the Library. Their downloads go as
+   * an unstar's do (`unstarredDownload`).
+   */
+  readonly cancel: readonly number[];
+  /** The missing songs whose stars this phone has seen now: the next call's [seen]. */
+  readonly seen: ReadonlySet<number>;
+}
+
+/**
+ * Stars of missing songs, the Wave account's (another phone's, or this one's
+ * before a sign-in) as much as this phone's: each missing song with a star
+ * downloads. [seen] are the starred missing songs this phone saw before,
+ * whose stars have asked already: a download cancelled or cleared since
+ * stays so.
+ */
+export const syncedStarDownloads = (
+  {
+    starred,
+    missing,
+  }: { readonly starred: ReadonlySet<number>; readonly missing: readonly number[] },
+  seen: ReadonlySet<number>,
+): SyncedStarDownloads => {
+  const starredMissing = missing.filter((id) => starred.has(id));
+  const now = new Set(starredMissing);
+  return {
+    download: starredMissing.filter((id) => !seen.has(id)),
+    cancel: [...seen].filter((id) => !now.has(id)),
+    seen: now,
+  };
+};
+
 /** [ids] as `readStarDownloads` reads them back; null (nothing stored) for none. */
 export const writeStarDownloads = (ids: ReadonlySet<string>): string | null =>
+  ids.size === 0 ? null : JSON.stringify([...ids]);
+
+/**
+ * The starred missing songs this phone has seen (`syncedStarDownloads`'s
+ * [seen]), by track id, as the key-value store keeps them: a JSON array, or
+ * nothing when there are none. What can't be read counts as none.
+ */
+export const readSyncedStars = (stored: string | null): ReadonlySet<number> => {
+  if (stored === null) return new Set();
+  try {
+    const value: unknown = JSON.parse(stored);
+    return new Set(
+      Array.isArray(value) ? value.filter((id): id is number => Number.isInteger(id)) : [],
+    );
+  } catch {
+    return new Set();
+  }
+};
+
+/** [ids] as `readSyncedStars` reads them back; null (nothing stored) for none. */
+export const writeSyncedStars = (ids: ReadonlySet<number>): string | null =>
   ids.size === 0 ? null : JSON.stringify([...ids]);

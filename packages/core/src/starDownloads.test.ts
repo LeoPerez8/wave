@@ -5,9 +5,12 @@ import {
   FAVORITES_DOWNLOAD_ORIGIN,
   downloadingList,
   readStarDownloads,
+  readSyncedStars,
   starredDownload,
+  syncedStarDownloads,
   unstarredDownload,
   writeStarDownloads,
+  writeSyncedStars,
   type YtDownloadJournalJob,
   type YtDownloadStatus,
 } from "./index.ts";
@@ -108,5 +111,50 @@ describe("FAVORITES_DOWNLOAD_ORIGIN", () => {
       groups.map((group) => [group.name, group.line]),
       [["Favorites", "2 songs left"]],
     );
+  });
+});
+
+describe("syncedStarDownloads", () => {
+  /** The Library after a pull: tracks 1, 2 and 3 are missing songs; 4 and 5 have files. */
+  const missing = [3, 1, 2];
+
+  test("signing in on a phone with no files downloads every starred missing song", () => {
+    const { download } = syncedStarDownloads({ starred: new Set([1, 3, 4]), missing }, new Set());
+    assert.deepEqual(download, [3, 1]);
+  });
+
+  test("a star this phone has seen asks once: a download cancelled or cleared since isn't asked for again", () => {
+    const first = syncedStarDownloads({ starred: new Set([1, 3]), missing }, new Set());
+    const later = syncedStarDownloads({ starred: new Set([1, 2, 3]), missing }, first.seen);
+    assert.deepEqual(later.download, [2]);
+  });
+
+  test("a star taken off (on any phone) takes back its download; starred again, it asks again", () => {
+    const starred = syncedStarDownloads({ starred: new Set([1, 3]), missing }, new Set());
+    const unstarred = syncedStarDownloads({ starred: new Set([3]), missing }, starred.seen);
+    assert.deepEqual(unstarred.cancel, [1]);
+    assert.deepEqual(unstarred.download, []);
+    const again = syncedStarDownloads({ starred: new Set([1, 3]), missing }, unstarred.seen);
+    assert.deepEqual(again.download, [1]);
+    assert.deepEqual(again.cancel, []);
+  });
+
+  test("a song whose file arrived, or that left the Library, is seen no more", () => {
+    const starred = syncedStarDownloads({ starred: new Set([1, 3]), missing }, new Set());
+    const after = syncedStarDownloads({ starred: new Set([1, 3]), missing: [2] }, starred.seen);
+    assert.deepEqual([...after.seen], []);
+  });
+});
+
+describe("readSyncedStars / writeSyncedStars", () => {
+  test("the starred missing songs seen are kept by track id", () => {
+    assert.deepEqual([...readSyncedStars(writeSyncedStars(new Set([3, 1])))], [3, 1]);
+  });
+
+  test("none kept stores nothing, and what can't be read counts as none", () => {
+    assert.equal(writeSyncedStars(new Set()), null);
+    assert.deepEqual([...readSyncedStars(null)], []);
+    assert.deepEqual([...readSyncedStars("{oops")], []);
+    assert.deepEqual([...readSyncedStars('[3, "1", null, 2.5]')], [3]);
   });
 });
