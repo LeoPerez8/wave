@@ -11,7 +11,6 @@ import {
   type ArtworkPalette,
   type LyricLine,
   type LyricSelection,
-  type Lyrics,
 } from "@wave/core";
 import * as Haptics from "expo-haptics";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -38,7 +37,7 @@ import { useThemeColor } from "@/theme/useThemeColor";
 import { DismissArea } from "./DismissArea";
 import { usePlayhead } from "./hooks";
 import { TrackHeader } from "./TrackHeader";
-import { useLyrics } from "./useLyrics";
+import { useLibraryLyrics, type LibraryLyricsShown } from "./useLibraryLyrics";
 import { useNonDLyrics, type NonDLyricsShown } from "./useNonDLyrics";
 
 /** Where the sung line rests, as a fraction of the view's height from its top. */
@@ -350,7 +349,7 @@ function PickingBar({
 const SKELETON_LINES = ["72%", "58%", "84%", "46%", "66%", "78%", "52%", "70%"] as const;
 
 /**
- * Placeholder lyric lines while a non-D song's lyrics are searched online,
+ * Placeholder lyric lines while a song's lyrics are searched online,
  * each as tall as a line of lyrics. It holds still, as the mixes' skeleton
  * does: a pulse would re-blur the glass on every frame.
  */
@@ -374,8 +373,8 @@ function LyricsSkeleton() {
   );
 }
 
-/** What the Lyrics view shows: lyrics (or a Library file's none), or a non-D song's search. */
-type Shown = Lyrics | Exclude<NonDLyricsShown, { kind: "lyrics" }>;
+/** What the Lyrics view shows: lyrics (or a Library file's none), or an online search's state. */
+type Shown = LibraryLyricsShown | Exclude<NonDLyricsShown, { kind: "lyrics" }>;
 
 /** The lyrics themselves, the search's skeleton, or the empty state. */
 function LyricsBody({
@@ -450,9 +449,10 @@ function LyricsBody({
 type Item = NonNullable<PlaybackState["item"]>;
 
 /**
- * The Lyrics view under what's playing, for the file at `path`, or for the
- * queue's track [trackId] when it's a non-D song (no file), whose lyrics are
- * searched online (`useNonDLyrics`): synced lyrics that follow the song,
+ * The Lyrics view under what's playing, for the file at `path` (searched
+ * online when it has no lyrics, `useLibraryLyrics`), or for the queue's track
+ * [trackId] when it's a non-D song (no file), whose lyrics are searched
+ * online (`useNonDLyrics`): synced lyrics that follow the song,
  * unsynced lyrics as text, a skeleton while it searches, or an empty state
  * when the song has none. A song with lyrics gets Share, which picks up to
  * five lines (Core's `tapLyricLine`), then Next previews them as a card
@@ -469,11 +469,11 @@ export function LyricsView({
   item: Item;
   palette: ArtworkPalette | null;
 }) {
-  const fileLyrics = useLyrics(path);
+  const library = useLibraryLyrics(trackId, path);
   const nonD = useNonDLyrics(trackId);
   const shown: Shown | null =
     nonD.shown === null
-      ? fileLyrics
+      ? library.shown
       : nonD.shown.kind === "lyrics"
         ? nonD.shown.lyrics
         : nonD.shown;
@@ -561,7 +561,11 @@ export function LyricsView({
           </View>
         )}
       </DismissArea>
-      <LyricsBody shown={shown} picking={picking} retry={nonD.retry} />
+      <LyricsBody
+        shown={shown}
+        picking={picking}
+        retry={nonD.shown === null ? library.retry : nonD.retry}
+      />
     </View>
   );
 }

@@ -111,6 +111,43 @@ const lyricsSources = (song: LyricsSearchSong, ytMusicOn: boolean): LyricsSource
   ...(song.videoId === null || !ytMusicOn ? [] : (["ytMusic"] as const)),
 ];
 
+/** Whether a miss checked at [checkedAt] still stands at [now] (it's searched again after a week). */
+export const missStands = (checkedAt: number, now: number): boolean =>
+  now - checkedAt < LYRICS_MISS_RETRY_MS;
+
+/** Where an online search for a song's lyrics stands, given the answers so far. */
+export type LyricsSearch =
+  | { readonly kind: "searching"; readonly ask: LyricsSource }
+  | { readonly kind: "found"; readonly found: FoundLyrics; readonly lyrics: Lyrics }
+  /** No source had them. */
+  | { readonly kind: "miss" }
+  /** A source couldn't be reached and none had them. */
+  | { readonly kind: "failed" };
+
+/**
+ * The search for [song]'s lyrics given the [answers] so far: the source to
+ * ask next (LRCLIB, then YT Music's lyrics for its video), the first lyrics
+ * found, or none. Shared by the non-D and Library searches.
+ */
+export const lyricsSearch = (
+  song: LyricsSearchSong,
+  answers: readonly LyricsAnswer[],
+  ytMusicOn: boolean,
+): LyricsSearch => {
+  const sources = lyricsSources(song, ytMusicOn);
+  for (const [at, source] of sources.entries()) {
+    const answer = answers[at];
+    if (answer === undefined) return { kind: "searching", ask: source };
+    const lyrics = answer.ok ? shown(answer.lyrics) : null;
+    if (answer.ok && answer.lyrics !== null && lyrics !== null) {
+      return { kind: "found", found: answer.lyrics, lyrics };
+    }
+  }
+  // A source that couldn't say might have them: not a miss.
+  if (answers.some((answer) => !answer.ok)) return { kind: "failed" };
+  return { kind: "miss" };
+};
+
 /**
  * Where [song]'s lyrics stand in the Lyrics view: the source to ask next
  * while it searches, the lyrics to show, or why there are none.
@@ -121,24 +158,24 @@ export const nonDLyrics = (song: LyricsSearchSong, state: NonDLyricsState): NonD
     return { kind: "lyrics", lyrics: parseLyrics(saved.lyrics.text), save: null };
   }
   if (!state.lookupsOn) return { kind: "off" };
-  if (saved?.kind === "miss" && state.now - saved.checkedAt < LYRICS_MISS_RETRY_MS) {
+  if (saved?.kind === "miss" && missStands(saved.checkedAt, state.now)) {
     return { kind: "notFound", save: null };
   }
-  const sources = lyricsSources(song, state.ytMusicOn);
-  for (const [at, source] of sources.entries()) {
-    const answer = state.answers[at];
-    if (answer === undefined) return { kind: "searching", ask: source };
-    const lyrics = answer.ok ? shown(answer.lyrics) : null;
-    if (answer.ok && answer.lyrics !== null && lyrics !== null) {
-      const save: SavedLyrics | null =
-        song.videoId === null ? null : { kind: "found", lyrics: answer.lyrics };
-      return { kind: "lyrics", lyrics, save };
-    }
+  const search = lyricsSearch(song, state.answers, state.ytMusicOn);
+  switch (search.kind) {
+    case "searching":
+    case "failed":
+      return search;
+    case "found":
+      return {
+        kind: "lyrics",
+        lyrics: search.lyrics,
+        save: song.videoId === null ? null : { kind: "found", lyrics: search.found },
+      };
+    case "miss":
+      return {
+        kind: "notFound",
+        save: song.videoId === null ? null : { kind: "miss", checkedAt: state.now },
+      };
   }
-  // A source that couldn't say might have them: not a miss.
-  if (state.answers.some((answer) => !answer.ok)) return { kind: "failed" };
-  return {
-    kind: "notFound",
-    save: song.videoId === null ? null : { kind: "miss", checkedAt: state.now },
-  };
 };
