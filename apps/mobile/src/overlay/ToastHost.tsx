@@ -69,7 +69,7 @@ function ToastPill({ toast }: { toast: Toast }) {
   const ms = useTapAnimationMs();
   const reduceMotion = useReducedMotion();
   const [height, setHeight] = useState<number | null>(null);
-  const size = useRef({ width: 1, height: 1 });
+  const size = useRef({ height: 1 });
   // The same height, for the animated style on the UI thread.
   const pillHeight = useSharedValue(1);
   const dragging = useRef(false);
@@ -114,15 +114,8 @@ function ToastPill({ toast }: { toast: Toast }) {
     if (expired.current) dismissToast(id);
   };
 
-  const endDrag = (
-    translationX: number,
-    translationY: number,
-    velocityX: number,
-    velocityY: number,
-    canceled: boolean,
-  ) => {
-    const swipe = { translationX, translationY, velocityX, velocityY, ...size.current };
-    if (canceled || !toastSwipeDismisses(swipe)) {
+  const endDrag = (translationY: number, velocityY: number, canceled: boolean) => {
+    if (canceled || !toastSwipeDismisses({ translationY, velocityY, ...size.current })) {
       settle();
       return;
     }
@@ -146,14 +139,7 @@ function ToastPill({ toast }: { toast: Toast }) {
     },
     onDeactivate: (event) => {
       "worklet";
-      scheduleOnRN(
-        endDrag,
-        event.translationX,
-        event.translationY,
-        event.velocityX,
-        event.velocityY,
-        event.canceled,
-      );
+      scheduleOnRN(endDrag, event.translationY, event.velocityY, event.canceled);
     },
   });
   const tap = useTapGesture({
@@ -196,10 +182,7 @@ function ToastPill({ toast }: { toast: Toast }) {
           }
           pointerEvents={leaving ? "none" : "auto"}
           onLayout={({ nativeEvent: { layout } }) => {
-            size.current = {
-              width: Math.max(1, layout.width),
-              height: Math.max(1, layout.height),
-            };
+            size.current = { height: Math.max(1, layout.height) };
             pillHeight.set(size.current.height);
             setHeight(layout.height);
           }}

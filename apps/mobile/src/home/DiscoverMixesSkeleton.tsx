@@ -2,22 +2,10 @@ import { View } from "react-native";
 
 import { COVER_ROW_TILE, CoverRow } from "@/catalog/CoverRow";
 import { CELL } from "@/catalog/grid";
+import { SkeletonLine as Line } from "@/catalog/SkeletonLine";
 
 /** Enough placeholder tiles to fill the row past the screen's edge, as the mixes do. */
 const TILES = 3;
-
-/**
- * A text line's placeholder: a fill bar [width] wide (a share of the tile),
- * centred in a box as tall as the line it stands for, so the tile keeps the
- * mix tile's height.
- */
-function Line({ lineHeight, width }: { lineHeight: number; width: `${number}%` }) {
-  return (
-    <View className="justify-center" style={{ height: lineHeight }}>
-      <View className="bg-fill" style={{ width, height: lineHeight / 2 }} />
-    </View>
-  );
-}
 
 /**
  * One mix tile's stand-in, laid out as `AlbumTile` is at the row's size: the

@@ -25,9 +25,9 @@ describe("toastDuration", () => {
 });
 
 describe("toastSwipeDismisses", () => {
-  const still = { translationX: 0, translationY: 0, velocityX: 0, velocityY: 0 };
+  const still = { translationY: 0, velocityY: 0 };
   // Two lines tall, so a short flick is shorter than a third of it.
-  const pill = { width: 240, height: 72 };
+  const pill = { height: 72 };
 
   test("sends the toast away on a drag up a third of its height, or a flick up", () => {
     assert.equal(toastSwipeDismisses({ ...still, ...pill, translationY: -24 }), true);
@@ -38,17 +38,9 @@ describe("toastSwipeDismisses", () => {
     );
   });
 
-  test("keeps it on a drag down or sideways: it leaves only off the top", () => {
+  test("keeps it on a drag down: it leaves only off the top", () => {
     assert.equal(
       toastSwipeDismisses({ ...still, ...pill, translationY: 40, velocityY: 900 }),
-      false,
-    );
-    assert.equal(
-      toastSwipeDismisses({ ...still, ...pill, translationX: 120, velocityX: 900 }),
-      false,
-    );
-    assert.equal(
-      toastSwipeDismisses({ ...still, ...pill, translationX: -120, velocityX: -900 }),
       false,
     );
   });

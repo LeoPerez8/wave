@@ -2,7 +2,8 @@
  * Lyrics found online for a Library song whose file has none (docs/spec.md,
  * "Lyrics online"): the same search as a non-D song's (`onlineLyrics.ts`),
  * but a hit is written into the file and a miss is remembered for the track.
- * Fetching, writing and remembering live in the app.
+ * A file with lyrics (its tags or a sidecar, `pickLyrics`) shows them and is
+ * never searched. Fetching, writing and remembering live in the app.
  */
 
 import type { Lyrics } from "./lyrics.ts";
@@ -16,8 +17,6 @@ import {
 } from "./onlineLyrics.ts";
 
 export interface LibraryLyricsState {
-  /** What its file has, in its tags or a sidecar `.lrc` (Core's `pickLyrics`). */
-  readonly file: Lyrics;
   /** When a search last found nothing for it; null for never. */
   readonly missedAt: number | null;
   /** The answers so far, in the order the sources were asked. */
@@ -29,11 +28,11 @@ export interface LibraryLyricsState {
   readonly now: number;
 }
 
-/** Where a Library song's lyrics stand. */
+/** Where the search for a Library song whose file has no lyrics stands. */
 export type LibraryLyrics =
   | { readonly kind: "searching"; readonly ask: LyricsSource }
-  /** Lyrics to show, and what to write into its file (null: they came from it). */
-  | { readonly kind: "lyrics"; readonly lyrics: Lyrics; readonly write: FoundLyrics | null }
+  /** Lyrics found, to show and to write into its file. */
+  | { readonly kind: "lyrics"; readonly lyrics: Lyrics; readonly write: FoundLyrics }
   /**
    * Today's "No lyrics" (with its `.lrc` hint), and when to remember that
    * the search found nothing (null: nothing new to remember).
@@ -66,12 +65,11 @@ export const libraryLyricsSong = (track: LibraryLyricsTrack): LyricsSearchSong =
 });
 
 /**
- * Where the Library song [song]'s lyrics stand in the Lyrics view: its
- * file's, or the source to ask next while it searches, the lyrics found, or
- * why there are none.
+ * Where the lyrics of the Library song [song], whose file has none, stand in
+ * the Lyrics view: the source to ask next while it searches, the lyrics
+ * found, or why there are none.
  */
 export const libraryLyrics = (song: LyricsSearchSong, state: LibraryLyricsState): LibraryLyrics => {
-  if (state.file.kind !== "none") return { kind: "lyrics", lyrics: state.file, write: null };
   if (!state.lookupsOn) return NO_LYRICS;
   if (state.missedAt !== null && missStands(state.missedAt, state.now)) return NO_LYRICS;
   const search = lyricsSearch(song, state.answers, state.ytMusicOn);

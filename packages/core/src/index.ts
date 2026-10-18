@@ -1416,3 +1416,6 @@ export type {
 } from "./mixKnownSongs.ts";
 export { starAskedAfter, starredHere, ytSongStarred } from "./starDownloads.ts";
 export type { StarAskedChange } from "./starDownloads.ts";
+export type { LyricsToSave } from "./onlineLyrics.ts";
+export { isCollectionKind } from "./itemActions.ts";
+export type { CollectionKind } from "./itemActions.ts";
