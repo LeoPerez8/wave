@@ -210,12 +210,7 @@ class DurableDownloads(
     if (job["phase"] !in DECISIONS || job["token"] != null || job["acknowledged"] == true || job["importFailure"] != null || job.number("retryAt") > clock()) return null
     // Songs join the Library one at a time: the next is offered once the one before is imported.
     if (job["phase"] == "awaitingPublication" && jobs.values.any { it !== job && saving(it) }) return null
-    if (outOfTime(job)) {
-      // As in expire(): a published file is never a failed download, only one the Library didn't import.
-      val cause = "Out of time before the ${DECISIONS[job["phase"]]} decision"
-      if (job["phase"] == "completed") importFailed(job, "failed", cause) else fail(job, "timedOut", cause)
-      persist(); return null
-    }
+    if (outOfTime(job)) { fail(job, "timedOut", "Out of time before the ${DECISIONS[job["phase"]]} decision"); persist(); return null }
     job["decisionAttempts"] = job.number("decisionAttempts") + 1
     job["token"] = UUID.randomUUID().toString()
     job["leaseUntil"] = clock() + minOf(LEASE_MS, budgetLeft(job))
@@ -407,8 +402,8 @@ class DurableDownloads(
       if (job["phase"] in TERMINAL || job["acknowledged"] == true || job["importFailure"] != null) continue
       // A queued job's time starts when it gets a slot.
       if (job["phase"] == "queued") continue
-      charging = true
-      // A song being saved (outside the lock: [save]) is judged once its save is done.
+      charging = charging || charged(job)
+      // A song being saved (outside the lock: [save]) is left alone until its save is done.
       if (job["phase"] == "publishing" && job["id"] in running) continue
       if (stopAll || outOfTime(job)) {
         changed = true
@@ -720,15 +715,19 @@ class DurableDownloads(
     view = JournalView(entries, revision, if (reordered) revision else before.orderRevision)
   }
 
-  // The job's budget: [JOB_MS] from leaving the queue, charged on [budget]'s clock, which stands
-  // still while Wave is closed. A peer's turn ([QUEUE_MS], [ATTEMPT_MS], [STALL_MS]) is a deadline
-  // on the same clock, within the job's.
+  // The job's budget: [JOB_MS] from leaving the queue until its file is downloaded, charged on
+  // [budget]'s clock, which stands still while Wave is closed. Saving to the Library (the confirm
+  // decision, tagging, its turn and publication) is outside it: a song downloaded in its last
+  // minute is saved however long that takes. A peer's turn ([QUEUE_MS], [ATTEMPT_MS],
+  // [STALL_MS]) is a deadline on the same clock, within the job's.
 
   private fun budgetNow(): Long = budget.now()
   /** [job]'s budget starts afresh: leaving the queue, retried, or handed over to YouTube Music. */
   private fun startBudget(job: MutableMap<String, Any?>) { job["deadline"] = budgetNow() + JOB_MS }
-  /** How much of its budget [job] has left (none, or less, once it's over). */
-  private fun budgetLeft(job: Map<String, Any?>): Long = job.number("deadline") - budgetNow()
+  /** Whether [job] is where its time is charged: started, and its file not downloaded yet. */
+  private fun charged(job: Map<String, Any?>) = job["phase"] in CHARGED
+  /** How much of its budget [job] has left (none, or less, once it's over); no end once it's downloaded. */
+  private fun budgetLeft(job: Map<String, Any?>): Long = if (charged(job)) job.number("deadline") - budgetNow() else Long.MAX_VALUE
   private fun outOfTime(job: Map<String, Any?>) = budgetLeft(job) <= 0
   /** A deadline [ms] from now on the budget's clock, never past [job]'s own. */
   private fun withinBudget(job: Map<String, Any?>, ms: Long): Long = minOf(budgetNow() + ms, job.number("deadline"))
@@ -794,7 +793,7 @@ class DurableDownloads(
     /** How long a started song may wait for JS's answer before it leaves its slot to the next. */
     const val DECISION_WAIT_MS = 30_000L
     const val LEASE_MS = 45_000L
-    /** A job's whole budget from leaving the queue: search, peers' queues, transfers and saving. */
+    /** A job's budget from leaving the queue until its file is downloaded: search, peers' queues and transfers. */
     const val JOB_MS = 20 * 60_000L
     /** How long one peer may keep us in its upload queue. */
     const val QUEUE_MS = 120_000L
@@ -825,6 +824,8 @@ class DurableDownloads(
     private val TERMINAL = setOf("failed", "cancelled")
     /** Until the audio is accepted; afterwards a failure is the save's, which YouTube would share. */
     private val ACQUIRING = setOf("preparing", "prepared", "transferring", "sourceReady")
+    /** Where a job's budget is charged: until its file is downloaded. */
+    private val CHARGED = setOf("preparing", "prepared", "transferring")
     private val DECISIONS = mapOf("preparing" to "prepare", "sourceReady" to "confirm", "awaitingPublication" to "publish", "completed" to "import")
     /** The phases with native work: a worker thread runs them. */
     private val WORK = setOf("transferring", "tagging", "publishing")

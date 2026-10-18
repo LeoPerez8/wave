@@ -57,6 +57,40 @@ class DurableJobBudgetTest {
     assertEquals("timedOut", reopened.snapshot().single()["reason"])
   }
 
+  @Test fun aSongDownloadedAtTheEndOfItsBudgetIsStillSavedHoweverLongSavingTakes() = inFolder { folder ->
+    var now = 1_000L
+    val owner = DurableDownloads(File(folder, "jobs"), clock = { now })
+    val target = File(folder, "Recording.mp3")
+    owner.enqueue(song, null)
+    prepare(owner, target)
+    val lastMinute = object : DurableTransfer {
+      override fun cancel(id: String) {}
+      override fun receive(id: String, candidate: Map<String, Any?>, source: File, durationMs: Long, progress: (Long, Long, Long?) -> Unit): Map<String, Any?> {
+        source.parentFile.mkdirs()
+        // Bytes keep coming until the budget's last half minute (it started at 1 000).
+        var received = 0L
+        while (now + 30_000 < 1_000 + DurableDownloads.JOB_MS) { now += 30_000; progress(++received, 100, null) }
+        source.writeText("complete validated audio")
+        return mapOf("durationMs" to 12_000L, "receivedTags" to emptyMap<String, Any?>())
+      }
+    }
+    owner.advance(lastMinute, GoodPublication)
+    assertEquals("sourceReady", owner.snapshot().single()["phase"])
+    // From here on, each step waits far longer than the budget had left.
+    fun later() { now += 30 * MINUTE; owner.expire(NoTransfer); assertNull(owner.snapshot().single()["reason"]) }
+    later(); answer(owner, "confirm", mapOf("acceptable" to true))
+    later(); owner.advance(GoodTransfer, GoodPublication)
+    assertEquals("awaitingPublication", owner.snapshot().single()["phase"])
+    later(); answer(owner, "publish", mapOf("targetPath" to target.path, "revision" to owner.refreshPolicy(listOf(folder.path), emptyList())))
+    later(); owner.advance(GoodTransfer, GoodPublication)
+    assertEquals("completed", owner.snapshot().single()["phase"])
+    later(); answer(owner, "import", mapOf("path" to target.path))
+    val job = owner.snapshot().single()
+    assertEquals(true, job["acknowledged"])
+    assertNull(job["importFailure"])
+    assertTrue(target.isFile)
+  }
+
   private val song = mapOf("videoId" to "song", "title" to "Recording", "durationMs" to 12_000L)
   private val candidate = mapOf("username" to "peer", "filename" to "Recording.mp3", "bitrateKbps" to 320)
   private fun prepare(owner: DurableDownloads, target: File) {
