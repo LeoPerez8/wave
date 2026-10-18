@@ -11,6 +11,7 @@
 import { splitCredit } from "./credits.ts";
 import type { BlendedDiscoverMix } from "./discoverMixLevels.ts";
 import { artistPhotoName } from "./artistPhoto.ts";
+import type { ExplicitFlag } from "./explicit.ts";
 import { identityKey } from "./library.ts";
 import { normalizeSearchText } from "./search.ts";
 import { readStoredRecord } from "./storedJson.ts";
@@ -36,6 +37,8 @@ export interface DiscoverSeedSong {
   /** The Library artists its credit names. */
   readonly artistIds: readonly number[];
   readonly durationMs: number;
+  /** Its explicit flag, for a mix's Library pool (Don't play explicit); absent counts as unknown. */
+  readonly explicit?: ExplicitFlag;
 }
 
 /** A Library artist with how many of the Library's songs credit them. */
@@ -644,6 +647,11 @@ export interface DiscoverMixLibrarySong {
   readonly title: string;
   /** Its artist credit. */
   readonly artist: string;
+  /**
+   * Its explicit flag as the build saw it, so Home leaves it out while Don't
+   * play explicit is on without reading the Library; absent for unknown.
+   */
+  readonly explicit?: ExplicitFlag;
 }
 
 /**
@@ -667,7 +675,9 @@ export const discoverMix = (
           artists: seed.kind === "artist" ? [seed.name] : splitCredit(seed.song.artist),
         },
         songs: songs.map(({ video: _video, ...song }) => song),
-        library: library.map(({ id, title, artist }) => ({ id, title, artist })),
+        library: library.map(({ id, title, artist, explicit }) =>
+          explicit === undefined ? { id, title, artist } : { id, title, artist, explicit },
+        ),
       };
 
 /** How many of a mix's artists its tile names. */
@@ -790,8 +800,11 @@ const readMix = (value: unknown): DiscoverMix | null => {
 
 const readLibrarySong = (value: unknown): DiscoverMixLibrarySong[] => {
   if (!isRecord(value)) return [];
-  const { id, title, artist } = value;
-  return isNumber(id) && isString(title) && isString(artist) ? [{ id, title, artist }] : [];
+  const { id, title, artist, explicit } = value;
+  if (!isNumber(id) || !isString(title) || !isString(artist)) return [];
+  return explicit === "explicit" || explicit === "clean"
+    ? [{ id, title, artist, explicit }]
+    : [{ id, title, artist }];
 };
 
 /**

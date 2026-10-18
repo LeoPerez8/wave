@@ -6,6 +6,7 @@ import {
   blendDiscoverMix,
   discoverMix,
   discoverMixCaption,
+  discoverMixKeep,
   discoverMixLibraryPool,
   discoverMixPlaylist,
   parseDiscoverMixes,
@@ -310,6 +311,79 @@ describe("A saved mix's Library pool", () => {
       mixes: [{ ...mix, library: [librarySong(1), { id: "2", title: "x", artist: "y" }, null] }],
     });
     assert.deepEqual(parseDiscoverMixes(stored)?.mixes[0]?.library, [librarySong(1)]);
+  });
+});
+
+describe("A mix with Don't play explicit", () => {
+  const marked = new Set([1, 4]);
+  const fresh = newSongs(10).map((song, n) => ({ ...song, explicit: n % 3 === 0 }));
+  const pool = librarySongs(8).map((song) => ({
+    ...song,
+    explicit: marked.has(song.id) ? ("explicit" as const) : ("clean" as const),
+  }));
+  const mix = discoverMix(portishead, fresh, pool)!;
+  const ids = (blended: ReturnType<typeof blendDiscoverMix>) =>
+    blended.songs.map((song) => (song.source === "stream" ? song.song.videoId : song.track.id));
+
+  test("on, keeps no explicit song, new or the Library's", () => {
+    const keep = discoverMixKeep({ dontPlayExplicit: true, library: null });
+    const blended = blendDiscoverMix(mix, { level: 1, keep });
+    assert.deepEqual(ids(blended), ["v1", 2, 3, 5, 6, 7]);
+  });
+
+  test("off, keeps every song, as the mix was", () => {
+    const keep = discoverMixKeep({ dontPlayExplicit: false, library: null });
+    assert.deepEqual(
+      blendDiscoverMix(mix, { level: 3, keep }),
+      blendDiscoverMix(mix, { level: 3 }),
+    );
+  });
+
+  test("goes by the Library's flag when it's read, and leaves out songs it no longer has", () => {
+    const library = new Map([
+      [1, { explicit: "clean" as const }],
+      [2, { explicit: "explicit" as const }],
+      [3, { explicit: "unknown" as const }],
+    ]);
+    const keep = discoverMixKeep({ dontPlayExplicit: true, library });
+    const blended = blendDiscoverMix(mix, { level: 1, keep });
+    assert.deepEqual(
+      blended.songs.flatMap((song) => (song.source === "library" ? [song.track.id] : [])),
+      [1, 3],
+    );
+  });
+
+  test("a pool keeps its songs' flags, saved and read back", () => {
+    const tagged = discoverMixLibraryPool(
+      { kind: "artist", id: "artist:x", name: "X", from: "plays" },
+      {
+        radio: [],
+        find: () => null,
+        library: {
+          artists: [{ id: 7, name: "X" }],
+          songs: [
+            {
+              id: 70,
+              title: "A",
+              artist: "X",
+              artistIds: [7],
+              durationMs: 1,
+              addedAt: 2,
+              explicit: "explicit",
+            },
+            { id: 71, title: "B", artist: "X", artistIds: [7], durationMs: 1, addedAt: 1 },
+          ],
+        },
+        taken: new Set(),
+        length: 25,
+      },
+    );
+    assert.deepEqual(tagged, [
+      { id: 70, title: "A", artist: "X", explicit: "explicit" },
+      { id: 71, title: "B", artist: "X" },
+    ]);
+    const saved = { builtAt: 1, playSeeds: true, mixes: [discoverMix(portishead, fresh, tagged)!] };
+    assert.deepEqual(parseDiscoverMixes(storedDiscoverMixes(saved))?.mixes[0]?.library, tagged);
   });
 });
 

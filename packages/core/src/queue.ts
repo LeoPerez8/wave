@@ -122,24 +122,53 @@ const result = (state: QueueState, playback: QueuePlayback = "keep"): QueueResul
   playback,
 });
 
+/**
+ * The songs of [command]'s list that play, those [passOver] leaves out
+ * gone, and where the tapped one is among them: a tapped song passed over
+ * gives way to the next one that plays, else the last before it.
+ */
+const playedTracks = (
+  command: Extract<QueueCommand, { type: "play" }>,
+  passOver: PassOver,
+): { trackIds: string[]; startIndex: number | undefined } => {
+  const tapped = command.startIndex;
+  const trackIds: string[] = [];
+  let startIndex: number | undefined;
+  for (const [at, trackId] of command.trackIds.entries()) {
+    if (passOver(trackId)) continue;
+    if (tapped !== undefined && startIndex === undefined && at >= tapped) {
+      startIndex = trackIds.length;
+    }
+    trackIds.push(trackId);
+  }
+  if (tapped !== undefined && startIndex === undefined) {
+    startIndex = Math.max(0, trackIds.length - 1);
+  }
+  return { trackIds, startIndex };
+};
+
 const play = (
   state: QueueState,
   command: Extract<QueueCommand, { type: "play" }>,
   random: () => number,
   kind: Shuffle,
+  passOver: PassOver,
 ): QueueResult => {
-  const { entries, nextKey } = makeEntries(command.trackIds, state.nextKey, (i) => i);
+  const { trackIds, startIndex: tapped } = playedTracks(command, passOver);
+  // Every song passed over: nothing plays instead, and the queue stays.
+  if (trackIds.length === 0 && command.trackIds.length > 0) return result(state);
+  const { entries, nextKey } = makeEntries(trackIds, state.nextKey, (i) => i);
   if (entries.length === 0) return result({ ...EMPTY_QUEUE, repeat: state.repeat, nextKey });
   const shuffle = command.shuffle ?? state.shuffle;
   // Smart Shuffle with no song tapped (a Shuffle button) orders the whole list, first song included.
-  if (shuffle && command.startIndex === undefined && kind.kind === "smart") {
+  if (shuffle && tapped === undefined && kind.kind === "smart") {
     const order = shuffleEntries(entries, random, kind);
     return result(
       { ...state, context: command.context, entries: order, index: 0, shuffle: true, nextKey },
       "play",
     );
   }
-  const startIndex = command.startIndex ?? (shuffle ? Math.floor(random() * entries.length) : 0);
+  const startIndex = tapped ?? (shuffle ? Math.floor(random() * entries.length) : 0);
   const index = Math.max(0, Math.min(Math.trunc(startIndex), entries.length - 1));
   const started: QueueState = {
     ...state,
@@ -207,6 +236,21 @@ export type Shuffle =
   | { readonly kind: "smart"; readonly plays: ReadonlyMap<string, number> };
 
 export const REAL_SHUFFLE: Shuffle = { kind: "real" };
+
+/**
+ * Which songs the queue passes over, by track id: songs that don't play now
+ * (explicit ones while Don't play explicit is on, Core's `explicitPassOver`).
+ * A play, Play Next, Add to Queue or More from this artist leaves them out,
+ * and an unsearched song found as one goes as one not found does.
+ */
+export type PassOver = (trackId: string) => boolean;
+
+/** Passes over nothing: every song plays. */
+const playsAll: PassOver = () => false;
+
+/** The songs of [trackIds] that play, in order. */
+const playing = (trackIds: readonly string[], passOver: PassOver): readonly string[] =>
+  trackIds.filter((trackId) => !passOver(trackId));
 
 /** The kind of shuffle the owner chose on the shuffle card. */
 export type ShuffleKind = Shuffle["kind"];
@@ -470,9 +514,17 @@ const removeTracks = (state: QueueState, trackIds: readonly string[]): QueueResu
   return result({ ...state, entries, index: entries.length - 1 }, "stop");
 };
 
-/** An unsearched song's entries once searched: each becomes [becomes], or (null) they go. */
-const settled = (state: QueueState, trackId: string, becomes: string | null): QueueResult => {
-  if (becomes === null) return removeTracks(state, [trackId]);
+/**
+ * An unsearched song's entries once searched: each becomes [becomes], or
+ * they go when it wasn't found (null) or was found as a song passed over.
+ */
+const settled = (
+  state: QueueState,
+  trackId: string,
+  becomes: string | null,
+  passOver: PassOver,
+): QueueResult => {
+  if (becomes === null || passOver(becomes)) return removeTracks(state, [trackId]);
   if (!state.entries.some((entry) => entry.trackId === trackId)) return result(state);
   const entries = state.entries.map((entry) =>
     entry.trackId === trackId ? { ...entry, trackId: becomes } : entry,
@@ -482,17 +534,19 @@ const settled = (state: QueueState, trackId: string, becomes: string | null): Qu
 
 /**
  * Applies one command. `random` returns numbers in [0, 1); pass a seeded one
- * in tests. [shuffle] is the kind of shuffle a command that shuffles uses.
+ * in tests. [shuffle] is the kind of shuffle a command that shuffles uses,
+ * and [passOver] says which songs don't play (`PassOver`).
  */
 export const reduceQueue = (
   state: QueueState,
   command: QueueCommand,
   random: () => number = Math.random,
   shuffle: Shuffle = REAL_SHUFFLE,
+  passOver: PassOver = playsAll,
 ): QueueResult => {
   switch (command.type) {
     case "play":
-      return play(state, command, random, shuffle);
+      return play(state, command, random, shuffle, passOver);
     case "setShuffle":
       return setShuffle(state, command.on, random, shuffle);
     case "reshuffle":
@@ -506,11 +560,11 @@ export const reduceQueue = (
     case "setRepeat":
       return result({ ...state, repeat: command.mode });
     case "playNext":
-      return enqueue(state, command.trackIds, "next");
+      return enqueue(state, playing(command.trackIds, passOver), "next");
     case "addToQueue":
-      return enqueue(state, command.trackIds, "last");
+      return enqueue(state, playing(command.trackIds, passOver), "last");
     case "moreFromArtist":
-      return moreFromArtist(state, command.ranking);
+      return moreFromArtist(state, playing(command.ranking, passOver));
     case "jumpTo":
       return jumpTo(state, command.key);
     case "playerMoved":
@@ -522,7 +576,7 @@ export const reduceQueue = (
     case "removeTracks":
       return removeTracks(state, command.trackIds);
     case "settled":
-      return settled(state, command.trackId, command.becomes);
+      return settled(state, command.trackId, command.becomes, passOver);
   }
 };
 

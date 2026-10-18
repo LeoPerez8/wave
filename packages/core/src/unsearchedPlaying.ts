@@ -11,10 +11,12 @@ import {
   readUnsearchedTrackId,
   type UnsearchedSong,
 } from "./playlistEntries.ts";
+import { explicitSkipNotice } from "./explicitPlayback.ts";
 import { counted } from "./listening.ts";
 import type { QueueList } from "./playerSync.ts";
 import {
   reduceQueue,
+  type PassOver,
   type QueueCommand,
   type QueueEntry,
   type QueuePlayback,
@@ -252,13 +254,23 @@ const chosenBy = (command: QueueCommand, before: QueueState): boolean =>
   command.type === "jumpTo" ||
   ((command.type === "playNext" || command.type === "addToQueue") && before.index < 0);
 
-/** What the queue does once [walk]'s playing song's search answered [settlement]. */
+/**
+ * What the queue does once [walk]'s playing song's search answered
+ * [settlement]. Found as a song [passOver] passes over (an explicit one,
+ * while Don't play explicit is on), it's skipped as one not found is, and
+ * the notice says it's explicit (`explicitSkipNotice`).
+ */
 export const answerPlayingWalk = <S extends YtSong>(
   walk: PlayingWalk,
   settlement: UnsearchedSettlement<S>,
+  passOver: PassOver = () => false,
 ): PlayingStep => {
   const current = walk.state.entries[walk.state.index]!;
-  if (settlement.kind === "found") {
+  const song = readUnsearchedTrackId(current.trackId)!;
+  // Found as a song that doesn't play (an explicit one): it goes as one not found does.
+  const passed =
+    settlement.kind === "found" && passOver(ytTrackId(settlement.becomes.song.videoId));
+  if (settlement.kind === "found" && !passed) {
     const becomes = ytTrackId(settlement.becomes.song.videoId);
     const { state } = reduceQueue(walk.state, {
       type: "settled",
@@ -269,7 +281,9 @@ export const answerPlayingWalk = <S extends YtSong>(
   }
   // Only the song the command made current was chosen; those after it come as skips do.
   const chosen = walk.chosen && walk.asked.length === 1;
-  const step = playingAnswerStep(readUnsearchedTrackId(current.trackId)!, settlement, { chosen });
+  const step: PlayingAnswerStep = passed
+    ? { kind: "skip", notice: explicitSkipNotice(song.title) }
+    : playingAnswerStep(song, settlement, { chosen });
   if (step.kind === "stay") return { kind: "stay", state: walk.before, notice: step.notice };
   // The songs after it can't be searched either: none is asked, nor named.
   if (step.kind === "stop") {
@@ -283,7 +297,7 @@ export const answerPlayingWalk = <S extends YtSong>(
     walk.way === "back" ? { type: "previous", positionMs: 0 } : { type: "next" },
   );
   const next =
-    settlement.kind === "notFound"
+    settlement.kind === "notFound" || passed
       ? reduceQueue(walk.way === "back" ? moved.state : walk.state, {
           type: "settled",
           trackId: current.trackId,
