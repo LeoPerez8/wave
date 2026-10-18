@@ -207,6 +207,29 @@ describe("A mix's Library pool", () => {
     assert.deepEqual(ids(pool), [21, 11, 20, 10]);
   });
 
+  test("keeps each song's artwork file, for the tile's cover", () => {
+    const covered = (row: (typeof songs)[number]) => ({
+      ...row,
+      artworkPath: row.id === 21 ? "/art/mezzanine.jpg" : null,
+    });
+    const pool = discoverMixLibraryPool(tripHop, {
+      radio: radio(["Angel", "Glory Box"]),
+      find: (heard) => {
+        const found = find(heard);
+        return found === null ? null : covered(found);
+      },
+      library: { ...library, songs: songs.map(covered) },
+      taken: new Set(),
+      length: 25,
+    });
+    assert.deepEqual(
+      pool.slice(0, 2).map((entry) => entry.artworkPath),
+      ["/art/mezzanine.jpg", undefined],
+    );
+    const saved = { builtAt: 1, playSeeds: true, mixes: [discoverMix(tripHop, newSongs(10), pool)!] };
+    assert.deepEqual(parseDiscoverMixes(storedDiscoverMixes(saved))?.mixes[0]?.library, pool);
+  });
+
   test("holds as many songs as level 1 takes", () => {
     const pool = discoverMixLibraryPool(tripHop, {
       radio: radio(["Angel", "Overcome"]),
@@ -265,6 +288,46 @@ describe("A blended mix", () => {
       line: "10 songs",
       artworkUrl: "https://lh3.googleusercontent.com/0",
     });
+  });
+
+  test("follows the level: mostly familiar, it takes its first Library song's cover; mostly new, its first new song's", () => {
+    const covered = discoverMix(
+      portishead,
+      newSongs(10).map((song, n) => ({
+        ...song,
+        artworkUrl: `https://lh3.googleusercontent.com/${n}`,
+      })),
+      [
+        { ...known(1, "Massive Attack"), artworkPath: "/art/blue-lines.jpg" },
+        { ...known(2, "Tricky"), artworkPath: "/art/maxinquaye.jpg" },
+        ...[3, 4, 5, 6, 7, 8].map((id) => known(id, "Someone Known")),
+      ],
+    )!;
+    const coverAt = (level: 1 | 2 | 3 | 4 | 5) =>
+      discoverMixCaption(blendDiscoverMix(covered, { level })).artworkUrl;
+    assert.deepEqual([1, 2, 3, 4, 5].map((level) => coverAt(level as 1)), [
+      "file:///art/blue-lines.jpg",
+      "file:///art/blue-lines.jpg",
+      "https://lh3.googleusercontent.com/0",
+      "https://lh3.googleusercontent.com/0",
+      "https://lh3.googleusercontent.com/0",
+    ]);
+  });
+
+  test("mostly familiar, takes the first Library song with a cover, else its first new song's", () => {
+    const later = discoverMix(
+      portishead,
+      newSongs(10).map((song) => ({ ...song, artworkUrl: "https://lh3.googleusercontent.com/n" })),
+      [known(1, "Massive Attack"), { ...known(2, "Tricky"), artworkPath: "/art/maxinquaye.jpg" }, ...[3, 4, 5, 6, 7, 8].map((id) => known(id, "X"))],
+    )!;
+    assert.equal(
+      discoverMixCaption(blendDiscoverMix(later, { level: 1 })).artworkUrl,
+      "file:///art/maxinquaye.jpg",
+    );
+    assert.equal(
+      discoverMixCaption(blendDiscoverMix(mix, { level: 1 })).artworkUrl,
+      "https://lh3.googleusercontent.com/0",
+    );
   });
 
   test("saves as a playlist of its Library songs and its new ones, in its order", () => {
