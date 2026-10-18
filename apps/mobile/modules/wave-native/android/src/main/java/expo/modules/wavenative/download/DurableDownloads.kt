@@ -384,17 +384,13 @@ class DurableDownloads(
     if (lastEnd == "cancelled") DownloadServiceStop.CANCELLED else DownloadServiceStop.QUEUE_EMPTY
 
   /** The songs started and not yet in the Library, and those still waiting to start; the notification shows both. */
-  fun counts(): DownloadCounts {
-    val all = published
-    val left = all.count { it["phase"] == "queued" }
-    return DownloadCounts(running = all.count(::pending) - left, left = left)
-  }
+  fun counts(): DownloadCounts = DownloadCounts.of(published)
 
   /** The first song started, else the next one waiting; what the notification shows. */
   fun current(): Map<String, Any?>? =
     published.firstOrNull { it["phase"] != "queued" && pending(it) } ?: published.firstOrNull { it["phase"] == "queued" }
 
-  private fun pending(job: Map<String, Any?>) = job["phase"] !in TERMINAL && !(job["phase"] == "completed" && (job["acknowledged"] == true || job["importFailure"] != null))
+  private fun pending(job: Map<String, Any?>) = DownloadCounts.pending(job)
 
   /** Between its publish decision and its import: what only one song does at a time. */
   private fun saving(job: Map<String, Any?>) = pending(job) &&
@@ -1206,7 +1202,20 @@ private class JournalView(val entries: List<PublishedJob>, val revision: Long, v
 }
 
 /** What the download notification counts: songs on their way ([running]) and songs not started yet ([left]). */
-data class DownloadCounts(val running: Int, val left: Int)
+data class DownloadCounts(val running: Int, val left: Int) {
+  companion object {
+    /** Whether [job] is still on its way: not failed or cancelled, nor imported (or failed to import). */
+    fun pending(job: Map<*, *>): Boolean =
+      job["phase"] != "failed" && job["phase"] != "cancelled" &&
+        !(job["phase"] == "completed" && (job["acknowledged"] == true || job["importFailure"] != null))
+
+    /** [jobs] counted: those on their way that started, and those waiting. The one rule, for the notification and the app log. */
+    fun of(jobs: Collection<Map<*, *>>): DownloadCounts {
+      val left = jobs.count { it["phase"] == "queued" }
+      return DownloadCounts(running = jobs.count(::pending) - left, left = left)
+    }
+  }
+}
 
 /**
  * What went wrong, as `<exception class>: <message>`, then what caused it (`<-`). A
