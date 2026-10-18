@@ -36,7 +36,7 @@ const THUMB = CELL * 5;
  * (or a numbered list's number), two lines (body), the favorite cell and the
  * length.
  */
-export function TrackRowSkeleton({ leading = "artwork" }: { leading?: "artwork" | "number" }) {
+function TrackRowSkeleton({ leading = "artwork" }: { leading?: "artwork" | "number" }) {
   return (
     <View className="flex-row items-center" style={{ height: grid.row, gap: CELL * 1.5 }}>
       {leading === "artwork" ? (
@@ -148,4 +148,21 @@ export function HiddenSkeletonLine({
       <Line lineHeight={lineHeight} width={width} />
     </View>
   );
+}
+
+/**
+ * A picture's stand-in that screen readers skip (a page head's cover or
+ * portrait not known yet): a still fill box, [width] by [height], rounded by
+ * [radius].
+ */
+export function HiddenSkeletonBox({
+  width,
+  height,
+  radius,
+}: {
+  width: number;
+  height: number;
+  radius?: number;
+}) {
+  return <View {...HIDDEN} className="bg-fill" style={{ width, height, borderRadius: radius }} />;
 }

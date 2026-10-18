@@ -1,7 +1,5 @@
-import { View } from "react-native";
-
 import { COVER_ROW_TILE, CoverRow } from "@/catalog/CoverRow";
-import { SKELETON_TILES, TileSkeleton } from "@/catalog/Skeletons";
+import { SKELETON_TILES, SkeletonGroup, TileSkeleton } from "@/catalog/Skeletons";
 
 /**
  * The Discover mixes row while the first mixes build (Core's
@@ -11,12 +9,12 @@ import { SKELETON_TILES, TileSkeleton } from "@/catalog/Skeletons";
  */
 export function DiscoverMixesSkeleton() {
   return (
-    <View accessible accessibilityLabel="Building your mixes" accessibilityState={{ busy: true }}>
+    <SkeletonGroup label="Building your mixes">
       <CoverRow>
         {Array.from({ length: SKELETON_TILES }, (_, index) => (
           <TileSkeleton key={index} size={COVER_ROW_TILE} />
         ))}
       </CoverRow>
-    </View>
+    </SkeletonGroup>
   );
 }

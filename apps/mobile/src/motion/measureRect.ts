@@ -24,14 +24,14 @@ export const measureRect = (
       );
 
 /** A view a `Press` highlights in its place, with the highlight's corner radius. */
-export interface PressHighlight {
+interface PressHighlight {
   readonly view: Measurable | null | undefined;
   /** Corner radius of the highlight and the veil's hole around it, in dp. */
   readonly radius: number;
 }
 
 /** Where a pressed element's card anchors and its highlight sits, and the highlight's corners. */
-export interface PressedPlace {
+interface PressedPlace {
   readonly rect: OverlayRect | undefined;
   /** Undefined for the usual corners, square like the row. */
   readonly radius: number | undefined;
