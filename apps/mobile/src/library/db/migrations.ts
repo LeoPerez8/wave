@@ -850,6 +850,17 @@ CREATE TABLE \`pending_favorites\` (
 );
 `;
 
+// Lyrics the Lyrics view found online for non-D songs, and its misses, by
+// video (\`schema.ts\`'s \`savedLyrics\`).
+const mSavedLyrics = `
+CREATE TABLE \`saved_lyrics\` (
+	\`video_id\` text PRIMARY KEY NOT NULL,
+	\`lyrics\` text,
+	\`synced\` integer DEFAULT false NOT NULL,
+	\`checked_at\` integer NOT NULL
+);
+`;
+
 export default {
   journal: {
     entries: [
@@ -881,6 +892,7 @@ export default {
       { idx: 25, when: 1_793_966_400_000, tag: "0025_unsearched_titles", breakpoints: true },
       { idx: 26, when: 1_794_052_800_000, tag: "0026_explicit", breakpoints: true },
       { idx: 27, when: 1_794_139_200_000, tag: "0027_pending_favorites", breakpoints: true },
+      { idx: 28, when: 1_794_225_600_000, tag: "0028_saved_lyrics", breakpoints: true },
     ],
   },
   migrations: {
@@ -912,5 +924,6 @@ export default {
     m0025: mUnsearchedTitles,
     m0026: mExplicit,
     m0027: mPendingFavorites,
+    m0028: mSavedLyrics,
   },
 };

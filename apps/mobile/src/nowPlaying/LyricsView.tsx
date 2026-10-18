@@ -39,6 +39,7 @@ import { DismissArea } from "./DismissArea";
 import { usePlayhead } from "./hooks";
 import { TrackHeader } from "./TrackHeader";
 import { useLyrics } from "./useLyrics";
+import { useNonDLyrics, type NonDLyricsShown } from "./useNonDLyrics";
 
 /** Where the sung line rests, as a fraction of the view's height from its top. */
 const ANCHOR = 0.3;
@@ -345,10 +346,49 @@ function PickingBar({
   );
 }
 
-/** The lyrics themselves, or the empty state. */
-function LyricsBody({ lyrics, picking }: { lyrics: Lyrics | null; picking: Picking | null }) {
+/** How wide each placeholder line of the skeleton is, as a share of the view: ragged, as lyrics are. */
+const SKELETON_LINES = ["72%", "58%", "84%", "46%", "66%", "78%", "52%", "70%"] as const;
+
+/**
+ * Placeholder lyric lines while a non-D song's lyrics are searched online,
+ * each as tall as a line of lyrics. It holds still, as the mixes' skeleton
+ * does: a pulse would re-blur the glass on every frame.
+ */
+function LyricsSkeleton() {
+  return (
+    <DismissArea style={{ flex: 1 }}>
+      <View
+        accessible
+        accessibilityLabel="Searching for lyrics"
+        accessibilityState={{ busy: true }}
+        style={{ paddingTop: CELL * 2 }}
+      >
+        {SKELETON_LINES.map((width, at) => (
+          // A title2 line (28 high) with its padding, the bar half its height.
+          <View key={at} className="justify-center" style={{ height: 28 + CELL * 2 }}>
+            <View className="bg-fill" style={{ width, height: 14 }} />
+          </View>
+        ))}
+      </View>
+    </DismissArea>
+  );
+}
+
+/** What the Lyrics view shows: lyrics (or a Library file's none), or a non-D song's search. */
+type Shown = Lyrics | Exclude<NonDLyricsShown, { kind: "lyrics" }>;
+
+/** The lyrics themselves, the search's skeleton, or the empty state. */
+function LyricsBody({
+  shown,
+  picking,
+  retry,
+}: {
+  shown: Shown | null;
+  picking: Picking | null;
+  retry: () => void;
+}) {
   // Reading takes a moment; an empty field avoids flashing the empty state.
-  if (lyrics === null) {
+  if (shown === null) {
     return (
       <DismissArea style={{ flex: 1 }}>
         <View className="flex-1" />
@@ -356,11 +396,13 @@ function LyricsBody({ lyrics, picking }: { lyrics: Lyrics | null; picking: Picki
     );
   }
 
-  switch (lyrics.kind) {
+  switch (shown.kind) {
     case "synced":
-      return <SyncedLyrics lines={lyrics.lines} picking={picking} />;
+      return <SyncedLyrics lines={shown.lines} picking={picking} />;
     case "unsynced":
-      return <UnsyncedLyrics lines={lyrics.lines} picking={picking} />;
+      return <UnsyncedLyrics lines={shown.lines} picking={picking} />;
+    case "searching":
+      return <LyricsSkeleton />;
     case "none":
       return (
         <DismissArea style={{ flex: 1 }}>
@@ -371,35 +413,81 @@ function LyricsBody({ lyrics, picking }: { lyrics: Lyrics | null; picking: Picki
           />
         </DismissArea>
       );
+    case "off":
+      return (
+        <DismissArea style={{ flex: 1 }}>
+          <EmptyState
+            icon={IconQuoteOff}
+            title="No lyrics"
+            message="Turn on Fix songs online in Settings › Lyrics and tags to find this song's lyrics."
+          />
+        </DismissArea>
+      );
+    case "notFound":
+      return (
+        <DismissArea style={{ flex: 1 }}>
+          <EmptyState
+            icon={IconQuoteOff}
+            title="No lyrics found"
+            message="Wave couldn't find lyrics for this song online."
+          />
+        </DismissArea>
+      );
+    case "failed":
+      return (
+        <DismissArea style={{ flex: 1 }}>
+          <EmptyState
+            icon={IconQuoteOff}
+            title="Couldn't search for lyrics"
+            message="Check your connection and try again."
+            action={<TextButton label="Try Again" onPress={retry} />}
+          />
+        </DismissArea>
+      );
   }
 }
 
 type Item = NonNullable<PlaybackState["item"]>;
 
 /**
- * The Lyrics view under what's playing, for the file at `path`: synced
- * lyrics that follow the song, unsynced lyrics as text, or an empty state
+ * The Lyrics view under what's playing, for the file at `path`, or for the
+ * queue's track [trackId] when it's a non-D song (no file), whose lyrics are
+ * searched online (`useNonDLyrics`): synced lyrics that follow the song,
+ * unsynced lyrics as text, a skeleton while it searches, or an empty state
  * when the song has none. A song with lyrics gets Share, which picks up to
  * five lines (Core's `tapLyricLine`), then Next previews them as a card
  * (`LyricCardPreview`) in the cover's colours.
  */
 export function LyricsView({
   path,
+  trackId,
   item,
   palette,
 }: {
   path: string | null;
+  trackId: string | null;
   item: Item;
   palette: ArtworkPalette | null;
 }) {
-  const lyrics = useLyrics(path);
+  const fileLyrics = useLyrics(path);
+  const nonD = useNonDLyrics(trackId);
+  const shown: Shown | null =
+    nonD.shown === null
+      ? fileLyrics
+      : nonD.shown.kind === "lyrics"
+        ? nonD.shown.lyrics
+        : nonD.shown;
+  const lyrics =
+    shown !== null && (shown.kind === "synced" || shown.kind === "unsynced") ? shown : null;
   const lines = useMemo(() => shareableLyricLines(lyrics), [lyrics]);
-  // The lines picked for the song at `path`; another song's lyrics start afresh.
+  // The song whose lines are picked: its file, or a non-D song's track id.
+  const song = path ?? trackId;
+  // The lines picked for that song; another song's lyrics start afresh.
   const [picked, setPicked] = useState<{
-    readonly path: string | null;
+    readonly song: string | null;
     readonly selection: LyricSelection | null;
   } | null>(null);
-  const isPicking = picked !== null && picked.path === path && lines !== null;
+  const isPicking = picked !== null && picked.song === song && lines !== null;
   const selection = isPicking ? picked.selection : null;
 
   // Back leaves picking (the card's preview, over it, takes Back first).
@@ -424,9 +512,9 @@ export function LyricsView({
         return;
       }
       void Haptics.selectionAsync();
-      setPicked({ path, selection: tap.selection });
+      setPicked({ song, selection: tap.selection });
     },
-    [lines, selection, path],
+    [lines, selection, song],
   );
 
   const picking = useMemo<Picking | null>(
@@ -466,14 +554,14 @@ export function LyricsView({
                 <IconButton
                   icon={IconShare3}
                   label="Share Lyrics"
-                  onPress={() => setPicked({ path, selection: null })}
+                  onPress={() => setPicked({ song, selection: null })}
                 />
               </View>
             )}
           </View>
         )}
       </DismissArea>
-      <LyricsBody lyrics={lyrics} picking={picking} />
+      <LyricsBody shown={shown} picking={picking} retry={nonD.retry} />
     </View>
   );
 }
