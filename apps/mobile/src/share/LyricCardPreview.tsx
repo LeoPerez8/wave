@@ -44,7 +44,10 @@ const LOG_TAG = "LyricsShare";
 /** The exported card's width in pixels: a Story's (1080 × 1920). */
 const EXPORT_PX = 1080;
 
-/** The preview's rounded corners, which the exported image doesn't have. */
+/**
+ * The preview's rounded corners. Save image and More export the card square;
+ * Instagram's sticker is exported with these same corners, as it's previewed.
+ */
 const PREVIEW_RADIUS = CELL * 2;
 
 const NO_APPS: LyricShareApps = { instagramStories: false, whatsapp: false };
@@ -52,7 +55,7 @@ const NO_APPS: LyricShareApps = { instagramStories: false, whatsapp: false };
 /** The card's file name, stamped now. */
 const cardFileName = (title: string): string => lyricCardFileName(title, new Date());
 
-/** The apps the last preview found, shown while the next one checks again. */
+/** The apps the last preview found: the row's layout while the next one checks again. */
 let lastApps: LyricShareApps | null = null;
 
 /**
@@ -64,6 +67,7 @@ function FittedCard({
   colour,
   area,
   cardRef,
+  rounded,
   onReady,
   onPress,
 }: {
@@ -71,6 +75,8 @@ function FittedCard({
   colour: string;
   area: { width: number; height: number };
   cardRef: ImageSource;
+  /** Whether the card itself takes the preview's corners (drawing Instagram's sticker). */
+  rounded: boolean;
   onReady: () => void;
   onPress: () => void;
 }) {
@@ -102,6 +108,7 @@ function FittedCard({
           content={content}
           colour={colour}
           width={exportWidth}
+          cornerRadius={rounded ? PREVIEW_RADIUS / scale : 0}
           onReady={onReady}
         />
       </View>
@@ -121,9 +128,28 @@ function LyricCardPreview({ content }: { content: LyricCardContent }) {
   // A cover still loading would be missing from the image.
   const [ready, setReady] = useState(content.artworkUri === undefined);
   const [busy, setBusy] = useState(false);
+  // Two taps in one frame both see busy false; this sees the first.
+  const sending = useRef(false);
   const card: ImageSource = useRef(null);
-  // Null until this phone's apps are checked; the last answer shows meanwhile.
-  const [apps, setApps] = useState<LyricShareApps | null>(lastApps);
+  // Null until this preview's own check answers: an app removed since the last one stays
+  // offered otherwise. The last answer lays the row out meanwhile, its buttons disabled.
+  const [apps, setApps] = useState<LyricShareApps | null>(null);
+  const [laidOutAs] = useState(lastApps);
+  // Instagram's sticker is drawn from the card with the preview's corners, then squared again.
+  const [rounded, setRounded] = useState(false);
+  const roundedDrawn = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    if (!rounded) return;
+    const drawn = roundedDrawn.current;
+    roundedDrawn.current = null;
+    // A frame, so the corners reach the native view the image is drawn from.
+    requestAnimationFrame(() => drawn?.());
+  }, [rounded]);
+  const roundCorners = (): Promise<void> =>
+    new Promise((resolve) => {
+      roundedDrawn.current = resolve;
+      setRounded(true);
+    });
 
   useEffect(
     () =>
@@ -145,21 +171,30 @@ function LyricCardPreview({ content }: { content: LyricCardContent }) {
     };
   }, []);
 
-  /** Draws the card into a PNG, then hands it to [send]; one at a time. */
+  /**
+   * Draws the card into a PNG (with the preview's corners for a [sticker]),
+   * then hands it to [send]; one at a time.
+   */
   const sendCard = async (
     what: string,
     send: (path: string) => Promise<void>,
     failed: string,
+    { sticker = false }: { readonly sticker?: boolean } = {},
   ): Promise<void> => {
-    if (busy) return;
+    if (sending.current) return;
+    sending.current = true;
     setBusy(true);
     try {
-      const path = await writeViewPng(card, cardFileName(content.title));
+      if (sticker) await roundCorners();
+      const path = await writeViewPng(card, cardFileName(content.title)).finally(() =>
+        setRounded(false),
+      );
       await send(path);
     } catch (error) {
       appLog("warn", LOG_TAG, `Couldn't ${what}: ${String(error)}`);
       void showToast(failed);
     } finally {
+      sending.current = false;
       setBusy(false);
     }
   };
@@ -174,6 +209,7 @@ function LyricCardPreview({ content }: { content: LyricCardContent }) {
           "share the lyrics card to Instagram Stories",
           (path) => shareImageToInstagramStory(path, lyricStoryBackground(colour)),
           "Couldn't open Instagram",
+          { sticker: true },
         ),
     },
     whatsapp: {
@@ -213,7 +249,8 @@ function LyricCardPreview({ content }: { content: LyricCardContent }) {
         ),
     },
   };
-  const destinations = lyricShareDestinations(apps ?? NO_APPS).map((key) => all[key]);
+  const shown = apps ?? laidOutAs;
+  const destinations = lyricShareDestinations(shown ?? NO_APPS).map((key) => all[key]);
 
   return (
     <View
@@ -243,6 +280,7 @@ function LyricCardPreview({ content }: { content: LyricCardContent }) {
             colour={colour}
             area={area}
             cardRef={card}
+            rounded={rounded}
             onReady={() => setReady(true)}
             onPress={() => setColour((current) => nextLyricCardColour(content.colours, current))}
           />
@@ -254,8 +292,8 @@ function LyricCardPreview({ content }: { content: LyricCardContent }) {
       >
         {content.colours.length > 1 ? "Tap the card to change its colour" : " "}
       </Text>
-      {/* Hidden, not left out, until the apps are known: the row's height stays and the card doesn't jump. */}
-      <View style={{ opacity: apps === null ? 0 : 1 }}>
+      {/* Hidden, not left out, until some answer is known: the row's height stays and the card doesn't jump. */}
+      <View style={{ opacity: shown === null ? 0 : 1 }}>
         <ShareDestinations destinations={destinations} disabled={busy || !ready || apps === null} />
       </View>
     </View>
