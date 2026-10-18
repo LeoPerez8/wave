@@ -17,8 +17,9 @@
  * the foreground or imports again. A read that fails otherwise leaves its
  * playlist empty, with a line and Try Again on its page. With Also add to Favorites on, Liked Songs'
  * read stars its songs the Library has (Core's `ytLibraryFavorites`), kept
- * in the batch so a resumed read or Try Again still stars; the star syncs
- * like any other, and the import never takes one away.
+ * in the batch so a resumed read or Try Again still stars; the others are
+ * kept as pending favorites, each starred once a download or scan brings
+ * it in. The star syncs like any other, and the import never takes one away.
  *
  * Each playlist's origin (the YouTube Music playlist it came from) is kept
  * on this phone, unsynced: the picker marks those rows Imported, and ticking
@@ -42,6 +43,7 @@ import {
   ytLibraryReadFailed,
   ytLibraryReadLogLine,
   ytLibraryReadView,
+  type PendingFavorite,
   type YtLibraryBatch,
   type YtLibraryOrigins,
   type YtLibraryPicker,
@@ -128,6 +130,18 @@ const downloadPlaylist = async (playlistId: number): Promise<void> => {
 };
 
 /**
+ * Keeps the liked songs the Library hasn't as pending favorites: each gets
+ * its star once a download or scan brings it in (the store's `saveBatch`).
+ */
+const keepPendingFavorites = async (songs: readonly PendingFavorite[]): Promise<void> => {
+  if (songs.length === 0) return;
+  await appRuntime.runPromise(
+    // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+    LibraryStore.use((store) => store.addPendingFavorites(songs)),
+  );
+};
+
+/**
  * Reads [read]'s playlist and gives its Wave playlist the songs, as a link
  * import does (whose line goes to the app log), starring the Library's songs
  * when it was asked to. A read whose playlist was refreshed or deleted
@@ -149,7 +163,10 @@ const fill = async (read: YtLibraryRead): Promise<string | null> => {
         await listLibrary(),
       );
       // Before it leaves the batch: Wave stopped in between stars again, which changes nothing.
-      await setFavorites(ytLibraryFavorites(read, plan), true);
+      const favorites = ytLibraryFavorites(read, plan);
+      await setFavorites(favorites.star, true);
+      // Before any download is queued, so each one's landing finds its pending favorite.
+      await keepPendingFavorites(favorites.pending);
       // Checked again with no wait before the link import starts: a refresh from here on
       // empties the playlist and ends that import.
       if (!isYtLibraryReadQueued(batch.get(), read)) return null;
