@@ -43,6 +43,7 @@ const song = (
   year: null,
   genre: null,
   hasLyrics: false,
+  explicit: "unknown",
 });
 
 const ytSong = (videoId: string): YtSong => ({

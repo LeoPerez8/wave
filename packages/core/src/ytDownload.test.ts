@@ -75,7 +75,14 @@ describe("ytDownloadTags", () => {
       genre: "Dance",
       lyrics: "[00:01.00]Like the legend",
       artworkUrl: "https://yt3.googleusercontent.com/N55arCGj=w1200-h1200-l90-rj",
+      // YT Music didn't mark it explicit: checked and clean.
+      advisory: 0,
     });
+  });
+
+  test("a song YT Music marks explicit gets an advisory tag of 1", () => {
+    assert.equal(ytDownloadTags({ ...getLucky, explicit: true }, ram, null, null).advisory, 1);
+    assert.equal(ytDownloadTags({ ...getLucky, explicit: true }, null, null, null).advisory, 1);
   });
 
   test("finds the song in its album by video id first", () => {

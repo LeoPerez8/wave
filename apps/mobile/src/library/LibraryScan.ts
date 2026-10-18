@@ -1,4 +1,5 @@
 import {
+  explicitFromAdvisory,
   normalizeTrack,
   planAddRoot,
   planExclusion,
@@ -85,6 +86,7 @@ export const toIndexedTrack = (native: NativeScannedTrack): IndexedTrack => ({
   bitrateKbps: native.bitrateKbps,
   artworkHash: native.artworkHash,
   hasLyrics: native.hasLyrics,
+  explicit: explicitFromAdvisory(native.advisory),
 });
 
 export const toIndexedArtwork = (native: NativeArtwork): IndexedArtwork => {

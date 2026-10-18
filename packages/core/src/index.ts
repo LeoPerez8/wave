@@ -1241,3 +1241,5 @@ export type {
 export { discoverMixesSection } from "./discoverMixesSection.ts";
 export type { DiscoverMixesSection } from "./discoverMixesSection.ts";
 export { streamedCoverUrl, streamedCoverUrls } from "./streamedCover.ts";
+export { advisoryTag, explicitFromAdvisory, isExplicit, showsExplicitBadge } from "./explicit.ts";
+export type { ExplicitFlag } from "./explicit.ts";
