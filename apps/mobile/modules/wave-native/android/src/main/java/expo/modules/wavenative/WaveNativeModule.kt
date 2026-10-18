@@ -25,6 +25,8 @@ import expo.modules.kotlin.exception.Exceptions
 import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import expo.modules.kotlin.records.Field
+import expo.modules.kotlin.records.Record
 import expo.modules.wavenative.appearance.AppearanceMode
 import expo.modules.wavenative.artwork.AndroidArtworkProcessor
 import expo.modules.wavenative.artwork.ArtistPhotoStore
@@ -71,6 +73,15 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+
+/** A square of a playlist image's original as JS passes it (Core's `FramingSquare`), in px. */
+class FramingSquareRecord : Record {
+  @Field val left: Int = 0
+  @Field val top: Int = 0
+  @Field val side: Int = 0
+
+  fun toSquare(): Square = Square(left, top, side)
+}
 
 /**
  * Wave's native side: all-files access, the folder, playlist file and playlist image pickers, the library scanner,
@@ -203,17 +214,17 @@ class WaveNativeModule : Module() {
     }.runOnQueue(Queues.MAIN)
 
     /**
-     * Crops the square [left], [top], [side] (px) out of the original at [path]
+     * Crops [square] (px, Core's `framingSquare`) out of the original at [path]
      * (one `pickPlaylistPhoto` kept, or an image saved before originals were)
      * and saves it as a playlist image. Resolves `{ path, thumbPath }` (new
      * files each time); rejects when [path] isn't one of Wave's playlist
      * images or can't be read.
      */
-    AsyncFunction("cropPlaylistImage") { path: String, left: Int, top: Int, side: Int ->
+    AsyncFunction("cropPlaylistImage") { path: String, square: FramingSquareRecord ->
       val store = playlistImages()
       if (!store.owns(path)) throw IllegalArgumentException("Not a playlist image: $path")
       try {
-        val (large, thumb) = AndroidPlaylistImages.squareJpegs(path, Square(left, top, side))
+        val (large, thumb) = AndroidPlaylistImages.squareJpegs(path, square.toSquare())
         store.save(large, thumb).toMap()
       } catch (e: OutOfMemoryError) {
         throw IllegalStateException("The photo is too big", e)

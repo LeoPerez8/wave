@@ -37,14 +37,7 @@ import { UnsearchedSongRow } from "./UnsearchedSongRow";
 
 import { useFavoriteIds } from "./favorites";
 import type { PlaylistEntryRow } from "./LibraryStore";
-import {
-  entryText,
-  FIND_FIELD_HEIGHT,
-  FindInPlaylistField,
-  foundSongs,
-  NoSongsMatch,
-  useFindInList,
-} from "./FindInPlaylist";
+import { entryText, FIND_FIELD_HEIGHT, FindHead, useFindInList } from "./FindInPlaylist";
 import {
   useDragCell,
   useListDrag,
@@ -376,9 +369,8 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
     () => dragRef.current?.drag.scroll.get() ?? 0,
     (y) => dragRef.current?.scrollRef.current?.scrollTo({ y, animated: false }),
   );
-  const { found } = find;
   // The rows shown: the whole playlist, or the songs the query finds, in playlist order.
-  const shown = useMemo(() => foundSongs(order, found), [found, order]);
+  const { found, shown } = find;
   const orderRef = useRef(order);
   useLayoutEffect(() => {
     orderRef.current = order;
@@ -412,7 +404,7 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
     const item = shown[index];
     if (item === undefined) return null;
     // A found song plays the whole playlist from its own place in it.
-    const play = () => playPlaylistEntries(order, found?.[index] ?? index, context);
+    const play = () => playPlaylistEntries(order, find.placeOf(index), context);
     const row =
       item.source === "unavailable" && listSelection.selecting
         ? INERT_ROW
@@ -459,8 +451,7 @@ export function PlaylistItems({ playlistId, items, header, empty }: Props) {
       }}
     >
       <View onLayout={listDrag.onHeaderLayout}>
-        <FindInPlaylistField find={find} />
-        {found === null ? header : found.length === 0 ? <NoSongsMatch /> : null}
+        <FindHead find={find} header={header} />
       </View>
       {items !== undefined && found === null && order.length === 0 && empty}
       {items !== undefined && shown.length > 0 && (

@@ -178,32 +178,23 @@ const framePlaylistImage = async (
   frame: FramePhoto,
   fresh: boolean,
 ): Promise<boolean> => {
-  const discard = fresh ? [photo.path] : [];
-  const framing = await frame(photo, start).catch(async (error: unknown) => {
+  // What a Cancel or a failure leaves behind: the fresh photo, then the new square's files too.
+  let discard: readonly string[] = fresh ? [photo.path] : [];
+  let unused: readonly string[];
+  try {
+    const framing = await frame(photo, start);
+    if (framing === null) {
+      await deleteImageFiles(discard);
+      return false;
+    }
+    const files = await WaveNative.cropPlaylistImage(photo.path, framingSquare(photo, framing));
+    discard = [files.path, files.thumbPath, ...discard];
+    const image = { ...files, originalPath: photo.path, framing: framingText(photo, framing) };
+    unused = await edit((store) => store.setPlaylistImage(id, image), id);
+  } catch (error) {
     await deleteImageFiles(discard);
     throw error;
-  });
-  if (framing === null) {
-    await deleteImageFiles(discard);
-    return false;
   }
-  const square = framingSquare(photo, framing);
-  const files = await WaveNative.cropPlaylistImage(
-    photo.path,
-    square.left,
-    square.top,
-    square.side,
-  ).catch(async (error: unknown) => {
-    await deleteImageFiles(discard);
-    throw error;
-  });
-  const image = { ...files, originalPath: photo.path, framing: framingText(photo, framing) };
-  const unused = await edit((store) => store.setPlaylistImage(id, image), id).catch(
-    async (error: unknown) => {
-      await deleteImageFiles([files.path, files.thumbPath, ...discard]);
-      throw error;
-    },
-  );
   await deleteImageFiles(unused);
   return true;
 };

@@ -40,6 +40,9 @@ export function useRecapMusic(
     return song !== null && songHasFile(song.item) ? song.item : null;
   }, [recap, index, playingBefore]);
 
+  // Whether the stories are held (or Share is open) as each step runs.
+  const held = useRef(paused);
+
   // A new slide's song takes over; the same song goes on playing.
   const played = useRef<number | null>(null);
   useEffect(() => {
@@ -50,12 +53,13 @@ export function useRecapMusic(
       Effect.gen(function* () {
         loan.current ??= yield* (yield* Queue).borrow;
         yield* loan.current.play(toQueueTrack(row));
+        // Held before the song could start (while the Recap loaded): it waits, paused.
+        if (held.current) yield* (yield* Player).pause;
       }),
     );
   }, [row]);
 
   // Holding a slide pauses the music, letting go resumes it.
-  const held = useRef(paused);
   useEffect(() => {
     if (held.current === paused) return;
     held.current = paused;

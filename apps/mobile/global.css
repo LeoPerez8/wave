@@ -24,6 +24,11 @@
  * (Core's SETTINGS_TILE_COLOURS, each page naming its own in SETTINGS_PAGES).
  * The chosen theme leaves them as they are; each keeps its glyph (`on-tile`,
  * white, Core's SETTINGS_TILE_GLYPH) legible.
+ *
+ * The `recap-*` colours are a Recap's own: its slides, its share image,
+ * Stats' Recap tiles and Home's Recap card (Core's RECAP_COLOURS), the same
+ * in both schemes, under white ink (`on-recap`, Core's RECAP_INK) that reads
+ * as text, its quieter lines at 80% too.
  */
 @layer theme {
   :root {
@@ -50,6 +55,15 @@
       --color-tile-pink: #c93370;
       --color-tile-grey: #606b6e;
       --color-on-tile: #ffffff;
+      --color-recap-red: #b02c24;
+      --color-recap-orange: #9c4600;
+      --color-recap-green: #1e6e35;
+      --color-recap-blue: #1a5fb8;
+      --color-recap-indigo: #3f43b8;
+      --color-recap-purple: #7a3bb0;
+      --color-recap-pink: #a8285e;
+      --color-recap-grey: #454f52;
+      --color-on-recap: #ffffff;
     }
 
     @variant dark {
@@ -75,6 +89,15 @@
       --color-tile-pink: #d6427d;
       --color-tile-grey: #778385;
       --color-on-tile: #ffffff;
+      --color-recap-red: #b02c24;
+      --color-recap-orange: #9c4600;
+      --color-recap-green: #1e6e35;
+      --color-recap-blue: #1a5fb8;
+      --color-recap-indigo: #3f43b8;
+      --color-recap-purple: #7a3bb0;
+      --color-recap-pink: #a8285e;
+      --color-recap-grey: #454f52;
+      --color-on-recap: #ffffff;
     }
   }
 }

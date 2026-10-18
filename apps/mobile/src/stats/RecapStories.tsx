@@ -2,13 +2,14 @@ import { IconShare3, IconX } from "@tabler/icons-react-native";
 import {
   RECAP_SLIDE_MS,
   recapBack,
+  recapAutoForward,
   recapBarFill,
   recapForward,
   recapHourLabel,
   recapWeekdayLabel,
   type GenreFamily,
   type RecapGenre,
-  type SettingsTileColour,
+  type RecapColour,
 } from "@wave/core";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
@@ -79,8 +80,8 @@ function Rise({ step, children }: { step: number; children: ReactNode }) {
   );
 }
 
-/** Each slide kind's backdrop: a tile colour, white ink on it. */
-const BACKDROP: Record<LoadedRecapSlide["kind"], SettingsTileColour> = {
+/** Each slide kind's backdrop: a Recap colour, white ink on it. */
+const BACKDROP: Record<LoadedRecapSlide["kind"], RecapColour> = {
   minutes: "indigo",
   topSongs: "pink",
   topArtists: "purple",
@@ -95,20 +96,20 @@ function MinutesSlide({ title, minutes }: { title: string; minutes: number }) {
   return (
     <View className="flex-1 justify-center" style={{ gap: CELL * 2 }}>
       <Rise step={0}>
-        <Text className="font-sans text-title3 text-on-tile">In {title} you listened for</Text>
+        <Text className="font-sans text-title3 text-on-recap">In {title} you listened for</Text>
       </Rise>
       <Rise step={1}>
         <Text
           adjustsFontSizeToFit
           numberOfLines={1}
-          className="font-sans font-bold text-on-tile"
+          className="font-sans font-bold text-on-recap"
           style={{ fontSize: 96, lineHeight: 104, fontVariant: ["tabular-nums"] }}
         >
           {minutes.toLocaleString("en")}
         </Text>
       </Rise>
       <Rise step={2}>
-        <Text className="font-sans text-title1 font-semibold text-on-tile">
+        <Text className="font-sans text-title1 font-semibold text-on-recap">
           {minutes === 1 ? "minute" : "minutes"}
         </Text>
       </Rise>
@@ -116,8 +117,12 @@ function MinutesSlide({ title, minutes }: { title: string; minutes: number }) {
   );
 }
 
-const artworkUri = (song: SongRow): string | undefined => {
-  const path = song.artworkPath ?? song.thumbPath;
+/** A song's or an album's cover as a file URI: its artwork, else its thumbnail. */
+const artworkUri = (item: {
+  readonly artworkPath: string | null;
+  readonly thumbPath: string | null;
+}): string | undefined => {
+  const path = item.artworkPath ?? item.thumbPath;
   return path === null ? undefined : `file://${path}`;
 };
 
@@ -126,20 +131,18 @@ function TopSongsSlide({ songs }: { songs: readonly Ranked<SongRow>[] }) {
   if (top === undefined) return null;
   return (
     <View className="flex-1 justify-center" style={{ gap: CELL * 3 }}>
-      <Rise step={0}>
-        <Text className="font-sans text-title3 text-on-tile">Your top songs</Text>
-      </Rise>
+      <Heading>Your top songs</Heading>
       <Rise step={1}>
         <View style={{ gap: CELL * 1.5 }}>
           <Artwork uri={artworkUri(top.item)} size={CELL * 26} radius={12} />
           <View>
-            <Text className="font-sans text-footnote font-semibold text-on-tile opacity-80">
+            <Text className="font-sans text-footnote font-semibold text-on-recap opacity-80">
               #1 · {playCount(top.countedPlays)}
             </Text>
-            <Text numberOfLines={2} className="font-sans text-title1 font-bold text-on-tile">
+            <Text numberOfLines={2} className="font-sans text-title1 font-bold text-on-recap">
               {top.item.title}
             </Text>
-            <Text numberOfLines={1} className="font-sans text-body text-on-tile opacity-80">
+            <Text numberOfLines={1} className="font-sans text-body text-on-recap opacity-80">
               {top.item.artist}
             </Text>
           </View>
@@ -147,24 +150,13 @@ function TopSongsSlide({ songs }: { songs: readonly Ranked<SongRow>[] }) {
       </Rise>
       <View style={{ gap: CELL * 1.5 }}>
         {rest.map((entry, index) => (
-          <Rise key={entry.item.id} step={index + 2}>
-            <View className="flex-row items-center" style={{ gap: CELL * 2 }}>
-              <Text
-                className="font-sans text-title3 font-semibold text-on-tile"
-                style={{ width: CELL * 3, fontVariant: ["tabular-nums"] }}
-              >
-                {index + 2}
-              </Text>
-              <View className="flex-1">
-                <Text numberOfLines={1} className="font-sans text-body font-semibold text-on-tile">
-                  {entry.item.title}
-                </Text>
-                <Text numberOfLines={1} className="font-sans text-footnote text-on-tile opacity-80">
-                  {entry.item.artist} · {playCount(entry.countedPlays)}
-                </Text>
-              </View>
-            </View>
-          </Rise>
+          <RankedLine
+            key={entry.item.id}
+            rank={index + 2}
+            step={index + 2}
+            title={entry.item.title}
+            detail={`${entry.item.artist} · ${playCount(entry.countedPlays)}`}
+          />
         ))}
       </View>
     </View>
@@ -175,7 +167,7 @@ function TopSongsSlide({ songs }: { songs: readonly Ranked<SongRow>[] }) {
 function Heading({ children }: { children: ReactNode }) {
   return (
     <Rise step={0}>
-      <Text className="font-sans text-title3 text-on-tile">{children}</Text>
+      <Text className="font-sans text-title3 text-on-recap">{children}</Text>
     </Rise>
   );
 }
@@ -198,18 +190,18 @@ function RankedLine({
     <Rise step={step}>
       <View className="flex-row items-center" style={{ gap: CELL * 2 }}>
         <Text
-          className="font-sans text-title3 font-semibold text-on-tile"
+          className="font-sans text-title3 font-semibold text-on-recap"
           style={{ width: CELL * 3, fontVariant: ["tabular-nums"] }}
         >
           {rank}
         </Text>
         {image}
         <View className="flex-1">
-          <Text numberOfLines={1} className="font-sans text-body font-semibold text-on-tile">
+          <Text numberOfLines={1} className="font-sans text-body font-semibold text-on-recap">
             {title}
           </Text>
           {detail !== undefined && (
-            <Text numberOfLines={1} className="font-sans text-footnote text-on-tile opacity-80">
+            <Text numberOfLines={1} className="font-sans text-footnote text-on-recap opacity-80">
               {detail}
             </Text>
           )}
@@ -229,10 +221,10 @@ function TopArtistsSlide({ artists }: { artists: readonly Ranked<ArtistRow>[] })
         <View style={{ gap: CELL * 1.5 }}>
           <ArtistImage artist={top.item} size={CELL * 22} large />
           <View>
-            <Text className="font-sans text-footnote font-semibold text-on-tile opacity-80">
+            <Text className="font-sans text-footnote font-semibold text-on-recap opacity-80">
               #1 · {playCount(top.countedPlays)}
             </Text>
-            <Text numberOfLines={2} className="font-sans text-title1 font-bold text-on-tile">
+            <Text numberOfLines={2} className="font-sans text-title1 font-bold text-on-recap">
               {top.item.name}
             </Text>
           </View>
@@ -255,19 +247,18 @@ function TopArtistsSlide({ artists }: { artists: readonly Ranked<ArtistRow>[] })
 }
 
 function TopAlbumSlide({ album }: { album: Ranked<AlbumRow> }) {
-  const path = album.item.artworkPath ?? album.item.thumbPath;
   return (
     <View className="flex-1 justify-center" style={{ gap: CELL * 3 }}>
       <Heading>Your top album</Heading>
       <Rise step={1}>
-        <Artwork uri={path === null ? undefined : `file://${path}`} size={CELL * 32} radius={12} />
+        <Artwork uri={artworkUri(album.item)} size={CELL * 32} radius={12} />
       </Rise>
       <Rise step={2}>
         <View>
-          <Text numberOfLines={2} className="font-sans text-title1 font-bold text-on-tile">
+          <Text numberOfLines={2} className="font-sans text-title1 font-bold text-on-recap">
             {album.item.title}
           </Text>
-          <Text numberOfLines={1} className="font-sans text-body text-on-tile opacity-80">
+          <Text numberOfLines={1} className="font-sans text-body text-on-recap opacity-80">
             {album.item.albumArtist} · {playCount(album.countedPlays)}
           </Text>
         </View>
@@ -286,13 +277,13 @@ function TopGenresSlide({ genres }: { genres: readonly RecapGenre[] }) {
       <Heading>Your top genres</Heading>
       <Rise step={1}>
         <View>
-          <Text className="font-sans text-footnote font-semibold text-on-tile opacity-80">
+          <Text className="font-sans text-footnote font-semibold text-on-recap opacity-80">
             #1 · {percent(top.share)} of your plays
           </Text>
           <Text
             adjustsFontSizeToFit
             numberOfLines={1}
-            className="font-sans font-bold text-on-tile"
+            className="font-sans font-bold text-on-recap"
             style={{ fontSize: 56, lineHeight: 64 }}
           >
             {top.family.name}
@@ -327,22 +318,22 @@ function HabitsSlide({
     <View className="flex-1 justify-center" style={{ gap: CELL * 4 }}>
       <Heading>You listened most</Heading>
       <Rise step={1}>
-        <Text className="font-sans text-title1 font-bold text-on-tile">
+        <Text className="font-sans text-title1 font-bold text-on-recap">
           on {recapWeekdayLabel(peakWeekday)}
         </Text>
-        <Text className="font-sans text-title1 font-bold text-on-tile">
+        <Text className="font-sans text-title1 font-bold text-on-recap">
           around {recapHourLabel(peakHour)}
         </Text>
       </Rise>
       <Rise step={2}>
-        <Text className="font-sans text-title3 text-on-tile">Your longest streak</Text>
+        <Text className="font-sans text-title3 text-on-recap">Your longest streak</Text>
         <Text
-          className="font-sans font-bold text-on-tile"
+          className="font-sans font-bold text-on-recap"
           style={{ fontSize: 56, lineHeight: 64, fontVariant: ["tabular-nums"] }}
         >
           {longestStreakDays}
         </Text>
-        <Text className="font-sans text-title3 font-semibold text-on-tile">
+        <Text className="font-sans text-title3 font-semibold text-on-recap">
           {longestStreakDays === 1 ? "day" : "days in a row"}
         </Text>
       </Rise>
@@ -362,12 +353,12 @@ function DiscoveredSlide({
       <Heading>You discovered</Heading>
       <Rise step={1}>
         <Text
-          className="font-sans font-bold text-on-tile"
+          className="font-sans font-bold text-on-recap"
           style={{ fontSize: 72, lineHeight: 80, fontVariant: ["tabular-nums"] }}
         >
           {count.toLocaleString("en")}
         </Text>
-        <Text className="font-sans text-title1 font-semibold text-on-tile">
+        <Text className="font-sans text-title1 font-semibold text-on-recap">
           {count === 1 ? "new artist" : "new artists"}
         </Text>
       </Rise>
@@ -391,7 +382,7 @@ function DiscoveredSlide({
 function SummaryColumn({ heading, names }: { heading: string; names: readonly string[] }) {
   return (
     <View className="flex-1" style={{ gap: CELL }}>
-      <Text className="font-sans text-footnote font-semibold text-on-tile opacity-80">
+      <Text className="font-sans text-footnote font-semibold text-on-recap opacity-80">
         {heading}
       </Text>
       {names.map((name, index) => (
@@ -399,7 +390,7 @@ function SummaryColumn({ heading, names }: { heading: string; names: readonly st
           // A name can repeat (two songs with one title); the rank can't.
           key={index}
           numberOfLines={1}
-          className="font-sans text-subheadline font-semibold text-on-tile"
+          className="font-sans text-subheadline font-semibold text-on-recap"
         >
           <Text style={{ fontVariant: ["tabular-nums"] }}>{index + 1} </Text>
           {name}
@@ -413,11 +404,13 @@ function SummaryColumn({ heading, names }: { heading: string; names: readonly st
 function SummaryFigure({ label, value }: { label: string; value: string }) {
   return (
     <View className="flex-1">
-      <Text className="font-sans text-footnote font-semibold text-on-tile opacity-80">{label}</Text>
+      <Text className="font-sans text-footnote font-semibold text-on-recap opacity-80">
+        {label}
+      </Text>
       <Text
         adjustsFontSizeToFit
         numberOfLines={1}
-        className="font-sans text-title1 font-bold text-on-tile"
+        className="font-sans text-title1 font-bold text-on-recap"
         style={{ fontVariant: ["tabular-nums"] }}
       >
         {value}
@@ -519,9 +512,9 @@ function ProgressBar({
 }) {
   const filling = useAnimatedStyle(() => ({ width: `${progress.get() * 100}%` }));
   return (
-    <View className="flex-1 overflow-hidden rounded-full bg-on-tile/30" style={{ height: 3 }}>
+    <View className="flex-1 overflow-hidden rounded-full bg-on-recap/30" style={{ height: 3 }}>
       <Animated.View
-        className="h-full rounded-full bg-on-tile"
+        className="h-full rounded-full bg-on-recap"
         style={bar === index ? filling : { width: `${recapBarFill(bar, index, 0) * 100}%` }}
       />
     </View>
@@ -529,8 +522,8 @@ function ProgressBar({
 }
 
 /**
- * A Recap's stories: full-screen slides that move on by themselves, with a
- * progress bar for each at the top. A tap on the right goes forward (past the
+ * A Recap's stories: full-screen slides that move on by themselves (the
+ * summary card, last, stays), with a progress bar for each at the top. A tap on the right goes forward (past the
  * last slide, it closes), on the left back; holding pauses; dragging down or
  * the close button closes. `recap` is undefined while it loads and null when
  * the period has no Recap.
@@ -557,7 +550,9 @@ export function RecapStories({
   const count = recap?.slides.length ?? 0;
   useRecapMusic(recap, index, paused);
   const slide = recap?.slides[index];
-  const backdrop = useThemeColor(`tile-${slide === undefined ? "grey" : BACKDROP[slide.kind]}`);
+  // While the Recap loads (or when there's none), the viewer sits on grey.
+  const backdrop = useThemeColor(`recap-${slide === undefined ? "grey" : BACKDROP[slide.kind]}`);
+  const ink = useThemeColor("on-recap");
   const closeShare = useCallback(() => setSharing(false), []);
 
   const close = useCallback(() => {
@@ -575,6 +570,14 @@ export function RecapStories({
     }
   }, [close, count, index, progress]);
 
+  // A slide's time ran out: on to the next, but the summary card stays.
+  const timeUp = useCallback(() => {
+    const next = recapAutoForward(index, count);
+    if (next === null) return;
+    progress.set(0);
+    setIndex(next);
+  }, [count, index, progress]);
+
   const back = useCallback(() => {
     progress.set(0);
     // Back on the first slide restarts it: the timer below starts again.
@@ -582,8 +585,9 @@ export function RecapStories({
     setRestarts((n) => n + 1);
   }, [progress]);
 
-  // The slide showing plays out its time, then the stories move on; a pause
-  // holds the bar where it is and the rest of the time resumes after.
+  // The slide showing plays out its time, then the stories move on (the
+  // summary card's bar fills and stays); a pause holds the bar where it is
+  // and the rest of the time resumes after.
   useEffect(() => {
     if (count === 0 || paused) {
       cancelAnimation(progress);
@@ -595,14 +599,14 @@ export function RecapStories({
         { duration: (1 - progress.get()) * RECAP_SLIDE_MS, easing: Easing.linear },
         (finished) => {
           "worklet";
-          if (finished === true) scheduleOnRN(forward);
+          if (finished === true) scheduleOnRN(timeUp);
         },
       ),
     );
     return () => cancelAnimation(progress);
     // `index` and `restarts` aren't read in here: a new slide, or the same one again, restarts the timer.
     // oxlint-disable-next-line react/exhaustive-effect-dependencies
-  }, [count, forward, paused, progress, index, restarts]);
+  }, [count, timeUp, paused, progress, index, restarts]);
 
   const settleDrag = useCallback(
     (translation: number, velocity: number) => {
@@ -648,16 +652,12 @@ export function RecapStories({
   }));
 
   return (
-    <View className="flex-1 bg-scrim">
+    <View className="flex-1 bg-background">
       <StatusBar style="light" />
       <Animated.View
         accessibilityViewIsModal
-        className="flex-1 overflow-hidden bg-scrim"
-        style={[
-          { paddingTop: insets.top + CELL },
-          slide !== undefined && { backgroundColor: backdrop },
-          dragStyle,
-        ]}
+        className="flex-1 overflow-hidden"
+        style={[{ paddingTop: insets.top + CELL, backgroundColor: backdrop }, dragStyle]}
         onLayout={(event) => {
           width.current = event.nativeEvent.layout.width;
         }}
@@ -673,7 +673,7 @@ export function RecapStories({
         >
           <Text
             numberOfLines={1}
-            className="flex-1 font-sans text-subheadline font-semibold text-on-tile"
+            className="flex-1 font-sans text-subheadline font-semibold text-on-recap"
           >
             {recap?.title ?? ""}
           </Text>
@@ -686,7 +686,7 @@ export function RecapStories({
               className="items-center justify-center"
               style={{ width: 48, height: 48 }}
             >
-              <IconShare3 size={24} color="#ffffff" strokeWidth={1.5} />
+              <IconShare3 size={24} color={ink} strokeWidth={1.5} />
             </Press>
           )}
           <Press
@@ -697,7 +697,7 @@ export function RecapStories({
             className="items-center justify-center"
             style={{ width: 48, height: 48 }}
           >
-            <IconX size={24} color="#ffffff" strokeWidth={1.5} />
+            <IconX size={24} color={ink} strokeWidth={1.5} />
           </Press>
         </View>
         {/* The slide takes the taps, holds and drags; the close button above stays its own. */}
@@ -708,7 +708,7 @@ export function RecapStories({
           >
             {recap === null ? (
               <View className="flex-1 justify-center">
-                <Text className="font-sans text-title3 text-on-tile">
+                <Text className="font-sans text-title3 text-on-recap">
                   This Recap isn&apos;t available.
                 </Text>
               </View>
