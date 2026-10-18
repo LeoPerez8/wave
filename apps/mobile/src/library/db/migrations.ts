@@ -861,6 +861,26 @@ CREATE TABLE \`saved_lyrics\` (
 );
 `;
 
+// The songs a quality replacement found no better copy of (\`schema.ts\`'s \`noBetterCopies\`).
+const mNoBetterCopies = `
+CREATE TABLE \`no_better_copies\` (
+	\`track_id\` integer NOT NULL,
+	\`direction\` text NOT NULL,
+	PRIMARY KEY(\`track_id\`, \`direction\`),
+	FOREIGN KEY (\`track_id\`) REFERENCES \`tracks\`(\`id\`) ON UPDATE no action ON DELETE cascade
+);
+`;
+
+// Library songs the Lyrics view's online search found no lyrics for
+// (\`schema.ts\`'s \`lyricsMisses\`).
+const mLyricsMisses = `
+CREATE TABLE \`lyrics_misses\` (
+	\`track_id\` integer PRIMARY KEY NOT NULL,
+	\`checked_at\` integer NOT NULL,
+	FOREIGN KEY (\`track_id\`) REFERENCES \`tracks\`(\`id\`) ON UPDATE no action ON DELETE cascade
+);
+`;
+
 export default {
   journal: {
     entries: [
@@ -893,6 +913,8 @@ export default {
       { idx: 26, when: 1_794_052_800_000, tag: "0026_explicit", breakpoints: true },
       { idx: 27, when: 1_794_139_200_000, tag: "0027_pending_favorites", breakpoints: true },
       { idx: 28, when: 1_794_225_600_000, tag: "0028_saved_lyrics", breakpoints: true },
+      { idx: 29, when: 1_794_312_000_000, tag: "0029_no_better_copies", breakpoints: true },
+      { idx: 30, when: 1_794_398_400_000, tag: "0030_lyrics_misses", breakpoints: true },
     ],
   },
   migrations: {
@@ -925,5 +947,7 @@ export default {
     m0026: mExplicit,
     m0027: mPendingFavorites,
     m0028: mSavedLyrics,
+    m0029: mNoBetterCopies,
+    m0030: mLyricsMisses,
   },
 };

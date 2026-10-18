@@ -16,6 +16,7 @@ import type {
   DiscoverSeedSong,
   DiscoverSongPlays,
 } from "./discoverMixes.ts";
+import { mixLibrarySong } from "./discoverMixes.ts";
 import { isExplicit, type ExplicitFlag } from "./explicit.ts";
 import { ofGenreFamily } from "./genreMixes.ts";
 import { identityKey } from "./library.ts";
@@ -187,12 +188,7 @@ export const discoverMixLibraryPool = <S extends DiscoverRadioSong>(
   const add = (song: DiscoverSeedSong): void => {
     if (pool.length >= most || seen.has(song.id)) return;
     seen.add(song.id);
-    const { id, title, artist, explicit } = song;
-    pool.push(
-      explicit === undefined || explicit === "unknown"
-        ? { id, title, artist }
-        : { id, title, artist, explicit },
-    );
+    pool.push(mixLibrarySong(song));
   };
   for (const song of radio) {
     if (song.video) continue;

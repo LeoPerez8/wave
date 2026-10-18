@@ -51,8 +51,9 @@ import {
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { useFocusEffect } from "expo-router";
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useSyncExternalStore } from "react";
 
+import { makeExternalStore, type ExternalStore } from "@/lib/externalStore";
 import { persistedSetting, type PersistedSetting } from "@/lib/persistedSetting";
 import { libraryListQueries } from "@/library/hooks";
 import { LibraryStore, type SongRow } from "@/library/LibraryStore";
@@ -320,8 +321,11 @@ interface MixSection {
    * and is often left without families.
    */
   readonly nothingRetryMs: number;
-  /** A build going on, so Home coming back into focus meanwhile doesn't start another. */
-  building: boolean;
+  /**
+   * A build going on: Home coming back into focus meanwhile doesn't start
+   * another, and the section says it's updating over the saved mixes.
+   */
+  readonly building: ExternalStore<boolean>;
   /** After a build that made no mixes: no build before then (ms since the epoch). */
   retryAt: number | null;
 }
@@ -346,7 +350,7 @@ const section = (
   nothingToBuildFrom: flag(`${key}.nothingToBuildFrom`),
   build,
   nothingRetryMs,
-  building: false,
+  building: makeExternalStore(false),
   retryAt: null,
 });
 
@@ -367,9 +371,10 @@ const sectionOfMix = (id: string): MixSectionId =>
 const refresh = (id: MixSectionId, played: boolean): void => {
   const mixSection = SECTIONS[id];
   const now = Date.now();
-  if (mixSection.building || !discoverMixesDue(mixSection.saved.get(), { now, played })) return;
+  if (mixSection.building.get() || !discoverMixesDue(mixSection.saved.get(), { now, played }))
+    return;
   if (mixSection.retryAt !== null && now < mixSection.retryAt) return;
-  mixSection.building = true;
+  mixSection.building.set(true);
   void appRuntime
     .runPromise(Effect.result(mixSection.build))
     .then((result) => {
@@ -390,7 +395,7 @@ const refresh = (id: MixSectionId, played: boolean): void => {
       if (Result.isSuccess(result)) mixSection.nothingToBuildFrom.set(false);
     })
     .finally(() => {
-      mixSection.building = false;
+      mixSection.building.set(false);
     });
 };
 
@@ -428,26 +433,34 @@ export const useLibraryTracks = (): ReadonlyMap<number, SongRow> | null => {
 
 /**
  * What the Home mix section [id] shows (`discoverMixesSection`): the last
- * mixes built, blended by its level, a skeleton while the first ones build,
- * or nothing while YT Music is off. Each time Home comes into focus with YT
+ * mixes built, blended by its level (saying they're updating while a
+ * rebuild runs), a skeleton while the first ones build, or nothing while YT
+ * Music is off. Each time Home comes into focus with YT
  * Music on, they're built again if they weren't today, and while it's in
  * focus once [played] turns true (the first counted plays) if the last build
  * had no seeds from plays.
  */
 export const useDiscoverMixes = (id: MixSectionId, played: boolean): DiscoverMixesSection => {
-  const { saved, nothingToBuildFrom } = SECTIONS[id];
+  const { saved, nothingToBuildFrom, building } = SECTIONS[id];
   const enabled = useYtMusicEnabled();
   const mixes = saved.useValue();
   const blend = useBlend(id, null);
   const nothing = nothingToBuildFrom.useValue();
+  const rebuilding = useSyncExternalStore(building.subscribe, building.get);
   useFocusEffect(
     useCallback(() => {
       if (enabled) refresh(id, played);
     }, [enabled, id, played]),
   );
   return useMemo(
-    () => discoverMixesSection(mixes, { ytMusic: enabled, nothingToBuildFrom: nothing, blend }),
-    [mixes, enabled, nothing, blend],
+    () =>
+      discoverMixesSection(mixes, {
+        ytMusic: enabled,
+        nothingToBuildFrom: nothing,
+        blend,
+        building: rebuilding,
+      }),
+    [mixes, enabled, nothing, blend, rebuilding],
   );
 };
 

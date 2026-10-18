@@ -683,3 +683,35 @@ export const savedLyrics = sqliteTable("saved_lyrics", {
   /** When the search was made (ms since the epoch). */
   checkedAt: integer("checked_at").notNull(),
 });
+
+/**
+ * The songs a quality replacement found no better copy of (Core's
+ * `noBetterCopies`): no Soulseek 320 for an upgrade, no YouTube Music match
+ * for a downgrade, or a failure after retries. Each keeps its file and isn't
+ * offered in that direction again. Goes with its Track; this phone only.
+ */
+export const noBetterCopies = sqliteTable(
+  "no_better_copies",
+  {
+    trackId: integer("track_id")
+      .notNull()
+      .references(() => tracks.id, { onDelete: "cascade" }),
+    /** Core's `QualityDirection`: "upgrade" or "downgrade". */
+    direction: text("direction").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.trackId, t.direction] })],
+);
+
+/**
+ * Library songs whose file has no lyrics and for which the Lyrics view's
+ * online search found none (Core's `libraryLyrics`): not searched again for
+ * a week (`LYRICS_MISS_RETRY_MS`). Lyrics it finds go into the file, so only
+ * misses are kept. This phone only, never synced.
+ */
+export const lyricsMisses = sqliteTable("lyrics_misses", {
+  trackId: integer("track_id")
+    .primaryKey()
+    .references(() => tracks.id, { onDelete: "cascade" }),
+  /** When the search found nothing (ms since the epoch). */
+  checkedAt: integer("checked_at").notNull(),
+});

@@ -12,10 +12,10 @@ import { YtSongList, type YtListLoad } from "@/ytmusic/YtSongList";
 
 /**
  * One of Home's Discover mixes, as the owner's level blends it: its cover
- * (its first new song's), its name and artists, Play / Shuffle / Download
- * (every new song, with the progress in the head) and its songs, as last
- * built, the Library's among the new ones. Songs downloaded since play their
- * files.
+ * (its tile's, following the level), its name and artists, Play / Shuffle /
+ * Download (every new song, with the progress in the head) and its songs, as
+ * last built, the Library's among the new ones. Songs downloaded since play
+ * their files.
  */
 export default function DiscoverMixScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();

@@ -1,11 +1,18 @@
-import { pendingFavorite } from "@wave/core";
+import {
+  pendingFavorite,
+  readSyncedStars,
+  syncedStarDownloads,
+  writeSyncedStars,
+} from "@wave/core";
 
+import { persistedSetting } from "@/lib/persistedSetting";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import type { FindInLibrary } from "@/ytmusic/libraryFinder";
 import { cancelUnstarredDownloads, downloadStarredSongs } from "@/ytmusic/YtDownloads";
 
-import { setFavorites, setPendingFavorites } from "./favorites";
-import { songHasFile, type SongRow } from "./LibraryStore";
+import { currentFavoriteIds, setFavorites, setPendingFavorites } from "./favorites";
+import { LibraryStore, songHasFile, type SongRow } from "./LibraryStore";
+import { appRuntime } from "./runtime";
 
 /**
  * A star means downloaded (docs/spec.md, "Favorites of songs this phone has
@@ -64,4 +71,43 @@ export const starSongs = (
         );
     });
   return Promise.all([stars, pending]).then(() => undefined);
+};
+
+/**
+ * The starred missing songs this phone has seen, by Track id (Core's `syncedStarDownloads`):
+ * their stars have asked for their downloads already. Kept on this phone, never synced.
+ */
+const seenStars = persistedSetting<ReadonlySet<number>>({
+  key: "downloads.syncedStars",
+  read: readSyncedStars,
+  write: writeSyncedStars,
+});
+
+let syncing = Promise.resolve();
+
+/**
+ * Stars that came from the Wave account mean downloaded too (docs/spec.md, "A star means
+ * downloaded"): each missing song with a star this phone hasn't seen yet joins the download
+ * queue under Favorites (a sign-in on a new phone queues them all), and a star taken off since,
+ * here or on another phone, takes back the download only it asked for. A song already on its
+ * way, or in the Library, isn't queued again (`downloadStarredSongs`). Run after a pull that
+ * changed the stars or the missing songs, and once as Wave starts; one run at a time.
+ */
+export const downloadSyncedStars = (): Promise<void> => {
+  syncing = syncing
+    .then(async () => {
+      const [starred, missing] = await Promise.all([
+        currentFavoriteIds(),
+        appRuntime
+          // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+          .runPromise(LibraryStore.use((store) => store.missingSongs()))
+          .then((tracks) => tracks.map((track) => track.id)),
+      ]);
+      const { download, cancel, seen } = syncedStarDownloads({ starred, missing }, seenStars.get());
+      seenStars.set(seen);
+      downloadStarredSongs([], download);
+      cancelUnstarredDownloads([], cancel);
+    })
+    .catch(() => undefined);
+  return syncing;
 };

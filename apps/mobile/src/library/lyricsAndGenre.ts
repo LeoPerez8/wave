@@ -300,6 +300,26 @@ export const writeLyricsAndGenre = (
     };
   });
 
+/** What Deezer adds when nothing is written but lyrics. */
+const NOTHING_FROM_DEEZER = {
+  genre: null,
+  trackNumber: null,
+  discNumber: null,
+  year: null,
+  explicit: "unknown",
+} as const;
+
+/**
+ * Writes [lyrics] found online into the file at [path] as Fix Song writes
+ * them (its tags, or a sidecar `.lrc` for a format without tag writing),
+ * and nothing else. The Lyrics view's search for a Library song.
+ */
+export const writeFoundLyrics = (
+  path: string,
+  lyrics: FoundLyrics,
+): Effect.Effect<TagWriteReport, TagWriteFailed, LibraryStore> =>
+  writeLyricsAndGenre(path, { lyrics, ...NOTHING_FROM_DEEZER });
+
 /**
  * Fix Song for one song: looks up what it lacks and writes only that (Core's
  * `missingTags`), never replacing lyrics, a genre, a track number, a year or

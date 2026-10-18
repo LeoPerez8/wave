@@ -252,7 +252,16 @@ class AndroidDownloads private constructor(private val context: Context) {
     main.post { JsRuntime.release(OWNER) }
   }
 
+  /**
+   * The cover's image: from the network, or a quality replacement's own cover, the Library's copy
+   * of it on the phone (an absolute path).
+   */
   private fun cover(url: String): ByteArray {
+    if (url.startsWith("/")) {
+      val file = File(url)
+      check(file.isFile && file.length() in 1..ArtworkStore.MAX_IMAGE_BYTES.toLong())
+      return file.readBytes()
+    }
     val connection = (URL(url).openConnection() as HttpURLConnection).apply { connectTimeout = 2_000; readTimeout = 2_000 }
     try {
       check(connection.responseCode == 200)
