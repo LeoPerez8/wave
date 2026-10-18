@@ -9,6 +9,7 @@
  */
 
 import { downloadJobKind } from "./downloadJobKind.ts";
+import { counted } from "./listening.ts";
 import { foundNoBetterCopy, type QualityDirection } from "./qualityReplacement.ts";
 import type { YtSong } from "./ytMusic.ts";
 import {
@@ -157,6 +158,19 @@ export const failedDownloads = <S extends YtSong>(
   });
 
 /**
+ * How many songs `failedDownloads` lists, without building their rows: the
+ * Settings row's count.
+ */
+export const failedDownloadCount = <S extends YtSong>(
+  jobs: readonly YtDownloadJournalJob<S>[],
+  input: FailedDownloadsInput<S>,
+): number => {
+  let count = 0;
+  for (const job of jobs) if (failureOf(job) !== null && !settled(job, input)) count += 1;
+  return count;
+};
+
+/**
  * The videos to cancel so the journal forgets the failures that settled
  * another way: the ones `failedDownloads` no longer lists, which the journal
  * would otherwise keep (and rewrite on every change) for good.
@@ -166,3 +180,132 @@ export const settledDownloadFailures = <S extends YtSong>(
   input: FailedDownloadsInput<S>,
 ): string[] =>
   jobs.flatMap((job) => (failureOf(job) !== null && settled(job, input) ? videosOf(job) : []));
+
+/** Whether [job] failed, its download or its import: cheap, for every journal change. */
+const hasFailed = <S extends YtSong>(job: YtDownloadJournalJob<S>): boolean =>
+  job.phase === "failed" || job.importFailure !== undefined;
+
+/** Two journal jobs that say the same (the journal is plain data, read afresh). */
+const sameJob = <S extends YtSong>(a: YtDownloadJournalJob<S>, b: YtDownloadJournalJob<S>) =>
+  a === b || JSON.stringify(a) === JSON.stringify(b);
+
+/**
+ * The jobs of [jobs] whose download or import failed, in order: [previous]
+ * itself while they're the same jobs saying the same, so what's built from
+ * them (`failedDownloads`, the failed rows) is built again only when a
+ * failure comes, goes or changes, not on each tick of the songs on their way.
+ */
+export const failedJobs = <J extends YtDownloadJournalJob>(
+  jobs: readonly J[],
+  previous: readonly J[] = [],
+): readonly J[] => {
+  const failed = jobs.filter(hasFailed);
+  const same =
+    failed.length === previous.length &&
+    failed.every((job, index) => {
+      const before = previous[index];
+      return before !== undefined && sameJob(job, before);
+    });
+  return same ? previous : failed;
+};
+
+/** What Retry asks for, as a key: a replacement's direction and Track too. */
+const retryKey = <S extends YtSong>(retry: FailedDownloadRetry<S>): string =>
+  retry.kind === "quality"
+    ? `quality:${retry.direction}:${retry.trackId}`
+    : retry.kind === "missingSong"
+      ? `missingSong:${retry.trackId}`
+      : `song:${retry.song.videoId}`;
+
+/** What a row shows of [song]: its id, title, artists and cover. */
+const songKey = (song: YtSong): string =>
+  [song.videoId, song.title, song.artists.join(", "), song.artworkUrl ?? ""].join("\u0000");
+
+/**
+ * Whether two failed rows show and do the same (the journal is read afresh on
+ * each change, so equal rows are new objects): the same song, line, detail,
+ * Retry and Remove. A memoised row renders again only when they don't.
+ */
+export const sameFailedDownload = <S extends YtSong>(
+  a: FailedDownload<S>,
+  b: FailedDownload<S>,
+): boolean =>
+  a === b ||
+  (a.id === b.id &&
+    a.line === b.line &&
+    a.detail === b.detail &&
+    a.clear.join() === b.clear.join() &&
+    retryKey(a.retry) === retryKey(b.retry) &&
+    songKey(a.song) === songKey(b.song));
+
+/**
+ * The failed section's top row: how many songs failed, with Retry All, Clear
+ * All, and what shows or hides the songs ([expanded]).
+ */
+export interface FailedHeaderRow {
+  readonly kind: "failedHeader";
+  readonly key: string;
+  readonly line: string;
+  readonly expanded: boolean;
+}
+
+/**
+ * The header of the songs that failed for one reason: the reason and how many
+ * ("This song is unavailable on YouTube Music · 640"), with Retry and Remove
+ * for all of them ([failed]).
+ */
+export interface FailedGroupRow<S extends YtSong = YtSong> {
+  readonly kind: "failedGroup";
+  readonly key: string;
+  readonly line: string;
+  readonly failed: readonly FailedDownload<S>[];
+}
+
+/** A failed song, under its reason's header. */
+export interface FailedSongRow<S extends YtSong = YtSong> {
+  readonly kind: "failedSong";
+  readonly key: string;
+  readonly failed: FailedDownload<S>;
+}
+
+export type FailedListRow<S extends YtSong = YtSong> =
+  FailedHeaderRow | FailedGroupRow<S> | FailedSongRow<S>;
+
+/**
+ * [failed] (`failedDownloads`) as rows of Settings › Downloads' one
+ * virtualized list, under the songs on their way: the row saying how many
+ * failed, then while [expanded] the songs grouped by why they failed (the
+ * reason first met first), each group under its header. None while no song
+ * has failed.
+ */
+export const failedDownloadRows = <S extends YtSong>(
+  failed: readonly FailedDownload<S>[],
+  { expanded }: { readonly expanded: boolean },
+): readonly FailedListRow<S>[] => {
+  if (failed.length === 0) return [];
+  const header: FailedHeaderRow = {
+    kind: "failedHeader",
+    key: "failed",
+    line: `${counted(failed.length, "song")} failed`,
+    expanded,
+  };
+  if (!expanded) return [header];
+  const byReason = new Map<string, FailedDownload<S>[]>();
+  for (const each of failed) {
+    const group = byReason.get(each.line);
+    if (group === undefined) byReason.set(each.line, [each]);
+    else group.push(each);
+  }
+  const rows: FailedListRow<S>[] = [header];
+  for (const [reason, group] of byReason) {
+    rows.push({
+      kind: "failedGroup",
+      key: `failedGroup:${reason}`,
+      line: `${reason} · ${group.length.toLocaleString("en")}`,
+      failed: group,
+    });
+    for (const each of group)
+      rows.push({ kind: "failedSong", key: `failed:${each.id}`, failed: each });
+  }
+  return rows;
+};

@@ -19,6 +19,7 @@ import {
   ytSongArtist,
   ytTrackId,
   type ArtworkPalette,
+  type QueueCover,
   type QueueEntry,
   type UnsearchedSong,
   type YtSong,
@@ -206,13 +207,16 @@ export const YT_COVERS_AT_ONCE = 2;
  * queue's tracks (Core's `createQueueCoverBatcher`); the [playing] song's
  * fills in at once. A song that has left the queue isn't cached, and one that
  * leaves while its cover is cached stays out of it; a cover that can't be
- * cached leaves YouTube's. [cacheArtwork] is YT Music's, passed in so this
+ * cached leaves YouTube's. Each batch, once in the queue's tracks, goes on to
+ * [toPlayer] (by track id, only songs still queued), so the player's items
+ * show the cached file too. [cacheArtwork] is YT Music's, passed in so this
  * stays free of Expo.
  */
 export const cacheYtCoversLater = <E, R>(
   songs: readonly YtSong[],
   cacheArtwork: (url: string) => Effect.Effect<CachedArtwork, E, R>,
   playing: (trackId: string) => boolean = () => false,
+  toPlayer: (covers: ReadonlyMap<string, QueueCover>) => void = () => {},
 ): Effect.Effect<void, never, R> =>
   Effect.suspend(() => {
     const batcher = createQueueCoverBatcher({
@@ -221,7 +225,12 @@ export const cacheYtCoversLater = <E, R>(
         return () => clearTimeout(timer);
       },
       playing,
-      apply: (covers) => queueTracks.set(withQueueCovers(queueTracks.get(), covers)),
+      apply: (covers) => {
+        const tracks = queueTracks.get();
+        queueTracks.set(withQueueCovers(tracks, covers));
+        const queued = new Map([...covers].filter(([id]) => tracks.has(id)));
+        if (queued.size > 0) toPlayer(queued);
+      },
     });
     return Effect.forEach(
       songs,

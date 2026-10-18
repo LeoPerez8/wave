@@ -1,29 +1,109 @@
-import { IconTrash } from "@tabler/icons-react-native";
-import { downloadsSummary, type FailedDownload } from "@wave/core";
+import {
+  sameFailedDownload,
+  type FailedDownload,
+  type FailedGroupRow,
+  type FailedHeaderRow,
+} from "@wave/core";
 import { memo } from "react";
-import { View, type StyleProp, type ViewStyle } from "react-native";
+import { Text, View } from "react-native";
 
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
-import { IconButton } from "@/components/IconButton";
-import { TextButton } from "@/components/TextButton";
+import { PlainTextButton } from "@/components/PlainTextButton";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 import { DownloadSongRow } from "@/settings/DownloadSongRow";
-import { useYtMusicEnabled } from "@/settings/ytMusic";
-import {
-  clearFailedDownloads,
-  retryFailedDownloads,
-  useFailedDownloads,
-} from "@/ytmusic/YtDownloads";
+import { SECTION_GAP } from "@/settings/SettingsPage";
+import { clearFailedDownloads, retryFailedDownloads } from "@/ytmusic/YtDownloads";
 
 /**
- * One failed song: its artwork, title and artists, why it failed (with what actually went
- * wrong when that adds something), Retry, and a trash button that clears it alone as Clear All
- * clears every song, without asking: its menu offers Download again. It only renders again when
- * what it shows or does changed, not each time a download on its way makes progress.
+ * Settings › Downloads' failed songs are rows of the page's one virtualized list (Core's
+ * `failedDownloadRows`), under the songs on their way: this header, then while it's expanded the
+ * songs grouped by why they failed. None of these rows draws an SVG or carries an animated style
+ * of its own: with hundreds of failed songs either froze the page (#446, #465).
  */
-const FailedDownloadRow = memo(
+
+/**
+ * The failed section's top row: how many songs failed, Retry All and Clear All for every one
+ * ([failed]), and Show or Hide for the songs themselves (collapsed by default).
+ */
+export const FailedSectionHeader = memo(function FailedSectionHeader({
+  row,
+  failed,
+  onToggle,
+}: {
+  row: FailedHeaderRow;
+  failed: readonly FailedDownload<NativeYtSong>[];
+  onToggle: () => void;
+}) {
+  return (
+    <View style={{ marginTop: SECTION_GAP }}>
+      <CatalogLine className="mb-2">{row.line}</CatalogLine>
+      <View className="flex-row items-center" style={{ gap: CELL * 3 }}>
+        <PlainTextButton label="Retry All" onPress={() => retryFailedDownloads(failed)} />
+        <PlainTextButton label="Clear All" onPress={() => clearFailedDownloads(failed)} />
+        <View className="flex-1" />
+        <PlainTextButton
+          label={row.expanded ? "Hide Songs" : "Show Songs"}
+          accessibilityLabel={row.expanded ? "Hide failed songs" : "Show failed songs"}
+          onPress={onToggle}
+        />
+      </View>
+      <Hairline />
+    </View>
+  );
+});
+
+/** Two lists of failed songs that show and do the same. */
+const sameFailedList = (
+  a: readonly FailedDownload<NativeYtSong>[],
+  b: readonly FailedDownload<NativeYtSong>[],
+) =>
+  a === b ||
+  (a.length === b.length && a.every((each, index) => sameFailedDownload(each, b[index] ?? each)));
+
+/**
+ * The header of the songs that failed for one reason: the reason and how many, then Retry and
+ * Remove for all of them.
+ */
+export const FailedGroupHeader = memo(
+  function FailedGroupHeader({ row }: { row: FailedGroupRow<NativeYtSong> }) {
+    return (
+      <View>
+        <View className="flex-row items-center" style={{ gap: CELL * 3, paddingTop: CELL }}>
+          <Text
+            className="flex-1 font-sans text-body font-semibold text-foreground"
+            accessibilityRole="header"
+            style={{ fontVariant: ["tabular-nums"] }}
+          >
+            {row.line}
+          </Text>
+          <PlainTextButton
+            label="Retry"
+            accessibilityLabel={`Retry ${row.line}`}
+            onPress={() => retryFailedDownloads(row.failed)}
+          />
+          <PlainTextButton
+            label="Remove"
+            accessibilityLabel={`Remove ${row.line} from failed downloads`}
+            onPress={() => clearFailedDownloads(row.failed)}
+          />
+        </View>
+        <Hairline />
+      </View>
+    );
+  },
+  (before, after) =>
+    before.row.line === after.row.line && sameFailedList(before.row.failed, after.row.failed),
+);
+
+/**
+ * One failed song: its artwork, title and artists, why it failed (with what actually went wrong
+ * when that adds something), Retry, and Remove, which clears it alone as Clear All clears every
+ * song, without asking: its menu offers Download again. It only renders again when what it shows
+ * or does changed (Core's `sameFailedDownload`).
+ */
+export const FailedDownloadRow = memo(
   function FailedDownloadRow({
     failed,
     covers,
@@ -34,49 +114,15 @@ const FailedDownloadRow = memo(
     const { song, line, detail } = failed;
     return (
       <DownloadSongRow song={song} covers={covers} line={line} detail={detail}>
-        <TextButton label="Retry" onPress={() => retryFailedDownloads([failed])} />
-        <IconButton
-          icon={IconTrash}
-          label="Remove from failed downloads"
+        <PlainTextButton label="Retry" onPress={() => retryFailedDownloads([failed])} />
+        <PlainTextButton
+          label="Remove"
+          accessibilityLabel="Remove from failed downloads"
           onPress={() => clearFailedDownloads([failed])}
         />
       </DownloadSongRow>
     );
   },
-  ({ failed: before, covers }, { failed: after, covers: coversAfter }) =>
-    covers === coversAfter &&
-    before.song === after.song &&
-    before.line === after.line &&
-    before.detail === after.detail &&
-    before.clear.join() === after.clear.join() &&
-    retryKey(before.retry) === retryKey(after.retry),
+  (before, after) =>
+    before.covers === after.covers && sameFailedDownload(before.failed, after.failed),
 );
-
-/** What a Retry asks for, to tell whether a row's Retry changed. */
-const retryKey = (retry: FailedDownload<NativeYtSong>["retry"]): string =>
-  retry.kind === "song" ? `song:${retry.song.videoId}` : `missingSong:${retry.trackId}`;
-
-/**
- * Settings › Downloads, under the switch: the songs whose download failed (Core's
- * `failedDownloads`), with Retry All and Clear All above them. Nothing while none has.
- */
-export function FailedDownloadsSection({ style }: { style?: StyleProp<ViewStyle> }) {
-  const failed = useFailedDownloads();
-  // With YT Music off Wave asks YouTube for nothing, covers included.
-  const covers = useYtMusicEnabled();
-  const summary = downloadsSummary(failed.length);
-  if (summary === null) return null;
-  return (
-    <View style={style}>
-      <CatalogLine className="mb-2">{summary}</CatalogLine>
-      <View className="flex-row items-center" style={{ gap: CELL * 3 }}>
-        <TextButton label="Retry All" onPress={() => retryFailedDownloads(failed)} />
-        <TextButton label="Clear All" onPress={() => clearFailedDownloads(failed)} />
-      </View>
-      <Hairline />
-      {failed.map((item) => (
-        <FailedDownloadRow key={item.id} failed={item} covers={covers} />
-      ))}
-    </View>
-  );
-}

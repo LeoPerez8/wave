@@ -12,6 +12,7 @@ import type { AutoRequest } from "@/native/wavePlayer";
 import { connectPlayer } from "@/playback/actions";
 import { startPlayingSearches } from "@/playback/playingSearches";
 import { applyCrossfade } from "@/settings/crossfade";
+import { applyStreamBuffer } from "@/settings/streamBuffer";
 import { WaveSync } from "@/sync/WaveSync";
 import { startDownloads } from "@/ytmusic/YtDownloads";
 
@@ -76,6 +77,7 @@ export const startServices = (by: ServicesStarter): void => {
   if (by === "app") afterFirstContent("backgroundFill", startBackgroundFill);
   else startBackgroundFill();
   applyCrossfade();
+  applyStreamBuffer();
   onSyncedSettingChange(stampPreference);
   startAutoResponder(answerAuto);
   startAutoLyrics();
