@@ -26,6 +26,7 @@ import {
   missingSongsDownload,
   downloadingList,
   moveQueuedJobs,
+  NO_BETTER_COPY_FOUND,
   noBetterCopies,
   QUALITY_ORIGINS,
   qualityJobOf,
@@ -648,10 +649,11 @@ const fileLyrics = (path: string) =>
  * The journal's "prepare" decision for a quality replacement of Track [trackId] (job
  * `upgrade:<id>`, Core's `qualityJobOf`), read from the Track as it is now. An upgrade is
  * Soulseek's MP3 320 or nothing: it never falls back to YouTube Music, and no 320 copy fails it as
- * `unavailable`, which Core records as no better copy (`noBetterCopies`). The new file goes beside
- * the old one under its name, with the old one's tags, cover and lyrics
- * (`qualityReplacementTarget`, `qualityReplacementTags`). A Track gone meanwhile has nothing left
- * to replace: `notFound`, which settles the job without listing it as failed.
+ * Core's `NO_BETTER_COPY_FOUND`, which records the song as having no better copy
+ * (`noBetterCopies`) without listing it as a failed download. The new file goes beside the old one
+ * under its name, with the old one's tags, cover and lyrics (`qualityReplacementTarget`,
+ * `qualityReplacementTags`). A Track gone meanwhile has nothing left to replace: it settles the
+ * same way (there's no Track left to record).
  */
 const prepareQualityReplacement = (direction: QualityDirection, trackId: number) =>
   Effect.gen(function* () {
@@ -659,7 +661,7 @@ const prepareQualityReplacement = (direction: QualityDirection, trackId: number)
     if (direction !== "upgrade") return yield* new DownloadFailed({ reason: "noSource" });
     const store = yield* LibraryStore;
     const track = yield* store.replacedTrack(trackId).pipe(Effect.mapError(libraryFailure));
-    if (track === null) return yield* new DownloadFailed({ reason: "notFound" });
+    if (track === null) return yield* new DownloadFailed({ reason: NO_BETTER_COPY_FOUND });
     const session = yield* native(() => WaveSoulseek.session());
     if (session.status === "off") return yield* new DownloadFailed({ reason: "noSource" });
     const job = qualityReplacementJob(direction, track);
@@ -672,7 +674,7 @@ const prepareQualityReplacement = (direction: QualityDirection, trackId: number)
       return { failure: found.failure.reason, tags, failurePlan } satisfies PrepareAnswer;
     const candidates = soulseekCandidates(job, found.success);
     if (candidates.length === 0)
-      return { failure: "unavailable", tags, failurePlan } satisfies PrepareAnswer;
+      return { failure: NO_BETTER_COPY_FOUND, tags, failurePlan } satisfies PrepareAnswer;
     return {
       source: "soulseek",
       candidates,
@@ -778,7 +780,7 @@ const publicationTarget = (claim: NativeDownloadDecision) =>
       const track = yield* store
         .replacedTrack(replacement.trackId)
         .pipe(Effect.mapError(libraryFailure));
-      if (track === null) return yield* new DownloadFailed({ reason: "notFound" });
+      if (track === null) return yield* new DownloadFailed({ reason: NO_BETTER_COPY_FOUND });
       const { targetPath, replaces } = qualityReplacementTarget(
         track.path,
         claim.source ?? "soulseek",

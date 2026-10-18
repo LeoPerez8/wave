@@ -1319,6 +1319,7 @@ export type { DiscoverMixKeep } from "./discoverMixLevels.ts";
 export {
   BEST_QUALITY_KBPS,
   LOW_QUALITY_BELOW_KBPS,
+  NO_BETTER_COPY_FOUND,
   QUALITY_ORIGINS,
   formatStorageSize,
   foundNoBetterCopy,

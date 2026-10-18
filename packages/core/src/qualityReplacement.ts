@@ -309,11 +309,12 @@ export const qualityReplacementTags = (
 };
 
 /**
- * Failures that say the song has no better copy (no Soulseek 320, no
- * YouTube Music match): the song keeps its file, and it isn't a failed
- * download.
+ * The failure a replacement's prepare answers with when it finds no better
+ * copy (no Soulseek 320 candidate, no YouTube Music match): the song keeps
+ * its file, and it isn't a failed download. Every peer failing (Soulseek's
+ * `unavailable` once they're used up) is a failure after retries.
  */
-const NO_BETTER_COPY: readonly YtDownloadFailure[] = ["unavailable", "notFound", "ytUnavailable"];
+export const NO_BETTER_COPY_FOUND: YtDownloadFailure = "notFound";
 
 /**
  * Failures that are the phone's or the account's, not the song's: they'd fail
@@ -336,7 +337,7 @@ const failureOf = (job: YtDownloadJournalJob): YtDownloadFailure | null =>
 /** Whether replacement job [job] failed because there's no better copy of its song. */
 export const foundNoBetterCopy = (job: YtDownloadJournalJob): boolean => {
   const failure = failureOf(job);
-  return qualityJobOf(job.id) !== null && failure !== null && NO_BETTER_COPY.includes(failure);
+  return qualityJobOf(job.id) !== null && failure === NO_BETTER_COPY_FOUND;
 };
 
 /** A song recorded as having no better copy in a direction. */

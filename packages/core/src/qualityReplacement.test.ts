@@ -263,7 +263,7 @@ describe("qualityReplacementTags", () => {
 describe("noBetterCopies", () => {
   test("remembers a song Soulseek has no 320 copy of, and one that failed after retries", () => {
     const jobs = [
-      job("upgrade:1", { phase: "failed", reason: "unavailable" }),
+      job("upgrade:1", { phase: "failed", reason: "notFound" }),
       job("upgrade:2", { phase: "failed", reason: "timedOut" }),
       job("upgrade:3", { phase: "completed", importFailure: "failed" }),
     ];
@@ -318,9 +318,18 @@ describe("a replacement's failure in Settings › Downloads", () => {
   });
 
   test("no better copy isn't a failure: the song keeps its file, and the journal forgets the job", () => {
-    const jobs = [job("upgrade:1", { phase: "failed", reason: "unavailable" })];
+    const jobs = [job("upgrade:1", { phase: "failed", reason: "notFound" })];
     assert.deepEqual(failedDownloads(jobs, input), []);
     assert.deepEqual(settledDownloadFailures(jobs, input), ["upgrade:1"]);
+  });
+
+  test("every peer failing is a failure after retries, listed", () => {
+    const jobs = [job("upgrade:1", { phase: "failed", reason: "unavailable" })];
+    assert.deepEqual(
+      failedDownloads(jobs, input).map((each) => each.id),
+      ["upgrade:1"],
+    );
+    assert.deepEqual(settledDownloadFailures(jobs, input), []);
   });
 });
 
