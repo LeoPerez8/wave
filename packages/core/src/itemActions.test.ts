@@ -496,6 +496,29 @@ describe("itemActions", () => {
     assert.ok(!two.includes("renamePlaylist"));
   });
 
+  test("a playlist's menu offers Share after its image entries while it can be shared somewhere", () => {
+    const menu = (sharing?: boolean, hasImage?: boolean) =>
+      names(itemActions({ kind: "playlist", items: [{ hasImage }], here: "/", sharing }));
+    assert.deepEqual(menu(true).slice(-4), [
+      "renamePlaylist",
+      "changeImage",
+      "share",
+      "deletePlaylist",
+    ]);
+    assert.deepEqual(menu(true, true).slice(-3), ["removeImage", "share", "deletePlaylist"]);
+    assert.ok(!menu(false).includes("share"));
+    assert.ok(!menu().includes("share"));
+    const selected = itemActions({
+      kind: "playlist",
+      items: [{}],
+      here: "/",
+      sharing: true,
+      surface: "selection",
+    });
+    assert.ok(!names(selected).includes("share"));
+    assert.equal(ITEM_ACTION_LABELS.share, "Share");
+  });
+
   test("a playlist's menu changes its image, and adjusts or removes it once it has one", () => {
     const menu = (hasImage?: boolean) =>
       names(itemActions({ kind: "playlist", items: [{ hasImage }], here: "/" }));

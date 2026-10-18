@@ -46,7 +46,8 @@ import {
   lyricsAndGenreLookupsEnabled,
   useLyricsAndGenreLookupsEnabled,
 } from "@/settings/lyricsAndGenre";
-import { ytMusicEnabled } from "@/settings/ytMusic";
+import { useYtMusicEnabled, ytMusicEnabled } from "@/settings/ytMusic";
+import { openSharePlaylist } from "@/share/sharePlaylist";
 import {
   cancelMissingSongDownload,
   downloadMissingSongs,
@@ -203,6 +204,8 @@ function usePlan(
 } {
   const here = usePathname();
   const onlineLookups = useLyricsAndGenreLookupsEnabled();
+  // A playlist can be shared on YT Music while it's on.
+  const ytMusic = useYtMusicEnabled();
   const download = useMissingSongDownloadStatus(onlyMissingSong(target));
   // YT Music songs among the items: whether each is a file by now, and who their artists are.
   const streams = hasStreamedSongs(target);
@@ -241,6 +244,7 @@ function usePlan(
     onlineLookups,
     here,
     streamedArtists,
+    sharing: ytMusic,
   });
   return { planned, missingSongs, perAlbum, collectionSongs };
 }
@@ -427,6 +431,8 @@ export function useItemActions(
         return run(() => playlist !== undefined && void adjustPlaylistImageFlow(playlist));
       case "removeImage":
         return run(() => playlist !== undefined && void removePlaylistImageFlow(playlist));
+      case "share":
+        return run(() => playlist !== undefined && openSharePlaylist(playlist));
       case "deletePlaylist":
       case "deletePlaylists": {
         const playlists = target.kind === "playlist" ? target.items : [];

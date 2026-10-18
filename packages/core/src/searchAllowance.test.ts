@@ -186,6 +186,10 @@ describe("the app log of the search allowance", () => {
       searchFailedLine("tryAgain", "Within Daft Punk", "failed"),
       'A YouTube Music search for Try Again failed (failed): "Within Daft Punk"',
     );
+    assert.equal(
+      searchFailedLine("share", "Get Lucky Daft Punk", "offline"),
+      'A YouTube Music search for sharing a playlist failed (offline): "Get Lucky Daft Punk"',
+    );
   });
 
   test("Search asking as you type (Always) goes before downloads, and its wait names it", () => {

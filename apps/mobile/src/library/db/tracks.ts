@@ -106,6 +106,22 @@ export const selectPlayableSongs = (db: LibraryDatabase, ids: readonly number[])
     trackQuery(db, "files").where(inArray(schema.tracks.id, some)).all(),
   );
 
+/**
+ * The YouTube video id each of the songs [ids] was downloaded from, by song
+ * id; songs without one (files from elsewhere) are left out.
+ */
+export const selectVideoIds = (db: LibraryDatabase, ids: readonly number[]): Map<number, string> =>
+  new Map(
+    chunks(ids).flatMap((some) =>
+      db
+        .select({ id: schema.tracks.id, videoId: schema.tracks.videoId })
+        .from(schema.tracks)
+        .where(and(inArray(schema.tracks.id, some), isNotNull(schema.tracks.videoId)))
+        .all()
+        .flatMap(({ id, videoId }) => (videoId === null ? [] : [[id, videoId] as const])),
+    ),
+  );
+
 /** A song whose genre tag has several values, with each of them. */
 export interface SongGenres {
   readonly id: number;
