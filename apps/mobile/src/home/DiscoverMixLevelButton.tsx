@@ -10,7 +10,7 @@ import { CardEntries } from "@/overlay/CardEntries";
 import { useOverlayFlow } from "@/overlay/flow";
 import { openOverlay } from "@/overlay/overlay";
 
-import { setDiscoverMixLevel, useDiscoverMixLevel } from "./discoverMixLevel";
+import { setDiscoverMixLevel, useDiscoverMixLevel, type MixSectionId } from "./discoverMixLevel";
 
 const levelOf = (level: DiscoverMixLevel) =>
   DISCOVER_MIX_LEVELS.find((entry) => entry.level === level) ?? DISCOVER_MIX_LEVELS[0]!;
@@ -50,12 +50,12 @@ function LevelMenu({
 }
 
 /**
- * Discover mixes' header control: how much of every mix is new ("60% new"),
+ * A mix section's header control: how much of each of its mixes is new ("60% new"),
  * opening the card of levels next to itself. A level chosen re-blends the
  * saved mixes at once, offline.
  */
-export function DiscoverMixLevelButton() {
-  const level = useDiscoverMixLevel();
+export function DiscoverMixLevelButton({ section }: { section: MixSectionId }) {
+  const level = useDiscoverMixLevel(section);
   const open = () => {
     openOverlay({
       label: "New music in mixes",
@@ -64,7 +64,7 @@ export function DiscoverMixLevelButton() {
         <LevelMenu
           current={level}
           choose={(chosen) => {
-            setDiscoverMixLevel(chosen);
+            setDiscoverMixLevel(section, chosen);
             close();
           }}
         />

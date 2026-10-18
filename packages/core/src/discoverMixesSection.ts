@@ -16,7 +16,15 @@ export type DiscoverMixesSection =
   | { readonly kind: "hidden" }
   /** Placeholder tiles in the mixes' row: the first mixes are on their way. */
   | { readonly kind: "skeleton" }
-  | { readonly kind: "mixes"; readonly mixes: readonly BlendedDiscoverMix[] };
+  | {
+      readonly kind: "mixes";
+      readonly mixes: readonly BlendedDiscoverMix[];
+      /**
+       * A rebuild is running: the header says "Updating…" over the saved
+       * mixes, which stay until the new ones are saved.
+       */
+      readonly updating: boolean;
+    };
 
 /**
  * What the section shows for the [saved] mixes (`parseDiscoverMixes`, null
@@ -26,7 +34,9 @@ export type DiscoverMixesSection =
  * (Don't play explicit leaving most out) isn't shown, and with none left,
  * nothing is. With none saved, a skeleton while a build can make them, a
  * failed build included (a later one may succeed); nothing when the last
- * build found [nothingToBuildFrom] (no plays and an empty Library).
+ * build found [nothingToBuildFrom] (no plays and an empty Library). While a
+ * build is [building], saved mixes say they're updating (no skeleton over
+ * them); with none saved, the skeleton stands for it.
  */
 export const discoverMixesSection = (
   saved: DiscoverMixes | null,
@@ -34,16 +44,19 @@ export const discoverMixesSection = (
     ytMusic,
     nothingToBuildFrom,
     blend,
+    building = false,
   }: {
     readonly ytMusic: boolean;
     readonly nothingToBuildFrom: boolean;
     readonly blend: DiscoverMixBlend;
+    /** A build of the section's mixes is running; absent for none. */
+    readonly building?: boolean;
   },
 ): DiscoverMixesSection => {
   if (!ytMusic) return { kind: "hidden" };
   if (saved !== null) {
     const mixes = saved.mixes.map((mix) => blendDiscoverMix(mix, blend)).filter(isMix);
-    return mixes.length === 0 ? { kind: "hidden" } : { kind: "mixes", mixes };
+    return mixes.length === 0 ? { kind: "hidden" } : { kind: "mixes", mixes, updating: building };
   }
   return nothingToBuildFrom ? { kind: "hidden" } : { kind: "skeleton" };
 };
