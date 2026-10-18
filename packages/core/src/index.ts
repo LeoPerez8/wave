@@ -1237,6 +1237,8 @@ export {
   ytLibraryFavorites,
   ytLibraryPauseLogLine,
   ytLibraryReadDone,
+  ytLibraryDownloadsToQueue,
+  ytLibraryDownloadsQueued,
   ytLibraryReadFailed,
   ytLibraryReadLogLine,
   ytLibraryReadView,

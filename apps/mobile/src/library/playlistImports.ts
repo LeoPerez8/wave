@@ -50,7 +50,7 @@ const imports = persistedSetting<PlaylistImports<YtAlbumSong>>({
 });
 
 /** The playlists whose import is giving them their songs now, so none is given twice. */
-const finishing = new Set<number>();
+const finishing = new Map<number, Promise<void>>();
 
 /** The imports, for the playlist page's line. */
 export const usePlaylistImports = (): PlaylistImports<YtAlbumSong> => imports.useValue();
@@ -62,9 +62,16 @@ const LOG_TAG = "WaveImport";
  * only while it has songs left out to show. A playlist deleted meanwhile
  * (here or on another phone) ends it.
  */
-const finish = async (job: Job, resumed: boolean): Promise<void> => {
-  if (finishing.has(job.playlistId)) return;
-  finishing.add(job.playlistId);
+const finish = (job: Job, resumed: boolean): Promise<void> => {
+  const going = finishing.get(job.playlistId);
+  if (going !== undefined) return going;
+  const giving = give(job, resumed).finally(() => finishing.delete(job.playlistId));
+  finishing.set(job.playlistId, giving);
+  return giving;
+};
+
+/** [finish]'s work, while no other import gives [job]'s playlist its songs. */
+const give = async (job: Job, resumed: boolean): Promise<void> => {
   const { songs, job: done } = finishPlaylistImport(job);
   try {
     if (songs.length > 0) await addToPlaylist(job.playlistId, songs);
@@ -73,8 +80,6 @@ const finish = async (job: Job, resumed: boolean): Promise<void> => {
     imports.set(withoutPlaylistImport(imports.get(), job.playlistId));
     if (kept) void showError("Couldn't import the playlist", error);
     return;
-  } finally {
-    finishing.delete(job.playlistId);
   }
   perfMark("import.done", String(songs.length));
   appLog("info", LOG_TAG, importLogLine(done, { resumed }));
@@ -120,4 +125,16 @@ export const resumePlaylistImports = (): void => {
   for (const job of imports.get()) {
     if (job.state.kind === "importing") void finish(job, true);
   }
+};
+
+/**
+ * Resolves once [playlistId]'s import has given it its songs: at once with
+ * none going on, else when the one a Wave from before kept going on (or the
+ * one giving them now) is done. What queues its downloads waits on this.
+ */
+export const settlePlaylistImport = (playlistId: number): Promise<void> => {
+  const job = imports
+    .get()
+    .find((queued) => queued.playlistId === playlistId && queued.state.kind === "importing");
+  return job === undefined ? (finishing.get(playlistId) ?? Promise.resolve()) : finish(job, true);
 };
