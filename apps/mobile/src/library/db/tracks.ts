@@ -79,6 +79,7 @@ export const songColumns = {
   year: schema.tracks.year,
   genre: trackGenre,
   hasLyrics: schema.tracks.hasLyrics,
+  explicit: schema.tracks.explicit,
 };
 
 /** The Tracks in [scope], with their `songColumns`. */

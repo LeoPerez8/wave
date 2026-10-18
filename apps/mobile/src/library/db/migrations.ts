@@ -829,6 +829,15 @@ CREATE INDEX \`playlist_items_unsearched_title_idx\` ON \`playlist_items\` (CASE
   THEN json_extract(\`yt_song\`, '$.title') END);
 `;
 
+// Whether each song is explicit, as its file's advisory tag says (Core's
+// \`explicitFromAdvisory\`). Only a scan can tell, so every indexed file is
+// marked as changed (modified_at 0): the next scan reads them all again.
+const mExplicit = `
+ALTER TABLE \`tracks\` ADD \`explicit\` text DEFAULT 'unknown' NOT NULL;
+--> statement-breakpoint
+UPDATE \`tracks\` SET \`modified_at\` = 0;
+`;
+
 export default {
   journal: {
     entries: [
@@ -858,6 +867,7 @@ export default {
       { idx: 23, when: 1_793_793_600_000, tag: "0023_play_totals", breakpoints: true },
       { idx: 24, when: 1_793_880_000_000, tag: "0024_play_contexts", breakpoints: true },
       { idx: 25, when: 1_793_966_400_000, tag: "0025_unsearched_titles", breakpoints: true },
+      { idx: 26, when: 1_794_052_800_000, tag: "0026_explicit", breakpoints: true },
     ],
   },
   migrations: {
@@ -887,5 +897,6 @@ export default {
     m0023: mPlayTotals,
     m0024: mPlayContexts,
     m0025: mUnsearchedTitles,
+    m0026: mExplicit,
   },
 };

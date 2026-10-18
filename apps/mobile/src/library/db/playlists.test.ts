@@ -1170,4 +1170,5 @@ const indexedTrack = (title: string, artist: string, durationMs: number): Indexe
   bitrateKbps: null,
   artworkHash: null,
   hasLyrics: false,
+  explicit: "unknown",
 });

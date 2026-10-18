@@ -4,7 +4,7 @@ import {
   type OnViewableItemsChangedInfo,
 } from "@legendapp/list/react-native";
 import { IconMusic } from "@tabler/icons-react-native";
-import { librarySongSort, PAGED_ROWS_LIMITS } from "@wave/core";
+import { librarySongSort, PAGED_ROWS_LIMITS, showsExplicitBadge } from "@wave/core";
 import { useScrollToTop } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { View } from "react-native";
@@ -101,6 +101,7 @@ const toTrackSummary = (song: SongSummary): TrackSummary => ({
   artworkUri: song.thumbPath === null ? undefined : `file://${song.thumbPath}`,
   // A missing song: dimmed, as a YT Music song not downloaded is.
   missingTrackId: song.hasFile ? undefined : song.id,
+  explicit: showsExplicitBadge(song.explicit),
 });
 
 /** A row whose page is still being read: its thumbnail's place, and nothing to press. */
