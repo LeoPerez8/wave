@@ -1,6 +1,7 @@
 import {
   listeningOverview,
   summedListeningTotals,
+  type CollectionKind,
   type LibraryReads,
   type ListeningOverview,
   type ListeningSums,
@@ -119,7 +120,7 @@ export const useAlbumsMissingSongs = (
 };
 
 /** A collection whose Library songs a menu reads (`useCollectionSongs`). */
-export type SongsCollection = "album" | "artist" | "playlist" | "genre";
+export type SongsCollection = CollectionKind;
 
 const COLLECTION_SONGS: {
   readonly [K in SongsCollection]: (

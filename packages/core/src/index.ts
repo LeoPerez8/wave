@@ -1415,3 +1415,5 @@ export type {
   StreamedSong,
 } from "./mixKnownSongs.ts";
 export type { LyricsToSave } from "./onlineLyrics.ts";
+export { isCollectionKind } from "./itemActions.ts";
+export type { CollectionKind } from "./itemActions.ts";
