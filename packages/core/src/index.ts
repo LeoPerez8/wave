@@ -1091,7 +1091,17 @@ export type {
   HomeSection,
   HomeSectionId,
 } from "./homeSections.ts";
-export { CROSSFADE, crossfadeDuration, readCrossfade, snapCrossfade } from "./crossfade.ts";
+export {
+  CROSSFADE,
+  CROSSFADE_PREFETCH_LEAD_MS,
+  CROSSFADE_PRE_ROLL_MS,
+  crossfadeDuration,
+  crossfadePrefetchAt,
+  lateCrossfadeOverlap,
+  MIN_LATE_CROSSFADE_MS,
+  readCrossfade,
+  snapCrossfade,
+} from "./crossfade.ts";
 export {
   DISCOVER_MIX_COUNT,
   discoverMix,

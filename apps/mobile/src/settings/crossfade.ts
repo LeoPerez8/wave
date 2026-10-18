@@ -33,4 +33,7 @@ export const applyCrossfade = (): void => {
 
 export const useCrossfadeSeconds = crossfade.useValue;
 
+/** The overlap songs ending on their own get now, in ms (Core's `crossfadeDuration`); 0 is off. */
+export const crossfadeMs = (): number => crossfadeDuration(crossfade.get());
+
 export const setCrossfadeSeconds = (value: number): void => crossfade.set(snapCrossfade(value));
