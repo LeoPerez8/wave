@@ -46,6 +46,11 @@ class PlayerEventsTest {
       "crossfade",
       PlayerEvents.transitionReason(Player.MEDIA_ITEM_TRANSITION_REASON_SEEK, crossfade = true),
     )
+    // The handoff changes the session's player, which Media3 reports to controllers as a repeat.
+    assertEquals(
+      "crossfade",
+      PlayerEvents.transitionReason(Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT, crossfade = true),
+    )
     // Anything else moving the player at that moment is what it is.
     assertEquals(
       "auto",
