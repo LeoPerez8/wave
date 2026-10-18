@@ -55,16 +55,19 @@ const isQueueEntry = (entry: { readonly action: string }): boolean =>
 
 /**
  * Lays out [subject]'s menu from its [entries]: Play Next and Add to Queue
- * leave the list for cards. A collection always has Play, Play Next and Add
- * to Queue cards and Shuffle first in its list; a song (a tap already plays
- * it) has no Play card, and only the queue cards its entries offer (none for
- * a missing song, or an unavailable entry).
+ * leave the list for cards. A collection has Play, Play Next and Add to
+ * Queue cards and Shuffle first in its list, unless it's [empty] (no songs
+ * to play, as a YT Music artist's page can be): then neither. A song (a tap
+ * already plays it) has no Play card, and only the queue cards its entries
+ * offer (none for a missing song, or an unavailable entry).
  */
 export const menuLayout = <E extends { readonly action: string }>(
   subject: MenuSubject,
   entries: readonly E[],
+  { empty = false }: { readonly empty?: boolean } = {},
 ): MenuLayout<E> => {
   const list = entries.filter((entry) => !isQueueEntry(entry));
+  if (empty) return { cards: [], list };
   if (COLLECTIONS.has(subject))
     return { cards: ["play", ...QUEUE_CARDS], list: [{ action: "shuffle" }, ...list] };
   return {
