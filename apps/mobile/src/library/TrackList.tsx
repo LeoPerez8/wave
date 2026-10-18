@@ -15,7 +15,7 @@ import { View } from "react-native";
 import { AlphabetSpine } from "@/catalog/AlphabetSpine";
 import { CatalogLine } from "@/catalog/CatalogLine";
 import { CELL, grid } from "@/catalog/grid";
-import { PlayShuffle } from "@/catalog/PlayShuffle";
+import { PlayShuffle, type LineToggle } from "@/catalog/PlayShuffle";
 import { type TrackSummary, TrackRow } from "@/catalog/TrackRow";
 import { useChromeInset } from "@/chrome/chrome";
 import { useRenderCount } from "@/perf/perf";
@@ -45,8 +45,9 @@ export const toTrackSummary = (song: SongRow): TrackSummary => ({
 export const songCount = (count: number): string => counted(count, "song");
 
 /**
- * A list's opening: a catalog line (the count, a path…) over Play and Shuffle,
- * with the list's sort control (if any) on the right.
+ * A list's opening: a catalog line (the count, a path…) over Play and Shuffle
+ * (and the Library | Online toggle, if any), with the list's sort control (if
+ * any) on the right.
  */
 export function ListIntro({
   line,
@@ -54,6 +55,7 @@ export function ListIntro({
   mixed,
   context,
   sortControl,
+  toggle,
 }: {
   line: string;
   /**
@@ -69,6 +71,8 @@ export function ListIntro({
   mixed?: readonly MixedSong<YtSong, SongRow>[] | undefined;
   context: QueueContext;
   sortControl?: ReactNode;
+  /** The Library | Online toggle after Play and Shuffle (an artist's page, YT Music on). */
+  toggle?: LineToggle | null;
 }) {
   const library = useMemo(
     () => songs?.map((track) => ({ source: "library" as const, track })),
@@ -81,30 +85,34 @@ export function ListIntro({
       onPlay={() => play(false)}
       onShuffle={() => play(true)}
       sortControl={sortControl}
+      toggle={toggle}
     />
   );
 }
 
 /**
- * What `ListIntro` draws: [line] over Play and Shuffle, [sortControl] (if any)
- * on the right. The Design preview draws it too, on synthetic songs.
+ * What `ListIntro` draws: [line] over Play and Shuffle (and the Library |
+ * Online toggle, if any), [sortControl] (if any) on the right. The Design
+ * preview draws it too, on synthetic songs.
  */
 export function ListIntroLayout({
   line,
   onPlay,
   onShuffle,
   sortControl,
+  toggle,
 }: {
   line: string;
   onPlay: () => void;
   onShuffle: () => void;
   sortControl?: ReactNode;
+  toggle?: LineToggle | null;
 }) {
   return (
     <View style={{ gap: CELL, paddingBottom: CELL }}>
       <CatalogLine>{line}</CatalogLine>
       <View className="flex-row items-center justify-between">
-        <PlayShuffle onPlay={onPlay} onShuffle={onShuffle} />
+        <PlayShuffle onPlay={onPlay} onShuffle={onShuffle} toggle={toggle} />
         {sortControl !== undefined && (
           // Its glyph sits on the right margin, like Back on the left.
           <View className="-mr-3">{sortControl}</View>
