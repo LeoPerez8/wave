@@ -51,6 +51,11 @@ export interface YtDownloadTags {
    * explicit, 0 checked and clean; null writes none.
    */
   readonly advisory: 0 | 1 | null;
+  /**
+   * A quality replacement's old file: the new one keeps every other tag it
+   * has (composer, comments, BPM, every genre value…) under the ones above.
+   */
+  readonly keepTagsOf?: string;
 }
 
 /** The side of the cover a download embeds, in pixels. */

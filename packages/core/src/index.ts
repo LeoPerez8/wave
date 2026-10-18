@@ -1422,3 +1422,5 @@ export type { LyricsToSave } from "./onlineLyrics.ts";
 export { isCollectionKind } from "./itemActions.ts";
 export type { CollectionKind } from "./itemActions.ts";
 export { mixSectionOfId, mixSeedArtists } from "./discoverMixes.ts";
+export { downloadJobKind } from "./downloadJobKind.ts";
+export type { DownloadJobKind } from "./downloadJobKind.ts";

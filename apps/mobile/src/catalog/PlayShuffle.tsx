@@ -8,7 +8,7 @@ import { useShuffleControl } from "@/nowPlaying/ShuffleMenu";
 import { useThemeColor } from "@/theme/useThemeColor";
 import { OnlineToggle, OnlineToggleFaces } from "@/ytmusic/OnlineToggle";
 
-import { CELL } from "./grid";
+import { CELL, widthOf } from "./grid";
 
 type IconProps = { size?: number; color?: string; strokeWidth?: number };
 
@@ -138,9 +138,6 @@ const NOTHING_MEASURED: Measured = {
 };
 
 const NO_LABELS: readonly string[] = [];
-
-/** The width a layout pass gave a view. */
-const widthOf = (event: LayoutChangeEvent): number => event.nativeEvent.layout.width;
 
 function LineWithLast({
   onPlay,

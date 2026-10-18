@@ -29,10 +29,11 @@ import type { LineToggle } from "@/catalog/PlayShuffle";
 import { LibraryStore, type AlbumRow } from "@/library/LibraryStore";
 import { appRuntime } from "@/library/runtime";
 import type { NativeYtSong } from "@/native/waveYtMusic";
-import { openSearchOnlineChoices, useSearchOnlineAlways } from "@/settings/searchOnline";
+import { useSearchOnlineAlways } from "@/settings/searchOnline";
 import { useYtMusicEnabled } from "@/settings/ytMusic";
 
 import { useLoadedLibraryFinder } from "./libraryFinder";
+import { useLineToggle } from "./OnlineToggle";
 import { YtMusic, YtMusicError } from "./YtMusic";
 
 type Saved = YtArtistSaved<NativeYtSong>;
@@ -329,11 +330,6 @@ export const useYtArtistSection = (
     },
     [retry, show],
   );
-  const selected = view?.toggle;
-  const toggle = useMemo(
-    () =>
-      selected === undefined ? null : { selected, onPick, onLongPress: openSearchOnlineChoices },
-    [selected, onPick],
-  );
+  const toggle = useLineToggle(view?.toggle, onPick);
   return { view, shelves, integrated, toggle };
 };

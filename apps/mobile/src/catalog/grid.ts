@@ -1,3 +1,5 @@
+import type { LayoutChangeEvent } from "react-native";
+
 /**
  * One cell module for the whole catalog: margins, rows, tiles and the A–Z
  * spine are all whole multiples of it, so calm comes from alignment rather
@@ -33,3 +35,6 @@ export const grid = {
 
 /** Letter spacing for catalog lines (small tracked caps), in dp. */
 export const CATALOG_TRACKING = 1.4;
+
+/** The width a layout pass gave a view. */
+export const widthOf = (event: LayoutChangeEvent): number => event.nativeEvent.layout.width;
