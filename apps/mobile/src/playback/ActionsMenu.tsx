@@ -1,6 +1,7 @@
 import {
+  PLAY_ACTION_LABELS,
   YT_PLAYLIST_DOWNLOAD_ACTION_LABELS,
-  entryDivider,
+  menuLayout,
   type DownloadOrigin,
   type UnsearchedSong,
 } from "@wave/core";
@@ -23,22 +24,19 @@ import type {
 } from "@/library/LibraryStore";
 import { playlistEntries, songsWithIds } from "@/library/sectionSongs";
 import { pressedRect } from "@/motion/pressedRect";
-import { CardEntries } from "@/overlay/CardEntries";
 import { CardHeading } from "@/overlay/CardHeading";
-import { useOverlayFlow } from "@/overlay/flow";
-import { MenuRow } from "@/overlay/MenuRow";
+import { MenuChoices, type MenuChoice, type PlayCardChoice } from "@/overlay/MenuChoices";
 import { followUp, openOverlay } from "@/overlay/overlay";
-import { useSlideToChoose } from "@/overlay/useSlideToChoose";
 import { useLoadedInLibrary } from "@/ytmusic/libraryFinder";
 import { runYtPlaylistDownloadAction, useYtPlaylistDownload } from "@/ytmusic/YtDownloads";
 
-import type { MenuAction } from "./actionIcons";
 import { targetHeading, type ActionItems, type Heading, type PlaylistPlace } from "./actionTargets";
 import { useItemActions, type ActionEntry } from "./itemActions";
+import { playTarget } from "./playTarget";
 
 const NO_ENTRIES: readonly PlaylistEntryRow[] = [];
 const NO_SONGS: readonly SongRow[] = [];
-const NO_DOWNLOADS: readonly MenuEntry[] = [];
+const NO_DOWNLOADS: readonly MenuChoice[] = [];
 
 /** How a menu was opened. */
 export interface MenuOptions {
@@ -158,15 +156,6 @@ function SectionActionsMenu({ target, close }: { target: ActionItems; close: () 
   );
 }
 
-/** One row of the menu card. */
-interface MenuEntry {
-  /** What it does, which picks its icon. */
-  readonly action: MenuAction;
-  readonly label: string;
-  readonly onPress: () => void;
-  readonly destructive: boolean;
-}
-
 /**
  * A playlist's download entries (Core's `ytPlaylistDownload`): Download
  * Playlist, or Cancel Playlist Download while its songs are on their way,
@@ -177,7 +166,7 @@ function usePlaylistDownloadEntries(
   entries: readonly PlaylistEntryRow[],
   origin: DownloadOrigin | null,
   close: () => void,
-): MenuEntry[] {
+): MenuChoice[] {
   const inLibrary = useLoadedInLibrary();
   const download = useYtPlaylistDownload(entries, inLibrary);
   return download.actions.map((action) => ({
@@ -194,9 +183,10 @@ function usePlaylistDownloadEntries(
 /**
  * The long-press menu for a track, an album, an artist, a playlist, a genre or
  * a Library entry: what it is (unless the row it was opened from is
- * highlighted, which says so already), then one quiet line per action (the
- * shared list in `itemActions`, which the selection bar offers too). A glass
- * card on the overlay, floating next to the row it was opened from.
+ * highlighted, which says so already), then its play cards and one quiet
+ * line per other action (the shared list in `itemActions`, which the
+ * selection bar offers too). A glass card on the overlay, floating next to
+ * the row it was opened from.
  */
 function ActionsMenu({
   target,
@@ -228,39 +218,55 @@ function ActionsMenu({
       sectionSongs={sectionSongs}
       actions={actions}
       downloads={downloads}
+      play={(shuffle) => {
+        close();
+        playTarget(target, shuffle);
+      }}
     />
   );
 }
 
 /**
- * [target]'s menu card: what it is, then [actions], a playlist's [downloads]
- * after Add to Playlist. The Design preview draws it too, for synthetic items,
- * with actions that only close it.
+ * [target]'s menu card: what it is, then its play cards and the rest of
+ * [actions] under them (Core's `menuLayout`; a collection's Play and Shuffle
+ * run [play]), a playlist's [downloads] after Add to Playlist. The Design
+ * preview draws it too, for synthetic items, with actions that only close it.
  */
 export function ItemMenuCard({
   target,
   sectionSongs,
   actions,
   downloads = NO_DOWNLOADS,
+  play,
 }: {
   target: ActionItems;
   /** Each Library entry's song count, for a Library entry's heading. */
   sectionSongs?: LibraryCounts | undefined;
   actions: readonly ActionEntry[];
   /** A playlist's download entries; none for other targets. */
-  downloads?: readonly MenuEntry[];
+  downloads?: readonly MenuChoice[];
+  /** A collection's Play ([shuffle] false) and Shuffle: closes the menu and plays it. */
+  play: (shuffle: boolean) => void;
 }) {
+  const layout = menuLayout(target.kind, actions);
+  const cards = layout.cards.flatMap((card): PlayCardChoice[] => {
+    if (card === "play") return [{ action: card, onPress: () => play(false) }];
+    const entry = actions.find(({ action }) => action === card);
+    return entry === undefined ? [] : [{ action: card, onPress: entry.onPress }];
+  });
   // A playlist's download entries follow Add to Playlist, before Rename and Delete.
-  const entries: MenuEntry[] = actions.flatMap((entry): MenuEntry[] => [
-    entry,
-    ...(entry.action === "addToPlaylist" ? downloads : []),
-  ]);
+  const entries = layout.list.flatMap((entry): MenuChoice[] =>
+    entry.action === "shuffle"
+      ? [{ action: "shuffle", label: PLAY_ACTION_LABELS.shuffle, onPress: () => play(true) }]
+      : [entry, ...(entry.action === "addToPlaylist" ? downloads : [])],
+  );
 
   return (
     <MenuCard
       heading={targetHeading(target, sectionSongs)}
       // A Library entry's heading counts the songs it acts on, which its row doesn't show.
       alwaysHeading={target.kind === "section"}
+      cards={cards}
       entries={entries}
     />
   );
@@ -268,25 +274,20 @@ export function ItemMenuCard({
 
 /**
  * What a menu card draws: its heading (unless the row it was opened from is
- * highlighted), then its entries.
+ * highlighted), then its play cards and entries.
  */
 function MenuCard({
   heading: head,
   alwaysHeading = false,
+  cards,
   entries,
 }: {
   heading: Heading | undefined;
   /** Shows the heading even under a highlight (`CardHeading`'s `always`). */
   alwaysHeading?: boolean;
-  entries: readonly MenuEntry[];
+  cards: readonly PlayCardChoice[];
+  entries: readonly MenuChoice[];
 }) {
-  // The finger that long-pressed the row can slide onto an entry and lift to run it;
-  // the entry under it shows pressed meanwhile.
-  const { underFinger, trackEntry, trackList } = useSlideToChoose((index) =>
-    entries[index]?.onPress(),
-  );
-  const flow = useOverlayFlow();
-
   return (
     <>
       {head !== undefined && (
@@ -303,21 +304,7 @@ function MenuCard({
           </View>
         </CardHeading>
       )}
-      {/* Play Next sits nearest the finger, whichever side of the row the card opened on. */}
-      <CardEntries listRef={trackList}>
-        {entries.map((entry, index) => (
-          <View key={entry.action} ref={trackEntry(index)} collapsable={false}>
-            <MenuRow
-              action={entry.action}
-              label={entry.label}
-              onPress={entry.onPress}
-              divider={entryDivider(index, entries.length, flow)}
-              highlighted={index === underFinger}
-              destructive={entry.destructive}
-            />
-          </View>
-        ))}
-      </CardEntries>
+      <MenuChoices cards={cards} entries={entries} />
     </>
   );
 }

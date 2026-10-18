@@ -1,7 +1,7 @@
 import {
   discoverMixCaption,
   homeSectionTitle,
-  type DiscoverMix,
+  type BlendedDiscoverMix,
   type HomeSectionId,
 } from "@wave/core";
 import { router } from "expo-router";
@@ -22,6 +22,7 @@ import { openDiscoverMix } from "@/ytmusic/routes";
 
 import { useDiscoverMixes } from "./discoverMixes";
 import { openDiscoverMixActions } from "./DiscoverMixActions";
+import { DiscoverMixLevelButton } from "./DiscoverMixLevelButton";
 import { DiscoverMixesSkeleton } from "./DiscoverMixesSkeleton";
 import { useMostPlayedOfAllTime } from "./mostPlayedOfAllTime";
 
@@ -65,12 +66,13 @@ function MostPlayedAlbums({ title }: SectionProps) {
 /**
  * The mixes as covers, each opening its page; placeholder tiles while the
  * first ones build; nothing with YT Music off (Core's `discoverMixesSection`).
+ * The header's control sets how much of every mix is new.
  */
 function DiscoverMixes({ home, title }: SectionProps) {
   const section = useDiscoverMixes(home.mostPlayed.length > 0);
   if (section.kind === "hidden") return null;
   return (
-    <TitledSection title={title}>
+    <TitledSection title={title} control={<DiscoverMixLevelButton />}>
       {section.kind === "skeleton" ? (
         <DiscoverMixesSkeleton />
       ) : (
@@ -81,7 +83,7 @@ function DiscoverMixes({ home, title }: SectionProps) {
 }
 
 /** The mixes' row of covers. */
-function DiscoverMixRow({ mixes }: { mixes: readonly DiscoverMix[] }) {
+function DiscoverMixRow({ mixes }: { mixes: readonly BlendedDiscoverMix[] }) {
   return (
     <CoverRow>
       {mixes.map((mix) => {
@@ -95,7 +97,7 @@ function DiscoverMixRow({ mixes }: { mixes: readonly DiscoverMix[] }) {
               albumArtist: caption.artists,
               trackCount: mix.songs.length,
               durationMs: 0,
-              artworkUri: mix.songs[0]?.artworkUrl ?? undefined,
+              artworkUri: caption.artworkUrl ?? undefined,
             }}
             size={COVER_ROW_TILE}
             detail={caption.line}

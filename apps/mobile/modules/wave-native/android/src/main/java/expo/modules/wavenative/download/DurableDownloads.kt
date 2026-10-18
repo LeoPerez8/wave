@@ -379,6 +379,26 @@ class DurableDownloads(
   }
 
   /**
+   * Settings › Downloads' drag (Core's `moveQueuedJobs`, which this mirrors): the waiting jobs
+   * [order] names take the places those same jobs held, in [order]'s order, so they start in
+   * that order. Every other job keeps its place, and so does one that started meanwhile. The
+   * new order is written at once, so it survives a restart; readers following [changesSince]
+   * get it as the jobs' order.
+   */
+  @Synchronized fun moveQueued(order: List<String>) {
+    val named = order.toSet()
+    fun moves(job: Map<String, Any?>) = job["phase"] == "queued" && job["id"] in named
+    val moving = order.distinct().mapNotNull { id -> jobs[id]?.takeIf(::moves) }
+    if (moving.isEmpty()) return
+    val next = moving.iterator()
+    val reordered = jobs.values.map { job -> if (moves(job)) next.next() else job }
+    if (reordered.map { it["id"] } == jobs.keys.toList()) return
+    jobs.clear()
+    for (job in reordered) jobs[job["id"] as String] = job
+    persist()
+  }
+
+  /**
    * Too late while publishing or importing. A published file the Library couldn't import shows as a
    * failure with Cancel: cancelling forgets the row and leaves the file in the Library folder.
    */

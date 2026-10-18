@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  blendDiscoverMix,
   discoverMix,
   discoverMixCaption,
   discoverMixReadsMore,
@@ -857,6 +858,9 @@ describe("A mix's songs", () => {
 });
 
 describe("A mix", () => {
+  /** A mix's tile with every song new (level 5), as mixes were before levels. */
+  const captionOf = (mix: Parameters<typeof blendDiscoverMix>[0]) =>
+    discoverMixCaption(blendDiscoverMix(mix, { level: 5 }));
   const songs = (count: number) =>
     Array.from({ length: count }, (_, n) => ({ ...yt(`v${n}`, `Song ${n}`, ["X"]), video: false }));
   const portishead = {
@@ -875,15 +879,16 @@ describe("A mix", () => {
 
   test("is named after its seed and says how many songs it has", () => {
     const mix = discoverMix(portishead, songs(12));
-    assert.deepEqual(mix && { id: mix.id, caption: discoverMixCaption(mix) }, {
+    assert.deepEqual(mix && { id: mix.id, caption: captionOf(mix) }, {
       id: "artist:portishead",
-      caption: { title: "Portishead mix", artists: "X", line: "12 songs" },
+      caption: { title: "Portishead mix", artists: "X", line: "12 songs", artworkUrl: null },
     });
     const songMix = discoverMix(gloryBox, songs(30));
-    assert.deepEqual(songMix && discoverMixCaption(songMix), {
+    assert.deepEqual(songMix && captionOf(songMix), {
       title: "Glory Box mix",
       artists: "X",
       line: "30 songs",
+      artworkUrl: null,
     });
   });
 
@@ -902,7 +907,7 @@ describe("A mix", () => {
       ],
     }).filter((candidate) => candidate.from === "similar");
     const mix = seed && discoverMix(seed, songs(12));
-    assert.deepEqual(mix && { id: mix.id, title: discoverMixCaption(mix).title }, {
+    assert.deepEqual(mix && { id: mix.id, title: captionOf(mix).title }, {
       id: "artist:zero 7",
       title: "Zero 7 mix",
     });
@@ -920,19 +925,21 @@ describe("A mix", () => {
       foo,
       songs(12).map((song, n) => ({ ...song, artists: [n === 0 ? "Muse" : "Queen"] })),
     );
-    assert.deepEqual(mix && discoverMixCaption(mix), {
+    assert.deepEqual(mix && captionOf(mix), {
       title: "Rock mix",
       artists: "Foo Fighters, Muse, Queen",
       line: "12 songs",
+      artworkUrl: null,
     });
     const songMix = discoverMix(
       { ...gloryBox, genre: "Trip Hop", song: seedSong(10, "Glory Box", "Portishead", [2]) },
       songs(12),
     );
-    assert.deepEqual(songMix && discoverMixCaption(songMix), {
+    assert.deepEqual(songMix && captionOf(songMix), {
       title: "Trip Hop mix",
       artists: "Portishead, X",
       line: "12 songs",
+      artworkUrl: null,
     });
   });
 
@@ -964,7 +971,7 @@ describe("A mix", () => {
       portishead,
       songs(12).map((song, n) => ({ ...song, artists: [leads[n] ?? "Goldfrapp", "Guest"] })),
     );
-    assert.equal(mix && discoverMixCaption(mix).artists, "Massive Attack, Tricky, Björk");
+    assert.equal(mix && captionOf(mix).artists, "Massive Attack, Tricky, Björk");
   });
 
   test("keeps its songs without telling videos apart", () => {

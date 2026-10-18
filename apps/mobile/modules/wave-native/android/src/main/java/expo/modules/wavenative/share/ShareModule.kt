@@ -15,7 +15,8 @@ import java.io.File
 
 /**
  * Sharing images Wave draws (the lyrics card): JS sends a PNG as base64
- * ([SharedImages]), then saves it to the gallery or opens the share sheet with it.
+ * ([SharedImages]), then saves it to the gallery, opens the share sheet with it,
+ * or hands it straight to Instagram Stories or WhatsApp.
  */
 class ShareModule : Module() {
   private val context: Context get() = appContext.reactContext ?: throw Exceptions.ReactContextLost()
@@ -35,7 +36,49 @@ class ShareModule : Module() {
       val send = imageIntent(File(path))
       startActivity(Intent.createChooser(send, title))
     }
+
+    /**
+     * Which apps an image can go straight to: `instagramStories` (Instagram
+     * takes its Stories intent) and `whatsapp` (WhatsApp takes a shared image).
+     * The manifest's `<queries>` make both packages visible to the check.
+     */
+    AsyncFunction("shareApps") {
+      mapOf(
+        "instagramStories" to resolves(storyIntent()),
+        "whatsapp" to resolves(Intent(Intent.ACTION_SEND).setType(PNG).setPackage(WHATSAPP)),
+      )
+    }
+
+    /**
+     * Opens Instagram's Stories editor with the image at [path] as a sticker the
+     * user can move and resize, over a [top] to [bottom] background (`#rrggbb`),
+     * as Meta's "Sharing to Stories" has it. [appId] is the build's Facebook App
+     * ID, which Instagram requires as the source application. Only Instagram is
+     * granted to read the image.
+     */
+    AsyncFunction("shareToInstagramStory") { path: String, top: String, bottom: String, appId: String ->
+      val uri = contentUri(File(path))
+      context.grantUriPermission(INSTAGRAM, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+      val story = storyIntent().apply {
+        putExtra("source_application", appId)
+        putExtra("interactive_asset_uri", uri)
+        putExtra("top_background_color", top)
+        putExtra("bottom_background_color", bottom)
+      }
+      startActivity(story)
+    }
+
+    /** Sends the image at [path] straight to WhatsApp's share flow; only WhatsApp can read it. */
+    AsyncFunction("shareToWhatsApp") { path: String ->
+      startActivity(imageIntent(File(path)).setPackage(WHATSAPP))
+    }
   }
+
+  /** Instagram's Stories intent, addressed to Instagram only, with no image yet. */
+  private fun storyIntent(): Intent = Intent(INSTAGRAM_STORY).setType(PNG).setPackage(INSTAGRAM)
+
+  /** Whether an installed app takes [intent]. */
+  private fun resolves(intent: Intent): Boolean = intent.resolveActivity(context.packageManager) != null
 
   /** A content URI for a shared image, readable by whoever the intent carrying it reaches. */
   private fun contentUri(image: File): Uri {
@@ -49,7 +92,7 @@ class ShareModule : Module() {
   private fun imageIntent(image: File): Intent {
     val uri = contentUri(image)
     return Intent(Intent.ACTION_SEND).apply {
-      type = "image/png"
+      type = PNG
       putExtra(Intent.EXTRA_STREAM, uri)
       // The share sheet shows the image as its preview.
       clipData = ClipData.newRawUri(image.name, uri)
@@ -70,7 +113,7 @@ class ShareModule : Module() {
     val resolver = context.contentResolver
     val values = ContentValues().apply {
       put(MediaStore.Images.Media.DISPLAY_NAME, image.name)
-      put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+      put(MediaStore.Images.Media.MIME_TYPE, PNG)
       put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/Wave")
       // Hidden from other apps until it's all written.
       put(MediaStore.Images.Media.IS_PENDING, 1)
@@ -85,5 +128,12 @@ class ShareModule : Module() {
       resolver.delete(uri, null, null)
       throw e
     }
+  }
+
+  private companion object {
+    const val PNG = "image/png"
+    const val INSTAGRAM = "com.instagram.android"
+    const val INSTAGRAM_STORY = "com.instagram.share.ADD_TO_STORY"
+    const val WHATSAPP = "com.whatsapp"
   }
 }

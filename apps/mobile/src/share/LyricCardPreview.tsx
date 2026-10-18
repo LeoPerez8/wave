@@ -1,9 +1,19 @@
-import { IconDots, IconPhotoDown, IconX } from "@tabler/icons-react-native";
+import {
+  IconBrandInstagram,
+  IconBrandWhatsapp,
+  IconDots,
+  IconPhotoDown,
+  IconX,
+} from "@tabler/icons-react-native";
 import {
   LYRIC_CARD_FALLBACK,
   LYRIC_CARD_LAYOUT,
   lyricCardFileName,
+  lyricShareDestinations,
+  lyricStoryBackground,
   nextLyricCardColour,
+  type LyricShareApps,
+  type LyricShareDestination,
 } from "@wave/core";
 import { useEffect, useRef, useState } from "react";
 import { PixelRatio, StyleSheet, Text, View } from "react-native";
@@ -20,8 +30,11 @@ import { LyricCard } from "./LyricCard";
 import { closeLyricCard, useLyricCard, type LyricCardContent } from "./lyricCard";
 import { ShareDestinations, type ShareDestination } from "./ShareDestinations";
 import {
+  imageShareApps,
   openImageShareSheet,
   saveImageToGallery,
+  shareImageToInstagramStory,
+  shareImageToWhatsApp,
   writeViewPng,
   type ImageSource,
 } from "./shareImage";
@@ -33,6 +46,14 @@ const EXPORT_PX = 1080;
 
 /** The preview's rounded corners, which the exported image doesn't have. */
 const PREVIEW_RADIUS = CELL * 2;
+
+const NO_APPS: LyricShareApps = { instagramStories: false, whatsapp: false };
+
+/** The card's file name, stamped now. */
+const cardFileName = (title: string): string => lyricCardFileName(title, new Date());
+
+/** The apps the last preview found, shown while the next one checks again. */
+let lastApps: LyricShareApps | null = null;
 
 /**
  * The card, fitted into [size] and drawn at the export's size scaled down, so
@@ -101,6 +122,8 @@ function LyricCardPreview({ content }: { content: LyricCardContent }) {
   const [ready, setReady] = useState(content.artworkUri === undefined);
   const [busy, setBusy] = useState(false);
   const card: ImageSource = useRef(null);
+  // Null until this phone's apps are checked; the last answer shows meanwhile.
+  const [apps, setApps] = useState<LyricShareApps | null>(lastApps);
 
   useEffect(
     () =>
@@ -111,6 +134,17 @@ function LyricCardPreview({ content }: { content: LyricCardContent }) {
     [],
   );
 
+  useEffect(() => {
+    let live = true;
+    void imageShareApps().then((found) => {
+      lastApps = found;
+      if (live) setApps(found);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+
   /** Draws the card into a PNG, then hands it to [send]; one at a time. */
   const sendCard = async (
     what: string,
@@ -120,7 +154,7 @@ function LyricCardPreview({ content }: { content: LyricCardContent }) {
     if (busy) return;
     setBusy(true);
     try {
-      const path = await writeViewPng(card, lyricCardFileName(content.title, new Date()));
+      const path = await writeViewPng(card, cardFileName(content.title));
       await send(path);
     } catch (error) {
       appLog("warn", LOG_TAG, `Couldn't ${what}: ${String(error)}`);
@@ -130,8 +164,30 @@ function LyricCardPreview({ content }: { content: LyricCardContent }) {
     }
   };
 
-  const destinations: ShareDestination[] = [
-    {
+  const all: Record<LyricShareDestination, ShareDestination> = {
+    instagramStories: {
+      key: "instagramStories",
+      label: "Instagram Stories",
+      icon: IconBrandInstagram,
+      onPress: () =>
+        void sendCard(
+          "share the lyrics card to Instagram Stories",
+          (path) => shareImageToInstagramStory(path, lyricStoryBackground(colour)),
+          "Couldn't open Instagram",
+        ),
+    },
+    whatsapp: {
+      key: "whatsapp",
+      label: "WhatsApp",
+      icon: IconBrandWhatsapp,
+      onPress: () =>
+        void sendCard(
+          "share the lyrics card to WhatsApp",
+          shareImageToWhatsApp,
+          "Couldn't open WhatsApp",
+        ),
+    },
+    save: {
       key: "save",
       label: "Save image",
       icon: IconPhotoDown,
@@ -145,7 +201,7 @@ function LyricCardPreview({ content }: { content: LyricCardContent }) {
           "Couldn't save the image",
         ),
     },
-    {
+    more: {
       key: "more",
       label: "More",
       icon: IconDots,
@@ -156,7 +212,8 @@ function LyricCardPreview({ content }: { content: LyricCardContent }) {
           "Couldn't share the image",
         ),
     },
-  ];
+  };
+  const destinations = lyricShareDestinations(apps ?? NO_APPS).map((key) => all[key]);
 
   return (
     <View
@@ -197,7 +254,10 @@ function LyricCardPreview({ content }: { content: LyricCardContent }) {
       >
         {content.colours.length > 1 ? "Tap the card to change its colour" : " "}
       </Text>
-      <ShareDestinations destinations={destinations} disabled={busy || !ready} />
+      {/* Hidden, not left out, until the apps are known: the row's height stays and the card doesn't jump. */}
+      <View style={{ opacity: apps === null ? 0 : 1 }}>
+        <ShareDestinations destinations={destinations} disabled={busy || !ready || apps === null} />
+      </View>
     </View>
   );
 }
