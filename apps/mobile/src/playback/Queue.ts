@@ -1,5 +1,6 @@
 import {
   EMPTY_QUEUE,
+  NEW_QUEUE_NOTICE,
   REAL_SHUFFLE,
   answerPlayingWalk,
   applyPlayerSync,
@@ -12,11 +13,13 @@ import {
   planPlayerSync,
   playerQueueList,
   queueSourceAfter,
+  queueUndo,
   reduceQueue,
   shuffledTrackIds,
   shufflesQueue,
   startPlayingWalk,
   statsWindow,
+  undoneQueue,
   withHeldCurrent,
   type PlayerList,
   type PlayingStep,
@@ -26,6 +29,7 @@ import {
   type QueueEntry,
   type QueuePlayback,
   type QueueState,
+  type QueueUndo,
   type RepeatMode,
   type Shuffle,
   type SyncStep,
@@ -143,6 +147,12 @@ const askPlaying = (trackId: string): Promise<PlayingSettlement> =>
     (settled): PlayingSettlement => settled ?? { kind: "failed", reason: "failed" },
   );
 
+/** A play's way back to the queue it replaced (Core's `QueueUndo`), with the tracks that queue knew. */
+interface TakeBack {
+  readonly undo: QueueUndo;
+  readonly tracks: ReadonlyMap<string, QueueTrack>;
+}
+
 /** A command waiting, outside the queue's lane, for its playing song's search (Core's `PlayingWalk`). */
 interface Waiting {
   readonly walk: PlayingWalk;
@@ -150,11 +160,19 @@ interface Waiting {
   readonly answer: Promise<PlayingSettlement>;
   /** The tracks the queue knew before the command: going back, the queue knows them again. */
   readonly knownBefore: ReadonlyMap<string, QueueTrack>;
+  /** The Undo the new queue offers once it plays, if the command was a play. */
+  readonly takeBack: TakeBack | null;
 }
 
 /** Where a command got to in the lane: done (go, stay, or another command took its place) or waiting. */
 type Outcome =
-  | { readonly kind: "go"; readonly state: QueueState; readonly playback: QueuePlayback }
+  | {
+      readonly kind: "go";
+      readonly state: QueueState;
+      readonly playback: QueuePlayback;
+      /** A new queue's Undo: going there shows "New queue playing" with it. */
+      readonly takeBack: TakeBack | null;
+    }
   | { readonly kind: "stay" }
   | { readonly kind: "superseded" }
   | { readonly kind: "wait"; readonly waiting: Waiting };
@@ -308,12 +326,14 @@ export const layer = Layer.effect(
      * waits for the playing song's search (the song shows as playing, and the
      * song before it pauses), goes back to the queue as it was, or goes on.
      * [rejoin] is the command waiting before, whose search for the same song
-     * is joined rather than asked again.
+     * is joined rather than asked again. [takeBack] is the Undo a new queue
+     * offers once it goes; staying, there's none.
      */
     const take = (
       step: PlayingStep,
       knownBefore: ReadonlyMap<string, QueueTrack>,
       rejoin: Waiting | null,
+      takeBack: TakeBack | null,
     ) =>
       Effect.gen(function* () {
         if (step.notice !== null) void showToast(step.notice);
@@ -326,7 +346,7 @@ export const layer = Layer.effect(
             }
             const answer =
               rejoin?.trackId === step.trackId ? rejoin.answer : askPlaying(step.trackId);
-            waiting = { walk: step.walk, trackId: step.trackId, answer, knownBefore };
+            waiting = { walk: step.walk, trackId: step.trackId, answer, knownBefore, takeBack };
             return { kind: "wait", waiting } satisfies Outcome;
           }
           case "stay":
@@ -342,13 +362,16 @@ export const layer = Layer.effect(
           case "go": {
             const playback = pausedForSearch && step.playback === "keep" ? "play" : step.playback;
             pausedForSearch = false;
-            return { kind: "go", state: step.state, playback } satisfies Outcome;
+            return { kind: "go", state: step.state, playback, takeBack } satisfies Outcome;
           }
         }
       });
 
-    /** Runs [command] in the lane, up to its end or its wait for a search. */
-    const start = (command: QueueCommand, added: readonly QueueTrack[]) =>
+    /**
+     * Runs [command] in the lane, up to its end or its wait for a search. A
+     * play from the phone [offersUndo]; one from Android Auto doesn't.
+     */
+    const start = (command: QueueCommand, added: readonly QueueTrack[], offersUndo = true) =>
       Effect.gen(function* () {
         const pending = waiting;
         waiting = null;
@@ -356,6 +379,15 @@ export const layer = Layer.effect(
         learnTracks(command, added);
         if (command.type === "playerMoved") native = { ...native, currentKey: command.key };
         const before = queueState.get();
+        // A play offers going back to the queue the player holds (a walk's
+        // goes back there too); a command taking a walk's place keeps its Undo.
+        const undo = queueUndo(pending?.walk.before ?? before, command, currentPositionMs());
+        const takeBack =
+          command.type !== "play"
+            ? (pending?.takeBack ?? null)
+            : offersUndo && undo !== null
+              ? { undo, tracks: knownBefore }
+              : null;
         const reduced = yield* reduce(before, command);
         const step = startPlayingWalk(before, command, reduced, pending?.walk ?? null);
         // The player went on past songs still unsearched: they're skipped, as a failed search skips them.
@@ -363,7 +395,7 @@ export const layer = Layer.effect(
           const notice = passedOverNotice(before, step.state);
           if (notice !== null) void showToast(notice);
         }
-        return yield* take(step, knownBefore, pending);
+        return yield* take(step, knownBefore, pending, takeBack);
       });
 
     /** Takes [answer], [w]'s search's, in the lane, unless a newer command took its place. */
@@ -371,7 +403,7 @@ export const layer = Layer.effect(
       Effect.gen(function* () {
         if (waiting !== w) return { kind: "superseded" } satisfies Outcome;
         waiting = null;
-        return yield* take(answerPlayingWalk(w.walk, answer), w.knownBefore, null);
+        return yield* take(answerPlayingWalk(w.walk, answer), w.knownBefore, null, w.takeBack);
       });
 
     /**
@@ -410,7 +442,7 @@ export const layer = Layer.effect(
     const apply = (done: Done) =>
       Effect.gen(function* () {
         if (done.kind !== "go") return;
-        const { state, playback } = done;
+        const { state, playback, takeBack } = done;
         const shown = queueState.get();
         if (state === shown && playback === "keep") return;
         queueState.set(state);
@@ -432,7 +464,40 @@ export const layer = Layer.effect(
           case "keep":
             break;
         }
+        if (takeBack !== null) {
+          void showToast(NEW_QUEUE_NOTICE, {
+            label: "Undo",
+            run: () =>
+              Effect.runFork(
+                undoPlay(takeBack).pipe(
+                  Effect.catch((error) => Effect.sync(() => reportError(error))),
+                ),
+              ),
+          });
+        }
       });
+
+    /**
+     * Undo on "New queue playing": the queue the play replaced comes back as
+     * it was (Core's `undoneQueue`), on its song where it was, playing. A
+     * command still waiting for a search gives way.
+     */
+    const undoPlay = ({ undo, tracks }: TakeBack) =>
+      lane.withPermit(
+        Effect.gen(function* () {
+          waiting = null;
+          pausedForSearch = false;
+          learnQueueTracks([...tracks.values()], { forgetOthers: true });
+          queueSource.set("phone");
+          const state = undoneQueue(undo, queueState.get());
+          queueState.set(state);
+          queueChanged();
+          yield* sync(state);
+          yield* applyRepeat(state);
+          yield* player.seekTo(undo.positionMs);
+          yield* player.play;
+        }),
+      );
 
     const dispatch = (command: QueueCommand, added: readonly QueueTrack[] = []) =>
       walkOut(
@@ -445,7 +510,7 @@ export const layer = Layer.effect(
 
     // An unsearched song played from Auto is searched first, as on the phone.
     const handOver = (command: PlayCommand, added: readonly QueueTrack[]) =>
-      walkOut(start(command, added), (done) =>
+      walkOut(start(command, added, false), (done) =>
         Effect.gen(function* () {
           if (done.kind !== "go") {
             const cause = done.kind === "stay" ? "not searched" : "played something else meanwhile";
