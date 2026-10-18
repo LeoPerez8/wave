@@ -1122,6 +1122,7 @@ export type {
   DiscoverSeedSource,
   DiscoverSimilarArtist,
   DiscoverSimilarArtists,
+  DiscoverSongPlays,
 } from "./discoverMixes.ts";
 export { discoverMixActions, discoverMixPlaylist } from "./discoverMixActions.ts";
 export type { DiscoverMixAction } from "./discoverMixActions.ts";
