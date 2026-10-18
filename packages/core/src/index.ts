@@ -1254,19 +1254,30 @@ export {
   LYRIC_CARD_LAYOUT,
   LYRIC_CARD_TEXT_SIZES,
   MAX_SHARED_LYRIC_LINES,
+  instagramStoriesAppId,
   isLyricLineSelected,
   lyricCardColours,
   lyricCardFileName,
   lyricCardInk,
   lyricCardTextSize,
+  lyricShareDestinations,
+  lyricStoryBackground,
   nextLyricCardColour,
   shareableLyricLines,
   sharedLyricLines,
   tapLyricLine,
 } from "./lyricsShare.ts";
-export type { LyricSelection, LyricSelectionTap } from "./lyricsShare.ts";
+export type {
+  LyricSelection,
+  LyricSelectionTap,
+  LyricShareApps,
+  LyricShareDestination,
+  LyricStoryBackground,
+} from "./lyricsShare.ts";
 export type { YtLibraryFavorites } from "./ytLibraryBatch.ts";
 export { pendingFavorite, settlePendingFavorites } from "./pendingFavorites.ts";
 export type { EnteringSong, PendingFavorite, SettledFavorites } from "./pendingFavorites.ts";
 export { applyJournalChanges } from "./journalChanges.ts";
 export type { JournalChanges } from "./journalChanges.ts";
+export { PLAY_ACTION_LABELS, menuLayout } from "./menuLayout.ts";
+export type { MenuLayout, MenuSubject, PlayAction, PlayCard } from "./menuLayout.ts";

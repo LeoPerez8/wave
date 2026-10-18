@@ -9,6 +9,9 @@ import {
   lyricCardFileName,
   lyricCardInk,
   lyricCardTextSize,
+  lyricShareDestinations,
+  lyricStoryBackground,
+  instagramStoriesAppId,
   nextLyricCardColour,
   parseLyrics,
   shareableLyricLines,
@@ -259,5 +262,63 @@ describe("lyricCardFileName", () => {
   test("keeps a long title to 60 characters", () => {
     const name = lyricCardFileName("a".repeat(100), at);
     assert.equal(name, `Wave - ${"a".repeat(60)} - 20261018-140509.png`);
+  });
+});
+
+describe("lyricShareDestinations", () => {
+  test("with Instagram Stories and WhatsApp on hand, the apps come first, as in Spotify", () => {
+    assert.deepEqual(lyricShareDestinations({ instagramStories: true, whatsapp: true }), [
+      "instagramStories",
+      "whatsapp",
+      "save",
+      "more",
+    ]);
+  });
+
+  test("an app that isn't on hand isn't in the row; Save image and More always are", () => {
+    assert.deepEqual(lyricShareDestinations({ instagramStories: false, whatsapp: true }), [
+      "whatsapp",
+      "save",
+      "more",
+    ]);
+    assert.deepEqual(lyricShareDestinations({ instagramStories: true, whatsapp: false }), [
+      "instagramStories",
+      "save",
+      "more",
+    ]);
+    assert.deepEqual(lyricShareDestinations({ instagramStories: false, whatsapp: false }), [
+      "save",
+      "more",
+    ]);
+  });
+});
+
+describe("lyricStoryBackground", () => {
+  test("the story's top and bottom are both the card's colour, so the sticker sits on it seamlessly", () => {
+    assert.deepEqual(lyricStoryBackground("#3a5f8c"), { top: "#3a5f8c", bottom: "#3a5f8c" });
+  });
+
+  test("a colour Instagram can't read becomes Wave's graphite", () => {
+    assert.deepEqual(lyricStoryBackground("blue"), {
+      top: LYRIC_CARD_FALLBACK,
+      bottom: LYRIC_CARD_FALLBACK,
+    });
+  });
+});
+
+describe("instagramStoriesAppId", () => {
+  test("reads the Facebook App ID Instagram needs from app.config.ts extra", () => {
+    assert.equal(
+      instagramStoriesAppId({ facebookAppId: " 1234567890123456 " }),
+      "1234567890123456",
+    );
+  });
+
+  test("a build without one, or with something that isn't an App ID, has none", () => {
+    assert.equal(instagramStoriesAppId({ facebookAppId: "" }), null);
+    assert.equal(instagramStoriesAppId({ facebookAppId: "dev.leoperez.wave" }), null);
+    assert.equal(instagramStoriesAppId({ facebookAppId: 1234567890123456 }), null);
+    assert.equal(instagramStoriesAppId({}), null);
+    assert.equal(instagramStoriesAppId(undefined), null);
   });
 });

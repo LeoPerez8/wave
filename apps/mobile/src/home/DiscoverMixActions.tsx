@@ -1,10 +1,13 @@
 import {
+  PLAY_ACTION_LABELS,
   discoverMixActions,
   discoverMixCaption,
   discoverMixPlaylist,
   discoverSongs,
-  entryDivider,
+  menuLayout,
   type DiscoverMix,
+  type DiscoverMixAction,
+  type PlayAction,
 } from "@wave/core";
 import { Text, View } from "react-native";
 
@@ -13,14 +16,11 @@ import { CELL } from "@/catalog/grid";
 import { saveImportedPlaylist } from "@/library/importPlaylists";
 import { pressedRect } from "@/motion/pressedRect";
 import { showError } from "@/overlay/alert";
-import { CardEntries } from "@/overlay/CardEntries";
 import { CardHeading } from "@/overlay/CardHeading";
-import { useOverlayFlow } from "@/overlay/flow";
-import { MenuRow } from "@/overlay/MenuRow";
+import { MenuChoices, type MenuChoice } from "@/overlay/MenuChoices";
 import { followUp, openOverlay } from "@/overlay/overlay";
 import { showToast } from "@/overlay/toast";
-import { useSlideToChoose } from "@/overlay/useSlideToChoose";
-import { queueDiscoverSongs } from "@/playback/actions";
+import { playDiscoverSongs, queueDiscoverSongs } from "@/playback/actions";
 import {
   currentLibraryFinder,
   useLibraryFinder,
@@ -62,30 +62,39 @@ function DiscoverMixActionsMenu({ mix, close }: { mix: DiscoverMix; close: () =>
   const find = useLibraryFinder();
   const inLibrary = useLoadedInLibrary();
   const download = useYtAlbumDownload(mix.songs, inLibrary);
-  const entries = discoverMixActions(download);
   const caption = discoverMixCaption(mix);
-  const choose = (index: number) => {
-    const entry = entries[index];
-    if (entry === undefined) return;
+  // As its page plays them: the Library's files for the songs it has, the rest streamed.
+  const listed = discoverSongs(mix.songs, find);
+  const context = { kind: "discoverMix", id: mix.id };
+  const run = (action: DiscoverMixAction | PlayAction) => () => {
     close();
-    switch (entry.action) {
+    switch (action) {
+      case "play":
+      case "shuffle":
+        void playDiscoverSongs(listed, undefined, context, { shuffle: action === "shuffle" });
+        return;
       case "playNext":
       case "addToQueue":
-        void queueDiscoverSongs(discoverSongs(mix.songs, find), entry.action);
+        void queueDiscoverSongs(listed, action);
         return;
       case "saveAsPlaylist":
         saveAsPlaylist(mix);
         return;
       default:
-        runYtDownloadAction(entry.action, mix.songs, inLibrary, {
+        runYtDownloadAction(action, mix.songs, inLibrary, {
           kind: "mix",
           id: mix.id,
           name: caption.title,
         });
     }
   };
-  const { underFinger, trackEntry, trackList } = useSlideToChoose(choose);
-  const flow = useOverlayFlow();
+  const layout = menuLayout("discoverMix", discoverMixActions(download));
+  const cards = layout.cards.map((action) => ({ action, onPress: run(action) }));
+  const entries = layout.list.map((entry): MenuChoice => ({
+    action: entry.action,
+    label: "label" in entry ? entry.label : PLAY_ACTION_LABELS.shuffle,
+    onPress: run(entry.action),
+  }));
 
   return (
     <>
@@ -100,19 +109,7 @@ function DiscoverMixActionsMenu({ mix, close }: { mix: DiscoverMix; close: () =>
           </Text>
         </View>
       </CardHeading>
-      <CardEntries listRef={trackList}>
-        {entries.map((entry, index) => (
-          <View key={entry.action} ref={trackEntry(index)} collapsable={false}>
-            <MenuRow
-              action={entry.action}
-              label={entry.label}
-              onPress={() => choose(index)}
-              divider={entryDivider(index, entries.length, flow)}
-              highlighted={index === underFinger}
-            />
-          </View>
-        ))}
-      </CardEntries>
+      <MenuChoices cards={cards} entries={entries} />
     </>
   );
 }
