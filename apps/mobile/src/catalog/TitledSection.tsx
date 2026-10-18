@@ -10,11 +10,14 @@ import { CELL } from "./grid";
 export function TitledSection({
   title,
   action,
+  control,
   first = false,
   children,
 }: {
   title: string;
   action?: { label: string; onPress: () => void };
+  /** A control of its own in the action's place (Discover mixes' level), when it has no action. */
+  control?: ReactNode;
   /** The first section sits closer to the large title. */
   first?: boolean;
   children: ReactNode;
@@ -25,7 +28,11 @@ export function TitledSection({
         <View className="flex-1">
           <CatalogLine>{title}</CatalogLine>
         </View>
-        {action !== undefined && <TextButton label={action.label} onPress={action.onPress} />}
+        {action !== undefined ? (
+          <TextButton label={action.label} onPress={action.onPress} />
+        ) : (
+          control
+        )}
       </View>
       {children}
     </View>

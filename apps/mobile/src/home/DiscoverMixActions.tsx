@@ -3,12 +3,13 @@ import {
   discoverMixActions,
   discoverMixCaption,
   discoverMixPlaylist,
-  discoverSongs,
   menuLayout,
-  type DiscoverMix,
+  placeDiscoverMixSongs,
+  type BlendedDiscoverMix,
   type DiscoverMixAction,
   type PlayAction,
 } from "@wave/core";
+import { useMemo } from "react";
 import { Text, View } from "react-native";
 
 import { Artwork } from "@/catalog/Artwork";
@@ -28,8 +29,13 @@ import {
 } from "@/ytmusic/libraryFinder";
 import { runYtDownloadAction, useYtAlbumDownload } from "@/ytmusic/YtDownloads";
 
-/** Prepares local Library matches before opening the cached mix's menu. */
-export const openDiscoverMixActions = (mix: DiscoverMix): void => {
+import { newSongsOf, useDiscoverMix, useLibraryTracks } from "./discoverMixes";
+
+/**
+ * Prepares local Library matches before opening the cached mix's menu, the
+ * mix as the owner's level blends it.
+ */
+export const openDiscoverMixActions = (mix: BlendedDiscoverMix): void => {
   const anchor = pressedRect();
   void followUp(async () => {
     try {
@@ -46,7 +52,7 @@ export const openDiscoverMixActions = (mix: DiscoverMix): void => {
 };
 
 /** A one-time copy using the same Replace / Keep Both choice as a playlist import. */
-const saveAsPlaylist = (mix: DiscoverMix): void => {
+const saveAsPlaylist = (mix: BlendedDiscoverMix): void => {
   const playlist = discoverMixPlaylist(mix);
   void followUp(async () => {
     try {
@@ -58,13 +64,24 @@ const saveAsPlaylist = (mix: DiscoverMix): void => {
   });
 };
 
-function DiscoverMixActionsMenu({ mix, close }: { mix: DiscoverMix; close: () => void }) {
+function DiscoverMixActionsMenu({
+  mix: pressed,
+  close,
+}: {
+  mix: BlendedDiscoverMix;
+  close: () => void;
+}) {
   const find = useLibraryFinder();
+  const tracks = useLibraryTracks();
+  // Blended again without Library songs the Library no longer has (Home doesn't read every song).
+  const mix = useDiscoverMix(pressed.id, tracks) ?? pressed;
   const inLibrary = useLoadedInLibrary();
-  const download = useYtAlbumDownload(mix.songs, inLibrary);
+  // Its new songs download; its Library songs are on the phone already.
+  const fresh = useMemo(() => newSongsOf(mix), [mix]);
+  const download = useYtAlbumDownload(fresh, inLibrary);
   const caption = discoverMixCaption(mix);
-  // As its page plays them: the Library's files for the songs it has, the rest streamed.
-  const listed = discoverSongs(mix.songs, find);
+  // As its page plays them, blended: the Library's files for the songs it has, the rest streamed.
+  const listed = placeDiscoverMixSongs(mix, { find, track: (id) => tracks?.get(id) ?? null });
   const context = { kind: "discoverMix", id: mix.id };
   const run = (action: DiscoverMixAction | PlayAction) => () => {
     close();
@@ -81,7 +98,7 @@ function DiscoverMixActionsMenu({ mix, close }: { mix: DiscoverMix; close: () =>
         saveAsPlaylist(mix);
         return;
       default:
-        runYtDownloadAction(action, mix.songs, inLibrary, {
+        runYtDownloadAction(action, fresh, inLibrary, {
           kind: "mix",
           id: mix.id,
           name: caption.title,
@@ -99,7 +116,7 @@ function DiscoverMixActionsMenu({ mix, close }: { mix: DiscoverMix; close: () =>
   return (
     <>
       <CardHeading>
-        <Artwork uri={mix.songs[0]?.artworkUrl ?? undefined} size={CELL * 5} />
+        <Artwork uri={caption.artworkUrl ?? undefined} size={CELL * 5} />
         <View className="flex-1">
           <Text numberOfLines={1} className="font-sans text-body font-medium text-foreground">
             {caption.title}
