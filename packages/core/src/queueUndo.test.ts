@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { EMPTY_QUEUE, queueUndo, reduceQueue, undoneQueue } from "./index.ts";
+import { EMPTY_QUEUE, newQueueToast, queueUndo, reduceQueue, undoneQueue } from "./index.ts";
 import type { QueueCommand, QueueState } from "./index.ts";
 
 const album = { kind: "album", id: "7" } as const;
@@ -18,22 +18,33 @@ const playing: QueueState = [
   EMPTY_QUEUE,
 );
 
+/** The player on the playing queue's song ("b", key 2), 73 s in. */
+const onB = { key: "2", positionMs: 73_000 };
+
 describe("queueUndo", () => {
   test("a play over a queue with a song current offers going back to it, where its song was", () => {
-    assert.deepEqual(queueUndo(playing, playAlbum, 73_000), { state: playing, positionMs: 73_000 });
+    assert.deepEqual(queueUndo(playing, playAlbum, onB), { state: playing, positionMs: 73_000 });
+  });
+
+  test("goes back to the start of the song when the player is on another one", () => {
+    // The player went on to "q" while a search held the queue on "b".
+    assert.deepEqual(queueUndo(playing, playAlbum, { key: "4", positionMs: 12_000 }), {
+      state: playing,
+      positionMs: 0,
+    });
   });
 
   test("the first play offers nothing: there's no queue to go back to", () => {
-    assert.equal(queueUndo(EMPTY_QUEUE, playAlbum, 0), null);
+    assert.equal(queueUndo(EMPTY_QUEUE, playAlbum, onB), null);
   });
 
   test("a play of nothing offers nothing: no new queue plays", () => {
-    assert.equal(queueUndo(playing, { type: "play", trackIds: [], context: album }, 0), null);
+    assert.equal(queueUndo(playing, { type: "play", trackIds: [], context: album }, onB), null);
   });
 
   test("only a play offers it, not changes to the same queue", () => {
-    assert.equal(queueUndo(playing, { type: "next" }, 0), null);
-    assert.equal(queueUndo(playing, { type: "playNext", trackIds: ["x"] }, 0), null);
+    assert.equal(queueUndo(playing, { type: "next" }, onB), null);
+    assert.equal(queueUndo(playing, { type: "playNext", trackIds: ["x"] }, onB), null);
   });
 });
 
@@ -52,5 +63,22 @@ describe("undoneQueue", () => {
     assert.equal(back.nextKey, 7);
     const added = reduceQueue(back, { type: "addToQueue", trackIds: ["z"] }).state;
     assert.equal(added.entries.find((entry) => entry.trackId === "z")?.key, "7");
+  });
+});
+
+describe("newQueueToast", () => {
+  test("says a new queue is playing", () => {
+    assert.equal(newQueueToast("play", null), "New queue playing");
+  });
+
+  test("says why a song was skipped on the way along with it", () => {
+    assert.equal(
+      newQueueToast("play", `Skipped "Airbag": it isn't on YouTube Music.`),
+      `New queue playing · Skipped "Airbag": it isn't on YouTube Music.`,
+    );
+  });
+
+  test("says nothing of a new queue when nothing plays: every song was skipped", () => {
+    assert.equal(newQueueToast("stop", `Skipped "Airbag": you're offline.`), null);
   });
 });

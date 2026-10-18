@@ -23,18 +23,18 @@ const LONGEST_MS = 8_000;
 
 /**
  * How long [text] stays up, in ms: a few seconds, more for a longer line or
- * one with an [action] (its label). The app lengthens it further when
- * Android's accessibility timeout asks to.
+ * one [withAction] (Undo). The app lengthens it further when Android's
+ * accessibility timeout asks to.
  */
 export const toastDuration = (
   text: string,
-  { action }: { readonly action?: string | undefined } = {},
+  { withAction = false }: { readonly withAction?: boolean } = {},
 ): number =>
   Math.min(
     LONGEST_MS,
     SHORT_MS +
       Math.max(0, text.length - SHORT_CHARACTERS) * MS_PER_CHARACTER +
-      (action === undefined ? 0 : ACTION_MS),
+      (withAction ? ACTION_MS : 0),
   );
 
 /** How a drag on the toast ended. */

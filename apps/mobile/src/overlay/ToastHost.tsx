@@ -43,6 +43,9 @@ const PADDING_X = CELL * 2.5;
 /** The gap between the line and the action, in dp. */
 const ACTION_GAP = CELL * 2;
 
+/** A pill with an action is at least a touch target tall, in dp. */
+const ACTION_MIN_HEIGHT = CELL * 6;
+
 /**
  * Draws the toast (`showToast`) above the floating chrome. Render it at the
  * app root, outside the backdrop its glass shows through: `OverlayHost` does.
@@ -85,7 +88,7 @@ function ToastPill({ toast }: { toast: Toast }) {
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     let cancelled = false;
-    const duration = toastDuration(text, { action: action?.label });
+    const duration = toastDuration(text, { withAction: action !== null });
     void AccessibilityInfo.getRecommendedTimeoutMillis(duration).then((timeout) => {
       if (cancelled) return;
       timer = setTimeout(() => {
@@ -221,6 +224,7 @@ function ToastPill({ toast }: { toast: Toast }) {
               alignItems: "center",
               paddingHorizontal: PADDING_X,
               paddingVertical: CELL * 1.5,
+              minHeight: action === null ? undefined : ACTION_MIN_HEIGHT,
             },
             style,
           ]}
@@ -238,7 +242,7 @@ function ToastPill({ toast }: { toast: Toast }) {
               onLayout={({ nativeEvent: { layout } }) => {
                 actionStart.current = layout.x - ACTION_GAP / 2;
               }}
-              className="font-sans text-subheadline font-semibold text-accent"
+              className="font-sans text-body font-medium text-accent"
               style={{ marginLeft: ACTION_GAP }}
             >
               {action.label}

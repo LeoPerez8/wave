@@ -18,9 +18,9 @@ describe("toastDuration", () => {
   });
 
   test("gives a line with an action two seconds more, to reach the button", () => {
-    assert.equal(toastDuration("New queue playing", { action: "Undo" }), 6_000);
-    assert.equal(toastDuration("x".repeat(80), { action: "Undo" }), 8_000);
-    assert.equal(toastDuration("x".repeat(400), { action: "Undo" }), 8_000);
+    assert.equal(toastDuration("New queue playing", { withAction: true }), 6_000);
+    assert.equal(toastDuration("x".repeat(80), { withAction: true }), 8_000);
+    assert.equal(toastDuration("x".repeat(400), { withAction: true }), 8_000);
   });
 });
 
