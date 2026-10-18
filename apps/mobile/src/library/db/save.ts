@@ -27,7 +27,7 @@ import { settlePendingFavorites } from "./pendingFavorites.ts";
 import { linkPlaylistEntries } from "./playlists.ts";
 import * as schema from "./schema.ts";
 import { leaveKeys, selectJoinedAccount } from "./syncRows.ts";
-import { deleteTracks } from "./tracks.ts";
+import { deleteTracks, storedGenres } from "./tracks.ts";
 
 const excluded = (column: SQLiteColumn): SQL => sql.raw(`excluded."${column.name}"`);
 
@@ -195,6 +195,7 @@ const tagColumns = (filing: Filing, track: FiledTrack) => ({
   artistCredits: storedCredits(track.artistCredits),
   albumId: filing.albumId(track),
   genreId: filing.genreId(track),
+  genres: storedGenres(track.genres),
   year: track.year,
   trackNumber: track.trackNumber,
   trackTotal: track.trackTotal,
@@ -388,6 +389,7 @@ export const saveBatch = (
             artistCredits: excluded(t.artistCredits),
             albumId: excluded(t.albumId),
             genreId: excluded(t.genreId),
+            genres: excluded(t.genres),
             year: excluded(t.year),
             trackNumber: excluded(t.trackNumber),
             trackTotal: excluded(t.trackTotal),

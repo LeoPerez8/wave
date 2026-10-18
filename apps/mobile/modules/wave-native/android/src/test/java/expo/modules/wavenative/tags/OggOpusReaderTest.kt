@@ -64,6 +64,14 @@ class OggOpusReaderTest {
     assertEquals(listOf("Ariana Grande"), tags.albumArtists)
   }
 
+  @Test
+  fun everyGenreValueIsKept() {
+    val block = vorbisComments("GENRE=Metalcore", "GENRE=Electronic", "GENRE= ")
+    val tags = with(OggOpusReader) { parseComments(block, 0).toRawTags(durationMs = 0, sampleRate = null) }
+    assertEquals("Metalcore", tags.genre)
+    assertEquals(listOf("Metalcore", "Electronic"), tags.genres)
+  }
+
   private fun vorbisComments(vararg entries: String): ByteArray {
     val out = java.io.ByteArrayOutputStream()
     fun writeInt(value: Int) {

@@ -147,7 +147,9 @@ import {
   selectLibraryLookupSongs,
   trackArtistIds,
   selectPlayableSongs,
+  selectSongGenres,
   trackQuery,
+  type SongGenres,
   type TrackScope,
   withFile,
 } from "./db/tracks";
@@ -514,6 +516,11 @@ export class LibraryStore extends Context.Service<
      * whether it has lyrics, for the whole-Library run.
      */
     readonly listLibraryLookupSongs: Effect.Effect<readonly LibraryLookupSong[], LibraryStoreError>;
+    /**
+     * The songs whose genre tag has several values, with every value (the
+     * Library files them under the first): what Genre mixes count.
+     */
+    readonly listSongGenres: Effect.Effect<readonly SongGenres[], LibraryStoreError>;
     /** Every album by title, then album artist, for Library › Albums. */
     readonly listAlbums: Effect.Effect<readonly AlbumRow[], LibraryStoreError>;
     /**
@@ -1122,6 +1129,8 @@ const make = Effect.gen(function* () {
     songsWithIds: (ids) => attempt("read songs", () => selectSongsWithIds(db, ids)),
 
     listLibraryLookupSongs: attempt("list songs to look up", () => selectLibraryLookupSongs(db)),
+
+    listSongGenres: attempt("list song genres", () => selectSongGenres(db)),
 
     trackDetails: (id) =>
       attempt(

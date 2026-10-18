@@ -7,7 +7,12 @@ import { normalizeTrack, type ExplicitFlag } from "@wave/core";
 import type { IndexedTrack } from "../LibraryStore.ts";
 import { creditSplits } from "./credits.ts";
 import { saveBatch } from "./save.ts";
-import { selectKnownFiles, selectLibraryLookupSongs, trackQuery } from "./tracks.ts";
+import {
+  selectKnownFiles,
+  selectLibraryLookupSongs,
+  selectSongGenres,
+  trackQuery,
+} from "./tracks.ts";
 import { addTrack, migrateTestDatabase, openTestDatabase } from "./testDatabase.ts";
 
 /** A file as the scanner reads it, with the flag its advisory tag gives. */
@@ -33,6 +38,53 @@ const explicitByTitle = (db: Awaited<ReturnType<typeof openTestDatabase>>) =>
       .all()
       .map(({ title, explicit }) => [title, explicit]),
   );
+
+/** A file whose genre tag has [genres] as its values, as the scanner reads it. */
+const genreTagged = (title: string, genres: readonly string[]): IndexedTrack => ({
+  ...scanned(title, "unknown"),
+  ...normalizeTrack({ path: `/Music/${title}.flac`, title, genre: genres[0], genres }),
+});
+
+describe("selectSongGenres", () => {
+  test("gives every value of the songs' multi-value genre tags, while the Library files them under the first", async () => {
+    const db = await openTestDatabase();
+    saveBatch(
+      db,
+      creditSplits(),
+      [
+        genreTagged("Like a Villain", ["Metalcore", "Electronic"]),
+        genreTagged("Teardrop", ["Trip-Hop"]),
+        genreTagged("Untagged", []),
+      ],
+      [],
+      [],
+      1_000,
+    );
+    const ids = Object.fromEntries(
+      trackQuery(db)
+        .all()
+        .map(({ id, title }) => [title, id]),
+    );
+    assert.deepEqual(selectSongGenres(db), [
+      { id: ids["Like a Villain"], genres: ["Metalcore", "Electronic"] },
+    ]);
+    assert.deepEqual(
+      Object.fromEntries(
+        trackQuery(db)
+          .all()
+          .map(({ title, genre }) => [title, genre]),
+      ),
+      { "Like a Villain": "Metalcore", Teardrop: "Trip-Hop", Untagged: null },
+    );
+  });
+
+  test("a song saved again with a single genre has only that one", async () => {
+    const db = await openTestDatabase();
+    saveBatch(db, creditSplits(), [genreTagged("Song", ["Metalcore", "Rock"])], [], [], 1_000);
+    saveBatch(db, creditSplits(), [genreTagged("Song", ["Rock"])], [], [], 2_000);
+    assert.deepEqual(selectSongGenres(db), []);
+  });
+});
 
 describe("selectLibraryLookupSongs", () => {
   test("lists every song with what a lookup sends and the tags it may lack", async () => {
@@ -158,5 +210,15 @@ describe("selectKnownFiles", () => {
     const [known] = selectKnownFiles(old, ["/Music"]);
     assert.equal(known?.path, "/Music/boyfriend (single)/boyfriend.mp3");
     assert.notEqual(known?.modifiedAt, 1_234);
+  });
+
+  test("a song indexed before Wave read every value of a genre tag is read again by the next scan", async () => {
+    const old = await openTestDatabase({ through: "0031_streamed_songs" });
+    addTrack(old, { title: "Airbag", album: "OK Computer", genre: "Rock", addedAt: 1_234 });
+    await migrateTestDatabase(old);
+    const [known] = selectKnownFiles(old, ["/Music"]);
+    assert.equal(known?.path, "/Music/OK Computer/Airbag.mp3");
+    assert.notEqual(known?.modifiedAt, 1_234);
+    assert.deepEqual(selectSongGenres(old), []);
   });
 });

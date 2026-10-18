@@ -881,6 +881,18 @@ CREATE TABLE \`lyrics_misses\` (
 );
 `;
 
+// A song tagged with several genres counts in each of their families for
+// Genre mixes (docs/spec.md, "Genre mixes"): tracks keep every value of a
+// multi-value genre tag (\`schema.ts\`'s \`genres\`), while the Library still
+// files them under the first. Only a scan reads a tag's every value, so every
+// indexed file is marked as changed (modified_at 0) as in 0015: the next scan
+// reads them all again. Self-contained, so it can take any number when merged.
+const mGenreTags = `
+ALTER TABLE \`tracks\` ADD \`genres\` text;
+--> statement-breakpoint
+UPDATE \`tracks\` SET \`modified_at\` = 0;
+`;
+
 // YT Music songs the owner streamed (\`schema.ts\`'s \`streamedSongs\`), for Home's mixes.
 const mStreamedSongs = `
 CREATE TABLE \`streamed_songs\` (
@@ -927,6 +939,7 @@ export default {
       { idx: 29, when: 1_794_312_000_000, tag: "0029_no_better_copies", breakpoints: true },
       { idx: 30, when: 1_794_398_400_000, tag: "0030_lyrics_misses", breakpoints: true },
       { idx: 31, when: 1_794_484_800_000, tag: "0031_streamed_songs", breakpoints: true },
+      { idx: 32, when: 1_794_571_200_000, tag: "0032_genre_tags", breakpoints: true },
     ],
   },
   migrations: {
@@ -962,5 +975,6 @@ export default {
     m0029: mNoBetterCopies,
     m0030: mLyricsMisses,
     m0031: mStreamedSongs,
+    m0032: mGenreTags,
   },
 };

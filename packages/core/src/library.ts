@@ -32,6 +32,11 @@ export interface RawTrack {
   /** Every value of a multi-value album artist tag, as [artists]. */
   readonly albumArtists?: readonly string[] | null | undefined;
   readonly genre?: string | null | undefined;
+  /**
+   * Every value of a multi-value genre tag (Vorbis comments, ID3v2.4), when
+   * the reader has them, where [genre] holds the first.
+   */
+  readonly genres?: readonly string[] | null | undefined;
   /** Year or date as tagged, e.g. `1997` or `1997-05-21`. */
   readonly year?: string | null | undefined;
   /** Track number as tagged, e.g. `3` or `3/12`. */
@@ -78,6 +83,11 @@ export interface LibraryTrack {
   readonly genre: string | null;
   readonly genreSort: string | null;
   readonly genreKey: string | null;
+  /**
+   * Every value of the genre tag ([genre] is the first; none without one).
+   * The Library files the song under [genre] alone; Genre mixes count each.
+   */
+  readonly genres: readonly string[];
 
   readonly year: number | null;
   readonly trackNumber: number | null;
@@ -239,6 +249,7 @@ export const normalizeTrack = (raw: RawTrack): LibraryTrack => {
         ? [VARIOUS_ARTISTS]
         : artistCredits;
   const genre = parseGenre(raw.genre);
+  const genreValues = (raw.genres ?? []).flatMap((value) => parseGenre(value) ?? []);
   const track = parseNumberOfTotal(raw.trackNumber);
   const disc = parseNumberOfTotal(raw.discNumber);
   const durationMs =
@@ -266,6 +277,7 @@ export const normalizeTrack = (raw: RawTrack): LibraryTrack => {
     genre,
     genreSort: genre === null ? null : sortKey(genre),
     genreKey: genre === null ? null : identityKey(genre),
+    genres: genreValues.length > 0 ? genreValues : genre === null ? [] : [genre],
     year: parseYear(raw.year),
     trackNumber: track.number,
     trackTotal: track.total,
