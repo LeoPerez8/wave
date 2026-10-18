@@ -16,14 +16,17 @@ import { toggleFavorite, useIsFavorite } from "@/library/favorites";
 import { useLinkRows } from "@/library/hooks";
 import type { TrackDetails } from "@/library/LibraryStore";
 import { openAlbum, useCurrentPath } from "@/library/routes";
+import { starSongs } from "@/library/starSongs";
 import { Press } from "@/motion/Press";
 import { useRenderCount } from "@/perf/perf";
 import { useCurrentTrackId } from "@/playback/hooks";
 import { playbackState, type PlaybackState } from "@/playback/Player";
 import { queueTracks, type QueueTrack } from "@/playback/queueTracks";
 import { useThemeColor } from "@/theme/useThemeColor";
+import { useLoadedLibraryFinder, type FindInLibrary } from "@/ytmusic/libraryFinder";
 import { useStreamedArtistLink } from "@/ytmusic/streamedArtist";
 
+import { usePlayingYtSong } from "./hooks";
 import { closeNowPlaying, useNowPlayingShown } from "./sheet";
 
 /** How far the artwork steps back while paused. */
@@ -126,16 +129,25 @@ function MetaLink({ label, open, hint, className }: LinkProps) {
   );
 }
 
+const findsNothing: FindInLibrary = () => null;
+
 /**
  * Stars the current track; in sync with every other star (rows, menus). A
- * YT Music song has none: favorites are the Library's.
+ * YT Music song's star is the Library song's once the Library has it, else
+ * its pending favorite; starring it downloads it (`starSongs`: a star means
+ * downloaded).
  */
 function FavoriteStar({ title }: { title: string }) {
   const accent = useThemeColor("accent");
   const highlight = useThemeColor("highlight");
   const trackId = useCurrentTrackId();
-  const favorite = useIsFavorite(trackId);
-  if (trackId !== null && parseTrackId(trackId)?.kind === "yt") return null;
+  const ytSong = usePlayingYtSong(trackId);
+  const find = useLoadedLibraryFinder(ytSong !== null) ?? findsNothing;
+  const track = ytSong === null ? null : find(ytSong);
+  const pendingStar = useIsFavorite(trackId);
+  const libraryStar = useIsFavorite(track?.id ?? null);
+  // Either, so the star stays lit while the arriving file settles its pending favorite.
+  const favorite = pendingStar || libraryStar;
   return (
     <Press
       accessibilityRole="button"
@@ -143,7 +155,8 @@ function FavoriteStar({ title }: { title: string }) {
       accessibilityState={{ selected: favorite, disabled: trackId === null }}
       disabled={trackId === null}
       onPress={() => {
-        if (trackId !== null) void toggleFavorite(trackId);
+        if (ytSong !== null) void starSongs({ tracks: [], ytSongs: [ytSong] }, !favorite, find);
+        else if (trackId !== null) void toggleFavorite(trackId);
       }}
       haptic="impact"
       depth={0.1}

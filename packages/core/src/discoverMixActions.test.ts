@@ -52,8 +52,8 @@ test("a mix menu queues and saves its songs, and follows the album download thro
 
 test("a mix name is kept within the imported playlist name limit", () => {
   const playlist = discoverMixPlaylist({
-    id: "song:1",
-    seed: { kind: "song", name: "x".repeat(120) },
+    id: "artist:x",
+    seed: { kind: "artist", name: "x".repeat(120) },
     songs: [{ source: "stream", song: song("a") }],
   });
   assert.equal(playlist.name, "x".repeat(100));

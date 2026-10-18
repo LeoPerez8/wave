@@ -14,7 +14,7 @@ describe("Library shelf", () => {
       { shelf: "recently-played", label: "Recently played" },
       { shelf: "most-played-albums", label: "Most played albums" },
       { shelf: "most-played-artists", label: "Most played artists" },
-      { shelf: "discover-mixes", label: "Discover mixes" },
+      { shelf: "artist-mixes", label: "Artist mixes" },
       { shelf: "favorites", label: "Favorites" },
       { shelf: "none", label: "None" },
     ]);
@@ -24,6 +24,10 @@ describe("Library shelf", () => {
     for (const { shelf } of LIBRARY_SHELF_CHOICES) {
       assert.equal(parseLibraryShelf(storedLibraryShelf(shelf)), shelf);
     }
+  });
+
+  test("Discover mixes, picked before it became Artist mixes, reads as Artist mixes", () => {
+    assert.equal(parseLibraryShelf("discover-mixes"), "artist-mixes");
   });
 
   test("anything else stored (junk, a section that isn't a shelf, one this Wave doesn't know) is Recently added", () => {

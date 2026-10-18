@@ -61,6 +61,23 @@ export const addPendingFavorites = (
   });
 };
 
+/**
+ * Forgets the pending favorites of videos [videoIds]: their stars were taken
+ * off before their files arrived, so the songs come in unstarred.
+ */
+export const removePendingFavorites = (db: LibraryDatabase, videoIds: readonly string[]): void => {
+  const t = schema.pendingFavorites;
+  const ids = [...new Set(videoIds)];
+  if (ids.length === 0) return;
+  db.transaction((tx) => {
+    for (let start = 0; start < ids.length; start += BATCH) {
+      tx.delete(t)
+        .where(inArray(t.videoId, ids.slice(start, start + BATCH)))
+        .run();
+    }
+  });
+};
+
 /** The artists kept as [stored], or none when they can't be read. */
 const readArtists = (stored: string): string[] => {
   try {

@@ -19,7 +19,8 @@ import { useMemo } from "react";
 import { followArtistLink, followStreamedArtistLink } from "@/library/ArtistChoice";
 import { confirmDeleteSongs, confirmRemoveSongs } from "@/library/deleteSongs";
 import { songHasFile, type ArtistRow, type SongRow } from "@/library/LibraryStore";
-import { setFavorites, useFavoriteIds } from "@/library/favorites";
+import { useFavoriteIds, usePendingFavoriteVideos } from "@/library/favorites";
+import { starSongs } from "@/library/starSongs";
 import { fixSongs } from "@/library/findLyricsAndGenre";
 import {
   useAlbumsMissingSongs,
@@ -173,7 +174,9 @@ function usePlan(
     const start = perAlbum.slice(0, index).reduce((sum, ids) => sum + ids.length, 0);
     return statuses.slice(start, start + (perAlbum[index]?.length ?? 0));
   };
-  const facts = targetFacts(target, favorites, find);
+  // Starred YT Music songs waiting for their files: their Favorite reads Remove from Favorites.
+  const pending = usePendingFavoriteVideos();
+  const facts = targetFacts(target, favorites, find, pending);
   const planned = itemActions({
     kind: target.kind,
     items: facts.map((item, index) =>
@@ -282,9 +285,14 @@ export function useItemActions(
   const star = (on: boolean) =>
     run(() => {
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      void setFavorites(
-        tracks.map(({ song }) => song.id),
+      // A star means downloaded: songs with no file here join the download queue with it.
+      void starSongs(
+        {
+          tracks: tracks.map(({ song }) => song),
+          ytSongs: allTracks.flatMap((item) => ("ytSong" in item ? [item.ytSong] : [])),
+        },
         on,
+        find,
       );
     });
 
