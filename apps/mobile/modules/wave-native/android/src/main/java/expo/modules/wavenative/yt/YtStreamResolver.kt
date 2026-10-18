@@ -119,7 +119,7 @@ class YtStreamResolver(context: Context) {
   private fun logFailure(videoId: String, error: YtException, elapsedMs: Long, attempts: List<YtPlayerAttempt>) {
     val failure = failureOf(error)
     if (failure == YtStreamFailure.DISABLED || (failure == YtStreamFailure.OFFLINE && attempts.isEmpty())) return
-    val resolve = generateSequence(error as Throwable) { it.cause }.filterIsInstance<StreamResolveException>().firstOrNull()
+    val resolve = resolveFailure(error)
     val outcomes = resolve?.diagnostics?.attempts.orEmpty().map { "${it.clientName} ${it.outcome}" }
     WaveLog.w(
       LOG_TAG,
@@ -180,15 +180,12 @@ class YtStreamResolver(context: Context) {
   companion object {
     private const val LOG_TAG = "WaveYtStreams"
 
+    /** The extractor's own failure behind [error] (from [resolve]), if one is in its causes. */
+    private fun resolveFailure(error: YtException): StreamResolveException? =
+      generateSequence(error as Throwable) { it.cause }.filterIsInstance<StreamResolveException>().firstOrNull()
+
     /** Why [error] (from [resolve]) means the song can't stream: offline, off, unavailable or failed. */
-    fun failureOf(error: YtException): YtStreamFailure {
-      val reason = generateSequence(error as Throwable) { it.cause }
-        .filterIsInstance<StreamResolveException>()
-        .firstOrNull()
-        ?.reason
-        ?.name
-      return YtStreamFailure.of(error.failure, reason)
-    }
+    fun failureOf(error: YtException): YtStreamFailure = YtStreamFailure.of(error.failure, resolveFailure(error)?.reason?.name)
 
     /**
      * Whether [error] (from [resolve]) is YouTube refusing the song rather than saying it's
@@ -196,12 +193,7 @@ class YtStreamResolver(context: Context) {
      */
     fun refused(error: YtException): Boolean {
       if (failureOf(error) != YtStreamFailure.UNAVAILABLE) return false
-      val reason = generateSequence(error as Throwable) { it.cause }
-        .filterIsInstance<StreamResolveException>()
-        .firstOrNull()
-        ?.reason
-        ?.name
-      return YtRefusal.refused(reason, error.answers)
+      return YtRefusal.refused(resolveFailure(error)?.reason?.name, error.answers)
     }
 
     /**

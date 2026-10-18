@@ -54,17 +54,21 @@ class DurableYoutubePauseTest {
     val owner = DurableDownloads(File(folder, "jobs"), clock = { now })
     val asked = mutableListOf<String>()
     val any = transfer { candidate, source -> asked += candidate["source"] as? String ?: "soulseek"; served(source) }
-    owner.pauseYoutube(now + 5 * MINUTE, 1)
     owner.enqueue(song("a"), null, emptyMap(), "youtube")
     prepareYoutube(owner, "a", folder)
+    owner.pauseYoutube(now + 5 * MINUTE, 1)
+    // A YouTube song asked for during the pause waits in line until it's over.
+    owner.enqueue(song("c"), null, emptyMap(), "youtube")
     owner.enqueue(song("b"), null, emptyMap(), "soulseek")
     prepareSoulseek(owner, "b", folder)
     repeat(3) { owner.advance(any, Untouched) }
     assertEquals(listOf("soulseek"), asked)
     assertEquals("prepared", job(owner, "a")["phase"])
+    assertEquals("queued", job(owner, "c")["phase"])
     now += 5 * MINUTE
     owner.advance(any, Untouched)
     assertEquals(listOf("soulseek", "youtube"), asked)
+    assertEquals("preparing", job(owner, "c")["phase"])
   }
 
   @Test fun aPausedYoutubeJobIsntChargedForThePause() = inFolder { folder ->
@@ -126,13 +130,46 @@ class DurableYoutubePauseTest {
     assertEquals(DurableDownloads.YoutubePause(now + 4 * MINUTE, 2), reopened.youtubePause())
   }
 
-  @Test fun noPauseIsReportedOnceItsOver() = inFolder { folder ->
+  @Test fun aPauseOverIsNoLongerOnButKeepsItsBackoffAcrossARestart() = inFolder { folder ->
+    var now = 1_000L
+    val journal = File(folder, "jobs")
+    val owner = DurableDownloads(journal, clock = { now })
+    assertNull(owner.youtubePause())
+    owner.pauseYoutube(now + MINUTE, 3)
+    now += MINUTE
+    assertNull(owner.youtubePausedNow())
+    owner.flush()
+    // JS's throttle starts from the level after a restart: YouTube may still be limiting downloads.
+    assertEquals(DurableDownloads.YoutubePause(now, 3), DurableDownloads(journal, clock = { now }).youtubePause())
+  }
+
+  @Test fun soulseekSongsBehindMoreYoutubeSongsThanTheSlotsHoldStillStartWhileYoutubeIsPaused() = inFolder { folder ->
     var now = 1_000L
     val owner = DurableDownloads(File(folder, "jobs"), clock = { now })
-    assertNull(owner.youtubePause())
-    owner.pauseYoutube(now + MINUTE, 1)
-    now += MINUTE
-    assertNull(owner.youtubePause())
+    val asked = mutableListOf<String>()
+    val any = transfer { candidate, source -> asked += candidate["source"] as? String ?: "soulseek"; served(source) }
+    for (n in 1..12) owner.enqueue(song("y$n"), null, emptyMap(), "youtube")
+    owner.enqueue(song("s"), null, emptyMap(), "soulseek")
+    // YouTube refuses the songs that start, each waiting to try again: ten start, the most at once.
+    val refusing = transfer { _, _ -> throw DurableFailure("ytRefused") }
+    repeat(30) {
+      owner.advance(refusing, Untouched)
+      for (id in owner.snapshot().filter { it["phase"] == "preparing" }.map { it["id"] as String }) answerYoutube(owner, id, folder)
+    }
+    assertEquals(10, owner.snapshot().count { it["phase"] == "prepared" })
+    assertEquals("queued", job(owner, "s")["phase"])
+    // A burst pauses YouTube: its ten songs wait for the next try, two more wait in line, and the
+    // Soulseek song behind them starts all the same.
+    owner.pauseYoutube(now + 10 * MINUTE, 1)
+    owner.advance(NoTransfer, Untouched)
+    assertEquals("preparing", job(owner, "s")["phase"])
+    assertEquals("queued", job(owner, "y11")["phase"])
+    answer(owner, "s", soulseekPlan("s", folder))
+    owner.advance(any, Untouched)
+    assertEquals(listOf("soulseek"), asked)
+    now += 10 * MINUTE
+    repeat(3) { owner.advance(any, Untouched) }
+    assertTrue(asked.count { it == "youtube" } > 0)
   }
 
   private val REFUSAL_PAUSES = ((CorePlans.youtube["refused"] as Map<*, *>)["pausesMs"] as List<*>).map { (it as Number).toLong() }
@@ -162,12 +199,16 @@ class DurableYoutubePauseTest {
   }
   private fun prepareYoutube(owner: DurableDownloads, id: String, folder: File) {
     owner.advance(NoTransfer, Untouched)
-    answer(owner, id, mapOf("source" to "youtube", "targetPath" to File(folder, "$id.m4a").path, "tags" to emptyMap<String, Any?>(), "failurePlan" to CorePlans.youtube))
+    answerYoutube(owner, id, folder)
   }
+  private fun answerYoutube(owner: DurableDownloads, id: String, folder: File) =
+    answer(owner, id, mapOf("source" to "youtube", "targetPath" to File(folder, "$id.m4a").path, "tags" to emptyMap<String, Any?>(), "failurePlan" to CorePlans.youtube))
   private fun prepareSoulseek(owner: DurableDownloads, id: String, folder: File) {
     owner.advance(NoTransfer, Untouched)
-    answer(owner, id, mapOf("source" to "soulseek", "candidates" to listOf(mapOf("username" to "peer", "filename" to "$id.mp3", "bitrateKbps" to 320)), "targetPath" to File(folder, "$id.mp3").path, "tags" to emptyMap<String, Any?>(), "failurePlan" to CorePlans.soulseek(ytMusicOn = false)))
+    answer(owner, id, soulseekPlan(id, folder))
   }
+  private fun soulseekPlan(id: String, folder: File) =
+    mapOf("source" to "soulseek", "candidates" to listOf(mapOf("username" to "peer", "filename" to "$id.mp3", "bitrateKbps" to 320)), "targetPath" to File(folder, "$id.mp3").path, "tags" to emptyMap<String, Any?>(), "failurePlan" to CorePlans.soulseek(ytMusicOn = false))
   private fun answer(owner: DurableDownloads, id: String, payload: Map<String, Any?>) {
     val lease = owner.claim(id)!!
     assertTrue(owner.submit(id, lease["generation"] as Long, lease["token"] as String, "prepare", payload))
