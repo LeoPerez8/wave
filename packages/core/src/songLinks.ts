@@ -4,6 +4,7 @@
  * its universal song.link page and its Spotify and YT Music links.
  */
 
+import { at, text } from "./json.ts";
 import { ytShareMatch } from "./playlistShare.ts";
 import type { SongLinkOption } from "./songShare.ts";
 import type { SpotifySong } from "./spotifyPlaylist.ts";
@@ -51,30 +52,24 @@ const ytMusicSongUrl = (videoId: string): string => `https://music.youtube.com/w
 const odesliUrl = (videoId: string): string =>
   `${ODESLI}?url=${encodeURIComponent(ytMusicSongUrl(videoId))}`;
 
-const record = (value: unknown): Record<string, unknown> | null =>
-  typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
-
-const text = (value: unknown): string | null =>
-  typeof value === "string" && value !== "" ? value : null;
-
 /** The url Odesli's answer gives for [platform], or null. */
-const platformUrl = (links: Record<string, unknown> | null, platform: string): string | null =>
-  text(record(links?.[platform])?.["url"]);
+const platformUrl = (links: unknown, platform: string): string | null =>
+  text(at(links, platform, "url"));
 
 /**
  * The links in Odesli's answer [body] about [videoId], or null when it has no
  * song.link page. YT Music always has the video it was asked about.
  */
 const odesliLinks = (body: string, videoId: string): SongLinks | null => {
-  let answer: Record<string, unknown> | null;
+  let answer: unknown;
   try {
-    answer = record(JSON.parse(body));
+    answer = JSON.parse(body);
   } catch {
     return null;
   }
-  const page = text(answer?.["pageUrl"]);
+  const page = text(at(answer, "pageUrl"));
   if (page === null) return null;
-  const links = record(answer?.["linksByPlatform"]);
+  const links = at(answer, "linksByPlatform");
   return {
     page,
     spotify: platformUrl(links, "spotify"),

@@ -8,17 +8,16 @@
  * and reads them.
  */
 
+import { array, at, text } from "./json.ts";
+import { SPOTIFY_CHANGED_LINE } from "./spotifyAccount.ts";
 import {
-  array,
-  at,
   firstImage,
+  readSpotifyPages,
   spotifyPlaylistPage,
   spotifyTrackSong,
-  text,
   type SpotifyPlaylist,
   type SpotifySong,
 } from "./spotifyPlaylist.ts";
-import { SPOTIFY_CHANGED_LINE } from "./spotifyAccount.ts";
 import type { YtLibraryFailureView } from "./ytLibrary.ts";
 
 /**
@@ -122,21 +121,23 @@ export const readSpotifyLibrary = async (
   ask: (offset: number) => Promise<SpotifyAccountAnswer>,
 ): Promise<SpotifyLibraryRead> => {
   const playlists: SpotifyLibraryPlaylist[] = [];
-  let offset = 0;
-  for (;;) {
-    const answer = await ask(offset);
-    if (!answer.ok) return answer;
-    const page = at(answer.data, "me", "libraryV3");
-    const items = at(page, "items");
-    const total = at(page, "totalCount");
-    if (!Array.isArray(items) || typeof total !== "number") return { ok: false, reason: "failed" };
-    for (const item of items) {
-      const playlist = libraryPlaylist(item);
-      if (playlist !== null) playlists.push(playlist);
-    }
-    offset += items.length;
-    if (items.length === 0 || offset >= total) return { ok: true, playlists };
-  }
+  return readSpotifyPages<SpotifyLibraryRead>(
+    async (offset) => {
+      const answer = await ask(offset);
+      if (!answer.ok) return { done: answer };
+      const page = at(answer.data, "me", "libraryV3");
+      const items = at(page, "items");
+      const total = at(page, "totalCount");
+      if (!Array.isArray(items) || typeof total !== "number")
+        return { done: { ok: false, reason: "failed" } };
+      for (const item of items) {
+        const playlist = libraryPlaylist(item);
+        if (playlist !== null) playlists.push(playlist);
+      }
+      return { items: items.length, total };
+    },
+    () => ({ ok: true, playlists }),
+  );
 };
 
 /**
@@ -195,24 +196,28 @@ export const readSpotifyAccountPlaylist = async (
   const liked = source === SPOTIFY_LIKED_SONGS_SOURCE;
   const songs: SpotifySong[] = [];
   let first: Page | null = null;
-  let offset = 0;
-  for (;;) {
-    const answer = await ask(
-      liked ? { kind: "likedSongs", offset } : { kind: "playlist", uri: source, offset },
-    );
-    if (!answer.ok) return answer;
-    const page = liked ? likedSongsPage(answer.data) : spotifyPlaylistPage({ data: answer.data });
-    if (page === "notFound") return { ok: false, reason: "missing" };
-    if (page === null) return { ok: false, reason: "failed" };
-    first ??= page;
-    songs.push(...page.songs);
-    offset += page.items;
-    if (page.items === 0 || offset >= page.total) {
+  let last: Page | null = null;
+  return readSpotifyPages<SpotifyAccountRead>(
+    async (offset) => {
+      const answer = await ask(
+        liked ? { kind: "likedSongs", offset } : { kind: "playlist", uri: source, offset },
+      );
+      if (!answer.ok) return { done: answer };
+      const page = liked ? likedSongsPage(answer.data) : spotifyPlaylistPage({ data: answer.data });
+      if (page === "notFound") return { done: { ok: false, reason: "missing" } };
+      if (page === null) return { done: { ok: false, reason: "failed" } };
+      first ??= page;
+      last = page;
+      songs.push(...page.songs);
+      return page;
+    },
+    () => {
+      if (first === null || last === null) return { ok: false, reason: "failed" };
       const { title, artworkUrl } = first;
       return {
         ok: true,
-        playlist: { title, artworkUrl, songs, truncated: false, total: page.total },
+        playlist: { title, artworkUrl, songs, truncated: false, total: last.total },
       };
-    }
-  }
+    },
+  );
 };
