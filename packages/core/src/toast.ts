@@ -15,15 +15,27 @@ const SHORT_CHARACTERS = 40;
 /** Reading time added for each character past a short line, in ms. */
 const MS_PER_CHARACTER = 50;
 
+/** Time added for an action on the pill (Undo), to reach it, in ms. */
+const ACTION_MS = 2_000;
+
 /** The longest any line stays up, in ms. */
 const LONGEST_MS = 8_000;
 
 /**
- * How long [text] stays up, in ms: a few seconds, more for a longer line.
- * The app lengthens it further when Android's accessibility timeout asks to.
+ * How long [text] stays up, in ms: a few seconds, more for a longer line or
+ * one with an [action] (its label). The app lengthens it further when
+ * Android's accessibility timeout asks to.
  */
-export const toastDuration = (text: string): number =>
-  Math.min(LONGEST_MS, SHORT_MS + Math.max(0, text.length - SHORT_CHARACTERS) * MS_PER_CHARACTER);
+export const toastDuration = (
+  text: string,
+  { action }: { readonly action?: string | undefined } = {},
+): number =>
+  Math.min(
+    LONGEST_MS,
+    SHORT_MS +
+      Math.max(0, text.length - SHORT_CHARACTERS) * MS_PER_CHARACTER +
+      (action === undefined ? 0 : ACTION_MS),
+  );
 
 /** How a drag on the toast ended. */
 export interface ToastSwipe {

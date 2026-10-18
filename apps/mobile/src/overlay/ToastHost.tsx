@@ -22,7 +22,7 @@ import { BACKDROP, chrome, useFloatingChromeHeight } from "@/chrome/chrome";
 import { Glass } from "@/glass/Glass";
 import { useTapAnimationMs } from "@/settings/tapAnimation";
 
-import { currentToast, dismissToast, removeToast, type Toast } from "./toast";
+import { currentToast, dismissToast, removeToast, runToastAction, type Toast } from "./toast";
 import { useEnterAndLeave } from "./useEnterAndLeave";
 
 /** The pill's corners: fully round on one line, an overlay card's corners on more. */
@@ -36,6 +36,12 @@ const DRAG_SLOP = CELL * 1.5;
 
 /** A line longer than this many lines is cut. */
 const MAX_LINES = 3;
+
+/** The pill's padding at either end, in dp. */
+const PADDING_X = CELL * 2.5;
+
+/** The gap between the line and the action, in dp. */
+const ACTION_GAP = CELL * 2;
 
 /**
  * Draws the toast (`showToast`) above the floating chrome. Render it at the
@@ -51,7 +57,8 @@ export function ToastHost() {
  * The line on a glass pill, centred a gap above the mini player (or whatever
  * floating chrome the screen has). It leaves after Core's `toastDuration`
  * (longer when Android's accessibility timeout asks), on a tap, or on a swipe
- * sideways or down.
+ * sideways or down. An action sits at its end: a tap there, from half the gap
+ * before it to the pill's edge, runs it.
  */
 function ToastPill({ toast }: { toast: Toast }) {
   const insets = useSafeAreaInsets();
@@ -67,7 +74,9 @@ function ToastPill({ toast }: { toast: Toast }) {
   const expired = useRef(false);
   const offsetX = useSharedValue(0);
   const offsetY = useSharedValue(0);
-  const { id, text, leaving } = toast;
+  // Where the action's tap area starts across the pill, in dp.
+  const actionStart = useRef(Number.POSITIVE_INFINITY);
+  const { id, text, action, leaving } = toast;
 
   // Screen readers say the line as it shows.
   useEffect(() => AccessibilityInfo.announceForAccessibility(text), [text]);
@@ -76,7 +85,8 @@ function ToastPill({ toast }: { toast: Toast }) {
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     let cancelled = false;
-    void AccessibilityInfo.getRecommendedTimeoutMillis(toastDuration(text)).then((timeout) => {
+    const duration = toastDuration(text, { action: action?.label });
+    void AccessibilityInfo.getRecommendedTimeoutMillis(duration).then((timeout) => {
       if (cancelled) return;
       timer = setTimeout(() => {
         expired.current = true;
@@ -87,7 +97,7 @@ function ToastPill({ toast }: { toast: Toast }) {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [id, text]);
+  }, [id, text, action]);
 
   // Comes in once it knows its size, goes when leaving, then is taken off.
   const progress = useEnterAndLeave({ id, ready: height !== null, leaving, remove: removeToast });
@@ -149,7 +159,11 @@ function ToastPill({ toast }: { toast: Toast }) {
       );
     },
   });
-  const tap = useTapGesture({ runOnJS: true, onActivate: () => dismissToast(id) });
+  const tap = useTapGesture({
+    runOnJS: true,
+    onActivate: (event) =>
+      event.x >= actionStart.current ? runToastAction(id) : dismissToast(id),
+  });
   const gesture = useExclusiveGestures(pan, tap);
 
   const style = useAnimatedStyle(() => {
@@ -183,8 +197,13 @@ function ToastPill({ toast }: { toast: Toast }) {
           accessible
           accessibilityLabel={text}
           accessibilityHint="Dismisses"
-          accessibilityActions={[{ name: "activate" }]}
-          onAccessibilityAction={() => dismissToast(id)}
+          accessibilityActions={[
+            { name: "activate" },
+            ...(action === null ? [] : [{ name: "action", label: action.label }]),
+          ]}
+          onAccessibilityAction={(event) =>
+            event.nativeEvent.actionName === "action" ? runToastAction(id) : dismissToast(id)
+          }
           pointerEvents={leaving ? "none" : "auto"}
           onLayout={({ nativeEvent: { layout } }) => {
             size.current = {
@@ -199,7 +218,9 @@ function ToastPill({ toast }: { toast: Toast }) {
             {
               borderRadius: radius,
               overflow: "hidden",
-              paddingHorizontal: CELL * 2.5,
+              flexDirection: "row",
+              alignItems: "center",
+              paddingHorizontal: PADDING_X,
               paddingVertical: CELL * 1.5,
             },
             style,
@@ -208,10 +229,22 @@ function ToastPill({ toast }: { toast: Toast }) {
           <Glass backdropId={BACKDROP.root} cornerRadius={radius} />
           <Text
             numberOfLines={MAX_LINES}
-            className="text-center font-sans text-subheadline font-medium text-foreground"
+            className="shrink text-center font-sans text-subheadline font-medium text-foreground"
           >
             {text}
           </Text>
+          {action === null ? null : (
+            <Text
+              numberOfLines={1}
+              onLayout={({ nativeEvent: { layout } }) => {
+                actionStart.current = layout.x - ACTION_GAP / 2;
+              }}
+              className="font-sans text-subheadline font-semibold text-accent"
+              style={{ marginLeft: ACTION_GAP }}
+            >
+              {action.label}
+            </Text>
+          )}
         </Animated.View>
       </GestureDetector>
     </View>
