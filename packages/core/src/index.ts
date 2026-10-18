@@ -93,6 +93,17 @@ export { restorePlayback } from "./playbackRestore.ts";
 export type { RestoredPlayback } from "./playbackRestore.ts";
 export { extrapolatePosition, scrubPosition } from "./position.ts";
 export type { PositionReport, ScrubTouch } from "./position.ts";
+export {
+  CENTRE_FRAMING,
+  framingSquare,
+  framingText,
+  framingView,
+  MAX_FRAMING_ZOOM,
+  panFraming,
+  pinchFraming,
+  readFraming,
+} from "./imageFraming.ts";
+export type { FramingSquare, FramingView, ImageFraming, ImageSize } from "./imageFraming.ts";
 export { elapsedWavePath } from "./elapsedWave.ts";
 export type { ElapsedWave } from "./elapsedWave.ts";
 export { contrastRatio, paletteGradient } from "./palette.ts";

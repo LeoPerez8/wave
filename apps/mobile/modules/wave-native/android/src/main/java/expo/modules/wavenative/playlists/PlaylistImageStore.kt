@@ -15,11 +15,12 @@ data class PlaylistImageFiles(val path: String, val thumbPath: String) {
 data class Square(val left: Int, val top: Int, val side: Int)
 
 /**
- * Playlist images in [directory] (`filesDir/artwork/playlists`): each pick is
- * saved as a new pair of JPEGs named after a random hash, `<hash>.jpg` and
+ * Playlist images in [directory] (`filesDir/artwork/playlists`): each framing
+ * is saved as a new pair of JPEGs named after a random hash, `<hash>.jpg` and
  * `<hash>_thumb.jpg`, the names Android Auto's artwork URIs read
- * ([ArtworkUris]). Which playlist shows which image is the database's call;
- * only files of this kind in [directory] are ever deleted.
+ * ([ArtworkUris]), and each picked photo as an original, `<hash>.jpg`, that
+ * Adjust Image frames again. Which playlist shows which image is the
+ * database's call; only files of this kind in [directory] are ever deleted.
  *
  * Plain files only, so it runs in JVM tests; [AndroidPlaylistImages] makes the JPEGs.
  */
@@ -43,13 +44,23 @@ class PlaylistImageStore(
     return PlaylistImageFiles(largeFile.path, thumbFile.path)
   }
 
+  /** Saves an original photo under a new name; throws [IOException] and keeps nothing when the write fails. */
+  fun saveOriginal(bytes: ByteArray): String {
+    directory.mkdirs()
+    val file = File(directory, "${newName()}.jpg")
+    ArtworkStore.writeAtomically(file, bytes)
+    return file.path
+  }
+
+  /** Whether [path] is one of the saved images (originals too); only those are cropped or deleted. */
+  fun owns(path: String): Boolean {
+    val file = File(path)
+    return ArtworkUris.hashOf(file.name) != null && file.canonicalFile.parentFile == directory.canonicalFile
+  }
+
   /** Deletes the saved images at [paths]; any other path is left alone. */
   fun delete(paths: List<String>) {
-    val own = directory.canonicalFile
-    for (path in paths) {
-      val file = File(path)
-      if (ArtworkUris.hashOf(file.name) != null && file.canonicalFile.parentFile == own) file.delete()
-    }
+    for (path in paths) if (owns(path)) File(path).delete()
   }
 
   companion object {
@@ -65,20 +76,31 @@ class PlaylistImageStore(
     /** A random name in [ArtworkStore.hash]'s form, so no two picks share files. */
     fun randomName(): String = ArtworkStore.hash(UUID.randomUUID().toString().toByteArray(Charsets.UTF_8))
 
-    /** The largest centred square of a [width]×[height] picture. */
-    fun centreSquare(width: Int, height: Int): Square {
-      val side = minOf(width, height)
-      return Square(left = (width - side) / 2, top = (height - side) / 2, side = side)
+    /**
+     * The original's short side, in px, at most: twice the large image's, so
+     * a framing zoomed in twice is still sharp.
+     */
+    const val ORIGINAL_SIZE = 2 * LARGE_SIZE
+
+    /** The size to keep a [width]×[height] photo at: its shape, its short side at most [cap] px. */
+    fun originalSize(width: Int, height: Int, cap: Int = ORIGINAL_SIZE): Pair<Int, Int> {
+      val short = minOf(width, height)
+      if (short <= cap) return width to height
+      val scale = cap.toDouble() / short
+      return Math.round(width * scale).toInt() to Math.round(height * scale).toInt()
     }
 
     /**
-     * The power-of-two scale to decode a [width]×[height] picture at: as small
-     * as it goes while its short side still covers [target] px.
+     * [square] (a framing, Core's `framingSquare`) kept inside a [width]×[height]
+     * picture, at least 1 px: its size and place as close as the picture allows.
      */
-    fun sampleSize(width: Int, height: Int, target: Int): Int {
-      var size = 1
-      while (minOf(width, height) / (size * 2) >= target) size *= 2
-      return size
+    fun fitSquare(width: Int, height: Int, square: Square): Square {
+      val side = square.side.coerceIn(1, maxOf(1, minOf(width, height)))
+      return Square(
+        left = square.left.coerceIn(0, maxOf(0, width - side)),
+        top = square.top.coerceIn(0, maxOf(0, height - side)),
+        side = side,
+      )
     }
   }
 }

@@ -1,6 +1,7 @@
 import {
   IconArrowForwardUp,
   IconArrowsShuffle,
+  IconCrop,
   IconDeviceFloppy,
   IconDisc,
   IconDownload,
@@ -71,6 +72,7 @@ export const ACTION_ICONS: { readonly [A in MenuAction]: ActionIcon } = {
   goToArtist: IconMicrophone2,
   renamePlaylist: IconPencil,
   changeImage: IconPhotoEdit,
+  adjustImage: IconCrop,
   removeImage: IconPhotoOff,
   deletePlaylist: IconTrash,
   deletePlaylists: IconTrash,
