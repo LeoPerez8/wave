@@ -6,6 +6,7 @@ import * as ManagedRuntime from "effect/ManagedRuntime";
 import { AppState } from "react-native";
 
 import { whenFree } from "@/lib/backgroundWork";
+import * as MagicQueue from "@/playback/MagicQueue";
 import * as PlaybackPersistence from "@/playback/PlaybackPersistence";
 import * as PlayHistory from "@/playback/PlayHistory";
 import * as Player from "@/playback/Player";
@@ -40,6 +41,7 @@ const services = Layer.mergeAll(
 export const appLayer = Layer.mergeAll(
   PlaybackPersistence.layer,
   PlayHistory.layer,
+  MagicQueue.layer,
   Stats.layer,
   Auto.layer,
   YtMusic.layer,

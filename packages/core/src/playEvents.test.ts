@@ -8,6 +8,7 @@ import {
   keptPlayingEntry,
   playSoFar,
   queueSourceAfter,
+  RECAP_PLAY_CONTEXT,
   resumePlay,
   trackPlays,
   type PlayEvent,
@@ -145,6 +146,23 @@ describe("trackPlays", () => {
         ["a", "completed", MIN],
         ["b", "skipped", 3 * MIN],
       ],
+    );
+  });
+
+  test("a song a Recap plays is never on record, and the queue's songs after it are", () => {
+    const { started, ended } = run([
+      playing(0, "1", "a", { context: RECAP_PLAY_CONTEXT }),
+      moved(MIN, "2", "sync"),
+      playing(MIN, "2", "b"),
+      moved(4 * MIN, "3", "seek"),
+    ]);
+    assert.deepEqual(
+      started.map((play) => play.trackId),
+      ["b"],
+    );
+    assert.deepEqual(
+      ended.map((play) => [play.trackId, play.listenedMs]),
+      [["b", 3 * MIN]],
     );
   });
 

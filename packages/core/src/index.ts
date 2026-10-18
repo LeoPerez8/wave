@@ -232,6 +232,8 @@ export type {
   RecapSlide,
   RecapSongGenre,
 } from "./recap.ts";
+export { RECAP_PLAY_CONTEXT, recapSong } from "./recapMusic.ts";
+export type { RecapMusicSlide } from "./recapMusic.ts";
 export {
   AUTO_ROOT,
   AUTO_TABS,
@@ -558,6 +560,27 @@ export type { QueueCover, QueueCoverBatcher, QueueCoverBatcherOptions } from "./
 export { MORE_FROM_ARTIST } from "./queue.ts";
 export { newQueueToast, noticeLine, queueUndo, undoneQueue } from "./queueUndo.ts";
 export type { PlayerAt, QueueUndo } from "./queueUndo.ts";
+export {
+  MAGIC_QUEUE_CONTEXT,
+  MAGIC_SKIP_MS,
+  isMagicQueue,
+  magicBatch,
+  magicPlaySignal,
+  magicQueueEdits,
+  magicQueueLabel,
+  magicSignal,
+  parseMagicSession,
+  startMagicQueue,
+  wantsMagicBatch,
+} from "./magicQueue.ts";
+export type {
+  MagicQueueEdits,
+  MagicSeed,
+  MagicSession,
+  MagicSignal,
+  MagicSignalKind,
+  MagicSong,
+} from "./magicQueue.ts";
 export { artistRanking } from "./moreFromArtist.ts";
 export type { ArtistRankingInput, ArtistRankingSong } from "./moreFromArtist.ts";
 export { artistPageItems } from "./artistPage.ts";
@@ -762,6 +785,7 @@ export type {
   YtAlbumDownload,
   YtAlbumDownloadAction,
   YtAlbumDownloadRequest,
+  YtListDownloadButtonState,
   YtPlaylistDownload,
   YtPlaylistDownloadAction,
   YtSongsDownload,
@@ -1210,6 +1234,15 @@ export {
   readCrossfade,
   snapCrossfade,
 } from "./crossfade.ts";
+export {
+  bufferAheadMs,
+  LIBRARY_BUFFER_MS,
+  readStreamBuffer,
+  STREAM_BUFFER_DEFAULT,
+  STREAM_BUFFER_MINUTES,
+  streamBufferMs,
+} from "./streamBuffer.ts";
+export type { StreamBufferMinutes } from "./streamBuffer.ts";
 export {
   discoverMix,
   discoverMixCaption,

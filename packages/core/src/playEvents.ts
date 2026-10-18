@@ -6,6 +6,7 @@
  */
 
 import { RESTART_THRESHOLD_MS, type QueueCommand } from "./queue.ts";
+import { RECAP_PLAY_CONTEXT } from "./recapMusic.ts";
 import { parseTrackId } from "./ytMusic.ts";
 
 /**
@@ -308,6 +309,8 @@ const trackCurrentPlay = (
       if (!signal.playing || signal.key === null || signal.track === null) return unchanged;
       // Play history and stats are about the Library: streamed songs are never on record.
       if (parseTrackId(signal.track.trackId)?.kind === "yt") return unchanged;
+      // Nor is a Recap's music: watching a Recap mustn't add to what it reports.
+      if (signal.track.context?.kind === RECAP_PLAY_CONTEXT.kind) return unchanged;
       const started = open(signal.key, signal.track, signal.at, signal.durationMs);
       return {
         state: { play: started, fading: null },
