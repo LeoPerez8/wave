@@ -149,6 +149,56 @@ export const lyricCardFileName = (title: string | null, at: Date): string => {
   return `Wave - ${name} - ${date}-${time}.png`;
 };
 
+/** Where the card can go from the preview's row. */
+export type LyricShareDestination = "instagramStories" | "whatsapp" | "save" | "more";
+
+/** Which of the apps the card can go straight to are there to take it. */
+export interface LyricShareApps {
+  readonly instagramStories: boolean;
+  readonly whatsapp: boolean;
+}
+
+/**
+ * The preview's destinations, in order: the apps on hand first (Instagram
+ * Stories, WhatsApp), as Spotify has them, then Save image and More, always.
+ */
+export const lyricShareDestinations = (apps: LyricShareApps): LyricShareDestination[] => [
+  ...(apps.instagramStories ? (["instagramStories"] as const) : []),
+  ...(apps.whatsapp ? (["whatsapp"] as const) : []),
+  "save",
+  "more",
+];
+
+/** An Instagram story's background, as `#rrggbb` top and bottom (a gradient when they differ). */
+export interface LyricStoryBackground {
+  readonly top: string;
+  readonly bottom: string;
+}
+
+/**
+ * The background of the story the card goes to as a sticker: the card's
+ * [colour] (the one picked in the preview) top and bottom, so the sticker sits
+ * on its own colour. Wave's graphite when [colour] isn't a `#rrggbb`.
+ */
+export const lyricStoryBackground = (colour: string): LyricStoryBackground => {
+  const solid = HEX.test(colour) ? colour.toLowerCase() : LYRIC_CARD_FALLBACK;
+  return { top: solid, bottom: solid };
+};
+
+/**
+ * The Facebook App ID Instagram's Stories intent requires as its source
+ * application (Meta's "Sharing to Stories"), from app.config.ts `extra`
+ * (`facebookAppId`): digits only; null when the build has none, so no
+ * Instagram Stories destination (Instagram refuses a share without one).
+ */
+export const instagramStoriesAppId = (extra: unknown): string | null => {
+  if (typeof extra !== "object" || extra === null) return null;
+  const { facebookAppId } = extra as Record<string, unknown>;
+  if (typeof facebookAppId !== "string") return null;
+  const id = facebookAppId.trim();
+  return /^\d+$/.test(id) ? id : null;
+};
+
 /** A line with words: a blank one (a pause, a gap between verses) can't be shared. */
 const isWorded = (line: string | undefined): boolean => line !== undefined && line.trim() !== "";
 

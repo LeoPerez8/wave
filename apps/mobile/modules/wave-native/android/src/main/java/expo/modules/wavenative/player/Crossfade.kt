@@ -43,6 +43,12 @@ interface CrossfadeHost {
   /** Whether the session's player has the next song's start buffered, ready to sound. */
   val nextReady: Boolean
 
+  /** The entry the session's player is on (its media id), or null. */
+  val currentKey: String?
+
+  /** The entry it moves to when the current song ends on its own, or null. */
+  val nextKey: String?
+
   /**
    * Starts making the next song ready: a streamed song's address resolved and
    * its start buffered. Asked once per song, at [CrossfadeTiming.prefetchAt].
@@ -54,6 +60,12 @@ interface CrossfadeHost {
    * [lateMs] late, and the overlap is [overlapMs] (0: none, a gapless move). For the app log.
    */
   fun nextLate(lateMs: Long, overlapMs: Long)
+
+  /**
+   * The tail's pre-roll ([overlapping] false) or the overlap itself was
+   * called off before its end, for [why]. For the app log.
+   */
+  fun endedEarly(why: CrossfadeEnd, overlapping: Boolean)
 
   /** Opens a second player on the current song at [positionMs], playing. */
   fun openTail(positionMs: Long): CrossfadeDeck
@@ -67,6 +79,20 @@ interface CrossfadeHost {
   fun fadeEnded()
 }
 
+/** Why a pre-roll or an overlap ended before its time, as the app log says it. */
+enum class CrossfadeEnd(val reason: String) {
+  /** A skip, previous, picking a song, or the song being faded into replaced in the queue. */
+  Moved("the player moved to another song"),
+  Seek("a seek"),
+  Error("a player error"),
+  Paused("playback paused"),
+  Off("crossfade turned off"),
+  NoNext("no song plays next on its own"),
+  NotInStep("the outgoing song couldn't get in step"),
+  Stalled("the outgoing song stalled"),
+  Stopped("the playback service stopped"),
+}
+
 /**
  * Crossfade (Settings › Playback): a song ending on its own overlaps the next
  * one for [overlapMs], the first fading out while the next fades in.
@@ -77,8 +103,9 @@ interface CrossfadeHost {
  * session's player (playback speed while it's off by a little, a seek while
  * it's off by a lot). At the overlap the tail takes over the outgoing song at
  * full volume and the session's player moves to the next song, so Now Playing,
- * the notification, the lock screen and Auto show it from then on. A tail that
- * can't get in step in time is dropped, and that song ends gapless.
+ * the notification, the lock screen and Auto show it from then on. A tail
+ * still out of step when the overlap is due is late, as a late next song is
+ * (below); one that never gets in step leaves that song gapless.
  *
  * The next song is made ready well ahead ([CrossfadeHost.prefetchNext] at
  * [CrossfadeTiming.prefetchAt]). One still not ready when the overlap should
@@ -89,11 +116,17 @@ interface CrossfadeHost {
  * session's player buffers the next song's start: the overlap's clock only
  * starts once the incoming song sounds. The outgoing song never fades out alone.
  *
- * The owner moving the session's player (skip, previous, picking a song, a
- * seek) switches at once: [interrupt]. Pausing pauses the tail too.
+ * Once begun, the overlap runs to its end unless the song being faded into
+ * changes ([moved]: a skip, previous, picking a song, the next song replaced
+ * in the queue), the owner seeks, or the player fails ([interrupt]): those
+ * switch at once. A queue sync that leaves the next song as it was doesn't.
+ * Pausing pauses the tail too. Every early end reaches the app log, with its
+ * reason ([CrossfadeHost.endedEarly]).
  *
  * Main thread only. [tick] runs the timing; the service calls it again after
- * the delay it returns.
+ * the delay it returns. The fades follow the two songs' positions, which go
+ * on with elapsed time, so a tick that comes late (a stall on the main thread)
+ * brings the volumes to where they should be by then.
  */
 class Crossfade(private val host: CrossfadeHost) {
   /** The overlap chosen in Settings (Core's `crossfadeDuration`); 0 is off. */
@@ -109,6 +142,7 @@ class Crossfade(private val host: CrossfadeHost) {
    */
   private class PreRoll(
     val tail: CrossfadeDeck,
+    val outgoingKey: String?,
     val durationMs: Long,
     val handoffAtMs: Long,
     val overlapMs: Long,
@@ -120,7 +154,13 @@ class Crossfade(private val host: CrossfadeHost) {
    * incoming song sounds ([overlapMs]; null until then), at most [upToMs];
    * [fullMs] is the song's whole overlap, before any was lost to lateness.
    */
-  private class Fading(var tail: CrossfadeDeck?, val endMs: Long, val upToMs: Long, val fullMs: Long) : Phase {
+  private class Fading(
+    var tail: CrossfadeDeck?,
+    val incomingKey: String?,
+    val endMs: Long,
+    val upToMs: Long,
+    val fullMs: Long,
+  ) : Phase {
     var overlapMs: Long? = null
   }
 
@@ -137,13 +177,32 @@ class Crossfade(private val host: CrossfadeHost) {
       is Fading -> fading(current)
     }
 
-  /** The owner moved the session's player: no fade, the outgoing song stops now. */
-  fun interrupt() {
+  /**
+   * The session's player moved to the entry [key], for any reason. The move
+   * into the song being faded into (the overlap's own, or a queue sync
+   * reporting it again) keeps the overlap going; any other ends it at once
+   * ([interrupt]): a skip, picking a song, or the next song replaced.
+   */
+  fun moved(key: String?) {
+    val expected = when (val current = phase) {
+      Idle -> null
+      is PreRoll -> current.outgoingKey
+      is Fading -> current.incomingKey
+    }
+    if (phase == Idle || key == null || key != expected) interrupt(CrossfadeEnd.Moved)
+  }
+
+  /** The owner moved the session's player ([why]): no fade, the outgoing song stops now. */
+  fun interrupt(why: CrossfadeEnd) {
     prefetched = false
     when (val current = phase) {
       Idle -> {}
-      is PreRoll -> host.closeTail()
+      is PreRoll -> {
+        host.endedEarly(why, overlapping = false)
+        host.closeTail()
+      }
       is Fading -> {
+        if (current.tail != null) host.endedEarly(why, overlapping = true)
         endTail(current)
         host.main.setVolume(1f)
       }
@@ -154,7 +213,7 @@ class Crossfade(private val host: CrossfadeHost) {
   /** Play or pause on the session's player; the outgoing song follows. */
   fun onPlayingChanged() {
     when (val current = phase) {
-      is PreRoll -> if (!host.mainWantsToPlay) cancel()
+      is PreRoll -> if (!host.mainWantsToPlay) callOff(CrossfadeEnd.Paused)
       is Fading -> current.tail?.setPlaying(host.mainWantsToPlay)
       Idle -> {}
     }
@@ -180,29 +239,39 @@ class Crossfade(private val host: CrossfadeHost) {
     if (positionMs >= handoffAt || !host.movesOnNaturally) return POLL_MS
     val tail = host.openTail(positionMs + START_LEAD_MS)
     tail.setVolume(0f)
-    phase = PreRoll(tail, durationMs, handoffAt, overlap)
+    phase = PreRoll(tail, host.currentKey, durationMs, handoffAt, overlap)
     return TICK_MS
   }
 
+  /**
+   * The tail getting in step. A queue sync leaving no next song for a moment
+   * and a rebuffer of the session's player (the tail waits with it) don't
+   * call it off. Once the overlap is due, a tail a little further off than
+   * [IN_STEP_MS] will do ([LATE_IN_STEP_MS]); one still out of step keeps
+   * trying, and the overlap starts late, over what's left, once it's in step
+   * ([overlapOnceReady]), or the song ends gapless when too little is left.
+   */
   private fun preRoll(current: PreRoll): Long? {
     val main = host.main
-    if (overlapMs <= 0 || !main.isPlaying || !host.movesOnNaturally) {
-      cancel()
-      return tick()
-    }
+    if (overlapMs <= 0) return callOff(CrossfadeEnd.Off)
+    if (!host.mainWantsToPlay) return callOff(CrossfadeEnd.Paused)
+    val due = main.positionMs >= current.handoffAtMs
+    if (due && !host.movesOnNaturally) return callOff(CrossfadeEnd.NoNext)
     val tail = current.tail
+    if (!main.isPlaying) {
+      tail.setPlaying(false)
+      return TICK_MS
+    }
+    tail.setPlaying(true)
     val offset = tail.positionMs - main.positionMs
-    val inStep = tail.isPlaying && abs(offset) <= IN_STEP_MS
-    if (main.positionMs >= current.handoffAtMs) {
-      if (inStep) return overlapOnceReady(current)
-      if (main.positionMs >= current.handoffAtMs + current.overlapMs / 2) {
-        cancel()
-        return POLL_MS
-      }
+    if (due) {
+      if (tail.isPlaying && abs(offset) <= LATE_IN_STEP_MS) return overlapOnceReady(current)
+      val leftMs = current.durationMs - main.positionMs
+      if (CrossfadeTiming.lateOverlap(current.overlapMs, leftMs) <= 0) return callOff(CrossfadeEnd.NotInStep)
     }
     when {
       !tail.isPlaying -> {}
-      inStep -> tail.setSpeed(1f)
+      abs(offset) <= IN_STEP_MS -> tail.setSpeed(1f)
       abs(offset) > RESEEK_MS -> tail.seekTo(main.positionMs + START_LEAD_MS)
       else -> tail.setSpeed((1f - offset.toFloat() / CATCH_UP_MS).coerceIn(MIN_SPEED, MAX_SPEED))
     }
@@ -226,10 +295,11 @@ class Crossfade(private val host: CrossfadeHost) {
       return POLL_MS
     }
     if (!host.nextReady) return TICK_MS
+    val incomingKey = host.nextKey
     current.tail.setSpeed(1f)
     current.tail.setVolume(1f)
     main.setVolume(0f)
-    phase = Fading(current.tail, current.durationMs, overlap, current.overlapMs)
+    phase = Fading(current.tail, incomingKey, current.durationMs, overlap, current.overlapMs)
     prefetched = false
     host.advance()
     return TICK_MS
@@ -255,6 +325,7 @@ class Crossfade(private val host: CrossfadeHost) {
       if (tail.ended || leftMs <= 0 || overdue) {
         // Over before the incoming song sounded: a gapless move after all.
         if (overlap == null) host.nextLate(current.fullMs, 0)
+        else if (!tail.ended && leftMs > 0) host.endedEarly(CrossfadeEnd.Stalled, overlapping = true)
         endTail(current)
       } else {
         tail.setVolume(if (overlap == null) 1f else gain(leftMs.toFloat() / overlap))
@@ -281,6 +352,13 @@ class Crossfade(private val host: CrossfadeHost) {
     phase = Idle
   }
 
+  /** Calls the pre-roll off for [why], and goes on as if there was none. */
+  private fun callOff(why: CrossfadeEnd): Long? {
+    host.endedEarly(why, overlapping = false)
+    cancel()
+    return tick()
+  }
+
   private companion object {
     /** How often volumes and timing are brought up to date around an overlap. */
     const val TICK_MS = 50L
@@ -299,6 +377,9 @@ class Crossfade(private val host: CrossfadeHost) {
 
     /** Close enough for the handoff to go unheard. */
     const val IN_STEP_MS = 20L
+
+    /** Close enough for the handoff once the overlap is due: a late overlap beats none. */
+    const val LATE_IN_STEP_MS = 40L
 
     /** Further off than this, the tail seeks instead of catching up. */
     const val RESEEK_MS = 500L

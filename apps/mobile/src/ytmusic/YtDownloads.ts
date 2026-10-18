@@ -24,6 +24,7 @@ import {
   missingSongVideo,
   missingSongsDownload,
   downloadingList,
+  moveQueuedJobs,
   queuedDownloads,
   settledDownloadFailures,
   soulseekCandidates,
@@ -1380,6 +1381,25 @@ export const cancelQueuedDownload = ({ cancel }: QueuedDownload<NativeYtSong>): 
   requests = requests
     .then(async () => {
       for (const videoId of cancel) await WaveSoulseek.cancelJob(videoId);
+      await refresh();
+    })
+    .catch(() => undefined);
+};
+
+/**
+ * Settings › Downloads' drag: the waiting jobs [ids] start in this order (Core's
+ * `moveDownloadGroup` / `moveDownloadInGroup`). The list shows it at once (Core's
+ * `moveQueuedJobs`, as the journal will do it), then follows the journal's own order again.
+ */
+export const moveQueuedDownloads = (ids: readonly string[]): void => {
+  if (ids.length === 0) return;
+  journal.set(moveQueuedJobs(journal.get(), ids));
+  requests = requests
+    .then(() => WaveSoulseek.moveQueuedJobs(ids))
+    .catch(() => undefined)
+    .then(async () => {
+      // Shown again from the journal even when the move changed nothing there.
+      shown = null;
       await refresh();
     })
     .catch(() => undefined);

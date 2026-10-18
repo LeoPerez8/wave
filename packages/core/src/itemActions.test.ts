@@ -59,10 +59,10 @@ describe("itemActions", () => {
     assert.ok(!names(itemActions({ kind: "album", items: [{}], here: "/" })).includes("delete"));
   });
 
-  test("Delete Playlist is red like Delete and Remove from Library, and no other entry is", () => {
+  test("Delete Playlist and Delete Playlists are red like Delete and Remove from Library, and no other entry is", () => {
     assert.deepEqual(
       Object.keys(ITEM_ACTION_LABELS).filter((action) => isDestructiveAction(action as ItemAction)),
-      ["deletePlaylist", "delete", "removeFromLibrary"],
+      ["deletePlaylist", "deletePlaylists", "delete", "removeFromLibrary"],
     );
   });
 
