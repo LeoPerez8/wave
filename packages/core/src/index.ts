@@ -1130,6 +1130,7 @@ export {
 export type {
   DiscoverMix,
   DiscoverMixFilter,
+  DiscoverMixLibrarySong,
   DiscoverMixSeed,
   DiscoverMixes,
   DiscoverLibraryArtist,
@@ -1241,3 +1242,18 @@ export type { DiscoverMixesSection } from "./discoverMixesSection.ts";
 export { streamedCoverUrl, streamedCoverUrls } from "./streamedCover.ts";
 export { advisoryTag, explicitFromAdvisory, isExplicit, showsExplicitBadge } from "./explicit.ts";
 export type { ExplicitFlag } from "./explicit.ts";
+export {
+  DEFAULT_DISCOVER_MIX_LEVEL,
+  DISCOVER_MIX_LEVELS,
+  blendDiscoverMix,
+  discoverMixLibraryPool,
+  placeDiscoverMixSongs,
+  readDiscoverMixLevel,
+} from "./discoverMixLevels.ts";
+export type {
+  BlendedDiscoverMix,
+  DiscoverMixBlend,
+  DiscoverMixLevel,
+  DiscoverMixPoolSources,
+  DiscoverMixSong,
+} from "./discoverMixLevels.ts";

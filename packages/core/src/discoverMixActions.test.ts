@@ -54,7 +54,7 @@ test("a mix name is kept within the imported playlist name limit", () => {
   const playlist = discoverMixPlaylist({
     id: "song:1",
     seed: { kind: "song", name: "x".repeat(120) },
-    songs: [song("a")],
+    songs: [{ source: "stream", song: song("a") }],
   });
   assert.equal(playlist.name, "x".repeat(100));
 });
@@ -62,7 +62,11 @@ test("a mix name is kept within the imported playlist name limit", () => {
 test("Save as Playlist keeps the mix's name and song order as independent YT Music entries", () => {
   const songs = [song("b"), song("a")];
   const seed = { kind: "artist" as const, name: "Portishead" };
-  const playlist = discoverMixPlaylist({ id: "artist:portishead", seed, songs });
+  const playlist = discoverMixPlaylist({
+    id: "artist:portishead",
+    seed,
+    songs: songs.map((entry) => ({ source: "stream", song: entry })),
+  });
   // The next build replaces the mix's songs and seed; the saved copy stays as it was.
   songs.splice(0, songs.length, song("c"));
   seed.name = "Massive Attack";
