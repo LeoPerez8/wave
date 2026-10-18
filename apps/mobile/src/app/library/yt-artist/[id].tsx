@@ -19,7 +19,12 @@ import { SECTION_HEAD, SectionHead } from "@/catalog/CatalogLine";
 import { COVER_ROW_TILE, CoverRow } from "@/catalog/CoverRow";
 import { CELL, grid } from "@/catalog/grid";
 import { PlayShuffle } from "@/catalog/PlayShuffle";
-import { PlayShuffleSkeleton, TrackSkeletons } from "@/catalog/Skeletons";
+import {
+  HiddenSkeletonBox,
+  HiddenSkeletonLine,
+  PlayShuffleSkeleton,
+  TrackSkeletons,
+} from "@/catalog/Skeletons";
 import { useChromeInset } from "@/chrome/chrome";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { TextButton } from "@/components/TextButton";
@@ -178,24 +183,14 @@ function Head({
     <View style={{ gap: CELL * 2, paddingBottom: CELL * 2 }}>
       <View className="items-center" style={{ gap: CELL * 2 }}>
         {loading && artworkUrl === null ? (
-          <View
-            accessibilityElementsHidden
-            importantForAccessibility="no-hide-descendants"
-            className="bg-fill"
-            style={{ width: size, height: size, borderRadius: size / 2 }}
-          />
+          <HiddenSkeletonBox width={size} height={size} radius={size / 2} />
         ) : (
           <YtArtistImage name={name ?? ""} uri={artworkUrl} size={size} />
         )}
         {name === null ? (
-          // A title line's height (global.css's title1), its bar centred under the circle.
-          <View
-            accessibilityElementsHidden
-            importantForAccessibility="no-hide-descendants"
-            className="justify-center"
-            style={{ height: 34 }}
-          >
-            <View className="bg-fill" style={{ width: size * 0.8, height: 17 }} />
+          // A title line (global.css's title1), its bar centred under the circle.
+          <View style={{ width: size * 0.8 }}>
+            <HiddenSkeletonLine lineHeight={34} width="100%" />
           </View>
         ) : (
           <Text

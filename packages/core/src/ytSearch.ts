@@ -17,7 +17,7 @@ import type { YtPick } from "./onlineToggle.ts";
 import { identityKey } from "./library.ts";
 import { createSearchIndex, type SearchEntry } from "./search.ts";
 import {
-  ytArtistMergedCounts,
+  ytArtistMergedSongCount,
   ytArtistQuery,
   type YtArtistAlbum,
   type YtArtistCandidate,
@@ -465,13 +465,10 @@ export const ytSearchTopArtistSongs = <S extends YtSong>(
   return songs === artist.songs ? null : songs;
 };
 
-/** Search counts songs only: releases don't count. */
-const libraryRelease = (): boolean => true;
-
 /**
  * The song count Search's row for its top-hit Library artist reads: with
  * Online selected and the artist's online answer [saved] standing (as their
- * page counts it, `ytArtistMergedCounts`), the Library's [local] count plus
+ * page counts it, `ytArtistMergedSongCount`), the Library's [local] count plus
  * every song of theirs it lacks, each once; otherwise (Library selected, no
  * answer yet, no match, a failure) [local].
  */
@@ -482,6 +479,5 @@ export const ytSearchArtistSongs = <S extends YtSong>(
   context: { readonly now: number; readonly inLibrary: (song: S) => boolean },
 ): number => {
   if (ytSectionToggle(section) !== "online") return local;
-  return ytArtistMergedCounts({ albums: 0, songs: local }, saved, { ...context, libraryRelease })
-    .songs;
+  return ytArtistMergedSongCount(local, saved, context);
 };

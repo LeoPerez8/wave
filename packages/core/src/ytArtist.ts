@@ -557,13 +557,31 @@ export const ytArtistMergedCounts = <S extends YtSong>(
   context: YtArtistCountsLibrary<S> & { readonly now: number },
 ): YtArtistCounts => {
   if (saved?.outcome !== "found" || !standsOnArtistPage(saved, context.now)) return local;
-  const songs = new Set<string>();
-  for (const song of saved.page.allSongs ?? [])
-    if (!context.inLibrary(song)) songs.add(song.videoId);
   const releases = new Set<string>();
   for (const album of [...saved.page.albums, ...saved.page.singles])
     if (!context.libraryRelease(album)) releases.add(album.browseId);
-  return { albums: local.albums + releases.size, songs: local.songs + songs.size };
+  return {
+    albums: local.albums + releases.size,
+    songs: ytArtistMergedSongCount(local.songs, saved, context),
+  };
+};
+
+/**
+ * The Library's song count [local] with every song of the artist's answer
+ * [saved] (`allSongs`) the Library lacks, each once (by video id), as
+ * `ytArtistMergedCounts` counts them; [local] alone while no match stands on
+ * the artist page at [now].
+ */
+export const ytArtistMergedSongCount = <S extends YtSong>(
+  local: number,
+  saved: YtArtistSaved<S> | null,
+  context: { readonly inLibrary: (song: S) => boolean; readonly now: number },
+): number => {
+  if (saved?.outcome !== "found" || !standsOnArtistPage(saved, context.now)) return local;
+  const songs = new Set<string>();
+  for (const song of saved.page.allSongs ?? [])
+    if (!context.inLibrary(song)) songs.add(song.videoId);
+  return local + songs.size;
 };
 
 export interface YtArtistCountsContext<S extends YtSong>

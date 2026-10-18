@@ -32,7 +32,12 @@ import { Text, useWindowDimensions, View } from "react-native";
 import { Artwork } from "@/catalog/Artwork";
 import { CELL, grid } from "@/catalog/grid";
 import { PlayShuffle, type LastListAction } from "@/catalog/PlayShuffle";
-import { HiddenSkeletonLine, PlayShuffleSkeleton, TrackSkeletons } from "@/catalog/Skeletons";
+import {
+  HiddenSkeletonBox,
+  HiddenSkeletonLine,
+  PlayShuffleSkeleton,
+  TrackSkeletons,
+} from "@/catalog/Skeletons";
 import { useChromeInset } from "@/chrome/chrome";
 import { EmptyState } from "@/components/EmptyState";
 import { ScreenHeader } from "@/components/ScreenHeader";
@@ -287,12 +292,7 @@ function Head({
   return (
     <View style={{ gap: CELL * 2, paddingBottom: CELL }}>
       {head === undefined ? (
-        <View
-          accessibilityElementsHidden
-          importantForAccessibility="no-hide-descendants"
-          className="bg-fill"
-          style={{ width: cover, height: cover }}
-        />
+        <HiddenSkeletonBox width={cover} height={cover} />
       ) : (
         <Artwork uri={head.artworkUrl ?? undefined} size={cover} />
       )}
