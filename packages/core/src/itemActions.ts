@@ -81,7 +81,7 @@ export interface ActionItem {
   readonly unsearched?: boolean | undefined;
   /**
    * A song Fix Song can do something for: it lacks lyrics, a track number, a
-   * year or a genre (`canFixSong`).
+   * year, a genre or a checked explicit flag (`canFixSong`).
    */
   readonly fixable?: boolean | undefined;
   /**

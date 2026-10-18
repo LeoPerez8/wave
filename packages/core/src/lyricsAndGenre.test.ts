@@ -851,13 +851,11 @@ describe("describeTagLookups", () => {
 
   test("says when one song's explicit flag was filled in", () => {
     assert.equal(
-      describeTagLookups([result("Airbag", updated("none", "none", { explicit: "tags" }))])
-        .message,
+      describeTagLookups([result("Airbag", updated("none", "none", { explicit: "tags" }))]).message,
       "Filled in the explicit flag of “Airbag”.",
     );
     assert.equal(
-      describeTagLookups([result("Airbag", updated("tags", "tags", { explicit: "tags" }))])
-        .message,
+      describeTagLookups([result("Airbag", updated("tags", "tags", { explicit: "tags" }))]).message,
       "Filled in the lyrics, genre and explicit flag of “Airbag”.",
     );
   });
@@ -928,10 +926,7 @@ describe("describeTagLookups", () => {
       /^1 fixed · 1 not found · 0 failed$/,
     );
     assert.equal(tagLookupsToast([result("A", flagOnly)]), "Fixed “A”");
-    assert.equal(
-      tagLookupsToast([result("A", flagOnly), result("B", flagOnly)]),
-      "Fixed 2 songs",
-    );
+    assert.equal(tagLookupsToast([result("A", flagOnly), result("B", flagOnly)]), "Fixed 2 songs");
   });
 
   test("counts a song whose track number and year were all that was written as fixed", () => {
@@ -965,7 +960,8 @@ describe("describeTagLookups", () => {
   test("says when every song already had everything", () => {
     assert.deepEqual(describeTagLookups([], undefined, 40), {
       title: "Nothing to fix",
-      message: "All 40 songs already have lyrics, a genre, a track number, a year and an explicit flag.",
+      message:
+        "All 40 songs already have lyrics, a genre, a track number, a year and an explicit flag.",
     });
     assert.equal(
       describeTagLookups([], undefined, 1).message,
