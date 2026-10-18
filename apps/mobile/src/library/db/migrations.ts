@@ -829,6 +829,18 @@ CREATE INDEX \`playlist_items_unsearched_title_idx\` ON \`playlist_items\` (CASE
   THEN json_extract(\`yt_song\`, '$.title') END);
 `;
 
+// The liked songs Also add to Favorites stars once they enter the Library
+// (\`schema.ts\`'s \`pendingFavorites\`).
+const mPendingFavorites = `
+CREATE TABLE \`pending_favorites\` (
+	\`video_id\` text PRIMARY KEY NOT NULL,
+	\`title\` text NOT NULL,
+	\`artists\` text NOT NULL,
+	\`duration_ms\` integer,
+	\`added_at\` integer NOT NULL
+);
+`;
+
 export default {
   journal: {
     entries: [
@@ -858,6 +870,7 @@ export default {
       { idx: 23, when: 1_793_793_600_000, tag: "0023_play_totals", breakpoints: true },
       { idx: 24, when: 1_793_880_000_000, tag: "0024_play_contexts", breakpoints: true },
       { idx: 25, when: 1_793_966_400_000, tag: "0025_unsearched_titles", breakpoints: true },
+      { idx: 26, when: 1_794_052_800_000, tag: "0026_pending_favorites", breakpoints: true },
     ],
   },
   migrations: {
@@ -887,5 +900,6 @@ export default {
     m0023: mPlayTotals,
     m0024: mPlayContexts,
     m0025: mUnsearchedTitles,
+    m0026: mPendingFavorites,
   },
 };

@@ -18,7 +18,7 @@ import { makeExternalStore } from "@/lib/externalStore";
 import { argbToHex, type NativeArtwork, type NativeScannedTrack } from "@/native/waveNative";
 
 import type { ArtworkPalette } from "./db/schema";
-import { publishLibraryChange } from "./libraryChanges";
+import { publishLibraryChange, publishSavedStars } from "./libraryChanges";
 import { LibraryStore, type IndexedArtwork, type IndexedTrack } from "./LibraryStore";
 import { NativeScanner, type ScanEvent } from "./NativeScanner";
 
@@ -180,7 +180,7 @@ const scanFolders = (roots: readonly string[]) =>
             // Up to 500 files a batch: saved a slice per free turn, so a tap never waits on it.
             for (const [index, slice] of parts.entries()) {
               yield* freeTurnEffect;
-              yield* store.saveBatch(
+              const { starred } = yield* store.saveBatch(
                 slice.tracks,
                 // Before any file that shows it.
                 index === 0 ? artwork : [],
@@ -188,6 +188,8 @@ const scanFolders = (roots: readonly string[]) =>
                 // Linked once, against the whole Library, when the scan ends.
                 { linkEntries: false },
               );
+              // A file a pending favorite was waiting for has its star.
+              publishSavedStars(starred);
               saved += slice.tracks.length;
             }
             for (const track of changes.added) indexed.add(track.path);

@@ -23,6 +23,7 @@ import {
   type CreditSplits,
 } from "./credits.ts";
 import type { LibraryDatabase } from "./database.ts";
+import { settlePendingFavorites } from "./pendingFavorites.ts";
 import { linkPlaylistEntries } from "./playlists.ts";
 import * as schema from "./schema.ts";
 import { leaveKeys, selectJoinedAccount } from "./syncRows.ts";
@@ -296,7 +297,10 @@ const selectKeysByPath = (
  * with the store's [splits]. Playlists' YT Music entries that the saved
  * tracks positively are become those tracks (`linkPlaylistEntries`), so a
  * download brings them in; a scan passes [linkEntries] false and links once
- * against the whole Library when it ends.
+ * against the whole Library when it ends. The saved tracks that are pending
+ * favorites (a liked song Also add to Favorites couldn't star yet) get their
+ * star, and those favorites are settled (`settlePendingFavorites`): what's
+ * returned as [SavedBatch.starred].
  */
 export const saveBatch = (
   db: LibraryDatabase,
@@ -306,9 +310,9 @@ export const saveBatch = (
   moves: readonly PathMove[],
   now: number,
   { linkEntries = true }: { readonly linkEntries?: boolean } = {},
-): void => {
+): SavedBatch => {
   const { artwork } = schema;
-  db.transaction((tx) => {
+  return db.transaction((tx): SavedBatch => {
     // The upsert below then updates the moved rows by their new path.
     for (const move of moves) {
       tx.update(schema.tracks)
@@ -329,7 +333,7 @@ export const saveBatch = (
         })
         .run();
     }
-    if (tracks.length === 0) return;
+    if (tracks.length === 0) return NOTHING_STARRED;
 
     const keptKeys = fillMissing(tx, tracks);
     const keys = new Map(
@@ -416,8 +420,28 @@ export const saveBatch = (
     );
     // A song a playlist streamed from YT Music becomes this Library song there.
     if (linkEntries) linkPlaylistEntries(tx, now, [...trackIds.values()]);
+    const starred = settlePendingFavorites(
+      tx,
+      tracks.map((track) => ({
+        id: requireId(trackIds, track.path, "track"),
+        title: track.title,
+        artist: track.artist,
+        durationMs: track.durationMs,
+        videoId: track.videoId ?? null,
+      })),
+      now,
+    );
+    return starred.length === 0 ? NOTHING_STARRED : { starred };
   });
 };
+
+/** What a saved batch did besides saving its tracks. */
+export interface SavedBatch {
+  /** The saved tracks starred as pending favorites (`settlePendingFavorites`). */
+  readonly starred: readonly number[];
+}
+
+const NOTHING_STARRED: SavedBatch = { starred: [] };
 
 /** Where missing songs are filed: they have no folder on this phone. */
 const NO_FOLDER = "";

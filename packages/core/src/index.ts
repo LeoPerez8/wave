@@ -1227,3 +1227,6 @@ export type {
 } from "./ytLibraryBatch.ts";
 export { discoverMixesSection } from "./discoverMixesSection.ts";
 export type { DiscoverMixesSection } from "./discoverMixesSection.ts";
+export type { YtLibraryFavorites } from "./ytLibraryBatch.ts";
+export { pendingFavorite, settlePendingFavorites } from "./pendingFavorites.ts";
+export type { EnteringSong, PendingFavorite, SettledFavorites } from "./pendingFavorites.ts";

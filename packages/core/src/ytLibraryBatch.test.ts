@@ -413,16 +413,19 @@ describe("ytLibraryFavorites", () => {
   );
 
   test("with Also add to Favorites on, stars each liked song the Library has, once", () => {
-    assert.deepEqual(ytLibraryFavorites(likedRead(true), plan), [2, 1]);
+    assert.deepEqual(ytLibraryFavorites(likedRead(true), plan).star, [2, 1]);
   });
 
-  test("a song that goes in as a YT Music entry gets no star", () => {
-    assert.ok(!ytLibraryFavorites(likedRead(true), plan).includes(3), "Contact isn't liked");
-    assert.equal(ytLibraryFavorites(likedRead(true), plan).length, 2, "Instant Crush streams");
+  test("each liked song the Library hasn't becomes a pending favorite, by its song and recording", () => {
+    const { star, pending } = ytLibraryFavorites(likedRead(true), plan);
+    assert.ok(!star.includes(3), "Contact isn't liked");
+    assert.deepEqual(pending, [
+      { videoId: "x", title: "Instant Crush", artists: ["Daft Punk"], durationMs: 337_000 },
+    ]);
   });
 
-  test("with it off, stars nothing", () => {
-    assert.deepEqual(ytLibraryFavorites(likedRead(false), plan), []);
+  test("with it off, stars nothing and keeps nothing pending", () => {
+    assert.deepEqual(ytLibraryFavorites(likedRead(false), plan), { star: [], pending: [] });
   });
 });
 

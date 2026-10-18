@@ -85,6 +85,7 @@ import {
   toIndexedArtwork,
   toIndexedTrack,
 } from "@/library/LibraryScan";
+import { publishSavedStars } from "@/library/libraryChanges";
 import { LibraryStore, type SongRow } from "@/library/LibraryStore";
 import { useLoadedMissingSongs, useMissingSongs } from "@/library/hooks";
 import { refreshDownloadPolicy } from "@/library/downloadPolicy";
@@ -639,6 +640,8 @@ export const downloadPathIncluded = (path: string) =>
  * repeated delivery. A song downloaded from YouTube Music keeps its
  * [videoId] on its Track; a Soulseek download has none. A missing song's
  * download fills in its Track ([fills]), so its places, star and plays stay.
+ * Any download of a liked song a pending favorite waits for stars it
+ * (`saveBatch` settles it).
  */
 export const importDownload = (
   saved: NativeSavedDownload,
@@ -649,13 +652,15 @@ export const importDownload = (
     if (!(yield* downloadPathIncluded(saved.path)))
       return yield* new DownloadFailed({ reason: "noFolder" });
     const store = yield* LibraryStore;
-    yield* store
+    const { starred } = yield* store
       .saveBatch(
         [{ ...toIndexedTrack(saved.track), videoId, ...(fills === null ? {} : { fills }) }],
         saved.artwork === null ? [] : [toIndexedArtwork(saved.artwork)],
       )
       .pipe(Effect.mapError(libraryFailure));
     libraryEdited();
+    // A liked song a pending favorite was waiting for has its star.
+    publishSavedStars(starred);
     return saved.path;
   });
 
