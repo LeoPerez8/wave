@@ -844,6 +844,7 @@ export {
 export type { QueuedDownload, QueuedDownloadCounts } from "./queuedDownloads.ts";
 export {
   SONGS_GROUP_NAME,
+  downloadGroupKey,
   downloadingList,
   moveDownloadGroup,
   moveDownloadInGroup,
@@ -852,6 +853,24 @@ export {
   albumDownloadOrigin,
 } from "./downloadGroups.ts";
 export type { DownloadGroup, DownloadingList, DownloadOrigin } from "./downloadGroups.ts";
+export {
+  DOWNLOAD_PACE_MIN_SONGS,
+  DOWNLOAD_PACE_MIN_SPAN_MS,
+  DOWNLOAD_PACE_WINDOW_MS,
+  NO_DOWNLOAD_RUN,
+  downloadRunLines,
+  downloadRunProgress,
+  downloadTimeLeft,
+  downloadTimeLeftLine,
+  downloadsPaused,
+  followDownloadRun,
+} from "./downloadRun.ts";
+export type {
+  DownloadRun,
+  DownloadRunCounts,
+  DownloadRunLines,
+  DownloadRunProgress,
+} from "./downloadRun.ts";
 export type {
   FailedDownload,
   FailedDownloadRetry,
@@ -1147,6 +1166,21 @@ export type {
   SpotifySong,
   SpotifyTransport,
 } from "./spotifyPlaylist.ts";
+export {
+  SPOTIFY_LIKED_SONGS_SOURCE,
+  isSpotifyLibrarySource,
+  readSpotifyAccountPlaylist,
+  readSpotifyLibrary,
+  spotifyLibraryFailure,
+} from "./spotifyLibrary.ts";
+export type {
+  SpotifyAccountAnswer,
+  SpotifyAccountFailure,
+  SpotifyAccountRead,
+  SpotifyAccountRequest,
+  SpotifyLibraryPlaylist,
+  SpotifyLibraryRead,
+} from "./spotifyLibrary.ts";
 export { compareOrderKeys, orderKeyBetween, placeEntries } from "./orderKey.ts";
 export type { EntryPlacement, OrderedEntry } from "./orderKey.ts";
 export {
@@ -1365,6 +1399,7 @@ export {
   ytLibraryFailure,
   ytLibraryPicker,
   ytLibraryPickerView,
+  spotifyLibraryPicker,
 } from "./ytLibrary.ts";
 export type {
   YtLibraryFailure,
@@ -1684,3 +1719,5 @@ export {
   ytThrottleSucceeded,
 } from "./ytThrottle.ts";
 export type { YtThrottle, YtThrottleJob, YtThrottlePause } from "./ytThrottle.ts";
+export { throttledFailures, throttledFailuresLine } from "./throttledFailures.ts";
+export type { ThrottledFailureJob, ThrottledFailuresInput } from "./throttledFailures.ts";

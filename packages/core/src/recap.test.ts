@@ -362,7 +362,7 @@ describe("recapSlides", () => {
     );
     assert.deepEqual(
       slides.map((slide) => slide.kind),
-      ["minutes", "topSongs", "habits"],
+      ["minutes", "topSongs", "habits", "summary"],
     );
     const [minutes, top] = slides;
     assert.deepEqual(minutes, { kind: "minutes", minutes: 180 });
@@ -375,11 +375,11 @@ describe("recapSlides", () => {
     );
     assert.deepEqual(
       slides.map((slide) => slide.kind),
-      ["minutes", "habits"],
+      ["minutes", "habits", "summary"],
     );
   });
 
-  test("every slide in order: minutes, songs, artists, album, genres, habits, discoveries", () => {
+  test("every slide in order: minutes, songs, artists, album, genres, habits, discoveries, summary", () => {
     const slides = recapSlides(
       recap({
         period: september,
@@ -399,6 +399,13 @@ describe("recapSlides", () => {
       { kind: "topGenres", genres: [{ family: genreFamily("Rock"), share: 1 }] },
       { kind: "habits", peakHour: 21, peakWeekday: 4, longestStreakDays: 1 },
       { kind: "discovered", artists: [song(11, 4)] },
+      {
+        kind: "summary",
+        minutes: 180,
+        songs: [song(1, 4)],
+        artists: [song(11, 4)],
+        genre: genreFamily("Rock"),
+      },
     ]);
   });
 
@@ -416,8 +423,46 @@ describe("recapSlides", () => {
     );
     assert.deepEqual(
       slides.map((slide) => slide.kind),
-      ["minutes", "topSongs", "topArtists", "topAlbum", "habits"],
+      ["minutes", "topSongs", "topArtists", "topAlbum", "habits", "summary"],
     );
+  });
+});
+
+describe("recap summary card", () => {
+  test("the last slide sums the Recap up: minutes, top 5 songs, top 5 artists, top genre", () => {
+    const slides = recapSlides(
+      recap({
+        period: september,
+        listening: [listened(at(2026, 9, 3), 3 * HOUR)],
+        songs: [1, 2, 3, 4, 5, 6].map((id) => song(id, 10 - id)),
+        artists: [11, 12, 13, 14, 15, 16].map((id) => song(id, 20 - id)),
+        songGenres: [
+          { id: 1, genre: "Jazz" },
+          { id: 2, genre: "Rock" },
+          { id: 3, genre: "Rock" },
+        ],
+      }),
+    );
+    assert.deepEqual(slides.at(-1), {
+      kind: "summary",
+      minutes: 180,
+      songs: [1, 2, 3, 4, 5].map((id) => song(id, 10 - id)),
+      artists: [11, 12, 13, 14, 15].map((id) => song(id, 20 - id)),
+      genre: genreFamily("Rock"),
+    });
+  });
+
+  test("with no genres and nothing in the Library, the card still has the minutes", () => {
+    const slides = recapSlides(
+      recap({ period: september, listening: [listened(at(2026, 9, 3), 3 * HOUR)], songs: [] }),
+    );
+    assert.deepEqual(slides.at(-1), {
+      kind: "summary",
+      minutes: 180,
+      songs: [],
+      artists: [],
+      genre: null,
+    });
   });
 });
 

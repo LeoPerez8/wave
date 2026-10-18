@@ -10,6 +10,7 @@ import {
   recapWindow,
   statsWindow,
   type ArtistStats as ArtistStatsLines,
+  type GenreFamily,
   type PlayTotals,
   type RecapPeriod,
   type RecapSlide,
@@ -42,7 +43,7 @@ export type ArtistStats =
 
 /** A Recap slide with the rows it shows loaded. */
 export type LoadedRecapSlide =
-  | Exclude<RecapSlide, { kind: "topSongs" | "topArtists" | "topAlbum" | "discovered" }>
+  | Exclude<RecapSlide, { kind: "topSongs" | "topArtists" | "topAlbum" | "discovered" | "summary" }>
   | { readonly kind: "topSongs"; readonly songs: readonly Ranked<SongRow>[] }
   | { readonly kind: "topArtists"; readonly artists: readonly Ranked<ArtistRow>[] }
   | { readonly kind: "topAlbum"; readonly album: Ranked<AlbumRow> }
@@ -52,6 +53,14 @@ export type LoadedRecapSlide =
       readonly count: number;
       /** The most played of them, the top one first. */
       readonly artists: readonly Ranked<ArtistRow>[];
+    }
+  | {
+      /** The summary card: the top songs and artists still in the Library. */
+      readonly kind: "summary";
+      readonly minutes: number;
+      readonly songs: readonly Ranked<SongRow>[];
+      readonly artists: readonly Ranked<ArtistRow>[];
+      readonly genre: GenreFamily | null;
     };
 
 /** How many discovered artists a Recap's slide names. */
@@ -173,6 +182,16 @@ const loadSlide = (
           artists.length === 0
             ? []
             : [{ kind: "discovered", count: slide.artists.length, artists }],
+      );
+    case "summary":
+      return Effect.map(
+        Effect.all([
+          withRows(slide.songs, store.songsByIds),
+          withRows(slide.artists, store.artistsByIds),
+        ]),
+        ([songs, artists]) => [
+          { kind: "summary", minutes: slide.minutes, songs, artists, genre: slide.genre },
+        ],
       );
     case "topGenres":
     case "habits":

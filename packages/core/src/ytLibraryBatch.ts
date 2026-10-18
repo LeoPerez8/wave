@@ -8,6 +8,7 @@
 
 import { pendingFavorite, type PendingFavorite } from "./pendingFavorites.ts";
 import type { LinkImportPlan } from "./playlistImport.ts";
+import { isSpotifyLibrarySource } from "./spotifyLibrary.ts";
 import { readStoredRecord } from "./storedJson.ts";
 import type { YtSong } from "./ytMusic.ts";
 
@@ -156,13 +157,16 @@ export interface YtLibraryReadFailure {
   readonly pause: boolean;
 }
 
-/** Why a read failed when every read would fail alike: no network, YT Music off. */
-const PAUSING_REASONS: ReadonlySet<string> = new Set(["offline", "disabled"]);
+/**
+ * Why a read failed when every read would fail alike: no network, YT Music
+ * off, or (From Spotify) no Spotify session Spotify accepts.
+ */
+const PAUSING_REASONS: ReadonlySet<string> = new Set(["offline", "disabled", "signedOut"]);
 
 /**
  * What [batch] becomes once [read] failed because of [reason]. Offline
- * (`offline`) or with YT Music off (`disabled`), nothing changes and the
- * batch pauses: its playlist and the rest keep waiting, in order, and a
+ * (`offline`), with YT Music off (`disabled`) or signed out of Spotify
+ * (`signedOut`), nothing changes and the batch pauses: its playlist and the rest keep waiting, in order, and a
  * failed one Try Again read keeps its line. Refused, or an answer Wave
  * can't read, marks its playlist failed (it stays empty, with Try Again,
  * which imports it without downloading) and the rest goes on. A newer read
@@ -245,13 +249,17 @@ export const ytLibraryReadView = (
   return read?.state === "failed" ? { line: "Couldn't read it online", read } : null;
 };
 
+/** The service [read] is read from, as the app log names it. */
+const serviceName = (read: YtLibraryRead): string =>
+  isSpotifyLibrarySource(read.source) ? "Spotify" : "YouTube Music";
+
 /** The app log's line for [read] that failed because of [reason]; no song titles. */
 export const ytLibraryReadLogLine = (read: YtLibraryRead, reason: string): string =>
-  `Import of "${read.name}" from YouTube Music couldn't read the playlist (${reason}); it stays empty, with Try Again`;
+  `Import of "${read.name}" from ${serviceName(read)} couldn't read the playlist (${reason}); it stays empty, with Try Again`;
 
 /** The app log's line for the batch paused at [read] because of [reason] (`ytLibraryReadFailed`). */
 export const ytLibraryPauseLogLine = (read: YtLibraryRead, reason: string): string =>
-  `Import of "${read.name}" from YouTube Music waits (${reason}); the batch goes on when Wave starts again, comes back to the foreground or imports again`;
+  `Import of "${read.name}" from ${serviceName(read)} waits (${reason}); the batch goes on when Wave starts again, comes back to the foreground or imports again`;
 
 // ---------------------------------------------------------------------------
 // Kept while Wave is closed

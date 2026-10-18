@@ -41,6 +41,8 @@ export interface NativeDownloadJob extends YtDownloadJournalJob<NativeYtSong> {
   /** When YouTube last refused the job's song, and served its stream (epoch ms): what Core's `ytThrottle` reads. */
   readonly refusedAt?: number;
   readonly servedAt?: number;
+  /** The attempts the job's last try made (Core's `throttledFailures` reads it). */
+  readonly attempts?: number;
 }
 
 /** The pause on YouTube downloads the journal keeps (Core's `YtThrottlePause`). */
