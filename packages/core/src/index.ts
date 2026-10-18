@@ -1339,5 +1339,9 @@ export {
   starredDownload,
   unstarredDownload,
   writeStarDownloads,
+  syncedStarDownloads,
+  readSyncedStars,
+  writeSyncedStars,
 } from "./starDownloads.ts";
 export type { StarredDownload, UnstarredDownload } from "./starDownloads.ts";
+export type { SyncedStarDownloads } from "./starDownloads.ts";

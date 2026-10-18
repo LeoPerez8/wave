@@ -1,5 +1,6 @@
 import { libraryEdited, libraryVersion } from "@/library/LibraryScan";
 import { onFavoritesSaved, reloadFavorites } from "@/library/favorites";
+import { downloadSyncedStars } from "@/library/starSongs";
 import { onPlaylistsEdited, playlistsChanged } from "@/library/playlists";
 import { appRuntime } from "@/library/runtime";
 import { WaveSoulseek } from "@/native/waveSoulseek";
@@ -18,13 +19,15 @@ const changed = (songs: boolean) => (): void => {
 
 /**
  * Shows what the Wave account changed: lists over playlists, stars and plays
- * re-read, and every list once missing songs came in or left.
+ * re-read, and every list once missing songs came in or left. Missing songs
+ * with a star download (`downloadSyncedStars`).
  */
 const showPulled = (changes: SyncedChanges): void => {
   if (changes.library) libraryEdited();
   if (changes.playlists) playlistsChanged();
   if (changes.favorites) reloadFavorites();
   if (changes.plays) playHistoryChanged();
+  if (changes.favorites || changes.library) void downloadSyncedStars();
 };
 
 /**
@@ -32,7 +35,8 @@ const showPulled = (changes: SyncedChanges): void => {
  * (`WaveSync`), and tells it of the changes made here: playlist edits,
  * stars, plays (Wave's own and imported) and the song list (scans,
  * downloads, deletions). Synced preferences tell it as they're stamped
- * (`startServices`). The app's root layout calls it; a headless start
+ * (`startServices`). Missing songs with a star download, those starred
+ * before Wave started too. The app's root layout calls it; a headless start
  * (Android Auto) doesn't sync. Safe to call repeatedly.
  */
 export const startSync = (): void => {
@@ -50,6 +54,8 @@ export const startSync = (): void => {
       ),
     )
     .catch((error: unknown) => console.warn("[wave] Couldn't start syncing", error));
+  // Stars already here (pulled by an older Wave, or by a run that didn't finish) download too.
+  void downloadSyncedStars();
   onPlaylistsEdited(changed(false));
   onFavoritesSaved(changed(false));
   playHistoryVersion.subscribe(changed(false));
