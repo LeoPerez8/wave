@@ -124,7 +124,12 @@ const downloadPlaylist = async (playlistId: number): Promise<void> => {
     currentLibraryFinder(),
   ]);
   if (detail === null || detail.items.length === 0) return;
-  runYtPlaylistDownloadAction("downloadPlaylist", detail.items, (song) => find(song) !== null);
+  const { playlist } = detail;
+  runYtPlaylistDownloadAction("downloadPlaylist", detail.items, (song) => find(song) !== null, {
+    kind: "playlist",
+    id: String(playlist.id),
+    name: playlist.name,
+  });
 };
 
 /**
