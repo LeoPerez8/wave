@@ -36,7 +36,8 @@ export interface ReplacementDuplicate<F extends DuplicateCheckFile = DuplicateCh
 }
 
 const sameArtists = (a: readonly string[], b: readonly string[]): boolean =>
-  a.length === b.length && a.every((artist, i) => normalizeSearchText(artist) === normalizeSearchText(b[i] ?? ""));
+  a.length === b.length &&
+  a.every((artist, i) => normalizeSearchText(artist) === normalizeSearchText(b[i] ?? ""));
 
 /**
  * Whether [a] and [b] are one recording: the same recording key, or the same
@@ -83,7 +84,11 @@ export type DuplicateFix<F extends DuplicateCheckFile = DuplicateCheckFile> =
       readonly deleted: string;
     }
   /** A file isn't complete audio ([incomplete], old first): never delete what may be the only copy. */
-  | { readonly kind: "leave"; readonly reason: "incomplete"; readonly incomplete: readonly string[] }
+  | {
+      readonly kind: "leave";
+      readonly reason: "incomplete";
+      readonly incomplete: readonly string[];
+    }
   /** Both Tracks have favorites, plays or playlist entries: which keeps them can't be told. */
   | { readonly kind: "leave"; readonly reason: "bothHistory" };
 
@@ -160,7 +165,8 @@ export const replacementsUnderway = (jobs: readonly YtDownloadJournalJob[]): boo
   );
 
 /** What became of a pair: its fix, or left because the Library changed while it was checked. */
-export type DuplicateOutcome = DuplicateFix | { readonly kind: "leave"; readonly reason: "changed" };
+export type DuplicateOutcome =
+  DuplicateFix | { readonly kind: "leave"; readonly reason: "changed" };
 
 const WHEN: Record<DuplicateCheckWhen, string> = {
   update: "after the update",

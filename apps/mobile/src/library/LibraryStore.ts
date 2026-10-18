@@ -27,6 +27,7 @@ import {
   type ReplacedTrack,
   type MixPlaylistEntry,
   type StreamedSong,
+  type DuplicateCheckFile,
 } from "@wave/core";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { drizzle, type ExpoSQLiteDatabase } from "drizzle-orm/expo-sqlite";
@@ -131,6 +132,11 @@ import {
   type ReplacedFile,
 } from "./db/qualityReplacement";
 import { forgetFileDeletions, pendingFileDeletions, recordFileDeletions } from "./db/fileDeletions";
+import {
+  fixReplacementDuplicate,
+  selectDuplicateCheckFiles,
+  type DuplicateFixToApply,
+} from "./db/replacementDuplicates";
 import { keepLyricsMiss, selectLyricsSearchTrack, type LyricsSearchTrack } from "./db/lyricsMisses";
 import {
   noteStreamedSong,
@@ -778,6 +784,15 @@ export class LibraryStore extends Context.Service<
     readonly forgetFileDeletions: (
       paths: readonly string[],
     ) => Effect.Effect<void, LibraryStoreError>;
+    /** The MP3 and M4A files the check for songs a replacement left twice pairs (Core's `replacementDuplicates`). */
+    readonly duplicateCheckFiles: Effect.Effect<readonly DuplicateCheckFile[], LibraryStoreError>;
+    /**
+     * Puts a song a replacement left twice back to one (`fixReplacementDuplicate`): the bare
+     * Track goes, the other file's deletion is recorded. False when the Library changed meanwhile.
+     */
+    readonly fixReplacementDuplicate: (
+      fix: DuplicateFixToApply,
+    ) => Effect.Effect<boolean, LibraryStoreError>;
     /** Records a play as it starts (Core's `PlayEvent`); returns its id, to update it as it goes on. */
     readonly recordPlay: (
       play: PlayEvent,
@@ -1404,6 +1419,13 @@ const make = Effect.gen(function* () {
     pendingFileDeletions: attempt("read the files to delete", () => pendingFileDeletions(db)),
     forgetFileDeletions: (paths) =>
       attempt("forget deleted files", () => forgetFileDeletions(db, paths)),
+    duplicateCheckFiles: attempt("read the files a replacement may have left twice", () =>
+      selectDuplicateCheckFiles(db),
+    ),
+    fixReplacementDuplicate: (fix) =>
+      attempt("put a song left twice back to one", () =>
+        fixReplacementDuplicate(db, splits, fix, Date.now()),
+      ),
 
     recordPlay: (play, overlapping) =>
       attempt("record the play", () => recordPlay(db, play, overlapping)),

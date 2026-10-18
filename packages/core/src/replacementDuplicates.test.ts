@@ -99,13 +99,16 @@ describe("putting a pair back to one song", () => {
     const mp3 = file(1, MP3);
     // The same recording key, another edit: complete, but not the song's length.
     const m4a = file(2, M4A, { history: true, durationMs: 200_000 });
-    assert.deepEqual(replacementDuplicateFix({ old: mp3, new: m4a }, { old: 253_100, new: 200_100 }), {
-      kind: "fix",
-      keep: m4a,
-      drop: mp3,
-      path: MP3,
-      deleted: M4A,
-    });
+    assert.deepEqual(
+      replacementDuplicateFix({ old: mp3, new: m4a }, { old: 253_100, new: 200_100 }),
+      {
+        kind: "fix",
+        keep: m4a,
+        drop: mp3,
+        path: MP3,
+        deleted: M4A,
+      },
+    );
   });
 
   test("with no history on either, the Track on the file kept stays", () => {
@@ -157,7 +160,10 @@ describe("what the check writes to the log", () => {
       old: file(5, "/Music/a.mp3", { title: "Do I Wanna Know?", history: true }),
       new: file(6, "/Music/a.m4a", { title: "Do I Wanna Know?", history: true }),
     };
-    const moved = { old: file(7, "/Music/b.mp3", { title: "R U Mine?" }), new: file(8, "/Music/b.m4a", { title: "R U Mine?" }) };
+    const moved = {
+      old: file(7, "/Music/b.mp3", { title: "R U Mine?" }),
+      new: file(8, "/Music/b.m4a", { title: "R U Mine?" }),
+    };
     assert.deepEqual(
       replacementDuplicateLines("update", [
         { pair: fixed, outcome: replacementDuplicateFix(fixed, { old: 253_000, new: 253_000 }) },
