@@ -1215,3 +1215,4 @@ export type {
   YtLibraryReadState,
   YtLibraryReadView,
 } from "./ytLibraryBatch.ts";
+export { streamedCoverUrl, streamedCoverUrls } from "./streamedCover.ts";
