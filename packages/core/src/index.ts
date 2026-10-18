@@ -1246,14 +1246,23 @@ export {
   LYRIC_CARD_LAYOUT,
   LYRIC_CARD_TEXT_SIZES,
   MAX_SHARED_LYRIC_LINES,
+  instagramStoriesAppId,
   isLyricLineSelected,
   lyricCardColours,
   lyricCardFileName,
   lyricCardInk,
   lyricCardTextSize,
+  lyricShareDestinations,
+  lyricStoryBackground,
   nextLyricCardColour,
   shareableLyricLines,
   sharedLyricLines,
   tapLyricLine,
 } from "./lyricsShare.ts";
-export type { LyricSelection, LyricSelectionTap } from "./lyricsShare.ts";
+export type {
+  LyricSelection,
+  LyricSelectionTap,
+  LyricShareApps,
+  LyricShareDestination,
+  LyricStoryBackground,
+} from "./lyricsShare.ts";
