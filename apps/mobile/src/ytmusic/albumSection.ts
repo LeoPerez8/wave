@@ -9,16 +9,17 @@ import {
 } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { LineToggle } from "@/catalog/PlayShuffle";
 import type { SongRow } from "@/library/LibraryStore";
 import type { NativeYtSong } from "@/native/waveYtMusic";
-import { openSearchOnlineChoices, useSearchOnlineAlways } from "@/settings/searchOnline";
+import { useSearchOnlineAlways } from "@/settings/searchOnline";
 
 import { useYtArtistAnswer } from "./artistSection";
 import { askYtMusic } from "./askYtMusic";
 import { useLoadedLibraryFinder } from "./libraryFinder";
+import { useLineToggle } from "./OnlineToggle";
 
 type Load = YtReleaseLoad<NativeYtSong>;
 
@@ -135,11 +136,6 @@ export const useYtAlbumSection = (
     },
     [retry, askArtist],
   );
-  const selected = view?.toggle;
-  const toggle = useMemo(
-    () =>
-      selected === undefined ? null : { selected, onPick, onLongPress: openSearchOnlineChoices },
-    [selected, onPick],
-  );
+  const toggle = useLineToggle(view?.toggle, onPick);
   return { view, toggle };
 };
