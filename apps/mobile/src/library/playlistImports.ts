@@ -31,9 +31,16 @@ import { showError } from "@/overlay/alert";
 import { perfMark, registerPerfMeta } from "@/perf/perf";
 
 import { playlistWorkReport } from "./db/playlistWork";
+import { LibraryStore } from "./LibraryStore";
 import { addToPlaylist, currentPlaylists } from "./playlists";
+import { appRuntime } from "./runtime";
 
 type Job = PlaylistImport<YtAlbumSong>;
+
+/** The Library's songs, as an import matches them (`planLinkImport`). */
+export const listLibrary = () =>
+  // oxlint-disable-next-line react/rules-of-hooks -- Effect Service.use resolves a service; it is not a React Hook.
+  appRuntime.runPromise(LibraryStore.use((store) => store.listSongs));
 
 /** The imports giving their playlist its songs, or done with songs left out to show, kept until Wave starts again. */
 const imports = persistedSetting<PlaylistImports<YtAlbumSong>>({
@@ -84,14 +91,15 @@ registerPerfMeta("playlistWork", () =>
 /**
  * Imports [plan] into the playlist Import just made, [playlistId] named
  * [name]: every song goes in at once. Replaces an import into that playlist.
+ * Resolves once the playlist has its songs (a failure is shown, not thrown).
  */
 export const startLinkImport = (
   plan: LinkImportPlan<YtAlbumSong>,
   { playlistId, name }: { readonly playlistId: number; readonly name: string },
-): void => {
+): Promise<void> => {
   const job = startPlaylistImport(plan, { playlistId, name });
   imports.set(queuePlaylistImport(imports.get(), job));
-  void finish(job, false);
+  return finish(job, false);
 };
 
 /**

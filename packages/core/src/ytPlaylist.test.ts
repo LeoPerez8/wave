@@ -111,6 +111,62 @@ describe("readYtPlaylist", () => {
     assert.equal(read.truncated, true);
   });
 
+  test("uncapped, it reads every page, past 5,000 songs and 100 pages", async () => {
+    // Liked Songs: 150 pages of 100 songs, 15,000 in all.
+    const asked: string[] = [];
+    const pages: Record<string, YtPlaylistPage> = {};
+    for (let n = 2; n <= 150; n++) {
+      pages[`p${n}`] = page(run(n * 100, 100), n === 150 ? null : `p${n + 1}`);
+    }
+    const read = await readYtPlaylist(
+      async () => firstPage(run(100, 100), "p2"),
+      pagesFrom(pages, asked),
+      { uncapped: true },
+    );
+    assert.equal(read.songs.length, 15_000);
+    assert.equal(read.songs[14_999]?.videoId, "v15099");
+    assert.equal(read.truncated, false);
+    assert.equal(asked.length, 149);
+  });
+
+  test("uncapped, a token it already followed ends the read, read whole", async () => {
+    const asked: string[] = [];
+    const read = await readYtPlaylist(
+      async () => firstPage(["a"], "p2"),
+      pagesFrom({ p2: page(["b"], "p3"), p3: page(["c"], "p2") }, asked),
+      { uncapped: true },
+    );
+    assert.deepEqual(asked, ["p2", "p3"]);
+    assert.deepEqual(ids(read.songs), ["a", "b", "c"]);
+    assert.equal(read.truncated, false, "the pages loop back: every song is read");
+  });
+
+  test("uncapped, a page of nothing but songs already read ends the read, read whole", async () => {
+    // Fresh tokens that keep answering the same songs.
+    const asked: string[] = [];
+    const more = async (token: string): Promise<YtPlaylistPage> => {
+      asked.push(token);
+      return page(["b", "c"], `${token}+`);
+    };
+    const read = await readYtPlaylist(async () => firstPage(["a"], "p2"), more, {
+      uncapped: true,
+    });
+    assert.deepEqual(asked, ["p2", "p2+"]);
+    assert.deepEqual(ids(read.songs), ["a", "b", "c"]);
+    assert.equal(read.truncated, false, "a stale token: every song is read");
+  });
+
+  test("uncapped, a page with no songs it can read goes on", async () => {
+    // A page of rows YouTube Music greys out reads as no songs.
+    const read = await readYtPlaylist(
+      async () => firstPage(["a"], "p2"),
+      pagesFrom({ p2: page([], "p3"), p3: page(["b"], null) }),
+      { uncapped: true },
+    );
+    assert.deepEqual(ids(read.songs), ["a", "b"]);
+    assert.equal(read.truncated, false);
+  });
+
   test("a page that fails fails the whole read", async () => {
     const reset = new Error("reset");
     await assert.rejects(

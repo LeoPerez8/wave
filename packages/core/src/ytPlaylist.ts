@@ -50,14 +50,21 @@ export interface YtPlaylistReadOptions<S extends YtSong> {
   readonly onPage?: (playlist: YtPlaylist<S>, done: boolean) => void;
   /** Once aborted, no more page is asked for and the read rejects. */
   readonly signal?: AbortSignal;
+  /**
+   * Reads past `YT_PLAYLIST_SONG_CAP` and `YT_PLAYLIST_PAGE_CAP` to the last
+   * page (Liked Songs). A token already followed, or a page of nothing but
+   * songs already read, still ends it, so pages that never end can't read forever;
+   * either way every song has come, so it's never `truncated`.
+   */
+  readonly uncapped?: boolean;
 }
 
 /**
  * Reads a whole playlist: its first page ([first]), then each page its token
  * leads to ([more]) until the last, `YT_PLAYLIST_SONG_CAP` songs or
  * `YT_PLAYLIST_PAGE_CAP` pages, whichever comes first (`truncated` then says
- * so). A song listed twice is kept once, at its first place. A page that
- * fails rejects the whole read, so it never resolves with part of a playlist
+ * so), or, `uncapped`, until the last. A song listed twice is kept once, at
+ * its first place. A page that fails rejects the whole read, so it never resolves with part of a playlist
  * that looks complete; [onPage] has heard the pages before it.
  */
 export const readYtPlaylist = async <S extends YtSong>(
@@ -65,31 +72,54 @@ export const readYtPlaylist = async <S extends YtSong>(
   more: (continuation: string) => Promise<YtPlaylistPage<S>>,
   options: YtPlaylistReadOptions<S> = {},
 ): Promise<YtPlaylist<S>> => {
-  const { onPage, signal } = options;
+  const { onPage, signal, uncapped = false } = options;
+  const songCap = uncapped ? Infinity : YT_PLAYLIST_SONG_CAP;
   const head = await first();
-  const songs = new Map<string, S>();
+  // Built up page by page, so a read of 40,000 liked songs isn't quadratic.
+  const seen = new Set<string>();
+  const kept: S[] = [];
+  const keptIds = new Set<string>();
   const repeats: S[] = [];
+  const followed = new Set<string>();
+  let overflow = false;
   let page: YtPlaylistPage<S> = head;
   for (let pages = 1; ; pages++) {
+    let fresh = 0;
     for (const song of page.songs) {
-      if (songs.has(song.videoId)) repeats.push(song);
-      else songs.set(song.videoId, song);
+      if (seen.has(song.videoId)) {
+        if (keptIds.has(song.videoId)) repeats.push(song);
+        continue;
+      }
+      seen.add(song.videoId);
+      fresh += 1;
+      if (kept.length < songCap) {
+        kept.push(song);
+        keptIds.add(song.videoId);
+      } else overflow = true;
     }
-    const full = songs.size >= YT_PLAYLIST_SONG_CAP || pages >= YT_PLAYLIST_PAGE_CAP;
+    // Uncapped, a stale token (a page of nothing new, or one already followed)
+    // means every song has come: it ends the read without cutting it.
+    const full = uncapped
+      ? (page.songs.length > 0 && fresh === 0) ||
+        (page.continuation !== null && followed.has(page.continuation))
+      : kept.length >= YT_PLAYLIST_SONG_CAP || pages >= YT_PLAYLIST_PAGE_CAP;
     const next = full ? null : page.continuation;
-    const kept = [...songs.values()].slice(0, YT_PLAYLIST_SONG_CAP);
-    const keptIds = new Set(kept.map((song) => song.videoId));
-    const playlist: YtPlaylist<S> = {
+    const snapshot = (): YtPlaylist<S> => ({
       title: head.title,
       author: head.author,
       artworkUrl: head.artworkUrl,
-      songs: kept,
-      repeats: repeats.filter((song) => keptIds.has(song.videoId)),
-      truncated: songs.size > YT_PLAYLIST_SONG_CAP || (full && page.continuation !== null),
-    };
-    onPage?.(playlist, next === null);
-    if (next === null) return playlist;
+      songs: [...kept],
+      repeats: [...repeats],
+      truncated: overflow || (!uncapped && full && page.continuation !== null),
+    });
+    if (next === null) {
+      const playlist = snapshot();
+      onPage?.(playlist, true);
+      return playlist;
+    }
+    onPage?.(snapshot(), false); // Builds no snapshot without a listener.
     if (signal?.aborted === true) throw new Error("The playlist read was cancelled");
+    followed.add(next);
     page = await more(next);
   }
 };
