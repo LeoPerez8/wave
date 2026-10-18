@@ -27,6 +27,14 @@ import { selectableRow } from "@/selection/selectableRow";
 import { useListSelection } from "@/selection/useListSelection";
 
 import { useFavoriteIds } from "./favorites";
+import {
+  FIND_FIELD_HEIGHT,
+  FindInPlaylistField,
+  foundSongs,
+  librarySongText,
+  NoSongsMatch,
+  useFindInLegendList,
+} from "./FindInPlaylist";
 import type { SongRow } from "./LibraryStore";
 import { useSpine } from "./useSpine";
 import { useListScrollable } from "@/motion/heldTouch";
@@ -142,6 +150,11 @@ type Props = {
    * file-name sorts). Without it the list goes without a spine.
    */
   sort?: SongSort | undefined;
+  /**
+   * Find in Playlist (Favorites): its field waits above [header] until the
+   * list is pulled down, and narrows the list as you type.
+   */
+  findable?: boolean;
 };
 
 /**
@@ -150,7 +163,7 @@ type Props = {
  * long-press opens the track's menu, whose Select starts selection mode: then
  * every row shows a check cell and taps check and uncheck.
  */
-export function TrackList({ songs, context, header, sort }: Props) {
+export function TrackList({ songs, context, header, sort, findable = false }: Props) {
   useRenderCount("TrackList");
   const scrollable = useListScrollable();
   const list = useRef<LegendListRef>(null);
@@ -172,6 +185,9 @@ export function TrackList({ songs, context, header, sort }: Props) {
     [sort, songs],
   );
   const spine = useSpine(sortKeys, list);
+  const find = useFindInLegendList(list, songs, librarySongText, findable);
+  const { found } = find;
+  const shown = useMemo(() => foundSongs(songs, found), [songs, found]);
 
   const renderItem = useCallback(
     ({ item, index }: { item: SongRow; index: number }) => (
@@ -183,12 +199,13 @@ export function TrackList({ songs, context, header, sort }: Props) {
         {...selectableRow(
           item,
           listSelection,
-          () => playSongs(songs, index, context),
+          // A found song plays the whole list from its own place in it.
+          () => playSongs(songs, found?.[index] ?? index, context),
           (options) => openTrackActions(item, options),
         )}
       />
     ),
-    [context, currentId, favorites, songs, listSelection],
+    [context, currentId, favorites, songs, found, listSelection],
   );
 
   return (
@@ -197,7 +214,7 @@ export function TrackList({ songs, context, header, sort }: Props) {
         scrollEnabled={scrollable}
         ref={list}
         className="flex-1"
-        data={songs}
+        data={shown}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
         extraData={rowState}
@@ -209,10 +226,21 @@ export function TrackList({ songs, context, header, sort }: Props) {
           paddingRight: spine.paddingRight,
           // Lets the last row scroll out from under the floating mini player (or selection bar).
           paddingBottom: bottomInset,
+          minHeight: findable ? find.minHeight : undefined,
         }}
-        ListHeaderComponent={header}
+        initialScrollOffset={findable ? FIND_FIELD_HEIGHT : undefined}
+        ListHeaderComponent={
+          findable ? (
+            <>
+              <FindInPlaylistField find={find} />
+              {found === null ? header : found.length === 0 ? <NoSongsMatch /> : null}
+            </>
+          ) : (
+            header
+          )
+        }
       />
-      {spine.show && (
+      {spine.show && found === null && (
         <AlphabetSpine entries={spine.entries} onJump={spine.onJump} topRow={spine.topRow} />
       )}
     </View>

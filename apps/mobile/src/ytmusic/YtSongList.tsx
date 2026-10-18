@@ -1,4 +1,4 @@
-import { LegendList } from "@legendapp/list/react-native";
+import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
 import {
   IconCloudOff,
   IconDownload,
@@ -26,7 +26,7 @@ import {
 import type { DownloadOrigin } from "@wave/core";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Text, useWindowDimensions, View } from "react-native";
 
 import { Artwork } from "@/catalog/Artwork";
@@ -41,6 +41,14 @@ import {
 import { useChromeInset } from "@/chrome/chrome";
 import { EmptyState } from "@/components/EmptyState";
 import { ScreenHeader } from "@/components/ScreenHeader";
+import {
+  entryText,
+  FIND_FIELD_HEIGHT,
+  FindInPlaylistField,
+  foundSongs,
+  NoSongsMatch,
+  useFindInLegendList,
+} from "@/library/FindInPlaylist";
 import type { SongRow } from "@/library/LibraryStore";
 import { songCount } from "@/library/TrackList";
 import { useListScrollable } from "@/motion/heldTouch";
@@ -364,6 +372,7 @@ export function YtSongList({
   context,
   numbered,
   albumDownload,
+  findable = false,
 }: {
   /** What the tapped cover knew, shown until the page arrives. */
   known: YtListHead | undefined;
@@ -376,6 +385,11 @@ export function YtSongList({
    * progress. Its songs remember it, by [context]'s id and its title.
    */
   albumDownload?: "album" | "mix";
+  /**
+   * Find in Playlist (a playlist): its field waits above the head until the
+   * list is pulled down, and narrows the songs read so far as you type.
+   */
+  findable?: boolean;
 }) {
   const scrollable = useListScrollable();
   const bottomInset = useChromeInset();
@@ -407,6 +421,10 @@ export function YtSongList({
       void playDiscoverSongs(songs, startIndex, context, { shuffle }),
     [songs, context],
   );
+  const list = useRef<LegendListRef>(null);
+  const findInList = useFindInLegendList(list, songs, entryText, findable);
+  const { found } = findInList;
+  const shown = useMemo(() => foundSongs(songs, found), [songs, found]);
   const head = page?.head ?? known;
   const loading = load.status === "loading";
   const restLine = load.status === "loaded" ? ytPlaylistRestLine(load.rest) : null;
@@ -422,11 +440,12 @@ export function YtSongList({
       <DiscoverSongRow
         song={item}
         selection={selection}
-        trackNumber={numbered ? index + 1 : undefined}
-        onPress={() => play(index)}
+        trackNumber={numbered ? (found?.[index] ?? index) + 1 : undefined}
+        // A found song plays the whole playlist from its own place in it.
+        onPress={() => play(found?.[index] ?? index)}
       />
     ),
-    [numbered, play, selection],
+    [numbered, play, selection, found],
   );
 
   return (
@@ -434,18 +453,26 @@ export function YtSongList({
       <ScreenHeader />
       <LegendList
         scrollEnabled={scrollable}
+        ref={list}
         className="flex-1"
-        data={songs}
+        data={shown}
         keyExtractor={keyOf}
         renderItem={renderItem}
         extraData={selection.selection}
         getFixedItemSize={() => grid.row}
         estimatedItemSize={grid.row}
         recycleItems
-        contentContainerStyle={{ paddingHorizontal: grid.margin, paddingBottom: bottomInset }}
+        contentContainerStyle={{
+          paddingHorizontal: grid.margin,
+          paddingBottom: bottomInset,
+          minHeight: findable ? findInList.minHeight : undefined,
+        }}
+        initialScrollOffset={findable ? FIND_FIELD_HEIGHT : undefined}
         ListHeaderComponent={
           <>
-            {(head !== undefined || loading) && (
+            {findable && <FindInPlaylistField find={findInList} />}
+            {found !== null && found.length === 0 && <NoSongsMatch />}
+            {found === null && (head !== undefined || loading) && (
               <Head
                 head={head}
                 loading={loading}
@@ -455,7 +482,7 @@ export function YtSongList({
                 download={download.button}
               />
             )}
-            {load.status === "quiet" && (
+            {found === null && load.status === "quiet" && (
               <EmptyState
                 icon={load.reason === "offline" ? IconWifiOff : IconCloudOff}
                 title={load.reason === "offline" ? "You're offline" : "No answer online"}

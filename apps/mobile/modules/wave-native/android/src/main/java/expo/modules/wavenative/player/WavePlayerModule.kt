@@ -34,6 +34,12 @@ class PlayerItem : Record {
   @Field val artworkPath: String? = null
 }
 
+/** A loaded item's new artwork, as JS sends it (Core's `PlayerCoverUpdate`). */
+class ItemArtworkRecord : Record {
+  @Field val key: String = ""
+  @Field val artworkPath: String = ""
+}
+
 /** The lines Core's `autoLyricLines` picked, as JS sends them ([LyricFrame]). */
 class AutoLyricsFrameRecord : Record {
   @Field val previous: String? = null
@@ -255,6 +261,29 @@ class WavePlayerModule : Module() {
           promise.resolve(null)
         } catch (error: IllegalArgumentException) {
           promise.reject("ERR_PLAYER_SYNC", error.message, error)
+        } finally {
+          syncing = false
+        }
+      }
+    }.runOnQueue(Queues.MAIN)
+
+    /**
+     * Gives loaded items a cover cached after they were set (a YT Music song's
+     * file in place of YouTube's address), so the notification, Auto and Now
+     * Playing show the file. Same media ID and URI, so the player swaps each
+     * item in place without interrupting playback. Keys it doesn't hold are skipped.
+     */
+    AsyncFunction("setItemArtwork") { updates: List<ItemArtworkRecord>, promise: Promise ->
+      withController(promise) { player ->
+        val byKey = updates.associate { it.key to it.artworkPath }
+        syncing = true
+        try {
+          for (index in 0 until player.mediaItemCount) {
+            val item = player.getMediaItemAt(index)
+            val artworkPath = byKey[item.mediaId] ?: continue
+            player.replaceMediaItem(index, PlayerMediaItems.withArtwork(item, artworkPath))
+          }
+          promise.resolve(null)
         } finally {
           syncing = false
         }

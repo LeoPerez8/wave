@@ -1,4 +1,5 @@
 import { ytSongArtist } from "@wave/core";
+import { Image } from "expo-image";
 import type { ReactNode } from "react";
 import {
   Text,
@@ -7,15 +8,39 @@ import {
   type AccessibilityActionInfo,
 } from "react-native";
 
-import { Artwork } from "@/catalog/Artwork";
 import { CELL, grid } from "@/catalog/grid";
 import { Hairline } from "@/catalog/Hairline";
 import type { NativeYtSong } from "@/native/waveYtMusic";
 
+const COVER = CELL * 5;
+
+/**
+ * A row's cover: the song's artwork on the fill colour, or the fill colour alone. Not `Artwork`,
+ * whose placeholder is an SVG glyph: drawing an SVG shape in each row of this list makes
+ * Reanimated re-apply its whole registry on the main thread per layout event (#446).
+ */
+function DownloadCover({ uri }: { uri: string | undefined }) {
+  return (
+    <View className="bg-fill" style={{ width: COVER, height: COVER }}>
+      {uri !== undefined && (
+        <Image
+          source={{ uri }}
+          // List rows are recycled; the key stops the previous song's artwork flashing.
+          recyclingKey={uri}
+          style={{ width: COVER, height: COVER }}
+          contentFit="cover"
+          accessibilityIgnoresInvertColors
+        />
+      )}
+    </View>
+  );
+}
+
 /**
  * A song in Settings › Downloads, queued or failed: its artwork, title and artists, the line
  * that says where it stands, what went wrong when there's [detail], then its buttons
- * ([children]), over a hairline.
+ * ([children], `PlainTextButton`s), over a hairline. Nothing in it draws an SVG or carries an
+ * animated style of its own.
  */
 export function DownloadSongRow({
   song,
@@ -40,7 +65,7 @@ export function DownloadSongRow({
   return (
     <View>
       <View className="flex-row items-center py-2" style={{ minHeight: grid.row, gap: CELL * 1.5 }}>
-        <Artwork uri={covers ? (song.artworkUrl ?? undefined) : undefined} size={CELL * 5} />
+        <DownloadCover uri={covers ? (song.artworkUrl ?? undefined) : undefined} />
         <View
           className="flex-1"
           accessible
