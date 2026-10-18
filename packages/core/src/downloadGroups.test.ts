@@ -216,7 +216,10 @@ describe("Settings › Downloads › Downloading: dragging changes what download
       moved.map((entry) => entry.id),
       ["a1", "b1", "b2", "a2"],
     );
-    assert.deepEqual(downloadingList(moved).downloading.map((row) => row.id), ["a1"]);
+    assert.deepEqual(
+      downloadingList(moved).downloading.map((row) => row.id),
+      ["a1"],
+    );
   });
 });
 

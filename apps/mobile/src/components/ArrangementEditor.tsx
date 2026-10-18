@@ -145,7 +145,7 @@ function ShownRow<Id>({
   reorder,
   edit,
 }: ShownRowProps<Id>) {
-  const { dragged, style, handle } = useReorderRow({ index, reorder });
+  const { style, underline, handle } = useReorderRow({ index, reorder });
 
   const onAccessibilityAction = (event: AccessibilityActionEvent) => {
     const action = event.nativeEvent.actionName;
@@ -157,7 +157,7 @@ function ShownRow<Id>({
   return (
     <Animated.View
       onLayout={(event) => reorder.measure(id, event.nativeEvent.layout.height)}
-      style={[ROW_BOX, ...style]}
+      style={[ROW_BOX, style]}
     >
       <View
         accessible
@@ -179,8 +179,11 @@ function ShownRow<Id>({
         />
         <ReorderHandle gesture={handle} />
       </View>
-      {/* Hidden rather than dropped while dragged, so the row keeps its height. */}
-      {(divideLast || index < count - 1) && <Hairline className={dragged ? "opacity-0" : ""} />}
+      {(divideLast || index < count - 1) && (
+        <Animated.View style={underline}>
+          <Hairline />
+        </Animated.View>
+      )}
     </Animated.View>
   );
 }
@@ -288,7 +291,7 @@ export function ArrangementEditor<Id extends string>({
         <ScrollView
           bounces={false}
           overScrollMode="never"
-          scrollEnabled={reorder.drag === null}
+          scrollEnabled={!reorder.dragging}
           contentContainerStyle={onDone === undefined ? PAGE_CONTENT : undefined}
         >
           {first}

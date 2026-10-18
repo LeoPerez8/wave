@@ -6,7 +6,7 @@ import {
   type SettingsPage,
   type SettingsTileColour,
 } from "@wave/core";
-import type { ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { ScrollView, Text, View } from "react-native";
 
 import { CELL, grid } from "@/catalog/grid";
@@ -28,22 +28,41 @@ const pageTitle = (id: PageId): string =>
     : LAYOUT_PAGES.find((entry) => entry.page === id.layoutPage)
   )?.title ?? "";
 
+/** Holds a Settings page's scrolling still; returns how to let go. */
+const HoldPageScroll = createContext<() => () => void>(() => () => undefined);
+
+/**
+ * Holds the Settings page's scrolling still while [held] (a row of it being
+ * dragged), so the drag isn't taken for a scroll.
+ */
+export const useHoldPageScroll = (held: boolean): void => {
+  const hold = useContext(HoldPageScroll);
+  useEffect(() => (held ? hold() : undefined), [held, hold]);
+};
+
 /**
  * A Settings page: back, its title, then its sections (each one element) with
- * room between them.
+ * room between them. It scrolls, except while a section holds it still
+ * (`useHoldPageScroll`).
  */
 export function SettingsPageScreen({ children, ...id }: PageId & { children: ReactNode }) {
+  const [holds, setHolds] = useState(0);
+  const hold = useCallback(() => {
+    setHolds((count) => count + 1);
+    return () => setHolds((count) => count - 1);
+  }, []);
   return (
     <View className="flex-1 bg-background">
       <ScreenHeader title={pageTitle(id)} />
       <ScrollView
+        scrollEnabled={holds === 0}
         contentContainerStyle={{
           paddingHorizontal: grid.margin,
           paddingBottom: SECTION_GAP,
           gap: SECTION_GAP,
         }}
       >
-        {children}
+        <HoldPageScroll.Provider value={hold}>{children}</HoldPageScroll.Provider>
       </ScrollView>
     </View>
   );
