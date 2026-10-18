@@ -22,14 +22,16 @@ const WHEN: Record<FileDeletionsWhen, string> = {
  * one that couldn't be deleted stays for the next time. Writes which files went
  * (but for an import's own, one per replaced song) and which couldn't (tag
  * `downloads`). Never fails: resolves to the files still
- * recorded, which a scan leaves out so they never come back as songs.
+ * recorded, which a scan leaves out so they never come back as songs. The
+ * media scanner hears of the deleted files with its next batch, along with
+ * [scanWith] when given (an import's new file, once its fill-in is done).
  */
-export const finishFileDeletions = (when: FileDeletionsWhen) =>
+export const finishFileDeletions = (when: FileDeletionsWhen, scanWith: string | null = null) =>
   Effect.gen(function* () {
     const store = yield* LibraryStore;
     const pending = yield* store.pendingFileDeletions;
     if (pending.length === 0) return pending;
-    const outcomes = yield* Effect.tryPromise(() => WaveNative.deleteFiles(pending)).pipe(
+    const outcomes = yield* Effect.tryPromise(() => WaveNative.deleteFiles(pending, scanWith)).pipe(
       // The native call failing as a whole leaves every file where it was.
       Effect.orElseSucceed((): readonly FileDeleteOutcome[] => pending.map(() => "failed")),
     );

@@ -428,7 +428,9 @@ const fixSong = (
  * incomplete can still be fixed from its menu. What it writes lands as the
  * download did (`songsLanded`), joining its import's change while that still
  * waits. A failed write is logged with why (`writeLyricsAndGenre`); a failed
- * lookup, by each service's line and this.
+ * lookup, by each service's line and this. Once it's done, whatever it wrote,
+ * the file goes to Android's media scanner with its next batch, along with
+ * the file it replaced (`downloadFilledIn`), so other apps scan it once.
  */
 export const fillInLyricsAndGenre = (
   song: TaggableSong,
@@ -444,6 +446,8 @@ export const fillInLyricsAndGenre = (
     Effect.catch((error) =>
       Effect.sync(() => console.warn(`[wave] couldn't fill in ${song.path}`, error)),
     ),
+    // Unasked, the file is scanned all the same a minute after it was published.
+    Effect.ensuring(Effect.promise(() => WaveNative.downloadFilledIn(song.path).catch(() => {}))),
   );
 
 /**

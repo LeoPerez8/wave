@@ -99,7 +99,7 @@ class DurableJournalWritesTest {
         }
       }
       val publication = object : DurablePublication {
-        override fun tag(source: File, tags: Map<String, Any?>) { source.appendText(" tagged"); die() }
+        override fun tag(source: File, tags: Map<String, Any?>): String? { source.appendText(" tagged"); die(); return null }
         override fun index(file: File): Map<String, Any?> { die(); return indexed(file) }
       }
       try {
@@ -241,7 +241,7 @@ class DurableJournalWritesTest {
     }
   }
   private val GoodPublication = object : DurablePublication {
-    override fun tag(source: File, tags: Map<String, Any?>) { source.appendText(" tagged") }
+    override fun tag(source: File, tags: Map<String, Any?>): String? { source.appendText(" tagged"); return null }
     override fun index(file: File): Map<String, Any?> = indexed(file)
   }
   /** What a new process finds in [journal]'s files now (a copy, so this one may go on writing its own). */

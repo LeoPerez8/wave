@@ -1,5 +1,6 @@
 package expo.modules.wavenative.tags
 
+import expo.modules.wavenative.files.FileDigest
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
@@ -7,6 +8,7 @@ import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.security.DigestOutputStream
 import org.jaudiotagger.audio.AudioFile
 import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.mp4.Mp4Tag
@@ -26,15 +28,16 @@ internal object FragmentedMp4 {
    * Writes [audio]'s tag into [file], read from it: through [writeIlst] for a
    * fragmented M4A (a YouTube download, a quality replacement's copy),
    * jaudiotagger's writer otherwise. Every tag writer goes through here.
+   * Returns the file's SHA-256 when the write went through every byte of it, else null.
    */
-  fun writeTag(audio: AudioFile, file: File) {
+  fun writeTag(audio: AudioFile, file: File): String? {
     val tag = audio.tag
     if (tag is Mp4Tag && isFragmented(file)) {
       val ilst = Mp4TagCreator().convertMetadata(tag)
-      writeIlst(file, ByteArray(ilst.remaining()).also(ilst::get))
-    } else {
-      AudioFileIO.write(audio)
+      return writeIlst(file, ByteArray(ilst.remaining()).also(ilst::get))
     }
+    AudioFileIO.write(audio)
+    return null
   }
 
   private class Box(val type: String, val offset: Long, val header: Int, val size: Long) {
@@ -50,8 +53,11 @@ internal object FragmentedMp4 {
     return chunkOffsetCounts(bytes, children).all { it == 0L }
   }
 
-  /** Rewrites [file] with [ilst] (a whole `ilst` box) as its tags; the audio and fragments stay as they are. */
-  fun writeIlst(file: File, ilst: ByteArray) {
+  /**
+   * Rewrites [file] with [ilst] (a whole `ilst` box) as its tags; the audio and fragments stay as
+   * they are. Returns the new file's SHA-256, taken as it was written ([FileDigest]).
+   */
+  fun writeIlst(file: File, ilst: ByteArray): String {
     val boxes = topLevel(file)
     val moov = boxes.singleOrNull { it.type == "moov" } ?: throw IOException("No single moov box")
     if (boxes.any { it.type == "sidx" && it.offset < moov.offset }) throw IOException("A sidx comes before the moov")
@@ -59,9 +65,10 @@ internal object FragmentedMp4 {
     val tagged = tagged(old, moov.header, ilst)
     val delta = tagged.size.toLong() - moov.size
     val temp = File(file.parentFile, "${file.name}.tagging")
+    val sha = FileDigest.sha256()
     try {
       RandomAccessFile(file, "r").use { input ->
-        temp.outputStream().buffered().use { output ->
+        DigestOutputStream(temp.outputStream().buffered(), sha).use { output ->
           for (box in boxes) {
             when {
               box === moov -> output.write(tagged)
@@ -73,6 +80,7 @@ internal object FragmentedMp4 {
         }
       }
       Files.move(temp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
+      return FileDigest.hex(sha)
     } finally {
       temp.delete()
     }

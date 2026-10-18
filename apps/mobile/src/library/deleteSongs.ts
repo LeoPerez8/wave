@@ -30,7 +30,7 @@ export interface SongsDeleted<S extends DeletableSong> {
 }
 
 const deleteFiles = (paths: readonly string[]) =>
-  Effect.tryPromise(() => WaveNative.deleteFiles(paths)).pipe(
+  Effect.tryPromise(() => WaveNative.deleteFiles(paths, null)).pipe(
     // The native call failing as a whole leaves every file where it was.
     Effect.orElseSucceed((): readonly FileDeleteOutcome[] => paths.map(() => "failed")),
   );

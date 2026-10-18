@@ -1,12 +1,12 @@
 package expo.modules.wavenative.download
 
+import expo.modules.wavenative.files.FileDigest
 import expo.modules.wavenative.log.LogUnits
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
-import java.security.MessageDigest
 import java.util.UUID
 
 interface DurableTransfer {
@@ -15,7 +15,12 @@ interface DurableTransfer {
 }
 
 interface DurablePublication {
-  fun tag(source: File, tags: Map<String, Any?>)
+  /**
+   * Writes [tags] into [source]. Returns the file's SHA-256 (lowercase hex) as the writer wrote
+   * it, taken while writing every byte (#455), or null when it didn't write every byte: the
+   * journal reads the file for it then.
+   */
+  fun tag(source: File, tags: Map<String, Any?>): String?
   fun index(file: File): Map<String, Any?>
 }
 
@@ -217,7 +222,7 @@ class DurableDownloads(
         if (origin != null) existing["origin"] = clean(origin)
         existing["decisionAttempts"] = 0L; startBudget(existing)
         if (savedGone) {
-          for (key in listOf("saved", "acknowledged", "finalPath", "digest", "publishSource", "replaces")) existing.remove(key)
+          for (key in listOf("saved", "acknowledged", "finalPath", "digest", "taggedDigest", "publishSource", "replaces")) existing.remove(key)
         }
         if (existing["saved"] != null) existing["phase"] = "completed"
         // Only while the file there is still this download's: one replaced since downloads again.
@@ -225,7 +230,7 @@ class DurableDownloads(
           existing["phase"] = "awaitingPublication"; existing["publicationAttempts"] = 0L
         } else {
           cleanup(existing)
-          for (key in listOf("finalPath", "digest", "publishSource", "replaces")) existing.remove(key)
+          for (key in listOf("finalPath", "digest", "taggedDigest", "publishSource", "replaces")) existing.remove(key)
           existing["phase"] = "queued"; existing["attempts"] = 0L; existing["candidateIndex"] = 0L
           setSource(existing, source)
         }
@@ -656,11 +661,13 @@ class DurableDownloads(
         "tagging" -> {
           // The cover comes over the network: other songs' steps and decisions go on meanwhile.
           val source = File(work["sourcePath"] as String)
-          publication.tag(source, work.map("tags"))
+          val written = publication.tag(source, work.map("tags"))
           synchronized(this) {
             // Cancelled while it was tagged: the file it tagged goes with it.
             val job = held(id, generation, "tagging") ?: run { source.delete(); return }
             if (stopped) return
+            // The digest the tag writer took as it wrote the file: publication needn't read it again.
+            if (written != null) job["taggedDigest"] = written else job.remove("taggedDigest")
             transition(job, "awaitingPublication"); persist()
           }
         }
@@ -718,18 +725,21 @@ class DurableDownloads(
     val target = File(start["targetPath"] as String)
     if (start["finalPath"] == null) {
       var source = File(start["sourcePath"] as String)
+      // Taken as the file was written (#455): by the tag writer, or by the copy below.
+      var written = start["taggedDigest"] as? String
       target.parentFile.mkdirs()
       if (!target.parentFile.isDirectory) throw DurableFailure("storage", java.io.IOException("Couldn't make the folder ${target.parentFile.path}"))
       // A changed root requires a new hidden file on the destination filesystem.
       if (source.parentFile.canonicalFile != target.parentFile.canonicalFile) {
         val local = DownloadFiles.partFileFor(target, "$id-$generation-publication")
         onJob { job -> job["outputPath"] = local.path; persistNow() } ?: return
-        FileInputStream(source).use { input -> FileOutputStream(local).use { out -> input.copyTo(out); out.fd.sync() } }
+        written = copyWithDigest(source, local)
         source = local
       }
       // A replacement overwrites the file it replaces; anything else gets a free name beside it.
       val chosen = if (start["replaces"] == target.path) target.path else DownloadFiles.freeName(target).path
-      val sum = digest(source)
+      // Only a file whose tag writer didn't write every byte (jaudiotagger's MP3s) is read for it.
+      val sum = written ?: digest(source)
       onJob { job -> job["finalPath"] = chosen; job["digest"] = sum; job["publishSource"] = source.path; persistNow() } ?: return
     }
     val chosen = onJob { job ->
@@ -756,9 +766,10 @@ class DurableDownloads(
       }
       Files.move(publishSource.toPath(), final.toPath(), StandardCopyOption.REPLACE_EXISTING)
     }
-    else if (!final.exists()) Files.move(publishSource.toPath(), final.toPath())
-    // Checked again unless it was just checked before the move over the replaced file.
-    if (!moving && digest(final) != sum) {
+    // A rename keeps the bytes whose digest was taken: only a file found there already (a save
+    // taken up again after a crash, or another file) is read to tell whose it is.
+    val movedHere = moving || (!final.exists()).also { free -> if (free) Files.move(publishSource.toPath(), final.toPath()) }
+    if (!movedHere && digest(final) != sum) {
       onJob { job ->
         // Wave's own copy is gone and another file holds its name: Retry downloads the song again.
         for (key in listOf("finalPath", "digest", "publishSource")) job.remove(key)
@@ -1196,10 +1207,11 @@ private fun Map<String, Any?>.maps(key: String): List<Map<String, Any?>> = get(k
 @Suppress("UNCHECKED_CAST")
 private fun Map<String, Any?>.strings(key: String): List<String> = get(key) as? List<String> ?: emptyList()
 
-private fun digest(file: File): String {
-  val sha = MessageDigest.getInstance("SHA-256")
-  file.inputStream().use { input -> val buffer = ByteArray(64 * 1024); while (true) { val count = input.read(buffer); if (count < 0) break; sha.update(buffer, 0, count) } }
-  return sha.digest().joinToString("") { "%02x".format(it) }
+private fun digest(file: File): String = file.inputStream().use { input -> FileDigest.of(input) }
+
+/** Copies [from] to [to], synced, and returns the copy's digest, taken as its bytes go by. */
+private fun copyWithDigest(from: File, to: File): String = FileInputStream(from).use { input ->
+  FileOutputStream(to).use { out -> FileDigest.of(input) { buffer, count -> out.write(buffer, 0, count) }.also { out.fd.sync() } }
 }
 
 /** Persist only standard JDK maps (in order)/lists/scalars; no app classes or credentials enter the journal. */
