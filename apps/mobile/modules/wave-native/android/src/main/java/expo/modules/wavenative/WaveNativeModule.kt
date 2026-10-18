@@ -44,6 +44,7 @@ import expo.modules.wavenative.net.Connectivity
 import expo.modules.wavenative.playlists.AndroidPlaylistImages
 import expo.modules.wavenative.playlists.PlaylistFiles
 import expo.modules.wavenative.playlists.PlaylistImageStore
+import expo.modules.wavenative.playlists.Square
 import expo.modules.wavenative.scan.KnownFile
 import expo.modules.wavenative.scan.LibraryScanner
 import expo.modules.wavenative.scan.ScanListener
@@ -187,19 +188,38 @@ class WaveNativeModule : Module() {
 
     /**
      * Opens Android's photo picker (the document picker where there is none)
-     * for a playlist's image. Resolves `{ path, thumbPath }` of the picked
-     * photo saved square in Wave's storage ([PlaylistImageStore], new files
-     * each time), or null when nothing was picked; rejects when the photo can't
-     * be read. The photo is processed off the main thread.
+     * for a playlist's image. Resolves `{ path, width, height }` of the picked
+     * photo kept upright in Wave's storage as the image's original
+     * ([PlaylistImageStore], a new file each time), or null when nothing was
+     * picked; rejects when the photo can't be read. The photo is processed off
+     * the main thread.
      */
-    AsyncFunction("pickPlaylistImage") { promise: Promise ->
+    AsyncFunction("pickPlaylistPhoto") { promise: Promise ->
       val activity = appContext.currentActivity ?: throw Exceptions.MissingActivity()
       pendingImagePick?.resolve(null)
       pendingImagePick = promise
       activity.startActivityForResult(imagePickerIntent(), PICK_IMAGE_REQUEST)
     }.runOnQueue(Queues.MAIN)
 
-    /** Deletes playlist images `pickPlaylistImage` saved; other paths are left alone. */
+    /**
+     * Crops the square [left], [top], [side] (px) out of the original at [path]
+     * (one `pickPlaylistPhoto` kept, or an image saved before originals were)
+     * and saves it as a playlist image. Resolves `{ path, thumbPath }` (new
+     * files each time); rejects when [path] isn't one of Wave's playlist
+     * images or can't be read.
+     */
+    AsyncFunction("cropPlaylistImage") { path: String, left: Int, top: Int, side: Int ->
+      val store = playlistImages()
+      if (!store.owns(path)) throw IllegalArgumentException("Not a playlist image: $path")
+      try {
+        val (large, thumb) = AndroidPlaylistImages.squareJpegs(path, Square(left, top, side))
+        store.save(large, thumb).toMap()
+      } catch (e: OutOfMemoryError) {
+        throw IllegalStateException("The photo is too big", e)
+      }
+    }
+
+    /** Deletes playlist images and originals Wave saved; other paths are left alone. */
     AsyncFunction("deletePlaylistImages") { paths: List<String> -> playlistImages().delete(paths) }
 
     /**
@@ -495,8 +515,14 @@ class WaveNativeModule : Module() {
     val store = playlistImages()
     Thread({
       try {
-        val (large, thumb) = AndroidPlaylistImages.squareJpegs(resolver, uri)
-        promise.resolve(store.save(large, thumb).toMap())
+        val original = AndroidPlaylistImages.original(resolver, uri)
+        promise.resolve(
+          mapOf(
+            "path" to store.saveOriginal(original.jpeg),
+            "width" to original.width,
+            "height" to original.height,
+          ),
+        )
       } catch (e: Exception) {
         promise.reject("ERR_PLAYLIST_IMAGE", "Couldn't read the photo", e)
       } catch (e: OutOfMemoryError) {

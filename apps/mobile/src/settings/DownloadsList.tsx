@@ -405,14 +405,7 @@ export function DownloadsList({ header }: { header: ReactElement }) {
     () => (failedRows.length === 0 ? rows : [...rows, ...failedRows]),
     [rows, failedRows],
   );
-  const summary = useMemo(
-    () =>
-      queuedDownloadsSummary({
-        downloading: list.downloading.length,
-        waiting: list.groups.reduce((sum, group) => sum + group.queued.length, 0),
-      }),
-    [list],
-  );
+  const summary = useMemo(() => queuedDownloadsSummary(list.counts), [list]);
   const listRef = useRef<LegendListRef>(null);
   const { drag, rowDrag, moveSong, moveGroup, liftedStyle, scrollRef, container, onLayout } =
     useDownloadsDrag({ list, rows, listRef });

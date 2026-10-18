@@ -38,6 +38,28 @@ export interface QueuedDownload<S extends YtSong = YtSong> {
 const statusOf = <S extends YtSong>(job: YtDownloadJournalJob<S>): YtDownloadStatus | null =>
   ytDownloadsFromJournal([job]).jobs[0]?.status ?? null;
 
+type Stage = "downloading" | "saving" | "waiting";
+
+/**
+ * Where a job on its way is in the queue: started and holding a slot (tagging
+ * included, which keeps its slot), downloaded and waiting its turn to be saved
+ * to the Library, or not started yet.
+ */
+const stageOf = (job: YtDownloadJournalJob): Stage => {
+  // Started before Wave was killed: it has no slot until the queue takes it up again.
+  if (job.resumed === true) return "waiting";
+  switch (job.phase) {
+    case "queued":
+      return "waiting";
+    case "awaitingPublication":
+    case "publishing":
+    case "completed":
+      return "saving";
+    default:
+      return "downloading";
+  }
+};
+
 /** Still on its way: neither failed nor in the Library. */
 const onItsWay = (status: YtDownloadStatus | null): status is YtDownloadStatus =>
   status !== null && status.kind !== "failed" && status.kind !== "done";
@@ -69,9 +91,16 @@ export const queuedDownloads = <S extends YtSong>(
   return [...rows.filter((row) => !row.waiting), ...rows.filter((row) => row.waiting)];
 };
 
-/** How many songs on their way are downloading (or saving) and how many wait. */
+/**
+ * How many songs on their way are downloading, saving and waiting. Downloading
+ * are the ones the queue started, which hold its slots (five, and at most ten
+ * with the ones waiting on a peer, a pause or JS's answer); saving the ones
+ * whose file is downloaded and that wait their turn to join the Library, one
+ * at a time (in a big run they pile up); waiting the ones not started yet.
+ */
 export interface QueuedDownloadCounts {
   readonly downloading: number;
+  readonly saving: number;
   readonly waiting: number;
 }
 
@@ -80,13 +109,16 @@ export const queuedDownloadCounts = <S extends YtSong>(
   jobs: readonly YtDownloadJournalJob<S>[],
 ): QueuedDownloadCounts => {
   let downloading = 0;
+  let saving = 0;
   let waiting = 0;
   for (const job of jobs) {
     if (!onItsWay(statusOf(job))) continue;
-    if (job.phase === "queued") waiting += 1;
+    const stage = stageOf(job);
+    if (stage === "waiting") waiting += 1;
+    else if (stage === "saving") saving += 1;
     else downloading += 1;
   }
-  return { downloading, waiting };
+  return { downloading, saving, waiting };
 };
 
 /**
@@ -96,10 +128,12 @@ export const queuedDownloadCounts = <S extends YtSong>(
  */
 export const queuedDownloadsSummary = ({
   downloading,
+  saving,
   waiting,
 }: QueuedDownloadCounts): string | null => {
   const parts = [
     ...(downloading === 0 ? [] : [`${downloading.toLocaleString("en")} downloading`]),
+    ...(saving === 0 ? [] : [`${saving.toLocaleString("en")} saving`]),
     ...(waiting === 0 ? [] : [`${waiting.toLocaleString("en")} waiting`]),
   ];
   return parts.length === 0 ? null : parts.join(" · ");

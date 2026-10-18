@@ -31,6 +31,7 @@ import {
   type SongsCollection,
 } from "@/library/hooks";
 import {
+  adjustPlaylistImageFlow,
   changePlaylistImageFlow,
   confirmDeletePlaylists,
   openAddToPlaylist,
@@ -422,6 +423,8 @@ export function useItemActions(
         return run(() => playlist !== undefined && void renamePlaylistFlow(playlist));
       case "changeImage":
         return run(() => playlist !== undefined && void changePlaylistImageFlow(playlist));
+      case "adjustImage":
+        return run(() => playlist !== undefined && void adjustPlaylistImageFlow(playlist));
       case "removeImage":
         return run(() => playlist !== undefined && void removePlaylistImageFlow(playlist));
       case "deletePlaylist":
