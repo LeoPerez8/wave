@@ -203,6 +203,29 @@ export type { CreditedPlayTotals } from "./stats.ts";
 export { STATS_RANKINGS, statsSeeAll } from "./statsSeeAll.ts";
 export type { StatsRanking, StatsSeeAll } from "./statsSeeAll.ts";
 export {
+  RECAP_MONTH_MINIMUM_MS,
+  RECAP_SLIDE_MS,
+  RECAP_TOP_SONGS,
+  availableRecaps,
+  parseRecapId,
+  recap,
+  recapBack,
+  recapBarFill,
+  recapForward,
+  recapId,
+  recapSlides,
+  recapTitle,
+  recapWindow,
+} from "./recap.ts";
+export type {
+  CountedListening,
+  Recap,
+  RecapInput,
+  RecapMonth,
+  RecapPeriod,
+  RecapSlide,
+} from "./recap.ts";
+export {
   AUTO_ROOT,
   AUTO_TABS,
   autoAlbumItem,
@@ -528,6 +551,27 @@ export type { QueueCover, QueueCoverBatcher, QueueCoverBatcherOptions } from "./
 export { MORE_FROM_ARTIST } from "./queue.ts";
 export { newQueueToast, noticeLine, queueUndo, undoneQueue } from "./queueUndo.ts";
 export type { PlayerAt, QueueUndo } from "./queueUndo.ts";
+export {
+  MAGIC_QUEUE_CONTEXT,
+  MAGIC_SKIP_MS,
+  isMagicQueue,
+  magicBatch,
+  magicPlaySignal,
+  magicQueueEdits,
+  magicQueueLabel,
+  magicSignal,
+  parseMagicSession,
+  startMagicQueue,
+  wantsMagicBatch,
+} from "./magicQueue.ts";
+export type {
+  MagicQueueEdits,
+  MagicSeed,
+  MagicSession,
+  MagicSignal,
+  MagicSignalKind,
+  MagicSong,
+} from "./magicQueue.ts";
 export { artistRanking } from "./moreFromArtist.ts";
 export type { ArtistRankingInput, ArtistRankingSong } from "./moreFromArtist.ts";
 export { artistPageItems } from "./artistPage.ts";
@@ -732,6 +776,7 @@ export type {
   YtAlbumDownload,
   YtAlbumDownloadAction,
   YtAlbumDownloadRequest,
+  YtListDownloadButtonState,
   YtPlaylistDownload,
   YtPlaylistDownloadAction,
   YtSongsDownload,
@@ -1180,6 +1225,15 @@ export {
   readCrossfade,
   snapCrossfade,
 } from "./crossfade.ts";
+export {
+  bufferAheadMs,
+  LIBRARY_BUFFER_MS,
+  readStreamBuffer,
+  STREAM_BUFFER_DEFAULT,
+  STREAM_BUFFER_MINUTES,
+  streamBufferMs,
+} from "./streamBuffer.ts";
+export type { StreamBufferMinutes } from "./streamBuffer.ts";
 export {
   discoverMix,
   discoverMixCaption,

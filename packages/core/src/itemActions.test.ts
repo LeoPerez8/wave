@@ -45,12 +45,31 @@ describe("itemActions", () => {
     assert.deepEqual(names(itemActions(tracks([song()]))), [
       "playNext",
       "addToQueue",
+      "magicQueue",
       "addToPlaylist",
       "favorite",
       "goToAlbum",
       "goToArtist",
       "delete",
     ]);
+  });
+
+  test("the menu of a Library song, album, artist or playlist starts a Magic Queue", () => {
+    const offers = (subject: ActionSubject) => names(itemActions(subject)).includes("magicQueue");
+    assert.deepEqual(names(itemActions(tracks([song()]))).slice(0, 3), [
+      "playNext",
+      "addToQueue",
+      "magicQueue",
+    ]);
+    assert.equal(ITEM_ACTION_LABELS.magicQueue, "Magic Queue");
+    for (const kind of ["album", "artist", "playlist"] as const)
+      assert.ok(offers({ kind, items: [{}], here: "/" }), kind);
+    // Not a genre, the selection bar, several items, nor a song with no file here.
+    assert.ok(!offers({ kind: "genre", items: [{}], here: "/" }));
+    assert.ok(!offers(tracks([song()], { surface: "selection" })));
+    assert.ok(!offers(tracks([song(), song()])));
+    assert.ok(!offers(tracks([{ ...song(), missing: true }])));
+    assert.ok(!offers(tracks([{ streamed: true, artistNames: ["A"] }])));
   });
 
   test("Delete comes last for songs, after Select, and is the destructive one", () => {
@@ -247,11 +266,13 @@ describe("itemActions", () => {
     );
   });
 
-  test("for one song the selection bar offers exactly the menu's entries, Select aside", () => {
+  test("for one song the selection bar offers exactly the menu's entries, Select and Magic Queue aside", () => {
     const subject = tracks([song({ favorite: true })], { selectable: true });
     assert.deepEqual(
       itemActions({ ...subject, surface: "selection" }),
-      itemActions(subject).filter((entry) => entry.action !== "select"),
+      itemActions(subject).filter(
+        (entry) => entry.action !== "select" && entry.action !== "magicQueue",
+      ),
     );
   });
 
@@ -348,7 +369,7 @@ describe("itemActions", () => {
   test("an album: queue it, add it to a playlist, go to its artist", () => {
     assert.deepEqual(
       names(itemActions({ kind: "album", items: [{ artistIds: [3] }], here: "/" })),
-      ["playNext", "addToQueue", "addToPlaylist", "goToArtist"],
+      ["playNext", "addToQueue", "magicQueue", "addToPlaylist", "goToArtist"],
     );
   });
 
@@ -368,7 +389,7 @@ describe("itemActions", () => {
       names(
         itemActions({ kind: "album", items: [{ artistIds: [3] }], selectable: true, here: "/" }),
       ),
-      ["playNext", "addToQueue", "addToPlaylist", "goToArtist", "select"],
+      ["playNext", "addToQueue", "magicQueue", "addToPlaylist", "goToArtist", "select"],
     );
   });
 
@@ -382,6 +403,7 @@ describe("itemActions", () => {
     assert.deepEqual(names(menu), [
       "playNext",
       "addToQueue",
+      "magicQueue",
       "addToPlaylist",
       "downloadMissingSongs",
       "goToArtist",
@@ -392,7 +414,7 @@ describe("itemActions", () => {
 
   test("an album's missing songs on their way offer Cancel Download, and Retry Failed once the rest has ended", () => {
     const album = (missingSongs: ActionSubject["items"][number]["missingSongs"]) =>
-      names(itemActions({ kind: "album", items: [{ missingSongs }], here: "/" })).slice(3);
+      names(itemActions({ kind: "album", items: [{ missingSongs }], here: "/" })).slice(4);
     const failed = { kind: "failed", reason: "notFound" } as const;
     // All of them asked for: nothing left to download.
     assert.deepEqual(album([{ kind: "queued" }, { kind: "downloading", received: 1, total: 2 }]), [
@@ -414,7 +436,7 @@ describe("itemActions", () => {
     for (const missingSongs of [undefined, []]) {
       assert.deepEqual(
         names(itemActions({ kind: "album", items: [{ artistIds: [3], missingSongs }], here: "/" })),
-        ["playNext", "addToQueue", "addToPlaylist", "goToArtist"],
+        ["playNext", "addToQueue", "magicQueue", "addToPlaylist", "goToArtist"],
       );
     }
   });
@@ -450,13 +472,16 @@ describe("itemActions", () => {
     assert.ok(!names(asked).includes("downloadMissingSongs"));
   });
 
-  test("selected artists or genres: the bar offers their menu's entries, but Select", () => {
+  test("selected artists or genres: the bar offers their menu's entries, but Select and Magic Queue", () => {
     for (const kind of ["artist", "genre"] as const) {
       const menu = names(itemActions({ kind, items: [{}], selectable: true, here: "/library" }));
       const bar = names(
         itemActions({ kind, items: [{}, {}, {}], surface: "selection", here: "/library" }),
       );
-      assert.deepEqual(menu, ["playNext", "addToQueue", "addToPlaylist", "select"]);
+      assert.deepEqual(
+        menu.filter((action) => action !== "magicQueue"),
+        ["playNext", "addToQueue", "addToPlaylist", "select"],
+      );
       assert.deepEqual(bar, ["playNext", "addToQueue", "addToPlaylist"]);
     }
   });
@@ -522,13 +547,20 @@ describe("itemActions", () => {
   });
 
   test("a genre, artist or Library entry: queue it and add it to a playlist", () => {
-    for (const kind of ["genre", "artist", "section"] as const) {
+    for (const kind of ["genre", "section"] as const) {
       assert.deepEqual(names(itemActions({ kind, items: [{}], here: "/" })), [
         "playNext",
         "addToQueue",
         "addToPlaylist",
       ]);
     }
+    // An artist starts a Magic Queue too.
+    assert.deepEqual(names(itemActions({ kind: "artist", items: [{}], here: "/" })), [
+      "playNext",
+      "addToQueue",
+      "magicQueue",
+      "addToPlaylist",
+    ]);
   });
 
   test("an empty selection offers nothing", () => {
