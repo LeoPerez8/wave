@@ -311,6 +311,11 @@ export interface LogDevice {
   readonly appVersion: string;
   /** Android's versionCode. */
   readonly appBuild: string;
+  /**
+   * What CI built: `PR #438 @ 90970e3` for a PR build, `ti @ 1a2b3c4` for a push to ti.
+   * Absent, or empty, in a build made off CI (a local or debug build).
+   */
+  readonly buildLabel?: string | undefined;
   /** Android's release, such as `15`. */
   readonly androidVersion: string;
   readonly androidApi: number;
@@ -320,10 +325,22 @@ export interface LogDevice {
   readonly fontScale: number;
 }
 
+/**
+ * The Wave build, as the export's header and the "started" line name it:
+ * `Wave 0.10.1 (build 1001, PR #438 @ 90970e3)`, or `Wave 0.10.1 (build 1001)`
+ * for a build without a label.
+ */
+export const appBuildName = ({
+  appVersion,
+  appBuild,
+  buildLabel,
+}: Pick<LogDevice, "appVersion" | "appBuild" | "buildLabel">): string =>
+  `Wave ${appVersion} (build ${appBuild}${buildLabel ? `, ${buildLabel}` : ""})`;
+
 /** The lines an exported log starts with, then a blank line before the entries. */
 export const logHeader = (device: LogDevice, exportedAt: number): string =>
   [
-    `Wave ${device.appVersion} (build ${device.appBuild})`,
+    appBuildName(device),
     `Android ${device.androidVersion} (API ${device.androidApi})`,
     `Phone: ${device.manufacturer} ${device.model}`,
     // Android's float, such as 1.2999999523162842, to two places.

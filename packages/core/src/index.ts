@@ -1210,6 +1210,7 @@ export {
   logHeader,
   redactSecrets,
   trimLog,
+  appBuildName,
 } from "./appLog.ts";
 export type { LogDevice, LogEntry, LogLevel, LogLimits, LogTrim } from "./appLog.ts";
 export {
